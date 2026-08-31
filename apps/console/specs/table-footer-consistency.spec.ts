@@ -926,6 +926,18 @@ const NOT_A_LIST: Array<[string, string]> = [
       'file, and a pager on either would offer to page a fixed list.',
   ],
   [
+    'libs/plugins/email/src/lib/components/sending-sender-drawer.tsx',
+    'A PICKER’s option list, which this file’s own prose puts out of scope: ' +
+      'the roster read fills a select of teammates to fill a sender’s three ' +
+      'fields from, and a person choosing one knows who they are looking ' +
+      'for. `MenuItem` is deliberately absent from the row shapes above for ' +
+      'exactly this reason; what trips the check is the `Stack` INSIDE the ' +
+      'menu item that puts a name over an address. Paging it would page a ' +
+      'lookup — and the read is already ceilinged at the largest per-site ' +
+      'collaborator allowance any finite plan grants, so on every plan below ' +
+      'Enterprise the whole entitled set fits and nothing is cut.',
+  ],
+  [
     'libs/plugins/email/src/lib/components/sending-domains-card.tsx',
     'The org’s proved sending identities. Not a growing collection: a domain ' +
       'is here because somebody published DNS records for it and waited for ' +
@@ -1374,6 +1386,10 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // the same version history the component and layout ones do, read the
     // same unordered way, and is blocked on the same `createdAt` audit.
     expect(OWES_A_FOOTER).toHaveLength(15)
+    // 37 since a site's senders became a list the composer picks from: the
+    // drawer that edits one carries a picker of teammates, and a picker's
+    // option list is a lookup rather than a window a reader pages through.
+    //
     // 36 since the staff margin surface arrived: one table is a fixed band
     // taxonomy, and the other is windowed by an explicit SCAN rather than by
     // a footer, because its rows cost four Firestore reads each.
@@ -1389,7 +1405,7 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // not follow the size of the file it describes — which is the property
     // this list exists to record. Raised here deliberately rather than by a
     // walk that quietly stopped reaching a file.
-    expect(NOT_A_LIST).toHaveLength(36)
+    expect(NOT_A_LIST).toHaveLength(37)
   })
 })
 

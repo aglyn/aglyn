@@ -114,8 +114,10 @@ import {
   EMAIL_MAX_AUDIENCE_PER_SEND,
   EMAIL_MAX_RECIPIENTS_PER_SEND,
   campaignBatchPlan,
+  HOST_SENDERS_COLLECTION,
   isEmailConfigured,
   rateLimitedRetryAtMs,
+  readHostSender,
   sendEmail,
   sendingIdentityRefusal,
   sentAsStamp,
@@ -322,6 +324,32 @@ export interface CampaignSendOptions {
   fromName?: string
   /** Where replies go, when it is not the sending address. */
   replyTo?: string
+  /**
+   * WHICH OF THE SITE'S SENDERS THIS EMAIL LEAVES AS —
+   * `hosts/{hostId}/senders/{senderId}`.
+   *
+   * The mailbox, and only the mailbox. A sender also carries a display name
+   * and a reply address, and those stay per-send fields resolved from
+   * {@link fromName} and {@link replyTo}: the composer seeds them from the
+   * chosen sender so a merchant sees what will go out, and the send records
+   * what was submitted, which is what keeps the stored report and the message
+   * one answer rather than two.
+   *
+   * ## An id, which is not the input path that was closed
+   *
+   * `req.body.sendingIdentity` is read by nothing, and a per-send local part
+   * would reopen it: a mailbox is where a bounce returns and where a client
+   * ignoring `Reply-To:` answers, so one that exists in a single campaign's
+   * headers is an address nobody serves. A sender id names a mailbox that was
+   * configured once, validated once and stored on this site under an
+   * `org.settings` gate. The set of addresses this field can reach is the set
+   * an org admin already approved.
+   *
+   * Absent means the site's DEFAULT sender, which is the projection the host
+   * document has always carried. Naming a sender this site does not hold is
+   * REFUSED — see the resolution below — rather than falling back to it.
+   */
+  senderId?: string
   /**
    * The CAMPAIGN this send belongs to — `hosts/{hostId}/emailCampaigns/{id}`.
    *
@@ -1614,13 +1642,58 @@ export async function performCampaignSend(
    * whose DNS is unfinished has to be told, by name, at the composer.
    */
   /*
-   * The site's standing selection, and nothing else.
+   * The DOMAIN is the site's standing selection, and nothing a request says
+   * moves it.
    *
-   * No option reaches this. The address is assembled from the host document,
-   * so a request cannot name a domain to send as — which is the spoofing path
-   * — and cannot drop the selection to reach the shared platform domain
-   * either, which is the reputation path. Both used to be one field.
+   * No option reaches it. It is read from the host document, so a request
+   * cannot name a domain to send as — which is the spoofing path — and cannot
+   * drop the selection to reach the shared platform domain either, which is
+   * the reputation path. Both used to be one field.
+   *
+   * The MAILBOX in front of it is chosen per send, and by id: `senderId` names
+   * a row in `hosts/{hostId}/senders` that an org admin configured, so it can
+   * only reach an address this site was already set up to send as. That is the
+   * whole difference between it and the free `sendingIdentity` the route reads
+   * from nobody.
    */
+  /*
+   * WHICH SENDER, and the refusal when the campaign names one this site does
+   * not hold.
+   *
+   * The one line that decides the mailbox a campaign leaves on. A site's
+   * senders are `hosts/{hostId}/senders/{senderId}`, and the host's
+   * `sendingLocalPart` is the DEFAULT sender's projection — so a send that
+   * names nobody resolves exactly as it did before the collection existed,
+   * including on a site that has never written to it.
+   *
+   * An unknown id is REFUSED rather than defaulted, and that is the whole
+   * reason this is a read and not a `??`. Quietly sending as the default is
+   * the same class of failure as the mailbox validation that used to answer
+   * `hello` to a name it could not parse: a merchant is told their campaign
+   * went out as the sender they picked, and it did not.
+   *
+   * Refused HERE, above the dry run, so `preview` answers it too — the
+   * composer finds out at the picker rather than from the Send button.
+   */
+  const senderId = String(options.senderId ?? '').trim()
+  const senderSnapshot = senderId
+    ? await hostRef.collection(HOST_SENDERS_COLLECTION).doc(senderId).get()
+    : null
+  if (senderId && !senderSnapshot?.exists) {
+    throw new CampaignSendError(
+      'The sender this email is set to go out as is no longer one this site ' +
+        'holds. Pick a sender in the composer, or add it back under ' +
+        'Emails → Sending.',
+      404,
+    )
+  }
+  const chosenSender = senderSnapshot?.exists
+    ? readHostSender({
+        id: senderId,
+        data: senderSnapshot.data() as Record<string, unknown>,
+      })
+    : null
+
   /*
    * `purpose: 'marketing'` is what makes the refusal below name the real
    * cause. A campaign is the one send site that knows for certain what it is
@@ -1633,7 +1706,8 @@ export async function performCampaignSend(
     orgId,
     hostId,
     selectedDomain: hostSnapshot.get('sendingDomain'),
-    selectedLocalPart: hostSnapshot.get('sendingLocalPart'),
+    selectedLocalPart:
+      chosenSender?.localPart || hostSnapshot.get('sendingLocalPart'),
     poolMember: hostSnapshot.get('sendingPoolMember'),
     purpose: 'marketing',
   })
@@ -2372,6 +2446,16 @@ export async function performCampaignSend(
       ...(options.fromName ? { fromName: options.fromName } : {}),
       ...(options.replyTo ? { replyTo: options.replyTo } : {}),
       /*
+       * WHICH SENDER was chosen, beside the address it resolved to.
+       *
+       * Not a duplicate of `sentAs.from`: that records what left, and this
+       * records what was picked. A follow-up re-sends under the same sender —
+       * `storedSendOptionsFrom` reads this field — so an email that went out
+       * as `jamie@` reaches the rest of its audience as `jamie@` even after
+       * the site's default has moved to somebody else.
+       */
+      ...(senderId ? { senderId } : {}),
+      /*
        * THE ADDRESS, beside the name and for the same reason.
        *
        * The two fields above are what the COMPOSER submitted; this is what
@@ -2956,6 +3040,13 @@ function storedSendOptionsFrom(
     ...optional('topicId'),
     ...optional('fromName'),
     ...optional('replyTo'),
+    /*
+     * The sender the email ALREADY went out as, so a follow-up reaches the
+     * rest of its audience from the same address. Taking the site's current
+     * default instead would split one mailing across two `From:` lines, which
+     * is the same drift the stored name and reply address are read back for.
+     */
+    ...optional('senderId'),
     ...optional('preheader'),
     ...optional('displayName'),
     ...optional('emailCampaignId'),
@@ -3051,10 +3142,23 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
    * `req.body.sendingIdentity` is READ BY NOTHING.
    *
    * A body naming `acme.com`, or `platform`, is not an error and is not
-   * honored: the address is resolved from the host document, so there is no
+   * honored: the DOMAIN is resolved from the host document, so there is no
    * value this field could carry that would reach it. Left undocumented it
    * would look like an oversight; said here, it is the closure.
+   *
+   * `senderId` below does not reopen it, and is worth reading against it. What
+   * was closed is a request naming an ADDRESS — a domain, or a free local part
+   * — because a mailbox has to be one somebody serves. What this names is a
+   * row in `hosts/{hostId}/senders`, written under the `org.settings` gate and
+   * validated there, so the addresses it can reach are the ones this site was
+   * already configured to send as. An id this site does not hold is refused
+   * rather than defaulted, which is the property that keeps the two apart:
+   * nothing a request says can produce an address that was not configured.
    */
+  const senderId = String(req.body?.senderId ?? '')
+  if (senderId && !isDocumentId(senderId)) {
+    return res.status(400).json({ error: 'Invalid sender' })
+  }
   // The campaign this send joins. Validated as a document id here because it
   // is stored and later queried as one.
   const emailCampaignId = String(req.body?.emailCampaignId ?? '')
@@ -3247,6 +3351,10 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
         templateScreenId: templateScreenId || undefined,
         fromName,
         replyTo,
+        // The proof leaves as the sender the composer has chosen, so what a
+        // merchant reads in their own inbox is the `From:` their audience
+        // will see rather than the site's default.
+        ...(senderId ? { senderId } : {}),
         preheader,
         ...(persona ? { proofPersona: persona } : {}),
         recordCampaign: false,
@@ -3339,8 +3447,10 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
          * makes the refusal arrive BEFORE the Send button rather than from
          * it. The dry run resolves the identity on the same terms a send
          * does and throws the same 409, so picking a domain whose DNS is
-         * unfinished says so the moment it is picked.
+         * unfinished says so the moment it is picked — and a sender this site
+         * no longer holds is refused at the picker rather than at Send.
          */
+        ...(senderId ? { senderId } : {}),
         senderUid: decoded.uid,
         dryRun: true,
       })
@@ -3503,6 +3613,7 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
           // than one that reverts to the org's branding defaults.
           ...(fromName ? { fromName } : {}),
           ...(replyTo ? { replyTo } : {}),
+          ...(senderId ? { senderId } : {}),
           ...(preheader ? { preheader } : {}),
           ...(displayName ? { displayName } : {}),
           ...(emailCampaignId ? { emailCampaignId } : {}),
@@ -3732,6 +3843,7 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
       templateScreenId: templateScreenId || undefined,
       fromName,
       replyTo,
+      ...(senderId ? { senderId } : {}),
       preheader,
       displayName,
       emailCampaignId,

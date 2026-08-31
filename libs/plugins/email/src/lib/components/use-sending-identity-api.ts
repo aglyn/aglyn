@@ -77,6 +77,26 @@ export interface SendingDomainView {
   providerDetail?: string | null
 }
 
+/**
+ * One sender this site holds — `hosts/{hostId}/senders/{senderId}`.
+ *
+ * `from` is the whole address, assembled by the server for the reason
+ * `IdentityOption.from` is: a surface that built `${localPart}@${domain}`
+ * itself would be a second derivation of the address, and the two would
+ * disagree the first time either moved. It is `null` for a row whose mailbox
+ * is not in effect — a site on the pooled Aglyn address has one fixed mailbox,
+ * shared with the other sites on it.
+ */
+export interface HostSenderView {
+  id: string
+  localPart: string
+  fromName: string | null
+  replyTo: string | null
+  /** Whether an email that names no sender goes out as this one. */
+  isDefault: boolean
+  from: string | null
+}
+
 /** What this site sends as, and what it is allowed to send as. */
 export interface SendingIdentityView {
   orgId: string | null
@@ -112,6 +132,14 @@ export interface SendingIdentityView {
   fromName: string | null
   /** The site's default reply address, or null. */
   replyTo: string | null
+  /**
+   * Every sender this site may send as, the default among them.
+   *
+   * Never empty: a site with no `senders` subcollection has exactly one
+   * sender, and the server synthesizes it from the three fields the host
+   * document has always carried rather than reporting an absence.
+   */
+  senders: HostSenderView[]
   identity: string
   /**
    * `'custom'` for a domain this site has verified, `'shared'` for the pooled

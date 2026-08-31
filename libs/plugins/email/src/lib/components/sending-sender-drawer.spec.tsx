@@ -164,6 +164,9 @@ jest.mock('@aglyn/shared-ui-jsx/components/navigation-drawer.component', () => (
 const HOST = 'host-1'
 const ORG = 'org-1'
 
+/** The id the site's original sender is synthesized and materialized under. */
+const DEFAULT_SENDER = 'default'
+
 const identity = (over: Record<string, unknown> = {}) =>
   ({
     orgId: ORG,
@@ -176,19 +179,42 @@ const identity = (over: Record<string, unknown> = {}) =>
     identitySource: 'custom',
     refusal: null,
     options: [],
+    /*
+     * A site with one sender, which is what every site has before anybody
+     * opens this list: the route synthesizes the row from the three fields the
+     * host document has always carried rather than reporting none.
+     */
+    senders: [
+      {
+        id: DEFAULT_SENDER,
+        localPart: 'hello',
+        fromName: null,
+        replyTo: null,
+        isDefault: true,
+        from: 'hello@acme.com',
+      },
+    ],
     domains: [],
     canManage: true,
     entitled: true,
     ...over,
   }) as never
 
-const mount = async (view: unknown) => {
+/**
+ * Open the drawer on a sender, or on nothing to ADD one.
+ *
+ * The two modes are the whole of the difference between editing and adding,
+ * and the default here is the edit — most of this file is about what the three
+ * fields refuse, which is the same either way.
+ */
+const mount = async (view: unknown, senderId: string | null = DEFAULT_SENDER) => {
   await act(async () => {
     render(
       <SendingSenderDrawer
         open
         hostId={HOST}
         view={view as never}
+        senderId={senderId}
         onClose={() => undefined}
         onSaved={() => undefined}
       />,
@@ -198,7 +224,7 @@ const mount = async (view: unknown) => {
 
 const save = async () => {
   await act(async () => {
-    fireEvent.click(screen.getByText('Save sender'))
+    fireEvent.click(screen.getByText(/^(Save sender|Add sender)$/))
   })
 }
 
@@ -301,11 +327,74 @@ describe('what the drawer sends', () => {
     expect(posted).toHaveLength(1)
     expect(posted[0]).toEqual({
       hostId: HOST,
+      action: 'updateSender',
+      senderId: DEFAULT_SENDER,
       localPart: 'jamie',
       fromName: 'Jamie',
       replyTo: 'jamie@acme-corp.com',
     })
     expect(posted[0]).not.toHaveProperty('domain')
+  })
+
+  /**
+   * ADDING A SENDER LEAVES THE EXISTING ONE ALONE.
+   *
+   * The property the list exists for, asserted where it could be lost: an add
+   * that named the site's current sender would be a rename wearing the label
+   * of a create, which is exactly what "send as a person" used to be when a
+   * site could hold only one.
+   */
+  it('adds a second sender rather than renaming the one this site has', async () => {
+    await mount(identity(), null)
+
+    // The fields open EMPTY, so nothing about the existing sender is carried
+    // into the new one by accident.
+    expect(field('Mailbox').value).toBe('')
+    expect(field('Sender name').value).toBe('')
+
+    await act(async () => {
+      fireEvent.change(field('Mailbox'), { target: { value: 'jamie' } })
+    })
+    await save()
+
+    expect(posted[0]).toEqual({
+      hostId: HOST,
+      action: 'createSender',
+      localPart: 'jamie',
+      fromName: '',
+      replyTo: '',
+    })
+    expect(posted[0]).not.toHaveProperty('senderId')
+  })
+
+  it('opens an existing sender on its own stored values', async () => {
+    await mount(
+      identity({
+        senders: [
+          {
+            id: DEFAULT_SENDER,
+            localPart: 'hello',
+            fromName: 'Acme',
+            replyTo: null,
+            isDefault: true,
+            from: 'hello@acme.com',
+          },
+          {
+            id: 'sender-jamie',
+            localPart: 'jamie',
+            fromName: 'Jamie Lee',
+            replyTo: 'jamie@acme-corp.com',
+            isDefault: false,
+            from: 'jamie@acme.com',
+          },
+        ],
+      }),
+      'sender-jamie',
+    )
+
+    expect(field('Mailbox').value).toBe('jamie')
+    expect(field('Sender name').value).toBe('Jamie Lee')
+    expect(field('Reply address').value).toBe('jamie@acme-corp.com')
   })
 })
 
