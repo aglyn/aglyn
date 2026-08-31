@@ -55,6 +55,7 @@ import { isCronAuthorized, isCronDryRun } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
 import {
   provisionPendingSendingDomains,
+  readSendingDomainCapacity,
   sendingDomainCapacity,
 } from '../../../../utils/server/provision-sending-domain'
 
@@ -101,9 +102,22 @@ async function handler(request: Request): Promise<Response> {
   try {
     if (dryRun) {
       const pending = await listPendingSendingDomains(BATCH)
+      /*
+       * The ceiling STATE, not just the configured number.
+       *
+       * `capacity` alone says what the limit is; what an operator came here
+       * to learn is whether the queue below it is waiting on vendor work or
+       * on a purchase. Reported here rather than only in the sweep's logs
+       * because a dry run is the surface somebody looks at deliberately, and
+       * the ceiling is otherwise visible only to whoever was reading stderr
+       * when the sweep last ran.
+       */
+      const ceiling = await readSendingDomainCapacity()
       return Response.json({
         dryRun: true,
         capacity,
+        held: ceiling.held,
+        atCapacity: ceiling.atCapacity,
         pending: pending.length,
         // Domains only. A dry run must not print a DKIM key, and there is no
         // reason for one to leave this process at all.
@@ -133,15 +147,25 @@ async function handler(request: Request): Promise<Response> {
 
     /*
      * The ceiling is the one outcome an operator has to act on, and it is
-     * silent otherwise: every new site simply never becomes able to send. So
-     * it is logged loudly and reported distinctly rather than folded into the
-     * failure count.
+     * silent otherwise: new sites simply stop getting a domain of their own,
+     * and the only visible symptom is a delivery reputation that stops
+     * improving. So it is logged loudly and reported distinctly rather than
+     * folded into the failure count.
+     *
+     * It is not an outage, and the message must not read as one. A site with
+     * no dedicated domain sends its receipts on the shared pool, so what the
+     * ceiling costs is the isolation a dedicated domain buys — not the mail.
+     * Saying otherwise would send an operator to fix an emergency at the
+     * provider that is really a purchasing decision.
      */
     if (summary.atCapacity) {
       console.error(
         `[provision-sending-domains] AT CAPACITY (${capacity}). New sites ` +
-          'cannot send until the provider plan and ' +
-          'AGLYN_SENDING_DOMAIN_CAPACITY are both raised.',
+          'keep sending on the shared pool and stay there: they get no ' +
+          'dedicated domain, so their reputation is pooled with every other ' +
+          'unprovisioned site. Raise AGLYN_SENDING_DOMAIN_CAPACITY once the ' +
+          'provider allowance covers it, or move merchants onto domains they ' +
+          'own — see the per-domain line for which lever pulls on what.',
       )
     }
 
