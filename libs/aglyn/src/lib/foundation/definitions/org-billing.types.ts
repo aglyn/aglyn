@@ -396,6 +396,25 @@ export interface OrgEntitlements {
    * that shows this number says "campaign".
    */
   emailSendsPerMonth?: number
+  /**
+   * Aglyn Assist credits per calendar month — the band assist spends against.
+   *
+   * A CREDIT IS A UNIT OF MODEL COST, not a message. One assist action can
+   * cost two orders of magnitude more than another: a question is a few
+   * thousand tokens, while generating a screen carries the node tree, the
+   * component catalog and the theme tokens in, structured markup out, and
+   * iterates. A message allowance would price those the same, so one
+   * workspace's ten screen builds would outspend another's thousand questions
+   * and both would read as "within allowance".
+   *
+   * The unit is defined by `ASSIST_CREDIT_COST_USD` and the conversion lives
+   * in `assist-credits.ts`. Only that module turns credits into dollars;
+   * everything a customer sees counts credits, because the dollar figure
+   * behind them is our provider bill and not a price.
+   *
+   * 0 on Free and Starter, which carry no `aiAssist` and no band.
+   */
+  assistCreditsPerMonth?: number
   /** Action runs per calendar month (AGL-148). */
   actionRunsPerMonth?: number
   /** Included customer REST API requests per calendar month (AGL-634);

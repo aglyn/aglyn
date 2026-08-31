@@ -219,6 +219,44 @@ export type ResolvedOrgEntitlements = Required<
   features: Required<OrgFeatureFlags>
 }
 
+/**
+ * Aglyn Assist credits an Enterprise agreement includes per month, before the
+ * contract says otherwise.
+ *
+ * ## Never `UNLIMITED`, and the reason is not stylistic
+ *
+ * `UNLIMITED` is `Number.POSITIVE_INFINITY`, `JSON.stringify(Infinity)` is
+ * `null`, and `Number(null)` is `0`. An unbounded assist band therefore
+ * serialises to a band of ZERO through every route that does not also send
+ * the explicit flag `restoreQuotaLimit` rebuilds from — which would hand the
+ * only customers with a signed contract the one budget that refuses
+ * everything. A finite number crosses the wire as itself.
+ *
+ * The band is also a real liability rather than a capacity we already own.
+ * Storage and page views are infrastructure metered into the deal; assist is
+ * a per-token charge from a third party, and generative building spends it in
+ * units two orders of magnitude apart.
+ *
+ * ## Why this number
+ *
+ * Enterprise carries no list price, so the band cannot be sized as a share of
+ * one the way every self-serve tier's is. It is anchored to the top of the
+ * ladder instead: 250,000 credits is ~1.5x Agency's band, which is the
+ * direction the ladder has to run and the step it already takes between
+ * Advanced and Agency. In cost that is $250 of provider spend a month, which
+ * stays inside the ~20% envelope for any deal priced at or above the
+ * self-serve top — and a deal below that is sold as Agency, not written as an
+ * Enterprise agreement.
+ *
+ * ## It is a DEFAULT, and a contract raises it
+ *
+ * `resolveOrgEntitlements` applies a per-org `entitlements.assistCreditsPerMonth`
+ * override ahead of this, so a deal that buys more assist buys it on that org
+ * without moving the figure every other agreement is measured against — the
+ * same mechanism the other contracted bands use.
+ */
+export const ENTERPRISE_ASSIST_CREDITS_PER_MONTH = 250_000
+
 export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
   free: {
     hostLimit: 1,
@@ -254,6 +292,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     contactsPerHost: 100,
     emailSendsPerMonth: 0,
     actionRunsPerMonth: 0,
+    assistCreditsPerMonth: 0,
     apiRequestsPerMonth: 0,
     datasetsPerOrg: 0,
     maxDatasetsPerOrg: 0,
@@ -341,6 +380,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     contactsPerHost: 1000,
     emailSendsPerMonth: 500,
     actionRunsPerMonth: 0,
+    assistCreditsPerMonth: 0,
     apiRequestsPerMonth: 0,
     datasetsPerOrg: 3,
     maxDatasetsPerOrg: 10,
@@ -415,6 +455,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     contactsPerHost: 10000,
     emailSendsPerMonth: 5000,
     actionRunsPerMonth: 5000,
+    assistCreditsPerMonth: 7_500,
     apiRequestsPerMonth: 0,
     datasetsPerOrg: 15,
     maxDatasetsPerOrg: 50,
@@ -487,6 +528,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     contactsPerHost: 50000,
     emailSendsPerMonth: 25000,
     actionRunsPerMonth: 50000,
+    assistCreditsPerMonth: 18_000,
     apiRequestsPerMonth: 100_000,
     datasetsPerOrg: 100,
     maxDatasetsPerOrg: 250,
@@ -560,6 +602,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     contactsPerHost: 100000,
     emailSendsPerMonth: 40000,
     actionRunsPerMonth: 100000,
+    assistCreditsPerMonth: 32_000,
     apiRequestsPerMonth: 300000,
     datasetsPerOrg: 250,
     maxDatasetsPerOrg: 500,
@@ -630,6 +673,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     contactsPerHost: 150000,
     emailSendsPerMonth: 65000,
     actionRunsPerMonth: 250000,
+    assistCreditsPerMonth: 52_000,
     apiRequestsPerMonth: 1_000_000,
     datasetsPerOrg: 500,
     maxDatasetsPerOrg: 1000,
@@ -716,6 +760,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     contactsPerHost: 500000,
     emailSendsPerMonth: 130000,
     actionRunsPerMonth: 1000000,
+    assistCreditsPerMonth: 170_000,
     apiRequestsPerMonth: 5000000,
     datasetsPerOrg: 2000,
     maxDatasetsPerOrg: 5000,
@@ -801,6 +846,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     contactsPerHost: UNLIMITED,
     emailSendsPerMonth: ENTERPRISE_EMAIL_SENDS_PER_MONTH,
     actionRunsPerMonth: UNLIMITED,
+    assistCreditsPerMonth: ENTERPRISE_ASSIST_CREDITS_PER_MONTH,
     apiRequestsPerMonth: UNLIMITED,
     datasetsPerOrg: UNLIMITED,
     maxDatasetsPerOrg: UNLIMITED,
@@ -1021,6 +1067,39 @@ export interface PlanPricing {
    */
   extraApiRequestsUsdPer1k: number | null
   /**
+   * Retail overage per 1,000 Aglyn Assist credits beyond
+   * `assistCreditsPerMonth`.
+   *
+   * ## The rate is a multiplier on our own cost, and reads as one
+   *
+   * A credit is defined as a fixed quantity of provider spend
+   * (`ASSIST_CREDIT_COST_USD`), so 1,000 credits cost us exactly $1.00 and
+   * this figure IS the multiplier: $3.00 per 1,000 is cost x3, $2.00 is
+   * cost x2. That is the property worth having, because the alternative —
+   * a rate per message — prices a question and a generated screen the same
+   * when they differ by two orders of magnitude.
+   *
+   * ## The floor, and why the ladder stops descending
+   *
+   * Every retail line carries at least a 50% margin
+   * (`ASSIST_CREDIT_MIN_MARGIN_PCT`), which at $1.00 of cost per 1,000 is a
+   * floor of $2.00 per 1,000 — cost x2. The ladder steps down with the tier
+   * the way contacts and API requests do, $3.00 -> $2.75 -> $2.50 -> $2.25,
+   * and stops at the floor on Agency rather than running past it.
+   *
+   * ## Where it is null, and why that is not "free overage"
+   *
+   * Null on Free and Starter because neither carries `aiAssist` and both
+   * band at 0 credits: there is no generative building to overspend, so
+   * there is no overage to price. Null on Enterprise, where every rate is
+   * the "not for sale" sentinel and the terms are contractual.
+   *
+   * Unlike email, a null here strands nothing. Assist is refused at the
+   * band on every tier, so a plan with no rate simply stops — there is no
+   * unrefusable traffic to absorb.
+   */
+  extraAssistCreditsUsdPer1k: number | null
+  /**
    * Metered overage per 1,000 contacts beyond `contactsPerHost` (AGL-890):
    * audience bands, Ghost-style. Paid plans meter (a growing audience is
    * never dropped); free is null and hard-bands at the included count.
@@ -1104,6 +1183,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDatasetMonthlyUsd: null,
     extraDataGbMonthlyUsd: null,
     extraApiRequestsUsdPer1k: null,
+    extraAssistCreditsUsdPer1k: null,
     extraContactsUsdPer1k: null,
     extraEmailSendsUsdPer1k: null,
     meteredInfraPassThrough: false,
@@ -1117,6 +1197,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDatasetMonthlyUsd: 2,
     extraDataGbMonthlyUsd: 0.36,
     extraApiRequestsUsdPer1k: null,
+    extraAssistCreditsUsdPer1k: null,
     extraContactsUsdPer1k: 1,
     extraEmailSendsUsdPer1k: 2.5,
     meteredInfraPassThrough: true,
@@ -1130,6 +1211,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDatasetMonthlyUsd: 2,
     extraDataGbMonthlyUsd: 0.36,
     extraApiRequestsUsdPer1k: null,
+    extraAssistCreditsUsdPer1k: 3,
     extraContactsUsdPer1k: 0.75,
     extraEmailSendsUsdPer1k: 2.25,
     meteredInfraPassThrough: true,
@@ -1143,6 +1225,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDatasetMonthlyUsd: 1,
     extraDataGbMonthlyUsd: 0.36,
     extraApiRequestsUsdPer1k: 0.5,
+    extraAssistCreditsUsdPer1k: 2.75,
     extraContactsUsdPer1k: 0.5,
     extraEmailSendsUsdPer1k: 2,
     meteredInfraPassThrough: true,
@@ -1156,6 +1239,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDatasetMonthlyUsd: 1,
     extraDataGbMonthlyUsd: 0.36,
     extraApiRequestsUsdPer1k: 0.35,
+    extraAssistCreditsUsdPer1k: 2.5,
     extraContactsUsdPer1k: 0.4,
     extraEmailSendsUsdPer1k: 1.9,
     meteredInfraPassThrough: true,
@@ -1169,6 +1253,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDatasetMonthlyUsd: 1,
     extraDataGbMonthlyUsd: 0.36,
     extraApiRequestsUsdPer1k: 0.2,
+    extraAssistCreditsUsdPer1k: 2.25,
     // FLOORED at the 50% retail margin, not stepped down again. The ladder
     // above it descends $1.00 → $0.75 → $0.50 → $0.40, and one more step
     // would have reached $0.25 against a `perContactMonth` cost of $0.20 per
@@ -1200,6 +1285,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDatasetMonthlyUsd: 1,
     extraDataGbMonthlyUsd: 0.36,
     extraApiRequestsUsdPer1k: 0.15,
+    extraAssistCreditsUsdPer1k: 2,
     // $0.40, because the band it meters is now FINITE.
     //
     // This row has been wrong in both directions. It shipped $0.20 against an
@@ -1241,6 +1327,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDatasetMonthlyUsd: null,
     extraDataGbMonthlyUsd: null,
     extraApiRequestsUsdPer1k: null,
+    extraAssistCreditsUsdPer1k: null,
     extraContactsUsdPer1k: null,
     extraEmailSendsUsdPer1k: null,
     meteredInfraPassThrough: false,

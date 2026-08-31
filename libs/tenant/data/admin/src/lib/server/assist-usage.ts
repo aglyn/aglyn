@@ -25,6 +25,12 @@
  * `FieldValue`'s statics need no app at all.
  */
 import { FieldValue } from 'firebase-admin/firestore'
+import {
+  publicAssistCredits,
+  resolveAssistBudgetUsd,
+  type PublicAssistCredits,
+} from '@aglyn/aglyn/app-utils/assist-credits'
+import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 
 /**
  * Aglyn Assist metering + the data loop (AGL-1860, phase 1).
@@ -187,6 +193,10 @@ export function assistEntitledMonthlyLimit(): number {
  * The free tier gets no separate figure and needs none — its 10 messages a
  * UTC day bound it at roughly $0.28/day, so this is a backstop it cannot
  * reach rather than a cap it runs into.
+ *
+ * ⚠️ It applies only to an org whose plan sells NO assist band. Several plans
+ * now include more assist than $40 of spend, so `assistMonthlyCeilingUsd`
+ * keeps this default off them — see there for which figure binds when.
  */
 export const ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD = 40
 
@@ -222,12 +232,66 @@ export const ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD = 40
  * should have to write down rather than reach by mistyping a digit.
  */
 export function assistOrgMonthlyCostLimitUsd(): number | null {
+  const configured = assistOperatorCeilingUsd()
+  return configured === undefined
+    ? ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD
+    : configured
+}
+
+/**
+ * The operator's ceiling exactly as CONFIGURED — three states, not two:
+ * a number, `null` for the word `off`, and `undefined` for unset or
+ * unparseable.
+ *
+ * `assistOrgMonthlyCostLimitUsd` collapses `undefined` onto the repo default
+ * and is the reading every existing caller wants. The composition with a
+ * plan's own band needs the third state, because "the operator wrote a
+ * number" and "nobody configured anything" have to bind differently against a
+ * band that was sold: an operator's figure is a decision, and the repo
+ * default is a backstop for orgs that have no band of their own.
+ */
+function assistOperatorCeilingUsd(): number | null | undefined {
   const raw = String(process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD ?? '').trim()
+  if (raw === '') return undefined
   if (raw.toLowerCase() === 'off') return null
   const parsed = Number(raw)
-  return Number.isFinite(parsed) && parsed > 0
-    ? parsed
-    : ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
+}
+
+/**
+ * The ceiling one reservation is actually measured against, given the org's
+ * plan band.
+ *
+ * ## Why the repo default must not bind an org that has a band
+ *
+ * `ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD` is $40, which was sized as a
+ * runaway guard back when every org's assist spend was bounded by a message
+ * cap. It is now BELOW what several plans include, so applying it to a plan
+ * band would refuse Business, Scale, Advanced and Agency workspaces partway
+ * through capacity they are paying for. A band that is sold is a product
+ * limit; a default nobody typed is not allowed to undercut it.
+ *
+ * ## Why an operator's explicit figure still does
+ *
+ * A self-hoster paying their own provider bill, or an operator responding to
+ * an incident, sets `ASSIST_ORG_MONTHLY_COGS_LIMIT_USD` on purpose. The lower
+ * of the two wins there, because that is what setting it means.
+ *
+ * `off` removes the operator's ceiling and does NOT remove a plan band: the
+ * word turns off a backstop, and the band is not one.
+ *
+ * An org with no band (`budgetUsd === null` — Free, Starter, and any org
+ * whose plan sells no assist) is unchanged in every case: it gets exactly the
+ * ceiling it got before, default and all.
+ */
+export function assistMonthlyCeilingUsd(
+  budgetUsd: number | null,
+): number | null {
+  if (budgetUsd === null) return assistOrgMonthlyCostLimitUsd()
+  const operator = assistOperatorCeilingUsd()
+  return typeof operator === 'number'
+    ? Math.min(budgetUsd, operator)
+    : budgetUsd
 }
 
 export interface AssistTokenRates {
@@ -366,8 +430,24 @@ export interface AssistReservation extends AssistQuotaVerdict {
    * nothing" from "nobody looked".
    */
   costUsd: number | null
-  /** The configured ceiling, or `null` when none is set (the default). */
+  /**
+   * The ceiling this reservation was measured against, or `null` when none
+   * applied — the plan's band, the operator's figure, or the lower of the
+   * two. See `assistMonthlyCeilingUsd`.
+   */
   costLimitUsd: number | null
+  /**
+   * The org's PLAN assist band in USD, or `null` when its plan sells none.
+   *
+   * Separate from `costLimitUsd` because they answer different questions and
+   * a surface needs both. `costLimitUsd` is what refused; this is whether the
+   * org has a band at all, and therefore whether it can be shown a credit
+   * balance. An org with no band that met the operator's backstop must not be
+   * told it used up credits it was never sold, and an org whose band was
+   * undercut by an operator's figure must not be told it has credits left
+   * while being refused.
+   */
+  budgetUsd: number | null
 }
 
 /**
@@ -398,12 +478,43 @@ export interface AssistReservation extends AssistQuotaVerdict {
  *
  * A plan-less org resolves as free upstream, so an unknown org gets the
  * SMALLER cap. That direction is deliberate.
+ *
+ * ## The spend gate is the one that matters now
+ *
+ * The message caps above are a runaway guard. The gate that decides what a
+ * paying workspace gets is the SPEND ceiling, because assist actions differ
+ * in cost by up to two orders of magnitude: a question is a few thousand
+ * tokens and generating a screen carries a node tree, a component catalog and
+ * theme tokens in and structured markup out. Counting both as one message
+ * would let ten screen builds outspend a thousand questions while both read
+ * as being within allowance.
+ *
+ * `org` is the billing document the caller already resolved `entitled` from.
+ * It is optional and defaults to no org, which resolves as free — a band of
+ * none, and therefore exactly the operator-backstop behaviour that predates
+ * plan bands. Passing it is what makes a plan's own band bind.
+ *
+ * ## Refusal is legitimate here, unlike the transactional email carve-out
+ *
+ * A campaign send is refusable at its band and transactional mail is not,
+ * because a blocked password reset locks somebody out of their own account.
+ * Nothing assist does is that. It is help, not a person's data and not their
+ * access: a refused question means the answer is not given, and a refused
+ * build means the screen is built by hand in a besigner that still works. So
+ * assist refuses at the band with no carve-out.
+ *
+ * What is never refused is what costs nothing. A docs-deflected answer and a
+ * cache hit spend no tokens and take NO RESERVATION AT ALL — they return
+ * before this function is reached — so a workspace at its band keeps getting
+ * every answer the docs index can give it. That is not a carve-out inside
+ * this gate; it is the reason those paths are ahead of it.
  */
 export async function reserveAssistMessage(
   firestore: FirebaseFirestore.Firestore,
   orgId: string,
   entitled: boolean,
   now = new Date(),
+  org: Partial<AglynOrgBilling> | null = null,
 ): Promise<AssistReservation> {
   const increment = FieldValue.increment
   const serverTimestamp = FieldValue.serverTimestamp
@@ -417,7 +528,12 @@ export async function reserveAssistMessage(
   const gateRef = entitled ? monthlyRef : dailyRef
   const gateField = entitled ? 'messages' : day
 
-  const costLimitUsd = assistOrgMonthlyCostLimitUsd()
+  // The plan's band first, then whatever the operator did about it. Resolved
+  // OUTSIDE the transaction: it is pure arithmetic over a document the caller
+  // already holds, and a transaction that retries must not re-derive a
+  // ceiling that could have moved between attempts.
+  const budgetUsd = resolveAssistBudgetUsd(org)
+  const costLimitUsd = assistMonthlyCeilingUsd(budgetUsd)
 
   return firestore.runTransaction(async (tx) => {
     // Every read before any write — Firestore requires that ordering, and it
@@ -447,6 +563,7 @@ export async function reserveAssistMessage(
         remaining: 0,
         costUsd,
         costLimitUsd,
+        budgetUsd,
       }
     }
     // The dollar ceiling, checked AFTER the message cap so the cheaper and
@@ -465,6 +582,7 @@ export async function reserveAssistMessage(
         remaining: Math.max(0, limit - used),
         costUsd,
         costLimitUsd,
+        budgetUsd,
       }
     }
     // `set(…, { merge: true })` and never `update()`: the counter document
@@ -487,8 +605,63 @@ export async function reserveAssistMessage(
       remaining: Math.max(0, limit - (used + 1)),
       costUsd,
       costLimitUsd,
+      budgetUsd,
     }
   })
+}
+
+/** A reservation with every dollar of provider spend removed. */
+export interface PublicAssistQuota {
+  allowed: boolean
+  period: 'day' | 'month'
+  used: number
+  limit: number
+  remaining: number
+  refusedBy: 'messages' | 'budget' | null
+  /**
+   * The credit standing, or `null` when the org's plan sells no assist band.
+   *
+   * Null rather than a converted backstop, because a Free workspace refused
+   * at the operator's ceiling has no credit balance to report and telling it
+   * "0 of 40,000 credits left" names a band it was never sold.
+   */
+  credits: PublicAssistCredits | null
+}
+
+/**
+ * The reservation as a CUSTOMER may see it.
+ *
+ * `AssistReservation` carries `costUsd`, `costLimitUsd` and `budgetUsd`, and
+ * all three are our provider bill at the serving model's list rates. Handing
+ * the reservation itself to a browser publishes our model costs, and they
+ * would move under customers on every model swap. Assist is surfaced in
+ * CREDITS, whose meaning is fixed, and this is the one function that crosses
+ * that boundary — every route returning quota to a client returns this.
+ *
+ * `limit` and `remaining` stay MESSAGES, unchanged: the free tier's daily
+ * message cap is a real, separately-worded limit that the panel already
+ * renders, and folding it into credits would make "10 messages a day"
+ * unsayable.
+ *
+ * The credit view reads against the EFFECTIVE ceiling, not the plan band, so
+ * an org whose band was undercut by an operator's figure is not told it has
+ * credits left while being refused.
+ */
+export function publicAssistQuota(
+  reservation: AssistReservation,
+): PublicAssistQuota {
+  return {
+    allowed: reservation.allowed,
+    period: reservation.period,
+    used: reservation.used,
+    limit: reservation.limit,
+    remaining: reservation.remaining,
+    refusedBy: reservation.refusedBy,
+    credits:
+      reservation.budgetUsd === null
+        ? null
+        : publicAssistCredits(reservation.costUsd, reservation.costLimitUsd),
+  }
 }
 
 /**
