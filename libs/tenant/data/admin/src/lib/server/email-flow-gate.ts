@@ -34,13 +34,25 @@
  * merchant decided to mail them, rather than because the recipient just did
  * something. An action's immediate `sendEmail` is the second — the visitor
  * submitted the form a moment ago and the reply is the response to it, which
- * is why that path is priority `transactional` and consults no consent
- * record.
+ * is why that path stays priority `transactional`.
  *
  * A step that runs three days later is the first. The person did one thing
  * once; everything after the wait is the merchant's schedule, not the
  * recipient's act. So a flow email is checked here, and the answer is the
  * same one a campaign would get for the same person.
+ *
+ * ## The middle ground, which used to be nothing at all
+ *
+ * An immediate reply used to ask NEITHER question, and that was too little.
+ * The recipient comes out of the event payload — an anonymous visitor's write
+ * on the collect route — so "the recipient just did something" is an
+ * assumption about who typed the address, not a fact the path establishes.
+ * Somebody with a recorded refusal on this site received merchant-authored
+ * content whenever a third party entered their address in a form.
+ *
+ * It cannot ask the full question either: the default policy is `strict`, and
+ * under it an address with no record is withheld — which is every first-time
+ * visitor. {@link FlowEmailScope} is where that line is drawn.
  *
  * ## What this deliberately does NOT do
  *
@@ -57,7 +69,7 @@ import {
   DEFAULT_CAMPAIGN_TOPIC_ID,
   consentGroupForHost,
   readMarketingBasis,
-  marketingConsentVerdict,
+  marketingConsentDecision,
   resolveMarketingConsentPolicy,
 } from '@aglyn/aglyn/server'
 import firebaseAdmin from './firebase-admin'
@@ -70,6 +82,42 @@ export type FlowEmailRefusal =
   | 'consent-withheld'
   /** They have left the stream this message belongs to. */
   | 'topic-unsubscribed'
+
+/**
+ * WHICH OF THE TWO QUESTIONS THIS MESSAGE HAS TO ANSWER.
+ *
+ * The distinction the module header draws, made into a parameter, because the
+ * middle ground it leaves out is where a real defect lived: an immediate step
+ * asked NEITHER question, so an address with a recorded refusal on this site
+ * received merchant-authored content whenever somebody typed it into a form.
+ *
+ * `'scheduled'` — a step after a `wait`, or anything else that goes out on
+ * the merchant's schedule. The org's full consent policy applies, and an
+ * unnamed stream resolves to the default one, exactly as a campaign's does.
+ *
+ * `'immediate'` — a reply to an act the recipient just performed. Only a
+ * STATED refusal stops it, and only a stream the step actually named.
+ *
+ * ## Why an immediate reply cannot take the full policy
+ *
+ * {@link DEFAULT_MARKETING_CONSENT_POLICY} is `strict`, which is what an org
+ * that has never opened the setting has. Under it an address with no record
+ * is withheld — and a first-time visitor filling in a form is exactly an
+ * address with no record. Applying the split there would refuse the
+ * auto-response to almost every new visitor on almost every site, which is a
+ * far larger failure than the one being fixed.
+ *
+ * A stated refusal is different in kind and needs no policy to read it: the
+ * person ticked the box that says do not market to me. `declined` is withheld
+ * under every mode, so this narrows to the one answer that is the person's
+ * own words rather than the org's configuration.
+ *
+ * The topic half narrows the same way. Defaulting an unnamed stream to
+ * "Promotions and offers" would let a promotions opt-out silence a reply to a
+ * contact form, and a form reply is not a promotion. A step that NAMES a
+ * stream has said what it is, and is filtered on it.
+ */
+export type FlowEmailScope = 'scheduled' | 'immediate'
 
 /**
  * The person's own record, from the two silos that hold a consent basis for
@@ -139,7 +187,10 @@ export async function flowEmailRefusal(options: {
   topicId?: string | null
   org?: unknown
   firestore?: any
+  /** See {@link FlowEmailScope}. Defaults to the stricter `'scheduled'`. */
+  scope?: FlowEmailScope
 }): Promise<FlowEmailRefusal | null> {
+  const immediate = options.scope === 'immediate'
   const email = String(options.email ?? '')
     .trim()
     .toLowerCase()
@@ -164,15 +215,29 @@ export async function flowEmailRefusal(options: {
     (options.org as Record<string, unknown> | undefined) ?? null,
     options.hostId,
   )
+  const decision = marketingConsentDecision(
+    readMarketingBasis(record, group),
+    policy,
+  )
+  /*
+   * An immediate reply is stopped by the person's own `declined` and by
+   * nothing else the policy decides. Every other `withheld` reason —
+   * `no-basis`, `not-grandfathered`, `other-host` — is a statement about
+   * configuration and capture history, and under the default `strict` mode
+   * the first of them describes every new visitor.
+   */
   if (
-    marketingConsentVerdict(readMarketingBasis(record, group), policy) ===
-    'withheld'
+    decision.verdict === 'withheld' &&
+    (!immediate || decision.reason === 'declined')
   ) {
     return 'consent-withheld'
   }
 
-  const topicId =
-    String(options.topicId ?? '').trim() || DEFAULT_CAMPAIGN_TOPIC_ID
+  const named = String(options.topicId ?? '').trim()
+  // An immediate reply belongs to no stream unless the step named one; a
+  // scheduled send belongs to the default stream, as a campaign does.
+  const topicId = immediate ? named : named || DEFAULT_CAMPAIGN_TOPIC_ID
+  if (!topicId) return null
   const sendable = await filterTopicSendable(
     options.hostId,
     topicId,

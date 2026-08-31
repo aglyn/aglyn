@@ -191,7 +191,17 @@ export async function scanAbandonedCheckouts(
       audience: 'tenant',
       context: 'abandoned cart',
       priority: 'bulk',
-      marketing: { hostId, siteBase: siteBaseByHost.get(hostId) ?? '' },
+      /*
+       * A cart reminder is promotional mail — the "Promotions and offers"
+       * stream, which is also where a campaign lands by default. Declared so
+       * a shopper who left that stream stops receiving these; the gate asks
+       * the topic only for callers that name one.
+       */
+      marketing: {
+        hostId,
+        siteBase: siteBaseByHost.get(hostId) ?? '',
+        topicId: Aglyn.EMAIL_TOPIC_MARKETING,
+      },
     })
     /*
      * SKIPPED, NOT DROPPED — the lockdown rule above, applied to the two

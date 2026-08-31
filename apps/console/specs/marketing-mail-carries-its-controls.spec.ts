@@ -122,6 +122,33 @@ const contextMatcher = (label: string) =>
 const DECLARES_MARKETING = /\bmarketing:\s*\{/
 
 /**
+ * How a sender names the STREAM its mail belongs to.
+ *
+ * Matched INSIDE the `marketing` object — `[^{}]*` cannot cross a brace, so a
+ * `topicId` belonging to something else in the same file does not count.
+ *
+ * The gate asks a topic opt-out only for callers that name one, and that is
+ * deliberate: an absent topic must refuse nobody, or a preference about
+ * "Promotions and offers" would start deciding whether a receipt goes out.
+ * The cost of that safety is exactly this — a sender that forgets to name its
+ * stream is not refused and not warned, it simply keeps mailing people who
+ * left it. So the sweep is what notices, the same way it notices a sender
+ * that forgets `marketing` altogether.
+ */
+const DECLARES_TOPIC = /marketing:\s*\{[^{}]*\btopicId\s*:/
+
+/**
+ * Audience senders that name their stream somewhere other than the
+ * `marketing` context. A reason is mandatory, as above.
+ */
+const TOPIC_EXEMPT: Record<string, string> = {
+  'libs/plugins/marketing/src/lib/server/campaign-send.ts':
+    'A campaign carries a topic chosen by its author, resolved per send rather than fixed per sender, and filters the whole audience through `filterTopicSendable` in one keyed read before the recipient count is shown. Naming a stream in the `marketing` context would be naming a second, constant one.',
+  'libs/tenant/runtime/src/lib/run-event-actions.ts':
+    'A workflow step carries its own `step.topicId`, which the executor hands to `flowEmailRefusal` before the send. That gate also decides whether an unnamed stream resolves to the default one, which turns on whether the step is a scheduled campaign or an immediate reply — a distinction the `marketing` context cannot express.',
+}
+
+/**
  * Audience senders that deliberately do not pass `marketing`. A reason is
  * mandatory — the value of the sweep is that "we decided" is written down,
  * not that the list is short.
@@ -133,6 +160,7 @@ const EXEMPT: Record<string, string> = {
 
 const audienceSenders: Array<{ path: string; text: string }> = []
 const undeclared: string[] = []
+const streamless: string[] = []
 
 for (const root of SEARCH_ROOTS) {
   for (const file of sourceFiles(root)) {
@@ -144,6 +172,9 @@ for (const root of SEARCH_ROOTS) {
     )
     if (!mailsAnAudience) continue
     audienceSenders.push({ path, text })
+    if (!(path in TOPIC_EXEMPT) && !DECLARES_TOPIC.test(text)) {
+      streamless.push(path)
+    }
     if (path in EXEMPT) continue
     if (!DECLARES_MARKETING.test(text)) undeclared.push(path)
   }
@@ -171,6 +202,30 @@ describe('mail to a merchant’s audience carries its controls', () => {
       expect(readFileSync(join(REPO_ROOT, path), 'utf8')).toMatch(
         CALLS_SEND_EMAIL,
       )
+    }
+  })
+
+  /*
+   * The same sweep pointed at the third list.
+   *
+   * A topic opt-out is the recipient telling the platform which streams they
+   * still want, made on the preference page and reached from the
+   * `List-Unsubscribe` link in every one of these messages. The gate enforces
+   * it only for a sender that names its stream — because an absent topic has
+   * to refuse nobody, or the check would reach mail nobody can unsubscribe
+   * from — so a sender that names none is not failing loudly anywhere else.
+   * It mails people who left it, and this is the only thing that says so.
+   */
+  it('leaves no audience sender without a stream to be unsubscribed from', () => {
+    expect(streamless).toEqual([])
+  })
+
+  it('records a reason for every stream exemption', () => {
+    for (const [path, reason] of Object.entries(TOPIC_EXEMPT)) {
+      expect(reason.length).toBeGreaterThan(60)
+      // The exemption is a claim that the sender resolves a topic ITSELF, so
+      // a file that stopped mentioning one has stopped earning it.
+      expect(readFileSync(join(REPO_ROOT, path), 'utf8')).toMatch(/topicId/)
     }
   })
 })

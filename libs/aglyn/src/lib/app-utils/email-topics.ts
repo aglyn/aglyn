@@ -247,6 +247,29 @@ export const EMAIL_TOPICS_COLLECTION = 'emailTopics'
 /** `hosts/{hostId}/topicOptOuts/{emailKey}` — one document per recipient. */
 export const TOPIC_OPT_OUTS_SUBCOLLECTION = 'topicOptOuts'
 
+/*==========================================
+ * THE BUILT-IN STREAM IDS.
+ *
+ * Named rather than written as literals wherever a send declares which stream
+ * it belongs to, because a mistyped id does not fail loudly. It names a
+ * stream nobody has opted out of, so `filterTopicSendable` finds no opt-out
+ * and the send goes to everybody — the control silently doing nothing, which
+ * is the failure mode a topic filter is least able to reveal.
+ *
+ * The value is also a Firestore path component and a colon-joined component
+ * of the unsubscribe link's signed subject, so it is a wire format: changing
+ * one of these strings orphans every opt-out already recorded against it.
+ *=========================================*/
+
+/** Sales, discounts, seasonal campaigns — and the cart a shopper left. */
+export const EMAIL_TOPIC_MARKETING = 'marketing'
+/** Regular news and stories, including a site's posts to its members. */
+export const EMAIL_TOPIC_NEWSLETTER = 'newsletter'
+/** New products, restocks, and changes to what a site offers. */
+export const EMAIL_TOPIC_PRODUCT_UPDATES = 'product-updates'
+/** One person here writing to another about working together. */
+export const EMAIL_TOPIC_SALES = 'sales'
+
 /**
  * The catalog every org has before anyone opens the console.
  *
@@ -258,22 +281,22 @@ export const TOPIC_OPT_OUTS_SUBCOLLECTION = 'topicOptOuts'
  */
 export const DEFAULT_EMAIL_TOPICS: readonly EmailTopic[] = [
   {
-    id: 'marketing',
+    id: EMAIL_TOPIC_MARKETING,
     name: 'Promotions and offers',
     description: 'Sales, discounts and seasonal campaigns.',
   },
   {
-    id: 'newsletter',
+    id: EMAIL_TOPIC_NEWSLETTER,
     name: 'Newsletter',
     description: 'Regular news and stories from us.',
   },
   {
-    id: 'product-updates',
+    id: EMAIL_TOPIC_PRODUCT_UPDATES,
     name: 'Product updates',
     description: 'New products, restocks and changes to what we offer.',
   },
   {
-    id: 'sales',
+    id: EMAIL_TOPIC_SALES,
     name: 'Sales outreach',
     description: 'Messages from a person here about working together.',
   },
@@ -287,7 +310,7 @@ export const DEFAULT_EMAIL_TOPICS: readonly EmailTopic[] = [
  * offer the catalog but not say which entry this message was, which is the one
  * thing the recipient came to the page knowing.
  */
-export const DEFAULT_CAMPAIGN_TOPIC_ID = 'marketing'
+export const DEFAULT_CAMPAIGN_TOPIC_ID = EMAIL_TOPIC_MARKETING
 
 /**
  * Whether `value` may be a topic id.

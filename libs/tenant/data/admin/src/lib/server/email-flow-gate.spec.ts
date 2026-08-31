@@ -195,6 +195,82 @@ describe('the consent split, applied to one person', () => {
     ).toBeNull()
   })
 
+  /*==========================================
+   * THE IMMEDIATE SCOPE — a reply to the recipient's own act.
+   *
+   * Two directions, and both have to hold or the change is a defect either
+   * way. It must refuse the person who SAID no, because the address in the
+   * payload was typed by whoever filled in the form. It must not refuse the
+   * person nobody has a record for, because under the default `strict` mode
+   * that is every first-time visitor, and refusing them would take out the
+   * auto-response on almost every site.
+   *=========================================*/
+  it('REFUSES an immediate reply to somebody who declined', async () => {
+    contact = { email: EMAIL, marketingConsent: false }
+
+    expect(
+      await flowEmailRefusal({
+        hostId: HOST,
+        email: EMAIL,
+        org: {},
+        firestore,
+        scope: 'immediate',
+      }),
+    ).toBe('consent-withheld')
+  })
+
+  it('ALLOWS an immediate reply to an address with no record, under the default policy', async () => {
+    // ⛔ The control. `strict` is the default, and it withholds an unrecorded
+    // address — so a scope that took the full split would refuse the reply to
+    // every new visitor. The assertion below is what fails if this is ever
+    // widened to the scheduled question.
+    contact = null
+    lead = null
+
+    expect(
+      await flowEmailRefusal({
+        hostId: HOST,
+        email: EMAIL,
+        org: {},
+        firestore,
+        scope: 'immediate',
+      }),
+    ).toBeNull()
+  })
+
+  it('ALLOWS an immediate reply on a basis given to a different site', async () => {
+    // The same control at one remove: `other-host` is a statement about
+    // capture history, not the person saying no.
+    contact = { email: EMAIL, ...grantedTo('site-2') }
+
+    expect(
+      await flowEmailRefusal({
+        hostId: HOST,
+        email: EMAIL,
+        org: STRICT,
+        firestore,
+        scope: 'immediate',
+      }),
+    ).toBeNull()
+  })
+
+  it('still REFUSES a scheduled step for the same unrecorded address', async () => {
+    // The scope is the only difference, so the two assertions together are
+    // what prove it is doing something rather than nothing.
+    contact = null
+    lead = null
+
+    expect(
+      await flowEmailRefusal({
+        hostId: HOST,
+        email: EMAIL,
+        org: {},
+        firestore,
+        scope: 'scheduled',
+      }),
+    ).toBe('consent-withheld')
+  })
+
   it('falls back to the lead silo when there is no contact', async () => {
     // A welcome series fires on a sign-up that may not have produced a
     // contact yet, so reading contacts alone would refuse the very audience
@@ -294,6 +370,41 @@ describe('the topic filter, after the consent split', () => {
         email: EMAIL,
         org: {},
         firestore,
+      }),
+    ).toBe('topic-unsubscribed')
+  })
+
+  it('does not filter an immediate reply on a stream it never named', async () => {
+    // The over-correction this scope exists to prevent. Defaulting an
+    // unnamed stream to "Promotions and offers" would let a promotions
+    // opt-out silence the reply to a contact form, and a form reply is not
+    // a promotion.
+    contact = { email: EMAIL, ...grantedTo(HOST) }
+    topicsLeft = { topics: { marketing: { optedOutAt: 1 } } }
+
+    expect(
+      await flowEmailRefusal({
+        hostId: HOST,
+        email: EMAIL,
+        org: {},
+        firestore,
+        scope: 'immediate',
+      }),
+    ).toBeNull()
+  })
+
+  it('DOES filter an immediate reply on a stream the step named', async () => {
+    contact = { email: EMAIL, ...grantedTo(HOST) }
+    topicsLeft = { topics: { promotions: { optedOutAt: 1 } } }
+
+    expect(
+      await flowEmailRefusal({
+        hostId: HOST,
+        email: EMAIL,
+        topicId: 'promotions',
+        org: {},
+        firestore,
+        scope: 'immediate',
       }),
     ).toBe('topic-unsubscribed')
   })

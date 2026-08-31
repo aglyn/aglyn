@@ -114,6 +114,41 @@ export interface MarketingSendContext {
    * Defaults to true: an unmarked caller is a machine.
    */
   capped?: boolean
+  /**
+   * The STREAM this message belongs to, so a recipient who left that stream
+   * is not mailed it.
+   *
+   * ## Absent refuses nobody, and that is the whole safety property
+   *
+   * A topic opt-out governs marketing STREAMS — "Promotions and offers",
+   * "Newsletter". It is not a thing anybody can untick off a receipt, a
+   * password reset or a booking confirmation, and a gate that refused those
+   * on a topic preference would be the failure mode this control is most
+   * capable of causing. Two guards make that unreachable rather than
+   * unlikely:
+   *
+   *  1. transactional mail declares no `marketing` context at all, so it
+   *     never reaches the gate; and
+   *  2. a marketing caller that names no stream gets no topic refusal here.
+   *     `filterTopicSendable` already reads an empty topic that way — there
+   *     is no stream to have left — and this preserves it rather than
+   *     defaulting to one.
+   *
+   * So the check binds exactly the senders that declare what they are, which
+   * is the same polarity `isMarketingMessage` chose: enumerate what is
+   * restricted, and a forgotten caller sends rather than silently drops.
+   *
+   * ## Why the gate asks it at all, when the consent split does not
+   *
+   * The two used to travel together in `email-flow-gate.ts`, and they are not
+   * the same kind of fact. The consent split is the ORG's policy over its own
+   * audience, which is why it stays a caller-side question. A topic opt-out
+   * is the RECIPIENT talking to the platform, recorded by the same preference
+   * page that records their cadence and reached by the same
+   * `List-Unsubscribe` link — so it belongs with the suppression and cadence
+   * checks, at the one chokepoint every marketing message crosses.
+   */
+  topicId?: string
 }
 
 /** What the gate is asked, once per marketing message. */
@@ -124,6 +159,12 @@ export interface MarketingSendGateRequest {
   email: string
   /** The caller's `context` label, for the log line on a refusal. */
   context?: string
+  /**
+   * The stream this message belongs to, or absent for a message that belongs
+   * to none. See {@link MarketingSendContext.topicId} — absent refuses
+   * nobody.
+   */
+  topicId?: string
   /** Whether a frequency cap may refuse — see {@link MarketingSendContext}. */
   capped: boolean
 }
@@ -132,6 +173,20 @@ export interface MarketingSendGateRequest {
 export type MarketingSendRefusal =
   /** On a suppression list: unsubscribed, hard-bounced, or a complaint. */
   | 'suppressed'
+  /**
+   * They have left the STREAM this message belongs to.
+   *
+   * Kept apart from `suppressed` even though both are terminal for this
+   * message, because they describe different people: somebody on a
+   * suppression list has left the site, and somebody here has left one of its
+   * streams and still wants the others. A merchant reading why a send shrank
+   * has a different thing to do about each, and only one of them is a list
+   * that has to be rebuilt.
+   *
+   * NOT retryable — the condition clears when the person re-subscribes, not
+   * when time passes.
+   */
+  | 'topic-unsubscribed'
   /** This person has already received their ceiling from this site. */
   | 'frequency-capped'
   /**
