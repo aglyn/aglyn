@@ -656,7 +656,7 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
 
     it('annual, per month — the same one column, at the same discount', () => {
       const PUBLISHED: Row = [0, 16, 39, 99, 179, 299, 649]
-      const CODE: Row = [0, 16, 39, 99, 179, 299, 1055]
+      const CODE: Row = [0, 16, 39, 99, 179, 299, 1049]
       expect(
         PUBLISHED_COLUMNS.map(
           (plan) => PLAN_PRICING[plan].basePriceAnnualMonthlyUsd,
@@ -665,11 +665,11 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       expect(
         PUBLISHED_COLUMNS.map((plan, column) => [plan, PUBLISHED[column], CODE[column]])
           .filter(([, was, now]) => was !== now),
-      ).toEqual([['agency', 649, 1055]])
+      ).toEqual([['agency', 649, 1049]])
       // The discount held its ratio. Moving the monthly alone would have
       // widened Agency's annual discount to 50% on the one tier being
       // repriced for margin — a bigger leak than the rise closes.
-      expect(1 - 1055 / 1299).toBeCloseTo(1 - 649 / 799, 2)
+      expect(1 - 1049 / 1299).toBeCloseTo(1 - 649 / 799, 2)
     })
 
     it('Enterprise publishes no list price — the card reads "Custom"', () => {

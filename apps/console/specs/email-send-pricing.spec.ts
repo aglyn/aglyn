@@ -658,7 +658,7 @@ describe('exactly one list price moved with the email change', () => {
     // Moving the monthly alone would have widened the annual discount to 50%
     // on the single tier being repriced for margin.
     expect(PLAN_PRICING.agency.basePriceMonthlyUsd).toBe(1299)
-    expect(PLAN_PRICING.agency.basePriceAnnualMonthlyUsd).toBe(1055)
+    expect(PLAN_PRICING.agency.basePriceAnnualMonthlyUsd).toBe(1049)
     const discount =
       1 -
       PLAN_PRICING.agency.basePriceAnnualMonthlyUsd /

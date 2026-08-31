@@ -321,7 +321,7 @@ describe('plan entitlements', () => {
       },
       agency: {
         basePriceMonthlyUsd: 1299,
-        basePriceAnnualMonthlyUsd: 1055,
+        basePriceAnnualMonthlyUsd: 1049,
         extraHostMonthlyUsd: 8,
         extraSeatMonthlyUsd: 2,
         extraCollaboratorMonthlyUsd: 1,

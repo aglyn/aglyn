@@ -1186,11 +1186,11 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
   // undercuts all three for the buyer this architecture is built for.
   agency: {
     basePriceMonthlyUsd: 1299,
-    // The annual discount holds its ratio (18.8%) across the rise. Leaving
-    // it at $649 while the monthly moved would have widened the annual
-    // discount to 50% on the one tier being repriced for margin — a bigger
-    // leak than the one the rise closes, on the customers who prepay.
-    basePriceAnnualMonthlyUsd: 1055,
+    // The annual discount holds its ratio across the rise, and the figure is
+    // what the live Stripe price charges: `aglyn_agency_v2_yearly` is $12,588
+    // a year, which is $1,049 a month. These two must not drift — a customer
+    // is billed by the Stripe price, while every surface quotes this constant.
+    basePriceAnnualMonthlyUsd: 1049,
     extraHostMonthlyUsd: 8,
     extraSeatMonthlyUsd: 2,
     extraCollaboratorMonthlyUsd: 1,
