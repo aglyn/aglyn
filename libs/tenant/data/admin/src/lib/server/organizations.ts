@@ -328,6 +328,21 @@ export async function createOrganization(
          * with the projection every other path uses.
          */
         scopeTokens: projectMemberScopeTokens({ role: 'owner', allHosts: true }),
+        /*
+         * The permission projection, stamped here for the same reason and
+         * with the same consequence if it is missed.
+         *
+         * No custom role can exist in an org being created, so the resolver
+         * is handed an explicit null and returns the owner's role defaults —
+         * which is also what the rules fall back to for a member carrying no
+         * map, so a failure to stamp this is invisible rather than a lockout.
+         * It is written anyway: an unstamped owner is a row the drift check
+         * has to keep explaining.
+         */
+        resolvedPermissions: resolveOrgPermissions(
+          { role: 'owner', allHosts: true },
+          null,
+        ),
       },
     )
     tx.set(
@@ -777,20 +792,81 @@ export async function listOrgMembers(
 }
 
 /**
- * Recomputes both denormalized authorization projections after a
- * membership change: `memberRoles` on every host the org owns (or one host
- * when given), and `scopeTokens` on every member doc.
+ * The custom role documents this roster actually references, read once each.
  *
- * The rules resolve a request from these two reads — the host doc for host
+ * A roster of hundreds shares a handful of roles, so this is bounded by the
+ * number of DISTINCT `roleId`s and not by the member count.
+ *
+ * A role id that resolves to nothing is left ABSENT rather than recorded as
+ * an empty role. The two happen to reach the same verdict today —
+ * `resolveOrgPermissions` skips a key whose value is not a boolean, so an
+ * empty map changes nothing — but they are different claims, and only one of
+ * them is true: a dangling id means the lookup MISSED, not that a role
+ * granting nothing was found. Recording the miss honestly is what keeps the
+ * fallback correct if that resolver ever treats an empty map as a revocation,
+ * which is what its own type comment already says it does.
+ */
+async function loadOrgCustomRoles(
+  orgId: string,
+  members: readonly AglynOrgMember[],
+): Promise<Map<string, AglynOrgCustomRole>> {
+  const roleIds = [
+    ...new Set(
+      members
+        .map((member) => member.roleId)
+        .filter((roleId): roleId is string => typeof roleId === 'string' && !!roleId),
+    ),
+  ]
+  const rolesRef = firestore()
+    .collection('orgs')
+    .doc(orgId)
+    .collection('roles')
+  const found = new Map<string, AglynOrgCustomRole>()
+  await Promise.all(
+    roleIds.map(async (roleId) => {
+      const snapshot = await rolesRef.doc(roleId).get()
+      if (snapshot.exists) {
+        found.set(roleId, snapshot.data() as AglynOrgCustomRole)
+      }
+    }),
+  )
+  return found
+}
+
+/**
+ * Recomputes the denormalized authorization projections after a membership
+ * change: `memberRoles` on every host the org owns (or one host when given),
+ * and `scopeTokens` + `resolvedPermissions` on every member doc.
+ *
+ * The rules resolve a request from these reads — the host doc for host
  * content (docs/MULTI_TENANT_FIRESTORE.md §5), the member doc for scoped
  * org resources (AGL-1038) — so this is what makes a membership effective.
- * Both live here, in one writer called by every mutation below, because a
- * grant path that updates one projection and forgets the other silently
- * over- or under-grants.
+ * They live here, in one writer called by every mutation below, because a
+ * grant path that updates one projection and forgets another silently over-
+ * or under-grants.
  *
- * `scopeTokens` is recomputed for the whole roster rather than the changed
+ * Everything is recomputed for the whole roster rather than the changed
  * member: the roster is already loaded for `memberRoles`, and a full pass
  * self-heals rows that an earlier partial failure left stale.
+ *
+ * ## `resolvedPermissions`, and why the rules need it denormalized
+ *
+ * Security rules cannot resolve a custom role. `member.roleId` points at
+ * `orgs/{orgId}/roles/{roleId}`, and reproducing the three-layer precedence
+ * (per-member beats custom role beats role default) in CEL takes a second
+ * cross-document get() plus a correct handling of a dangling id — where a
+ * naive version over-denies and locks out paying customers. So the rules read
+ * the ANSWER instead of the inputs, which is the same trade `scopeTokens`
+ * already makes for a reason the rules language shares: it has no `.map()`
+ * either.
+ *
+ * The map is `resolveOrgPermissions`' own output, so the rules and every
+ * server route are reading one resolver's verdict rather than two
+ * implementations of it.
+ *
+ * ONE READ PER DISTINCT ROLE, not per member: an org assigns a handful of
+ * custom roles across a roster that can run to hundreds, and resolving each
+ * member independently would re-read the same few documents once each.
  */
 export async function syncOrgAuthProjections(
   orgId: string,
@@ -799,6 +875,7 @@ export async function syncOrgAuthProjections(
   const db = firestore()
   const orgRef = db.collection('orgs').doc(orgId)
   const members = await listOrgMembers(orgId)
+  const customRoles = await loadOrgCustomRoles(orgId, members)
   const hostIds = hostId
     ? [hostId]
     : Object.keys(
@@ -821,7 +898,19 @@ export async function syncOrgAuthProjections(
       (member) =>
         [
           orgRef.collection('members').doc(member.$id),
-          { scopeTokens: projectMemberScopeTokens(member) },
+          {
+            scopeTokens: projectMemberScopeTokens(member),
+            resolvedPermissions: resolveOrgPermissions(
+              member,
+              // `?? null`, never `?? undefined`: a member whose `roleId`
+              // points at a DELETED role must resolve to their role
+              // defaults, which is what the resolver does with an explicit
+              // null and what every server route already does with the same
+              // dangling id. Leaving it undefined would be the same value,
+              // but the null says the lookup happened and missed.
+              member.roleId ? (customRoles.get(member.roleId) ?? null) : null,
+            ),
+          },
         ] as [FirebaseFirestore.DocumentReference, object],
     ),
   ]

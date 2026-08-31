@@ -465,28 +465,22 @@ service cloud.firestore {
        * org block deliberately has no `{document=**}` catch-all (see the note
        * further down) — so there is no looser sibling to defeat it.
        *
-       * ⛔ STILL OPEN: the CUSTOM-ROLE layer. `member.roleId` points at
-       * `orgs/{orgId}/roles/{roleId}`, whose map can also revoke
-       * `billing.view`, and rules cannot resolve that faithfully without
-       * a second cross-document get() plus a correct three-layer precedence
-       * (per-member beats custom role beats role default) reimplemented in
-       * CEL. A naive OR of the two layers OVER-denies — an admin whose custom
-       * role revokes `billing.view` but whose per-member map re-grants it is
-       * permitted by the resolver and would be locked out by the rule — and a
-       * dangling `roleId` makes get() return null, which denies where the
-       * resolver falls back to the role defaults. Both failure modes lock out
-       * paying customers, so it is not being attempted during the freeze.
+       * ⚠️ THE CUSTOM-ROLE LAYER IS NOT READ HERE. It is read by
+       * `memberResolves` further down, which is the denormalization this note
+       * used to propose: `syncOrgAuthProjections` now writes the RESOLVED map
+       * (`resolvedPermissions`, all three layers applied) onto the member doc
+       * and the rules read the answer instead of chasing the inputs. The
+       * reasons the direct approach was refused stand — a second
+       * cross-document get(), a three-layer precedence in CEL, and a dangling
+       * `roleId` whose null get() denies where the resolver falls back to the
+       * role defaults.
        *
-       * The fix that layer needs is DENORMALISATION, not a cleverer rule:
-       * `syncOrgAuthProjections` already writes `scopeTokens` onto the member
-       * doc for exactly this reason. Extend it to write the RESOLVED map —
-       *
-       *   orgs/{orgId}/members/{uid}.resolvedPermissions:
-       *     Record<string, boolean>   // all three layers already applied
-       *
-       * — recomputed whenever the member, their `roleId`, or that role doc
-       * changes, and then this rule becomes `memberGrants` against
-       * `resolvedPermissions` with the same default-true backfill semantics.
+       * This billing rule is deliberately NOT switched over to it. The gap it
+       * closes is a custom role revoking `billing.view` from a manager, and
+       * nothing has asked for that; changing a rule that guards the Stripe
+       * document to gain a case nobody has is how a lockout ships. The reader
+       * that needed it is `canWriteOrgDatasets`, where the rules and
+       * `/api/orgs/datasets` were already disagreeing about a live workspace.
        */
       match /billing/{billingDocId} {
         allow read: if isStaff() ||
@@ -602,6 +596,73 @@ service cloud.firestore {
           orgNotSuspended();
       }
       /**
+       * The RESOLVED permission verdict, denormalized (AGL-243 residual).
+       *
+       * `memberGrants` above reads the per-member override layer only, and
+       * the note under the `billing` match says why the custom-role layer was
+       * left open: rules cannot resolve `member.roleId` into
+       * `orgs/{orgId}/roles/{roleId}` and reimplement a three-layer
+       * precedence in CEL without a second get() and two lockout-shaped
+       * failure modes. That note also names the fix, which is this one —
+       * denormalize the ANSWER, exactly as `scopeTokens` denormalizes a reach
+       * the rules language cannot compute either.
+       *
+       * `resolvedPermissions` is `resolveOrgPermissions(member, customRole)`
+       * with all three layers already applied, written by
+       * `syncOrgAuthProjections` on every membership change and — the case
+       * that has no membership change at all — on every save or delete of a
+       * custom role.
+       *
+       * ## The default chain, which is the whole safety argument
+       *
+       * An absent map must not read as "everything allowed", and must not
+       * read as "nothing allowed" either. Both are wrong and one of them
+       * locks out every member of every org the moment this deploys, so the
+       * fallback is neither: it is the layer the rules CAN still read.
+       *
+       *   resolvedPermissions[key]         the resolved verdict, if stamped
+       *   -> permissions[key]              the per-member override, if any
+       *   -> true                          leaving the ROLE gate to decide
+       *
+       * That last step is only safe because every caller conjoins this with a
+       * role check it cannot influence. A member carrying no map — every
+       * member written before this field, and any written by a path that
+       * bypasses the projection — therefore gets exactly the verdict this
+       * ruleset gave them yesterday: their role's. A `true` here grants
+       * nothing on its own.
+       *
+       * Costs no document read. `orgMember()` is a get() every caller on this
+       * path already pays for, and identical get()s in one evaluation are
+       * billed once.
+       */
+      function memberResolves(permission) {
+        return orgMember()
+          .get('resolvedPermissions', orgMember().get('permissions', {}))
+          .get(permission, true) == true;
+      }
+      /**
+       * Dataset and record writes: the role, AND the resolved `data.manage`.
+       *
+       * The two halves are not redundant. The role list is what an absent or
+       * unstamped permission map falls through to, and the permission is what
+       * makes a custom role's revocation effective — which it was not, so the
+       * same principal was refused by `/api/orgs/datasets` and permitted
+       * here. That mattered most where there is no API to disagree with: a
+       * dataset UPDATE and a record update/delete go client-direct through
+       * these rules, so an editor whose `data.manage` a custom role revoked
+       * kept full edit and delete access to everything already stored.
+       *
+       * NOT folded into `canWriteOrgData`, deliberately. That helper also
+       * gates contacts, segments, media and media folders, and `data.manage`
+       * is scoped to datasets — "Create, edit, and delete organization
+       * datasets". Applying it to the media library would refuse a member
+       * whom `media-scope.ts` permits, which is the same disagreement this
+       * closes, pointed the other way.
+       */
+      function canWriteOrgDatasets() {
+        return canWriteOrgData() && memberResolves('data.manage');
+      }
+      /**
        * Write access to the org-wide records a site collaborator cannot read
        * (AGL-1026). Without this, an org role of `editor` scoped to one site
        * could still WRITE the contacts and lists the read rules now deny
@@ -646,6 +707,17 @@ service cloud.firestore {
         return canWriteOrgData() && canReadScoped();
       }
       /**
+       * The dataset-only twin. Same scoping, plus `data.manage`.
+       *
+       * Separate from `canWriteScopedOrgData` because that helper also gates
+       * contacts, segments, media and media folders — surfaces no server
+       * route gates on `data.manage`, so requiring it there would refuse
+       * members the API permits and invent the disagreement this closes.
+       */
+      function canWriteScopedOrgDatasets() {
+        return canWriteOrgDatasets() && canReadScoped();
+      }
+      /**
        * Only an org-wide member may change who a resource is shared with.
        * Without this a scoped editor could widen their own site's dataset to
        * `['org']`, or — worse — narrow an org-wide one to just their site,
@@ -685,7 +757,7 @@ service cloud.firestore {
         allow read: if isStaff() || canReadScoped();
         allow create: if isStaff();
         allow update: if isStaff() ||
-          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()));
+          (canWriteScopedOrgDatasets() && (isOrgWideMember() || scopeUnchanged()));
         allow delete: if isStaff();
         match /records/{recordId} {
           // A record has no `visibleTo` of its own; it inherits the
@@ -707,7 +779,7 @@ service cloud.firestore {
           allow read: if isStaff() || parentDatasetVisible();
           allow create: if isStaff();
           allow update, delete: if isStaff() ||
-            (canWriteOrgData() && parentDatasetVisible());
+            (canWriteOrgDatasets() && parentDatasetVisible());
         }
       }
       // The CRM is org-wide-only (AGL-1026). Contacts and segments are people
