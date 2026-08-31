@@ -478,7 +478,7 @@ Domain count is `O(1) + O(customers who want isolation)`, never `O(hosts)`:
 | --- | --- | --- | --- | --- |
 | **Shared pool** | Pooled across the sites on one member | 4 | **12** | Every site with no domain of its own. Transactional ONLY. |
 | **Customer-owned** | Fully the customer's | 1 each | **0** | Pro and above (`customSendingDomain`), for anyone who wants isolation and a name recipients recognize |
-| **Dedicated platform subdomain** | Fully the site's | 1 each | 3 each | Pro and above, **requested by the merchant**, best-effort |
+| **Dedicated platform subdomain** | Fully the site's | 1 each | 3 each | Pro and above (`dedicatedSendingDomain`), **requested by the merchant**, best-effort |
 
 The pool is flat at every scale — twelve records whether the platform has
 twelve sites or a hundred thousand. Customer-owned domains scale with
@@ -488,9 +488,16 @@ right isolation *product* rather than a concession.
 The dedicated platform subdomain is the one that must stay bounded. It is
 genuinely useful — reputation isolation with no DNS work for the merchant —
 and it is the only shape whose cost lands in our zone. It is therefore a
-**capacity-managed resource**, not an entitlement that scales: gated to Pro and
-above, capped by `AGLYN_SENDING_DOMAIN_CAPACITY`, and **claimed only when a
-merchant asks for one**.
+**capacity-managed resource**, not a capability that scales: gated on the
+`dedicatedSendingDomain` entitlement, which Pro and above carry, capped by
+`AGLYN_SENDING_DOMAIN_CAPACITY`, and **claimed only when a merchant asks for
+one**.
+
+An entitlement rather than a plan comparison so that a single account can be
+granted one without being repriced — a support grant that a plan word could not
+see. It is not a way past the ceiling: a granted org's claim draws on the same
+allowance and is refused at the same cap, and a site refused for any reason
+sends on the pool.
 
 That last clause is what makes the count bounded rather than merely capped.
 Claiming at the upgrade transition kept the spend proportional to revenue,

@@ -169,16 +169,32 @@ function seedHost(hostId: string, subdomain: string, orgId: string = ORG) {
 }
 
 /**
- * A dedicated domain is now a PAID capability, so the org's plan decides
+ * A dedicated domain is a PAID capability, so the org's entitlements decide
  * whether a claim may happen at all.
  *
  * Seeded to a qualifying plan by default, because everything else in this file
  * is about the claim MECHANICS — the label race, the rename pin, the teardown —
- * and those tests would otherwise all be asserting the plan gate by accident.
- * The gate has its own block, which sets the plan explicitly on both sides.
+ * and those tests would otherwise all be asserting the gate by accident. The
+ * gate has its own block, which sets the plan explicitly on both sides.
  */
 function seedOrgPlan(plan: string, orgId: string = ORG) {
   store.set(`orgs/${orgId}`, { plan })
+}
+
+/**
+ * The same org, plus the per-org feature overrides staff write.
+ *
+ * Stored under `entitlements.features`, which is the shape
+ * `resolveOrgEntitlements` merges over the plan defaults and the shape the
+ * staff override route writes — so what these tests exercise is the document a
+ * support engineer actually produces, not a convention invented here.
+ */
+function seedOrgWithFeatures(
+  plan: string,
+  features: Record<string, boolean>,
+  orgId: string = ORG,
+) {
+  store.set(`orgs/${orgId}`, { plan, entitlements: { features } })
 }
 
 beforeEach(() => {
@@ -1033,6 +1049,125 @@ describe('a dedicated domain is claimed by need, not by existence', () => {
       })
       expect([plan, result.created]).toEqual([plan, true])
     }
+  })
+
+  /**
+   * A GRANT ON ONE ACCOUNT, WITHOUT REPRICING IT.
+   *
+   * The gate resolves the org's ENTITLEMENTS, so the override staff write for
+   * a support case reaches the claim path. A comparison against the plan word
+   * cannot see this document at all: it reads `starter`, answers no, and the
+   * grant becomes a field with an audit row and no effect — the shape of
+   * failure where an operator gets a success message and changes nothing.
+   *
+   * Paired in one test on purpose. Starter WITHOUT the grant must still be
+   * refused in the same run, or "the override works" is equally satisfied by a
+   * gate that stopped refusing anybody.
+   */
+  it('claims for a lower plan holding a per-org grant, and not for the same plan without one', async () => {
+    seedOrgWithFeatures('starter', { dedicatedSendingDomain: true })
+    seedHost(HOST, 'granted')
+
+    const granted = await requestHostSendingDomain({
+      hostId: HOST,
+      orgId: ORG,
+      subdomain: 'granted',
+      requestedBy: 'staff',
+    })
+
+    expect(granted.created).toBe(true)
+    expect(granted.domain).toBe(`granted.${MAIL_APEX}`)
+    expect(granted.error).toBeNull()
+
+    store.clear()
+    seedOrgPlan('starter')
+    seedHost(OTHER_HOST, 'ungranted')
+
+    const ungranted = await requestHostSendingDomain({
+      hostId: OTHER_HOST,
+      orgId: ORG,
+      subdomain: 'ungranted',
+      requestedBy: 'merchant',
+    })
+
+    expect(ungranted.created).toBe(false)
+    expect(ungranted.error).toBe('plan-no-dedicated-domain')
+  })
+
+  /**
+   * THE GRANT IS ONE KEY, NOT A DOOR.
+   *
+   * An override document reaches the resolver whole, so a gate that merely
+   * noticed overrides EXIST — or that read the wrong key — would hand a
+   * dedicated domain to every org staff have ever touched for any reason.
+   * These two orgs both carry grants; neither carries this one.
+   */
+  it('is not opened by a grant of some other feature', async () => {
+    seedOrgWithFeatures('starter', {
+      customSendingDomain: true,
+      whiteLabel: true,
+    })
+    seedHost(HOST, 'northwind')
+
+    const result = await requestHostSendingDomain({
+      hostId: HOST,
+      orgId: ORG,
+      subdomain: 'northwind',
+      requestedBy: 'merchant',
+    })
+
+    expect(result.created).toBe(false)
+    expect(result.error).toBe('plan-no-dedicated-domain')
+    expect(store.has('sendingLabels/northwind')).toBe(false)
+  })
+
+  /**
+   * The override binds in BOTH directions, which is what makes it a lever
+   * rather than a one-way grant: an org whose sites cost the platform more
+   * than the account is worth can be held off the provider allowance without
+   * being downgraded out of everything else its plan carries.
+   */
+  it('refuses a qualifying plan whose grant is explicitly withdrawn', async () => {
+    seedOrgWithFeatures('agency', { dedicatedSendingDomain: false })
+    seedHost(HOST, 'northwind')
+
+    const result = await requestHostSendingDomain({
+      hostId: HOST,
+      orgId: ORG,
+      subdomain: 'northwind',
+      requestedBy: 'merchant',
+    })
+
+    expect(result.created).toBe(false)
+    expect(result.error).toBe('plan-no-dedicated-domain')
+  })
+
+  /**
+   * A DEAD SUBSCRIPTION STOPS NEW CLAIMS.
+   *
+   * `resolveEffectivePlan` reads a canceled or unpaid subscription down to
+   * `free`, and the gate inherits that with every other entitlement rather
+   * than needing its own rule — so a Pro account that stopped paying stops
+   * drawing on the provider allowance. Sites it already holds keep their
+   * domains: the pinned-label early return sits above this gate, which the
+   * downgrade case below covers.
+   */
+  it('claims nothing for a plan whose subscription is dead', async () => {
+    store.set(`orgs/${ORG}`, {
+      plan: 'pro',
+      subscription: { status: 'canceled' },
+    })
+    seedHost(HOST, 'northwind')
+
+    const result = await requestHostSendingDomain({
+      hostId: HOST,
+      orgId: ORG,
+      subdomain: 'northwind',
+      requestedBy: 'merchant',
+    })
+
+    expect(result.created).toBe(false)
+    expect(result.error).toBe('plan-no-dedicated-domain')
   })
 
   /**

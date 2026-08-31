@@ -32,6 +32,7 @@ this file is the last step, not the decision.
 | `customDomain` | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `customSendingDomain` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `dataStore` | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `dedicatedSendingDomain` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `dropshipRouting` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `eventCalendar` | — | — | — | — | — | — | — | — |
 | `giftCards` | — | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -56,4 +57,4 @@ this file is the last step, not the decision.
 | `whiteLabel` | — | — | — | — | — | — | ✓ | ✓ |
 | `workflows` | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
-_35 features across 8 plans._
+_36 features across 8 plans._

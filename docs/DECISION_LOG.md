@@ -92,6 +92,50 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-08-31 — The dedicated sending subdomain becomes an entitlement, so one org can be granted one
+
+- **Decided by:** the account owner — the gate moves to the mechanism every other capability uses, which makes a per-org grant real rather than a field nothing reads.
+- **Scope:** packaging
+- **Evidence:** `dedicatedSendingDomain` is `false` on Free and Starter and `true` from Pro up, which is the same ladder the plan floor described. The staff override route writes `entitlements.features` from `Object.keys(PLAN_ENTITLEMENTS.free.features)`, so adding the key is what makes the grant writable at all.
+
+**No charged price moves and no plan's default capability moves.** Every tier
+carries exactly what it carried before.
+
+### What changes
+
+The claim path read the org's `plan` word against a floor, so a per-org grant
+of this capability was inert: staff could write it, the write succeeded, an
+audit row was recorded, and nothing consulted it. Read through
+`checkEntitlement`, the same document decides the answer.
+
+Two consequences follow from resolving the whole org rather than one field:
+
+- **A grant takes effect.** A Starter org staff have granted may request a
+  dedicated subdomain without being moved to Pro — which is the support case
+  this gate meets most often, and which previously cost the account a repricing
+  that also moved eight quotas.
+- **A dead subscription revokes.** `resolveEffectivePlan` reads a canceled or
+  unpaid subscription down to `free`, so an org that stops paying stops
+  claiming NEW subdomains. Sites it already holds keep theirs: the pinned-label
+  early return sits above the gate, and a downgrade has never repossessed a
+  name that has earned sending reputation.
+
+### What does not change
+
+The grant is not a way past the ceiling. A claim is still one of three
+conditions — a merchant asks, the org carries the capability, and
+`AGLYN_SENDING_DOMAIN_CAPACITY` has room — and a site refused at any of them
+sends on the shared pool rather than not at all. `whiteLabel` does not move;
+it stays Agency and Enterprise, and the parity assertion that fails if the
+sending gates are ever conflated with the brand gate stays green.
+
+`DEDICATED_SENDING_DOMAIN_MIN_PLAN` survives only as the name an upsell
+quotes, and is now derived from `PLAN_ENTITLEMENTS` rather than declared beside
+it, so the tier a refusal names cannot disagree with the tier the gate
+enforces.
+
+---
+
 ## 2026-08-31 — A dedicated sending subdomain is requested, not issued
 
 - **Decided by:** the account owner — degrading to the pool at the ceiling is an improvement and not the same thing as scaling, so the demand curve moves rather than only the failure mode.
