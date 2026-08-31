@@ -642,6 +642,27 @@ service cloud.firestore {
           .get(permission, true) == true;
       }
       /**
+       * The same default chain as `memberResolves`, read with the OPPOSITE
+       * default: was this permission written down as granted?
+       *
+       * `memberResolves` answers "has this been taken away", which is why it
+       * defaults true and why every caller conjoins it with a role gate. This
+       * one answers "has it been given", so an absent key is `false` and it
+       * grants nothing on its own to a member the projection has not reached.
+       *
+       * It exists because `resolveOrgPermissions` WIDENS as well as narrows: a
+       * custom role or a per-member override can hand `data.manage` to a
+       * viewer, and the console surfaces that gate on the resolved map admit
+       * them. A rule that stopped at the role list would deny the read those
+       * pages are already granting, and the member would get a table that
+       * never loads.
+       */
+      function memberStamps(permission) {
+        return orgMember()
+          .get('resolvedPermissions', orgMember().get('permissions', {}))
+          .get(permission, false) == true;
+      }
+      /**
        * Dataset and record writes: the role, AND the resolved `data.manage`.
        *
        * The two halves are not redundant. The role list is what an absent or
@@ -704,6 +725,45 @@ service cloud.firestore {
         return isOrgWideMember() ||
           (isOrgMember() &&
            resource.data.visibleTo.hasAny(orgMember().get('scopeTokens', ['org'])));
+      }
+      /**
+       * WHO MAY READ THE PEOPLE: the reach, AND the authority. Both halves.
+       *
+       * `canReadScoped()` alone answers only "which documents is this member
+       * near", and nothing about what they may do once there. On `datasets`
+       * and `media` that is the whole question — a collaborator building a
+       * site has to read the rows their pages bind and the assets their pages
+       * place. On the CRM it is not: a contact is a person's name, address,
+       * order history, notes and consent, and an org VIEWER — the role whose
+       * entire definition is reading and changing nothing — was admitted to
+       * every one of them by membership alone.
+       *
+       * `data.manage` is the key, because it is the key the surfaces over this
+       * data already gate on. The Contacts console registers
+       * `permission: 'data.manage'` and the Emails console registers the same,
+       * so this is what makes those gates defense in depth rather than the
+       * only door: contact and segment writes are client-direct, so a browser
+       * that skips the console reaches Firestore and nothing else.
+       *
+       * THE SCOPED HALF SURVIVES, and that is deliberate. A site collaborator
+       * holding `data.manage` reads the contacts their own host captured —
+       * their listener filters on `visibleTo` and this predicate proves the
+       * same intersection per document. Dropping it in favor of
+       * `isOrgWideMember()` would take a shipped capability away from every
+       * agency to close a hole that is about the ROLE axis, not the scope one.
+       *
+       * The disjunction mirrors the resolver rather than approximating it. An
+       * explicit grant leads, so a viewer handed `data.manage` by a custom
+       * role or a per-member override is admitted exactly as the console
+       * admits them; a member the projection never reached falls through to
+       * the role that grants it by default, which is the only reading of an
+       * absent map that neither locks out every org nor admits every viewer.
+       */
+      function canReadScopedPeople() {
+        return canReadScoped() &&
+          (memberStamps('data.manage') ||
+           (orgMember().role in ['owner', 'admin', 'editor'] &&
+            memberResolves('data.manage')));
       }
       function canWriteScopedOrgData() {
         return canWriteOrgData() && canReadScoped();
@@ -784,14 +844,6 @@ service cloud.firestore {
             (canWriteOrgDatasets() && parentDatasetVisible());
         }
       }
-      // The CRM is org-wide-only (AGL-1026). Contacts and segments are people
-      // — names, emails, everything a form ever collected, across every site
-      // — and there is no per-site slice of them to hand a collaborator: a
-      // contact belongs to the org, not to the site whose form created it.
-      // Given the choice between showing a one-site contractor the whole
-      // customer list and showing them none of it, none is the only defensible
-      // one. A collaborator who genuinely needs their site's leads should get
-      // them through a server route that filters, not a widened rule.
       /**
        * The CRM, scoped like `datasets` and `media` rather than org-wide.
        *
@@ -803,10 +855,18 @@ service cloud.firestore {
        * every contact in it, so an agency running twelve client brands had
        * one address book with twelve readers.
        *
-       * `canReadScoped()` is the same predicate the client's
-       * `array-contains-any` filter uses, which is what makes a filtered
-       * query provable per-document and an UNFILTERED one denied outright
-       * rather than quietly returning the collection.
+       * The scope half of `canReadScopedPeople()` is the same predicate the
+       * client's `array-contains-any` filter uses, which is what makes a
+       * filtered query provable per-document and an UNFILTERED one denied
+       * outright rather than quietly returning the collection. The authority
+       * half is `data.manage`, the key the Contacts console itself gates on.
+       *
+       * READ IS NARROWER THAN WRITE HERE, and the asymmetry is deliberate.
+       * The writes stay on `canWriteOrgData()`, whose role list already
+       * excludes the viewer this read is about; adding the capability to them
+       * as well would apply it to the media library through the shared
+       * helper, where no surface asks for it. Disclosure is the risk this
+       * collection carries, and disclosure is the read.
        *
        * DELETE IS SOLE-HOLDER ONLY, and that is the load-bearing clause.
        * Removing a contact from one site's CRM is a DETACH — drop that
@@ -819,7 +879,7 @@ service cloud.firestore {
        * and goes through the Admin SDK, which these rules do not gate.
        */
       match /contacts/{contactId} {
-        allow read: if isStaff() || canReadScoped();
+        allow read: if isStaff() || canReadScopedPeople();
         allow create: if isStaff() ||
           (canWriteOrgData() && canCreateScoped());
         allow update: if isStaff() ||
@@ -830,10 +890,14 @@ service cloud.firestore {
              orgMember().get('scopeTokens', ['org'])));
       }
       // Segments are saved filters over the contacts above and are stamped
-      // org-wide at creation, so they follow the same scoped predicate: a
-      // segment nobody may see is a campaign audience nobody may resolve.
+      // org-wide at creation, so they follow the same predicate: a segment
+      // nobody may see is a campaign audience nobody may resolve, and a
+      // segment somebody may see is a description of the people it selects —
+      // the tags, capture sources, order thresholds and engagement windows
+      // that pick a slice of the CRM out. Reading it is reading about the
+      // contacts, so it answers to the same authority they do.
       match /contactSegments/{segmentId} {
-        allow read: if isStaff() || canReadScoped();
+        allow read: if isStaff() || canReadScopedPeople();
         allow create: if isStaff() ||
           (canWriteOrgData() && canCreateScoped());
         allow update: if isStaff() ||
