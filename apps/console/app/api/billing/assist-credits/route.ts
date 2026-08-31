@@ -27,6 +27,11 @@ import {
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 
+// lockdown-423: exempt — a READ-ONLY billing surface that writes nothing,
+// same posture as billing/usage-budget beside it. AGL-1501 keeps
+// billing-locked sessions alive so members can reach Billing, and a
+// locked org needs its usage readouts more than an unlocked one does.
+
 /**
  * This month's Aglyn Assist credit standing for one org — the odometer beside
  * the band on Billing → Usage.
