@@ -237,8 +237,13 @@ async function readZone(config: ZoneSettings): Promise<ExistingRecord[] | null> 
     let rows: Record<string, unknown>[]
     let next: unknown
     try {
+      // `v5` is the version the reference documents for this read; the writes
+      // below stay on the versions documented for them. The two answer
+      // identically — same records, same keys, same cursor for the same
+      // query — so this is alignment with what is published rather than a
+      // behavior change.
       const response = await fetch(
-        `https://api.vercel.com/v4/domains/${encodeURIComponent(config.zone)}/records?${params}`,
+        `https://api.vercel.com/v5/domains/${encodeURIComponent(config.zone)}/records?${params}`,
         {
           method: 'GET',
           headers: { Authorization: `Bearer ${config.token}` },
