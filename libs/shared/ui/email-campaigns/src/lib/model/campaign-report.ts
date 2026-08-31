@@ -198,6 +198,7 @@ export interface CampaignCaveat {
     | 'revenue-denominator-unrecorded'
     | 'revenue-multi-currency'
     | 'revenue-mid-flight'
+    | 'revenue-mixed-model'
     /* Raised by `campaign-conversions.ts`, through this shape for the same
      * reason: one way of saying "a number is being withheld, or must not be
      * read the obvious way, and here is why". The first two are the reasons

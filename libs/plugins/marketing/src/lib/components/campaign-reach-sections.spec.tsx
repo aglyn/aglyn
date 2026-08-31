@@ -18,16 +18,21 @@
  */
 
 /**
- * A CAMPAIGN BEYOND ITS MAIL — the properties these two sections hold.
+ * A CAMPAIGN BEYOND ITS MAIL — the properties these three sections hold.
  *
- *  1. Both join on the campaign's SEND IDS, because that is the only handle
- *     `campaignAttributions` and the click reports offer. A campaign owns no
- *     screen and no form, so there is nothing else to join on.
+ *  1. All of them join on the campaign's SEND IDS, because that is the only
+ *     handle `campaignAttributions`, the revenue rollups and the click
+ *     reports offer. A campaign owns no screen and no form, so there is
+ *     nothing else to join on.
  *  2. The conversion figures are AGGREGATE COUNTS, never a listing, and a
  *     refused count is withheld rather than rendered as a zero — "we could
  *     not read this" and "this campaign caused nothing" are opposite facts.
- *  3. The destinations are read ONLY WHEN ASKED, because they cost one
- *     document per email in the campaign.
+ *  3. The destinations and the revenue are read ONLY WHEN ASKED, because
+ *     each costs one document per email in the campaign.
+ *  4. The revenue is reported PER CURRENCY and never totalled across them —
+ *     currency is to money what kind is to a conversion, and a suite that
+ *     only ever saw one currency would pass against an implementation that
+ *     added them.
  */
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -42,6 +47,8 @@ const countCalls: string[] = []
 const docCalls: string[] = []
 /** What each `getDoc` answers, keyed by the document path. */
 const documents = new Map<string, Record<string, unknown>>()
+/** Document paths whose read is refused rather than answered. */
+const docRefusals = new Set<string>()
 
 const describeQuery = (parts: string[]): string => parts.join('|')
 
@@ -81,10 +88,17 @@ jest.mock('firebase/firestore', () => ({
     return { data: () => ({ count: counts.get(key) ?? 0 }) }
   },
   getDoc: async (target: any) => {
-    docCalls.push(String(target.__path))
+    const path = String(target.__path)
+    docCalls.push(path)
     await new Promise((resolve) => setTimeout(resolve, 0))
-    const data = documents.get(String(target.__path))
-    return { data: () => data }
+    if (docRefusals.has(path)) {
+      throw Object.assign(new Error('denied'), { code: 'permission-denied' })
+    }
+    /*
+     * `undefined` for a document that does not exist, which is what the real
+     * SDK answers and what the absent-versus-zero branch turns on.
+     */
+    return { data: () => documents.get(path) }
   },
 }))
 
@@ -104,6 +118,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 import {
   CampaignConversionsSection,
   CampaignDestinationsSection,
+  CampaignRevenueSection,
 } from './campaign-reach-sections'
 
 const ATTRIBUTIONS = 'hosts/host-1/campaignAttributions'
@@ -141,6 +156,7 @@ beforeEach(() => {
   countCalls.length = 0
   docCalls.length = 0
   documents.clear()
+  docRefusals.clear()
 })
 
 describe('what a campaign caused', () => {
@@ -398,5 +414,384 @@ describe('where a campaign sent people', () => {
     )
 
     expect(document.querySelectorAll('tbody tr')).toHaveLength(0)
+  })
+})
+
+/**
+ * WHAT A CAMPAIGN OF SEVERAL EMAILS EARNED.
+ *
+ * The merge is proved in `campaign-revenue.spec.ts`; this proves the merge is
+ * what a reader sees, and that the read is paid for the way this page pays
+ * for per-record reads.
+ *
+ * The MULTI-CURRENCY case is the control the rest of the file cannot stand in
+ * for. An implementation that adds a USD amount to a EUR amount passes every
+ * single-currency fixture ever written, so a suite that only ever sees one
+ * currency proves nothing about the one property this section exists to hold.
+ */
+describe('what a campaign earned', () => {
+  /**
+   * The figures on screen, with the currency symbols and separators off.
+   *
+   * Stripped rather than compared as formatted money, so the assertions do
+   * not turn on the runtime's locale. The currency headings share the `h6`
+   * tag and strip to nothing, so they drop out here and are asserted for by
+   * name instead.
+   */
+  const amounts = (): string[] =>
+    [...document.querySelectorAll('h6')]
+      .map((node) => (node.textContent ?? '').replace(/[^\d.]/g, ''))
+      .filter(Boolean)
+
+  const revenuePath = (sendId: string): string =>
+    `hosts/host-1/campaigns/${sendId}/reports/revenue`
+
+  const show = async () => {
+    fireEvent.click(screen.getByText('Show revenue'))
+    await settle()
+  }
+
+  it('reads NOTHING until it is asked, and says what asking costs', async () => {
+    render(
+      <CampaignRevenueSection
+        hostId="host-1"
+        sendIds={['send-1', 'send-2', 'send-3']}
+        truncated={false}
+      />,
+    )
+    await settle()
+
+    /*
+     * One document per email, against a section above it that runs on mount.
+     * The conversions counts are aggregations — billed per thousand index
+     * entries, so four honest figures cost about one row whatever the size of
+     * the campaign — and this cannot meet that budget, so it asks.
+     */
+    expect(docCalls).toHaveLength(0)
+    expect(
+      screen.getByText(/Reads one record per email — 3 of them\./),
+    ).toBeTruthy()
+  })
+
+  it('reads one revenue record per email, and merges them', async () => {
+    documents.set(revenuePath('send-1'), {
+      model: 'last-click',
+      windowDays: 7,
+      byCurrency: {
+        usd: { grossCents: 50_000, refundedCents: 5_000, orders: 4 },
+      },
+    })
+    documents.set(revenuePath('send-2'), {
+      model: 'last-click',
+      windowDays: 7,
+      byCurrency: { usd: { grossCents: 30_000, orders: 2 } },
+    })
+
+    render(
+      <CampaignRevenueSection
+        hostId="host-1"
+        sendIds={['send-1', 'send-2']}
+        truncated={false}
+      />,
+    )
+    await settle()
+    await show()
+
+    expect(docCalls).toEqual([revenuePath('send-1'), revenuePath('send-2')])
+    // Net, gross, refunded, then the two order counts. One currency, so no
+    // per-currency email count and no heading — a `USD` label over a report
+    // that only ever shows dollars is noise.
+    expect(amounts()).toEqual(['750.00', '800.00', '50.00', '6', '0'])
+    expect(screen.queryByText('USD')).toBeNull()
+    expect(screen.getByText(/6 orders credited, across 2 of/)).toBeTruthy()
+  })
+
+  it('reports several currencies APART, and totals none of them', async () => {
+    documents.set(revenuePath('send-1'), {
+      byCurrency: { usd: { grossCents: 50_000, orders: 3 } },
+    })
+    documents.set(revenuePath('send-2'), {
+      byCurrency: { eur: { grossCents: 30_000, orders: 2 } },
+    })
+    documents.set(revenuePath('send-3'), {
+      byCurrency: { gbp: { grossCents: 10_000, orders: 1 } },
+    })
+
+    render(
+      <CampaignRevenueSection
+        hostId="host-1"
+        sendIds={['send-1', 'send-2', 'send-3']}
+        truncated={false}
+      />,
+    )
+    await settle()
+    await show()
+
+    /*
+     * THE CONTROL. 900.00 is 500 + 300 + 100 and is a figure in no currency —
+     * an implementation that summed the buckets would print it here and would
+     * pass every other assertion in this file.
+     */
+    expect(amounts().filter((text) => text === '900.00')).toEqual([])
+    // Three blocks, largest net first, each complete and each its own unit.
+    expect(amounts()).toEqual([
+      '500.00',
+      '500.00',
+      '0.00',
+      '3',
+      '0',
+      '1',
+      '300.00',
+      '300.00',
+      '0.00',
+      '2',
+      '0',
+      '1',
+      '100.00',
+      '100.00',
+      '0.00',
+      '1',
+      '0',
+      '1',
+    ])
+    // The layout says it and the words say it. A reader who scans the blocks
+    // and a reader who reads the note reach the same conclusion.
+    expect(screen.getByText('USD')).toBeTruthy()
+    expect(screen.getByText('EUR')).toBeTruthy()
+    expect(screen.getByText('GBP')).toBeTruthy()
+    expect(screen.getByText(/deliberately no combined total/i)).toBeTruthy()
+    // Orders are a COUNT, so they may cross currencies where the money may
+    // not: six orders is six orders whatever they were paid in.
+    expect(screen.getByText(/6 orders credited, across 3 of/)).toBeTruthy()
+  })
+
+  it('names the emails behind each currency once there is more than one', async () => {
+    documents.set(revenuePath('send-1'), {
+      byCurrency: { usd: { grossCents: 20_000, orders: 2 } },
+    })
+    documents.set(revenuePath('send-2'), {
+      byCurrency: { usd: { grossCents: 20_000, orders: 2 } },
+    })
+    documents.set(revenuePath('send-3'), {
+      byCurrency: { eur: { grossCents: 90_000, orders: 1 } },
+    })
+
+    render(
+      <CampaignRevenueSection
+        hostId="host-1"
+        sendIds={['send-1', 'send-2', 'send-3']}
+        truncated={false}
+      />,
+    )
+    await settle()
+    await show()
+
+    // A currency block is a part of the campaign, not a view of all of it.
+    expect(screen.getByText('earned in EUR')).toBeTruthy()
+    expect(screen.getByText('earned in USD')).toBeTruthy()
+  })
+
+  it('reads a campaign that earned NOTHING as zero, not as absent', async () => {
+    // The record exists, so the join has run against these emails and found
+    // no sale. That is a real zero and a merchant may act on it.
+    documents.set(revenuePath('send-1'), { byCurrency: {} })
+
+    render(
+      <CampaignRevenueSection
+        hostId="host-1"
+        sendIds={['send-1', 'send-2']}
+        truncated={false}
+      />,
+    )
+    await settle()
+    await show()
+
+    expect(
+      screen.getByText('No orders have been credited to this campaign.'),
+    ).toBeTruthy()
+    expect(screen.queryByText(/never show a figure here/)).toBeNull()
+  })
+
+  it('reads a campaign with no record as absent, not as zero', async () => {
+    // No email has a revenue record. That is not "earned nothing" — it is
+    // also every campaign sent before the join existed and every site with no
+    // store, and the copy names both rather than printing a confident 0.
+    render(
+      <CampaignRevenueSection
+        hostId="host-1"
+        sendIds={['send-1', 'send-2']}
+        truncated={false}
+      />,
+    )
+    await settle()
+    await show()
+
+    expect(screen.getByText(/never show a figure here/)).toBeTruthy()
+    expect(
+      screen.queryByText('No orders have been credited to this campaign.'),
+    ).toBeNull()
+    expect(amounts()).toEqual([])
+  })
+
+  it('WITHHOLDS the figures when a read is refused, rather than zeroing them', async () => {
+    const errors = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined)
+    documents.set(revenuePath('send-1'), {
+      byCurrency: { usd: { grossCents: 50_000, orders: 3 } },
+    })
+    docRefusals.add(revenuePath('send-2'))
+
+    render(
+      <CampaignRevenueSection
+        hostId="host-1"
+        sendIds={['send-1', 'send-2']}
+        truncated={false}
+      />,
+    )
+    await settle()
+    await show()
+
+    /*
+     * "We could not read this" and "this campaign earned nothing" are
+     * opposite facts, and only one of them flatters the campaign. Neither the
+     * partial figures nor a zero is shown: a campaign whose second email
+     * could not be read has an unknown total, not a smaller one.
+     */
+    expect(screen.getByText(/could not be read/i)).toBeTruthy()
+    expect(amounts()).toEqual([])
+    expect(screen.queryByText(/orders credited, across/)).toBeNull()
+    expect(
+      screen.queryByText('No orders have been credited to this campaign.'),
+    ).toBeNull()
+    errors.mockRestore()
+  })
+
+  it('drops figures already on screen when a re-read is refused', async () => {
+    const errors = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined)
+    documents.set(revenuePath('send-1'), {
+      byCurrency: { usd: { grossCents: 50_000, orders: 3 } },
+    })
+
+    render(
+      <CampaignRevenueSection
+        hostId="host-1"
+        sendIds={['send-1']}
+        truncated={false}
+      />,
+    )
+    await settle()
+    await show()
+    expect(amounts()).toEqual(['500.00', '500.00', '0.00', '3', '0'])
+
+    docRefusals.add(revenuePath('send-1'))
+    fireEvent.click(screen.getByText('Read again'))
+    await settle()
+
+    // A stale total under a fresh error is the one arrangement that looks
+    // authoritative and is not.
+    expect(screen.getByText(/could not be read/i)).toBeTruthy()
+    expect(amounts()).toEqual([])
+    errors.mockRestore()
+  })
+
+  it('states the rule the amounts were credited under', async () => {
+    documents.set(revenuePath('send-1'), {
+      model: 'last-click',
+      windowDays: 7,
+      byCurrency: { usd: { grossCents: 10_000, orders: 1 } },
+    })
+
+    render(
+      <CampaignRevenueSection
+        hostId="host-1"
+        sendIds={['send-1']}
+        truncated={false}
+      />,
+    )
+    await settle()
+    await show()
+
+    expect(
+      screen.getByText(
+        /Credited to the last campaign whose link the buyer clicked, within 7 days/,
+      ),
+    ).toBeTruthy()
+    /*
+     * NO PER-MESSAGE AVERAGE. The send report divides by that send's own
+     * delivered count; a container's revenue and its delivery total cover
+     * different subsets of its emails, so the quotient would be an average
+     * over a population nobody named — and the delivery denominators on this
+     * page are the ones already known to read as unrecorded.
+     */
+    expect(screen.queryByText(/per delivered message/i)).toBeNull()
+  })
+
+  it('says so when the emails were not all credited under one rule', async () => {
+    documents.set(revenuePath('send-1'), {
+      windowDays: 7,
+      byCurrency: { usd: { grossCents: 10_000, orders: 1 } },
+    })
+    documents.set(revenuePath('send-2'), {
+      windowDays: 30,
+      byCurrency: { usd: { grossCents: 10_000, orders: 1 } },
+    })
+
+    render(
+      <CampaignRevenueSection
+        hostId="host-1"
+        sendIds={['send-1', 'send-2']}
+        truncated={false}
+      />,
+    )
+    await settle()
+    await show()
+
+    expect(
+      screen.getByText(/not all credited under the same rule/i),
+    ).toBeTruthy()
+    // One unit, so the amounts still add — this is a comparability warning,
+    // not the refusal two currencies get.
+    expect(amounts()[0]).toBe('200.00')
+  })
+
+  it('asks for nothing at all when the campaign has sent nothing', async () => {
+    render(
+      <CampaignRevenueSection hostId="host-1" sendIds={[]} truncated={false} />,
+    )
+    await settle()
+
+    expect(docCalls).toHaveLength(0)
+    expect(screen.queryByText('Show revenue')).toBeNull()
+    expect(screen.getByText(/nothing can be credited to it yet/i)).toBeTruthy()
+  })
+
+  it('says the amounts cover only the emails the page holds', async () => {
+    documents.set(revenuePath('send-1'), {
+      byCurrency: { usd: { grossCents: 10_000, orders: 1 } },
+    })
+
+    render(
+      <CampaignRevenueSection hostId="host-1" sendIds={['send-1']} truncated />,
+    )
+    await settle()
+    await show()
+
+    expect(screen.getByText(/The campaign has sent more\./)).toBeTruthy()
+  })
+
+  it('names the population behind an EMPTY answer too', async () => {
+    render(
+      <CampaignRevenueSection hostId="host-1" sendIds={['send-1']} truncated />,
+    )
+    await settle()
+    await show()
+
+    // "Nothing was credited" over part of a campaign is a claim about that
+    // part. The emptier the answer, the more it needs its population named.
+    expect(screen.getByText(/never show a figure here/)).toBeTruthy()
+    expect(screen.getByText(/The campaign has sent more\./)).toBeTruthy()
   })
 })

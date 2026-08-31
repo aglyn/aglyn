@@ -109,6 +109,12 @@ import { campaignRate, type CampaignCaveat } from './campaign-report'
  * than a field on the order. The rollup therefore buckets BY currency and
  * this module never adds two buckets together. A campaign with two currencies
  * renders two blocks and no total, and says so.
+ *
+ * The rule survives the merge across a container's emails.
+ * {@link campaignRevenueAcrossSends} keys its accumulator on the currency, so
+ * two rollups can only ever meet inside a bucket they already share — there
+ * is no code path in which a USD amount and a EUR amount reach the same
+ * addition, and no combined figure exists for a screen to print by accident.
  */
 
 /**
@@ -220,6 +226,18 @@ export interface CampaignRevenueReport {
   caveats: CampaignCaveat[]
 }
 
+/**
+ * Why there is no total, in the words both reports use.
+ *
+ * One sentence, one definition. A send's report and its campaign's report
+ * make the same refusal for the same reason, and two copies of the sentence
+ * is how one of them comes to be softened into a promise of a total.
+ */
+export const REVENUE_MULTI_CURRENCY_MESSAGE =
+  'This campaign earned in more than one currency. Each is reported on its ' +
+  'own — nothing here converts between them, so there is deliberately no ' +
+  'combined total.'
+
 /** A stored count as a non-negative integer. */
 function count(raw: unknown): number {
   const value = Math.floor(Number(raw ?? 0))
@@ -328,10 +346,7 @@ export function campaignRevenueReport(options: {
   if (multiCurrency) {
     caveats.push({
       id: 'revenue-multi-currency',
-      message:
-        'This campaign earned in more than one currency. Each is reported on ' +
-        'its own — nothing here converts between them, so there is ' +
-        'deliberately no combined total.',
+      message: REVENUE_MULTI_CURRENCY_MESSAGE,
     })
   }
   if (midFlight && currencies.length) {
@@ -351,6 +366,183 @@ export function campaignRevenueReport(options: {
     multiCurrency,
     model: String(rollup?.model ?? EMAIL_ATTRIBUTION_MODEL),
     windowDays: count(rollup?.windowDays) || EMAIL_ATTRIBUTION_WINDOW_DAYS,
+    caveats,
+  }
+}
+
+/** One currency's totals, merged across a campaign's emails. */
+export interface CampaignRevenueCurrencyAcrossSends {
+  /** Lowercase ISO code as the sales recorded it, e.g. `'usd'`. */
+  currency: string
+  grossCents: number
+  refundedCents: number
+  /** `gross - refunded` over the whole campaign, clamped once at zero. */
+  netCents: number
+  orders: number
+  refundedOrders: number
+  /** Emails of the campaign whose revenue record holds this currency. */
+  emails: number
+}
+
+/** Everything a campaign container's revenue section renders. */
+export interface CampaignRevenueAcrossSends {
+  /** One block per currency, largest net first. Never summed together. */
+  currencies: CampaignRevenueCurrencyAcrossSends[]
+  /**
+   * Orders credited across every currency.
+   *
+   * A COUNT, which is why it may cross currencies when the money may not: an
+   * order is one order whatever it was paid in, and counting two of them
+   * loses nothing. Adding their amounts loses the unit.
+   */
+  attributedOrders: number
+  /** Emails whose revenue record was looked for. */
+  read: number
+  /**
+   * Of those, how many have a revenue record at all.
+   *
+   * The rollup is created by the attribution writer on the first order it
+   * credits, so an email with no record has never been credited with one.
+   * Zero across the whole campaign is therefore the container's version of
+   * {@link CampaignRevenueReport.recorded} being `false`: it is not "this
+   * campaign earned nothing", it is also every campaign sent before the join
+   * existed and every campaign on a site with no store.
+   */
+  recorded: number
+  /** More than one currency is present, so no total may be shown. */
+  multiCurrency: boolean
+  /** The models these emails were credited under, distinct and sorted. */
+  models: string[]
+  /** The windows, in days, they were credited inside, distinct and sorted. */
+  windowDays: number[]
+  caveats: CampaignCaveat[]
+}
+
+/**
+ * MERGES A CAMPAIGN'S EMAILS INTO ONE REVENUE SECTION, per currency.
+ *
+ * `reports/revenue` is written per SEND, so a container's figure is one
+ * document per email and a merge. The merge is the whole risk: two emails of
+ * one campaign can have earned in different currencies, and adding their
+ * amounts produces a number that is wrong with nothing on screen to show it.
+ *
+ * ## The currency is the accumulator's KEY, not a field beside the amount
+ *
+ * That is the structural half of the guarantee. Amounts are added into a map
+ * keyed by currency, so two amounts can only reach the same addition when
+ * they already carry the same code — a USD figure and a EUR figure have no
+ * path to each other, whatever a later caller asks for. There is no combined
+ * field on the result, so a screen cannot print a cross-currency total by
+ * reading the wrong property, and
+ * {@link CampaignRevenueAcrossSends.multiCurrency} is what tells the screen
+ * to label the blocks.
+ *
+ * ## Clamped ONCE, over the campaign
+ *
+ * The single-send report clamps its net at zero because a partial refund can
+ * settle against an order credited at the full charge. Doing that per email
+ * and then summing would let one over-refunded email keep money a sibling
+ * email handed back — an email at -$50 clamped to $0 beside one at $200 would
+ * report $200 for a campaign holding $150. So gross and refunded are summed
+ * as they stand and the difference is clamped once, at the end.
+ *
+ * ## No per-message average, deliberately
+ *
+ * The send report divides net revenue by that send's own `delivered`, taken
+ * from the same document at the same instant. A container has no such pair.
+ * Its delivery total is summed over the emails that RECORDED a delivery count
+ * and its revenue over the emails that have a revenue record, and those are
+ * different subsets of the campaign — so the quotient would be an average
+ * over a population nobody named, which is the defect the whole reporting
+ * surface is built to refuse. The amounts are reported without one.
+ *
+ * @param rollups - one entry per email read, `undefined` where no record
+ * exists.
+ */
+export function campaignRevenueAcrossSends(
+  rollups: readonly (CampaignRevenueRollup | undefined)[],
+): CampaignRevenueAcrossSends {
+  const byCurrency = new Map<string, CampaignRevenueCurrencyAcrossSends>()
+  const models = new Set<string>()
+  const windows = new Set<number>()
+  let recorded = 0
+
+  for (const rollup of rollups) {
+    if (!rollup) continue
+    recorded += 1
+    models.add(String(rollup.model ?? EMAIL_ATTRIBUTION_MODEL))
+    windows.add(count(rollup.windowDays) || EMAIL_ATTRIBUTION_WINDOW_DAYS)
+    for (const [code, stored] of Object.entries(rollup.byCurrency ?? {})) {
+      const currency = String(code).trim().toLowerCase()
+      if (!currency) continue
+      const entry = byCurrency.get(currency) ?? {
+        currency,
+        grossCents: 0,
+        refundedCents: 0,
+        netCents: 0,
+        orders: 0,
+        refundedOrders: 0,
+        emails: 0,
+      }
+      entry.grossCents += count(stored?.grossCents)
+      entry.refundedCents += count(stored?.refundedCents)
+      entry.orders += count(stored?.orders)
+      entry.refundedOrders += count(stored?.refundedOrders)
+      // One rollup holds at most one bucket per currency, so this counts
+      // EMAILS that earned in it rather than orders.
+      entry.emails += 1
+      byCurrency.set(currency, entry)
+    }
+  }
+
+  const currencies = [...byCurrency.values()]
+    .map((entry) => ({
+      ...entry,
+      netCents: Math.max(0, entry.grossCents - entry.refundedCents),
+    }))
+    .filter((entry) => entry.orders > 0 || entry.grossCents > 0)
+    .sort(
+      (a, b) => b.netCents - a.netCents || a.currency.localeCompare(b.currency),
+    )
+
+  const multiCurrency = currencies.length > 1
+  const caveats: CampaignCaveat[] = []
+  if (multiCurrency) {
+    caveats.push({
+      id: 'revenue-multi-currency',
+      message: REVENUE_MULTI_CURRENCY_MESSAGE,
+    })
+  }
+  /*
+   * Two rules met in one figure, which is the currency problem in another
+   * dimension: a campaign whose older emails were credited under a different
+   * model or a different window holds amounts that were judged by different
+   * tests. They are still money in one unit, so unlike two currencies they
+   * add — the total stands, and the reader is told the rule behind it is not
+   * single.
+   */
+  if (models.size > 1 || windows.size > 1) {
+    caveats.push({
+      id: 'revenue-mixed-model',
+      message:
+        'This campaign’s emails were not all credited under the same rule. ' +
+        'The amounts are real, but they were judged by different attribution ' +
+        'models or windows, so they are not strictly comparable with each ' +
+        'other.',
+    })
+  }
+
+  return {
+    currencies,
+    attributedOrders: currencies.reduce(
+      (total, entry) => total + entry.orders,
+      0,
+    ),
+    read: rollups.length,
+    recorded,
+    multiCurrency,
+    models: [...models].sort(),
+    windowDays: [...windows].sort((a, b) => a - b),
     caveats,
   }
 }

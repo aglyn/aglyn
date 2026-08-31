@@ -19,6 +19,7 @@
 import { AppLink } from '@aglyn/shared-ui-jsx'
 import {
   Figure,
+  MoneyFigure,
   Section,
 } from '@aglyn/shared-ui-email-campaigns/components/report-figures'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
@@ -45,14 +46,19 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import {
+  campaignRevenueAcrossSends,
   CAMPAIGN_CONVERSION_KINDS,
   CAMPAIGN_CONVERSION_KIND_COPY,
+  EMAIL_ATTRIBUTION_WINDOW_DAYS,
   type CampaignConversionKind,
   type CampaignLinkRollup,
+  type CampaignRevenueAcrossSends,
+  type CampaignRevenueRollup,
 } from '@aglyn/shared-ui-email-campaigns/model'
 
 /**
- * A CAMPAIGN BEYOND ITS MAIL — what it caused, and where it sent people.
+ * A CAMPAIGN BEYOND ITS MAIL — what it caused, what it earned, and where it
+ * sent people.
  *
  * ## Attribution is the mechanism, and there is no other one
  *
@@ -74,9 +80,13 @@ import {
  *  - **What it caused there.** `campaignAttributions` records one row per
  *    identify moment — a form submission, a lead, a contact, a booking —
  *    carrying the SEND whose link the visitor followed.
+ *  - **What it earned there.** `campaigns/{sendId}/reports/revenue` buckets
+ *    the orders credited to that send by currency, so the merge across a
+ *    campaign's emails is what the campaign was credited with — per currency,
+ *    because the buckets have units and a total across them would not.
  *
- * Both sections below therefore hang off the campaign's own send ids, which
- * is the only handle either collection offers.
+ * All three sections below therefore hang off the campaign's own send ids,
+ * which is the only handle any of those collections offers.
  *
  * ## What neither section can say, and says so instead
  *
@@ -89,9 +99,10 @@ import {
  * copy below points at it rather than quietly leaving it out.
  *
  * A conversion with no touch at all is credited to nobody and is in neither
- * collection. That makes a page showing only credited conversions a partial
- * account by construction, which is why the figures are labelled "credited to
- * this campaign" everywhere they appear.
+ * collection. The same holds for an order: one placed by somebody who never
+ * clicked is credited to no campaign. That makes a page showing only credited
+ * outcomes a partial account by construction, which is why the figures are
+ * labelled "credited to this campaign" everywhere they appear.
  */
 
 /** Firestore's cap on the values in one `in` filter. */
@@ -268,6 +279,308 @@ export function CampaignConversionsSection(
   )
 }
 CampaignConversionsSection.displayName = 'CampaignConversionsSection'
+
+/**
+ * The rule the amounts were credited under, in the sentence a reader can
+ * check them against.
+ *
+ * Plural where the campaign is plural. A container can hold emails credited
+ * under different models or windows, and printing one of them as though it
+ * governed all of them would be the same lie as printing one currency symbol
+ * over two currencies.
+ */
+function creditedUnder(report: CampaignRevenueAcrossSends): string {
+  const model = report.models.length === 1 ? report.models[0] : ''
+  const rule =
+    model === 'last-click'
+      ? 'to the last campaign whose link the buyer clicked'
+      : model
+        ? `under the ${model} model`
+        : 'under more than one attribution model'
+  const window =
+    report.windowDays.length === 1
+      ? `within ${report.windowDays[0]} days of that click`
+      : `within ${report.windowDays.join(' or ')} days of that click, ` +
+        'depending on the email'
+  return `Credited ${rule}, ${window}.`
+}
+
+/**
+ * WHAT THE CAMPAIGN EARNED — per currency, and never across them.
+ *
+ * The same question a campaign of one email answers, answered the same way by
+ * a campaign of several: how many messages a container happens to hold is not
+ * a fact about whether its revenue is knowable. So this is the same section
+ * the single-send report carries — `Revenue`, in the same place in the page's
+ * order, drawn by the same money components — over a merge rather than over
+ * one document.
+ *
+ * ## Why it takes a merge, and what the merge may not do
+ *
+ * `reports/revenue` is written per SEND. There is no container-level rollup
+ * and there should not be one: it would have to be kept true against every
+ * order and every refund of every email in the campaign, duplicating figures
+ * that are already correct one level down. So the campaign's figure is one
+ * document per email and an addition — and the addition is the danger.
+ *
+ * **Currency is to money what kind is to a conversion.** The section above
+ * refuses to total form submissions with leads because one visit writes both;
+ * this refuses to total USD with EUR because the sum has no unit. Both
+ * refusals are structural rather than remembered:
+ * {@link campaignRevenueAcrossSends} keys its accumulator on the currency, so
+ * amounts in different currencies never reach the same addition, and the
+ * result carries no combined field for a screen to print.
+ *
+ * ## One currency reads as one figure; several read as several
+ *
+ * The common case is one currency, and it is drawn exactly as a single
+ * email's report draws it — net, gross, refunded, orders — with no currency
+ * heading, because a label saying `USD` over a page that only ever shows
+ * dollars is noise. The moment a second currency appears every block gets its
+ * code as a heading and its own email count, and a caveat says in words what
+ * the headings say in layout: these do not add up, and nothing here converts
+ * between them. The rare case pays for itself; the common one does not pay
+ * for the rare one.
+ *
+ * ## Behind a button, and the button says the price
+ *
+ * One document per email — the per-record read the conversions section above
+ * is shaped to avoid. That section can run on mount because an aggregation is
+ * billed per thousand index entries, so its four honest figures cost about as
+ * much as a single row however large the campaign is. This cannot: fifty
+ * emails is fifty document reads, every time the page opens, for a section
+ * most readers of a campaign are not opening the page for. So it is asked
+ * for, at the same control and in the same words as the destinations section
+ * below, which buys its rows the same way.
+ *
+ * ## Nothing, and nothing readable, are different sentences
+ *
+ * The rollup is created by the writer on the first order it credits, so an
+ * email with no record has never earned. A campaign where NO email has one
+ * has not been shown to have earned nothing — it is also every campaign sent
+ * before the join existed and every campaign on a site with no store, which
+ * is the distinction the single-send report draws in the same two sentences.
+ * A read that is REFUSED shows neither: the figures are withheld behind a
+ * warning, and any figures already on screen are dropped rather than left
+ * standing beside it, because a stale total under a fresh error is the one
+ * arrangement that looks authoritative and is not.
+ */
+export function CampaignRevenueSection(props: CampaignReachProps) {
+  const { hostId, sendIds, truncated } = props
+  const firestore = useFirestore()
+  const key = idsKey(sendIds)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [report, setReport] = useState<CampaignRevenueAcrossSends | null>(null)
+
+  // A merge over one set of emails describes that set. Leaving it on screen
+  // after the campaign's emails change labels it as something it is not.
+  useEffect(() => {
+    setReport(null)
+    setError(null)
+  }, [key])
+
+  const load = useCallback(async () => {
+    if (busy) return
+    const ids = key ? key.split(',') : []
+    if (!ids.length) return
+    setBusy(true)
+    setError(null)
+    try {
+      const snapshots = await Promise.all(
+        ids.map((id) =>
+          getDoc(
+            doc(
+              firestore,
+              'hosts',
+              hostId,
+              'campaigns',
+              id,
+              'reports',
+              'revenue',
+            ),
+          ),
+        ),
+      )
+      /*
+       * `data()` is `undefined` on a document that does not exist, and it is
+       * handed on as `undefined` rather than as an empty rollup: the merge
+       * counts the records that EXIST to tell a campaign that earned nothing
+       * from one whose revenue was never recorded at all.
+       */
+      setReport(
+        campaignRevenueAcrossSends(
+          snapshots.map(
+            (snapshot) => snapshot.data() as CampaignRevenueRollup | undefined,
+          ),
+        ),
+      )
+    } catch (caught) {
+      console.error(caught)
+      /*
+       * WITHHELD, never zeroed and never left stale. A refused read and a
+       * campaign that earned nothing are opposite facts, and the second is
+       * the more flattering of the two.
+       */
+      setReport(null)
+      setError('The revenue credited to this campaign could not be read')
+    } finally {
+      setBusy(false)
+    }
+  }, [busy, firestore, hostId, key])
+
+  const count = key ? key.split(',').length : 0
+
+  return (
+    <Section title="Revenue">
+      {!count ? (
+        <Typography variant="body2" color="text.secondary">
+          {'No emails have gone out under this campaign, so nothing can be ' +
+            'credited to it yet.'}
+        </Typography>
+      ) : (
+        <Stack spacing={1}>
+          <Typography variant="body2" color="text.secondary">
+            {'What this campaign’s emails were credited with, read from each ' +
+              'email’s own revenue record and merged by currency.'}
+          </Typography>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            <Button size="small" onClick={() => void load()} disabled={busy}>
+              {busy ? 'Reading…' : report ? 'Read again' : 'Show revenue'}
+            </Button>
+            <Typography variant="caption" color="text.secondary">
+              {`Reads one record per email — ${count.toLocaleString()} of them.`}
+            </Typography>
+          </Stack>
+          {error ? <Alert severity="warning">{error}</Alert> : null}
+          {report ? (
+            report.currencies.length ? (
+              <Stack spacing={3}>
+                {report.caveats.map((caveat) => (
+                  <Alert key={caveat.id} severity="info">
+                    {caveat.message}
+                  </Alert>
+                ))}
+                {report.currencies.map((entry) => (
+                  <Stack key={entry.currency} spacing={1}>
+                    {/*
+                     * The currency is a HEADING when there is more than one
+                     * and absent when there is one — the single-send report's
+                     * rule, so the two shapes of campaign page read alike.
+                     */}
+                    {report.multiCurrency ? (
+                      <Typography variant="subtitle2">
+                        {entry.currency.toUpperCase()}
+                      </Typography>
+                    ) : null}
+                    <Stack
+                      direction="row"
+                      spacing={4}
+                      useFlexGap
+                      sx={{ flexWrap: 'wrap' }}
+                    >
+                      <MoneyFigure
+                        label="Net revenue"
+                        cents={entry.netCents}
+                        currency={entry.currency}
+                        note="after refunds"
+                      />
+                      <MoneyFigure
+                        label="Gross revenue"
+                        cents={entry.grossCents}
+                        currency={entry.currency}
+                        note="as charged"
+                      />
+                      <MoneyFigure
+                        label="Refunded"
+                        cents={entry.refundedCents}
+                        currency={entry.currency}
+                        note="handed back"
+                      />
+                      <Figure
+                        label="Orders"
+                        value={entry.orders}
+                        note="credited to this campaign"
+                      />
+                      <Figure
+                        label="Fully refunded"
+                        value={entry.refundedOrders}
+                        note="of those orders"
+                      />
+                      {/*
+                       * Only where it says something. With one currency this
+                       * repeats the coverage line under the figures; with
+                       * two it is what shows the blocks are disjoint parts of
+                       * the campaign rather than two views of all of it.
+                       */}
+                      {report.multiCurrency ? (
+                        <Figure
+                          label="Emails"
+                          value={entry.emails}
+                          note={`earned in ${entry.currency.toUpperCase()}`}
+                        />
+                      ) : null}
+                    </Stack>
+                  </Stack>
+                ))}
+                {/*
+                 * NO PER-MESSAGE AVERAGE, and this is where a reader of the
+                 * single-send report would look for one. That page divides by
+                 * the send's own delivered count, read from the same document
+                 * at the same instant. A campaign has no such pair — its
+                 * revenue covers the emails with a revenue record and its
+                 * delivery total covers the emails that recorded a delivery
+                 * count, which are different subsets — so the quotient would
+                 * be an average over a population nobody named.
+                 */}
+                <Typography variant="caption" color="text.secondary">
+                  {`${report.attributedOrders.toLocaleString()} ` +
+                    `${report.attributedOrders === 1 ? 'order' : 'orders'} ` +
+                    `credited, across ${report.recorded.toLocaleString()} of ` +
+                    `this campaign’s ${report.read.toLocaleString()} ` +
+                    `${report.read === 1 ? 'email' : 'emails'}. The rest have ` +
+                    'never been credited with a sale.'}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {`${creditedUnder(report)} Clicks only — an open is not ` +
+                    'treated as evidence that anybody read the email. An ' +
+                    'order placed by somebody who never clicked, or who ' +
+                    'checked out without giving an address, is credited to no ' +
+                    'campaign, so this is a floor rather than every sale this ' +
+                    'campaign influenced.'}
+                </Typography>
+              </Stack>
+            ) : (
+              <Typography variant="body2" color="text.secondary">
+                {report.recorded
+                  ? 'No orders have been credited to this campaign.'
+                  : 'No revenue has been attributed to any of this ' +
+                    'campaign’s emails. Orders are credited to the last ' +
+                    'campaign whose link the buyer clicked, within ' +
+                    `${EMAIL_ATTRIBUTION_WINDOW_DAYS} days — emails sent ` +
+                    'before that was recorded, or a site with no store, will ' +
+                    'never show a figure here.'}
+              </Typography>
+            )
+          ) : null}
+          {/*
+            OUTSIDE both branches, because it qualifies both. A campaign that
+            reports nothing over the emails this page holds has not reported
+            nothing about itself, and the emptier answer is the one that most
+            needs its population named.
+           */}
+          {report && truncated ? (
+            <Typography variant="caption" color="text.secondary">
+              {`Across the ${report.read.toLocaleString()} emails this page ` +
+                'holds. The campaign has sent more.'}
+            </Typography>
+          ) : null}
+        </Stack>
+      )}
+    </Section>
+  )
+}
+CampaignRevenueSection.displayName = 'CampaignRevenueSection'
 
 /** One destination, summed across the campaign's emails. */
 interface DestinationRow {

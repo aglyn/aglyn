@@ -17,6 +17,7 @@
 
 import {
   campaignMoneyPerMessage,
+  campaignRevenueAcrossSends,
   campaignRevenueReport,
   EMAIL_ATTRIBUTION_MODEL,
   EMAIL_ATTRIBUTION_WINDOW_DAYS,
@@ -225,6 +226,266 @@ describe('campaignMoneyPerMessage', () => {
       denominator: 250,
       denominatorLabel: 'delivered',
       currency: 'usd',
+    })
+  })
+})
+
+/**
+ * MERGING A CAMPAIGN'S EMAILS, which is where the currencies could be lost.
+ *
+ * The single-send report cannot get this wrong: it reads one bucket map and
+ * renders it. The merge can, because it adds — and the addition that would
+ * pass every single-currency fixture ever written is the one that adds a USD
+ * amount to a EUR amount. Every case below that involves money therefore
+ * either carries two currencies or exists to pin an edge the two-currency
+ * case cannot see.
+ */
+describe('campaignRevenueAcrossSends', () => {
+  it('sums one currency across the campaign’s emails', () => {
+    const report = campaignRevenueAcrossSends([
+      rollup({
+        byCurrency: {
+          usd: { grossCents: 50_000, refundedCents: 5_000, orders: 4 },
+        },
+      }),
+      rollup({
+        byCurrency: {
+          usd: { grossCents: 30_000, orders: 2, refundedOrders: 0 },
+        },
+      }),
+    ])
+
+    expect(report.currencies).toHaveLength(1)
+    expect(report.currencies[0]).toMatchObject({
+      currency: 'usd',
+      grossCents: 80_000,
+      refundedCents: 5_000,
+      netCents: 75_000,
+      orders: 6,
+      emails: 2,
+    })
+    expect(report.multiCurrency).toBe(false)
+    expect(report.attributedOrders).toBe(6)
+  })
+
+  it('NEVER adds two currencies, whatever the caller asks it for', () => {
+    const report = campaignRevenueAcrossSends([
+      rollup({ byCurrency: { usd: { grossCents: 50_000, orders: 3 } } }),
+      rollup({ byCurrency: { eur: { grossCents: 30_000, orders: 2 } } }),
+      rollup({ byCurrency: { gbp: { grossCents: 10_000, orders: 1 } } }),
+    ])
+
+    expect(report.multiCurrency).toBe(true)
+    expect(report.currencies.map((entry) => entry.currency)).toEqual([
+      'usd',
+      'eur',
+      'gbp',
+    ])
+    // The figure a summing implementation would produce, asserted against by
+    // name: 90_000 is 50 + 30 + 10 and belongs to nothing.
+    expect(report.currencies.some((entry) => entry.grossCents === 90_000)).toBe(
+      false,
+    )
+    expect(report.currencies.map((entry) => entry.grossCents)).toEqual([
+      50_000, 30_000, 10_000,
+    ])
+    // And there is no field for a screen to print a total FROM. A combined
+    // amount that exists anywhere on the result is a combined amount that
+    // eventually reaches a `<MoneyFigure>`.
+    expect(Object.keys(report)).not.toContain('grossCents')
+    expect(Object.keys(report)).not.toContain('netCents')
+    expect(report.caveats.map((caveat) => caveat.id)).toContain(
+      'revenue-multi-currency',
+    )
+  })
+
+  it('keeps one email’s two currencies apart', () => {
+    // The case a per-EMAIL currency assumption would pass: the rollup itself
+    // holds both, so nothing about which document it came from separates them.
+    const report = campaignRevenueAcrossSends([
+      rollup({
+        byCurrency: {
+          usd: { grossCents: 20_000, orders: 2 },
+          eur: { grossCents: 20_000, orders: 2 },
+        },
+      }),
+    ])
+
+    expect(report.currencies).toHaveLength(2)
+    expect(report.multiCurrency).toBe(true)
+    expect(report.attributedOrders).toBe(4)
+    expect(report.currencies.every((entry) => entry.emails === 1)).toBe(true)
+  })
+
+  it('counts the emails each currency was earned in', () => {
+    const report = campaignRevenueAcrossSends([
+      rollup({ byCurrency: { usd: { grossCents: 10_000, orders: 1 } } }),
+      rollup({ byCurrency: { usd: { grossCents: 10_000, orders: 1 } } }),
+      rollup({ byCurrency: { eur: { grossCents: 40_000, orders: 1 } } }),
+    ])
+
+    expect(
+      Object.fromEntries(
+        report.currencies.map((entry) => [entry.currency, entry.emails]),
+      ),
+    ).toEqual({ usd: 2, eur: 1 })
+  })
+
+  it('clamps the net ONCE over the campaign, not per email', () => {
+    /*
+     * An over-refunded email beside a profitable one. Clamping each send's
+     * net at zero and then summing would report $200 for a campaign that is
+     * holding $150 — the refund on the first email would simply vanish.
+     */
+    const report = campaignRevenueAcrossSends([
+      rollup({
+        byCurrency: {
+          usd: { grossCents: 10_000, refundedCents: 15_000, orders: 1 },
+        },
+      }),
+      rollup({ byCurrency: { usd: { grossCents: 20_000, orders: 1 } } }),
+    ])
+
+    expect(report.currencies[0]).toMatchObject({
+      grossCents: 30_000,
+      refundedCents: 15_000,
+      netCents: 15_000,
+    })
+  })
+
+  it('still refuses to print a negative campaign', () => {
+    const report = campaignRevenueAcrossSends([
+      rollup({
+        byCurrency: {
+          usd: { grossCents: 1_000, refundedCents: 9_000, orders: 1 },
+        },
+      }),
+    ])
+
+    expect(report.currencies[0].netCents).toBe(0)
+    expect(report.currencies[0].refundedCents).toBe(9_000)
+  })
+
+  it('tells a campaign with no record apart from one that earned nothing', () => {
+    // Neither email has ever been credited: the join may not exist, the site
+    // may have no store, the emails may predate the whole mechanism.
+    const absent = campaignRevenueAcrossSends([undefined, undefined])
+    expect(absent.recorded).toBe(0)
+    expect(absent.read).toBe(2)
+    expect(absent.currencies).toEqual([])
+
+    // A record exists and holds nothing: this campaign really earned nothing.
+    const zero = campaignRevenueAcrossSends([
+      rollup({ byCurrency: {} }),
+      undefined,
+    ])
+    expect(zero.recorded).toBe(1)
+    expect(zero.read).toBe(2)
+    expect(zero.currencies).toEqual([])
+  })
+
+  it('reports how much of the campaign the amounts cover', () => {
+    const report = campaignRevenueAcrossSends([
+      rollup({ byCurrency: { usd: { grossCents: 10_000, orders: 1 } } }),
+      undefined,
+      undefined,
+    ])
+
+    expect(report.read).toBe(3)
+    expect(report.recorded).toBe(1)
+  })
+
+  it('says when the emails were not all credited under one rule', () => {
+    const report = campaignRevenueAcrossSends([
+      rollup({
+        windowDays: 7,
+        byCurrency: { usd: { grossCents: 10_000, orders: 1 } },
+      }),
+      rollup({
+        windowDays: 30,
+        byCurrency: { usd: { grossCents: 10_000, orders: 1 } },
+      }),
+    ])
+
+    expect(report.windowDays).toEqual([7, 30])
+    expect(report.caveats.map((caveat) => caveat.id)).toContain(
+      'revenue-mixed-model',
+    )
+    // The amounts are one unit, so unlike two currencies they still add.
+    expect(report.currencies[0].grossCents).toBe(20_000)
+  })
+
+  it('is quiet about the rule when every email shares it', () => {
+    const report = campaignRevenueAcrossSends([
+      rollup({ byCurrency: { usd: { grossCents: 10_000, orders: 1 } } }),
+      rollup({ byCurrency: { usd: { grossCents: 10_000, orders: 1 } } }),
+    ])
+
+    expect(report.models).toEqual([EMAIL_ATTRIBUTION_MODEL])
+    expect(report.windowDays).toEqual([EMAIL_ATTRIBUTION_WINDOW_DAYS])
+    expect(report.caveats).toEqual([])
+  })
+
+  it('merges buckets whose codes differ only in case', () => {
+    // Two spellings of one currency are one currency. Left apart they would
+    // render as two blocks and read as a campaign that took two units.
+    const report = campaignRevenueAcrossSends([
+      rollup({ byCurrency: { usd: { grossCents: 10_000, orders: 1 } } }),
+      rollup({ byCurrency: { USD: { grossCents: 10_000, orders: 1 } } }),
+    ])
+
+    expect(report.currencies).toHaveLength(1)
+    expect(report.multiCurrency).toBe(false)
+    expect(report.currencies[0]).toMatchObject({
+      currency: 'usd',
+      grossCents: 20_000,
+      emails: 2,
+    })
+  })
+
+  it('sorts the biggest earner first', () => {
+    const report = campaignRevenueAcrossSends([
+      rollup({
+        byCurrency: {
+          usd: { grossCents: 1_000, orders: 1 },
+          eur: { grossCents: 9_000, orders: 1 },
+        },
+      }),
+    ])
+
+    expect(report.currencies.map((entry) => entry.currency)).toEqual([
+      'eur',
+      'usd',
+    ])
+  })
+
+  it('drops a bucket holding neither orders nor money', () => {
+    const report = campaignRevenueAcrossSends([
+      rollup({
+        byCurrency: {
+          usd: { grossCents: 10_000, orders: 1 },
+          eur: { grossCents: 0, orders: 0 },
+        },
+      }),
+    ])
+
+    expect(report.currencies).toHaveLength(1)
+    // One surviving currency is not a multi-currency campaign, so the reader
+    // is not warned about a total that was never in question.
+    expect(report.multiCurrency).toBe(false)
+  })
+
+  it('answers an empty campaign without inventing a figure', () => {
+    const report = campaignRevenueAcrossSends([])
+    expect(report).toMatchObject({
+      currencies: [],
+      attributedOrders: 0,
+      read: 0,
+      recorded: 0,
+      multiCurrency: false,
+      models: [],
+      windowDays: [],
+      caveats: [],
     })
   })
 })

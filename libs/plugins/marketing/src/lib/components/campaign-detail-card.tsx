@@ -91,6 +91,7 @@ import CampaignEditDrawer, {
 import {
   CampaignConversionsSection,
   CampaignDestinationsSection,
+  CampaignRevenueSection,
 } from './campaign-reach-sections'
 import CampaignReportCard from './campaign-report-card'
 import { useCampaignManageApi } from '@aglyn/plugins-email/components/use-campaign-send-api'
@@ -135,18 +136,18 @@ export interface CampaignDetailCardProps {
 }
 
 /**
- * ONE CAMPAIGN: its lists, what it caused, where it sent people, and the
- * emails it did all of that with.
+ * ONE CAMPAIGN: its lists, what it caused, what it earned, where it sent
+ * people, and the emails it did all of that with.
  *
  * ## Why the emails are a section rather than the page
  *
  * A campaign reaches people by email, which is not the same as a campaign
  * BEING a list of emails. It runs over a window, against a set of audiences,
- * and the pages its links land on and the conversions credited to it are
- * facts about the campaign that no single message in it holds. So the body is
- * sectioned — what it caused, where it sent people, then the mail's own
- * figures, then its emails — and each section names the population it
- * describes.
+ * and the pages its links land on, the money credited to it and the
+ * conversions credited to it are facts about the campaign that no single
+ * message in it holds. So the body is sectioned — what it caused, what it
+ * earned, where it sent people, then the mail's own figures, then its emails
+ * — and each section names the population it describes.
  *
  * The ORDER is the part that says which of those the page is about. Delivery,
  * engagement and rates are mechanics of a message; a page that met the reader
@@ -155,10 +156,10 @@ export interface CampaignDetailCardProps {
  * campaign of one email gets — carries the same two outcome headings first,
  * for the same reason and in the same words.
  *
- * The two middle sections live in `campaign-reach-sections.tsx`, which is
+ * The three middle sections live in `campaign-reach-sections.tsx`, which is
  * also where the reason a campaign cannot simply DECLARE the screens and
  * forms it runs across is written down: no such edge is stored, attribution
- * is the mechanism, and both sections join on this campaign's send ids.
+ * is the mechanism, and all three sections join on this campaign's send ids.
  *
  * ## Why this resolves two kinds of id
  *
@@ -621,16 +622,36 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
           why `campaign-report-card.tsx` carries these two headings in this
           order too.
 
-          Both sections join on the campaign's own send ids, which is the only
-          handle the attribution and click-report collections offer — see
-          `campaign-reach-sections.tsx` for why no other join exists, and why
-          the web channel is named there rather than quietly omitted.
+          All three sections join on the campaign's own send ids, which is the
+          only handle the attribution, revenue and click-report collections
+          offer — see `campaign-reach-sections.tsx` for why no other join
+          exists, and why the web channel is named there rather than quietly
+          omitted.
          */}
         <CampaignConversionsSection
           hostId={hostId}
           sendIds={sendIds}
           truncated={sendsTruncated}
           basePath={basePath}
+        />
+
+        <Divider />
+        {/*
+          WHAT IT EARNED, between what it caused and where it sent people —
+          the order `campaign-report-card.tsx` puts these three in, so a
+          campaign of one email and a campaign of ten answer the merchant's
+          questions in the same sequence.
+
+          How many messages a container holds is not a fact about whether its
+          revenue is knowable, so the money question is answered here whatever
+          the count. Reading it costs one record per email, so it asks first —
+          see `campaign-reach-sections.tsx` for that bargain, and for why the
+          currencies are reported apart and never totalled.
+         */}
+        <CampaignRevenueSection
+          hostId={hostId}
+          sendIds={sendIds}
+          truncated={sendsTruncated}
         />
 
         <Divider />

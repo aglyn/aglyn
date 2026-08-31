@@ -220,6 +220,9 @@ jest.mock('./campaign-reach-sections', () => ({
   CampaignDestinationsSection: (props: any) => (
     <div>{`destinations of ${props.sendIds.join('|')}`}</div>
   ),
+  CampaignRevenueSection: (props: any) => (
+    <div>{`earned by ${props.sendIds.join('|')}`}</div>
+  ),
 }))
 
 import CampaignDetailCard from './campaign-detail-card'
@@ -339,16 +342,22 @@ describe('an id that names a campaign', () => {
   it('presents the campaign as more than a list of its emails', async () => {
     /*
      * The emails are ONE section of the body. A campaign runs over a window,
-     * against a set of audiences, and the conversions credited to it and the
-     * pages its links landed on are facts about the campaign that no single
-     * message holds — so a body that was the email table and nothing else
-     * said a campaign is that table.
+     * against a set of audiences, and the conversions credited to it, the
+     * money credited to it and the pages its links landed on are facts about
+     * the campaign that no single message holds — so a body that was the
+     * email table and nothing else said a campaign is that table.
      */
     await mount('camp-1')
 
-    // Both sections are handed the campaign's own emails, newest first, which
-    // is the only handle either collection joins on.
+    // All three sections are handed the campaign's own emails, newest first,
+    // which is the only handle any of those collections joins on.
     expect(screen.getByText('caused by send-2|send-1')).toBeTruthy()
+    /*
+     * Revenue included, whatever the number of emails. The single-send report
+     * answers the money question, and how many messages a container holds is
+     * not a fact about whether its revenue is knowable.
+     */
+    expect(screen.getByText('earned by send-2|send-1')).toBeTruthy()
     expect(screen.getByText('destinations of send-2|send-1')).toBeTruthy()
     // And the email list is still there, named as one section among them.
     expect(screen.getByText('Emails (2)')).toBeTruthy()
