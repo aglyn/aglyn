@@ -45,7 +45,7 @@ import {
 
 export interface SendingDomainsCardProps {
   hostId: string
-  /** `/…/emails/sending`, so a row can link to the domain's own page. */
+  /** `/…/emails`, which every card in this section is handed. */
   basePath: string
 }
 
@@ -145,7 +145,9 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
        * "Publish the records" with the records one click further away would
        * make the next step something they have to go looking for.
        */
-      router.push(`${basePath}/${encodeURIComponent(payload?.domain ?? domain)}`)
+      router.push(
+        `${basePath}/sending/${encodeURIComponent(payload?.domain ?? domain)}`,
+      )
   }, [call, view?.orgId, basePath, router, newDomain, addingBusy])
 
   const domains = view?.domains ?? []
@@ -256,7 +258,7 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
                     sx={{ cursor: 'pointer' }}
                     onClick={() =>
                       router.push(
-                        `${basePath}/${encodeURIComponent(record.domain)}`,
+                        `${basePath}/sending/${encodeURIComponent(record.domain)}`,
                       )
                     }
                   >

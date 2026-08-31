@@ -294,7 +294,7 @@ export function SendingDomainDetail(props: SendingDomainDetailProps) {
         variant: 'warning',
       })
     }
-    router.push(basePath)
+    router.push(`${basePath}/sending`)
   }, [confirm, call, identity, domain, router, basePath])
 
   const state = describeSendingDomain({

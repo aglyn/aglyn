@@ -35,11 +35,25 @@ import { act, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { SendingDomainsCard } from './sending-domains-card'
 
-const BASE_PATH = '/acme/hosts/site/emails/sending'
+/*
+ * What the section actually hands every card: the Emails base, with no
+ * section segment on it. A fixture carrying `/sending` already made
+ * `${basePath}/${domain}` look right, which is how a card that navigated to
+ * `/emails/{domain}` — a route that renders nothing — passed its own tests.
+ */
+const BASE_PATH = '/acme/hosts/site/emails'
+
+/** Every path this render navigated to, in order. */
+const pushed: string[] = []
 
 jest.mock('next/navigation', () => ({
-  useRouter: () => ({ push: () => undefined, replace: () => undefined }),
-  usePathname: () => BASE_PATH,
+  useRouter: () => ({
+    push: (path: string) => {
+      pushed.push(path)
+    },
+    replace: () => undefined,
+  }),
+  usePathname: () => `${BASE_PATH}/sending`,
 }))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: { uid: 'uid-1', getIdToken: async () => 'token' } }),
@@ -81,6 +95,7 @@ jest.mock('@aglyn/shared-ui-jsx/components/navigation-drawer.component', () => (
 let identity: Record<string, unknown> = {}
 
 beforeEach(() => {
+  pushed.length = 0
   identity = {
     orgId: 'org-1',
     selected: 'platform',
@@ -196,5 +211,34 @@ describe('what a reader may do is what the server says they may do', () => {
     await mount()
 
     expect(screen.getByText(/part of the Agency plan/i)).toBeTruthy()
+  })
+})
+
+/*
+ * A DOMAIN'S OWN PAGE IS REACHED AT `/emails/sending/{domain}`.
+ *
+ * `/emails/{domain}` resolves to no section and renders an empty page. That
+ * is the worst possible landing for the two navigations below, because both
+ * happen at the moment the reader needs the DNS records: right after adding
+ * the domain, and on clicking the row that says the records are outstanding.
+ */
+describe('navigating to one domain', () => {
+  it('sends a row click to the domain page under the sending section', async () => {
+    identity.domains = [
+      { domain: 'acme.com', status: 'requested', records: [] },
+    ]
+    await mount()
+    const row = screen.getByText('acme.com').closest('tr') as HTMLElement
+    await act(async () => {
+      row.click()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(pushed).toEqual([`${BASE_PATH}/sending/acme.com`])
+  })
+
+  it('THE CONTROL: the section segment is not already in the base', () => {
+    // Without this, a base that ended in `/sending` would make the assertion
+    // above pass against the very bug it exists to catch.
+    expect(BASE_PATH.endsWith('/sending')).toBe(false)
   })
 })
