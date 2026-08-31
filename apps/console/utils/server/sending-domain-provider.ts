@@ -212,6 +212,29 @@ function providerDetail(status: number, body: unknown): string {
   return safeProviderDetail(`http-${status}${known ? `:${known}` : ''}`)
 }
 
+/**
+ * Whether a rejected `POST /domains` means "the account already holds this
+ * name" rather than "you may not do this".
+ *
+ * Resend does not use one status for it. A duplicate is documented as `422`,
+ * and the live API answers `403` with `validation_error` and a message naming
+ * the domain. Both have to route to adoption, because the alternative is a
+ * domain that can never be issued a key: every retry re-POSTs, is refused for
+ * the same reason, and the record stays `requested` forever.
+ *
+ * Matching the error NAME rather than the message keeps this off the vendor's
+ * English. It is deliberately not narrowed further: `403:validation_error` is
+ * also what an unrelated rejection could carry, and adoption is safe to
+ * attempt regardless — it confirms the account really holds the name and that
+ * the fetched object carries it, and refuses on anything it cannot tie to the
+ * domain asked for. A wrong guess here costs one extra lookup and still ends
+ * in `failed`; the opposite mistake strands the domain.
+ */
+function isDuplicateRejection(status: number, body: unknown): boolean {
+  if (status === 422) return true
+  return status === 403 && (body as { name?: unknown })?.name === 'validation_error'
+}
+
 /** Whether a rejection was our own deadline rather than the network's. */
 function abortedDetail(error: unknown): 'timeout' | 'network' {
   const name = (error as { name?: string })?.name
@@ -348,7 +371,9 @@ export const RESEND_SENDING_DOMAIN_PROVIDER: SendingDomainProvider = {
         })
       }
 
-      if (response.status === 422) return adoptExisting(domain, apiKey)
+      if (isDuplicateRejection(response.status, payload)) {
+        return adoptExisting(domain, apiKey)
+      }
 
       const detail = providerDetail(response.status, payload)
       console.error('[sending-domain-provider:resend] issue failed', domain, detail)

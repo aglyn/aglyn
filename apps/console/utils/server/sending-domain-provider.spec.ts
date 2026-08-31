@@ -312,6 +312,50 @@ describe('with a key', () => {
     Requirement 5 — idempotency at the provider
   ========================================*/
 
+  /*
+   * THE STATUS THE LIVE API ACTUALLY ANSWERS WITH.
+   *
+   * A duplicate is documented as 422, and Resend answers 403 with
+   * `validation_error` and the message "The <domain> domain has been
+   * registered already." A trigger keyed to 422 alone leaves such a domain
+   * stuck at `requested` forever: every retry re-POSTs and is refused the
+   * same way, so no signing key is ever stored and the site cannot send.
+   */
+  describe('a 403 duplicate', () => {
+    it('adopts the domain the account already holds', async () => {
+      responses = [
+        { ok: false, status: 403, json: { name: 'validation_error' } },
+        {
+          ok: true,
+          status: 200,
+          json: { data: [{ id: 'existing-id', name: DOMAIN }] },
+        },
+        { ok: true, status: 200, json: resendDomainPayload({ id: 'existing-id' }) },
+      ]
+
+      const issue = await sendingDomainProvider().issue(DOMAIN)
+
+      expect(issue.outcome).toBe('already-exists')
+      expect(issue.dkimPublicKey).toBe(PUBLIC_KEY)
+      expect(issue.providerDomainId).toBe('existing-id')
+      expect(calls.filter((call) => call.method === 'POST')).toHaveLength(1)
+    })
+
+    it('still refuses a 403 that is not a duplicate', async () => {
+      // A forbidden key must not be read as "the account already has it".
+      // Nothing is adopted and no lookup is attempted.
+      responses = [
+        { ok: false, status: 403, json: { name: 'restricted_api_key' } },
+      ]
+
+      const issue = await sendingDomainProvider().issue(DOMAIN)
+
+      expect(issue.outcome).toBe('failed')
+      expect(issue.dkimPublicKey).toBeNull()
+      expect(calls).toHaveLength(1)
+    })
+  })
+
   describe('a 422 duplicate', () => {
     it('adopts the domain the account already holds', async () => {
       responses = [
