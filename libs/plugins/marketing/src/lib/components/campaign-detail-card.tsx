@@ -88,6 +88,10 @@ import CampaignComposer from '@aglyn/plugins-email/components/campaign-composer'
 import CampaignEditDrawer, {
   type CampaignEditValues,
 } from './campaign-edit-drawer'
+import {
+  CampaignConversionsSection,
+  CampaignDestinationsSection,
+} from './campaign-reach-sections'
 import CampaignReportCard from './campaign-report-card'
 import { useCampaignManageApi } from '@aglyn/plugins-email/components/use-campaign-send-api'
 import { useEmailsHubPath } from './use-emails-hub-path'
@@ -131,7 +135,22 @@ export interface CampaignDetailCardProps {
 }
 
 /**
- * ONE CAMPAIGN: its lists, its emails, and the sum of what they did.
+ * ONE CAMPAIGN: its lists, what it caused, where it sent people, and the
+ * emails it did all of that with.
+ *
+ * ## Why the emails are a section rather than the page
+ *
+ * A campaign reaches people by email, which is not the same as a campaign
+ * BEING a list of emails. It runs over a window, against a set of audiences,
+ * and the pages its links land on and the conversions credited to it are
+ * facts about the campaign that no single message in it holds. So the body is
+ * sectioned — the rolled-up figures, what it caused, where it sent people,
+ * then its emails — and each section names the population it describes.
+ *
+ * The two middle sections live in `campaign-reach-sections.tsx`, which is
+ * also where the reason a campaign cannot simply DECLARE the screens and
+ * forms it runs across is written down: no such edge is stored, attribution
+ * is the mechanism, and both sections join on this campaign's send ids.
  *
  * ## Why this resolves two kinds of id
  *
@@ -257,6 +276,13 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
     [readSends],
   )
   const rollup = useMemo(() => campaignRollup(sends), [sends])
+  // The ids the two sections beneath the figures join on. Derived from the
+  // window this card already holds, so neither of them reads the send list
+  // again to find out which emails the campaign has.
+  const sendIds = useMemo(
+    () => sends.map((send) => String(send.$id)).filter(Boolean),
+    [sends],
+  )
   // The page is a SLICE of a window the card already holds.
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
@@ -445,7 +471,7 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
    * working has nothing to get wrong, and it costs nothing to leave standing.
    *=========================================*/
   const sendHref = (send: CampaignSend) =>
-    emailsHub ? `${emailsHub}/emails/${send.$id}` : undefined
+    emailsHub ? `${emailsHub}/messages/${send.$id}` : undefined
 
   /**
    * What one of this campaign's emails can be opened into.
@@ -599,41 +625,35 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
           <RateRow label="Click rate" rate={rollup.clickRate} />
           <RateRow label="Unsubscribe rate" rate={rollup.unsubscribeRate} />
         </Stack>
+
+        <Divider />
         {/*
-          WHAT THE CAMPAIGN CAUSED — named here, counted elsewhere.
+          A CAMPAIGN IS NOT ONLY ITS MAIL, and the body is sectioned to say so.
 
-          A conversion is credited to the EMAIL that carried the link, because
-          that is the id the click's touch records, so the rollup lives under
-          each message and is drawn on its report. Summing those here would
-          mean one more document read per email in the campaign — up to fifty
-          on this page — which is the per-record read every figure above was
-          arranged to avoid. Two links instead, and both are free.
+          The emails below are one section of several rather than the whole
+          page. What the campaign CAUSED and where it SENT people are facts
+          about the campaign, not about any one message in it, and a page that
+          led with a list of emails and said nothing else read as though a
+          campaign were that list.
 
-          Saying nothing would be worse than either: a campaign page silent
-          about conversions reads as a campaign that caused none.
+          Both sections join on the campaign's own send ids, which is the only
+          handle the attribution and click-report collections offer — see
+          `campaign-reach-sections.tsx` for why no other join exists, and why
+          the web channel is named there rather than quietly omitted.
          */}
-        <Stack
-          direction="row"
-          spacing={1}
-          useFlexGap
-          sx={{ alignItems: 'center', flexWrap: 'wrap' }}
-        >
-          <Typography variant="caption" color="text.secondary">
-            {'Form submissions, leads, contacts and bookings are credited to ' +
-              'the email whose link the visitor followed, so each email’s ' +
-              'report carries its own. The site-wide view also counts the ' +
-              'ones credited to no campaign at all.'}
-          </Typography>
-          <Button
-            component={AppLink as any}
-            {...({ componentVariant: 'naked', nativeButton: false } as any)}
-            href={`${basePath}/conversions`}
-            size="small"
-            color="primary"
-          >
-            {'All conversions'}
-          </Button>
-        </Stack>
+        <CampaignConversionsSection
+          hostId={hostId}
+          sendIds={sendIds}
+          truncated={sendsTruncated}
+          basePath={basePath}
+        />
+
+        <Divider />
+        <CampaignDestinationsSection
+          hostId={hostId}
+          sendIds={sendIds}
+          truncated={sendsTruncated}
+        />
 
         <Divider />
         <Stack
@@ -641,7 +661,11 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
           spacing={1}
           sx={{ alignItems: 'center', justifyContent: 'space-between' }}
         >
-          <Typography variant="subtitle2">
+          {/*
+            The section rail's own heading style, so this reads as one section
+            among the others rather than as the page's subject.
+           */}
+          <Typography variant="overline" color="text.secondary">
             {`Emails (${sends.length})`}
           </Typography>
           <Button

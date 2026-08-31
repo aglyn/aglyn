@@ -205,6 +205,22 @@ jest.mock('@aglyn/plugins-email/components/campaign-composer', () => ({
     <div>{`composer for ${props.emailCampaignId}`}</div>
   ),
 }))
+/*
+ * The two sections that answer for the campaign BEYOND its mail, stubbed at
+ * their module boundary for the reason the composer is: they open an
+ * aggregation count each and a per-email document read, which is cost this
+ * file asserts nothing about. What belongs here is that they mount and are
+ * handed the campaign's own send ids — the join both of them depend on.
+ */
+jest.mock('./campaign-reach-sections', () => ({
+  __esModule: true,
+  CampaignConversionsSection: (props: any) => (
+    <div>{`caused by ${props.sendIds.join('|')}`}</div>
+  ),
+  CampaignDestinationsSection: (props: any) => (
+    <div>{`destinations of ${props.sendIds.join('|')}`}</div>
+  ),
+}))
 
 import CampaignDetailCard from './campaign-detail-card'
 
@@ -320,6 +336,24 @@ describe('an id that names a campaign', () => {
     expect(screen.getAllByText('not recorded').length).toBeGreaterThan(0)
   })
 
+  it('presents the campaign as more than a list of its emails', async () => {
+    /*
+     * The emails are ONE section of the body. A campaign runs over a window,
+     * against a set of audiences, and the conversions credited to it and the
+     * pages its links landed on are facts about the campaign that no single
+     * message holds — so a body that was the email table and nothing else
+     * said a campaign is that table.
+     */
+    await mount('camp-1')
+
+    // Both sections are handed the campaign's own emails, newest first, which
+    // is the only handle either collection joins on.
+    expect(screen.getByText('caused by send-2|send-1')).toBeTruthy()
+    expect(screen.getByText('destinations of send-2|send-1')).toBeTruthy()
+    // And the email list is still there, named as one section among them.
+    expect(screen.getByText('Emails (2)')).toBeTruthy()
+  })
+
   it('opens each email on the SAME page every other route to it opens', async () => {
     /*
      * One record, one destination. This table used to send a reader to
@@ -335,7 +369,7 @@ describe('an id that names a campaign', () => {
     const rows = document.querySelectorAll('tbody tr')
     fireEvent.click(rows[0])
 
-    expect(pushed).toContain('/acme/hosts/store/emails/emails/send-2')
+    expect(pushed).toContain('/acme/hosts/store/emails/messages/send-2')
     expect(pushed).not.toContain('/acme/hosts/store/marketing/campaigns/send-2')
   })
 
@@ -350,7 +384,7 @@ describe('an id that names a campaign', () => {
       .querySelectorAll('tbody tr')[1]
       .querySelector('a') as HTMLAnchorElement
     expect(link.getAttribute('href')).toBe(
-      '/acme/hosts/store/emails/emails/send-1',
+      '/acme/hosts/store/emails/messages/send-1',
     )
     fireEvent.click(link)
     expect(pushed).toEqual([])
