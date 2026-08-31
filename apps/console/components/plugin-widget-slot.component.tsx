@@ -94,10 +94,10 @@ export function useSlotWidgets(slots: readonly string[]): {
    * ONE resolution for every slot on the page, from `OrgPermissionsProvider`
    * in `firebase-app.layout.tsx`.
    *
-   * `useOrgPermissions` used to issue two `getDoc`s per call, and this hook
-   * runs once per mounted slot: the host dashboard mounts four of them plus
-   * the customize dialog, so gating them the obvious way would have turned a
-   * page that read the member document twice into one that read it ten times.
+   * An unshared `useOrgPermissions` costs two `getDoc`s per call, and this
+   * hook runs once per mounted slot: the host dashboard mounts four of them
+   * plus the customize dialog, so gating them without sharing the resolution
+   * makes a page that reads the member document twice read it ten times.
    * Under the provider this call reads context and issues nothing.
    */
   const { can, permissions, loaded: permissionsLoaded } = useOrgPermissions()

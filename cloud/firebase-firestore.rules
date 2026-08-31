@@ -465,15 +465,15 @@ service cloud.firestore {
        * org block deliberately has no `{document=**}` catch-all (see the note
        * further down) — so there is no looser sibling to defeat it.
        *
-       * ⚠️ THE CUSTOM-ROLE LAYER IS NOT READ HERE. It is read by
-       * `memberResolves` further down, which is the denormalization this note
-       * used to propose: `syncOrgAuthProjections` now writes the RESOLVED map
+       * ⚠️ THE CUSTOM-ROLE LAYER IS NOT READ HERE. `memberResolves` further
+       * down reads it, through denormalization rather than resolution:
+       * `syncOrgAuthProjections` writes the RESOLVED map
        * (`resolvedPermissions`, all three layers applied) onto the member doc
-       * and the rules read the answer instead of chasing the inputs. The
-       * reasons the direct approach was refused stand — a second
-       * cross-document get(), a three-layer precedence in CEL, and a dangling
-       * `roleId` whose null get() denies where the resolver falls back to the
-       * role defaults.
+       * and the rules read the answer instead of chasing the inputs. Resolving
+       * it directly is not available at any price — it needs a second
+       * cross-document get(), a three-layer precedence expressed in CEL, and a
+       * dangling `roleId` whose null get() denies where the resolver falls
+       * back to the role defaults.
        *
        * This billing rule is deliberately NOT switched over to it. The gap it
        * closes is a custom role revoking `billing.view` from a manager, and
@@ -627,9 +627,10 @@ service cloud.firestore {
        * That last step is only safe because every caller conjoins this with a
        * role check it cannot influence. A member carrying no map — every
        * member written before this field, and any written by a path that
-       * bypasses the projection — therefore gets exactly the verdict this
-       * ruleset gave them yesterday: their role's. A `true` here grants
-       * nothing on its own.
+       * bypasses the projection — therefore gets the verdict the role gate
+       * alone produces, which is what this rule resolves to whenever the two
+       * denormalized layers are silent. A `true` here grants nothing on its
+       * own.
        *
        * Costs no document read. `orgMember()` is a get() every caller on this
        * path already pays for, and identical get()s in one evaluation are
@@ -644,13 +645,14 @@ service cloud.firestore {
        * Dataset and record writes: the role, AND the resolved `data.manage`.
        *
        * The two halves are not redundant. The role list is what an absent or
-       * unstamped permission map falls through to, and the permission is what
-       * makes a custom role's revocation effective — which it was not, so the
-       * same principal was refused by `/api/orgs/datasets` and permitted
-       * here. That mattered most where there is no API to disagree with: a
-       * dataset UPDATE and a record update/delete go client-direct through
-       * these rules, so an editor whose `data.manage` a custom role revoked
-       * kept full edit and delete access to everything already stored.
+       * unstamped permission map falls through to, and the permission is the
+       * only thing here that a custom role's revocation can reach. Without
+       * it the same principal is refused by `/api/orgs/datasets` and
+       * permitted by these rules — which matters most where there is no API
+       * to disagree with, because a dataset UPDATE and a record
+       * update/delete go client-direct: an editor whose `data.manage` a
+       * custom role revokes otherwise keeps full edit and delete access to
+       * everything already stored.
        *
        * NOT folded into `canWriteOrgData`, deliberately. That helper also
        * gates contacts, segments, media and media folders, and `data.manage`

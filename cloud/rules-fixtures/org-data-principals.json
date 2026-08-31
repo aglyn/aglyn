@@ -172,7 +172,7 @@
     },
     {
       "uid": "uid-editor-bare",
-      "note": "NO resolvedPermissions AT ALL — the shape of every member written before the field existed. Must resolve to the role's own verdict, which is what this ruleset gave them yesterday. If this is false the deploy is a mass lockout.",
+      "note": "NO resolvedPermissions AT ALL — the shape of every member written before the field existed. Must resolve to the role's own verdict, so the verdict comes from the role gate alone. If this is false the deploy is a mass lockout.",
       "member": { "role": "editor", "allHosts": true, "scopeTokens": ["org"] },
       "customRole": null,
       "mayWriteDatasets": true
