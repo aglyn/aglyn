@@ -412,8 +412,10 @@ of later sends.
 ### 2f. Who may do it
 
 **A host role is necessary and not sufficient.** Lists live at
-`orgs/{orgId}/lists` and their members are contacts, so the security rules put
-both behind `isOrgWideMember()`. An editor invited to ONE site is an org member
+`orgs/{orgId}/lists`, so the security rules put the list document behind
+`isOrgWideMember()` and its `members` — which are people, with a consent record
+attached — behind that plus a role of owner, admin or editor. An editor invited
+to ONE site is an org member
 with `allHosts: false`; gating this route on the host role alone would let a
 single-site collaborator enroll people into an audience every other site in the
 org can mail. The Admin SDK evaluates no rules, so the route is the enforcement

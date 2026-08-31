@@ -3704,6 +3704,275 @@ describe('org-shared data (AGL-237)', () => {
 })
 
 /**
+ * A LIST IS METADATA; ITS `members` ARE PEOPLE, and the two reads differ for
+ * exactly that reason.
+ *
+ * An enrollment document carries an address, a name and the consent record
+ * that says why this person may be mailed — the basis, the moment it was
+ * given, and the console account that attested to it. `isOrgWideMember()` is
+ * the ROSTER question and has no role in it, so a rule that asks only that
+ * hands every audience the workspace has, and everybody on it, to an org
+ * VIEWER — the role whose whole definition is reading and changing nothing.
+ * The Emails console admits nobody to that page without `data.manage`, and
+ * the rule underneath asks the same thing, which is what makes the page gate
+ * defense in depth instead of the only door.
+ *
+ * The list DOCUMENT keeps the roster-only read on purpose, and the tests below
+ * assert the split rather than assuming it: the document holds a name, a kind
+ * and a selection rule, it names no human, and four surfaces outside the
+ * Emails console read it so a campaign row, a workflow step and the
+ * reference-health card can print a name instead of an id.
+ */
+describe('audience membership is people data; the list document is not', () => {
+  // The org-wide shapes the fixtures did not have. EDITOR is `allHosts: false`
+  // — a site collaborator — so a denial proved against them proves AGL-1026
+  // and says nothing about the ROLE, which is the axis under test here.
+  const ORG_ADMIN = 'uid-org-admin'
+  const ORG_EDITOR = 'uid-org-editor'
+  // Org-wide editors that differ from ORG_EDITOR only in the permission maps
+  // `memberResolves` reads: the resolved projection a custom role produces,
+  // the raw per-member override it falls back to, a map that never mentions
+  // the key, and the pair that proves which of the two leads.
+  const CUSTOM_ROLE_EDITOR = 'uid-org-editor-role-revokes-data-manage'
+  const REVOKED_EDITOR = 'uid-org-editor-data-manage-revoked'
+  const UNRELATED_OVERRIDES_EDITOR = 'uid-org-editor-other-overrides'
+  const REGRANTED_EDITOR = 'uid-org-editor-resolved-regrants'
+
+  const enrollment = (uid) =>
+    doc(authed(uid), 'orgs', ORG, 'lists', 'l1', 'members', 'm1')
+  const enrollments = (uid) =>
+    collection(authed(uid), 'orgs', ORG, 'lists', 'l1', 'members')
+  const listDoc = (uid) => doc(authed(uid), 'orgs', ORG, 'lists', 'l1')
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'orgs', ORG, 'members', ORG_ADMIN), {
+        role: 'admin', allHosts: true, scopeTokens: ['org'],
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'members', ORG_EDITOR), {
+        role: 'editor', allHosts: true, scopeTokens: ['org'],
+      })
+      // A CUSTOM ROLE's revocation, as `syncOrgAuthProjections` stamps it:
+      // the resolver's own output, all three layers already applied.
+      await setDoc(doc(db, 'orgs', ORG, 'members', CUSTOM_ROLE_EDITOR), {
+        role: 'editor', allHosts: true, scopeTokens: ['org'],
+        roleId: 'role-read-only-data',
+        resolvedPermissions: { 'data.manage': false, 'plugins.install': true },
+      })
+      // The per-member override layer, on a member the projection has not
+      // reached — the fallback `memberResolves` reads second.
+      await setDoc(doc(db, 'orgs', ORG, 'members', REVOKED_EDITOR), {
+        role: 'editor', allHosts: true, scopeTokens: ['org'],
+        permissions: { 'data.manage': false },
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'members', UNRELATED_OVERRIDES_EDITOR), {
+        role: 'editor', allHosts: true, scopeTokens: ['org'],
+        permissions: { 'billing.view': false, 'plugins.install': false },
+      })
+      // The two maps disagreeing. `resolvedPermissions` is the resolver's
+      // ANSWER and has already applied the per-member layer, so it leads —
+      // reading the raw override on a member that carries both would report a
+      // revocation the resolver did not make.
+      await setDoc(doc(db, 'orgs', ORG, 'members', REGRANTED_EDITOR), {
+        role: 'editor', allHosts: true, scopeTokens: ['org'],
+        permissions: { 'data.manage': false },
+        resolvedPermissions: { 'data.manage': true },
+      })
+      // A dynamic list: a name and a rule, and not one person's details on it.
+      await setDoc(doc(db, 'orgs', ORG, 'lists', 'l1'), {
+        name: 'Lapsed customers', kind: 'dynamic',
+        rule: { sources: ['contacts'], behavior: { noPurchaseForDays: 180 } },
+      })
+      // An enrollment with the fields the denial is actually about: the
+      // address, and an ATTESTATION naming the account answerable for it.
+      await setDoc(doc(db, 'orgs', ORG, 'lists', 'l1', 'members', 'm1'), {
+        email: 'buyer@example.test', name: 'A Buyer',
+        marketingConsent: true,
+        consent: {
+          basis: 'operator-attested', atMs: 1,
+          byUid: OWNER, reason: 'badge scanned at a trade show',
+        },
+      })
+      // A second row so the collection query has something to page over and
+      // cannot pass by being empty.
+      await setDoc(doc(db, 'orgs', ORG, 'lists', 'l1', 'members', 'm2'), {
+        email: 'other@example.test',
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'contacts', 'c1'), {
+        email: 'buyer@example.test', visibleTo: ['org'],
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'datasets', 'ds1'), {
+        name: 'Team', visibleTo: ['org'],
+      })
+    })
+  })
+
+  /**
+   * The gap this closes, and the controls that stop it reading as a vacuous
+   * pass. The viewer is a full org-wide member: they read the org's contacts,
+   * its datasets and the list document itself in the same test, so the denial
+   * is about THIS collection and not about an account that cannot reach the
+   * org at all.
+   */
+  it('an org-wide VIEWER is refused an enrollment, and still reads the rest', async () => {
+    await mustDeny(
+      'an org-wide viewer reading one enrollment',
+      getDoc(enrollment(VIEWER)),
+    )
+    // The shape the console actually uses: the members panel subscribes to
+    // the collection and the audiences card counts it. A rule that denied
+    // only the document read would leave both working.
+    await mustDeny(
+      'an org-wide viewer listing a list\'s enrollments',
+      getDocs(enrollments(VIEWER)),
+    )
+
+    // THE CONTROLS. Same account, same org, three reads that must survive.
+    await mustAllow(
+      'the same viewer reading the LIST document (the name a campaign row shows)',
+      getDoc(listDoc(VIEWER)),
+    )
+    await mustAllow(
+      'the same viewer reading an org contact',
+      getDoc(doc(authed(VIEWER), 'orgs', ORG, 'contacts', 'c1')),
+    )
+    await mustAllow(
+      'the same viewer reading an org dataset',
+      getDoc(doc(authed(VIEWER), 'orgs', ORG, 'datasets', 'ds1')),
+    )
+  })
+
+  /**
+   * The other half of the same rule: everybody the product needs here keeps
+   * working. A narrowing that broke the audiences page would be worse than
+   * the hole it closed.
+   */
+  it('owner, admin and an ORG-WIDE editor read and manage enrollments', async () => {
+    for (const [label, uid] of [
+      ['the owner', OWNER],
+      ['an org-wide admin', ORG_ADMIN],
+      ['an org-wide editor', ORG_EDITOR],
+      ['an org-wide editor whose overrides never mention data.manage',
+        UNRELATED_OVERRIDES_EDITOR],
+    ]) {
+      await mustAllow(`${label} reading one enrollment`, getDoc(enrollment(uid)))
+      await mustAllow(`${label} listing enrollments`, getDocs(enrollments(uid)))
+    }
+    // Removal is the client's, and it is the write that has to follow the
+    // read: whoever may see who is on a list may take them off it.
+    await mustAllow(
+      'an org-wide editor removing an enrollment',
+      deleteDoc(enrollment(ORG_EDITOR)),
+    )
+  })
+
+  /**
+   * AGL-1026, unchanged. A collaborator invited to one site is refused the
+   * whole audience — the list document as well as its people — because an
+   * audience has no per-site slice: it belongs to the org and every host in
+   * it may mail the same list.
+   */
+  it('a site collaborator is still refused the list AND its enrollments', async () => {
+    await mustDeny(
+      'a scoped editor reading the list document',
+      getDoc(listDoc(EDITOR)),
+    )
+    await mustDeny(
+      'a scoped editor reading an enrollment',
+      getDoc(enrollment(EDITOR)),
+    )
+    await mustDeny(
+      'a scoped author reading an enrollment',
+      getDoc(enrollment(AUTHOR)),
+    )
+    await mustDeny(
+      'an outsider reading an enrollment',
+      getDoc(enrollment(OUTSIDER)),
+    )
+    // THE CONTROL: the collaborator is a real member of this org and reads
+    // the org-wide data they were invited for. Without it the three denials
+    // above would pass against an account with no membership at all.
+    await mustAllow(
+      'the same scoped editor reading an org-wide dataset',
+      getDoc(doc(authed(EDITOR), 'orgs', ORG, 'datasets', 'ds1')),
+    )
+  })
+
+  /**
+   * The permission layer, which is what makes this rule agree with the Emails
+   * console rather than merely resemble it: the page resolves `data.manage`,
+   * and a member whose resolved verdict is `false` is refused by both.
+   *
+   * Both halves of `memberResolves` are exercised — the `resolvedPermissions`
+   * projection a custom role produces, and the raw `permissions` override it
+   * falls back to on a member the projection has not reached.
+   *
+   * DEFAULT TRUE is the safety argument, so the controls are the point of the
+   * test: no map at all, and a map that names other keys, both still read. An
+   * absent key must never read as `false`.
+   */
+  it('a revoked data.manage is honored on both layers; an absent one is not a denial', async () => {
+    await mustDeny(
+      'an editor whose CUSTOM ROLE revokes data.manage reading an enrollment',
+      getDoc(enrollment(CUSTOM_ROLE_EDITOR)),
+    )
+    await mustDeny(
+      'an org-wide editor whose per-member override revokes it',
+      getDoc(enrollment(REVOKED_EDITOR)),
+    )
+    await mustDeny(
+      'the same member removing an enrollment',
+      deleteDoc(enrollment(REVOKED_EDITOR)),
+    )
+    // The projection is the resolver's ANSWER and has already applied the
+    // per-member layer, so it leads rather than being ORed with it.
+    await mustAllow(
+      'an editor whose projection GRANTS what their raw override revokes',
+      getDoc(enrollment(REGRANTED_EDITOR)),
+    )
+    // The override governs the PEOPLE, not the audience's name — the list
+    // document is metadata and stays on the roster question.
+    await mustAllow(
+      'the same member reading the list document',
+      getDoc(listDoc(REVOKED_EDITOR)),
+    )
+    // The two default-true controls.
+    await mustAllow(
+      'the owner, who carries no permissions map at all',
+      getDoc(enrollment(OWNER)),
+    )
+    await mustAllow(
+      'an editor whose permissions map never mentions data.manage',
+      getDoc(enrollment(UNRELATED_OVERRIDES_EDITOR)),
+    )
+  })
+
+  /**
+   * Suspension freezes writing, not looking. A workspace that may not read
+   * its own audience may not export it either, and winding down is precisely
+   * when that is asked for — so the read helper deliberately leaves
+   * `orgNotSuspended()` to the write half.
+   */
+  it('a suspended org still READS its audience and cannot change it', async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(
+        doc(context.firestore(), 'orgs', ORG, 'members', ORG_EDITOR),
+        { orgSuspended: true },
+      )
+    })
+    await mustAllow(
+      'a suspended org-wide editor reading an enrollment',
+      getDoc(enrollment(ORG_EDITOR)),
+    )
+    await mustDeny(
+      'a suspended org-wide editor removing an enrollment',
+      deleteDoc(enrollment(ORG_EDITOR)),
+    )
+  })
+})
+
+/**
  * Site collaborators are org members, and the rules used not to notice
  * (AGL-1026).
  *

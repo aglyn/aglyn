@@ -872,8 +872,64 @@ service cloud.firestore {
       // with no list to reach them from. /api/resources/erase walks the
       // whole subtree; enrollments below stay individually deletable.
       match /lists/{listId} {
-        // Enrolled members are contacts, so the list follows the CRM
-        // (AGL-1026): org-wide readers only.
+        /**
+         * Org-wide reach AND the authority to manage the org's data — who may
+         * see the PEOPLE on an audience, as opposed to the audience's name.
+         *
+         * Three conjuncts, none redundant. `isOrgWideMember()` keeps the
+         * AGL-1026 boundary: an audience belongs to the org and every host in
+         * it may mail the same list, so a collaborator invited to one site is
+         * refused the whole thing. The role list is the population
+         * `data.manage` defaults to, and it is what an unstamped permission
+         * map falls through to. `memberResolves` is the only conjunct a
+         * custom role or a per-member override can reach, and it is what
+         * makes this agree with the Emails console rather than merely
+         * resemble it — that page gates on `data.manage` and this collection
+         * is the org-shared people data it opens onto.
+         *
+         * `orgNotSuspended()` is deliberately not folded in. Suspension stops
+         * a workspace writing; a workspace that may not read its own audience
+         * may not export it either, and winding down is exactly when that is
+         * asked for. The delete below adds the clause for itself.
+         */
+        function isOrgWideAudienceManager() {
+          return isOrgWideMember() &&
+            orgMember().role in ['owner', 'admin', 'editor'] &&
+            memberResolves('data.manage');
+        }
+        /**
+         * THE LIST DOCUMENT IS METADATA; ITS `members` ARE PEOPLE. The two
+         * reads answer different questions, and this is the looser half.
+         *
+         * A list document holds a name, a `kind`, and — for a dynamic one —
+         * the `rule` that selects its audience: tags, capture sources, form
+         * names, date windows, order and engagement thresholds, other list
+         * ids. Selection criteria, not people. Nothing on it names a human,
+         * which is why org-wide membership is the whole question for it and
+         * the predicate above is not applied here.
+         *
+         * It is also read well outside the Emails console, by surfaces that
+         * are not about audiences at all: the campaigns table and a
+         * campaign's detail name what a send was aimed at, the workflows card
+         * names the list an `enrollList` step enrolls into, and the
+         * reference-health card exists to notice when one of those ids stops
+         * resolving. All of them read `name` so the screen shows a name and
+         * not an id, and all of them are legitimately open to a reader who
+         * changes nothing. Narrowing this read would print ids where names
+         * belong and would hide the dangling reference the health card is
+         * for.
+         *
+         * NOT `canReadScoped()`, the predicate the CRM beside it uses. On a
+         * contact that is a NARROWING: a contact carries `visibleTo`, so a
+         * scoped member sees the sites that captured the person and no
+         * others. A list carries no `visibleTo` and has no per-site slice to
+         * put in one, and the enrollment route refuses a caller who is not
+         * org-wide. Applied here the same predicate would be a WIDENING,
+         * admitting scoped members and changing nothing else. The two
+         * collections share the principle — look at what the resource is,
+         * then decide — and differ in the answer because the resources
+         * differ.
+         */
         allow read: if isStaff() || isOrgWideMember();
         allow create, update: if isStaff() || canWriteOrgWideData();
         allow delete: if isStaff();
@@ -897,9 +953,36 @@ service cloud.firestore {
         // relies on — the refusal it must never be confused with lives on the
         // suppression list, which this block does not touch.
         match /members/{memberId} {
-          allow read: if isStaff() || isOrgWideMember();
+          /**
+           * WHO MAY READ AN ENROLLMENT: an org-wide member who manages data.
+           *
+           * A member document is an address, a name, and the consent record
+           * that says why this person may be mailed — the basis, the moment
+           * it was given, the console account that attested to it and the
+           * words they attested in. `isOrgWideMember()` alone asks only
+           * whether the caller is on the roster with org-wide reach, and
+           * nothing about what they may do once there, so it hands every
+           * audience the organization has and everybody on it to an org
+           * VIEWER — the role whose entire definition is reading and changing
+           * nothing.
+           *
+           * "They can read the contacts anyway" is not true of this
+           * collection, which is what makes the denial worth having. An
+           * enrollment is often an address that is not a contact and never
+           * was: the importer writes a supplied file straight onto the list,
+           * and a dynamic list materializes people out of `leads`,
+           * `siteMembers` and `formSubmissions`. Nor does a contact carry the
+           * attestation — that is a record about an EMPLOYEE, naming who
+           * asserted permission for this person and in what words, and it
+           * exists nowhere else.
+           */
+          allow read: if isStaff() || isOrgWideAudienceManager();
           allow create, update: if isStaff();
-          allow delete: if isStaff() || canWriteOrgWideData();
+          // Removal follows the read: a caller who may not see who is on a
+          // list has no business taking them off it. Suspension belongs on
+          // this half, which is the write.
+          allow delete: if isStaff() ||
+            (isOrgWideAudienceManager() && orgNotSuspended());
         }
       }
 
