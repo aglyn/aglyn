@@ -900,6 +900,10 @@ const FRAME_STALE_CELLS: Record<string, { frame: string; why: string }> = {
     frame: '—',
     why: 'AGL-1152 moved the CDN to every plan, Free included; the frame still shows the pre-AGL-1152 split',
   },
+  'Bandwidth / mo · Pro': {
+    frame: '250 GB',
+    why: 'the band is 225 GB, sized so the tier holds a positive margin at 100% of every band it sells — page views are 82.5% of its cost model (`apps/console/specs/tier-margin-floor.spec.ts`); the frame still shows the pre-resize figure',
+  },
 }
 
 const diffs: string[] = []

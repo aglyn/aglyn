@@ -22,7 +22,7 @@ until the start of the next month.
 |---|---|---|
 | Free | 2 GB | Sites are **paused** until the start of next month |
 | Starter | 50 GB | Keeps serving; the extra is billed |
-| Pro | 250 GB | Keeps serving; the extra is billed |
+| Pro | 225 GB | Keeps serving; the extra is billed |
 | Business | 400 GB | Keeps serving; the extra is billed |
 | Scale | 700 GB | Keeps serving; the extra is billed |
 | Advanced | 1,000 GB | Keeps serving; the extra is billed |
