@@ -54,7 +54,11 @@
  * found these people, and losing it on a toggle would lose the work.
  */
 
-import { normalizeDynamicListRule, pluginDocsHelp } from '@aglyn/aglyn'
+import {
+  normalizeDynamicListRule,
+  PageHeaderRecord,
+  pluginDocsHelp,
+} from '@aglyn/aglyn'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -199,9 +203,11 @@ export function ListEditCard(props: ListEditCardProps) {
     )
   }
 
-  return (
+  /* The card, named so the page chrome above it is a plain list of
+     what this surface publishes upward. */
+  const card = (
     <CardDisplay
-      header={`Edit ${storedName || 'list'}`}
+      header={'Edit audience'}
       help={pluginDocsHelp('emailCampaigns', {
         anchor: dynamic ? '#lists-built-from-a-rule' : '#manual-lists',
       })}
@@ -294,6 +300,18 @@ export function ListEditCard(props: ListEditCardProps) {
         </Stack>
       </Stack>
     </CardDisplay>
+  )
+
+  return (
+    <>
+      {/*
+        The audience being edited. This route is one level BELOW it, and the
+        way back is the card header's own button — the trail names where the
+        reader is and does not link its last step.
+      */}
+      <PageHeaderRecord title={storedName || listId} />
+      {card}
+    </>
   )
 }
 ListEditCard.displayName = 'ListEditCard'

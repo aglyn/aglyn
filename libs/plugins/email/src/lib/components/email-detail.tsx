@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { pluginDocsHelp } from '@aglyn/aglyn'
+import { PageHeaderRecord, pluginDocsHelp } from '@aglyn/aglyn'
 import {
   mdiCalendarClockOutline,
   mdiCloseCircleOutline,
@@ -820,9 +820,11 @@ export function EmailDetail(props: EmailDetailProps) {
 
   return (
     <Stack spacing={3}>
+      {/* The page heading and the trail name the message; this card is
+          then free to say what it holds rather than repeating the title. */}
+      <PageHeaderRecord title={email ? subject : undefined} />
       <CardDisplay
-        header={subject}
-        subheader={'Email'}
+        header={'Email'}
         help={emailDocsHelp}
         contentGutterX
         contentGutterY

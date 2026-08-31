@@ -45,6 +45,11 @@
  */
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { useMemo, useState, type ReactNode } from 'react'
+import {
+  PageHeaderRecordContext,
+  type PageHeaderRecordValue,
+} from '@aglyn/aglyn'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 
 jest.setTimeout(30_000)
@@ -283,13 +288,40 @@ const figure = (label: string): string =>
     .map((node) => node.parentElement?.querySelector('h6')?.textContent)
     .find((text): text is string => typeof text === 'string') ?? ''
 
+/**
+ * The page header's record slot, the shape `DashboardLayout` provides.
+ *
+ * The campaign's NAME is the page heading, not a card title: this surface is
+ * mounted by the console shell's plugin route, which owns the heading and the
+ * trail, so the name is published upward through `PageHeaderRecord`. A plugin
+ * lib may not import console-app code, so the provider here stands in for it
+ * and prints what it is handed.
+ */
+function ChromeHarness(props: { children: ReactNode }) {
+  const [record, setRecord] = useState<PageHeaderRecordValue | null>(null)
+  const value = useMemo(() => ({ setHeaderRecord: setRecord }), [])
+  return (
+    <PageHeaderRecordContext.Provider value={value}>
+      <h1>{record?.title ?? 'Marketing'}</h1>
+      {props.children}
+    </PageHeaderRecordContext.Provider>
+  )
+}
+
+/** The page heading, which on a campaign's page must be the campaign. */
+const heading = () => screen.getByRole('heading', { level: 1 }).textContent
+
 const mount = async (campaignId: string) => {
   render(
-    <CampaignDetailCard
-      hostId="host-1"
-      campaignId={campaignId}
-      basePath="/acme/hosts/store/marketing"
-    />,
+    <ChromeHarness>
+      <div data-testid="surface-body">
+        <CampaignDetailCard
+          hostId="host-1"
+          campaignId={campaignId}
+          basePath="/acme/hosts/store/marketing"
+        />
+      </div>
+    </ChromeHarness>,
   )
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0))
@@ -300,7 +332,10 @@ describe('an id that names a campaign', () => {
   it('renders the campaign, its window and its lists', async () => {
     await mount('camp-1')
 
-    expect(screen.getByText('Spring sale')).toBeTruthy()
+    // The NAME heads the page, not the card. A card titled with the record
+    // beneath a page titled with the collection says the collection twice
+    // and the record once, in the smaller of the two.
+    expect(heading()).toBe('Spring sale')
     expect(screen.getByText('Newsletter')).toBeTruthy()
   })
 
@@ -550,7 +585,11 @@ describe('an id that names a SEND', () => {
     await mount('camp-1')
 
     expect(screen.queryByText('send report for camp-1')).toBeNull()
-    expect(document.body.textContent).toBe('')
+    // The SURFACE, not the whole document: the chrome around it belongs to
+    // the console shell, and the heading it draws is the surface's own name
+    // until this read settles and a campaign can replace it.
+    expect(screen.getByTestId('surface-body').textContent).toBe('')
+    expect(heading()).toBe('Marketing')
   })
 
   it('goes on resolving even though nothing in the console links here any more', async () => {

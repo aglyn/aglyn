@@ -40,8 +40,8 @@ import { render, screen, within } from '@testing-library/react'
 import { useMemo, useState, type ReactNode } from 'react'
 import { PageHeaderActionsContext } from '@aglyn/aglyn'
 
-/** The rows the mocked page query hands the card. Reassigned per test. */
-let mockRows: any[] = []
+/** The rows the mocked page query hands the card. */
+const mockRows: any[] = []
 /** What the server aggregate answers for the quota readout. */
 let mockLiveCount: number | null = 0
 
@@ -133,10 +133,13 @@ jest.mock('@aglyn/shared-ui-jsx-forms', () => ({
  * One form's own surface, stubbed.
  *
  * The routing decision is `forms-console-page.tsx`'s and is exercised for
- * real; what the detail card renders is not this file's subject. It publishes
- * nothing, which is exactly what the real one does — and the assertion that
- * the header is empty on a form's route is therefore an assertion about the
- * LIST card unmounting, which is the mechanism that has to hold.
+ * real; what the detail card renders is not this file's subject, and it has
+ * its own header assertions in `form-detail-page-chrome.spec.tsx`. Stubbed
+ * to publish NOTHING so the assertion below is about the LIST card
+ * unmounting and taking its create button with it — the mechanism that has
+ * to hold. The real detail card publishes a besigner button of its own,
+ * which would satisfy an "the header changed" assertion without the list
+ * card ever having let go of its own controls.
  */
 jest.mock('./form-detail-card', () => ({
   __esModule: true,
@@ -228,7 +231,7 @@ describe('the forms catalog publishes its controls to the page header', () => {
     ).toBeNull()
   })
 
-  it('publishes nothing on a form’s own route', () => {
+  it('lets go of the catalog’s controls on a form’s own route', () => {
     renderForms({ org: { plan: 'pro' }, segments: ['form-abc'] })
     // The detail surface is a different component, so the list card unmounts
     // and takes its create button with it. A create button here would offer a

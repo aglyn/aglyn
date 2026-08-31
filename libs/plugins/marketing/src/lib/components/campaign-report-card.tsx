@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { pluginDocsHelp } from '@aglyn/aglyn'
+import { PageHeaderRecord, pluginDocsHelp } from '@aglyn/aglyn'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import {
   Alert,
@@ -308,10 +308,11 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
     )
   }
 
-  return (
+  /* The card, named so the page chrome above it is a plain list of
+     what this surface publishes upward. */
+  const card = (
     <CardDisplay
-      header={subject}
-      subheader={'Campaign report'}
+      header={'Campaign report'}
       help={reportDocsHelp}
       contentGutterX
       contentGutterY
@@ -829,6 +830,19 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
         ) : null}
       </Stack>
     </CardDisplay>
+  )
+
+  return (
+    <>
+      {/* The page heading and the trail name the send; this card is
+          then free to say what it holds rather than repeating the title. */}
+      <PageHeaderRecord
+        title={
+          campaign ? String(campaign.subject || '') || campaignId : undefined
+        }
+      />
+      {card}
+    </>
   )
 }
 CampaignReportCard.displayName = 'CampaignReportCard'

@@ -45,6 +45,7 @@
 
 import {
   normalizeDynamicListRule,
+  PageHeaderRecord,
   pluginDocsHelp,
   type ConsentGroup,
 } from '@aglyn/aglyn'
@@ -202,9 +203,11 @@ export function ListDetailCard(props: ListDetailCardProps) {
   const hasFilters = rule.sources.length > 0
   const summary = hasFilters ? describeDynamicListRule(rule) : []
 
-  return (
+  /* The card, named so the page chrome above it is a plain list of
+     what this surface publishes upward. */
+  const card = (
     <CardDisplay
-      header={String(list['name'] ?? 'Audience')}
+      header={'Audience'}
       help={pluginDocsHelp('emailCampaigns', { anchor: '#list-members' })}
       contentGutterX
       contentGutterY
@@ -295,6 +298,15 @@ export function ListDetailCard(props: ListDetailCardProps) {
         />
       ) : null}
     </CardDisplay>
+  )
+
+  return (
+    <>
+      {/* The page heading and the trail name the audience; this card is
+          then free to say what it holds rather than repeating the title. */}
+      <PageHeaderRecord title={String(list['name'] || listId)} />
+      {card}
+    </>
   )
 }
 ListDetailCard.displayName = 'ListDetailCard'

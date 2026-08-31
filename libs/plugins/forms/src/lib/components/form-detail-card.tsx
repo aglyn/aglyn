@@ -17,7 +17,13 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
-import { buildRoute, pluginDocsHelp, Route } from '@aglyn/aglyn'
+import {
+  buildRoute,
+  PageHeaderActions,
+  PageHeaderRecord,
+  pluginDocsHelp,
+  Route,
+} from '@aglyn/aglyn'
 import { ICON_VARIANT_BESIGNER } from '@aglyn/shared-data-enums'
 import { AppLink, CardDisplay, GridItems, MdiIcon, useLoading } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -56,7 +62,14 @@ import useFormPromoteApi from './use-form-promote-api'
 export interface FormDetailCardProps {
   hostId: string
   formId: string
-  /** The Forms surface's own absolute console path, for the back link. */
+  /**
+   * The Forms surface's own absolute console path.
+   *
+   * Only the not-found branch links it. The trail carries the way back on a
+   * form that exists, so a link beside the heading would be the breadcrumb
+   * written twice; a form that does NOT exist has no heading of its own for
+   * the trail to end on, and the reader needs somewhere to go.
+   */
   basePath?: string
   /** Whether this viewer's role on the site may make a version live. */
   canPublish?: boolean
@@ -383,48 +396,12 @@ export function FormDetailCard(props: FormDetailCardProps) {
     )
   }
 
-  return (
+  /* The cards, named so the page chrome above them is a plain list of
+     what this surface publishes upward. */
+  const cards = (
     <GridItems
       spacing={3}
       items={[
-        {
-          size: { xs: 12 },
-          children: (
-            <Stack
-              direction="row"
-              spacing={2}
-              sx={{ alignItems: 'center', justifyContent: 'space-between' }}
-            >
-              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                {basePath ? (
-                  <AppLink href={basePath}>{'Forms'}</AppLink>
-                ) : null}
-                <Typography variant="h6">
-                  {form?.displayName ?? formId}
-                </Typography>
-              </Stack>
-              {/*
-                The besigner is what this surface exists to reach, so it leads.
-                Withheld when there is no form: it would mint a version
-                document under an id that has none (AGL-706).
-              */}
-              <Button
-                size="small"
-                variant="contained"
-                disabled={opening || !orgSlug || !host}
-                title={
-                  orgSlug && host ? undefined : 'Resolving this site’s address…'
-                }
-                onClick={handleOpen()}
-                startIcon={
-                  <MdiIcon color="inherit" path={ICON_VARIANT_BESIGNER.path} />
-                }
-              >
-                {opening ? 'Opening…' : 'Edit in besigner'}
-              </Button>
-            </Stack>
-          ),
-        },
         {
           size: { xs: 12, lg: 5 },
           children: (
@@ -696,6 +673,43 @@ export function FormDetailCard(props: FormDetailCardProps) {
         },
       ]}
     />
+  )
+
+  return (
+    <>
+      {/*
+        The page chrome this surface cannot set for itself. The console shell
+        owns the layout and builds its heading from the Forms nav item, so
+        without these the page about one form is headed `Forms` and its trail
+        stops on the list — the same on every row of it.
+      */}
+      <PageHeaderRecord
+        title={form ? form.displayName || formId : undefined}
+      />
+      {/*
+        The besigner is what this surface exists to reach, so it leads — in
+        the PAGE header, which is where an action belongs on a surface with
+        no section rail beneath it. Withheld when there is no form: it would
+        mint a version document under an id that has none (AGL-706).
+      */}
+      <PageHeaderActions>
+        <Button
+          size="small"
+          variant="contained"
+          disabled={opening || !orgSlug || !host}
+          title={
+            orgSlug && host ? undefined : 'Resolving this site’s address…'
+          }
+          onClick={handleOpen()}
+          startIcon={
+            <MdiIcon color="inherit" path={ICON_VARIANT_BESIGNER.path} />
+          }
+        >
+          {opening ? 'Opening…' : 'Edit in besigner'}
+        </Button>
+      </PageHeaderActions>
+      {cards}
+    </>
   )
 }
 FormDetailCard.displayName = 'FormDetailCard'
