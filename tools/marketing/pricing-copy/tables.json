@@ -930,6 +930,7 @@
     "rows": [
       {
         "label": "Extra site, per month",
+        "rate": "extraHostMonthlyUsd",
         "values": {
           "starter": "$10",
           "pro": "$8",
@@ -942,6 +943,7 @@
       },
       {
         "label": "Extra team seat, per month",
+        "rate": "extraSeatMonthlyUsd",
         "values": {
           "starter": "$5",
           "pro": "$4",
@@ -954,6 +956,7 @@
       },
       {
         "label": "Extra site collaborator, per month",
+        "rate": "extraCollaboratorMonthlyUsd",
         "values": {
           "starter": "$3",
           "pro": "$2",
@@ -966,6 +969,7 @@
       },
       {
         "label": "Extra dataset, per month",
+        "rate": "extraDatasetMonthlyUsd",
         "values": {
           "starter": "$2",
           "pro": "$2",
@@ -978,6 +982,7 @@
       },
       {
         "label": "Extra data storage, per GB-month",
+        "rate": "extraDataGbMonthlyUsd",
         "values": {
           "starter": "$0.36",
           "pro": "$0.36",
@@ -990,6 +995,7 @@
       },
       {
         "label": "API requests, per 1,000 over limit",
+        "rate": "extraApiRequestsUsdPer1k",
         "values": {
           "starter": "—",
           "pro": "—",
@@ -1002,6 +1008,7 @@
       },
       {
         "label": "Contacts, per 1,000 over the included band",
+        "rate": "extraContactsUsdPer1k",
         "values": {
           "starter": "$1",
           "pro": "$0.75",
@@ -1009,6 +1016,32 @@
           "scale": "$0.40",
           "advanced": "$0.40",
           "agency": "$0.40",
+          "enterprise": "Custom"
+        }
+      },
+      {
+        "label": "Email sends, per 1,000 over the included band",
+        "rate": "extraEmailSendsUsdPer1k",
+        "values": {
+          "starter": "$2.5",
+          "pro": "$2.25",
+          "business": "$2",
+          "scale": "$1.9",
+          "advanced": "$1.85",
+          "agency": "$1.8",
+          "enterprise": "Custom"
+        }
+      },
+      {
+        "label": "AI assist, per 1,000 credits over the included band",
+        "rate": "extraAssistCreditsUsdPer1k",
+        "values": {
+          "starter": "—",
+          "pro": "$3",
+          "business": "$2.75",
+          "scale": "$2.5",
+          "advanced": "$2.25",
+          "agency": "$2",
           "enterprise": "Custom"
         }
       }
