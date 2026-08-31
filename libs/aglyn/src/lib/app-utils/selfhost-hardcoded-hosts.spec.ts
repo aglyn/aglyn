@@ -23,9 +23,9 @@ import { resolve } from 'path'
  * Self-host ratchet: Aglyn's own hostnames may not appear in runtime code
  * except where it is written down WHY (AGL-2195).
  *
- * the rule: *"the self hosted owner should not have to edit the source to
- * update aglyn branded items urls or personal identification items, should
- * move these to env vars"*. `NEXT_PUBLIC_TENANT_DOMAIN` and
+ * The rule: a self-host operator changes Aglyn-branded URLs and identifying
+ * values by setting an environment variable, never by editing the source.
+ * `NEXT_PUBLIC_TENANT_DOMAIN` and
  * `NEXT_PUBLIC_WORKSPACE_DOMAIN` exist and are honoured by `TENANT_APEX` and
  * `WORKSPACE_DOMAIN` — and were then ignored by four surfaces that re-derived
  * the apex by hand, including the JSON-LD a published site emits. A
