@@ -267,7 +267,7 @@ export function EmailTemplateDetail(props: EmailTemplateDetailProps) {
   const provenance = useMemo(() => templateProvenance(screen), [screen])
 
   const messageHref = (message: TemplateMessage) =>
-    `${basePath}/emails/${message.campaignId}`
+    `${basePath}/messages/${message.campaignId}`
 
   /**
    * What one message sent from this template can be opened into.

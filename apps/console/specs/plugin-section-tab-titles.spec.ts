@@ -33,6 +33,11 @@
  */
 
 import { generateMetadata } from '../app/(app)/[orgSlug]/hosts/[host]/[...pluginSlug]/layout'
+import {
+  PLUGIN_SECTIONS,
+  pluginPageTitle,
+  pluginSectionTitle,
+} from '../app/plugin-page-title'
 
 const HOST = 'aglyn-marketing'
 
@@ -88,6 +93,7 @@ describe('a plugin surface titles its sections apart', () => {
       ['products', 'catalog'],
       ['products', 'orders'],
       ['emails'],
+      ['emails', 'messages'],
       ['emails', 'templates'],
       ['automation'],
       ['automation', 'webhooks'],
@@ -111,5 +117,40 @@ describe('a plugin surface titles its sections apart', () => {
     expect(await titleFor(['forms', 'aL_o499p_p'])).toBe(
       'Forms · aglyn-marketing',
     )
+  })
+})
+
+/**
+ * A SECTION MUST NOT BE NAMED AFTER THE SURFACE HOLDING IT.
+ *
+ * The shell prints both, and prints them together in three places — the tab
+ * title's `subject · noun`, the page header's title and secondary, and the
+ * breadcrumb's last two crumbs. A section whose name equals its surface's
+ * renders each of them as one word said twice, which tells the reader nothing
+ * about which section of the hub is open.
+ *
+ * Asserted over the whole table rather than over one surface: every hub can
+ * grow the section that repeats its own name, and the first one to do it is
+ * the one nobody is looking at.
+ */
+describe('no section repeats the name of its surface', () => {
+  it('names every section something other than its surface', () => {
+    const repeated = Object.entries(PLUGIN_SECTIONS)
+      .flatMap(([surface, ids]) =>
+        ids.map((id) => ({
+          surface,
+          id,
+          section: pluginSectionTitle(surface, id),
+          page: pluginPageTitle(surface),
+        })),
+      )
+      .filter((entry) => entry.section === entry.page)
+      .map((entry) => `${entry.surface}/${entry.id}: "${entry.section}"`)
+      .sort()
+
+    // Fix by renaming the section in the plugin's `*-console-sections.ts` —
+    // id and label together, with the old path kept alive by a redirect in
+    // `next.config.js` — and mirroring the new id in `PLUGIN_SECTIONS`.
+    expect(repeated).toEqual([])
   })
 })

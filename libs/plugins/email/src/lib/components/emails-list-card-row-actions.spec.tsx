@@ -65,7 +65,7 @@ const MARKETING_PATH = '/acme/hosts/site/marketing'
 const mockPush = jest.fn()
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush, replace: () => undefined }),
-  usePathname: () => `${BASE_PATH}/emails`,
+  usePathname: () => `${BASE_PATH}/messages`,
   useParams: () => ({ orgSlug: 'acme', host: 'site' }),
 }))
 
@@ -196,7 +196,7 @@ describe('a message row opens the message', () => {
   it('clicking the row navigates to that message’s own route', async () => {
     await mountCard()
     fireEvent.click(rowFor('Spring sale'))
-    expect(mockPush).toHaveBeenCalledWith(`${BASE_PATH}/emails/msg-modern`)
+    expect(mockPush).toHaveBeenCalledWith(`${BASE_PATH}/messages/msg-modern`)
   })
 
   it('the row navigates to ITS OWN id, not the first one', async () => {
@@ -204,13 +204,13 @@ describe('a message row opens the message', () => {
     // the same place, and a fixture of one message could not tell.
     await mountCard()
     fireEvent.click(rowFor('Last week’s news'))
-    expect(mockPush).toHaveBeenCalledWith(`${BASE_PATH}/emails/msg-legacy`)
+    expect(mockPush).toHaveBeenCalledWith(`${BASE_PATH}/messages/msg-legacy`)
   })
 
   it('the subject is a real link, and does not double-push', async () => {
     await mountCard()
     const link = rowFor('Spring sale').querySelector('a') as HTMLAnchorElement
-    expect(link.getAttribute('href')).toBe(`${BASE_PATH}/emails/msg-modern`)
+    expect(link.getAttribute('href')).toBe(`${BASE_PATH}/messages/msg-modern`)
     fireEvent.click(link)
     expect(mockPush).not.toHaveBeenCalled()
   })
@@ -238,7 +238,7 @@ describe('the message row’s other destinations are in the menu', () => {
       .slice(0, 3)
       .map((item) => [item.tagName, item.getAttribute('href')])
     expect(hrefs).toEqual([
-      ['A', `${BASE_PATH}/emails/msg-modern`],
+      ['A', `${BASE_PATH}/messages/msg-modern`],
       // The MARKETING hub for the campaign: its page is a section of the
       // Marketing console, and this list links out to it.
       ['A', `${MARKETING_PATH}/campaigns/camp-1`],

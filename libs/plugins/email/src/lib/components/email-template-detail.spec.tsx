@@ -281,7 +281,7 @@ describe('the template report names its denominators on screen', () => {
   it('links each message to its own page', async () => {
     await renderDetail()
     const link = screen.getByText('Spring sale').closest('a')
-    expect(link?.getAttribute('href')).toBe('/acme/hosts/site/emails/emails/msg_1')
+    expect(link?.getAttribute('href')).toBe('/acme/hosts/site/emails/messages/msg_1')
   })
 
   it('the message ROW opens it too, and the link does not double-push', async () => {
@@ -289,7 +289,7 @@ describe('the template report names its denominators on screen', () => {
     await renderDetail()
 
     fireEvent.click(messagesTable().querySelectorAll('tbody tr')[0])
-    expect(pushed).toContain('/acme/hosts/site/emails/emails/msg_1')
+    expect(pushed).toContain('/acme/hosts/site/emails/messages/msg_1')
 
     // The row's own handler would fire again and push the same route twice —
     // one history entry per back press.

@@ -340,7 +340,7 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
                 either way.
                */}
               {emailsHub ? (
-                <AppLink href={`${emailsHub}/emails/${campaignId}`}>
+                <AppLink href={`${emailsHub}/messages/${campaignId}`}>
                   {subject}
                 </AppLink>
               ) : (

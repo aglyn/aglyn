@@ -170,6 +170,21 @@ module.exports = withAglyn({
         destination: '/:orgSlug/hosts/:host/automation',
         permanent: true,
       },
+      // The Emails hub's first section is named for the record it lists rather
+      // than for the surface holding it, so `Emails / Messages` names a place
+      // and `Emails / Emails` named the surface twice. `:path*` matches zero
+      // segments as well as many, so the bare section URL and every message's
+      // own page both arrive.
+      //
+      // A redirect rather than a section alias: the shell resolves a section
+      // by matching the declared id, and a second id answering to the same
+      // body would put the surface back to having two addresses for one page
+      // — which is what a canonical URL is for.
+      {
+        source: '/:orgSlug/hosts/:host/emails/emails/:path*',
+        destination: '/:orgSlug/hosts/:host/emails/messages/:path*',
+        permanent: true,
+      },
     ]
   },
 })
