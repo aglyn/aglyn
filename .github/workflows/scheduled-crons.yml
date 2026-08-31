@@ -203,6 +203,7 @@ on:
           - /api/campaigns/process-scheduled
           - /api/admin/finish-domain-attachments
           - /api/lists/materialize
+          - /api/admin/provision-sending-domains
       force:
         # Only /api/admin/reverify-plugin-versions reads this (AGL-1086). A
         # stored verdict is skipped while it is current, which is what makes

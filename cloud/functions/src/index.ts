@@ -222,6 +222,25 @@ const CONSOLE_FAST_CRON_ROUTES: readonly string[] = [
   '/api/campaigns/process-scheduled',
   '/api/admin/finish-domain-attachments',
   '/api/lists/materialize',
+  /*
+   * The sending-domain sweep belongs on a runner rather than on nothing.
+   *
+   * It is a console route because issuing a DKIM key needs a full-access
+   * mail-provider credential and writing the zone needs `VERCEL_TOKEN`,
+   * neither of which the tenant runtime may hold — so the platform job beat,
+   * which runs in the tenant app, cannot carry it. `CRON_SECRET` and this
+   * function are the console-side equivalent. (The credential's own name is
+   * deliberately absent here: `sending-domain-credential-isolation.spec.ts`
+   * refuses it outside the console app, mention included.)
+   *
+   * Frequent rather than daily for the same reason `finish-domain-attachments`
+   * is: a site claims its sending domain the moment it is created, and until
+   * the claim is provisioned and verified `resolveSendingIdentity` refuses
+   * every send that site attempts. The refusal text tells the merchant their
+   * domain is "usually ready within a few minutes", and a fifteen-minute
+   * sweep is what makes that sentence true.
+   */
+  '/api/admin/provision-sending-domains',
 ]
 
 /** What one POST to a cron route settled as. */

@@ -1960,6 +1960,20 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
       'Re-checks pending custom domains after the certificate or DNS settles (AGL-2010). If it stops, a correctly-configured domain stays dark until a human presses Re-attach.',
   },
   {
+    id: 'provision-sending-domains',
+    label: 'Sending domain provisioning',
+    // The fourth route on the `consoleFastCrons` job, sharing its schedule
+    // with the three rows above. It is a console route rather than a job on
+    // the platform beat because issuing a DKIM key needs a full-access
+    // provider credential the tenant runtime must never hold.
+    cron: '*/15 * * * *',
+    runner: 'cloud-scheduler',
+    target: 'consoleFastCrons → console /api/admin/provision-sending-domains',
+    graceMinutes: 45,
+    drives:
+      'Turns a site’s sending-domain claim into a DKIM key and the DNS records that carry it. If it stops, every site whose claim has not been provisioned refuses EVERY send with "this site has no sending domain yet" — not a degraded send on a shared address, but no mail at all, including receipts and password resets.',
+  },
+  {
     id: 'plugin-jobs-beat',
     label: 'Plugin job beat',
     // Cloud Scheduler says `every 1 minutes`; the equivalent five-field
