@@ -79,8 +79,21 @@ export { METERED_MARKUP } from '@aglyn/aglyn/app-utils/plan-entitlements'
  *   transfer at ~$0.15/GB, see `ESTIMATED_PAGE_TRANSFER_BYTES`) together with
  *   the Firestore reads behind a render. Measured against a real cold tenant
  *   page load — 24 requests, **627 KB encoded** — giving ~$0.000088 transfer +
- *   ~40 reads @ $3e-7 + edge/ISR ≈ **$0.000102**, i.e. +2%. This is the one
- *   well-calibrated rate; leave it alone.
+ *   ~40 reads @ $3e-7 + edge/ISR ≈ **$0.000102**, i.e. +2%.
+ *
+ *   ⚠️ **The page has since outgrown this figure, and the rate has not
+ *   followed.** A cold load of `aglyn.com/` measures **1054.3 KB** of
+ *   first-party encoded bytes with every image accounted for — 1.68× the
+ *   627 KB this rate is calibrated against, which at the same per-KB basis
+ *   would be $0.000168/view. 792.4 KB of that is JavaScript every visitor to
+ *   every published site pays, whatever the page contains. The rate below is
+ *   deliberately UNCHANGED: it is inside the locked launch price set, and
+ *   moving it moves `METERED_BILLED_RATES_USD` and therefore what a customer
+ *   is charged, which is a pricing decision and not a measurement's to make.
+ *   The gap is recorded in `tools/tenant-page-budget.json` under
+ *   `wireCalibration` and held there by `npm run check:page-view-rate`, which
+ *   goes red if a later measurement widens it. Until it is closed, "at cost +
+ *   30%" overstates the margin on this meter rather than understating it.
  * - `perFormSubmission` **0.00005** (2026-08-09) — measured from
  *   `apps/tenant/app/api/forms/submit/route.ts`: ~12 Firestore reads, ~9
  *   writes, one ~0.4s function invocation. No email is sent

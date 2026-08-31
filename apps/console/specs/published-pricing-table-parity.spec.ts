@@ -56,6 +56,9 @@
  * check it. Enterprise capacity is contractual (`isCustomPricedPlan`).
  */
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
 import { METERED_MARKUP, METERED_UNIT_RATES_USD } from '../utils/usage-metering'
 import {
   PLAN_ENTITLEMENTS,
@@ -876,6 +879,60 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       expect(
         METERED_UNIT_RATES_USD.perPageView * METERED_MARKUP * 1000,
       ).toBeCloseTo(0.13, 6)
+    })
+
+    /**
+     * ⚠️ THE PAGE AND THE CODE AGREE; NEITHER MATCHES THE MEASUREMENT.
+     *
+     * Every other divergence in this file is between what `/pricing` states
+     * and what the code charges. This one is different and worse: the page and
+     * the code both say $0.13 per 1,000, and the thing they disagree with is
+     * the physical page a customer's visitor actually downloads.
+     *
+     * `perPageView` is a COST, calibrated once against a 627 KB cold load. A
+     * cold load of `aglyn.com/` now measures 1054.3 KB of first-party encoded
+     * bytes with every image accounted for, so the same per-KB basis gives
+     * $0.000168 and a billed $0.22 per 1,000. At the published $0.13 the meter
+     * runs at roughly -29% margin, and 792.4 KB of that page is JavaScript
+     * every visitor to every published site pays whatever the page contains.
+     *
+     * It is pinned here rather than fixed because the published figure is
+     * inside the locked launch price set: correcting the cost moves
+     * `METERED_BILLED_RATES_USD` and therefore a customer's invoice, which is
+     * a pricing decision. What the test can do is refuse to let the gap be
+     * forgotten, and refuse to let it be closed by editing the published
+     * figure alone.
+     *
+     * `tools/tenant-page-budget.json` holds the measurement and
+     * `npm run check:page-view-rate` holds the gap; this asserts the two
+     * agree, so the record cannot drift from the rate it describes.
+     */
+    it('the $0.13 is priced for a 627 KB page that now measures 1054.3 KB', () => {
+      const { wireCalibration } = JSON.parse(
+        readFileSync(
+          join(__dirname, '..', '..', '..', 'tools', 'tenant-page-budget.json'),
+          'utf8',
+        ),
+      )
+      expect(wireCalibration.pricedForKb).toBe(627)
+      expect(wireCalibration.measuredKb).toBe(1054.3)
+      // The rate on the page is the one the 627 KB basis implies…
+      expect(METERED_UNIT_RATES_USD.perPageView).toBeCloseTo(
+        (0.0001 * wireCalibration.pricedForKb) / 627,
+        10,
+      )
+      // …and the measured page implies a materially different one, which is
+      // the whole finding. A weight that drifted back under the calibration
+      // would make this fail, and that failure is the good news.
+      const impliedByMeasured = (0.0001 * wireCalibration.measuredKb) / 627
+      expect(impliedByMeasured).toBeGreaterThan(
+        METERED_UNIT_RATES_USD.perPageView * 1.5,
+      )
+      // Rounded the way a published figure would be: $0.22 per 1,000 against
+      // the $0.13 the page states.
+      expect(
+        Math.round(impliedByMeasured * METERED_MARKUP * 1000 * 100) / 100,
+      ).toBe(0.22)
     })
 
     it('Form submissions — $0.065 / 1,000', () => {

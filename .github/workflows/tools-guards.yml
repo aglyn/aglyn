@@ -733,6 +733,14 @@ jobs:
       - run: npm run test:tenant-page-weight
       - run: npm run check:tenant-page-weight
 
+      # The PRICE that weight is charged at. `perPageView` is a cost per page
+      # view billed at cost + 30%, and the budget above cannot see that the
+      # rate was calibrated against a page the code no longer builds. This
+      # pins the rate to the recorded wire measurement, and the measurement to
+      # the module graph it was taken against.
+      - run: npm run test:page-view-rate
+      - run: npm run check:page-view-rate
+
       # NEXT_PUBLIC access form (AGL-2037, AGL-2172). Next substitutes only the
       # dot form, so a bracket read in a client-reachable module is `undefined`
       # in the browser and the value silently falls back to Aglyn's default —
