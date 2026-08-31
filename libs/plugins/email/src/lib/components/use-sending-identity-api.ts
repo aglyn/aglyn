@@ -83,7 +83,14 @@ export interface SendingIdentityView {
   selected: string
   localPart: string
   identity: string
-  identitySource: 'custom' | 'platform' | null
+  /**
+   * `'custom'` for a domain this site has verified, `'shared'` for the pooled
+   * Aglyn address a site uses until it has one, `null` when the send is
+   * refused. `'platform'` is in the union because the resolver can return it,
+   * and never reaches this view: it is Aglyn's own `aglyn.com` identity, which
+   * a host-scoped resolution cannot produce.
+   */
+  identitySource: 'custom' | 'shared' | 'platform' | null
   refusal: {
     code: string
     domain: string | null

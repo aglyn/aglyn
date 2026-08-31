@@ -341,67 +341,199 @@ verified set, which is a scope that does not exist yet.
 
 ---
 
-## What one domain per site costs
+## DMARC alignment: what actually holds, measured
 
-One provider domain object per host reads like the expensive choice and is
-not. Measured against Resend's published pricing on 2026-08-31:
-
-| Tier | Price | Emails/mo | Verified domains |
-| --- | --- | --- | --- |
-| Free | $0 | 3,000 | 3 |
-| Pro | $20 | 50,000 | 10 |
-| Scale | $90 | 100,000 | 1,000 |
-| Enterprise | contract | contract | contract |
-
-Plus one flat add-on: **$20/mo adds 100 domains**, available on Pro and Scale,
-changing neither the email quota nor the contact limit nor the rate limit.
-
-**There is no per-domain meter.** Billing is the tier, per-email overage
-($0.90/1,000 on Pro), and contacts on the marketing product. A domain is a
-bundled quota, so the marginal cost of the eleventh tenant domain is zero
-until an allowance boundary is crossed, and crossing one costs $20 flat for
-the next hundred — $0.20 per site per month at the boundary, falling to
-nothing as sites fill the allowance.
-
-The consequence for `AGLYN_SENDING_DOMAIN_CAPACITY` is that **the tier is
-chosen by send volume and this ceiling is raised with the add-on.** Reaching
-the ceiling and upgrading Pro to Scale spends $70/mo more for domains the
-$20 add-on already supplies.
-
-### The alternatives, and why none of them is cheaper
-
-Every option that fits more sites into one domain object works by putting
-more than one site behind one DKIM `d=`, which is the pooled reputation this
-whole feature exists to end. That is not merely a product regression — the
-console tells merchants in as many words that a shared domain pools their
-reputation — it is **blocked by DNS we already publish**:
+`_dmarc.aglyn.app` publishes, as of 2026-08-31:
 
 ```
-_dmarc.aglyn.app  "v=DMARC1; p=reject; sp=reject; adkim=s; ..."
+v=DMARC1; p=reject; sp=reject; adkim=s; aspf=r; rua=mailto:webmaster@aglyn.com
 ```
 
-`adkim=s` is strict alignment, and `sp=reject` extends the policy to every
-subdomain. A signature with `d=mail.aglyn.app` therefore cannot authenticate
-a message `From: hello@northwind.mail.aglyn.app` — it fails DMARC and is
-rejected, not merely pooled. So:
+`sp=reject` extends the policy to every subdomain, so it governs every sending
+name in the mail apex. There is no `_dmarc` record on `mail.aglyn.app` or on any
+name below it, so every one of them inherits this record.
 
-| Option | Reputation isolation | Provider objects | Verdict |
+**The `aspf=r` half is the one that matters and the one previously overlooked.**
+DMARC passes when EITHER identifier aligns. Strict DKIM means the signature's
+`d=` must equal the `From:` domain exactly; relaxed SPF means only the
+organizational domains must match, and every name under `aglyn.app` shares an
+organizational domain. So a shape can fail DKIM alignment completely and still
+pass DMARC on SPF alone.
+
+Evaluated against the live record:
+
+| Shape | `From:` | DKIM `d=` | Direct | Forwarded |
+| --- | --- | --- | --- | --- |
+| Shared pool member | `shared1.mail.aglyn.app` | same | pass | **pass** |
+| Dedicated per-site | `northwind.mail.aglyn.app` | same | pass | **pass** |
+| Per-host `From:` over ONE apex key | `northwind.mail.aglyn.app` | `mail.aglyn.app` | pass | **FAIL → reject** |
+| Customer-owned | `acme.com` | same | pass | **pass** |
+
+Row three is the tempting design — one provider domain object for the whole
+platform, and the site's name still in the header. An earlier version of this
+document said it "fails DMARC and is rejected". That was the right conclusion
+for the wrong reason, and the wrong reason makes it dangerous: it **passes** on
+direct delivery, because relaxed SPF rescues it. It fails only once a recipient
+forwards the message, because forwarding breaks SPF and the DKIM signature that
+would have survived is the one that does not align.
+
+A shape that tests green to one mailbox and fails in the field is worse than one
+that refuses outright. **The rule that follows is the whole constraint on the
+design: the `From:` domain must be exactly the domain whose key signs it.**
+Every sending identity here obeys it — a pool member sends as itself, a
+dedicated domain sends as itself, a customer domain sends as itself — and there
+is deliberately no configuration that can produce row three.
+
+## What a sending domain costs, and where it stops being possible
+
+Measured 2026-08-31 against published vendor documentation. The previous
+version of this section concluded that one domain per site "reads like the
+expensive choice and is not". **That conclusion was wrong**, and it was wrong
+because it counted only the provider's price list. A per-host sending domain is
+`O(hosts)` in three resources, and the money is the one that matters least.
+
+| Resource | Per dedicated domain | Per customer-owned domain | Per pool member |
 | --- | --- | --- | --- |
-| One domain per host (today) | Full — one `d=` per site | 1 per host | **Kept.** Costs nothing per domain. |
-| One domain, per-host subdomain `From:` | None — one `d=` for all | 1 total | Rejected. Needs `adkim=r`, which pools every site and re-opens the failure the two apexes were built to avoid. Saves $0. |
-| One domain, per-host return path / envelope sender | None for DMARC — alignment is evaluated against the `From:` domain, and the return path is not it | 1 total | Rejected. Isolates bounce routing only, which is not what a mailbox provider scores. |
-| Per-host DKIM selectors under one domain | None — mailbox providers score the **domain**, not the selector, and Resend issues one key per domain object and picks the selector itself | 1 total | Rejected. Not expressible at the provider, and would not isolate anything if it were. |
-| Shared address on small plans, dedicated domain on paid tiers | Partial, by tier | fewer | Rejected on cost grounds alone: the domains it saves are free. It also re-introduces the shared-domain refusal path for the tiers it covers. |
+| Provider domain object | 1 | 1 | 1, for the whole platform |
+| **Records in OUR DNS zone** | **3** | **0** — the customer publishes them | 3, for the whole platform |
+| Place in the re-verification sweep | forever | forever | 4 total |
 
-Dedicated IPs remain out for the reason section 4 already gives, and the
-price confirms it: $30/mo, Scale only, and harmful below roughly 90,000
-messages a month.
+The middle column is the asymmetry the old analysis missed. A customer-owned
+`acme.com` and a platform `northwind.mail.aglyn.app` look like one feature and
+do not scale alike: only one of them writes into a zone we have to hold.
 
----
+### The vendor numbers
+
+| Constraint | Value | Source |
+| --- | --- | --- |
+| Resend verified domains | Free 3, Pro 10, Scale 1,000 | resend.com/pricing |
+| Resend domain add-on | **a toggle**: +100 for $20/mo, Pro and Scale | resend.com/docs/knowledge-base/how-to-add-more-domains |
+| Self-serve ceiling | **1,100** (Scale + the one add-on). Past that, "chat with support" | same |
+| Resend API rate limit | **10 req/s per TEAM**, shared across every key **and with `POST /emails`** | resend.com/docs/api-reference/rate-limit |
+| Records Resend requires per domain | **3** (MX `send`, TXT `send`, TXT `resend._domainkey`) | resend.com/docs/add-a-domain |
+| Vercel DNS record creation | **50 per minute**, scoped to the `owner` | vercel.com/docs/limits |
+| Vercel records per zone | **not published anywhere** | — |
+
+Two things follow immediately, and both were assumptions before:
+
+- **The add-on does not stack into a quantity.** It is a toggle that adds one
+  hundred. There is no self-serve configuration that holds ten thousand
+  domains, so "90 add-ons at $20" is not a purchase anyone can make — it is a
+  contract negotiation. **No add-on is purchased today**, so the real ceiling
+  right now is the plan's own allowance, which is what
+  `AGLYN_SENDING_DOMAIN_CAPACITY` defaults to.
+- **Vercel publishes no per-zone record limit.** That is not permission; it is
+  the absence of a commitment. The nearest anchors are Route 53's 10,000 per
+  hosted zone (raisable, and billed above the default) and Cloudflare's 3,500
+  on Pro and Business.
+
+### One domain per site, at four scales
+
+Three records per domain, so zone records are `3 × sites`. Creation time is
+`records ÷ 50` minutes of continuously saturated Vercel DNS API — an API
+scoped to the whole team, and shared with tenant web-domain attachment.
+
+| Sites | Domains | Zone records | One-time creation | Provider | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| 100 | 100 | 300 | 6 min | Pro + add-on = **$40/mo** | Fine |
+| 1,000 | 1,000 | 3,000 | 60 min | Scale + add-on = **$110/mo** | Works, and is already at Cloudflare's per-zone figure |
+| 10,000 | 10,000 | 30,000 | **10 hours** | **past self-serve entirely** | Infeasible |
+| 100,000 | 100,000 | 300,000 | **100 hours** | negotiated only | Impossible |
+
+The re-verification sweep is the cost the price list never shows, because it
+**recurs**. Every dedicated domain must be re-checked on a schedule against
+DNS and against the provider, forever. At 100,000 domains one pass is 300,000
+DNS lookups, and any provider call in it draws on an account-wide limit of ten
+requests a second **that the sends share** — 100,000 domains is roughly 2.8
+hours of fully saturated rate limit during which the platform cannot send.
+
+So the wall is not the money. At 10,000 sites the zone is three times Route 53's
+default quota and the provider allowance is off the self-serve price list
+altogether; the dollars would have been the least of it.
+
+### Would NS delegation rescue it? No — checked, not assumed.
+
+If a sending subdomain could be delegated to the provider's nameservers, every
+per-host record would live in THEIR zone and ours would hold a handful of `NS`
+records forever. SendGrid and Mailgun support variants of this, so it is the
+obvious thing to reach for.
+
+**Resend does not support it.** Across the complete documentation corpus
+(`resend.com/docs/llms-full.txt`, 356 pages) `delegat*`, `hosted zone` and
+`automated security` return zero matches, and the decisive detail is in the
+API: `POST /domains` returns `records[]` whose `type` enum is `MX | TXT |
+CNAME`. **`NS` is not representable in the response**, so this is a structural
+absence rather than a documentation gap. Resend's own multi-tenant guide offers
+exactly two options — one domain object per tenant, or separate accounts — and
+no wildcard sending domain exists.
+
+Vercel DNS *can* create `NS` records, so our side is not the blocker. If NS
+delegation ever becomes a hard requirement it selects the ESP, not the design.
+
+### What the model is instead
+
+Domain count is `O(1) + O(customers who want isolation)`, never `O(hosts)`:
+
+| Shape | Reputation | Provider slots | Our zone records | Who |
+| --- | --- | --- | --- | --- |
+| **Shared pool** | Pooled across the sites on one member | 4 | **12** | Every site with no domain of its own. Transactional ONLY. |
+| **Customer-owned** | Fully the customer's | 1 each | **0** | Anyone who wants isolation and a name recipients recognize |
+| **Dedicated platform subdomain** | Fully the site's | 1 each | 3 each | Pro and above, provisioned on upgrade |
+
+The pool is flat at every scale — twelve records whether the platform has
+twelve sites or a hundred thousand. Customer-owned domains scale with
+willingness to pay and cost our zone nothing, which is what makes them the
+right isolation *product* rather than a concession.
+
+The dedicated platform subdomain is the one that must stay bounded. It is
+genuinely useful — reputation isolation with no DNS work for the merchant —
+and it is the only shape whose cost lands in our zone. It is therefore a
+**capacity-managed resource**, not an entitlement that scales: gated to Pro and
+above, claimed at the upgrade rather than at signup, and capped by
+`AGLYN_SENDING_DOMAIN_CAPACITY`. Past roughly a thousand of them the honest
+answer is to move merchants who want isolation onto their own domains, which is
+an argument for offering customer-owned domains BELOW the Agency plan, since
+they are the cheap shape and are currently gated the most tightly.
+
+### Dedicated IPs
+
+Still out, for the reason section 4 gives, and the price agrees: $30/mo, Scale
+only, and harmful below roughly 90,000 messages a month.
 
 ## What a human must still do
 
 The code is finished and inert. Nothing below can be done from a repository.
+
+### 0. Create the shared pool. This is the one that unblocks every site.
+
+Until these exist, every site without a domain of its own refuses every message
+— receipts and password resets included — with
+`tenant-identity-unprovisioned`. It is four domains, once, and it does not grow
+again:
+
+1. In Resend, create a domain object for each of `shared1.mail.aglyn.app`
+   through `shared4.mail.aglyn.app`. Four is `DEFAULT_SHARED_POOL_SIZE`; a
+   deployment that wants a different number sets
+   `AGLYN_TENANT_SHARED_POOL_SIZE` **and creates exactly that many**, because
+   the code derives the pool from the number and will otherwise hand sites an
+   address nothing signs for.
+2. Publish each one's three records into `aglyn.app`: `TXT send.shared{n}.mail`,
+   `MX send.shared{n}.mail`, and the issued `TXT
+   {selector}._domainkey.shared{n}.mail`. Twelve records total, and this is the
+   entire DNS footprint of every unprovisioned site on the platform.
+3. Verify all four in Resend before any traffic arrives. A pool member that is
+   not verified is a domain the provider will refuse to send from, and the
+   refusal will land on a merchant's receipt.
+
+Do NOT create a domain object for the bare mail apex. Nothing sends from it —
+the pool members are one label deeper, each signing for itself, which is what
+satisfies `adkim=s`.
+
+Growing the pool later is safe: the assignment is rendezvous-hashed, so adding a
+member moves only the sites that land on the new one and never shuffles sites
+between existing members. Shrinking it moves only the removed member's sites.
+
+### 1. The dedicated-domain credential
 
 1. **Mint a Resend API key with full access.** Resend dashboard → API Keys →
    Create, permission **Full access**. It cannot be a sending key: a

@@ -80,7 +80,12 @@ function docRef(path: string) {
 
 function collectionRef(path: string) {
   const query = (rows: string[]) => ({
-    where: () => query(rows),
+    // A REAL filter, matching `collectionGroup` below. A `where` that ignored
+    // its arguments would make every org-scoped query in this file return the
+    // whole collection, so a test asserting that one org's sweep leaves another
+    // org's sites alone would pass whether or not the filter existed.
+    where: (field: string, _op: string, value: unknown) =>
+      query(rows.filter((key) => store.get(key)?.[field] === value)),
     orderBy: () => query(rows),
     limit: (n: number) => query(rows.slice(0, n)),
     async get() {
@@ -143,6 +148,7 @@ jest.mock('./organizations', () => ({
 }))
 
 import {
+  claimOrgSendingDomains,
   claimUnprovisionedHosts,
   ensureHostSendingDomain,
   listPendingSendingDomains,
@@ -157,12 +163,26 @@ const HOST = 'HostAbc123'
 const OTHER_HOST = 'HostXyz789'
 const MAIL_APEX = 'mail.aglyn.app'
 
-function seedHost(hostId: string, subdomain: string) {
-  store.set(`hosts/${hostId}`, { subdomain })
+function seedHost(hostId: string, subdomain: string, orgId: string = ORG) {
+  store.set(`hosts/${hostId}`, { subdomain, orgId })
+}
+
+/**
+ * A dedicated domain is now a PAID capability, so the org's plan decides
+ * whether a claim may happen at all.
+ *
+ * Seeded to a qualifying plan by default, because everything else in this file
+ * is about the claim MECHANICS — the label race, the rename pin, the teardown —
+ * and those tests would otherwise all be asserting the plan gate by accident.
+ * The gate has its own block, which sets the plan explicitly on both sides.
+ */
+function seedOrgPlan(plan: string, orgId: string = ORG) {
+  store.set(`orgs/${orgId}`, { plan })
 }
 
 beforeEach(() => {
   store.clear()
+  seedOrgPlan('pro')
   orgForHost.mockReset()
   orgForHost.mockResolvedValue({ orgId: ORG, org: {} })
 })
@@ -708,11 +728,86 @@ describe('the identity a site sends on, from a hostId alone', () => {
     expect(verdict.from).toBe(`hello@acme.${MAIL_APEX}`)
   })
 
-  it('refuses a site that is not provisioned yet', async () => {
+  /**
+   * A site with no domain of its own SENDS, on the pool.
+   *
+   * This used to refuse, and the refusal was the defect: it covered receipts,
+   * password resets and booking confirmations, so a site that had simply not
+   * been provisioned could not tell a customer their order had gone through.
+   * The console had always told merchants the opposite — that mail leaves on a
+   * shared Aglyn address until they prove a domain — and the code was what was
+   * wrong, not the copy.
+   *
+   * The address is on a POOL MEMBER, which is the DMARC constraint: under the
+   * published `adkim=s` the `From:` domain must be exactly the domain the DKIM
+   * key signs for, and each pool member signs for itself.
+   */
+  it('sends a site with no domain of its own on the shared pool', async () => {
     seedHost(HOST, 'acme')
     const verdict = await hostSendingIdentity(HOST)
+
+    expect(verdict.refusal).toBeNull()
+    expect(verdict.source).toBe('shared')
+    expect(verdict.from).toMatch(/^notifications@shared\d+\.mail\.aglyn\.app$/)
+    // Pooled, and the summary says so — the console renders this verbatim, so
+    // the disclosure and the resolver cannot drift apart.
+    expect(verdict.summary).toMatch(/pooled/i)
+    expect(verdict.from).not.toContain('aglyn.com')
+  })
+
+  /**
+   * The assignment is STABLE. Reputation is built by sending steadily from one
+   * name, so a site that hopped between pool members would have none.
+   */
+  it('gives one site the same pool member every time', async () => {
+    seedHost(HOST, 'acme')
+    seedHost(OTHER_HOST, 'zenith')
+
+    const first = await hostSendingIdentity(HOST)
+    const again = await hostSendingIdentity(HOST)
+    expect(again.from).toBe(first.from)
+
+    // And the pool is actually used rather than collapsing to one member for
+    // everybody — otherwise "stable" would be trivially true and the blast
+    // radius the pool exists to bound would be the whole platform.
+    const members = new Set<string>()
+    for (let index = 0; index < 60; index += 1) {
+      seedHost(`Host${index}`, `site-${index}`)
+      members.add((await hostSendingIdentity(`Host${index}`)).from ?? '')
+    }
+    expect(members.size).toBeGreaterThan(1)
+  })
+
+  /**
+   * THE CONTROL FOR AN INDISCRIMINATE FALLBACK.
+   *
+   * A site that SELECTED a domain and has not verified it must still refuse.
+   * The two cases look alike — neither has a usable domain — and they are
+   * opposites: this merchant told us what their recipients would see, and
+   * sending as somebody else is not a degraded way of honoring that.
+   *
+   * If the pool were applied wherever no verified domain was available, this
+   * test is the one that fails.
+   */
+  it('still refuses a site whose SELECTED domain is unverified', async () => {
+    seedHost(HOST, 'acme')
+    store.set(`hosts/${HOST}`, {
+      subdomain: 'acme',
+      orgId: ORG,
+      sendingDomain: 'acme.com',
+    })
+    store.set(`orgs/${ORG}/sendingDomains/acme.com`, {
+      domain: 'acme.com',
+      status: 'records-issued',
+      dkimSelector: 'aglyn-org123',
+    })
+
+    const verdict = await hostSendingIdentity(HOST)
+
     expect(verdict.from).toBeNull()
-    expect(verdict.refusal.code).toBe('tenant-identity-unprovisioned')
+    expect(verdict.source).toBeNull()
+    expect(verdict.refusal.code).toBe('domain-unverified')
+    expect(verdict.refusal.message).toContain('acme.com')
   })
 
   /**
@@ -749,5 +844,204 @@ describe('the identity a site sends on, from a hostId alone', () => {
     await hostSendingIdentity(HOST, cache)
     await hostSendingIdentity(HOST, cache)
     expect(orgForHost).not.toHaveBeenCalled()
+  })
+})
+
+/*==========================================
+  Provisioning follows the plan, not the signup
+==========================================*/
+
+/**
+ * THE COST CURVE, AS A TEST.
+ *
+ * A dedicated sending domain is not free to us: one provider domain object out
+ * of a per-account allowance, THREE records in our own DNS zone, and a
+ * permanent place in the re-verification sweep. Claiming one for every host
+ * that exists makes all three scale with signups. Claiming one when a site can
+ * actually use it makes them scale with revenue.
+ *
+ * Every assertion here is two-sided on purpose. A filter that claimed NOBODY
+ * would satisfy "the free site was skipped" perfectly well, and would be a
+ * total outage of the feature — so each case that must be skipped is paired
+ * with a case that must still be claimed, in the same run where possible.
+ */
+describe('a dedicated domain is claimed by need, not by existence', () => {
+  it('claims for a plan that carries one', async () => {
+    seedOrgPlan('pro')
+    seedHost(HOST, 'northwind')
+
+    const result = await ensureHostSendingDomain({
+      hostId: HOST,
+      orgId: ORG,
+      subdomain: 'northwind',
+    })
+
+    expect(result.created).toBe(true)
+    expect(result.domain).toBe(`northwind.${MAIL_APEX}`)
+    expect(result.error).toBeNull()
+  })
+
+  it.each(['free', 'starter'])(
+    'claims nothing for %s, and says why',
+    async (plan) => {
+      seedOrgPlan(plan)
+      seedHost(HOST, 'northwind')
+
+      const result = await ensureHostSendingDomain({
+        hostId: HOST,
+        orgId: ORG,
+        subdomain: 'northwind',
+      })
+
+      expect(result.created).toBe(false)
+      expect(result.domain).toBeNull()
+      expect(result.error).toBe('plan-no-dedicated-domain')
+
+      // Nothing was spent: no label claimed, no record to provision, and so
+      // nothing for the console sweep to hand to the provider.
+      expect(store.has(`sendingLabels/northwind`)).toBe(false)
+      expect(await listPendingSendingDomains(25)).toEqual([])
+      expect(store.get(`hosts/${HOST}`)?.sendingLabel).toBeUndefined()
+    },
+  )
+
+  it('claims for every plan above the floor, enterprise included', async () => {
+    for (const plan of ['pro', 'business', 'scale', 'advanced', 'agency', 'enterprise']) {
+      store.clear()
+      seedOrgPlan(plan)
+      seedHost(HOST, 'northwind')
+      const result = await ensureHostSendingDomain({
+        hostId: HOST,
+        orgId: ORG,
+        subdomain: 'northwind',
+      })
+      expect([plan, result.created]).toEqual([plan, true])
+    }
+  })
+
+  /**
+   * The sweep, which is where the blanket spend actually happened: it walked a
+   * page of hosts and claimed for each one regardless of tier.
+   *
+   * Both orgs are swept in ONE run, so this cannot pass by the sweep having
+   * done nothing.
+   */
+  it('sweeps past the sites that cannot use one and claims the ones that can', async () => {
+    seedOrgPlan('free', 'orgFree')
+    seedOrgPlan('pro', 'orgPro')
+    seedHost('HostFree', 'freesite', 'orgFree')
+    seedHost('HostPro', 'prosite', 'orgPro')
+
+    const result = await claimUnprovisionedHosts(25)
+
+    expect(result.claimed).toBe(1)
+    expect(result.skippedUnentitled).toBe(1)
+    expect(store.get('hosts/HostPro')?.sendingLabel).toBe('prosite')
+    expect(store.get('hosts/HostFree')?.sendingLabel).toBeUndefined()
+  })
+
+  /**
+   * The upgrade path. This is what makes the sweep a backstop rather than the
+   * schedule — the sweep reads an unordered, uncursored page of `hosts`, so
+   * past a few hundred sites it would never reach an org that just upgraded.
+   */
+  it('claims for one org on demand, and only that org', async () => {
+    seedOrgPlan('pro', 'orgPro')
+    seedOrgPlan('pro', 'orgOther')
+    seedHost('HostPro', 'prosite', 'orgPro')
+    seedHost('HostOther', 'othersite', 'orgOther')
+
+    const result = await claimOrgSendingDomains('orgPro')
+
+    expect(result.claimed).toBe(1)
+    expect(store.get('hosts/HostPro')?.sendingLabel).toBe('prosite')
+    // The other org's site is untouched — it gets claimed by its OWN upgrade
+    // event, not by somebody else's.
+    expect(store.get('hosts/HostOther')?.sendingLabel).toBeUndefined()
+  })
+
+  it('claims nothing on demand for an org still below the floor', async () => {
+    seedOrgPlan('starter', 'orgFree')
+    seedHost('HostFree', 'freesite', 'orgFree')
+
+    expect(await claimOrgSendingDomains('orgFree')).toEqual({
+      scanned: 0,
+      claimed: 0,
+    })
+    expect(store.get('hosts/HostFree')?.sendingLabel).toBeUndefined()
+  })
+
+  /**
+   * A DOWNGRADE DOES NOT REPOSSESS A DOMAIN.
+   *
+   * Taking one back would move that site's mail onto a cold pooled address and
+   * discard whatever reputation the name had earned — a punishment the merchant
+   * never agreed to, applied silently by a sweep. Reclaiming is a teardown
+   * decision with its own surface.
+   */
+  it('leaves a domain already claimed alone when the plan falls', async () => {
+    seedOrgPlan('pro')
+    seedHost(HOST, 'northwind')
+    await ensureHostSendingDomain({ hostId: HOST, orgId: ORG, subdomain: 'northwind' })
+
+    seedOrgPlan('free')
+    const again = await ensureHostSendingDomain({
+      hostId: HOST,
+      orgId: ORG,
+      subdomain: 'northwind',
+    })
+
+    expect(again.domain).toBe(`northwind.${MAIL_APEX}`)
+    expect(again.error).toBeNull()
+    expect(store.get(`hosts/${HOST}`)?.sendingLabel).toBe('northwind')
+  })
+
+  /**
+   * THE HEADLINE REQUIREMENT: being on Free costs a site its dedicated domain,
+   * and does NOT cost it the ability to send.
+   *
+   * Both halves in one test, on one org, because separately either half is
+   * satisfiable by a mistake. A gate that blocked everything would pass "no
+   * domain was claimed"; a gate that blocked nothing would pass "the site can
+   * still send".
+   *
+   * Free is not a tier that never sends. It has no storefront and a campaign
+   * quota of zero, but it collects form submissions and a merchant can reply to
+   * one from the inbox — a transactional message to a person who wrote in, and
+   * exactly the kind that must never be gated behind a plan.
+   */
+  it('gives a free site no domain of its own and sends its mail anyway', async () => {
+    seedOrgPlan('free')
+    seedHost(HOST, 'freesite')
+
+    const claim = await ensureHostSendingDomain({
+      hostId: HOST,
+      orgId: ORG,
+      subdomain: 'freesite',
+    })
+    expect(claim.created).toBe(false)
+    expect(claim.error).toBe('plan-no-dedicated-domain')
+
+    const verdict = await hostSendingIdentity(HOST)
+    expect(verdict.refusal).toBeNull()
+    expect(verdict.source).toBe('shared')
+    expect(verdict.from).toMatch(/^notifications@shared\d+\.mail\.aglyn\.app$/)
+  })
+
+  it('claims nothing when the org cannot be read at all', async () => {
+    // No `orgs/{id}` document. Failing CLOSED is the safe direction: the cost
+    // of a late claim is one sweep, and the cost of an early one is a zone
+    // record spent on a plan nobody could name.
+    seedHost(HOST, 'northwind')
+    store.delete(`orgs/${ORG}`)
+
+    const result = await ensureHostSendingDomain({
+      hostId: HOST,
+      orgId: ORG,
+      subdomain: 'northwind',
+    })
+
+    expect(result.created).toBe(false)
+    expect(result.error).toBe('plan-no-dedicated-domain')
   })
 })

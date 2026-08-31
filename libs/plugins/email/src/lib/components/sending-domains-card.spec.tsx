@@ -96,21 +96,26 @@ let identity: Record<string, unknown> = {}
 
 beforeEach(() => {
   pushed.length = 0
+  /*
+   * A site with no domain of its own, as the resolver actually answers it.
+   *
+   * `identitySource` is `'shared'` and the address is a POOL MEMBER, not
+   * `noreply@aglyn.com`. A host-scoped resolution cannot produce the platform
+   * identity at all — that is Aglyn's own `aglyn.com` mail — so a fixture
+   * carrying it was describing a state the product cannot reach, and the card
+   * was being tested against an impossible answer.
+   */
   identity = {
     orgId: 'org-1',
-    selected: 'platform',
+    selected: '',
     localPart: 'hello',
-    identity: 'Sending as noreply@aglyn.com on the shared platform domain.',
-    identitySource: 'platform',
+    identity:
+      'Sending as notifications@shared1.mail.aglyn.app on a shared Aglyn ' +
+      'domain. Delivery reputation there is pooled with the other sites using ' +
+      'it, and only receipts and account email leave on it.',
+    identitySource: 'shared',
     refusal: null,
-    options: [
-      {
-        value: 'platform',
-        from: 'noreply@aglyn.com',
-        selectable: true,
-        status: 'platform',
-      },
-    ],
+    options: [],
     domains: [],
     canManage: true,
     entitled: true,
@@ -135,16 +140,32 @@ describe('a workspace with no verified domain', () => {
     await mount()
 
     expect(screen.getByText('This site sends as')).toBeTruthy()
-    expect(screen.getByText(/noreply@aglyn\.com/)).toBeTruthy()
+    expect(screen.getByText(/notifications@shared1\.mail\.aglyn\.app/)).toBeTruthy()
   })
 
   it('says what using the shared domain costs', async () => {
     await mount()
 
-    // The half a surface is tempted to leave out. "Sending as noreply@…" is
-    // true and tells a merchant nothing about whose reputation they are
+    // The half a surface is tempted to leave out. "Sending as notifications@…"
+    // is true and tells a merchant nothing about whose reputation they are
     // borrowing, or that their recipients will not see their own brand.
-    expect(screen.getByText(/reputation is shared with other workspaces/i)).toBeTruthy()
+    expect(
+      screen.getByText(/reputation on this address is shared with the other sites/i),
+    ).toBeTruthy()
+  })
+
+  /**
+   * The disclosure has to name the LIMIT too, not just the pooling.
+   *
+   * A merchant who reads "your mail sends on a shared address" and then finds
+   * their campaign refused has been told half of an arrangement. The pool
+   * carries receipts and account mail; marketing needs a domain of the site's
+   * own, and the card is where that is learned rather than at the send.
+   */
+  it('says marketing does not send from the shared address', async () => {
+    await mount()
+
+    expect(screen.getByText(/Marketing email does not send from here/i)).toBeTruthy()
   })
 
   it('does not present it as a failure', async () => {

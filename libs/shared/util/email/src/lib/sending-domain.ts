@@ -36,9 +36,9 @@
  *
  * ## THE BOUNDARY THAT MATTERS MOST
  *
- * **An unverified sending domain refuses the send. It never falls back to the
- * platform identity.** {@link resolveSendingIdentity} has no arm that reaches
- * a platform address from a selected-but-unverified domain, and
+ * **A SELECTED sending domain that is not verified refuses the send. It never
+ * falls back to any other identity.** {@link resolveSendingIdentity} has no
+ * arm that reaches another address from a selected-but-unverified domain, and
  * {@link sendingIdentityRefusal} is what a caller must print.
  *
  * Silent fallback would be wrong three ways, and each is independently
@@ -46,6 +46,28 @@
  * the recipient sees a `From:` they did not expect from a brand they did;
  * and the tenant's reputation risk lands back on the shared domain the custom
  * domain existed to move it off.
+ *
+ * **SELECTED is the load-bearing word.** A site that has chosen nothing has
+ * made no statement about what its recipients will see, so there is nothing to
+ * contradict — and it still has receipts to send. That site sends on the
+ * shared platform identity, which is what the console has always told
+ * merchants happens. The two cases look similar and are opposites: one is a
+ * merchant whose instruction we would be ignoring, the other is a merchant who
+ * gave none.
+ *
+ * ## The shared identity is TRANSACTIONAL only
+ *
+ * The shared identity pools reputation across every site using it, which is
+ * acceptable for mail a recipient asked for by acting — a receipt, a reset, a
+ * booking confirmation — and is not acceptable for mail a merchant chose to
+ * send. Complaints follow bulk sending, so one merchant's imported list would
+ * be charged against every other site's password resets, and the pool would
+ * stop delivering the messages that have no alternative.
+ *
+ * That is a REPUTATION rule and not a pricing one. It happens to line up with
+ * the tiers — a site entitled to send marketing is a site entitled to a domain
+ * of its own — but it would hold if the price list changed tomorrow, and
+ * nothing here reads a plan.
  *
  * The failure mode this guards against is the house one. `USAGE_EMAIL_FROM`
  * was empty in production for weeks; because mail is best-effort at every
@@ -663,6 +685,35 @@ export function assessSendingRecords(
  */
 export type SendingIdentityAudience = 'platform' | 'tenant'
 
+/**
+ * WHAT KIND OF MESSAGE this is, which decides whether the shared tenant
+ * identity is reachable.
+ *
+ * `transactional` — the recipient's own action produced it, or a fact about
+ * their order or account did. A receipt, a password reset, a booking
+ * confirmation, a supplier notice. **Never blocked**, on any tier, by anything
+ * in this module: a merchant who cannot send a receipt does not have a
+ * degraded product, they have no product.
+ *
+ * `marketing` — the merchant chose to send it. A campaign, an abandoned-cart
+ * sweep, a restock alert, a flow step. It carries the merchant's list quality,
+ * so it may only leave on a domain whose reputation is that merchant's own.
+ *
+ * Orthogonal to {@link SendingIdentityAudience}, which asks WHO is speaking.
+ * Both axes are needed and neither implies the other: platform mail is all
+ * transactional today, tenant mail is both, and the answer to "may this leave
+ * on the pooled address" needs the second axis specifically.
+ *
+ * Defaults to `transactional` wherever it is unset, and the polarity is
+ * deliberate — the same one `resolveSendPriority` chose for the same reason.
+ * Enumerating what is RESTRICTED means a caller who forgets sends a receipt
+ * that goes; enumerating what is permitted means a caller who forgets drops
+ * one. The forgotten-marketing case is caught structurally instead, in
+ * `sendEmail`, which derives the answer from fields a marketing send is
+ * already required to carry rather than from one more thing to remember.
+ */
+export type SendingIdentityPurpose = 'transactional' | 'marketing'
+
 export interface SendingIdentityInput {
   /**
    * The site's chosen sending domain, or null when it has not chosen one.
@@ -670,6 +721,19 @@ export interface SendingIdentityInput {
   selection?: SendingDomainSelection | null
   /** `USAGE_EMAIL_FROM`, the platform's own verified identity. */
   platformFrom?: string | null
+  /**
+   * The shared tenant identity — `sharedTenantSendingFrom()`, an address on
+   * the mail apex.
+   *
+   * Passed in rather than read from the environment here, so this module stays
+   * pure and free of a dependency on `platform-sending-domain.ts` (which
+   * imports from this file; reading it here would be a cycle). The durable
+   * half supplies it, which is also the layer that knows whether this
+   * deployment has one.
+   */
+  sharedFrom?: string | null
+  /** See {@link SendingIdentityPurpose}. Defaults to `transactional`. */
+  purpose?: SendingIdentityPurpose
   /**
    * Whose mail this is. Defaults to `platform`, which is what every caller
    * that resolves a PLATFORM identity means and never has to say.
@@ -682,7 +746,16 @@ export interface SendingIdentityInput {
   audience?: SendingIdentityAudience
 }
 
-export type SendingIdentitySource = 'custom' | 'platform'
+export type SendingIdentitySource =
+  /** A domain this site has verified — its own name, or one inside our apex. */
+  | 'custom'
+  /**
+   * The pooled tenant identity on the mail apex. Transactional mail from a
+   * site that has no domain of its own.
+   */
+  | 'shared'
+  /** `USAGE_EMAIL_FROM`. Aglyn's own mail, never a tenant's. */
+  | 'platform'
 
 /**
  * Why a send was refused. Every arm is a state a customer can be walked out
@@ -696,20 +769,30 @@ export type SendingIdentityRefusalCode =
   /** No custom domain, and the platform identity is not configured either. */
   | 'platform-unconfigured'
   /**
-   * TENANT mail from a site that has no sending domain yet.
+   * TENANT mail from a site with no sending domain, on a deployment that has
+   * no shared identity configured either.
    *
-   * The arm that used to be a silent fallback to `USAGE_EMAIL_FROM`. A site
-   * with no identity of its own does not borrow the platform's: `aglyn.com`
-   * carries the platform's own billing and account mail, and a tenant's list
-   * quality must never be charged against it.
-   *
-   * Ordinarily transient and self-healing — provisioning issues the site a
-   * domain inside the platform mail apex without the tenant doing anything —
-   * so the message says "not ready yet" rather than asking for DNS work the
-   * tenant does not owe. It is a REFUSAL and not a delay because a message
-   * sent from the wrong domain cannot be recalled, and a send that waits can.
+   * An OPERATOR fault, not a customer one — the shared identity is derived
+   * from the mail apex and needs no tenant action — so it is the tenant-side
+   * twin of `platform-unconfigured` rather than something a merchant can fix.
+   * It stays a refusal and not a fallback for the same reason that one does:
+   * `aglyn.com` carries the platform's own billing and account mail, and a
+   * tenant's list quality must never be charged against it.
    */
   | 'tenant-identity-unprovisioned'
+  /**
+   * MARKETING mail from a site that has no domain of its own.
+   *
+   * The shared identity carries transactional mail for every site using it, so
+   * admitting one merchant's campaign would charge that campaign's complaint
+   * rate against every other site's receipts and password resets — the messages
+   * with no alternative and no way to opt out of the consequence.
+   *
+   * Distinct from `tenant-identity-unprovisioned` because the remedy is
+   * different in kind: that one is waiting on us, and this one is waiting on
+   * the merchant to have a domain whose reputation is theirs to spend.
+   */
+  | 'shared-identity-marketing'
 
 export interface SendingIdentityRefusal {
   code: SendingIdentityRefusalCode
@@ -720,6 +803,26 @@ export interface SendingIdentityRefusal {
   /** Record keys the last conclusive lookup did not see. */
   missing: string[]
 }
+
+/**
+ * What a merchant is told when marketing meets the pooled identity.
+ *
+ * ONE string, because it is produced from two places that must not drift: the
+ * resolver, when a caller declares the purpose up front, and
+ * {@link sharedIdentityMarketingRefusal}, when the send path notices at the
+ * last moment. Two copies is how the route comes to explain one rule while the
+ * backstop explains another.
+ *
+ * It names the remedy in both forms a merchant can actually reach — verify a
+ * domain, or use the one their site is issued — because "not allowed" without
+ * a next action is the refusal shape this module exists to avoid.
+ */
+const SHARED_IDENTITY_MARKETING_MESSAGE =
+  'Marketing email does not leave on the shared Aglyn address. That address ' +
+  'carries receipts and password resets for every site using it, and one ' +
+  'campaign’s complaint rate would be charged against all of them. Send ' +
+  'marketing from a domain of this site’s own — either one you verify, or ' +
+  'the one this site is issued automatically.'
 
 export interface SendingIdentityVerdict {
   /** Null whenever `refusal` is set. */
@@ -745,21 +848,32 @@ export interface SendingIdentityVerdict {
  *
  * 1. Selection, `verified` → that identity.
  * 2. Selection, anything else → **REFUSED**.
- * 3. No selection, `platform` audience → the platform identity, named as such.
- * 4. No selection, `tenant` audience → **REFUSED**.
+ * 3. No selection, `tenant` audience, `marketing` → **REFUSED**.
+ * 4. No selection, `tenant` audience, `transactional` → the shared identity,
+ *    if this deployment has one; **REFUSED** if it does not.
+ * 5. No selection, `platform` audience → the platform identity, named as such.
  *
- * There is no arm that reaches a platform address from an unverified
- * selection. A customer who has told us to send as their domain has made a
- * statement about what their recipients will see; quietly sending as somebody
- * else instead is not a degraded version of honoring it.
+ * There is no arm that reaches ANY other address from an unverified selection.
+ * A customer who has told us to send as their domain has made a statement
+ * about what their recipients will see; quietly sending as somebody else
+ * instead is not a degraded version of honoring it. That is arm 2, it is
+ * checked before anything else, and neither the shared identity nor the
+ * platform one is consulted inside it.
  *
- * Arm 4 is the same principle applied to a site that has not chosen anything
- * yet, and it is the one that keeps tenant mail off `aglyn.com`. It used to
- * fall through to arm 3. That fallback covered TRANSACTIONAL mail too —
- * receipts, booking reminders, membership password resets — so the platform's
- * own billing domain carried the delivery consequences of every tenant's list,
- * which is exactly the coupling a per-tenant sending domain exists to break.
- * Closing it in the resolver rather than at the call sites is what makes it a
+ * Arms 3 and 4 are the site that has chosen nothing. It is not the same case
+ * and must not get the same answer: there is no instruction to contradict, and
+ * a site that cannot send a receipt is not a site. So transactional mail goes,
+ * on the pooled identity, which is what the console has always disclosed. What
+ * does NOT go is marketing, because the pool is only usable while nobody is
+ * spending it on a list.
+ *
+ * Arm 5 is the platform's own mail and is unreachable from a tenant audience,
+ * which is what keeps a merchant's list quality off `aglyn.com`. The `tenant`
+ * checks sit ABOVE the `platformFrom` read rather than inside it, so the
+ * platform address is not preferred-but-overridable for a tenant — it is
+ * simply not an address this audience can reach.
+ *
+ * Deciding all of it here rather than at the call sites is what makes it a
  * property: `resolveHostSendingIdentity` passes `tenant` for every host-scoped
  * send, so no individual caller has to remember.
  */
@@ -770,6 +884,12 @@ export function resolveSendingIdentity(
   const platformFrom = String(input?.platformFrom ?? '').trim() || null
   const audience: SendingIdentityAudience =
     input?.audience === 'tenant' ? 'tenant' : 'platform'
+  const sharedFrom = String(input?.sharedFrom ?? '')
+    .trim()
+    .toLowerCase()
+  // Defaulted to the arm that can never be blocked. See `SendingIdentityPurpose`.
+  const purpose: SendingIdentityPurpose =
+    input?.purpose === 'marketing' ? 'marketing' : 'transactional'
 
   if (selection) {
     const domain = normalizeSendingDomain(selection.domain)
@@ -817,26 +937,78 @@ export function resolveSendingIdentity(
   }
 
   /*
-   * TENANT mail with nothing selected. The platform identity is not consulted
+   * TENANT mail with nothing selected. The PLATFORM identity is not consulted
    * at all — not preferred-but-overridable, not a last resort. It is simply
-   * not an address this audience can reach, which is why the check sits above
-   * the `platformFrom` read rather than inside it.
+   * not an address this audience can reach, which is why these checks sit
+   * above the `platformFrom` read rather than inside it.
    */
   if (audience === 'tenant') {
+    /*
+     * Re-validated here rather than trusted, for the same reason `localPart` is
+     * on the selection branch: this is the one function that decides what goes
+     * into a `From:` header, and a malformed address reaching the provider is a
+     * failed send whose cause names the wrong layer.
+     */
+    const sharedAt = sharedFrom.lastIndexOf('@')
+    const sharedLocal =
+      sharedAt > 0 ? normalizeLocalPart(sharedFrom.slice(0, sharedAt)) : ''
+    const sharedDomain =
+      sharedAt > 0 ? normalizeSendingDomain(sharedFrom.slice(sharedAt + 1)) : ''
+    const shared =
+      sharedLocal && sharedDomain ? `${sharedLocal}@${sharedDomain}` : ''
+
+    /*
+     * Marketing first, and BEFORE the "is a shared identity configured" check.
+     *
+     * Otherwise a deployment with no pool would answer a campaign with "your
+     * domain is being set up, try again shortly" — which is a promise that a
+     * later attempt will succeed, and it will not: marketing never leaves on
+     * the pool however well provisioned it is. A refusal that misdescribes
+     * what is wrong sends a merchant to wait for something that is not coming.
+     */
+    if (purpose === 'marketing') {
+      return {
+        from: null,
+        source: null,
+        domain: null,
+        summary: 'Blocked: marketing needs a sending domain of its own.',
+        refusal: {
+          code: 'shared-identity-marketing',
+          domain: null,
+          missing: [],
+          message: SHARED_IDENTITY_MARKETING_MESSAGE,
+        },
+      }
+    }
+
+    if (shared) {
+      return {
+        from: shared,
+        source: 'shared',
+        domain: sharedDomain,
+        summary:
+          `Sending as ${shared} on a shared Aglyn domain. Delivery ` +
+          'reputation there is pooled with the other sites using it, and ' +
+          'only receipts and account email leave on it.',
+        refusal: null,
+      }
+    }
+
     return {
       from: null,
       source: null,
       domain: null,
-      summary: 'Blocked: this site has no sending domain yet.',
+      summary: 'Blocked: this deployment has no shared sending identity.',
       refusal: {
         code: 'tenant-identity-unprovisioned',
         domain: null,
         missing: [],
         message:
-          'This site does not have a sending domain yet, so the message was ' +
-          'refused rather than sent from the shared Aglyn address. Its ' +
-          'domain is set up automatically and is usually ready within a few ' +
-          'minutes of the site being created — try again shortly.',
+          'This site has no sending domain of its own, and this deployment ' +
+          'has no shared sending identity configured for it to fall back to, ' +
+          'so the message was refused rather than sent from the platform’s ' +
+          'own address. This is an operator setting, not something the site ' +
+          'can fix.',
       },
     }
   }
@@ -880,4 +1052,39 @@ export function sendingIdentityRefusal(
   verdict: SendingIdentityVerdict | null | undefined,
 ): SendingIdentityRefusal | null {
   return verdict?.refusal ?? null
+}
+
+/**
+ * The refusal a MARKETING message owes when its resolved identity turns out to
+ * be a pooled one, or null.
+ *
+ * The second half of the marketing rule, and the half that does not depend on
+ * anybody remembering. {@link resolveSendingIdentity} refuses marketing when it
+ * is TOLD the purpose — which the campaign route does, so the merchant gets a
+ * `409` naming the cause. But identities are resolved once and reused for
+ * thousands of messages, sometimes by a caller that does not know what will be
+ * sent through them, and the default purpose is `transactional` because the
+ * cost of guessing wrong in the other direction is a dropped password reset.
+ *
+ * So the verdict is re-examined at the send, where the message itself is in
+ * hand and the question "is this marketing" has a structural answer rather than
+ * a declared one. Same shape as the send-rate governor, which is likewise
+ * enforced at the route and again here: a resolution is skippable and a
+ * declaration is forgettable, so neither may be the only thing between a
+ * merchant's list and the pool that carries everybody's receipts.
+ *
+ * Takes the verdict rather than the source string so a caller cannot pass the
+ * wrong field, and returns the same refusal shape every other arm produces so
+ * `sendEmail` has one thing to print.
+ */
+export function sharedIdentityMarketingRefusal(
+  verdict: SendingIdentityVerdict | null | undefined,
+): SendingIdentityRefusal | null {
+  if (verdict?.source !== 'shared') return null
+  return {
+    code: 'shared-identity-marketing',
+    domain: verdict?.domain ?? null,
+    missing: [],
+    message: SHARED_IDENTITY_MARKETING_MESSAGE,
+  }
 }

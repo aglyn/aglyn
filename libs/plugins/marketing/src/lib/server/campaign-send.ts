@@ -115,6 +115,7 @@ import {
   rateLimitedRetryAtMs,
   sendEmail,
   sendingIdentityRefusal,
+  type SendingIdentitySource,
   type EmailRampVerdict,
 } from '@aglyn/shared-util-email'
 
@@ -631,8 +632,16 @@ export interface CampaignSendResult {
   suppressed?: number
   /** Dry run only: which sending identity this campaign would leave on. */
   identity?: string
-  /** Dry run only: `'custom'` for a verified tenant domain, else `'platform'`. */
-  identitySource?: 'custom' | 'platform' | null
+  /**
+   * Dry run only: which KIND of identity this campaign would leave on.
+   *
+   * The union from the resolver rather than a local copy of it, so a new arm
+   * cannot be added there and silently narrowed here. `'shared'` never reaches
+   * a real campaign — the resolution above declares `purpose: 'marketing'`, and
+   * a pooled identity refuses before this is assembled — but the type says what
+   * the resolver can return, not what this path expects to see.
+   */
+  identitySource?: SendingIdentitySource | null
   dryRun?: boolean
   /** Recipients the hourly governor refused mid-batch (AGL-2409). */
   deferred?: number
@@ -1559,10 +1568,21 @@ export async function performCampaignSend(
    * — and cannot drop the selection to reach the shared platform domain
    * either, which is the reputation path. Both used to be one field.
    */
+  /*
+   * `purpose: 'marketing'` is what makes the refusal below name the real
+   * cause. A campaign is the one send site that knows for certain what it is
+   * carrying, so it says so — and a site with no domain of its own is then
+   * told that marketing needs one, rather than being handed the shared pool
+   * and refused later by `sendEmail` with the merchant already past the
+   * composer. `sendEmail` still re-checks; this is the check a person reads.
+   */
   const sendingIdentity = await resolveHostSendingIdentity({
     orgId,
+    hostId,
     selectedDomain: hostSnapshot.get('sendingDomain'),
     selectedLocalPart: hostSnapshot.get('sendingLocalPart'),
+    poolMember: hostSnapshot.get('sendingPoolMember'),
+    purpose: 'marketing',
   })
   const identityRefusal = sendingIdentityRefusal(sendingIdentity)
   if (identityRefusal) {
