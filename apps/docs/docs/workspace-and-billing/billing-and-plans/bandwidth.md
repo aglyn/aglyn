@@ -23,14 +23,14 @@ until the start of the next month.
 | Free | 2 GB | Sites are **paused** until the start of next month |
 | Starter | 50 GB | Keeps serving; the extra is billed |
 | Pro | 250 GB | Keeps serving; the extra is billed |
-| Business | 500 GB | Keeps serving; the extra is billed |
-| Scale | 900 GB | Keeps serving; the extra is billed |
-| Advanced | 1,500 GB | Keeps serving; the extra is billed |
-| Agency | 4,000 GB | Keeps serving; the extra is billed |
+| Business | 400 GB | Keeps serving; the extra is billed |
+| Scale | 700 GB | Keeps serving; the extra is billed |
+| Advanced | 1,000 GB | Keeps serving; the extra is billed |
+| Agency | 3,000 GB | Keeps serving; the extra is billed |
 | Enterprise | Unlimited | Nothing to pass |
 
 The allowance is per **organization**, across every site in it — not per site. If you run
-four sites on one Business plan, they share the 500 GB.
+four sites on one Business plan, they share the 400 GB.
 
 ## Where to see your usage {#where-to-see-it}
 

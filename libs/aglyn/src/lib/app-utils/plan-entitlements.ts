@@ -475,7 +475,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     managersPerOrg: 15,
     maxManagersPerOrg: 100,
     maxMembersPerHost: 100,
-    bandwidthGb: 500,
+    bandwidthGb: 400,
     formSubmissionsPerMonth: 8000,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 1000,
@@ -484,7 +484,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     workflowRunsPerMonth: 50000,
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
-    contactsPerHost: 100000,
+    contactsPerHost: 50000,
     emailSendsPerMonth: 25000,
     actionRunsPerMonth: 50000,
     apiRequestsPerMonth: 100_000,
@@ -548,7 +548,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     managersPerOrg: 25,
     maxManagersPerOrg: 150,
     maxMembersPerHost: 150,
-    bandwidthGb: 900,
+    bandwidthGb: 700,
     formSubmissionsPerMonth: 25000,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 5000,
@@ -557,7 +557,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     workflowRunsPerMonth: 150000,
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
-    contactsPerHost: 500000,
+    contactsPerHost: 100000,
     emailSendsPerMonth: 40000,
     actionRunsPerMonth: 100000,
     apiRequestsPerMonth: 300000,
@@ -618,7 +618,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     managersPerOrg: 50,
     maxManagersPerOrg: 250,
     maxMembersPerHost: 250,
-    bandwidthGb: 1500,
+    bandwidthGb: 1000,
     formSubmissionsPerMonth: 40000,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: UNLIMITED,
@@ -627,7 +627,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     workflowRunsPerMonth: 500000,
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
-    contactsPerHost: 1000000,
+    contactsPerHost: 150000,
     emailSendsPerMonth: 65000,
     actionRunsPerMonth: 250000,
     apiRequestsPerMonth: 1_000_000,
@@ -692,7 +692,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     managersPerOrg: 100,
     maxManagersPerOrg: 500,
     maxMembersPerHost: 1000,
-    bandwidthGb: 4000,
+    bandwidthGb: 3000,
     // FINITE, where every other capacity row on this tier is unbounded.
     // `formSubmissionsPerMonth` is multiplied by `hostLimit` to get the
     // org-wide band, so at 100 hosts an unbounded figure was not merely
@@ -713,7 +713,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     workflowRunsPerMonth: 2000000,
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
-    contactsPerHost: UNLIMITED,
+    contactsPerHost: 500000,
     emailSendsPerMonth: 130000,
     actionRunsPerMonth: 1000000,
     apiRequestsPerMonth: 5000000,
@@ -1186,10 +1186,13 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
   // undercuts all three for the buyer this architecture is built for.
   agency: {
     basePriceMonthlyUsd: 1299,
-    // The annual discount holds its ratio across the rise, and the figure is
-    // what the live Stripe price charges: `aglyn_agency_v2_yearly` is $12,588
-    // a year, which is $1,049 a month. These two must not drift — a customer
-    // is billed by the Stripe price, while every surface quotes this constant.
+    // $1,049/mo is $12,588 a year, which is what the live Stripe yearly price
+    // charges. Stripe prices are immutable, so the constant every surface
+    // quotes has to match the one a customer is actually billed by — a
+    // ratio-derived figure that no price object backs would quote one number
+    // and charge another. It lands within a dollar of holding the previous
+    // 18.8% annual discount across the rise, which is what stops the annual
+    // interval becoming the cheap way past a repricing.
     basePriceAnnualMonthlyUsd: 1049,
     extraHostMonthlyUsd: 8,
     extraSeatMonthlyUsd: 2,
@@ -1197,13 +1200,27 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDatasetMonthlyUsd: 1,
     extraDataGbMonthlyUsd: 0.36,
     extraApiRequestsUsdPer1k: 0.15,
-    // NULL, not 0.2, because Agency's `contactsPerHost` is UNLIMITED and an
-    // uncapped band has no "over" (AGL-2439). The rate was unreachable
-    // — `checkContactQuota` computes `Math.max(0, used - Infinity)`, which is
-    // 0 at every usage level — so no charge changes; what changes is that we
-    // stop advertising a fee we could never collect. The plan card and
-    // `/pricing` both already suppress the suffix when this is null.
-    extraContactsUsdPer1k: null,
+    // $0.40, because the band it meters is now FINITE.
+    //
+    // This row has been wrong in both directions. It shipped $0.20 against an
+    // UNLIMITED band, advertising a fee that could not be charged —
+    // `checkContactQuota` computes `Math.max(0, used - Infinity)`, which is 0
+    // at every usage level (AGL-2439) — and was corrected to `null` to stop
+    // publishing a claim the code could not honour. Bounding the band inverts
+    // the problem: a finite band with no rate is usage past a bound that is
+    // silently free, and the bound achieves nothing.
+    //
+    // $0.40 rather than a further step down the ladder because that is the
+    // 50% retail floor against a `perContactMonth` cost of $0.20 per 1,000 —
+    // the same figure Scale and Advanced carry, and the same floor that moved
+    // Advanced off $0.25.
+    //
+    // It METERS rather than walls: a rate is what makes `checkContactQuota`
+    // return `allowed: true` past the band, so a growing audience is billed
+    // and never dropped. That is what makes bounding this band safe here and
+    // NOT safe on enterprise, whose every rate is the "not for sale"
+    // sentinel.
+    extraContactsUsdPer1k: 0.4,
     extraEmailSendsUsdPer1k: 1.8,
     meteredInfraPassThrough: true,
   },

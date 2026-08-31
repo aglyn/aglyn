@@ -659,6 +659,9 @@ describe('exactly one list price moved with the email change', () => {
     // on the single tier being repriced for margin.
     expect(PLAN_PRICING.agency.basePriceMonthlyUsd).toBe(1299)
     expect(PLAN_PRICING.agency.basePriceAnnualMonthlyUsd).toBe(1049)
+    // $12,588 a year, which is what the live Stripe yearly price charges —
+    // the constant every surface quotes has to be the one Stripe bills.
+    expect(PLAN_PRICING.agency.basePriceAnnualMonthlyUsd * 12).toBe(12_588)
     const discount =
       1 -
       PLAN_PRICING.agency.basePriceAnnualMonthlyUsd /

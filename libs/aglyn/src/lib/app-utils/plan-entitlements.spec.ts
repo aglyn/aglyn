@@ -328,7 +328,7 @@ describe('plan entitlements', () => {
         extraDatasetMonthlyUsd: 1,
         extraDataGbMonthlyUsd: 0.36,
         extraApiRequestsUsdPer1k: 0.15,
-        extraContactsUsdPer1k: null,
+        extraContactsUsdPer1k: 0.4,
         extraEmailSendsUsdPer1k: 1.8,
         meteredInfraPassThrough: true,
       },
@@ -818,8 +818,18 @@ describe('plan entitlements', () => {
     // Within the band there is no overage; remaining is tracked.
     const within = checkContactQuota({ plan: 'business' } as any, 40_000)
     expect(within.overageContacts).toBe(0)
-    expect(within.remaining).toBe(60_000)
+    expect(within.remaining).toBe(10_000)
     expect(within.allowed).toBe(true)
+    // Agency METERS now that its band is finite — a rate is what makes the
+    // bound bill rather than drop the CRM record, and the two only ever
+    // moved together.
+    const agency = checkContactQuota(
+      { plan: 'agency' } as any,
+      PLAN_ENTITLEMENTS.agency.contactsPerHost + 2_000,
+    )
+    expect(agency.allowed).toBe(true)
+    expect(agency.overageContacts).toBe(2_000)
+    expect(agency.overageMonthlyUsd).toBeCloseTo(0.8)
     // Free hard-bands at 100 — no rate, blocked at the band.
     const freeOver = checkContactQuota({ plan: 'free' } as any, 100)
     expect(freeOver.allowed).toBe(false)

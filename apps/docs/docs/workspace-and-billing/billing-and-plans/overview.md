@@ -195,8 +195,8 @@ what will apply once Contacts opens.
 Your **contacts CRM** — form fills, member sign-ups, buyers, and bookings unified into
 one people list — is priced as an **audience band**, not a hard cap:
 
-- Each tier includes a band: Free 100, Starter 1,000, Pro 10,000, Business 100,000,
-  Scale 500,000, Advanced 1,000,000 contacts. Agency and Enterprise are unlimited.
+- Each tier includes a band: Free 100, Starter 1,000, Pro 10,000, Business 50,000,
+  Scale 100,000, Advanced 150,000, Agency 500,000 contacts. Enterprise is unlimited.
 - On **paid tiers**, growing past the band never blocks or drops anything — extra
   contacts are **metered overage** on your monthly invoice, at a per-1,000 rate that
   falls as you move up the plans — see [pricing](https://aglyn.com/pricing) for the
