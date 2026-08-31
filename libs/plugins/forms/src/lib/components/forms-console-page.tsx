@@ -37,7 +37,7 @@ import HostFormsCard from './host-forms-card.component'
  * reader who came for the list must not pay for them.
  */
 export function FormsConsolePage(props: ConsolePluginPageProps) {
-  const { hostId, basePath, segments, hostRole } = props
+  const { hostId, basePath, segments, hostRole, org } = props
   // Everything under the surface's own href is a form id — see `ownsSubtree`.
   const formId = (segments ?? [])[0]
 
@@ -50,7 +50,7 @@ export function FormsConsolePage(props: ConsolePluginPageProps) {
       hostRoleLoaded={hostRole?.loaded ?? false}
     />
   ) : (
-    <HostFormsCard hostId={hostId} basePath={basePath} />
+    <HostFormsCard hostId={hostId} basePath={basePath} org={org} />
   )
 }
 FormsConsolePage.displayName = 'FormsConsolePage'

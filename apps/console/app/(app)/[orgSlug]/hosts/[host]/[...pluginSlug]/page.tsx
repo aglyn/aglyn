@@ -414,6 +414,10 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
       help={resolveDocsHelpTopic(header?.docsTopic, 'plugins')}
       header={{
         children: title,
+        // The section, after the surface name rather than instead of it. One
+        // title across every section of a hub says only which surface is
+        // open, and the section is the part the reader navigated to.
+        secondary: activeSection?.label,
         icon: { path: header?.icon?.path ?? ICON_VARIANT_APP_SETTINGS.path },
       }}
     >

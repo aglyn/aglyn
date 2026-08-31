@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { pluginPageTitle } from '../../../../../plugin-page-title'
+import { entityPageTitle } from '../../../../../entity-page-title'
+import {
+  pluginPageTitle,
+  pluginSectionTitle,
+} from '../../../../../plugin-page-title'
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 
@@ -29,25 +33,39 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { host, pluginSlug } = await params
   /*
-   * The SURFACE, not the section (AGL-2501). The route is a catch-all now, so
-   * `pluginSlug` is every segment beneath the site — `['products', 'orders']`
-   * on a section URL. The tab says "Products", because a tab strip is read to
-   * tell one open site's page from another's and the section is a rail click
-   * away inside it. The breadcrumb is where the section is named.
-   */
-  const [surfaceSlug = ''] = pluginSlug ?? []
-  /*
-   * The DISPLAYED name, not the URL slug (AGL-2184). This returned
-   * `${pluginSlug} · ${host}` — the raw lowercase segment — so every plugin
-   * page's browser tab read `products · aglyn-marketing` while the page
-   * itself rendered `Products`. The page has always had the right string
-   * (`navItem.header?.title ?? navItem.label`); the tab was reading the URL.
+   * The SURFACE and the SECTION. The route is a catch-all, so `pluginSlug` is
+   * every segment beneath the site — `['products', 'orders']` on a section
+   * URL. A title built from the surface alone is the same string for every
+   * section of a hub, so `/marketing/campaigns` and `/marketing/experiments`
+   * put two identical tabs in the strip a reader is picking between, which is
+   * the one job a tab title has.
    *
-   * A title also must not depend on whether this org has the plugin enabled —
-   * naming the page is not a permission decision, and the page below already
-   * gates itself.
+   * The second segment is a section only on a hub; on a surface that owns its
+   * subtree it is a document id. `pluginSectionTitle` answers `''` for
+   * anything it does not recognize as a declared section, and an empty part
+   * is dropped rather than separated — so an entity route keeps the title it
+   * has rather than gaining a mangled id.
    */
-  return { title: `${pluginPageTitle(surfaceSlug)} · ${host}` }
+  const [surfaceSlug = '', sectionSlug = ''] = pluginSlug ?? []
+  /*
+   * `subject · noun · scope` (AGL-2184/AGL-2486), the console's own title
+   * vocabulary: most specific first, because a browser tab is about twenty
+   * characters wide and truncates from the right.
+   *
+   * Both names are the DISPLAYED ones rather than the URL slugs — the tab
+   * reads `Products`, not `products`, and the page renders the same string
+   * from `navItem.header?.title ?? navItem.label`.
+   *
+   * Neither depends on whether this org has the plugin enabled. Naming a page
+   * is not a permission decision, and the page below gates itself.
+   */
+  return {
+    title: entityPageTitle({
+      subject: pluginSectionTitle(surfaceSlug, sectionSlug),
+      noun: pluginPageTitle(surfaceSlug),
+      scope: host,
+    }),
+  }
 }
 
 export default function HostPluginTitleLayout({
