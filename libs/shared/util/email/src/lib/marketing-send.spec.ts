@@ -446,8 +446,13 @@ describe('sendEmail with a marketing context', () => {
       marketing,
     })
 
-    expect(result).toMatchObject({ sent: false, reason: 'frequency-capped' })
-    expect(result.detail).toBe('asked for weekly')
+    expect(result).toMatchObject({
+      sent: false,
+      reason: 'frequency-capped',
+      // The gate's own sentence, carried out rather than replaced by a
+      // generic one — it is what a console readout has to show.
+      detail: 'asked for weekly',
+    })
     expect(isDeferrableSendResult(result)).toBe(true)
     expect(fetchMock).not.toHaveBeenCalled()
   })

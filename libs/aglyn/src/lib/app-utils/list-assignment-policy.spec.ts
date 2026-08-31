@@ -34,10 +34,32 @@ import type { MarketingConsentRecord } from './marketing-consent'
 const NOW = Date.UTC(2026, 7, 29)
 const OPTED_IN_AT = Date.UTC(2025, 2, 14)
 
+/**
+ * The site the enrollment is decided FOR.
+ *
+ * A consent record answers about one host and no other, so the fixture names
+ * one — the same thing `readMarketingBasis` requires of every caller, and the
+ * reason a record cannot be built without saying which brand is asking.
+ */
+const HOST = 'host-a'
+
 const record = (
   basis: MarketingConsentRecord['basis'],
   basisAtMs: number | null = null,
 ): MarketingConsentRecord => ({
+  hostId: HOST,
+  // The site pools with nobody, so the controller a basis runs to is the site
+  // itself — the group of one `soloConsentGroup` produces for an org that has
+  // declared no pooling.
+  groupId: HOST,
+  // No grant held for another brand. The enrollment rule never reaches for
+  // one, and seeding a foreign grant here would assert that it may.
+  otherGrant: 'none',
+  // This site collected the address, so the attribution is its own. Paired
+  // with an absent capture DATE, which is what a document carrying a host but
+  // no `createdAt` reads as.
+  capturedByHostIds: [HOST],
+  capturedByGroup: true,
   basis,
   // A person's own act with no operator provenance behind it, which is what
   // every capture surface writes and therefore the right default here. The

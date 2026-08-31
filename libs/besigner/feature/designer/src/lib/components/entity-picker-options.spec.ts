@@ -412,7 +412,15 @@ describe('a keyed read is asked for only when nothing else can answer', () => {
   })
 
   it('asks for nothing when the node carries no value', () => {
-    const context = { ...base, forms: [], status: { forms: 'ready' } }
+    // Annotated because the value is shared across the three calls below
+    // rather than written into each. A bare literal here would widen
+    // `'ready'` to `string` and the context would stop being checked against
+    // the contract the surface actually receives.
+    const context: Aglyn.EntityPickerContextValue = {
+      ...base,
+      forms: [],
+      status: { forms: 'ready' },
+    }
     expect(Aglyn.entityValueNeedsResolution(context, 'forms', '')).toBeUndefined()
     expect(Aglyn.entityValueNeedsResolution(context, 'forms', '   ')).toBeUndefined()
     expect(Aglyn.entityValueNeedsResolution(context, 'forms', 42)).toBeUndefined()

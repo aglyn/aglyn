@@ -135,6 +135,7 @@ describe('the closed editor is free', () => {
       <ProductEditorDialog
         hostId="host-1"
         product={null}
+        seedFromCache={false}
         open={false}
         onClose={() => undefined}
       />,
@@ -149,6 +150,7 @@ describe('the closed editor is free', () => {
       <ProductEditorDialog
         hostId="host-1"
         product={null}
+        seedFromCache={false}
         open
         onClose={() => undefined}
       />,
@@ -169,6 +171,7 @@ describe('the closed editor is free', () => {
       <ProductEditorDialog
         hostId="host-1"
         product={null}
+        seedFromCache={false}
         open
         onClose={() => undefined}
       />,
@@ -179,6 +182,7 @@ describe('the closed editor is free', () => {
       <ProductEditorDialog
         hostId="host-1"
         product={null}
+        seedFromCache={false}
         open={false}
         onClose={() => undefined}
       />,
