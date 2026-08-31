@@ -88,7 +88,13 @@ export const PLUGIN_SECTIONS: Readonly<Record<string, readonly string[]>> = {
     'sending',
     'suppressions',
   ],
-  marketing: ['overview', 'campaigns', 'overlays', 'experiments'],
+  marketing: [
+    'overview',
+    'campaigns',
+    'conversions',
+    'overlays',
+    'experiments',
+  ],
   automation: ['workflows', 'actions', 'webhooks'],
 }
 
