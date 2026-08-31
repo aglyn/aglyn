@@ -92,6 +92,15 @@ applies the `featureFlag` entitlement gate itself, so an extension can't
 bypass plans. A feature plugin adds a menu item to the host app bar **and a
 new page** without editing any core console file (AGL-394).
 
+The shell applies the `permission` gate the same way, for the other question:
+`featureFlag` is what the organization bought, `permission` is what the person
+reading may open. Name a key on the extension (or on one nav item, to narrow
+that surface) and the shell refuses to construct the page for a reader who
+does not hold it — see
+[the plugin-manager API reference](reference/plugin-manager-api.md#console-extensions--feature-plugins).
+Gating inside the page instead means the surface has already mounted and
+opened its listeners before the check runs.
+
 A nav item that carries a `Component` becomes a full page: the shell's
 generic host route (`apps/console/app/(app)/[orgSlug]/hosts/[host]/[...pluginSlug]/page.tsx`)
 mounts it under the active host, wires the breadcrumb/header, resolves the

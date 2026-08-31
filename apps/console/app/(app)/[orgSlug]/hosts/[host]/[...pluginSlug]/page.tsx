@@ -48,6 +48,11 @@ import {
   resolveUpgradeNoticeAnchor,
   upgradeNoticeMessage,
 } from '../../../../../../utils/extension-entitlement'
+import {
+  refusedExtensionNotice,
+  requiredExtensionPermissions,
+  resolveExtensionPermission,
+} from '../../../../../../utils/extension-permission'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'
 import useHostRole from '../../../../../../hooks/use-host-role'
 import useOrgPermissions from '../../../../../../hooks/use-org-permissions'
@@ -92,7 +97,11 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
   }, [params?.pluginSlug])
   const pluginHref = segments.length ? `/${segments.join('/')}` : ''
   const { org, ready: orgReady } = useCurrentOrg()
-  const { permissions, loaded: permissionsLoaded } = useOrgPermissions()
+  const {
+    permissions,
+    can: canOrgPermission,
+    loaded: permissionsLoaded,
+  } = useOrgPermissions()
   // The site role, handed DOWN like the release verdict (AGL-2334). A plugin
   // surface that publishes has to disable its control with a reason, and the
   // member read it takes is `scope:app`.
@@ -279,6 +288,30 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
     orgReady,
   )
 
+  /*
+   * The same promise, for WHO is reading rather than what the org bought.
+   *
+   * `permissions` is handed to the extension a few lines below and is advice
+   * for exactly the reason `entitled` is: an extension that never reads it
+   * renders its surface for a member with no standing, and by then the page
+   * has mounted and its listeners are open. Contacts is the case that makes
+   * this concrete — the CRM is org-shared people data, and a site
+   * collaborator is a real org member document, so "is on the roster" was
+   * the only thing standing in front of it.
+   *
+   * Resolved from the extension's declaration and the member's own map, in
+   * that order and from nothing else. The extension names a requirement; it
+   * cannot supply an answer.
+   */
+  const extensionPermission = resolveExtensionPermission(
+    requiredExtensionPermissions(resolved?.extension, resolved?.navItem),
+    {
+      can: canOrgPermission,
+      permissions,
+      loaded: permissionsLoaded,
+    },
+  )
+
   const header = resolved?.navItem.header
   const title = header?.title ?? resolved?.navItem.label ?? 'Not found'
   const PluginComponent = resolved?.navItem.Component
@@ -302,7 +335,7 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
       {"This page isn't available. It may have moved or the feature that " +
         'provided it is not installed.'}
     </Alert>
-  ) : !orgReady || !permissionsLoaded ? (
+  ) : !orgReady || !permissionsLoaded || extensionPermission === 'pending' ? (
     // The choke point for every plugin console page (AGL-1380). `org` is
     // undefined both while the billing doc is in flight and while the read is
     // failing, and `checkEntitlement(undefined)` answers NO — so this route
@@ -323,9 +356,25 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
     // whether the map is an answer, and every plugin page is handed the same
     // map. A guess about who is reading is no more renderable than a guess
     // about what they bought.
+    //
+    // `extensionPermission === 'pending'` says the same thing in the gate's
+    // own terms, and the two are each other's backstop: either one alone
+    // holds this wait shut. A surface with a declared permission must not
+    // render off the permissive loading map, and that stays true if the
+    // reason for the other half of this condition ever goes away.
     <Box sx={{ p: 2 }}>
       <CircularProgress size={24} />
     </Box>
+  ) : extensionPermission === 'refused' ? (
+    // BEFORE the entitlement branch, and the order is the decision.
+    //
+    // Both branches refuse, and only one of them tries to sell something. A
+    // reader who may not open the surface has no business being shown its
+    // upgrade path with a link into Billing — the plan is not what is
+    // standing between them and the page, and pointing them at it invites an
+    // org to buy a feature that would change nothing for the person asking.
+    // So authorization answers first and the plan question is never reached.
+    <Alert severity="warning">{refusedExtensionNotice(title)}</Alert>
   ) : extensionEntitlement === 'blocked' ? (
     // Refused by the shell, not by the plugin — and refused with the upgrade
     // path attached, because the surface behind this notice is the only
