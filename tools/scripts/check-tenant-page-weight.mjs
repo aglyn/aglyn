@@ -48,7 +48,7 @@
  * forbidden barrel is statically reachable again.
  */
 
-import { readFileSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -130,7 +130,14 @@ function main() {
     // Always the checked-in file. `--budget` points at something to COMPARE
     // against, and re-baselining onto it would silently rewrite whatever it
     // was — the release tag's budget, another branch's — rather than this one.
-    const budget = budgetFor(measured)
+    // The calibration on disk rides through the rewrite. Read from the
+    // checked-in path, not `--budget`, for the same reason the write targets
+    // it: re-baselining onto a comparison target would carry that file's
+    // calibration into this one.
+    const existing = existsSync(DEFAULT_BUDGET_PATH)
+      ? JSON.parse(readFileSync(DEFAULT_BUDGET_PATH, 'utf8'))
+      : undefined
+    const budget = budgetFor(measured, existing)
     writeFileSync(DEFAULT_BUDGET_PATH, `${JSON.stringify(budget, null, 2)}\n`)
     console.log(
       `Wrote ${relative(REPO_ROOT, DEFAULT_BUDGET_PATH)}\n` +

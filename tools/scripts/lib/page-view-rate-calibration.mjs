@@ -173,7 +173,19 @@ export function evaluateRateCalibration({
   const drift =
     (sourceGraphBytes - calibration.sourceGraphBytes) /
     calibration.sourceGraphBytes
-  const calibrationStale = Math.abs(drift) > calibration.sourceGraphTolerance
+  /*
+   * Representation slack, not extra tolerance. `drift` is a quotient of
+   * floats, so a graph sitting EXACTLY on the boundary can compute to a few
+   * parts in 10^16 beyond it — 1130012 * (1 - 0.15) reads as a drift of
+   * -0.15000000000000005, which a bare `>` calls stale.
+   *
+   * 1e-12 is five orders of magnitude above that error and, at this graph
+   * size, four orders BELOW one byte: a single byte of real drift is 9e-7 in
+   * relative terms, so nothing a measurement can actually produce hides here.
+   */
+  const FLOAT_SLACK = 1e-12
+  const calibrationStale =
+    Math.abs(drift) - calibration.sourceGraphTolerance > FLOAT_SLACK
 
   return {
     ok:

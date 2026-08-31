@@ -168,13 +168,31 @@ export function forbiddenReached(measured) {
 }
 
 /** The budget a measurement should be pinned at, given the measurement. */
-export function budgetFor(measured) {
-  return {
+export function budgetFor(measured, previous) {
+  const budget = {
     entry: TENANT_PAGE_ENTRY,
     baselineBytes: measured.bytes,
     budgetBytes: Math.ceil((measured.bytes * HEADROOM) / 1024) * 1024,
     baselineModules: measured.moduleCount,
   }
+  /*
+   * The wire calibration survives a re-baseline untouched.
+   *
+   * `--write` rewrites this file wholesale, and the calibration is not a
+   * measurement of the source graph — it records a page weight measured
+   * against a deployment, what was and was not counted, and why. None of that
+   * is re-derivable from the numbers this function has. Dropping it would make
+   * the pricing gate fail as UNREADABLE rather than as stale, and the obvious
+   * repair for an unreadable calibration is to write a fresh one from nothing,
+   * which is how the provenance gets lost for good.
+   *
+   * Carried only when a previous budget actually holds one, so the FIRST
+   * baseline still invents nothing.
+   */
+  if (previous?.wireCalibration) {
+    budget.wireCalibration = previous.wireCalibration
+  }
+  return budget
 }
 
 /**
