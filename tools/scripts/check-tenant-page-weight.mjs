@@ -23,7 +23,15 @@
  * npm run check:tenant-page-weight -- --list   # what is in the graph
  * npm run check:tenant-page-weight -- --write  # re-baseline, deliberately
  * npm run check:tenant-page-weight -- --json
+ * npm run check:tenant-page-weight -- --budget <path>   # against another
+ * npm run check:tenant-page-weight -- --entry <path> --list
  * ```
+ *
+ * `--budget` weighs this tree against a budget file from somewhere else — a
+ * branch's, a release tag's — without checking that branch out. It is also
+ * the only way to drive this script to a red without editing the repo, which
+ * is what the self-test uses: the exit code is the whole product here, and an
+ * exit code no test ever saw go to 1 is an exit code nothing is holding.
  *
  * `check:aglyn-barrel` and `check:jsx-barrel` pin WHICH third-party packages a
  * published page can reach. Neither can see the failure this one exists for:
@@ -36,7 +44,8 @@
  * number moves in the same diff as the import that moved it, so a reviewer sees
  * the new figure next to the change that bought it.
  *
- * Exit codes: 0 within budget · 1 over budget, or the entry moved.
+ * Exit codes: 0 within budget · 1 over budget, the entry moved, or a
+ * forbidden barrel is statically reachable again.
  */
 
 import { readFileSync, statSync, writeFileSync } from 'node:fs'
@@ -46,22 +55,41 @@ import { fileURLToPath } from 'node:url'
 import { createResolver } from '../lint-rules/lib/app-router-graph.mjs'
 import {
   TENANT_PAGE_ENTRY,
-  WHY_PAGE_WEIGHT,
   budgetFor,
   evaluatePageWeight,
+  explainVerdict,
   measurePageWeight,
 } from './lib/tenant-page-weight.mjs'
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
-const BUDGET_PATH = join(REPO_ROOT, 'tools', 'tenant-page-budget.json')
+const DEFAULT_BUDGET_PATH = join(REPO_ROOT, 'tools', 'tenant-page-budget.json')
 
 const args = process.argv.slice(2)
+const flag = (name, fallback) => {
+  const at = args.indexOf(name)
+  return at >= 0 && args[at + 1] ? args[at + 1] : fallback
+}
+const BUDGET_PATH = flag('--budget', DEFAULT_BUDGET_PATH)
+/**
+ * The client root to weigh, repo-relative.
+ *
+ * `TENANT_PAGE_ENTRY` unless asked otherwise. `/[host]/search` is a second
+ * published client root and nothing watches it, so being able to point this
+ * at another one is worth having — and it is what lets the self-test drive
+ * the unmeasurable-entry red, which is otherwise unreachable without deleting
+ * a file from the tree.
+ *
+ * `--write` refuses to run beside it: `budgetFor` records `TENANT_PAGE_ENTRY`
+ * whatever was measured, so re-baselining here would pin one page's budget to
+ * another page's weight.
+ */
+const ENTRY = flag('--entry', TENANT_PAGE_ENTRY)
 const kb = (n) => `${(n / 1024).toFixed(1)} KB`
 
 function main() {
   let measured
   try {
-    const entry = join(REPO_ROOT, TENANT_PAGE_ENTRY)
+    const entry = join(REPO_ROOT, ENTRY)
     // Stat the entry first. A resolver handed a path that does not exist walks
     // no edges and reports zero bytes, and zero bytes is under every budget —
     // so an entry that moved would PASS this gate while measuring nothing.
@@ -74,7 +102,7 @@ function main() {
     })
   } catch (error) {
     console.error(
-      `check:tenant-page-weight — cannot measure ${TENANT_PAGE_ENTRY}: ` +
+      `check:tenant-page-weight — cannot measure ${ENTRY}: ` +
         `${error.message}\n` +
         "If the published page's client root moved, point TENANT_PAGE_ENTRY " +
         'at the new one and re-baseline in the same commit. An unmeasurable ' +
@@ -83,11 +111,23 @@ function main() {
     return 1
   }
 
+  if (args.includes('--write') && ENTRY !== TENANT_PAGE_ENTRY) {
+    console.error(
+      `check:tenant-page-weight — refusing to re-baseline from ${ENTRY}. ` +
+        `The budget file records ${TENANT_PAGE_ENTRY} whatever was measured, ` +
+        "so this would pin one page's budget to another page's weight.",
+    )
+    return 1
+  }
+
   if (args.includes('--write')) {
+    // Always the checked-in file. `--budget` points at something to COMPARE
+    // against, and re-baselining onto it would silently rewrite whatever it
+    // was — the release tag's budget, another branch's — rather than this one.
     const budget = budgetFor(measured)
-    writeFileSync(BUDGET_PATH, `${JSON.stringify(budget, null, 2)}\n`)
+    writeFileSync(DEFAULT_BUDGET_PATH, `${JSON.stringify(budget, null, 2)}\n`)
     console.log(
-      `Wrote ${relative(REPO_ROOT, BUDGET_PATH)}\n` +
+      `Wrote ${relative(REPO_ROOT, DEFAULT_BUDGET_PATH)}\n` +
         `  ${kb(budget.baselineBytes)} of first-party source across ` +
         `${budget.baselineModules} modules (budget ${kb(budget.budgetBytes)})`,
     )
@@ -100,7 +140,7 @@ function main() {
     console.log(
       JSON.stringify(
         {
-          entry: TENANT_PAGE_ENTRY,
+          entry: ENTRY,
           bytes: measured.bytes,
           moduleCount: measured.moduleCount,
           budgetBytes: budget.budgetBytes,
@@ -114,7 +154,7 @@ function main() {
 
   if (args.includes('--list')) {
     console.log(
-      `First-load first-party graph of ${TENANT_PAGE_ENTRY}\n` +
+      `First-load first-party graph of ${ENTRY}\n` +
         `  ${kb(measured.bytes)} across ${measured.moduleCount} modules\n`,
     )
     for (const [file, size] of measured.files.slice(0, 60)) {
@@ -125,24 +165,10 @@ function main() {
 
   const verdict = evaluatePageWeight(measured, budget)
 
-  if (verdict.entryMoved) {
-    console.error(
-      `check:tenant-page-weight — the recorded budget is for ${budget.entry}, ` +
-        `but this run measured ${TENANT_PAGE_ENTRY}. Re-baseline with --write ` +
-        'in the commit that moved the entry.',
-    )
-    return 1
-  }
-
-  if (verdict.over) {
-    console.error(
-      "check:tenant-page-weight — a published page's first load grew past " +
-        'its budget.\n\n' +
-        `  measured  ${kb(measured.bytes)}  (${measured.moduleCount} modules)\n` +
-        `  budget    ${kb(budget.budgetBytes)}\n` +
-        `  over by   ${kb(verdict.overBy)}\n\n` +
-        WHY_PAGE_WEIGHT,
-    )
+  if (!verdict.ok) {
+    for (const reason of explainVerdict(verdict, measured, budget)) {
+      console.error(`check:tenant-page-weight — ${reason}`)
+    }
     return 1
   }
 

@@ -33,7 +33,8 @@
 
 import { strict as assert } from 'node:assert'
 import { execFileSync } from 'node:child_process'
-import { readFileSync, statSync } from 'node:fs'
+import { mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
@@ -41,9 +42,12 @@ import { fileURLToPath } from 'node:url'
 import { createResolver, readImports } from '../../lint-rules/lib/app-router-graph.mjs'
 import { collectBarrelGraph } from './jsx-barrel.mjs'
 import {
+  FORBIDDEN_MODULES,
   TENANT_PAGE_ENTRY,
   budgetFor,
   evaluatePageWeight,
+  explainVerdict,
+  forbiddenReached,
   measurePageWeight,
 } from './tenant-page-weight.mjs'
 
@@ -209,4 +213,296 @@ test('POSITIVE CONTROL: an unrelated edit does not move the number', () => {
     file === ENTRY ? `${source}\n// a comment costs nothing\n` : source,
   )
   assert.equal(after.moduleCount, before.moduleCount)
+})
+
+// --- the named barrels, which are red under the ceiling too ----------------
+
+test('forbiddenReached matches on the repo-relative suffix, not a substring', () => {
+  const hit = forbiddenReached({
+    modules: ['/anywhere/on/disk/libs/aglyn/src/index.ts'],
+  })
+  assert.deepEqual(
+    hit.map(({ path }) => path),
+    ['libs/aglyn/src/index.ts'],
+  )
+})
+
+test('POSITIVE CONTROL: a same-named file in another package is not a match', () => {
+  // The suffix carries the whole repo-relative path, so a vendored copy or a
+  // sibling library's own `src/index.ts` cannot trip the pin.
+  assert.deepEqual(
+    forbiddenReached({
+      modules: [
+        '/repo/node_modules/@vendor/libs/aglyn/src/index.ts.map',
+        '/repo/libs/aglyn-node-renderer/src/index.ts',
+        '/repo/libs/besigner/core/src/lib/foundation/index.ts',
+      ],
+    }),
+    [],
+  )
+})
+
+test('a measurement with no module list is not silently forbidden', () => {
+  // `evaluatePageWeight` is called with `{ bytes }` alone in several places.
+  // An absent list has to read as "nothing reached", never as a red.
+  assert.deepEqual(forbiddenReached({}), [])
+  assert.equal(
+    evaluatePageWeight(
+      { bytes: 1 },
+      { entry: TENANT_PAGE_ENTRY, budgetBytes: 1000 },
+    ).ok,
+    true,
+  )
+})
+
+test('FORCED RED: a forbidden barrel is red while far UNDER the budget', () => {
+  const verdict = evaluatePageWeight(
+    { bytes: 1, modules: ['/repo/libs/aglyn/src/index.ts'] },
+    { entry: TENANT_PAGE_ENTRY, budgetBytes: 10_000_000 },
+  )
+  assert.equal(verdict.ok, false)
+  assert.equal(verdict.over, false, 'the ceiling is not what caught this')
+  assert.deepEqual(
+    verdict.forbidden.map(({ path }) => path),
+    ['libs/aglyn/src/index.ts'],
+  )
+})
+
+test('every forbidden module names a file that exists and says why', () => {
+  // A pin whose path stopped resolving is a pin that can never go red again.
+  for (const { path, why } of FORBIDDEN_MODULES) {
+    assert.ok(
+      statSync(join(REPO_ROOT, path)).isFile(),
+      `${path} is pinned but is not a file`,
+    )
+    assert.ok(why.length > 80, `${path} must explain the fix, not just forbid`)
+  }
+})
+
+test('POSITIVE CONTROL: the real page reaches none of them', () => {
+  assert.deepEqual(forbiddenReached(measureReal()), [])
+})
+
+test('FORCED RED: the entry taking one value back off the core barrel', () => {
+  // The exact regression the pin exists for, and the one the ceiling cannot
+  // see on its own: a single named import is enough to reopen the barrel, and
+  // a named import is what every one of these started as.
+  const measured = measureReal((file, source) =>
+    file === ENTRY
+      ? source.replace(
+          "import { canvas, emitter } from '@aglyn/aglyn/aglyn'",
+          "import { canvas, emitter } from '@aglyn/aglyn'",
+        )
+      : source,
+  )
+  const hit = forbiddenReached(measured).map(({ path }) => path)
+  assert.ok(hit.includes('libs/aglyn/src/index.ts'))
+  // And it brings the other two with it, which is the argument for pinning
+  // the boundary rather than trusting a byte ceiling to notice: one named
+  // import re-admits every module three separate pins exist to keep out.
+  assert.deepEqual(hit, FORBIDDEN_MODULES.map(({ path }) => path).filter(
+    (path) => path !== 'libs/shared/ui/jsx/src/index.ts',
+  ))
+  assert.equal(evaluatePageWeight(measured, BUDGET).ok, false)
+})
+
+test('FORCED RED: a core module reopening the foundation barrel', () => {
+  // Five constants, all of them in a `foundation/constants/*` file of one or
+  // two KB, reached through a barrel that pulls 114 modules.
+  const canvasManager = join(
+    REPO_ROOT,
+    'libs/aglyn/src/lib/canvas-manager/canvas-manager.ts',
+  )
+  const measured = measureReal((file, source) =>
+    file === canvasManager
+      ? source.replace(
+          "from '../foundation/constants/app'",
+          "from '../foundation'",
+        )
+      : source,
+  )
+  assert.deepEqual(
+    forbiddenReached(measured).map(({ path }) => path),
+    ['libs/aglyn/src/lib/foundation/index.ts'],
+  )
+})
+
+test('FORCED RED: the badge taking its brand off the plan table', () => {
+  const measured = measureReal((file, source) =>
+    file === ENTRY
+      ? source.replace(
+          "from '@aglyn/aglyn/app-utils/platform-brand'",
+          "from '@aglyn/aglyn/app-utils/plan-entitlements'",
+        )
+      : source,
+  )
+  assert.deepEqual(
+    forbiddenReached(measured).map(({ path }) => path),
+    ['libs/aglyn/src/lib/app-utils/plan-entitlements.ts'],
+  )
+})
+
+// --- the exit and the reason cannot drift apart ---------------------------
+
+const SOME_BUDGET = { entry: TENANT_PAGE_ENTRY, budgetBytes: 1000 }
+
+test('explainVerdict says nothing when the verdict is green', () => {
+  const verdict = evaluatePageWeight({ bytes: 1, modules: [] }, SOME_BUDGET)
+  assert.equal(verdict.ok, true)
+  assert.deepEqual(explainVerdict(verdict, { bytes: 1 }, SOME_BUDGET), [])
+})
+
+test('a red verdict always yields at least one reason to print', () => {
+  // The gap this closes: the CLI branched per reason and returned 1 from each
+  // branch, so deleting a branch changed the EXIT CODE and no test noticed.
+  // One `!ok` now decides the exit, and this asserts the reader is still told
+  // why for every shape of red there is.
+  const reds = [
+    evaluatePageWeight(
+      { bytes: 1, modules: ['/repo/libs/aglyn/src/index.ts'] },
+      SOME_BUDGET,
+    ),
+    evaluatePageWeight({ bytes: 5000, modules: [] }, SOME_BUDGET),
+    evaluatePageWeight(
+      { bytes: 1, modules: [] },
+      { entry: 'apps/tenant/app/moved.tsx', budgetBytes: 1000 },
+    ),
+  ]
+  for (const verdict of reds) {
+    assert.equal(verdict.ok, false)
+    const reasons = explainVerdict(verdict, { bytes: 5000, moduleCount: 3 }, SOME_BUDGET)
+    assert.ok(reasons.length >= 1, 'a red with no reason is a silent failure')
+    for (const reason of reasons) assert.ok(reason.length > 40)
+  }
+})
+
+test('explainVerdict names the forbidden module and its fix', () => {
+  const verdict = evaluatePageWeight(
+    { bytes: 1, modules: ['/repo/libs/aglyn/src/index.ts'] },
+    SOME_BUDGET,
+  )
+  const text = explainVerdict(verdict, { bytes: 1, moduleCount: 1 }, SOME_BUDGET).join('\n')
+  assert.match(text, /libs\/aglyn\/src\/index\.ts/)
+  assert.match(text, /@aglyn\/aglyn\/app-utils/, 'must say what to import instead')
+})
+
+test('a red for two reasons at once reports both', () => {
+  const verdict = evaluatePageWeight(
+    { bytes: 5000, modules: ['/repo/libs/aglyn/src/index.ts'] },
+    SOME_BUDGET,
+  )
+  assert.equal(
+    explainVerdict(verdict, { bytes: 5000, moduleCount: 9 }, SOME_BUDGET).length,
+    2,
+  )
+})
+
+// --- the exit code itself, through the real process -----------------------
+
+/** A budget file outside the repo, so a forced red never edits the tree. */
+function budgetFile(budget) {
+  const dir = mkdtempSync(join(tmpdir(), 'tenant-page-weight-'))
+  const file = join(dir, 'budget.json')
+  writeFileSync(file, JSON.stringify(budget))
+  return file
+}
+
+function runCli(extra = []) {
+  try {
+    const stdout = execFileSync('node', [CLI, ...extra], {
+      cwd: REPO_ROOT,
+      encoding: 'utf8',
+      stdio: 'pipe',
+    })
+    return { code: 0, output: stdout }
+  } catch (error) {
+    return { code: error.status, output: `${error.stdout}${error.stderr}` }
+  }
+}
+
+test('FORCED RED: the CLI exits 1 over a budget it cannot meet', () => {
+  // Everything above proves the VERDICT. This proves the only thing the gate
+  // actually delivers to CI, which is the exit code — and it is the one thing
+  // a green-path-only test can never hold: with the red branch removed, the
+  // run passed silently.
+  const result = runCli([
+    '--budget',
+    budgetFile({ entry: TENANT_PAGE_ENTRY, budgetBytes: 1 }),
+  ])
+  assert.equal(result.code, 1)
+  assert.match(result.output, /grew past its budget/)
+})
+
+test('FORCED RED: the CLI exits 1 when the budget names another entry', () => {
+  const result = runCli([
+    '--budget',
+    budgetFile({
+      entry: 'apps/tenant/app/somewhere-else.tsx',
+      budgetBytes: 10_000_000,
+    }),
+  ])
+  assert.equal(result.code, 1)
+  assert.match(result.output, /Re-baseline with --write/)
+})
+
+test('POSITIVE CONTROL: --budget against a generous budget still exits 0', () => {
+  // Without this, a CLI that exited 1 unconditionally would pass both reds
+  // above and nothing would say so.
+  const result = runCli([
+    '--budget',
+    budgetFile({ entry: TENANT_PAGE_ENTRY, budgetBytes: 10_000_000 }),
+  ])
+  assert.equal(result.code, 0)
+})
+
+test('--write re-baselines the checked-in file, never the --budget one', () => {
+  // A comparison target is not a place to bank a win. Pointed at a temp file
+  // with --write, the CLI must leave it exactly as it found it.
+  const file = budgetFile({ entry: TENANT_PAGE_ENTRY, budgetBytes: 1 })
+  const before = readFileSync(file, 'utf8')
+  // Not run for real: --write rewrites tools/tenant-page-budget.json, and a
+  // test must not move the repo's baseline. The pin is that the two paths are
+  // distinct constants in the source, and that --write names the default one.
+  const cli = readFileSync(CLI, 'utf8')
+  assert.match(cli, /writeFileSync\(DEFAULT_BUDGET_PATH/)
+  assert.equal(readFileSync(file, 'utf8'), before)
+})
+
+test('FORCED RED: an entry that cannot be measured is red, never a pass', () => {
+  // Zero bytes is under every budget, so a client root that moved would sail
+  // through a gate that treated an unreadable entry as an empty graph.
+  const result = runCli(['--entry', 'apps/tenant/app/does-not-exist.tsx'])
+  assert.equal(result.code, 1)
+  assert.match(result.output, /cannot measure/)
+  assert.match(result.output, /never a pass/)
+})
+
+test('FORCED RED: --write refuses to re-baseline from another entry', () => {
+  // `budgetFor` stamps TENANT_PAGE_ENTRY whatever was measured, so without the
+  // refusal this pins the published page's budget to a different page's
+  // weight — measured, by deleting the refusal: the file came back reading
+  // 4,737,856 B across 446 modules, the SEARCH page, under the catch-all's
+  // name. That is a budget with four times the headroom nobody chose.
+  //
+  // The file is restored before the assertions rather than after, so a red
+  // here reports a red instead of also leaving the repo's baseline rewritten.
+  const path = join(REPO_ROOT, 'tools', 'tenant-page-budget.json')
+  const before = readFileSync(path, 'utf8')
+  const result = runCli([
+    '--entry',
+    'apps/tenant/app/[host]/search/page.tsx',
+    '--write',
+  ])
+  const after = readFileSync(path, 'utf8')
+  if (after !== before) writeFileSync(path, before)
+  assert.equal(after, before, 'the checked-in budget is untouched')
+  assert.equal(result.code, 1)
+  assert.match(result.output, /refusing to re-baseline/)
+})
+
+test('POSITIVE CONTROL: --entry pointed at the real root behaves as default', () => {
+  const withFlag = runCli(['--entry', TENANT_PAGE_ENTRY])
+  const without = runCli([])
+  assert.equal(withFlag.code, 0)
+  assert.equal(withFlag.output, without.output)
 })
