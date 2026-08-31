@@ -57,6 +57,18 @@ jest.mock('next/navigation', () => ({
 }))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: { uid: 'uid-1', getIdToken: async () => 'token' } }),
+  /*
+   * The card composes the drawer that edits who the site sends as, and that
+   * drawer offers a picker over the site's people. Doubled rather than
+   * omitted: the drawer is mounted whether it is open or not, so a missing
+   * hook is a card that cannot render at all.
+   *
+   * `useFirestoreCollection` answers nothing here, which is also what it does
+   * in the product while the drawer is closed — it builds a null query, so
+   * no read is issued until somebody asks for one.
+   */
+  useFirestore: () => ({}),
+  useFirestoreCollection: () => ({ data: [], status: 'success' }),
 }))
 jest.mock('@aglyn/aglyn', () => ({
   ...jest.requireActual('@aglyn/aglyn'),

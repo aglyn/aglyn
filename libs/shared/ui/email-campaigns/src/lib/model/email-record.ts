@@ -201,3 +201,53 @@ export function emailAudienceLabel(
     ? 'A list this send did not name'
     : 'A list this send did not record'
 }
+
+/**
+ * The sender a message actually left with, as this record has it.
+ *
+ * `recorded` is the whole point of the shape. The address a send goes out on
+ * is stamped by the send — see `sentAsStamp` — and every message sent before
+ * that stamp existed carries nothing, so a surface has to be able to tell an
+ * unrecorded sender apart from one it could compose. Composing it is the
+ * thing that must not happen: a site's sending identity is a setting, and
+ * resolving it now would answer "what would this send as today" on a report
+ * whose subject is a message that went out months ago, under whatever address
+ * the site held then.
+ *
+ * The same rule {@link emailAudienceLabel} follows for a list name, and for
+ * the same reason: the report says what happened, not what would happen now.
+ *
+ * `replyTo` is null on a message that set none, which is not missing
+ * information — a message with no `Reply-To:` takes replies at its `from`,
+ * and that is a fact the record states by omission rather than one it lost.
+ * The difference only reads correctly when `recorded` is true, which is why
+ * a caller must consult that first.
+ */
+export interface EmailSentAs {
+  /** False on a message sent before the send began stamping its sender. */
+  recorded: boolean
+  from: string | null
+  /** The display name recipients saw, or null when the address stood alone. */
+  fromName: string | null
+  /** Where replies were pointed, or null when they go to `from`. */
+  replyTo: string | null
+}
+
+export function emailSentAs(
+  record: Record<string, any> | null | undefined,
+): EmailSentAs {
+  const stamp = record?.['sentAs'] as Record<string, any> | null | undefined
+  const from = String(stamp?.['from'] ?? '').trim()
+  // The ADDRESS is what makes the stamp a record of a send. A `sentAs` map
+  // carrying only a display name is a partial write, and reporting it as
+  // recorded would put a name on screen beside an address nothing supplied.
+  if (!from) {
+    return { recorded: false, from: null, fromName: null, replyTo: null }
+  }
+  return {
+    recorded: true,
+    from,
+    fromName: String(stamp?.['fromName'] ?? '').trim() || null,
+    replyTo: String(stamp?.['replyTo'] ?? '').trim() || null,
+  }
+}

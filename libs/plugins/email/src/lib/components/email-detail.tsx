@@ -59,6 +59,7 @@ import {
   emailAudienceLabel,
   emailIsUnsent,
   emailSendTimeMs,
+  emailSentAs,
 } from '@aglyn/shared-ui-email-campaigns/model/email-record'
 import CampaignComposer from './campaign-composer'
 import { useMarketingHubPath } from './use-marketing-hub-path'
@@ -223,6 +224,16 @@ export function EmailDetail(props: EmailDetailProps) {
   const lastSentMs = email?.lastSentAt
     ? emailSendTimeMs({ sentAt: email.lastSentAt })
     : 0
+  /**
+   * The sender this message actually left with, as the SEND recorded it.
+   *
+   * Read, never composed. The site's sending identity is a setting: a
+   * merchant who verifies a new domain in November has not changed what went
+   * out in March, and resolving the identity here would answer "what would
+   * this send as today" on a page whose whole subject is a message that
+   * already went. Exactly the rule the list name beside it follows.
+   */
+  const sentAs = emailSentAs(email)
 
   /*
    * The campaign this message belongs to.
@@ -852,6 +863,69 @@ export function EmailDetail(props: EmailDetailProps) {
                     <TableCell align="right">{displayName}</TableCell>
                   </TableRow>
                 ) : null}
+                {/*
+                  THE ADDRESS THIS MESSAGE ACTUALLY LEFT AS.
+
+                  Always a row. A site's sending identity can move — a domain
+                  verifies, a mailbox is renamed, a sender changes — so the
+                  question "what did my recipients see" has an answer only if
+                  the send wrote one down, and a page that omitted the row for
+                  the sends that did not would make an unanswerable question
+                  look like one nobody asked.
+
+                  Three states, and they are three different facts. A
+                  recorded address is what went out. An unsent email has no
+                  address yet, which is not the same as having lost one. And a
+                  message sent before the send began stamping its sender says
+                  so plainly rather than being handed today's identity, which
+                  would be this page inventing history.
+                 */}
+                <TableRow>
+                  <TableCell>{'Sent as'}</TableCell>
+                  <TableCell align="right">
+                    {sentAs.recorded ? (
+                      <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                        {sentAs.from}
+                      </Typography>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        {unsent ? 'not sent yet' : 'not recorded'}
+                      </Typography>
+                    )}
+                  </TableCell>
+                </TableRow>
+                {/*
+                  The two rows that only exist once there is a sender to
+                  describe. Both name what an ABSENT value means rather than
+                  leaving a blank: a message with no display name showed the
+                  address on its own, and one with no reply address takes
+                  replies where it was sent from. Neither is missing
+                  information — each is a fact the record states by omission.
+                 */}
+                {sentAs.recorded ? (
+                  <TableRow>
+                    <TableCell>{'From name'}</TableCell>
+                    <TableCell align="right">
+                      {sentAs.fromName ?? (
+                        <Typography variant="body2" color="text.secondary">
+                          {'The address on its own'}
+                        </Typography>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+                {sentAs.recorded ? (
+                  <TableRow>
+                    <TableCell>{'Reply-to'}</TableCell>
+                    <TableCell align="right">
+                      {sentAs.replyTo ?? (
+                        <Typography variant="body2" color="text.secondary">
+                          {'The sending address'}
+                        </Typography>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ) : null}
                 <TableRow>
                   <TableCell>{'Campaign'}</TableCell>
                   <TableCell align="right">
@@ -906,7 +980,8 @@ export function EmailDetail(props: EmailDetailProps) {
              * history of a message that went out months ago.
              */}
             <Typography variant="caption" color="text.secondary">
-              {'The list is named as it was when this email was sent.'}
+              {'The list and the sender are recorded as they were when this ' +
+                'email was sent, not as this site is configured now.'}
             </Typography>
           </Section>
 

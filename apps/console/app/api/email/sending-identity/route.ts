@@ -54,6 +54,25 @@
  * selections pointing at it, and this route does not repair them either. A
  * site configured to send as a domain nothing has verified must refuse rather
  * than quietly revert to the shared domain — see `releaseSendingDomain`.
+ *
+ * ## The DOMAIN is proved; the MAILBOX is chosen
+ *
+ * DMARC on the sending apex is published with `adkim=s`, so the `From:`
+ * domain has to be exactly the domain whose DKIM key signed the message.
+ * Nothing a merchant sends here can move it. What they can choose is the part
+ * in front of the `@` — and a display name and a reply address to go with it,
+ * which is what "send as a person" is made of.
+ *
+ * The mailbox is stored per site rather than taken per send, because it
+ * addresses a real mailbox: it is where a bounce returns and where a client
+ * that ignores `Reply-To:` will answer. `campaign-send.ts` states the same
+ * boundary from the other end — the sending identity named in a send request
+ * is read by nothing — and a per-send mailbox would reopen exactly that path.
+ *
+ * It is also the reason the two writes have different gates. Choosing the
+ * address every recipient of this site's mail sees is an `org.settings`
+ * decision, and the composer, which is admin-or-editor, may only choose the
+ * name in front of it.
  */
 
 import { checkEntitlement, pluginRequestFromWeb } from '@aglyn/aglyn/server'
@@ -70,16 +89,31 @@ import {
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import {
+  DEFAULT_SENDING_LOCAL_PART,
+  headerSafeText,
   normalizeLocalPart,
   normalizeSendingDomain,
   platformSendingDomainFor,
+  SENDING_FROM_NAME_MAX,
+  SENDING_REPLY_TO_MAX,
+  validateSendingLocalPart,
   type SendingDomainRecord,
 } from '@aglyn/shared-util-email'
 
 export const dynamic = 'force-dynamic'
 
-/** The mailbox a site sends as when it has never chosen one. */
-const DEFAULT_LOCAL_PART = 'hello'
+/**
+ * A reply address has to be one a person can actually write back to, so it is
+ * checked as an address and not merely as header-safe text.
+ *
+ * The loose shape the members route uses, deliberately: this field is the one
+ * place a merchant may legitimately name a mailbox on a domain nothing here
+ * controls — a personal account, a shared inbox at their own company — and a
+ * stricter pattern would be this surface guessing at somebody else's mail
+ * provider. What it must not admit is a value with whitespace or a second
+ * address in it, which is what the anchors and the `\s` exclusions cover.
+ */
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 /**
  * One choice in the composer's identity control.
@@ -182,7 +216,29 @@ async function handler(request: Request): Promise<Response> {
   )
   const localPart =
     normalizeLocalPart(String(hostSnapshot.get('sendingLocalPart') ?? '')) ||
-    DEFAULT_LOCAL_PART
+    DEFAULT_SENDING_LOCAL_PART
+  /*
+   * WHO THE SITE SENDS AS, as opposed to WHERE FROM.
+   *
+   * A display name and a reply address, stored per site so a merchant sets
+   * "Jamie at Acme, replies to jamie@acme-corp.com" once rather than retyping
+   * it into every campaign. The composer still owns the per-send values — it
+   * has carried both fields since it shipped — and these are what it starts
+   * from when a campaign has said nothing.
+   *
+   * Deliberately NOT read by the send path. A campaign records the values the
+   * composer submitted, so what these do is decide what a person is shown
+   * before they press send; a second reader inside the send would make the
+   * stored report and the site setting two answers to one question.
+   */
+  const senderName = headerSafeText(
+    hostSnapshot.get('sendingFromName'),
+    SENDING_FROM_NAME_MAX,
+  )
+  const senderReplyTo = headerSafeText(
+    hostSnapshot.get('sendingReplyTo'),
+    SENDING_REPLY_TO_MAX,
+  ).toLowerCase()
 
   if (method === 'GET') {
     const records = orgId ? await listSendingDomains(orgId) : []
@@ -270,6 +326,23 @@ async function handler(request: Request): Promise<Response> {
        */
       selected: selectedDomain || platformDomain || '',
       localPart,
+      /*
+       * WHETHER THE CHOSEN MAILBOX IS THE ONE BEING USED.
+       *
+       * A site with no domain of its own sends on a pooled Aglyn address, and
+       * that address's mailbox is fixed — `resolveSendingIdentity` builds the
+       * shared arm from the operator's `sharedTenantSendingFrom()` and never
+       * consults the site's `localPart`. So the stored mailbox is real, it is
+       * kept, and it is simply not in effect yet.
+       *
+       * Reported rather than hidden because the alternative is a settings
+       * card showing `sales` beside mail that is going out as
+       * `notifications@`. A stored value that is not the value in use is
+       * exactly the case a surface has to say out loud.
+       */
+      localPartInUse: resolved.source === 'custom',
+      fromName: senderName || null,
+      replyTo: senderReplyTo || null,
       identity: resolved.summary,
       identitySource: resolved.source,
       refusal: resolved.refusal,
@@ -298,8 +371,154 @@ async function handler(request: Request): Promise<Response> {
     )
   }
   const requested = String(body?.['domain'] ?? '').trim()
-  const nextLocalPart =
-    normalizeLocalPart(String(body?.['localPart'] ?? '')) || DEFAULT_LOCAL_PART
+
+  /*
+   * THE MAILBOX, THE NAME AND THE REPLY ADDRESS — each written only when the
+   * body names it.
+   *
+   * Absent and blank are different requests, and reading them as one is what
+   * made the old handler quietly wrong. Changing the domain and changing the
+   * mailbox are separate decisions taken from separate controls, so a body
+   * that names a domain and no mailbox must leave the mailbox alone rather
+   * than resetting a site that sends as `jamie@` back to `hello@`.
+   *
+   * A field that is PRESENT and empty is a merchant clearing it, which is a
+   * real instruction for a name and a reply address — both are optional — and
+   * is not one for the mailbox, which every address needs.
+   */
+  const localPartGiven = body?.['localPart'] !== undefined
+  const fromNameGiven = body?.['fromName'] !== undefined
+  const replyToGiven = body?.['replyTo'] !== undefined
+
+  /*
+   * REFUSED WITH A SENTENCE RATHER THAN CORRECTED IN SILENCE.
+   *
+   * `normalizeLocalPart` answers the empty string for anything malformed, and
+   * this used to be read through `|| DEFAULT_LOCAL_PART` — so a merchant who
+   * typed `sales team!` was answered `hello`, a real address they had not
+   * chosen, presented as the one they had just set. The value reaches an SMTP
+   * envelope and a `From:` header, so it has to be validated either way; what
+   * changes here is that the person is told which rule they met.
+   */
+  const mailbox = localPartGiven
+    ? validateSendingLocalPart(body?.['localPart'])
+    : null
+  if (mailbox?.error) {
+    return Response.json({ error: mailbox.error }, { status: 400 })
+  }
+
+  const nextFromName = headerSafeText(body?.['fromName'], SENDING_FROM_NAME_MAX)
+  const nextReplyTo = headerSafeText(
+    body?.['replyTo'],
+    SENDING_REPLY_TO_MAX,
+  ).toLowerCase()
+  /*
+   * THE ONE FIELD THAT MAY NAME A MAILBOX WE DO NOT SIGN FOR.
+   *
+   * DMARC on the sending apex is published `adkim=s`, so the `From:` domain
+   * must be exactly the domain whose DKIM key signed the message and no
+   * merchant input can move it. `Reply-To:` carries no such alignment: it is
+   * where a person's answer goes, and pointing it at a personal or corporate
+   * mailbox is the supported way to be reachable at an address this platform
+   * has never verified.
+   */
+  if (replyToGiven && nextReplyTo && !EMAIL_PATTERN.test(nextReplyTo)) {
+    return Response.json(
+      {
+        error:
+          'Enter a reply address as a full email address, for example ' +
+          'jamie@acme.com. Replies go there instead of to the sending ' +
+          'address, and it does not have to be on a domain you have verified.',
+      },
+      { status: 400 },
+    )
+  }
+
+  /**
+   * The three sender fields as a Firestore merge patch.
+   *
+   * `deleteField` rather than `''` for a cleared name or reply address, so an
+   * unset field is genuinely unset. A stored empty string would read as a
+   * value on every surface that tests for presence, which is the shape that
+   * makes an absent setting render as a real one.
+   */
+  const senderPatch = () => ({
+    ...(mailbox?.localPart ? { sendingLocalPart: mailbox.localPart } : {}),
+    ...(fromNameGiven
+      ? {
+          sendingFromName: nextFromName
+            ? nextFromName
+            : firebaseAdmin.firestore.FieldValue.delete(),
+        }
+      : {}),
+    ...(replyToGiven
+      ? {
+          sendingReplyTo: nextReplyTo
+            ? nextReplyTo
+            : firebaseAdmin.firestore.FieldValue.delete(),
+        }
+      : {}),
+  })
+
+  /*
+   * WHY A SITE ON THE POOLED ADDRESS CANNOT CHOOSE A MAILBOX.
+   *
+   * Three reasons, and the first is structural: the shared arm of
+   * `resolveSendingIdentity` builds its address from the operator's
+   * `sharedTenantSendingFrom()` and never reads the site's `localPart`, so
+   * storing one for a pooled site stores a setting with no effect.
+   *
+   * The second is that the mailbox on a pooled member is not the site's to
+   * name. Every site assigned to `shared{n}.mail.aglyn.app` shares it, and the
+   * mailbox is where that member's bounces and complaints come back — one
+   * operational address serving all of them, not a per-site brand.
+   *
+   * The third is what a recipient would read. `sales@shared3.mail.aglyn.app`
+   * puts a merchant's own department name on a domain the merchant plainly
+   * does not own, which is the shape a receiving filter is built to distrust
+   * and a person is right to.
+   *
+   * So this is refused rather than stored. The name and the reply address are
+   * not: both are honored on the pooled address exactly as they are on a
+   * site's own domain, and they are the half of "send as a person" that does
+   * not depend on owning a name.
+   */
+  const POOLED_MAILBOX_REFUSAL =
+    'This site sends on a shared Aglyn address, whose mailbox is fixed and ' +
+    'shared with the other sites on it, so it cannot be renamed. The sender ' +
+    'name and reply address below still apply. Choosing the address itself ' +
+    'needs a domain of this site’s own.'
+
+  /*
+   * A BODY WITH NO `domain` KEY IS NOT A REQUEST TO CHANGE THE DOMAIN.
+   *
+   * Absent and empty part ways here. An empty `domain` has always meant "move
+   * this site back to the one Aglyn issues it", and the drawer that sets who
+   * the site sends AS must not be able to say that by accident: a site
+   * sending as its own verified `acme.com` would have its selection reset the
+   * first time somebody edited the sender name.
+   */
+  if (body?.['domain'] === undefined) {
+    /*
+     * `sendingLabel`, not `sendingDomain`. The label is the pinned claim and
+     * is what makes a domain this site's own; the selection can be empty for
+     * a site whose provisioning has not finished attaching it yet, and a
+     * mailbox stored in that window is correct and simply not yet in use.
+     */
+    const hasOwnDomain =
+      Boolean(selectedDomain) ||
+      Boolean(String(hostSnapshot.get('sendingLabel') ?? '').trim())
+    if (mailbox?.localPart && !hasOwnDomain) {
+      return Response.json({ error: POOLED_MAILBOX_REFUSAL }, { status: 409 })
+    }
+    await hostRef.set(senderPatch(), { merge: true })
+    return Response.json({
+      selected: selectedDomain,
+      localPart: mailbox?.localPart || localPart,
+      fromName: fromNameGiven ? nextFromName || null : senderName || null,
+      replyTo: replyToGiven ? nextReplyTo || null : senderReplyTo || null,
+    })
+  }
 
   /*
    * Clearing the selection moves this site back to ITS OWN provisioned
@@ -326,25 +545,34 @@ async function handler(request: Request): Promise<Response> {
     if (!provisioned?.domain) {
       return Response.json(
         {
-          error:
-            'This site does not have a sending domain of its own yet, so it ' +
-            'cannot be moved back to one. It is set up automatically and is ' +
-            'usually ready within a few minutes — try again shortly.',
+          error: mailbox?.localPart
+            ? POOLED_MAILBOX_REFUSAL
+            : 'This site does not have a sending domain of its own yet, so ' +
+              'it cannot be moved back to one. It is set up automatically ' +
+              'and is usually ready within a few minutes — try again shortly.',
         },
         { status: 409 },
       )
     }
 
+    /*
+     * The mailbox SURVIVES a change of domain, and is only rewritten when the
+     * body names one.
+     *
+     * It used to be deleted here, which made "stop using our own domain" also
+     * mean "and go back to sending as hello@" — two decisions taken by one
+     * control, one of them silently. Which mailbox a site sends as and which
+     * domain it sends on are set from different places and answer different
+     * questions, so moving one leaves the other where its owner put it.
+     */
     await hostRef.set(
-      {
-        sendingDomain: provisioned.domain,
-        sendingLocalPart: firebaseAdmin.firestore.FieldValue.delete(),
-      },
+      { sendingDomain: provisioned.domain, ...senderPatch() },
       { merge: true },
     )
     return Response.json({
       selected: provisioned.domain,
-      localPart: DEFAULT_LOCAL_PART,
+      localPart: mailbox?.localPart || localPart,
+      from: `${mailbox?.localPart || localPart}@${provisioned.domain}`,
     })
   }
 
@@ -403,13 +631,14 @@ async function handler(request: Request): Promise<Response> {
   }
 
   await hostRef.set(
-    { sendingDomain: domain, sendingLocalPart: nextLocalPart },
+    { sendingDomain: domain, ...senderPatch() },
     { merge: true },
   )
+  const appliedLocalPart = mailbox?.localPart || localPart
   return Response.json({
     selected: domain,
-    localPart: nextLocalPart,
-    from: `${nextLocalPart}@${domain}`,
+    localPart: appliedLocalPart,
+    from: `${appliedLocalPart}@${domain}`,
   })
 }
 
