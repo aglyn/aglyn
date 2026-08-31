@@ -75,6 +75,11 @@ import {
   platformSendingDomainFor,
   type SendingDomainRecord,
 } from '@aglyn/shared-util-email'
+import { DEDICATED_SENDING_DOMAIN_MIN_PLAN } from '@aglyn/aglyn/app-utils/dedicated-sending-domain'
+import {
+  PLAN_LABELS,
+  planLabelGrantingFeature,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 
 export const dynamic = 'force-dynamic'
 
@@ -178,6 +183,28 @@ async function handler(request: Request): Promise<Response> {
   // a selection the org may not claim a domain to fill.
   const entitled =
     Boolean(org) && checkEntitlement(org as never, 'customSendingDomain')
+  /*
+   * THE TWO PLAN NAMES THIS SURFACE QUOTES, DERIVED RATHER THAN WRITTEN.
+   *
+   * A merchant without a sending domain of their own needs to be told which
+   * plan carries one, and there are two answers to give: a subdomain the
+   * platform provisions inside its own mail apex, and a domain the customer
+   * owns. They happen to name the same tier today, and they are read
+   * separately because they are decided separately — one by an entitlement
+   * flag, one by a plan floor — so a re-cut of either moves its own sentence.
+   *
+   * `planGrantingFeature` walks `PLAN_ENTITLEMENTS` for the flag rather than
+   * being told the answer. A tier name written into a surface is pricing copy
+   * that keeps rendering after the gate beneath it moves, which is the failure
+   * `planLabelGrantingFeature` exists to stop.
+   *
+   * `null` rather than a fallback name when no plan carries the gate: "upgrade
+   * to undefined" is worse than a card that says only what it is sure of.
+   */
+  const customDomainPlan =
+    planLabelGrantingFeature('customSendingDomain') ?? null
+  const dedicatedDomainPlan =
+    PLAN_LABELS[DEDICATED_SENDING_DOMAIN_MIN_PLAN] ?? null
 
   const selectedDomain = normalizeSendingDomain(
     String(hostSnapshot.get('sendingDomain') ?? ''),
@@ -271,6 +298,18 @@ async function handler(request: Request): Promise<Response> {
        * that has made no explicit choice — it is what such a site sends as.
        */
       selected: selectedDomain || platformDomain || '',
+      /*
+       * The site's OWN provisioned domain, or `''` when it has none.
+       *
+       * Empty is the ordinary state below the dedicated tier, not a fault: a
+       * site with no domain of its own sends its transactional mail on the
+       * shared pool. The card needs the distinction to say which of the two
+       * sentences applies, and deriving it there would mean a second place
+       * that decides what "has a domain" means.
+       */
+      platformDomain: platformDomain || '',
+      customDomainPlan,
+      dedicatedDomainPlan,
       localPart,
       identity: resolved.summary,
       identitySource: resolved.source,
@@ -307,16 +346,20 @@ async function handler(request: Request): Promise<Response> {
    * Clearing the selection moves this site back to ITS OWN provisioned
    * domain — `{label}.mail.aglyn.app` — and never to the shared Aglyn one.
    *
-   * The difference matters twice. Sending as `aglyn.com` is what this whole
-   * feature exists to stop: a site's list quality must not be charged against
-   * the domain the platform's own billing and account mail depends on. And
-   * clearing to NOTHING would be worse still, because a site with no sending
-   * domain refuses every message — so an admin choosing "stop using our own
-   * domain" would silently switch their receipts off.
+   * Sending as `aglyn.com` is what this whole feature exists to stop: a
+   * site's list quality must not be charged against the domain the platform's
+   * own billing and account mail depends on.
+   *
+   * Clearing to the shared pool instead would be a quiet demotion. The pool
+   * carries transactional mail only, so a site moved there stops being able
+   * to send campaigns — which is not what "stop using our own domain" asks
+   * for, and not something to do to a site whose plan entitles it to a name
+   * of its own.
    *
    * `ensureHostSendingDomain` rather than a bare read, so a site that somehow
-   * has no claim gets one here instead of being left unable to send. It is
-   * idempotent, so a site that already has one keeps exactly the name it has.
+   * has no claim gets one here instead of being left on the pool. It is
+   * idempotent, so a site that already has one keeps exactly the name it has,
+   * and it refuses below the dedicated tier — which the 409 below explains.
    */
   if (!requested || requested === 'platform') {
     const provisioned = await ensureHostSendingDomain({
@@ -326,12 +369,30 @@ async function handler(request: Request): Promise<Response> {
     }).catch(() => null)
 
     if (!provisioned?.domain) {
+      /*
+       * NAME THE REASON, WHICH IS ALMOST ALWAYS THE PLAN.
+       *
+       * `ensureHostSendingDomain` refuses below the dedicated tier, so the
+       * common case here is a site that is not entitled to a domain of its
+       * own rather than one whose provisioning is in flight. Telling such a
+       * merchant to "try again shortly" sends them to wait for something that
+       * is never coming, which is the shape of refusal this whole surface
+       * exists to avoid.
+       *
+       * Nothing about the site's mail is broken meanwhile: it keeps sending
+       * its receipts on the shared address, which is what makes this a
+       * refusal of a CHOICE rather than of a send.
+       */
       return Response.json(
         {
-          error:
-            'This site does not have a sending domain of its own yet, so it ' +
-            'cannot be moved back to one. It is set up automatically and is ' +
-            'usually ready within a few minutes — try again shortly.',
+          error: dedicatedDomainPlan
+            ? `A sending domain of this site’s own comes with ${dedicatedDomainPlan}. ` +
+              'Until then this site sends its receipts and account email on ' +
+              'the shared address, and marketing email needs a domain ' +
+              'of its own.'
+            : 'This site does not have a sending domain of its own, so it ' +
+              'cannot be moved back to one. It sends its receipts and ' +
+              'account email on the shared address meanwhile.',
         },
         { status: 409 },
       )
@@ -344,9 +405,14 @@ async function handler(request: Request): Promise<Response> {
       },
       { merge: true },
     )
+    // `from` as well as its two halves, matching the selection branch below,
+    // so a surface reporting the new address reads one field rather than
+    // assembling one — and cannot assemble a different address from the one
+    // the send path will use.
     return Response.json({
       selected: provisioned.domain,
       localPart: DEFAULT_LOCAL_PART,
+      from: `${DEFAULT_LOCAL_PART}@${provisioned.domain}`,
     })
   }
 
@@ -368,8 +434,10 @@ async function handler(request: Request): Promise<Response> {
     return Response.json(
       {
         error:
-          'Sending as your own domain starts on the Pro plan. This site keeps ' +
-          'sending on the address Aglyn issues it either way.',
+          (customDomainPlan
+            ? `Sending as your own domain starts on the ${customDomainPlan} plan.`
+            : 'Sending as your own domain is not available on this plan.') +
+          ' This site keeps sending on the address Aglyn issues it either way.',
       },
       { status: 403 },
     )

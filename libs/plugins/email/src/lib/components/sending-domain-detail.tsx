@@ -245,10 +245,18 @@ export function SendingDomainDetail(props: SendingDomainDetailProps) {
         })
       }
       await load()
+      /*
+       * The address the ROUTE settled on, not the one this click asked for.
+       *
+       * Clearing the selection does not name a domain — it hands the site back
+       * to the one provisioned for it — so only the response knows what the
+       * `From:` line now says. A message composed from `next` would announce
+       * an address chosen here rather than the one recipients will see.
+       */
       notifyRef.current(
-        next === 'platform'
-          ? 'This site now sends on the shared Aglyn domain'
-          : `This site now sends as ${payload?.from ?? next}`,
+        payload?.from
+          ? `This site now sends as ${payload.from}`
+          : 'This site’s sending address was changed',
         { variant: 'success' },
       )
     },
@@ -260,19 +268,33 @@ export function SendingDomainDetail(props: SendingDomainDetailProps) {
     const ok = await confirm({
       title: `Remove ${domain}?`,
       /*
-       * The consequence stated rather than implied. Removing the claim does
-       * NOT move a site sending as this domain back onto the shared one —
-       * that site refuses instead, which is deliberate and is exactly the
-       * thing a person needs told before they press the button rather than
-       * after their campaigns start failing.
+       * The consequence stated rather than implied, and it is not one
+       * consequence.
+       *
+       * Releasing the claim leaves the host's selection pointing at a record
+       * that no longer exists, and `resolveHostSendingIdentity` reads WHOSE
+       * name it is from the domain itself. A platform subdomain drops to the
+       * shared pool, so receipts carry on; a domain the customer owns refuses,
+       * because sending as something else would contradict what they told us
+       * their recipients would see.
+       *
+       * Two different warnings, and printing the harsher one for both would
+       * teach a merchant to dismiss it.
        */
       description:
         identity.selected === domain
-          ? `This site is currently sending as ${domain}. Removing the ` +
-            `domain does not move it back to the shared Aglyn address — it ` +
-            `stops this site sending at all until you choose another ` +
-            `identity. The DNS records stay in your zone; nothing is changed ` +
-            `at your registrar.`
+          ? domain === identity.platformDomain
+            ? `This site is currently sending as ${domain}. Removing it moves ` +
+              `receipts and account email back to the shared address, ` +
+              `and stops marketing email until this site has a domain of its ` +
+              `own again. Nothing in your own DNS is involved — we published ` +
+              `these records and we remove them.`
+            : `This site is currently sending as ${domain}. Removing the ` +
+              `domain does not move it onto another address — not the one ` +
+              `this site is issued, and not the shared address. It stops ` +
+              `this site sending at all, receipts included, until you choose ` +
+              `another identity. The DNS records stay in your zone; nothing ` +
+              `is changed at your registrar.`
           : `The claim and the signing key are dropped. The DNS records stay ` +
             `in your zone — nothing is changed at your registrar — and you ` +
             `can add the domain again later, which issues a new key.`,
@@ -444,12 +466,20 @@ export function SendingDomainDetail(props: SendingDomainDetailProps) {
               </Button>
             ) : null}
             {canManage && isSelected ? (
+              /*
+               * Clearing the selection returns the site to the domain
+               * PROVISIONED for it — `{label}.mail.aglyn.app` — not to the
+               * shared pool, and the label says so. A site whose plan carries
+               * no such domain is refused here with the reason, which is why
+               * the control is worded as leaving this domain rather than
+               * promising a destination it may not reach.
+               */
               <Button
                 variant="outlined"
                 disabled={busy}
                 onClick={() => void handleUse('platform')}
               >
-                {'Go back to the shared Aglyn domain'}
+                {'Stop sending this site’s email as this domain'}
               </Button>
             ) : null}
           </Stack>

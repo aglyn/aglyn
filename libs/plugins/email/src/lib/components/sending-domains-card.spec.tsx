@@ -108,6 +108,13 @@ beforeEach(() => {
   identity = {
     orgId: 'org-1',
     selected: '',
+    // No domain of its own, which is why the pool is carrying its receipts.
+    platformDomain: '',
+    // Both derived server-side from the entitlement tables, so the card never
+    // writes a tier name of its own. They name the same tier today and are
+    // still two values, because two separate gates decide them.
+    customDomainPlan: 'Pro',
+    dedicatedDomainPlan: 'Pro',
     localPart: 'hello',
     identity:
       'Sending as notifications@shared1.mail.aglyn.app on a shared Aglyn ' +
@@ -150,7 +157,7 @@ describe('a workspace with no verified domain', () => {
     // is true and tells a merchant nothing about whose reputation they are
     // borrowing, or that their recipients will not see their own brand.
     expect(
-      screen.getByText(/reputation on this address is shared with the other sites/i),
+      screen.getByText(/reputation on it is shared with the other sites/i),
     ).toBeTruthy()
   })
 
@@ -165,7 +172,26 @@ describe('a workspace with no verified domain', () => {
   it('says marketing does not send from the shared address', async () => {
     await mount()
 
-    expect(screen.getByText(/Marketing email does not send from here/i)).toBeTruthy()
+    expect(
+      screen.getByText(/marketing email are different: they need a sending domain/i),
+    ).toBeTruthy()
+  })
+
+  /**
+   * …and names BOTH ways out of it.
+   *
+   * A merchant told "marketing needs a domain of your own" and nothing else
+   * has been given a refusal, not an answer. The two shapes arrive at the same
+   * tier and are not the same choice: one costs DNS work in the merchant's own
+   * zone and puts their name in the `From:` line, the other costs nothing and
+   * shows recipients an Aglyn address. A card naming only one of them decides
+   * that trade on the merchant's behalf.
+   */
+  it('names both ways to get a domain, and what each costs', async () => {
+    await mount()
+
+    expect(screen.getByText(/A domain we set up/i)).toBeTruthy()
+    expect(screen.getByText(/you publish three records in your zone/i)).toBeTruthy()
   })
 
   it('does not present it as a failure', async () => {

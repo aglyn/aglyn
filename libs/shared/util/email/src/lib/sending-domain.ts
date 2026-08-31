@@ -855,8 +855,9 @@ const SHARED_IDENTITY_MARKETING_MESSAGE =
   'Marketing email does not leave on the shared Aglyn address. That address ' +
   'carries receipts and password resets for every site using it, and one ' +
   'campaign’s complaint rate would be charged against all of them. Send ' +
-  'marketing from a domain of this site’s own — either one you verify, or ' +
-  'the one this site is issued automatically.'
+  'marketing from a domain of this site’s own — one you verify yourself, or ' +
+  'the one this site is issued. Emails → Sending says which of the two ' +
+  'this site has, and whether it has finished verifying.'
 
 export interface SendingIdentityVerdict {
   /** Null whenever `refusal` is set. */
@@ -1083,8 +1084,10 @@ export function resolveSendingIdentity(
           'This site has no sending domain of its own, and this deployment ' +
           'has no shared sending identity configured for it to fall back to, ' +
           'so the message was refused rather than sent from the platform’s ' +
-          'own address. This is an operator setting, not something the site ' +
-          'can fix.',
+          'own address. Nothing on this site can fix it and nothing about ' +
+          'the site is wrong — the shared identity is an operator setting. ' +
+          'Contact support, and note that no mail leaves this site until it ' +
+          'is set.',
       },
     }
   }

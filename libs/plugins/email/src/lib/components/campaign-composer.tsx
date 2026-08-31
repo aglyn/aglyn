@@ -1287,8 +1287,9 @@ export function CampaignComposer(props: CampaignComposerProps) {
           </Typography>
           <Typography variant="body2">{preview.error}</Typography>
           <Typography variant="body2" sx={{ mt: 0.5 }}>
-            {'Nothing has been sent, and nothing about this draft is lost — ' +
-              'finish the domain on the Sending page and come back.'}
+            {'Nothing has been sent, and nothing about this draft is lost. ' +
+              'Emails → Sending is where this is settled — it says what this ' +
+              'site sends as and what it would take to change it.'}
           </Typography>
         </Alert>
       ) : preview && !('error' in preview) && preview.identity ? (
