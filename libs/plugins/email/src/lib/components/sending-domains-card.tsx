@@ -151,7 +151,6 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
   }, [call, view?.orgId, basePath, router, newDomain, addingBusy])
 
   const domains = view?.domains ?? []
-  const platformOption = view?.options?.find((one) => one.value === 'platform')
 
   return (
     <CardDisplay
@@ -177,12 +176,14 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
     >
       <Stack spacing={1.5}>
         <Typography variant="body2" color="text.secondary">
-          {'Marketing email from this site leaves on a verified address. ' +
-            'Until you prove a domain of your own, that address is on the ' +
-            'shared Aglyn domain — which works, and which means this site’s ' +
-            'delivery reputation is pooled with every other workspace’s. A ' +
-            'domain you own moves that reputation onto a name your recipients ' +
-            'already recognize.'}
+          {'Receipts, password resets and other account email from this site ' +
+            'always send — on a shared Aglyn address until you have a domain ' +
+            'of your own. Delivery reputation on that shared address is ' +
+            'pooled with the other sites using it, which is why marketing ' +
+            'email does not leave on it: a campaign’s complaint rate would be ' +
+            'charged against everybody’s receipts. Marketing needs a domain ' +
+            'of this site’s own, and a domain you already own moves that ' +
+            'reputation onto a name your recipients recognize.'}
         </Typography>
 
         {/*
@@ -201,12 +202,13 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
             <Typography variant="body2">
               {view.refusal?.message ?? view.identity}
             </Typography>
-            {view.identitySource === 'platform' && !view.refusal ? (
+            {view.identitySource === 'shared' && !view.refusal ? (
               <Typography variant="body2" sx={{ mt: 0.5 }}>
                 {'Recipients see an Aglyn address, and replies still reach ' +
-                  'you. What they do not see is your own domain, and your ' +
-                  'sending reputation is shared with other workspaces rather ' +
-                  'than being yours.'}
+                  'you. What they do not see is your own domain, and the ' +
+                  'sending reputation on this address is shared with the ' +
+                  'other sites using it rather than being yours. Marketing ' +
+                  'email does not send from here.'}
               </Typography>
             ) : null}
           </Alert>
@@ -214,9 +216,9 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
 
         {view && !view.entitled ? (
           <Alert severity="info">
-            {'Custom sending domains are part of the Agency plan. Until then ' +
-              'this site sends on the shared Aglyn domain' +
-              (platformOption?.from ? ` (${platformOption.from}).` : '.')}
+            {'Sending as a domain you own is part of the Agency plan. Account ' +
+              'email from this site sends without it — the address is shown ' +
+              'above.'}
           </Alert>
         ) : null}
 

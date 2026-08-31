@@ -114,14 +114,19 @@ async function handler(request: Request): Promise<Response> {
     /*
      * Claim first, then provision.
      *
-     * `claimHostForOrg` claims at creation, so this ordinarily finds nothing.
-     * It runs anyway because that covers only sites created after it shipped,
-     * and a site with no claim refuses every send — a worse failure than the
-     * shared domain it replaced, and one nobody sees until a merchant asks why
-     * their receipts stopped.
+     * The BACKSTOP, not the schedule. A dedicated domain is claimed when an org
+     * reaches a plan that carries one, from the billing webhook, which is where
+     * the transition is observable. This sweep catches what that signal cannot:
+     * a dropped webhook, a plan set by hand, a site created under an org that
+     * was already paying.
      *
-     * Before rather than after, so a site claimed on this run is provisioned
-     * on this run instead of waiting for the next one.
+     * It no longer claims for every host it sees. A site whose plan carries no
+     * dedicated domain is skipped and reported as `skippedUnentitled` — it is
+     * not failing, and it is not waiting for anything. Its mail leaves on the
+     * shared pool, which needs no per-site provisioning at all.
+     *
+     * Before the provision step rather than after, so a site claimed on this
+     * run is provisioned on this run instead of waiting for the next one.
      */
     const claims = await claimUnprovisionedHosts(BATCH)
     const summary = await provisionPendingSendingDomains(BATCH)
@@ -140,7 +145,12 @@ async function handler(request: Request): Promise<Response> {
       )
     }
 
-    return Response.json({ ...summary, claimed: claims.claimed, capacity })
+    return Response.json({
+      ...summary,
+      claimed: claims.claimed,
+      skippedUnentitled: claims.skippedUnentitled,
+      capacity,
+    })
   } catch (error) {
     // Never a provider body: an error the vendor wrote can carry the request
     // it is complaining about, and the request carries the credential.

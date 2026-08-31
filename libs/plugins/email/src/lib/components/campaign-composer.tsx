@@ -92,7 +92,7 @@ interface AudiencePreview {
   consentWithheld: number
   /** Which address this send would leave on, in the server's own words. */
   identity: string
-  identitySource: 'custom' | 'platform' | null
+  identitySource: 'custom' | 'shared' | 'platform' | null
 }
 
 /** The message itself, rendered by the send path's own renderer. */
@@ -512,6 +512,7 @@ export function CampaignComposer(props: CampaignComposerProps) {
           identity: String(payload?.identity ?? ''),
           identitySource: (payload?.identitySource ?? null) as
             | 'custom'
+            | 'shared'
             | 'platform'
             | null,
         })

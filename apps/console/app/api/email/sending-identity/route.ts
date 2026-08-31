@@ -195,8 +195,10 @@ async function handler(request: Request): Promise<Response> {
      */
     const resolved = await resolveHostSendingIdentity({
       orgId,
+      hostId,
       selectedDomain,
       selectedLocalPart: localPart,
+      poolMember: hostSnapshot.get('sendingPoolMember'),
     })
 
     /*

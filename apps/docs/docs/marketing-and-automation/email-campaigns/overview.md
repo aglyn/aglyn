@@ -63,8 +63,8 @@ and the unsubscribe links in mail already delivered are untouched.
 These fields sit under the audience picker, and they are per email rather than per site:
 
 - **From address** — which verified identity this email leaves on. It is offered only
-  when your site has more than one to choose between: your own verified domain, or the
-  shared Aglyn domain. See [sending domains](#sending-domains) below.
+  when your site has more than one verified domain to choose between. See
+  [sending domains](#sending-domains) below.
 - **From name** — the display name in front of your sending address. The address itself
   is always a verified sending identity; a from name changes what a recipient reads,
   never which domain the mail leaves on.
@@ -77,8 +77,17 @@ preheader is set.
 ### Sending from your own domain {#sending-domains}
 
 **Emails → Sending** is where a workspace proves it owns the domain its mail comes from.
-Until you add one, campaigns leave on a shared Aglyn address. That works, and it means
-your delivery reputation is pooled with every other workspace's rather than being yours.
+
+Two kinds of email leave your site, and they are treated differently:
+
+- **Account email** — order receipts, password resets, booking confirmations, replies to
+  form submissions — always sends, on every plan. Until your site has a domain of its
+  own it leaves on a shared Aglyn address, which works and means the delivery reputation
+  on that address is pooled with the other sites using it rather than being yours.
+- **Campaigns and other marketing email** need a domain of this site's own. They are not
+  sent from the shared address, because one campaign's complaint rate would be charged
+  against every other site's receipts on it — including the sites that never sent a
+  campaign at all.
 
 Add a domain and you are given the exact DNS records to publish — an authorization
 record, a signing key and a bounce-routing record. Publish them wherever your DNS is

@@ -26,8 +26,10 @@
  */
 
 import {
+  DEFAULT_SHARED_POOL_SIZE,
   isPlatformSendingDomain,
   isReservedMailLabel,
+  isSharedPoolLabel,
   mailLabelCandidate,
   platformSendingApex,
   platformSendingDomainFor,
@@ -35,6 +37,9 @@ import {
   platformZoneNamesFor,
   platformZoneRecords,
   PLATFORM_MAIL_RESERVED_LABELS,
+  sharedSendingDomainFor,
+  sharedSendingPool,
+  sharedTenantSendingFrom,
   tenantWebApex,
 } from './platform-sending-domain'
 import {
@@ -482,5 +487,164 @@ describe('tenant mail never resolves to the platform address', () => {
 
     expect(verdict.source).toBe('platform')
     expect(verdict.from).toBe(PLATFORM_FROM)
+  })
+})
+
+/*==========================================
+  The shared pool
+==========================================*/
+
+/**
+ * THE POOL IS THE THING THAT MAKES THIS SCALE.
+ *
+ * A dedicated per-site domain is `O(hosts)` in three resources that do not
+ * stretch: a provider domain object out of a per-account allowance, THREE
+ * records in our own DNS zone, and a permanent place in the re-verification
+ * sweep. The pool is `O(1)` in all three, and that is the property under test
+ * here — not a nicety of naming.
+ */
+describe('the shared pool', () => {
+  it('is a fixed size that does not grow with hosts', () => {
+    const pool = sharedSendingPool(MAIL_APEX, DEFAULT_SHARED_POOL_SIZE)
+    expect(pool).toHaveLength(DEFAULT_SHARED_POOL_SIZE)
+    expect(pool[0]).toBe(`shared1.${MAIL_APEX}`)
+
+    // Ten thousand sites, still the same pool. The zone cost is 3 records per
+    // MEMBER, so this is the whole DNS footprint of every unprovisioned site
+    // on the platform.
+    const assigned = new Set<string>()
+    for (let index = 0; index < 10_000; index += 1) {
+      assigned.add(sharedSendingDomainFor(`Host${index}`, MAIL_APEX, DEFAULT_SHARED_POOL_SIZE))
+    }
+    expect(assigned.size).toBeLessThanOrEqual(DEFAULT_SHARED_POOL_SIZE)
+    for (const domain of assigned) expect(pool).toContain(domain)
+  })
+
+  it('spreads sites across every member, so one bad sender is not everybody', () => {
+    const counts = new Map<string, number>()
+    for (let index = 0; index < 4_000; index += 1) {
+      const domain = sharedSendingDomainFor(`Host${index}`, MAIL_APEX, 4)
+      counts.set(domain, (counts.get(domain) ?? 0) + 1)
+    }
+    // All four members carry traffic, and none of them carries most of it. A
+    // hash that degenerated onto one member would satisfy every other test in
+    // this block while leaving the blast radius exactly where it started.
+    expect(counts.size).toBe(4)
+    for (const share of counts.values()) {
+      expect(share).toBeGreaterThan(4_000 / 4 / 3)
+    }
+  })
+
+  it('gives one site the same member every time', () => {
+    for (const id of ['HostAbc', 'HostXyz', 'a', 'Z9']) {
+      const first = sharedSendingDomainFor(id, MAIL_APEX, 4)
+      expect(sharedSendingDomainFor(id, MAIL_APEX, 4)).toBe(first)
+    }
+  })
+
+  /**
+   * THE REASON THIS IS RENDEZVOUS HASHING AND NOT A MODULO.
+   *
+   * An operator grows the pool when a member is in trouble, which makes that
+   * the worst possible moment to shuffle everybody. Reputation is built by
+   * sending steadily from one name, so a site that is reassigned does not get
+   * rebalanced — it gets reset.
+   *
+   * The guarantee is NOT "few sites move" in general: adding a fifth member to
+   * four must move about a fifth of them, because that is what a balanced
+   * assignment across five members means. The guarantee is that **nothing moves
+   * that did not have to** — every site that moves, moves ONTO the new member,
+   * and no site is shuffled between two members that both already existed.
+   *
+   * That second assertion is the one a modulo fails catastrophically. `hash %
+   * 4` → `hash % 5` reassigns roughly 80% of hosts and scatters them across
+   * every member, so the great majority of the churn is pure loss: sites
+   * abandoning one warm domain for another warm domain, for nothing.
+   */
+  it('moves sites only onto the NEW member when the pool grows', () => {
+    const before = new Map<string, string>()
+    for (let index = 0; index < 2_000; index += 1) {
+      before.set(`Host${index}`, sharedSendingDomainFor(`Host${index}`, MAIL_APEX, 4))
+    }
+
+    const added = `shared5.${MAIL_APEX}`
+    let moved = 0
+    for (const [id, was] of before) {
+      const now = sharedSendingDomainFor(id, MAIL_APEX, 5)
+      if (now === was) continue
+      moved += 1
+      // The whole property, in one assertion: a site that moved went to the
+      // member that did not exist before. Nothing churns between old members.
+      expect(now).toBe(added)
+    }
+
+    // And the share that moved is about the 1/5 a balanced pool of five
+    // implies — not the ~80% a modulo would reassign.
+    expect(moved / before.size).toBeGreaterThan(0.1)
+    expect(moved / before.size).toBeLessThan(0.32)
+  })
+
+  /**
+   * The other direction, which is what an operator actually does to retire a
+   * member whose reputation has gone: only that member's own sites move.
+   */
+  it('moves only the removed member’s sites when the pool shrinks', () => {
+    const retired = `shared4.${MAIL_APEX}`
+    for (let index = 0; index < 2_000; index += 1) {
+      const id = `Host${index}`
+      const was = sharedSendingDomainFor(id, MAIL_APEX, 4)
+      const now = sharedSendingDomainFor(id, MAIL_APEX, 3)
+      if (was !== retired) expect(now).toBe(was)
+    }
+  })
+
+  it('has no pool, and refuses, when it cannot be told which site is sending', () => {
+    expect(sharedSendingDomainFor('', MAIL_APEX, 4)).toBe('')
+    expect(sharedTenantSendingFrom('', MAIL_APEX, 4)).toBe('')
+    expect(sharedTenantSendingFrom(null, MAIL_APEX, 4)).toBe('')
+  })
+
+  /**
+   * The address must sit ON a pool member, never under one — see the module
+   * docblock. Under `adkim=s` the `From:` domain and the DKIM `d=` have to be
+   * the same name, and each member is its own provider domain object signing
+   * for itself.
+   */
+  it('puts the address exactly on a member, one label below the apex', () => {
+    const from = sharedTenantSendingFrom('HostAbc', MAIL_APEX, 4)
+    const domain = from.split('@')[1]
+
+    expect(sharedSendingPool(MAIL_APEX, 4)).toContain(domain)
+    expect(domain.endsWith(`.${MAIL_APEX}`)).toBe(true)
+    // Exactly one label deeper. A second label would be a name whose DKIM key
+    // is its parent's, which does not align under strict DMARC.
+    expect(domain.slice(0, -(MAIL_APEX.length + 1))).not.toContain('.')
+    expect(from).not.toContain('aglyn.com')
+  })
+
+  /**
+   * A tenant must not be able to take a pool label. Checked by RULE rather
+   * than by list, so raising the pool size cannot hand a site a name the pool
+   * is about to want.
+   */
+  it('reserves every pool label against tenants, at any pool size', () => {
+    for (const label of ['shared1', 'shared2', 'shared9', 'shared64', 'shared128']) {
+      expect(isSharedPoolLabel(label)).toBe(true)
+      expect(isReservedMailLabel(label)).toBe(true)
+      expect(platformSendingDomainFor(label, MAIL_APEX)).toBe('')
+    }
+    // …and does not over-reach onto names a site might legitimately want.
+    for (const label of ['shared', 'sharedthings', 'share1', 'shared-1', 'shared0x']) {
+      expect(isSharedPoolLabel(label)).toBe(false)
+    }
+    // `shared` itself IS reserved, by the fixed list rather than the pattern.
+    expect(isReservedMailLabel('sharedthings')).toBe(false)
+  })
+
+  it('builds the pool despite those labels being reserved against tenants', () => {
+    // The deadlock this guards: routing the pool builder through the tenant
+    // gate would refuse every one of its own names and yield an empty pool —
+    // the guard protecting the pool being what stopped the pool existing.
+    expect(sharedSendingPool(MAIL_APEX, 4)).toHaveLength(4)
   })
 })

@@ -22,16 +22,28 @@
  * A site sends on a name inside `mail.aglyn.app`, never on `aglyn.com`. The
  * two apexes carry different reputations on purpose:
  *
- *   `aglyn.com`             Aglyn talking to its own customers — billing,
- *                           account notices, console password resets.
- *   `{label}.mail.aglyn.app`  A site talking to its visitors — marketing AND
- *                           transactional. A receipt is still the tenant
- *                           speaking.
+ *   `aglyn.com`               Aglyn talking to its own customers — billing,
+ *                             account notices, console password resets.
+ *   `{label}.mail.aglyn.app`  One site talking to its visitors, on a domain
+ *                             of its own. Marketing AND transactional: a
+ *                             receipt is still the tenant speaking.
+ *   `shared{n}.mail.aglyn.app`  A FIXED, SMALL POOL. Every site that has no
+ *                             domain of its own is assigned one member and
+ *                             stays there. Transactional ONLY.
  *
- * The line is WHO IS SPEAKING, not whether the message is promotional. A
- * booking reminder that bounces is the tenant's list problem, and charging it
- * against the domain the platform's own invoices leave on means one merchant's
- * bad import degrades every other merchant's password reset.
+ * The FIRST line is WHO IS SPEAKING, and it is absolute. A booking reminder
+ * that bounces is the tenant's list problem, and charging it against the
+ * domain the platform's own invoices leave on means one merchant's bad import
+ * degrades every other merchant's password reset. No tenant message reaches
+ * `aglyn.com` under any configuration.
+ *
+ * The SECOND line — promotional or not — divides only the two tenant names,
+ * and only because the lower one is shared. On a site's own domain the
+ * distinction does not matter: the merchant is the only person whose
+ * reputation is at stake, so they may spend it how they like. On the pooled
+ * identity it is the whole of what keeps the pool usable, because complaints
+ * follow bulk sending and one imported list would be charged against every
+ * other site's receipts.
  *
  * ## Why the mail name is its own namespace and not the site's own subdomain
  *
@@ -81,23 +93,85 @@
  * this namespace hangs off. The namespace is free by construction rather than
  * by a rule added to protect it.
  *
- * ## Why a whole domain per site rather than one shared domain
+ * ## A whole domain per site, for the sites that have one
  *
  * DMARC alignment is evaluated against the `From:` domain and DKIM is what
  * carries it. `aglyn.app` publishes `adkim=s` — strict — so a signature with
  * `d=aglyn.app` cannot authenticate mail `From:` a tenant name, and one
- * tenant's key can never sign as another. That is the isolation. Relaxed DKIM
- * alignment would collapse it all back into one reputation, which is the state
- * this exists to leave.
+ * tenant's key can never sign as another. That is the isolation, and it is
+ * what a dedicated per-site domain buys.
  *
- * ## The apex sends nothing, and says so
+ * ## …and a FIXED POOL for the sites that do not, which is what makes this
+ * design survive
+ *
+ * A per-host domain is `O(hosts)` in three separate resources, and none of them
+ * is the one people reach for first:
+ *
+ *   - a provider domain object per site, which is a bundled quota with a hard
+ *     per-account ceiling;
+ *   - **three records in OUR OWN ZONE per site** — SPF, MX and DKIM under
+ *     `send.{label}.…` — which a customer's own domain costs us NOTHING of,
+ *     because the customer publishes those in their zone;
+ *   - a place in the verification and re-check sweeps, forever, at the
+ *     provider's account-wide rate limit that the SENDS also share.
+ *
+ * The zone wall arrives first and it arrives hard. That asymmetry is the whole
+ * argument: a customer-owned `acme.com` scales, a platform subdomain does not,
+ * and treating the two as one feature hides it.
+ *
+ * So the default for a site with no domain of its own is a member of a fixed,
+ * small pool — {@link sharedSendingPool} — and the pool does not grow with
+ * hosts. Its entire cost is {@link DEFAULT_SHARED_POOL_SIZE} domain objects and
+ * three records each, at twelve sites or at a hundred thousand. Sites are
+ * assigned by {@link sharedSendingDomainFor}, deterministically and with
+ * nothing stored, so the assignment costs no write and no read either.
+ *
+ * Not ONE pool member, because then one compromised site sending "receipts"
+ * would take every other site's password resets with it. Several, so the blast
+ * radius is a fraction.
+ *
+ * ## The address is ON a pool member, never under one
+ *
+ * This is a DMARC constraint rather than a naming preference. The tempting
+ * shape is to keep a per-site `From:` (`hello@acme.mail.aglyn.app`) over one
+ * shared key at `d=mail.aglyn.app` — one domain object for the whole platform,
+ * and the site's name still in the header. Under `adkim=s` those are not the
+ * same name, so the signature does not align.
+ *
+ * What makes that shape actively dangerous rather than merely wrong is
+ * `aspf=r`, which the published record also carries: such a message still
+ * scrapes a DMARC pass off SPF alone. It works when you test it to one mailbox
+ * and fails the moment a recipient forwards it, because forwarding breaks SPF
+ * and the DKIM signature that would have survived is the one that does not
+ * align. A shape that passes when you check it and fails in the field is worse
+ * than one that refuses.
+ *
+ * Each pool member is therefore its own domain object with its own key signing
+ * for itself, and the `From:` sits on the member exactly. Alignment holds on
+ * DKIM without depending on SPF.
+ *
+ * ## What the pool costs the product, and what bounds it
+ *
+ * Reputation on a member is pooled across the sites assigned to it, which is
+ * the trade the console discloses in as many words. It is bounded by keeping
+ * MARKETING mail off the pool entirely — see `resolveSendingIdentity`, which
+ * admits only transactional mail. Complaints follow bulk sending, and a
+ * merchant's purchased list is exactly what would otherwise be charged against
+ * every other site's receipts.
+ *
+ * ## The web apex sends nothing, and says so
  *
  * `aglyn.app` publishes `v=spf1 -all`. SPF is not inherited by subdomains, so
  * it constrains only the apex — correct, because no message ever leaves
- * `From: something@aglyn.app`. Every sending name here is strictly deeper.
+ * `From: something@aglyn.app`. Every sending name here is strictly deeper, the
+ * pool members included.
  */
 
-import { normalizeSendingDomain, SENDING_SUBDOMAIN } from './sending-domain'
+import {
+  normalizeLocalPart,
+  normalizeSendingDomain,
+  SENDING_SUBDOMAIN,
+} from './sending-domain'
 
 /*==========================================
   The apexes
@@ -145,6 +219,222 @@ export function platformSendingApex(): string {
   )
   if (configured && configured !== web) return configured
   return `mail.${web}`
+}
+
+/*==========================================
+  The shared identity every site can reach
+==========================================*/
+
+/**
+ * The mailbox the shared tenant identity sends as.
+ *
+ * `notifications` rather than `hello`, which is what a site's own domain
+ * defaults to. The two are different promises: `hello@northwind.mail.aglyn.app`
+ * is a site inviting a reply, and this one is a platform address carrying
+ * transactional mail for whichever site the display name in front of it names.
+ * Calling it `hello` would invite replies to a mailbox belonging to no site.
+ */
+export const SHARED_TENANT_LOCAL_PART = 'notifications'
+
+/** The label prefix every pool member carries. Reserved by rule, not by list. */
+const SHARED_POOL_PREFIX = 'shared'
+
+/**
+ * How many shared sending domains exist, absent configuration.
+ *
+ * FOUR, and the number is a blast-radius decision rather than a capacity one.
+ * The pool is FIXED-SIZE — it does not grow with hosts — so its whole cost is
+ * four provider domain objects and twelve records in our own zone, whether the
+ * deployment has twelve sites or a hundred thousand. That is the property that
+ * makes this design survive a scale a per-host domain does not.
+ *
+ * One would be simpler and is wrong: every site without a domain of its own
+ * would share a single reputation, so one compromised site blasting "receipts"
+ * takes every other site's password resets down with it. Four caps that at a
+ * quarter, for three more domain objects.
+ *
+ * Not larger, because each member is a reputation that has to be EARNED — one
+ * warm domain sending steadily is worth more than eight cold ones — and
+ * because each is a provider slot on an account whose allowance is ten on the
+ * plan this deployment pays for. Raising it is a real decision with a real
+ * cost, so it is a configuration value rather than a constant somebody bumps.
+ */
+export const DEFAULT_SHARED_POOL_SIZE = 4
+
+/** Hard ceiling on the configured pool, so a typo cannot ask for thousands. */
+const MAX_SHARED_POOL_SIZE = 64
+
+/** How many members this deployment's pool has. */
+export function sharedPoolSize(): number {
+  const raw = Number(
+    String(process.env.AGLYN_TENANT_SHARED_POOL_SIZE || '').trim(),
+  )
+  if (!Number.isFinite(raw)) return DEFAULT_SHARED_POOL_SIZE
+  const size = Math.floor(raw)
+  if (size < 1) return DEFAULT_SHARED_POOL_SIZE
+  return Math.min(size, MAX_SHARED_POOL_SIZE)
+}
+
+/**
+ * Whether a label names a pool member.
+ *
+ * By PATTERN rather than by list, so raising the pool size can never hand a
+ * tenant a label the pool is about to want. `PLATFORM_MAIL_RESERVED_LABELS`
+ * covers the fixed names; this covers a family whose size is configurable, and
+ * a blocklist that had to be edited in step with an environment variable is a
+ * blocklist that will be forgotten.
+ */
+export function isSharedPoolLabel(label: string): boolean {
+  return new RegExp(`^${SHARED_POOL_PREFIX}[1-9][0-9]*$`).test(
+    String(label ?? '')
+      .trim()
+      .toLowerCase(),
+  )
+}
+
+/**
+ * The pool, in order: `shared1.mail.aglyn.app`, `shared2.…`, and so on.
+ *
+ * The names say what they are on purpose. A recipient who looks sees an address
+ * that is plainly platform infrastructure rather than one pretending to be the
+ * merchant's own — which is what the console tells the merchant is happening,
+ * and a `From:` that oversold the arrangement would be the one surface
+ * contradicting the disclosure.
+ */
+export function sharedSendingPool(
+  apex: string = platformSendingApex(),
+  size: number = sharedPoolSize(),
+): string[] {
+  const pool: string[] = []
+  for (let index = 1; index <= size; index += 1) {
+    // The grammar, not `platformSendingDomainFor`: these labels are RESERVED
+    // against tenants, so the tenant gate would refuse every one of them and
+    // hand back an empty pool.
+    const domain = mailDomainWithinApex(`${SHARED_POOL_PREFIX}${index}`, apex)
+    if (domain) pool.push(domain)
+  }
+  return pool
+}
+
+/**
+ * FNV-1a, 32-bit. A stable, dependency-free string hash.
+ *
+ * Stability across processes and deployments is the entire requirement — the
+ * assignment below has to be the same answer in the tenant runtime, in a cron
+ * and in the console, today and in a year — so it cannot be anything that
+ * varies by runtime. `>>> 0` after the multiply keeps the value in unsigned
+ * 32-bit range, which is what makes it reproducible rather than dependent on
+ * float rounding.
+ *
+ * Deliberately not a cryptographic hash. Nothing here is a secret, and nobody
+ * gains anything by predicting which pool member a site lands on.
+ */
+function hash32(input: string): number {
+  let hash = 0x811c9dc5
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index)
+    hash = Math.imul(hash, 0x01000193) >>> 0
+  }
+  return hash >>> 0
+}
+
+/**
+ * Which pool member one host sends on. Deterministic, and stored nowhere.
+ *
+ * ## Rendezvous hashing, and why not `hash % size`
+ *
+ * The requirement is that a host's sending identity does not move underneath
+ * it. Reputation is built by sending steadily from one name, so a reassignment
+ * is not a rebalance — it is a reset, and it throws away every day of standing
+ * the old name had earned.
+ *
+ * `hash(hostId) % size` satisfies that only while `size` never changes. Growing
+ * a pool from four to eight remaps roughly HALF of all hosts, silently moving
+ * half the platform's transactional mail onto cold domains. The operator's
+ * reason for growing the pool is usually that one member is in trouble, which
+ * makes the moment they act the worst possible moment to shuffle everybody.
+ *
+ * Rendezvous (highest-random-weight) hashing scores the host against EVERY
+ * member and takes the winner. Adding a member moves only the hosts that now
+ * score highest on the new one — about 1/size of them — and removing a member
+ * moves only that member's own hosts. Nothing else observes the change.
+ *
+ * That property is why this is worth ten lines instead of a modulo, and it is
+ * also why the assignment needs no stored field: there is nothing to pin,
+ * because the function does not change its mind. A pinned column would be one
+ * more write per host on a path whose whole point is costing nothing per host.
+ *
+ * Ties break on the domain name so the answer is total rather than dependent on
+ * iteration order. A 32-bit collision across a four-member pool is vanishingly
+ * unlikely and would still have to resolve to something.
+ */
+export function sharedSendingDomainFor(
+  hostId: string | null | undefined,
+  apex: string = platformSendingApex(),
+  size: number = sharedPoolSize(),
+): string {
+  const id = String(hostId ?? '').trim()
+  const pool = sharedSendingPool(apex, size)
+  if (!id || !pool.length) return ''
+
+  let best = ''
+  let bestScore = -1
+  for (const domain of pool) {
+    const score = hash32(`${id}:${domain}`)
+    if (score > bestScore || (score === bestScore && domain > best)) {
+      best = domain
+      bestScore = score
+    }
+  }
+  return best
+}
+
+/**
+ * The address one host sends TRANSACTIONAL mail on when it has no domain of
+ * its own.
+ *
+ * `''` when the deployment has no usable pool, or when the caller has no host.
+ * The caller must treat that as a REFUSAL rather than substituting anything: a
+ * caller with no `hostId` does not know which site it is sending for, and the
+ * honest answer to that is not "some pool member".
+ *
+ * ## The address always sits ON a pool member, never under one
+ *
+ * Under `adkim=s` the `From:` domain and the DKIM `d=` must be the same name,
+ * exactly. Each pool member is its own provider domain object with its own key
+ * signing for itself, so an address on the member aligns. An address BENEATH a
+ * member — a per-host `From:` over a shared key — does not, and the published
+ * record's `aspf=r` would let it scrape a DMARC pass off SPF alone until the
+ * first recipient forwarded it. There is deliberately no configuration that can
+ * produce that shape: the local part is the only part an operator may set.
+ */
+export function sharedTenantSendingFrom(
+  hostId: string | null | undefined,
+  apex: string = platformSendingApex(),
+  size: number = sharedPoolSize(),
+): string {
+  const domain = sharedSendingDomainFor(hostId, apex, size)
+  if (!domain) return ''
+  const localPart =
+    normalizeLocalPart(process.env.AGLYN_TENANT_SHARED_LOCAL_PART || '') ||
+    SHARED_TENANT_LOCAL_PART
+  return `${localPart}@${domain}`
+}
+
+/**
+ * Whether a domain is one of this deployment's pool members.
+ *
+ * Used where a surface has a domain and needs to know whether its reputation is
+ * pooled — so the disclosure is driven by the same function the send path
+ * resolves through, rather than by a second opinion assembled at the surface.
+ */
+export function isSharedSendingDomain(
+  domain: string | null | undefined,
+  apex: string = platformSendingApex(),
+  size: number = sharedPoolSize(),
+): boolean {
+  const name = normalizeSendingDomain(String(domain ?? ''))
+  return Boolean(name) && sharedSendingPool(apex, size).includes(name)
 }
 
 /*==========================================
@@ -213,9 +503,25 @@ const RESERVED = new Set(PLATFORM_MAIL_RESERVED_LABELS)
  */
 const LABEL_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/
 
-/** Whether a label may become a sending name inside the mail apex. */
+/**
+ * Whether a label is one a TENANT may not take inside the mail apex.
+ *
+ * Two sources, and the second is why this is a function rather than a `Set`
+ * lookup: the fixed infrastructure names above, plus the pool family, whose
+ * size is a configuration value. A pool grown from four to eight must not be
+ * able to want a label a site was handed last week, and a blocklist that had to
+ * be edited in step with an environment variable is one that gets forgotten.
+ *
+ * This is the TENANT policy, not the name grammar. The pool's own builder
+ * deliberately does not consult it — `shared3` is reserved precisely so that
+ * the pool can have it — which is why {@link mailDomainWithinApex} exists as
+ * the shape check underneath both.
+ */
 export function isReservedMailLabel(label: string): boolean {
-  return RESERVED.has(String(label ?? '').trim().toLowerCase())
+  const name = String(label ?? '')
+    .trim()
+    .toLowerCase()
+  return RESERVED.has(name) || isSharedPoolLabel(name)
 }
 
 /**
@@ -257,11 +563,35 @@ export function platformSendingDomainFor(
   const name = String(label ?? '')
     .trim()
     .toLowerCase()
+  return isReservedMailLabel(name) ? '' : mailDomainWithinApex(name, apex)
+}
+
+/**
+ * The NAME GRAMMAR, with no policy about who may hold the name.
+ *
+ * Split out from {@link platformSendingDomainFor} because the pool needs the
+ * grammar and must not be subject to the tenant policy: `shared3` is a reserved
+ * label exactly so that no site can take it, and a pool builder routed through
+ * the tenant gate would find every one of its own names refused and produce an
+ * empty pool — a deadlock in which the guard protecting the pool is what stops
+ * the pool existing.
+ *
+ * Still ONE generator for the shape, which is the invariant that matters: every
+ * name this module emits, tenant or pool, is a single well-formed label
+ * strictly one level below the apex. Two generators for that is how a verifier
+ * comes to look at a name nothing writes.
+ *
+ * Not exported. A caller outside this module that wants a name for a site wants
+ * the policy applied.
+ */
+function mailDomainWithinApex(label: string, apex: string): string {
+  const name = String(label ?? '')
+    .trim()
+    .toLowerCase()
   const root = normalizeSendingDomain(apex)
 
   if (!name || !root) return ''
   if (!LABEL_PATTERN.test(name)) return ''
-  if (isReservedMailLabel(name)) return ''
 
   const domain = `${name}.${root}`
   // Strictly one label deeper than the apex. A label reproducing the apex, or

@@ -67,6 +67,14 @@
  * server layer that already signs one.
  */
 
+/*
+ * `send-rate.ts` imports nothing, so this cannot be half of a cycle — which
+ * matters, because this module is imported by `send-email.ts` alongside that
+ * one and a cycle between the two would resolve differently under swc and
+ * jest.
+ */
+import { resolveSendPriority, type EmailSendPriority } from './send-rate'
+
 /** What a marketing send declares about itself. */
 export interface MarketingSendContext {
   /** The site whose audience this is. Both suppression lists key on it. */
@@ -159,6 +167,61 @@ export interface MarketingSendGateVerdict {
    * misconfiguration to fix and not a reason to refuse mail.
    */
   unsubscribeUrl?: string
+}
+
+/**
+ * Whether a message is MARKETING, derived from what it already carries.
+ *
+ * ## Nothing new to remember, on purpose
+ *
+ * The obvious design is a `kind: 'marketing' | 'transactional'` option on
+ * `sendEmail`. It is rejected for the reason the `from` override was deleted
+ * and the `context` tag was derived rather than threaded: twenty call sites
+ * cannot each be relied on to set a field, and the twenty-first is the one that
+ * does not. The consequence of forgetting here is a merchant's campaign leaving
+ * on the pooled identity that carries every other site's password resets — a
+ * failure nobody sees until the pool stops delivering.
+ *
+ * So the answer is read off two things a marketing send is ALREADY obliged to
+ * carry, neither of which is optional and neither of which was added for this:
+ *
+ * 1. **`marketing`** — the context object. A message that declares it gets the
+ *    RFC 8058 header pair, the suppression check and the frequency cap, so a
+ *    marketing sender cannot omit it and still be correct; it would be shipping
+ *    mail with no unsubscribe link. Four of the five marketing senders in the
+ *    tree take this arm.
+ * 2. **`priority === 'campaign'`** — which `resolveSendPriority` derives from
+ *    `context: 'campaign'`. The campaign sender mints its own unsubscribe
+ *    headers upstream and so passes no `marketing` context, but it is the one
+ *    sender that cannot avoid this label: the hourly governor is allowed to
+ *    refuse a campaign, and a campaign that hid from the priority would be
+ *    hiding from that too.
+ *
+ * A sender would have to defeat BOTH — no unsubscribe context and no campaign
+ * priority — to reach the pool with promotional mail, and a message in that
+ * state is already broken in ways its author would notice.
+ *
+ * ## Polarity
+ *
+ * A message matching neither is transactional, which is the permissive answer,
+ * and that is deliberate — the same choice `resolveSendPriority` makes for the
+ * same reason. Enumerating what is RESTRICTED means a forgotten caller sends a
+ * receipt that goes out. Enumerating what is PERMITTED means a forgotten caller
+ * drops one, and a dropped password reset is the failure you learn about from a
+ * support ticket.
+ */
+export function isMarketingMessage(options: {
+  marketing?: unknown
+  priority?: string | null
+  context?: string | null
+}): boolean {
+  if (options?.marketing) return true
+  // `context` is consulted only through the same rule the governor uses, so a
+  // context that stops meaning "campaign" cannot leave the two disagreeing.
+  return resolveSendPriority(
+    options?.context ?? undefined,
+    (options?.priority as EmailSendPriority) || undefined,
+  ) === 'campaign'
 }
 
 export type MarketingSendGate = (

@@ -36,10 +36,12 @@ import {
   sendingDnsRecords,
   sendingDomainRequiredRecords,
   sendingRecordKey,
+  sharedIdentityMarketingRefusal,
   validateSendingDomain,
   type SendingDomainSelection,
   type SendingDomainStatus,
 } from './sending-domain'
+import { isMarketingMessage } from './marketing-send'
 
 const DOMAIN = 'acme.com'
 const DKIM_KEY = 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAexamplekey'
@@ -485,5 +487,271 @@ describe('assessSendingRecords', () => {
 
     expect(verdict.status).not.toBe('verified')
     expect(verdict.missing).toEqual(['dkim-key-not-issued'])
+  })
+})
+
+/*==========================================
+  The shared identity, and what it will not carry
+==========================================*/
+
+const SHARED_FROM = 'notifications@shared1.mail.aglyn.app'
+
+/**
+ * TRANSACTIONAL MAIL IS NEVER BLOCKED, AND MARKETING NEVER POOLS.
+ *
+ * These two rules are one decision seen from both sides. A receipt has no
+ * alternative — a merchant who cannot send one does not have a degraded
+ * product, they have no product — so it goes on the pooled identity whatever
+ * the tier. A campaign is the merchant's own choice and carries their list
+ * quality, so it may only leave on a name whose reputation is theirs to spend;
+ * pooling it would charge one merchant's complaint rate against every other
+ * site's password resets.
+ *
+ * Nothing in this block reads a plan. The rule is about reputation and it
+ * would hold if the price list changed tomorrow.
+ */
+describe('the shared identity carries transactional mail only', () => {
+  it('sends a site with no domain of its own, on the shared identity', () => {
+    const verdict = resolveSendingIdentity({
+      selection: null,
+      platformFrom: 'noreply@aglyn.com',
+      sharedFrom: SHARED_FROM,
+      audience: 'tenant',
+    })
+
+    expect(verdict.refusal).toBeNull()
+    expect(verdict.from).toBe(SHARED_FROM)
+    expect(verdict.source).toBe('shared')
+    expect(verdict.domain).toBe('shared1.mail.aglyn.app')
+  })
+
+  it('defaults an undeclared purpose to transactional, so a receipt always goes', () => {
+    // The polarity that matters: a caller who forgets sends a receipt that
+    // goes out, rather than dropping one. The forgotten-marketing case is
+    // caught structurally at the send path instead.
+    const verdict = resolveSendingIdentity({
+      selection: null,
+      sharedFrom: SHARED_FROM,
+      audience: 'tenant',
+    })
+    expect(verdict.source).toBe('shared')
+  })
+
+  it('refuses marketing, and names the remedy rather than a wait', () => {
+    const verdict = resolveSendingIdentity({
+      selection: null,
+      platformFrom: 'noreply@aglyn.com',
+      sharedFrom: SHARED_FROM,
+      audience: 'tenant',
+      purpose: 'marketing',
+    })
+
+    expect(verdict.from).toBeNull()
+    expect(verdict.source).toBeNull()
+    expect(verdict.refusal.code).toBe('shared-identity-marketing')
+    expect(verdict.refusal.message).toMatch(/domain of this site/i)
+    // NOT "try again shortly". A campaign will never leave on the pool however
+    // well provisioned it is, so a message promising a later success would send
+    // the merchant to wait for something that is not coming.
+    expect(verdict.refusal.message).not.toMatch(/try again/i)
+  })
+
+  it('refuses marketing the same way when no pool is configured at all', () => {
+    // The marketing check sits ABOVE the "is a shared identity available"
+    // check, so the answer does not change with the deployment's plumbing.
+    const verdict = resolveSendingIdentity({
+      selection: null,
+      sharedFrom: '',
+      audience: 'tenant',
+      purpose: 'marketing',
+    })
+    expect(verdict.refusal.code).toBe('shared-identity-marketing')
+  })
+
+  it('refuses transactional as an OPERATOR fault when no pool is configured', () => {
+    const verdict = resolveSendingIdentity({
+      selection: null,
+      platformFrom: 'noreply@aglyn.com',
+      sharedFrom: '',
+      audience: 'tenant',
+    })
+
+    expect(verdict.from).toBeNull()
+    expect(verdict.refusal.code).toBe('tenant-identity-unprovisioned')
+    // And it still does not reach the platform's own address to rescue itself.
+    expect(String(verdict.from ?? '')).not.toContain('aglyn.com')
+  })
+
+  /**
+   * THE CONTROL FOR AN INDISCRIMINATE FALLBACK.
+   *
+   * Every case below has a shared identity available and must NOT use it. If
+   * the pool were applied wherever no verified domain was to hand, this is the
+   * test that fails — and it is the one that distinguishes "the merchant gave
+   * no instruction" from "the merchant gave one we would be ignoring".
+   */
+  it.each(['requested', 'records-issued', 'failed'] as const)(
+    'refuses a SELECTED domain at %s rather than pooling it',
+    (status) => {
+      const verdict = resolveSendingIdentity({
+        selection: selection(status),
+        platformFrom: 'noreply@aglyn.com',
+        sharedFrom: SHARED_FROM,
+        audience: 'tenant',
+      })
+
+      expect(verdict.from).toBeNull()
+      expect(verdict.source).toBeNull()
+      expect(verdict.refusal.domain).toBe(DOMAIN)
+      expect(verdict.summary).not.toContain('shared1')
+    },
+  )
+
+  it('never reaches the shared identity for PLATFORM mail', () => {
+    // Aglyn's own billing and account mail stays on `aglyn.com`. The pool is
+    // the tenant's side of the split and the platform must not borrow it any
+    // more than a tenant may borrow `aglyn.com`.
+    const verdict = resolveSendingIdentity({
+      selection: null,
+      platformFrom: 'noreply@aglyn.com',
+      sharedFrom: SHARED_FROM,
+    })
+
+    expect(verdict.source).toBe('platform')
+    expect(verdict.from).toBe('noreply@aglyn.com')
+  })
+
+  it('reports the pooling in the summary a surface prints', () => {
+    // The console renders `summary` verbatim, so the reputation disclosure and
+    // the resolver cannot drift apart. A surface that composed its own wording
+    // would eventually describe an arrangement the send path had left behind.
+    const verdict = resolveSendingIdentity({
+      selection: null,
+      sharedFrom: SHARED_FROM,
+      audience: 'tenant',
+    })
+    expect(verdict.summary).toMatch(/pooled/i)
+    expect(verdict.summary).toContain(SHARED_FROM)
+  })
+
+  it('refuses a malformed shared address instead of putting it in a From:', () => {
+    for (const bad of ['notanaddress', '@shared1.mail.aglyn.app', 'x@', '  ']) {
+      const verdict = resolveSendingIdentity({
+        selection: null,
+        sharedFrom: bad,
+        audience: 'tenant',
+      })
+      expect(verdict.from).toBeNull()
+      expect(verdict.refusal.code).toBe('tenant-identity-unprovisioned')
+    }
+  })
+})
+
+describe('sharedIdentityMarketingRefusal — the backstop at the send', () => {
+  /**
+   * The half that does not depend on anybody remembering. An identity is
+   * resolved once and reused for thousands of messages, so the send path
+   * re-examines the verdict with the message in hand.
+   */
+  it('refuses a marketing message whose identity turned out to be pooled', () => {
+    const verdict = resolveSendingIdentity({
+      selection: null,
+      sharedFrom: SHARED_FROM,
+      audience: 'tenant',
+    })
+
+    expect(verdict.source).toBe('shared')
+    const refusal = sharedIdentityMarketingRefusal(verdict)
+    expect(refusal.code).toBe('shared-identity-marketing')
+    expect(refusal.domain).toBe('shared1.mail.aglyn.app')
+  })
+
+  it('says nothing about a verified custom domain or the platform identity', () => {
+    // A merchant on their own domain may send marketing — it is their
+    // reputation to spend. This must not become a blanket marketing gate.
+    const custom = resolveSendingIdentity({
+      selection: selection('verified'),
+      sharedFrom: SHARED_FROM,
+      audience: 'tenant',
+    })
+    expect(custom.source).toBe('custom')
+    expect(sharedIdentityMarketingRefusal(custom)).toBeNull()
+
+    const platform = resolveSendingIdentity({
+      selection: null,
+      platformFrom: 'noreply@aglyn.com',
+    })
+    expect(sharedIdentityMarketingRefusal(platform)).toBeNull()
+    expect(sharedIdentityMarketingRefusal(null)).toBeNull()
+  })
+
+  it('gives the same message the resolver does', () => {
+    // One string, produced from two places. Two copies is how the route comes
+    // to explain one rule while the backstop explains another.
+    const declared = resolveSendingIdentity({
+      selection: null,
+      sharedFrom: SHARED_FROM,
+      audience: 'tenant',
+      purpose: 'marketing',
+    })
+    const caught = sharedIdentityMarketingRefusal(
+      resolveSendingIdentity({
+        selection: null,
+        sharedFrom: SHARED_FROM,
+        audience: 'tenant',
+      }),
+    )
+    expect(caught.message).toBe(declared.refusal.message)
+  })
+})
+
+describe('isMarketingMessage — derived, never declared', () => {
+  /**
+   * The classification is read off fields a marketing send is ALREADY obliged
+   * to carry. A new `kind:` option would be one more thing for twenty call
+   * sites to remember, and the twenty-first would be a campaign on the pool.
+   */
+  it('recognizes a send that declares a marketing context', () => {
+    expect(isMarketingMessage({ marketing: { hostId: 'h', siteBase: 'x' } })).toBe(true)
+  })
+
+  it('recognizes the campaign sender, which carries no marketing context', () => {
+    // `campaign-send.ts` mints its own unsubscribe headers upstream, so it
+    // passes no `marketing` object — but it cannot avoid the campaign
+    // priority, because the hourly governor is allowed to refuse it.
+    expect(isMarketingMessage({ context: 'campaign' })).toBe(true)
+    expect(isMarketingMessage({ priority: 'campaign' })).toBe(true)
+  })
+
+  it('leaves every transactional sender alone', () => {
+    for (const context of [
+      'receipt',
+      'cart receipt',
+      'booking confirmation',
+      'booking reminder',
+      'membership recovery',
+      'inbox-reply',
+      'gift card',
+      'seller order notice',
+      undefined,
+    ]) {
+      expect(isMarketingMessage({ context })).toBe(false)
+    }
+  })
+
+  it('does not treat a resumable bulk sweep as marketing on its own', () => {
+    // `priority: 'bulk'` says "a refusal means not this hour", which is about
+    // DEFERRABILITY and not about whose reputation is at risk. The bulk
+    // marketing sweeps are caught by their `marketing` context instead.
+    expect(isMarketingMessage({ priority: 'bulk', context: 'booking reminder' })).toBe(
+      false,
+    )
+    expect(
+      isMarketingMessage({
+        priority: 'bulk',
+        context: 'abandoned cart',
+        marketing: { hostId: 'h', siteBase: 'x' },
+      }),
+    ).toBe(true)
   })
 })

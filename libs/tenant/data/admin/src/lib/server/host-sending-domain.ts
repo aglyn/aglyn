@@ -65,10 +65,38 @@ import {
   platformSendingLabel,
   type SendingDomainRecord,
 } from '@aglyn/shared-util-email'
+import { planHoldsDedicatedSendingDomain } from '@aglyn/aglyn/app-utils/dedicated-sending-domain'
 import firebaseAdmin from './firebase-admin'
 import { SENDING_DOMAINS_COLLECTION, readSendingDomainRecord } from './sending-domains'
 
 const firestore = () => firebaseAdmin.app().firestore()
+
+/**
+ * Whether this org's sites may hold a dedicated domain, from the stored plan.
+ *
+ * One read, and only ever on a CLAIM path — never on a send. A site that does
+ * not qualify has a sending identity regardless (the shared pool), so nothing
+ * here is on the critical path of a message.
+ *
+ * Fails closed on a read error, and that is the safe direction: the cost of
+ * answering `false` wrongly is that a domain is claimed on the next sweep
+ * instead of this one, while the cost of answering `true` wrongly is a zone
+ * record and a provider slot spent on a site that cannot use them.
+ */
+export async function orgHoldsDedicatedSendingDomain(
+  orgId: string | null | undefined,
+): Promise<boolean> {
+  const id = String(orgId ?? '').trim()
+  if (!id) return false
+  const snapshot = await firestore()
+    .collection('orgs')
+    .doc(id)
+    .get()
+    .catch(() => null)
+  return snapshot?.exists
+    ? planHoldsDedicatedSendingDomain(snapshot.get('plan'))
+    : false
+}
 
 /**
  * The uniqueness index for pinned mail labels.
@@ -168,6 +196,36 @@ export async function ensureHostSendingDomain(options: {
       // hand. Naming it is the only useful thing to do — silently re-pinning
       // would move a site's mail, which is the one thing this must not do.
       error: domain ? null : 'pinned-label-unusable',
+    }
+  }
+
+  /*
+   * THE PLAN GATE, AT THE ONLY WRITER.
+   *
+   * Below the pinned-label early return on purpose: a site that already HAS a
+   * domain keeps it through a downgrade. Taking one away would move that site's
+   * mail onto a cold pooled identity and throw away whatever reputation the
+   * name had earned, which is a punishment the merchant did not agree to and
+   * which we would be inflicting silently. Reclaiming a downgraded site's
+   * domain is a teardown decision with its own surface, not a side effect of
+   * the next sweep.
+   *
+   * Here rather than only at the callers because this is the ONE function that
+   * creates a claim — `claimHostForOrg` at creation, the console sweep, the
+   * identity route and `restartHostSendingDomain` all funnel through it. A gate
+   * at four call sites is a gate the fifth one skips, and the fifth one costs a
+   * zone record that nothing reclaims.
+   *
+   * The callers still filter before calling. Not redundancy: this read is per
+   * host, and a sweep that reached it for every free site on the platform would
+   * pay for the answer it could have got from a field it already held.
+   */
+  if (!(await orgHoldsDedicatedSendingDomain(orgId))) {
+    return {
+      domain: null,
+      label: null,
+      created: false,
+      error: 'plan-no-dedicated-domain',
     }
   }
 
@@ -450,18 +508,83 @@ export function sendingDomainLabel(domain: string): string {
 }
 
 /**
- * Claim a sending domain for any site that has none.
+ * Claim a dedicated sending domain for every site of ONE org. The upgrade path.
  *
- * `claimHostForOrg` does this at creation, so in steady state this finds
- * nothing. It exists because that covers only sites created AFTER it shipped,
- * and a site with no claim refuses every send — which is a worse failure than
- * the shared domain it replaced, and one nobody would see until a merchant
- * asked why their receipts stopped.
+ * A plan change is the moment a site becomes able to hold a domain of its own,
+ * and it is observable — the billing webhook already detects the transition, so
+ * this hangs off a signal that exists rather than inventing one.
  *
- * A self-healing sweep rather than a one-shot backfill script, for the reason
- * the re-check sweep is one: a script has to be remembered, run once, and run
- * against the right project, and the failure mode of forgetting is silent. A
- * sweep that finds nothing costs one bounded query and cannot be forgotten.
+ * ## Why the sweep is not enough on its own
+ *
+ * {@link claimUnprovisionedHosts} reads a BOUNDED PAGE of `hosts` with no
+ * ordering and no cursor. Past a few hundred sites it examines the same
+ * arbitrary page on every run — document-id order, which is a stable sample and
+ * not a queue — so an org that upgraded would wait forever for a sweep that is
+ * never going to reach it. The sweep is a backstop for a claim that was missed,
+ * which is what a backstop should be; it is not a schedule.
+ *
+ * Bounded anyway, because an agency org can hold many sites and a webhook has a
+ * deadline. Whatever this run does not reach, the sweep or the next plan event
+ * finishes — every step is idempotent, so being interrupted costs nothing.
+ *
+ * Never throws. A billing webhook that failed because mail provisioning did
+ * would be retried by the payment provider and would re-run the billing
+ * mirror — so a failure here must be a log line, not an exception.
+ */
+export async function claimOrgSendingDomains(
+  orgId: string | null | undefined,
+  limit = 25,
+): Promise<{ scanned: number; claimed: number }> {
+  const id = String(orgId ?? '').trim()
+  if (!id) return { scanned: 0, claimed: 0 }
+  if (!(await orgHoldsDedicatedSendingDomain(id))) return { scanned: 0, claimed: 0 }
+
+  const snapshot = await firestore()
+    .collection('hosts')
+    .where('orgId', '==', id)
+    .limit(Math.max(1, limit))
+    .get()
+    .catch(() => null)
+  if (!snapshot) return { scanned: 0, claimed: 0 }
+
+  let claimed = 0
+  for (const doc of snapshot.docs) {
+    if (String(doc.get('sendingLabel') ?? '').trim()) continue
+    const subdomain = String(doc.get('subdomain') ?? '').trim()
+    if (!subdomain) continue
+    const result = await ensureHostSendingDomain({
+      hostId: doc.id,
+      orgId: id,
+      subdomain,
+    }).catch(() => null)
+    if (result?.created) claimed += 1
+  }
+
+  return { scanned: snapshot.docs.length, claimed }
+}
+
+/**
+ * Claim a dedicated sending domain for any ENTITLED site that has none.
+ *
+ * The backstop, not the schedule. {@link claimOrgSendingDomains} runs at the
+ * plan transition and is what makes an upgrade take effect; this catches the
+ * cases that signal cannot: a webhook that was dropped, a plan set by hand, a
+ * site created under an org that was already paying.
+ *
+ * ## It claims by NEED, not by existence
+ *
+ * It used to claim for every host it saw. That is what made provider spend
+ * scale with signups rather than with revenue — and it was worse than a cost
+ * problem, because most of those sites could not send at all. A free site has
+ * no storefront, no bookings and a campaign quota of zero; the one message it
+ * can originate is a reply to a form submission, and that leaves on the shared
+ * pool like every other site's transactional mail. Provisioning it a domain
+ * bought a zone record, a provider slot and a permanent place in the re-check
+ * sweep, in exchange for nothing.
+ *
+ * So the plan is checked FIRST, from the host document's own `orgId` against
+ * the org — and `ensureHostSendingDomain` checks it again, because this filter
+ * is here to save reads and that one is there to be correct.
  *
  * ## The filter is in memory, and deliberately
  *
@@ -471,20 +594,34 @@ export function sendingDomainLabel(domain: string): string {
  * right one returns the empty set forever. This reads a bounded page of hosts
  * and filters here, matching the SSO re-verify sweep: no index to be missing,
  * and no ordering to silently exclude the target.
+ *
+ * ## Known limitation, and why it is acceptable NOW
+ *
+ * That bounded page has no cursor, so past a few hundred hosts this examines
+ * the same arbitrary slice every run. That was a silent correctness bug while
+ * this was the ONLY claim path — sites outside the first page were never
+ * provisioned and nobody could see why. It is merely a slow backstop now that
+ * the plan transition claims eagerly, which is the order these two should have
+ * been built in.
  */
 export async function claimUnprovisionedHosts(
   limit = 25,
-): Promise<{ scanned: number; claimed: number }> {
+): Promise<{ scanned: number; claimed: number; skippedUnentitled: number }> {
   const snapshot = await firestore()
     .collection('hosts')
     .limit(Math.max(1, limit))
     .get()
 
   let claimed = 0
+  let skippedUnentitled = 0
+  // One answer per org, not per host: an agency's twelve sites share a plan,
+  // and a sweep that asked twelve times would pay for eleven reads it already
+  // had the answer to.
+  const entitled = new Map<string, boolean>()
+
   for (const doc of snapshot.docs) {
     if (String(doc.get('sendingLabel') ?? '').trim()) continue
     const orgId = String(doc.get('orgId') ?? '').trim()
-    const subdomain = String(doc.get('subdomain') ?? '').trim()
     /*
      * A host with no subdomain has no name to build a label from, and the
      * check is here rather than left to the callee because the callee would
@@ -496,7 +633,17 @@ export async function claimUnprovisionedHosts(
      * save nothing — a guard that cannot change an outcome or a cost reads as
      * though it protects something.
      */
+    const subdomain = String(doc.get('subdomain') ?? '').trim()
     if (!subdomain) continue
+
+    if (!entitled.has(orgId)) {
+      entitled.set(orgId, await orgHoldsDedicatedSendingDomain(orgId))
+    }
+    if (!entitled.get(orgId)) {
+      skippedUnentitled += 1
+      continue
+    }
+
     const result = await ensureHostSendingDomain({
       hostId: doc.id,
       orgId,
@@ -505,5 +652,5 @@ export async function claimUnprovisionedHosts(
     if (result?.created) claimed += 1
   }
 
-  return { scanned: snapshot.docs.length, claimed }
+  return { scanned: snapshot.docs.length, claimed, skippedUnentitled }
 }

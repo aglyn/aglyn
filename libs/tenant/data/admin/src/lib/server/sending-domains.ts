@@ -70,6 +70,7 @@
 import {
   assessDmarc,
   assessSendingRecords,
+  isSharedSendingDomain,
   normalizeLocalPart,
   normalizeSendingDomain,
   resolveSendingIdentity,
@@ -78,11 +79,13 @@ import {
   sendingDnsRecords,
   sendingDomainRequiredRecords,
   sendingRecordKey,
+  sharedTenantSendingFrom,
   validateSendingDomain,
   type DmarcAssessment,
   type SendingDnsRecord,
   type SendingDomainRecord,
   type SendingDomainSelection,
+  type SendingIdentityPurpose,
   type SendingIdentityVerdict,
   type SendingVerification,
 } from '@aglyn/shared-util-email'
@@ -547,15 +550,42 @@ export async function resolveHostSendingIdentity(options: {
   /** `hosts/{hostId}.sendingLocalPart`, defaulted when unset. */
   selectedLocalPart?: string | null
   platformFrom?: string | null
+  /**
+   * The site, so an unselected host can be assigned a pool member.
+   *
+   * Optional because two of the three callers resolve an identity for a host
+   * they are already holding and one — the console's identity view — is asking
+   * about a specific site by id. A caller that omits it gets no shared
+   * identity, which is the honest answer: the pool assignment is per site, and
+   * "some pool member" is not a thing to send a receipt from.
+   */
+  hostId?: string | null
+  /**
+   * A pool member this host is pinned to, overriding the hash.
+   *
+   * `hosts/{hostId}.sendingPoolMember`. The QUARANTINE lever: a site whose
+   * transactional mail is generating complaints can be moved onto a member set
+   * aside for it, without disturbing any of the other sites that hash to the
+   * member it was on. Ignored unless it names a real member of the current
+   * pool, so a stale or hand-edited value degrades to the ordinary assignment
+   * rather than to an address nothing signs for.
+   */
+  poolMember?: string | null
+  /** See `SendingIdentityPurpose`. Defaults to transactional. */
+  purpose?: SendingIdentityPurpose
 }): Promise<SendingIdentityVerdict> {
   const platformFrom =
     options?.platformFrom ?? process.env.USAGE_EMAIL_FROM ?? null
   const domain = normalizeSendingDomain(options?.selectedDomain ?? '')
+  const purpose = options?.purpose
+  const sharedFrom = hostSharedFrom(options?.hostId, options?.poolMember)
 
   if (!domain || !options?.orgId) {
     return resolveSendingIdentity({
       selection: null,
       platformFrom,
+      sharedFrom,
+      purpose,
       audience: 'tenant',
     })
   }
@@ -578,7 +608,50 @@ export async function resolveHostSendingIdentity(options: {
       }
     : { domain, status: 'failed', localPart: '', missing: [] }
 
-  return resolveSendingIdentity({ selection, platformFrom, audience: 'tenant' })
+  /*
+   * `sharedFrom` is passed even here, where a selection exists and will decide
+   * the outcome. It is inert by construction — the selection branch of
+   * `resolveSendingIdentity` never reads it — and passing it unconditionally
+   * keeps the call shape identical between the two arms, so a future edit
+   * cannot produce a path that had a pool available and did not offer it.
+   *
+   * It must NOT become a fallback for an unverified selection, and it is the
+   * resolver's structure rather than this call site that guarantees that.
+   */
+  return resolveSendingIdentity({
+    selection,
+    platformFrom,
+    sharedFrom,
+    purpose,
+    audience: 'tenant',
+  })
+}
+
+/**
+ * The pool address for one host: the pinned member if it names a real one, the
+ * hash assignment otherwise.
+ *
+ * The override is validated against the LIVE pool rather than trusted, because
+ * a stale value is the expected case — an operator shrinks the pool, or a
+ * quarantine was lifted by deleting the member rather than the field — and an
+ * address on a domain that no longer exists is a send that fails at the
+ * provider instead of one that quietly goes back to normal.
+ */
+function hostSharedFrom(
+  hostId: string | null | undefined,
+  poolMember: string | null | undefined,
+): string {
+  const id = String(hostId ?? '').trim()
+  if (!id) return ''
+
+  const pinned = normalizeSendingDomain(String(poolMember ?? ''))
+  if (pinned && isSharedSendingDomain(pinned)) {
+    const shared = sharedTenantSendingFrom(id)
+    const at = shared.lastIndexOf('@')
+    return at > 0 ? `${shared.slice(0, at)}@${pinned}` : ''
+  }
+
+  return sharedTenantSendingFrom(id)
 }
 
 /**
@@ -611,9 +684,15 @@ export async function hostSendingIdentity(
 ): Promise<SendingIdentityVerdict> {
   const id = String(hostId ?? '').trim()
   if (!id) {
-    // No host is not "the platform is speaking" — it is a caller that does
-    // not know which site it is sending for, and the honest answer to that is
-    // a refusal rather than the shared domain.
+    /*
+     * No host is not "the platform is speaking", and it is not "any pool
+     * member will do" either. It is a caller that does not know which site it
+     * is sending for, and the honest answer to that is a refusal.
+     *
+     * No `sharedFrom` is passed, which is what makes that structural rather
+     * than a rule: the pool is assigned FROM the host id, so a caller without
+     * one has nothing to be assigned.
+     */
     return resolveSendingIdentity({ selection: null, audience: 'tenant' })
   }
 
@@ -631,6 +710,8 @@ export async function hostSendingIdentity(
     orgId: owner?.orgId ?? null,
     selectedDomain: snapshot?.get('sendingDomain') ?? '',
     selectedLocalPart: snapshot?.get('sendingLocalPart') ?? '',
+    hostId: id,
+    poolMember: snapshot?.get('sendingPoolMember') ?? '',
   })
 
   cache?.set(id, verdict)

@@ -32,6 +32,7 @@ import {
 import { renderTextEmailHtml } from './text-email-html'
 import {
   sendingIdentityRefusal,
+  sharedIdentityMarketingRefusal,
   type SendingIdentityAudience,
   type SendingIdentityVerdict,
 } from './sending-domain'
@@ -39,6 +40,7 @@ import {
   appendUnsubscribeHtml,
   appendUnsubscribeText,
   getMarketingSendGate,
+  isMarketingMessage,
   unsubscribeHeaders,
   type MarketingSendContext,
 } from './marketing-send'
@@ -497,6 +499,38 @@ export async function sendEmail(
       sent: false,
       reason: 'unverified-domain',
       detail: identityRefusal.message,
+    }
+  }
+
+  /*
+   * MARKETING MAIL DOES NOT LEAVE ON THE POOLED IDENTITY.
+   *
+   * The identity above may have resolved perfectly well and still be the wrong
+   * one for THIS message. A shared address carries transactional mail for every
+   * site assigned to it, so admitting one merchant's campaign charges that
+   * campaign's complaint rate against every other site's receipts — the
+   * messages that have no alternative and whose recipients never opted into the
+   * consequence.
+   *
+   * Checked here rather than only where the identity is resolved, because those
+   * are different moments with different information. A verdict is resolved
+   * ONCE and reused across thousands of messages, sometimes by a batch sender
+   * that does not yet know what each one will be; the message is in hand only
+   * here. `resolveSendingIdentity` still refuses when a caller declares the
+   * purpose — that is what gives the campaign route a `409` a merchant can
+   * read — and this is what holds when nobody declared anything.
+   *
+   * The classification is DERIVED, never declared. See `isMarketingMessage`.
+   */
+  const marketingRefusal = isMarketingMessage(options)
+    ? sharedIdentityMarketingRefusal(options.sendingIdentity)
+    : null
+  if (marketingRefusal) {
+    console.warn(`${label} refused — ${marketingRefusal.message}`)
+    return {
+      sent: false,
+      reason: 'unverified-domain',
+      detail: marketingRefusal.message,
     }
   }
 
