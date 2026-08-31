@@ -187,6 +187,31 @@ export function registerCommerceConsole(): void {
         // the generic [pluginSlug] shell now serves it at the same URL.
         label: 'POS',
         href: '/pos',
+        /*
+         * WHO may open the register, declared on THIS nav item rather than on
+         * the extension.
+         *
+         * A key here narrows one surface; a key on the extension would gate
+         * every surface it registers, and Products is the sibling — a catalog
+         * anyone who works on the site may open. The register is the one that
+         * takes money and lists checked-in guests by name, so the two
+         * genuinely have different answers and only this one is narrowed.
+         *
+         * `managePos` rather than a dotted catalog key because it is the key
+         * the sale itself is refused by: `server/pos-order.ts` resolves the
+         * member's permission map and returns 403 unless `managePos` holds.
+         * The shell answers this declaration out of that same resolved map, so
+         * the console offers a register exactly to the people the route will
+         * accept a sale from — the gate and its server twin cannot disagree,
+         * because they are reading one value.
+         *
+         * `pos-order.ts` stays the enforcement point regardless. This decides
+         * whether the surface is built at all, which is the part a check
+         * inside the page cannot do: by the time the page can refuse itself it
+         * has mounted and its product, register, location and reservation
+         * listeners are already open.
+         */
+        permission: 'managePos',
         icon: { path: mdiStorefrontOutline.path },
         header: { title: 'Point of Sale', docsTopic: 'pos' },
         Component: PosConsolePage,

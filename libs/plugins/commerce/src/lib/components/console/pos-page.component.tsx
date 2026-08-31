@@ -78,20 +78,19 @@ const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`
  * discount, and cash / QR-card / reservation-folio settlement through
  * the server-priced pos-order API. Receipts print via the browser.
  */
-export function PosConsolePage({
-  hostId,
-  permissions,
-}: ConsolePluginPageProps) {
-  // `managePos` IS READ HERE (AGL-2474). The key was declared by
-  // COMMERCE_PERMISSIONS and consulted by nothing — this page had no
-  // permission check of any kind. `pos-order.ts` is the enforcement point and
-  // refuses the sale regardless; this only stops the console offering a
-  // register to somebody the API will turn down.
-  //
-  // `!== false` rather than a truthy test on purpose: the prop is optional and
-  // is absent while the permission map loads, and treating "not yet known" as
-  // "denied" is how a gate flashes a refusal at somebody who is allowed.
-  const canUsePos = permissions?.managePos !== false
+/*
+ * `managePos` is NOT read here. The nav item in `plugin.ts` declares it and
+ * the shell refuses the route before this component is constructed, so a
+ * reader without the key never reaches this file and there is no unpermitted
+ * state for it to render — the same arrangement the entitlement gate has.
+ *
+ * Re-adding a check off the `permissions` prop would be a second answer to a
+ * settled question, and a laxer one: a prop absent because the map has not
+ * landed reads as permitted here, while the shell holds the route on that
+ * same condition rather than guessing. `server/pos-order.ts` remains the
+ * enforcement point for the sale itself.
+ */
+export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
@@ -543,23 +542,6 @@ export function PosConsolePage({
     win.focus()
     win.print()
   }, [lastReceipt])
-
-  if (!canUsePos) {
-    return (
-      <>
-        <NextPageTitle screen={'POS'} />
-        <Box sx={{ p: 4 }}>
-          <Typography variant="h6" gutterBottom>
-            You do not have access to the point of sale
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            An org admin can restore it by granting the &quot;Use the point of
-            sale&quot; permission.
-          </Typography>
-        </Box>
-      </>
-    )
-  }
 
   return (
     <>

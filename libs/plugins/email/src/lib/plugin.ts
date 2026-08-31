@@ -61,6 +61,40 @@ export function registerEmailConsole(): void {
   Aglyn.registerConsoleExtension({
     pluginId: BUNDLE_ID,
     displayName: 'Email',
+    /*
+     * WHO may open the email console, declared so the shell enforces it.
+     *
+     * The audiences section reads `orgs/{orgId}/lists/{listId}/members`, and
+     * those members are enrolled CONTACTS — an address, a name, and the
+     * consent basis recording why the person may be mailed. That is the same
+     * org-shared people data the CRM holds, reached from a different page.
+     *
+     * The rules gate those reads on `isOrgWideMember()` ALONE, with no role
+     * condition, so org-wide membership of any role is enough to list every
+     * audience the organization has and everybody on it. An org VIEWER — the
+     * role that exists to read and change nothing — therefore reads the whole
+     * marketing audience today. `data.manage` is what closes that: it
+     * defaults to owner, admin and editor, so the population it admits is
+     * exactly the one `server-list-gate.ts` accepts a list write from, and
+     * the viewer it excludes is the reader the rules never excluded.
+     *
+     * `data.manage` rather than a key of this plugin's own for the reason the
+     * catalog gives for refusing a `marketing.manage`: campaigns are written
+     * client-direct against rules that gate on the HOST role, so a new
+     * org-level key would name an action with no org-level boundary under it.
+     * `data.manage` is not in that position — it already governs the
+     * org-shared data this surface exposes, and the list gate already reads
+     * the roles it defaults to.
+     *
+     * A SITE COLLABORATOR holding it opens the page, and the answer is NOT
+     * the one Contacts reached. There the listener is scoped and the rules
+     * prove the same predicate per document; here the audiences read demands
+     * `isOrgWideMember()`, which a collaborator is not, so the org-shared
+     * half is already refused beneath the console and the half that remains —
+     * this site's own messages, templates and sending identities — is theirs.
+     * Refusing the surface outright would take that away to close nothing.
+     */
+    permission: 'data.manage',
     navItems: [
       {
         label: 'Emails',

@@ -18,7 +18,11 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { renderEmailHtml } from './model'
 import { BUNDLE_ID } from './constants/bundle-common'
-import { EMAIL_BUNDLE, registerEmailPlugin } from './plugin'
+import {
+  EMAIL_BUNDLE,
+  registerEmailConsole,
+  registerEmailPlugin,
+} from './plugin'
 
 /**
  * Email blocks that RENDER what is dropped into them (AGL-1389) — see the
@@ -94,5 +98,54 @@ describe('email plugin', () => {
       if (!html.includes(SENTINEL)) swallowed.push(componentId)
     }
     expect(swallowed).toEqual([])
+  })
+})
+
+/**
+ * The email console declares who may open it.
+ *
+ * This asserts the DECLARATION only; the shell's handling of it is proved at
+ * the route in `apps/console/specs/plugin-surface-permission-keys.spec.tsx`.
+ */
+describe('the email console surface declares its own authorization', () => {
+  const consoleExtension = () =>
+    Aglyn.listConsoleExtensions().find((entry) => entry.pluginId === BUNDLE_ID)
+
+  beforeEach(() => {
+    registerEmailConsole()
+  })
+
+  it('requires `data.manage` to open the email console', () => {
+    expect(consoleExtension()?.permission).toBe('data.manage')
+  })
+
+  it('declares on the EXTENSION, because every surface here is the same one', () => {
+    // The opposite arrangement from commerce, and for the opposite reason:
+    // this extension registers a single nav item whose sections all belong to
+    // one answer, so narrowing an item would only restate the extension's own
+    // requirement in a second place that can drift from it.
+    expect(consoleExtension()?.navItems?.length).toBe(1)
+    expect(consoleExtension()?.navItems?.[0]?.permission).toBeUndefined()
+  })
+
+  it('names a key the catalog carries, so a role editor can grant it', () => {
+    const permission = consoleExtension()?.permission as Aglyn.OrgPermission
+    expect(Aglyn.ORG_PERMISSION_KEYS).toContain(permission)
+  })
+
+  it('excludes the VIEWER tier, which is the population it exists to refuse', () => {
+    /*
+     * The audiences section reads `orgs/{orgId}/lists/{listId}/members` —
+     * enrolled contacts and their consent basis. The rules gate that read on
+     * `isOrgWideMember()` with no role condition, so an org-wide viewer reads
+     * every audience the organization has. This key is chosen because its
+     * population is exactly the one `server-list-gate.ts` accepts a list
+     * write from, and the viewer it drops is the reader the rules admit.
+     */
+    const permission = consoleExtension()?.permission as Aglyn.OrgPermission
+    expect(Aglyn.DEFAULT_ROLE_PERMISSIONS.owner[permission]).toBe(true)
+    expect(Aglyn.DEFAULT_ROLE_PERMISSIONS.admin[permission]).toBe(true)
+    expect(Aglyn.DEFAULT_ROLE_PERMISSIONS.editor[permission]).toBe(true)
+    expect(Aglyn.DEFAULT_ROLE_PERMISSIONS.viewer[permission]).toBe(false)
   })
 })
