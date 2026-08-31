@@ -90,6 +90,12 @@ interface AudiencePreview {
   grandfathered: number
   /** Of `audienceSize`, how many the consent rule refuses. */
   consentWithheld: number
+  /**
+   * Of `recipients`, how many asked this site for mail less often than this
+   * send would arrive. They are still subscribed and the next campaign
+   * outside their interval reaches them.
+   */
+  cadenceHeld: number
   /** Which address this send would leave on, in the server's own words. */
   identity: string
   identitySource: 'custom' | 'shared' | 'platform' | null
@@ -509,6 +515,7 @@ export function CampaignComposer(props: CampaignComposerProps) {
           consented: Number(payload?.consented ?? 0),
           grandfathered: Number(payload?.grandfathered ?? 0),
           consentWithheld: Number(payload?.consentWithheld ?? 0),
+          cadenceHeld: Number(payload?.cadenceHeld ?? 0),
           identity: String(payload?.identity ?? ''),
           identitySource: (payload?.identitySource ?? null) as
             | 'custom'
@@ -698,6 +705,19 @@ export function CampaignComposer(props: CampaignComposerProps) {
       if (counts.suppressed) {
         withheld.push(
           `${counts.suppressed.toLocaleString()} unsubscribed or suppressed`,
+        )
+      }
+      /*
+       * Named separately from `suppressed`, because the two ask different
+       * things of a merchant. An address that unsubscribed is gone; one
+       * holding for its own cadence arrives at the next campaign outside its
+       * interval, and reading that as an unsubscribe would send somebody
+       * looking for a broken audience that is not broken.
+       */
+      if (counts.cadenceHeld) {
+        withheld.push(
+          `${counts.cadenceHeld.toLocaleString()} asked for mail less often ` +
+            `than this`,
         )
       }
       if (counts.grandfathered) {
@@ -969,6 +989,9 @@ export function CampaignComposer(props: CampaignComposerProps) {
                 : '') +
               (preview.suppressed
                 ? ` · ${preview.suppressed.toLocaleString()} unsubscribed or suppressed`
+                : '') +
+              (preview.cadenceHeld
+                ? ` · ${preview.cadenceHeld.toLocaleString()} asked for mail less often than this`
                 : '')}
       </Typography>
       {/*

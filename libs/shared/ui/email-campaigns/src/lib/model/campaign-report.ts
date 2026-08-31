@@ -104,6 +104,9 @@ export interface CampaignStats {
   /** Of `recipients`, how many were already suppressed (unsubscribed,
    * bounced or complained on an earlier send). */
   suppressed?: number
+  /** Of `recipients`, how many asked this site for mail less often than this
+   * send would have arrived. Still subscribed; reached by a later campaign. */
+  cadenceHeld?: number
   /** Recipients the hourly send governor refused mid-batch. */
   deferred?: number
   /**
@@ -402,6 +405,13 @@ export function campaignReport(stats: CampaignStats | undefined): CampaignReport
     'suppressed',
     'Already suppressed',
     source.suppressed,
+    'addressed',
+    recipients,
+  )
+  addPopulation(
+    'cadenceHeld',
+    'Asked for mail less often than this',
+    source.cadenceHeld,
     'addressed',
     recipients,
   )

@@ -165,38 +165,124 @@ interface ExistingRecord {
   value: string
 }
 
-/** Every record currently in the zone, or null when the read failed. */
-async function readZone(config: ZoneSettings): Promise<ExistingRecord[] | null> {
-  // Built with `URLSearchParams` rather than by concatenating onto `query()`,
-  // which emits an empty string when there is no team — appending `&limit=500`
-  // to that produces `records&limit=500`, a path with no query string at all,
-  // and the page size is silently dropped.
-  const params = new URLSearchParams({ limit: '500' })
-  if (config.teamId) params.set('teamId', config.teamId)
+/**
+ * How many records one page asks for.
+ *
+ * A number, not a guarantee. The provider answers with as many as it feels
+ * like and says so in `pagination.next`, which is why this value is not the
+ * thing that makes the read complete — the walk below is.
+ */
+const ZONE_PAGE_SIZE = 500
 
-  try {
-    const response = await fetch(
-      `https://api.vercel.com/v4/domains/${encodeURIComponent(config.zone)}/records?${params}`,
-      {
-        method: 'GET',
-        headers: { Authorization: `Bearer ${config.token}` },
-        signal: deadline(),
-      },
-    )
-    if (!response.ok) return null
-    const body = await response.json().catch(() => null)
-    const rows = Array.isArray((body as { records?: unknown })?.records)
-      ? ((body as { records: unknown[] }).records as Record<string, unknown>[])
-      : []
-    return rows.map((row) => ({
-      id: String(row?.['id'] ?? ''),
-      name: String(row?.['name'] ?? '').toLowerCase(),
-      type: String(row?.['type'] ?? '').toUpperCase(),
-      value: String(row?.['value'] ?? '').trim(),
-    }))
-  } catch {
-    return null
+/**
+ * A ceiling on the walk, so an endpoint that kept handing back cursors could
+ * not turn a zone read into an unbounded loop. Exceeding it reads as
+ * UNREADABLE rather than as the records collected so far, for the reason the
+ * whole function exists: a partial zone is the input that makes
+ * {@link alreadyPresent} answer false about a record that is already there.
+ */
+const ZONE_MAX_PAGES = 20
+
+/**
+ * Every record currently in the zone, or null when the read failed.
+ *
+ * ## One page is not the zone, and the page size cannot make it one
+ *
+ * This endpoint returns 20 records when asked for no limit, and honors a
+ * larger `limit` only as far as it chooses to. There is no error and no
+ * marker in the records themselves when it returns fewer than were asked
+ * for — the truncation lives entirely in `pagination.next`, which is set
+ * whenever the page came back full. So a single request cannot distinguish a
+ * zone of 26 records from the first 26 of several hundred, and raising the
+ * page size only moves the number at which it stops being able to.
+ *
+ * Getting that wrong is not untidiness. The caller writes only what
+ * {@link alreadyPresent} says is missing, so a truncated read re-POSTs
+ * records that exist — and a name carrying two DKIM TXT records is a name
+ * whose DKIM does not verify, which breaks signing for every site under it.
+ *
+ * ## `until`, not `since`
+ *
+ * `pagination.next` is a millisecond timestamp pointing at OLDER records, and
+ * `until` is the parameter that means "created before this". `since` means
+ * the opposite, and passing the cursor to it returns the same page with the
+ * same cursor forever — a loop that never terminates and never advances.
+ *
+ * ## Terminating
+ *
+ * A page that comes back exactly full carries a non-null cursor even when the
+ * zone is exhausted, so `next === null` cannot be the only exit: the walk
+ * also stops on a page with no records, which is what that cursor returns.
+ * Records are collected by id, because a timestamp cursor can hand back a row
+ * on both sides of a page boundary.
+ *
+ * One deadline for the whole walk rather than one per page, so
+ * {@link SENDING_ZONE_TIMEOUT_MS} still bounds a zone read the way the
+ * contract at the top of this file says it does.
+ */
+async function readZone(config: ZoneSettings): Promise<ExistingRecord[] | null> {
+  const signal = deadline()
+  const collected = new Map<string, ExistingRecord>()
+  let cursor = ''
+
+  for (let page = 0; page < ZONE_MAX_PAGES; page += 1) {
+    // Built with `URLSearchParams` rather than by concatenating onto
+    // `query()`, which emits an empty string when there is no team —
+    // appending `&limit=500` to that produces `records&limit=500`, a path
+    // with no query string at all, and the page size is silently dropped.
+    const params = new URLSearchParams({ limit: String(ZONE_PAGE_SIZE) })
+    if (config.teamId) params.set('teamId', config.teamId)
+    if (cursor) params.set('until', cursor)
+
+    let rows: Record<string, unknown>[]
+    let next: unknown
+    try {
+      // `v5` is the version the reference documents for this read; the writes
+      // below stay on the versions documented for them. The two answer
+      // identically — same records, same keys, same cursor for the same
+      // query — so this is alignment with what is published rather than a
+      // behavior change.
+      const response = await fetch(
+        `https://api.vercel.com/v5/domains/${encodeURIComponent(config.zone)}/records?${params}`,
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${config.token}` },
+          signal,
+        },
+      )
+      if (!response.ok) return null
+      const body = await response.json().catch(() => null)
+      rows = Array.isArray((body as { records?: unknown })?.records)
+        ? ((body as { records: unknown[] }).records as Record<string, unknown>[])
+        : []
+      next = (body as { pagination?: { next?: unknown } })?.pagination?.next
+    } catch {
+      // A page that failed mid-walk is the whole read failing. Returning what
+      // came back before it would be returning a truncated zone, which is the
+      // exact state this function refuses to hand its caller.
+      return null
+    }
+
+    for (const row of rows) {
+      const id = String(row?.['id'] ?? '')
+      collected.set(id || `${collected.size}`, {
+        id,
+        name: String(row?.['name'] ?? '').toLowerCase(),
+        type: String(row?.['type'] ?? '').toUpperCase(),
+        value: String(row?.['value'] ?? '').trim(),
+      })
+    }
+
+    // No cursor, or a cursor that led to nothing: the zone is exhausted. An
+    // empty FIRST page is an empty zone, which is readable and is not a
+    // failure — the caller then writes every record, correctly.
+    if (next === null || next === undefined || next === '' || !rows.length) {
+      return [...collected.values()]
+    }
+    cursor = String(next)
   }
+
+  return null
 }
 
 /**
