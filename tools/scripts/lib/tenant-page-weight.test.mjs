@@ -480,9 +480,11 @@ test('FORCED RED: an entry that cannot be measured is red, never a pass', () => 
 test('FORCED RED: --write refuses to re-baseline from another entry', () => {
   // `budgetFor` stamps TENANT_PAGE_ENTRY whatever was measured, so without the
   // refusal this pins the published page's budget to a different page's
-  // weight — measured, by deleting the refusal: the file came back reading
-  // 4,737,856 B across 446 modules, the SEARCH page, under the catch-all's
-  // name. That is a budget with four times the headroom nobody chose.
+  // weight. Measured, by deleting the refusal: the file came back reading
+  // 312,735 baseline bytes across 135 modules — the search results component
+  // — under the catch-all page's name. Which direction that lands in is luck:
+  // a lighter root writes a budget the real page cannot meet, and a heavier
+  // one writes headroom nobody chose.
   //
   // The file is restored before the assertions rather than after, so a red
   // here reports a red instead of also leaving the repo's baseline rewritten.
@@ -490,7 +492,7 @@ test('FORCED RED: --write refuses to re-baseline from another entry', () => {
   const before = readFileSync(path, 'utf8')
   const result = runCli([
     '--entry',
-    'apps/tenant/app/[host]/search/page.tsx',
+    'apps/tenant/app/[host]/search/search-results.component.tsx',
     '--write',
   ])
   const after = readFileSync(path, 'utf8')

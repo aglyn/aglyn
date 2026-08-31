@@ -73,11 +73,17 @@ const BUDGET_PATH = flag('--budget', DEFAULT_BUDGET_PATH)
 /**
  * The client root to weigh, repo-relative.
  *
- * `TENANT_PAGE_ENTRY` unless asked otherwise. `/[host]/search` is a second
- * published client root and nothing watches it, so being able to point this
- * at another one is worth having — and it is what lets the self-test drive
- * the unmeasurable-entry red, which is otherwise unreachable without deleting
- * a file from the tree.
+ * `TENANT_PAGE_ENTRY` unless asked otherwise. The tenant app has other
+ * published client roots that nothing budgets — `[host]/search/
+ * search-results.component.tsx` is 305.4 KB across 135 modules — so being able
+ * to point this at one is worth having. It is also what lets the self-test
+ * drive the unmeasurable-entry red, which is otherwise unreachable without
+ * deleting a file from the tree.
+ *
+ * Aim it at a client root, not at a `page.tsx`. An App Router page without
+ * `'use client'` is a SERVER component, and its graph is server modules that
+ * no visitor downloads — a number that looks alarming and bills nothing on
+ * the wire.
  *
  * `--write` refuses to run beside it: `budgetFor` records `TENANT_PAGE_ENTRY`
  * whatever was measured, so re-baselining here would pin one page's budget to
