@@ -16,9 +16,13 @@
  */
 'use client'
 
-import type { ConsolePluginPageProps } from '@aglyn/aglyn'
+import {
+  consentGroupForHost,
+  type ConsentGroup,
+  type ConsolePluginPageProps,
+} from '@aglyn/aglyn'
 import { HubSections } from '@aglyn/shared-ui-next'
-import type { ReactNode } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import EmailDetail from './email-detail'
 import EmailScreensCard from './email-screens-card'
 import EmailTemplateDetail from './email-template-detail'
@@ -52,6 +56,14 @@ function sectionBody(
    */
   detail: readonly string[],
   basePath: string,
+  /**
+   * The controller the surface is being viewed as, resolved once by the page.
+   *
+   * Only the audience detail needs it today — it is what its membership table
+   * reads consent FOR — but it is resolved at the page because the answer is a
+   * property of the org and this is the one place holding the org document.
+   */
+  consentGroup: ConsentGroup,
 ): ReactNode {
   switch (section) {
     case 'emails':
@@ -124,6 +136,7 @@ function sectionBody(
         ) : (
           <ListDetailCard
             hostId={hostId}
+            consentGroup={consentGroup}
             listId={detail[0]}
             basePath={basePath}
           />
@@ -197,7 +210,25 @@ function sectionBody(
  * somebody has to remember on the next surface.
  */
 export function EmailsConsolePage(props: ConsolePluginPageProps) {
-  const { hostId, section, sections, basePath, segments } = props
+  const { hostId, org, section, sections, basePath, segments } = props
+
+  /*==========================================
+   * THE CONTROLLER THIS SURFACE IS BEING VIEWED AS.
+   *
+   * The declared group of sites that are one sender, or this site alone. Every
+   * consent question asked below is asked FOR a controller and not for a site:
+   * a grant is looked up under the asking site, a refusal is honored across
+   * the whole group, and a grant held by a site outside it belongs to somebody
+   * else. It is the same group `performCampaignSend` resolves, so the audience
+   * table and the send agree about the same document by construction.
+   *
+   * Pure, from the org document the shell already passed, so it costs no read.
+   * An absent org resolves to the group of one, which is the narrow answer.
+   *=========================================*/
+  const consentGroup = useMemo(
+    () => consentGroupForHost(org as Record<string, unknown>, hostId),
+    [org, hostId],
+  )
 
   /*
    * Nothing, deliberately, while the redirect is in flight. Rendering the
@@ -215,6 +246,7 @@ export function EmailsConsolePage(props: ConsolePluginPageProps) {
         // already — so what a section owns is everything after it.
         (segments ?? []).slice(1),
         basePath,
+        consentGroup,
       )}
     </HubSections>
   )

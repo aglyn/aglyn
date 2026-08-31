@@ -283,15 +283,26 @@ read until you open a list.
 **How** tells a rule match apart from somebody who was added. A person a rule enrolled
 leaves when they stop matching; a person who was added stays.
 
-**Consent** is the basis the membership carries, and the two kinds are not the same
-fact:
+**Consent** is the basis the membership carries, read for the site you are on. The
+kinds are not the same fact and the column keeps them apart:
 
 - **Opted in** — this person ticked a box, on the date shown. Their own decision.
 - **Attested by your team** — somebody on your team stated they had this person's
   permission. That statement is the basis, and it is recorded against their account
   with the date.
+- **Opted out** — a recorded refusal. Nothing makes this person mailable again except
+  their own opt-in.
+- **Opted in to another site** — they agreed to hear from a different site in your
+  account, and permission given to one brand is not permission for another. Ask them
+  yourself, or attest that you have it.
+- **Opted in — no site recorded** — a grant from before consent named the site it was
+  given to. It names no brand, so it grants to none.
 - **No basis on record** — nothing either way. Not a refusal; see
   [who a campaign is allowed to reach](#who-a-campaign-is-allowed-to-reach).
+
+To record a basis for somebody who has none, put their address in the add box and
+state that you have their permission. It merges onto the membership already there —
+they are not added twice, and the date they joined is kept.
 
 **Rename** the list from the same panel. The name is what the campaign composer's
 audience picker shows, so renaming it is safe at any time — the list, its members and

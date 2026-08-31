@@ -34,14 +34,22 @@
  * reads anything until a list is opened, and the add form reads nothing until
  * an address is typed.
  *
- * ## The consent facts come from the server, always
+ * ## Whether somebody may be ADDED is the server's answer, always
  *
- * Every sentence about whether somebody may be added is `email/list-members-preview`
+ * Every sentence about an address being typed in is `email/list-members-preview`
  * answering from that person's actual record and both suppression lists. This
- * component computes none of it. A screen that decided for itself would be a
+ * component decides none of it. A screen that decided for itself would be a
  * second copy of the rule on the one surface whose job is to tell the operator
  * the truth about what is about to happen — including, and especially, that
  * the product knows nothing about this person's permission.
+ *
+ * ## The membership table reads consent through the SEND-TIME reader
+ *
+ * The `Consent` column answers the same question `performCampaignSend` asks of
+ * the same document, so it asks it with the same function —
+ * {@link readMarketingBasis}, against the consent group this console is being
+ * viewed as. A column that picked the fields out of the row itself is a second
+ * reader of a stored shape, and the two only agree until the shape moves.
  *
  * ## Removing is not suppressing, and the screen says so
  *
@@ -52,7 +60,11 @@
  * blur is a console where "remove" is quietly relied on as an unsubscribe.
  */
 
-import type { DynamicListRule } from '@aglyn/aglyn'
+import {
+  readMarketingBasis,
+  type ConsentGroup,
+  type DynamicListRule,
+} from '@aglyn/aglyn'
 import { mdiAccountRemoveOutline } from '@aglyn/shared-data-mdi'
 import { MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
@@ -93,6 +105,18 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
 export interface ListMembersPanelProps {
   hostId: string
+  /**
+   * The controller this membership is being read AS — the declared group of
+   * sites that are one sender, or this site alone.
+   *
+   * Required and undefaulted, for the reason {@link readMarketingBasis} makes
+   * it required: a basis runs to a brand, so a surface that has not said which
+   * brand is asking cannot report one. Defaulting to the group of one here
+   * would compile and would then answer a declared group's questions with a
+   * single site's facts — reporting a sibling's refusal as no record at all,
+   * and a pooled grant as another brand's.
+   */
+  consentGroup: ConsentGroup
   /** `['orgs', orgId]` — the resolved org scope the card already holds. */
   scope: readonly [string, string]
   listId: string
@@ -123,7 +147,18 @@ export interface ListMembersPanelProps {
   ruleSummary?: readonly string[]
 }
 
-/** One member row, as stored. */
+/**
+ * One member row, as stored.
+ *
+ * The consent fields are deliberately NOT enumerated here. They live one level
+ * down, in an entry per site under `marketingConsentByHost`, and a row type
+ * that named them at the top would be an invitation to read them there — which
+ * is exactly what this table did while `enrollListMember` wrote them nested,
+ * so every membership on every list reported "No basis on record" while the
+ * send path mailed the same people on a basis it could see perfectly well. The
+ * index signature is what {@link readMarketingBasis} takes; it is the only
+ * reader of those fields on this surface.
+ */
 interface MemberRow {
   $id: string
   email?: string
@@ -131,9 +166,7 @@ interface MemberRow {
   source?: string
   via?: 'manual' | 'rule'
   addedAt?: { toDate?: () => Date }
-  marketingConsent?: boolean
-  marketingConsentBasis?: 'contact-opt-in' | 'operator-attested'
-  marketingConsentAtMs?: number
+  [field: string]: unknown
 }
 
 /** What `email/list-members-preview` answers for one address. */
@@ -172,24 +205,73 @@ interface AddResult {
 }
 
 /**
- * How the basis reads on screen.
+ * How the basis reads on screen, for the group this console is viewed as.
  *
- * An attestation and an opt-in are NOT the same fact and a table that
- * rendered both as a tick would be the conflation `list-members.ts` stores
- * the basis to prevent: one is a person's own decision, the other is a claim
- * an account made on their behalf. A row with neither says so plainly rather
- * than reading as a refusal — absence is not refusal.
+ * ## Read through `readMarketingBasis`, never off the row
+ *
+ * This picked `marketingConsent`, `marketingConsentBasis` and
+ * `marketingConsentAtMs` off the top of the membership document, which is
+ * where `enrollListMember` used to put them. They now live in an entry per
+ * site under `marketingConsentByHost`, because a basis runs to the brand it
+ * was given to rather than to the account that holds the row. Nothing here
+ * moved with them, so every top-level read answered `undefined` and every
+ * member of every list — including people carrying a perfectly good attested
+ * basis — was reported as having no basis on record, on the one screen an
+ * operator consults before mailing them. `performCampaignSend` reads the same
+ * documents through the function below and mailed them, correctly, at the same
+ * time.
+ *
+ * The fix is not a second field name. It is that the send path's reader is the
+ * only reader: a surface that parses the stored shape itself agrees with the
+ * sender only until the shape moves, and it moves without anybody thinking to
+ * look here.
+ *
+ * ## Five states, because the model carries five
+ *
+ * An attestation and an opt-in are not the same fact — one is a person's own
+ * decision, the other a claim an account made on their behalf — and a table
+ * rendering both as a tick is the conflation `list-members.ts` stores the
+ * basis to prevent. The three that are not a grant are not one state either.
+ * Absence is not refusal, and neither of them is "opted in, to somebody else
+ * in this account": that third one is a person the sender deliberately leaves
+ * alone, and an operator who cannot see why reads it as the product having
+ * lost their subscriber.
  */
-function consentLabel(member: MemberRow): { label: string; asserted: boolean } {
-  if (member.marketingConsent !== true) {
-    return { label: 'No basis on record', asserted: false }
-  }
-  const when = member.marketingConsentAtMs
-    ? ` · ${new Date(member.marketingConsentAtMs).toLocaleDateString()}`
+function consentLabel(
+  member: MemberRow,
+  group: ConsentGroup,
+): { label: string; color: 'default' | 'warning' | 'error' } {
+  const record = readMarketingBasis(member as Record<string, unknown>, group)
+  const when = record.basisAtMs
+    ? ` · ${new Date(record.basisAtMs).toLocaleDateString()}`
     : ''
-  return member.marketingConsentBasis === 'operator-attested'
-    ? { label: `Attested by your team${when}`, asserted: true }
-    : { label: `Opted in${when}`, asserted: false }
+  if (record.basis === 'declined') {
+    return { label: `Opted out${when}`, color: 'error' }
+  }
+  if (record.basis === 'granted') {
+    /*
+     * `assertedBy` rather than the stored basis field, because there are two
+     * ways a record says an operator asserted it — a membership's
+     * `marketingConsentBasis`, and the provenance object a backfill writes —
+     * and the reader has already resolved both into this one answer.
+     */
+    return record.assertedBy === 'operator'
+      ? { label: `Attested by your team${when}`, color: 'warning' }
+      : { label: `Opted in${when}`, color: 'default' }
+  }
+  /*
+   * A grant this site may not use. Reported rather than folded into "no
+   * basis" because the two are different situations with different answers:
+   * nobody has ever asked this person, versus somebody asked them on behalf
+   * of another brand in this account and this brand may not borrow it.
+   */
+  if (record.otherGrant === 'other-host') {
+    return { label: 'Opted in to another site', color: 'warning' }
+  }
+  if (record.otherGrant === 'unscoped') {
+    return { label: 'Opted in — no site recorded', color: 'warning' }
+  }
+  return { label: 'No basis on record', color: 'default' }
 }
 
 /** Free text — a paste, a typed address, commas or newlines — to addresses. */
@@ -205,6 +287,7 @@ export function splitAddresses(value: string): string[] {
 export function ListMembersPanel(props: ListMembersPanelProps) {
   const {
     hostId,
+    consentGroup,
     scope,
     listId,
     listName,
@@ -683,7 +766,7 @@ export function ListMembersPanel(props: ListMembersPanelProps) {
             </TableHead>
             <TableBody>
               {members.map((member) => {
-                const consent = consentLabel(member)
+                const consent = consentLabel(member, consentGroup)
                 return (
                   <TableRow key={member.$id}>
                     <TableCell>{member.email ?? '—'}</TableCell>
@@ -720,7 +803,7 @@ export function ListMembersPanel(props: ListMembersPanelProps) {
                       <Chip
                         size="small"
                         variant="outlined"
-                        color={consent.asserted ? 'warning' : 'default'}
+                        color={consent.color}
                         label={consent.label}
                       />
                     </TableCell>
@@ -765,6 +848,24 @@ export function ListMembersPanel(props: ListMembersPanelProps) {
           />
         </>
       )}
+
+      {/*
+        What the column MEANS, and what to do about the one state an operator
+        can act on. "No basis on record" is a fact about this site's records,
+        not a refusal and not a dead end — the remedy is the add form above,
+        which merges onto the membership that is already here rather than
+        creating a second one. Whether a basis-less member is actually mailed
+        is the org's consent policy to decide and is deliberately not claimed
+        here: this surface does not hold that setting, and a caption that
+        guessed it would be wrong for every org on the other mode.
+       */}
+      <Typography variant="caption" color="text.secondary">
+        {'"No basis on record" means nobody has recorded this person\'s ' +
+          'permission for this site — it is not a refusal. To record one, put ' +
+          'their address in the box above and state that you have their ' +
+          'permission; the statement is kept against your account, with the ' +
+          'date.'}
+      </Typography>
 
       <Typography variant="caption" color="text.secondary">
         {'Removing someone from a list is not an unsubscribe. It does not add ' +
