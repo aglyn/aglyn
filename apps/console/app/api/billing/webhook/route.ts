@@ -41,7 +41,6 @@ import {
 import {
   findOrgIdByStripeCustomer,
   firebaseAdmin,
-  claimOrgSendingDomains,
   logOrgActivity,
   sendGa4Purchase,
   sendGa4Refund,
@@ -618,45 +617,22 @@ async function handler(request: Request): Promise<Response> {
         // must not fan a site-wide cache drop out across every host each time.
         if (mirrored && previousPlan !== String(plan)) {
           /*
-           * PROVISIONING FOLLOWS THE UPGRADE, NOT THE SIGNUP.
+           * NO SENDING DOMAIN IS CLAIMED ON AN UPGRADE.
            *
-           * A dedicated sending domain costs a provider slot AND three records
-           * in our own zone, per site, forever, plus a permanent place in the
-           * re-verification sweep. Claiming one at host creation spends all
-           * three on every free signup — for sites that mostly cannot
-           * originate mail at all. Claiming at the plan transition makes that
-           * spend track revenue instead.
+           * This transition used to claim a dedicated subdomain for every site
+           * in the org, on the reasoning that the spend should track revenue
+           * rather than signups. It does track revenue — and that is the
+           * problem, because revenue is what the platform is trying to grow
+           * while the provider's domain allowance is a bounded resource that
+           * grows only by purchase. The demand curve and the supply curve
+           * were tied to opposite things.
            *
-           * Here specifically because this is the one place the transition is
-           * OBSERVABLE, and the condition is already proof of a real change
-           * rather than one of Stripe's many re-deliveries of the same
-           * subscription.
-           *
-           * Fire-and-forget, and it must stay that way. A throw would fail the
-           * webhook, Stripe would retry, and the retry would re-run the billing
-           * mirror above — so a mail-provisioning hiccup would become a billing
-           * event replay. The console sweep is the backstop for anything this
-           * misses, which is what makes swallowing the error safe rather than
-           * merely convenient.
-           *
-           * Started through `Promise.resolve().then()` rather than called
-           * directly, because `.catch()` on the returned promise does NOT catch
-           * a SYNCHRONOUS throw — and the call is reached through a module
-           * boundary, so "it is an async function and cannot throw
-           * synchronously" is an assumption about someone else's file. A bad
-           * import or a partial mock makes it a `TypeError` at the call itself,
-           * which lands in the handler's outer catch and reports the whole
-           * delivery as half-applied. This wrapper is what makes the paragraph
-           * above true rather than merely intended.
+           * A merchant asks for one from the sending domains card instead. The
+           * upgrade already gives them what an upgrade should: the pool keeps
+           * carrying their transactional mail, and `customSendingDomain` now
+           * lets them send as a name they already own, which costs our zone
+           * nothing and gives their recipients their brand rather than ours.
            */
-          void Promise.resolve()
-            .then(() => claimOrgSendingDomains(String(orgId)))
-            .catch((error) => {
-              console.warn(
-                '[sending-domains] upgrade claim failed',
-                (error as { name?: string })?.name ?? 'unknown',
-              )
-            })
           // No `ledger.effect()` beside it, per AGL-1954's rule directly
           // above: this is a cache hint over HTTP, not a committed write, and
           // a hand-written claim would outlive the call it names. The org

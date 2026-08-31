@@ -478,7 +478,7 @@ Domain count is `O(1) + O(customers who want isolation)`, never `O(hosts)`:
 | --- | --- | --- | --- | --- |
 | **Shared pool** | Pooled across the sites on one member | 4 | **12** | Every site with no domain of its own. Transactional ONLY. |
 | **Customer-owned** | Fully the customer's | 1 each | **0** | Pro and above (`customSendingDomain`), for anyone who wants isolation and a name recipients recognize |
-| **Dedicated platform subdomain** | Fully the site's | 1 each | 3 each | Pro and above, provisioned on upgrade, **best-effort** |
+| **Dedicated platform subdomain** | Fully the site's | 1 each | 3 each | Pro and above, **requested by the merchant**, best-effort |
 
 The pool is flat at every scale — twelve records whether the platform has
 twelve sites or a hundred thousand. Customer-owned domains scale with
@@ -489,12 +489,27 @@ The dedicated platform subdomain is the one that must stay bounded. It is
 genuinely useful — reputation isolation with no DNS work for the merchant —
 and it is the only shape whose cost lands in our zone. It is therefore a
 **capacity-managed resource**, not an entitlement that scales: gated to Pro and
-above, claimed at the upgrade rather than at signup, and capped by
-`AGLYN_SENDING_DOMAIN_CAPACITY`. Past roughly a thousand of them the honest
-answer is to move merchants who want isolation onto their own domains, which is
-why customer-owned domains start at Pro rather than at Agency: they are the
-cheap shape, and gating the cheap shape most tightly made the expensive one the
-default at every tier that can send.
+above, capped by `AGLYN_SENDING_DOMAIN_CAPACITY`, and **claimed only when a
+merchant asks for one**.
+
+That last clause is what makes the count bounded rather than merely capped.
+Claiming at the upgrade transition kept the spend proportional to revenue,
+which sounds right and is the wrong curve: revenue is what the platform is
+trying to grow, while the provider's domain allowance grows only by purchase.
+At 100,000 hosts with 10% paying, an automatic claim wants 10,000 domains
+against roughly 1,095 of self-serve headroom — so the ceiling would bind, and
+past it a paying customer sold reputation isolation would quietly be pooled
+instead. Making the claim a request leaves demand proportional to the merchants
+who actually want an Aglyn-branded sending name, which is a fraction of a
+fraction, and it is a number nobody has to forecast because it is spent one
+deliberate decision at a time.
+
+It also puts the two options in front of the merchant in the right order.
+Customer-owned domains start at Pro rather than at Agency — they are the cheap
+shape, and gating the cheap shape most tightly made the expensive one the
+default at every tier that can send — so the card offers a domain you own
+first, and an issued subdomain as the answer for somebody who cannot publish
+DNS.
 
 **The subdomain is an optimization; the pool is the guarantee.** A site whose
 subdomain has not been provisioned — the ceiling reached, a zone write failed,
@@ -579,7 +594,13 @@ become `false` and the DKIM row should carry a `p=` value. If it stays true,
 Cloud Scheduler job. It is idempotent and safe to run at any time, but the
 first tick after `cloud/functions` is deployed is the one that turns every
 outstanding claim into a real domain object at the provider — so the plan's
-allowance has to cover the site count BEFORE that deploy, not after.
+allowance has to cover the OUTSTANDING CLAIMS before that deploy, not after.
+
+That is a number, not a forecast. The sweep finishes claims; it does not
+create them, and nothing else does either — a claim exists because a merchant
+asked for one. A dry run (`GET`, same route) reports `pending` beside `held`,
+`remaining` and `used`, so the size of the first tick is readable before it
+runs.
 
 `AGLYN_SENDING_DOMAIN_CAPACITY` is the backstop if it does not: the sweep
 stops at the ceiling, stores `at-capacity` on the records it could not

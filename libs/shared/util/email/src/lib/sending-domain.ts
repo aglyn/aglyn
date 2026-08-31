@@ -53,10 +53,10 @@
  *
  *   - A domain the CUSTOMER owns, unverified. An instruction of theirs that we
  *     would be ignoring. Refused.
- *   - A platform subdomain we issued, unverified. Not an instruction at all —
- *     we chose the name, wrote the records and pointed the site at it — so
- *     there is nothing to contradict, and everything that can leave it
- *     unfinished is ours to fix. Sends on the pool.
+ *   - A platform subdomain we issued, unverified. The merchant asked for a
+ *     domain; we chose the name, wrote the records and pointed the site at
+ *     it, so there is nothing of theirs to contradict and everything that can
+ *     leave it unfinished is ours to fix. Sends on the pool.
  *   - Nothing selected. Likewise no statement to contradict, and the site
  *     still has receipts to send. Sends on the pool, which is what the console
  *     has always told merchants happens.
@@ -235,12 +235,13 @@ export interface SendingDomainSelection {
    *
    * It decides what an UNVERIFIED selection means, which is the one place the
    * two kinds of domain must not be treated alike. A customer's own domain is
-   * an instruction: they told us what their recipients would see, and sending
-   * as anything else contradicts it. A platform subdomain is not an
-   * instruction at all — the platform picked the name, wrote the records and
-   * pointed the site at it, all without the merchant asking — so a subdomain
-   * that has not finished provisioning is our unfinished work and not the
-   * merchant's unfinished DNS. See {@link resolveSendingIdentity}.
+   * an instruction about the NAME: they published DNS for it and told us what
+   * their recipients would see, so sending as anything else contradicts them.
+   * A platform subdomain carries no such instruction even though the merchant
+   * asked for one — they asked for a domain of their own, and we picked the
+   * name, wrote the records and pointed the site at it. So a subdomain that
+   * has not finished provisioning is our unfinished work rather than their
+   * unfinished DNS. See {@link resolveSendingIdentity}.
    *
    * Carried on the selection rather than derived here because the apex lives
    * in `platform-sending-domain.ts`, which imports from this module; reading
@@ -848,16 +849,23 @@ export interface SendingIdentityRefusal {
  * backstop explains another.
  *
  * It names the remedy in both forms a merchant can actually reach — verify a
- * domain, or use the one their site is issued — because "not allowed" without
- * a next action is the refusal shape this module exists to avoid.
+ * domain of their own, or ask for one on our apex — because "not allowed"
+ * without a next action is the refusal shape this module exists to avoid.
+ *
+ * Neither is something the site already has. A dedicated subdomain is claimed
+ * when somebody asks for it rather than issued on an upgrade, so a message
+ * pointing at "the one this site is issued" would name a thing most sites do
+ * not have and give a merchant nothing to do about it. It names the SCREEN
+ * instead, where both remedies live and where the state of each is legible.
  */
 const SHARED_IDENTITY_MARKETING_MESSAGE =
   'Marketing email does not leave on the shared Aglyn address. That address ' +
   'carries receipts and password resets for every site using it, and one ' +
   'campaign’s complaint rate would be charged against all of them. Send ' +
-  'marketing from a domain of this site’s own — one you verify yourself, or ' +
-  'the one this site is issued. Emails → Sending says which of the two ' +
-  'this site has, and whether it has finished verifying.'
+  'marketing from a domain of this site’s own: at Emails → Sending, add a ' +
+  'domain you already own, or ask there for an Aglyn sending domain for this ' +
+  'site. Either one unblocks campaigns; the domain you own is the one your ' +
+  'recipients will recognize.'
 
 export interface SendingIdentityVerdict {
   /** Null whenever `refusal` is set. */
@@ -897,11 +905,12 @@ export interface SendingIdentityVerdict {
  * neither the shared identity nor the platform one is consulted inside it.
  *
  * Arm 2 is the same sentence read the other way. A platform subdomain is a
- * name WE chose, provisioned and pointed the site at; the merchant made no
- * statement for it to contradict, and everything that can leave one unverified
- * — the provider's domain allowance, a zone write, a sweep that has not run —
- * is ours rather than theirs. Refusing there would make the dedicated domain a
- * single point of failure for receipts on exactly the tiers that pay for it.
+ * name WE chose, provisioned and pointed the site at — the merchant asked for
+ * a domain, not for that name and not for a DNS state — so there is no
+ * statement of theirs to contradict, and everything that can leave one
+ * unverified is ours: the provider's domain allowance, a zone write, a sweep
+ * that has not run. Refusing there would make the dedicated domain a single
+ * point of failure for receipts on exactly the tiers that pay for it.
  *
  * Arms 4 and 5 are the site that has chosen nothing. It is not the same case
  * as arm 3 and must not get the same answer: there is no instruction to

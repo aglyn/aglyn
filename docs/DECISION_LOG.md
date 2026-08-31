@@ -92,6 +92,74 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-08-31 — A dedicated sending subdomain is requested, not issued
+
+- **Decided by:** the account owner — degrading to the pool at the ceiling is an improvement and not the same thing as scaling, so the demand curve moves rather than only the failure mode.
+- **Scope:** packaging
+- **Evidence:** three code paths claimed a platform subdomain with nobody asking — `provisionHost` at site creation, `claimOrgSendingDomains` from the billing webhook's plan transition, and `claimUnprovisionedHosts` from the console sweep. All three were gated on the plan, so demand for a bounded resource tracked paying customers. Resend's self-serve ceiling is 1,100 domains and five are used today.
+
+**No price and no entitlement value moves.** `customSendingDomain` and
+`DEDICATED_SENDING_DOMAIN_MIN_PLAN` are both unchanged; what changes is when a
+subdomain is claimed.
+
+### What the earlier entry got right, and what it did not fix
+
+Making an unverified platform subdomain fall back to the pool turned a ceiling
+from an outage into a degradation, which was worth doing on its own — a paying
+site refused every message, receipts included, between claim and verification.
+
+It did not make the count scale. `D` still grew automatically with every
+paying customer, so at 100,000 hosts with 10% paying the demand is 10,000
+domains against roughly 1,095 of headroom. The failure that leaves is a promise
+problem rather than an outage: customers past the ceiling are silently pooled
+after being sold reputation isolation, and nothing tells them or us which ones
+they are.
+
+### The asymmetry, applied one layer down
+
+A customer-owned domain costs the platform zero records in its own zone and no
+place in the re-verification sweep, and now starts at Pro. A platform subdomain
+costs a provider slot, three zone records and a permanent sweep entry — and
+gives the merchant **no branding benefit over a pool member**, only isolation.
+Handing out the expensive one automatically while the free one had to be found
+is the same inversion the entitlement change corrected a layer up.
+
+So the subdomain is offered rather than issued:
+
+- The three automatic claim paths are removed. `claimOrgSendingDomains` and
+  `claimUnprovisionedHosts` are deleted rather than gated, because both existed
+  only to claim without being asked.
+- `ensureHostSendingDomain` is renamed `requestHostSendingDomain` and takes a
+  required `requestedBy`. The rename is the structural half: `ensure…` invites
+  a defensive call, and a process has no honest value for `requestedBy`.
+- Pro's default is the pool for transactional mail, with a domain the merchant
+  owns as the promoted route to isolation and an issued subdomain as the answer
+  for somebody who cannot publish DNS.
+
+### The merchant is not left stuck
+
+Marketing still needs a domain of the site's own, so the refusal a Pro merchant
+meets now names both routes and points at the card, and the card carries the
+offer directly under the identity readout. Both were required: a refusal naming
+a control that is not on screen is the same dead end as no control at all.
+
+### The ceiling is watchable before it binds
+
+`atCapacity` alone is observable only once it has already cost something, and
+the remedy is a billing change plus a config deploy. The provisioning route now
+reports `remaining` and `used` as a `0`–`1` share alongside it, and the sweep
+warns from 80% spent — a share because deployments differ by two orders of
+magnitude, with the absolute count beside it because a share is unreadable at
+an allowance of 10.
+
+### The resulting curve
+
+`4 + R + C`, where `R` is subdomains merchants requested — bounded by the
+ceiling AND no longer growing with anything automatic — and `C` is customers
+who brought their own, which costs our zone nothing. Zone records are `12 + 3R`.
+Nothing in it is a function of host count or of paying-customer count.
+
+---
 ## 2026-08-31 — Agency is $1,299/mo and $1,049 annual, and the pin catches up to it
 
 - **Decided by:** the account owner, confirming the raise made under the authorization to fix tier margins — Agency was the worst margin on the ladder and the most underpriced against the field.

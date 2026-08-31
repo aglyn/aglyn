@@ -141,6 +141,24 @@ export interface SendingIdentityView {
   }[]
   canManage: boolean
   entitled: boolean
+  /**
+   * The OFFER of a platform sending domain — never the fact of having one,
+   * which `platformDomain` above answers.
+   *
+   * A dedicated subdomain is no longer issued on upgrade: it costs a provider
+   * domain slot and three records in Aglyn's own zone, so it is requested by
+   * somebody who wants it rather than handed to every paying site.
+   *
+   * Optional because a console deployment can be older than the field. A
+   * surface reading it must treat its absence as "no offer to show", never as
+   * "the offer was refused".
+   */
+  dedicated?: {
+    /** The plan carries one and this site has none. */
+    available: boolean
+    /** The name a request would most likely take. Not a reservation. */
+    proposed: string | null
+  }
 }
 
 /**

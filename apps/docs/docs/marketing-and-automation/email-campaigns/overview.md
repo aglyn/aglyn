@@ -134,6 +134,22 @@ going out on the shared address as before. A domain *you* own is your instructio
 what recipients will see, so until its records verify this site does not send at all
 rather than quietly sending as something else. Campaigns wait for either to finish.
 
+There are two ways to get a domain of this site's own, and the card offers both on the
+Pro plan and above:
+
+- **Add a domain you already own** — `news.yourshop.com`, or `yourshop.com` itself. Your
+  recipients see your name, and the reputation you build belongs to you wherever you go
+  next. It needs three DNS records published at your registrar.
+- **Ask Aglyn to issue this site one** — press **Use an Aglyn domain** and we set up
+  `yoursite.mail.aglyn.app` with nothing for you to publish. It unblocks campaigns and
+  gives this site a sending reputation of its own, separate from the shared pool. The
+  trade is the name: recipients see an Aglyn address rather than yours.
+
+Pick the first if you can publish DNS records. Pick the second if you cannot — an agency
+client whose domain somebody else administers, or a registrar you do not have access to.
+Neither is issued automatically, and a site with neither keeps sending account email on
+the shared address in the meantime.
+
 Add a domain and you are given the exact DNS records to publish — an authorization
 record, a signing key and a bounce-routing record. Publish them wherever your DNS is
 hosted, then press **Check DNS**. A domain has five things it can be telling you:

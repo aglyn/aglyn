@@ -97,6 +97,7 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
   const [addingBusy, setAddingBusy] = useState(false)
   const [newDomain, setNewDomain] = useState('')
   const [addError, setAddError] = useState('')
+  const [claimingDedicated, setClaimingDedicated] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -152,6 +153,45 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
         `${basePath}/sending/${encodeURIComponent(payload?.domain ?? domain)}`,
       )
   }, [call, view?.orgId, basePath, router, newDomain, addingBusy])
+
+  /**
+   * ASK FOR THE PLATFORM SUBDOMAIN.
+   *
+   * The second of the two ways out of the marketing refusal, and the one for a
+   * merchant who cannot publish DNS — an agency's client on a domain somebody
+   * else administers, or a site whose registrar access is a support ticket
+   * away. It is offered rather than issued because it spends a provider domain
+   * slot and three records in Aglyn's own zone, where a domain the merchant
+   * owns spends neither.
+   *
+   * Reloads rather than patching the view from the response. The claim moves
+   * three things at once — the site's selection, the org's domain list and the
+   * identity the send path resolves — and a surface that updated one of them
+   * from a response body would be the second opinion this card exists not to
+   * be.
+   */
+  const handleClaimDedicated = useCallback(async () => {
+    if (claimingDedicated) return
+    setClaimingDedicated(true)
+    const { response, payload } = await call({
+      path: 'sending-identity',
+      method: 'POST',
+      body: { hostId, action: 'request-dedicated' },
+    })
+    setClaimingDedicated(false)
+    if (!response.ok) {
+      return void notifyRef.current(
+        payload?.error ?? 'Could not set up a sending domain for this site',
+        { variant: 'warning' },
+      )
+    }
+    notifyRef.current(
+      `${payload?.selected} is being set up. Account email keeps sending ` +
+        'meanwhile, and campaigns can go out once it verifies.',
+      { variant: 'success' },
+    )
+    await load()
+  }, [call, hostId, claimingDedicated, load])
 
   const domains = view?.domains ?? []
 
@@ -286,6 +326,14 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
           The plan names come from the server, which derives them from the
           entitlement tables. A tier written in here is pricing copy that keeps
           rendering after the gate beneath it moves.
+
+          The one we provision carries an ACTION, and it is the only place in
+          the product that claims one. It used to arrive by itself — at site
+          creation, on the upgrade webhook, from a sweep — which made the
+          platform's domain count grow with paying customers rather than with
+          anybody's decision, against a provider allowance that grows only by
+          purchase. Offering it here is what makes the count something people
+          choose rather than something that happens.
          */}
         {view ? (
           <>
@@ -307,6 +355,30 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
                   'reputation on it is this site’s alone. Recipients see an ' +
                   'address on our domain rather than on yours.'}
             </Typography>
+            {/*
+              The action, beside the sentence that describes it rather than in
+              an alert of its own — a second box repeating the same trade would
+              be the surface arguing with itself about which option it prefers.
+
+              Only for a reader who can act on it, and only when the plan
+              carries one and this site has none. Somebody without
+              `org.settings` gets the role notice further down instead.
+             */}
+            {view.dedicated?.available && view.canManage ? (
+              <Button
+                size="small"
+                variant="outlined"
+                sx={{ alignSelf: 'flex-start' }}
+                disabled={claimingDedicated}
+                onClick={() => void handleClaimDedicated()}
+              >
+                {claimingDedicated
+                  ? 'Setting up…'
+                  : view.dedicated.proposed
+                    ? `Set up ${view.dedicated.proposed}`
+                    : 'Set up a domain for this site'}
+              </Button>
+            ) : null}
             <Typography variant="body2" color="text.secondary">
               {(view.customDomainPlan
                 ? 'A domain you already own. Sending as your own domain ' +

@@ -73,24 +73,40 @@
  * address every recipient of this site's mail sees is an `org.settings`
  * decision, and the composer, which is admin-or-editor, may only choose the
  * name in front of it.
+ *
+ * ## The dedicated subdomain is asked for HERE, and nowhere else
+ *
+ * `action: 'request-dedicated'` is the only path in the product that claims a
+ * platform sending subdomain. It is the one shape of sending identity that
+ * draws on a resource the platform cannot grow without buying more of it —
+ * a provider domain slot, three records in our own zone, and a permanent place
+ * in the re-verification sweep — while the shared pool is flat at any scale
+ * and a customer's own domain costs our zone nothing.
+ *
+ * So it is offered rather than issued. The `GET` reports it as an offer under
+ * `dedicated` for an entitled site that has none, which is what stops the
+ * option being invisible to the merchant who needs it: the marketing refusal
+ * names this screen, and this screen is where the two ways out of it live.
  */
 
 import { checkEntitlement, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
-  ensureHostSendingDomain,
   firebaseAdmin,
   getOrgForHost,
   isImpersonationSession,
   listSendingDomains,
   lockdownRefusal,
   memberHasOrgPermission,
+  orgHoldsDedicatedSendingDomain,
+  requestHostSendingDomain,
   resolveHostSendingIdentity,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import {
   DEFAULT_SENDING_LOCAL_PART,
   headerSafeText,
+  mailLabelCandidate,
   normalizeLocalPart,
   normalizeSendingDomain,
   platformSendingDomainFor,
@@ -306,13 +322,44 @@ async function handler(request: Request): Promise<Response> {
       ? records.find((entry) => entry.domain === platformDomain)
       : null
 
+    /*
+     * THE DEDICATED SUBDOMAIN AS AN OFFER, NOT AS A FACT.
+     *
+     * A site is no longer issued one on upgrade, so a surface that only
+     * reported the domain a site HAS would show an entitled workspace nothing
+     * at all — and the merchant would meet the marketing refusal with no idea
+     * that the thing it asks for is one click away on this screen.
+     *
+     * TWO FIELDS, and deliberately not a third saying whether the site has
+     * one. `platformDomain` above already answers that, and a second key
+     * carrying the same fact is a second place that decides what "has a
+     * domain" means — which is how a card comes to offer one to a site that
+     * already holds it.
+     *
+     * `proposed` is the name a request would MOST LIKELY take, derived the
+     * same way the claim derives it. It is not a reservation: a label already
+     * taken moves the claim to the next candidate, so the response to the
+     * request is what names the domain the site actually got. Showing it
+     * anyway is what lets somebody decide — an Aglyn-branded sending name is
+     * the trade this option asks them to accept, and it cannot be weighed
+     * unseen.
+     */
+    const dedicated = {
+      available:
+        !platformDomain && Boolean(orgId) && (await orgHoldsDedicatedSendingDomain(orgId)),
+      proposed:
+        platformSendingDomainFor(
+          mailLabelCandidate(String(hostSnapshot.get('subdomain') ?? ''), 1),
+        ) || null,
+    }
+
     const options: IdentityOption[] = []
     if (platformDomain) {
       options.push({
         value: platformDomain,
         from: `${localPart}@${platformDomain}`,
         // Selectable only once it verifies, exactly like a customer's own
-        // domain. Provisioning is automatic, not instantaneous.
+        // domain. Provisioning follows the request; it is not instant.
         selectable: platformRecord?.status === 'verified',
         status: platformRecord?.status ?? 'requested',
       })
@@ -398,6 +445,7 @@ async function handler(request: Request): Promise<Response> {
       })),
       canManage,
       entitled,
+      dedicated,
     })
   }
 
@@ -531,6 +579,100 @@ async function handler(request: Request): Promise<Response> {
     'needs a domain of this site’s own.'
 
   /*
+   * ASK FOR A DEDICATED SENDING DOMAIN — the only way one is ever claimed.
+   *
+   * A separate action rather than a side effect of choosing an identity,
+   * because it is the one operation on this route that spends a resource the
+   * platform cannot buy back: a slot in the provider's account-wide domain
+   * allowance, three records in our own zone, and a permanent place in the
+   * re-verification sweep. Three code paths used to spend it without anybody
+   * asking — site creation, the upgrade webhook and a sweep — which made the
+   * platform's domain count grow with paying customers rather than with
+   * anybody's decision.
+   *
+   * `requestedBy: 'merchant'` is honest for both callers reaching here. Staff
+   * arrive through impersonation, acting as the workspace and recorded as that
+   * session; a `staff` stamp here would name the role rather than the account,
+   * which is the less useful of the two and the one the impersonation log
+   * already carries.
+   */
+  if (String(body?.['action'] ?? '') === 'request-dedicated') {
+    const claim = await requestHostSendingDomain({
+      hostId,
+      orgId,
+      subdomain: String(hostSnapshot.get('subdomain') ?? ''),
+      requestedBy: 'merchant',
+    }).catch(() => null)
+
+    if (!claim?.domain) {
+      /*
+       * NAME THE REASON, WHICH IS ALMOST ALWAYS THE PLAN.
+       *
+       * `requestHostSendingDomain` refuses below the dedicated tier, so the
+       * common case is a site that is not entitled to a domain of its own
+       * rather than one whose provisioning is in flight. Telling such a
+       * merchant to "try again shortly" sends them to wait for something that
+       * is never coming, which is the shape of refusal this whole surface
+       * exists to avoid — so the plan case is separated from every other,
+       * which is ours and says so.
+       *
+       * Nothing about the site's mail is broken meanwhile: it keeps sending
+       * its receipts on the shared address, which is what makes this a
+       * refusal of a CHOICE rather than of a send.
+       *
+       * The tier is derived rather than written. A name typed into a refusal
+       * is pricing copy that keeps rendering after the gate beneath it moves.
+       */
+      const planned = claim?.error === 'plan-no-dedicated-domain'
+      return Response.json(
+        {
+          error: planned
+            ? dedicatedDomainPlan
+              ? `A sending domain of this site’s own comes with ${dedicatedDomainPlan}. ` +
+                'Until then this site sends its receipts and account email on ' +
+                'the shared address, and marketing email needs a domain of ' +
+                'its own.'
+              : 'This site’s plan does not carry a sending domain of its own. ' +
+                'It sends its receipts and account email on the shared ' +
+                'address meanwhile.'
+            : 'We could not set up a sending domain for this site just now. ' +
+              'Nothing has changed and account email is still sending — try ' +
+              'again shortly.',
+          reason: claim?.error ?? 'unknown',
+        },
+        { status: planned ? 403 : 409 },
+      )
+    }
+
+    /*
+     * The site is pointed at the new domain immediately, before any DNS
+     * exists. That is safe rather than premature: an unverified domain the
+     * PLATFORM issued resolves to the shared pool for transactional mail, so
+     * the site keeps sending throughout, and the moment the sweep verifies it
+     * the same field is already correct.
+     *
+     * A mailbox named in the same body is applied rather than refused. The
+     * pooled refusal above exists because a shared member's address is not one
+     * site's to name; this site now has a domain of its own, which is the
+     * condition that refusal is about.
+     */
+    await hostRef.set(
+      { sendingDomain: claim.domain, ...senderPatch() },
+      { merge: true },
+    )
+    const claimedMailbox = mailbox?.localPart || localPart
+    // `from` as well as its two halves, matching the selection branch below,
+    // so a surface reporting the new address reads one field rather than
+    // assembling one.
+    return Response.json({
+      selected: claim.domain,
+      localPart: claimedMailbox,
+      from: `${claimedMailbox}@${claim.domain}`,
+      created: claim.created,
+    })
+  }
+
+  /*
    * A BODY WITH NO `domain` KEY IS NOT A REQUEST TO CHANGE THE DOMAIN.
    *
    * Absent and empty part ways here. An empty `domain` has always meant "move
@@ -538,6 +680,12 @@ async function handler(request: Request): Promise<Response> {
    * the site sends AS must not be able to say that by accident: a site
    * sending as its own verified `acme.com` would have its selection reset the
    * first time somebody edited the sender name.
+   *
+   * BELOW THE REQUEST ACTION, and that order is load-bearing.
+   * `request-dedicated` names no domain either, so reaching this first would
+   * swallow it — the sender fields would be stored, a 200 returned carrying
+   * the selection the site already had, and nothing claimed. An explicit
+   * action is not the same thing as a body that did not mention the domain.
    */
   if (body?.['domain'] === undefined) {
     /*
@@ -562,92 +710,68 @@ async function handler(request: Request): Promise<Response> {
   }
 
   /*
-   * Clearing the selection moves this site back to ITS OWN provisioned
-   * domain — `{label}.mail.aglyn.app` — and never to the shared Aglyn one.
+   * Clearing the selection moves this site to the domain it was ISSUED if it
+   * has one, and to the shared pool if it has not. Never to `aglyn.com`.
    *
-   * Sending as `aglyn.com` is what this whole feature exists to stop: a
-   * site's list quality must not be charged against the domain the platform's
-   * own billing and account mail depends on.
+   * Sending as `aglyn.com` is what this whole feature exists to stop: a site's
+   * list quality must not be charged against the domain the platform's own
+   * billing and account mail depends on.
    *
-   * Clearing to the shared pool instead would be a quiet demotion. The pool
-   * carries transactional mail only, so a site moved there stops being able
-   * to send campaigns — which is not what "stop using our own domain" asks
-   * for, and not something to do to a site whose plan entitles it to a name
-   * of its own.
+   * WHICH OF THE TWO IS A READ, NOT A CLAIM. This branch used to call the
+   * claim defensively, so a site with no issued domain got one here. That made
+   * "stop using our own domain" the cheapest route to the provider's domain
+   * ceiling, reached through a control whose label promises the opposite of
+   * acquiring something — and it spent a slot and three zone records on a
+   * merchant who had just said they wanted less, not more.
    *
-   * `ensureHostSendingDomain` rather than a bare read, so a site that somehow
-   * has no claim gets one here instead of being left on the pool. It is
-   * idempotent, so a site that already has one keeps exactly the name it has,
-   * and it refuses below the dedicated tier — which the 409 below explains.
+   * Clearing to the pool is safe in a way it was not before: a site with no
+   * sending domain sends its transactional mail pooled rather than refusing
+   * everything, so an admin doing this cannot switch their receipts off.
+   *
+   * What they DO lose is marketing, and that must not be silent. The response
+   * says so, and the identity summary the surface reloads says it again —
+   * which is the difference between a demotion somebody chose and one that
+   * happened to them. Getting it back is one request away, on this same route.
    */
   if (!requested || requested === 'platform') {
-    const provisioned = await ensureHostSendingDomain({
-      hostId,
-      orgId,
-      subdomain: String(hostSnapshot.get('subdomain') ?? ''),
-    }).catch(() => null)
-
-    if (!provisioned?.domain) {
-      /*
-       * NAME THE REASON, WHICH IS ALMOST ALWAYS THE PLAN.
-       *
-       * `ensureHostSendingDomain` refuses below the dedicated tier, so the
-       * common case here is a site that is not entitled to a domain of its
-       * own rather than one whose provisioning is in flight. Telling such a
-       * merchant to "try again shortly" sends them to wait for something that
-       * is never coming, which is the shape of refusal this whole surface
-       * exists to avoid.
-       *
-       * Nothing about the site's mail is broken meanwhile: it keeps sending
-       * its receipts on the shared address, which is what makes this a
-       * refusal of a CHOICE rather than of a send.
-       */
-      return Response.json(
-        {
-          /*
-           * A chosen mailbox is refused for its own reason, which is about
-           * the pool rather than the plan: the address on a shared member is
-           * where every site on it gets its bounces back, so it is not one
-           * site's to name. Everything else answers with the plan that
-           * carries a domain of the site's own.
-           */
-          error: mailbox?.localPart
-            ? POOLED_MAILBOX_REFUSAL
-            : dedicatedDomainPlan
-              ? `A sending domain of this site’s own comes with ${dedicatedDomainPlan}. ` +
-                'Until then this site sends its receipts and account email on ' +
-                'the shared address, and marketing email needs a domain ' +
-                'of its own.'
-              : 'This site does not have a sending domain of its own, so it ' +
-                'cannot be moved back to one. It sends its receipts and ' +
-                'account email on the shared address meanwhile.',
-        },
-        { status: 409 },
-      )
-    }
+    const issued = platformSendingDomainFor(
+      String(hostSnapshot.get('sendingLabel') ?? ''),
+    )
 
     /*
-     * The mailbox SURVIVES a change of domain, and is only rewritten when the
-     * body names one.
-     *
-     * It used to be deleted here, which made "stop using our own domain" also
-     * mean "and go back to sending as hello@" — two decisions taken by one
-     * control, one of them silently. Which mailbox a site sends as and which
-     * domain it sends on are set from different places and answer different
-     * questions, so moving one leaves the other where its owner put it.
+     * A mailbox cannot be stored on the way to the pool, for the reason the
+     * refusal itself gives: a shared member's address is where every site on
+     * it gets its bounces back, so it is not one site's to name. Refused here
+     * as well as at the mailbox-only branch, because a body that clears the
+     * domain and sets a mailbox in one call reaches this one instead.
      */
+    if (mailbox?.localPart && !issued) {
+      return Response.json({ error: POOLED_MAILBOX_REFUSAL }, { status: 409 })
+    }
+
     await hostRef.set(
-      { sendingDomain: provisioned.domain, ...senderPatch() },
+      {
+        sendingDomain: issued
+          ? issued
+          : firebaseAdmin.firestore.FieldValue.delete(),
+        ...senderPatch(),
+      },
       { merge: true },
     )
-    // `from` as well as its two halves, matching the selection branch below,
-    // so a surface reporting the new address reads one field rather than
-    // assembling one — and cannot assemble a different address from the one
-    // the send path will use.
+    const clearedMailbox = mailbox?.localPart || localPart
     return Response.json({
-      selected: provisioned.domain,
-      localPart: mailbox?.localPart || localPart,
-      from: `${mailbox?.localPart || localPart}@${provisioned.domain}`,
+      selected: issued || '',
+      localPart: clearedMailbox,
+      ...(issued
+        ? { from: `${clearedMailbox}@${issued}` }
+        : {
+            pooled: true,
+            warning:
+              'This site now sends on the shared Aglyn address. Receipts and ' +
+              'account email keep going out; marketing email does not leave ' +
+              'on that address, so campaigns are blocked until this site has ' +
+              'a domain of its own again.',
+          }),
     })
   }
 

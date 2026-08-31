@@ -47,16 +47,12 @@
  */
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
-import {
-  claimUnprovisionedHosts,
-  listPendingSendingDomains,
-} from '@aglyn/tenant-data-admin'
+import { listPendingSendingDomains } from '@aglyn/tenant-data-admin'
 import { isCronAuthorized, isCronDryRun } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
 import {
   provisionPendingSendingDomains,
   readSendingDomainCapacity,
-  sendingDomainCapacity,
 } from '../../../../utils/server/provision-sending-domain'
 
 export const dynamic = 'force-dynamic'
@@ -97,7 +93,6 @@ async function handler(request: Request): Promise<Response> {
   if (method === 'POST') await recordCronBeat('provision-sending-domains')
 
   const dryRun = isCronDryRun({ method, query, body })
-  const capacity = sendingDomainCapacity()
 
   try {
     if (dryRun) {
@@ -115,9 +110,7 @@ async function handler(request: Request): Promise<Response> {
       const ceiling = await readSendingDomainCapacity()
       return Response.json({
         dryRun: true,
-        capacity,
-        held: ceiling.held,
-        atCapacity: ceiling.atCapacity,
+        ...ceiling,
         pending: pending.length,
         // Domains only. A dry run must not print a DKIM key, and there is no
         // reason for one to leave this process at all.
@@ -126,24 +119,20 @@ async function handler(request: Request): Promise<Response> {
     }
 
     /*
-     * Claim first, then provision.
+     * IT FINISHES CLAIMS; IT DOES NOT CREATE THEM.
      *
-     * The BACKSTOP, not the schedule. A dedicated domain is claimed when an org
-     * reaches a plan that carries one, from the billing webhook, which is where
-     * the transition is observable. This sweep catches what that signal cannot:
-     * a dropped webhook, a plan set by hand, a site created under an org that
-     * was already paying.
+     * This used to claim a domain for any entitled site that had none, as a
+     * backstop for a dropped upgrade webhook. Neither exists any more: a
+     * dedicated subdomain is requested by a person from the sending domains
+     * card, so there is no automatic signal to be a backstop for, and a sweep
+     * that invented claims would be the largest automatic draw on the ceiling
+     * of the three that were removed.
      *
-     * It no longer claims for every host it sees. A site whose plan carries no
-     * dedicated domain is skipped and reported as `skippedUnentitled` — it is
-     * not failing, and it is not waiting for anything. Its mail leaves on the
-     * shared pool, which needs no per-site provisioning at all.
-     *
-     * Before the provision step rather than after, so a site claimed on this
-     * run is provisioned on this run instead of waiting for the next one.
+     * What is left is the half that was always vendor work: take each claim a
+     * merchant made and turn it into a domain that can sign.
      */
-    const claims = await claimUnprovisionedHosts(BATCH)
     const summary = await provisionPendingSendingDomains(BATCH)
+    const ceiling = await readSendingDomainCapacity()
 
     /*
      * The ceiling is the one outcome an operator has to act on, and it is
@@ -160,21 +149,40 @@ async function handler(request: Request): Promise<Response> {
      */
     if (summary.atCapacity) {
       console.error(
-        `[provision-sending-domains] AT CAPACITY (${capacity}). New sites ` +
-          'keep sending on the shared pool and stay there: they get no ' +
-          'dedicated domain, so their reputation is pooled with every other ' +
-          'unprovisioned site. Raise AGLYN_SENDING_DOMAIN_CAPACITY once the ' +
-          'provider allowance covers it, or move merchants onto domains they ' +
-          'own — see the per-domain line for which lever pulls on what.',
+        `[provision-sending-domains] AT CAPACITY (${ceiling.held}/` +
+          `${ceiling.capacity}). Sites that asked for a dedicated domain keep ` +
+          'sending on the shared pool and stay there, so their reputation is ' +
+          'pooled with every other unprovisioned site. Raise ' +
+          'AGLYN_SENDING_DOMAIN_CAPACITY once the provider allowance covers ' +
+          'it, or move merchants onto domains they own — see the per-domain ' +
+          'line for which lever pulls on what.',
+      )
+    } else if (ceiling.low) {
+      /*
+       * THE WARNING THAT ARRIVES IN TIME TO ACT ON.
+       *
+       * The at-capacity line above is the moment it is already too late to
+       * avoid: sites that asked for isolation are being pooled instead. Buying
+       * the provider's domain add-on is a billing change plus a configuration
+       * deploy, which is hours at best, so a ceiling that is only observable
+       * at the ceiling cannot be met without a gap.
+       *
+       * A warning rather than an error, because nothing is wrong yet. It is
+       * emitted on every run inside the band rather than once on crossing it:
+       * a single edge-triggered line is one an operator has to have been
+       * watching for, and this is read from a log search after somebody
+       * noticed something else.
+       */
+      console.warn(
+        `[provision-sending-domains] domain headroom low: ${ceiling.held}/` +
+          `${ceiling.capacity} used, ${ceiling.remaining} left. Raise ` +
+          'AGLYN_SENDING_DOMAIN_CAPACITY before it runs out — past it, a ' +
+          'merchant who asks for a dedicated domain silently keeps the pooled ' +
+          'one instead.',
       )
     }
 
-    return Response.json({
-      ...summary,
-      claimed: claims.claimed,
-      skippedUnentitled: claims.skippedUnentitled,
-      capacity,
-    })
+    return Response.json({ ...summary, ...ceiling })
   } catch (error) {
     // Never a provider body: an error the vendor wrote can carry the request
     // it is complaining about, and the request carries the credential.

@@ -54,12 +54,15 @@ const mockState: {
   plan: string
   domains: Array<Record<string, unknown>>
   written: Record<string, unknown> | null
+  /** Every call that reached the claim, so "nothing claims by itself" is testable. */
+  claims: Array<Record<string, unknown>>
 } = {
   hostRole: 'admin',
   canManage: true,
   plan: 'pro',
   domains: [],
   written: null,
+  claims: [],
 }
 
 jest.mock('@aglyn/aglyn/server', () => ({
@@ -112,17 +115,49 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: mockState.plan } }),
   listSendingDomains: async () => mockState.domains,
   /*
-   * The site's own provisioned domain. Built through the REAL naming
-   * function, so "clearing the selection returns the site to its own domain"
-   * is a statement about the name the product would actually issue rather
-   * than about a literal written here.
+   * Whether the org's PLAN carries a dedicated subdomain, which is what
+   * decides whether the read offers one. Resolved from the real ladder against
+   * `mockState.plan`, so the offer appears for the tiers that carry it and for
+   * no others without a second list of plan names in this file.
    */
-  ensureHostSendingDomain: async (options: Record<string, any>) => {
+  orgHoldsDedicatedSendingDomain: async () => {
+    const aglyn = jest.requireActual(
+      '@aglyn/aglyn/app-utils/dedicated-sending-domain',
+    )
+    return aglyn.planHoldsDedicatedSendingDomain(mockState.plan)
+  },
+  /*
+   * The claim, recorded rather than performed, and named through the REAL
+   * naming function so what the route answers with is the name the product
+   * would actually issue rather than a literal written here.
+   *
+   * It records that it was CALLED, which is what the automatic-provisioning
+   * assertions read: the guarantee those protect is that nothing but the
+   * request action reaches this.
+   */
+  requestHostSendingDomain: async (options: Record<string, any>) => {
+    mockState.claims.push(options)
+    const aglyn = jest.requireActual(
+      '@aglyn/aglyn/app-utils/dedicated-sending-domain',
+    )
+    if (!aglyn.planHoldsDedicatedSendingDomain(mockState.plan)) {
+      return {
+        domain: null,
+        label: null,
+        created: false,
+        error: 'plan-no-dedicated-domain',
+      }
+    }
     const email = jest.requireActual('@aglyn/shared-util-email')
     const domain = email.platformSendingDomainFor(
-      String(mockHostDoc['sendingLabel'] ?? options?.subdomain ?? ''),
+      email.mailLabelCandidate(String(options?.subdomain ?? ''), 1),
     )
-    return { domain: domain || null, label: null, created: false, error: null }
+    return {
+      domain: domain || null,
+      label: null,
+      created: Boolean(domain),
+      error: domain ? null : 'no-label',
+    }
   },
   memberHasOrgPermission: async () => mockState.canManage,
   resolveOrgMembership: async () => ({ member: { role: 'admin' } }),
@@ -151,6 +186,19 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 }))
 
 import { GET, POST } from '../app/api/email/sending-identity/route'
+import { DEDICATED_SENDING_DOMAIN_MIN_PLAN } from '@aglyn/aglyn/app-utils/dedicated-sending-domain'
+import { PLAN_LABELS } from '@aglyn/aglyn'
+
+/**
+ * The tier the refusal should name, DERIVED the way the route derives it.
+ *
+ * Asserting the literal "Pro" would be the same defect the route was changed
+ * to avoid: pricing copy pinned in a place that keeps rendering after the gate
+ * beneath it moves. This reads the same table the gate does, so a re-cut of
+ * the dedicated floor moves the expectation with it — and a route that stopped
+ * naming a tier at all still fails.
+ */
+const DEDICATED_PLAN_LABEL = PLAN_LABELS[DEDICATED_SENDING_DOMAIN_MIN_PLAN]
 
 const AUTH = { authorization: 'Bearer token' }
 const URL_BASE = 'https://app.aglyn.com/api/email/sending-identity'
@@ -182,6 +230,7 @@ beforeEach(() => {
   mockState.canManage = true
   mockState.plan = 'pro'
   mockState.written = null
+  mockState.claims = []
   mockState.domains = [
     { domain: 'acme.com', status: 'verified' },
     { domain: 'beta.com', status: 'records-issued', lastMissing: ['TXT:send.beta.com'] },
@@ -347,21 +396,18 @@ describe('a selection is only accepted for a verified domain', () => {
   })
 
   /**
-   * Clearing the selection returns the site to ITS OWN domain, never to the
-   * shared Aglyn one and never to nothing at all.
+   * Clearing the selection returns the site to the domain it was ISSUED,
+   * never to the shared Aglyn one.
    *
-   * It used to delete both keys, which meant "send as Aglyn". That is the
-   * coupling this feature exists to break. Deleting them NOW would be worse
-   * still: a site with no sending domain refuses every message, so an admin
-   * choosing "stop using our own domain" would silently switch their receipts
-   * off.
+   * It used to delete both keys, which meant "send as `aglyn.com`". That is
+   * the coupling this feature exists to break.
    *
    * The MAILBOX is left where its owner put it. Which mailbox a site sends as
    * and which domain it sends on are set from different controls and answer
    * different questions, so moving the domain must not also rename the
    * address — that was one control silently taking two decisions.
    */
-  it('returns the site to its own provisioned domain, not to aglyn.com', async () => {
+  it('returns the site to its own issued domain, not to aglyn.com', async () => {
     mockHostDoc = { subdomain: 'acme', sendingLabel: 'acme' }
 
     const response = await write({ domain: 'platform' })
@@ -518,5 +564,200 @@ describe('choosing the mailbox this site sends as', () => {
 
     expect(response.status).toBe(200)
     expect(mockState.written.sendingFromName).toBe('__delete__')
+  })
+
+  /**
+   * A SITE THAT WAS NEVER ISSUED ONE CLEARS TO THE POOL, AND CLAIMS NOTHING.
+   *
+   * Clearing is somebody stepping back from a choice. Answering it by spending
+   * a provider domain slot and three zone records would make "stop using our
+   * own domain" the cheapest route to the ceiling — reached through a control
+   * whose label promises the opposite of acquiring something.
+   *
+   * It is safe to clear to nothing now because a site with no sending domain
+   * sends its transactional mail pooled rather than refusing everything, which
+   * is the property that used to make this branch claim defensively.
+   */
+  it('clears to the pool for a site with no issued domain, and claims none', async () => {
+    mockHostDoc = { subdomain: 'acme' }
+
+    const response = await write({ domain: 'platform' })
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(mockState.written.sendingDomain).toBe('__delete__')
+    expect(mockState.claims).toEqual([])
+    /*
+     * AND IT SAYS WHAT WAS LOST.
+     *
+     * Clearing to the pool stops campaigns, because marketing does not leave
+     * on a shared address. That is a real demotion and the merchant chose it;
+     * what it must not be is silent, which is the whole reason this branch is
+     * allowed to clear instead of quietly claiming a domain to avoid the
+     * conversation.
+     */
+    expect(body.pooled).toBe(true)
+    expect(body.warning).toMatch(/campaigns are blocked/i)
+    expect(body.warning).toMatch(/receipts/i)
+  })
+
+  /**
+   * A mailbox cannot ride along to the pool. A shared member's address is
+   * where every site on it gets its bounces back, so it is not one site's to
+   * name — and a body that clears the domain and renames the mailbox in one
+   * call reaches this branch rather than the mailbox-only one.
+   */
+  it('refuses a mailbox chosen on the way to the pool', async () => {
+    mockHostDoc = { subdomain: 'acme' }
+
+    const response = await write({ domain: 'platform', localPart: 'sales' })
+
+    expect(response.status).toBe(409)
+    expect(mockState.written).toBeNull()
+    expect(mockState.claims).toEqual([])
+  })
+})
+
+/*==========================================
+  The dedicated subdomain is asked for, never issued
+==========================================*/
+
+/**
+ * THE ONLY PATH THAT SPENDS A PROVIDER DOMAIN SLOT.
+ *
+ * A platform subdomain costs a slot in the provider's account-wide allowance,
+ * three records in Aglyn's own zone and a permanent place in the
+ * re-verification sweep — where a domain the merchant owns costs the zone
+ * nothing and the pool costs nothing per site at all. It used to be claimed at
+ * site creation, at the billing webhook's upgrade transition, and by a sweep;
+ * it is now claimed here and nowhere else.
+ */
+describe('a dedicated sending domain is requested, not issued', () => {
+  it('claims one for an entitled site and points the site at it', async () => {
+    mockHostDoc = { subdomain: 'acme' }
+
+    const response = await write({ action: 'request-dedicated' })
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.selected).toBe('acme.mail.aglyn.app')
+    expect(body.from).toBe('hello@acme.mail.aglyn.app')
+    expect(mockState.claims).toHaveLength(1)
+    expect(mockState.claims[0]).toMatchObject({ requestedBy: 'merchant' })
+    // Pointed at it immediately, before any DNS exists. Safe because an
+    // unverified PLATFORM domain resolves to the pool for transactional mail,
+    // so the site keeps sending throughout.
+    expect(mockState.written.sendingDomain).toBe('acme.mail.aglyn.app')
+    // And the mailbox is not reset by acquiring a domain. Which mailbox a
+    // site sends as and which domain it sends on are different decisions.
+    expect(mockState.written.sendingLocalPart).toBeUndefined()
+  })
+
+  /**
+   * A mailbox named in the same body IS applied, unlike on the way to the
+   * pool: the refusal there is about a shared member's address not being one
+   * site's to name, and this site now has a domain of its own.
+   */
+  it('applies a mailbox chosen in the same request', async () => {
+    mockHostDoc = { subdomain: 'acme' }
+
+    const response = await write({
+      action: 'request-dedicated',
+      localPart: 'sales',
+    })
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.from).toBe('sales@acme.mail.aglyn.app')
+    expect(mockState.written.sendingLocalPart).toBe('sales')
+  })
+
+  /**
+   * The plan refusal is named apart from every other failure, because it is
+   * the only one the reader can act on — and it says what happens meanwhile,
+   * because a merchant reading "not on your plan" about their mail needs to
+   * know their receipts are still going out.
+   */
+  it.each(['free', 'starter'])('refuses a %s org, and says mail continues', async (plan) => {
+    mockState.plan = plan
+    mockHostDoc = { subdomain: 'acme' }
+
+    const response = await write({ action: 'request-dedicated' })
+    const { error } = await response.json()
+
+    expect(response.status).toBe(403)
+    expect(error).toContain(DEDICATED_PLAN_LABEL)
+    // And it says the mail is still going out, because a merchant reading
+    // "not on your plan" about their email needs to know their receipts are
+    // not what was refused.
+    expect(error).toMatch(/receipts and account email/i)
+    expect(mockState.written).toBeNull()
+  })
+
+  /** Writing this key is an org-admin action, exactly like choosing one. */
+  it('refuses a site admin who is not an org admin', async () => {
+    mockState.canManage = false
+    mockHostDoc = { subdomain: 'acme' }
+
+    expect((await write({ action: 'request-dedicated' })).status).toBe(403)
+    expect(mockState.claims).toEqual([])
+  })
+
+  /**
+   * THE CONTROL FOR AN AUTOMATIC CLAIM.
+   *
+   * Every other write this route accepts must reach the claim ZERO times. If
+   * provisioning is ever hung off one of them again — the way it was hung off
+   * creation, the upgrade webhook and the sweep — this is the assertion that
+   * fails, and it fails without anybody having to think of the specific
+   * caller.
+   */
+  it('claims nothing on any other write', async () => {
+    mockHostDoc = { subdomain: 'acme', sendingLabel: 'acme' }
+
+    await write({ domain: 'acme.com', localPart: 'hello' })
+    await write({ domain: 'platform' })
+    await write({ domain: 'beta.com' })
+    await write({ domain: 'somebody-else.com' })
+
+    expect(mockState.claims).toEqual([])
+  })
+
+  /**
+   * The read OFFERS it, which is what stops the option being invisible. A
+   * merchant meeting the marketing refusal is told to come to this card; an
+   * entitled site with no domain has to find something here to act on.
+   */
+  it('offers one on the read for an entitled site that has none', async () => {
+    mockHostDoc = { subdomain: 'acme' }
+
+    const body = await (await read()).json()
+
+    expect(body.dedicated.available).toBe(true)
+    expect(body.dedicated.proposed).toBe('acme.mail.aglyn.app')
+    // `platformDomain` is the one place that says whether the site HAS one,
+    // and it says no. A second key carrying the same fact is how a card comes
+    // to offer a domain to a site that already holds it.
+    expect(body.platformDomain).toBe('')
+    // Offering is not claiming.
+    expect(mockState.claims).toEqual([])
+  })
+
+  it.each(['free', 'starter'])('offers nothing to a %s org', async (plan) => {
+    mockState.plan = plan
+    mockHostDoc = { subdomain: 'acme' }
+
+    const body = await (await read()).json()
+
+    expect(body.dedicated.available).toBe(false)
+  })
+
+  it('stops offering once the site has one', async () => {
+    mockHostDoc = { subdomain: 'acme', sendingLabel: 'acme' }
+
+    const body = await (await read()).json()
+
+    expect(body.dedicated.available).toBe(false)
+    expect(body.platformDomain).toBe('acme.mail.aglyn.app')
   })
 })

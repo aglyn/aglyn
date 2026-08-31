@@ -106,6 +106,9 @@ jest.mock('@aglyn/shared-ui-jsx/components/navigation-drawer.component', () => (
 /** What the sending-identity route reports, staged per case. */
 let identity: Record<string, unknown> = {}
 
+/** Every body this render POSTed, so a claim cannot happen unnoticed. */
+const posted: Record<string, unknown>[] = []
+
 beforeEach(() => {
   pushed.length = 0
   /*
@@ -138,13 +141,22 @@ beforeEach(() => {
     domains: [],
     canManage: true,
     entitled: true,
+    dedicated: { available: true, proposed: 'acme.mail.aglyn.app' },
   }
-  ;(global as any).fetch = jest.fn(async (url: string) => ({
-    ok: true,
-    status: 200,
-    json: async () =>
-      String(url).includes('sending-identity') ? identity : { domains: [] },
-  }))
+  posted.length = 0
+  ;(global as any).fetch = jest.fn(async (url: string, init?: any) => {
+    if (init?.method === 'POST') posted.push(JSON.parse(init.body))
+    return {
+      ok: true,
+      status: 200,
+      json: async () =>
+        init?.method === 'POST'
+          ? { selected: 'acme.mail.aglyn.app', created: true }
+          : String(url).includes('sending-identity')
+            ? identity
+            : { domains: [] },
+    }
+  })
 })
 
 const mount = async () => {
@@ -304,5 +316,124 @@ describe('navigating to one domain', () => {
     // Without this, a base that ended in `/sending` would make the assertion
     // above pass against the very bug it exists to catch.
     expect(BASE_PATH.endsWith('/sending')).toBe(false)
+  })
+})
+
+/*==========================================
+  The dedicated domain is offered, not issued
+==========================================*/
+
+/**
+ * WHERE THE MARKETING REFUSAL SENDS A MERCHANT WHO CANNOT PUBLISH DNS.
+ *
+ * A platform subdomain is no longer handed to every paying site — it spends a
+ * provider domain slot and three records in Aglyn's own zone, so it is asked
+ * for. Which puts a burden on this card that did not exist while it arrived by
+ * itself: a merchant who meets "marketing needs a domain of this site's own"
+ * has to find something here to act on, and "Add domain" is only one of the
+ * two ways out. Somebody whose registrar access is a support ticket away needs
+ * the other one.
+ */
+describe('the offer of an Aglyn sending domain', () => {
+  it('offers one to an entitled site that has none', async () => {
+    await mount()
+
+    // Named on the control itself, because an Aglyn-branded sending address is
+    // the trade this option asks a merchant to accept and it cannot be weighed
+    // unseen.
+    expect(
+      screen.getByRole('button', { name: /Set up acme\.mail\.aglyn\.app/i }),
+    ).toBeTruthy()
+  })
+
+  /**
+   * The trade is stated in BOTH directions on the same screen. An offer that
+   * only said "no records to publish" would read as the better option, and it
+   * is the one that costs the platform a slot and the merchant their brand.
+   */
+  /**
+   * The offer sits beside the sentence that states its cost, rather than in an
+   * alert of its own repeating it. An action whose trade-off is a scroll away
+   * is an action taken without the trade-off.
+   */
+  it('sits beside the sentence naming what it costs', async () => {
+    await mount()
+
+    expect(
+      screen.getByText(/Recipients see an address on our domain rather than on yours/i),
+    ).toBeTruthy()
+    // And the other option's cost is stated too, so the two are a choice
+    // rather than a recommendation.
+    expect(screen.getByText(/The trade is the DNS work/i)).toBeTruthy()
+  })
+
+  it('asks for one, and asks the route rather than assuming', async () => {
+    await mount()
+
+    await act(async () => {
+      screen
+        .getByRole('button', { name: /Set up acme\.mail\.aglyn\.app/i })
+        .click()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    expect(posted).toContainEqual({
+      hostId: 'host-1',
+      action: 'request-dedicated',
+    })
+  })
+
+  /**
+   * NOTHING IS CLAIMED BY RENDERING. The whole point of the change behind this
+   * card is that a domain is spent when somebody decides to spend it, and a
+   * surface that requested one on mount would reintroduce exactly the
+   * automatic draw that was removed from site creation and the upgrade
+   * webhook.
+   */
+  it('claims nothing until the button is pressed', async () => {
+    await mount()
+
+    expect(posted).toEqual([])
+  })
+
+  it('offers nothing once the site already has one', async () => {
+    identity = {
+      ...identity,
+      platformDomain: 'acme.mail.aglyn.app',
+      dedicated: { available: false, proposed: 'acme.mail.aglyn.app' },
+    }
+
+    await mount()
+
+    expect(screen.queryByRole('button', { name: /Set up/i })).toBeNull()
+    // The sentence still names the domain it has, so the reader is told what
+    // this site sends on rather than simply shown nothing.
+    expect(screen.getByText(/This site has one — acme\.mail\.aglyn\.app/)).toBeTruthy()
+  })
+
+  it('offers nothing to a reader who could not act on it', async () => {
+    identity = { ...identity, canManage: false }
+
+    await mount()
+
+    // The notice about who CAN is what they get instead.
+    expect(screen.queryByRole('button', { name: /Set up/i })).toBeNull()
+    expect(screen.getByText(/needs the organization admin role/i)).toBeTruthy()
+  })
+
+  /**
+   * A console can be newer than the route it is talking to. An absent
+   * `dedicated` must read as "no offer to show" rather than as an offer with
+   * an undefined name in it.
+   */
+  it('shows nothing when the route did not report the field', async () => {
+    identity = { ...identity, dedicated: undefined }
+
+    await mount()
+
+    expect(screen.queryByRole('button', { name: /Set up/i })).toBeNull()
+    // The explainer still renders — it is prose about the two options and does
+    // not depend on the offer being available.
+    expect(screen.getByText('Two ways to get one')).toBeTruthy()
   })
 })
