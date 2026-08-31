@@ -71,6 +71,12 @@
       "@aglyn/plugins-events-calendar/*": [
         "../../libs/plugins/events-calendar/src/lib/*"
       ],
+      "@aglyn/plugins-forms": [
+        "../../libs/plugins/forms/src/index.ts"
+      ],
+      "@aglyn/plugins-forms/*": [
+        "../../libs/plugins/forms/src/lib/*"
+      ],
       "@aglyn/plugins-inbox": [
         "../../libs/plugins/inbox/src/index.ts"
       ],

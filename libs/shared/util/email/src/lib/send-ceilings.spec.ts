@@ -27,22 +27,19 @@
 
 import {
   EMAIL_CEILING_MONTH_HOURS,
+  EMAIL_MAX_AUDIENCE_PER_SEND,
   EMAIL_MAX_RECIPIENTS_PER_SEND,
+  EMAIL_MAX_SEND_BATCHES,
   EMAIL_ORG_HOURLY_SHARE,
   EMAIL_ORG_HOURLY_SHARE_MAX,
   EMAIL_ORG_HOURLY_SHARE_MIN,
+  campaignBatchPlan,
   deliverableMonthlyCeiling,
   describeEmailCeilings,
   emailSendHeadroom,
   normalizeOrgHourlyShare,
-  orgHourlyCampaignCeiling,
-} from './send-ceilings'
-import {
-  EMAIL_MAX_AUDIENCE_PER_SEND,
-  EMAIL_MAX_RECIPIENTS_PER_SEND,
-  EMAIL_MAX_SEND_BATCHES,
-  campaignBatchPlan,
   orgDailyCampaignCeiling,
+  orgHourlyCampaignCeiling,
 } from './send-ceilings'
 import { EMAIL_SEND_RATE_DEFAULT_PER_HOUR } from './send-rate'
 /*

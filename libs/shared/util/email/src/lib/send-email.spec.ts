@@ -775,8 +775,10 @@ describe('whose mail is this', () => {
       context: 'receipt',
     })
 
-    expect(result.sent).toBe(false)
-    expect(result.reason).toBe('unverified-domain')
+    expect(result).toMatchObject({
+      sent: false,
+      reason: 'unverified-domain',
+    })
     // Nothing reached the wire. A refusal that still sent would be the whole
     // bug wearing a false negative.
     expect(fetchMock).not.toHaveBeenCalled()

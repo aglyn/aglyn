@@ -17,10 +17,9 @@
 
 import { createHash } from 'crypto'
 import {
+  UNSUBSCRIBE_SUPPRESSION_REASON,
   emailSuppressionKey,
   filterSendableForHost,
-  suppressEmail,
-  UNSUBSCRIBE_SUPPRESSION_REASON,
   filterSuppressedEmails,
   filterTopicSendable,
   isEmailSuppressed,

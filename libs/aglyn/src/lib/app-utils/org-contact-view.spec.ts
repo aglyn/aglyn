@@ -27,6 +27,7 @@ import {
   orgContactRow,
   ORG_CONTACT_FIELDS,
   readContactFacet,
+  type OrgContactHostConsent,
 } from './contacts'
 import { CONSENT_GROUPS_FIELD } from './consent-groups'
 
@@ -61,7 +62,11 @@ const twoHostContact = () => ({
       notes: `${FACET_SECRET}-notes-b`,
       tags: [`${FACET_SECRET}-tag-b`],
       sources: { form: true },
-      interactions: [],
+      // A timeline entry on the SECOND site too, so the leak assertions below
+      // cover both facets rather than only the one that happens to be first.
+      interactions: [
+        { type: 'form', atMs: 2, hostId: 'host-b', summary: `${FACET_SECRET}-form-b` },
+      ],
       ltvCents: 12_34,
     },
   },
@@ -141,10 +146,11 @@ describe('the org view carries NO per-host facet content', () => {
   })
 
   it('exposes no facet-shaped key, whatever the values happen to be', () => {
-    const row = orgContactRow(twoHostContact(), 'c', null) as Record<
-      string,
-      unknown
-    >
+    // A plain copy of the projection, so it can be probed by keys the row type
+    // does not declare — which is the whole question here.
+    const row: Record<string, unknown> = {
+      ...orgContactRow(twoHostContact(), 'c', null),
+    }
     for (const forbidden of [
       'facets',
       'notes',
@@ -259,12 +265,12 @@ describe('consent is per (contact, host-or-group) and says so', () => {
 })
 
 describe('orgContactConsentLabel — never a bare verdict', () => {
-  const entry = {
+  const entry: OrgContactHostConsent = {
     hostId: 'host-a',
     groupId: 'host-a',
     groupName: null,
     declared: false,
-    basis: 'granted' as const,
+    basis: 'granted',
   }
 
   it('names the site beside the verdict', () => {

@@ -275,7 +275,11 @@ jest.mock('@aglyn/shared-util-email', () => ({
 }))
 
 import type { PluginApiResponse } from '@aglyn/aglyn/server'
-import { campaignSendHandler, performCampaignSend } from './campaign-send'
+import {
+  campaignSendHandler,
+  performCampaignSend,
+  type CampaignSendOptions,
+} from './campaign-send'
 
 const HOST = 'host-1'
 const CALLER = 'owner@acme-agency.com'
@@ -762,7 +766,16 @@ describe('each half of the reduction is load-bearing on its own', () => {
       dkimPublicKey: 'key',
     })
 
-    await performCampaignSend({
+    /*
+     * `sendingIdentity` is NOT a member of `CampaignSendOptions` — the option
+     * was deleted so that no request could name the address a campaign leaves
+     * on. The intersection states that here rather than hiding it: what is
+     * being exercised is precisely a caller that still carries the field, and
+     * the send is expected to ignore it.
+     */
+    const withRemovedOption: CampaignSendOptions & {
+      sendingIdentity: string
+    } = {
       hostId: HOST,
       subject: 'Spring sale',
       body: 'The sale is on.',
@@ -772,7 +785,9 @@ describe('each half of the reduction is load-bearing on its own', () => {
       senderUid: 'uid-1',
       proofFor: CALLER,
       sendingIdentity: 'acme.com',
-    })
+    }
+
+    await performCampaignSend(withRemovedOption)
 
     expect(sent[0]['sendingIdentity']).toMatchObject({
       from: 'noreply@aglyn.com',
