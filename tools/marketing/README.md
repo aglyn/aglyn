@@ -12,6 +12,7 @@ on Aglyn**). These are authoring inputs for the besigner, not application code
 | `product-copy/copy-<page>.json` | Copy and structure extracted verbatim from the Figma frames, one file per product page, plus a `claimsToVerify` list per page. |
 | `extract-solutions-copy.mjs` | Extracts one `solutions-copy/copy-<page>.json` per solutions/use-case frame from a `get_metadata` dump of canvas `163:89`. Unit is a **card in a grid**. |
 | `extract-pricing-copy.mjs` | Extracts `pricing-copy/copy-<variant>.json` from the four Pricing frame dumps. Unit is a **row in a table**. See below — it is deliberately not the solutions extractor. |
+| `build-pricing-tables.mts` | Builds `pricing-copy/tables.json` FROM `plan-entitlements.ts` and reconciles all six tables it emits — `compare` (rows and plan columns), `tiers`, `usage`, `metered`, `fees`, `addons` — against the extractions, cell by cell. `npm run check:pricing-tables` runs it without writing. Deliberate divergences are declared with the frame's exact stale value, and a declaration the frame has caught up on fails until it is deleted. The tables that read every breakpoint print a compared-cell count; zero is a failure, because a reader that matches nothing reports clean. |
 
 ## Why the applier refuses rather than repairs
 
