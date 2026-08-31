@@ -56,9 +56,11 @@ import {
   useFirestore,
   useFirestoreCollection,
   useFirestoreDoc,
+  useHostCampaigns,
   useOrgDataScope,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import CampaignPicker from '@aglyn/shared-ui-email-campaigns/components/campaign-picker.component'
 import {
   Alert,
   Button,
@@ -97,6 +99,8 @@ type ContactDoc = HostContact & {
   $id: string
   createdAt?: any
   updatedAt?: any
+  /** The campaigns THIS holder has filed the person under. */
+  campaignIds?: string[]
 }
 
 /**
@@ -299,6 +303,10 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
           ),
           ltvCents: facet.ltvCents ?? 0,
           ordersCount: facet.ordersCount ?? 0,
+          // Through the facet like every field beside it: campaign membership
+          // is this holder's own filing, and a read off the top of the
+          // document would be somebody else's.
+          campaignIds: Aglyn.readContactCampaignIds(row, consentGroup.groupId),
         }
       }),
     [contactDocs, consentGroup],
@@ -599,11 +607,30 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
   const selected = contacts.find((contact) => contact.$id === selectedId)
   const [tagsDraft, setTagsDraft] = useState('')
   const [notesDraft, setNotesDraft] = useState('')
+  /**
+   * The campaigns picked in the drawer.
+   *
+   * Seeded on open like the tags and the notes beside it, and edited as a
+   * plain array rather than as text: a campaign is chosen from a list of the
+   * site's own, so there is no free-typed value to normalize.
+   */
+  const [campaignsDraft, setCampaignsDraft] = useState<string[]>([])
   const openContact = useCallback((contact: ContactDoc) => {
     setSelectedId(contact.$id)
     setTagsDraft((contact.tags ?? []).join(', '))
     setNotesDraft(contact.notes ?? '')
+    setCampaignsDraft(contact.campaignIds ?? [])
   }, [])
+  /*
+   * The site's campaigns, read only while a contact is OPEN.
+   *
+   * One picker in one drawer, drawn nowhere in the table — so a merchant who
+   * came to look at their address book must not pay for the campaign list.
+   * The same bargain the topic catalog gets on the campaigns card.
+   */
+  const siteCampaigns = useHostCampaigns(hostId, {
+    enabled: Boolean(selectedId),
+  })
   // Right-to-erasure (AGL-209): hard-deletes the contact doc. Source
   // records (inbox, orders, bookings, members) live in their own managers.
   const handleDeleteContact = useCallback(async () => {
@@ -731,6 +758,11 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
               [Aglyn.contactFacetPath(consentGroup.groupId, 'tags')]: tags,
               [Aglyn.contactFacetPath(consentGroup.groupId, 'notes')]:
                 notesDraft.slice(0, 2000),
+              // An empty selection is written as an empty array rather than
+              // removed, so "filed under no campaign" has one shape here and
+              // in the pass that detaches a deleted campaign.
+              [Aglyn.contactCampaignFieldPath(consentGroup.groupId)]:
+                Aglyn.campaignMembershipValue(campaignsDraft),
               updatedAt: new Date(),
             },
           )
@@ -757,6 +789,7 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
     selectedId,
     tagsDraft,
     notesDraft,
+    campaignsDraft,
     consentGroup,
     firestore,
     dataScope,
@@ -1068,6 +1101,32 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
               onChange={(event) => setNotesDraft(event.target.value)}
               multiline
               minRows={3}
+            />
+            {/*
+              WHICH CAMPAIGNS THIS PERSON IS FILED UNDER — and it is not the
+              question the attribution above answers.
+
+              The attribution says which campaign the person ARRIVED from,
+              recorded from the link they followed and never editable. This
+              says which campaigns the merchant has PUT them in, which is a
+              working set they keep by hand. Both are true at once and they
+              disagree often — somebody who came in from the spring push can
+              be filed under the summer one — so they sit apart with their own
+              words rather than as one "campaign" line.
+
+              It adds nobody to a send. A campaign's audience is its lists and
+              each email's own picker; nothing on the send path reads this
+              field, and the helper says so where somebody would otherwise
+              assume the opposite.
+             */}
+            <CampaignPicker
+              options={siteCampaigns.options}
+              value={campaignsDraft}
+              onChange={setCampaignsDraft}
+              label="Filed under campaigns"
+              helperText="Your own filing. It never adds anyone to a send — a campaign mails its lists."
+              empty={siteCampaigns.ready && !siteCampaigns.options.length}
+              emptyText="This site has no campaigns yet."
             />
             <Stack direction="row" spacing={1}>
               <Button

@@ -93,6 +93,7 @@ import {
   CampaignDestinationsSection,
   CampaignRevenueSection,
 } from './campaign-reach-sections'
+import CampaignMembersSection from './campaign-members-section'
 import CampaignReportCard from './campaign-report-card'
 import { useCampaignManageApi } from '@aglyn/plugins-email/components/use-campaign-send-api'
 import { useEmailsHubPath } from './use-emails-hub-path'
@@ -392,7 +393,8 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
             'not stop that — the sender picks each one up from its own ' +
             'record. Stop a send from its own page. '
           : '') +
-        'Only the campaign itself goes.',
+        'Any screens, forms and contacts assigned to it come out of it and ' +
+        'are otherwise untouched. Only the campaign itself goes.',
       confirmationText: 'Delete campaign',
     })
       .then(() => true)
@@ -660,6 +662,24 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
           sendIds={sendIds}
           truncated={sendsTruncated}
         />
+
+        <Divider />
+        {/*
+          WHAT THE MERCHANT SAID BELONGS HERE, under what the visitors did.
+
+          Everything above this line is measured — the conversions, the money
+          and the pages the mail's own links pointed at, all joined on this
+          campaign's send ids. This section is the only one on the page that
+          reports a DECLARATION: a screen or a form carrying this campaign's
+          id in its own document because somebody put it there.
+
+          It sits after the evidence deliberately. A reader who met the
+          assigned list first would take it for the campaign's reach, and the
+          two are not the same list — a landing page can be assigned to a
+          campaign no email ever linked to, and a campaign's mail can drive
+          traffic to a page assigned to nothing.
+         */}
+        <CampaignMembersSection hostId={hostId} campaignId={campaignId} />
 
         <Divider />
         {/*

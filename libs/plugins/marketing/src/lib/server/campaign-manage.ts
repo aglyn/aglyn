@@ -59,6 +59,15 @@
  * email inside it keeps its send time and still goes out, because a
  * container is a grouping and cancelling somebody's mail is `cancel`'s job.
  * The console says so before it asks.
+ *
+ * ## The same rule for everything else the campaign held
+ *
+ * A campaign also groups forms, screens and contacts, each of which names it
+ * from its OWN document. They are detached on exactly the argument the sends
+ * are: a form left naming a container nobody can read has not been freed, it
+ * has been made unreadable — its page draws a dead id where a campaign name
+ * belongs, and the campaigns table can no longer find it. The record itself
+ * is never touched. Deleting a campaign deletes a campaign.
  */
 
 /*
@@ -70,7 +79,23 @@
  */
 import firebaseAdmin from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
-import { type PluginApiHandler } from '@aglyn/aglyn/server'
+/*
+ * The MODULES again, for the same reason: `consentGroupForSite` and
+ * `orgDataCollectionForHost` are what the contact pass needs, and taking them
+ * from `@aglyn/tenant-data-admin`'s index would pull the whole Next server
+ * pipeline back into this file's graph.
+ */
+import {
+  consentGroupForSite,
+  orgDataCollectionForHost,
+  resolveOrgIdForHost,
+} from '@aglyn/tenant-data-admin/server/organizations'
+import {
+  CAMPAIGN_MEMBER_HOST_COLLECTIONS,
+  CAMPAIGN_MEMBERSHIP_FIELD,
+  contactCampaignFieldPath,
+  type PluginApiHandler,
+} from '@aglyn/aglyn/server'
 import {
   CAMPAIGN_SEND_CONTAINER_FIELD,
 } from '@aglyn/shared-ui-email-campaigns/model'
@@ -152,6 +177,120 @@ async function detachSends(
 }
 
 /**
+ * Clears one campaign id out of a membership array, wherever it is held.
+ *
+ * The same walk {@link detachSends} makes, over an ARRAY field rather than a
+ * scalar one: `array-contains` matches on Firestore's automatic single-field
+ * index, and `arrayRemove` takes out the one id without touching the other
+ * campaigns a form or a screen is in. That is the whole reason the membership
+ * is an array here and a `FieldValue.delete()` on a send — a send is in one
+ * campaign and a landing page is in several, so removing one must not be
+ * removing all of them.
+ *
+ * `query` rather than a collection ref, because the contact pass hands in a
+ * path this file cannot build for itself.
+ *
+ * @returns how many were detached, and whether any were left.
+ */
+async function detachMembership(
+  firestore: FirebaseFirestore.Firestore,
+  collectionRef: FirebaseFirestore.CollectionReference,
+  fieldPath: string,
+  campaignId: string,
+): Promise<{ detached: number; remaining: boolean }> {
+  let detached = 0
+  for (let pass = 0; pass < DETACH_PASSES; pass += 1) {
+    const page = await collectionRef
+      .where(fieldPath, 'array-contains', campaignId)
+      .limit(DETACH_BATCH)
+      .get()
+    if (page.empty) return { detached, remaining: false }
+    const batch = firestore.batch()
+    for (const member of page.docs) {
+      batch.update(member.ref, {
+        [fieldPath]: firebaseAdmin.firestore.FieldValue.arrayRemove(campaignId),
+      })
+    }
+    await batch.commit()
+    detached += page.size
+    if (page.size < DETACH_BATCH) return { detached, remaining: false }
+  }
+  return { detached, remaining: true }
+}
+
+/**
+ * Clears the campaign off every form, screen and contact holding it.
+ *
+ * ## Why the campaign is not simply deleted over the top of them
+ *
+ * A campaign that went away leaving members naming it is the same failure the
+ * send detach exists to prevent, one collection over: the campaign's own page
+ * finds its forms and screens with `array-contains`, and a form still naming
+ * a container nobody can read is in neither half of that — not a member of
+ * any campaign the console can draw, and not free of one either. Its own page
+ * would render the dead id as a chip with no name.
+ *
+ * ## The contacts are reached by a different path, on purpose
+ *
+ * A contact lives on the ORG (`orgs/{orgId}/contacts`) and is shared by every
+ * site in it, so the membership sits inside this site's consent-group facet
+ * rather than at the top of the document. The field PATH is therefore the
+ * scope: only rows this group filed under the campaign match it, and no other
+ * holder's filing is touched. The unscoped collection ref is what the walk
+ * runs on precisely because the path already carries the boundary — the
+ * `visibleTo` filter `orgDataQueryForHost` adds would spend the query's one
+ * array-contains slot and leave none for the membership.
+ *
+ * A group that cannot be resolved answers as the site alone, which is
+ * {@link consentGroupForSite}'s documented failure direction and the safe one
+ * here too: the pass then clears the site's own facet and no other.
+ */
+async function detachMembers(
+  hostId: string,
+  hostRef: FirebaseFirestore.DocumentReference,
+  campaignId: string,
+): Promise<{ detached: number; remaining: boolean }> {
+  const firestore = hostRef.firestore
+  let detached = 0
+  let remaining = false
+  for (const collectionName of CAMPAIGN_MEMBER_HOST_COLLECTIONS) {
+    const pass = await detachMembership(
+      firestore,
+      hostRef.collection(collectionName),
+      CAMPAIGN_MEMBERSHIP_FIELD,
+      campaignId,
+    )
+    detached += pass.detached
+    remaining = remaining || pass.remaining
+  }
+  /*
+   * NO ORG, NO ORG CONTACTS — and that is a skip rather than a failure.
+   *
+   * Contacts live at `orgs/{orgId}/contacts`, so a site whose `hostIndex`
+   * entry names no org holds none of them and there is nothing here to
+   * detach. Resolving it first is what separates that from a read that FAILED:
+   * `orgDataCollectionForHost` throws for both, and swallowing both would let
+   * a transient Firestore error delete the campaign with contacts still
+   * naming it. A thrown read reaches the handler's 500 and the container
+   * survives, which is the direction a failure here has to fall.
+   */
+  const orgId = await resolveOrgIdForHost(hostId)
+  if (!orgId) return { detached, remaining }
+  const group = await consentGroupForSite(hostId)
+  const contacts = await orgDataCollectionForHost(hostId, 'contacts')
+  const contactPass = await detachMembership(
+    firestore,
+    contacts,
+    contactCampaignFieldPath(group.groupId),
+    campaignId,
+  )
+  return {
+    detached: detached + contactPass.detached,
+    remaining: remaining || contactPass.remaining,
+  }
+}
+
+/**
  * Removes a campaign container, leaving its emails standing.
  *
  * Detach first, delete second, and the order is the point: stopping between
@@ -161,6 +300,7 @@ async function detachSends(
  * them from the table.
  */
 async function deleteCampaign(
+  hostId: string,
   hostRef: FirebaseFirestore.DocumentReference,
   campaignId: string,
 ): Promise<ManageResult> {
@@ -189,8 +329,42 @@ async function deleteCampaign(
       },
     }
   }
+  /*
+   * The MEMBERS come off before the container does, for the reason the sends
+   * do: a partial run leaves records that are already out of the campaign,
+   * which every surface draws correctly, while deleting first would leave
+   * forms, screens and contacts naming an id nothing can resolve.
+   *
+   * Their own 409 rather than a shared one. "More emails than one request can
+   * detach" is a sentence about the campaign's mail, and a merchant reading
+   * it about a campaign of two emails and four thousand contacts would go
+   * looking for emails that are not the problem.
+   */
+  const members = await detachMembers(hostId, hostRef, campaignId)
+  if (members.remaining) {
+    return {
+      status: 409,
+      body: {
+        detached,
+        detachedMembers: members.detached,
+        error:
+          'This campaign is on more records than one request can clear. ' +
+          `${members.detached.toLocaleString()} of them are already out of ` +
+          'it and the campaign is still here — run the delete again to ' +
+          'finish it.',
+      },
+    }
+  }
   await ref.delete()
-  return { status: 200, body: { campaignId, detached, deleted: true } }
+  return {
+    status: 200,
+    body: {
+      campaignId,
+      detached,
+      detachedMembers: members.detached,
+      deleted: true,
+    },
+  }
 }
 
 /**
@@ -300,7 +474,7 @@ export const campaignManageHandler: PluginApiHandler = async (req, res) => {
 
     const result =
       action === 'deleteCampaign'
-        ? await deleteCampaign(hostRef, targetId)
+        ? await deleteCampaign(hostId, hostRef, targetId)
         : await discardDraft(hostRef, targetId)
     return res.status(result.status).json(result.body)
   } catch (error) {

@@ -36,6 +36,7 @@ import {
   type HostVariable,
   type HostWorkflow,
   buildDatasetRecordValues,
+  contactCampaignFieldPath,
   datasetIntegrityFields,
   datasetIntegrityUpdate,
   describeStepOutcome,
@@ -724,15 +725,59 @@ async function executeAction(
           stepErrors.push(`no contact for ${email}`)
           continue
         }
-        await contact.ref.set(
-          {
-            campaigns: FieldValue.arrayUnion(
-              step.campaignId?.trim() || step.campaignName?.trim() || '',
-            ),
-            updatedAt: FieldValue.serverTimestamp(),
-          },
-          { merge: true },
-        )
+        /*
+         * THE CAMPAIGN IS RESOLVED TO A DOCUMENT, exactly as `enrollList`
+         * resolves a list one branch above.
+         *
+         * A step may name a campaign by id or by name — the picker writes the
+         * id, an imported automation may carry only the name — and what gets
+         * stored is the id either way. Storing whichever of the two the step
+         * happened to hold would put names and ids in one array, and every
+         * reader of that array resolves ids: a name in it renders as a chip
+         * nobody can click and matches no campaign the console can find.
+         *
+         * An unknown campaign is an ERROR rather than a stored string. The
+         * reference audit already reports a step pointing at a campaign that
+         * does not exist; a run that wrote the dangling name anyway would
+         * make the audit's finding untrue the moment it fired.
+         */
+        const campaignsRef = hostRef.collection('emailCampaigns')
+        const namedId = step.campaignId?.trim() ?? ''
+        const campaignDoc = namedId
+          ? await campaignsRef.doc(namedId).get()
+          : (
+              await campaignsRef
+                .where('name', '==', step.campaignName?.trim() ?? '')
+                .limit(1)
+                .get()
+            ).docs[0]
+        if (!campaignDoc?.exists) {
+          stepErrors.push(
+            `unknown campaign "${step.campaignName || step.campaignId}"`,
+          )
+          continue
+        }
+        /*
+         * INSIDE THIS SITE'S FACET, not at the top of the document.
+         *
+         * A contact is one row shared by every site in the org, and which
+         * campaigns a merchant has filed somebody under is that merchant's
+         * business record on the same footing as their notes and their tags.
+         * Written at the top it would be readable by every other site in an
+         * agency's account.
+         *
+         * `update` with a dotted path, never `set({merge:true})`: a `set`
+         * treats the string as a literal field NAME and would mint a
+         * top-level key with dots in it. The document was just read, so the
+         * update cannot fail for absence.
+         */
+        const group = await consentGroupForSite(hostId)
+        await contact.ref.update({
+          [contactCampaignFieldPath(group.groupId)]: FieldValue.arrayUnion(
+            campaignDoc.id,
+          ),
+          updatedAt: FieldValue.serverTimestamp(),
+        })
       }
     } catch (error) {
       stepErrors.push((error as Error).message)

@@ -114,6 +114,8 @@ jest.mock('@aglyn/plugins-email/components/use-org-email-topics', () => ({
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => FIRESTORE,
   useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1' }),
+  // The console address the assigned-records section links its rows with.
+  useConsoleHostRoute: () => ({ orgSlug: 'acme', subdomain: 'store' }),
   // Signed in and able to mint an ID token: the delete posts through
   // `useCampaignManageApi`, which authorizes from one and issues nothing
   // without it.

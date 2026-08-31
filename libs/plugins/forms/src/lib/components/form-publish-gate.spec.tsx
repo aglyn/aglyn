@@ -65,6 +65,8 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     subdomain: 'site',
   }),
   useHostVersionApi: () => async () => undefined,
+  // The site's campaigns, which fill the picker in the form's Details card.
+  useHostCampaigns: () => ({ options: [], truncated: false, ready: true }),
   useHostResourceApi: () => async () => undefined,
   useLiveArtifactCount: () => 0,
   // The form itself, and the versions the Publish buttons hang off. Answered
