@@ -51,7 +51,10 @@ import {
 } from '@aglyn/aglyn/app-utils/email-topics'
 import { isEmailTopicId } from '@aglyn/aglyn/app-utils/email-topics'
 import firebaseAdmin from './firebase-admin'
-import { emailSuppressionKey } from './email-suppression'
+import {
+  emailSuppressionKey,
+  releaseEmailForConfirmedOptIn,
+} from './email-suppression'
 
 const defaultFirestore = () => firebaseAdmin.app().firestore()
 
@@ -183,6 +186,27 @@ export type ConfirmTopicResult =
  *
  * Same rule as `releaseSiteSuppression`: the recipient's later, more explicit
  * act stands, and a link minted before it must not undo it.
+ *
+ * ## A confirmation DOES reverse a hard bounce
+ *
+ * The one thing a completed round trip is evidence of. A `bounce` entry on
+ * the platform list claims mail addressed here is permanently refused, and a
+ * click on a link that was delivered to that mailbox is the only evidence
+ * that could refute it. Without this, an address recorded as permanently
+ * bounced — often a full mailbox or a misconfigured receiving server that a
+ * provider reported as permanent — can never re-subscribe by any route, and
+ * the double opt-in it just completed would enrol somebody the send path then
+ * silently drops.
+ *
+ * The refusal above and the release here are the same rule seen from two
+ * sides: a stated intention stands and a measurement does not. Which reasons
+ * qualify is decided by `OPT_IN_RELEASABLE_REASONS`, not here — an unsubscribe
+ * or a spam complaint is never among them, or this function would be a way to
+ * launder a complaint through a signup form.
+ *
+ * The release is best-effort and deliberately after the transaction: the
+ * confirmation is what the person is waiting for, and a suppression list that
+ * could not be written must not cost them the subscription they just made.
  */
 export async function confirmTopicSubscription(
   hostId: string,
@@ -194,41 +218,49 @@ export async function confirmTopicSubscription(
   if (!key || !hostId || !isEmailTopicId(topicId)) return 'unusable'
   const nowMs = options?.nowMs ?? Date.now()
   const ref = optOutDoc(hostId, key, options?.firestore)
-  let result: ConfirmTopicResult = 'not-pending'
-  await (options?.firestore ?? defaultFirestore()).runTransaction(
-    async (transaction: any) => {
-      const snapshot = await transaction.get(ref)
-      const stored = ((snapshot.exists ? snapshot.get('topics') : null) ??
-        {}) as Record<string, TopicSubscriptionEntry>
-      const existing = stored[topicId]
-      const state = readTopicSubscriptionState(existing)
-      if (state === 'opted-out') {
-        result = 'opted-out'
-        return
-      }
-      if (state === 'subscribed') {
-        result = existing?.confirmedAt ? 'already-confirmed' : 'not-pending'
-        return
-      }
-      if (doubleOptInExpired(Number(existing?.pendingAt), nowMs)) {
-        result = 'expired'
-        return
-      }
-      result = 'confirmed'
-      transaction.set(
-        ref,
-        {
-          email: String(email).trim().toLowerCase(),
-          topics: {
-            ...stored,
-            [topicId]: { ...(existing ?? {}), confirmedAt: nowMs },
-          },
-          updatedAt: FieldValue.serverTimestamp(),
+  /*
+   * The verdict comes OUT of the transaction rather than through a closure
+   * variable beside it. A transaction body can be retried, so a variable the
+   * caller reads afterwards describes whichever attempt ran last rather than
+   * the one that committed.
+   */
+  const result: ConfirmTopicResult = await (
+    options?.firestore ?? defaultFirestore()
+  ).runTransaction(async (transaction: any): Promise<ConfirmTopicResult> => {
+    const snapshot = await transaction.get(ref)
+    const stored = ((snapshot.exists ? snapshot.get('topics') : null) ??
+      {}) as Record<string, TopicSubscriptionEntry>
+    const existing = stored[topicId]
+    const state = readTopicSubscriptionState(existing)
+    if (state === 'opted-out') return 'opted-out'
+    if (state === 'subscribed') {
+      return existing?.confirmedAt ? 'already-confirmed' : 'not-pending'
+    }
+    if (doubleOptInExpired(Number(existing?.pendingAt), nowMs)) {
+      return 'expired'
+    }
+    transaction.set(
+      ref,
+      {
+        email: String(email).trim().toLowerCase(),
+        topics: {
+          ...stored,
+          [topicId]: { ...(existing ?? {}), confirmedAt: nowMs },
         },
-        { merge: true },
-      )
-    },
-  )
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    )
+    return 'confirmed'
+  })
+  if (result === 'confirmed') {
+    await releaseEmailForConfirmedOptIn({
+      email,
+      hostId,
+      topicId,
+      ...(options?.firestore ? { firestore: options.firestore } : {}),
+    })
+  }
   return result
 }
 

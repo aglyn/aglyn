@@ -253,6 +253,100 @@ describe('confirming', () => {
   })
 })
 
+/**
+ * THE ROUND TRIP IS THE EVIDENCE.
+ *
+ * A confirmation is sent without consulting either suppression list, because
+ * it is the one message that has to reach somebody whose state is uncertain.
+ * The other half of that decision is here: once the link is CLICKED, the
+ * platform record it disproved is lifted — otherwise an address recorded as
+ * permanently bounced completes a double opt-in and is enrolled into a stream
+ * the send path then silently drops it from, forever.
+ *
+ * `email-suppression.spec.ts` pins which reasons qualify. This pins that the
+ * confirmation actually reaches the guard, and that the refusal survives the
+ * trip: the complaint case here is the same address completing the same
+ * successful double opt-in, and it must still be suppressed at the end.
+ */
+describe('a confirmation and the platform suppression list', () => {
+  /** A pending request, plus a live suppression under `reason`. */
+  const withSuppression = (reason: string) =>
+    fakeFirestore({
+      [OPT_OUTS]: {
+        [KEY]: {
+          email: ADDRESS,
+          topics: { [TOPIC]: { pendingAt: NOW - 1000, confirmedAt: null } },
+        },
+      },
+      emailSuppressions: {
+        [KEY]: { email: ADDRESS, reason, releasedAt: null },
+      },
+    })
+
+  const suppression = (store: ReturnType<typeof fakeFirestore>) =>
+    store.docs('emailSuppressions')[KEY]
+
+  it('releases a hard bounce the confirmation just disproved', async () => {
+    const firestore = withSuppression('bounce')
+
+    await expect(
+      confirmTopicSubscription(HOST, ADDRESS, TOPIC, { nowMs: NOW, firestore }),
+    ).resolves.toBe('confirmed')
+
+    expect(readTopicSubscriptionState(entry(firestore))).toBe('subscribed')
+    expect(suppression(firestore).releasedAt).toBeTruthy()
+    expect(suppression(firestore).releasedVia).toBe('double-opt-in')
+  })
+
+  /**
+   * THE CONTROL. Identical setup, identical successful confirmation, one
+   * different reason — and the record stands. Without this the test above
+   * passes just as well against a release that never looked at the reason,
+   * which is the version that turns a signup form into a way to launder a
+   * spam complaint onto the shared sending domain.
+   */
+  it('does NOT release a complaint, even on the same completed opt-in', async () => {
+    const firestore = withSuppression('complaint')
+
+    await expect(
+      confirmTopicSubscription(HOST, ADDRESS, TOPIC, { nowMs: NOW, firestore }),
+    ).resolves.toBe('confirmed')
+
+    // The subscription is real — they asked for it and they confirmed it.
+    expect(readTopicSubscriptionState(entry(firestore))).toBe('subscribed')
+    // …and no mail reaches them, because the complaint was never ours to lift.
+    expect(suppression(firestore).releasedAt).toBeNull()
+    expect(suppression(firestore).releasedVia).toBeUndefined()
+  })
+
+  it('releases nothing when the confirmation did not succeed', async () => {
+    // An expired link. The address stays pending and the record stays in
+    // force: a lapse that released a suppression would make the window a
+    // delay somebody could wait out for a second effect too.
+    const firestore = fakeFirestore({
+      [OPT_OUTS]: {
+        [KEY]: {
+          email: ADDRESS,
+          topics: {
+            [TOPIC]: {
+              pendingAt: NOW - DOUBLE_OPT_IN_EXPIRY_MS - 1,
+              confirmedAt: null,
+            },
+          },
+        },
+      },
+      emailSuppressions: {
+        [KEY]: { email: ADDRESS, reason: 'bounce', releasedAt: null },
+      },
+    })
+
+    await expect(
+      confirmTopicSubscription(HOST, ADDRESS, TOPIC, { nowMs: NOW, firestore }),
+    ).resolves.toBe('expired')
+    expect(suppression(firestore).releasedAt).toBeNull()
+  })
+})
+
 describe('the site default', () => {
   it('is on only when the site says so', async () => {
     await expect(

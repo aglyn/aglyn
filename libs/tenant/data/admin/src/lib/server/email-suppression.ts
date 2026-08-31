@@ -68,11 +68,12 @@
  * outage on a customer's business. A suppression is not a quota, but the same
  * proportionality applies and lands in the same place:
  *
- *  - **Bulk mail consults this list.** The monthly usage summary and the
- *    usage-alert fan-out go to a LIST of people who did not ask for that
- *    particular message, on a schedule, forever. They are the sends that
- *    re-hit a dead mailbox every month and teach a mailbox provider that
- *    `aglyn.com` does not listen.
+ *  - **Bulk mail consults this list.** The monthly usage summary, the
+ *    usage-alert fan-out and the marketplace review fan-out to a publisher's
+ *    owners and admins go to a LIST of people who did not ask for that
+ *    particular message, on a schedule or on every submission, forever. They
+ *    are the sends that re-hit a dead mailbox every month and teach a mailbox
+ *    provider that `aglyn.com` does not listen.
  *  - **Transactional mail does NOT.** A password reset, a verification, an
  *    invite, a receipt or a booking confirmation answers something the human
  *    just did. Refusing one because an address bounced or because somebody
@@ -190,6 +191,12 @@ export interface EmailSuppressionRecord {
   hostId: string | null
   /** Non-null once released. A released record does not suppress. */
   releasedAt: unknown | null
+  /** What lifted it. Absent on records written before releases were typed. */
+  releasedVia?: EmailReleaseChannel
+  /** The site whose confirmed double opt-in lifted it, when one did. */
+  releasedHostId?: string | null
+  /** The stream that was confirmed, likewise. */
+  releasedTopicId?: string | null
 }
 
 /**
@@ -272,10 +279,31 @@ export async function suppressEmail(input: SuppressEmailInput): Promise<{
 }
 
 /**
+ * What lifted a suppression, recorded on the record it lifted.
+ *
+ * Written explicitly by both paths rather than left to "absent means staff".
+ * The two are held to different rules — a staff release may lift any reason,
+ * a confirmed opt-in may lift exactly one — so the audit answer to "how did
+ * this address get back on the domain" has to be a stored fact and not an
+ * inference from which field happens to be missing.
+ */
+export type EmailReleaseChannel =
+  /** A staff correction through the admin suppressions surface. */
+  | 'staff'
+  /** A recipient completed a double opt-in from this address. */
+  | 'double-opt-in'
+
+/**
  * Put an address back in circulation (a staff correction, or the person asking
  * to be re-added). The record is kept and marked released, never deleted —
  * same reasoning as `releasePhoneContact`: a deleted record cannot show that
  * the suppression was honored while it stood.
+ *
+ * Unconditional on the reason, and that is what separates it from
+ * {@link releaseEmailForConfirmedOptIn}: a human with the staff role has read
+ * the record and is accountable for the row, so they may lift a complaint —
+ * a report filed against the wrong message, an address entered by mistake.
+ * Nothing automatic gets that latitude.
  *
  * @returns false when there was no live record to release.
  */
@@ -296,10 +324,130 @@ export async function releaseEmail(input: {
       releasedAt: FieldValue.serverTimestamp(),
       releasedByUid: input.releasedByUid ?? null,
       releasedNote: input.note ?? null,
+      releasedVia: 'staff' satisfies EmailReleaseChannel,
     },
     { merge: true },
   )
   return true
+}
+
+/**
+ * The ONLY reason a completed round trip may lift, as a runtime set.
+ *
+ * ## Why a bounce is releasable
+ *
+ * A `bounce` record is a claim about a MAILBOX at a moment: mail addressed
+ * here was permanently refused. Somebody clicking a confirmation link that
+ * was delivered to that mailbox has refuted the claim with the only evidence
+ * that could refute it — the message arrived, a human read it, and the round
+ * trip closed. Leaving the record standing after that makes one transient
+ * failure recorded as permanent — a mailbox that was full, a receiving server
+ * that answered 550 while it was misconfigured — a life sentence no route can
+ * undo.
+ *
+ * ## Why a complaint is NOT, and never will be
+ *
+ * `complaint` is not a deliverability fact. It is a person stating they do not
+ * want this mail, and a round trip proves nothing about that statement — it
+ * proves the mailbox works, which nobody doubted. Releasing one here would
+ * make a public signup form into a laundry for spam complaints: submit the
+ * complainant's address, they receive a confirmation (the shared sender is
+ * transactional and consults no list), and one click anywhere in the chain
+ * puts them back on the sending domain that the complaint was filed against.
+ * The same reasoning refuses `staff`, which is a written request, a
+ * correction, or a legal instruction, and is nobody's to reverse from a link.
+ *
+ * A runtime set and not just the type, for the reason
+ * {@link PLATFORM_SUPPRESSION_REASONS} gives: reasons arrive from webhook
+ * payloads through an untyped boundary, and the cost of the type being wrong
+ * once here is a complaint silently laundered.
+ */
+export const OPT_IN_RELEASABLE_REASONS: readonly EmailSuppressionReason[] = [
+  'bounce',
+]
+
+/** What a completed double opt-in did to a platform suppression. */
+export type ConfirmedOptInRelease =
+  /** A live `bounce` record was lifted. The address is mailable again. */
+  | 'released'
+  /** Nothing was suppressed, or it was already released. */
+  | 'nothing-to-release'
+  /** A record stands that a round trip may not lift — see the constant. */
+  | 'refused'
+  /** The read or the write failed. The record, whatever it is, still stands. */
+  | 'failed'
+
+/**
+ * Lift a platform suppression that a completed double opt-in has disproved.
+ *
+ * THE ONE PLACE THE AUTOMATIC RULE IS STATED, mirroring
+ * `releaseSiteSuppression` for the per-site list: every path that puts an
+ * address back in circulation without a human deciding goes through here, so
+ * there is one line to read and one line to change.
+ *
+ * ## Platform-wide, from one site's round trip
+ *
+ * The record being lifted asserts something host-independent — this mailbox
+ * does not exist, learned anywhere in the product, including on transactional
+ * mail that carried no site tag. A confirmation delivered to that mailbox
+ * disproves it just as host-independently, so scoping the release to the
+ * confirming site would leave a record standing that says the mailbox is dead
+ * while we hold proof that it is not. The site and the topic are written onto
+ * the record instead, which is what makes the release reviewable: an operator
+ * reading the row sees which site's round trip lifted it and when.
+ *
+ * ## The per-site list is NOT touched
+ *
+ * `hosts/{hostId}/suppressions` mixes a deliverability fact with a stated
+ * preference — an unsubscribe from that one site lives there too — and the
+ * email plugin's `releaseSiteSuppression` is the single guarded path that
+ * lifts one. Reaching around it from here would put a second, differently
+ * reasoned releaser on a list whose whole protection is that there is one.
+ *
+ * Never throws: it runs inside a recipient's confirmation click, and a
+ * Firestore failure must degrade to a suppression that stays in force, not to
+ * a person told their confirmation failed.
+ */
+export async function releaseEmailForConfirmedOptIn(input: {
+  email: string
+  /** The site whose confirmation link was clicked, for the audit trail. */
+  hostId: string
+  /** The stream that was confirmed, likewise. */
+  topicId: string
+  firestore?: any
+}): Promise<ConfirmedOptInRelease> {
+  const key = emailSuppressionKey(input.email)
+  if (!key) return 'nothing-to-release'
+  try {
+    const db = input.firestore ?? defaultFirestore()
+    const ref = db.collection(EMAIL_SUPPRESSIONS_COLLECTION).doc(key)
+    const snapshot = await ref.get()
+    if (!snapshot.exists || snapshot.get('releasedAt')) {
+      return 'nothing-to-release'
+    }
+    if (!OPT_IN_RELEASABLE_REASONS.includes(snapshot.get('reason'))) {
+      return 'refused'
+    }
+    await ref.set(
+      {
+        releasedAt: FieldValue.serverTimestamp(),
+        // No human released this, so the field says so rather than naming
+        // whoever last touched the record.
+        releasedByUid: null,
+        releasedVia: 'double-opt-in' satisfies EmailReleaseChannel,
+        releasedHostId: input.hostId || null,
+        releasedTopicId: input.topicId || null,
+      },
+      { merge: true },
+    )
+    return 'released'
+  } catch (error) {
+    console.error(
+      '[email-suppression] opt-in release failed; suppression stands',
+      error,
+    )
+    return 'failed'
+  }
 }
 
 /**

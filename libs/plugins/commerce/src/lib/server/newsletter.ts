@@ -115,6 +115,15 @@ async function enrollInList(options: {
  * which is the check that matters: a signup form must not become a way to
  * mail somebody who unsubscribed by asking them again.
  *
+ * A hard-bounced address is deliberately NOT refused here, and the asymmetry
+ * with the opt-out above is the point. An opt-out is a stated intention; a
+ * bounce is a measurement of a mailbox at a moment, and refusing to send at
+ * submission time would settle it on evidence that cannot be older than the
+ * question being asked. The confirmation goes out, and if it is delivered and
+ * clicked, `confirmTopicSubscription` lifts the platform bounce — the round
+ * trip is what proves the record stale. A complaint or an unsubscribe is
+ * never lifted by that path.
+ *
  * ## Best-effort, like the enrollment beside it
  *
  * A failure to send leaves the address pending and unmailable, which is the
