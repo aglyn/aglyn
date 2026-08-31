@@ -633,6 +633,13 @@ export async function sendEmail(
           email: to[0],
           context: options.context,
           capped: options.marketing.capped !== false,
+          // Passed through verbatim, INCLUDING absent. A default topic
+          // applied here would invent a stream for every caller that named
+          // none and let a topic opt-out refuse messages that belong to no
+          // stream — see `MarketingSendContext.topicId`.
+          ...(options.marketing.topicId
+            ? { topicId: options.marketing.topicId }
+            : {}),
         })
       } catch (error) {
         /*

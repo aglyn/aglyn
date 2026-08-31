@@ -201,7 +201,18 @@ export async function scanRestockAlerts(
       audience: 'tenant',
       context: 'restock alert',
       priority: 'bulk',
-      marketing: { hostId: hostRef.id, siteBase: siteBaseByHost.get(hostRef.id) ?? '' },
+      /*
+       * A restock alert IS the "Product updates" stream — the catalog entry
+       * names restocks in its own description. Declared so a shopper who
+       * unticked that stream on the preference page is not mailed it: the
+       * gate asks the topic only for callers that name one, so a sender that
+       * left this off would keep mailing them.
+       */
+      marketing: {
+        hostId: hostRef.id,
+        siteBase: siteBaseByHost.get(hostRef.id) ?? '',
+        topicId: Aglyn.EMAIL_TOPIC_PRODUCT_UPDATES,
+      },
     })
     /*
      * SKIPPED, NOT DROPPED — the lockdown rule above, applied to the two

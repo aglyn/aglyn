@@ -150,6 +150,121 @@ describe('the gate consults BOTH suppression lists', () => {
   })
 })
 
+describe('the stream a message belongs to', () => {
+  const TOPIC_PATH = `hosts/${HOST}/topicOptOuts`
+
+  /** Somebody who has left `topicId` and stayed on everything else. */
+  function leftStream(topicId: string) {
+    const firestore = fakeFirestore()
+    firestore
+      .collection('hosts')
+      .doc(HOST)
+      .collection('topicOptOuts')
+      .doc(KEY)
+      .set({ topics: { [topicId]: { optedOutAt: NOW - 1 } } })
+    return firestore
+  }
+
+  it('REFUSES a message on a stream this person left', async () => {
+    const firestore = leftStream('product-updates')
+
+    await expect(
+      ask(firestore, { topicId: 'product-updates' }),
+    ).resolves.toMatchObject({ refusal: 'topic-unsubscribed', allowed: false })
+  })
+
+  it('reduces nobody and counts nothing for it', async () => {
+    const firestore = leftStream('product-updates')
+    const before = JSON.stringify(firestore.docs(FREQUENCY_PATH)[KEY])
+
+    await ask(firestore, { topicId: 'product-updates' })
+
+    // A message that never left must not count against what this person has
+    // received, and no suppression is written for a topic preference.
+    expect(JSON.stringify(firestore.docs(FREQUENCY_PATH)[KEY])).toBe(before)
+    expect(firestore.docs(TOPIC_PATH)[KEY].topics['product-updates']).toEqual({
+      optedOutAt: NOW - 1,
+    })
+  })
+
+  it('sends a message on a DIFFERENT stream to the same person', async () => {
+    // The whole value of topics: leaving one is not leaving the site.
+    const firestore = leftStream('product-updates')
+
+    await expect(
+      ask(firestore, { topicId: 'newsletter' }),
+    ).resolves.toMatchObject({ allowed: true })
+  })
+
+  /*==========================================
+   * ⛔ THE CONTROL, and it is the assertion that matters most here.
+   *
+   * A topic opt-out governs marketing STREAMS. Nothing about a receipt, a
+   * password reset or a booking confirmation is a stream anybody can untick,
+   * and a gate that refused those on a topic preference would be a far worse
+   * defect than the one this check closes. Transactional mail declares no
+   * marketing context and never reaches this function at all; this is the
+   * second guard, for a marketing caller that names no stream.
+   *
+   * These two fail the moment the check is widened to default an unnamed
+   * topic to anything.
+   *=========================================*/
+  it('refuses NOBODY when the caller named no stream', async () => {
+    const firestore = leftStream('marketing')
+
+    await expect(ask(firestore)).resolves.toMatchObject({ allowed: true })
+  })
+
+  it('refuses nobody for an empty or blank stream either', async () => {
+    const firestore = leftStream('marketing')
+
+    await expect(ask(firestore, { topicId: '' })).resolves.toMatchObject({
+      allowed: true,
+    })
+    await expect(ask(firestore, { topicId: '   ' })).resolves.toMatchObject({
+      allowed: true,
+    })
+  })
+
+  it('reports suppression over a topic, because one is permanent', async () => {
+    const firestore = leftStream('marketing')
+    await firestore
+      .collection('emailSuppressions')
+      .doc(KEY)
+      .set({ email: ADDRESS, reason: 'bounce', releasedAt: null })
+
+    await expect(
+      ask(firestore, { topicId: 'marketing' }),
+    ).resolves.toMatchObject({ refusal: 'suppressed' })
+  })
+
+  it('fails OPEN when the topic lookup itself breaks', async () => {
+    // The asymmetry `filterTopicSendable` argues: a topic preference is a
+    // narrower fact than a suppression, and a read that failed for an
+    // unrelated reason is no reason to withhold mail from somebody both
+    // suppression lists already cleared.
+    const firestore = leftStream('marketing')
+    const working = firestore.getAll.bind(firestore)
+    // Only the TOPIC read breaks. Breaking every `getAll` would also break
+    // the suppression lookup, which fails closed — and the test would then
+    // pass or fail for the wrong reason.
+    firestore.getAll = async (...refs: any[]) => {
+      if (
+        refs.some((ref: any) =>
+          String(ref?.collectionPath ?? '').includes('topicOptOuts'),
+        )
+      ) {
+        throw new Error('topic lookup unavailable')
+      }
+      return working(...refs)
+    }
+
+    await expect(
+      ask(firestore, { topicId: 'marketing' }),
+    ).resolves.toMatchObject({ allowed: true })
+  })
+})
+
 describe('the frequency ceiling', () => {
   const cap = MARKETING_FREQUENCY_DEFAULT_PER_WINDOW
   const windowOf = (count: number) =>

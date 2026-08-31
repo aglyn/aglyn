@@ -24,6 +24,7 @@ import {
 import * as CommerceModel from '../model'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import {
+  EMAIL_TOPIC_NEWSLETTER,
   hostPublicOrigin,
   type PluginApiHandler,
   resolveBrandingProfile,
@@ -154,7 +155,18 @@ export const memberPostHandler: PluginApiHandler = async (req, res) => {
           sendingIdentity: identity,
           audience: 'tenant',
           context: 'member post',
-          marketing: { hostId, siteBase },
+          /*
+           * A post to a site's members is the "Newsletter" stream — regular
+           * news and stories from the site. Declared so a member who left
+           * that stream, while staying subscribed to everything else, is not
+           * mailed it; the gate asks the topic only for callers that name
+           * one.
+           */
+          marketing: {
+            hostId,
+            siteBase,
+            topicId: EMAIL_TOPIC_NEWSLETTER,
+          },
         })
         // The cost meter counts messages that LEFT. A suppressed or capped
         // recipient produced no message and therefore no cost, and counting

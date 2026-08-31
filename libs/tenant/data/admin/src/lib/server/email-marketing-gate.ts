@@ -132,7 +132,11 @@ import {
 } from '@aglyn/shared-util-email'
 import firebaseAdmin from './firebase-admin'
 import { readPersonEngagement } from './email-delivery-log'
-import { emailSuppressionKey, filterSendableForHost } from './email-suppression'
+import {
+  emailSuppressionKey,
+  filterSendableForHost,
+  filterTopicSendable,
+} from './email-suppression'
 import { buildUnsubscribeUrl } from './email-unsubscribe-link'
 
 const defaultFirestore = () => firebaseAdmin.app().firestore()
@@ -570,6 +574,58 @@ export async function marketingSendVerdict(
     hostId: request.hostId,
     email,
   })
+
+  /*
+   * THE STREAM THIS MESSAGE BELONGS TO — the third list, and the narrowest.
+   *
+   * ONLY when the caller named one. An absent topic is not "the default
+   * topic": it is a message that belongs to no stream, and there is nothing
+   * for a person to have left. That is what keeps this check off the mail it
+   * must never touch — a receipt, a password reset, a booking confirmation,
+   * none of which declare a `marketing` context at all and none of which name
+   * a stream if they somehow did.
+   *
+   * After the suppression lists and before the counter read below, matching
+   * the order `campaign-send.ts` filters in, for two reasons that agree. It
+   * is the weaker fact, and the weaker fact should never be the one that
+   * decides — a person who unticked "Promotions and offers" is still a
+   * subscriber, where a person on either suppression list is not. And it is a
+   * TERMINAL refusal, so answering it before the counter read means a
+   * recipient this message was never going to reach costs one lookup rather
+   * than three.
+   *
+   * Fails OPEN, because `filterTopicSendable` does: a topic preference is a
+   * narrower fact than a suppression, and a read that failed for an unrelated
+   * reason is no reason to withhold a message from somebody the two lists
+   * above already cleared.
+   */
+  const topicId = String(request.topicId ?? '').trim()
+  if (topicId) {
+    const onTopic = await filterTopicSendable(
+      request.hostId,
+      topicId,
+      [email],
+      options?.firestore,
+    )
+    if (!onTopic.length) {
+      /*
+       * ⛔ A REFUSAL AND NOTHING ELSE, as with the pace refusals below.
+       *
+       * No suppression is written, no membership changes, and the frequency
+       * window is not appended to — a message that never left must not count
+       * against what this person has received. They stay on every other
+       * stream they subscribe to, and the next message on one of those goes.
+       */
+      return {
+        allowed: false,
+        refusal: 'topic-unsubscribed',
+        detail:
+          'This address has left the email topic this message belongs to. ' +
+          'They still receive the other streams from this site.',
+        unsubscribeUrl,
+      }
+    }
+  }
 
   // ONE read, and every refusal below is answered from it — except the
   // sunset's engagement half, which is a different document and is fetched
