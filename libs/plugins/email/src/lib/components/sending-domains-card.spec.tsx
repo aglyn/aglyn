@@ -90,8 +90,51 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
     </div>
   ),
   Container: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  HelpTip: () => null,
   MdiIcon: () => null,
   SrOnly: ({ children }: { children: ReactNode }) => <span>{children}</span>,
+  /*
+   * The confirmation the row menu's Remove opens. Doubled as an ACCEPT so the
+   * assertions below exercise the call that follows it; a double that
+   * rejected would make "the request was sent" untestable and would pass by
+   * never sending anything.
+   */
+  useConfirmationContext: () => ({
+    confirm: () => Promise.resolve(undefined),
+  }),
+}))
+/*
+ * The row overflow, flattened to its items.
+ *
+ * A double rather than the real menu because the real one hides its items
+ * behind a click, and what these tests are about is WHICH items a row offers
+ * and which of them are inert — a menu that had to be opened first would let
+ * an assertion pass against a menu that never rendered. `title` carries the
+ * disabled reason, which is where the real component puts it too.
+ */
+jest.mock('@aglyn/shared-ui-jsx/components/row-actions-menu.component', () => ({
+  __esModule: true,
+  default: ({ items }: { items: any[] }) => (
+    <div>
+      {items.map((item) =>
+        item.href ? (
+          <a key={item.key} href={item.href}>
+            {item.label}
+          </a>
+        ) : (
+          <button
+            key={item.key}
+            type="button"
+            disabled={item.disabled}
+            title={item.disabledReason}
+            onClick={item.onClick}
+          >
+            {item.label}
+          </button>
+        ),
+      )}
+    </div>
+  ),
 }))
 jest.mock('@aglyn/shared-ui-jsx/components/navigation-drawer.component', () => ({
   NavigationDrawerComponent: ({
@@ -282,11 +325,11 @@ describe('what a reader may do is what the server says they may do', () => {
     await mount()
 
     expect(screen.getByText(/starts on the Pro plan/i)).toBeTruthy()
-    // And it says the site still sends. A plan gate on the custom domain is
-    // not a gate on the mail: the address Aglyn issues carries account email
-    // at every tier, and a card that only said "not on your plan" would read
-    // as an outage.
-    expect(screen.getByText(/sends without it/i)).toBeTruthy()
+    // And it says the site still sends. A plan gate on the two domains is not
+    // a gate on the mail: the shared address carries account email at every
+    // tier, and a card that only said "not on your plan" would read as an
+    // outage.
+    expect(screen.getByText(/sends without either of those/i)).toBeTruthy()
   })
 })
 
@@ -317,6 +360,170 @@ describe('navigating to one domain', () => {
     // above pass against the very bug it exists to catch.
     expect(BASE_PATH.endsWith('/sending')).toBe(false)
   })
+
+  it('points the row menu at the same address the row does', async () => {
+    identity.domains = [
+      { domain: 'acme.com', status: 'requested', records: [] },
+    ]
+    await mount()
+    // An anchor, not a handler: the domain's page has to be middle-clickable
+    // like any other link. And the same one derivation as the row click, so
+    // the two cannot drift apart.
+    expect(
+      screen.getByRole('link', { name: 'Open domain' }).getAttribute('href'),
+    ).toBe(`${BASE_PATH}/sending/acme.com`)
+  })
+})
+
+/*==========================================
+  What a row offers, and what it refuses to
+==========================================*/
+
+/**
+ * A MENU ITEM IS A PROMISE THAT THE ROUTE BEHIND IT WILL ANSWER.
+ *
+ * The table had no per-row control at all, so every operation on a domain
+ * meant opening its page first. What it must not gain instead is a menu of
+ * actions that 403 — the routes behind these gate on the organization admin
+ * role and on the own-domain entitlement, and both are already in the view
+ * this card holds. So an item the reader cannot use is present and INERT with
+ * the reason on it, which is the one of the three states that says something:
+ * an absent control and an inapplicable one look identical to a reader.
+ */
+describe('the row menu offers only what the routes will accept', () => {
+  const menuItem = (label: RegExp) =>
+    screen.getByRole('button', { name: label }) as HTMLButtonElement
+
+  it('refuses to check DNS for a domain with no records yet', async () => {
+    identity.domains = [
+      { domain: 'acme.com', status: 'requested', records: [] },
+    ]
+    await mount()
+
+    const item = menuItem(/Check DNS/i)
+    expect(item.disabled).toBe(true)
+    expect(item.getAttribute('title')).toMatch(/nothing to look for/i)
+  })
+
+  it('checks DNS through the domains route once records exist', async () => {
+    identity.domains = [
+      { domain: 'acme.com', status: 'records-issued', records: [] },
+    ]
+    await mount()
+
+    await act(async () => {
+      menuItem(/Check DNS/i).click()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    expect(posted).toContainEqual({
+      orgId: 'org-1',
+      domain: 'acme.com',
+      action: 'verify',
+    })
+  })
+
+  it('will not send as a domain that is not verified, and says why', async () => {
+    identity.domains = [
+      { domain: 'acme.com', status: 'records-issued', records: [] },
+    ]
+    await mount()
+
+    const item = menuItem(/Send this site’s email as this domain/i)
+    expect(item.disabled).toBe(true)
+    expect(item.getAttribute('title')).toMatch(/Only a verified domain/i)
+  })
+
+  it('will not offer to send as the domain already in use', async () => {
+    identity.selected = 'acme.com'
+    identity.domains = [
+      { domain: 'acme.com', status: 'verified', records: [] },
+    ]
+    await mount()
+
+    const item = menuItem(/Send this site’s email as this domain/i)
+    expect(item.disabled).toBe(true)
+    expect(item.getAttribute('title')).toMatch(/already sends as this domain/i)
+  })
+
+  it('moves the selection through the identity route', async () => {
+    identity.domains = [
+      { domain: 'acme.com', status: 'verified', records: [] },
+    ]
+    await mount()
+
+    await act(async () => {
+      menuItem(/Send this site’s email as this domain/i).click()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    // The IDENTITY route, whose write gate is the per-site selection — not
+    // the domains route, which decides what the ORG has proved.
+    expect(posted).toContainEqual({ hostId: 'host-1', domain: 'acme.com' })
+  })
+
+  /**
+   * The gate the card can see, applied before the route has to. A viewer is
+   * shown the whole menu with the reason on the items they cannot use, rather
+   * than a shorter menu that leaves them wondering whether the console can do
+   * these things at all.
+   */
+  it('inerts the domains-route actions for somebody who cannot manage', async () => {
+    identity.canManage = false
+    identity.domains = [
+      { domain: 'acme.com', status: 'verified', records: [] },
+    ]
+    await mount()
+
+    expect(menuItem(/Check DNS/i).disabled).toBe(true)
+    expect(menuItem(/Remove domain/i).disabled).toBe(true)
+    expect(menuItem(/Remove domain/i).getAttribute('title')).toMatch(
+      /organization admin role/i,
+    )
+    // Opening it is still offered — reading a domain's records needs nothing.
+    expect(
+      screen.getByRole('link', { name: 'Open domain' }),
+    ).toBeTruthy()
+  })
+
+  it('removes a domain through the domains route, after confirming', async () => {
+    identity.domains = [
+      { domain: 'acme.com', status: 'verified', records: [] },
+    ]
+    await mount()
+
+    await act(async () => {
+      menuItem(/Remove domain/i).click()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    // The URL as well as the verb: a DELETE carries no body, so the org and
+    // the domain travel in the query and an assertion on the method alone
+    // would pass against a call that named neither.
+    const calls = ((global as any).fetch as jest.Mock).mock.calls
+    expect(
+      calls.some(
+        ([url, init]: [string, any]) =>
+          init?.method === 'DELETE' &&
+          String(url).includes('/api/email/sending-domains') &&
+          String(url).includes('orgId=org-1') &&
+          String(url).includes('domain=acme.com'),
+      ),
+    ).toBe(true)
+  })
+
+  it('inerts them for a workspace whose plan does not carry own domains', async () => {
+    identity.entitled = false
+    identity.domains = [
+      { domain: 'acme.com', status: 'verified', records: [] },
+    ]
+    await mount()
+
+    expect(menuItem(/Check DNS/i).disabled).toBe(true)
+    expect(menuItem(/Check DNS/i).getAttribute('title')).toMatch(
+      /plan that carries sending as your own domain/i,
+    )
+  })
 })
 
 /*==========================================
@@ -342,7 +549,7 @@ describe('the offer of an Aglyn sending domain', () => {
     // the trade this option asks a merchant to accept and it cannot be weighed
     // unseen.
     expect(
-      screen.getByRole('button', { name: /Set up acme\.mail\.aglyn\.app/i }),
+      screen.getByRole('button', { name: /Ask for acme\.mail\.aglyn\.app/i }),
     ).toBeTruthy()
   })
 
@@ -372,7 +579,7 @@ describe('the offer of an Aglyn sending domain', () => {
 
     await act(async () => {
       screen
-        .getByRole('button', { name: /Set up acme\.mail\.aglyn\.app/i })
+        .getByRole('button', { name: /Ask for acme\.mail\.aglyn\.app/i })
         .click()
       await new Promise((resolve) => setTimeout(resolve, 0))
     })
@@ -405,7 +612,7 @@ describe('the offer of an Aglyn sending domain', () => {
 
     await mount()
 
-    expect(screen.queryByRole('button', { name: /Set up/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Ask for/i })).toBeNull()
     // The sentence still names the domain it has, so the reader is told what
     // this site sends on rather than simply shown nothing.
     expect(screen.getByText(/This site has one — acme\.mail\.aglyn\.app/)).toBeTruthy()
@@ -417,7 +624,7 @@ describe('the offer of an Aglyn sending domain', () => {
     await mount()
 
     // The notice about who CAN is what they get instead.
-    expect(screen.queryByRole('button', { name: /Set up/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Ask for/i })).toBeNull()
     expect(screen.getByText(/needs the organization admin role/i)).toBeTruthy()
   })
 
@@ -431,9 +638,12 @@ describe('the offer of an Aglyn sending domain', () => {
 
     await mount()
 
-    expect(screen.queryByRole('button', { name: /Set up/i })).toBeNull()
-    // The explainer still renders — it is prose about the two options and does
-    // not depend on the offer being available.
-    expect(screen.getByText('Two ways to get one')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Ask for/i })).toBeNull()
+    // The explainer still renders — it is prose about the three places a
+    // site's mail can leave from and does not depend on the offer being
+    // available.
+    expect(
+      screen.getByText('Where this site’s mail can leave from'),
+    ).toBeTruthy()
   })
 })

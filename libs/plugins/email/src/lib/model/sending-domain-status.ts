@@ -42,7 +42,24 @@
  * without replacing it: {@link describeSendingDomain} keeps reporting
  * `records-issued` or `verified`, and {@link INCONCLUSIVE_CHECK} is what the
  * surface adds next to it.
+ *
+ * ## THE OTHER DISTINCTION: A CLAIM THAT IS WAITING IS NOT A CLAIM THAT FAILED
+ *
+ * A dedicated platform subdomain is claimed when a merchant asks for one, and
+ * the claim is filled only if the mail provider's account-wide domain
+ * allowance has room. When it does not, the claim is refused before any call
+ * is made and `at-capacity` is stored where a provider refusal would go.
+ *
+ * The record cannot tell those two apart — both leave a `requested` domain
+ * with a reason and no key — but the reader has to, because the sentences
+ * point at different people. A provider refusal is a fault to retry; this is a
+ * queue, nothing is broken, and the retry does not move it until we have
+ * bought more allowance. Describing it as a failed key request would tell a
+ * merchant their sending setup is broken when the only thing that happened is
+ * that they are waiting for something they were never promised outright.
  */
+
+import { SENDING_DOMAIN_AT_CAPACITY } from '@aglyn/shared-util-email'
 
 /** The four states a record can be stored in. */
 export type SendingDomainStatusId =
@@ -128,6 +145,37 @@ export function describeSendingDomain(input: {
        * one whose attempt failed, because those are two different people's
        * problems and only one of them is the customer's.
        */
+      /*
+       * WAITING FOR ROOM, and it is neither of those two.
+       *
+       * Read FIRST, because it arrives in the same field a provider refusal
+       * does and the generic branch would otherwise print "the mail provider
+       * did not issue a signing key" about a call that was never made.
+       *
+       * Three things this has to say and the failure copy gets all three
+       * wrong: nothing is broken, nothing at a registrar is involved, and the
+       * site's account email is still going out on the shared address. It
+       * names the retry anyway — the button is on the screen either way, and
+       * a state that says nothing about the one control beside it invites the
+       * reader to assume it will help.
+       */
+      if (String(input?.issueError ?? '') === SENDING_DOMAIN_AT_CAPACITY) {
+        return {
+          label: 'Waiting for room',
+          color: 'warning',
+          severity: 'info',
+          text:
+            'This domain has been asked for and is waiting. We are at our ' +
+            'mail provider’s limit on sending domains, so it has not been ' +
+            'created yet — nothing here is broken and nothing at your DNS ' +
+            'host is involved. This site keeps sending its receipts and ' +
+            'account email on the shared address meanwhile; campaigns wait ' +
+            'with the domain. Request records will keep answering the same ' +
+            'way until we have room, and a domain you own instead of this ' +
+            'one is never held this way.',
+          sending: false,
+        }
+      }
       if (input?.pendingProvider !== false && !input?.issueError) {
         return {
           label: 'Waiting on a signing key',
@@ -171,4 +219,63 @@ export const INCONCLUSIVE_CHECK = {
     'We could not reach DNS to run that check, so nothing has changed — not ' +
     'the records, and not this domain’s state. This is our lookup failing, ' +
     'not a problem with your zone. Try again in a few minutes.',
+}
+
+/**
+ * WHAT REMOVING ONE SENDING DOMAIN DOES TO THE SITE USING IT.
+ *
+ * Here for the reason {@link describeSendingDomain} is: the domain's own page
+ * and the row menu on the list both ask to remove the same record, and two
+ * confirmations describing one action differently is how a merchant comes to
+ * dismiss the harsher one as boilerplate.
+ *
+ * ## Three answers, because releasing a claim does three different things
+ *
+ * `resolveHostSendingIdentity` reads WHOSE name a selection is from the domain
+ * itself, so what a removal costs depends on which of the three the site is
+ * standing on:
+ *
+ *   - a domain the CUSTOMER owns, currently in use. It stops sending
+ *     altogether, receipts included. That is deliberate rather than a gap: the
+ *     customer published records saying what their recipients would see, and
+ *     falling back to any other address would contradict them.
+ *   - a domain WE set up, currently in use. It drops to the shared pool, so
+ *     receipts carry on and only marketing stops.
+ *   - a domain nothing is sending as. The claim and the key go; no mail moves.
+ *
+ * Printing the harshest of the three for all of them would be the surface
+ * warning about a consequence that is not going to happen, which is the same
+ * failure as printing the gentlest.
+ */
+export function describeSendingDomainRemoval(input: {
+  domain: string
+  /** The domain this site currently sends as, as the route reported it. */
+  selected?: string | null
+  /** The site's own platform-provisioned domain, or `''` when it has none. */
+  platformDomain?: string | null
+}): { title: string; description: string; confirmationText: string } {
+  const domain = String(input?.domain ?? '')
+  const inUse = Boolean(domain) && String(input?.selected ?? '') === domain
+  const ours = Boolean(domain) && String(input?.platformDomain ?? '') === domain
+
+  return {
+    title: `Remove ${domain}?`,
+    description: !inUse
+      ? 'The claim and the signing key are dropped. The DNS records stay in ' +
+        'your zone — nothing is changed at your registrar — and you can add ' +
+        'the domain again later, which issues a new key.'
+      : ours
+        ? `This site is currently sending as ${domain}. Removing it moves ` +
+          'receipts and account email back to the shared address, and stops ' +
+          'marketing email until this site has a domain of its own again. ' +
+          'Nothing in your own DNS is involved — we published these records ' +
+          'and we remove them.'
+        : `This site is currently sending as ${domain}. Removing the domain ` +
+          'does not move it onto another address — not the one this site is ' +
+          'issued, and not the shared address. It stops this site sending at ' +
+          'all, receipts included, until you choose another identity. The ' +
+          'DNS records stay in your zone; nothing is changed at your ' +
+          'registrar.',
+    confirmationText: 'Remove domain',
+  }
 }

@@ -288,9 +288,12 @@ Read this part before you use it, because it decides where the conversation cont
   answer lands in your own mailbox. Nothing on this platform receives mail, so the
   Inbox will not show it. The Inbox is a record of what your site collected and what you
   sent back — it is not a mailbox.
-- **The reply is sent from the platform's address**, with your site's sending name in
-  front of it. Sending from your own domain is not available yet. The Reply-To above is
-  what makes the round trip work in the meantime.
+- **The reply leaves on whatever this site sends as**, with your site's sending name in
+  front of it — a domain of the site's own if it has one, and the shared Aglyn address
+  if it does not. See
+  [which domain your mail leaves on](../../marketing-and-automation/email-campaigns/overview.md#sending-domains).
+  The Reply-To above is what makes the round trip work either way, because it is the
+  only part of the address that may point at a mailbox nobody here has verified.
 - **Replies sent** lists what you have already sent on this submission, so you can see
   whether someone else on your team has answered.
 

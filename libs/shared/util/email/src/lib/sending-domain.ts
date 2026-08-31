@@ -192,6 +192,25 @@ export interface SendingDomainRecord {
 }
 
 /**
+ * The one {@link SendingDomainRecord.lastIssueError} value that is not a
+ * provider failure.
+ *
+ * A dedicated platform subdomain draws on an allowance the provider grants the
+ * whole account, so a claim made while that allowance is spent is refused
+ * before any call is made. It is stored in the same field as a provider
+ * refusal because it is the same fact from the record's point of view — no key
+ * was issued, and the domain stays `requested` — but it is a DIFFERENT
+ * sentence to the person reading it: nothing failed, nobody's DNS is wrong,
+ * and pressing the retry does not move it until there is room.
+ *
+ * Named here rather than at either end because the two ends are in different
+ * projects: the console's provisioning sweep writes it and the email plugin's
+ * status model reads it, and a string spelled out twice is one a rename
+ * silently breaks in the surface rather than in the writer.
+ */
+export const SENDING_DOMAIN_AT_CAPACITY = 'at-capacity'
+
+/**
  * A provider's failure reduced to something safe to store, log and print.
  *
  * Provider error bodies are attacker-adjacent text we did not write, and the

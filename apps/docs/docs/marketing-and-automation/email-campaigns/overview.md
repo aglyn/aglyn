@@ -66,19 +66,39 @@ and the unsubscribe links in mail already delivered are untouched.
 
 ### Who the email comes from {#who-the-email-comes-from}
 
-These fields sit under the audience picker, and they are per email rather than per site:
+These fields sit under the audience picker. The first picks from a list the site was set
+up with; the rest are yours to change for this one email:
 
-- **From address** — which verified identity this email leaves on. It is offered only
-  when your site has more than one verified domain to choose between. See
+- **From** — which of the site's **senders** this email goes out as. A sender is a
+  mailbox on the site's sending domain, with a display name and a reply address stored
+  beside it. The picker appears when the site holds more than one; with a single sender
+  there is nothing to choose, so the composer names it instead of asking. **Add a
+  sender…** at the bottom of the list opens the same drawer the Sending page uses. See
+  [the addresses this site may send as](#senders).
+- **From address** — which verified domain this email leaves on. It is offered only when
+  your site has more than one verified domain to choose between. See
   [sending domains](#sending-domains) below.
-- **From name** — the display name in front of your sending address. The address itself
-  is always a verified sending identity; a from name changes what a recipient reads,
-  never which domain the mail leaves on.
-- **Reply-to** — where replies land, when that is not the sending address.
+- **From name** — the display name in front of your sending address. Picking a sender
+  fills this from that sender's own name, and editing it here changes this email only —
+  the sender itself is untouched, and the helper text under the field says which of the
+  two you are looking at. The address itself is always a verified sending identity; a from
+  name changes what a recipient reads, never which domain the mail leaves on.
+- **Reply-to** — where replies land, when that is not the sending address. Picking a
+  sender fills this too, and editing it is per email in the same way.
 - **Preheader** — the preview line an inbox shows after the subject.
+
+Under the picker the composer states the result in one line — the name, the address the
+email will leave on, and the reply address when one is set — so you are never assembling
+the `From:` line in your head.
 
 Left empty, the from name falls back to your workspace's branding and no reply-to or
 preheader is set.
+
+**There is no box to type a sending address into**, and that is deliberate. A `From:`
+address is a real mailbox: bounces come back to it, and mail clients that ignore
+`Reply-To:` answer to it. An address invented for one campaign is an address nobody
+serves. So addresses are set up once, on **Emails → Sending**, and a campaign picks among
+them.
 
 ### Which domain your mail leaves on {#sending-domains}
 
@@ -104,29 +124,38 @@ alternative and no way to opt out of the consequence — and one campaign's comp
 there would be charged against all of it.
 
 That is a deliverability rule rather than a billing one. It lines up with the plans
-because a site entitled to send campaigns is a site entitled to a domain of its own.
+because a site entitled to send campaigns is a site entitled to a domain of its own — to
+**ask** for one, at least, which is not quite the same thing and is the subject of
+[a domain we set up is asked for, not included](#a-domain-we-set-up-is-a-request).
 
-#### The two ways to get one {#two-ways-to-get-a-domain}
+#### The two ways to get a domain of this site's own {#two-ways-to-get-a-domain}
 
-Both arrive with **Pro**, and what separates them is not the price:
+A site's mail can leave from three places, and only the first is guaranteed. **The shared
+address** above needs nothing, is there on every plan, and carries account email at any
+tier — it is where a site sits until one of the two below is in place, and it is where it
+goes back to if one is removed. The two below both need **Pro** or above, and what
+separates them is not the price:
 
 |  | A domain we set up | A domain you own |
 | --- | --- | --- |
 | **Looks like** | `hello@yoursite.mail.aglyn.app` | `hello@yoursite.com` |
-| **Comes with** | Pro and above | Pro and above |
+| **How you get it** | Ask for it on the Sending page. A request, which we may not be able to fill straight away | Add it yourself, then publish three records |
+| **Needs** | Pro and above, **and room in our provider allowance** | Pro and above |
 | **DNS work** | None — we publish the records | Three records, published in your zone |
 | **Reputation** | This site's alone | Entirely yours |
 | **Recipients see** | An Aglyn address | Your own name |
 
 **A domain you already own is the better of the two.** Your brand in the `From:` line,
 and a sending history that belongs to you rather than to a name inside `aglyn.app`. The
-trade is the DNS work: the records go in your zone, and we never write to it.
+trade is the DNS work: the records go in your zone, and we never write to it. It is also
+the one we can always say yes to — see the next section for why that is not true of the
+other.
 
-**The domain we set up** costs you no DNS work at all and is provisioned when your
-workspace moves to a plan that carries one — not at signup. Its name is **pinned** at that
-moment from the site's address, and renaming the site afterwards does not move it. That is
-deliberate: a sending domain's value is its age with the mailbox providers, and a new name
-starts at zero. Ask support if you want the sending name changed anyway.
+**The domain we set up** costs you no DNS work at all. Its name is **pinned** the moment
+it is claimed, taken from the site's address as it reads then, and renaming the site
+afterwards does not move it. That is deliberate: a sending domain's value is its age with
+the mailbox providers, and a new name starts at zero. Ask support if you want the sending
+name changed anyway.
 
 **Nothing stops while a domain is being set up, and the two kinds differ here.** A domain
 *we* set up is our work, so while it is still coming up your account email carries on
@@ -134,35 +163,68 @@ going out on the shared address as before. A domain *you* own is your instructio
 what recipients will see, so until its records verify this site does not send at all
 rather than quietly sending as something else. Campaigns wait for either to finish.
 
-There are two ways to get a domain of this site's own, and the card offers both on the
-Pro plan and above:
+The Sending card offers both:
 
 - **Add a domain you already own** — `news.yourshop.com`, or `yourshop.com` itself. Your
   recipients see your name, and the reputation you build belongs to you wherever you go
   next. It needs three DNS records published at your registrar.
-- **Ask Aglyn to issue this site one** — press **Use an Aglyn domain** and we set up
-  `yoursite.mail.aglyn.app` with nothing for you to publish. It unblocks campaigns and
-  gives this site a sending reputation of its own, separate from the shared pool. The
-  trade is the name: recipients see an Aglyn address rather than yours.
+- **Ask us to set this site up with one** — press **Ask for yoursite.mail.aglyn.app** and
+  there is nothing for you to publish. It unblocks campaigns and gives this site a sending
+  reputation of its own, separate from the shared pool. The trade is the name: recipients
+  see an Aglyn address rather than yours.
 
 Pick the first if you can publish DNS records. Pick the second if you cannot — an agency
 client whose domain somebody else administers, or a registrar you do not have access to.
 Neither is issued automatically, and a site with neither keeps sending account email on
 the shared address in the meantime.
 
+#### A domain we set up is asked for, not included {#a-domain-we-set-up-is-a-request}
+
+This is the part worth reading before you plan around it.
+
+**Nothing is provisioned automatically.** Creating a site does not claim a sending domain,
+and neither does upgrading. A site gets one only when somebody presses the button on
+**Emails → Sending**. If you upgraded and went looking for a domain you expected to find
+waiting, that is why it is not there: it is one press away, and it was never going to
+arrive on its own.
+
+**Your plan admits the request. It does not guarantee the domain.** Every domain we set up
+takes a slot in the allowance our mail provider gives us for the whole platform, three
+records in our own DNS, and a permanent place in the checks we re-run against it. That
+allowance is bought rather than conjured, so a request made while we are at the ceiling is
+held rather than filled, and the domain reads **Waiting for room** on the Sending page
+until we have some. We would rather tell you that than show you a set of records that is
+not coming.
+
+**Being held is not stopped mail.** A site waiting on a domain keeps sending its receipts,
+password resets and booking confirmations on the shared address exactly as before, and
+nothing you have set up is lost. What is waiting is the reputation of its own — and, with
+it, campaigns.
+
+**If you would rather not wait, add a domain you own.** A domain you publish records for
+is never held this way, and it gives you the better `From:` line as well. It is the option
+this page recommends first for both reasons.
+
+You will not find "a dedicated sending domain" ticked on the plan comparison, and that is
+on purpose: a tick in a checklist reads as an inclusion, and this is a request we answer
+rather than something your plan hands you.
+
+#### The states a domain can be in {#domain-states}
+
 Add a domain and you are given the exact DNS records to publish — an authorization
 record, a signing key and a bounce-routing record. Publish them wherever your DNS is
-hosted, then press **Check DNS**. A domain has five things it can be telling you:
+hosted, then press **Check DNS**. A domain has six things it can be telling you:
 
 | State | What it means | What to do |
 | --- | --- | --- |
 | **Waiting on a signing key** | The domain is claimed, but no key has been issued for it yet, so there is nothing to publish. | Nothing at your registrar will help. Press **Request records**. |
+| **Waiting for room** | We are at our mail provider's limit on sending domains, so this one — which is a domain we set up, inside our own namespace — has not been created yet. | Nothing, and nothing at your registrar is involved. This site keeps sending account email on the shared address. A domain you own instead of this one is never held this way. |
 | **Key request failed** | The mail provider refused to issue a key. | Press **Request records** again; it creates no second domain. If it persists, this is ours to fix. |
 | **Publish the records** | The records are issued and waiting for you. | Add them at your DNS host, then **Check DNS**. |
 | **Verified** | Every required record is live and we can see it. | Nothing — this domain can send. |
 | **Records not found** | We looked, and one or more records are not published. | Compare them against what is shown and check again. |
 
-**"DNS unreachable" is none of the five.** It means our lookup did not complete — a
+**"DNS unreachable" is none of the six.** It means our lookup did not complete — a
 resolver outage, a timeout — so nothing changed, including the domain's state. Your zone
 is not the problem and there is nothing to edit. Try again in a few minutes.
 
@@ -175,6 +237,41 @@ way to fail. Removing the domain **we set up** is the gentler case: receipts go 
 the shared address and only marketing stops.
 
 Adding a domain and choosing what a site sends as need the organization admin role.
+
+#### The addresses this site may send as {#senders}
+
+Under the domain, the same page lists this site's **senders**. Each one is a mailbox on
+the site's sending domain with a display name and a reply address stored beside it, and
+every email you compose goes out as one of them.
+
+| Column | What it is |
+| --- | --- |
+| **Sends as** | The part before the `@`. The domain after it is the site's verified sending domain and is not editable here — the `From:` domain has to be exactly the domain whose key signed the message. |
+| **Name** | What a recipient reads in front of the address. A person's name, or your brand. |
+| **Replies to** | Where a reply goes. This one may be any mailbox at all, including a personal address on a domain you have never verified. |
+
+One sender is the **default** — what an email that names no other goes out as. **Make
+default** on any row moves it. The default cannot be removed until another one has taken
+over, because every site sends as something and picking the replacement for you would
+decide what your mail looks like from an ordering you never saw. A site can hold up to 25.
+
+**Send as a person**, at the top of the add drawer, fills all three fields from somebody
+who works on this site — anyone on the workspace team who can reach it, and anyone
+invited to the site directly. It proposes their mailbox name for the address, their
+display name for the name, and their real address as the **reply** target. Their own
+address cannot be the sending address: mail we sign cannot claim to come from their mail
+provider's domain, and a receiving server refuses that rather than delivering it.
+
+**A site on the shared address has exactly one sender.** The mailbox on a shared address
+is where every site using it gets its bounces back, so it is not one site's to rename, and
+a second sender that could not differ in the mailbox would be the same address offered
+twice. The **name** and the **reply address** are not restricted this way — both are
+honored on the shared address exactly as they are on a domain of your own. A mailbox you
+set before this site has its own domain is kept and takes effect the day it does, and the
+Sending page says as much rather than showing you a setting that is quietly doing nothing.
+
+Adding, editing and removing senders needs the organization admin role. Picking one for a
+particular email does not — anyone who can write a campaign can choose among them.
 
 ### Send a test {#send-a-test}
 

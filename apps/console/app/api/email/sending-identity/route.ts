@@ -583,6 +583,16 @@ async function handler(request: Request): Promise<Response> {
         status: record.status,
         verifiedAtMs: record.verifiedAtMs ?? null,
         lastCheckedAtMs: record.lastCheckedAtMs ?? null,
+        /*
+         * THE REASON, because one of its values is not a fault.
+         *
+         * A `requested` domain reads as "waiting on a signing key" without
+         * it, and that sentence tells the reader to press a button. A claim
+         * held at the provider's domain allowance is not waiting on anything
+         * a press moves, so the list would be sending somebody to retry a
+         * queue. It costs no extra read — the record is already in hand.
+         */
+        lastIssueError: record.lastIssueError ?? null,
       })),
       canManage,
       entitled,
@@ -907,7 +917,8 @@ async function handler(request: Request): Promise<Response> {
         {
           error: planned
             ? dedicatedDomainPlan
-              ? `A sending domain of this site’s own comes with ${dedicatedDomainPlan}. ` +
+              ? `Asking for a sending domain of this site’s own needs ${dedicatedDomainPlan}, ` +
+                'which admits the request rather than including the domain. ' +
                 'Until then this site sends its receipts and account email on ' +
                 'the shared address, and marketing email needs a domain of ' +
                 'its own.'

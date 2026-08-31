@@ -61,12 +61,19 @@
  *
  * ## Sending identity
  *
- * The `From:` address is the one verified platform identity, because per-org
- * sending domains do not exist. Only the display name varies, through the
- * shared `resolveBrandingProfile`, which is entitlement-gated — so a merchant
- * without white-label replies to their own customer under the platform's
- * name. That is a known deficiency of a phase this feature does not build,
- * and it is the reason `Reply-To` is load-bearing rather than a nicety.
+ * The `From:` address is whatever THIS SITE sends as — `hostSendingIdentity`,
+ * the same resolution a campaign gets — so a site with a domain of its own
+ * replies on it, and a site without one replies on the shared pool, which is
+ * correct for a reply because a reply is transactional.
+ *
+ * The display name varies separately, through `resolveBrandingProfile`, which
+ * is entitlement-gated: a merchant without white-label replies under the
+ * platform's name even on their own domain.
+ *
+ * `Reply-To` stays load-bearing either way, and not as a stopgap. Nothing
+ * here receives mail, so the answer has to be routed to a mailbox somebody
+ * actually reads — and `Reply-To` is the one header that may name an address
+ * on a domain this platform has never verified.
  *
  * ## Consent and suppression
  *

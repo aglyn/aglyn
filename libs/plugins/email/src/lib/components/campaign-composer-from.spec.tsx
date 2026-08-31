@@ -111,6 +111,9 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   useConfirmationContext: () => ({ confirm: () => Promise.resolve(undefined) }),
   Container: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  // The sender drawer's own help affordance. It is mounted from here, so a
+  // missing double is a drawer that cannot render rather than a missing tip.
+  HelpTip: () => null,
   MdiIcon: () => null,
   SrOnly: ({ children }: { children: ReactNode }) => <span>{children}</span>,
 }))

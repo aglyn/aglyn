@@ -16,9 +16,9 @@
  */
 'use client'
 
-import { hostRoleFor, HOST_ACCESS_ROLES } from '@aglyn/aglyn'
+import { hostRoleFor, HOST_ACCESS_ROLES, pluginDocsHelp } from '@aglyn/aglyn'
 import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
-import { Container, MdiIcon, SrOnly } from '@aglyn/shared-ui-jsx'
+import { Container, HelpTip, MdiIcon, SrOnly } from '@aglyn/shared-ui-jsx'
 import { NavigationDrawerComponent } from '@aglyn/shared-ui-jsx/components/navigation-drawer.component'
 import {
   normalizeLocalPart,
@@ -510,6 +510,22 @@ export function SendingSenderDrawer(props: SendingSenderDrawerProps) {
           <Typography variant="h6" component="div">
             {senderId ? 'Edit this sender' : 'Add a sender'}
           </Typography>
+          {/*
+            The help affordance every console surface carries, pointed at the
+            section that says what a sender is and which of its three fields
+            the shared address restricts — which is the question somebody
+            standing in this drawer with a disabled Mailbox field has.
+           */}
+          <HelpTip
+            {...pluginDocsHelp('emailCampaigns', {
+              anchor: '#senders',
+              title: 'Senders',
+              excerpt:
+                'A mailbox this site may send as, with the name and reply ' +
+                'address that go out in front of it. A campaign picks one of ' +
+                'them rather than typing an address.',
+            })}
+          />
         </>
       }
     >
