@@ -193,11 +193,11 @@ Org roles (org-wide), then per-host refinement:
   denormalized for the same reason `orgSuspended` is, plus a harder one:
   the rules language has no `.map()`, so `hostAccess`'s keys cannot be
   turned into tokens at evaluation time at any price.
-  - Both projections — `memberRoles` on host docs, `scopeTokens` on member
-    docs — are written by the single `syncOrgAuthProjections()` writer,
-    which every membership mutation calls. A grant path that updates one
-    and forgets the other silently over- or under-grants, so they do not
-    get separate writers.
+  - All three projections — `memberRoles` on host docs, `scopeTokens` and
+    `resolvedPermissions` on member docs — are written by the single
+    `syncOrgAuthProjections()` writer, which every membership mutation calls.
+    A grant path that updates one and forgets another silently over- or
+    under-grants, so they do not get separate writers.
   - Whether a member is org-wide (owner/admin, `allHosts`, or the legacy
     pre-`allHosts` shape) is decided by one shared `isOrgWideMember()` in
     `app-utils/organizations`, mirrored by `isOrgWideMember()` in the
@@ -211,6 +211,29 @@ Org roles (org-wide), then per-host refinement:
     reads as org-wide, so an unbackfilled row never hides a real member's
     workspace (`tools/scripts/backfill-org-reach.mjs` stamps it). This is
     chrome, not a boundary — the rules above are the boundary.
+- **Custom roles.** A member's effective permissions resolve through three
+  layers — the role default, then `roles/{roleId}`, then the member's own
+  `permissions` overrides — and rules can follow none of that: `roleId`
+  addresses another document, and reimplementing the precedence in CEL costs
+  a second cross-document get() plus a dangling-id case whose null get()
+  denies where the resolver falls back to role defaults. So the member doc
+  carries `resolvedPermissions` — the resolver's own output, all three layers
+  applied, written by the same `syncOrgAuthProjections()` — and
+  `memberResolves()` reads the answer instead of chasing the inputs.
+  - **An absent map is not an empty one.** Rules fall back to the layers they
+    can still read: the member's `permissions` overrides, then the role gate
+    every caller conjoins this with. A member written before the field, or by
+    a path that bypasses the projection, therefore gets the verdict the role
+    gate alone produces. Never "everything allowed"; never "nothing allowed"
+    either.
+  - Applied to datasets and records only (`canWriteOrgDatasets()`), matching
+    `data.manage`'s scope. Contacts, segments and media keep the plain role
+    check, because no server route gates them on that permission and
+    requiring it would refuse members those routes permit.
+  - This projection has one input no membership mutation touches: the custom
+    role document itself. `/api/orgs/roles` therefore calls the same writer on
+    save and on delete, and awaits it, so a narrowing is in force before the
+    response says it is.
 
 ### Rules v2 sketch
 

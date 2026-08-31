@@ -21,7 +21,12 @@ import type { ComponentType } from 'react'
 import { useEnabledPluginIds } from './console-plugins-gate.component'
 import { useDashboardWidgetPrefs } from './dashboard-widget-prefs.context'
 import useCurrentOrg from '../hooks/use-current-org'
+import useOrgPermissions from '../hooks/use-org-permissions'
 import { resolveExtensionEntitlement } from '../utils/extension-entitlement'
+import {
+  requiredExtensionPermissions,
+  resolveExtensionPermission,
+} from '../utils/extension-permission'
 import {
   isDashboardWidgetHidden,
   orderDashboardWidgets,
@@ -43,7 +48,29 @@ export interface EntitledSlotWidget {
 
 /**
  * The widgets a slot may render for the current workspace: registered for
- * the slot, enabled for this org and site, and ENTITLED (AGL-2484).
+ * the slot, enabled for this org and site, ENTITLED (AGL-2484) and PERMITTED.
+ *
+ * ## The permission gate, and why it is here rather than in the widget
+ *
+ * This resolved entitlement and nothing else, so a plugin card appeared
+ * wherever its slot was rendered no matter who was looking. Entitlement is a
+ * fact about the ORGANIZATION; it says nothing about the person, and the two
+ * surfaces that mount extension code have to answer both questions or the
+ * answer is whichever one each extension remembered to ask itself — which is
+ * exactly the position AGL-2484 found the entitlement half in.
+ *
+ * A card is the worst place to leave that to the extension. It is dropped
+ * onto a page the reader opened for something else, so the widget has already
+ * mounted and opened its listeners before any check it runs on itself could
+ * fire, and there is nowhere in a card to put a refusal anyone would read. So
+ * the gate is HERE, ahead of construction, and a card its reader may not have
+ * is simply absent — the same treatment, in the same place, as an unentitled
+ * one.
+ *
+ * `pending` is withheld like an unsettled entitlement is, and for the same
+ * reason: `useOrgPermissions` answers the permissive admin map while the
+ * member document is in flight, so "not yet known" and "granted" are one
+ * value in it, and rendering from that is the leak this closes.
  *
  * Shared with the dashboard's customize dialog, which has to list exactly the
  * cards the slot would render and no others. Resolving that separately would
@@ -63,21 +90,59 @@ export function useSlotWidgets(slots: readonly string[]): {
   // session-wide union across every org visited.
   const enabledPluginIds = useEnabledPluginIds()
   const { org, ready: orgReady } = useCurrentOrg()
-  const widgets = slots.flatMap((slot) =>
-    listConsoleWidgets(slot, enabledPluginIds)
-      .filter(
-        ({ extension }) =>
-          resolveExtensionEntitlement(extension.featureFlag, org, orgReady) ===
-          'entitled',
-      )
-      .map(({ extension, widget }) => ({
+  /**
+   * ONE resolution for every slot on the page, from `OrgPermissionsProvider`
+   * in `firebase-app.layout.tsx`.
+   *
+   * An unshared `useOrgPermissions` costs two `getDoc`s per call, and this
+   * hook runs once per mounted slot: the host dashboard mounts four of them
+   * plus the customize dialog, so gating them without sharing the resolution
+   * makes a page that reads the member document twice read it ten times.
+   * Under the provider this call reads context and issues nothing.
+   */
+  const { can, permissions, loaded: permissionsLoaded } = useOrgPermissions()
+  const answers = { can, permissions, loaded: permissionsLoaded }
+  const resolved = slots.flatMap((slot) =>
+    listConsoleWidgets(slot, enabledPluginIds).map(({ extension, widget }) => ({
+      entitlement: resolveExtensionEntitlement(
+        extension.featureFlag,
+        org,
+        orgReady,
+      ),
+      // The extension's requirement AND the widget's own, exactly as a nav
+      // item composes with its extension's: a card cannot escape its
+      // extension's gate by declaring a key its reader happens to hold.
+      permission: resolveExtensionPermission(
+        requiredExtensionPermissions(extension, widget),
+        answers,
+      ),
+      widget: {
         slot,
         widgetId: widget.widgetId,
         title: widget.title ?? extension.displayName ?? widget.widgetId,
         Component: widget.Component,
-      })),
+      },
+    })),
   )
-  return { widgets, ready: orgReady }
+  return {
+    widgets: resolved
+      .filter(
+        (entry) =>
+          entry.entitlement === 'entitled' && entry.permission === 'granted',
+      )
+      .map((entry) => entry.widget),
+    /**
+     * Both gates have settled, not just the org read.
+     *
+     * The customize dialog lists what the slot WOULD render, so answering
+     * `ready` while a card is still `pending` on the member document tells it
+     * the list is final and then grows it — a switch appearing under the
+     * reader's cursor. A slot whose widgets declare no permission never waits:
+     * `resolveExtensionPermission` returns `granted` for an empty requirement
+     * without consulting `loaded` at all.
+     */
+    ready: orgReady && resolved.every((entry) => entry.permission !== 'pending'),
+  }
 }
 
 /**

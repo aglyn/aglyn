@@ -461,6 +461,22 @@ export interface ConsoleWidget {
    * ambiguous for one contributing several.
    */
   title?: string
+  /**
+   * The permission a reader must hold for this card, when it is narrower
+   * than its extension's own {@link ConsoleExtension.permission}.
+   *
+   * Composes by AND with the extension's, like a nav item's does: a widget
+   * cannot escape its extension's gate by naming a key its reader happens to
+   * hold, and declaring nothing here inherits the extension's requirement
+   * rather than clearing it.
+   *
+   * A card is a surface the reader never asked for — the shell drops it onto
+   * a page they opened for something else — so there is nowhere in it to put
+   * an upsell or a refusal, and a widget its reader may not have is simply
+   * absent. That is the same treatment the entitlement gate gives a widget,
+   * and for the same reason.
+   */
+  permission?: string
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   Component: ComponentType<any>
 }

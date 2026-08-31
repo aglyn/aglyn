@@ -37,6 +37,7 @@ npx firebase emulators:exec --only firestore,database --project demo-rules-check
    && for spec in \
         cloud/rules-tenant.spec.mjs \
         cloud/rules-org-billing.spec.mjs \
+        cloud/rules-org-data-permission.spec.mjs \
         cloud/rules-working-draft.spec.mjs \
         cloud/marketplace-rules.spec.mjs \
         cloud/hosts-list-constraint.spec.mjs \

@@ -75,7 +75,7 @@ const REPO_ROOT = join(__dirname, '../../..')
 const read = (p: string) => readFileSync(join(REPO_ROOT, p), 'utf8')
 
 const SERVER_RESOLVER = 'libs/tenant/runtime/src/lib/org-permissions.ts'
-const CONSOLE_HOOK = 'apps/console/hooks/use-org-permissions.ts'
+const CONSOLE_HOOK = 'apps/console/hooks/use-org-permissions.tsx'
 const ADMIN_ORGS = 'libs/tenant/data/admin/src/lib/server/organizations.ts'
 
 /** An editor whose override REVOKES plugin installs. */
