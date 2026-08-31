@@ -109,8 +109,8 @@ describe('the assist credit odometer', () => {
     const payload = await response.json()
     expect(payload.credits).toEqual({
       used: 4_500,
-      limit: 18_000,
-      remaining: 13_500,
+      limit: 7_500,
+      remaining: 3_000,
     })
     const wire = JSON.stringify(payload)
     for (const leak of ['estCostUsd', 'costUsd', 'Usd', '4.5']) {
@@ -135,8 +135,8 @@ describe('the assist credit odometer', () => {
     const payload = await (await GET(get())).json()
     expect(payload.credits).toEqual({
       used: 0,
-      limit: 18_000,
-      remaining: 18_000,
+      limit: 7_500,
+      remaining: 7_500,
     })
   })
 

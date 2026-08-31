@@ -194,9 +194,10 @@ export function assistEntitledMonthlyLimit(): number {
  * UTC day bound it at roughly $0.28/day, so this is a backstop it cannot
  * reach rather than a cap it runs into.
  *
- * ⚠️ It applies only to an org whose plan sells NO assist band. Several plans
- * now include more assist than $40 of spend, so `assistMonthlyCeilingUsd`
- * keeps this default off them — see there for which figure binds when.
+ * ⚠️ It applies only to an org whose plan sells NO assist band. Agency and
+ * Enterprise include more assist than $40 of spend, so
+ * `assistMonthlyCeilingUsd` keeps this default off every plan that sells a
+ * band — see there for which figure binds when.
  */
 export const ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD = 40
 
@@ -266,10 +267,11 @@ function assistOperatorCeilingUsd(): number | null | undefined {
  *
  * `ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD` is $40, which was sized as a
  * runaway guard back when every org's assist spend was bounded by a message
- * cap. It is now BELOW what several plans include, so applying it to a plan
- * band would refuse Business, Scale, Advanced and Agency workspaces partway
- * through capacity they are paying for. A band that is sold is a product
- * limit; a default nobody typed is not allowed to undercut it.
+ * cap. It is BELOW what Agency and Enterprise include, so applying it to a
+ * plan band would refuse those workspaces partway through capacity they are
+ * paying for. The rule is not about which tiers happen to clear $40 today: a
+ * band that is sold is a product limit, and a default nobody typed is not
+ * allowed to undercut one at any size.
  *
  * ## Why an operator's explicit figure still does
  *

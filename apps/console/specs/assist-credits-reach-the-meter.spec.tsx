@@ -69,7 +69,7 @@ jest.mock('firebase/firestore', () => ({
 
 import BillingUsageComponent from '../components/billing/billing-usage.component'
 
-/** Business: 18,000 credits included. */
+/** Business: 7,500 credits included. */
 const BUSINESS = { $id: 'org-1', plan: 'business' } as any
 /** Free: `assistCreditsPerMonth: 0` — the plan sells no band. */
 const FREE = { $id: 'org-1', plan: 'free' } as any
@@ -81,7 +81,7 @@ const METER = 'Aglyn Assist credits (this month)'
 let mockCredits: { used: number; limit: number; remaining: number } | null
 
 beforeEach(() => {
-  mockCredits = { used: 4_500, limit: 18_000, remaining: 13_500 }
+  mockCredits = { used: 4_500, limit: 7_500, remaining: 3_000 }
   global.fetch = jest.fn(async (input: any) => {
     const url = String(input)
     if (url.startsWith('/api/billing/assist-credits')) {
@@ -95,8 +95,8 @@ beforeEach(() => {
 })
 
 describe('the fixture is a plan that really sells a band', () => {
-  it('Business includes 18,000 credits and Free includes none', () => {
-    expect(PLAN_ENTITLEMENTS.business.assistCreditsPerMonth).toBe(18_000)
+  it('Business includes 7,500 credits and Free includes none', () => {
+    expect(PLAN_ENTITLEMENTS.business.assistCreditsPerMonth).toBe(7_500)
     expect(PLAN_ENTITLEMENTS.free.assistCreditsPerMonth).toBe(0)
   })
 })

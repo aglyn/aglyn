@@ -239,14 +239,15 @@ export type ResolvedOrgEntitlements = Required<
  *
  * ## Why this number
  *
- * Enterprise carries no list price, so the band cannot be sized as a share of
- * one the way every self-serve tier's is. It is anchored to the top of the
- * ladder instead: 250,000 credits is ~1.5x Agency's band, which is the
- * direction the ladder has to run and the step it already takes between
- * Advanced and Agency. In cost that is $250 of provider spend a month, which
- * stays inside the ~20% envelope for any deal priced at or above the
- * self-serve top — and a deal below that is sold as Agency, not written as an
- * Enterprise agreement.
+ * Enterprise carries no list price, so the band cannot be sized the way every
+ * self-serve tier's is — against what that tier's other cost terms leave out
+ * of a known price. It is anchored to the top of the ladder instead: 87,000
+ * credits is 1.5x Agency's band, which is the direction the ladder has to run
+ * and the step it already takes between Advanced and Agency. In cost that is
+ * $87 of provider spend a month, or under 7% of any deal priced at or above
+ * the self-serve top — the same share of price the self-serve assist bands
+ * take. A deal below that is sold as Agency, not written as an Enterprise
+ * agreement.
  *
  * ## It is a DEFAULT, and a contract raises it
  *
@@ -255,7 +256,7 @@ export type ResolvedOrgEntitlements = Required<
  * without moving the figure every other agreement is measured against — the
  * same mechanism the other contracted bands use.
  */
-export const ENTERPRISE_ASSIST_CREDITS_PER_MONTH = 250_000
+export const ENTERPRISE_ASSIST_CREDITS_PER_MONTH = 87_000
 
 export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
   free: {
@@ -443,11 +444,11 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     managersPerOrg: 5,
     maxManagersPerOrg: 20,
     maxMembersPerHost: 25,
-    // Page views are 82.5% of this tier's modeled COGS — one GB is 1,748 views
+    // Page views are 78% of this tier's modeled COGS — one GB is 1,748 views
     // at `ESTIMATED_PAGE_TRANSFER_BYTES`, or $0.175 of measured cost — so the
     // bandwidth band is what decides whether the tier survives a customer
     // spending the whole allowance it was sold. At 225 GB the $56
-    // subscription holds a 14.9% gross margin with every band at 100%;
+    // subscription holds a 10.0% gross margin with every band at 100%;
     // `tier-margin-floor.spec.ts` carries the model and pins the figure.
     //
     // `meteredInfraPassThrough` is true here, so traffic past the band BILLS
@@ -464,7 +465,10 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     contactsPerHost: 10000,
     emailSendsPerMonth: 5000,
     actionRunsPerMonth: 5000,
-    assistCreditsPerMonth: 7_500,
+    // $2.75 of provider spend, against the $8.35 the tier's other seven cost
+    // terms leave out of $56. See `OrgEntitlements.assistCreditsPerMonth` for
+    // why the remainder and not the price is what sizes this.
+    assistCreditsPerMonth: 2_750,
     apiRequestsPerMonth: 0,
     datasetsPerOrg: 15,
     maxDatasetsPerOrg: 50,
@@ -537,7 +541,8 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     contactsPerHost: 50000,
     emailSendsPerMonth: 25000,
     actionRunsPerMonth: 50000,
-    assistCreditsPerMonth: 18_000,
+    // $7.50, against the $22.69 the other seven terms leave out of $139.
+    assistCreditsPerMonth: 7_500,
     apiRequestsPerMonth: 100_000,
     datasetsPerOrg: 100,
     maxDatasetsPerOrg: 250,
@@ -611,7 +616,8 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     contactsPerHost: 100000,
     emailSendsPerMonth: 40000,
     actionRunsPerMonth: 100000,
-    assistCreditsPerMonth: 32_000,
+    // $10.00, against the $30.62 the other seven terms leave out of $249.
+    assistCreditsPerMonth: 10_000,
     apiRequestsPerMonth: 300000,
     datasetsPerOrg: 250,
     maxDatasetsPerOrg: 500,
@@ -682,7 +688,10 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     contactsPerHost: 150000,
     emailSendsPerMonth: 65000,
     actionRunsPerMonth: 250000,
-    assistCreditsPerMonth: 52_000,
+    // $13.00, against the $39.74 the other seven terms leave out of $399 —
+    // the thinnest remainder on the ladder, and the tier that binds the
+    // whole assist ladder's share of it.
+    assistCreditsPerMonth: 13_000,
     apiRequestsPerMonth: 1_000_000,
     datasetsPerOrg: 500,
     maxDatasetsPerOrg: 1000,
@@ -769,7 +778,8 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     contactsPerHost: 500000,
     emailSendsPerMonth: 130000,
     actionRunsPerMonth: 1000000,
-    assistCreditsPerMonth: 170_000,
+    // $58.00, against the $176.71 the other seven terms leave out of $1,299.
+    assistCreditsPerMonth: 58_000,
     apiRequestsPerMonth: 5000000,
     datasetsPerOrg: 2000,
     maxDatasetsPerOrg: 5000,

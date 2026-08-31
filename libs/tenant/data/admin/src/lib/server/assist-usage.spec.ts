@@ -1084,18 +1084,18 @@ describe("the PLAN's band binds, and the operator default may not undercut it", 
   const monthPath = `orgs/${ORG}/assistUsage/2026-08`
 
   it('REFUSES a Business org at its band, well under the $40 default', async () => {
-    // $19 of spend against an $18 band. The repo default is $40, so a build
+    // $8 of spend against a $7.50 band. The repo default is $40, so a build
     // that ignored the plan band would let this through — which is precisely
     // the fail-open under test.
-    mockDocs.set(monthPath, { messages: 12, estCostUsd: 19 })
+    mockDocs.set(monthPath, { messages: 12, estCostUsd: 8 })
     const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, {
       plan: 'business',
     })
     expect(reservation).toMatchObject({
       allowed: false,
       refusedBy: 'budget',
-      costLimitUsd: 18,
-      budgetUsd: 18,
+      costLimitUsd: 7.5,
+      budgetUsd: 7.5,
     })
     // Refused, and nothing moved.
     expect(mockDocs.get(monthPath)).toMatchObject({ messages: 12 })
@@ -1104,7 +1104,7 @@ describe("the PLAN's band binds, and the operator default may not undercut it", 
   it('THE NEGATIVE CONTROL: the same spend under the band reserves', async () => {
     // Without this the test above passes for a build that refuses every
     // Business org, or every org carrying any cost at all.
-    mockDocs.set(monthPath, { messages: 12, estCostUsd: 17 })
+    mockDocs.set(monthPath, { messages: 12, estCostUsd: 7 })
     const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, {
       plan: 'business',
     })
@@ -1114,9 +1114,9 @@ describe("the PLAN's band binds, and the operator default may not undercut it", 
 
   it('ADMITS an Agency org above $40, which the default alone would refuse', async () => {
     // The other direction, and the one that costs a customer rather than us.
-    // $50 of spend is over the $40 repo default and far under Agency's $170
-    // band. A build that took the lower of the two would cut a paying
-    // workspace off a third of the way into capacity it bought.
+    // $50 of spend is over the $40 repo default and under Agency's $58 band.
+    // A build that took the lower of the two would cut a paying workspace off
+    // well before the capacity it bought.
     expect(process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD).toBeUndefined()
     mockDocs.set(monthPath, { messages: 12, estCostUsd: 50 })
     const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, {
@@ -1125,14 +1125,14 @@ describe("the PLAN's band binds, and the operator default may not undercut it", 
     expect(reservation).toMatchObject({
       allowed: true,
       refusedBy: null,
-      costLimitUsd: 170,
-      budgetUsd: 170,
+      costLimitUsd: 58,
+      budgetUsd: 58,
     })
     expect(mockDocs.get(monthPath)).toMatchObject({ messages: 13 })
   })
 
   it('and still refuses that Agency org at ITS band', async () => {
-    mockDocs.set(monthPath, { messages: 12, estCostUsd: 171 })
+    mockDocs.set(monthPath, { messages: 12, estCostUsd: 59 })
     const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, {
       plan: 'agency',
     })
@@ -1140,15 +1140,15 @@ describe("the PLAN's band binds, and the operator default may not undercut it", 
   })
 
   it('takes a CONTRACTED Enterprise band over the plan fallback', async () => {
-    mockDocs.set(monthPath, { messages: 12, estCostUsd: 300 })
-    // The fallback is 250,000 credits — $250 — so this org is over it.
+    mockDocs.set(monthPath, { messages: 12, estCostUsd: 100 })
+    // The fallback is 87,000 credits — $87 — so this org is over it.
     const onFallback = await reserveAssistMessage(firestore(), ORG, true, NOW, {
       plan: 'enterprise',
     })
     expect(onFallback).toMatchObject({
       allowed: false,
       refusedBy: 'budget',
-      costLimitUsd: 250,
+      costLimitUsd: 87,
     })
     // The same spend against a contract that bought more.
     const contracted = await reserveAssistMessage(firestore(), ORG, true, NOW, {
@@ -1186,9 +1186,9 @@ describe('the operator ceiling composes with a band without erasing it', () => {
 
   it('an EXPLICIT figure wins when it is lower — that is what setting it means', () => {
     process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = '25'
-    expect(assistMonthlyCeilingUsd(170)).toBe(25)
+    expect(assistMonthlyCeilingUsd(58)).toBe(25)
     // ...and does not RAISE a band it sits above.
-    expect(assistMonthlyCeilingUsd(18)).toBe(18)
+    expect(assistMonthlyCeilingUsd(7.5)).toBe(7.5)
   })
 
   it('`off` removes the BACKSTOP and leaves the band standing', () => {
@@ -1196,7 +1196,7 @@ describe('the operator ceiling composes with a band without erasing it', () => {
     // customer was sold, and an environment variable does not un-sell it.
     process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = 'off'
     expect(assistMonthlyCeilingUsd(null)).toBeNull()
-    expect(assistMonthlyCeilingUsd(170)).toBe(170)
+    expect(assistMonthlyCeilingUsd(58)).toBe(58)
   })
 
   it('refuses an Agency org at its band even with the backstop OFF', async () => {
@@ -1211,7 +1211,7 @@ describe('the operator ceiling composes with a band without erasing it', () => {
   it('a MISTYPED figure falls back to the band, never to no ceiling', () => {
     for (const junk of ['forty', '  ', '-5', '0']) {
       process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = junk
-      expect(assistMonthlyCeilingUsd(18)).toBe(18)
+      expect(assistMonthlyCeilingUsd(7.5)).toBe(7.5)
       // And an org with no band still lands on the repo default, unchanged.
       expect(assistMonthlyCeilingUsd(null)).toBe(
         ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD,
@@ -1268,8 +1268,8 @@ describe('what leaves the server is credits, never our provider bill', () => {
     const view = publicAssistQuota(reservation)
     expect(view.credits).toEqual({
       used: 4_500,
-      limit: 18_000,
-      remaining: 13_500,
+      limit: 7_500,
+      remaining: 3_000,
     })
     const wire = JSON.stringify(view)
     for (const leak of ['costUsd', 'costLimitUsd', 'budgetUsd', '4.5']) {

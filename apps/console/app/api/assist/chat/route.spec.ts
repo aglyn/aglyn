@@ -577,7 +577,7 @@ describe('the gate ladder — every guard forced red once', () => {
   it('THE DEFAULT IS ARMED: the same spend is refused with NOTHING set', async () => {
     // Bounded with NOTHING configured — a fresh deployment, or a self-hoster
     // who has never heard of the variable. What refuses this workspace is
-    // Pro's own band of 7,500 credits, which is tighter than the operator
+    // Pro's own band of 2,750 credits, which is far tighter than the operator
     // backstop; $41.50 of provider spend against a subscription that did not
     // move is refused before a token is bought. This is the test that fails
     // if anyone restores the unset default, or drops the band.
@@ -592,22 +592,22 @@ describe('the gate ladder — every guard forced red once', () => {
     expect(response.status).toBe(429)
     await expect(response.json()).resolves.toMatchObject({
       reason: 'quota',
-      quota: { refusedBy: 'budget', credits: { limit: 7_500, remaining: 0 } },
+      quota: { refusedBy: 'budget', credits: { limit: 2_750, remaining: 0 } },
     })
     expect(mockFetch).not.toHaveBeenCalled()
   })
 
   it('THE PAIRED CONTROL: an ordinary paid month still reaches the model', async () => {
     // Without this, the test above is satisfied by a build that refuses every
-    // entitled org. $5 of provider spend is two thirds of the way into Pro's
-    // band and answers normally, so the refusal above is the band binding
-    // rather than the gate being stuck shut.
+    // entitled org. $1.80 of provider spend is two thirds of the way into
+    // Pro's band and answers normally, so the refusal above is the band
+    // binding rather than the gate being stuck shut.
     expect(process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD).toBeUndefined()
     seedOrgs()
     armUpstream()
     mockDocs.set(`orgs/${PRO_ORG}/assistUsage/${MONTH}`, {
       messages: 5,
-      estCostUsd: 5,
+      estCostUsd: 1.8,
     })
     const response = await POST(post(QUESTION_BODY(PRO_ORG)))
     expect(response.status).toBe(200)
