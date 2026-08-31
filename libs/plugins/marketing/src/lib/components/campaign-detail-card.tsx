@@ -144,8 +144,16 @@ export interface CampaignDetailCardProps {
  * BEING a list of emails. It runs over a window, against a set of audiences,
  * and the pages its links land on and the conversions credited to it are
  * facts about the campaign that no single message in it holds. So the body is
- * sectioned — the rolled-up figures, what it caused, where it sent people,
- * then its emails — and each section names the population it describes.
+ * sectioned — what it caused, where it sent people, then the mail's own
+ * figures, then its emails — and each section names the population it
+ * describes.
+ *
+ * The ORDER is the part that says which of those the page is about. Delivery,
+ * engagement and rates are mechanics of a message; a page that met the reader
+ * with them and reached the outcomes only after scrolling was a mail report
+ * whatever its headings claimed. `campaign-report-card.tsx` — the page a
+ * campaign of one email gets — carries the same two outcome headings first,
+ * for the same reason and in the same words.
  *
  * The two middle sections live in `campaign-reach-sections.tsx`, which is
  * also where the reason a campaign cannot simply DECLARE the screens and
@@ -601,40 +609,17 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
 
         <Divider />
         {/*
-          The sum over the campaign's emails, not a second set of counters.
-          Nothing is stored per campaign: a rollup document would have to be
-          kept true against every delivery event of every email in it, and the
-          numbers it duplicates are already on the sends this page reads.
+          A CAMPAIGN IS NOT ONLY ITS MAIL, and it leads with the part that
+          is not.
 
-          Drawn by the shared figures so a campaign's rate and a single
-          message's read the same way — denominator named on the line, and an
-          em dash rather than a zero where nothing was recorded.
-         */}
-        <Section title="Across this campaign">
-          <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
-            <Figure label="Addressed" {...rolled(rollup.addressed)} />
-            <Figure label="Sent" {...rolled(rollup.sent)} />
-            <Figure label="Delivered" {...rolled(rollup.delivered)} />
-            <Figure label="Opens" {...rolled(rollup.opens)} />
-            <Figure label="Clicks" {...rolled(rollup.clicks)} />
-            <Figure label="Unsubscribed" {...rolled(rollup.unsubscribes)} />
-          </Stack>
-        </Section>
-        <Stack spacing={0.5}>
-          <RateRow label="Open rate" rate={rollup.openRate} />
-          <RateRow label="Click rate" rate={rollup.clickRate} />
-          <RateRow label="Unsubscribe rate" rate={rollup.unsubscribeRate} />
-        </Stack>
-
-        <Divider />
-        {/*
-          A CAMPAIGN IS NOT ONLY ITS MAIL, and the body is sectioned to say so.
-
-          The emails below are one section of several rather than the whole
-          page. What the campaign CAUSED and where it SENT people are facts
-          about the campaign, not about any one message in it, and a page that
-          led with a list of emails and said nothing else read as though a
-          campaign were that list.
+          What the campaign CAUSED and where it SENT people are facts about the
+          campaign; delivery, engagement and rates are mechanics of the
+          messages it used, and the list of those messages is one section among
+          several rather than the page. Ordering the mail first said the
+          opposite in the only way a page can — by what a reader meets before
+          they scroll — and a campaign of ONE email says it loudest, which is
+          why `campaign-report-card.tsx` carries these two headings in this
+          order too.
 
           Both sections join on the campaign's own send ids, which is the only
           handle the attribution and click-report collections offer — see
@@ -654,6 +639,35 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
           sendIds={sendIds}
           truncated={sendsTruncated}
         />
+
+        <Divider />
+        {/*
+          THE MAIL'S OWN FIGURES, under the outcomes rather than over them.
+
+          The sum over the campaign's emails, not a second set of counters.
+          Nothing is stored per campaign: a rollup document would have to be
+          kept true against every delivery event of every email in it, and the
+          numbers it duplicates are already on the sends this page reads.
+
+          Drawn by the shared figures so a campaign's rate and a single
+          message's read the same way — denominator named on the line, and an
+          em dash rather than a zero where nothing was recorded.
+         */}
+        <Section title="The mail, across this campaign">
+          <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
+            <Figure label="Addressed" {...rolled(rollup.addressed)} />
+            <Figure label="Sent" {...rolled(rollup.sent)} />
+            <Figure label="Delivered" {...rolled(rollup.delivered)} />
+            <Figure label="Opens" {...rolled(rollup.opens)} />
+            <Figure label="Clicks" {...rolled(rollup.clicks)} />
+            <Figure label="Unsubscribed" {...rolled(rollup.unsubscribes)} />
+          </Stack>
+        </Section>
+        <Stack spacing={0.5}>
+          <RateRow label="Open rate" rate={rollup.openRate} />
+          <RateRow label="Click rate" rate={rollup.clickRate} />
+          <RateRow label="Unsubscribe rate" rate={rollup.unsubscribeRate} />
+        </Stack>
 
         <Divider />
         <Stack

@@ -505,8 +505,13 @@ experiment results table fills in by itself.
 ### The campaign report
 
 **Report**, beside any campaign that has been sent, opens the full picture for
-that one send: delivery, engagement, rates, the audience it was taken from,
-and which links were clicked.
+that one send.
+
+It leads with what the campaign did — what it caused, what it earned, and where
+it sent people — and the mail's own figures come under that: delivery,
+engagement, rates and the audience it was taken from. A campaign holding
+several emails is laid out the same way, with the list of its emails last, so
+the two read alike.
 
 Every rate names the population it is taken over, right next to the number,
 because the same label means different things in different tools:

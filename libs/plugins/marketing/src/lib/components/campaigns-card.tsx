@@ -493,6 +493,17 @@ export function HostCampaignsCard(props: {
         as well as `align`: a grid column defaults its header to the column
         type's alignment rather than to the cell's, which is how these came to
         sit with left headers over figures nobody could compare down the page.
+
+        EVERY ONE OF THEM MEASURES THE MAIL, and the headings say so. What a
+        campaign CAUSED — the submissions, leads, contacts and bookings
+        credited to it — is not a column here, because there is no figure to
+        read: a container has no conversion counter of its own, so a column
+        would be an aggregation per row for a campaign and a subcollection
+        document per row for a single send, on a list that costs two queries
+        however many campaigns it holds. Headings that named the campaign over
+        figures that all described its mail were the cheaper mistake, so the
+        headings name the mail and the note under the table says where the
+        outcome figures are.
        */
       {
         field: 'emails',
@@ -535,8 +546,8 @@ export function HostCampaignsCard(props: {
       },
       {
         field: 'sent',
-        headerName: 'Sent',
-        width: 84,
+        headerName: 'Mail sent',
+        width: 112,
         align: 'right',
         headerAlign: 'right',
         renderCell: ({ row }: any) => (
@@ -545,8 +556,8 @@ export function HostCampaignsCard(props: {
       },
       {
         field: 'opens',
-        headerName: 'Opens',
-        width: 84,
+        headerName: 'Mail opens',
+        width: 112,
         align: 'right',
         headerAlign: 'right',
         renderCell: ({ row }: any) => (
@@ -555,8 +566,8 @@ export function HostCampaignsCard(props: {
       },
       {
         field: 'clicks',
-        headerName: 'Clicks',
-        width: 84,
+        headerName: 'Mail clicks',
+        width: 112,
         align: 'right',
         headerAlign: 'right',
         renderCell: ({ row }: any) => (
@@ -657,6 +668,20 @@ export function HostCampaignsCard(props: {
             </Button>
           }
         />
+        {/*
+          WHAT THIS TABLE MEASURES, said rather than inferred from the column
+          names. Every figure in it is a fact about the campaign's mail, and a
+          reader comparing rows is comparing mailings — the conversions and the
+          destinations credited to a campaign are on the campaign's own page,
+          because counting them for every row is a read per row on a list whose
+          whole cost is two queries.
+         */}
+        <Typography variant="caption" color="text.secondary">
+          {'These figures measure each campaign’s mail. What a campaign ' +
+            'caused — the form submissions, leads, contacts and bookings ' +
+            'credited to it — and the pages it sent people to are on the ' +
+            'campaign’s own page.'}
+        </Typography>
         {sendsTruncated || campaignsTruncated ? (
           <Alert severity="info">
             {`Showing the most recent ${CONTAINER_CEILING} campaigns and ` +
