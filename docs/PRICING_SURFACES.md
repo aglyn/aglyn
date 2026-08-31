@@ -61,17 +61,22 @@ can see it, so the body of the page can be entirely correct while search
 results and every shared link still advertise the old price. Fix it in the
 same pass as the body; it is a different field and it will not follow.
 
-## Republishing is not saving
+## Saving the LIVE version revalidates; saving a draft does not
 
-A saved edit to an already-published version **never reaches the live page**.
-On-demand revalidation fires only when a publish MOVES the version pointer,
-and only a pointer move busts the `tenant-data:{hostId}` document cache the
-render reads through — so a saved edit regenerates the page on schedule and
-re-reads the same cached document, forever. The symptom is a page whose
-`x-vercel-cache` age climbs past its window while the content never changes.
+Saving the version a screen currently points at drops the cached pages for it
+straight away — `revalidateLivePages` runs on save, not only on publish, and
+its guard is exactly that identity check. Saving a DRAFT version changes
+nothing live, so it correctly drops nothing.
 
-**Unpublish, then publish.** The version's own `PUBLISH NOW` is disabled while
-it is live, which is why this is not obvious.
+⚠️ **This is true of the production console.** The call is made by the console
+that served the page, so a save on localhost revalidates nothing in
+production — which is why a fix made locally can look like it never went out.
+Edit at `app.aglyn.com` when the point is to move the live page.
+
+The revalidate is deliberately not awaited and is reported rather than
+discarded: `revalidated: 0` reads the same for "nothing was routed here" as
+for "the tenant refused the call", and only the second leaves the page stale
+for the rest of its window.
 
 ## Checking the live page
 
