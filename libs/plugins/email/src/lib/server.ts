@@ -61,13 +61,18 @@ import {
   page,
   paragraph,
   PAL,
+  PLATFORM_EMAIL_BRAND,
   readParams,
+  resolveEmailPageBrand,
   sendPage,
   signatureMatches,
   signedQuery,
   submitButton,
   successBadge,
   suppressionKeyFor,
+  type EmailBrandSource,
+  type EmailPageBrand,
+  type EmailPalette,
   type UnsubscribeLinkParams,
 } from './unsubscribe-link'
 
@@ -183,6 +188,52 @@ function openSignedLink(req: Parameters<PluginApiHandler>[0]): OpenedLink {
   return { refusal: 0, params, key }
 }
 
+/**
+ * How long the shell will wait for the sending site's identity.
+ *
+ * A branded page is worth one host read; it is not worth a page that never
+ * arrives. These four routes are the recipient's only way to stop the mail, so
+ * an unbranded page rendered promptly beats a correct one that hangs behind a
+ * slow read — the timeout falls back rather than failing.
+ */
+const BRAND_READ_TIMEOUT_MS = 1500
+
+/**
+ * The SENDING SITE's identity for the shell, not ours.
+ *
+ * One read of `hosts/{hostId}`, and every failure mode lands on the same
+ * answer: no host id, a missing document, a read that throws, a read that is
+ * slow, or a host that has simply set no brand all resolve to
+ * {@link PLATFORM_EMAIL_BRAND}. That is also the self-host answer, so the
+ * fallback path is the one an operator runs every day rather than a branch
+ * only reached when something is broken.
+ */
+async function loadHostBrand(hostId: string): Promise<EmailPageBrand> {
+  if (!hostId) return PLATFORM_EMAIL_BRAND
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    const firestore = firebaseAdmin.app().firestore()
+    const snapshot = await Promise.race([
+      firestore.collection('hosts').doc(hostId).get(),
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), BRAND_READ_TIMEOUT_MS)
+      }),
+    ])
+    if (!snapshot?.exists) return PLATFORM_EMAIL_BRAND
+    // The id LAST: it addresses the `media:` logo reference, and the copy of
+    // it stored in the document is the one that can be stale or absent.
+    return resolveEmailPageBrand({
+      ...(snapshot.data() as EmailBrandSource),
+      $id: hostId,
+    })
+  } catch (error) {
+    console.error('[email] host brand read failed', error)
+    return PLATFORM_EMAIL_BRAND
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 const unsubscribeHandler: PluginApiHandler = async (req, res) => {
   const method = String(req.method ?? 'GET').toUpperCase()
   if (method !== 'GET' && method !== 'HEAD' && method !== 'POST') {
@@ -199,7 +250,9 @@ const unsubscribeHandler: PluginApiHandler = async (req, res) => {
   const query = signedQuery(params)
 
   if (method !== 'POST') {
-    // SAFE. A prescanner lands here and nothing is written.
+    // SAFE. A prescanner lands here and nothing is written — the brand read
+    // is the only Firestore access on this path, and it is a read.
+    const brand = await loadHostBrand(hostId)
     return void sendPage(
       res,
       page(
@@ -207,12 +260,15 @@ const unsubscribeHandler: PluginApiHandler = async (req, res) => {
           paragraph(
             `Confirm that <strong style="color:${PAL.ink}">${escapeAttribute(
               email,
-            )}</strong> should stop receiving emails from this site.`,
+            )}</strong> should stop receiving emails from ` +
+            `<strong style="color:${PAL.ink}">${escapeAttribute(
+              brand.name,
+            )}</strong>.`,
           ) +
           `<form method="post" action="/api/email/unsubscribe?${escapeAttribute(
             query,
           )}">` +
-          submitButton('Unsubscribe') +
+          submitButton('Unsubscribe', { pal: brand.pal }) +
           '</form>' +
           // The way to a NARROWER choice, offered on the page rather than only
           // in the message footer: a recipient who reached the total
@@ -220,19 +276,24 @@ const unsubscribeHandler: PluginApiHandler = async (req, res) => {
           // that leaving one stream is possible.
           `<p style="margin:16px 0 0;font-size:13px;line-height:1.5;text-align:center">` +
           `<a href="/api/email/preferences?${escapeAttribute(query)}" ` +
-          `style="color:${PAL.link};text-decoration:none">` +
+          `style="color:${brand.pal.link};text-decoration:none">` +
           'Choose which emails to stop instead</a></p>',
+        420,
+        brand,
       ),
     )
   }
 
   try {
     const firestore = firebaseAdmin.app().firestore()
-    const created = await writeSiteSuppression(firestore, hostId, key, {
-      email,
-      campaignId,
-      topicId,
-    })
+    const [created, brand] = await Promise.all([
+      writeSiteSuppression(firestore, hostId, key, {
+        email,
+        campaignId,
+        topicId,
+      }),
+      loadHostBrand(hostId),
+    ])
 
     /*
      * The campaign's own unsubscribe count.
@@ -262,15 +323,22 @@ const unsubscribeHandler: PluginApiHandler = async (req, res) => {
     return void sendPage(
       res,
       page(
-        successBadge() +
+        successBadge(brand.pal) +
           heading("You're unsubscribed") +
-          paragraph("You won't receive further emails from this site.", 20) +
+          paragraph(
+            `You won't receive further emails from ${escapeAttribute(
+              brand.name,
+            )}.`,
+            20,
+          ) +
           // Same signed params, so the click that just proved this is really
           // this recipient's link doubles as the resubscribe link — no new
           // token, no second email round-trip (AGL-2499).
           `<a href="/api/email/resubscribe?${escapeAttribute(query)}" ` +
-          `style="font-size:13px;color:${PAL.link};text-decoration:none">` +
+          `style="font-size:13px;color:${brand.pal.link};text-decoration:none">` +
           'Changed your mind? Resubscribe</a>',
+        420,
+        brand,
       ),
     )
   } catch (error) {
@@ -386,12 +454,14 @@ const resubscribeHandler: PluginApiHandler = async (req, res) => {
   if (method !== 'POST') {
     // SAFE, same reasoning as the unsubscribe GET: a prescanner must not be
     // able to resubscribe someone either.
+    const brand = await loadHostBrand(hostId)
     return void sendPage(
       res,
       page(
         heading('Resubscribe?') +
           paragraph(
-            'Start receiving emails from this site again at ' +
+            `Start receiving emails from <strong style="color:${PAL.ink}">` +
+              `${escapeAttribute(brand.name)}</strong> again at ` +
               `<strong style="color:${PAL.ink}">${escapeAttribute(
                 email,
               )}</strong>.`,
@@ -399,22 +469,36 @@ const resubscribeHandler: PluginApiHandler = async (req, res) => {
           `<form method="post" action="/api/email/resubscribe?${escapeAttribute(
             query,
           )}">` +
-          submitButton('Resubscribe', { accent: 'link' }) +
+          submitButton('Resubscribe', { accent: 'link', pal: brand.pal }) +
           '</form>',
+        420,
+        brand,
       ),
     )
   }
 
   try {
     const firestore = firebaseAdmin.app().firestore()
-    const released = await releaseSiteSuppression(firestore, hostId, key)
-    if (!released) return void sendPage(res, page(protectedAddressBody()))
+    const [released, brand] = await Promise.all([
+      releaseSiteSuppression(firestore, hostId, key),
+      loadHostBrand(hostId),
+    ])
+    if (!released) {
+      return void sendPage(res, page(protectedAddressBody(), 420, brand))
+    }
     return void sendPage(
       res,
       page(
-        successBadge() +
+        successBadge(brand.pal) +
           heading("You're resubscribed") +
-          paragraph("You'll receive emails from this site again.", 0),
+          paragraph(
+            `You'll receive emails from ${escapeAttribute(
+              brand.name,
+            )} again.`,
+            0,
+          ),
+        420,
+        brand,
       ),
     )
   } catch (error) {
@@ -519,14 +603,25 @@ const preferencesHandler: PluginApiHandler = async (req, res) => {
 
   try {
     const firestore = firebaseAdmin.app().firestore()
-    const topics = activeEmailTopics(await loadTopicCatalog(firestore, hostId))
-    const state = await readSubscriptionState(firestore, hostId, key)
+    // Three independent reads, so they go together rather than in series —
+    // the brand is not worth a third round trip on the page a recipient is
+    // waiting for.
+    const [catalog, state, brand] = await Promise.all([
+      loadTopicCatalog(firestore, hostId),
+      readSubscriptionState(firestore, hostId, key),
+      loadHostBrand(hostId),
+    ])
+    const topics = activeEmailTopics(catalog)
 
     if (method !== 'POST') {
       // SAFE. Reads only, exactly like the other two GETs.
       return void sendPage(
         res,
-        page(preferencesFormBody({ email, query, topics, state, topicId }), 520),
+        page(
+          preferencesFormBody({ email, query, topics, state, topicId, brand }),
+          520,
+          brand,
+        ),
       )
     }
 
@@ -549,23 +644,26 @@ const preferencesHandler: PluginApiHandler = async (req, res) => {
       return void sendPage(
         res,
         page(
-          successBadge() +
+          successBadge(brand.pal) +
             heading('Sorry to see you go') +
             paragraph(
               `<strong style="color:${PAL.ink}">${escapeAttribute(email)}</strong> ` +
-                'has been unsubscribed from every email this site sends.',
+                'has been unsubscribed from every email ' +
+                `${escapeAttribute(brand.name)} sends.`,
               20,
             ) +
             paragraph(
               'Changed your mind? ' +
                 `<a href="/api/email/resubscribe?${escapeAttribute(query)}" ` +
-                `style="color:${PAL.link};text-decoration:none">` +
+                `style="color:${brand.pal.link};text-decoration:none">` +
                 'Resubscribe</a>, or ' +
                 `<a href="/api/email/preferences?${escapeAttribute(query)}" ` +
-                `style="color:${PAL.link};text-decoration:none">` +
+                `style="color:${brand.pal.link};text-decoration:none">` +
                 'pick just the emails you want</a>.',
               0,
             ),
+          420,
+          brand,
         ),
       )
     }
@@ -623,7 +721,7 @@ const preferencesHandler: PluginApiHandler = async (req, res) => {
     return void sendPage(
       res,
       page(
-        successBadge() +
+        successBadge(brand.pal) +
           heading(drop.length ? 'Sorry to see you go' : 'Preferences saved') +
           paragraph(
             changeSummary({ email, keep: [...keep], drop, topics }),
@@ -660,12 +758,13 @@ const preferencesHandler: PluginApiHandler = async (req, res) => {
           paragraph(
             'Changed your mind? ' +
               `<a href="/api/email/preferences?${escapeAttribute(query)}" ` +
-              `style="color:${PAL.link};text-decoration:none">` +
+              `style="color:${brand.pal.link};text-decoration:none">` +
               'Come back to this page</a> and tick the boxes again — this ' +
               'link keeps working.',
             0,
           ),
         520,
+        brand,
       ),
     )
   } catch (error) {
@@ -917,6 +1016,7 @@ function topicRow(
    * and ticking it here confirms — see `writeTopicOptOuts`.
    */
   pending = false,
+  pal: EmailPalette = PAL,
 ): string {
   return (
     `<label style="display:flex;gap:12px;align-items:flex-start;padding:14px 0;` +
@@ -929,7 +1029,7 @@ function topicRow(
     escapeAttribute(topic.name) +
     (highlighted
       ? `<span style="margin-left:8px;font-size:11px;font-weight:600;` +
-        `text-transform:uppercase;letter-spacing:.04em;color:${PAL.link}">` +
+        `text-transform:uppercase;letter-spacing:.04em;color:${pal.link}">` +
         'This email</span>'
       : '') +
     '</span>' +
@@ -994,8 +1094,10 @@ function preferencesFormBody(args: {
   topics: EmailTopic[]
   state: SubscriptionState
   topicId: string
+  brand: EmailPageBrand
 }): string {
-  const { email, query, topics, state, topicId } = args
+  const { email, query, topics, state, topicId, brand } = args
+  const pal = brand.pal
   // A bounce or a complaint is not a preference, so the page does not pretend
   // the recipient can edit their way out of one. Shown instead of the form
   // rather than beside it: a form whose submit cannot take effect is worse
@@ -1008,8 +1110,10 @@ function preferencesFormBody(args: {
     paragraph(
       `Choose what <strong style="color:${PAL.ink}">${escapeAttribute(
         email,
-      )}</strong> should keep receiving from this site. ` +
-        'Unticked emails stop; everything else carries on.',
+      )}</strong> should keep receiving from ` +
+        `<strong style="color:${PAL.ink}">${escapeAttribute(
+          brand.name,
+        )}</strong>. Unticked emails stop; everything else carries on.`,
       8,
     ) +
     (state.suppressed
@@ -1034,6 +1138,7 @@ function preferencesFormBody(args: {
             !state.pending.has(topic.id),
           topic.id === current.id,
           !state.suppressed && state.pending.has(topic.id),
+          pal,
         ),
       )
       .join('') +
@@ -1049,7 +1154,7 @@ function preferencesFormBody(args: {
      */
     cadenceFieldset(state.cadence) +
     `<div style="border-top:1px solid ${PAL.divider};padding-top:20px;margin-top:6px">` +
-    submitButton('Save my preferences') +
+    submitButton('Save my preferences', { pal }) +
     '</div></form>' +
     // A SECOND form, not a second button in the first one. Sharing the form
     // would submit the checkbox state along with the "everything" action, so a
@@ -1129,8 +1234,11 @@ const confirmHandler: PluginApiHandler = async (req, res) => {
 
   try {
     const firestore = firebaseAdmin.app().firestore()
-    const topics = await loadTopicCatalog(firestore, hostId)
-    const topic = resolveCampaignTopic(topicId, topics)
+    const [catalog, brand] = await Promise.all([
+      loadTopicCatalog(firestore, hostId),
+      loadHostBrand(hostId),
+    ])
+    const topic = resolveCampaignTopic(topicId, catalog)
 
     if (method !== 'POST') {
       // SAFE. A prescanner lands here and confirms nothing.
@@ -1144,19 +1252,27 @@ const confirmHandler: PluginApiHandler = async (req, res) => {
               )}</strong> should receive ` +
                 `<strong style="color:${PAL.ink}">${escapeAttribute(
                   topic.name,
-                )}</strong> from this site.`,
+                )}</strong> from ` +
+                `<strong style="color:${PAL.ink}">${escapeAttribute(
+                  brand.name,
+                )}</strong>.`,
             ) +
             `<form method="post" action="/api/email/confirm?${escapeAttribute(
               query,
             )}">` +
-            submitButton('Yes, subscribe me') +
+            submitButton('Yes, subscribe me', { pal: brand.pal }) +
             '</form>',
+          420,
+          brand,
         ),
       )
     }
 
     const outcome = await confirmTopicSubscription(hostId, email, topicId)
-    return void sendPage(res, page(confirmationBody(outcome, topic.name)))
+    return void sendPage(
+      res,
+      page(confirmationBody(outcome, topic.name, brand.pal), 420, brand),
+    )
   } catch (error) {
     console.error(error)
     return void res.status(500).send('Confirmation failed — please try again')
@@ -1175,6 +1291,7 @@ const confirmHandler: PluginApiHandler = async (req, res) => {
 function confirmationBody(
   outcome: ConfirmTopicResult,
   topicName: string,
+  pal: EmailPalette = PAL,
 ): string {
   const stream = `<strong style="color:${PAL.ink}">${escapeAttribute(
     topicName,
@@ -1182,13 +1299,13 @@ function confirmationBody(
   switch (outcome) {
     case 'confirmed':
       return (
-        successBadge() +
+        successBadge(pal) +
         heading("You're subscribed") +
         paragraph(`You'll start receiving ${stream} from this site.`, 0)
       )
     case 'already-confirmed':
       return (
-        successBadge() +
+        successBadge(pal) +
         heading('Already confirmed') +
         paragraph(`${stream} is already on its way to you.`, 0)
       )
