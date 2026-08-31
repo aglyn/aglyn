@@ -384,6 +384,38 @@ export interface BillingPlanCardsProps {
    */
   subscriptionActive?: boolean
   /**
+   * True when the org sits on a PAID plan with no live subscription behind it,
+   * and both reads that could say otherwise have settled.
+   *
+   * ## The state, and why it needs a name
+   *
+   * A staff override (`/api/admin/org-override` writes `plan` directly), a
+   * comped workspace, or a seeded one all land here: `plan` says Starter and
+   * Stripe has never heard of them. Enterprise has had a card that says so
+   * since AGL-1118 — "Your organization is on an Enterprise agreement" — and
+   * a staff-set LOWER tier had no equivalent, so it was indistinguishable
+   * on screen from a plan the org had bought. The reader met a Free card
+   * whose control was dead, wearing the prospect's "No credit card required",
+   * and nothing anywhere explained why.
+   *
+   * ⚠️ IT NAMES THE OBSERVABLE FACT, NOT AN INFERRED REASON. "No live
+   * subscription" is what the page can see; "comped" is a guess about how the
+   * org got that way, and a wrong guess is worse than silence — an
+   * `incomplete` checkout is the same shape and is nobody's override. So the
+   * copy this drives says there is no subscription to change, and never says
+   * why there isn't.
+   *
+   * ⚠️ `past_due` IS LIVE (`isLiveSubscriptionStatus`, AGL-1715), so a dunning
+   * org is NOT this state and keeps every route a subscriber has — the cancel
+   * funnel included. Nothing here may become a way around an unpaid balance.
+   *
+   * ⚠️ IT MUST NOT BE TRUE WHILE A READ IS IN FLIGHT. `subscription` lives in
+   * `orgs/{orgId}/billing/stripe` (AGL-1028) and is merged over the org doc by
+   * the caller, so before that read lands EVERY paying org looks like this
+   * one. The caller holds it on both documents having settled.
+   */
+  planWithoutSubscription?: boolean
+  /**
    * Plan the visitor already chose on the marketing site (AGL-1117), read off
    * `?plan=` by the billing page. It emphasizes that card instead of the
    * next-tier-up default, so the deep link lands on the plan they clicked.
@@ -588,6 +620,40 @@ function capped(rows: string[]): { shown: string[]; more: number } {
   }
 }
 
+/**
+ * The sentence a plan the org did not buy owes its reader.
+ *
+ * ⚠️ IT STATES WHAT THE PAGE CAN SEE AND NOTHING MORE. "There is no
+ * subscription behind it" is observable — `subscription.status` is absent or
+ * not in `LIVE_SUBSCRIPTION_STATUSES`. "It was comped" is a guess about how
+ * the org got there, and an `incomplete` checkout has exactly the same shape,
+ * so a card that asserted the reason would be confidently wrong for somebody.
+ * The reader needs to know that the controls below cannot act and who can,
+ * which the observable fact already gives them.
+ *
+ * ⚠️ NOT A DUNNING NOTICE. `past_due` is a LIVE status (AGL-1715), so an org
+ * with an unpaid balance never reaches this and keeps the cancel funnel it is
+ * supposed to have. Nothing here may become a way to walk away from money
+ * owed.
+ *
+ * ONE component, rendered by both views, because the focused view is what the
+ * page opens on and the grid is where the dead control lives — a reader who
+ * met the explanation in only one of them would meet the control in the other.
+ */
+function PlanWithoutSubscriptionNotice({ label }: { label: string }) {
+  return (
+    <Typography
+      variant="caption"
+      color="text.secondary"
+      sx={{ display: 'block', mt: -1, mb: 1.5 }}
+    >
+      {`Your organization is on ${label} with no subscription behind it, so ` +
+        'there is nothing here to cancel or move down from. Reach out and we ' +
+        'can change the plan for you.'}
+    </Typography>
+  )
+}
+
 /** A rung in the focused view: a self-serve tier, or Enterprise above them. */
 type FocusedRung = OrgPlan | 'enterprise'
 
@@ -679,6 +745,7 @@ function FocusedTierView(props: {
   brand: string
   totalCount: number
   subscribeCollectsNotice: string | null
+  planWithoutSubscription: boolean
   onSelect: (plan: OrgPlan) => void
   onCompare: () => void
 }) {
@@ -691,6 +758,7 @@ function FocusedTierView(props: {
     brand,
     totalCount,
     subscribeCollectsNotice,
+    planWithoutSubscription,
     onSelect,
     onCompare,
   } = props
@@ -863,6 +931,15 @@ function FocusedTierView(props: {
                   </Typography>
                 ) : null}
 
+                {/* The focused view carries no rung BELOW the current plan, so
+                    it holds none of the dead controls — but it is the view the
+                    page opens on, and a reader who is going to find them owes
+                    nothing for having pressed Compare first. Said here too,
+                    once, on the card the sentence is about. */}
+                {role === 'current' && planWithoutSubscription ? (
+                  <PlanWithoutSubscriptionNotice label={label} />
+                ) : null}
+
                 <Divider sx={{ my: 1.5 }} />
 
                 {/* ONE SKELETON ON EVERY CARD: the quotas, then a tick
@@ -1030,12 +1107,11 @@ function FocusedTierView(props: {
  * downsell the retention funnel depends on (AGL-1863). What changes is the
  * DEFAULT: the upgrade path is what the page leads with.
  *
- * ⚠️ `Compare all N plans` ARRIVES HERE ALREADY EXPANDED, and this control
- * then reads "Hide lower plans". A button that promises a number has to
- * deliver that number: it named eight and landed the reader on six, with the
- * two cheapest still folded behind a second control they had no reason to
- * expect. The fold is a choice a reader makes from the grid, not a toll on the
- * way in.
+ * ⚠️ THIS CONTROL IS WHAT KEEPS `Compare all N plans` HONEST. The grid draws
+ * seven cards against a promise of eight, so the eighth has to be NAMED
+ * somewhere or the count is simply wrong — "Show 1 lower plan" is where the
+ * arithmetic closes. Counting the array alone said seven, which matched the
+ * cards and hid Free from both numbers at once.
  */
 function LowerTierDisclosure(props: {
   count: number
@@ -1089,11 +1165,15 @@ function LowerTierDisclosure(props: {
  * Tier visibility is ASYMMETRIC (AGL-1859): tiers above the current plan are
  * shown by default with a contained one-click Upgrade; tiers below it are
  * collapsed behind {@link LowerTierDisclosure} and, once shown, dimmed with a
- * quiet text CTA. Nothing is removed and nothing is disabled — the whole
- * ladder stays one click away, which is the line between de-emphasis and a
- * dark pattern. `Compare all N plans` is that one click, and it lands on all
- * N: a control that names a number and then withholds two of them is an
- * omission wearing a disclosure's clothes.
+ * quiet text CTA. Nothing is removed — the whole ladder stays one click away,
+ * which is the line between de-emphasis and a dark pattern. Nothing is
+ * disabled either, with ONE exception the product cannot argue with: an org
+ * whose plan has no subscription behind it has no server route down at all,
+ * and those controls say so rather than pretending (see
+ * `noSelfServeRouteDown`). `Compare all N plans` is that one click; it lands on the grid
+ * with the lower tiers still folded, and the disclosure there NAMES the ones
+ * it holds — a count that promises more than the page accounts for is the
+ * omission, not the fold itself.
  *
  * The deliberateness a downgrade needs is at the CONFIRM, not at the card: the
  * billing page prices the move, states the end-of-cycle terms and posts
@@ -1326,6 +1406,7 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
     enterprise = false,
     org,
     subscriptionActive = false,
+    planWithoutSubscription = false,
     subscribeCollectsNotice = null,
     highlight,
     onSelect,
@@ -1371,9 +1452,6 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
   // Starter card (AGL-1117) — collapsing the tier the visitor explicitly
   // clicked would make the link look broken, and de-emphasis is a default,
   // not an override of a stated intent.
-  //
-  // `Compare all N plans` is the other thing that overrides it — see the
-  // handler passed to {@link FocusedTierView} below.
   const [showLowerTiers, setShowLowerTiers] = useState(
     () => highlightIndex >= 0 && currentIndex >= 0 && highlightIndex < currentIndex,
   )
@@ -1400,6 +1478,30 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
     rungs.length > 0
   const [compareAll, setCompareAll] = useState(() => !canFocus)
 
+  /*
+   * NO ROUTE DOWN EXISTS FOR THIS ORG, AND THE SERVER IS WHY.
+   *
+   * A paid plan with no live subscription cannot self-serve a move to any
+   * lower tier, and every layer refuses independently:
+   *
+   *  - `plan` is Admin-SDK-only in `cloud/firebase-firestore.rules` for EVERY
+   *    client, staff included (AGL-1795) — there is no client write;
+   *  - `/api/billing/subscription` refuses three times over: 409 `No billing
+   *    account yet` without a `stripeCustomerId`, 409 `No active subscription`
+   *    without one, and 400 `cancel_required` for `plan: 'free'` specifically;
+   *  - the only writers of a lower `org.plan` are `/api/admin/org-override`
+   *    and `/api/admin/enterprise-billing`, both staff-gated and both
+   *    requiring a reason code for the audit row.
+   *
+   * So the control cannot be wired to anything, and inventing a click that
+   * 409s would be worse than the dead button it replaced. What it CAN do is
+   * stop lying: say the change goes through us, the way the Enterprise card
+   * has since AGL-1118, instead of showing a prospect "No credit card
+   * required" to somebody already on Starter.
+   */
+  const noSelfServeRouteDown =
+    planWithoutSubscription && !enterprise && currentIndex > 0
+
   if (!compareAll && plan) {
     return (
       <Grid container spacing={2} id="plans">
@@ -1419,34 +1521,19 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
            * in it. A reader counted the cards, got the promised number, and
            * had no reason to look for an eighth.
            *
-           * This is a PROMISE ABOUT THE NEXT SCREEN, which is why the handler
-           * below has to keep it: eight is the true total, so all eight have
-           * to be drawn on arrival.
+           * The fold itself is deliberate and stays: reaching a downgrade
+           * costs a second explicit act. Naming the true total is what makes
+           * that fold a disclosure rather than an omission — the grid draws
+           * seven, this promises eight, and the disclosure below names the
+           * one it is holding, so nothing is unaccounted for.
            */
           totalCount={PLAN_ORDER.length + 1}
           subscribeCollectsNotice={subscribeCollectsNotice}
+          // The same predicate the grid's controls read, so the sentence
+          // and the dead buttons it explains can never disagree.
+          planWithoutSubscription={noSelfServeRouteDown}
           onSelect={onSelect}
-          /*
-           * `Compare all` MEANS ALL — it expands the lower tiers as it opens
-           * the grid.
-           *
-           * The two states are independent, and left that way the button
-           * named eight plans and landed the reader on six: Free and Starter
-           * stayed folded behind a second control, below the fold, that
-           * nothing on the way in mentioned. "Compare" is a request for the
-           * whole price list, and answering it with a subset is an omission
-           * however honestly the remaining control is labelled.
-           *
-           * The fold is not lost — the disclosure now reads "Hide lower
-           * plans", so a reader weighing only an upgrade can put them away.
-           * That is a choice made FROM the grid rather than a toll on the way
-           * to it, and the default for a reader who never presses Compare is
-           * untouched: the page still opens on the focused view.
-           */
-          onCompare={() => {
-            setCompareAll(true)
-            setShowLowerTiers(true)
-          }}
+          onCompare={() => setCompareAll(true)}
         />
       </Grid>
     )
@@ -1499,10 +1586,8 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                     : 'divider',
                 borderWidth: isCurrent || isRecommended ? 2 : 1,
                 // De-emphasis is visual only — every figure stays readable and
-                // no control is disabled. It is what keeps the upgrade path
-                // leading on a grid that draws all eight plans: quiet, not
-                // absent. Dimming a card the customer just asked to see would
-                // be a dark pattern, not a nudge.
+                // no control is disabled. Dimming a card the customer just
+                // asked to see would be a dark pattern, not a nudge.
                 ...(isLower ? { opacity: 0.66 } : {}),
               }}
             >
@@ -1574,25 +1659,43 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                     // flow (AGL-2156) — which the page owns, and which states
                     // what happens and when.
                     //
-                    // Every PAID tier is clickable unconditionally. A missing
-                    // card or address is collected by the flow Upgrade opens,
-                    // so there is nothing left for this control to refuse; the
-                    // server still refuses the subscribe itself, which is
-                    // where that check belongs.
-                    disabled={tier === 'free' ? !canCancelToFree : false}
+                    // Every PAID tier is clickable unconditionally — UPWARD.
+                    // A missing card or address is collected by the flow
+                    // Upgrade opens, so there is nothing left for this control
+                    // to refuse; the server still refuses the subscribe
+                    // itself, which is where that check belongs. An org with
+                    // no subscription can still buy one, so this stays true
+                    // for it and `noSelfServeRouteDown` never touches an
+                    // upgrade.
+                    //
+                    // DOWN the ladder is the direction that can have no
+                    // route at all: see `noSelfServeRouteDown`, where the
+                    // three server refusals are written out. The caption under
+                    // the current plan explains it once for the whole grid, so
+                    // this control only has to stop claiming otherwise —
+                    // "No credit card required" on a card belonging to
+                    // somebody already on Starter is the prospect's sentence
+                    // read by a customer.
+                    disabled={
+                      tier === 'free'
+                        ? !canCancelToFree
+                        : isLower && noSelfServeRouteDown
+                    }
                     onClick={() => onSelect(tier)}
                     sx={{ mb: 1.5, ...(isLower ? { color: 'text.secondary' } : {}) }}
                   >
                     {/* AGL-1178: while pre-release, the Free card must not
                         promise the price is permanent — no price locks, no
                         grandfathering. Enforced by no-price-commitment.spec. */}
-                    {tier === 'free'
-                      ? canCancelToFree
-                        ? 'Cancel & move to Free'
-                        : 'No credit card required'
-                      : currentIndex < 0 || index > currentIndex
-                        ? 'Upgrade'
-                        : 'Downgrade'}
+                    {isLower && noSelfServeRouteDown
+                      ? 'Contact us to change'
+                      : tier === 'free'
+                        ? canCancelToFree
+                          ? 'Cancel & move to Free'
+                          : 'No credit card required'
+                        : currentIndex < 0 || index > currentIndex
+                          ? 'Upgrade'
+                          : 'Downgrade'}
                   </Button>
                   {/* What the next screen will ask for. Not a refusal and not
                       a reason the button is inert — it is not — but pressing
@@ -1622,9 +1725,21 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                   ) : null}
                   </>
                 ) : (
+                  <>
                   <Button fullWidth size="small" disabled sx={{ mb: 1.5 }}>
                     {'Your plan'}
                   </Button>
+                  {/* WHY THE CONTROLS BELOW BEHAVE DIFFERENTLY, said before
+                      the reader meets one of them. The Enterprise card has
+                      carried its own version of this since AGL-1118; a
+                      staff-set LOWER tier had none, so a Starter nobody
+                      bought was indistinguishable from a Starter somebody
+                      did — and the only evidence was a dead Free card
+                      wearing the prospect's copy. */}
+                  {noSelfServeRouteDown ? (
+                    <PlanWithoutSubscriptionNotice label={PLAN_LABELS[tier]} />
+                  ) : null}
+                  </>
                 )}
                 <Divider sx={{ mb: 1.5 }} />
                 <PlanCardBody
