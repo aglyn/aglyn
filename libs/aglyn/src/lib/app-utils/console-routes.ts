@@ -94,6 +94,23 @@ export enum Route {
   ORG_HOME = '/[orgSlug]',
   ORG_MEDIA = '/[orgSlug]/media',
   ORG_DATA = '/[orgSlug]/data',
+  /*
+   * The organization's address book.
+   *
+   * Org-scoped rather than a section of a site, because it answers the one
+   * question a site page cannot: which of the organization's sites know a
+   * given person. A contact document is shared by every site in the org — one
+   * human who touched two of them is one row — and until this route there was
+   * no surface anywhere that showed the deduped person, so the dedupe the
+   * shared address book exists for was invisible and the billing unit
+   * (unique people per org) had nothing standing behind it.
+   *
+   * It shows identity, which sites hold the person, and consent per site. The
+   * per-site CRM — notes, tags, timeline, order history — stays on the site's
+   * own Contacts surface, because those are the holder's business records and
+   * this is the one route designed to cross between holders.
+   */
+  ORG_CONTACTS = '/[orgSlug]/contacts',
   ORG_PLUGINS = '/[orgSlug]/plugins',
   // One plugin, as installed in this workspace (AGL-1007): scope, settings
   // and permissions in one place. The segment takes EITHER identifier
@@ -478,6 +495,7 @@ export interface RoutePayload {
   }
   [Route.ORG_MEDIA]: { orgSlug: string }
   [Route.ORG_DATA]: { orgSlug: string }
+  [Route.ORG_CONTACTS]: { orgSlug: string }
   [Route.ORG_PLUGINS]: { orgSlug: string }
   [Route.ORG_PLUGIN_INSTALLATION]: { orgSlug: string; pluginRef: string }
   [Route.ORG_MARKETPLACE]: { orgSlug: string }

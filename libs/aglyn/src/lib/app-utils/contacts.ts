@@ -23,6 +23,15 @@
  * client-side under the host-admin rules.
  */
 
+import { consentGroupForHost } from './consent-groups'
+import {
+  CAPTURED_BY_HOST_FIELD,
+  MARKETING_CONSENT_BY_HOST_FIELD,
+  MARKETING_CONSENT_FIELD,
+  readMarketingBasis,
+  type MarketingBasis,
+} from './marketing-consent'
+
 export type ContactSource =
   | 'form'
   | 'member'
@@ -424,4 +433,206 @@ export function contactMatchesSegment(
     }
   }
   return true
+}
+
+/*==========================================
+ * THE ORG-LEVEL VIEW: the complement of the facet reader above.
+ *
+ * {@link readContactFacet} answers "what does THIS holder know about this
+ * person". Everything below answers the question no host page can:
+ *
+ *   who does this ORGANIZATION know, and which of its sites know them.
+ *
+ * That question is the entire justification for one shared document. Dedupe,
+ * suppression and honest billing all rest on one human being one row, and
+ * with no surface that shows the deduped person the model's benefit is
+ * invisible and the billing unit — unique people per org — looks arbitrary.
+ *
+ * ## The org view crosses the host boundary, so it carries LESS, not more
+ *
+ * It is the one place in the product designed to read across holders, which
+ * makes it the one place where a careless field re-creates the disclosure the
+ * facets exist to end. So the projection is an ALLOW-LIST
+ * ({@link ORG_CONTACT_FIELDS}) rather than an omission: identity, capture
+ * attribution and consent state. Notes, tags, timelines, call logs and
+ * commercial figures are the holder's own business records and are not read
+ * here at all — not summarized, not counted, not indicated by their absence.
+ *
+ * An allow-list rather than a `delete facets` is the load-bearing choice. A
+ * subtraction is correct only for as long as somebody remembers to extend it,
+ * and a field added to {@link ContactFacet} tomorrow would ride out through a
+ * subtraction and be caught by an allow-list.
+ *
+ * ## The NAME is the canonical one, never a holder's override
+ *
+ * {@link contactDisplayName} prefers the viewing group's own override, which
+ * is right on a host page and wrong here: an override is a name ONE business
+ * chose, and rendering it at org level shows an agency the label its client
+ * picked. The shared identity is what every holder already sees, so it is the
+ * only name that belongs to the org.
+ *=========================================*/
+
+/**
+ * Every field of a contact document the org view may read.
+ *
+ * Stated as a value so it can be asserted against — see the org-view spec,
+ * which seeds each facet field with a sentinel and proves none of them
+ * reaches a row.
+ */
+export const ORG_CONTACT_FIELDS = [
+  'email',
+  'name',
+  CAPTURED_BY_HOST_FIELD,
+  MARKETING_CONSENT_BY_HOST_FIELD,
+  MARKETING_CONSENT_FIELD,
+] as const
+
+/**
+ * What one site's relationship with one person amounts to, at org level.
+ *
+ * Consent is per (contact, host-or-group) and there is no expression that
+ * returns another controller's grant, so a row cannot carry one consent
+ * verdict. It carries one PER CAPTURING SITE, each naming the controller it
+ * was read for — a bare "consented" with nobody attached would be exactly the
+ * confusion the per-brand model was built to prevent.
+ */
+export interface OrgContactHostConsent {
+  /** The site this verdict answers about, and no other. */
+  hostId: string
+  /** The controller the basis runs to — the declared group, or the site. */
+  groupId: string
+  /**
+   * The group's disclosed name, or `null` for a site that pools with nobody.
+   *
+   * `null` is not "unknown": it is the group of one, where the site's own
+   * name is the disclosure and inventing a second would put a label in front
+   * of a reader that nothing else uses.
+   */
+  groupName: string | null
+  /** Whether the controller is a DECLARED group rather than the site alone. */
+  declared: boolean
+  /** `granted` | `declined` | `unrecorded` — never collapsed to a boolean. */
+  basis: MarketingBasis
+}
+
+/** One person, as the organization may see them across all of its sites. */
+export interface OrgContactRow {
+  $id: string
+  /** The dedupe key, and the reason two captures are one row. */
+  email: string
+  /** The SHARED identity. Never a holder's own override. */
+  name: string
+  /** Every site that has captured this person, sorted for a stable render. */
+  capturedByHostIds: string[]
+  /** One verdict per capturing site, in the same order. */
+  consent: OrgContactHostConsent[]
+}
+
+/**
+ * Every site that has captured this person.
+ *
+ * Sorted, because the array is maintained by `arrayUnion` and therefore
+ * carries capture order, which is not an order anything should render: two
+ * readers of the same row would see the sites in different places on the
+ * screen depending on which site met the person first.
+ */
+export function contactCaptureHostIds(
+  contact: Record<string, unknown> | null | undefined,
+): string[] {
+  const raw = (contact ?? {})[CAPTURED_BY_HOST_FIELD]
+  if (!Array.isArray(raw)) return []
+  return [
+    ...new Set(
+      raw
+        .map((id) => String(id ?? '').trim())
+        .filter((id): id is string => id !== ''),
+    ),
+  ].sort()
+}
+
+/**
+ * One contact document, projected to what an ORG may see.
+ *
+ * @param org - the org document — the only input that can resolve a declared
+ *   consent group, and required for that reason. Without it every site reads
+ *   as a group of one, which understates the disclosure a person was given
+ *   and is the safe direction to be wrong in.
+ */
+export function orgContactRow(
+  contact: Record<string, unknown> | null | undefined,
+  contactId: string,
+  org: Record<string, unknown> | null | undefined,
+): OrgContactRow {
+  const record = contact ?? {}
+  const capturedByHostIds = contactCaptureHostIds(record)
+  return {
+    $id: contactId,
+    email: typeof record['email'] === 'string' ? record['email'] : '',
+    name: typeof record['name'] === 'string' ? record['name'] : '',
+    capturedByHostIds,
+    consent: capturedByHostIds.map((hostId) => {
+      /*
+       * READ FOR THE SITE, one call per site. `readMarketingBasis` requires
+       * the group it is being read for and has no default, so this cannot
+       * accidentally report a grant that belongs to somebody else — the
+       * argument is the guarantee, and passing the whole row through one
+       * call would have had to invent a controller to ask about.
+       */
+      const group = consentGroupForHost(org, hostId)
+      const { basis } = readMarketingBasis(record, group)
+      return {
+        hostId,
+        groupId: group.groupId,
+        groupName: group.name,
+        declared: group.declared,
+        basis,
+      }
+    }),
+  }
+}
+
+/**
+ * How a basis reads on screen.
+ *
+ * Three labels because there are three states. "Opted in" and "No record" are
+ * not opposites and must never collapse into one negative: absence is the
+ * commonest case by far — a record captured before the checkbox existed — and
+ * showing it as a refusal would tell a merchant they may not mail somebody
+ * who never said so.
+ */
+export const MARKETING_BASIS_LABELS: Record<MarketingBasis, string> = {
+  granted: 'Opted in',
+  declined: 'Opted out',
+  unrecorded: 'No record',
+}
+
+/**
+ * One consent verdict, WITH THE CONTROLLER IT RUNS TO, as one string.
+ *
+ * ⛔ There is no function here that returns a basis on its own, and that is
+ * the point. A basis is per (person, controller): the same person can be
+ * opted in to one brand in an org and opted out of another, so "consented"
+ * with nobody attached is not a shortened truth, it is a different and false
+ * claim — precisely the confusion the per-brand model was built to prevent.
+ * Joining the two into a single value is what stops a caller rendering half
+ * of it.
+ *
+ * The controller is the DECLARED GROUP when there is one, because that is who
+ * the person was told they would hear from, and the site otherwise. A group
+ * of one is named by the site, which is what the capture surface already
+ * showed them.
+ *
+ * @param siteName - how this site reads — the caller resolves it, since the
+ *   contact document holds ids and not names. An empty one falls back to the
+ *   id: a site whose name cannot be resolved must still be NAMED, because
+ *   dropping it would understate which brands hold a relationship.
+ */
+export function orgContactConsentLabel(
+  entry: OrgContactHostConsent,
+  siteName?: string,
+): string {
+  const controller = entry.declared
+    ? (entry.groupName ?? entry.groupId)
+    : siteName || entry.hostId
+  return `${controller} · ${MARKETING_BASIS_LABELS[entry.basis]}`
 }
