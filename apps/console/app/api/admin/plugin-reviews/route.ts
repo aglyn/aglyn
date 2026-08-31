@@ -63,52 +63,15 @@ import {
   publisherAgreementState,
 } from '@aglyn/aglyn/app-utils/publisher-agreement'
 import { FieldValue } from 'firebase-admin/firestore'
-import {
-  listOrgMembers,
-  meterPlatformEmail,
-  notifyOrgAdmins,
-} from '@aglyn/tenant-data-admin'
-import { sendEmail } from '@aglyn/shared-util-email'
-import { revalidateHostsWithPlugin } from '../../../../utils/server/tenant-revalidate'
-
-/**
- * Emails a publisher's owners and admins about a review outcome (AGL-972).
- *
- * In-app notifications alone assume the publisher is sitting in the console
- * — but review is asynchronous by nature: a submission can wait days, and
- * the publisher has no reason to keep checking. Best effort, and never
- * allowed to fail the verdict that triggered it.
+import { notifyOrgAdmins } from '@aglyn/tenant-data-admin'
+/*
+ * The publisher fan-out lives beside the usage-alert one in `_lib` rather
+ * than here. Both are multi-recipient platform sends that have to read the
+ * platform suppression list before addressing anybody, and that list has to
+ * be reachable by a spec that does not drag the admin SDK in behind a route.
  */
-async function emailPublisher(
-  orgId: string,
-  subject: string,
-  text: string,
-): Promise<void> {
-  try {
-    const members = await listOrgMembers(orgId)
-    const uids = members
-      .filter((member) => member.role === 'owner' || member.role === 'admin')
-      .map((member) => member.$id)
-    if (!uids.length) return
-    const users = await firebaseAdmin
-      .app()
-      .auth()
-      .getUsers(uids.map((uid) => ({ uid })))
-    const recipients = users.users
-      .map((user) => user.email)
-      .filter((email): email is string => Boolean(email))
-    const results = await Promise.all(
-      recipients.map((to) =>
-        sendEmail({ to, subject, text, context: 'plugin review update' }),
-      ),
-    )
-    // Cost meter (AGL-1438). Platform-scoped: marketplace review is Aglyn's
-    // own workflow talking to a publisher, not mail the publisher's org sent.
-    await meterPlatformEmail(results.filter((result) => result.sent).length)
-  } catch (error) {
-    console.error('publisher review email failed', error)
-  }
-}
+import { emailPublisher } from '../../_lib/publisher-review-email'
+import { revalidateHostsWithPlugin } from '../../../../utils/server/tenant-revalidate'
 
 /**
  * Marketplace review queue (AGL-432) — Strapi Market's two-phase review

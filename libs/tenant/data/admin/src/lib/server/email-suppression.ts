@@ -68,11 +68,12 @@
  * outage on a customer's business. A suppression is not a quota, but the same
  * proportionality applies and lands in the same place:
  *
- *  - **Bulk mail consults this list.** The monthly usage summary and the
- *    usage-alert fan-out go to a LIST of people who did not ask for that
- *    particular message, on a schedule, forever. They are the sends that
- *    re-hit a dead mailbox every month and teach a mailbox provider that
- *    `aglyn.com` does not listen.
+ *  - **Bulk mail consults this list.** The monthly usage summary, the
+ *    usage-alert fan-out and the marketplace review fan-out to a publisher's
+ *    owners and admins go to a LIST of people who did not ask for that
+ *    particular message, on a schedule or on every submission, forever. They
+ *    are the sends that re-hit a dead mailbox every month and teach a mailbox
+ *    provider that `aglyn.com` does not listen.
  *  - **Transactional mail does NOT.** A password reset, a verification, an
  *    invite, a receipt or a booking confirmation answers something the human
  *    just did. Refusing one because an address bounced or because somebody
