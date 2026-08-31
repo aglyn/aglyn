@@ -16,10 +16,15 @@
  */
 
 import {
+  CAPTURED_BY_HOST_FIELD,
   checkContactQuota,
+  consentGroupScope,
+  CONTACT_FACETS_FIELD,
   type ContactInteraction,
   type ContactSource,
+  marketingConsentFieldsForGroup,
   mergeContactInteraction,
+  readContactFacet,
   normalizeContactEmail,
   ORG_SCOPE_TOKEN,
 } from '@aglyn/aglyn/server'
@@ -32,9 +37,9 @@ import {
 } from './campaign-conversion-attribution'
 import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import {
+  consentGroupForSite,
   getOrgForHost,
   orgDataCollectionForHost,
-  scopedToHost,
 } from './organizations'
 
 /**
@@ -56,7 +61,10 @@ export async function upsertHostContact(options: {
   name?: string
   source: ContactSource
   interaction: Omit<ContactInteraction, 'type' | 'atMs'> & { atMs?: number }
-  /** Explicit marketing opt-in (AGL-301) with a consent timestamp. */
+  /**
+   * Explicit marketing opt-in (AGL-301) with a consent timestamp, recorded
+   * against {@link hostId} — the brand whose form carried the checkbox.
+   */
   marketingConsent?: boolean
   /**
    * Order value in cents — rolls into RFM fields (AGL-328).
@@ -158,17 +166,26 @@ export async function upsertHostContact(options: {
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(options.hostId)
     // Contacts are org-scoped (AGL-237): every host in the org feeds one
-    // shared list; hostId is stamped per contact for provenance.
+    // shared list.
     const contactsRef = await orgDataCollectionForHost(
       options.hostId,
       'contacts',
     )
-    // Reads narrow to what this host may see (AGL-1039); the collection
-    // ref is still what writes and `count()` use.
-    const visible = scopedToHost(contactsRef, options.hostId)
+    /*
+     * The consent group this capture belongs to — the sites declared to be
+     * one sender, or this site alone. Resolved once and used for three
+     * different decisions below, which must all agree: which controller the
+     * basis is recorded for, which sites the row becomes visible to, and
+     * whether the capture surface had to disclose anything.
+     */
+    const group = await consentGroupForSite(options.hostId)
     const interaction: ContactInteraction = {
       type: options.source,
       atMs: options.interaction.atMs ?? Date.now(),
+      // WHICH SITE this visit happened on. The row is shared; the history on
+      // it is not, and a timeline with no site cannot be split for an
+      // agency's client without showing them another client's activity.
+      hostId: options.hostId,
       ...(options.interaction.refId
         ? { refId: options.interaction.refId }
         : {}),
@@ -177,18 +194,47 @@ export async function upsertHostContact(options: {
         : {}),
     }
 
-    const existing = await visible
+    /*==========================================
+     * THE DEDUPE LOOKUP IS UNSCOPED, AND HAS TO BE.
+     *
+     * One human who touched two sites is ONE person. Narrowing this read to
+     * what the capturing site may already see would make a second submission
+     * on a sibling brand create a SECOND document for the same address —
+     * which loses the dedupe the shared address book exists for, and bills
+     * the org twice for one human.
+     *
+     * Recognizing somebody is not the same act as being allowed to read their
+     * row, and the two were the same query while every contact was stamped
+     * org-wide. They are separated here: this finds the person, and
+     * `visibleTo` below decides who may see them — widened by the capture
+     * that just happened, never by the lookup that found them.
+     *=========================================*/
+    const existing = await contactsRef
       .where('email', '==', email)
       .limit(1)
       .get()
 
     if (!existing.empty) {
       const docSnapshot = existing.docs[0]
+      /*
+       * MERGED INTO THIS GROUP'S FACET, not into the top of the document.
+       *
+       * `sources`, `interactions`, the tags, the notes and every commercial
+       * figure are the HOLDER's own business records: a booking taken by one
+       * client of an agency is that client's, and while these lived at the
+       * top of a shared row every other client could read them. The identity
+       * — the address, and a canonical name for a holder that has set none of
+       * its own — stays shared, because that is what makes this one row.
+       */
+      const facet = readContactFacet(
+        docSnapshot.data() as Record<string, unknown>,
+        group.groupId,
+      )
       const merged = mergeContactInteraction(
         {
-          name: docSnapshot.get('name') ?? undefined,
-          sources: docSnapshot.get('sources') ?? {},
-          interactions: docSnapshot.get('interactions') ?? [],
+          name: facet.name ?? undefined,
+          sources: facet.sources,
+          interactions: facet.interactions,
         },
         { source: options.source, interaction, name: options.name },
       )
@@ -198,26 +244,72 @@ export async function upsertHostContact(options: {
           // written: stamping an empty key over a real one would make the
           // contact unfindable by the name it still displays.
           ...(merged.name ? nameSearchFields(merged.name) : {}),
-          sources: merged.sources,
-          interactions: merged.interactions,
+          /*
+           * NESTED, not dot-pathed. This is a `set(…, { merge: true })`, and
+           * a merge-set treats a key containing dots as a literal field name
+           * — only `update()` reads them as paths. The nested form is what
+           * Firestore deep-merges, so this writes one holder's facet and
+           * leaves every other holder's untouched.
+           */
+          [CONTACT_FACETS_FIELD]: {
+            [group.groupId]: {
+              sources: merged.sources,
+              interactions: merged.interactions,
+              ...(merged.name ? { name: merged.name } : {}),
+              ...(options.purchaseCents
+                ? {
+                    ltvCents: FieldValue.increment(options.purchaseCents),
+                    ordersCount: FieldValue.increment(1),
+                    lastPurchaseAtMs: Date.now(),
+                    // A contact that EXISTED before their first purchase
+                    // reached this branch, and it never wrote
+                    // `firstPurchaseAtMs` — only the create path did. So
+                    // every converted lead permanently lacked RFM's R anchor
+                    // while walk-in buyers carried it. Set it on the first
+                    // purchase only; later purchases must not move it.
+                    ...(facet.firstPurchaseAtMs
+                      ? {}
+                      : { firstPurchaseAtMs: Date.now() }),
+                  }
+                : {}),
+            },
+          },
+          /*
+           * ATTRIBUTION GROWS ON THE MERGE BRANCH, which the create-only
+           * `hostId` beside it never did — so a person the first site
+           * captured and the second site later met read as the first site's
+           * alone, forever.
+           *
+           * `arrayUnion`, so the audience filter "everyone captured on A, B
+           * or C" answers with the sites that actually met this person.
+           */
+          [CAPTURED_BY_HOST_FIELD]: FieldValue.arrayUnion(options.hostId),
+          /*
+           * AND SO DOES VISIBILITY — by the capture, never by the lookup.
+           *
+           * This site just collected this person: it has its own relationship
+           * with them and may see the row. A site that has never captured
+           * them gains nothing here, which is what keeps an agency's clients
+           * apart on a document all of them share. The per-interaction
+           * `hostId` above is what keeps the HISTORY apart on the same row.
+           */
+          visibleTo: FieldValue.arrayUnion(...consentGroupScope(group)),
+          /*
+           * RECORDED AGAINST THE CAPTURING SITE, not against the org.
+           *
+           * The contact document is shared by every site in the org, which is
+           * the point of it — one address book behind many brands. Its
+           * consent is not shared on the same terms: the checkbox this
+           * capture carried was ticked under one brand's name, on one brand's
+           * form, and a basis written at the top of this document made the
+           * person mailable by every other brand the account holds.
+           *
+           * A merge writes one key of the map and leaves the rest, so a
+           * person who opts in to a second site accumulates two grants rather
+           * than replacing the first.
+           */
           ...(options.marketingConsent
-            ? { marketingConsent: true, marketingConsentAtMs: Date.now() }
-            : {}),
-          ...(options.purchaseCents
-            ? {
-                ltvCents: FieldValue.increment(options.purchaseCents),
-                ordersCount: FieldValue.increment(1),
-                lastPurchaseAtMs: Date.now(),
-                // A contact that EXISTED before their first purchase (form,
-                // membership, booking capture) reached this branch, and this
-                // branch never wrote `firstPurchaseAtMs` — only the create
-                // path below did. So every converted lead permanently lacked
-                // RFM's R anchor while walk-in buyers carried it. Set it on
-                // the first purchase only; later purchases must not move it.
-                ...(docSnapshot.get('firstPurchaseAtMs')
-                  ? {}
-                  : { firstPurchaseAtMs: Date.now() }),
-              }
+            ? marketingConsentFieldsForGroup(group, Date.now())
             : {}),
           updatedAt: FieldValue.serverTimestamp(),
         },
@@ -245,26 +337,59 @@ export async function upsertHostContact(options: {
 
     const created = await contactsRef.add({
       hostId: options.hostId,
-      // Org-wide by default — today's behavior. Keeping the field
-      // populated on every new contact is what lets the scoped reads
-      // above work at all: `array-contains-any` matches nothing on a doc
-      // that lacks it (AGL-1037).
-      visibleTo: [ORG_SCOPE_TOKEN],
+      /*
+       * WHICH SITES HAVE MET THIS PERSON — attribution, and separate from
+       * consent above.
+       *
+       * The scalar `hostId` beside it names the FIRST capturing site and is
+       * never rewritten, which is provenance for the ROW. This array is the
+       * one that grows and the one an audience query can filter on.
+       */
+      [CAPTURED_BY_HOST_FIELD]: [options.hostId],
+      /*
+       * THE CAPTURING GROUP, not the whole org.
+       *
+       * Stamping `['org']` here made every contact readable by every site in
+       * the account on the day it was created — so an agency's twelve clients
+       * shared one address book by default, and closing the missing-field
+       * fail-open would not have touched it, because the field was present
+       * and said so.
+       *
+       * A group of one — the default — is this site alone. A declared group
+       * is the sites that already present as one sender. Widening beyond that
+       * is available and is an ACT: an org may set `defaultResourceScope` to
+       * `'org'`, or a later capture on a sibling site unions that site in.
+       */
+      visibleTo:
+        (orgBilling?.org as { defaultResourceScope?: 'org' | 'host' } | null)
+          ?.defaultResourceScope === 'org'
+          ? [ORG_SCOPE_TOKEN]
+          : consentGroupScope(group),
       email,
       ...(options.name ? nameSearchFields(options.name.slice(0, 120)) : {}),
-      sources: { [options.source]: true },
-      interactions: [interaction],
-      tags: [],
+      // The facet this capture creates. Everything a holder owns lives under
+      // its own group id; the address and the canonical name above are the
+      // only shared identity.
+      [CONTACT_FACETS_FIELD]: {
+        [group.groupId]: {
+          sources: { [options.source]: true },
+          interactions: [interaction],
+          tags: [],
+          ...(options.name
+            ? { name: options.name.slice(0, 120) }
+            : {}),
+          ...(options.purchaseCents
+            ? {
+                ltvCents: options.purchaseCents,
+                ordersCount: 1,
+                lastPurchaseAtMs: Date.now(),
+                firstPurchaseAtMs: Date.now(),
+              }
+            : {}),
+        },
+      },
       ...(options.marketingConsent
-        ? { marketingConsent: true, marketingConsentAtMs: Date.now() }
-        : {}),
-      ...(options.purchaseCents
-        ? {
-            ltvCents: options.purchaseCents,
-            ordersCount: 1,
-            lastPurchaseAtMs: Date.now(),
-            firstPurchaseAtMs: Date.now(),
-          }
+        ? marketingConsentFieldsForGroup(group, Date.now())
         : {}),
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),

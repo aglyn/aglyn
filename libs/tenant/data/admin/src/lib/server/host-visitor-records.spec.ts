@@ -98,7 +98,11 @@ function harness(existingLeads: number): Harness {
       // document read added by the personKey upsert always misses. The
       // dedupe and merge semantics are owned by `host-lead-dedupe.spec.ts`;
       // what THIS file pins is the ceiling and its bookkeeping.
-      get: async () => ({ exists: false, get: () => undefined }),
+      get: async () => ({
+        exists: false,
+        get: () => undefined,
+        data: () => undefined,
+      }),
     }),
   }
   const countersDocs: Record<string, any> = {}

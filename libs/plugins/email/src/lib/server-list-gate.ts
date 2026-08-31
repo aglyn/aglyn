@@ -56,10 +56,12 @@ import {
   readMarketingBasis,
   type AddressRefusal,
   type AssignmentRefusal,
+  type ConsentGroup,
   type MarketingConsentRecord,
   type PluginApiHandler,
 } from '@aglyn/aglyn/server'
 import {
+  consentGroupForSite,
   filterSendableForHost,
   filterSuppressedEmails,
   firebaseAdmin,
@@ -252,6 +254,16 @@ export interface AddressResolution {
  */
 export interface ResolvedBatch extends AddressResolution {
   stored: Map<string, MarketingConsentRecord>
+  /**
+   * The consent group the resolution was made against, so the WRITE records
+   * a basis for exactly the controller the verdicts were computed for.
+   *
+   * Returned rather than re-resolved by the caller for the same reason
+   * `stored` is: two resolutions of the same question are two answers a
+   * concurrent edit can fit between, and the operator attested against the
+   * first one.
+   */
+  group: ConsentGroup
 }
 
 /**
@@ -295,12 +307,19 @@ export async function resolveAddresses(input: {
     .map((row) => row.email)
     .filter((email): email is string => Boolean(email))
 
+  /*
+   * The group first, because every answer below is about a CONTROLLER and
+   * not about a site: a business running three sites as one sender enrolls
+   * into all three at once, and an agency's client — which declared no group
+   * — resolves to itself.
+   */
+  const group = await consentGroupForSite(input.hostId)
   const [suppression, stored] = await Promise.all([
     suppressionFor(input.hostId, addresses),
-    storedConsentFor(input.hostId, addresses),
+    storedConsentFor(input.hostId, group, addresses),
   ])
 
-  const unrecorded: MarketingConsentRecord = readMarketingBasis(null)
+  const unrecorded: MarketingConsentRecord = readMarketingBasis(null, group)
   const verdicts = rows.map((row): AddressVerdict => {
     if (!row.email) {
       return {
@@ -340,6 +359,7 @@ export async function resolveAddresses(input: {
   return {
     verdicts,
     stored,
+    group,
     optedIn: verdicts.filter(
       (verdict) => !verdict.refusal && !verdict.requiresAttestation,
     ).length,
@@ -408,6 +428,7 @@ async function suppressionFor(
  */
 async function storedConsentFor(
   hostId: string,
+  group: ConsentGroup,
   addresses: readonly string[],
 ): Promise<Map<string, MarketingConsentRecord>> {
   const found = new Map<string, MarketingConsentRecord>()
@@ -425,7 +446,10 @@ async function storedConsentFor(
       for (const doc of snapshot.docs) {
         const email = normalizeContactEmail(doc.get('email'))
         if (!email) continue
-        const record = readMarketingBasis(doc.data() as Record<string, unknown>)
+        const record = readMarketingBasis(
+          doc.data() as Record<string, unknown>,
+          group,
+        )
         const already = found.get(email)
         if (already?.basis === 'declined') continue
         if (already && record.basis !== 'declined') continue
@@ -436,6 +460,7 @@ async function storedConsentFor(
   } catch (error) {
     console.error('[email] consent lookup failed', error)
     const refused: MarketingConsentRecord = {
+      ...readMarketingBasis(null, group),
       basis: 'declined',
       // Attributed to nobody: this is what a failed read falls back to, not a
       // refusal anybody recorded.

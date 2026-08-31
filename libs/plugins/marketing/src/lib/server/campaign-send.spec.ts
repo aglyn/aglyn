@@ -46,6 +46,24 @@ const mockState: {
 // which does not load under the jest environment. Nothing real is needed:
 // `performCampaignSend` takes its firestore from `firebaseAdmin`.
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  // The literal three call sites compare against — the unsubscribe writes
+  // it, the resubscribe link refuses to reverse anything else, and the
+  // preference page reads it. A mock that omitted it would write `undefined`
+  // and every one of those comparisons would silently stop matching.
+  UNSUBSCRIBE_SUPPRESSION_REASON: 'unsubscribe',
+  /*
+   * The real resolution's shape: an org that declared no pooling resolves
+   * every site to a group of ONE. Faked rather than imported because this
+   * file mocks the whole module — but faked to the NARROW answer, which is
+   * the direction a wrong group may fail in.
+   */
+  consentGroupForSite: async (hostId: string) => ({
+    hostId,
+    groupId: hostId,
+    name: null,
+    hostIds: [hostId],
+    declared: false,
+  }),
   /*
    * The unsubscribe-link signer and URL builder are the REAL ones. They need
    * nothing but `crypto`, and a double would let a spec assert on a URL shape
@@ -367,8 +385,10 @@ function seed(nodes: unknown) {
     'hosts/host-1/leads/lead-1': {
       email: 'dana@example.com',
       name: 'Dana Reed',
-      marketingConsent: true,
-      marketingConsentAtMs: Date.UTC(2026, 7, 1),
+      // The basis belongs to the site sending, not to the org.
+      marketingConsentByHost: {
+        'host-1': { marketingConsent: true, marketingConsentAtMs: Date.UTC(2026, 7, 1) },
+      },
     },
     'hosts/host-1/screens/screen-1': {
       kind: 'email',
@@ -675,8 +695,15 @@ describe('the campaign cap and the cost meter (AGL-1438)', () => {
       // Consented, so the send is refused by the org's exhausted allowance
       // and not by the consent join sitting in front of it. Both refusals are
       // a 400, so without a basis here this would pass on the wrong message.
-      marketingConsent: true,
-      marketingConsentAtMs: Date.UTC(2026, 7, 1),
+      // Recorded against `host-2`, which is the site sending: a basis under
+      // the sibling site would be withheld, and this test would then pass on
+      // the consent refusal rather than the allowance one it is about.
+      marketingConsentByHost: {
+        'host-2': {
+          marketingConsent: true,
+          marketingConsentAtMs: Date.UTC(2026, 7, 1),
+        },
+      },
     }
 
     await expect(

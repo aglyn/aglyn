@@ -55,6 +55,7 @@
 
 import {
   DEFAULT_CAMPAIGN_TOPIC_ID,
+  consentGroupForHost,
   readMarketingBasis,
   marketingConsentVerdict,
   resolveMarketingConsentPolicy,
@@ -154,8 +155,18 @@ export async function flowEmailRefusal(options: {
     email,
     options.firestore,
   )
+  /*
+   * The group the SEND belongs to, not the site alone. Three sites declared
+   * as one sender share a basis, and an automation running on any of them is
+   * that sender — resolved from the org the caller already read.
+   */
+  const group = consentGroupForHost(
+    (options.org as Record<string, unknown> | undefined) ?? null,
+    options.hostId,
+  )
   if (
-    marketingConsentVerdict(readMarketingBasis(record), policy) === 'withheld'
+    marketingConsentVerdict(readMarketingBasis(record, group), policy) ===
+    'withheld'
   ) {
     return 'consent-withheld'
   }

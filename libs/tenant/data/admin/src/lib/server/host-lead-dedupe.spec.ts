@@ -30,7 +30,11 @@
  * is enforcement at use, which is the shape the capacity rule forbids.
  */
 
-import { personKey } from '@aglyn/aglyn/server'
+import {
+  personKey,
+  readMarketingBasis,
+  soloConsentGroup,
+} from '@aglyn/aglyn/server'
 
 const HOST_ID = 'site-1'
 
@@ -64,6 +68,11 @@ jest.mock('./campaign-conversion-attribution', () => ({
  * Applies a `set(..., { merge: true })` the way Firestore does, including the
  * two sentinels this writer depends on. A fake that ignored `arrayUnion` and
  * `increment` would let a write that clobbers `sources` pass.
+ *
+ * Nested plain objects are MERGED rather than replaced, which is what
+ * Firestore does and what the per-host consent map depends on: a shallow fake
+ * would let a writer that erases every other brand's grant pass here and
+ * erase them in production.
  */
 const applyMerge = (
   existing: Record<string, any> | undefined,
@@ -79,6 +88,15 @@ const applyMerge = (
         if (!current.includes(entry)) current.push(entry)
       }
       next[key] = current
+    } else if (
+      value &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      next[key] &&
+      typeof next[key] === 'object' &&
+      !Array.isArray(next[key])
+    ) {
+      next[key] = applyMerge(next[key], value)
     } else {
       next[key] = value
     }
@@ -92,6 +110,9 @@ const leadDoc = (id: string) => ({
     exists: leads[id] !== undefined,
     id,
     get: (field: string) => leads[id]?.[field],
+    // A real snapshot answers both, and the consent read takes the whole
+    // document so one parser covers all four person silos.
+    data: () => leads[id],
   }),
 })
 
@@ -198,31 +219,64 @@ describe('one person submitting twice is one lead', () => {
   })
 })
 
-describe('consent is carried forward and never cleared', () => {
+describe('consent is carried forward, never cleared, and names the site', () => {
+  const storedLead = () => leads[personKey('visitor@example.com') as string]
+  /**
+   * Read through the shipped reader rather than by poking at field names, so
+   * a basis this file calls recorded is one the SEND path would also find.
+   * A test that asserted the raw shape would still pass if the reader and the
+   * writer drifted apart, which is the failure that costs an audience.
+   */
+  const basisFor = (hostId: string) =>
+    readMarketingBasis(storedLead() ?? null, soloConsentGroup(hostId)).basis
+
   it('leaves an earlier opt-in standing when a later capture carries none', async () => {
     // ⛔ A merge must never be the moment a person loses an opt-in.
     await capture({ marketingConsent: true })
     await capture({ source: 'booking' })
-    const lead = leads[personKey('visitor@example.com') as string]
-    expect(lead?.['marketingConsent']).toBe(true)
+    expect(basisFor(HOST_ID)).toBe('granted')
   })
 
   it('never invents one', async () => {
     await capture({})
     await capture({ source: 'booking' })
-    const lead = leads[personKey('visitor@example.com') as string]
-    expect(lead).not.toHaveProperty('marketingConsent')
+    expect(basisFor(HOST_ID)).toBe('unrecorded')
+    expect(storedLead()).not.toHaveProperty('marketingConsent')
+  })
+
+  /**
+   * The basis names THIS site and no other. A lead cannot be swept by another
+   * site — the collection lives under this host — so what this pins is the
+   * shape one reader answers over all four person silos, and that the reader
+   * cannot be handed a basis and told the wrong brand owns it.
+   */
+  it('grants to the capturing site and to nobody else', async () => {
+    await capture({ marketingConsent: true })
+    expect(basisFor(HOST_ID)).toBe('granted')
+    expect(basisFor('site-2')).toBe('unrecorded')
+    // Not an unscoped grant either: nothing sits at the top of the document
+    // where every brand in the account would read it.
+    expect(storedLead()).not.toHaveProperty('marketingConsent')
   })
 
   it('keeps the EARLIEST consent timestamp', async () => {
     // Re-stamping on every later capture would rewrite when this person
     // actually opted in.
     await capture({ marketingConsent: true })
-    const lead = leads[personKey('visitor@example.com') as string]
-    const consentedAt = lead?.['marketingConsentAtMs']
+    const consentedAt = readMarketingBasis(storedLead() ?? null, soloConsentGroup(HOST_ID)).basisAtMs
+    expect(consentedAt).toEqual(expect.any(Number))
     await capture({ marketingConsent: true, source: 'booking' })
-    const after = leads[personKey('visitor@example.com') as string]
-    expect(after?.['marketingConsentAtMs']).toBe(consentedAt)
+    expect(readMarketingBasis(storedLead() ?? null, soloConsentGroup(HOST_ID)).basisAtMs).toBe(
+      consentedAt,
+    )
+  })
+
+  it('stamps the capturing site as attribution, separately from consent', async () => {
+    await capture({})
+    expect(readMarketingBasis(storedLead() ?? null, soloConsentGroup(HOST_ID))).toMatchObject({
+      capturedByHostIds: [HOST_ID],
+      basis: 'unrecorded',
+    })
   })
 })
 

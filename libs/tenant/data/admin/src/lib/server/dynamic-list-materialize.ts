@@ -58,6 +58,7 @@ import type {
   QueryDocumentSnapshot,
 } from 'firebase-admin/firestore'
 import {
+  soloConsentGroup,
   candidateMatchesDynamicListRule,
   dynamicListRuleIsEmpty,
   dynamicListRuleListIds,
@@ -582,6 +583,10 @@ export async function materializeDynamicList(options: {
   for (const candidate of matches.values()) {
     const result = await enrollListMember({
       listRef: options.listRef,
+      // A group of one, and it costs nothing: the materializer passes NO
+      // consent (see below), so the group decides only which site is recorded
+      // as having captured the row.
+      group: soloConsentGroup(options.hostId),
       email: candidate.email,
       ...(candidate.name ? { name: candidate.name } : {}),
       source: `rule:${candidate.silo}`,

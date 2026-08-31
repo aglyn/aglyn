@@ -40,6 +40,7 @@ import {
   firebaseAdmin,
   resolveOrgIdForHost,
   setMarketingCadence,
+  UNSUBSCRIBE_SUPPRESSION_REASON,
   type ConfirmTopicResult,
 } from '@aglyn/tenant-data-admin'
 /*
@@ -327,7 +328,7 @@ async function writeSiteSuppression(
       ref,
       {
         email: fields.email,
-        reason: 'unsubscribe',
+        reason: UNSUBSCRIBE_SUPPRESSION_REASON,
         suppressedAt: FieldValue.serverTimestamp(),
         // WHICH mailing they left over. Written on the suppression itself as
         // well as counted on the campaign, so the Suppressions list can answer
@@ -448,7 +449,12 @@ async function releaseSiteSuppression(
     .collection('suppressions')
     .doc(key)
   const snapshot = await ref.get()
-  if (snapshot.exists && snapshot.get('reason') !== 'unsubscribe') return false
+  if (
+    snapshot.exists &&
+    snapshot.get('reason') !== UNSUBSCRIBE_SUPPRESSION_REASON
+  ) {
+    return false
+  }
   // Idempotent whether or not a doc existed — a resubscribe click on an
   // address that was never suppressed (or already resubscribed) is not an
   // error, it is the state the visitor wanted.
@@ -779,7 +785,8 @@ async function readSubscriptionState(
   return {
     suppressed: !!suppression?.exists,
     protectedRecord:
-      !!suppression?.exists && suppression.get('reason') !== 'unsubscribe',
+      !!suppression?.exists &&
+      suppression.get('reason') !== UNSUBSCRIBE_SUPPRESSION_REASON,
     optedOut,
     pending,
     cadence: normalizeMarketingCadence(

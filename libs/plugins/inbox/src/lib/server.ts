@@ -91,6 +91,7 @@ import {
   registerPluginApiRoute,
   resolveBrandingProfile,
   type AssignmentRefusal,
+  type ConsentGroup,
   type MarketingConsentRecord,
   type PluginApiHandler,
 } from '@aglyn/aglyn/server'
@@ -102,6 +103,7 @@ import {
   hostSendingIdentity,
   isEmailSuppressed,
   meterHostEmail,
+  consentGroupForSite,
   orgDataCollectionForHost,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
@@ -483,6 +485,7 @@ async function resolveAssignmentContext(
  */
 async function storedConsentForAddress(
   hostId: string,
+  group: ConsentGroup,
   email: string,
 ): Promise<MarketingConsentRecord> {
   try {
@@ -492,6 +495,7 @@ async function storedConsentForAddress(
       found.empty
         ? null
         : (found.docs[0].data() as Record<string, unknown>),
+      group,
     )
   } catch (error) {
     console.error('[inbox] consent lookup failed', error)
@@ -504,6 +508,7 @@ async function storedConsentForAddress(
      * later surface would ever revisit it. A refusal costs a retry.
      */
     return {
+      ...readMarketingBasis(null, group),
       basis: 'declined',
       // Attributed to nobody, because nobody asserted this: it is what a
       // failed read falls back to, not a refusal anyone recorded. Claiming
@@ -543,7 +548,10 @@ export const inboxListOptionsHandler: PluginApiHandler = async (req, res) => {
     const hostId = String(req.body?.hostId ?? '')
 
     const suppression = await addressSuppression(hostId, context.email)
-    const stored = await storedConsentForAddress(hostId, context.email)
+    // The controller this enrollment is made for — the declared group of
+    // sites that are one sender, or this site alone.
+    const group = await consentGroupForSite(hostId)
+    const stored = await storedConsentForAddress(hostId, group, context.email)
     const readout = assignmentReadout({ stored, suppression })
 
     const listsRef = context.firestore
@@ -638,7 +646,10 @@ export const inboxAssignListHandler: PluginApiHandler = async (req, res) => {
       return res.status(404).json({ error: 'Unknown list' })
     }
 
-    const stored = await storedConsentForAddress(hostId, context.email)
+    // The controller this enrollment is made for — the declared group of
+    // sites that are one sender, or this site alone.
+    const group = await consentGroupForSite(hostId)
+    const stored = await storedConsentForAddress(hostId, group, context.email)
     const nowMs = Date.now()
     const decision = assignmentBasis({
       stored,
@@ -655,6 +666,7 @@ export const inboxAssignListHandler: PluginApiHandler = async (req, res) => {
 
     const enrollment = await enrollListMember({
       listRef,
+      group,
       email: context.email,
       source: ASSIGNMENT_SOURCE,
       // Never `'rule'`: the dynamic-list materializer reconciles its own rows

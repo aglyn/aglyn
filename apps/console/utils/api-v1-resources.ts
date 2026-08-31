@@ -35,11 +35,16 @@ import {
   datasetIntegrityFields,
   datasetIntegrityUpdate,
   defaultScopeForNewResource,
+  CAPTURED_BY_HOST_FIELD,
   effectiveDatasetModel,
   getOrderFulfilmentService,
   inspectUploadBytes,
   isHostPluginEnabled,
+  consentGroupForHost,
   isBlockedSubdomain,
+  MARKETING_CONSENT_BY_HOST_FIELD,
+  marketingConsentHostIds,
+  marketingConsentFieldsForGroup,
   newResourceScopeFields,
   normalizeContactEmail,
   ORG_SCOPE_TOKEN,
@@ -2459,7 +2464,18 @@ function contactView(doc: FirebaseFirestore.DocumentSnapshot) {
     name: data.name ?? null,
     tags: data.tags ?? [],
     notes: data.notes ?? null,
-    marketingConsent: Boolean(data.marketingConsent),
+    /*
+     * TRUE means "some site may mail this person", and `consentSites` says
+     * which. A single boolean is what the org-wide model published, and it is
+     * exactly the claim that turned out to be wrong: an agency's key read
+     * `true` and could not tell which of its brands the person had agreed to
+     * hear from. Both are published so a client can act on either.
+     */
+    marketingConsent:
+      data.marketingConsent === false
+        ? false
+        : marketingConsentHostIds(data).length > 0,
+    consentSites: marketingConsentHostIds(data),
     sources: data.sources ? Object.keys(data.sources) : [],
     created: serialize(data.createdAt) ?? null,
     updated: serialize(data.updatedAt) ?? null,
@@ -2472,7 +2488,13 @@ const CONTACT_TAGS_MAX = 50
 const CONTACT_TAG_MAX = 60
 
 /** Fields a client may send. Anything else is named, never silently dropped. */
-const CONTACT_WRITABLE = ['name', 'tags', 'notes', 'marketingConsent'] as const
+const CONTACT_WRITABLE = [
+  'name',
+  'tags',
+  'notes',
+  'marketingConsent',
+  'consentSiteId',
+] as const
 
 /**
  * Validate the writable half of a contact (AGL-2276). `partial` separates
@@ -2497,6 +2519,7 @@ function readContactInput(
         tags?: string[]
         notes?: string
         marketingConsent?: boolean
+        consentSiteId?: string
       }
     }
   | { errors: Record<string, string> } {
@@ -2507,6 +2530,7 @@ function readContactInput(
     tags?: string[]
     notes?: string
     marketingConsent?: boolean
+    consentSiteId?: string
   } = {}
 
   const allowed = new Set<string>([
@@ -2556,12 +2580,45 @@ function readContactInput(
     values.notes = String(body.notes ?? '').slice(0, CONTACT_NOTES_MAX)
   }
 
+  if (body.consentSiteId !== undefined) {
+    const siteId = String(body.consentSiteId ?? '').trim()
+    if (!siteId) errors.consentSiteId = 'Must name a site'
+    else values.consentSiteId = siteId
+  }
+
   if (body.marketingConsent !== undefined) {
     if (typeof body.marketingConsent !== 'boolean') {
       errors.marketingConsent = 'Must be true or false'
     } else {
       values.marketingConsent = body.marketingConsent
     }
+  }
+
+  /*
+   * AN OPT-IN MUST NAME THE SITE IT WAS GIVEN TO; A REFUSAL MUST NOT.
+   *
+   * An API key belongs to an ORGANIZATION, and an organization is not a
+   * controller — an agency's key reaches every client brand it runs. So an
+   * integration asserting that somebody opted in has to say which brand they
+   * opted in to, exactly as a form does by being served from one site. There
+   * is no safe default: picking the org's only site works until the org has
+   * two, and picking none is the org-wide grant this field exists to stop.
+   *
+   * A refusal is the mirror image and is refused a site on purpose. It
+   * applies to every brand in the account, which is what `readMarketingBasis`
+   * does with an unscoped `false`, and accepting a site alongside it would
+   * imply a per-brand opt-out this endpoint does not write.
+   */
+  if (values.marketingConsent === true && !values.consentSiteId) {
+    errors.consentSiteId =
+      'Required with marketingConsent: true — name the site the person opted in to'
+  }
+  if (values.marketingConsent === false && values.consentSiteId) {
+    errors.consentSiteId =
+      'Not accepted with marketingConsent: false — a refusal applies to every site'
+  }
+  if (values.consentSiteId && values.marketingConsent === undefined) {
+    errors.consentSiteId = 'Only accepted alongside marketingConsent'
   }
 
   return Object.keys(errors).length ? { errors } : { values }
@@ -2644,7 +2701,16 @@ async function createContact(
       headers: ctx.headers,
     })
   }
-  const { email, name, tags, notes, marketingConsent } = parsed.values
+  const { email, name, tags, notes, marketingConsent, consentSiteId } =
+    parsed.values
+  if (consentSiteId && !orgOwnsHost(ctx, consentSiteId)) {
+    return ApiErrors.badRequest({
+      message: 'Contact failed validation',
+      code: 'validation_failed',
+      fields: { consentSiteId: 'No such site in this organization' },
+      headers: ctx.headers,
+    })
+  }
 
   const collection = contactsCollection(ctx)
   const claimed = await claimWrite(
@@ -2694,9 +2760,20 @@ async function createContact(
       ...(name ? nameSearchFields(name) : {}),
       tags: tags ?? [],
       ...(notes ? { notes } : {}),
-      ...(marketingConsent
-        ? { marketingConsent: true, marketingConsentAtMs: Date.now() }
+      ...(marketingConsent && consentSiteId
+        ? {
+            // The declared controller the named site belongs to, so an API
+            // opt-in pools exactly where a form on that site would.
+            ...marketingConsentFieldsForGroup(
+              consentGroupForHost(ctx.org as Record<string, unknown>, consentSiteId),
+              Date.now(),
+            ),
+          }
         : {}),
+      [CAPTURED_BY_HOST_FIELD]: consentSiteId ? [consentSiteId] : [],
+      // A refusal carries no site: it stands against every brand in the
+      // account — see `readMarketingBasis` for the asymmetry.
+      ...(marketingConsent === false ? { marketingConsent: false } : {}),
       // `sources.api` — a first-class provenance value beside `form`,
       // `member`, `order` and `booking`, so a merchant reading the console
       // can see which people an integration put there.
@@ -2748,19 +2825,51 @@ async function updateContact(
     })
   }
 
-  const { name, tags, notes, marketingConsent } = parsed.values
+  const { name, tags, notes, marketingConsent, consentSiteId } = parsed.values
+  if (consentSiteId && !orgOwnsHost(ctx, consentSiteId)) {
+    return ApiErrors.badRequest({
+      message: 'Contact failed validation',
+      code: 'validation_failed',
+      fields: { consentSiteId: 'No such site in this organization' },
+      headers: ctx.headers,
+    })
+  }
   const update: Record<string, unknown> = {}
   // A rename must move the search keys with it, or the contact stays findable
   // only by the name they no longer have.
   if (name !== undefined) Object.assign(update, nameSearchFields(name))
   if (tags !== undefined) update.tags = tags
   if (notes !== undefined) update.notes = notes
-  if (marketingConsent !== undefined) {
-    update.marketingConsent = marketingConsent
-    // The consent timestamp is the evidence, so it is stamped when consent is
-    // GIVEN and left alone when it is withdrawn — an audit needs to know when
-    // the person opted in, and clearing it would destroy that record.
-    if (marketingConsent) update.marketingConsentAtMs = Date.now()
+  if (marketingConsent === true && consentSiteId) {
+    /*
+     * A dotted path rather than a nested object, because this is an `update`
+     * and an `update` REPLACES a map field it is handed whole. Writing the
+     * nested form here would delete every other site's grant — the exact
+     * over-application this change exists to end, arriving through the write
+     * side instead of the read side.
+     */
+    const group = consentGroupForHost(
+      ctx.org as Record<string, unknown>,
+      consentSiteId,
+    )
+    for (const hostId of group.hostIds) {
+      update[`${MARKETING_CONSENT_BY_HOST_FIELD}.${hostId}`] = {
+        marketingConsent: true,
+        // The consent timestamp is the evidence, so it is stamped when
+        // consent is GIVEN and left alone when it is withdrawn — an audit
+        // needs to know when the person opted in, and clearing it would
+        // destroy that record.
+        marketingConsentAtMs: Date.now(),
+        ...(group.declared
+          ? {
+              consentGroupId: group.groupId,
+              consentGroupName: group.name ?? '',
+            }
+          : {}),
+      }
+    }
+  } else if (marketingConsent === false) {
+    update.marketingConsent = false
   }
   // An empty body is a no-op answered with the current contact, matching
   // `updateDataset`: a client re-sending an unchanged object should not have

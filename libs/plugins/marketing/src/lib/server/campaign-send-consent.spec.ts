@@ -40,6 +40,24 @@ const mockState: {
 } = { store: {}, sent: [], metered: [], reserved: [], org: { plan: 'starter' } }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  // The literal three call sites compare against — the unsubscribe writes
+  // it, the resubscribe link refuses to reverse anything else, and the
+  // preference page reads it. A mock that omitted it would write `undefined`
+  // and every one of those comparisons would silently stop matching.
+  UNSUBSCRIBE_SUPPRESSION_REASON: 'unsubscribe',
+  /*
+   * The real resolution's shape: an org that declared no pooling resolves
+   * every site to a group of ONE. Faked rather than imported because this
+   * file mocks the whole module — but faked to the NARROW answer, which is
+   * the direction a wrong group may fail in.
+   */
+  consentGroupForSite: async (hostId: string) => ({
+    hostId,
+    groupId: hostId,
+    name: null,
+    hostIds: [hostId],
+    declared: false,
+  }),
   /*
    * The unsubscribe-link signer and URL builder are the REAL ones. They need
    * nothing but `crypto`, and a double would let a spec assert on a URL shape
@@ -231,13 +249,30 @@ const AFTER_CUTOFF = MARKETING_CONSENT_ENFORCED_FROM_MS + 30 * 86_400_000
 function seedLeads() {
   mockState.store = {
     'hosts/host-1': { subdomain: 'acme', memberRoles: {} },
-    // Ticked the box. Mailable under every policy.
+    // Ticked the box, ON THIS SITE. Mailable under every policy.
     'hosts/host-1/leads/l1': {
       email: 'consented@example.com',
       name: 'Cora',
-      marketingConsent: true,
-      marketingConsentAtMs: AFTER_CUTOFF,
+      marketingConsentByHost: {
+        'host-1': {
+          marketingConsent: true,
+          marketingConsentAtMs: AFTER_CUTOFF,
+        },
+      },
       createdAt: AFTER_CUTOFF,
+    },
+    // Ticked the box for a SISTER BRAND on the same org, and never for this
+    // one. The address book is shared; the basis is not. Not mailable here.
+    'hosts/host-1/leads/l5': {
+      email: 'othersite@example.com',
+      name: 'Otto',
+      marketingConsentByHost: {
+        'host-2': {
+          marketingConsent: true,
+          marketingConsentAtMs: AFTER_CUTOFF,
+        },
+      },
+      createdAt: BEFORE_CUTOFF,
     },
     // Captured before consent was required, no basis. Reachable, reported.
     'hosts/host-1/leads/l2': {
@@ -529,12 +564,14 @@ describe('the send preview says which population is which', () => {
     await expect(send({ dryRun: true })).resolves.toMatchObject({
       // The WHOLE audience, which is what the breakdown is measured over —
       // the same figure the `500 of 3,200` readout uses.
-      audienceSize: 4,
+      audienceSize: 5,
       recipients: 2,
       sendable: 2,
       consented: 1,
       grandfathered: 1,
-      consentWithheld: 2,
+      // Three: no basis, a recorded refusal, and a basis given to a sister
+      // brand. All three are withheld and none of them for the same reason.
+      consentWithheld: 3,
       dryRun: true,
     })
     // A dry run writes nothing and mails nothing.
@@ -578,15 +615,15 @@ describe('what a real send writes onto the campaign', () => {
   }
 
   it('records the consent split the send measured', async () => {
-    // The same four leads and the same policy the dry run above reports on,
+    // The same five leads and the same policy the dry run above reports on,
     // so the recorded figures and the previewed ones are checkably the same
     // numbers rather than two implementations that happen to agree.
     expect(await recorded()).toMatchObject({
-      audienceSize: 4,
+      audienceSize: 5,
       recipients: 2,
       consented: 1,
       grandfathered: 1,
-      consentWithheld: 2,
+      consentWithheld: 3,
     })
   })
 
@@ -613,5 +650,55 @@ describe('what a real send writes onto the campaign', () => {
     expect(stats.delivered).toBeUndefined()
     expect(stats.opens).toBeUndefined()
     expect(stats.unsubscribes).toBeUndefined()
+  })
+})
+
+/**
+ * The agency case, at the send path.
+ *
+ * Contacts and lists are shared across every site in an org on purpose — one
+ * address book behind many brands. Consent is not shareable on those terms:
+ * it runs to the brand named on the form and in the sender line. So a basis
+ * one client collected must not put that person in another client's send.
+ */
+describe('a basis given to one brand does not reach another', () => {
+  it('withholds somebody who opted in to a SISTER site', async () => {
+    configurePolicy('forward')
+    await send()
+    expect(delivered()).not.toContain('othersite@example.com')
+  })
+
+  /**
+   * ANTI-VACUITY, and the load-bearing half. The assertion above passes
+   * against a send that mails nobody. This one drives the SAME address on the
+   * SAME data from the site the basis was actually given to, and requires it
+   * to arrive — so the refusal above is the host being wrong and not the
+   * consent join being broken.
+   */
+  it('mails that same person from the site the basis was given to', async () => {
+    configurePolicy('forward')
+    mockState.store['hosts/host-2'] = { subdomain: 'acme-two', memberRoles: {} }
+    mockState.store['hosts/host-2/leads/l5'] =
+      mockState.store['hosts/host-1/leads/l5']
+
+    await send({ hostId: 'host-2' })
+    expect(delivered()).toContain('othersite@example.com')
+  })
+
+  /**
+   * And the grandfathering door stays shut. `host-1` never collected a basis
+   * for this person, and under `forward` an unrecorded record ordinarily
+   * grandfathers on its capture date — which is before the cutoff here. The
+   * grant held by the sister brand is what closes it: consent WAS collected,
+   * and not by the site that is asking.
+   */
+  it('does not let grandfathering reopen the door for the other brand', async () => {
+    configurePolicy('forward')
+    await send()
+    // `grandfathered@example.com` has the same pre-cutoff capture date and no
+    // grant anywhere, and it IS mailed — so this is the sister grant closing
+    // the door and not the cutoff moving.
+    expect(delivered()).toContain('grandfathered@example.com')
+    expect(delivered()).not.toContain('othersite@example.com')
   })
 })

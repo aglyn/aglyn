@@ -83,6 +83,19 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     summary: 'Sending as hello@site.mail.aglyn.app.',
     refusal: null,
   }),
+  /*
+   * The real resolution's shape: an org that declared no pooling resolves
+   * every site to a group of ONE. Faked rather than imported because this
+   * file mocks the whole module — but faked to the NARROW answer, which is
+   * the direction a wrong group may fail in.
+   */
+  consentGroupForSite: async (hostId: string) => ({
+    hostId,
+    groupId: hostId,
+    name: null,
+    hostIds: [hostId],
+    declared: false,
+  }),
   isImpersonationSession: () => false,
   // White-Label Phase 3: the handler resolves the owning org's brand for the
   // sender from-name; a bare stub keeps it on the Aglyn defaults here.

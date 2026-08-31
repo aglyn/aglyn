@@ -85,6 +85,25 @@ let mockScan: {
 let mockScanCalls: Array<Record<string, unknown>> = []
 
 const HOST_ID = 'site-1'
+
+/**
+ * A contact whose basis is recorded against THIS site, and the enrolling
+ * site's own entry on a membership row.
+ *
+ * Consent is per (person, controller): a fixture writing a grant at the top
+ * of the document would be asserting the pre-host model, and an assertion
+ * reading one from there would pass against a reader that had lost the host
+ * dimension entirely. A REFUSAL is deliberately left unscoped — it names no
+ * controller and is honored against every one.
+ */
+const grantedHere = (atMs: number) => ({
+  marketingConsentByHost: {
+    [HOST_ID]: { marketingConsent: true, marketingConsentAtMs: atMs },
+  },
+})
+const entryOf = (row: Record<string, any> | undefined) =>
+  (row?.['marketingConsentByHost']?.[HOST_ID] ?? {}) as Record<string, any>
+
 const ORG_ID = 'org-1'
 const LIST_ID = 'list-1'
 const LIST_PATH = `orgs/${ORG_ID}/lists/${LIST_ID}`
@@ -178,6 +197,24 @@ const firestoreHandle: any = {
 }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  // The literal three call sites compare against — the unsubscribe writes
+  // it, the resubscribe link refuses to reverse anything else, and the
+  // preference page reads it. A mock that omitted it would write `undefined`
+  // and every one of those comparisons would silently stop matching.
+  UNSUBSCRIBE_SUPPRESSION_REASON: 'unsubscribe',
+  /*
+   * The real resolution's shape: an org that declared no pooling resolves
+   * every site to a group of ONE. Faked rather than imported because this
+   * file mocks the whole module — but faked to the NARROW answer, which is
+   * the direction a wrong group may fail in.
+   */
+  consentGroupForSite: async (hostId: string) => ({
+    hostId,
+    groupId: hostId,
+    name: null,
+    hostIds: [hostId],
+    declared: false,
+  }),
   __esModule: true,
   collectDynamicListCandidates: async (options: Record<string, unknown>) => {
     mockScanCalls.push(options)
@@ -294,10 +331,7 @@ beforeEach(() => {
     memberRoles: { 'editor-uid': 'editor' },
   }
   store[LIST_PATH] = { name: 'Newsletter' }
-  seedContact(OPTED_IN, {
-    marketingConsent: true,
-    marketingConsentAtMs: OPTED_IN_AT,
-  })
+  seedContact(OPTED_IN, grantedHere(OPTED_IN_AT))
   seedContact(REFUSED, { marketingConsent: false })
 })
 
@@ -317,6 +351,8 @@ describe('THE CONTROL: the ordinary add works', () => {
       email: OPTED_IN,
       source: CONSOLE_ADD_SOURCE,
       via: 'manual',
+    })
+    expect(entryOf(memberFor(OPTED_IN))).toMatchObject({
       marketingConsent: true,
       marketingConsentBasis: 'contact-opt-in',
     })
@@ -395,11 +431,11 @@ describe('no consent record either way', () => {
     const out = await add({ email: UNKNOWN, attestConsent: true })
     expect(out.body.added).toBe(1)
     const member = memberFor(UNKNOWN) as Record<string, any>
-    expect(member['marketingConsentBasis']).toBe('operator-attested')
+    expect(entryOf(member)['marketingConsentBasis']).toBe('operator-attested')
     // Never optional for this basis: an attestation nobody is named for is
     // indistinguishable from an opt-in.
-    expect(member['marketingConsentByUid']).toBe('editor-uid')
-    expect(member['marketingConsentAtMs']).toBeGreaterThanOrEqual(before)
+    expect(entryOf(member)['marketingConsentByUid']).toBe('editor-uid')
+    expect(entryOf(member)['marketingConsentAtMs']).toBeGreaterThanOrEqual(before)
   })
 
   it('the preview says the absence out loud rather than resolving it', async () => {
@@ -418,15 +454,15 @@ describe('a stored opt-in', () => {
   it('carries the date the person said yes, attributable to nobody', async () => {
     await add({ email: OPTED_IN })
     const member = memberFor(OPTED_IN) as Record<string, any>
-    expect(member['marketingConsentAtMs']).toBe(OPTED_IN_AT)
-    expect(member['marketingConsentByUid']).toBeNull()
+    expect(entryOf(member)['marketingConsentAtMs']).toBe(OPTED_IN_AT)
+    expect(entryOf(member)['marketingConsentByUid']).toBeNull()
   })
 
   it('does not become an attestation just because one was given', async () => {
     await add({ email: OPTED_IN, attestConsent: true })
     const member = memberFor(OPTED_IN) as Record<string, any>
-    expect(member['marketingConsentBasis']).toBe('contact-opt-in')
-    expect(member['marketingConsentAtMs']).toBe(OPTED_IN_AT)
+    expect(entryOf(member)['marketingConsentBasis']).toBe('contact-opt-in')
+    expect(entryOf(member)['marketingConsentAtMs']).toBe(OPTED_IN_AT)
   })
 
   /*
@@ -590,10 +626,10 @@ describe('a pasted batch', () => {
    */
   it('applies the single attestation only where it is needed', async () => {
     await add({ emails: [OPTED_IN, UNKNOWN], attestConsent: true })
-    expect((memberFor(OPTED_IN) as any)['marketingConsentBasis']).toBe(
+    expect(entryOf(memberFor(OPTED_IN))['marketingConsentBasis']).toBe(
       'contact-opt-in',
     )
-    expect((memberFor(UNKNOWN) as any)['marketingConsentBasis']).toBe(
+    expect(entryOf(memberFor(UNKNOWN))['marketingConsentBasis']).toBe(
       'operator-attested',
     )
   })

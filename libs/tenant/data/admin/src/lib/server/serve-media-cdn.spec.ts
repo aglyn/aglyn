@@ -82,9 +82,19 @@ describe('mediaCdnAllows (AGL-1043)', () => {
     expect(mediaCdnAllows(forSiteA, ['org'])).toBe(true)
   })
 
-  it('treats a MISSING scope as org-wide, for pre-backfill docs', () => {
-    expect(mediaCdnAllows(orgWide, undefined)).toBe(true)
-    expect(mediaCdnAllows(forSiteA, undefined)).toBe(true)
+  /**
+   * An UNSCOPED asset is served to nobody, matching what both enforcement
+   * layers already do with a document carrying no `visibleTo`. The CDN is
+   * unauthenticated and the URL is the only thing it can decide from, so this
+   * is the surface where the permissive reading was worth the least and cost
+   * the most.
+   */
+  it('refuses a MISSING scope rather than serving it to everyone', () => {
+    expect(mediaCdnAllows(orgWide, undefined)).toBe(false)
+    expect(mediaCdnAllows(forSiteA, undefined)).toBe(false)
+    // The control: a stamped asset is still served, so this is the absent
+    // field being refused and not the whole CDN.
+    expect(mediaCdnAllows(orgWide, ['org'])).toBe(true)
   })
 
   it('fails closed on an empty scope', () => {

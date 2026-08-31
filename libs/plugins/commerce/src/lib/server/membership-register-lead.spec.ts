@@ -113,6 +113,10 @@ jest.mock('./membership', () => ({
   setMemberCookie: () => undefined,
 }))
 
+import {
+  readMarketingBasis,
+  soloConsentGroup,
+} from '@aglyn/aglyn/server'
 import { membershipRegisterHandler } from './membership-register'
 
 function makeRes(): any {
@@ -206,10 +210,18 @@ describe('the consent a member signs up with', () => {
   it('persists a ticked checkbox on the member document', async () => {
     await register({ displayName: 'Dana Reed', marketingConsent: true })
     expect(mockState.members).toHaveLength(1)
-    expect(mockState.members[0]).toMatchObject({ marketingConsent: true })
+    // Recorded against THIS SITE, through the shipped reader, so a basis
+    // this file calls stored is one the send path would also find.
     expect(
-      typeof mockState.members[0]['marketingConsentAtMs'],
+      readMarketingBasis(mockState.members[0], soloConsentGroup('host-1')).basis,
+    ).toBe('granted')
+    expect(
+      typeof readMarketingBasis(mockState.members[0], soloConsentGroup('host-1'))
+        .basisAtMs,
     ).toBe('number')
+    // And nothing at the top of the document, where every brand in the
+    // account would read it as its own.
+    expect(mockState.members[0]).not.toHaveProperty('marketingConsent')
   })
 
   /**

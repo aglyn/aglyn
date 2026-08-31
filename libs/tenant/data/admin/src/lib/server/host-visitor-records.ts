@@ -26,9 +26,13 @@
  */
 
 import {
+  CAPTURED_BY_HOST_FIELD,
   checkVisitorRecordCeiling,
   LEADS_MAX_PER_HOST,
+  marketingConsentFieldsForGroup,
   personKey,
+  readMarketingBasis,
+  soloConsentGroup,
   submissionMonthKey,
   visitorRecordRefusedCounterId,
   type VisitorRecordKind,
@@ -255,14 +259,34 @@ export async function addHostLead(options: {
       /*
        * Consent is carried forward and never cleared.
        *
-       * `marketingConsent` is written only when this capture carried an
-       * explicit opt-in, so a later booking by someone who did not tick the
-       * box leaves an earlier `true` standing — absent-or-true, the shape
-       * every other writer uses. The TIMESTAMP is stamped once: the earliest
-       * consent is the one that happened, and re-stamping it on every later
-       * capture would rewrite when this person opted in.
+       * A basis is written only when this capture carried an explicit
+       * opt-in, so a later booking by someone who did not tick the box
+       * leaves an earlier grant standing — absent-or-granted, the shape
+       * every other writer uses. The TIMESTAMP is carried over rather than
+       * restamped, for the reason given at the read below.
        */
-      const alreadyConsented = existing.get('marketingConsent') === true
+      /*
+       * The EARLIEST grant is the one that happened, so a later capture
+       * carrying the same checkbox keeps the original date rather than
+       * restamping when this person opted in. Read back through the shared
+       * reader so "already consented" means the same thing here as it does
+       * at send time.
+       */
+      /*
+       * THE GROUP OF ONE, and deliberately so on this silo.
+       *
+       * `hosts/{hostId}/leads` is private by path — no sibling site can sweep
+       * it, declared group or not — so pooling a lead's basis would record a
+       * disclosure that reaches nothing. The contact written by the same
+       * capture door IS org-shared and IS pooled, which is where a declared
+       * group's disclosure is honored.
+       */
+      const group = soloConsentGroup(hostId)
+      const prior = readMarketingBasis(existing.data() ?? null, group)
+      const consentAtMs =
+        prior.basis === 'granted' && prior.basisAtMs !== null
+          ? prior.basisAtMs
+          : now
       created = !existing.exists
       tx.set(
         leadRef,
@@ -274,12 +298,22 @@ export async function addHostLead(options: {
             : {
                 firstSeenAtMs: now,
                 createdAt: FieldValue.serverTimestamp(),
+                [CAPTURED_BY_HOST_FIELD]: [hostId],
               }),
+          /*
+           * Recorded under THIS host even though the collection already sits
+           * under it.
+           *
+           * A lead cannot be swept by another site — `hosts/{hostId}/leads`
+           * is private by path — so the host key adds no enforcement here.
+           * It is written anyway because {@link readMarketingBasis} is one
+           * function over four silos, and a silo whose basis lived somewhere
+           * else would need the reader to know which collection it was
+           * handed. A reader that has to be told the shape is a reader that
+           * can be told the wrong one.
+           */
           ...(lead.marketingConsent
-            ? {
-                marketingConsent: true,
-                ...(alreadyConsented ? {} : { marketingConsentAtMs: now }),
-              }
+            ? marketingConsentFieldsForGroup(group, consentAtMs)
             : {}),
         },
         { merge: true },

@@ -42,7 +42,10 @@ import { FieldValue } from 'firebase-admin/firestore'
 import {
   normalizeContactEmail,
   personKey,
+  CAPTURED_BY_HOST_FIELD,
+  marketingConsentFieldsForGroup,
   readMarketingBasis,
+  type ConsentGroup,
 } from '@aglyn/aglyn/server'
 import { createHash, createHmac } from 'node:crypto'
 
@@ -117,6 +120,19 @@ export interface ListMemberConsent {
 export interface EnrollListMemberInput {
   /** `orgs/{orgId}/lists/{listId}` — the caller has already proved it exists. */
   listRef: DocumentReference
+  /**
+   * The consent group the enrollment is being made IN THE NAME OF.
+   *
+   * Lists live on the org and every site in it can mail one, so a membership
+   * carries a basis that no path could attribute to a controller. A GROUP
+   * rather than a site, because a business running three sites under one name
+   * legitimately enrolls somebody into all three at once — and an agency's
+   * client, which declared no group, gets exactly itself.
+   *
+   * Required and undefaulted: a caller that has not resolved a group has not
+   * decided who this person agreed to hear from.
+   */
+  group: ConsentGroup
   email: string
   name?: string
   /** Free-form provenance: `'newsletter'`, `'action:{actionId}'`. */
@@ -246,8 +262,8 @@ export async function enrollListMember(
 
   if (
     existing &&
-    readMarketingBasis(existing.data() as Record<string, unknown>).basis ===
-      'declined'
+    readMarketingBasis(existing.data() as Record<string, unknown>, input.group)
+      .basis === 'declined'
   ) {
     return { enrolled: false, refusal: 'declined' }
   }
@@ -293,6 +309,12 @@ export async function enrollListMember(
        * are attribution ON that field — they say why the person is mailable,
        * never whether — so nothing about the send decision moves into them.
        *
+       * Written UNDER the enrolling GROUP, through the one writer helper. A
+       * list lives on the org and every site in it can mail one, so a basis
+       * written at the top of this row would enroll a person into one
+       * client's newsletter and make them mailable by all of them. A group of
+       * one — the default — is that client and nobody else.
+       *
        * `marketingConsentByUid` is written on EVERY basis, `null` for a
        * pass-through. Leaving it absent would let a real opt-in that
        * supersedes an earlier attestation inherit the attesting account, and
@@ -306,15 +328,18 @@ export async function enrollListMember(
        * merchant said the address came from.
        */
       ...(consent
-        ? {
-            marketingConsent: true,
-            marketingConsentAtMs: consent.atMs,
+        ? marketingConsentFieldsForGroup(input.group, consent.atMs, {
             marketingConsentBasis: consent.basis,
             marketingConsentByUid: consent.byUid ?? null,
             marketingConsentReason: consent.reason ?? '',
-          }
+          })
         : {}),
-      ...(existing ? {} : { addedAt: FieldValue.serverTimestamp() }),
+      ...(existing
+        ? {}
+        : {
+            addedAt: FieldValue.serverTimestamp(),
+            [CAPTURED_BY_HOST_FIELD]: [input.group.hostId],
+          }),
     },
     { merge: true },
   )

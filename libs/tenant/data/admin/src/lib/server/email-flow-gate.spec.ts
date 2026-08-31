@@ -83,6 +83,7 @@ jest.mock('./organizations', () => ({
   }),
 }))
 
+import { marketingConsentFieldsForHost } from '@aglyn/aglyn/server'
 import { flowEmailRefusal } from './email-flow-gate'
 
 const HOST = 'site-1'
@@ -95,6 +96,16 @@ const EMAIL = 'buyer@example.com'
 const STRICT = { marketingConsentPolicy: { mode: 'strict' } }
 const FORWARD = { marketingConsentPolicy: { mode: 'forward' } }
 
+/**
+ * A person record whose basis is recorded against ONE site.
+ *
+ * Written through the shipped writer rather than by hand, so a spec that
+ * calls somebody consented is asserting the shape the capture doors actually
+ * produce.
+ */
+const grantedTo = (hostId: string) =>
+  marketingConsentFieldsForHost(hostId, Date.now())
+
 beforeEach(() => {
   contact = null
   lead = null
@@ -105,7 +116,7 @@ beforeEach(() => {
 
 describe('the consent split, applied to one person', () => {
   it('lets a granted basis through', async () => {
-    contact = { email: EMAIL, marketingConsent: true }
+    contact = { email: EMAIL, ...grantedTo(HOST) }
 
     expect(
       await flowEmailRefusal({
@@ -115,6 +126,25 @@ describe('the consent split, applied to one person', () => {
         firestore,
       }),
     ).toBeNull()
+  })
+
+  /**
+   * The leak, at the automation gate. A workflow step running on one site
+   * must not mail somebody on a basis they gave to a sister brand — the same
+   * rule the campaign path applies, asserted here because this gate is a
+   * second door into the same audience.
+   */
+  it('REFUSES a basis given to a DIFFERENT site in the same account', async () => {
+    contact = { email: EMAIL, ...grantedTo('site-2') }
+
+    expect(
+      await flowEmailRefusal({
+        hostId: HOST,
+        email: EMAIL,
+        org: STRICT,
+        firestore,
+      }),
+    ).toBe('consent-withheld')
   })
 
   it('REFUSES a recorded opt-out, under any policy', async () => {
@@ -170,7 +200,7 @@ describe('the consent split, applied to one person', () => {
     // contact yet, so reading contacts alone would refuse the very audience
     // the feature exists for.
     contact = null
-    lead = { email: EMAIL, marketingConsent: true }
+    lead = { email: EMAIL, ...grantedTo(HOST) }
 
     expect(
       await flowEmailRefusal({
@@ -184,7 +214,7 @@ describe('the consent split, applied to one person', () => {
   })
 
   it('does not pay for the lead read when the contact answered', async () => {
-    contact = { email: EMAIL, marketingConsent: true }
+    contact = { email: EMAIL, ...grantedTo(HOST) }
 
     await flowEmailRefusal({
       hostId: HOST,
@@ -206,7 +236,7 @@ describe('the consent split, applied to one person', () => {
 
 describe('the topic filter, after the consent split', () => {
   it('REFUSES somebody who has left the stream', async () => {
-    contact = { email: EMAIL, marketingConsent: true }
+    contact = { email: EMAIL, ...grantedTo(HOST) }
     topicsLeft = { topics: { promotions: { optedOutAt: 1 } } }
 
     expect(
@@ -221,7 +251,7 @@ describe('the topic filter, after the consent split', () => {
   })
 
   it('lets them back in once they resubscribe', async () => {
-    contact = { email: EMAIL, marketingConsent: true }
+    contact = { email: EMAIL, ...grantedTo(HOST) }
     topicsLeft = {
       topics: { promotions: { optedOutAt: 1, resubscribedAt: 2 } },
     }
@@ -238,7 +268,7 @@ describe('the topic filter, after the consent split', () => {
   })
 
   it('does not refuse for a DIFFERENT stream they left', async () => {
-    contact = { email: EMAIL, marketingConsent: true }
+    contact = { email: EMAIL, ...grantedTo(HOST) }
     topicsLeft = { topics: { productNews: { optedOutAt: 1 } } }
 
     expect(
@@ -255,7 +285,7 @@ describe('the topic filter, after the consent split', () => {
   it('resolves a step with no topic to the default stream', async () => {
     // A step authored before topics reached the editor still belongs to some
     // stream — the same one a campaign with no topic mints its links for.
-    contact = { email: EMAIL, marketingConsent: true }
+    contact = { email: EMAIL, ...grantedTo(HOST) }
     topicsLeft = { topics: { marketing: { optedOutAt: 1 } } }
 
     expect(
@@ -289,7 +319,7 @@ describe('the topic filter, after the consent split', () => {
     // The asymmetry with consent above: refusing a newsletter somebody asked
     // for, over a read that failed for an unrelated reason, is the worse
     // error — and both suppression lists have already run one layer down.
-    contact = { email: EMAIL, marketingConsent: true }
+    contact = { email: EMAIL, ...grantedTo(HOST) }
     topicLookupThrows = true
 
     expect(

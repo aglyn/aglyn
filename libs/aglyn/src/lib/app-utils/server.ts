@@ -41,6 +41,7 @@ export * from './contacts'
 // `contacts` for the normalizer, so it sits directly beside it. No Node
 // builtin, which is what keeps it out of the `/server`-only group `person-key`
 // belongs to.
+export * from './consent-groups'
 export * from './marketing-consent'
 // The ENROLLMENT-time half of the same question, beside its reader for the
 // same reason: `marketing-consent` decides whether a recorded basis lets us

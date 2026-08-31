@@ -44,17 +44,47 @@ jest.mock('firebase-admin/firestore', () => ({
   FieldValue: {
     increment: (operand: number) => ({ __inc: operand }),
     serverTimestamp: () => ({ __serverTimestamp: true }),
+    arrayUnion: (...values: unknown[]) => ({ __arrayUnion: values }),
   },
 }))
 
 const contacts: Record<string, Record<string, any>> = {}
+/**
+ * The org's stored sharing default. Undefined is the shipped one — a new
+ * contact is scoped to the capturing group — and `'org'` is the deliberate
+ * widening an org running one brand across several sites may choose.
+ */
+let mockOrgDefaultScope: 'org' | 'host' | undefined
 let added: Record<string, any>[] = []
 
-/** Applies a merge-set the way Firestore does: given keys only, increments applied. */
+/**
+ * Applies a merge-set the way Firestore does: given keys only, increments
+ * applied, and NESTED MAPS MERGED rather than replaced.
+ *
+ * The recursion is load-bearing. The per-holder facets and the per-host
+ * consent entries are both maps written one key at a time, and a shallow fake
+ * would let a write that erases every other holder's notes, order history and
+ * consent pass here and erase them in production.
+ */
 function mergeApply(target: Record<string, any>, data: Record<string, any>) {
   for (const [key, value] of Object.entries(data)) {
     if (value && typeof value === 'object' && '__inc' in value) {
       target[key] = (Number(target[key]) || 0) + (value as any).__inc
+    } else if (
+      value &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      !('__serverTimestamp' in value) &&
+      !('__arrayUnion' in value)
+    ) {
+      target[key] = { ...(target[key] ?? {}) }
+      mergeApply(target[key], value)
+    } else if (value && typeof value === 'object' && '__arrayUnion' in value) {
+      const current: unknown[] = Array.isArray(target[key]) ? target[key] : []
+      for (const entry of (value as any).__arrayUnion) {
+        if (!current.includes(entry)) current.push(entry)
+      }
+      target[key] = current
     } else {
       target[key] = value
     }
@@ -73,6 +103,9 @@ const contactsRef = {
           docs: hits.map(([id, data]) => ({
             id,
             get: (key: string) => data[key],
+            // A real snapshot answers both; the facet read takes the whole
+            // document because one parser covers every holder.
+            data: () => data,
             ref: {
               set: async (
                 payload: Record<string, any>,
@@ -113,7 +146,16 @@ jest.mock('./firebase-admin', () => ({
 }))
 
 jest.mock('./organizations', () => ({
-  getOrgForHost: async () => ({ orgId: 'org1', org: { plan: 'starter' } }),
+  // The real resolution, which for an org that declared nothing is the
+  // group of one — the shape every case in this file exercises.
+  consentGroupForSite: async (hostId: string) =>
+    jest
+      .requireActual('@aglyn/aglyn/app-utils/consent-groups')
+      .soloConsentGroup(hostId),
+  getOrgForHost: async () => ({
+    orgId: 'org1',
+    org: { plan: 'starter', defaultResourceScope: mockOrgDefaultScope },
+  }),
   orgDataCollectionForHost: async () => contactsRef,
   scopedToHost: (ref: unknown) => ref,
 }))
@@ -127,10 +169,27 @@ jest.mock('@aglyn/aglyn/server', () => {
   )
   return {
     ...contactsModule,
+    // The real consent and scope helpers. Reimplementing them here is the
+    // unfaithful-double trap: a fake that wrote a basis at the top of the
+    // document, or scoped a new contact org-wide, would pass this file while
+    // shipping the leak.
+    ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/consent-groups'),
+    ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/marketing-consent'),
     ORG_SCOPE_TOKEN: 'org',
     checkContactQuota: () => ({ allowed: true }),
   }
 })
+
+/**
+ * The commercial figures are the HOLDER's, not the org's.
+ *
+ * Two unrelated merchants who both sell to one person have two different
+ * lifetime values and neither is entitled to the other's, so these live in
+ * the capturing group's facet rather than at the top of the shared row.
+ * `facet()` is how every assertion below reads them.
+ */
+const facet = (id: string, groupId = 'h1') =>
+  contacts[id]?.facets?.[groupId] ?? {}
 
 describe('upsertHostContact RFM fields on an existing contact', () => {
   beforeEach(() => {
@@ -148,11 +207,14 @@ describe('upsertHostContact RFM fields on an existing contact', () => {
       purchaseCents: 1800,
       interaction: { refId: 'o1', summary: 'Placed an order' },
     })
-    expect(contacts['c1'].ltvCents).toBe(1800)
-    expect(contacts['c1'].ordersCount).toBe(1)
-    expect(contacts['c1'].lastPurchaseAtMs).toEqual(expect.any(Number))
+    expect(facet('c1').ltvCents).toBe(1800)
+    expect(facet('c1').ordersCount).toBe(1)
+    expect(facet('c1').lastPurchaseAtMs).toEqual(expect.any(Number))
     // The red before the fix: this field stayed absent forever.
-    expect(contacts['c1'].firstPurchaseAtMs).toEqual(expect.any(Number))
+    expect(facet('c1').firstPurchaseAtMs).toEqual(expect.any(Number))
+    // And a sister brand sees none of it — a lifetime value is the holder's
+    // own business record, not the account's.
+    expect(facet('c1', 'h2')).toEqual({})
   })
 
   it('never moves firstPurchaseAtMs on a later purchase', async () => {
@@ -160,10 +222,16 @@ describe('upsertHostContact RFM fields on an existing contact', () => {
       email: 'buyer@example.com',
       sources: { order: true },
       interactions: [],
-      ltvCents: 1000,
-      ordersCount: 1,
-      firstPurchaseAtMs: 111,
-      lastPurchaseAtMs: 111,
+      facets: {
+        h1: {
+          sources: { order: true },
+          interactions: [],
+          ltvCents: 1000,
+          ordersCount: 1,
+          firstPurchaseAtMs: 111,
+          lastPurchaseAtMs: 111,
+        },
+      },
     }
     await upsertHostContact({
       hostId: 'h1',
@@ -172,10 +240,10 @@ describe('upsertHostContact RFM fields on an existing contact', () => {
       purchaseCents: 2500,
       interaction: { refId: 'o2', summary: 'Placed an order' },
     })
-    expect(contacts['c1'].firstPurchaseAtMs).toBe(111) // anchored
-    expect(contacts['c1'].ltvCents).toBe(3500) // increment applied for real
-    expect(contacts['c1'].ordersCount).toBe(2)
-    expect(contacts['c1'].lastPurchaseAtMs).toBeGreaterThan(111)
+    expect(facet('c1').firstPurchaseAtMs).toBe(111) // anchored
+    expect(facet('c1').ltvCents).toBe(3500) // increment applied for real
+    expect(facet('c1').ordersCount).toBe(2)
+    expect(facet('c1').lastPurchaseAtMs).toBeGreaterThan(111)
   })
 
   it('leaves every RFM field untouched when there is no purchase', async () => {
@@ -186,8 +254,96 @@ describe('upsertHostContact RFM fields on an existing contact', () => {
       source: 'form',
       interaction: { refId: 'f1', summary: 'Submitted a form' },
     })
-    expect(contacts['c1'].ltvCents).toBeUndefined()
-    expect(contacts['c1'].firstPurchaseAtMs).toBeUndefined()
-    expect(contacts['c1'].lastPurchaseAtMs).toBeUndefined()
+    expect(facet('c1').ltvCents).toBeUndefined()
+    expect(facet('c1').firstPurchaseAtMs).toBeUndefined()
+    expect(facet('c1').lastPurchaseAtMs).toBeUndefined()
+  })
+})
+
+/**
+ * A NEW CONTACT IS SCOPED TO THE CAPTURING GROUP, NOT TO THE ORG.
+ *
+ * Stamping `['org']` here made every contact readable by every site in the
+ * account on the day it was created, so an agency's twelve clients shared one
+ * address book by default. Closing the missing-field fail-open would not have
+ * touched it: the field was present and said so.
+ */
+describe('the scope a captured contact starts with', () => {
+  beforeEach(() => {
+    for (const key of Object.keys(contacts)) delete contacts[key]
+    added = []
+    mockOrgDefaultScope = undefined
+  })
+
+  it('scopes a new contact to the capturing site and no wider', async () => {
+    await upsertHostContact({
+      hostId: 'h1',
+      email: 'new@example.com',
+      source: 'form',
+      interaction: { refId: 'f1' },
+    })
+    expect(added).toHaveLength(1)
+    expect(added[0].visibleTo).toEqual(['host:h1'])
+    // ⛔ And not the token that would make it everybody's.
+    expect(added[0].visibleTo).not.toContain('org')
+  })
+
+  /**
+   * ATTRIBUTION GROWS ON THE MERGE BRANCH. A person the first site captured
+   * and the second site later met read as the first site's alone forever,
+   * because the create-only `hostId` beside this was never rewritten — so
+   * "everyone captured on B" missed everybody B met second.
+   */
+  it('adds a second site to the attribution when it meets the same person', async () => {
+    contacts['c1'] = {
+      email: 'both@example.com',
+      capturedByHostIds: ['h1'],
+      facets: { h1: { sources: { form: true }, interactions: [] } },
+    }
+    await upsertHostContact({
+      hostId: 'h2',
+      email: 'both@example.com',
+      source: 'booking',
+      interaction: { refId: 'b1' },
+    })
+    expect(contacts['c1'].capturedByHostIds).toEqual(
+      expect.arrayContaining(['h1', 'h2']),
+    )
+    // And the second site can now SEE the row it just captured — widened by
+    // the capture, never by the lookup that found the person.
+    expect(contacts['c1'].visibleTo).toEqual(
+      expect.arrayContaining(['host:h2']),
+    )
+    // ⛔ Still one document: the dedupe is the point.
+    expect(added).toHaveLength(0)
+  })
+
+  it('records the capturing site as a queryable attribution', async () => {
+    await upsertHostContact({
+      hostId: 'h1',
+      email: 'new@example.com',
+      source: 'form',
+      interaction: { refId: 'f1' },
+    })
+    // An ARRAY, because "everyone captured on A, B or C" is an audience and
+    // `array-contains-any` is what answers it.
+    expect(added[0].capturedByHostIds).toEqual(['h1'])
+  })
+
+  /**
+   * ANTI-VACUITY. The org may still widen deliberately — visibility and
+   * consent are separate axes, and an org running one brand across three
+   * sites may reasonably want one address book. What changed is that it is
+   * an ACT rather than the default.
+   */
+  it('still honors an org that has chosen org-wide sharing', async () => {
+    mockOrgDefaultScope = 'org'
+    await upsertHostContact({
+      hostId: 'h1',
+      email: 'wide@example.com',
+      source: 'form',
+      interaction: { refId: 'f2' },
+    })
+    expect(added[0].visibleTo).toEqual(['org'])
   })
 })

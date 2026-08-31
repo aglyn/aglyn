@@ -130,6 +130,30 @@ const firestoreHandle: any = {
 }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  /*
+   * The campaign-touch lookup, answering "no campaign".
+   *
+   * The double was missing it entirely, so the newsletter route threw on its
+   * first line and the enrollment under test never ran. Answering null is the
+   * honest default for a request carrying no touch, and it is what keeps this
+   * file about enrollment rather than about attribution.
+   */
+  resolveCampaignTouch: async () => null,
+  // The real resolution's shape: an org that declared no pooling resolves
+  // every site to a group of ONE — the narrow answer, which is the direction
+  // a wrong group may fail in.
+  consentGroupForSite: async (hostId: string) => ({
+    hostId,
+    groupId: hostId,
+    name: null,
+    hostIds: [hostId],
+    declared: false,
+  }),
+  // The literal three call sites compare against — the unsubscribe writes
+  // it, the resubscribe link refuses to reverse anything else, and the
+  // preference page reads it. A mock that omitted it would write `undefined`
+  // and every one of those comparisons would silently stop matching.
+  UNSUBSCRIBE_SUPPRESSION_REASON: 'unsubscribe',
   __esModule: true,
   // The REAL enrollment helper, reached by its deep path so the barrel — and
   // the Admin SDK initialization behind it — is not pulled into the suite.
@@ -332,16 +356,22 @@ describe('the consent a list membership records', () => {
     .filter((key) => key.startsWith(`${MEMBERS_PATH}/`))
     .map((key) => key.slice(MEMBERS_PATH.length + 1))[0]}`]
 
+  /** The enrolling site's own entry — a list is org-shared, its basis is not. */
+  const entry = () => memberDoc()?.['marketingConsentByHost']?.[HOST_ID] ?? {}
+
   it('records a basis for a newsletter subscribe', async () => {
     await subscribeByNewsletterForm('bob@example.com')
-    expect(memberDoc()).toMatchObject({ marketingConsent: true })
-    expect(typeof memberDoc()?.['marketingConsentAtMs']).toBe('number')
+    expect(entry()).toMatchObject({ marketingConsent: true })
+    expect(typeof entry()['marketingConsentAtMs']).toBe('number')
+    // And nothing at the top of the row, where every site in the org would
+    // read it as its own.
+    expect('marketingConsent' in (memberDoc() ?? {})).toBe(false)
   })
 
   it('⛔ records NO basis for an automation enrollment', async () => {
     await subscribeByAutomation('bob@example.com')
     expect(memberDoc()).toBeDefined()
-    expect('marketingConsent' in (memberDoc() ?? {})).toBe(false)
+    expect(memberDoc()?.['marketingConsentByHost']).toBeUndefined()
   })
 
   /**
@@ -354,6 +384,6 @@ describe('the consent a list membership records', () => {
   it('does not erase an existing basis when a later route carries none', async () => {
     await subscribeByNewsletterForm('bob@example.com')
     await subscribeByAutomation('bob@example.com')
-    expect(memberDoc()).toMatchObject({ marketingConsent: true })
+    expect(entry()).toMatchObject({ marketingConsent: true })
   })
 })

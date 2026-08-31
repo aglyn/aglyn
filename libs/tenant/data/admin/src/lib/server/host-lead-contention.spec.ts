@@ -154,6 +154,7 @@ function fakeLeadStore() {
                 exists: data !== undefined,
                 id: target.__doc,
                 get: (field: string) => data?.[field],
+                data: () => data,
               }
             },
             set: (ref: any, patch: Record<string, any>) => {

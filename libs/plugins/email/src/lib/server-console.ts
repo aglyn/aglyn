@@ -248,7 +248,7 @@ export const emailListMembersAddHandler: PluginApiHandler = async (
        * anything — is refused HERE and only here.
        */
       const decision = assignmentBasis({
-        stored: resolution.stored.get(verdict.email) ?? readMarketingBasis(null),
+        stored: resolution.stored.get(verdict.email) ?? readMarketingBasis(null, resolution.group),
         attested,
         actingUid: context.uid,
         nowMs,
@@ -265,6 +265,7 @@ export const emailListMembersAddHandler: PluginApiHandler = async (
       }
       const enrollment = await enrollListMember({
         listRef: context.listRef,
+        group: resolution.group,
         email: verdict.email,
         ...(name && requested.emails.length === 1 ? { name } : {}),
         source: CONSOLE_ADD_SOURCE,
