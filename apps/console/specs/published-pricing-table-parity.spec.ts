@@ -207,19 +207,23 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       ])
     })
 
-    it('Bandwidth / mo — the four upper bands and Free came down', () => {
+    it('Bandwidth / mo — Free, Pro and the four upper bands came down', () => {
       const PUBLISHED: Row = [5, 50, 250, 1000, 2500, 5000, 20000]
-      const CODE: Row = [2, 50, 250, 400, 700, 1000, 3000]
+      const CODE: Row = [2, 50, 225, 400, 700, 1000, 3000]
       expect(quotaColumn('bandwidthGb')).toEqual(CODE)
-      // Starter and Pro did not move. FREE did, and it is the one band on
-      // that tier that can never be metered — there is no subscription to
-      // bill an overage onto, so it is a pure give at $0.175 a GB.
-      expect(CODE.slice(1, 3)).toEqual(PUBLISHED.slice(1, 3))
+      // Starter did not move, so this is not a sweep. FREE did, and it is the
+      // one band on that tier that can never be metered — there is no
+      // subscription to bill an overage onto, so it is a pure give at $0.175
+      // a GB. Pro's is the smallest proportional cut on the row, 10%, and the
+      // only one on a tier that was never negative: at 250 GB it held a 7.1%
+      // ceiling against 10-16% everywhere else (`tier-margin-floor.spec.ts`).
+      expect(CODE[1]).toBe(PUBLISHED[1])
       expect(
         PUBLISHED_COLUMNS.map((plan, column) => [plan, PUBLISHED[column], CODE[column]])
           .filter(([, was, now]) => was !== now),
       ).toEqual([
         ['free', 5, 2],
+        ['pro', 250, 225],
         ['business', 1000, 400],
         ['scale', 2500, 700],
         ['advanced', 5000, 1000],

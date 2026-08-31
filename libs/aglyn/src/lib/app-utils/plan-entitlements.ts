@@ -443,7 +443,16 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     managersPerOrg: 5,
     maxManagersPerOrg: 20,
     maxMembersPerHost: 25,
-    bandwidthGb: 250,
+    // Page views are 82.5% of this tier's modeled COGS — one GB is 1,748 views
+    // at `ESTIMATED_PAGE_TRANSFER_BYTES`, or $0.175 of measured cost — so the
+    // bandwidth band is what decides whether the tier survives a customer
+    // spending the whole allowance it was sold. At 225 GB the $56
+    // subscription holds a 14.9% gross margin with every band at 100%;
+    // `tier-margin-floor.spec.ts` carries the model and pins the figure.
+    //
+    // `meteredInfraPassThrough` is true here, so traffic past the band BILLS
+    // at the page-view pass-through rather than being refused or absorbed.
+    bandwidthGb: 225,
     formSubmissionsPerMonth: 1000,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 100,

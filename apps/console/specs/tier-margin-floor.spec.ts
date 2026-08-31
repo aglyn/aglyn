@@ -33,6 +33,17 @@
  *     business  +16.3%    scale  +12.3%     advanced  +10.0%
  *     agency    +13.6%, bounded on every axis
  *
+ * ## Pro is on the same rule, and the same instrument
+ *
+ * Pro was never negative, so it is not in the list above — it is here because
+ * a tier can be the wrong side of a decision without being the wrong side of
+ * zero. Bandwidth is 82.5% of its modeled cost, so the bandwidth band is what
+ * decides the tier: at 250 GB the same $56 subscription runs at +7.1%,
+ * positive but thinner than every other rung on a ladder that otherwise sits
+ * between 10% and 16%, and therefore the first tier any cost-rate move takes
+ * under. At 225 GB it is +14.9%. `MUTATION: Pro at a 250 GB band` is that
+ * arithmetic, on the one axis that moved.
+ *
  * ## A floor AND a pin
  *
  * The rule is non-negative at 100%, and every tier now holds it. But a
@@ -76,6 +87,7 @@
  */
 
 import {
+  METERED_BILLED_RATES_USD,
   METERED_MARKUP,
   METERED_UNIT_RATES_USD,
   meteredIncludedAllowance,
@@ -280,7 +292,7 @@ describe('no self-serve tier loses money at full utilization', () => {
       ),
     ).toEqual({
       starter: [92, 90.4, 80.7, 61.5],
-      pro: [89.3, 76.8, 53.6, 7.1],
+      pro: [89.3, 78.7, 57.5, 14.9],
       business: [85.6, 79.1, 58.2, 16.3],
       scale: [88, 78.1, 56.1, 12.3],
       advanced: [87.5, 77.5, 55, 10],
@@ -290,6 +302,24 @@ describe('no self-serve tier loses money at full utilization', () => {
 
   it('clears 40% at the realistic 25% band, on every tier', () => {
     expect(tiersUnderFloor(PAID, 0.25, 0.4)).toEqual([])
+  })
+
+  /**
+   * THE BAND THE LADDER ACTUALLY OCCUPIES, which is a stricter statement than
+   * the rule above.
+   *
+   * Non-negative is the survival condition. This is the shape the tiers were
+   * priced to: every paid worst case sits between 9% and 62%, with Advanced
+   * setting the low end at 9.96%. A tier landing under it is not losing money
+   * — it is carrying a ceiling thinner than any other rung, which is the
+   * position Pro was in, and the reason a floor of zero is not enough on its
+   * own to keep the ladder coherent.
+   */
+  it('holds a 9% floor at 100%, which is where the ladder sits', () => {
+    expect(tiersUnderFloor(PAID, 1, 0.09)).toEqual([])
+    // BOTH WAYS. One point higher and the thinnest rung fails, so this is a
+    // real edge rather than a number nothing on the ladder could cross.
+    expect(tiersUnderFloor(PAID, 1, 0.1)).toEqual(['advanced'])
   })
 
   it('CONTROL: the floor is not so low that nothing could fail it', () => {
@@ -366,6 +396,112 @@ describe('no self-serve tier loses money at full utilization', () => {
     ).toBeLessThan(0)
     // …and with the shipped band it is positive. Both directions on one axis.
     expect(tierMargin('advanced', 1)).toBeGreaterThan(0)
+  })
+
+  /**
+   * PRO, ONE AXIS AT A TIME.
+   *
+   * The decomposition is pinned as numbers so a change that moved several of
+   * Pro's bands at once cannot read as this one, which moved bandwidth and
+   * nothing else.
+   */
+  it('spends 82.5% of Pro on bandwidth, and the rest on six small bands', () => {
+    const terms = bandCostTerms('pro')
+    expect(
+      Object.fromEntries(
+        Object.entries(terms).map(([term, cost]) => [
+          term,
+          Number(cost.toFixed(4)),
+        ]),
+      ),
+    ).toEqual({
+      mediaStorage: 0.78,
+      formSubmissions: 0.15,
+      bandwidth: 39.3216,
+      datasetStorage: 0.9,
+      apiRequests: 0,
+      contacts: 2,
+      emailSends: 4.5,
+    })
+    // The six others total $8.33 against a $56 price, so none of them — nor
+    // all of them together — could have carried this tier into the ladder's
+    // band. Bandwidth was the only lever that could.
+    const total = Object.values(terms).reduce((a, b) => a + b, 0)
+    expect(total - terms.bandwidth).toBeCloseTo(8.33, 2)
+    expect(terms.bandwidth / total).toBeGreaterThan(0.8)
+  })
+
+  it('MUTATION: Pro at a 250 GB band drops out of the ladder', () => {
+    const terms = bandCostTerms('pro')
+    const restored =
+      Object.values(terms).reduce((a, b) => a + b, 0) -
+      terms.bandwidth +
+      250 * VIEWS_PER_GB * ORG_COGS_UNIT_RATES_USD.perPageView
+    const price = PLAN_PRICING.pro.basePriceMonthlyUsd
+    // The price is not a lever here. $56 is the Squarespace-anchored rung and
+    // the whole move is on the band, so a reading that came from a repricing
+    // would be the wrong green.
+    expect(price).toBe(56)
+    // POSITIVE, which is why the non-negative rule above would never have
+    // reported it — and under every other rung on the ladder.
+    expect((price - restored) / price).toBeCloseTo(0.071, 3)
+    expect((price - restored) / price).toBeLessThan(0.09)
+    // …and with the shipped band it clears. Both directions, one axis.
+    expect(tierMargin('pro', 1)).toBeGreaterThanOrEqual(0.09)
+  })
+
+  it('governs what Pro sells past every band it bounds', () => {
+    // A finite band with no rate is silently free past the band, so shrinking
+    // one is half a change on its own. Bandwidth rides the infrastructure
+    // pass-through; contacts and email sends carry retail rates. Asserted as
+    // pairs, because each half is only correct with the other.
+    expect(PLAN_PRICING.pro.meteredInfraPassThrough).toBe(true)
+    expect(METERED_BILLED_RATES_USD.perPageView).toBe(
+      METERED_UNIT_RATES_USD.perPageView * METERED_MARKUP,
+    )
+    expect(METERED_BILLED_RATES_USD.perPageView).toBeGreaterThan(0)
+    // The line where the pass-through starts billing IS the band, read from
+    // the entitlement — so a smaller band moves the meter with it rather than
+    // leaving a give the customer no longer has.
+    const allowance = meteredIncludedAllowance({ plan: 'pro' } as never)
+    expect(allowance.metered).toBe(true)
+    expect(allowance.pageViews).toBeCloseTo(
+      PLAN_ENTITLEMENTS.pro.bandwidthGb * VIEWS_PER_GB,
+      3,
+    )
+    expect(Number.isFinite(PLAN_ENTITLEMENTS.pro.contactsPerHost)).toBe(true)
+    expect(PLAN_PRICING.pro.extraContactsUsdPer1k).toBe(0.75)
+    expect(Number.isFinite(PLAN_ENTITLEMENTS.pro.emailSendsPerMonth)).toBe(true)
+    expect(PLAN_PRICING.pro.extraEmailSendsUsdPer1k).toBe(2.25)
+    // …and contacts METER rather than wall, which is what makes a bounded
+    // band safe on this tier: the rate is what flips `allowed` past it.
+    const past = checkContactQuota(
+      { plan: 'pro', subscription: { status: 'active' } } as never,
+      PLAN_ENTITLEMENTS.pro.contactsPerHost + 2_000,
+    )
+    expect(past.allowed).toBe(true)
+    expect(past.overageContacts).toBe(2_000)
+    expect(past.overageMonthlyUsd).toBe(1.5)
+  })
+
+  /**
+   * STARTER IS NOT IN THE SAME POSITION, and the arithmetic is here rather
+   * than asserted by absence. Its bands imply $9.63 against a $25 price —
+   * the widest paid margin on the ladder — and bandwidth is 91% of that,
+   * $8.74. The lever Pro needed exists on Starter and is not called for.
+   */
+  it('leaves Starter where it is, with room the ladder does not have', () => {
+    const price = PLAN_PRICING.starter.basePriceMonthlyUsd
+    expect(price).toBe(25)
+    expect(tierCostUsd('starter', 1)).toBeCloseTo(9.63, 2)
+    expect(PLAN_ENTITLEMENTS.starter.bandwidthGb).toBe(50)
+    // Doubling the dominant rate is the move this ladder is thin against.
+    // Starter still clears 26% there; Pro does not survive it on either band,
+    // which is what makes the page-view rate the figure to calibrate next.
+    const atDoubleRate =
+      Object.values(bandCostTerms('starter')).reduce((a, b) => a + b, 0) +
+      bandCostTerms('starter').bandwidth
+    expect((price - atDoubleRate) / price).toBeGreaterThan(0.26)
   })
 
   it('Agency clears zero on its own, after the resize and the price rise', () => {
