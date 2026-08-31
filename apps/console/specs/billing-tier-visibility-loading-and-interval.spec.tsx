@@ -314,16 +314,21 @@ describe('the grid holds until the plan is KNOWN (AGL-1864 · AGL-1422)', () => 
   it('NEGATIVE CONTROL: and the collapse is still there behind it', () => {
     render(<BillingPage />)
     // One click further in, the AGL-1864 behaviour the hold protects is
-    // unchanged — the lower tiers are folded, not deleted. Asserted through
-    // the real button rather than by rendering the grid directly, because
-    // "reachable" is the property that matters.
+    // unchanged in the direction that matters — the lower tiers are folded,
+    // never deleted, and the fold is a state the reader can be in. What
+    // `Compare all` does NOT do any more is put them there uninvited, so the
+    // control now reads "Hide lower plans" and folding is one press away.
     fireEvent.click(screen.getByRole('button', { name: /Compare all/ }))
+    const fold = screen.getByRole('button', { name: /Hide lower plans/ })
+    expect(cardFor(PLAN_LABELS.free)).not.toBeNull()
+    fireEvent.click(fold)
+    expect(cardFor(PLAN_LABELS.free)).toBeNull()
     expect(
       screen.getByRole('button', { name: /Show \d+ lower plans?/ }),
     ).toBeTruthy()
   })
 
-  it('counts the plans it draws, so the folded one is visible in the total', () => {
+  it('counts the plans it draws, and draws every one it counted', () => {
     /*
      * The count has to include Enterprise, which the grid renders outside
      * `PLAN_ORDER`. Counting only that array said seven while the grid drew
@@ -332,9 +337,12 @@ describe('the grid holds until the plan is KNOWN (AGL-1864 · AGL-1422)', () => 
      * invisible in it: a reader counted the cards, got the promised number,
      * and had no reason to look for an eighth.
      *
-     * An org on Pro has Free and Starter below it, so the true total is the
-     * seven self-serve tiers plus Enterprise, and the grid draws six of them
-     * until the disclosure is pressed.
+     * Fixing the total exposed the other half. A button that names eight and
+     * hands over six is an omission whatever the second control says, and the
+     * gap it left was exactly the two cheapest plans — reported twice, from a
+     * screenshot with the disclosure plainly in it, as the Free tier being
+     * missing. So the promise and the delivery are asserted against each
+     * other here rather than reconciled through a fold.
      */
     render(<BillingPage />)
     const compare = screen.getByRole('button', { name: /Compare all/ })
@@ -344,16 +352,38 @@ describe('the grid holds until the plan is KNOWN (AGL-1864 · AGL-1422)', () => 
     const drawn = Object.values(PLAN_LABELS).filter((label) =>
       Boolean(cardFor(label)),
     ).length
-    const folded = Number(
-      /Show (\d+) lower plans?/.exec(
-        screen.getByRole('button', { name: /Show \d+ lower plans?/ })
-          .textContent ?? '',
-      )?.[1] ?? 0,
-    )
-    // Every plan the button promises is either on screen or named by the
-    // disclosure. Nothing is unaccounted for.
-    expect(folded).toBeGreaterThan(0)
-    expect(drawn + folded).toBe(8)
+    // Every plan the button promised is on screen. Nothing is owed to a
+    // second control, and nothing is unaccounted for.
+    expect(drawn).toBe(8)
+    // Named as well as counted, because "eight cards" and "the cheap end is
+    // there" are not the same assertion.
+    expect(cardFor(PLAN_LABELS.free)).not.toBeNull()
+    expect(cardFor(PLAN_LABELS.starter)).not.toBeNull()
+    expect(cardFor(PLAN_LABELS.enterprise)).not.toBeNull()
+  })
+
+  it('and the ones it just revealed are quiet, not promoted', () => {
+    /*
+     * The counter-property. "Visible" and "equally weighted" are different
+     * things, and a grid that answered the report by giving Free a contained
+     * primary button beside the recommended upgrade would satisfy the case
+     * above while presenting a downgrade as a peer of an upgrade — the dark
+     * pattern pointed the other way, and the thing AGL-1859 §2 forbids.
+     */
+    render(<BillingPage />)
+    fireEvent.click(screen.getByRole('button', { name: /Compare all/ }))
+    const free = cardFor(PLAN_LABELS.free) as HTMLElement
+    const business = cardFor(PLAN_LABELS.business) as HTMLElement
+    expect(
+      within(business).getByRole('button').className,
+    ).toMatch(/MuiButton-contained/)
+    expect(within(free).getByRole('button').className).toMatch(/MuiButton-text/)
+    expect(
+      within(free).getByRole('button').className,
+    ).not.toMatch(/MuiButton-contained/)
+    // The recommendation still points UP the ladder, and only there.
+    expect(within(free).queryByText('Recommended')).toBeNull()
+    expect(within(business).getByText('Recommended')).toBeTruthy()
   })
 })
 

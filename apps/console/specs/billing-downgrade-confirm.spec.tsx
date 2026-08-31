@@ -37,9 +37,14 @@
  *    deleted in one edit — drop the `await confirm(...)` — and the suite
  *    stayed green. The `feedback_verify_control_is_wired` shape exactly.
  *
- * So this file mounts the real page, expands the real lower-tier disclosure,
- * clicks the real Downgrade button, and answers the real
+ * So this file mounts the real page, opens the real comparison grid, clicks
+ * the real Downgrade button, and answers the real
  * `/api/billing/subscription` fetches — asserting on what was POSTED.
+ *
+ * ⚠️ THE FRICTION LIVES AT THE CONFIRM, NOT AT THE DISCLOSURE, and that is
+ * what makes this file the load-bearing one. `Compare all N plans` now hands
+ * over all N, so a Downgrade button is one click nearer than it was; nothing
+ * about what pressing it DOES has moved, and every case below is the proof.
  *
  * ⚠️ THE NEGATIVE CONTROL THIS FILE EXISTS TO CARRY: a test that asserts only
  * "the confirm appears" ALSO passes when the downgrade is impossible — when
@@ -334,24 +339,22 @@ const switches = () => subscriptionCalls.filter((c) => c.action === 'switch')
 const previews = () => subscriptionCalls.filter((c) => c.action === 'preview')
 
 /**
- * Reveal the collapsed lower tiers and press the target's control.
+ * Open the comparison grid and press the target's control.
  *
- * The disclosure click is part of the friction, not test scaffolding: lower
- * tiers are collapsed for a subscriber (AGL-1864), so reaching a downgrade
- * costs a deliberate act before the button even exists. Asserted below.
+ * The `Compare all` click is part of the friction, not test scaffolding: the
+ * page opens on the current plan and the step up (AGL-1859 §1), so no control
+ * that moves a customer DOWN exists until they ask for the whole price list.
+ * Asserted below.
+ *
+ * There is no second click. `Compare all N plans` delivers all N, the lower
+ * tiers among them — a control that names a total and withholds two of it is
+ * an omission, not friction. The friction that keeps a downgrade deliberate is
+ * the CONFIRM, which every case in this file drives.
  */
 async function press(label: 'Downgrade' | 'Upgrade') {
   render(<BillingPage />)
   if (label === 'Downgrade') {
-    // TWO deliberate acts now, not one. The page opens on the current plan
-    // and the step up, so the grid has to be asked for before the disclosure
-    // holding the lower tiers even exists. Both clicks are the friction
-    // AGL-1859 §2 is about, and neither is scaffolding.
     fireEvent.click(await screen.findByRole('button', { name: /Compare all/ }))
-    const disclosure = await screen.findByRole('button', {
-      name: /Show \d+ lower plans?/,
-    })
-    fireEvent.click(disclosure)
   }
   const buttons = await screen.findAllByRole('button', {
     // The focused view names its destination ("Upgrade to Pro"); the grid
@@ -374,13 +377,41 @@ describe('a downgrade is never one-click from the billing card (AGL-1859 §2)', 
     expect(screen.queryByRole('button', { name: /^Downgrade/ })).toBeNull()
   })
 
-  it('and the collapse is still there once the grid is asked for', async () => {
+  it('asking for the whole price list produces the whole price list', async () => {
     render(<BillingPage />)
     fireEvent.click(await screen.findByRole('button', { name: /Compare all/ }))
-    // The AGL-1864 collapse is unchanged behind the new default: the lower
-    // tiers are folded, never removed, so the downsell stays reachable.
-    await screen.findByRole('button', { name: /Show \d+ lower plans?/ })
+    // `Compare all 8 plans` means eight, the cheaper end included. Held back
+    // behind a second control they said eight and delivered six, and the two
+    // missing ones were Free and Starter.
+    expect(
+      (await screen.findAllByRole('button', { name: /^Downgrade/ })).length,
+    ).toBeGreaterThan(0)
+    // The AGL-1864 fold survives as something the reader can choose: it now
+    // says "Hide lower plans", and pressing it puts them away.
+    fireEvent.click(screen.getByRole('button', { name: /Hide lower plans/ }))
     expect(screen.queryByRole('button', { name: /^Downgrade/ })).toBeNull()
+    expect(
+      screen.getByRole('button', { name: /Show \d+ lower plans?/ }),
+    ).toBeTruthy()
+  })
+
+  /**
+   * ⚠️ THE PROPERTY THE REVEAL MUST NOT HAVE COST.
+   *
+   * A downgrade being one click closer to SEE is not a downgrade being one
+   * click closer to MAKE. The button is on screen sooner; what it does is
+   * unchanged, and everything below drives it to prove that.
+   */
+  it('a revealed Downgrade is still a quiet control, never the loud one', async () => {
+    render(<BillingPage />)
+    fireEvent.click(await screen.findByRole('button', { name: /Compare all/ }))
+    const downgrade = (
+      await screen.findAllByRole('button', { name: /^Downgrade/ })
+    )[0]
+    expect(downgrade.className).toMatch(/MuiButton-text/)
+    expect(downgrade.className).not.toMatch(/MuiButton-contained/)
+    const upgrade = screen.getAllByRole('button', { name: /^Upgrade/ })[0]
+    expect(upgrade.className).toMatch(/MuiButton-contained/)
   })
 
   it('the click PRICES the move and changes nothing — the confirm comes first', async () => {
