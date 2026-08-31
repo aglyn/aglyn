@@ -17,6 +17,7 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
+import type { AglynOrgBilling } from '@aglyn/aglyn'
 import {
   buildRoute,
   PageHeaderActions,
@@ -60,6 +61,16 @@ export interface HostFormsCardProps {
    * `/null/...` on first render is worse than one that pays nothing.
    */
   basePath?: string
+  /**
+   * The org billing document, from the shell.
+   *
+   * The quota readout's denominator resolves from it. `undefined` means the
+   * plan is not known rather than that it is Free — the shell holds this
+   * surface behind a spinner until the org read settles, so it reads that way
+   * only when the read failed — and the readout says so instead of naming a
+   * cap it cannot support.
+   */
+  org?: Partial<AglynOrgBilling>
 }
 
 /**
@@ -92,7 +103,7 @@ export interface HostFormsCardProps {
  * counting them back onto the form.
  */
 export function HostFormsCard(props: HostFormsCardProps) {
-  const { hostId, basePath } = props
+  const { hostId, basePath, org } = props
   const router = useRouter()
   const { orgSlug, subdomain: host } = useConsoleHostRoute(hostId)
   const firestore = useFirestore()
@@ -381,10 +392,18 @@ export function HostFormsCard(props: HostFormsCardProps) {
       */}
       <PageHeaderActions>
         <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+          {/*
+            The denominator is `formsPerHost` — the allowance
+            `/api/hosts/resources` refuses the create at, resolved through the
+            same `checkQuota` the route calls, so the number offered and the
+            number enforced cannot drift apart. `FORMS_MAX_PER_HOST` bounds a
+            READ of the catalog and sits above every plan's allowance, so
+            quoting it advertises room the server will not honor.
+          */}
           <QuotaReadoutComponent
-            ready={status !== 'loading'}
+            ready={org != null}
             used={formsUsed}
-            limit={Aglyn.FORMS_MAX_PER_HOST}
+            limit={Aglyn.checkQuota(org, 'formsPerHost', formsUsed).limit}
             noun="form"
           />
           <Button

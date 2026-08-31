@@ -172,6 +172,14 @@ function HeaderHarness(props: { children: ReactNode }) {
 /** The page header, by its landmark role. */
 const pageHeader = () => screen.getByRole('banner')
 
+/**
+ * The quota readout's own text, found by the tail every one of them carries —
+ * so the assertion is about the readout rather than about whatever else the
+ * header happens to hold beside it.
+ */
+const quotaReadout = () =>
+  within(pageHeader()).getByText(/your plan/).textContent
+
 function renderForms(options: {
   org?: Record<string, unknown>
   segments?: string[]
@@ -241,5 +249,42 @@ describe('the forms catalog publishes its controls to the page header', () => {
     expect(mockCountCalls.filter((call) => call === 'usePagedCollection')).toEqual(
       ['usePagedCollection'],
     )
+  })
+})
+
+describe('the readout names the plan’s allowance', () => {
+  it('reads the ceiling the server enforces, not the listing window', () => {
+    renderForms({ org: { plan: 'pro' }, used: 3 })
+    // 500 is `formsPerHost` on every plan that carries it, and it is what
+    // `/api/hosts/resources` refuses at. 1000 is `FORMS_MAX_PER_HOST`, which
+    // bounds a READ — quoting it would promise twice the room the plan has
+    // and send a customer into a refusal the page called impossible.
+    expect(quotaReadout()).toBe('3/500 forms on your plan')
+  })
+
+  it('does not invent room on a plan that carries no forms', () => {
+    // Free's allowance is 0 — the one plan where forms are not included.
+    renderForms({ org: { plan: 'free' }, used: 0 })
+    expect(quotaReadout()).toBe('0/0 forms on your plan')
+    expect(quotaReadout()).not.toContain('1000')
+    expect(quotaReadout()).not.toContain('∞')
+  })
+
+  it('honors a raised per-org allowance', () => {
+    // A staff-set override resolves ahead of the plan's number, and the
+    // readout follows it — the same resolution the create is refused by.
+    renderForms({
+      org: { plan: 'starter', entitlements: { formsPerHost: 25 } },
+      used: 4,
+    })
+    expect(quotaReadout()).toBe('4/25 forms on your plan')
+  })
+
+  it('names no cap at all until the plan has resolved', () => {
+    // `resolveOrgEntitlements(undefined)` answers the FREE tier rather than
+    // "unknown", so a denominator rendered without an org tells a paying
+    // customer they are on 0. The count it does know is still shown.
+    renderForms({ org: undefined, used: 3 })
+    expect(quotaReadout()).toBe('3 forms · checking your plan…')
   })
 })
