@@ -341,6 +341,64 @@ verified set, which is a scope that does not exist yet.
 
 ---
 
+## What one domain per site costs
+
+One provider domain object per host reads like the expensive choice and is
+not. Measured against Resend's published pricing on 2026-08-31:
+
+| Tier | Price | Emails/mo | Verified domains |
+| --- | --- | --- | --- |
+| Free | $0 | 3,000 | 3 |
+| Pro | $20 | 50,000 | 10 |
+| Scale | $90 | 100,000 | 1,000 |
+| Enterprise | contract | contract | contract |
+
+Plus one flat add-on: **$20/mo adds 100 domains**, available on Pro and Scale,
+changing neither the email quota nor the contact limit nor the rate limit.
+
+**There is no per-domain meter.** Billing is the tier, per-email overage
+($0.90/1,000 on Pro), and contacts on the marketing product. A domain is a
+bundled quota, so the marginal cost of the eleventh tenant domain is zero
+until an allowance boundary is crossed, and crossing one costs $20 flat for
+the next hundred — $0.20 per site per month at the boundary, falling to
+nothing as sites fill the allowance.
+
+The consequence for `AGLYN_SENDING_DOMAIN_CAPACITY` is that **the tier is
+chosen by send volume and this ceiling is raised with the add-on.** Reaching
+the ceiling and upgrading Pro to Scale spends $70/mo more for domains the
+$20 add-on already supplies.
+
+### The alternatives, and why none of them is cheaper
+
+Every option that fits more sites into one domain object works by putting
+more than one site behind one DKIM `d=`, which is the pooled reputation this
+whole feature exists to end. That is not merely a product regression — the
+console tells merchants in as many words that a shared domain pools their
+reputation — it is **blocked by DNS we already publish**:
+
+```
+_dmarc.aglyn.app  "v=DMARC1; p=reject; sp=reject; adkim=s; ..."
+```
+
+`adkim=s` is strict alignment, and `sp=reject` extends the policy to every
+subdomain. A signature with `d=mail.aglyn.app` therefore cannot authenticate
+a message `From: hello@northwind.mail.aglyn.app` — it fails DMARC and is
+rejected, not merely pooled. So:
+
+| Option | Reputation isolation | Provider objects | Verdict |
+| --- | --- | --- | --- |
+| One domain per host (today) | Full — one `d=` per site | 1 per host | **Kept.** Costs nothing per domain. |
+| One domain, per-host subdomain `From:` | None — one `d=` for all | 1 total | Rejected. Needs `adkim=r`, which pools every site and re-opens the failure the two apexes were built to avoid. Saves $0. |
+| One domain, per-host return path / envelope sender | None for DMARC — alignment is evaluated against the `From:` domain, and the return path is not it | 1 total | Rejected. Isolates bounce routing only, which is not what a mailbox provider scores. |
+| Per-host DKIM selectors under one domain | None — mailbox providers score the **domain**, not the selector, and Resend issues one key per domain object and picks the selector itself | 1 total | Rejected. Not expressible at the provider, and would not isolate anything if it were. |
+| Shared address on small plans, dedicated domain on paid tiers | Partial, by tier | fewer | Rejected on cost grounds alone: the domains it saves are free. It also re-introduces the shared-domain refusal path for the tiers it covers. |
+
+Dedicated IPs remain out for the reason section 4 already gives, and the
+price confirms it: $30/mo, Scale only, and harmful below roughly 90,000
+messages a month.
+
+---
+
 ## What a human must still do
 
 The code is finished and inert. Nothing below can be done from a repository.
@@ -372,6 +430,19 @@ Verify with a request for a domain in the console: `pendingProvider` should
 become `false` and the DKIM row should carry a `p=` value. If it stays true,
 `lastIssueError` on the record names why, as a code — `http-403:…`,
 `duplicate-mismatch`, `timeout`.
+
+### Deploying the sweep is what starts spending slots
+
+`/api/admin/provision-sending-domains` is a route on the `consoleFastCrons`
+Cloud Scheduler job. It is idempotent and safe to run at any time, but the
+first tick after `cloud/functions` is deployed is the one that turns every
+outstanding claim into a real domain object at the provider — so the plan's
+allowance has to cover the site count BEFORE that deploy, not after.
+
+`AGLYN_SENDING_DOMAIN_CAPACITY` is the backstop if it does not: the sweep
+stops at the ceiling, stores `at-capacity` on the records it could not
+provision, and logs the count. Nothing is lost, and a later tick finishes the
+remainder once the allowance is raised.
 
 ### Could `RESEND_READ_API_KEY` serve instead?
 

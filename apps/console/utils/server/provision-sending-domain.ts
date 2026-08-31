@@ -98,6 +98,26 @@ import { sendingZoneProvider } from './sending-zone-provider'
  * lives in a billing system this code cannot read.
  *
  * `-1` disables the check for an operator whose provider has no such limit.
+ *
+ * ## A DOMAIN IS A QUOTA, NOT A LINE ITEM
+ *
+ * Nothing about this ceiling is a per-domain price, and reading it as one
+ * leads to the expensive answer. Resend bills a tier plus per-email volume;
+ * the domain count is a bundled allowance inside the tier — Free 3, Pro 10,
+ * Scale 1,000 — with no per-domain meter anywhere. The marginal cost of the
+ * eleventh tenant domain on a Scale plan is zero.
+ *
+ * So one provider domain per site is not the cost driver it looks like, and
+ * the shape of the fix when this ceiling is reached is NOT "move up a tier".
+ * Resend sells a flat add-on: $20/mo adds 100 domains on top of whatever the
+ * plan includes, available on Pro and Scale, and it changes neither the email
+ * quota nor the contact limit nor the rate limit. Pro plus the add-on is 110
+ * domains for $40/mo. Pro to Scale for the same relief is $90/mo before the
+ * add-on — the same domains, $70 a month more, bought by misreading a quota
+ * as a price.
+ *
+ * The tier is therefore chosen by SEND VOLUME and this number is raised to
+ * match whatever allowance that tier plus its add-ons actually carries.
  */
 export function sendingDomainCapacity(): number {
   const raw = String(process.env.AGLYN_SENDING_DOMAIN_CAPACITY ?? '').trim()
@@ -175,8 +195,12 @@ export async function provisionSendingDomain(options: {
         })
         console.error(
           `[provision-sending-domain] at the sending-domain ceiling ` +
-            `(${held}/${capacity}) — ${domain} cannot be provisioned. Raise ` +
-            'AGLYN_SENDING_DOMAIN_CAPACITY after raising the provider plan.',
+            `(${held}/${capacity}) — ${domain} cannot be provisioned. Buy ` +
+            'the provider domain add-on (Resend: $20/mo for 100 more ' +
+            'domains, on Pro or Scale) and raise ' +
+            'AGLYN_SENDING_DOMAIN_CAPACITY to the new allowance. A tier ' +
+            'upgrade buys the same domains for more; the tier is for send ' +
+            'volume.',
         )
         return { domain, outcome: 'at-capacity', detail: 'at-capacity' }
       }
