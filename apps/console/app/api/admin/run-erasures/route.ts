@@ -31,6 +31,7 @@ import {
   meterPlatformEmail,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { teardownSendingDomain } from '../../../../utils/server/provision-sending-domain'
 
 /**
  * Executes due GDPR erasures (AGL-487) — completes the self-serve deletion
@@ -244,7 +245,24 @@ async function handler(request: Request): Promise<Response> {
       // the next run and starved them again: one broken erasure indefinitely
       // blocking everyone else's. `eraseOrg` has already written the durable
       // `org.erase-failed` audit row by the time this catches.
-      const result = await eraseOrg(org.id).catch((error) => {
+      /*
+       * The sending-domain teardown travels WITH the erasure.
+       *
+       * It is passed in rather than imported by `eraseOrg` because releasing
+       * a provider domain needs a full-access mail credential and removing
+       * the zone records needs a DNS token, and neither may be reachable from
+       * a library the tenant runtime imports. This route runs in the console,
+       * which is where those keys live.
+       *
+       * A vendor failure cannot stop the erasure and does not: the debt is
+       * recorded on the surviving label claim and the daily reap sweep
+       * settles it. An erasure has a legal clock on it; a Resend outage does
+       * not get to pause that clock, and does not get to silently keep the
+       * slot either.
+       */
+      const result = await eraseOrg(org.id, {
+        tearDownSendingDomain: teardownSendingDomain,
+      }).catch((error) => {
         console.error(`run-erasures: erasure failed for ${org.id}`, error)
         return { ok: false, skippedReason: 'erase-failed' }
       })

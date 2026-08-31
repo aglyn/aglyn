@@ -480,6 +480,23 @@ const CONSOLE_DAILY_CRONS = {
     schedule: '0 8 * * *',
     route: '/api/billing/usage-alerts',
   },
+  /*
+   * AN HOUR AFTER `run-erasures`, and that ordering is the point.
+   *
+   * An erasure must never be held up by a mail provider or a DNS API, so it
+   * records what it could not release and moves on. This is what collects
+   * that debt — and what collects a site delete whose teardown the provider
+   * refused, which `teardownSendingDomain` leaves "for the next pass".
+   *
+   * Daily rather than on the fifteen-minute job, because nothing waits on it:
+   * a provider slot released four hours later costs nothing, while the
+   * provisioning sweep beside it is what makes a new site able to send at
+   * all. Daily also keeps a walk of every label claim to once a day.
+   */
+  'reap-sending-domains': {
+    schedule: '0 5 * * *',
+    route: '/api/admin/reap-sending-domains',
+  },
 } as const
 
 /**
@@ -520,6 +537,7 @@ export const consoleAuditArchive = consoleDailyCron('audit-archive')
 export const consoleRunErasures = consoleDailyCron('run-erasures')
 export const consoleReportUsageCurrent = consoleDailyCron('report-usage-current')
 export const consoleUsageAlerts = consoleDailyCron('usage-alerts')
+export const consoleReapSendingDomains = consoleDailyCron('reap-sending-domains')
 
 /*==============================================================
  * THE SIGNUPS LOCK, AT ACCOUNT CREATION (AGL-1531)

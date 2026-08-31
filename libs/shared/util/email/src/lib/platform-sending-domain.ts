@@ -437,6 +437,70 @@ export function isSharedSendingDomain(
   return Boolean(name) && sharedSendingPool(apex, size).includes(name)
 }
 
+/**
+ * ⛔ WHY A DOMAIN MAY NOT BE TORN DOWN, or `null` when it may.
+ *
+ * Every path that destroys a sending domain — the site delete, the erasure,
+ * the orphan reaper — asks this ONE function first, and it lives here because
+ * this module is the only place that knows what the pool is. A guard held
+ * anywhere else is a guard the next teardown path forgets to consult.
+ *
+ * `shared-pool` is the answer that matters, and the reason it has to be
+ * explicit rather than emergent. A pool member is owned by NO HOST: it is
+ * platform infrastructure that every site without a domain of its own sends
+ * on, and {@link sharedSendingDomainFor} assigns hosts to it by hash rather
+ * than by a stored pointer. So any reaper keyed on "nothing points at this"
+ * describes a pool member perfectly, and releasing one takes a quarter of the
+ * platform's transactional mail — receipts, password resets, booking
+ * confirmations — down with it. Silently: nothing raises an error when a
+ * domain merely stops being verified, the sends just start refusing.
+ *
+ * It is asked of the LABEL as well as of the domain, in three ways, because
+ * pool membership answered from the CURRENT pool alone is not enough:
+ *
+ *   - the domain is in the pool this deployment builds today;
+ *   - the caller's own label is a pool label. {@link platformSendingLabel}
+ *     refuses to derive a label for a reserved name, so a pool member's domain
+ *     hands back an empty label, and a caller that then fell back to a label
+ *     it was handed separately would walk straight past the derivation that
+ *     was protecting it;
+ *   - the label UNDER the apex is a pool label, whatever the pool size says.
+ *     A deployment shrunk from eight members to four still holds `shared5`
+ *     through `shared8` at the provider, and they are still infrastructure —
+ *     a membership test against the current pool would hand all four to the
+ *     reaper on the day somebody lowered the number.
+ *
+ * `not-our-zone` is the other refusal and a different kind: a customer's own
+ * verified domain, which this deployment never provisioned, holds no provider
+ * slot for, and must never write DNS into.
+ */
+export function sendingDomainTeardownRefusal(
+  domain: string | null | undefined,
+  label: string | null | undefined = null,
+  apex: string = platformSendingApex(),
+  size: number = sharedPoolSize(),
+): 'shared-pool' | 'not-our-zone' | null {
+  if (isSharedSendingDomain(domain, apex, size)) return 'shared-pool'
+  if (isSharedPoolLabel(String(label ?? ''))) return 'shared-pool'
+
+  /*
+   * The bare suffix strip, not `platformSendingLabel`. That one re-applies the
+   * tenant policy and answers `''` for every reserved name — which is every
+   * pool label — so asking it here would return nothing for exactly the names
+   * this check exists to catch.
+   */
+  const name = normalizeSendingDomain(String(domain ?? ''))
+  const root = normalizeSendingDomain(apex)
+  const beneath =
+    name && root && name !== root && name.endsWith(`.${root}`)
+      ? name.slice(0, -(root.length + 1))
+      : ''
+  if (isSharedPoolLabel(beneath)) return 'shared-pool'
+
+  if (!isPlatformSendingDomain(domain, apex)) return 'not-our-zone'
+  return null
+}
+
 /*==========================================
   Labels a site's mail may not take
 ==========================================*/

@@ -34,6 +34,12 @@ import { EMAIL_IDENTITY_INDEX_COLLECTION } from './account-emails'
 import { removeOrgMember } from './organizations'
 import { isBillingSubscription } from '@aglyn/aglyn/server'
 import { readOrgBilling } from './org-billing'
+import {
+  disposeHostSendingDomain,
+  readSendingDomainTeardownByLabel,
+  type SendingDomainDisposition,
+  type TeardownSendingDomainDriver,
+} from './sending-domain-debt'
 
 /** The reversible hold before a requested erasure is executed (AGL-485). */
 export const ERASURE_HOLD_MS = 7 * 24 * 60 * 60 * 1000
@@ -131,11 +137,51 @@ async function eraseHostSupplierDeliveries(hostId: string): Promise<number> {
  * (AGL-487). Fail-soft on Storage/index cleanup so a partial failure never
  * blocks the Firestore delete; safe to re-run.
  */
-export async function eraseHost(hostId: string): Promise<void> {
+export interface EraseHostOptions {
+  /**
+   * The console-side sending-domain teardown, injected because this library
+   * may not hold the credentials it needs — see `sending-domain-debt.ts`.
+   *
+   * Absent, the site's domain is not released inline: the debt is recorded on
+   * the surviving label claim and `/api/admin/reap-sending-domains` settles
+   * it. That is the only correct default here. A library the tenant runtime
+   * imports cannot reach a full-access mail credential, and an erasure must
+   * not fail or stall because a vendor is unreachable.
+   */
+  tearDownSendingDomain?: TeardownSendingDomainDriver | null
+}
+
+export interface EraseHostResult {
+  /** What became of the site's dedicated sending domain, if it had one. */
+  sendingDomain: SendingDomainDisposition
+}
+
+export async function eraseHost(
+  hostId: string,
+  options: EraseHostOptions = {},
+): Promise<EraseHostResult> {
   const firestore = firebaseAdmin.app().firestore()
   const hostRef = firestore.collection('hosts').doc(hostId)
   const hostSnapshot = await hostRef.get()
   const orgId = hostSnapshot.get('orgId') as string | undefined
+
+  /*==========================================
+   * THE SENDING DOMAIN, READ FIRST AND RELEASED LAST.
+   *
+   * Read here because the pinned label lives on the host document and the
+   * `recursiveDelete` at the bottom of this function destroys it. Read
+   * afterwards there would be nothing left to say WHICH provider domain holds
+   * a plan-capped account slot and WHICH records in our zone carry a signing
+   * key for a name a future site can claim.
+   *
+   * Released after everything else, so a teardown that dies partway leaves the
+   * claim standing and the domain findable rather than orphaning two vendors'
+   * resources with nothing pointing at them.
+   *=========================================*/
+  const sendingLabel = String(hostSnapshot.get('sendingLabel') ?? '').trim()
+  const sendingTeardown = sendingLabel
+    ? await readSendingDomainTeardownByLabel(sendingLabel).catch(() => null)
+    : null
 
   // Storage first (best-effort — the object tree is derived, regenerable).
   try {
@@ -188,6 +234,15 @@ export async function eraseHost(hostId: string): Promise<void> {
 
   // The host document tree (screens/layouts/versions/counters/products/…).
   await firestore.recursiveDelete(hostRef)
+
+  // Never throws, and never leaves the slot unaccounted for: whatever the
+  // vendors refuse is recorded on the label claim for the reaper to finish.
+  return {
+    sendingDomain: await disposeHostSendingDomain({
+      teardown: sendingTeardown ? { ...sendingTeardown, hostId } : null,
+      tearDown: options?.tearDownSendingDomain,
+    }),
+  }
 }
 
 /**
@@ -787,6 +842,13 @@ export interface EraseOrgOptions {
    * most irreversible action the platform performs.
    */
   actorUid?: string
+  /**
+   * The console-side sending-domain teardown, passed through to every host
+   * this erasure destroys. See {@link EraseHostOptions.tearDownSendingDomain}.
+   *
+   * Never consulted on a dry run: a plan touches no vendor.
+   */
+  tearDownSendingDomain?: TeardownSendingDomainDriver | null
 }
 
 export interface EraseOrgResult {
@@ -842,6 +904,21 @@ export interface EraseOrgResult {
    * the highest-PII-density collection outside the org path.
    */
   supportTickets?: number
+  /**
+   * What became of the erased sites' dedicated sending domains.
+   *
+   * `deferred` is the number an operator reads: those provider slots and zone
+   * records are still held, the debt is on each label claim, and
+   * `/api/admin/reap-sending-domains` is what settles them. The erasure itself
+   * is complete either way — a vendor outage may delay a slot's release and
+   * may not delay a deletion somebody has a legal right to.
+   */
+  sendingDomains?: {
+    released: number
+    deferred: number
+    /** Shared pool members refused. Always 0; a non-zero is a real alarm. */
+    protected: number
+  }
 }
 
 /**
@@ -1016,7 +1093,11 @@ export async function eraseOrg(
   orgId: string,
   options: EraseOrgOptions = {},
 ): Promise<EraseOrgResult> {
-  const { dryRun = false, actorUid = 'cron:run-erasures' } = options
+  const {
+    dryRun = false,
+    actorUid = 'cron:run-erasures',
+    tearDownSendingDomain = null,
+  } = options
   const firestore = firebaseAdmin.app().firestore()
   const orgRef = firestore.collection('orgs').doc(orgId)
   const orgSnapshot = await orgRef.get()
@@ -1085,11 +1166,35 @@ export async function eraseOrg(
     step = 'support'
     progress.supportTickets = await eraseOrgSupportTickets(orgId, dryRun)
 
-    // Hosts (Storage + routing + Firestore trees).
+    /*
+     * Hosts (Storage + routing + Firestore trees + the sending domain).
+     *
+     * Each site's dedicated domain is released here rather than by a sweep
+     * that never existed: a workspace erasure used to leave one plan-capped
+     * provider slot and three zone records per site standing forever, with
+     * the DKIM key still live under a label a future site could claim.
+     *
+     * The driver is passed in and may be absent, and either way the erasure
+     * finishes. What the vendors refuse is recorded as a debt on the label
+     * claim, which survives the `recursiveDelete` of both the host and the
+     * org, and the reaper settles it.
+     */
     step = 'hosts'
     progress.hosts = 0
+    progress.sendingDomains = { released: 0, deferred: 0, protected: 0 }
     for (const host of hosts.docs) {
-      if (!dryRun) await eraseHost(host.id)
+      if (!dryRun) {
+        const erased = await eraseHost(host.id, { tearDownSendingDomain })
+        if (erased.sendingDomain === 'released') {
+          progress.sendingDomains.released += 1
+        }
+        if (erased.sendingDomain === 'deferred') {
+          progress.sendingDomains.deferred += 1
+        }
+        if (erased.sendingDomain === 'protected') {
+          progress.sendingDomains.protected += 1
+        }
+      }
       progress.hosts += 1
     }
 

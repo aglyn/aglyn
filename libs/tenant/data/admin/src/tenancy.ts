@@ -31,6 +31,7 @@ export * from './lib/server/console-domains'
 export * from './lib/server/dns-probe'
 export * from './lib/server/sending-domains'
 export * from './lib/server/host-sending-domain'
+export * from './lib/server/sending-domain-debt'
 export * from './lib/server/sending-domain-recheck'
 // The hosting seam itself, so a door can ask whether this deployment is able
 // to register a name at all before it promises the caller one.

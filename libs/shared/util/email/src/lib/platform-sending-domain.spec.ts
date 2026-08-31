@@ -37,6 +37,7 @@ import {
   platformZoneNamesFor,
   platformZoneRecords,
   PLATFORM_MAIL_RESERVED_LABELS,
+  sendingDomainTeardownRefusal,
   sharedSendingDomainFor,
   sharedSendingPool,
   sharedTenantSendingFrom,
@@ -646,5 +647,88 @@ describe('the shared pool', () => {
     // gate would refuse every one of its own names and yield an empty pool —
     // the guard protecting the pool being what stopped the pool existing.
     expect(sharedSendingPool(MAIL_APEX, 4)).toHaveLength(4)
+  })
+
+  /**
+   * ⛔ NOTHING MAY EVER TEAR A POOL MEMBER DOWN.
+   *
+   * This is the most important assertion about the pool and the reason
+   * {@link sendingDomainTeardownRefusal} exists as one function rather than as
+   * a check each teardown path writes for itself.
+   *
+   * A pool member is owned by NO HOST — sites are assigned to one by hash, not
+   * by a stored pointer — so "nothing points at this domain" describes a live
+   * pool member perfectly. Any orphan reaper is therefore, by default, a
+   * program that deletes exactly these four. Releasing one at the provider
+   * stops a quarter of the platform's receipts, password resets and booking
+   * confirmations, and stops them silently: a domain that is merely no longer
+   * verified raises no error anywhere, the sends just start refusing.
+   */
+  describe('⛔ the teardown refusal', () => {
+    it('refuses EVERY pool member, at every pool size', () => {
+      for (const size of [1, 4, 8, 64]) {
+        for (const domain of sharedSendingPool(MAIL_APEX, size)) {
+          expect(sendingDomainTeardownRefusal(domain, null, MAIL_APEX, size)).toBe(
+            'shared-pool',
+          )
+        }
+      }
+    })
+
+    it('refuses on the LABEL too, which is the hole a fallback opens', () => {
+      /*
+       * `platformSendingLabel` hands back `''` for a pool member, because the
+       * label is reserved. A teardown that then fell back to a label it was
+       * given separately — which is exactly what
+       * `sendingDomainLabel(domain) || teardown.label` does — would walk past
+       * the derivation that was protecting it and delete the pool member's
+       * zone records under its own name.
+       */
+      expect(platformSendingLabel('shared3.mail.aglyn.app', MAIL_APEX)).toBe('')
+      expect(
+        sendingDomainTeardownRefusal('shared3.mail.aglyn.app', 'shared3', MAIL_APEX, 4),
+      ).toBe('shared-pool')
+      // And on the label alone, for a caller whose domain field is empty or
+      // has been rewritten to something else.
+      expect(sendingDomainTeardownRefusal('', 'shared2', MAIL_APEX, 4)).toBe(
+        'shared-pool',
+      )
+      expect(
+        sendingDomainTeardownRefusal('northwind.mail.aglyn.app', 'shared1', MAIL_APEX, 4),
+      ).toBe('shared-pool')
+    })
+
+    it('refuses a member the CURRENT pool size no longer reaches', () => {
+      // A deployment shrunk from eight to four still holds `shared5`..`shared8`
+      // at the provider, and they are still infrastructure. The label pattern
+      // is what catches them; a membership test against the current pool alone
+      // would hand all four to the reaper the moment the size was lowered.
+      expect(sendingDomainTeardownRefusal('shared7.mail.aglyn.app', null, MAIL_APEX, 4))
+        .toBe('shared-pool')
+    })
+
+    it('still permits an ordinary tenant domain — the control', () => {
+      // Without this the block above passes for a function that refuses
+      // everything, which would be a reaper that never reaps and a leak that
+      // never closes.
+      expect(
+        sendingDomainTeardownRefusal('northwind.mail.aglyn.app', 'northwind', MAIL_APEX, 4),
+      ).toBeNull()
+      expect(
+        sendingDomainTeardownRefusal('shared-goods.mail.aglyn.app', 'shared-goods', MAIL_APEX, 4),
+      ).toBeNull()
+    })
+
+    it("refuses a customer's own domain as not ours to touch", () => {
+      // A different refusal with a different consequence: we never provisioned
+      // it, hold no provider slot for it, and must never write to its zone.
+      expect(sendingDomainTeardownRefusal('acme.com', null, MAIL_APEX, 4)).toBe(
+        'not-our-zone',
+      )
+      expect(sendingDomainTeardownRefusal(MAIL_APEX, null, MAIL_APEX, 4)).toBe(
+        'not-our-zone',
+      )
+      expect(sendingDomainTeardownRefusal('', null, MAIL_APEX, 4)).toBe('not-our-zone')
+    })
   })
 })
