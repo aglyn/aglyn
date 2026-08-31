@@ -160,6 +160,13 @@ export const MEDIA_SCAN_EXCLUDED: Record<string, string> = {
     'Booking records — a customer, a time and a service pointer. The service ' +
     'holds the imagery and IS scanned; a booking is the transaction against ' +
     'it.',
+  campaignAttributions:
+    'One row per conversion — a form submission, a lead, a contact or a ' +
+    'booking — recording which campaign the visitor arrived from. Written ' +
+    'only by the Admin SDK, and the whole record is three sanitized UTM ' +
+    'strings capped at a hundred characters: there is no field an asset ' +
+    'could occupy and no surface that could pick one into it. Unbounded on ' +
+    'the same footing as the conversions it credits.',
   reservations:
     'POS and booking holds. Short-lived transaction rows pointing at a ' +
     'resource that is itself scanned.',
