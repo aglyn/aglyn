@@ -45,6 +45,25 @@ export function orgNavTabItems(orgSlug: string) {
       label: 'Data',
       href: buildRoute(Route.ORG_DATA, { orgSlug }),
     },
+    /*
+     * The organization's address book, beside Data because it is the org's
+     * other shared collection of records.
+     *
+     * It carries the HOST tab's id on purpose, the way Data does: `release_
+     * contacts` names `nav-tab-contacts`, so sharing the id is what puts both
+     * halves of the CRM behind one flag. Two ids would let the org half ship
+     * to customers while the site half stayed hidden — a tab leading to a
+     * page whose per-site counterpart does not exist yet.
+     *
+     * The strip itself is not rendered at all for a scoped collaborator
+     * (`useSecondaryNav`), and the page refuses them independently — the tab
+     * is a signpost, never a gate.
+     */
+    {
+      id: 'nav-tab-contacts',
+      label: 'Contacts',
+      href: buildRoute(Route.ORG_CONTACTS, { orgSlug }),
+    },
     // Plugins is its own section again (AGL-1011). It was folded into
     // Marketplace by AGL-797, which conflated shopping for code with
     // administering the code you already run — and left the installation
