@@ -299,6 +299,21 @@ export interface ConsoleNavItem {
    */
   navTabId?: string
   /**
+   * The permission THIS surface requires, when it is narrower than the
+   * extension's own {@link ConsoleExtension.permission}.
+   *
+   * Declaring one NARROWS, never widens: the extension's requirement is
+   * applied alongside this one and both must be held, so a surface cannot
+   * escape its extension's gate by naming a key its reader happens to have.
+   * The composition is the release-flag one a nav item and its section
+   * already have, for the same reason.
+   *
+   * The granularity exists because one extension can register surfaces with
+   * genuinely different answers — a catalog anyone who edits the site may
+   * open, beside a register that takes money.
+   */
+  permission?: string
+  /**
    * Page body rendered by the shell's generic host route. When present,
    * the plugin owns the whole surface — no core page file needed.
    */
@@ -468,6 +483,14 @@ export interface ConsoleWidget {
  * Hiding the tab would hide the only route most workspaces have to the page
  * that sells the feature, and a nav entry leading to the shell's own upgrade
  * notice bypasses nothing.
+ *
+ * TWO QUESTIONS, BOTH ANSWERED BY THE SHELL. `featureFlag` is about the
+ * organization's plan; `permission` is about the person reading, and it is
+ * enforced in the same place and the same way — resolved from the member's
+ * own permission map, never from anything the extension supplies, and read
+ * before the surface is constructed. An extension declares what it requires
+ * and the shell decides whether the requirement is met, so the sentence
+ * above holds for authorization as well as for entitlements.
  */
 /**
  * What a blocked org is told about a feature it does not hold, in the
@@ -509,6 +532,32 @@ export interface ConsoleExtension {
   displayName: string
   /** Entitlement flag gating every surface this extension registers. */
   featureFlag?: keyof OrgFeatureFlags
+  /**
+   * The permission a reader must hold for every surface this extension
+   * registers — the AUTHORIZATION half of the sentence above `featureFlag`.
+   *
+   * `featureFlag` answers what the ORGANIZATION bought; this answers what
+   * the PERSON reading may open, and the two are independent: an org can
+   * hold a feature that most of its members have no business using.
+   *
+   * A key in the console's permission vocabulary, which is two spaces and
+   * they are not interchangeable. Either a dotted {@link OrgPermission} from
+   * the built-in catalog ('data.manage'), which the shell answers from the
+   * member's resolved granular map; or a key some plugin declared through
+   * `registerPluginPermissions` ('managePos'), which the shell answers from
+   * the resolved permission map that carries those keys. A key belonging to
+   * NEITHER space refuses the surface rather than passing it — a requirement
+   * nothing can answer is not a requirement that has been met.
+   *
+   * Declared here rather than checked inside the page for the reason the
+   * entitlement gate moved out of the pages: a check the extension performs
+   * on itself is enforcement only for as long as every extension remembers
+   * to perform it, and the surface has already mounted and opened its
+   * listeners by the time it runs.
+   *
+   * Omit for a surface every member of the workspace may open.
+   */
+  permission?: string
   /**
    * Refusal copy for an org that does not hold `featureFlag`, rendered by
    * the shell in place of the surface. Omit to get the shell's generic

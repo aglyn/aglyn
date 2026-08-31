@@ -25,10 +25,31 @@ design: the surface is small and curated, and each entry needs semantics
 
 `ConsoleExtension` fields: `pluginId`, `displayName`, `featureFlag?`
 (plan-entitlement gate the shell applies — extensions cannot bypass plans),
-`navItems?` (a nav item with a `Component` becomes a full page and receives
+`permission?` (authorization gate the shell applies — see below), `navItems?`
+(a nav item with a `Component` becomes a full page and receives
 `ConsolePluginPageProps { hostId, entitled, org?, permissions?, releaseFlag?,
 basePath?, sections?, section?, segments? }`), `dashboardCards?`,
 `settingsSections?`, `widgets?`, `providers?`.
+
+`ConsoleExtension.permission?` (and `ConsoleNavItem.permission?`, which
+narrows one surface) name a permission the reader must hold. `featureFlag`
+answers what the **organization** bought; `permission` answers what the
+**person** may open, and both are resolved by the shell before the surface is
+constructed — an extension declares a requirement and cannot supply an answer
+to one. Requirements compose by AND, so a nav item's key is applied on top of
+its extension's rather than instead of it.
+
+The key belongs to one of two vocabularies and they are **not**
+interchangeable: a dotted `OrgPermission` from the built-in catalog
+(`'data.manage'`), answered from the member's granular map; or a key some
+plugin declared through `registerPluginPermissions` (`'managePos'`), answered
+from the resolved permission map that carries those keys. A key in neither is
+**refused**, so a typo takes the surface offline rather than opening it.
+Declare a key that is already enforced somewhere real — a permission a
+customer can untick that changes nothing is worse than its absence. A surface
+that omits both fields is open to every member of the workspace.
+
+Reference adopter: `libs/plugins/contacts` gates the CRM on `data.manage`.
 
 `ConsoleNavItem.sections?` turns one surface into a hub of routes — each
 `{ id, label, navTabId? }` becomes a URL at `${href}/${id}`, and the shell
