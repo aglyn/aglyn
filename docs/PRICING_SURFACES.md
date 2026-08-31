@@ -89,10 +89,13 @@ cache key, so it renders fresh. Useful for deciding whether a difference is
 stale HTML or stale data, which are two different problems with two different
 fixes.
 
-`curl` cannot do either check against `aglyn.com`: bot protection answers it
-with a `429` and an `x-vercel-mitigated: challenge` header, and the challenge
-page contains enough digits to make a naive grep for a price report matches
-that are not there. Use a real browser.
+`curl` needs the probe header for either check. Bot protection answers an
+unheadered request with a `429` and `x-vercel-mitigated: challenge`, and the
+challenge page contains enough digits to make a naive grep for a price report
+matches that are not there — a false positive that reads exactly like a stale
+price. Send `x-aglyn-probe: $AGLYN_PROBE_TOKEN` (the token is in the repo-root
+`.env`; `set -a && . ./.env && set +a`). ⛔ Do not turn bot protection off to
+make a check work.
 
 ## Checking the code
 
