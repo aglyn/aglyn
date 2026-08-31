@@ -46,7 +46,7 @@ const THIS_MONTH = '2026-08'
 const LAST_MONTH = '2026-07'
 
 /** Free's published band. LOCKED — pricing may not move (decided). */
-const FREE_BANDWIDTH_GB = 5
+const FREE_BANDWIDTH_GB = 2
 
 const freeOrg = (cap?: unknown) =>
   ({
@@ -63,8 +63,11 @@ const paidOrg = (cap?: unknown) =>
 const engagedMarker = (month: string) => ({ month, engagedAt: 1 })
 
 describe('the band this cap is built on is the published one', () => {
-  it('free is 5 GB', () => {
+  it('free is 2 GB', () => {
     // If this moves, the cap starts refusing at a number nobody published.
+    // Free is the one plan whose bandwidth cannot be metered — there is no
+    // subscription to bill an overage onto — so the band is both what it
+    // gives away and where it stops.
     expect(PLAN_ENTITLEMENTS.free.bandwidthGb).toBe(FREE_BANDWIDTH_GB)
   })
 })

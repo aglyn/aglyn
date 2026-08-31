@@ -516,6 +516,7 @@ immediately, so enabling it cannot reach backwards and retro-bill. Format is
 | `AUTO_LOCK_BILLING_FROM` | Optional | Runtime | First month the sweep may auto-suspend organizations delinquent past a 30-day grace. Unset, nothing ever auto-locks. |
 | `BILL_ASSIST_TOKENS_FROM` | Optional | Runtime | First month Assist token cost appears on an invoice. Unset, assist usage is measured but never billed. |
 | `BILL_ORG_LIBRARY_STORAGE_FROM` | Optional | Runtime | First month media-library bytes are charged. Unset, storage is metered and cap-enforced but not charged. |
+| `BILL_EMAIL_SEND_OVERAGE_FROM` | Optional | Runtime | First month email past the plan's included band is charged, as `YYYY-MM`. Unset, the overage is measured, shown on the billing page and priced into the cost model, but never reaches an invoice. Not retroactive: no month before the one named here is ever charged, however late it is set. |
 
 ---
 

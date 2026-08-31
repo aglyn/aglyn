@@ -20,47 +20,49 @@
  *
  * The three email ceilings were each chosen on their own and never compared:
  * a per-send cap of 500, a platform ceiling of 2,000/hour, and plan
- * allowances reaching 1,000,000/month. They cannot all be true. At the
- * shipped constants the platform can deliver 360,000 campaign emails a month
- * to one workspace, so the agency allowance is 2.78x what the platform can
- * physically get out and the enterprise allowance is unbounded.
+ * allowances that once reached 1,000,000/month. They could not all be true.
+ * At the shipped constants the platform can deliver 360,000 campaign emails a
+ * month to one workspace, and every plan allowance now sits under that.
  *
  * ## Why this guard is a PIN and not a repair
  *
- * The obvious repair is to lower `emailSendsPerMonth` on the two plans that
- * oversell. That is not a repair this test — or the code under it — may make.
- * An entitlement is what a locked price bought, and lowering one is a
- * six-place pricing move with a Decision Log entry behind it. So the failing
- * relation is PINNED here instead: the set of overselling plans is asserted
- * exactly, which makes this file green today and RED the moment the set
- * changes in either direction.
+ * The repair — lowering `emailSendsPerMonth` — is not one this test, or the
+ * code under it, may make. An entitlement is what a price bought, and
+ * lowering one is a six-place pricing move with a Decision Log entry behind
+ * it. So the relation is PINNED here instead: the set of overselling plans is
+ * asserted exactly, which makes this file RED the moment the set changes in
+ * either direction.
  *
  * That means it fails when:
  *
  *  - a new plan is added that oversells (the set grew);
  *  - an existing plan's allowance is raised past the deliverable ceiling;
  *  - the platform hourly ceiling's DEFAULT is lowered, shrinking what is
- *    deliverable and pulling more plans over the line;
- *  - the decision below is taken and a plan comes back under the line
- *    (the set shrank) — at which point this file is edited deliberately,
- *    with the change that caused it.
+ *    deliverable and pulling plans over the line;
+ *  - a plan comes back under the line (the set shrank) — at which point this
+ *    file is edited deliberately, with the change that caused it.
  *
- * ## The decision this pin is holding open
+ * ## The decision this pin was holding open, and how it went
  *
- * Exactly one of two things has to happen, and neither is an engineering
- * choice that can be made inside this file:
+ * Two things could have closed the gap, and only one of them was an
+ * engineering choice:
  *
- *  1. **Raise the platform ceiling.** For the agency allowance to be
- *     deliverable at a 25% per-org share the platform needs
+ *  1. **Raise the platform ceiling.** For a 1,000,000 allowance to be
+ *     deliverable at a 25% per-org share the platform needed
  *     `1,000,000 / (0.25 x 720)` = **5,556 messages/hour**, 2.78x the
- *     current default. That is a deliverability and warm-up decision about a
- *     shared domain under `p=reject`, not a config edit.
- *  2. **Lower the top allowances** to the deliverable ceiling. That changes
- *     what a locked price buys and is a pricing move.
+ *     default. That is a deliverability and warm-up decision about a shared
+ *     domain under `p=reject`, not a config edit, and it was not taken.
+ *  2. **Lower the top allowances.** That is what happened, twice — once for
+ *     deliverability and once because email sending acquired a price and the
+ *     included bands were running 28-36% of the subscription.
  *
- * Until one is taken, the per-org hourly ceiling is what actually paces the
- * mail, and it DEFERS rather than refuses — the campaign stays a draft, the
- * audience is untouched, and the number is stated.
+ * `enterprise` left the set separately, when `UNLIMITED` became a finite
+ * contracted default. It was never oversold by arithmetic; it was unbounded
+ * by construction, and no finite platform can deliver an unbounded allowance.
+ *
+ * The per-org hourly ceiling is still what actually paces the mail, and it
+ * DEFERS rather than refuses — the campaign stays a draft, the audience is
+ * untouched, and the number is stated.
  *
  * ## Derived, never hand-listed
  *
@@ -223,44 +225,62 @@ describe('R3 — which plans the platform can actually deliver', () => {
    * silently drop out of it; asserting only the fitting set would let a new
    * plan quietly join the overselling one.
    *
-   * ⚑ `agency` LEFT THIS SET on 2026-08-30. It sold 1,000,000 sends a month
-   * against a 360,000 deliverable ceiling — 2,000 hours of sending inside a
-   * 720-hour month — and the owner lowered the allowance rather than buy
-   * platform capacity the abuse controls have not yet earned (Advanced
-   * 250,000 → 125,000, Agency 1,000,000 → 250,000; Drive Pricing Decision Log,
-   * mirrored in `docs/DECISION_LOG.md`).
+   * ⚑ THE SET IS NOW EMPTY, which is the outcome the header held the decision
+   * open for. Two changes emptied it. `agency` left on 2026-08-30, when the
+   * allowance came down rather than the platform ceiling going up (Advanced
+   * 250,000 → 125,000, Agency 1,000,000 → 250,000). `enterprise` left when
+   * `UNLIMITED` became a finite contracted default: it was never oversold by
+   * arithmetic, it was unbounded by construction, and no finite platform can
+   * deliver an unbounded allowance.
    *
-   * `enterprise` remains, and is the only member. It is not a defect: the
-   * plan is `UNLIMITED` by contract, so it is unbounded by construction rather
-   * than oversold by arithmetic, and the case below pins exactly that
-   * distinction. A SECOND member appearing here is a regression.
+   * An empty pin is not a weakened one. The detector is driven in BOTH
+   * directions against synthetic tables above — including the unlimited case
+   * — so a check that had stopped answering could not produce this green.
    */
-  const EXPECTED_OVERSELLING = ['enterprise']
+  const EXPECTED_OVERSELLING: string[] = []
 
   it('pins the overselling set exactly', () => {
     expect(PLAN_KEYS.filter(oversells).sort()).toEqual(EXPECTED_OVERSELLING)
   })
 
   it('pins the deliverable set exactly', () => {
-    expect(PLAN_KEYS.filter((plan) => !oversells(plan)).sort()).toEqual(
-      ['advanced', 'agency', 'business', 'free', 'pro', 'scale', 'starter'],
-    )
+    expect(PLAN_KEYS.filter((plan) => !oversells(plan)).sort()).toEqual([
+      'advanced',
+      'agency',
+      'business',
+      'enterprise',
+      'free',
+      'pro',
+      'scale',
+      'starter',
+    ])
   })
 
   it('states the size of the agency headroom in numbers, not a boolean', () => {
     const model = modelFor('agency')
-    expect(model.planMonthly).toBe(250_000)
+    expect(model.planMonthly).toBe(130_000)
     expect(model.deliverableMonthly).toBe(360_000)
-    // 250,000 at 500/hour needs 500 hours of a 720-hour month — it fits, with
-    // room for bursts, retries and domain warm-up. The number is asserted
-    // rather than a boolean because "fits" and "fits by 30 minutes" are
-    // different products, and only one of them survives a bad week.
-    expect(model.hoursToSpendPlan).toBe(500)
+    // 130,000 at 500/hour needs 260 hours of a 720-hour month. The number is
+    // asserted rather than a boolean because "fits" and "fits by 30 minutes"
+    // are different products, and only one of them survives a bad week.
+    expect(model.hoursToSpendPlan).toBe(260)
     expect(
       model.violations.some(
         (candidate) => candidate.relation === 'plan-exceeds-deliverable-month',
       ),
     ).toBe(false)
+  })
+
+  it('leaves the top of the ladder the widest, and still inside the pace', () => {
+    // Enterprise is now the largest allowance on the table and the one that
+    // has to clear the ceiling by the least. 250,000 at 500/hour spends 500 of
+    // a 720-hour month, which is where the header's "room for bursts, retries
+    // and domain warm-up" argument was made and is why this is the number.
+    const model = modelFor('enterprise')
+    expect(model.planMonthly).toBe(250_000)
+    expect(model.hoursToSpendPlan).toBe(500)
+    expect(model.planMonthly).toBeGreaterThan(modelFor('agency').planMonthly)
+    expect(model.planMonthly).toBeLessThanOrEqual(DELIVERABLE)
   })
 
   /**
@@ -274,13 +294,37 @@ describe('R3 — which plans the platform can actually deliver', () => {
     expect(DELIVERABLE).toBe(360_000)
   })
 
-  it('treats the unlimited plan as unbounded rather than as zero', () => {
-    expect(PLAN_ENTITLEMENTS.enterprise.emailSendsPerMonth).toBe(UNLIMITED)
-    const model = modelFor('enterprise')
-    expect(model.planUnlimited).toBe(true)
-    // The sentinel must not reach a surface: `JSON.stringify(Infinity)` is
-    // `null`, which reads back as a cap of ZERO on the most expensive plan.
-    expect(Number.isFinite(model.planMonthly)).toBe(true)
+  it('sells no unbounded email allowance on any plan', () => {
+    // The sentinel used to live here, and the model had to launder it: an
+    // unlimited plan reported `deliverableMonthly` as its allowance so that
+    // `JSON.stringify` could not turn the figure into `null` — which reads
+    // back as a cap of ZERO on the most expensive plan on the price list.
+    // Now the table itself is finite, so nothing has to be laundered.
+    for (const plan of PLAN_KEYS) {
+      const entitled = PLAN_ENTITLEMENTS[plan].emailSendsPerMonth
+      expect(`${plan}: ${Number.isFinite(entitled)}`).toBe(`${plan}: true`)
+      expect(`${plan}: ${entitled === UNLIMITED}`).toBe(`${plan}: false`)
+      expect(modelFor(plan).planUnlimited).toBe(false)
+    }
+  })
+
+  it('the finite table survives the wire that flattened the sentinel', () => {
+    // The defect this closes, exercised rather than described. `UNLIMITED` is
+    // `Number.POSITIVE_INFINITY`; `JSON.stringify` writes it as `null`; and
+    // `Number(null)` is `0`, which `Number.isFinite` accepts — so it passed
+    // every guard written to reject a payload that cannot state its terms.
+    expect(JSON.parse(JSON.stringify(UNLIMITED))).toBeNull()
+    expect(Number(JSON.parse(JSON.stringify(UNLIMITED)))).toBe(0)
+    const round = JSON.parse(JSON.stringify(PLAN_ENTITLEMENTS))
+    for (const plan of PLAN_KEYS) {
+      const sent = round[plan].emailSendsPerMonth
+      expect(`${plan}: ${typeof sent}`).toBe(`${plan}: number`)
+      expect(`${plan}: ${sent}`).toBe(
+        `${plan}: ${PLAN_ENTITLEMENTS[plan].emailSendsPerMonth}`,
+      )
+    }
+    // …and the one that used to be the sentinel is the one to name.
+    expect(round.enterprise.emailSendsPerMonth).toBe(250_000)
   })
 
   it('does not lower any plan allowance to make the arithmetic work', () => {

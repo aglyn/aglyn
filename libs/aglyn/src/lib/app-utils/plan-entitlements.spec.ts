@@ -36,6 +36,7 @@ import {
   FORM_ABUSE_CEILING_MULTIPLE,
   FORM_ABUSE_CEILING_UNLIMITED,
   FORMS_PER_HOST_CEILING,
+  ENTERPRISE_EMAIL_SENDS_PER_MONTH,
   planMetersInfraOverage,
   isBillingSubscription,
   isCustomPricedPlan,
@@ -250,6 +251,7 @@ describe('plan entitlements', () => {
         extraDataGbMonthlyUsd: null,
         extraApiRequestsUsdPer1k: null,
         extraContactsUsdPer1k: null,
+        extraEmailSendsUsdPer1k: null,
         meteredInfraPassThrough: false,
       },
       starter: {
@@ -259,9 +261,10 @@ describe('plan entitlements', () => {
         extraSeatMonthlyUsd: 5,
         extraCollaboratorMonthlyUsd: 3,
         extraDatasetMonthlyUsd: 2,
-        extraDataGbMonthlyUsd: 0.25,
+        extraDataGbMonthlyUsd: 0.36,
         extraApiRequestsUsdPer1k: null,
         extraContactsUsdPer1k: 1,
+        extraEmailSendsUsdPer1k: 2.5,
         meteredInfraPassThrough: true,
       },
       pro: {
@@ -271,9 +274,10 @@ describe('plan entitlements', () => {
         extraSeatMonthlyUsd: 4,
         extraCollaboratorMonthlyUsd: 2,
         extraDatasetMonthlyUsd: 2,
-        extraDataGbMonthlyUsd: 0.25,
+        extraDataGbMonthlyUsd: 0.36,
         extraApiRequestsUsdPer1k: null,
         extraContactsUsdPer1k: 0.75,
+        extraEmailSendsUsdPer1k: 2.25,
         meteredInfraPassThrough: true,
       },
       business: {
@@ -283,45 +287,49 @@ describe('plan entitlements', () => {
         extraSeatMonthlyUsd: 3,
         extraCollaboratorMonthlyUsd: 1,
         extraDatasetMonthlyUsd: 1,
-        extraDataGbMonthlyUsd: 0.25,
+        extraDataGbMonthlyUsd: 0.36,
         extraApiRequestsUsdPer1k: 0.5,
         extraContactsUsdPer1k: 0.5,
+        extraEmailSendsUsdPer1k: 2,
         meteredInfraPassThrough: true,
       },
       scale: {
         basePriceMonthlyUsd: 249,
         basePriceAnnualMonthlyUsd: 179,
-        extraHostMonthlyUsd: 5,
+        extraHostMonthlyUsd: 8,
         extraSeatMonthlyUsd: 2,
         extraCollaboratorMonthlyUsd: 1,
         extraDatasetMonthlyUsd: 1,
-        extraDataGbMonthlyUsd: 0.25,
+        extraDataGbMonthlyUsd: 0.36,
         extraApiRequestsUsdPer1k: 0.35,
         extraContactsUsdPer1k: 0.4,
+        extraEmailSendsUsdPer1k: 1.9,
         meteredInfraPassThrough: true,
       },
       advanced: {
         basePriceMonthlyUsd: 399,
         basePriceAnnualMonthlyUsd: 299,
-        extraHostMonthlyUsd: 4,
+        extraHostMonthlyUsd: 8,
         extraSeatMonthlyUsd: 2,
         extraCollaboratorMonthlyUsd: 1,
         extraDatasetMonthlyUsd: 1,
-        extraDataGbMonthlyUsd: 0.25,
+        extraDataGbMonthlyUsd: 0.36,
         extraApiRequestsUsdPer1k: 0.2,
-        extraContactsUsdPer1k: 0.25,
+        extraContactsUsdPer1k: 0.4,
+        extraEmailSendsUsdPer1k: 1.85,
         meteredInfraPassThrough: true,
       },
       agency: {
-        basePriceMonthlyUsd: 799,
-        basePriceAnnualMonthlyUsd: 649,
-        extraHostMonthlyUsd: 3,
+        basePriceMonthlyUsd: 1299,
+        basePriceAnnualMonthlyUsd: 1055,
+        extraHostMonthlyUsd: 8,
         extraSeatMonthlyUsd: 2,
         extraCollaboratorMonthlyUsd: 1,
         extraDatasetMonthlyUsd: 1,
-        extraDataGbMonthlyUsd: 0.25,
+        extraDataGbMonthlyUsd: 0.36,
         extraApiRequestsUsdPer1k: 0.15,
         extraContactsUsdPer1k: null,
+        extraEmailSendsUsdPer1k: 1.8,
         meteredInfraPassThrough: true,
       },
       // Enterprise (AGL-1118) is quoted per deal — these zeros/nulls are the
@@ -337,6 +345,7 @@ describe('plan entitlements', () => {
         extraDataGbMonthlyUsd: null,
         extraApiRequestsUsdPer1k: null,
         extraContactsUsdPer1k: null,
+        extraEmailSendsUsdPer1k: null,
         meteredInfraPassThrough: false,
       },
     })
@@ -391,9 +400,20 @@ describe('plan entitlements', () => {
       // deal that needs a larger one takes a per-org override, which is the
       // instrument for exactly this and leaves the ceiling alone.
       if (key === 'formsPerHost') continue
+      // Nor is the email allowance, and for a related reason one axis over.
+      // Every other band here is infrastructure we already meter and price
+      // into the deal; email is a third party's per-message charge, so an
+      // unbounded band is an unbounded liability the negotiation never named.
+      // It is a DEFAULT — a contract raises it through the same per-org
+      // override `formsPerHost` uses — and it is FINITE, because
+      // `JSON.stringify(Infinity)` is `null` and reads back as a cap of zero
+      // on the most expensive plan on the price list.
+      if (key === 'emailSendsPerMonth') continue
       expect([key, value]).toEqual([key, UNLIMITED])
     }
     expect(resolved.formsPerHost).toBe(FORMS_PER_HOST_CEILING)
+    expect(resolved.emailSendsPerMonth).toBe(ENTERPRISE_EMAIL_SENDS_PER_MONTH)
+    expect(Number.isFinite(resolved.emailSendsPerMonth)).toBe(true)
     expect(resolved.transactionFeePhysicalPct).toBe(0)
     expect(resolved.transactionFeeDigitalPct).toBe(0)
     expect(resolved.marketplaceFeePct).toBe(20)
@@ -744,12 +764,12 @@ describe('plan entitlements', () => {
   })
 
   it('checkDataStorageQuota meters overage on paid plans, blocks on free (AGL-240)', () => {
-    // Starter includes 1 GB; 1.5 GB used → 0.5 GB overage at $0.25/GB.
+    // Starter includes 1 GB; 1.5 GB used → 0.5 GB overage at $0.36/GB.
     const starter = checkDataStorageQuota({ plan: 'starter' } as any, 1536)
     expect(starter.allowed).toBe(true)
     expect(starter.includedMb).toBe(1024)
     expect(starter.overageGb).toBeCloseTo(0.5)
-    expect(starter.overageMonthlyUsd).toBeCloseTo(0.13)
+    expect(starter.overageMonthlyUsd).toBeCloseTo(0.18)
     // Within the included size there is no overage.
     const within = checkDataStorageQuota({ plan: 'pro' } as any, 1024)
     expect(within.overageGb).toBe(0)
@@ -899,9 +919,8 @@ describe('plan entitlements', () => {
       checkFormSubmissionAbuseCeiling({ plan: 'enterprise' } as any, 1e9).exceeded,
     ).toBe(true)
 
-    // The ladder never inverts: no plan's ceiling is below the one below it,
-    // and no plan's ceiling is below its OWN included band — either would
-    // turn containment into a capacity cut.
+    // No plan's ceiling is below its OWN included band — that would turn
+    // containment into a capacity cut, refusing submissions the plan sold.
     const ladder: OrgPlan[] = [
       'free',
       'starter',
@@ -912,18 +931,48 @@ describe('plan entitlements', () => {
       'agency',
       'enterprise',
     ]
-    let previous = 0
     for (const plan of ladder) {
       const { ceiling } = checkFormSubmissionAbuseCeiling({ plan } as any, 0)
-      expect(ceiling).toBeGreaterThanOrEqual(previous)
-      expect(ceiling).toBeGreaterThanOrEqual(
-        Math.min(
-          PLAN_ENTITLEMENTS[plan].formSubmissionsPerMonth,
-          FORM_ABUSE_CEILING_UNLIMITED,
-        ),
-      )
-      previous = ceiling
+      expect(`${plan}: ${ceiling >= Math.min(
+        PLAN_ENTITLEMENTS[plan].formSubmissionsPerMonth,
+        FORM_ABUSE_CEILING_UNLIMITED,
+      )}`).toBe(`${plan}: true`)
     }
+
+    /*
+     * ⚠️ THE PER-HOST LADDER INVERTS AT AGENCY, AND THE ORG-WIDE ONE DOES NOT.
+     *
+     * `formSubmissionsPerMonth` is a PER-HOST band and `hostLimit` expands it
+     * (`meteredIncludedAllowance`). Agency's per-host figure is 25,000 against
+     * Advanced's 40,000 — lower — while its org-wide allowance is 2,500,000
+     * against Advanced's 1,000,000, two and a half times larger. So a
+     * per-SITE ceiling really is smaller on the more expensive plan, and the
+     * plan a customer buys really does include far more.
+     *
+     * Asserted rather than smoothed over because both halves are visible to a
+     * customer: the comparison grid prints the per-host number, and the
+     * invoice bills against the org-wide one. Whether the per-host figure
+     * should be raised so the printed ladder reads correctly is a pricing
+     * decision, and this is where it will be noticed.
+     */
+    const perHost = ladder.map((plan) =>
+      Math.min(
+        PLAN_ENTITLEMENTS[plan].formSubmissionsPerMonth,
+        FORM_ABUSE_CEILING_UNLIMITED,
+      ),
+    )
+    const orgWide = ladder.map(
+      (plan) =>
+        PLAN_ENTITLEMENTS[plan].hostLimit *
+        PLAN_ENTITLEMENTS[plan].formSubmissionsPerMonth,
+    )
+    expect(orgWide).toEqual([...orgWide].sort((a, b) => a - b))
+    // The one inversion, named. A SECOND one appearing here is a regression.
+    expect(
+      ladder
+        .slice(1)
+        .filter((_plan, index) => perHost[index + 1] < perHost[index]),
+    ).toEqual(['agency'])
 
     // A negative count cannot manufacture headroom, and a plan-less org
     // resolves as free rather than as uncapped.
@@ -1432,7 +1481,7 @@ describe('plan entitlements', () => {
           ...base,
           subscription: { ...base.subscription, customMonthlyUsd: 0 },
         }),
-      ).toBe(799)
+      ).toBe(PLAN_PRICING.agency.basePriceMonthlyUsd)
     })
   })
 

@@ -70,11 +70,11 @@
  * Transactional mail is exempt from both ceilings and is unaffected by this.
  *
  * **R3 — a plan may not sell more than the platform can deliver.**
- * `planMonthly <= deliverableMonthly`. This is the relation that does not hold
- * today, and {@link describeEmailCeilings} reports it rather than repairing
- * it: the repair would be to lower an entitlement, and an entitlement is what
- * a locked price bought. See `email-ceiling-dimensioning.spec.ts`, which pins
- * exactly which plans fail so that the set cannot grow unnoticed.
+ * `planMonthly <= deliverableMonthly`. Every shipped plan holds it today, and
+ * {@link describeEmailCeilings} reports a breach rather than repairing it:
+ * the repair would be to lower an entitlement, and an entitlement is what a
+ * price bought. See `email-ceiling-dimensioning.spec.ts`, which pins exactly
+ * which plans fail — an empty set — so that it cannot grow unnoticed.
  *
  * ## What a violated relation does NOT do
  *

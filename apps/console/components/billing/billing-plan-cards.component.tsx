@@ -414,6 +414,11 @@ function headlineLimits(
    */
   const per = (rate: number | null | undefined, unit: string) =>
     rate != null ? ` (+$${rate}${unit})` : ''
+  // The per-1,000 email rates carry cents that a bare interpolation drops:
+  // 2.5 prints as "$2.5", which reads as a typo on the one line that is about
+  // money. Same reasoning the API overage caption records on the usage page.
+  const perThousand = (rate: number | null | undefined) =>
+    rate != null ? ` (+$${rate.toFixed(2)}/1k over)` : ''
   return [
     `${quotaLabel(entitlements.hostLimit)} host${
       entitlements.hostLimit === 1 ? '' : 's'
@@ -447,7 +452,8 @@ function headlineLimits(
      * which tells you what you already have and nothing about what a tier
      * you are considering would give you.
      */
-    `${quotaCount(entitlements.emailSendsPerMonth)} campaign emails/mo`,
+    `${quotaCount(entitlements.emailSendsPerMonth)} campaign emails/mo` +
+      perThousand(pricing.extraEmailSendsUsdPer1k),
   ]
 }
 
@@ -1073,6 +1079,221 @@ function LowerTierDisclosure(props: {
  * custom-priced and staff-provisioned, so it gets a full-width contact-sales
  * card after the grid — never a price and never a checkout button.
  */
+/**
+ * The body every plan card shares: the allowance lines, then the sectioned
+ * feature checklist.
+ *
+ * ONE component because the cards exist to be read ACROSS. A reader compares
+ * tiers by travelling along a row, which only works while every card puts the
+ * same fact in the same place — and a card that renders a different structure
+ * stops being a column of the table and becomes a different kind of object. The
+ * Enterprise card was exactly that: five highlight lines where its neighbours
+ * had eighteen allowances and thirty-two flags, so the one tier a reader most
+ * needs to compare against was the one they could not.
+ *
+ * Values come from the TIER, on every card including Enterprise. What a
+ * particular org actually holds is a different question, and on the Enterprise
+ * card `ENTERPRISE_HIGHLIGHTS` is what answers it.
+ */
+function PlanCardBody({
+  entitlements,
+  pricing,
+  groups,
+}: {
+  entitlements: (typeof PLAN_ENTITLEMENTS)[OrgPlan]
+  pricing: (typeof PLAN_PRICING)[OrgPlan]
+  groups: ReturnType<typeof featureGroups>
+}) {
+  return (
+    <>
+    <Stack spacing={0.5} sx={{ mb: 1.5 }}>
+      <Typography variant="body2">
+        {`${quotaLabel(entitlements.hostLimit)} host${
+          entitlements.hostLimit === 1 ? '' : 's'
+        }`}
+        {pricing.extraHostMonthlyUsd != null
+          ? ` (+$${pricing.extraHostMonthlyUsd}/extra)`
+          : ''}
+      </Typography>
+      <Typography variant="body2">
+        {`${quotaLabel(entitlements.screensPerHost)} screens per host`}
+      </Typography>
+      <Typography variant="body2">
+        {`${quotaLabel(entitlements.sharedLayoutsPerHost)} shared layouts`}
+      </Typography>
+      {/* AGL-2246: `templatesPerHost` is enforced by
+          /api/hosts/resources but was the one quota key of 31
+          with no customer-facing surface anywhere — not here,
+          not on the templates card, not in the usage meters. A
+          cap a shopper for a plan cannot see is not a plan
+          differentiator, it is a future refusal. */}
+      <Typography variant="body2">
+        {`${quotaLabel(entitlements.templatesPerHost)} saved templates per host`}
+      </Typography>
+      {/* Media storage only. The `totalSiteSizeMb` figure used to
+          sit beside it and was dropped in AGL-1370: it is
+          structurally unreachable (the 900 KB node-map wall of
+          AGL-678 bounds a whole site to a few percent of the
+          advertised cap), so the card was publishing a number we
+          do not back. The entitlement stays as an internal
+          signal. */}
+      <Typography variant="body2">
+        {`${mbLabel(entitlements.storagePerHostMb)} storage`}
+      </Typography>
+      <Typography variant="body2">
+        {`${
+          entitlements.bandwidthGb === UNLIMITED
+            ? 'Unlimited'
+            : `${entitlements.bandwidthGb} GB`
+        } bandwidth`}
+      </Typography>
+      <Typography variant="body2">
+        {`${quotaLabel(entitlements.managersPerOrg)} team seat${
+          entitlements.managersPerOrg === 1 ? '' : 's'
+        }`}
+        {pricing.extraSeatMonthlyUsd != null
+          ? ` (+$${pricing.extraSeatMonthlyUsd}/extra, ` +
+            `max ${quotaLabel(entitlements.maxManagersPerOrg)})`
+          : ''}
+      </Typography>
+      {/* Per-site console collaborators (AGL-888) — end-user
+          member accounts are unlimited and listed separately. */}
+      <Typography variant="body2">
+        {`${quotaLabel(entitlements.membersPerHost)} site collaborator${
+          entitlements.membersPerHost === 1 ? '' : 's'
+        }`}
+        {pricing.extraCollaboratorMonthlyUsd != null
+          ? ` (+$${pricing.extraCollaboratorMonthlyUsd}/extra, ` +
+            `max ${quotaLabel(entitlements.maxMembersPerHost)})`
+          : ''}
+      </Typography>
+      {/* Visitor signups are never capped (AGL-889). */}
+      <Typography variant="body2">
+        {'Unlimited member accounts'}
+      </Typography>
+      {/* Audience band (AGL-890): paid tiers meter overage. */}
+      <Typography variant="body2">
+        {`${quotaCount(entitlements.contactsPerHost)} contacts`}
+        {pricing.extraContactsUsdPer1k != null
+          ? ` (+$${pricing.extraContactsUsdPer1k}/1k over)`
+          : ''}
+      </Typography>
+      {/* CAMPAIGN sends only (AGL-1438) — transactional mail is
+          not rationed by a plan, and this row must not imply it
+          is. Absent from every customer-facing pricing surface
+          until now. */}
+      <Typography variant="body2">
+        {`${quotaCount(entitlements.emailSendsPerMonth)} campaign emails/mo`}
+        {/* `toFixed(2)`, unlike the rates above it: these are 2.5 and 1.25,
+            and a bare interpolation prints "$2.5" — a price missing its cents
+            column on the one line that is about money. */}
+        {pricing.extraEmailSendsUsdPer1k != null
+          ? ` (+$${pricing.extraEmailSendsUsdPer1k.toFixed(2)}/1k over)`
+          : ''}
+      </Typography>
+      {/* Submissions only. These cards exist to be compared, and
+          the saved-form ceiling is the same number on every plan
+          that has forms at all — printed here it would read as a
+          difference and send a buyer looking for one. What a
+          plan actually buys on this axis is the submissions
+          band, which is tiered and metered. The ceiling is shown
+          where it means something: beside the site's own count,
+          on the usage meters. */}
+      <Typography variant="body2">
+        {`${quotaCount(entitlements.formSubmissionsPerMonth)} form submissions/mo`}
+      </Typography>
+      <Typography variant="body2">
+        {`${quotaLabel(entitlements.variablesPerHost)} variables · ` +
+          `${quotaLabel(entitlements.functionsPerHost)} functions · ` +
+          `${quotaLabel(entitlements.workflowsPerHost)} workflows`}
+      </Typography>
+      <Typography variant="body2">
+        {entitlements.datasetsPerOrg > 0
+          ? `${quotaLabel(entitlements.datasetsPerOrg)} org datasets × ` +
+            `${quotaLabel(entitlements.recordsPerDataset)} records · ` +
+            `${mbLabel(entitlements.dataStorageMbPerOrg)} data`
+          : 'No datasets'}
+      </Typography>
+      <Typography variant="body2">
+        {entitlements.apiRequestsPerMonth > 0
+          ? `${quotaCount(entitlements.apiRequestsPerMonth)} API requests/mo` +
+            (pricing.extraApiRequestsUsdPer1k != null
+              ? ` (+$${pricing.extraApiRequestsUsdPer1k}/1k over)`
+              : '')
+          : 'No API access'}
+      </Typography>
+      {/* Declining platform-fee ladder (AGL-892): charged at
+          checkout as the Stripe Connect application fee. "Plus
+          card processing at cost" is AGL-2152: a storefront sale
+          is a DESTINATION charge, so Stripe's own fee is debited
+          from the platform's balance, and a card advertising 0%
+          with nothing beside it promised a merchant a free
+          payment rail that Aglyn was paying for out of pocket on
+          every order. The PLATFORM rates below did not move;
+          memberships, gated content and paid BOOKINGS all bill at
+          the digital rate (AGL-2315 — a booking is a service sale
+          and resolves through the same `'service'`/digital axis,
+          not a rate of its own). */}
+      <Typography variant="body2">
+        {entitlements.features.commerce
+          ? entitlements.transactionFeePhysicalPct > 0 ||
+            entitlements.transactionFeeDigitalPct > 0
+            ? `${entitlements.transactionFeePhysicalPct}% physical · ` +
+              `${entitlements.transactionFeeDigitalPct}% digital, ` +
+              'membership & booking fees, plus card processing ' +
+              'at cost'
+            : '0% platform fees, plus card processing at cost'
+          : 'No storefront'}
+      </Typography>
+    </Stack>
+    <Stack spacing={1.5}>
+      {/* Grouped since AGL-2079: the checklist went from 19 rows
+          to the full flag set, and 32 undifferentiated ticks is a
+          wall nobody reads. The headings are the difference
+          between a longer list and a legible one. */}
+      {groups.map((group) => (
+      <Stack key={group.title} spacing={0.5}>
+      <Typography
+        variant="overline"
+        color="text.secondary"
+        sx={{ lineHeight: 1.6 }}
+      >
+        {group.title}
+      </Typography>
+      {group.rows.map(({ key, label }) => {
+        const enabled = entitlements.features[key]
+        return (
+          <Stack
+            key={key}
+            direction="row"
+            spacing={0.75}
+            sx={{
+              alignItems: 'center',
+              color: enabled ? 'text.primary' : 'text.disabled',
+            }}
+          >
+            <MdiIcon
+              fontSize="inherit"
+              sx={{
+                color: enabled ? 'success.main' : 'text.disabled',
+              }}
+              path={
+                enabled
+                  ? ICON_VARIANT_SYMBOL_CONFIRMED.path
+                  : ICON_VARIANT_SYMBOL_MINUS.path
+              }
+            />
+            <Typography variant="body2">{label}</Typography>
+          </Stack>
+        )
+      })}
+      </Stack>
+      ))}
+    </Stack>
+    </>
+  )
+}
+
 export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
   const {
     plan,
@@ -1343,184 +1564,11 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                   </Button>
                 )}
                 <Divider sx={{ mb: 1.5 }} />
-                <Stack spacing={0.5} sx={{ mb: 1.5 }}>
-                  <Typography variant="body2">
-                    {`${quotaLabel(entitlements.hostLimit)} host${
-                      entitlements.hostLimit === 1 ? '' : 's'
-                    }`}
-                    {pricing.extraHostMonthlyUsd != null
-                      ? ` (+$${pricing.extraHostMonthlyUsd}/extra)`
-                      : ''}
-                  </Typography>
-                  <Typography variant="body2">
-                    {`${quotaLabel(entitlements.screensPerHost)} screens per host`}
-                  </Typography>
-                  <Typography variant="body2">
-                    {`${quotaLabel(entitlements.sharedLayoutsPerHost)} shared layouts`}
-                  </Typography>
-                  {/* AGL-2246: `templatesPerHost` is enforced by
-                      /api/hosts/resources but was the one quota key of 31
-                      with no customer-facing surface anywhere — not here,
-                      not on the templates card, not in the usage meters. A
-                      cap a shopper for a plan cannot see is not a plan
-                      differentiator, it is a future refusal. */}
-                  <Typography variant="body2">
-                    {`${quotaLabel(entitlements.templatesPerHost)} saved templates per host`}
-                  </Typography>
-                  {/* Media storage only. The `totalSiteSizeMb` figure used to
-                      sit beside it and was dropped in AGL-1370: it is
-                      structurally unreachable (the 900 KB node-map wall of
-                      AGL-678 bounds a whole site to a few percent of the
-                      advertised cap), so the card was publishing a number we
-                      do not back. The entitlement stays as an internal
-                      signal. */}
-                  <Typography variant="body2">
-                    {`${mbLabel(entitlements.storagePerHostMb)} storage`}
-                  </Typography>
-                  <Typography variant="body2">
-                    {`${
-                      entitlements.bandwidthGb === UNLIMITED
-                        ? 'Unlimited'
-                        : `${entitlements.bandwidthGb} GB`
-                    } bandwidth`}
-                  </Typography>
-                  <Typography variant="body2">
-                    {`${quotaLabel(entitlements.managersPerOrg)} team seat${
-                      entitlements.managersPerOrg === 1 ? '' : 's'
-                    }`}
-                    {pricing.extraSeatMonthlyUsd != null
-                      ? ` (+$${pricing.extraSeatMonthlyUsd}/extra, ` +
-                        `max ${quotaLabel(entitlements.maxManagersPerOrg)})`
-                      : ''}
-                  </Typography>
-                  {/* Per-site console collaborators (AGL-888) — end-user
-                      member accounts are unlimited and listed separately. */}
-                  <Typography variant="body2">
-                    {`${quotaLabel(entitlements.membersPerHost)} site collaborator${
-                      entitlements.membersPerHost === 1 ? '' : 's'
-                    }`}
-                    {pricing.extraCollaboratorMonthlyUsd != null
-                      ? ` (+$${pricing.extraCollaboratorMonthlyUsd}/extra, ` +
-                        `max ${quotaLabel(entitlements.maxMembersPerHost)})`
-                      : ''}
-                  </Typography>
-                  {/* Visitor signups are never capped (AGL-889). */}
-                  <Typography variant="body2">
-                    {'Unlimited member accounts'}
-                  </Typography>
-                  {/* Audience band (AGL-890): paid tiers meter overage. */}
-                  <Typography variant="body2">
-                    {`${quotaCount(entitlements.contactsPerHost)} contacts`}
-                    {pricing.extraContactsUsdPer1k != null
-                      ? ` (+$${pricing.extraContactsUsdPer1k}/1k over)`
-                      : ''}
-                  </Typography>
-                  {/* CAMPAIGN sends only (AGL-1438) — transactional mail is
-                      not rationed by a plan, and this row must not imply it
-                      is. Absent from every customer-facing pricing surface
-                      until now. */}
-                  <Typography variant="body2">
-                    {`${quotaCount(entitlements.emailSendsPerMonth)} campaign emails/mo`}
-                  </Typography>
-                  {/* Submissions only. These cards exist to be compared, and
-                      the saved-form ceiling is the same number on every plan
-                      that has forms at all — printed here it would read as a
-                      difference and send a buyer looking for one. What a
-                      plan actually buys on this axis is the submissions
-                      band, which is tiered and metered. The ceiling is shown
-                      where it means something: beside the site's own count,
-                      on the usage meters. */}
-                  <Typography variant="body2">
-                    {`${quotaCount(entitlements.formSubmissionsPerMonth)} form submissions/mo`}
-                  </Typography>
-                  <Typography variant="body2">
-                    {`${quotaLabel(entitlements.variablesPerHost)} variables · ` +
-                      `${quotaLabel(entitlements.functionsPerHost)} functions · ` +
-                      `${quotaLabel(entitlements.workflowsPerHost)} workflows`}
-                  </Typography>
-                  <Typography variant="body2">
-                    {entitlements.datasetsPerOrg > 0
-                      ? `${quotaLabel(entitlements.datasetsPerOrg)} org datasets × ` +
-                        `${quotaLabel(entitlements.recordsPerDataset)} records · ` +
-                        `${mbLabel(entitlements.dataStorageMbPerOrg)} data`
-                      : 'No datasets'}
-                  </Typography>
-                  <Typography variant="body2">
-                    {entitlements.apiRequestsPerMonth > 0
-                      ? `${quotaCount(entitlements.apiRequestsPerMonth)} API requests/mo` +
-                        (pricing.extraApiRequestsUsdPer1k != null
-                          ? ` (+$${pricing.extraApiRequestsUsdPer1k}/1k over)`
-                          : '')
-                      : 'No API access'}
-                  </Typography>
-                  {/* Declining platform-fee ladder (AGL-892): charged at
-                      checkout as the Stripe Connect application fee. "Plus
-                      card processing at cost" is AGL-2152: a storefront sale
-                      is a DESTINATION charge, so Stripe's own fee is debited
-                      from the platform's balance, and a card advertising 0%
-                      with nothing beside it promised a merchant a free
-                      payment rail that Aglyn was paying for out of pocket on
-                      every order. The PLATFORM rates below did not move;
-                      memberships, gated content and paid BOOKINGS all bill at
-                      the digital rate (AGL-2315 — a booking is a service sale
-                      and resolves through the same `'service'`/digital axis,
-                      not a rate of its own). */}
-                  <Typography variant="body2">
-                    {entitlements.features.commerce
-                      ? entitlements.transactionFeePhysicalPct > 0 ||
-                        entitlements.transactionFeeDigitalPct > 0
-                        ? `${entitlements.transactionFeePhysicalPct}% physical · ` +
-                          `${entitlements.transactionFeeDigitalPct}% digital, ` +
-                          'membership & booking fees, plus card processing ' +
-                          'at cost'
-                        : '0% platform fees, plus card processing at cost'
-                      : 'No storefront'}
-                  </Typography>
-                </Stack>
-                <Stack spacing={1.5}>
-                  {/* Grouped since AGL-2079: the checklist went from 19 rows
-                      to the full flag set, and 32 undifferentiated ticks is a
-                      wall nobody reads. The headings are the difference
-                      between a longer list and a legible one. */}
-                  {groups.map((group) => (
-                  <Stack key={group.title} spacing={0.5}>
-                  <Typography
-                    variant="overline"
-                    color="text.secondary"
-                    sx={{ lineHeight: 1.6 }}
-                  >
-                    {group.title}
-                  </Typography>
-                  {group.rows.map(({ key, label }) => {
-                    const enabled = entitlements.features[key]
-                    return (
-                      <Stack
-                        key={key}
-                        direction="row"
-                        spacing={0.75}
-                        sx={{
-                          alignItems: 'center',
-                          color: enabled ? 'text.primary' : 'text.disabled',
-                        }}
-                      >
-                        <MdiIcon
-                          fontSize="inherit"
-                          sx={{
-                            color: enabled ? 'success.main' : 'text.disabled',
-                          }}
-                          path={
-                            enabled
-                              ? ICON_VARIANT_SYMBOL_CONFIRMED.path
-                              : ICON_VARIANT_SYMBOL_MINUS.path
-                          }
-                        />
-                        <Typography variant="body2">{label}</Typography>
-                      </Stack>
-                    )
-                  })}
-                  </Stack>
-                  ))}
-                </Stack>
+                <PlanCardBody
+                  entitlements={entitlements}
+                  pricing={pricing}
+                  groups={groups}
+                />
               </CardContent>
             </Card>
           </Grid>
@@ -1532,114 +1580,162 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
           It sits IMMEDIATELY after the ladder, sharing a row with Agency at
           half width each. It is the rung above Agency, so the two belong side
           by side — and the disclosure below is full width, which would push
-          them onto separate rows if it came between them. */}
-      <Grid size={{ xs: 12, lg: 6 }}>
+          them onto separate rows if it came between them.
+
+          ONE SKELETON, like every card in the ladder: heading, price, tagline,
+          the control, then `PlanCardBody`. It reads as the top of the ladder
+          because it is built like the rungs below it — a reader can travel
+          along the "campaign emails/mo" row from Free to here and land on a
+          number, which is the only thing a comparison grid is for.
+
+          The three-column row this used to be is gone. At `lg: 6` it gave the
+          highlights about a third of half a card, so "Unlimited sites,
+          screens, seats, and storage" wrapped every two or three words beside
+          a mostly empty card. */}
+      <Grid size={{ xs: 12, sm: 6, lg: 6 }}>
         <Card
           variant="outlined"
           sx={{
+            height: '100%',
             borderColor: enterprise ? 'success.main' : 'divider',
             borderWidth: enterprise ? 2 : 1,
           }}
         >
           <CardContent>
             <Stack
-              direction={{ xs: 'column', md: 'row' }}
-              spacing={2}
-              sx={{ justifyContent: 'space-between' }}
+              direction="row"
+              sx={{ justifyContent: 'space-between', alignItems: 'center' }}
             >
-              <Stack spacing={1} sx={{ flex: 1 }}>
-                <Stack
-                  direction="row"
-                  spacing={1}
-                  sx={{ alignItems: 'center' }}
-                >
-                  <Typography variant="h6">
-                    {PLAN_LABELS.enterprise}
-                  </Typography>
-                  {enterprise ? (
-                    <Chip label="Current plan" color="success" size="small" />
-                  ) : null}
-                </Stack>
-                <Typography variant="h5" component="p">
-                  {'Custom pricing'}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {taglines.enterprise}
-                </Typography>
-              </Stack>
-              <Stack spacing={0.5} sx={{ flex: 2 }}>
-                {ENTERPRISE_HIGHLIGHTS.map(({ label, holds }) => {
-                  // A PROSPECT is being shown the tier, and every line is
-                  // accurate about the tier — so the offer ticks in full. A
-                  // CURRENT org is being told what it has, and that is a
-                  // different question with a different answer whenever the
-                  // Enterprise reading came from a comped marker or a
-                  // negotiated price rather than the plan itself.
-                  const held = enterprise ? holds(org) : true
-                  return (
-                    <Stack
-                      key={label}
-                      direction="row"
-                      spacing={0.75}
-                      sx={{ alignItems: 'center' }}
-                    >
-                      <MdiIcon
-                        fontSize="inherit"
-                        sx={{ color: held ? 'success.main' : 'text.disabled' }}
-                        path={
-                          held
-                            ? ICON_VARIANT_SYMBOL_CONFIRMED.path
-                            : ICON_VARIANT_SYMBOL_MINUS.path
-                        }
-                      />
-                      <Typography
-                        variant="body2"
-                        color={held ? 'text.primary' : 'text.secondary'}
-                      >
-                        {label}
-                      </Typography>
-                    </Stack>
-                  )
-                })}
-                {enterprise &&
-                ENTERPRISE_HIGHLIGHTS.some(({ holds }) => !holds(org)) ? (
-                  // Actionable, not just honest: the fix for a legacy
-                  // arrangement is a per-org entitlements override or a move
-                  // onto the real plan, and neither is something the admin can
-                  // do from here.
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{ pt: 0.5 }}
-                  >
-                    {'Your agreement does not currently enable everything ' +
-                      'Enterprise can include — talk to us to turn the rest on.'}
-                  </Typography>
-                ) : null}
-              </Stack>
-              <Stack
-                spacing={1}
-                sx={{ flex: 1, justifyContent: 'center', minWidth: 200 }}
-              >
-                {enterprise ? (
-                  <Typography variant="body2" color="text.secondary">
-                    {'Your organization is on an Enterprise agreement — ' +
-                      'reach out for any change to it.'}
-                  </Typography>
-                ) : (
-                  <Button
-                    fullWidth
-                    variant="contained"
-                    color="primary"
-                    href={ENTERPRISE_CONTACT_URL}
-                    target="_blank"
-                    rel="noopener"
-                  >
-                    {'Contact sales'}
-                  </Button>
-                )}
-              </Stack>
+              <Typography variant="h6">{PLAN_LABELS.enterprise}</Typography>
+              {enterprise ? (
+                <Chip label="Current plan" color="success" size="small" />
+              ) : null}
             </Stack>
+            <Stack
+              direction="row"
+              spacing={0.5}
+              sx={{ alignItems: 'baseline', my: 1 }}
+            >
+              {/* Where the ladder prints `$139`. `h4` matches them so the
+                  prices line up across the row; there is no `/month` suffix
+                  because there is no month price to qualify. */}
+              <Typography variant="h4" component="span">
+                {'Custom'}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {'pricing'}
+              </Typography>
+            </Stack>
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ mb: 1.5, minHeight: 40 }}
+            >
+              {taglines.enterprise}
+            </Typography>
+            {enterprise ? (
+              // Already on it. The agreement is changed by talking to whoever
+              // owns the contract, so the control says where that happens
+              // rather than pretending to be a checkout.
+              <Button fullWidth size="small" disabled sx={{ mb: 1.5 }}>
+                {'Contact us to change'}
+              </Button>
+            ) : (
+              <Button
+                fullWidth
+                size="small"
+                variant="contained"
+                color="primary"
+                href={ENTERPRISE_CONTACT_URL}
+                target="_blank"
+                rel="noopener"
+                sx={{ mb: 1.5 }}
+              >
+                {'Contact sales'}
+              </Button>
+            )}
+            {enterprise ? (
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ display: 'block', mt: -1, mb: 1.5 }}
+              >
+                {'Your organization is on an Enterprise agreement — reach ' +
+                  'out for any change to it.'}
+              </Typography>
+            ) : null}
+            <Divider sx={{ mb: 1.5 }} />
+            {/* WHAT THIS ORG HOLDS, which the rows below cannot say.
+                `PlanCardBody` renders the TIER on every card, and for
+                Enterprise the tier and the org come apart: `isEnterpriseOrg`
+                is true for a comped marker and for a negotiated price as well
+                as for the plan, and those two are display overlays on a lower
+                base plan that grant nothing (AGL-2297). So the highlights
+                stay, above the tier rows, as the only place a per-org answer
+                is given — and the caption below them is the route to fixing a
+                gap. A prospect sees the offer ticked in full, because every
+                line of it is accurate about the tier. */}
+            <Stack spacing={0.5} sx={{ mb: 1.5 }}>
+              <Typography
+                variant="overline"
+                color="text.secondary"
+                sx={{ lineHeight: 1.6 }}
+              >
+                {enterprise ? 'YOUR AGREEMENT' : 'WHAT AN AGREEMENT INCLUDES'}
+              </Typography>
+              {ENTERPRISE_HIGHLIGHTS.map(({ label, holds }) => {
+                const held = enterprise ? holds(org) : true
+                return (
+                  <Stack
+                    key={label}
+                    direction="row"
+                    spacing={0.75}
+                    sx={{ alignItems: 'center' }}
+                  >
+                    <MdiIcon
+                      fontSize="inherit"
+                      sx={{ color: held ? 'success.main' : 'text.disabled' }}
+                      path={
+                        held
+                          ? ICON_VARIANT_SYMBOL_CONFIRMED.path
+                          : ICON_VARIANT_SYMBOL_MINUS.path
+                      }
+                    />
+                    <Typography
+                      variant="body2"
+                      color={held ? 'text.primary' : 'text.secondary'}
+                    >
+                      {label}
+                    </Typography>
+                  </Stack>
+                )
+              })}
+              {enterprise &&
+              ENTERPRISE_HIGHLIGHTS.some(({ holds }) => !holds(org)) ? (
+                // Actionable, not just honest: the fix for a legacy
+                // arrangement is a per-org entitlements override or a move
+                // onto the real plan, and neither is something the admin can
+                // do from here.
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ pt: 0.5 }}
+                >
+                  {'Your agreement does not currently enable everything ' +
+                    'Enterprise can include — talk to us to turn the rest on.'}
+                </Typography>
+              ) : null}
+            </Stack>
+            <Divider sx={{ mb: 1.5 }} />
+            {/* The tier's own numbers, in the same order as every card to the
+                left. Most read "Unlimited"; `emailSendsPerMonth` is the one
+                that does not, and a contracted default a customer cannot see
+                is a future refusal rather than a plan they agreed to. */}
+            <PlanCardBody
+              entitlements={PLAN_ENTITLEMENTS.enterprise}
+              pricing={PLAN_PRICING.enterprise}
+              groups={groups}
+            />
           </CardContent>
         </Card>
       </Grid>

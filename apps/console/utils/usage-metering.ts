@@ -106,6 +106,15 @@ export const METERED_UNIT_RATES_USD = {
  *
  * Derived rather than written out, so a rate correction moves both together.
  * There is exactly one rate table in this file and it is the one above.
+ *
+ * ⛔ **Three meters, and email is not a fourth.** Every figure in this table
+ * is a cost passed through at `METERED_MARKUP`, and the published sentence
+ * for it is "at cost + 30%" — so anything added here inherits that claim.
+ * Email overage is a retail price on `PLAN_PRICING.extraEmailSendsUsdPer1k`
+ * that descends with the tier, like contacts and API requests; it is not
+ * derived from our cost and must never be quoted as though it were. Our
+ * per-email cost lives in `ORG_COGS_UNIT_RATES_USD.perEmailSend`, which the
+ * COGS model reads and no customer surface does.
  */
 export const METERED_BILLED_RATES_USD = {
   storagePerGbMonth: METERED_UNIT_RATES_USD.storagePerGbMonth * METERED_MARKUP,
@@ -183,6 +192,46 @@ export function orgBandwidthGb(
  * wrote `yes` in a field that wanted a month.
  */
 export function billsOrgLibraryStorage(
+  month: string,
+  configuredStart: string | null | undefined,
+): boolean {
+  return billsFromMonth(month, configuredStart)
+}
+
+/**
+ * Whether `month`'s invoice charges for email past the plan's included band.
+ *
+ * Same mechanism as {@link billsOrgLibraryStorage}, same reason, one meter
+ * over. Email sends have been counted for a long time and priced for none of
+ * it, and the included bands moved at the same time the rate arrived — so a
+ * boolean would put a charge on a month whose mail was sent under a larger
+ * allowance, for volume that no cap refused because transactional mail is
+ * never refused.
+ *
+ * TO TURN IT ON: set `BILL_EMAIL_SEND_OVERAGE_FROM` to the first month whose
+ * invoice should carry it, as `YYYY-MM`, in the console project's
+ * environment. The rate, the measurement and the customer-facing readouts are
+ * live without it; this decides only when money starts moving.
+ *
+ * FAILS CLOSED, identically.
+ */
+export function billsEmailSendOverage(
+  month: string,
+  configuredStart: string | null | undefined,
+): boolean {
+  return billsFromMonth(month, configuredStart)
+}
+
+/**
+ * The start-month comparison both gates above are.
+ *
+ * One implementation because both are the same decision about different
+ * money, and a second hand-written copy of a fail-closed parser is how the
+ * two stop agreeing on what `true` means. `usage-budget.ts` carries a third
+ * copy for Assist; it is left where it is because importing this module from
+ * there would close a cycle.
+ */
+function billsFromMonth(
   month: string,
   configuredStart: string | null | undefined,
 ): boolean {
