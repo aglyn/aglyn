@@ -30,6 +30,7 @@ this file is the last step, not the decision.
 | `commerceAnalytics` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `contentGating` | — | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `customDomain` | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `customSendingDomain` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `dataStore` | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `dropshipRouting` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `eventCalendar` | — | — | — | — | — | — | — | — |
@@ -55,4 +56,4 @@ this file is the last step, not the decision.
 | `whiteLabel` | — | — | — | — | — | — | ✓ | ✓ |
 | `workflows` | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
-_34 features across 8 plans._
+_35 features across 8 plans._

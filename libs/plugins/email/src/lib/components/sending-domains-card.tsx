@@ -216,7 +216,7 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
 
         {view && !view.entitled ? (
           <Alert severity="info">
-            {'Sending as a domain you own is part of the Agency plan. Account ' +
+            {'Sending as a domain you own starts on the Pro plan. Account ' +
               'email from this site sends without it — the address is shown ' +
               'above.'}
           </Alert>

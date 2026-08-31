@@ -558,6 +558,59 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       })
     })
 
+    /**
+     * A ROW THE PAGE DOES NOT CARRY AT ALL.
+     *
+     * Sending identity was not a published axis when `/pricing` was drawn, so
+     * there is no cell here to be ahead of — the whole row is new. It is
+     * pinned anyway, and for the same reason the email bands are: the gap
+     * between what the code sells and what the page says has to be visible as
+     * data, or the republish it is waiting on is remembered by nobody.
+     *
+     * Delete this block, and the `EXPECTED_MISSING` entry in
+     * `tools/marketing/build-pricing-tables.mts`, once the four responsive
+     * frames carry the row.
+     */
+    describe('Send email from your own domain — a row the page has never had', () => {
+      it('starts at Pro, and Free and Starter do not carry it', () => {
+        expect(flagColumn('customSendingDomain')).toEqual([
+          false,
+          false,
+          true,
+          true,
+          true,
+          true,
+          true,
+        ])
+      })
+
+      it('is a strictly wider grant than white-label, which has not moved', () => {
+        // The point of the carve-out. `whiteLabel` replaces the Aglyn brand
+        // everywhere and is still Agency-and-above; if this assertion ever
+        // fails, the sending gate was widened by widening the brand gate,
+        // which hands Pro a set of unrelated Agency features.
+        expect(flagColumn('whiteLabel')).toEqual([
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          true,
+        ])
+      })
+
+      it('no CHARGED price moved with it', () => {
+        // Adding an inclusion is not a repricing. Agency's figure is the one
+        // that moved, in its own change, and is pinned in the `prices` block.
+        expect(
+          PUBLISHED_COLUMNS.filter((plan) => plan !== 'agency').map(
+            (plan) => PLAN_PRICING[plan].basePriceMonthlyUsd,
+          ),
+        ).toEqual([0, 25, 56, 139, 249, 399])
+      })
+    })
+
     it.each([
       ['Actions builder', 'actions', 2],
       ['Appointment bookings', 'bookings', 1],

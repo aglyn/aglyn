@@ -44,20 +44,26 @@
 const mockState: {
   hostRole: string
   canManage: boolean
-  entitled: boolean
+  /**
+   * The owning org's PLAN, not a pre-answered entitlement.
+   *
+   * `checkEntitlement` is left unmocked below so the gate resolves against the
+   * real plan table. A mock returning a boolean proves only that the route
+   * reads something, and would pass identically whichever flag it named.
+   */
+  plan: string
   domains: Array<Record<string, unknown>>
   written: Record<string, unknown> | null
 } = {
   hostRole: 'admin',
   canManage: true,
-  entitled: true,
+  plan: 'pro',
   domains: [],
   written: null,
 }
 
 jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('@aglyn/aglyn/server'),
-  checkEntitlement: () => mockState.entitled,
   pluginRequestFromWeb: async (request: Request) => {
     const url = new URL(request.url)
     const raw = await request.text().catch(() => '')
@@ -103,7 +109,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     Response.json({ error: 'unverified' }, { status: 403 }),
   isImpersonationSession: () => false,
   lockdownRefusal: async () => null,
-  getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'agency' } }),
+  getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: mockState.plan } }),
   listSendingDomains: async () => mockState.domains,
   /*
    * The site's own provisioned domain. Built through the REAL naming
@@ -174,7 +180,7 @@ afterAll(() => {
 beforeEach(() => {
   mockState.hostRole = 'admin'
   mockState.canManage = true
-  mockState.entitled = true
+  mockState.plan = 'pro'
   mockState.written = null
   mockState.domains = [
     { domain: 'acme.com', status: 'verified' },
@@ -292,10 +298,33 @@ describe('writing needs the org admin role', () => {
     })
   })
 
-  it('refuses a plan without white-label', async () => {
-    mockState.entitled = false
+  /**
+   * THE LADDER, READ FROM BEHAVIOR — the per-site half of the same gate the
+   * org's domain list applies, resolved from the real plan table on both
+   * sides so a gate moved to another flag fails one of them.
+   */
+  it.each(['pro', 'business', 'agency', 'enterprise'])(
+    'lets a %s org point a site at a domain it owns',
+    async (plan) => {
+      mockState.plan = plan
 
-    expect((await write({ domain: 'acme.com' })).status).toBe(403)
+      expect((await write({ domain: 'acme.com' })).status).toBe(200)
+      expect(mockState.written).toMatchObject({ sendingDomain: 'acme.com' })
+    },
+  )
+
+  it.each(['free', 'starter'])('refuses a %s org, and writes nothing', async (plan) => {
+    mockState.plan = plan
+
+    const response = await write({ domain: 'acme.com' })
+    const { error } = await response.json()
+
+    expect(response.status).toBe(403)
+    expect(error).toMatch(/Pro plan/i)
+    // The refusal covers the CUSTOM domain only. A site below the tier keeps
+    // the address Aglyn issues it, so the message must not read as mail
+    // stopping.
+    expect(error).toMatch(/keeps sending/i)
     expect(mockState.written).toBeNull()
   })
 })

@@ -54,11 +54,19 @@ export const dynamic = 'force-dynamic'
  * whether unauthenticated mail is filed as spam or refused outright, and we
  * must never ask them to weaken it.
  *
- * ## Org-scoped, and gated on white-label
+ * ## Org-scoped, and gated on `customSendingDomain`
  *
- * Same gate as `console-domains.ts` and for the same reason: sending as your
- * own domain IS white-labeling the mail. `customDomain` is the SITE's public
- * domain and answers a different question.
+ * Its own entitlement rather than `whiteLabel`, which replaces the Aglyn brand
+ * across every surface: sending as your own name is one narrow consequence of
+ * white-labeling, and a shared flag would drag the whole of it down the ladder
+ * behind this one capability. `customDomain` is the SITE's public web address
+ * and authorizes nothing about mail.
+ *
+ * It sits at Pro because that is where campaign email starts, and because a
+ * domain the CUSTOMER owns is the option that costs this platform nothing in
+ * its own zone — the records are published in theirs. The subdomain a site is
+ * issued costs a provider slot, three records here and a permanent place in
+ * the re-verification sweep, so it is the one that has to be rationed.
  *
  * ## What a `verified` here does and does not mean
  *
@@ -126,9 +134,14 @@ async function handler(request: Request): Promise<Response> {
   })
   if (locked) return locked
 
-  if (!checkEntitlement(orgSnapshot.data() as never, 'whiteLabel')) {
+  if (!checkEntitlement(orgSnapshot.data() as never, 'customSendingDomain')) {
     return Response.json(
-      { error: 'Custom sending domains require the Agency plan' },
+      {
+        error:
+          'Sending as your own domain starts on the Pro plan. Until then this ' +
+          'site sends on a shared Aglyn address, which carries receipts and ' +
+          'account email but not campaigns.',
+      },
       { status: 403 },
     )
   }

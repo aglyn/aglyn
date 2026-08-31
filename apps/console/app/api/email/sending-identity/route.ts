@@ -173,9 +173,11 @@ async function handler(request: Request): Promise<Response> {
         membership?.member,
         'org.settings',
       ).catch(() => false)))
-  // Same entitlement as the domains route: sending as your own domain IS
-  // white-labeling the mail.
-  const entitled = Boolean(org) && checkEntitlement(org as never, 'whiteLabel')
+  // Same entitlement as the domains route, and for the same reason: this is
+  // the per-site half of one capability, so a site could otherwise be offered
+  // a selection the org may not claim a domain to fill.
+  const entitled =
+    Boolean(org) && checkEntitlement(org as never, 'customSendingDomain')
 
   const selectedDomain = normalizeSendingDomain(
     String(hostSnapshot.get('sendingDomain') ?? ''),
@@ -359,12 +361,16 @@ async function handler(request: Request): Promise<Response> {
    * un-entitled site's mail stop, which is worse than the shared-domain
    * behavior this replaced.
    *
-   * Sending as a domain the CUSTOMER owns is still white-labeling the mail,
-   * and still Agency.
+   * Sending as a domain the CUSTOMER owns is the paid capability, and it
+   * starts at Pro.
    */
   if (!entitled) {
     return Response.json(
-      { error: 'Custom sending domains require the Agency plan' },
+      {
+        error:
+          'Sending as your own domain starts on the Pro plan. This site keeps ' +
+          'sending on the address Aglyn issues it either way.',
+      },
       { status: 403 },
     )
   }

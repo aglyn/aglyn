@@ -231,7 +231,12 @@ describe('what a reader may do is what the server says they may do', () => {
 
     await mount()
 
-    expect(screen.getByText(/part of the Agency plan/i)).toBeTruthy()
+    expect(screen.getByText(/starts on the Pro plan/i)).toBeTruthy()
+    // And it says the site still sends. A plan gate on the custom domain is
+    // not a gate on the mail: the address Aglyn issues carries account email
+    // at every tier, and a card that only said "not on your plan" would read
+    // as an outage.
+    expect(screen.getByText(/sends without it/i)).toBeTruthy()
   })
 })
 

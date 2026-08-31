@@ -75,6 +75,30 @@ export interface OrgFeatureFlags {
   versioning?: boolean
   reusableComponents?: boolean
   customDomain?: boolean
+  /**
+   * Send mail as a domain the CUSTOMER owns — `hello@acme.com` — by publishing
+   * our SPF, DKIM and return-path records in their own zone.
+   *
+   * Distinct from `customDomain`, which is the site's public web address and
+   * authorizes nothing about mail; and distinct from `whiteLabel`, which
+   * replaces the Aglyn brand — product name, logo, colors, support URL,
+   * console chrome, favicon — across every branded surface. Sending as your
+   * own name is one narrow consequence of white-labeling rather than the
+   * whole of it, so the two cannot share a flag without the wider capability
+   * following the narrower one wherever it goes.
+   *
+   * It is also the CHEAP half of the sending model, which is why it sits low
+   * on the ladder. A customer-owned domain costs the platform one provider
+   * domain object and NOTHING in our own DNS zone, because the customer
+   * publishes the records; the platform subdomain a site is issued costs a
+   * provider slot, three records in our zone and a permanent place in the
+   * re-verification sweep. Holding the free-to-us option behind the highest
+   * paywall makes the expensive one the default at every tier that can send.
+   *
+   * Read through `checkEntitlement` at the two routes that write a sending
+   * identity: the org's domain list, and the per-site selection.
+   */
+  customSendingDomain?: boolean
   removeBranding?: boolean
   /** Schedule a version to publish at a date/time (tier above versioning). */
   scheduledPublishing?: boolean

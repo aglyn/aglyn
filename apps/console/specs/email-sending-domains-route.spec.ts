@@ -34,14 +34,22 @@
 
 const state: {
   role: string
-  entitled: boolean
+  /**
+   * The org's PLAN, not a pre-answered entitlement.
+   *
+   * `checkEntitlement` is deliberately left unmocked below, so the gate this
+   * route applies is resolved from the real plan table. A mock returning a
+   * boolean would have proved only that the route reads something — it would
+   * pass identically whether the gate named `customSendingDomain`,
+   * `whiteLabel` or a flag that does not exist.
+   */
+  plan: string
   domains: Record<string, Record<string, unknown>>
   verifyResult: Record<string, unknown>
-} = { role: 'admin', entitled: true, domains: {}, verifyResult: {} }
+} = { role: 'admin', plan: 'pro', domains: {}, verifyResult: {} }
 
 jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('@aglyn/aglyn/server'),
-  checkEntitlement: () => state.entitled,
   pluginRequestFromWeb: async (request: Request) => {
     const url = new URL(request.url)
     const query = Object.fromEntries(url.searchParams.entries())
@@ -66,7 +74,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
           doc: () => ({
             get: async () => ({
               exists: true,
-              data: () => ({ plan: 'agency' }),
+              data: () => ({ plan: state.plan }),
               get: (field: string) =>
                 name === 'orgs' && field === 'role' ? undefined : state.role,
             }),
@@ -125,7 +133,7 @@ const get = (queryString: string) =>
 
 beforeEach(() => {
   state.role = 'admin'
-  state.entitled = true
+  state.plan = 'pro'
   state.domains = {}
   state.verifyResult = {}
 })
@@ -245,13 +253,37 @@ describe('access', () => {
     expect((await response.json()).error).toMatch(/organization admin/i)
   })
 
-  it('refuses an org without the entitlement', async () => {
-    state.entitled = false
+  /**
+   * THE LADDER, READ FROM BEHAVIOR.
+   *
+   * A custom sending domain is the half of the sending model that costs this
+   * platform nothing in its own zone — the customer publishes the records —
+   * so it sits at the tier campaign email starts at rather than at the top of
+   * the price list. Both sides run the real `checkEntitlement` against the
+   * real plan table, so a gate moved to another flag fails one of them.
+   */
+  it.each(['pro', 'business', 'agency', 'enterprise'])(
+    'lets a %s org add a domain of its own',
+    async (plan) => {
+      state.plan = plan
+
+      const response = await post({ orgId: 'org-1', domain: 'acme.com' })
+
+      expect(response.status).toBe(201)
+    },
+  )
+
+  it.each(['free', 'starter'])('refuses a %s org, and names the tier', async (plan) => {
+    state.plan = plan
 
     const response = await post({ orgId: 'org-1', domain: 'acme.com' })
+    const { error } = await response.json()
 
     expect(response.status).toBe(403)
-    expect((await response.json()).error).toMatch(/Agency plan/i)
+    expect(error).toMatch(/Pro plan/i)
+    // And it says what happens meanwhile, because a refusal whose only content
+    // is "not on your plan" reads as "your mail is off".
+    expect(error).toMatch(/shared Aglyn address/i)
   })
 
   it('refuses an unauthenticated caller', async () => {

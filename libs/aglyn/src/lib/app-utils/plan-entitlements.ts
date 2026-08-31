@@ -313,6 +313,11 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       versioning: false,
       reusableComponents: false,
       customDomain: false,
+      // Sending as a domain the customer owns starts at Pro, with campaign
+      // email. Free sends no marketing at all — `emailSendsPerMonth` is 0 —
+      // and its transactional mail leaves on the shared pool, which needs no
+      // DNS from anybody.
+      customSendingDomain: false,
       removeBranding: false,
       scheduledPublishing: false,
       marketplaceSelling: false,
@@ -420,6 +425,11 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       versioning: false,
       reusableComponents: true,
       customDomain: true,
+      // Starter's allowance is 0 campaign sends, so a verified domain of the
+      // customer's own would carry receipts and nothing else — the one class
+      // of mail the shared pool already delivers with no DNS work at all. The
+      // capability arrives with the sends that need it.
+      customSendingDomain: false,
       removeBranding: true,
       scheduledPublishing: false,
       marketplaceSelling: false,
@@ -505,6 +515,17 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       versioning: true,
       reusableComponents: true,
       customDomain: true,
+      // The tier campaign email starts at, and therefore the tier a domain
+      // whose reputation belongs to the merchant starts at: marketing may not
+      // leave on the shared pool, because one merchant's complaint rate would
+      // be charged against every other site's password resets.
+      //
+      // It costs the platform nothing in our own zone — the customer
+      // publishes the records — which is what keeps the platform's domain
+      // count flat as the customer base grows. The platform subdomain a site
+      // is issued is the expensive half and stays an optimization on top of
+      // the pool.
+      customSendingDomain: true,
       removeBranding: true,
       scheduledPublishing: false,
       marketplaceSelling: true,
@@ -577,6 +598,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       versioning: true,
       reusableComponents: true,
       customDomain: true,
+      customSendingDomain: true,
       removeBranding: true,
       scheduledPublishing: true,
       marketplaceSelling: true,
@@ -652,6 +674,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       versioning: true,
       reusableComponents: true,
       customDomain: true,
+      customSendingDomain: true,
       removeBranding: true,
       scheduledPublishing: true,
       marketplaceSelling: true,
@@ -726,6 +749,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       versioning: true,
       reusableComponents: true,
       customDomain: true,
+      customSendingDomain: true,
       removeBranding: true,
       scheduledPublishing: true,
       marketplaceSelling: true,
@@ -814,6 +838,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       versioning: true,
       reusableComponents: true,
       customDomain: true,
+      customSendingDomain: true,
       removeBranding: true,
       scheduledPublishing: true,
       marketplaceSelling: true,
@@ -900,6 +925,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       versioning: true,
       reusableComponents: true,
       customDomain: true,
+      customSendingDomain: true,
       removeBranding: true,
       scheduledPublishing: true,
       marketplaceSelling: true,
