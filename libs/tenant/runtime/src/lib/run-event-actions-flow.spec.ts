@@ -491,6 +491,9 @@ describe('an email sent from a flow is still marketing mail', () => {
         hostId: HOST_ID,
         email: 'a@b.co',
         topicId: 'promotions',
+        // A step after a wait goes out on the merchant's schedule, so it
+        // answers the same question a campaign does.
+        scope: 'scheduled',
       }),
     ])
   })
@@ -542,21 +545,39 @@ describe('an email sent from a flow is still marketing mail', () => {
     expect(mockActivity.at(-1)?.action).toContain('unsubscribed or suppressed')
   })
 
-  it('does NOT apply the consent gate to an immediate reply', async () => {
+  it('asks the IMMEDIATE scope for a reply, not the scheduled one', async () => {
     /*
-     * The line this draws, deliberately. An auto-response to the form the
-     * visitor just submitted is a reply to their own act, which is exactly
-     * what `marketing-send.ts` says marketing is NOT. Gating it on a consent
-     * basis would break every auto-responder on the platform.
+     * The line this draws. An auto-response to the form the visitor just
+     * submitted is a reply to their own act, which is exactly what
+     * `marketing-send.ts` says marketing is NOT — so it must not be held to
+     * the org's full consent policy, whose default mode withholds every
+     * address with no record and would therefore refuse every new visitor.
+     *
+     * But it is not ungated either: the address comes out of the payload, so
+     * a stated refusal has to stop it. Which of those two questions gets
+     * asked is the whole assertion, and `email-flow-gate.spec.ts` owns what
+     * each one answers.
      */
+    seedAction([{ type: 'sendEmail', subject: 'Thanks', body: 'a' }])
+
+    await runEventActions(HOST_ID, 'formSubmission', { email: 'a@b.co' })
+
+    expect(flowGateCalls).toEqual([
+      expect.objectContaining({ email: 'a@b.co', scope: 'immediate' }),
+    ])
+    expect(sent).toHaveLength(1)
+    // Still transactional: an action run is not resumable.
+    expect(sent[0].priority).toBeUndefined()
+  })
+
+  it('does not send an immediate reply to somebody who declined', async () => {
     seedAction([{ type: 'sendEmail', subject: 'Thanks', body: 'a' }])
     flowGateRefusal = 'consent-withheld'
 
     await runEventActions(HOST_ID, 'formSubmission', { email: 'a@b.co' })
 
-    expect(flowGateCalls).toEqual([])
-    expect(sent).toHaveLength(1)
-    expect(sent[0].priority).toBeUndefined()
+    expect(sent).toEqual([])
+    expect(mockActivity.at(-1)?.action).toContain('declined marketing')
   })
 })
 

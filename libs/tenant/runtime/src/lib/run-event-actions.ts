@@ -577,31 +577,44 @@ async function executeAction(
          * the message is the response to it. None of that survives a three-day
          * delay. Everything after a wait goes out on the merchant's schedule,
          * to somebody who did one thing once — which is `marketing-send.ts`'s
-         * own definition of marketing mail, and it earns the two gates a
-         * campaign passes and an immediate reply does not: the consent split
-         * and the topic filter.
+         * own definition of marketing mail, and it earns the full consent
+         * split and the default stream, exactly as a campaign does.
+         *
+         * An immediate step is not ungated, which it used to be. `to` is read
+         * out of the event payload — an anonymous visitor's write on the
+         * collect route — so nothing here establishes that whoever typed the
+         * address is whoever receives the mail, and a person with a RECORDED
+         * REFUSAL on this site was mailed merchant-authored content because a
+         * third party entered their address in a form. `'immediate'` asks the
+         * narrower question that catches exactly that and cannot refuse a
+         * new visitor their auto-response: see `FlowEmailScope`.
          *
          * Refused BEFORE `sendEmail` rather than inside it, because these two
          * are the merchant's own policy over their own audience, where the
-         * three the seam asks are platform controls over the shared sending
+         * ones the seam asks are platform controls over the shared sending
          * domain. Both refusals are permanent for this message, so the
          * enrollment moves on rather than retrying.
          */
-        if (enrollmentRef) {
-          const gate = await flowEmailRefusal({
-            hostId,
-            email: to,
-            topicId: step.topicId ?? null,
-            org: env.org,
-          })
-          if (gate) {
-            stepErrors.push(
-              gate === 'consent-withheld'
+        const gate = await flowEmailRefusal({
+          hostId,
+          email: to,
+          topicId: step.topicId ?? null,
+          org: env.org,
+          scope: enrollmentRef ? 'scheduled' : 'immediate',
+        })
+        if (gate) {
+          stepErrors.push(
+            gate !== 'consent-withheld'
+              ? 'the recipient has left this email topic'
+              : // Named by what was actually asked. An immediate step refuses
+                // only on a stated refusal, so reporting it as a missing
+                // record would send a merchant looking for a consent field to
+                // fill in that would change nothing.
+                enrollmentRef
                 ? 'the recipient has no marketing consent record on this site'
-                : 'the recipient has left this email topic',
-            )
-            continue
-          }
+                : 'the recipient has declined marketing from this site',
+          )
+          continue
         }
         const result = await sendEmail({
           to,

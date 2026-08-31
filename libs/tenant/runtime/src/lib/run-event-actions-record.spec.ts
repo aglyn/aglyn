@@ -104,6 +104,15 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     summary: 'Sending as hello@site.mail.aglyn.app.',
     refusal: null,
   }),
+  /*
+   * The consent + topic gate, permissive. This file is about what a run
+   * RECORDS, and every `sendEmail` step now asks this one — an immediate step
+   * in the narrow `'immediate'` scope, a resumed one in full. A refusing stub
+   * here would turn each assertion about a recorded step into an assertion
+   * that the step was refused. `email-flow-gate.spec.ts` owns the rule and
+   * `run-event-actions-flow.spec.ts` owns which scope each path asks for.
+   */
+  flowEmailRefusal: async () => null,
   __esModule: true,
   firebaseAdmin: {
     app: () => ({
