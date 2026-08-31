@@ -38,6 +38,10 @@ const pages = new Map<string, { rows: any[]; hasMore: boolean }>()
 const built: string[] = []
 /** What each `getCountFromServer` answers, keyed by the counted path. */
 const counts = new Map<string, number>()
+/** Counted paths whose read is refused rather than answered. */
+const countRefusals = new Set<string>()
+/** Every path an aggregate was asked for — the read-cost meter. */
+const countCalls: string[] = []
 /** Docs each one-shot `getDocs` answers, keyed by the query description. */
 const fetched = new Map<string, { id: string; data: any }[]>()
 
@@ -69,7 +73,16 @@ jest.mock('firebase/firestore', () => ({
    */
   getCountFromServer: async (target: any) => {
     const key = describeQuery([target.__path, ...(target.__clauses ?? [])])
+    countCalls.push(key)
     await new Promise((resolve) => setTimeout(resolve, 0))
+    /*
+     * A REFUSED read, which is the case the withholding branch exists for.
+     * Answering 0 is a successful read of an empty collection and a different
+     * fact entirely — staging only that leaves the branch untested.
+     */
+    if (countRefusals.has(key)) {
+      throw Object.assign(new Error('denied'), { code: 'permission-denied' })
+    }
     return { data: () => ({ count: counts.get(key) ?? 0 }) }
   },
   getDocs: async (target: any) => {
@@ -198,6 +211,8 @@ beforeEach(() => {
   pages.clear()
   built.length = 0
   counts.clear()
+  countRefusals.clear()
+  countCalls.length = 0
   fetched.clear()
 })
 
@@ -246,15 +261,45 @@ describe('what is NOT credited', () => {
    *=========================================*/
   it('withholds the split rather than defaulting the total', async () => {
     counts.set(describeQuery([ATTRIBUTIONS, 'kind==form']), 12)
-    // No total recorded, so `getCountFromServer` answers 0 for the
-    // submissions collection and the coverage is computed from a real zero —
-    // the honest case is the FAILED read, staged by rejecting instead.
+    // The submissions count is REFUSED, not answered zero. Those are
+    // different facts and only one of them is the case this branch is for.
+    countRefusals.add('hosts/site1/formSubmissions')
+    await renderCard()
+    await settled()
+
+    // No figures at all, and the page says the split is missing rather than
+    // showing twelve credited out of twelve — which is what defaulting the
+    // total to the attributed count would render, and is the single most
+    // flattering wrong answer available here.
+    expect(screen.queryByText('Credited to a campaign')).toBeNull()
+    expect(screen.queryByText('Not credited')).toBeNull()
+    expect(
+      screen.getByText(/could not be counted, so it is not shown/i),
+    ).toBeTruthy()
+    expect(
+      screen.getByText(/not a count of everything that happened/i),
+    ).toBeTruthy()
+  })
+
+  /**
+   * A zero total is a successful read of an empty collection, so the split IS
+   * shown — twelve credited against nothing clamps to zero uncredited rather
+   * than withholding. The pair of tests is what keeps "refused" and "zero"
+   * from collapsing into one branch.
+   */
+  it('shows the split when the total really is zero', async () => {
+    counts.set(describeQuery([ATTRIBUTIONS, 'kind==form']), 12)
     await renderCard()
     await settled()
     expect(screen.getByText('Credited to a campaign')).toBeTruthy()
-    // Twelve credited against a total of zero clamps to zero uncredited, and
-    // never to a figure that implies everything was credited.
-    expect(screen.queryByText('12 of 12')).toBeNull()
+    expect(screen.getByText('Not credited')).toBeTruthy()
+    /*
+     * And the credited figure is not ECHOED as the total. Substituting the
+     * attributed count for a total the read did not produce renders every
+     * conversion as attributed, and it does so silently — the only thing on
+     * screen that gives it away is the same number appearing twice.
+     */
+    expect(screen.getAllByText('12')).toHaveLength(1)
   })
 })
 
@@ -376,6 +421,27 @@ describe('the campaign-scoped view', () => {
     ).toBeTruthy()
     expect(screen.queryByText('Not credited')).toBeNull()
     expect(screen.queryByText('78')).toBeNull()
+    /*
+     * AND IT DOES NOT PAY FOR THEM EITHER. The figures are withheld by the
+     * render branch, so a view that still ran the two aggregates would look
+     * identical on screen while billing for a number nobody can see.
+     */
+    expect(countCalls).toEqual([])
+  })
+
+  /**
+   * The anti-vacuity reading for the assertion above: the site-wide view DOES
+   * ask for both counts, so "no aggregate was read" means the campaign-scoped
+   * branch declined to and not that the meter is dead.
+   */
+  it('CONTROL: the site-wide view does pay for both aggregates', async () => {
+    counts.set(describeQuery([ATTRIBUTIONS, 'kind==form']), 12)
+    counts.set('hosts/site1/formSubmissions', 90)
+    await renderCard()
+    await settled()
+    expect(countCalls).toContain(describeQuery([ATTRIBUTIONS, 'kind==form']))
+    expect(countCalls).toContain('hosts/site1/formSubmissions')
+    expect(countCalls).toHaveLength(2)
   })
 
   it('narrows the email list by campaign rather than by channel', async () => {

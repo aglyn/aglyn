@@ -446,9 +446,9 @@ export function campaignConversionsCoverage(options: {
  * link — there is nothing at the other end of it.
  *
  * The `utm_` triple is joined in the order a marketer set it, with the parts
- * that are absent left out rather than filled with a placeholder: `google /
- * cpc` and `google / cpc / (none)` describe the same link, and only one of
- * them invites the reader to look for a campaign called "(none)".
+ * that are absent left out rather than filled with a placeholder.
+ * `google / cpc` and `google / cpc / (none)` describe the same link, and only
+ * one of them invites the reader to look for a campaign called "(none)".
  */
 export function campaignTouchLabel(
   record: CampaignConversionRecord | null | undefined,

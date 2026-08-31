@@ -384,7 +384,6 @@ export function CampaignConversionsCard(props: CampaignConversionsCardProps) {
       const paths = new Map<string, string>()
       for (let index = 0; index < refIds.length; index += ID_CHUNK) {
         const chunk = refIds.slice(index, index + ID_CHUNK)
-        // eslint-disable-next-line no-await-in-loop
         const found = await getDocs(
           query(submissions, where(documentId(), 'in', chunk)),
         )
