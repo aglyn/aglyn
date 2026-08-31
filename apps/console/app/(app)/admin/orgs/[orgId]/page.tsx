@@ -92,6 +92,7 @@ import {
   staffBillingCustomerChipLabel,
   staffBillingHistoryEmptyState,
 } from '../../../../../utils/stripe-mode-notice'
+import { useDeclareDocumentSubject } from '../../../../../components/document-subject'
 import { useIsStaff } from '../../../../../hooks/use-is-staff'
 import useFirestoreCollection from '../../../../../hooks/use-firestore-collection'
 
@@ -209,6 +210,16 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     () => (orgDoc ? { ...orgDoc, ...(orgBilling ?? {}) } : orgDoc),
     [orgDoc, orgBilling],
   )
+  /*
+   * The tab, upgraded from the id to the org's name (AGL-2486).
+   *
+   * `generateMetadata` runs on the server, where the only thing known about
+   * the org is the id in the URL, so it titles the tab `{orgId} · Staff
+   * organization` — right for the first paint and useless once four of them
+   * are open. The swap happens here because this is where the document
+   * arrives, and it costs no read the page was not already making.
+   */
+  useDeclareDocumentSubject(orgId, org?.name ?? undefined)
   // Off the client (AGL-929). This was a LIST over `hosts`, whose rule is
   // evaluated PER DOCUMENT (`isStaff() || memberRoles[uid] != null`). When a
   // document drops out of a query target — a rule re-evaluating, or an App
@@ -1000,8 +1011,13 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
         { children: 'Organizations', href: buildRoute(Route.ADMIN_ORGS) },
         { children: org?.name ?? orgId },
       ]}
+      // The ORG, the way every other detail page in the console names its
+      // record. `Organization Detail` is the page's category, which the
+      // breadcrumb above already says, and it reads the same on every org an
+      // operator has open — which is the one thing a heading has to
+      // distinguish. The id stands in until the document lands.
       header={{
-        children: 'Organization Detail',
+        children: org?.name ?? orgId,
         icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
       }}
       help={{ topic: 'staffConsole', anchor: '#entitlement-editor' }}

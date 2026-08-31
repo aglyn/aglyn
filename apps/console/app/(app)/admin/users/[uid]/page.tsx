@@ -528,10 +528,9 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
     <DashboardLayout
       breadcrumbItems={[
         { children: 'Users', href: buildRoute(Route.ADMIN_USERS) },
-        {
-          children: accountLabel ?? 'User',
-          href: '#',
-        },
+        // No href: this is the page the reader is standing on, and `#` is a
+        // link that scrolls them to the top for their trouble.
+        { children: accountLabel ?? 'User' },
       ]}
       header={{
         children: accountLabel ?? 'User',

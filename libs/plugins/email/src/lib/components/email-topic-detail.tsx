@@ -17,6 +17,7 @@
 'use client'
 
 import {
+  PageHeaderRecord,
   pluginDocsHelp,
   resolveCampaignTopic,
   DEFAULT_EMAIL_TOPICS,
@@ -198,9 +199,11 @@ export function EmailTopicDetail(props: EmailTopicDetailProps) {
     await save({ archived: true })
   }, [topic, confirm, save])
 
-  return (
+  /* The card, named so the page chrome above it is a plain list of
+     what this surface publishes upward. */
+  const card = (
     <CardDisplay
-      header={topic.name || 'Topic'}
+      header={'Topic'}
       subheader={
         <Stack direction="row" spacing={1} sx={{ mt: 1, alignItems: 'center' }}>
           {topic.archived ? (
@@ -312,6 +315,15 @@ export function EmailTopicDetail(props: EmailTopicDetailProps) {
         )}
       </Stack>
     </CardDisplay>
+  )
+
+  return (
+    <>
+      {/* The page heading and the trail name the topic; this card is
+          then free to say what it holds rather than repeating the title. */}
+      <PageHeaderRecord title={topic.name || topic.id} />
+      {card}
+    </>
   )
 }
 

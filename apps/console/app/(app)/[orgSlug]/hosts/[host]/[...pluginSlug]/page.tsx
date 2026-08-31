@@ -322,6 +322,19 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
     resolved?.extension.upgradeNotice,
   )
   const activeSection = resolved?.section
+  /**
+   * How deep beneath the surface's own href this URL goes.
+   *
+   * `0` on the surface itself, `1` on one of its sections OR on a record of
+   * a surface that owns its subtree, more than that on a record inside a
+   * section. It is what tells a crumb whether anything stands below it, and
+   * therefore whether it should be a link: the level the reader is ON is a
+   * label, and every level above it is a way back.
+   */
+  const depthBelowSurface = resolved?.segments?.length ?? 0
+  /** The active section's own address, for the crumb when a record is open. */
+  const activeSectionPath =
+    activeSection && basePath ? `${basePath}/${activeSection.id}` : undefined
 
   const body = sectionRedirect ? (
     // Deliberately NOT the plugin page. Mounting it here would download its
@@ -446,16 +459,32 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
           children: <HostDisplayNameComponent hostId={hostId} />,
           href: buildRoute(Route.HOST_DASHBOARD, { orgSlug, host }),
         },
-        // The surface, linked once a section is open beneath it, so the trail
+        // The surface, linked once anything is open beneath it, so the trail
         // walks back rather than dead-ending on the level the reader is on.
+        // A section is not the only thing that can be beneath it: a surface
+        // that owns its subtree puts a RECORD there, and the list is the one
+        // place that reader most wants to get back to.
         {
           children: title,
-          ...(activeSection && basePath ? { href: basePath } : {}),
+          ...(depthBelowSurface > 0 && basePath ? { href: basePath } : {}),
         },
         // The section the reader is actually on (AGL-2501), following the hubs
         // that already migrated: without it the trail names every level except
-        // theirs — the one that says where they are.
-        ...(activeSection ? [{ children: activeSection.label }] : []),
+        // theirs — the one that says where they are. Linked in turn once a
+        // record is open inside it, by the same rule the surface follows.
+        ...(activeSection
+          ? [
+              {
+                children: activeSection.label,
+                ...(depthBelowSurface > 1 && activeSectionPath
+                  ? { href: activeSectionPath }
+                  : {}),
+              },
+            ]
+          : []),
+        // The RECORD itself is not built here: only the surface knows it has
+        // one, and only after it has read the document. It publishes through
+        // `PageHeaderRecord` and the layout appends it after this trail.
       ]}
       // The surface's own docs page, not the marketplace's (AGL-1074). One
       // route renders every plugin page, so a hardcoded topic here told

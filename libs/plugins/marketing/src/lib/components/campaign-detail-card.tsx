@@ -39,7 +39,7 @@ import RowActionsMenu, {
 } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { ceilingedWindow } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
-import { pluginDocsHelp } from '@aglyn/aglyn'
+import { PageHeaderRecord, pluginDocsHelp } from '@aglyn/aglyn'
 import {
   Alert,
   Box,
@@ -529,9 +529,11 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
     ? new Date(campaign.endAtMs).toLocaleDateString()
     : ''
 
-  return (
+  /* The card, named so the page chrome above it is a plain list of
+     what this surface publishes upward. */
+  const card = (
     <CardDisplay
-      header={campaign.name || 'Campaign'}
+      header={'Campaign'}
       subheader={
         start || end
           ? `${start || 'Open'} – ${end || 'open-ended'}`
@@ -896,6 +898,15 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
         onSubmit={(values) => void handleSave(values)}
       />
     </CardDisplay>
+  )
+
+  return (
+    <>
+      {/* The page heading and the trail name the campaign; this card is
+          then free to say what it holds rather than repeating the title. */}
+      <PageHeaderRecord title={campaign.name || campaignId} />
+      {card}
+    </>
   )
 }
 CampaignDetailCard.displayName = 'CampaignDetailCard'

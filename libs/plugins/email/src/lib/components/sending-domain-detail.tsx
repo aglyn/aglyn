@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { pluginDocsHelp } from '@aglyn/aglyn'
+import { PageHeaderRecord, pluginDocsHelp } from '@aglyn/aglyn'
 import { mdiDeleteOutline, mdiEmailCheckOutline } from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import RowActionsMenu, {
@@ -341,9 +341,11 @@ export function SendingDomainDetail(props: SendingDomainDetailProps) {
       ]
     : []
 
-  return (
+  /* The card, named so the page chrome above it is a plain list of
+     what this surface publishes upward. */
+  const card = (
     <CardDisplay
-      header={domain}
+      header={'Sending domain'}
       help={pluginDocsHelp('emailCampaigns', {
         anchor: '#sending-domains',
       })}
@@ -486,6 +488,15 @@ export function SendingDomainDetail(props: SendingDomainDetailProps) {
         </Stack>
       )}
     </CardDisplay>
+  )
+
+  return (
+    <>
+      {/* The page heading and the trail name the domain; this card is
+          then free to say what it holds rather than repeating the title. */}
+      <PageHeaderRecord title={domain} />
+      {card}
+    </>
   )
 }
 SendingDomainDetail.displayName = 'SendingDomainDetail'

@@ -16,7 +16,12 @@
  */
 'use client'
 
-import { buildRoute, pluginDocsHelp, Route } from '@aglyn/aglyn'
+import {
+  buildRoute,
+  PageHeaderRecord,
+  pluginDocsHelp,
+  Route,
+} from '@aglyn/aglyn'
 import { ICON_VARIANT_BESIGNER } from '@aglyn/shared-data-enums'
 import { mdiBullhornOutline, mdiEyeOutline } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
@@ -318,9 +323,12 @@ export function EmailTemplateDetail(props: EmailTemplateDetailProps) {
    * The same pair the screen, component, template and layout detail pages
    * carry — a link to the listing and a contained button into the besigner
    * wearing the besigner icon. It hangs off `CardDisplay`'s header rather
-   * than the dashboard hero because this page is contributed by a plugin: the
-   * console shell owns the hero, and a `scope:lib` plugin may not reach into
-   * a `scope:app` layout to put a button in it.
+   * than the page header because Emails is a surface with a SECTION RAIL: an
+   * action beside the page title would read as the whole surface's, and this
+   * one belongs to the template the section is showing. The rule is the
+   * console's own — page header where there are no sections, section card
+   * header where there are — and it is why the Forms detail surface, which
+   * has no rail, publishes its besigner button upward instead.
    */
   const headerActions = (
     <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
@@ -388,9 +396,13 @@ export function EmailTemplateDetail(props: EmailTemplateDetailProps) {
 
   return (
     <Stack spacing={3}>
+      {/* The page heading and the trail name the template; this card is
+          then free to say what it holds rather than repeating the title. */}
+      <PageHeaderRecord
+        title={screen ? screen.displayName || screenId : undefined}
+      />
       <CardDisplay
-        header={screen?.displayName ?? 'Untitled template'}
-        subheader={'Email template'}
+        header={'Email template'}
         help={templateDocsHelp}
         contentGutterX
         contentGutterY
