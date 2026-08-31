@@ -371,7 +371,7 @@ async function run() {
     ? [await firestore.collection('hosts').doc(onlyHost).get()]
     : (await firestore.collection('hosts').select().get()).docs
 
-  let totals = { stamped: 0, unmatched: 0, alreadyStamped: 0, hosts: 0 }
+  const totals = { stamped: 0, unmatched: 0, alreadyStamped: 0, hosts: 0 }
 
   for (const hostDoc of hostDocs) {
     if (!hostDoc.exists) {

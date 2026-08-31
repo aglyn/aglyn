@@ -708,7 +708,7 @@ export const formSchema: Aglyn.ComponentSchema<FormProps> = {
   description:
     'Collects its Form Fields and sends the answers to you, or into a dataset.',
   category: Aglyn.ComponentCategory.FORMS,
-  icon: { path: mdiEmailFastOutline.path, sx: { color: '#0288d1' } },
+  icon: { path: mdiEmailFastOutline.path, sx: { color: 'info.main' } },
   attributes: [
     {
       name: 'formId',
@@ -817,7 +817,7 @@ export const formFieldSchema: Aglyn.ComponentSchema<FormFieldProps> = {
   description:
     'One input inside a form — text, select, radio, checkbox or rating.',
   category: Aglyn.ComponentCategory.FORMS,
-  icon: { path: mdiFormTextbox.path, sx: { color: '#0288d1' } },
+  icon: { path: mdiFormTextbox.path, sx: { color: 'info.main' } },
   flags: {
     selfClosing: Aglyn.FEATURE_FLAG.ENABLED,
   },
@@ -898,7 +898,7 @@ export const formPresets: Aglyn.PresetSchema[] = [
     pluginId: BUNDLE_ID,
     description: 'Name, email, and message with a send button',
     category: Aglyn.ComponentCategory.FORMS,
-    icon: { path: mdiEmailFastOutline.path, sx: { color: '#0288d1' } },
+    icon: { path: mdiEmailFastOutline.path, sx: { color: 'info.main' } },
     data: {
       $id: null,
       componentId: FORM_ID,
@@ -943,7 +943,7 @@ export const formPresets: Aglyn.PresetSchema[] = [
     pluginId: BUNDLE_ID,
     description: 'Single input inside a form',
     category: Aglyn.ComponentCategory.FORMS,
-    icon: { path: mdiFormTextbox.path, sx: { color: '#0288d1' } },
+    icon: { path: mdiFormTextbox.path, sx: { color: 'info.main' } },
     data: {
       $id: null,
       componentId: FORM_FIELD_ID,
@@ -971,7 +971,7 @@ export const formBlockPresets: Aglyn.PresetSchema[] = [
     pluginId: BUNDLE_ID,
     description: 'Heading with a name/email/message form',
     category: Aglyn.ComponentCategory.BLOCKS,
-    icon: { path: mdiEmailOutline.path, sx: { color: '#0288d1' } },
+    icon: { path: mdiEmailOutline.path, sx: { color: 'info.main' } },
     data: {
       $id: null,
       componentId: 'muiStack',

@@ -29,8 +29,8 @@
  * and the kill switch are what is on trial.
  */
 
-import { compress } from '../../../../../aglyn/src/lib/app-utils/compress'
-import { isPluginRevoked } from '../../../../../aglyn/src/lib/app-utils/plugin-manifest'
+import { compress } from '@aglyn/aglyn/app-utils/compress'
+import { isPluginRevoked } from '@aglyn/aglyn/app-utils/plugin-manifest'
 
 let mintedIds = 0
 

@@ -127,7 +127,7 @@ content on the marketing site and is written separately.
 - **console,tenant:** the subscription lifecycle reaches the workspace feed ([AGL-118](https://linear.app/aglyn/issue/AGL-118))
 - **tools:** fold one person's two accounts together, by sweeping for the uid ([AGL-2005](https://linear.app/aglyn/issue/AGL-2005), [AGL-2029](https://linear.app/aglyn/issue/AGL-2029))
 - **console:** the Stripe portal gains a staff door on the org page ([AGL-275](https://linear.app/aglyn/issue/AGL-275))
-- **tenant-data-admin,commerce,marketplace:** a payout that never landed leaves a record ([AGL-2513](https://linear.app/aglyn/issue/AGL-2513))
+- **tenant-data-admin,commerce,marketplace:** a payout that never landed leaves a record
 - **aglyn,console,commerce:** a plugin console page can be a hub of routes ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
 - **console,tenant,scripts:** creation is an event too, and a check that says so ([AGL-118](https://linear.app/aglyn/issue/AGL-118))
 - **console,docs:** a way to pay an overdue invoice, and a quote that explains its tax
@@ -310,9 +310,9 @@ content on the marketing site and is written separately.
 - **aglyn,cloud:** the sign-in screen is an admin decision ([AGL-553](https://linear.app/aglyn/issue/AGL-553), [AGL-1361](https://linear.app/aglyn/issue/AGL-1361))
 - **console:** the order row declares the two fields that decide its mode
 - **console:** capacity cannot be dropped out from under what is using it ([AGL-2439](https://linear.app/aglyn/issue/AGL-2439), [AGL-483](https://linear.app/aglyn/issue/AGL-483))
-- **commerce:** a rehearsal stops reporting itself into the merchant's analytics ([AGL-2521](https://linear.app/aglyn/issue/AGL-2521), [AGL-2040](https://linear.app/aglyn/issue/AGL-2040))
+- **commerce:** a rehearsal stops reporting itself into the merchant's analytics ([AGL-2040](https://linear.app/aglyn/issue/AGL-2040))
 - **console:** the bank challenge runs against the intent Stripe is holding ([AGL-1132](https://linear.app/aglyn/issue/AGL-1132))
-- **commerce,console,aglyn:** a smoke-test order stops counting as revenue ([AGL-2520](https://linear.app/aglyn/issue/AGL-2520))
+- **commerce,console,aglyn:** a smoke-test order stops counting as revenue
 - **redirects,events-calendar:** the redirect cap counts what the server counts ([AGL-693](https://linear.app/aglyn/issue/AGL-693), [AGL-1716](https://linear.app/aglyn/issue/AGL-1716))
 - **console:** a half-typed site setting survives changing tab ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
 - **tenant,logic,workflows,email,console:** the detector learns the shape a plugin list is actually written in ([AGL-693](https://linear.app/aglyn/issue/AGL-693), [AGL-185](https://linear.app/aglyn/issue/AGL-185))
@@ -321,26 +321,26 @@ content on the marketing site and is written separately.
 - **console:** the mode notice covers the org it was written for, and Plan fills its row
 - **console:** the downgrade warning measures what the plan includes ([AGL-483](https://linear.app/aglyn/issue/AGL-483))
 - **tenant:** a workflow step stops writing dataset rows nobody paid for ([AGL-2253](https://linear.app/aglyn/issue/AGL-2253))
-- **commerce:** the discounts hub reaches buy-now, and the product page can take a code ([AGL-2519](https://linear.app/aglyn/issue/AGL-2519), [AGL-96](https://linear.app/aglyn/issue/AGL-96))
+- **commerce:** the discounts hub reaches buy-now, and the product page can take a code ([AGL-96](https://linear.app/aglyn/issue/AGL-96))
 - **marketplace,console:** a facilitated sale records the state it was taxed in ([AGL-2137](https://linear.app/aglyn/issue/AGL-2137))
 - **console,tenant-data-admin:** mail history and erasure see every address ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
 - **console,tenant-data-admin:** a provider address joins the uniqueness index ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
-- **commerce:** a scoped discount stops discounting the whole catalog ([AGL-2517](https://linear.app/aglyn/issue/AGL-2517), [AGL-2518](https://linear.app/aglyn/issue/AGL-2518))
+- **commerce:** a scoped discount stops discounting the whole catalog
 - **console:** a marketplace moderation decision is retrievable by what it acted on
-- **commerce:** one dashboard stops showing two different revenues ([AGL-2516](https://linear.app/aglyn/issue/AGL-2516))
+- **commerce:** one dashboard stops showing two different revenues
 - **console:** an audit entry reaches the page of the person it is about
 - **console:** one opening of a message is one audited access
-- **console,commerce:** the ledger stops asserting money arrived ([AGL-2513](https://linear.app/aglyn/issue/AGL-2513))
+- **console,commerce:** the ledger stops asserting money arrived
 - **console:** the tax ID is asked for before the charge it changes
 - **console:** a mid-cycle plan change quotes its tax
-- **marketplace:** a publisher can take their bio down ([AGL-2512](https://linear.app/aglyn/issue/AGL-2512), [AGL-1009](https://linear.app/aglyn/issue/AGL-1009))
+- **marketplace:** a publisher can take their bio down ([AGL-1009](https://linear.app/aglyn/issue/AGL-1009))
 - **console:** an abandoned bank confirmation stops being invisible
-- **commerce:** a coupon can be given the expiry both checkouts already enforce ([AGL-2511](https://linear.app/aglyn/issue/AGL-2511))
+- **commerce:** a coupon can be given the expiry both checkouts already enforce
 - **console,docs:** the confirm quotes the proration too, not next month's invoice ([AGL-535](https://linear.app/aglyn/issue/AGL-535))
-- **commerce,marketplace,console:** a stranded merchant gets a door into Stripe ([AGL-2510](https://linear.app/aglyn/issue/AGL-2510))
-- **commerce:** a line refund gives back what the buyer paid, not the list price ([AGL-2509](https://linear.app/aglyn/issue/AGL-2509))
+- **commerce,marketplace,console:** a stranded merchant gets a door into Stripe
+- **commerce:** a line refund gives back what the buyer paid, not the list price
 - **console,scripts:** a site with one member has no mystery about who built it ([AGL-118](https://linear.app/aglyn/issue/AGL-118))
-- **commerce:** a free-shipping code stops charging for shipping ([AGL-2508](https://linear.app/aglyn/issue/AGL-2508))
+- **commerce:** a free-shipping code stops charging for shipping
 - **commerce:** an abandoned booking stops holding its dates forever
 - **aglyn,console:** an abandoned signup stops holding a paid plan and booking its MRR
 - **commerce:** a cancelled order stops counting as revenue at a glance
@@ -496,7 +496,7 @@ content on the marketing site and is written separately.
 - send readers to Admin for the surfaces that already live there
 - **console,tools:** the unmetered months are written off, and why not to chase them ([AGL-1280](https://linear.app/aglyn/issue/AGL-1280))
 - **console:** the Billing address card says which tax it sets ([AGL-1133](https://linear.app/aglyn/issue/AGL-1133))
-- **marketplace,console:** name the listing review state and pin the queue ([AGL-2514](https://linear.app/aglyn/issue/AGL-2514))
+- **marketplace,console:** name the listing review state and pin the queue
 - **releasing,scripts,tenant:** the owed rules deploy, the billing decision, and the field a feed cannot be read without ([AGL-118](https://linear.app/aglyn/issue/AGL-118), [AGL-693](https://linear.app/aglyn/issue/AGL-693))
 - **aglyn:** the dead-status note stops citing a bucket that no longer exists
 - put the stale-GA-settings marker where the paragraph still reads ([AGL-1597](https://linear.app/aglyn/issue/AGL-1597))
@@ -540,7 +540,7 @@ content on the marketing site and is written separately.
 - **console:** the create doubles carry the audit write and the refusal ([AGL-118](https://linear.app/aglyn/issue/AGL-118), [AGL-2265](https://linear.app/aglyn/issue/AGL-2265))
 - **console:** meter what each Host Setup section reads, before it becomes routes ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
 - **marketplace,console:** the sale's jurisdiction, and that nothing is backfilled ([AGL-2137](https://linear.app/aglyn/issue/AGL-2137))
-- **commerce:** the refund suite can reach line refunds, and stops eating its errors ([AGL-2515](https://linear.app/aglyn/issue/AGL-2515))
+- **commerce:** the refund suite can reach line refunds, and stops eating its errors
 - **console:** the crowding spec fills both access halves, so it can fail
 - **console:** the overview answers a spike instead of throwing on it ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
 - **tenant,console:** the console guard names its one ad mount instead of forbidding all of them

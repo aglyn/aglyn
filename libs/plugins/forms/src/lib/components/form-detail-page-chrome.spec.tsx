@@ -75,6 +75,10 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     subdomain: 'demo',
   }),
   useHostVersionApi: () => jest.fn().mockResolvedValue('v1'),
+  // The campaign picker the Details card renders. This spec is about the
+  // page's chrome, so the list is empty: an option here would put a control
+  // in the card that none of the assertions below are about.
+  useHostCampaigns: () => ({ options: [], truncated: false, ready: true }),
 }))
 
 jest.mock('@aglyn/shared-ui-jsx', () => ({
