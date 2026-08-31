@@ -216,7 +216,7 @@ Agency included 100 hosts, 20 TB of bandwidth and an unbounded form-submission b
 
 $1,299 still undercuts every comparable: Duda charges roughly $1,396–1,493/mo for 100 sites, BigCommerce Enterprise starts at $1,499, Shopify Plus at $2,300.
 
-**⛔ One surface still trails and it is the customer-facing one.** `/pricing` publishes $799 while checkout takes $1,299. A page quoting less than checkout is a price a customer can point at, so it is the more urgent direction of the two — and it is a besigner edit made by hand, not a generated artifact. `tools/marketing/pricing-copy/tables.json` already carries $1,299/$1,049; the page has not been republished from it. `docs/PRICING_SURFACES.md` lists every place a price change has to reach, and why this one is the surface that gets missed.
+Every customer-facing surface now carries $1,299: the `/pricing` body, and the page's SEO description, which is a separate hand-edited field that propagates into `<meta name="description">`, `og:description` and `twitter:description`. The description trailed the body for several hours — a page can read correctly while every search result and shared link still quotes the old price. `docs/PRICING_SURFACES.md` lists all nine places a price change has to reach, which of them nothing can check, and why one request against the live page is not enough to confirm a publish.
 
 ## 2026-08-31 — A custom sending domain starts at Pro, and the platform subdomain becomes best-effort
 

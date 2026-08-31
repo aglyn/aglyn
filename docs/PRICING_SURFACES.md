@@ -33,20 +33,12 @@ everything else can follow.
 | 6   | `tools/marketing/pricing-copy/tables.json`                           | The generated source the site is transcribed from | regenerate, do not hand-edit                                                  |
 | 7   | **`/pricing` on the marketing site**                                 | What a visitor reads                              | **by hand in the besigner** — see below                                       |
 | 8   | Figma pricing frames                                                 | The design of record                              | by hand; the reconciler reports the gap but cannot close it                   |
+| 9   | **`/pricing`'s SEO description**                                     | The price quoted in search results and link cards | **by hand in the besigner**, a separate field from the body — see below       |
 
 Plus the Drive source-of-truth doc (Pricing & Packaging → 00-Pricing-Source-of-Truth),
 which is the non-engineering record and is not checked by anything here.
 
 ## The two that get missed
-
-**#9 quotes the price in prose and nothing reads it.** `/pricing`'s description
-was "Simple plans from $0 to $799/mo …", which propagates into
-`<meta name="description">`, `og:description` and `twitter:description`. The
-body of the page was already correct and this was still advertising the old
-price in search results. It is a plain-text field on the screen's detail page,
-it is not generated, and no guard can see it.
-
-## The one that gets missed
 
 **#7 is not generated.** `tables.json` holding the new figure is not the page
 holding it. The marketing site is built by clicking in the besigner, so
@@ -61,6 +53,14 @@ the gap made visible. **When you republish the page, update those literals in
 the same commit** — otherwise the spec goes on describing a gap that no longer
 exists, and the next reader believes it.
 
+**#9 quotes the price in prose and nothing reads it.** `/pricing`'s
+description is a plain-text field on the screen's detail page, separate from
+the body, and it propagates into `<meta name="description">`,
+`og:description` and `twitter:description`. It is not generated and no guard
+can see it, so the body of the page can be entirely correct while search
+results and every shared link still advertise the old price. Fix it in the
+same pass as the body; it is a different field and it will not follow.
+
 ## Republishing is not saving
 
 A saved edit to an already-published version **never reaches the live page**.
@@ -73,7 +73,28 @@ re-reads the same cached document, forever. The symptom is a page whose
 **Unpublish, then publish.** The version's own `PUBLISH NOW` is disabled while
 it is live, which is why this is not obvious.
 
-## Checking
+## Checking the live page
+
+**One request cannot tell you whether a publish worked.** The tenant render is
+`revalidate = 600` with stale-while-revalidate, so the first request after the
+window has passed is served the OLD copy _and_ starts the regeneration behind
+it. Request, then request again: only the second answer describes what is
+published. Reading the first response as the verdict makes a publish that
+worked look like a publish that failed, and invites re-publishing something
+that was already correct.
+
+To read the published content without waiting on the cache at all, request the
+path with a query string it has never been asked with — that is a different
+cache key, so it renders fresh. Useful for deciding whether a difference is
+stale HTML or stale data, which are two different problems with two different
+fixes.
+
+`curl` cannot do either check against `aglyn.com`: bot protection answers it
+with a `429` and an `x-vercel-mitigated: challenge` header, and the challenge
+page contains enough digits to make a naive grep for a price report matches
+that are not there. Use a real browser.
+
+## Checking the code
 
 ```bash
 npm run check:pricing-drift     # code ↔ pin ↔ Stripe, every charged price
