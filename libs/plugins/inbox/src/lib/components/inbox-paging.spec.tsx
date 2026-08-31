@@ -52,6 +52,7 @@ import { act, fireEvent, render, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { InboxConsolePage } from './inbox-console-page'
+import { INBOX_CONSOLE_SECTIONS } from './inbox-console-sections'
 
 jest.setTimeout(30_000)
 
@@ -78,7 +79,7 @@ const submissionDocs = Array.from({ length: SUBMISSIONS }, (_, index) => ({
   createdAt: { seconds: (SUBMISSIONS - index) * 86_400 },
 }))
 
-/** The one adopted form, for the Submissions tab's filter. */
+/** The one adopted form, for the Submissions section's filter. */
 const formDocs = [{ $id: 'form-adopted', displayName: 'Contact' }]
 
 const memberDocs = Array.from({ length: MEMBERS }, (_, index) => ({
@@ -256,22 +257,12 @@ jest.mock('@aglyn/plugins-marketing/components/campaigns-card', () => ({
   __esModule: true,
   default: () => null,
 }))
-jest.mock(
-  '@aglyn/plugins-commerce/components/console/host-orders-card.component',
-  () => ({ __esModule: true, default: () => null }),
-)
 jest.mock('@aglyn/shared-ui-next', () => ({
-  // Every tab's content at once: the two tables under test live on different
-  // tabs and a real tab strip would hide one of them from the DOM.
-  HubTabs: ({ tabs }: { tabs: Array<{ id: string; content: ReactNode }> }) => (
-    <div>
-      {tabs.map((tab) => (
-        <div key={tab.id} data-tab={tab.id}>
-          {tab.content}
-        </div>
-      ))}
-    </div>
-  ),
+  // The rail's chrome, passed through (AGL-2501). The two tables under test
+  // are two SECTIONS now, so each describe mounts the one it is about — a
+  // stub cannot draw a section the URL does not name, because the page never
+  // builds it.
+  HubSections: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }))
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar: jest.fn() }),
@@ -297,14 +288,37 @@ beforeEach(() => {
   mockCeilingsAsked = []
 })
 
-const mountPage = async () => {
-  render(<InboxConsolePage hostId="host-1" entitled />)
+const BASE_PATH = '/acme/hosts/shop/inbox'
+
+/**
+ * The page as the shell mounts it, at the section the URL names (AGL-2501).
+ *
+ * The section is a REQUIRED argument rather than a defaulted one: each table
+ * below lives on a section of its own, and a mount that opened the wrong one
+ * would leave the assertions reading an empty document instead of failing.
+ */
+const mountPage = async (section: 'submissions' | 'contacts') => {
+  render(
+    <InboxConsolePage
+      hostId="host-1"
+      entitled
+      basePath={BASE_PATH}
+      sections={INBOX_CONSOLE_SECTIONS.map((item) => ({
+        id: item.id,
+        label: item.label,
+        href: `${BASE_PATH}/${item.id}`,
+        visible: true,
+      }))}
+      section={section}
+      segments={[section]}
+    />,
+  )
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0))
   })
 }
 
-/** The tables, in DOM order: submissions first, then contacts. */
+/** The tables on screen. One section is open, so there is exactly one. */
 const tables = () => Array.from(document.querySelectorAll('table'))
 const rowsOf = (table: Element) =>
   Array.from(table.querySelectorAll('tbody tr')).map((row) =>
@@ -332,7 +346,7 @@ describe('the submissions table walks the inbox (AGL-2501)', () => {
   })
 
   it('shows the newest page and reaches the rest by paging', async () => {
-    await mountPage()
+    await mountPage('submissions')
     const first = rowsOf(tables()[0])
     expect(first).toHaveLength(TABLE_PAGE_SIZE_DEFAULT)
     expect(first[0][0]).toContain('sender00@example.test')
@@ -385,15 +399,14 @@ describe('the contacts table cannot be paged by the query (AGL-2501)', () => {
   })
 
   it('shows each person ONCE across every page', async () => {
-    await mountPage()
+    await mountPage('contacts')
     const seen: string[] = []
-    // The contacts table is the second one on the page.
     for (let guard = 0; guard < 20; guard += 1) {
-      for (const row of rowsOf(tables()[1])) seen.push(row[0])
-      const next = nextPageButtons()[1] as HTMLButtonElement
+      for (const row of rowsOf(tables()[0])) seen.push(row[0])
+      const next = nextPageButtons()[0] as HTMLButtonElement
       if (!next || next.disabled) break
       fireEvent.click(next)
-      await waitFor(() => expect(rowsOf(tables()[1]).length).toBeGreaterThan(0))
+      await waitFor(() => expect(rowsOf(tables()[0]).length).toBeGreaterThan(0))
     }
     const addresses = seen.map((cell) => cell.replace(/\s+/g, ''))
     expect(new Set(addresses).size).toBe(addresses.length)
@@ -403,23 +416,23 @@ describe('the contacts table cannot be paged by the query (AGL-2501)', () => {
   })
 
   it('a duplicated address renders as the MEMBER, on one page only', async () => {
-    await mountPage()
+    await mountPage('contacts')
     const shared = leadDocs[0].email
     const found: string[] = []
     for (let guard = 0; guard < 20; guard += 1) {
-      for (const row of rowsOf(tables()[1])) {
+      for (const row of rowsOf(tables()[0])) {
         if (row[0].replace(/\s+/g, '').startsWith(shared)) found.push(row[1])
       }
-      const next = nextPageButtons()[1] as HTMLButtonElement
+      const next = nextPageButtons()[0] as HTMLButtonElement
       if (!next || next.disabled) break
       fireEvent.click(next)
-      await waitFor(() => expect(rowsOf(tables()[1]).length).toBeGreaterThan(0))
+      await waitFor(() => expect(rowsOf(tables()[0]).length).toBeGreaterThan(0))
     }
     expect(found).toEqual(['Member'])
   })
 
   it('both contact reads PROBE past their ceiling', async () => {
-    await mountPage()
+    await mountPage('contacts')
     // A ceiling with no probe cannot tell a full list from a truncated one:
     // `length === ceiling` is wrong at exactly the count that equals it. Two
     // reads, both asking for one document more than they will render.
@@ -437,7 +450,7 @@ describe('the contacts table cannot be paged by the query (AGL-2501)', () => {
  * `formName`, so a filter that still read the caption could never return the
  * form's whole history and cannot pass these by accident.
  */
-describe('the submissions tab can narrow to one form', () => {
+describe('the submissions section can narrow to one form', () => {
   /** The submissions query the page built most recently. */
   const submissionsQuery = () =>
     [...mockPagedQueries].reverse().find((q) => q.name === 'formSubmissions')
@@ -448,7 +461,7 @@ describe('the submissions tab can narrow to one form', () => {
   })
 
   it('issues NO form clause until one is chosen', async () => {
-    await mountPage()
+    await mountPage('submissions')
     // The site-wide question — "who is waiting for a reply" — does not
     // decompose by form, so the default must stay the whole inbox.
     expect(submissionsQuery().filter((c: any) => 'where' in c)).toEqual([])
@@ -459,7 +472,7 @@ describe('the submissions tab can narrow to one form', () => {
     // read the clause the page then issued. A filter that renders but never
     // reaches the query would pass a rows-only assertion on page one, where
     // the unfiltered and filtered lists can happen to agree.
-    await mountPage()
+    await mountPage('submissions')
     const combobox = document.querySelector(
       '[role="combobox"]',
     ) as HTMLElement | null
@@ -549,7 +562,7 @@ describe('the form filter never presents a cut list as the whole list', () => {
 
   it('says so when the catalog is larger than the window', async () => {
     byCollection.forms = formsFixture(WINDOW + 12)
-    await mountPage()
+    await mountPage('submissions')
     expect(await optionLabels()).toHaveLength(WINDOW)
     // The disclosure, in the reader's own words rather than a class name.
     expect(document.body.textContent).toContain(`Showing the first ${WINDOW}`)
@@ -559,7 +572,7 @@ describe('the form filter never presents a cut list as the whole list', () => {
     // Without this row the assertion above is satisfied by a page that cries
     // truncation permanently, which is its own way of being wrong.
     byCollection.forms = formsFixture(WINDOW)
-    await mountPage()
+    await mountPage('submissions')
     expect(await optionLabels()).toHaveLength(WINDOW)
     expect(document.body.textContent).not.toContain('Showing the first')
   })
@@ -569,7 +582,7 @@ describe('the form filter never presents a cut list as the whole list', () => {
     // is 50" from "the catalog is 5,000". The probe is the mechanism the
     // disclosure above depends on, so it is pinned on the QUERY.
     byCollection.forms = formsFixture(WINDOW + 12)
-    await mountPage()
+    await mountPage('submissions')
     expect(mockCeilingsAsked).toContain(WINDOW + 1)
   })
 })

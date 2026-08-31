@@ -20,192 +20,74 @@ import {
   type ConsolePluginPageProps,
   formSpamCaughtNotice,
   formSubmissionsPausedNotice,
-  FORMS_MAX_PER_HOST,
-  normalizeContactEmail,
-  pluginDocsHelp,
   submissionMonthKey,
   visitorRecordRefusedCounterId,
   visitorRecordsPausedNotice,
 } from '@aglyn/aglyn'
-// Deep imports, NOT the plugin barrels (AGL-1151): those barrels are the entry
-// point the tenant's loader dynamically imports to activate each plugin's SITE
-// half, so a console card named there ships to every published page. The
-// component path reaches the same module without crossing that entry point.
+// A deep import, NOT the plugin barrel (AGL-1151): the barrel is the entry
+// point the tenant's loader dynamically imports to activate the marketing
+// plugin's SITE half, so a console card named there ships to every published
+// page. The component path reaches the same module without crossing it.
 import { default as HostCampaignsCard } from '@aglyn/plugins-marketing/components/campaigns-card'
-import { default as ConversionAttribution } from '@aglyn/plugins-marketing/components/conversion-attribution.component'
-import { mdiBullhornOutline } from '@aglyn/shared-data-mdi'
-import { CardDisplay, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
-import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
-import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
-import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
-import { HubTabs } from '@aglyn/shared-ui-next'
-import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import {
-  useFirestore,
-  useFirestoreCollection,
-  useFirestoreDoc,
-  usePagedCollection,
-} from '@aglyn/tenant-feature-instance'
-import {
-  Alert,
-  AlertTitle,
-  Avatar,
-  Box,
-  Button,
-  Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Divider,
-  MenuItem,
-  Stack,
-  Table,
-  TextField,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Tooltip,
-  Typography,
-} from '@mui/material'
-import {
-  collection,
-  deleteDoc,
-  doc,
-  limit,
-  orderBy,
-  query,
-  updateDoc,
-  where,
-} from 'firebase/firestore'
-import {
-  relativeTime,
-  routingChips,
-  senderHue,
-  submissionSender,
-} from '../model/submission-presenter'
-import SubmissionReply from './submission-reply.component'
-import SubmissionListAssignment from './submission-list-assignment.component'
-import { useCallback, useMemo, useState } from 'react'
+import { HubSections } from '@aglyn/shared-ui-next'
+import { useFirestore, useFirestoreDoc } from '@aglyn/tenant-feature-instance'
+import { Alert, AlertTitle, Typography } from '@mui/material'
+import { doc } from 'firebase/firestore'
+import type { ReactNode } from 'react'
+import ContactsCard from './contacts-card.component'
+import type { InboxConsoleSectionId } from './inbox-console-sections'
+import SubmissionsCard from './submissions-card.component'
 
 /**
- * How many members and how many leads the contacts table reads.
+ * The body of one inbox section, built only when that section is the one being
+ * read (AGL-2501).
  *
- * A ceiling rather than a page size — see the two queries, which explain why
- * this one table cannot be paged by the server without breaking the dedupe
- * between them.
+ * A function rather than a map of nodes on purpose: a `Record<id, ReactNode>`
+ * would CONSTRUCT all three every render, and each card opens its Firestore
+ * listens on mount — which is the entire cost this page exists to stop paying.
+ * Only the returned branch is ever built.
  */
-const CONTACT_CEILING = 200
+function sectionBody(
+  section: InboxConsoleSectionId,
+  hostId: string,
+): ReactNode {
+  switch (section) {
+    case 'submissions':
+      return <SubmissionsCard hostId={hostId} />
+    case 'contacts':
+      return <ContactsCard hostId={hostId} />
+    case 'campaigns':
+      return <HostCampaignsCard hostId={hostId} />
+    default:
+      return null
+  }
+}
 
 /**
  * Inbox (AGL-77/104/109 → AGL-395): form submissions reader, site members +
- * leads, and campaigns — owned by the inbox plugin and rendered by the
- * shell's generic plugin route. Depends on the email plugin for the borrowed
- * Campaigns tab.
+ * leads, and campaigns — owned by the inbox plugin and rendered by the shell's
+ * generic plugin route. Depends on the marketing plugin for the borrowed
+ * Campaigns section.
  *
  * Orders are NOT here. A sale is not something that arrived in an inbox, and
- * the card was nested inside the members section rather than carrying a tab
- * of its own — so the rail listed three sections while the page drew a fourth
+ * the card was nested inside the members section rather than carrying a tab of
+ * its own — so the rail listed three sections while the page drew a fourth
  * subject. Commerce already owns it: `commerce-console-sections.ts` declares
  * an `orders` section that renders the same card.
+ *
+ * Sections are ROUTES (AGL-2501), following the hubs that migrated before it.
+ * Here it IS a read saving as well as an addressing one: this page carried
+ * `HubTabs lazy`, which mounts one panel but keeps every panel it has visited,
+ * so a reader who looked at Members & leads and went back to Submissions held
+ * both sections' listens open for the rest of the visit. A URL per section
+ * makes the saving structural — the page builds one section's body and the
+ * others do not exist to subscribe. What routing adds besides is that the URL
+ * names the section: it is linkable, the back button walks sections, and the
+ * breadcrumb says where you are.
  */
 export function InboxConsolePage(props: ConsolePluginPageProps) {
-  const { hostId } = props
+  const { hostId, section, sections, basePath } = props
   const firestore = useFirestore()
-  const { enqueueSnackbar } = useSnackbar()
-  const { confirm } = useConfirmationContext()
-
-  /*
-   * The site's forms, for the Submissions filter.
-   *
-   * `FORMS_MAX_PER_HOST` is a read WINDOW, not a cap on the collection — how
-   * many forms a site may hold is `formsPerHost`, enforced at the create in
-   * `/api/hosts/resources`, and a staff-set per-org override can raise it
-   * past this window. So the window can be smaller than the catalog, and one
-   * more document than fits is read on purpose: a filter that quietly listed
-   * the first N would report "this form does not exist" and "this form is
-   * past the window" as the same empty answer.
-   *
-   * Ordered by `__name__`. `displayName` would be the nicer order and is the
-   * wrong instrument: `orderBy` on a data field DROPS every document missing
-   * it, invisibly, so a form saved without a name would vanish from its own
-   * filter. The list is sorted for display below, where a missing name is
-   * merely ugly.
-   */
-  const { data: formDocs } = useFirestoreCollection<any>(
-    () =>
-      query(
-        collection(firestore, 'hosts', hostId, 'forms'),
-        orderBy('__name__'),
-        limit(FORMS_MAX_PER_HOST + 1),
-      ),
-    [firestore, hostId],
-    { idField: '$id' },
-  )
-  /** More forms exist than the window shows; the filter has to say so. */
-  const formsTruncated = (formDocs?.length ?? 0) > FORMS_MAX_PER_HOST
-  const forms = useMemo(
-    () =>
-      [...(formDocs ?? [])]
-        .slice(0, FORMS_MAX_PER_HOST)
-        .sort((left: any, right: any) =>
-          String(left.displayName ?? left.$id).localeCompare(
-            String(right.displayName ?? right.$id),
-          ),
-        ),
-    [formDocs],
-  )
-  /*
-   * `null` is "All forms"; a form id narrows to one form's submissions.
-   *
-   * A PRIMITIVE, deliberately: `usePagedCollection` reopens its listener when
-   * a dep changes, and an object identity would tear down and reopen on every
-   * render. It also resets the reader to page 1, which is what switching
-   * subjects should do.
-   */
-  const [formFilter, setFormFilter] = useState<string | null>(null)
-
-  /*
-   * The inbox WALKS its submissions instead of sampling them (AGL-2501,
-   * AGL-2292).
-   *
-   * `limit(200)` carried no `orderBy`, so Firestore answered it in
-   * DOCUMENT-ID order over ids `add()` generates — an arbitrary two hundred
-   * of the site's messages, which the client sort then arranged newest-first
-   * so the result looked like a feed. A site past two hundred submissions
-   * could not reach the rest, and the messages missing left no gap: the row
-   * dates on screen simply skipped, which reads as a quiet week rather than
-   * as an unreachable inbox.
-   *
-   * `createdAt` is safe to order on, checked against the writer rather than
-   * assumed: `apps/tenant/app/api/forms/submit/route.ts` is the only path
-   * that creates one and stamps `createdAt: serverTimestamp()` on every add,
-   * the v1 API only ever reads and deletes, and `formSubmissions` is absent
-   * from `IMPORTABLE_FIELDS`, so no restore path can make one without it.
-   */
-  const {
-    rows: submissions,
-    hasMore: hasMoreSubmissions,
-    page: submissionPage,
-    setPage: setSubmissionPage,
-    pageSize: submissionPageSize,
-    setPageSize: setSubmissionPageSize,
-  } = usePagedCollection<any>(
-    (pageLimit) =>
-      query(
-        collection(firestore, 'hosts', hostId, 'formSubmissions'),
-        // Served by the `formId ASC, createdAt DESC` composite index in
-        // `cloud/firebase-firestore.indexes.json`, which must be deployed
-        // before this ships — without it Firestore refuses the query rather
-        // than answering it slowly.
-        ...(formFilter ? [where('formId', '==', formFilter)] : []),
-        orderBy('createdAt', 'desc'),
-        limit(pageLimit),
-      ),
-    [firestore, hostId, formFilter],
-    { idField: '$id' },
-  )
 
   // Submissions this site's abuse ceiling refused (AGL-1655 → AGL-1666).
   //
@@ -292,179 +174,26 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
     ceiling: Number(leadsRefusedCounter?.['ceiling']) || undefined,
   })
 
-  /*==========================================
-   * SITE MEMBERS + LEADS (AGL-109): ORDERED AND CEILINGED, NOT PAGED BY QUERY.
-   *
-   * Both reads were `limit(200)` with no `orderBy` and a client sort on top —
-   * the same document-id sample as the submissions above, and both now name
-   * the order the rows are rendered in. `createdAt` is safe on both:
-   * `membership-register.ts` is the only writer that CREATES a site member
-   * and stamps it inside its transaction (every other membership path
-   * updates an existing document), `recordVisitorLead` is the only writer
-   * that creates a lead and stamps it on every `tx.create`, and neither
-   * collection is in `IMPORTABLE_FIELDS`.
-   *
-   * What they must NOT do is page the query, and the reason is the dedupe two
-   * hundred lines below: a lead is hidden when a MEMBER already exists on the
-   * same address. That test is only correct while both windows are whole. On a
-   * ten-row server page it would compare a page of leads against a page of
-   * members, so somebody who signed up after leaving their address would
-   * render as a Member on one page and again as a Lead on another — one person
-   * counted twice, in a list a site owner uses to count people.
-   *
-   * So the CEILING stays and the page is a slice of the assembled rows. The
-   * probe row makes "there are more contacts than these" a fact rather than a
-   * guess from `length === CONTACT_CEILING`, which is wrong at exactly the
-   * count that equals the ceiling.
-   *=========================================*/
-  const { data: memberDocs } = useFirestoreCollection<any>(
-    () =>
-      query(
-        collection(firestore, 'hosts', hostId, 'siteMembers'),
-        orderBy('createdAt', 'desc'),
-        limit(CONTACT_CEILING + 1),
-      ),
-    [firestore, hostId],
-    { idField: '$id' },
-  )
-  const siteMembers = (memberDocs ?? []).slice(0, CONTACT_CEILING)
-  const { data: leadDocs } = useFirestoreCollection<any>(
-    () =>
-      query(
-        collection(firestore, 'hosts', hostId, 'leads'),
-        orderBy('createdAt', 'desc'),
-        limit(CONTACT_CEILING + 1),
-      ),
-    [firestore, hostId],
-    { idField: '$id' },
-  )
-  const leads = (leadDocs ?? []).slice(0, CONTACT_CEILING)
-  const contactsTruncated =
-    (memberDocs?.length ?? 0) > CONTACT_CEILING ||
-    (leadDocs?.length ?? 0) > CONTACT_CEILING
   /*
-   * The contacts table is ONE list of two collections — members first, then
-   * the leads that are not already members — so the page is a window over the
-   * concatenation rather than over either read. Slicing each half by the same
-   * global offsets is what keeps a page exactly `pageSize` rows across the
-   * seam between them.
-   */
-  /*
-   * One person renders once, whichever tab they came in through.
+   * Nothing until the URL names a section. The shell redirects a bare hub URL
+   * to the landing section and holds a spinner while it does, so this state is
+   * transient — and rendering a default section here instead would pay for its
+   * listens on a URL that is already being replaced.
    *
-   * Raw `===` made `Bob@x.com` and `bob@x.com` two different people, so
-   * somebody could appear as a Member on one row and a Lead on another. The
-   * comparison is now the same NORMALIZATION a lead document is keyed by —
-   * `personKey` is `sha256(normalizeContactEmail(email))`, and hashing an
-   * already-normalized address cannot merge or split anything the normalizer
-   * did not, so the two agree by construction.
-   *
-   * `personKey` itself cannot run here: it needs `node:crypto` and this is a
-   * client component. That is why the shared half is the normalizer rather
-   * than the digest.
+   * The four counter reads above run either way, and that is deliberate: they
+   * are four single-document listens, and hoisting them behind this guard
+   * would make a ceiling notice appear a frame late on the section a reader
+   * lands on.
    */
-  const dedupedLeads = useMemo(() => {
-    const memberKeys = new Set(
-      siteMembers
-        .map((member: any) => normalizeContactEmail(member.email))
-        .filter(Boolean),
-    )
-    return leads.filter(
-      (lead: any) => !memberKeys.has(normalizeContactEmail(lead.email)),
-    )
-  }, [leads, siteMembers])
-  const [contactPage, setContactPage] = useState(0)
-  const [contactPageSize, setContactPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
-  const contactCount = siteMembers.length + dedupedLeads.length
-  const contactStart = contactPage * contactPageSize
-  const contactEnd = contactStart + contactPageSize
-  const visibleMembers = siteMembers.slice(contactStart, contactEnd)
-  const visibleLeads = dedupedLeads.slice(
-    Math.max(0, contactStart - siteMembers.length),
-    Math.max(0, contactEnd - siteMembers.length),
-  )
-  const handleDeleteMember = useCallback(
-    (member: any) => async () => {
-      const confirmed = await confirm({
-        title: 'Remove this member?',
-        description: `"${member.email}" can no longer sign in to your site.`,
-        confirmationText: 'Remove',
-        confirmationButtonProps: { color: 'error' },
-      })
-        .then(() => true)
-        .catch(() => false)
-      if (!confirmed) return
-      await deleteDoc(doc(firestore, 'hosts', hostId, 'siteMembers', member.$id))
-      enqueueSnackbar('Member removed', { variant: 'success', persist: false })
-    },
-    [confirm, firestore, hostId, enqueueSnackbar],
-  )
-
-  // Mail reader (AGL-104): opening a submission shows the full message and
-  // marks it read.
-  const [reader, setReader] = useState<any | null>(null)
-  /*
-   * WHERE A LEAD CAME FROM, on request.
-   *
-   * A lead is a table row with no page of its own, and the attribution is one
-   * keyed document read — cheap on its own, and the page size times cheap in
-   * a column. So it is an overflow action that opens a dialog: the reader who
-   * wants the answer pays for it, and the reader who came to scan the list
-   * does not.
-   */
-  const [leadOrigin, setLeadOrigin] = useState<any | null>(null)
-  const handleOpenReader = useCallback(
-    (submission: any) => () => {
-      setReader(submission)
-      if (!submission.read) {
-        void updateDoc(
-          doc(firestore, 'hosts', hostId, 'formSubmissions', submission.$id),
-          { read: true },
-        )
-      }
-    },
-    [firestore, hostId],
-  )
-
-  const handleToggleRead = useCallback(
-    (submission: any) => () => {
-      void updateDoc(
-        doc(firestore, 'hosts', hostId, 'formSubmissions', submission.$id),
-        { read: !submission.read },
-      )
-    },
-    [firestore, hostId],
-  )
-
-  const handleDelete = useCallback(
-    (submission: any) => async () => {
-      const confirmed = await confirm({
-        title: 'Delete this submission?',
-        description: 'The submission is removed permanently.',
-        confirmationText: 'Delete',
-        confirmationButtonProps: { color: 'error' },
-      })
-        .then(() => true)
-        .catch(() => false)
-      if (!confirmed) return
-      await deleteDoc(
-        doc(firestore, 'hosts', hostId, 'formSubmissions', submission.$id),
-      )
-      enqueueSnackbar('Submission deleted', {
-        variant: 'success',
-        persist: false,
-      })
-    },
-    [confirm, firestore, hostId, enqueueSnackbar],
-  )
+  if (!section || !sections?.length || !basePath) return null
 
   return (
     <>
-      {/* Above the tabs on purpose (AGL-1666). A paused form is not a fact
-          about the Submissions tab — it is why the whole inbox stopped
+      {/* Above the RAIL on purpose (AGL-1666). A paused form is not a fact
+          about the Submissions section — it is why the whole inbox stopped
           filling — and the notification that brings an owner here links to
-          the page, not to a tab. Inside a tab panel it would be invisible to
-          anyone who last left the page on Orders. */}
+          the surface, not to a section. Inside one section's body it would be
+          invisible to anyone who followed a link into another. */}
       {pausedNotice ? (
         <Alert severity="warning" sx={{ mb: 2 }}>
           <AlertTitle>{pausedNotice.title}</AlertTitle>
@@ -491,11 +220,11 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
           {spamNotice}
         </Alert>
       ) : null}
-      {/* Above the tabs for the same reason the form notice is (AGL-1529):
-          the Members and Leads lists are on the Contacts tab, and an owner
-          who last left this page on Orders would never see a notice hidden
-          inside one. Two notices rather than one because the two ceilings are
-          independent — a site can be refusing leads while sign-ups still
+      {/* Above the rail for the same reason the form notice is (AGL-1529):
+          the Members and Leads lists are one section of several, and an owner
+          who followed a link into another would never see a notice hidden
+          inside that one. Two notices rather than one because the two ceilings
+          are independent — a site can be refusing leads while sign-ups still
           land — and a merged sentence could only be true of both. Neither
           carries an `until` line: unlike the monthly form ceiling, these
           count LIVE DOCUMENTS and no date lifts them. */}
@@ -509,550 +238,9 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
           </Alert>
         ) : null,
       )}
-      <HubTabs
-        /*
-         * Mount the section being read, and no others (AGL-2501).
-         *
-         * `HubTabs` keeps every panel mounted unless told otherwise, so
-         * opening one section also subscribed the Firestore listeners behind
-         * all the rest and paid for every document their `limit()` allows.
-         * The reader sees one section; without this the page reads them all.
-         *
-         * Sections as ROUTES make this structural rather than a flag somebody
-         * has to remember, and plugin pages can carry them now: the shell's
-         * route is a catch-all and a nav item's `sections` are resolved by
-         * longest-prefix match. This page has not been converted yet, so the
-         * flag stays until it is.
-         */
-        lazy
-            tabs={[
-              {
-                id: 'submissions',
-                label: 'Submissions',
-                content: (
-                  <CardDisplay
-                    header={'Form Submissions'}
-                    help={pluginDocsHelp('forms', {
-                      anchor: '#the-inbox',
-                      excerpt:
-                        'Messages your forms collected, newest first, showing who sent ' +
-                        'each one and where it was routed.',
-                    })}
-                    contentGutterX
-                    contentGutterY
-                    contentBordered="all"
-                  >
-          {/*
-            * The Inbox stays the site-wide answer to "who is waiting for a
-            * reply" — that question does not decompose by form. This narrows
-            * it on request; it does not turn the page into a per-form view.
-            *
-            * Rendered only when the site HAS forms, so a site that has not
-            * adopted any sees the page exactly as it was.
-            */}
-          {forms.length > 0 ? (
-            <TextField
-              select
-              size="small"
-              label={'Form'}
-              value={formFilter ?? ''}
-              onChange={(event) => setFormFilter(event.target.value || null)}
-              helperText={
-                formsTruncated
-                  ? `Showing the first ${FORMS_MAX_PER_HOST.toLocaleString()} ` +
-                    'forms. Narrow by form is incomplete; All forms still ' +
-                    'covers every submission.'
-                  : undefined
-              }
-              sx={{ mb: 2, minWidth: 240 }}
-            >
-              <MenuItem value="">{'All forms'}</MenuItem>
-              {forms.map((form: any) => (
-                <MenuItem key={form.$id} value={form.$id}>
-                  {form.displayName || form.$id}
-                </MenuItem>
-              ))}
-            </TextField>
-          ) : null}
-          {submissions.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              {formFilter
-                ? 'No submissions for this form yet. Submissions sent before ' +
-                  'the form was created stay under All forms.'
-                : 'No form submissions yet. Add a Contact Form element to a ' +
-                  'screen — visitor messages arrive here.'}
-            </Typography>
-          ) : (
-            <>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>{'From'}</TableCell>
-                  <TableCell>{'Message'}</TableCell>
-                  <TableCell>{'Received'}</TableCell>
-                  <TableCell align="right">{'Actions'}</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {submissions.map((submission) => (
-                  <TableRow
-                    key={submission.$id}
-                    hover
-                    onClick={handleOpenReader(submission)}
-                    sx={{
-                      cursor: 'pointer',
-                      '& td': {
-                        fontWeight: submission.read ? undefined : 600,
-                      },
-                    }}
-                  >
-                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                      {/*
-                        The mockup's list is people, not forms (AGL-2168):
-                        an initials avatar, the sender, and the form name
-                        beneath it. The unread DOT replaces the `New` chip
-                        — the row is already bold, and a chip that says
-                        "New" beside bold text is the same fact twice.
-                       */}
-                      {(() => {
-                        const sender = submissionSender(submission.fields)
-                        const hue = senderHue(sender.label)
-                        return (
-                          <Stack
-                            direction="row"
-                            spacing={1}
-                            sx={{ alignItems: 'center' }}
-                          >
-                            {!submission.read ? (
-                              <Box
-                                aria-label="Unread"
-                                sx={{
-                                  width: 8,
-                                  height: 8,
-                                  borderRadius: '50%',
-                                  bgcolor: 'primary.main',
-                                  flexShrink: 0,
-                                }}
-                              />
-                            ) : (
-                              <Box sx={{ width: 8, flexShrink: 0 }} />
-                            )}
-                            <Avatar
-                              sx={{
-                                width: 28,
-                                height: 28,
-                                fontSize: 13,
-                                bgcolor: `hsl(${hue} 55% 45%)`,
-                              }}
-                            >
-                              {sender.initials}
-                            </Avatar>
-                            <Stack sx={{ minWidth: 0 }}>
-                              <Typography variant="body2" noWrap>
-                                {sender.label}
-                              </Typography>
-                              <Typography
-                                variant="caption"
-                                color="text.secondary"
-                                noWrap
-                              >
-                                {submission.formName ?? 'Form'}
-                              </Typography>
-                            </Stack>
-                          </Stack>
-                        )
-                      })()}
-                    </TableCell>
-                    <TableCell>
-                      <Typography
-                        variant="body2"
-                        component="div"
-                        sx={{
-                          maxWidth: 480,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {Object.entries(submission.fields ?? {})
-                          .map(([key, value]) => `${key}: ${value}`)
-                          .join(' · ')}
-                      </Typography>
-                    </TableCell>
-                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                      {/*
-                        Relative, as the mockup shows it — an inbox is
-                        scanned for recency and a locale timestamp makes
-                        the reader do the subtraction. The absolute time
-                        stays on the detail dialog, where it is the fact
-                        you actually want.
-                       */}
-                      <Tooltip
-                        title={
-                          submission.createdAt?.toDate?.().toLocaleString() ??
-                          ''
-                        }
-                      >
-                        <span>
-                          {relativeTime(
-                            submission.createdAt?.toDate?.().getTime(),
-                          )}
-                        </span>
-                      </Tooltip>
-                    </TableCell>
-                    <TableCell
-                      align="right"
-                      sx={{ whiteSpace: 'nowrap' }}
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      <Button size="small" onClick={handleToggleRead(submission)}>
-                        {submission.read ? 'Mark unread' : 'Mark read'}
-                      </Button>
-                      <Button
-                        size="small"
-                        color="error"
-                        onClick={handleDelete(submission)}
-                      >
-                        {'Delete'}
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <ListPagination
-              page={submissionPage}
-              pageSize={submissionPageSize}
-              rowCount={submissions.length}
-              hasMore={hasMoreSubmissions}
-              onPageChange={setSubmissionPage}
-              onPageSizeChange={setSubmissionPageSize}
-            />
-            </>
-          )}
-                  </CardDisplay>
-                ),
-              },
-              {
-                id: 'contacts',
-                label: 'Members & leads',
-                content: (
-                  <Stack spacing={3}>
-                    <CardDisplay
-                      header={'Site Members & Leads'}
-                      help={pluginDocsHelp('membersOnly', {
-                        anchor: '#manage-your-members',
-                      })}
-                      contentGutterX
-                      contentGutterY
-                      contentBordered="all"
-                    >
-              {siteMembers.length === 0 && leads.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  {'No members yet — visitors can join at /signup on your ' +
-                    'site; sign-ups also appear here as leads.'}
-                </Typography>
-              ) : (
-                <>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>{'Email'}</TableCell>
-                      <TableCell>{'Type'}</TableCell>
-                      <TableCell>{'Joined'}</TableCell>
-                      <TableCell align="right">{'Actions'}</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {visibleMembers.map((member: any) => (
-                      <TableRow key={member.$id} hover>
-                        <TableCell>
-                          {member.email}
-                          {member.displayName ? (
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                              sx={{ ml: 1 }}
-                              component="span"
-                            >
-                              {member.displayName}
-                            </Typography>
-                          ) : null}
-                        </TableCell>
-                        <TableCell>
-                          <Chip label="Member" color="primary" size="small" />
-                        </TableCell>
-                        <TableCell>
-                          {member.createdAt?.toDate?.().toLocaleString() ??
-                            '--'}
-                        </TableCell>
-                        <TableCell align="right">
-                          <Button
-                            size="small"
-                            color="error"
-                            onClick={handleDeleteMember(member)}
-                          >
-                            {'Remove'}
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {visibleLeads.map((lead: any) => (
-                        <TableRow key={lead.$id} hover>
-                          <TableCell>
-                            {lead.email}
-                            {/*
-                              The name the lead writer now stores (AGL-2303),
-                              same treatment as a member's `displayName` above
-                              — a list of bare addresses is a list nobody
-                              recognises anyone in.
-                            */}
-                            {lead.name ? (
-                              <Typography
-                                variant="caption"
-                                color="text.secondary"
-                                sx={{ ml: 1 }}
-                                component="span"
-                              >
-                                {lead.name}
-                              </Typography>
-                            ) : null}
-                          </TableCell>
-                          <TableCell>
-                            {/*
-                              WHERE THE LEAD CAME FROM (AGL-2338).
-                              `source` has been written by both lead writers —
-                              `'signup'` and `'booking'` — since AGL-109, and
-                              nothing read it: every row rendered the same flat
-                              "Lead" chip, so a site owner could not tell a
-                              membership sign-up from a booking, and the
-                              campaign audience selector treated them alike.
-                              Attribution collected and invisible.
-
-                              Falls back to the bare label rather than printing
-                              an empty suffix for a row written before the
-                              field, or by a future writer that omits it.
-                            */}
-                            <Chip
-                              label={
-                                lead.source ? `Lead · ${lead.source}` : 'Lead'
-                              }
-                              size="small"
-                              variant="outlined"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            {lead.createdAt?.toDate?.().toLocaleString() ??
-                              '--'}
-                          </TableCell>
-                          <TableCell align="right" sx={{ width: 56 }}>
-                            <RowActionsMenu
-                              label={String(lead.email ?? lead.$id)}
-                              items={[
-                                {
-                                  key: 'origin',
-                                  label: 'Where this came from',
-                                  icon: (
-                                    <MdiIcon
-                                      path={mdiBullhornOutline.path}
-                                      size={0.8}
-                                    />
-                                  ),
-                                  onClick: () => setLeadOrigin(lead),
-                                },
-                              ]}
-                            />
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                  </TableBody>
-                </Table>
-                <ListPagination
-                  page={contactPage}
-                  pageSize={contactPageSize}
-                  rowCount={visibleMembers.length + visibleLeads.length}
-                  // The whole deduped list, which this card genuinely holds —
-                  // both reads are ceilinged and complete below the ceiling.
-                  count={contactCount}
-                  onPageChange={setContactPage}
-                  onPageSizeChange={setContactPageSize}
-                />
-                {contactsTruncated ? (
-                  <Alert severity="info" sx={{ mt: 1 }}>
-                    {`Paging the ${CONTACT_CEILING} newest members and the ` +
-                      `${CONTACT_CEILING} newest leads. This site has more ` +
-                      'than that — the campaign audiences still reach ' +
-                      'everyone, whether or not they are listed here.'}
-                  </Alert>
-                ) : null}
-                </>
-              )}
-                    </CardDisplay>
-                  </Stack>
-                ),
-              },
-              {
-                id: 'campaigns',
-                label: 'Campaigns',
-                content: <HostCampaignsCard hostId={hostId} />,
-              },
-            ]}
-          />
-      <Dialog
-        open={Boolean(reader)}
-        onClose={() => setReader(null)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>{reader?.formName ?? 'Form submission'}</DialogTitle>
-        <DialogContent>
-          <Typography variant="caption" color="text.secondary">
-            {`Received ${reader?.createdAt?.toDate?.().toLocaleString() ?? ''}` +
-              (reader?.screenId ? ` · screen ${reader.screenId}` : '')}
-            {/*
-              THE PAGE THE FORM WAS ON. Stored by the submit route since the
-              form existed and rendered by nothing, which is also the field
-              the marketing console's landing-page grouping joins on — a
-              reader who wants to check one row against that grouping has to
-              be able to see the row's own page.
-             */}
-            {reader?.path ? ` · ${String(reader.path)}` : ''}
-          </Typography>
-          <Divider sx={{ my: 1.5 }} />
-          <Stack spacing={1.5}>
-            {Object.entries(reader?.fields ?? {}).map(([key, value]) => (
-              <Stack key={key} spacing={0.25}>
-                <Typography variant="caption" color="text.secondary">
-                  {key}
-                </Typography>
-                <Typography
-                  variant="body2"
-                  sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
-                >
-                  {String(value)}
-                </Typography>
-              </Stack>
-            ))}
-          </Stack>
-          {/*
-            What happened to this submission (AGL-2168). The mockup puts
-            these under the fields: `Saved to Inbox` and `Added to "Leads"
-            dataset`. The second is stamped by the submit route only when a
-            record was really appended — a form bound to a deleted dataset,
-            or one whose record quota is full, shows no chip rather than a
-            chip for a row that does not exist. Both are failures the route
-            already swallows silently, and a chip that lied about them
-            would be worse than the silence.
-           */}
-          <Stack
-            direction="row"
-            spacing={1}
-            sx={{ mt: 2, flexWrap: 'wrap', rowGap: 1 }}
-          >
-            {routingChips(reader?.routing).map((chip) => (
-              <Chip
-                key={chip.label}
-                size="small"
-                label={chip.label}
-                color={chip.color}
-                variant="outlined"
-              />
-            ))}
-          </Stack>
-          {/*
-            WHERE THIS SUBMISSION CAME FROM.
-
-            One keyed document read — the attribution's id is `form:{id}` and
-            the submission's id is that `{id}` — paid when a merchant opens a
-            submission rather than once per row of the list. A submission that
-            was credited to nobody renders the sentence saying so; it never
-            renders a campaign with a zero beside it.
-           */}
-          {reader?.$id ? (
-            <Box sx={{ mt: 2 }}>
-              <ConversionAttribution
-                hostId={hostId}
-                kind="form"
-                refId={String(reader.$id)}
-              />
-            </Box>
-          ) : null}
-          {/*
-            Answering the person is the act the Inbox exists for, and it is
-            inside the reader rather than on the row because a reply written
-            without the message in front of you is the reply that answers the
-            wrong question. Mounted with the dialog, so its reads — the site
-            name and the replies already sent — are paid when a merchant opens
-            a submission and not once per visit to this page.
-           */}
-          {reader ? (
-            <SubmissionReply hostId={hostId} submission={reader} />
-          ) : null}
-          {/*
-            Enrolling the sender in a marketing list — a SEPARATE act from
-            answering them, and a separate card, because the person asked to
-            be answered and did not ask to be marketed to. Its reads are paid
-            only when a merchant presses its own button, so opening a
-            submission to read it costs nothing extra.
-           */}
-          {reader ? (
-            <SubmissionListAssignment hostId={hostId} submission={reader} />
-          ) : null}
-        </DialogContent>
-        <DialogActions>
-          <Button
-            color="error"
-            onClick={async () => {
-              const target = reader
-              setReader(null)
-              if (target) await handleDelete(target)()
-            }}
-          >
-            {'Delete'}
-          </Button>
-          <Button
-            onClick={() => {
-              if (reader) void handleToggleRead({ ...reader, read: true })()
-              setReader(null)
-            }}
-          >
-            {'Mark unread'}
-          </Button>
-          <Button variant="contained" onClick={() => setReader(null)}>
-            {'Close'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-      {/*
-        WHERE A LEAD CAME FROM.
-
-        Its own dialog rather than a column, for the reason the state above
-        gives: one keyed read, paid by the reader who asked the question. A
-        lead has no page of its own to put this on, and giving it one to carry
-        a single line would be a new record surface rather than attribution.
-       */}
-      <Dialog
-        open={Boolean(leadOrigin)}
-        onClose={() => setLeadOrigin(null)}
-        maxWidth="xs"
-        fullWidth
-      >
-        <DialogTitle>{leadOrigin?.email ?? 'Lead'}</DialogTitle>
-        <DialogContent>
-          {leadOrigin?.$id ? (
-            <ConversionAttribution
-              hostId={hostId}
-              kind="lead"
-              refId={String(leadOrigin.$id)}
-            />
-          ) : null}
-        </DialogContent>
-        <DialogActions>
-          <Button variant="contained" onClick={() => setLeadOrigin(null)}>
-            {'Close'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <HubSections sections={sections}>
+        {sectionBody(section as InboxConsoleSectionId, hostId)}
+      </HubSections>
     </>
   )
 }

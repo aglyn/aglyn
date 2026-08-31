@@ -96,6 +96,7 @@ export const PLUGIN_SECTIONS: Readonly<Record<string, readonly string[]>> = {
     'experiments',
   ],
   automation: ['workflows', 'actions', 'webhooks'],
+  inbox: ['submissions', 'contacts', 'campaigns'],
 }
 
 /**
@@ -108,6 +109,10 @@ export const PLUGIN_SECTIONS: Readonly<Record<string, readonly string[]>> = {
 export const PLUGIN_SECTION_TITLES: Readonly<Record<string, string>> = {
   // An acronym and a slash, neither of which is in the slug.
   'marketing/experiments': 'A/B testing',
+  // Two nouns and an ampersand from a one-word slug. The id is the `?tab=`
+  // id the section was deep-linked by and does not move; the rail names both
+  // collections the one table holds.
+  'inbox/contacts': 'Members & leads',
 }
 
 /**

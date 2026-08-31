@@ -10,7 +10,7 @@ description: Add forms to your site, collect submissions in an inbox, and write 
 Submissions land in your **inbox** and can flow straight into a [dataset](../datasets/overview.md)
 and your [contacts CRM](../contacts/overview.md).
 
-![The Inbox page in the Aglyn console, with Form Submissions, Site Members & Leads, Orders, and Email campaigns sections](/img/forms/inbox-page.png)
+![The Inbox page in the Aglyn console, with its Submissions, Members & leads, and Campaigns sections](/img/forms/inbox-page.png)
 
 :::info Plan availability
 **Free** for basic forms and the inbox. Higher tiers raise submission and dataset caps.

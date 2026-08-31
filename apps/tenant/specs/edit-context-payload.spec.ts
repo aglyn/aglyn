@@ -32,7 +32,8 @@
  * - quick links are real buildRoute output for the org slug + subdomain;
  * - Inbox/Orders render only what the host's effective plugin set justifies:
  *   a host-level `disabledPlugins` entry removes its link, a release-flag
- *   subtraction removes its link, and Orders deep-links `?tab=orders`;
+ *   subtraction removes its link, and Orders deep-links the `orders` SECTION
+ *   beneath the products surface;
  * - a bad token still gets a flat 401 before any read happens.
  */
 
@@ -259,8 +260,12 @@ describe('/api/edit-context extended payload (AGL-1829)', () => {
       'https://app.aglyn.com/acme/hosts/www/screens',
     )
     expect(payload.inboxUrl).toBe('https://app.aglyn.com/acme/hosts/www/inbox')
+    // The commerce console's Orders SECTION, which is a path segment beneath
+    // the surface (AGL-2501). The `?tab=orders` this used to build names no
+    // section, so the shell would redirect it to Catalog — the link would
+    // resolve, and land somewhere other than orders.
     expect(payload.ordersUrl).toBe(
-      'https://app.aglyn.com/acme/hosts/www/products?tab=orders',
+      'https://app.aglyn.com/acme/hosts/www/products/orders',
     )
     expect(payload.editUrl).toBe(
       'https://app.aglyn.com/acme/hosts/www/screens/screen-1/versions/v-live/besigner',

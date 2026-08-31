@@ -40,6 +40,7 @@
 import { render } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { InboxConsolePage } from './inbox-console-page'
+import { INBOX_CONSOLE_SECTIONS } from './inbox-console-sections'
 
 /** Collection contents by collection NAME, as the page's queries address them. */
 let collections: Record<string, Array<Record<string, unknown>>>
@@ -95,26 +96,40 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
     confirm: jest.fn().mockResolvedValue(undefined),
   }),
 }))
-// EVERY tab's content, unlike the paused-notice spec's first-tab stub: the
-// audience table is not the tab the page opens on, and a stub that rendered
-// only the first would make every assertion below vacuous.
+// The rail's chrome, passed through (AGL-2501). Sections are routes now, so
+// the page builds ONE section's body and the URL says which — no stub can make
+// a closed section render, and this spec names the section it is about.
 jest.mock('@aglyn/shared-ui-next', () => ({
-  HubTabs: ({ tabs }: { tabs: Array<{ content: ReactNode }> }) => (
-    <div>{tabs.map((tab, index) => (
-      <div key={index}>{tab.content}</div>
-    ))}</div>
-  ),
+  HubSections: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }))
 jest.mock('@aglyn/plugins-marketing/components/campaigns-card', () => ({
   __esModule: true,
   default: () => null,
 }))
-jest.mock(
-  '@aglyn/plugins-commerce/components/console/host-orders-card.component',
-  () => ({ __esModule: true, default: () => null }),
-)
 
-const renderPage = () => render(<InboxConsolePage hostId="host-1" entitled />)
+const BASE_PATH = '/acme/hosts/shop/inbox'
+
+/**
+ * The Members & leads section, as the shell mounts it. Named rather than
+ * defaulted: the leads table is not the section a bare `/inbox` lands on, and
+ * a render that opened the wrong one would make every assertion below vacuous.
+ */
+const renderPage = () =>
+  render(
+    <InboxConsolePage
+      hostId="host-1"
+      entitled
+      basePath={BASE_PATH}
+      sections={INBOX_CONSOLE_SECTIONS.map((section) => ({
+        id: section.id,
+        label: section.label,
+        href: `${BASE_PATH}/${section.id}`,
+        visible: true,
+      }))}
+      section="contacts"
+      segments={['contacts']}
+    />,
+  )
 
 beforeEach(() => {
   collections = {}

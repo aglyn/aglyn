@@ -512,9 +512,11 @@ Conventions the scaffold already applies:
   relocated with just the layout wrapper + inline `FeatureGate` stripped (the
   shell supplies both); reads the `contactsPerHost` quota off the `org` prop.
 - **Inbox** (`libs/plugins/inbox`) — console-only (AGL-395): form-submissions
-  reader, site members + leads, and the borrowed **Orders** and **Campaigns**
-  tabs. Depends on `@aglyn/plugins-commerce` + `@aglyn/plugins-email` — a
-  plugin can compose tabs from other plugins the same way the app did.
+  reader, site members + leads, and the borrowed **Campaigns** section. Its
+  three sections are routes rather than tabs (AGL-2501), declared in
+  `inbox-console-sections.ts` and registered on the nav item. Depends on
+  `@aglyn/plugins-marketing` — a plugin can compose sections from other
+  plugins the same way the app did.
 - **Marketplace** (`libs/plugins/marketplace`) — console-only, multi-page
   (AGL-395): the plugin owns the hub page and its cards + `useMarketplaceActions`,
   but the listing/publisher **detail** pages stay as app file-routes (nested
