@@ -36,7 +36,7 @@ import type { NodeInteraction } from '../app-utils/node-interactions'
 import { schemaAcceptsChildren } from '../app-utils/child-contract'
 import { REUSABLE_INSTANCE_COMPONENT_ID } from '../app-utils/compose-reusable-components'
 import { stripUndefinedDeep } from '../app-utils/strip-undefined'
-import { createIdUrlSafe } from '../foundation'
+import { createIdUrlSafe } from '../foundation/constants/app'
 import type { PluginId } from '../plugin-manager'
 import {
   type ComponentId,

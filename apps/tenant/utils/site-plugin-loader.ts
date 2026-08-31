@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { createPluginLoader } from '@aglyn/aglyn'
+import { createPluginLoader } from '@aglyn/aglyn/plugin-manager/plugin-loader'
 import { TENANT_PLUGIN_MANIFEST } from './plugins.client.generated'
 
 /**
