@@ -17,7 +17,12 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
-import { buildRoute, pluginDocsHelp, Route } from '@aglyn/aglyn'
+import {
+  buildRoute,
+  PageHeaderActions,
+  pluginDocsHelp,
+  Route,
+} from '@aglyn/aglyn'
 import { ICON_VARIANT_SHOW_DETAIL } from '@aglyn/shared-data-enums'
 import { mdiEyeOutline, mdiVectorSquare } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
@@ -360,97 +365,102 @@ export function HostFormsCard(props: HostFormsCardProps) {
     }),
   ]
 
-  /*
-   * The readout leads the create button, as it does on every other artifact
-   * list. Both sit on the CARD rather than in the page header: the shell owns
-   * the header of every plugin surface, and the count comes from the listener
-   * this card already holds — a page that counted separately would be a second
-   * source for one fact.
-   */
   return (
-    <CardDisplay
-      header="Forms"
-      help={pluginDocsHelp('forms', {
-        anchor: '#build-a-form',
-        excerpt:
-          'A form collects submissions into the Inbox, and its design is ' +
-          'drawn in the besigner like any other artifact.',
-      })}
-      HeaderProps={{
-        action: (
-          <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
-            <QuotaReadoutComponent
-              ready={status !== 'loading'}
-              used={formsUsed}
-              limit={Aglyn.FORMS_MAX_PER_HOST}
-              noun="form"
-            />
-            <Button
-              size="small"
-              variant="contained"
-              disabled={creating}
-              onClick={() => {
-                setCreateError(null)
-                setCreateOpen(true)
-              }}
-            >
-              {creating ? 'Creating…' : 'Create Form'}
-            </Button>
-          </Stack>
-        ),
-      }}
-    >
-      <ListTable
-        rowHeight={TABLE_ROW_HEIGHT}
-        columns={columns}
-        noRowsLabel="No forms yet"
-        noRowsDescription="A form collects submissions, dedupes the people who send them, and can route them to a lead. Its design is drawn in the besigner and published like any other artifact."
-        noRowsAction={
-          <Button variant="contained" onClick={() => setCreateOpen(true)}>
-            {'Create your first form'}
-          </Button>
-        }
-        rows={forms}
-        // The whole row opens the detail page; the action cluster stops
-        // propagation so a menu click never navigates underneath it.
-        onOpen={(id) => router.push(formHref(String(id)))}
-        // An empty table while the read is in flight reads as "you have none"
-        // rather than "these are on their way".
-        loading={status === 'loading'}
-        // Paged by the footer below, so the grid must not also slice.
-        hideFooter
-      />
-      <ListPagination
-        page={page}
-        pageSize={pageSize}
-        rowCount={forms.length}
-        hasMore={hasMore}
-        onPageChange={setPage}
-        onPageSizeChange={setPageSize}
-      />
+    <>
       {/*
-        The console's own create drawer, from the shared library rather than a
-        second one that looks like it. The empty state and the header open the
-        SAME one, so the state that says "creating…" is one state.
-       */}
-      <CreateArtifactDrawer
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        title="Create new form"
-        // A form document stores no description: `/api/hosts/resources` filters
-        // `data` through a per-kind allow-list, so one typed here is dropped
-        // without a word.
-        includeDescription={false}
-        onSubmit={handleCreate}
-        errorSlot={
-          createError ? (
-            <Alert severity="error" sx={{ mt: 2, mb: 1 }}>
-              {createError}
-            </Alert>
-          ) : null
-        }
-      />
-    </CardDisplay>
+        The readout leads the create button, in the PAGE header — where Sites,
+        screens, layouts, components and templates put theirs. Forms declares
+        no sections, so it has no vertical rail for a card-header cluster to
+        belong beside, and the controls are about the whole surface rather
+        than about anything the card is showing.
+        Published from the card because the card owns what they say: the count
+        comes from the listener already open here, and a page that counted for
+        itself would be a second source for one fact and a second read for one
+        collection. It publishes from the LIST, so a form's own detail route —
+        a different component — leaves the header with nothing to create into.
+      */}
+      <PageHeaderActions>
+        <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+          <QuotaReadoutComponent
+            ready={status !== 'loading'}
+            used={formsUsed}
+            limit={Aglyn.FORMS_MAX_PER_HOST}
+            noun="form"
+          />
+          <Button
+            size="small"
+            variant="contained"
+            disabled={creating}
+            onClick={() => {
+              setCreateError(null)
+              setCreateOpen(true)
+            }}
+          >
+            {creating ? 'Creating…' : 'Create Form'}
+          </Button>
+        </Stack>
+      </PageHeaderActions>
+      <CardDisplay
+        header="Forms"
+        help={pluginDocsHelp('forms', {
+          anchor: '#build-a-form',
+          excerpt:
+            'A form collects submissions into the Inbox, and its design is ' +
+            'drawn in the besigner like any other artifact.',
+        })}
+      >
+        <ListTable
+          rowHeight={TABLE_ROW_HEIGHT}
+          columns={columns}
+          noRowsLabel="No forms yet"
+          noRowsDescription="A form collects submissions, dedupes the people who send them, and can route them to a lead. Its design is drawn in the besigner and published like any other artifact."
+          noRowsAction={
+            <Button variant="contained" onClick={() => setCreateOpen(true)}>
+              {'Create your first form'}
+            </Button>
+          }
+          rows={forms}
+          // The whole row opens the detail page; the action cluster stops
+          // propagation so a menu click never navigates underneath it.
+          onOpen={(id) => router.push(formHref(String(id)))}
+          // An empty table while the read is in flight reads as "you have none"
+          // rather than "these are on their way".
+          loading={status === 'loading'}
+          // Paged by the footer below, so the grid must not also slice.
+          hideFooter
+        />
+        <ListPagination
+          page={page}
+          pageSize={pageSize}
+          rowCount={forms.length}
+          hasMore={hasMore}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
+        {/*
+          The console's own create drawer, from the shared library rather than a
+          second one that looks like it. The empty state and the header open the
+          SAME one, so the state that says "creating…" is one state.
+         */}
+        <CreateArtifactDrawer
+          open={createOpen}
+          onClose={() => setCreateOpen(false)}
+          title="Create new form"
+          // A form document stores no description: `/api/hosts/resources` filters
+          // `data` through a per-kind allow-list, so one typed here is dropped
+          // without a word.
+          includeDescription={false}
+          onSubmit={handleCreate}
+          errorSlot={
+            createError ? (
+              <Alert severity="error" sx={{ mt: 2, mb: 1 }}>
+                {createError}
+              </Alert>
+            ) : null
+          }
+        />
+      </CardDisplay>
+    </>
   )
 }
 HostFormsCard.displayName = 'HostFormsCard'
