@@ -2,7 +2,7 @@
 
 Every place a charged price has to reach, and the order to reach them in.
 
-A price lives in eight places. Six are in this repo, one is at Stripe, and one
+A price lives in nine places. Six are in this repo, one is at Stripe, and one
 is a page somebody edits by hand — and the last of those is the one that has
 been missed, twice. This file exists because the failure is not forgetting to
 change a price; it is changing it in five places and believing that was all of
@@ -37,6 +37,15 @@ everything else can follow.
 Plus the Drive source-of-truth doc (Pricing & Packaging → 00-Pricing-Source-of-Truth),
 which is the non-engineering record and is not checked by anything here.
 
+## The two that get missed
+
+**#9 quotes the price in prose and nothing reads it.** `/pricing`'s description
+was "Simple plans from $0 to $799/mo …", which propagates into
+`<meta name="description">`, `og:description` and `twitter:description`. The
+body of the page was already correct and this was still advertising the old
+price in search results. It is a plain-text field on the screen's detail page,
+it is not generated, and no guard can see it.
+
 ## The one that gets missed
 
 **#7 is not generated.** `tables.json` holding the new figure is not the page
@@ -51,6 +60,18 @@ says, maintained by hand, so a difference between them and `PLAN_PRICING` is
 the gap made visible. **When you republish the page, update those literals in
 the same commit** — otherwise the spec goes on describing a gap that no longer
 exists, and the next reader believes it.
+
+## Republishing is not saving
+
+A saved edit to an already-published version **never reaches the live page**.
+On-demand revalidation fires only when a publish MOVES the version pointer,
+and only a pointer move busts the `tenant-data:{hostId}` document cache the
+render reads through — so a saved edit regenerates the page on schedule and
+re-reads the same cached document, forever. The symptom is a page whose
+`x-vercel-cache` age climbs past its window while the content never changes.
+
+**Unpublish, then publish.** The version's own `PUBLISH NOW` is disabled while
+it is live, which is why this is not obvious.
 
 ## Checking
 

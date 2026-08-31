@@ -727,7 +727,7 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
   // ---------------------------------------------------------------------
   describe('prices', () => {
     /**
-     * ⚠️ ONE CHARGED PRICE HAS MOVED, AND IT IS NOT YET PUBLISHED.
+     * ONE CHARGED PRICE MOVED, AND THE PAGE HAS CAUGHT UP.
      *
      * This is the row the header's freeze warning is about, so it is worth
      * being exact: Agency $799 -> $1,299 monthly and $649 -> $1,055 annual.
@@ -744,13 +744,28 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * immutable and the $799 pair is archived. `STRIPE_PRICE_AGENCY` and
      * `STRIPE_PRICE_AGENCY_YEARLY` name the new ids.
      *
-     * ⛔ `/pricing` still publishes $799, so the remaining gap is the
-     * PUBLISHED page trailing the charge — the opposite direction from the
-     * one this case was opened for, and the more urgent of the two: a page
-     * quoting less than checkout takes is a price a customer can point at.
+     * The page was republished on 2026-08-31 and now quotes $1,299 monthly and
+     * $1,049 annual. It trailed the charge for a while, which is the more
+     * urgent direction of the two — a page quoting less than checkout takes
+     * is a price a customer can point at.
+     *
+     * Getting it there needed an UNPUBLISH and republish, not a save: an
+     * in-place edit to an already-published version never moves the version
+     * pointer, and only a pointer move busts the `tenant-data:{hostId}`
+     * document cache the render reads through. A saved edit therefore
+     * regenerates the page on schedule and re-reads the same cached document
+     * forever.
+     *
+     * The SEO description is a SEVENTH surface and it quoted the price too —
+     * `<meta name="description">`, `og:` and `twitter:` all carried "$0 to
+     * $799/mo" while the body was already correct. Nothing in CI can see it.
+     * `docs/PRICING_SURFACES.md` lists them all.
      */
-    it('monthly — six columns unchanged, Agency at $1,299', () => {
-      const PUBLISHED: Row = [0, 25, 56, 139, 249, 399, 799]
+    it('monthly — the page and the code agree on every column', () => {
+      // PUBLISHED is transcribed BY HAND from the live page and is the whole
+      // value of this case: nothing in CI can read that page, so a divergence
+      // is only ever visible as a difference between these two rows.
+      const PUBLISHED: Row = [0, 25, 56, 139, 249, 399, 1299]
       const CODE: Row = [0, 25, 56, 139, 249, 399, 1299]
       expect(
         PUBLISHED_COLUMNS.map((plan) => PLAN_PRICING[plan].basePriceMonthlyUsd),
@@ -758,11 +773,11 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       expect(
         PUBLISHED_COLUMNS.map((plan, column) => [plan, PUBLISHED[column], CODE[column]])
           .filter(([, was, now]) => was !== now),
-      ).toEqual([['agency', 799, 1299]])
+      ).toEqual([])
     })
 
-    it('annual, per month — the same one column, at the same discount', () => {
-      const PUBLISHED: Row = [0, 16, 39, 99, 179, 299, 649]
+    it('annual, per month — the page and the code agree there too', () => {
+      const PUBLISHED: Row = [0, 16, 39, 99, 179, 299, 1049]
       const CODE: Row = [0, 16, 39, 99, 179, 299, 1049]
       expect(
         PUBLISHED_COLUMNS.map(
@@ -772,7 +787,7 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       expect(
         PUBLISHED_COLUMNS.map((plan, column) => [plan, PUBLISHED[column], CODE[column]])
           .filter(([, was, now]) => was !== now),
-      ).toEqual([['agency', 649, 1049]])
+      ).toEqual([])
       // $1,049/mo is $12,588 a year, which is what the live Stripe yearly
       // price charges — the constant every surface quotes has to be the one
       // Stripe bills, and Stripe prices are immutable. It lands within a
