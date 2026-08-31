@@ -63,6 +63,10 @@ export enum Route {
   // from 2026-09-01, so the return needs a URL a person can bookmark.
   ADMIN_ASSIST_SIGNALS = '/admin/assist-signals',
   ADMIN_REVENUE = '/admin/revenue',
+  // Realised band utilization and the margin that follows from it. Beside
+  // Revenue because the two are the halves of one question: that page reports
+  // what came in, this one what serving it cost.
+  ADMIN_MARGIN_UTILIZATION = '/admin/margin-utilization',
   ADMIN_TAX_RETURN = '/admin/tax-return',
   ADMIN_AUDIT = '/admin/audit',
   ADMIN_USERS = '/admin/users',
@@ -458,6 +462,7 @@ export interface RoutePayload {
   [Route.ADMIN_MAINTENANCE]: undefined
   [Route.ADMIN_ASSIST_SIGNALS]: undefined
   [Route.ADMIN_REVENUE]: undefined
+  [Route.ADMIN_MARGIN_UTILIZATION]: undefined
   [Route.ADMIN_TAX_RETURN]: undefined
   [Route.ADMIN_AUDIT]: undefined
   [Route.ADMIN_USERS]: undefined
