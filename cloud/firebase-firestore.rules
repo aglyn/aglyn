@@ -1756,6 +1756,24 @@ service cloud.firestore {
                      // owns both: it checks `org.settings`, and it refuses a
                      // domain the org has not verified.
                      'sendingDomain', 'sendingLocalPart',
+                     // `sendingLabel` is the PIN behind those two, and it was
+                     // missing here while they were listed. It is written once
+                     // and never rewritten, because it is what survives a site
+                     // rename and keeps a domain's accumulated sending
+                     // reputation attached to the site that earned it. An
+                     // editor able to write it could point this site at a
+                     // label another site holds, which the teardown path then
+                     // resolves to that site's DKIM record.
+                     //
+                     // `sendingDomainRequestedAtMs` and
+                     // `sendingDomainRequestedBy` are the record of who drew a
+                     // dedicated subdomain. That is a bounded resource — one
+                     // slot in the provider's account-wide allowance and three
+                     // records in our own zone — and at the ceiling the only
+                     // useful question is which slots somebody actually asked
+                     // for. An audit trail a client can write is not one.
+                     'sendingLabel', 'sendingDomainRequestedAtMs',
+                     'sendingDomainRequestedBy',
                      'projectId', 'projectNumber']) &&
           // The approved-host lists join the same admin tier (AGL-1152), and
           // for the sharper of the two reasons its siblings are here: they are
