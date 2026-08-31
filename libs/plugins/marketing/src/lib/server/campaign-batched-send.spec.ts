@@ -86,8 +86,21 @@ const reconciled: Array<{ reserved: number; delivered: number }> = []
 const suppressedAddresses = new Set<string>()
 const topicOptOuts = new Set<string>()
 const rejectedAddresses = new Set<string>()
-/** Fixed clock, so the day keys the ramp and the window use do not drift. */
-const nowMs = Date.UTC(2026, 7, 30, 12)
+/*
+ * The REAL clock, because the code under test has no seam for a fake one.
+ *
+ * `campaign-send` reads `Date.now()` directly — the ramp ages the workspace
+ * against it, and the reputation counter keys its day from it. A frozen
+ * constant here was read as "today" only on the day it was written: the next
+ * morning the same fixture aged the workspace to one day old, moved it to the
+ * second ramp step, and wrote the counter under a day key these assertions no
+ * longer looked up. Three cases went red having tested nothing new.
+ *
+ * Anchoring to the same clock the code uses is what makes "created today"
+ * mean it. The offsets below stay relative to this value, so they keep their
+ * sign and their distance.
+ */
+const nowMs = Date.now()
 
 function snapshotOf(path: string) {
   const data = store.get(path)
