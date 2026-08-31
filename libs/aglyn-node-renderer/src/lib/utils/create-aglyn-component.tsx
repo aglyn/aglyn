@@ -20,12 +20,12 @@
 // reaches is pinned into the published page's first load. The values this file
 // needs are named below, where the bundler can see them.
 import type * as Aglyn from '@aglyn/aglyn'
+import type { AglynExoticComponent } from '@aglyn/aglyn/foundation/definitions/components.types'
+import { FEATURE_FLAG } from '@aglyn/aglyn/foundation/constants/shared'
 import {
   AGLYN_OF,
-  type AglynExoticComponent,
   COMPONENT_ELEMENT_TYPE,
-  FEATURE_FLAG,
-} from '@aglyn/aglyn'
+} from '@aglyn/aglyn/foundation/constants/symbol'
 // Deep import, NOT the barrel — see the note in `leaf.tsx`.
 import {
   type ErrorBoundaryProps,

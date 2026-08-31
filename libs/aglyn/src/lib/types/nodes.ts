@@ -36,7 +36,7 @@ import type {
   NodeId,
   PresetId,
 } from '../foundation'
-import { ComponentCategory } from '../foundation'
+import { ComponentCategory } from '../foundation/constants/components'
 import type { ITimestamp } from '@aglyn/shared-util-timestamp'
 import type React from 'react'
 import type { ComponentClass, ComponentProps } from 'react'

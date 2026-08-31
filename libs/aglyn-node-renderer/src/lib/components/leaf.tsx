@@ -21,8 +21,13 @@
 // so every module the barrel reaches is pinned into the published page's first
 // load.
 import type * as Aglyn from '@aglyn/aglyn'
+import { components } from '@aglyn/aglyn/aglyn'
+import { sanitizeAuthorSx } from '@aglyn/aglyn/app-utils/author-css'
 import {
-  FEATURE_FLAG,
+  NODE_HIDE_IF_PROP,
+  NODE_HIDE_UNLESS_PROP,
+} from '@aglyn/aglyn/app-utils/compose-reusable-components'
+import {
   NODE_ANIMATION_DELAY_PROP,
   NODE_ANIMATION_DURATION_PROP,
   NODE_ANIMATION_EASE_PROP,
@@ -31,13 +36,10 @@ import {
   NODE_ANIMATION_STAGGER_PROP,
   NODE_ANIMATION_STAGGER_STEP_PROP,
   NODE_ANIMATION_TRIGGER_PROP,
-  NODE_HIDE_IF_PROP,
-  NODE_HIDE_UNLESS_PROP,
-  NodeIdentityContext,
-  components,
   resolveElementAnimation,
-  sanitizeAuthorSx,
-} from '@aglyn/aglyn'
+} from '@aglyn/aglyn/app-utils/element-animation'
+import { NodeIdentityContext } from '@aglyn/aglyn/app-utils/node-identity'
+import { FEATURE_FLAG } from '@aglyn/aglyn/foundation/constants/shared'
 // Deep import, NOT the barrel: `@aglyn/shared-ui-jsx`'s index re-exports the
 // Pages Router hooks (`next/router`), the inline SVG icon set and the whole
 // ~12,000-module MDI catalog, none of which a rendered node needs. This file

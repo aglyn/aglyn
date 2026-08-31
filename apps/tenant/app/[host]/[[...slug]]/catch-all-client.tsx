@@ -17,36 +17,43 @@
 
 'use client'
 
-// Type-only, with every value this file reads named below (AGL-2486's rule):
-// a VALUE namespace import of the core barrel is opaque to a bundler — it
-// cannot know which exports are read, so every module the barrel reaches gets
-// pinned into this page's first load. That is the whole console route table,
-// the plan and billing tables, the DMCA, webhook, dataset and marketplace
-// helpers, downloaded by every anonymous visitor to every customer site.
+// Every VALUE this file reads comes from the module that defines it, never
+// from the `@aglyn/aglyn` barrel. A named import off a barrel reads like it
+// costs only what it names, and it does not: `libs/aglyn/src/index.ts`
+// re-exports `./lib/aglyn`, whose singleton is constructed at import time, so
+// nothing downstream of it can be dropped as unused. Everything the barrel
+// reaches then lands in this page's first load — the console route table, the
+// plan and billing tables, the DMCA, webhook, dataset and marketplace helpers
+// — downloaded by every anonymous visitor to every customer site.
+//
+// The type-only namespace below is free: TypeScript erases it, so it is not a
+// runtime edge.
 import type * as Aglyn from '@aglyn/aglyn'
+import { canvas, emitter } from '@aglyn/aglyn/aglyn'
+import { ATTRIBUTION_ATTRIBUTE } from '@aglyn/aglyn/app-utils/attribution-guard'
+import { formatCollectionEntryDate } from '@aglyn/aglyn/app-utils/collection-entries'
+import { ELEMENT_HIDDEN_STYLE_TEXT } from '@aglyn/aglyn/app-utils/element-ui'
 import {
-  AglynEvent,
-  ATTRIBUTION_ATTRIBUTE,
-  DEFAULT_ENABLED_PLUGINS,
-  ELEMENT_HIDDEN_STYLE_TEXT,
   HEADING_ANCHOR_SCROLL_MARGIN,
-  NODE_ROOT_ID,
-  PLATFORM_BRANDING_PROFILE,
-  ScreenLinkContext,
-  SiteContext,
-  canvas,
-  emitter,
-  formatCollectionEntryDate,
-  listSiteRuntimes,
   markdownHeadingSlugs,
   parseMarkdownLite,
-  renderedMediaAlt,
-  resolveMediaSrc,
-} from '@aglyn/aglyn'
-// Deep import, NOT the barrel (AGL-2486): the plugin-manager barrel is
-// reachable from `@aglyn/aglyn/server`, and a client-only React hook on that
-// path 500s every server route. See `plugin-styles-ui.tsx`.
+} from '@aglyn/aglyn/app-utils/markdown-lite'
+import { renderedMediaAlt } from '@aglyn/aglyn/app-utils/media-metadata'
+import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
+// `PLATFORM_BRANDING_PROFILE` is re-exported by `app-utils/plan-entitlements`,
+// which is the largest first-party module a published page can reach. The
+// badge needs the brand, not the plan table.
+import { PLATFORM_BRANDING_PROFILE } from '@aglyn/aglyn/app-utils/platform-brand'
+import { ScreenLinkContext } from '@aglyn/aglyn/app-utils/screen-link-context'
+import { SiteContext } from '@aglyn/aglyn/app-utils/site-context'
+import { NODE_ROOT_ID } from '@aglyn/aglyn/canvas-manager/canvas-manager'
+import { AglynEvent } from '@aglyn/aglyn/emit-manager/emit-manager'
+import { DEFAULT_ENABLED_PLUGINS } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
+// The plugin-manager barrel is reachable from `@aglyn/aglyn/server`, and a
+// client-only React hook on that path 500s every server route. See
+// `plugin-styles-ui.tsx`.
 import { PluginStyles } from '@aglyn/aglyn/plugin-manager/plugin-styles-ui'
+import { listSiteRuntimes } from '@aglyn/aglyn/plugin-manager/site-runtime'
 import { AglynNodeRenderer } from '@aglyn/aglyn-node-renderer'
 import { observer } from 'mobx-react-lite'
 import {

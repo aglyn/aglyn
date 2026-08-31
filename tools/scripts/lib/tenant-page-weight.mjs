@@ -100,49 +100,95 @@ export function measurePageWeight({ entry, read, resolve, size }) {
   return {
     bytes,
     moduleCount: graph.modules.size,
+    modules: [...graph.modules],
     files,
     packages: graph.packages,
   }
 }
 
 /**
- * The budget a measurement should be pinned at, given the measurement.
+ * Modules a published page's client root must never reach STATICALLY, whatever
+ * the byte total says.
  *
- * `wireCalibration` is carried through from the existing file VERBATIM, and
- * deliberately not re-derived. It records what a real cold load of a published
- * page weighed over the wire and which graph it was measured against, and
- * `check-page-view-rate.mjs` prices `perPageView` off it. Re-stamping it here
- * would let a `--write` silently re-certify a measurement nobody took — the
- * whole point is that re-baselining a grown page leaves the calibration
- * pinned to the old graph, so the pricing gate goes red and the rate gets
- * looked at in the same diff.
+ * The budget is a ceiling, and a ceiling is the wrong instrument for this
+ * failure. Each of these is a barrel — or, in one case, a module that a barrel
+ * is the only reason to reach — and a barrel walks back in one named import at
+ * a time. The bytes then arrive gradually, under the headroom, until the
+ * ceiling is re-cut for an unrelated reason and the whole reach is permitted
+ * again. Naming the modules pins the SHAPE of the fix rather than its size, so
+ * a reviewer reads which boundary was crossed instead of a number that moved.
  *
- * Dropping it would be worse still: the field would vanish from the file and
- * the pricing gate would fail as unreadable rather than as stale.
+ * `reached` is a suffix match on the repo-relative path, so it needs no root.
  */
-export function budgetFor(measured, existing = {}) {
-  const budget = {
+export const FORBIDDEN_MODULES = [
+  {
+    path: 'libs/aglyn/src/index.ts',
+    why:
+      'the core barrel re-exports `lib/aglyn`, whose runtime singleton is ' +
+      'constructed at import time, so nothing downstream of it can be ' +
+      'dropped as unused. Import the module that DEFINES the value — ' +
+      "'@aglyn/aglyn/app-utils/<file>', '@aglyn/aglyn/aglyn' for the " +
+      'singleton — or hang it off `@aglyn/aglyn/server` if it is server-only.',
+  },
+  {
+    path: 'libs/aglyn/src/lib/foundation/index.ts',
+    why:
+      'the foundation barrel reaches the platform, organization and billing ' +
+      'type modules — 114 modules — and every value a published page takes ' +
+      'from it lives in a `foundation/constants/*` file of one or two KB. ' +
+      "Import `./foundation/constants/app`, `/shared` or `/components`.",
+  },
+  {
+    path: 'libs/aglyn/src/lib/app-utils/plan-entitlements.ts',
+    why:
+      'the plan, quota and entitlement table is the largest first-party ' +
+      'module a page can reach, and the only thing a published page needs ' +
+      'out of it is the platform brand. That constant lives in ' +
+      '`app-utils/platform-brand`, which this module re-exports.',
+  },
+  {
+    path: 'libs/shared/ui/jsx/src/index.ts',
+    why:
+      'the JSX barrel re-exports the Pages Router hooks, the inline SVG set ' +
+      'and the ~12,000-module MDI catalog. Import the component by subpath: ' +
+      "'@aglyn/shared-ui-jsx/components/<file>'.",
+  },
+]
+
+/**
+ * The forbidden modules a measurement actually reached.
+ *
+ * @param {{modules?: string[]}} measured
+ */
+export function forbiddenReached(measured) {
+  const modules = measured.modules ?? []
+  return FORBIDDEN_MODULES.filter(({ path }) =>
+    modules.some((file) => file.endsWith(`/${path}`)),
+  )
+}
+
+/** The budget a measurement should be pinned at, given the measurement. */
+export function budgetFor(measured) {
+  return {
     entry: TENANT_PAGE_ENTRY,
     baselineBytes: measured.bytes,
     budgetBytes: Math.ceil((measured.bytes * HEADROOM) / 1024) * 1024,
     baselineModules: measured.moduleCount,
   }
-  if (existing.wireCalibration) {
-    budget.wireCalibration = existing.wireCalibration
-  }
-  return budget
 }
 
 /**
  * Compare a measurement against the checked-in budget.
  *
- * Two ways to be red, and the second is the deliberate one:
+ * Three ways to be red, and the last two are the deliberate ones:
  *
  *   `over` — the page got heavier than the budget allows.
  *   `entryMoved` — the budget on disk is for a different entry, so it is
  *     measuring nothing. A gate that quietly passes because its subject moved
  *     is worse than no gate; whoever moved the client root re-baselines in the
  *     same commit.
+ *   `forbidden` — a named barrel is statically reachable again. Red on its own
+ *     terms, under the ceiling or not: see {@link FORBIDDEN_MODULES}.
  *
  * A page getting LIGHTER is deliberately NOT red, unlike the barrel gates'
  * exact-set pins. Those pin a SET, where a missing row means an allowlist
@@ -155,12 +201,63 @@ export function budgetFor(measured, existing = {}) {
 export function evaluatePageWeight(measured, budget) {
   const entryMoved = budget.entry !== TENANT_PAGE_ENTRY
   const over = measured.bytes > budget.budgetBytes
+  const forbidden = forbiddenReached(measured)
   return {
-    ok: !entryMoved && !over,
+    ok: !entryMoved && !over && forbidden.length === 0,
     over,
     entryMoved,
+    forbidden,
     overBy: over ? measured.bytes - budget.budgetBytes : 0,
   }
+}
+
+/**
+ * Every reason a verdict is red, as the text the gate prints.
+ *
+ * It lives here rather than in the CLI so the ONE thing the CLI does with a
+ * red — exit 1 — cannot be quietly separated from the reason it printed. The
+ * CLI used to branch per reason and return 1 from each branch, and a mutation
+ * that deleted one branch changed the exit code while every test stayed green:
+ * the reason simply stopped being reported and the run passed. One `!ok`
+ * decides the exit; this function decides what the reader is told.
+ *
+ * @param {ReturnType<typeof evaluatePageWeight>} verdict
+ * @param {{bytes: number, moduleCount: number}} measured
+ * @param {{entry: string, budgetBytes: number}} budget
+ * @returns {string[]} one paragraph per reason, in the order they are checked
+ */
+export function explainVerdict(verdict, measured, budget) {
+  const kb = (n) => `${(n / 1024).toFixed(1)} KB`
+  const reasons = []
+  if (verdict.entryMoved) {
+    reasons.push(
+      `the recorded budget is for ${budget.entry}, but this run measured ` +
+        `${TENANT_PAGE_ENTRY}. Re-baseline with --write in the commit that ` +
+        'moved the entry.',
+    )
+  }
+  if (verdict.forbidden.length) {
+    reasons.push(
+      "a published page's client root reached a module it must not reach " +
+        'statically.\n\n' +
+        verdict.forbidden
+          .map(({ path, why }) => `  ${path}\n      ${why}`)
+          .join('\n\n') +
+        '\n\nRun with --list to see the graph. This is red whether or not ' +
+        'the page is under its byte budget: the bytes arrive gradually, and ' +
+        'the boundary is the thing being kept.',
+    )
+  }
+  if (verdict.over) {
+    reasons.push(
+      "a published page's first load grew past its budget.\n\n" +
+        `  measured  ${kb(measured.bytes)}  (${measured.moduleCount} modules)\n` +
+        `  budget    ${kb(budget.budgetBytes)}\n` +
+        `  over by   ${kb(verdict.overBy)}\n\n` +
+        WHY_PAGE_WEIGHT,
+    )
+  }
+  return reasons
 }
 
 /**

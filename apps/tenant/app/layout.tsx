@@ -15,7 +15,12 @@
  * limitations under the License.
  */
 
-import { APP_CONSOLE } from '@aglyn/shared-data-enums'
+// Deep import, NOT the barrel. `@aglyn/shared-data-enums`' index re-exports
+// `lib/icons`, which names ~100 icons out of `@aglyn/shared-data-mdi` —
+// itself a barrel over the generated 6,606-module MDI catalog. This is the
+// ROOT LAYOUT of every published page, so the barrel's reach is every page's
+// reach, for one application constant.
+import { APP_CONSOLE } from '@aglyn/shared-data-enums/aglyn-applications'
 // Deep import (not the barrel) so this Server Component doesn't pull the theme
 // lib's createContext HOCs into the RSC graph (AGL-405).
 import { APP_EMOTION_CACHE_OPTIONS } from '@aglyn/shared-ui-theme/util/emotion-cache'

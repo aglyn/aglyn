@@ -24,11 +24,10 @@ import type {
   OrgPlan,
   OrgSeatAddons,
 } from '../foundation'
+import type { ResolvedBrandingProfile } from './platform-brand'
 import {
   PLATFORM_BRAND_NAME,
-  PLATFORM_HOME_URL,
-  PLATFORM_MARK_URL,
-  PLATFORM_SUPPORT_URL,
+  PLATFORM_BRANDING_PROFILE,
 } from './platform-brand'
 
 /** Sentinel for quotas a plan does not cap; `checkQuota` always allows. */
@@ -3125,74 +3124,17 @@ export function checkEntitlement(
 }
 
 /**
- * A branding profile with every field present — what a branded surface
- * renders. Image/color/domain fields are nullable (Aglyn's own surfaces
- * bake those in rather than carry a URL); the remaining text fields always
- * have a value so callers never string-concatenate `undefined`.
+ * The branding profile shape and the platform's own fallback, re-exported
+ * for every caller that reads them alongside the entitlement gate.
  *
- * `supportUrl` is nullable too, and it is the one field where null carries a
- * decision rather than an absence — see {@link resolveBrandingProfile}. A
- * caller must render NOTHING for it, never a placeholder and never a
- * substitute.
+ * They are DEFINED in `platform-brand.ts`, beside the environment-driven
+ * literals they are assembled from. A published tenant page renders the
+ * attribution badge from `PLATFORM_BRANDING_PROFILE` and needs nothing else
+ * in this module; importing it from here would put the whole plan, quota and
+ * entitlement table into every anonymous visitor's first load.
  */
-export interface ResolvedBrandingProfile {
-  productName: string
-  logoUrl: string | null
-  faviconUrl: string | null
-  primaryColor: string | null
-  supportUrl: string | null
-  /**
-   * The brand's own FRONT DOOR — where "Made with <product>" sends a visitor
-   * who wants to know what built the site they are looking at.
-   *
-   * Deliberately separate from {@link ResolvedBrandingProfile.supportUrl},
-   * which the badge used to borrow: a help-desk address is the wrong answer to
-   * "what is this", and on this deployment it resolves to a `mailto:`, so the
-   * badge opened a blank email instead of a web page.
-   *
-   * Nullable for the same reason `supportUrl` is — a brand with nowhere to
-   * send that visitor gets a plain label, never a substitute destination.
-   */
-  homeUrl: string | null
-  fromName: string
-  emailLogoUrl: string | null
-  customConsoleDomain: string | null
-}
-
-/**
- * The PLATFORM (non-white-label) brand — the fallback every surface gets when
- * an org lacks the `whiteLabel` entitlement, and the gap-filler for a partial
- * agency profile. Kept here beside the entitlement so brand and gate stay
- * reviewed together.
- *
- * Renamed from `AGLYN_BRANDING_PROFILE` (AGL-2153), and the rename is the
- * substance rather than tidying: the old name asserted *whose* brand this is,
- * and on a self-host install that assertion is exactly what stopped being
- * true. It is the platform's own brand, and which platform that is, is now
- * configuration.
- *
- * This one change reaches further than it looks. `resolveBrandingProfile` is
- * the single resolver EVERY branded surface routes through — console chrome,
- * published-site badge and title, transactional email — and this is its
- * fallback. Making the fallback read `platform-brand.ts` gives all of them a
- * self-host brand without extending the white-label machinery at all; only its
- * default needed to stop being a constant.
- */
-export const PLATFORM_BRANDING_PROFILE: ResolvedBrandingProfile = {
-  productName: PLATFORM_BRAND_NAME,
-  // The platform's own surfaces still bake their logo in — this is here for
-  // the surfaces that CANNOT, which is every surface rendered on somebody
-  // else's site. The free-tier attribution badge is the one that exists
-  // today, and it carried no mark at all while this was null.
-  logoUrl: PLATFORM_MARK_URL,
-  faviconUrl: null,
-  primaryColor: null,
-  supportUrl: PLATFORM_SUPPORT_URL,
-  homeUrl: PLATFORM_HOME_URL,
-  fromName: PLATFORM_BRAND_NAME,
-  emailLogoUrl: null,
-  customConsoleDomain: null,
-}
+export type { ResolvedBrandingProfile } from './platform-brand'
+export { PLATFORM_BRANDING_PROFILE } from './platform-brand'
 
 /** A non-empty trimmed string, else undefined — blanks never override a default. */
 function cleanBrandString(value: string | undefined): string | undefined {

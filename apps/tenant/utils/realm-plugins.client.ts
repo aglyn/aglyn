@@ -22,7 +22,8 @@
 // namespace as a value is the host ABI, which lives behind the relative
 // `import()` below; see `realm-plugin-host.client.ts`.
 import type * as Aglyn from '@aglyn/aglyn'
-import { capturePluginStyles, loadRealmPlugins } from '@aglyn/aglyn'
+import { capturePluginStyles } from '@aglyn/aglyn/plugin-manager/plugin-styles'
+import { loadRealmPlugins } from '@aglyn/aglyn/plugin-manager/realm-plugins'
 import * as React from 'react'
 import * as jsxRuntime from 'react/jsx-runtime'
 
