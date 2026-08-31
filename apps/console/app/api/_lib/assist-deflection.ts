@@ -188,15 +188,23 @@ const MIN_COVERAGE = 0.7
  *
  * Coverage and dominance are evidence about the same thing from opposite
  * directions, and holding both as independent hard floors throws away the
- * cases where one is emphatic. "what are webhooks used for in workflows"
- * covers 0.69 — a hair under the bar — while out-scoring every rival page by
- * FORTY times. There is no reading of that evidence in which the webhooks
- * page is the wrong page, and escalating it pays a provider to agree.
+ * cases where one is emphatic. "how do I edit text directly on the canvas"
+ * covers 0.68 — a hair under the bar, and the miss is `directly`, which the
+ * text-editing page never says — while winning so completely that every
+ * retrieved section belongs to it and there is no rival page to divide by.
+ * There is no reading of that evidence in which the text-editing page is the
+ * wrong page, and escalating it pays a provider to agree.
  *
- * The floor still binds: "what is the difference between screens and layouts"
- * also wins by ~48x and still escalates at 0.39, because a comparison
- * question is not answered by either page on its own however clearly one of
- * them wins. That is the case this pair of numbers is calibrated to keep out.
+ * The floor still binds, and it binds on questions that HAVE cleared
+ * {@link STRONG_PAGE_MARGIN}: "how do I customise the error screens" wins its
+ * page by 4.1x and still escalates at 0.42, because a page that ignores that
+ * much of the question is not answering it however clearly it wins. That is
+ * the case this pair of numbers is calibrated to keep out.
+ *
+ * ⚠️ Both figures are measurements over the CURRENT `apps/docs` corpus, and
+ * the corpus moves. `assist-deflection.spec.ts` asserts the first one's band
+ * rather than only its verdict, so a worked example that drifts out of the
+ * band fails there by name instead of going quietly wrong here.
  */
 const RELAXED_COVERAGE = 0.6
 
