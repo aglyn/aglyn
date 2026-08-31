@@ -353,6 +353,16 @@ const NOT_A_CAP: Record<string, string> = {
     'a rate — the platform share of a marketplace sale. Free carries the ' +
     'HIGHEST value on the price list (30), so reading it as a cap would ' +
     'invert the whole file.',
+  assistCreditsPerMonth:
+    'a real cap, and enforced — but NOT on this plan, and the causation ' +
+    'test would run backwards here. Zero on Free and Starter means "this ' +
+    'plan sells no assist band", so `resolveAssistCreditBudget` answers ' +
+    'null and what bounds a free workspace is the daily message cap plus ' +
+    'the operator spend backstop, both of which this file already covers ' +
+    'nowhere near this key. Relaxing it by one unit would hand Free a band ' +
+    'of ONE credit and refuse harder, which is the opposite of what step ' +
+    '(3) requires. The cap is driven to refusal on the plans that sell it ' +
+    'in `assist-usage.spec.ts`, both ways.',
 }
 
 /** Comment-stripped source, so prose naming a symbol is not a call site. */

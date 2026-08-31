@@ -349,6 +349,23 @@ export function BillingUsageComponent(props: BillingUsageProps) {
   const [apiRequests, setApiRequests] = useState<number | null>(null)
   // Contacts audience band (AGL-890/891): org-scoped aggregate count.
   const [contactsCount, setContactsCount] = useState<number | null>(null)
+  /*
+   * Aglyn Assist credits drawn this month, ORG-WIDE.
+   *
+   * From the server, not from Firestore like its neighbours:
+   * `orgs/{orgId}/assistUsage` is absent from the rules file and therefore
+   * default-deny for every client, so a browser read would fail silently and
+   * leave this meter reading "not yet metered" forever.
+   *
+   * Credits, never dollars. The stored figure is our provider bill at the
+   * serving model's list rates; `/api/billing/assist-credits` is where the
+   * one conversion happens and no dollar figure crosses it.
+   */
+  const [assistCredits, setAssistCredits] = useState<{
+    used: number
+    limit: number | null
+    remaining: number | null
+  } | null>(null)
   // Month bandwidth (AGL-1106/1371): org-wide, summed across the org's sites
   // below — `entitlements.bandwidthGb` is an org-wide band, and the invoice
   // and the cron both compare it against the org-wide total.
@@ -435,6 +452,21 @@ export function BillingUsageComponent(props: BillingUsageProps) {
       .catch(() => {
         // Meter keeps its "not yet metered" state on failure.
       })
+    void (async () => {
+      try {
+        const idToken = await (user as any)?.getIdToken?.()
+        const response = await fetch(
+          `/api/billing/assist-credits?orgId=${encodeURIComponent(orgId)}`,
+          idToken ? { headers: { Authorization: `Bearer ${idToken}` } } : undefined,
+        )
+        if (!response.ok) return
+        const result = await response.json()
+        if (active && result?.credits) setAssistCredits(result.credits)
+      } catch {
+        // Meter keeps its "not yet metered" state on failure — deliberately
+        // not 0, which reads as "you have used none of your credits".
+      }
+    })()
     void getDoc(
       doc(
         firestore,
@@ -738,6 +770,24 @@ export function BillingUsageComponent(props: BillingUsageProps) {
           label="API requests (this month)"
           used={apiRequests}
           limit={entitlements.apiRequestsPerMonth}
+        />
+      ) : null}
+      {/*
+        Credits, because assist actions differ in cost by up to two orders of
+        magnitude — a question against generating a screen — and a message
+        count would price them the same. The band is refused at the cap, so
+        this readout is the only thing standing between a customer and
+        learning their limit by being turned down mid-build.
+
+        Rendered only where a band is sold. Free and Starter carry
+        `assistCreditsPerMonth: 0` and no `aiAssist`, and a "0 of 0" meter is
+        not a readout of anything.
+      */}
+      {entitlements.assistCreditsPerMonth > 0 ? (
+        <UsageMeter
+          label="Aglyn Assist credits (this month)"
+          used={assistCredits ? assistCredits.used : null}
+          limit={entitlements.assistCreditsPerMonth}
         />
       ) : null}
       {/* No caption while the counter is still loading, and no separate guard

@@ -37,6 +37,7 @@ import {
   FORM_ABUSE_CEILING_UNLIMITED,
   FORMS_PER_HOST_CEILING,
   ENTERPRISE_EMAIL_SENDS_PER_MONTH,
+  ENTERPRISE_ASSIST_CREDITS_PER_MONTH,
   planMetersInfraOverage,
   isBillingSubscription,
   isCustomPricedPlan,
@@ -250,6 +251,7 @@ describe('plan entitlements', () => {
         extraDatasetMonthlyUsd: null,
         extraDataGbMonthlyUsd: null,
         extraApiRequestsUsdPer1k: null,
+        extraAssistCreditsUsdPer1k: null,
         extraContactsUsdPer1k: null,
         extraEmailSendsUsdPer1k: null,
         meteredInfraPassThrough: false,
@@ -263,6 +265,7 @@ describe('plan entitlements', () => {
         extraDatasetMonthlyUsd: 2,
         extraDataGbMonthlyUsd: 0.36,
         extraApiRequestsUsdPer1k: null,
+        extraAssistCreditsUsdPer1k: null,
         extraContactsUsdPer1k: 1,
         extraEmailSendsUsdPer1k: 2.5,
         meteredInfraPassThrough: true,
@@ -276,6 +279,7 @@ describe('plan entitlements', () => {
         extraDatasetMonthlyUsd: 2,
         extraDataGbMonthlyUsd: 0.36,
         extraApiRequestsUsdPer1k: null,
+        extraAssistCreditsUsdPer1k: 3,
         extraContactsUsdPer1k: 0.75,
         extraEmailSendsUsdPer1k: 2.25,
         meteredInfraPassThrough: true,
@@ -289,6 +293,7 @@ describe('plan entitlements', () => {
         extraDatasetMonthlyUsd: 1,
         extraDataGbMonthlyUsd: 0.36,
         extraApiRequestsUsdPer1k: 0.5,
+        extraAssistCreditsUsdPer1k: 2.75,
         extraContactsUsdPer1k: 0.5,
         extraEmailSendsUsdPer1k: 2,
         meteredInfraPassThrough: true,
@@ -302,6 +307,7 @@ describe('plan entitlements', () => {
         extraDatasetMonthlyUsd: 1,
         extraDataGbMonthlyUsd: 0.36,
         extraApiRequestsUsdPer1k: 0.35,
+        extraAssistCreditsUsdPer1k: 2.5,
         extraContactsUsdPer1k: 0.4,
         extraEmailSendsUsdPer1k: 1.9,
         meteredInfraPassThrough: true,
@@ -315,6 +321,7 @@ describe('plan entitlements', () => {
         extraDatasetMonthlyUsd: 1,
         extraDataGbMonthlyUsd: 0.36,
         extraApiRequestsUsdPer1k: 0.2,
+        extraAssistCreditsUsdPer1k: 2.25,
         extraContactsUsdPer1k: 0.4,
         extraEmailSendsUsdPer1k: 1.85,
         meteredInfraPassThrough: true,
@@ -328,6 +335,7 @@ describe('plan entitlements', () => {
         extraDatasetMonthlyUsd: 1,
         extraDataGbMonthlyUsd: 0.36,
         extraApiRequestsUsdPer1k: 0.15,
+        extraAssistCreditsUsdPer1k: 2,
         extraContactsUsdPer1k: 0.4,
         extraEmailSendsUsdPer1k: 1.8,
         meteredInfraPassThrough: true,
@@ -344,6 +352,7 @@ describe('plan entitlements', () => {
         extraDatasetMonthlyUsd: null,
         extraDataGbMonthlyUsd: null,
         extraApiRequestsUsdPer1k: null,
+        extraAssistCreditsUsdPer1k: null,
         extraContactsUsdPer1k: null,
         extraEmailSendsUsdPer1k: null,
         meteredInfraPassThrough: false,
@@ -409,8 +418,20 @@ describe('plan entitlements', () => {
       // `JSON.stringify(Infinity)` is `null` and reads back as a cap of zero
       // on the most expensive plan on the price list.
       if (key === 'emailSendsPerMonth') continue
+      // Nor is an assist band. Every other quota here is infrastructure the
+      // deal already meters and prices; assist is a per-token charge from a
+      // third party, and `UNLIMITED` is unrepresentable off-process —
+      // `JSON.stringify(Infinity)` is `null`, which reads back as a band of
+      // ZERO. An unbounded assist band would hand the only customers with a
+      // signed contract the one budget that refuses everything. A deal that
+      // needs more takes the per-org override, like `formsPerHost`.
+      if (key === 'assistCreditsPerMonth') continue
       expect([key, value]).toEqual([key, UNLIMITED])
     }
+    expect(resolved.assistCreditsPerMonth).toBe(
+      ENTERPRISE_ASSIST_CREDITS_PER_MONTH,
+    )
+    expect(Number.isFinite(resolved.assistCreditsPerMonth)).toBe(true)
     expect(resolved.formsPerHost).toBe(FORMS_PER_HOST_CEILING)
     expect(resolved.emailSendsPerMonth).toBe(ENTERPRISE_EMAIL_SENDS_PER_MONTH)
     expect(Number.isFinite(resolved.emailSendsPerMonth)).toBe(true)
@@ -2347,6 +2368,25 @@ describe('an uncapped band never carries an overage rate (AGL-2482)', () => {
       )
       expect(uncapped.length).toBeGreaterThan(0)
       expect(unit).toBeTruthy()
+    }
+  })
+
+  it('NO plan has an unbounded assist band, on any tier', () => {
+    // Assist is not in METERED_PAIRS above and cannot be: that rule forbids a
+    // rate on an uncapped band, and its premise guard requires some plan to
+    // be uncapped. Assist is finite EVERYWHERE, which is the stronger claim
+    // and the one worth pinning.
+    //
+    // `UNLIMITED` is `Number.POSITIVE_INFINITY`, `JSON.stringify(Infinity)`
+    // is `null`, and `Number(null)` is 0 — so an unbounded band reads back as
+    // a band of ZERO through any route that does not also send the explicit
+    // flag `restoreQuotaLimit` rebuilds from.
+    for (const plan of Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]) {
+      const band = PLAN_ENTITLEMENTS[plan].assistCreditsPerMonth
+      expect(Number.isFinite(band)).toBe(true)
+      expect(band).toBeGreaterThanOrEqual(0)
+      const wire = JSON.parse(JSON.stringify({ band })) as { band: number }
+      expect(wire.band).toBe(band)
     }
   })
 
