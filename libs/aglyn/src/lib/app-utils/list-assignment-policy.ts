@@ -42,7 +42,7 @@
  * they never asked about, and it requires a basis. Nothing in the reply path
  * reaches this module and nothing here sends anything.
  *
- * ## An enrollment is not a licence to send
+ * ## An enrollment is not a license to send
  *
  * Passing this rule writes a membership and nothing else. It meters nothing,
  * sends nothing, and is not a promise the person is still mailable when a
@@ -80,7 +80,10 @@
  * refusal and discarding it.
  */
 
-import type { MarketingConsentRecord } from './marketing-consent'
+import {
+  OPERATOR_ATTESTED_CONSENT_BASIS,
+  type MarketingConsentRecord,
+} from './marketing-consent'
 
 /**
  * What is wrong with the ADDRESS, before anybody asks what is wrong with the
@@ -114,7 +117,14 @@ export type AssignmentRefusal =
 
 /** The basis an enrollment would carry, resolved server-side. */
 export interface AssignmentBasisDecision {
-  basis: 'contact-opt-in' | 'operator-attested'
+  /*
+   * The attested value is the EXPORTED CONSTANT and not a literal spelled
+   * again here. `readMarketingBasis` recognizes an attestation by comparing
+   * the stored field against that constant, so a second spelling on the
+   * deciding side is a rename away from writing a basis the reader reports as
+   * the person's own act — the one conflation this whole area exists to stop.
+   */
+  basis: 'contact-opt-in' | typeof OPERATOR_ATTESTED_CONSENT_BASIS
   /** When the basis was recorded — the person's own moment, or the merchant's. */
   atMs: number
   /** The account answerable for an attestation; `null` for a pass-through. */
@@ -156,7 +166,7 @@ export function assignmentBasis(input: {
   }
   if (!input.attested) return { refusal: 'no-basis' }
   return {
-    basis: 'operator-attested',
+    basis: OPERATOR_ATTESTED_CONSENT_BASIS,
     atMs: input.nowMs,
     // Never optional for this basis: an attestation nobody is named for is
     // indistinguishable from an opt-in, which is the conflation the whole

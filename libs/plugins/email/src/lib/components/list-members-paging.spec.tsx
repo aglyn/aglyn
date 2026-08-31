@@ -41,11 +41,15 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { soloConsentGroup } from '@aglyn/aglyn'
 import { ListMembersPanel } from './list-members-panel'
 
 jest.setTimeout(30_000)
 
 const TOTAL = 45
+
+/** The site this console is being read as, and the one holding every grant. */
+const HOST = 'host-1'
 
 /**
  * The address ascends with the index; the document id DESCENDS with it. An
@@ -64,17 +68,34 @@ const memberDocs = Array.from({ length: TOTAL }, (_, index) => ({
   ...(index < 2
     ? {}
     : { addedAt: { toDate: () => new Date(Date.UTC(2026, 0, 1)) } }),
+  /*
+   * The basis NESTED UNDER THE HOST, which is where `enrollListMember` puts
+   * it. It sat at the top of this fixture while the writer had already moved
+   * it into `marketingConsentByHost`, so the panel's top-level reads found it
+   * here and found nothing in production — a test double in a shape the
+   * product never writes, which is how a column that reported every member of
+   * every list as having no basis went on passing.
+   */
   ...(index % 3 === 0
     ? {
-        marketingConsent: true,
-        marketingConsentBasis: 'operator-attested',
-        marketingConsentAtMs: Date.UTC(2026, 1, 2),
+        marketingConsentByHost: {
+          [HOST]: {
+            marketingConsent: true,
+            marketingConsentBasis: 'operator-attested',
+            marketingConsentByUid: 'uid-editor',
+            marketingConsentAtMs: Date.UTC(2026, 1, 2),
+          },
+        },
       }
     : index % 3 === 1
       ? {
-          marketingConsent: true,
-          marketingConsentBasis: 'contact-opt-in',
-          marketingConsentAtMs: Date.UTC(2025, 5, 6),
+          marketingConsentByHost: {
+            [HOST]: {
+              marketingConsent: true,
+              marketingConsentBasis: 'contact-opt-in',
+              marketingConsentAtMs: Date.UTC(2025, 5, 6),
+            },
+          },
         }
       : {}),
 }))
@@ -166,7 +187,8 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 const mountPanel = async () => {
   render(
     <ListMembersPanel
-      hostId="host-1"
+      hostId={HOST}
+      consentGroup={soloConsentGroup(HOST)}
       scope={['orgs', 'org-1']}
       listId="list-1"
       listName="Newsletter"

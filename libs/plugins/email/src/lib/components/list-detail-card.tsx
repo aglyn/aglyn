@@ -43,7 +43,11 @@
  * screen the question gets asked on.
  */
 
-import { normalizeDynamicListRule, pluginDocsHelp } from '@aglyn/aglyn'
+import {
+  normalizeDynamicListRule,
+  pluginDocsHelp,
+  type ConsentGroup,
+} from '@aglyn/aglyn'
 import { mdiPencilOutline, mdiTrayArrowUp } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { Button, Chip, Stack, Typography } from '@mui/material'
@@ -56,13 +60,22 @@ import ListMembersPanel from './list-members-panel'
 
 export interface ListDetailCardProps {
   hostId: string
+  /**
+   * The controller this audience is being read AS, resolved by the page from
+   * the org document it already holds.
+   *
+   * Passed through rather than resolved here: the group is a fact about the
+   * ORG, one lookup serves every section, and a card that resolved its own
+   * would be a second place for the answer to come from.
+   */
+  consentGroup: ConsentGroup
   listId: string
   /** The emails hub URL, for the way back to the audiences list. */
   basePath: string
 }
 
 export function ListDetailCard(props: ListDetailCardProps) {
-  const { hostId, listId, basePath } = props
+  const { hostId, consentGroup, listId, basePath } = props
   const firestore = useFirestore()
   const { scope } = useOrgDataScope({ hostId })
 
@@ -250,6 +263,7 @@ export function ListDetailCard(props: ListDetailCardProps) {
         {scope ? (
           <ListMembersPanel
             hostId={hostId}
+            consentGroup={consentGroup}
             scope={scope as readonly [string, string]}
             listId={listId}
             listName={String(list['name'] ?? '')}

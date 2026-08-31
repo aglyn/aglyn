@@ -32,6 +32,7 @@
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
+import { soloConsentGroup } from '@aglyn/aglyn'
 import { ListMembersPanel } from './list-members-panel'
 
 const FIRESTORE = {}
@@ -154,6 +155,7 @@ const mount = async (props: Record<string, unknown> = {}) => {
   render(
     <ListMembersPanel
       hostId="host-1"
+      consentGroup={soloConsentGroup('host-1')}
       scope={['orgs', 'org-1']}
       listId="list-1"
       listName="Newsletter"
