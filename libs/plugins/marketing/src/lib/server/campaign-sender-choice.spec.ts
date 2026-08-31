@@ -62,13 +62,24 @@ const isPlainObject = (value: unknown): value is Record<string, any> =>
  * though it had recorded nobody — which the follow-up correctly refuses to
  * proceed from.
  */
+/** The `FieldValue.delete()` marker, resolved by {@link mergeInto}. */
+const DELETE_SENTINEL = '__delete__'
+
 function mergeInto(
   existing: Record<string, any>,
   patch: Record<string, any>,
 ): Record<string, any> {
   const next = { ...existing }
   for (const [key, value] of Object.entries(patch)) {
-    if (isPlainObject(value) && '__increment' in value) {
+    if (value === DELETE_SENTINEL) {
+      /*
+       * `FieldValue.delete()` REMOVES the field rather than storing a marker.
+       * A double that kept the sentinel would leave a `templateScreenId` whose
+       * value happens to be a string — which is exactly the leftover the
+       * delete exists to clear, so the send would look one up and 400.
+       */
+      delete next[key]
+    } else if (isPlainObject(value) && '__increment' in value) {
       next[key] = Number(existing[key] ?? 0) + Number(value['__increment'])
     } else if (isPlainObject(value) && '__arrayUnion' in value) {
       const held = Array.isArray(existing[key]) ? existing[key] : []
@@ -192,6 +203,7 @@ jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => ({
         increment,
         arrayUnion,
         serverTimestamp: () => 'server-timestamp',
+        delete: () => DELETE_SENTINEL,
       },
     },
   },
@@ -221,7 +233,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         increment,
         arrayUnion,
         serverTimestamp: () => 'server-timestamp',
-        delete: () => '__delete__',
+        delete: () => DELETE_SENTINEL,
       },
       FieldPath: { documentId: () => '__name__' },
     },

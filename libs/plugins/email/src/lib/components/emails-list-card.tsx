@@ -402,7 +402,13 @@ export function EmailsListCard(props: EmailsListCardProps) {
           )
         }
         setCreateOpen(false)
-        router.push(`${basePath}/messages/${payload.campaignId}`)
+        /*
+         * Straight to where it is WRITTEN. The drawer collected the name and
+         * the campaign; the record now exists and holds nothing else, so the
+         * next thing to do with it is compose it — and its own page is a
+         * report of a send that has not happened.
+         */
+        router.push(`${basePath}/messages/${payload.campaignId}/edit`)
       } catch (error) {
         console.error(error)
         enqueueSnackbar('This email could not be created', {

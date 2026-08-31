@@ -305,14 +305,15 @@ describe('the list page never carries the composer', () => {
     expect(posted[0]['action']).toBe('draft')
   })
 
-  it('routes to the new email’s own page', async () => {
+  it('routes to where the new email is WRITTEN', async () => {
     await mount()
     await openDrawer()
     await submitDrawer()
 
-    // The same shape the table's own rows link to: the hub path, then the
-    // `emails` section, then the id.
-    expect(pushed).toBe('/acme/hosts/site/emails/messages/msg_new')
+    // The record's own page is a REPORT, and a record minted a second ago has
+    // nothing to report. The drawer collected the name; composing is the next
+    // thing to do with it, and that is its own route.
+    expect(pushed).toBe('/acme/hosts/site/emails/messages/msg_new/edit')
   })
 
   it('mounts NO composer on the list, before or after creating', async () => {
