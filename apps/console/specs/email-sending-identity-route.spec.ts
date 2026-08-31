@@ -81,6 +81,16 @@ jest.mock('@aglyn/aglyn/server', () => ({
 
 /** What the host document holds, before anything this route writes. */
 let mockHostDoc: Record<string, unknown> = {}
+/**
+ * `hosts/{hostId}/senders`, keyed by document id.
+ *
+ * A real subcollection rather than a pre-answered array, because the route's
+ * whole no-backfill design turns on the difference between EMPTY and holding
+ * rows: an empty one means the site's single sender is the three fields on the
+ * host document, and the first write has to materialize it there rather than
+ * inventing a new one.
+ */
+let mockSenders: Record<string, Record<string, unknown>> = {}
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   firebaseAdmin: {
@@ -101,7 +111,46 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
             }),
             set: async (value: Record<string, unknown>) => {
               mockState.written = value
+              /*
+               * MERGED as well as recorded. The assertions read `written`,
+               * which is the last patch and is what they are about — but the
+               * route reads the host document back through the same snapshot
+               * within one request, and a double that dropped the write would
+               * let a projection pass while never becoming the site's state.
+               */
+              mockHostDoc = { ...mockHostDoc, ...value }
             },
+            collection: () => ({
+              doc: (id: string) => ({
+                id,
+                get: async () => ({
+                  exists: mockSenders[id] !== undefined,
+                  id,
+                  data: () => mockSenders[id],
+                  get: (field: string) => mockSenders[id]?.[field],
+                }),
+                set: async (value: Record<string, unknown>) => {
+                  mockSenders[id] = { ...(mockSenders[id] ?? {}), ...value }
+                },
+                delete: async () => {
+                  delete mockSenders[id]
+                },
+              }),
+              // `limit` HONORS its argument: a double that returned everything
+              // could not fail the way the real query does.
+              limit: (max: number) => ({
+                get: async () => {
+                  const ids = Object.keys(mockSenders).sort().slice(0, max)
+                  return {
+                    docs: ids.map((id) => ({
+                      id,
+                      data: () => mockSenders[id],
+                      get: (field: string) => mockSenders[id]?.[field],
+                    })),
+                  }
+                },
+              }),
+            }),
           }),
         }),
       }),
@@ -236,6 +285,7 @@ beforeEach(() => {
     { domain: 'beta.com', status: 'records-issued', lastMissing: ['TXT:send.beta.com'] },
   ]
   mockHostDoc = { sendingDomain: 'acme.com', sendingLocalPart: 'news' }
+  mockSenders = {}
 })
 
 describe('reading is open to anyone who may compose', () => {
@@ -759,5 +809,316 @@ describe('a dedicated sending domain is requested, not issued', () => {
 
     expect(body.dedicated.available).toBe(false)
     expect(body.platformDomain).toBe('acme.mail.aglyn.app')
+  })
+})
+
+/**
+ * SEVERAL SENDERS, AND THE ONE AN EMAIL LEAVES ON WHEN IT NAMES NONE.
+ *
+ * The whole of this block turns on one property: `hosts/{hostId}` already
+ * carries `sendingLocalPart`, `sendingFromName` and `sendingReplyTo`, and
+ * `resolveHostSendingIdentity` reads the first of them on every tenant send.
+ * Those fields are the DEFAULT SENDER'S PROJECTION rather than something the
+ * list replaces, which is what lets this ship with no backfill — and what a
+ * regression here would break is not a new feature but every site that already
+ * sends as something other than `hello@`.
+ */
+describe('the senders a site holds', () => {
+  it('reports the site\u2019s existing sender as one row, with the address it leaves on', async () => {
+    // No subcollection at all, which is every site before anybody opens the
+    // list. The row is SYNTHESIZED from the host fields rather than reported
+    // as an absence, because such a site does have a sender — the one it has
+    // always had.
+    mockHostDoc = {
+      sendingDomain: 'acme.com',
+      sendingLocalPart: 'news',
+      sendingFromName: 'Acme',
+    }
+
+    const body = await (await read()).json()
+
+    expect(body.senders).toHaveLength(1)
+    expect(body.senders[0]).toMatchObject({
+      localPart: 'news',
+      fromName: 'Acme',
+      isDefault: true,
+      from: 'news@acme.com',
+    })
+  })
+
+  it('lists the stored senders once there are any, marking the default', async () => {
+    mockHostDoc = {
+      sendingDomain: 'acme.com',
+      sendingLocalPart: 'news',
+      defaultSenderId: 'default',
+    }
+    mockSenders = {
+      default: { localPart: 'news' },
+      'sender-jamie': { localPart: 'jamie', fromName: 'Jamie Lee' },
+    }
+
+    const body = await (await read()).json()
+    const rows = Object.fromEntries(
+      body.senders.map((one: any) => [one.id, one]),
+    )
+
+    expect(body.senders).toHaveLength(2)
+    expect(rows['default'].isDefault).toBe(true)
+    // Every row carries the WHOLE address, so no surface assembles one and
+    // the two cannot disagree the first time either half moves.
+    expect(rows['sender-jamie']).toMatchObject({
+      isDefault: false,
+      from: 'jamie@acme.com',
+    })
+  })
+
+  /**
+   * THE FIRST WRITE MATERIALIZES WHAT THE SITE ALREADY SENT AS.
+   *
+   * The failure this prevents is the one that would have needed a migration:
+   * a site sending as `test@` gains a second sender, the list starts from
+   * nothing, and the site quietly reverts to `hello@` — an address its owner
+   * never chose, on the domain their recipients already know.
+   */
+  it('keeps the site\u2019s existing sender when a second one is added', async () => {
+    mockHostDoc = {
+      sendingDomain: 'acme.com',
+      sendingLocalPart: 'test',
+      sendingFromName: 'Test Name',
+    }
+
+    const response = await write({
+      action: 'createSender',
+      localPart: 'jamie',
+      fromName: 'Jamie Lee',
+    })
+
+    expect(response.status).toBe(200)
+    const rows = Object.values(mockSenders)
+    expect(rows).toHaveLength(2)
+    expect(rows).toContainEqual(
+      expect.objectContaining({ localPart: 'test', fromName: 'Test Name' }),
+    )
+    expect(rows).toContainEqual(
+      expect.objectContaining({ localPart: 'jamie', fromName: 'Jamie Lee' }),
+    )
+    // And the projection the SEND path reads is untouched: adding a sender is
+    // not a decision about which one is the default.
+    expect(mockHostDoc['sendingLocalPart']).toBe('test')
+  })
+
+  it('refuses a second sender on the shared pooled address', async () => {
+    mockHostDoc = { subdomain: 'acme' }
+
+    const response = await write({
+      action: 'createSender',
+      localPart: 'jamie',
+    })
+
+    expect(response.status).toBe(409)
+    expect((await response.json()).error).toContain('shared Aglyn address')
+    expect(mockSenders).toEqual({})
+  })
+
+  it('refuses a reserved role mailbox on the list as well as on the site', async () => {
+    const response = await write({
+      action: 'createSender',
+      localPart: 'postmaster',
+    })
+
+    expect(response.status).toBe(400)
+    expect((await response.json()).error).toContain('reserved')
+  })
+
+  it('refuses a second sender on a mailbox this site already sends as', async () => {
+    mockHostDoc = {
+      sendingDomain: 'acme.com',
+      sendingLocalPart: 'news',
+      defaultSenderId: 'default',
+    }
+    mockSenders = { default: { localPart: 'news' } }
+
+    const response = await write({ action: 'createSender', localPart: 'news' })
+
+    expect(response.status).toBe(409)
+    expect(Object.keys(mockSenders)).toHaveLength(1)
+  })
+
+  it('writes the projection when the DEFAULT sender changes', async () => {
+    mockHostDoc = {
+      sendingDomain: 'acme.com',
+      sendingLocalPart: 'news',
+      defaultSenderId: 'default',
+    }
+    mockSenders = { default: { localPart: 'news' } }
+
+    const response = await write({
+      action: 'updateSender',
+      senderId: 'default',
+      localPart: 'jamie',
+      fromName: 'Jamie Lee',
+    })
+
+    expect(response.status).toBe(200)
+    // Both halves. The row is what the list renders; `sendingLocalPart` is
+    // what the send path actually reads, and a change that wrote only one of
+    // them is a site whose settings screen disagrees with its mail.
+    expect(mockSenders['default']).toMatchObject({
+      localPart: 'jamie',
+      fromName: 'Jamie Lee',
+    })
+    expect(mockState.written).toMatchObject({
+      sendingLocalPart: 'jamie',
+      sendingFromName: 'Jamie Lee',
+    })
+  })
+
+  /**
+   * The CONTROL for the projection: editing a sender that is not the default
+   * must not move the address every unnamed send leaves on.
+   */
+  it('leaves the projection alone when a non-default sender changes', async () => {
+    mockHostDoc = {
+      sendingDomain: 'acme.com',
+      sendingLocalPart: 'news',
+      defaultSenderId: 'default',
+    }
+    mockSenders = {
+      default: { localPart: 'news' },
+      'sender-jamie': { localPart: 'jamie' },
+    }
+
+    const response = await write({
+      action: 'updateSender',
+      senderId: 'sender-jamie',
+      localPart: 'jaime',
+    })
+
+    expect(response.status).toBe(200)
+    expect(mockSenders['sender-jamie']).toMatchObject({ localPart: 'jaime' })
+    expect(mockHostDoc['sendingLocalPart']).toBe('news')
+  })
+
+  it('re-projects when another sender is made the default', async () => {
+    mockHostDoc = {
+      sendingDomain: 'acme.com',
+      sendingLocalPart: 'news',
+      defaultSenderId: 'default',
+    }
+    mockSenders = {
+      default: { localPart: 'news' },
+      'sender-jamie': { localPart: 'jamie', fromName: 'Jamie Lee' },
+    }
+
+    const response = await write({
+      action: 'makeDefaultSender',
+      senderId: 'sender-jamie',
+    })
+
+    expect(response.status).toBe(200)
+    expect(mockState.written).toMatchObject({
+      defaultSenderId: 'sender-jamie',
+      sendingLocalPart: 'jamie',
+      sendingFromName: 'Jamie Lee',
+    })
+  })
+
+  /**
+   * A `senderId` this site does not hold is REFUSED, never defaulted.
+   *
+   * The same class as the mailbox validation that used to answer `hello` to a
+   * name it could not parse: answering a choice somebody made with a different
+   * one they did not is how a merchant is told their mail goes out as an
+   * address it does not.
+   */
+  it('refuses a sender this site does not hold rather than defaulting', async () => {
+    mockHostDoc = {
+      sendingDomain: 'acme.com',
+      sendingLocalPart: 'news',
+      defaultSenderId: 'default',
+    }
+    mockSenders = { default: { localPart: 'news' } }
+
+    const response = await write({
+      action: 'updateSender',
+      senderId: 'somebody-elses-sender',
+      localPart: 'jamie',
+    })
+
+    expect(response.status).toBe(404)
+    expect(mockSenders['default']).toMatchObject({ localPart: 'news' })
+    expect(mockHostDoc['sendingLocalPart']).toBe('news')
+  })
+
+  it('refuses to remove the default, and names the way out', async () => {
+    mockHostDoc = {
+      sendingDomain: 'acme.com',
+      sendingLocalPart: 'news',
+      defaultSenderId: 'default',
+    }
+    mockSenders = {
+      default: { localPart: 'news' },
+      'sender-jamie': { localPart: 'jamie' },
+    }
+
+    const response = await write({
+      action: 'deleteSender',
+      senderId: 'default',
+    })
+
+    expect(response.status).toBe(409)
+    expect((await response.json()).error).toMatch(/default/i)
+    expect(mockSenders['default']).toBeTruthy()
+  })
+
+  it('removes a sender that is not the default', async () => {
+    mockHostDoc = {
+      sendingDomain: 'acme.com',
+      sendingLocalPart: 'news',
+      defaultSenderId: 'default',
+    }
+    mockSenders = {
+      default: { localPart: 'news' },
+      'sender-jamie': { localPart: 'jamie' },
+    }
+
+    const response = await write({
+      action: 'deleteSender',
+      senderId: 'sender-jamie',
+    })
+
+    expect(response.status).toBe(200)
+    expect(Object.keys(mockSenders)).toEqual(['default'])
+  })
+
+  /**
+   * The list answers to the same gate as the mailbox it is made of.
+   *
+   * A site `admin` may be a site-scoped collaborator with no org standing, and
+   * naming the addresses this site's mail leaves on is exactly the decision
+   * `org.settings` covers.
+   */
+  it('refuses a sender write from somebody without the org admin role', async () => {
+    mockState.canManage = false
+
+    const response = await write({
+      action: 'createSender',
+      localPart: 'jamie',
+    })
+
+    expect(response.status).toBe(403)
+    expect(mockSenders).toEqual({})
+  })
+
+  it('reports the list to an editor, who is the one who picks from it', async () => {
+    // The composer is admin-or-editor. A list behind the write gate would
+    // leave a merchant with a From control that had nothing in it.
+    mockState.hostRole = 'editor'
+    mockState.canManage = false
+
+    const body = await (await read()).json()
+
+    expect(body.senders).toHaveLength(1)
+    expect(body.canManage).toBe(false)
   })
 })

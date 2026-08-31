@@ -36,11 +36,16 @@ import {
 import { collection, doc, limit, query } from 'firebase/firestore'
 import { createEmailScreen } from '../utils/create-email-screen'
 import { useCampaignSendApi } from './use-campaign-send-api'
-import { useSendingApi } from './use-sending-identity-api'
+import {
+  useSendingApi,
+  type HostSenderView,
+  type SendingIdentityView,
+} from './use-sending-identity-api'
+import SendingSenderDrawer from './sending-sender-drawer'
 import { describeCallFailure } from '@aglyn/shared-util-http/authorized-token'
 import CampaignTestSendDrawer from './campaign-test-send-drawer'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   useConsoleHostRoute,
   useFirestore,
@@ -173,6 +178,15 @@ export interface CampaignComposerProps {
     sendAtMs?: number
     /** `platform`, or absent for the site's standing selection. */
     sendingIdentity?: string
+    /**
+     * Which of the site's senders this email is set to go out as, or absent
+     * for the site's default.
+     *
+     * Read back so a draft reopens on the sender it was saved with, and so a
+     * scheduled email that is edited does not silently move onto whichever
+     * sender has become the default since.
+     */
+    senderId?: string
   }
   /** Called once a send or a schedule lands. */
   onSent?: () => void
@@ -186,6 +200,56 @@ export interface CampaignComposerProps {
  * the button that cannot be taken back — how many people it reaches and how
  * many it does not.
  */
+/**
+ * The picker entry that OPENS THE SENDER EDITOR rather than selecting a row.
+ *
+ * A one-off address is deliberately not offered, and this is what replaces it.
+ * An address typed into one campaign and stored nowhere is a mailbox nobody
+ * serves — its bounces come back to nothing and a client ignoring `Reply-To:`
+ * answers into a void — which does not stop being true because the merchant
+ * meant it. What they actually want is a sender they had not set up yet, and
+ * from here that costs one drawer: validated once, served, and reusable.
+ *
+ * A one-off NAME and a one-off reply address are a different matter and have
+ * always worked, as the two per-send fields below.
+ */
+const ADD_SENDER_OPTION = 'add-a-sender'
+
+/**
+ * What one of the two per-send sender fields is DOING, in a sentence.
+ *
+ * Three states, and the middle one is why this exists. The composer seeds both
+ * fields from the chosen sender, so a merchant opening a new email finds them
+ * already filled with values that are defined on another screen — and a field
+ * that silently matches a setting elsewhere reads as a second definition of
+ * it, which is exactly the "two pages define overlapping things" confusion the
+ * From line above was missing.
+ *
+ * Naming the inheritance costs a sentence and settles it: the value came from
+ * the sender, editing it is per-email, and the sender is unchanged either way.
+ * The send agrees — `campaign-send.ts` resolves `options.fromName ||
+ * branding.fromName`, so what is submitted here is what goes out and what is
+ * recorded on the report.
+ */
+function senderFieldHelp(
+  field: 'name' | 'reply address',
+  saved: string,
+  current: string,
+): string {
+  const base =
+    field === 'name'
+      ? 'Shown in front of the address.'
+      : 'Where replies go — any mailbox, including a personal one.'
+  if (!saved) {
+    return field === 'name'
+      ? `${base} Your brand name is used when this is empty.`
+      : base
+  }
+  return current.trim() === saved
+    ? `${base} This is the sender’s saved ${field}; editing it changes this email only.`
+    : `${base} Overrides the sender’s saved ${field}, ${saved}, for this email only.`
+}
+
 export function CampaignComposer(props: CampaignComposerProps) {
   const {
     hostId,
@@ -345,6 +409,23 @@ export function CampaignComposer(props: CampaignComposerProps) {
   const [sendingIdentity, setSendingIdentity] = useState(
     initial?.sendingIdentity ?? '',
   )
+  /**
+   * WHICH OF THE SITE'S SENDERS THIS EMAIL GOES OUT AS.
+   *
+   * An id into `hosts/{hostId}/senders`, empty for the site's default. It is
+   * an id and not an address, which is the difference between this and the
+   * field above it: the mailbox behind it was configured once under the
+   * organization-admin gate, so a composer choosing here can only reach an
+   * address the site was already set up to send as.
+   */
+  const [senderId, setSenderId] = useState(initial?.senderId ?? '')
+  /*
+   * The sender this composer OPENED on, which is a stable prop rather than the
+   * state above. The identity read below seeds two fields from it, and
+   * depending on the state would re-issue that request every time somebody
+   * changed the picker.
+   */
+  const openedAsSenderId = initial?.senderId ?? ''
   /*
    * The campaign's own list is where the composer opens, because a send
    * composed inside a campaign aimed at a list is overwhelmingly a send to
@@ -373,6 +454,8 @@ export function CampaignComposer(props: CampaignComposerProps) {
   )
   // Scheduling: a future timestamp turns Send into Schedule.
   const [sendAt, setSendAt] = useState('')
+  /** Whether the sender editor is open, opened from the From picker. */
+  const [addingSender, setAddingSender] = useState(false)
   const [busy, setBusy] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
 
@@ -490,6 +573,13 @@ export function CampaignComposer(props: CampaignComposerProps) {
            * somebody presses Send.
            */
           ...(sendingIdentity ? { sendingIdentity } : {}),
+          /*
+           * The chosen SENDER rides the count for the same reason. A sender
+           * this site no longer holds is refused by the dry run on exactly
+           * the terms a send refuses it, so a draft pointing at a removed one
+           * says so at the picker rather than at Send.
+           */
+          ...(senderId ? { senderId } : {}),
         })
         if (!active) return
         if (!response.ok) {
@@ -545,7 +635,15 @@ export function CampaignComposer(props: CampaignComposerProps) {
       active = false
       clearTimeout(timer)
     }
-  }, [authorizedPost, audienceKind, segmentId, listId, topicId, sendingIdentity])
+  }, [
+    authorizedPost,
+    audienceKind,
+    segmentId,
+    listId,
+    topicId,
+    sendingIdentity,
+    senderId,
+  ])
 
   /**
    * THE IDENTITIES THIS SITE MAY SEND AS, for the picker.
@@ -572,6 +670,37 @@ export function CampaignComposer(props: CampaignComposerProps) {
    */
   const siteDefaultIdentity =
     identityOptions?.find((one) => one.value !== 'platform')?.value ?? 'platform'
+  /**
+   * The identity as the route reports it, whole.
+   *
+   * Kept rather than picked apart into the two fields this file reads,
+   * because the sender drawer opens from here and takes the same view the
+   * Sending card hands it — so the editor and the picker agree about what a
+   * sender currently is instead of holding two answers.
+   *
+   * Null until the read lands, so the controls below render nothing rather
+   * than an empty picker — the same reason `identityOptions` starts null.
+   */
+  const [identityView, setIdentityView] = useState<SendingIdentityView | null>(
+    null,
+  )
+  const senders = identityView?.senders ?? null
+  /**
+   * Bumped to re-read the identity, and the pending row to select when it
+   * lands.
+   *
+   * A sender added from the composer exists only after the route answers, so
+   * the selection cannot be made at the moment somebody presses Save — the
+   * list it would select from has not been read yet. The id is parked here and
+   * applied by the read, which is also what puts the new sender's name and
+   * reply address into the two fields below.
+   *
+   * A ref rather than state for the pending id: it is read INSIDE the effect,
+   * and as state it would be a dependency, so every selection would re-issue
+   * the request that had just answered.
+   */
+  const [identityReads, setIdentityReads] = useState(0)
+  const pendingSenderRef = useRef('')
   const sendingApi = useSendingApi()
   useEffect(() => {
     let active = true
@@ -583,10 +712,27 @@ export function CampaignComposer(props: CampaignComposerProps) {
       })
       if (!active || !response.ok) return
       setIdentityOptions(payload?.options ?? [])
+      const rows = (payload?.senders ?? []) as HostSenderView[]
+      setIdentityView(payload as SendingIdentityView)
       /*
-       * THE SITE'S SENDER, AS A STARTING POINT AND NOT AS AN OVERRIDE.
+       * A sender just added from this composer is selected here, where the
+       * row it names finally exists, and brings its two fields with it —
+       * which is the same thing choosing an existing sender does.
+       */
+      const pending = pendingSenderRef.current
+      pendingSenderRef.current = ''
+      const added = pending ? rows.find((one) => one.id === pending) : null
+      if (added) {
+        setSenderId(added.id)
+        setFromName(added.fromName ?? '')
+        setReplyTo(added.replyTo ?? '')
+        return
+      }
+      /*
+       * THE SENDER'S NAME AND REPLY ADDRESS, AS A STARTING POINT AND NOT AS
+       * AN OVERRIDE.
        *
-       * A site can name who its mail comes from — a person's name and where
+       * A sender carries who its mail comes from — a person's name and where
        * their replies land — and this is where that reaches a campaign. It is
        * applied only to a field that is still empty, so it seeds a new
        * composer and never rewrites a value somebody typed, and never one a
@@ -597,16 +743,74 @@ export function CampaignComposer(props: CampaignComposerProps) {
        * afterwards. It also keeps one answer on the record: the send stores
        * the fields the composer submitted, so what the report says went out
        * is what was on screen when somebody pressed the button.
+       *
+       * From the sender this email ALREADY names where it names one, and from
+       * the site's fields otherwise. An email set to go out as Jamie seeded
+       * from the site's default would open with the wrong person's name in
+       * front of Jamie's address.
        */
-      const siteFromName = String(payload?.fromName ?? '')
-      const siteReplyTo = String(payload?.replyTo ?? '')
+      const opened = openedAsSenderId
+        ? rows.find((one) => one.id === openedAsSenderId)
+        : null
+      const siteFromName = String(
+        (opened ? opened.fromName : payload?.fromName) ?? '',
+      )
+      const siteReplyTo = String(
+        (opened ? opened.replyTo : payload?.replyTo) ?? '',
+      )
       if (siteFromName) setFromName((current) => current || siteFromName)
       if (siteReplyTo) setReplyTo((current) => current || siteReplyTo)
     })().catch(() => undefined)
     return () => {
       active = false
     }
-  }, [sendingApi, hostId])
+  }, [sendingApi, hostId, openedAsSenderId, identityReads])
+
+  /**
+   * CHOOSING A SENDER BRINGS THE THREE FIELDS IT CARRIES.
+   *
+   * Picking one is "send this as Jamie", so the display name and reply address
+   * configured beside the mailbox come with it — including when the sender has
+   * none, because leaving the previous person's name in front of somebody
+   * else's address is the one outcome nobody asked for. Both fields stay
+   * editable afterwards: they are per-message facts, and the send records what
+   * was submitted rather than re-deriving them.
+   */
+  const applySender = useCallback(
+    (next: string) => {
+      /*
+       * A REAL ROW ALWAYS WINS, and the sentinel is only reached when none
+       * matched. `ADD_SENDER_OPTION` is a value this product never mints as a
+       * document id, and checking the list first means that even if one ever
+       * arrived it would be selected as the sender it is rather than opening
+       * a drawer — a picker cannot be made to send as the wrong address by a
+       * value that happens to collide with a menu entry.
+       */
+      const chosen = (senders ?? []).find((one) => one.id === next)
+      if (!chosen) {
+        if (next === ADD_SENDER_OPTION) setAddingSender(true)
+        return
+      }
+      setSenderId(chosen.id)
+      setFromName(chosen.fromName ?? '')
+      setReplyTo(chosen.replyTo ?? '')
+    },
+    [senders],
+  )
+
+  /**
+   * The sender this email will actually leave as, and the address with it.
+   *
+   * Resolved from the list rather than from `senderId` alone, because an email
+   * that names no sender leaves on the site's DEFAULT — which is a real row
+   * with a real address, and the one the merchant needs to see when they have
+   * chosen nothing.
+   */
+  const chosenSender =
+    (senders ?? []).find((one) => one.id === senderId) ??
+    (senders ?? []).find((one) => one.isDefault) ??
+    (senders ?? [])[0] ??
+    null
 
   /**
    * WHAT THE EMAIL LOOKS LIKE, rendered by the code that will mail it.
@@ -794,6 +998,7 @@ export function CampaignComposer(props: CampaignComposerProps) {
         ...(emailCampaignId ? { emailCampaignId } : {}),
         ...(displayName ? { displayName } : {}),
         ...(topicId ? { topicId } : {}),
+        ...(senderId ? { senderId } : {}),
         fromName: fromName.trim(),
         replyTo: replyTo.trim(),
         preheader: preheader.trim(),
@@ -858,6 +1063,7 @@ export function CampaignComposer(props: CampaignComposerProps) {
     templateScreenId,
     emailCampaignId,
     topicId,
+    senderId,
     fromName,
     replyTo,
     preheader,
@@ -902,6 +1108,7 @@ export function CampaignComposer(props: CampaignComposerProps) {
         ...(emailCampaignId ? { emailCampaignId } : {}),
         ...(displayName ? { displayName } : {}),
         ...(topicId ? { topicId } : {}),
+        ...(senderId ? { senderId } : {}),
         fromName: fromName.trim(),
         replyTo: replyTo.trim(),
         preheader: preheader.trim(),
@@ -936,6 +1143,7 @@ export function CampaignComposer(props: CampaignComposerProps) {
     emailCampaignId,
     displayName,
     topicId,
+    senderId,
     fromName,
     replyTo,
     preheader,
@@ -1111,6 +1319,120 @@ export function CampaignComposer(props: CampaignComposerProps) {
             ))}
         </TextField>
       ) : null}
+      {/*
+        WHICH SENDER THIS EMAIL GOES OUT AS.
+
+        Offered only when there is a choice to make: a site with one sender
+        has nothing to pick, and a control with one option reads as a decision
+        somebody failed to take.
+
+        By ID rather than by address. The mailbox behind each row was
+        configured on the site under the organization-admin gate, so this
+        control can only reach an address the site was already set up to send
+        as — which is what keeps a per-send CHOICE from being the per-send
+        ADDRESS FIELD that the sending rules close off. The server refuses an
+        id this site does not hold rather than falling back to the default.
+       */}
+      {/*
+        THE PICKER IS OFFERED ONLY WHEN THERE IS A CHOICE, and the ADDRESS is
+        offered either way.
+
+        A site with one sender has nothing to pick, and a control with one
+        option reads as a decision somebody failed to take. What that site
+        still needs is the answer to "what will my recipients see in the From
+        line", which this page did not carry at all — so the sender was defined
+        on one screen and the email written on another that never named it,
+        and the two read as rivals defining overlapping things.
+
+        By ID rather than by address. The mailbox behind each row was
+        configured on the site under the organization-admin gate, so this
+        control can only reach an address this site was already set up to send
+        as — which is what keeps a per-send CHOICE from being the per-send
+        ADDRESS FIELD that the sending rules close off. The server refuses an
+        id this site does not hold rather than falling back to the default.
+       */}
+      {(senders?.length ?? 0) > 1 ? (
+        <TextField
+          select
+          label="From"
+          value={chosenSender?.id ?? ''}
+          onChange={(event) => applySender(event.target.value)}
+          size="small"
+          helperText="Which of this site’s senders this email goes out as"
+        >
+          {(senders ?? []).map((sender) => (
+            <MenuItem key={sender.id} value={sender.id}>
+              {/*
+                THE ADDRESS LEADS, and the name sits under it.
+
+                The inverse of the teammate picker in the sender drawer, and
+                deliberately: that one answers "which of us is this from",
+                which is a question about a person, while this one answers
+                "what address does this leave on" — and a row that led with a
+                display name would make the reader open the menu to find the
+                one fact they came for.
+               */}
+              <Stack spacing={0}>
+                <Typography variant="body2">
+                  {sender.from ?? `${sender.localPart}@`}
+                </Typography>
+                {sender.fromName || sender.isDefault ? (
+                  <Typography variant="caption" color="text.secondary">
+                    {[
+                      sender.fromName,
+                      sender.isDefault ? 'this site’s default' : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </Typography>
+                ) : null}
+              </Stack>
+            </MenuItem>
+          ))}
+          {/*
+            Adding one from here rather than sending the merchant to another
+            screen and back. It is what a "one-off sender" is met with: the
+            address is validated, served and reusable, which a per-campaign
+            address would be none of.
+
+            Offered only to somebody who may write it, and only where a
+            second sender is a thing this site can have. Naming the addresses a
+            site's mail leaves on is an organization-admin decision, and a site
+            on the shared pooled address has one fixed mailbox it does not own
+            — so in either case the entry would open a drawer whose Save is
+            refused, which is worse than not offering it.
+           */}
+          {identityView?.canManage && identityView?.selected ? (
+            <MenuItem value={ADD_SENDER_OPTION}>
+              <Typography variant="body2" color="primary">
+                {'Add a sender…'}
+              </Typography>
+            </MenuItem>
+          ) : null}
+        </TextField>
+      ) : null}
+      {/*
+        WHAT A RECIPIENT WILL SEE, in one line, from the three fields that
+        decide it.
+
+        Live rather than stored: the name is whatever is in the field below
+        this second, so editing it shows immediately in the From line it will
+        produce. Rendered only when there is an address to name — a site whose
+        mailbox is not in effect has no address to promise, and the identity
+        summary further down is what says so.
+       */}
+      {chosenSender?.from ? (
+        <Typography variant="body2" color="text.secondary">
+          {'This email goes out as '}
+          <Typography component="span" variant="body2" sx={{ fontWeight: 'bold' }}>
+            {fromName.trim()
+              ? `${fromName.trim()} <${chosenSender.from}>`
+              : chosenSender.from}
+          </Typography>
+          {replyTo.trim() ? `, with replies to ${replyTo.trim()}` : ''}
+          {'.'}
+        </Typography>
+      ) : null}
       <Stack direction="row" spacing={1}>
         <TextField
           label="From name"
@@ -1118,7 +1440,22 @@ export function CampaignComposer(props: CampaignComposerProps) {
           onChange={(event) => setFromName(event.target.value)}
           size="small"
           sx={{ flex: 1 }}
-          helperText="Shown in front of your verified sending address"
+          /*
+           * THE HELPER SAYS WHAT THIS FIELD IS OVERRIDING.
+           *
+           * The composer seeds both fields from the chosen sender, so the
+           * value sitting here on open is the SENDER'S — and a field that
+           * silently matches a setting somewhere else reads as a second
+           * definition of it. Saying which state it is in is what makes
+           * editing here read as "for this email" rather than as changing the
+           * site, which is the confusion two screens carrying the same two
+           * fields produce on their own.
+           */
+          helperText={senderFieldHelp(
+            'name',
+            chosenSender?.fromName ?? '',
+            fromName,
+          )}
         />
         <TextField
           label="Reply-to"
@@ -1136,7 +1473,11 @@ export function CampaignComposer(props: CampaignComposerProps) {
            * so it would be refused by the receiving side rather than
            * delivered; a reply address carries no such requirement.
            */
-          helperText="Where replies go. Any mailbox, including a personal one"
+          helperText={senderFieldHelp(
+            'reply address',
+            chosenSender?.replyTo ?? '',
+            replyTo,
+          )}
         />
       </Stack>
       <TextField
@@ -1386,6 +1727,36 @@ export function CampaignComposer(props: CampaignComposerProps) {
         is composed rather than a reconstruction of it. It shares the one
         authorized POST with every other action on this surface.
        */}
+      {/*
+        THE SENDER EDITOR, mounted only once somebody asks for it.
+
+        Not rendered closed. It reads the site's collaborator roster and three
+        shapes of the org's team when it opens, and the module it is built from
+        is a drawer nobody on this page has asked to see — so it costs nothing
+        until the picker's last entry is chosen.
+
+        `senderId={null}` is the ADD mode: the fields open empty, so the sender
+        this site already has is left exactly where it is rather than renamed
+        by somebody composing an email.
+       */}
+      {addingSender ? (
+        <SendingSenderDrawer
+          open
+          hostId={hostId}
+          view={identityView}
+          senderId={null}
+          onClose={() => setAddingSender(false)}
+          onSaved={(created) => {
+            /*
+             * The new row is selected by the read, not here: it does not exist
+             * in `senders` yet, because the list this picker draws from was
+             * fetched before the drawer wrote anything.
+             */
+            if (created) pendingSenderRef.current = created
+            setIdentityReads((count) => count + 1)
+          }}
+        />
+      ) : null}
       <CampaignTestSendDrawer
         open={testOpen}
         onClose={() => setTestOpen(false)}
@@ -1398,6 +1769,7 @@ export function CampaignComposer(props: CampaignComposerProps) {
           body: body.trim(),
           fromName: fromName.trim(),
           replyTo: replyTo.trim(),
+          ...(senderId ? { senderId } : {}),
           preheader: preheader.trim(),
           ...(templateScreenId ? { templateScreenId } : {}),
           ...(sendingIdentity ? { sendingIdentity } : {}),

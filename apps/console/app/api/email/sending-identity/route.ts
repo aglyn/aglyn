@@ -63,16 +63,41 @@
  * in front of the `@` — and a display name and a reply address to go with it,
  * which is what "send as a person" is made of.
  *
- * The mailbox is stored per site rather than taken per send, because it
+ * The mailbox is CONFIGURED here rather than typed per send, because it
  * addresses a real mailbox: it is where a bounce returns and where a client
  * that ignores `Reply-To:` will answer. `campaign-send.ts` states the same
- * boundary from the other end — the sending identity named in a send request
- * is read by nothing — and a per-send mailbox would reopen exactly that path.
+ * boundary from the other end — a sending identity named in a send request is
+ * read by nothing — and a per-send local part would reopen exactly that path.
  *
- * It is also the reason the two writes have different gates. Choosing the
- * address every recipient of this site's mail sees is an `org.settings`
- * decision, and the composer, which is admin-or-editor, may only choose the
- * name in front of it.
+ * It is also the reason the two writes have different gates. Deciding which
+ * addresses this site's mail may leave on is an `org.settings` decision, and
+ * the composer, which is admin-or-editor, may only pick among them.
+ *
+ * ## SEVERAL senders, chosen by id
+ *
+ * A site holds a list — `hosts/{hostId}/senders/{senderId}` — and a campaign
+ * names one. That does not reopen the closed path: a sender id is a key into a
+ * set an org admin already approved, so the addresses a send can reach are
+ * still only addresses that were validated once and are actually served. A
+ * `senderId` naming a sender this site does not hold is REFUSED rather than
+ * defaulted, which is the same rule the mailbox validation keeps — a value
+ * somebody chose is never answered with a different one they did not.
+ *
+ * The list belongs to the SITE and not to the org, even though the domain
+ * behind it is org-level, and for the reason the domain OPTIONS are scoped the
+ * same way: offering every site the whole org's set would let an editor on one
+ * client's site send as another client's — cross-site reach arriving through
+ * the `From:` line.
+ *
+ * ## The default is the PROJECTION, so nothing needed backfilling
+ *
+ * `hosts/{hostId}.sendingLocalPart`, `.sendingFromName` and `.sendingReplyTo`
+ * predate the collection and are what `resolveHostSendingIdentity` reads on
+ * every tenant send. They stay, as the default sender's projection: the read
+ * below synthesizes a default row from them while the subcollection is empty,
+ * the first write materializes that row, and every later change to the default
+ * writes both. A site already sending as `test@` cannot revert to `hello@`
+ * because a collection it never had holds nothing.
  *
  * ## The dedicated subdomain is asked for HERE, and nowhere else
  *
@@ -87,6 +112,12 @@
  * `dedicated` for an entitled site that has none, which is what stops the
  * option being invisible to the merchant who needs it: the marketing refusal
  * names this screen, and this screen is where the two ways out of it live.
+ *
+ * It is one of the four `action` values this route dispatches on, and the only
+ * one about the DOMAIN — the other three manage the sender list. They are read
+ * together, above the branch that treats a body naming no domain as a sender
+ * edit, because every one of them names no domain and would otherwise be
+ * swallowed by it.
  */
 
 import { checkEntitlement, pluginRequestFromWeb } from '@aglyn/aglyn/server'
@@ -104,17 +135,29 @@ import {
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import {
+  defaultHostSender,
+  DEFAULT_HOST_SENDER_ID,
   DEFAULT_SENDING_LOCAL_PART,
   headerSafeText,
+  HOST_SENDER_LIMIT,
+  HOST_SENDERS_COLLECTION,
+  hostSenderAddress,
   mailLabelCandidate,
   normalizeLocalPart,
   normalizeSendingDomain,
   platformSendingDomainFor,
+  readHostSender,
   SENDING_FROM_NAME_MAX,
   SENDING_REPLY_TO_MAX,
   validateSendingLocalPart,
+  type HostSenderRecord,
   type SendingDomainRecord,
 } from '@aglyn/shared-util-email'
+// The LEAF module rather than the barrel, for the reason that module states:
+// it imports nothing, and a barrel import would pull ~35 server modules in
+// behind a predicate about one path component.
+import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
+import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { DEDICATED_SENDING_DOMAIN_MIN_PLAN } from '@aglyn/aglyn/app-utils/dedicated-sending-domain'
 import {
   PLAN_LABELS,
@@ -285,7 +328,78 @@ async function handler(request: Request): Promise<Response> {
     SENDING_REPLY_TO_MAX,
   ).toLowerCase()
 
+  const sendersRef = hostRef.collection(HOST_SENDERS_COLLECTION)
+  /*
+   * WHICH ROW IS THE DEFAULT, and the flag that says whether there are rows.
+   *
+   * Written only when the collection is materialized, so an empty value means
+   * this site's senders are still the three fields above and nothing else —
+   * which is what lets the mirror below cost no read at all on a site that has
+   * never opened the sender list.
+   */
+  const defaultSenderId = String(hostSnapshot.get('defaultSenderId') ?? '')
+
+  /**
+   * The senders this site holds, or the one its host fields describe.
+   *
+   * An empty subcollection is not an absence of senders — it is a site with
+   * exactly one, the one the host document has always carried. Synthesizing it
+   * here rather than backfilling is what makes this change need no migration:
+   * a site that never opens the list keeps sending exactly as it does today,
+   * and the row it is shown is the row a send would use.
+   *
+   * `stored` distinguishes the two, because the writes below have to: patching
+   * a synthesized row means writing the host fields, and patching a
+   * materialized one means writing both.
+   */
+  const readSenders = async (): Promise<{
+    senders: HostSenderRecord[]
+    stored: boolean
+  }> => {
+    const snapshot = await sendersRef.limit(HOST_SENDER_LIMIT).get()
+    const stored = (snapshot?.docs ?? [])
+      .map((document: FirebaseFirestore.QueryDocumentSnapshot) =>
+        readHostSender({
+          id: document.id,
+          data: document.data() as Record<string, unknown>,
+          defaultSenderId,
+        }),
+      )
+      /*
+       * A row whose mailbox does not survive normalization is dropped rather
+       * than rendered. It cannot be sent as — `readHostSender` normalizes with
+       * the same function the send path does — so listing it would offer a
+       * choice that refuses, which is the state the domain options already
+       * refuse to enter.
+       */
+      .filter((sender: HostSenderRecord) => sender.localPart)
+    if (stored.length) {
+      const fallback = defaultHostSender(stored)
+      return {
+        senders: stored.map((sender: HostSenderRecord) => ({
+          ...sender,
+          isDefault: sender.id === fallback?.id,
+        })),
+        stored: true,
+      }
+    }
+    return {
+      senders: [
+        {
+          id: DEFAULT_HOST_SENDER_ID,
+          localPart,
+          fromName: senderName,
+          replyTo: senderReplyTo,
+          isDefault: true,
+          createdAtMs: 0,
+        },
+      ],
+      stored: false,
+    }
+  }
+
   if (method === 'GET') {
+    const { senders } = await readSenders()
     const records = orgId ? await listSendingDomains(orgId) : []
     /*
      * The identity as the SEND PATH would resolve it, through the same
@@ -431,6 +545,33 @@ async function handler(request: Request): Promise<Response> {
       localPartInUse: resolved.source === 'custom',
       fromName: senderName || null,
       replyTo: senderReplyTo || null,
+      /*
+       * THE SENDERS THIS SITE MAY SEND AS, with the address each one leaves
+       * on already assembled.
+       *
+       * Reported on the READ gate rather than behind the write gate, for the
+       * reason the identity itself is: the composer picks among these and is
+       * admin-or-editor, so putting the list behind `org.settings` would leave
+       * a merchant with a From control that had nothing in it.
+       *
+       * `from` is null for a row whose mailbox is not the one in use — a site
+       * on the pooled address has one fixed mailbox shared with every other
+       * site on it, so a stored mailbox there is real, kept, and simply not in
+       * effect. `localPartInUse` above says which case this is.
+       */
+      senders: senders.map((sender) => ({
+        id: sender.id,
+        localPart: sender.localPart,
+        fromName: sender.fromName || null,
+        replyTo: sender.replyTo || null,
+        isDefault: sender.isDefault,
+        from:
+          resolved.source === 'custom'
+            ? hostSenderAddress(sender.localPart, resolved.domain)
+            : sender.isDefault
+              ? resolved.from
+              : null,
+      })),
       identity: resolved.summary,
       identitySource: resolved.source,
       refusal: resolved.refusal,
@@ -579,6 +720,144 @@ async function handler(request: Request): Promise<Response> {
     'needs a domain of this site’s own.'
 
   /*
+   * `sendingLabel`, not `sendingDomain`. The label is the pinned claim and is
+   * what makes a domain this site's own; the selection can be empty for a site
+   * whose provisioning has not finished attaching it yet, and a mailbox stored
+   * in that window is correct and simply not yet in use.
+   */
+  const hasOwnDomain =
+    Boolean(selectedDomain) ||
+    Boolean(String(hostSnapshot.get('sendingLabel') ?? '').trim())
+
+  /**
+   * The three host fields, rewritten from whichever sender is the default.
+   *
+   * The projection, and the only writer of it once the collection exists. The
+   * send path reads `sendingLocalPart` and nothing else, so a default that
+   * moved without this write would leave a site sending as the sender it used
+   * to have — which is the silent disagreement the whole projection exists to
+   * make impossible.
+   */
+  const projectDefaultSender = async (sender: HostSenderRecord) => {
+    await hostRef.set(
+      {
+        defaultSenderId: sender.id,
+        /*
+         * The mailbox is projected only for a site that HAS a domain of its
+         * own. On the shared pool the mailbox is fixed and is not one site's
+         * to name — see `POOLED_MAILBOX_REFUSAL` above — so projecting one
+         * here would store, by way of the default, the exact setting that
+         * refusal exists to keep out.
+         */
+        ...(hasOwnDomain ? { sendingLocalPart: sender.localPart } : {}),
+        sendingFromName:
+          sender.fromName || firebaseAdmin.firestore.FieldValue.delete(),
+        sendingReplyTo:
+          sender.replyTo || firebaseAdmin.firestore.FieldValue.delete(),
+      },
+      { merge: true },
+    )
+  }
+
+  /**
+   * The site's senders as DOCUMENTS, writing the first one if it has none.
+   *
+   * The half of "no backfill" that happens at write time. Everything a site
+   * has ever sent as is already described by the host fields, so the row this
+   * mints is not a new sender — it is the existing one, given an id so a
+   * second can sit beside it.
+   */
+  const materializeSenders = async (): Promise<HostSenderRecord[]> => {
+    const { senders, stored } = await readSenders()
+    if (stored) return senders
+    const seed = senders[0]
+    await sendersRef.doc(DEFAULT_HOST_SENDER_ID).set(
+      {
+        localPart: seed.localPart,
+        ...(seed.fromName ? { fromName: seed.fromName } : {}),
+        ...(seed.replyTo ? { replyTo: seed.replyTo } : {}),
+        createdAtMs: Date.now(),
+      },
+      { merge: true },
+    )
+    await hostRef.set(
+      { defaultSenderId: DEFAULT_HOST_SENDER_ID },
+      { merge: true },
+    )
+    return [{ ...seed, id: DEFAULT_HOST_SENDER_ID, isDefault: true }]
+  }
+
+  /**
+   * Which sender a request is addressing, or the refusal.
+   *
+   * A `senderId` this site does not hold is REFUSED and never defaulted, which
+   * is the same rule the mailbox validation keeps: answering a value somebody
+   * chose with a different one they did not is how a merchant ends up told
+   * their site sends as an address it does not.
+   */
+  const targetSender = (
+    senders: HostSenderRecord[],
+    id: unknown,
+  ): HostSenderRecord | null =>
+    isDocumentId(id)
+      ? (senders.find((sender) => sender.id === id) ?? null)
+      : null
+
+  const UNKNOWN_SENDER_REFUSAL =
+    'That sender is not one this site holds. Pick one from the sender list, ' +
+    'or add it first.'
+
+  /**
+   * The DEFAULT sender's row, kept level with the host fields beside it.
+   *
+   * Every branch that writes `senderPatch()` — the domain actions and the
+   * mailbox-only body alike — writes the three host fields directly, because
+   * they predate the collection and are still the shape those controls post.
+   * This carries the same change onto the row once one exists, so the two
+   * cannot drift.
+   *
+   * Costs no read on a site that has never opened the sender list:
+   * `defaultSenderId` is written only where a row is materialized, so an empty
+   * one means the host fields are the whole of this site's senders.
+   */
+  const mirrorDefaultSender = async () => {
+    if (!defaultSenderId) return
+    const patch = {
+      ...(mailbox?.localPart ? { localPart: mailbox.localPart } : {}),
+      ...(fromNameGiven
+        ? {
+            fromName:
+              nextFromName || firebaseAdmin.firestore.FieldValue.delete(),
+          }
+        : {}),
+      ...(replyToGiven
+        ? {
+            replyTo: nextReplyTo || firebaseAdmin.firestore.FieldValue.delete(),
+          }
+        : {}),
+    }
+    if (!Object.keys(patch).length) return
+    await sendersRef.doc(defaultSenderId).set(patch, { merge: true })
+  }
+
+  /*
+   * THE FOUR ACTIONS THIS ROUTE DISPATCHES ON, READ TOGETHER AND READ FIRST.
+   *
+   * One claims the site a sending domain; the other three manage the list of
+   * senders it may send AS. They are unrelated operations and they share this
+   * dispatch for one reason: none of them names a `domain`, so every one of
+   * them would be swallowed by the branch below that reads a body with no
+   * `domain` key as a sender edit — stored, answered 200 with the selection
+   * the site already had, and nothing done.
+   *
+   * That is why the unknown-action refusal sits at the BOTTOM of the dispatch
+   * rather than after any one arm of it. A catch-all in the middle would turn
+   * the arms under it into 400s, which is the same swallowing failure wearing
+   * a different status code.
+   */
+  const action = String(body?.['action'] ?? '').trim()
+
+  /*
    * ASK FOR A DEDICATED SENDING DOMAIN — the only way one is ever claimed.
    *
    * A separate action rather than a side effect of choosing an identity,
@@ -596,7 +875,7 @@ async function handler(request: Request): Promise<Response> {
    * which is the less useful of the two and the one the impersonation log
    * already carries.
    */
-  if (String(body?.['action'] ?? '') === 'request-dedicated') {
+  if (action === 'request-dedicated') {
     const claim = await requestHostSendingDomain({
       hostId,
       orgId,
@@ -660,6 +939,7 @@ async function handler(request: Request): Promise<Response> {
       { sendingDomain: claim.domain, ...senderPatch() },
       { merge: true },
     )
+    await mirrorDefaultSender()
     const claimedMailbox = mailbox?.localPart || localPart
     // `from` as well as its two halves, matching the selection branch below,
     // so a surface reporting the new address reads one field rather than
@@ -672,6 +952,176 @@ async function handler(request: Request): Promise<Response> {
     })
   }
 
+  if (action === 'createSender') {
+    if (!mailbox?.localPart) {
+      return Response.json(
+        {
+          error:
+            'A sender needs a mailbox — the part of the address before the @.',
+        },
+        { status: 400 },
+      )
+    }
+    /*
+     * A pooled site has ONE sender and cannot be given a second, for the
+     * reason it cannot rename the one it has: the mailbox on a shared member
+     * is where every site on it gets its bounces back, so it is not one site's
+     * to name — and a second sender that could not differ in the mailbox would
+     * be the same address twice.
+     */
+    if (!hasOwnDomain) {
+      return Response.json({ error: POOLED_MAILBOX_REFUSAL }, { status: 409 })
+    }
+    const senders = await materializeSenders()
+    if (senders.length >= HOST_SENDER_LIMIT) {
+      return Response.json(
+        {
+          error:
+            `This site already has ${HOST_SENDER_LIMIT} senders, which is ` +
+            'the most it can hold. Every one of them is a mailbox that ' +
+            'receives bounces and replies. Remove one you no longer send as.',
+        },
+        { status: 409 },
+      )
+    }
+    /*
+     * Two senders on one mailbox would be the same address offered twice in
+     * the composer, distinguishable only by a display name the recipient sees
+     * and the person choosing does not.
+     */
+    if (senders.some((sender) => sender.localPart === mailbox.localPart)) {
+      return Response.json(
+        {
+          error: `This site already sends as ${mailbox.localPart}@. Edit that sender instead.`,
+        },
+        { status: 409 },
+      )
+    }
+    const senderId = createResourceUid()
+    const created: HostSenderRecord = {
+      id: senderId,
+      localPart: mailbox.localPart,
+      fromName: nextFromName,
+      replyTo: nextReplyTo,
+      isDefault: false,
+      createdAtMs: Date.now(),
+    }
+    await sendersRef.doc(senderId).set({
+      localPart: created.localPart,
+      ...(created.fromName ? { fromName: created.fromName } : {}),
+      ...(created.replyTo ? { replyTo: created.replyTo } : {}),
+      createdAtMs: created.createdAtMs,
+    })
+    if (body?.['makeDefault'] === true) {
+      await projectDefaultSender(created)
+    }
+    return Response.json({
+      senderId,
+      localPart: created.localPart,
+      from: hostSenderAddress(created.localPart, selectedDomain),
+    })
+  }
+
+  if (action === 'updateSender') {
+    const senders = await materializeSenders()
+    const target = targetSender(senders, body?.['senderId'])
+    if (!target) {
+      return Response.json({ error: UNKNOWN_SENDER_REFUSAL }, { status: 404 })
+    }
+    if (mailbox?.localPart && !hasOwnDomain) {
+      return Response.json({ error: POOLED_MAILBOX_REFUSAL }, { status: 409 })
+    }
+    if (
+      mailbox?.localPart &&
+      senders.some(
+        (sender) =>
+          sender.id !== target.id && sender.localPart === mailbox.localPart,
+      )
+    ) {
+      return Response.json(
+        {
+          error: `This site already sends as ${mailbox.localPart}@. Edit that sender instead.`,
+        },
+        { status: 409 },
+      )
+    }
+    const next: HostSenderRecord = {
+      ...target,
+      ...(mailbox?.localPart ? { localPart: mailbox.localPart } : {}),
+      ...(fromNameGiven ? { fromName: nextFromName } : {}),
+      ...(replyToGiven ? { replyTo: nextReplyTo } : {}),
+    }
+    await sendersRef.doc(target.id).set(
+      {
+        ...(mailbox?.localPart ? { localPart: mailbox.localPart } : {}),
+        ...(fromNameGiven
+          ? {
+              fromName:
+                nextFromName || firebaseAdmin.firestore.FieldValue.delete(),
+            }
+          : {}),
+        ...(replyToGiven
+          ? {
+              replyTo:
+                nextReplyTo || firebaseAdmin.firestore.FieldValue.delete(),
+            }
+          : {}),
+      },
+      { merge: true },
+    )
+    if (target.isDefault) await projectDefaultSender(next)
+    return Response.json({
+      senderId: next.id,
+      localPart: next.localPart,
+      from: hostSenderAddress(next.localPart, selectedDomain),
+    })
+  }
+
+  if (action === 'deleteSender') {
+    const senders = await materializeSenders()
+    const target = targetSender(senders, body?.['senderId'])
+    if (!target) {
+      return Response.json({ error: UNKNOWN_SENDER_REFUSAL }, { status: 404 })
+    }
+    /*
+     * The default is removed by naming another one first, rather than by this
+     * write choosing a replacement. Every site sends as something, and picking
+     * the successor here would decide what a merchant's mail looks like from
+     * an ordering they never saw.
+     */
+    if (target.isDefault) {
+      return Response.json(
+        {
+          error:
+            'This is the sender email goes out as when a campaign names no ' +
+            'other. Make a different sender the default first, then remove ' +
+            'this one.',
+        },
+        { status: 409 },
+      )
+    }
+    await sendersRef.doc(target.id).delete()
+    return Response.json({ senderId: target.id, deleted: true })
+  }
+
+  if (action === 'makeDefaultSender') {
+    const senders = await materializeSenders()
+    const target = targetSender(senders, body?.['senderId'])
+    if (!target) {
+      return Response.json({ error: UNKNOWN_SENDER_REFUSAL }, { status: 404 })
+    }
+    await projectDefaultSender(target)
+    return Response.json({
+      senderId: target.id,
+      localPart: target.localPart,
+      from: hostSenderAddress(target.localPart, selectedDomain),
+    })
+  }
+
+  if (action) {
+    return Response.json({ error: 'Unknown action' }, { status: 400 })
+  }
+
   /*
    * A BODY WITH NO `domain` KEY IS NOT A REQUEST TO CHANGE THE DOMAIN.
    *
@@ -681,26 +1131,19 @@ async function handler(request: Request): Promise<Response> {
    * sending as its own verified `acme.com` would have its selection reset the
    * first time somebody edited the sender name.
    *
-   * BELOW THE REQUEST ACTION, and that order is load-bearing.
-   * `request-dedicated` names no domain either, so reaching this first would
-   * swallow it — the sender fields would be stored, a 200 returned carrying
-   * the selection the site already had, and nothing claimed. An explicit
-   * action is not the same thing as a body that did not mention the domain.
+   * BELOW THE WHOLE ACTION DISPATCH, and that order is load-bearing. Not one
+   * of the four actions names a domain, so reaching this first would swallow
+   * every one of them — the sender fields would be stored, a 200 returned
+   * carrying the selection the site already had, and nothing claimed and no
+   * sender written. An explicit action is not the same thing as a body that
+   * did not mention the domain.
    */
   if (body?.['domain'] === undefined) {
-    /*
-     * `sendingLabel`, not `sendingDomain`. The label is the pinned claim and
-     * is what makes a domain this site's own; the selection can be empty for
-     * a site whose provisioning has not finished attaching it yet, and a
-     * mailbox stored in that window is correct and simply not yet in use.
-     */
-    const hasOwnDomain =
-      Boolean(selectedDomain) ||
-      Boolean(String(hostSnapshot.get('sendingLabel') ?? '').trim())
     if (mailbox?.localPart && !hasOwnDomain) {
       return Response.json({ error: POOLED_MAILBOX_REFUSAL }, { status: 409 })
     }
     await hostRef.set(senderPatch(), { merge: true })
+    await mirrorDefaultSender()
     return Response.json({
       selected: selectedDomain,
       localPart: mailbox?.localPart || localPart,
@@ -758,6 +1201,7 @@ async function handler(request: Request): Promise<Response> {
       },
       { merge: true },
     )
+    await mirrorDefaultSender()
     const clearedMailbox = mailbox?.localPart || localPart
     return Response.json({
       selected: issued || '',
@@ -839,6 +1283,7 @@ async function handler(request: Request): Promise<Response> {
     { sendingDomain: domain, ...senderPatch() },
     { merge: true },
   )
+  await mirrorDefaultSender()
   const appliedLocalPart = mailbox?.localPart || localPart
   return Response.json({
     selected: domain,

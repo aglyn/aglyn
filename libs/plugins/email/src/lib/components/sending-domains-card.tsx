@@ -93,7 +93,18 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
   const [view, setView] = useState<SendingIdentityView | null>(null)
   const [loading, setLoading] = useState(true)
   const [adding, setAdding] = useState(false)
-  const [editingSender, setEditingSender] = useState(false)
+  /**
+   * The open sender editor, and which row it is on.
+   *
+   * One state rather than an `open` flag beside an id, so the drawer cannot be
+   * open with no answer to "which sender" — the id and the openness are the
+   * same fact. `senderId: null` is the add case.
+   */
+  const [senderEditor, setSenderEditor] = useState<{
+    senderId: string | null
+  } | null>(null)
+  /** The row a list action is in flight for, so only its buttons go quiet. */
+  const [senderBusy, setSenderBusy] = useState('')
   const [addingBusy, setAddingBusy] = useState(false)
   const [newDomain, setNewDomain] = useState('')
   const [addError, setAddError] = useState('')
@@ -125,6 +136,34 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
   useEffect(() => {
     void load()
   }, [load])
+
+  /**
+   * The list's own two actions — move the default, and remove a sender.
+   *
+   * Both are a POST and a re-read rather than a local edit of `view`. The
+   * server decides which row is the default and what the projection onto the
+   * host document becomes, so re-reading is what keeps this list and the
+   * address a send would actually resolve to one answer.
+   */
+  const handleSenderAction = useCallback(
+    async (action: 'makeDefaultSender' | 'deleteSender', senderId: string) => {
+      setSenderBusy(senderId)
+      const { response, payload } = await call({
+        path: 'sending-identity',
+        method: 'POST',
+        body: { hostId, action, senderId },
+      })
+      setSenderBusy('')
+      if (!response.ok) {
+        return void notifyRef.current(
+          payload?.error ?? 'Could not update that sender',
+          { variant: 'warning' },
+        )
+      }
+      void load()
+    },
+    [call, hostId, load],
+  )
 
   const handleAdd = useCallback(async () => {
       const domain = newDomain.trim()
@@ -194,6 +233,14 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
   }, [call, hostId, claimingDedicated, load])
 
   const domains = view?.domains ?? []
+  const senders = view?.senders ?? []
+  /*
+   * Whether this site has a domain of its own to name a mailbox on — the same
+   * question the route asks before it accepts one. A site on the shared pool
+   * has exactly one sender and its mailbox is fixed, so offering to add a
+   * second would offer a choice the write refuses.
+   */
+  const canAddSender = Boolean(view?.selected)
 
   return (
     <CardDisplay
@@ -208,21 +255,28 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
         action: view?.canManage ? (
           <Stack direction="row" spacing={1}>
             {/*
-              The sender is offered on every plan, unlike the domain beside
-              it. A site on the pooled Aglyn address cannot rename its
-              mailbox — the drawer says so and disables that one field — but
-              the name in front of the address and where replies land are
-              honored on the pool exactly as they are on a site's own domain,
-              and gating them behind the paid tier would withhold the free
-              half of a capability over the paid half.
+              THE ACTION SITS IN THE HEADER, not above the list it adds to.
+
+              This page is built of vertical-tab sections, so a create control
+              stacked over the table would put an editor between a reader and
+              the rows they came to read — the same reason every create in the
+              console opens a drawer.
+
+              Senders are offered on every plan, unlike the domain beside
+              them: the name in front of the address and where replies land
+              are honored on the pooled Aglyn address exactly as they are on a
+              site's own domain, and gating them behind the paid tier would
+              withhold the free half of a capability over the paid half. A
+              SECOND sender is a different matter and is disabled on the pool,
+              because the mailbox that would distinguish it is fixed there.
              */}
             <Button
               size="small"
               variant="outlined"
-              disabled={!view}
-              onClick={() => setEditingSender(true)}
+              disabled={!view || !canAddSender}
+              onClick={() => setSenderEditor({ senderId: null })}
             >
-              {'Edit sender'}
+              {'Add sender'}
             </Button>
             <Button
               size="small"
@@ -311,6 +365,130 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
               </Typography>
             ) : null}
           </Alert>
+        ) : null}
+
+        {/*
+          THE SENDERS THIS SITE HOLDS.
+
+          A list rather than one editable address, because a site legitimately
+          sends as several people — and because a mailbox has to be one
+          somebody serves. A composer that could type an address per campaign
+          would mint mailboxes that exist in one message's headers and nowhere
+          else; a composer that picks from this list can only reach an address
+          that was configured here and validated once.
+
+          The DEFAULT is what an email that names no sender goes out as, and
+          it is also the row projected onto the host document — which is why
+          nothing needed backfilling: a site that never opens this list has
+          exactly one sender, the one it has always had.
+         */}
+        {view ? (
+          <>
+            <Divider />
+            <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+              {'Senders'}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {'The addresses this site may send as. Every email you compose ' +
+                'picks one of them; the default is what an email that names ' +
+                'no other goes out as.'}
+            </Typography>
+            {!canAddSender ? (
+              <Typography variant="body2" color="text.secondary">
+                {'This site sends on a shared Aglyn address, whose mailbox is ' +
+                  'fixed and shared with the other sites on it, so it has one ' +
+                  'sender. A domain of this site’s own is what makes a second ' +
+                  'address possible.'}
+              </Typography>
+            ) : null}
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>{'Sends as'}</TableCell>
+                  <TableCell>{'Name'}</TableCell>
+                  <TableCell>{'Replies to'}</TableCell>
+                  <TableCell align="right">{'Default'}</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {senders.map((sender) => (
+                  <TableRow
+                    key={sender.id}
+                    hover={view.canManage}
+                    sx={{ cursor: view.canManage ? 'pointer' : 'default' }}
+                    onClick={
+                      view.canManage
+                        ? () => setSenderEditor({ senderId: sender.id })
+                        : undefined
+                    }
+                  >
+                    <TableCell sx={{ fontFamily: 'monospace' }}>
+                      {/*
+                        The whole address as the SERVER assembled it, and the
+                        mailbox alone when there is none to assemble it onto.
+                        A site whose domain is not settled has a real stored
+                        mailbox that is not yet in effect, and the alert above
+                        says so — printing a domain here that no send would
+                        use would be this surface inventing the answer.
+                       */}
+                      {sender.from ?? `${sender.localPart}@`}
+                    </TableCell>
+                    <TableCell>{sender.fromName ?? '—'}</TableCell>
+                    <TableCell>{sender.replyTo ?? '—'}</TableCell>
+                    <TableCell align="right">
+                      {sender.isDefault ? (
+                        <Chip size="small" label="Default" color="primary" />
+                      ) : view.canManage ? (
+                        <Stack
+                          direction="row"
+                          spacing={1}
+                          sx={{ justifyContent: 'flex-end' }}
+                        >
+                          {/*
+                            `stopPropagation` because the row itself opens the
+                            editor. Without it, making a sender the default
+                            would also open a drawer over the list that just
+                            changed underneath it.
+                           */}
+                          <Button
+                            size="small"
+                            disabled={senderBusy === sender.id}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              void handleSenderAction(
+                                'makeDefaultSender',
+                                sender.id,
+                              )
+                            }}
+                          >
+                            {'Make default'}
+                          </Button>
+                          <Button
+                            size="small"
+                            color="error"
+                            disabled={senderBusy === sender.id}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              void handleSenderAction(
+                                'deleteSender',
+                                sender.id,
+                              )
+                            }}
+                          >
+                            {'Remove'}
+                          </Button>
+                        </Stack>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary">
+                          {'—'}
+                        </Typography>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </>
         ) : null}
 
         {/*
@@ -492,10 +670,11 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
         read.
        */}
       <SendingSenderDrawer
-        open={editingSender}
+        open={Boolean(senderEditor)}
         hostId={hostId}
         view={view}
-        onClose={() => setEditingSender(false)}
+        senderId={senderEditor?.senderId ?? null}
+        onClose={() => setSenderEditor(null)}
         onSaved={() => void load()}
       />
 

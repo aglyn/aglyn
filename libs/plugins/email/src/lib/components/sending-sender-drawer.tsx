@@ -69,9 +69,25 @@ export interface SendingSenderDrawerProps {
   hostId: string
   /** The identity as the route reports it. Null while the card is loading. */
   view: SendingIdentityView | null
+  /**
+   * WHICH SENDER THIS DRAWER IS EDITING, or `null` to add one.
+   *
+   * The two modes differ in what the fields start as and in nothing else: an
+   * edit opens on the row's stored values, and an add opens empty so the
+   * picker below fills a NEW sender rather than overwriting the one this site
+   * already has.
+   */
+  senderId?: string | null
   onClose: () => void
-  /** Called after a successful save, so the card can re-read the identity. */
-  onSaved: () => void
+  /**
+   * Called after a successful save, so the caller can re-read the identity.
+   *
+   * Carries the id the route answered with, which is what a caller that has to
+   * SELECT the new sender needs — the composer opens this drawer from its From
+   * picker, and the row it must then choose does not exist in any list it
+   * holds until it re-reads. A caller that only refreshes ignores it.
+   */
+  onSaved: (senderId?: string) => void
 }
 
 /** One row of the picker, reduced to what a sender needs from a person. */
@@ -82,7 +98,7 @@ interface SenderCandidate {
 }
 
 /**
- * WHO THIS SITE'S EMAIL COMES FROM.
+ * ONE SENDER THIS SITE MAY SEND AS.
  *
  * Three fields, and they are not three of a kind. The MAILBOX is the part of
  * the address in front of the `@`; the domain behind it is whatever this
@@ -94,7 +110,7 @@ interface SenderCandidate {
  * verified — which is what makes "replies reach me personally" possible
  * without pretending the mail came from a personal account.
  *
- * ## Why this is a site setting and not a per-send field
+ * ## Why a site holds a LIST, and why the composer picks from it
  *
  * The composer already carries a from name and a reply-to per campaign, and
  * keeps them: those are per-message facts. The mailbox is not, because it is
@@ -102,10 +118,14 @@ interface SenderCandidate {
  * that ignores `Reply-To:` answers to it. A mailbox that exists in one
  * campaign's headers and nowhere else is an address nobody serves.
  *
- * The gates differ for the same reason. Choosing what every recipient of this
- * site's mail sees is an organization-admin decision and lives here beside
- * the domain it depends on; the composer is admin-or-editor and may choose
- * only the name in front of the address.
+ * So a mailbox is configured HERE, once, and a campaign chooses among the
+ * senders that were configured. A per-send address field would be the thing
+ * that closure removed; a per-send choice between approved senders is not.
+ *
+ * The gates differ for the same reason. Deciding which addresses this site's
+ * mail may leave on is an organization-admin decision and lives here beside
+ * the domain it depends on; the composer is admin-or-editor and may pick
+ * among them and name the person in front of the address.
  *
  * ## The picker
  *
@@ -116,6 +136,10 @@ interface SenderCandidate {
  * name they already answer to, and their real address becomes the reply
  * target rather than the sender: a `From:` on their own mail provider's
  * domain could never align, and would be rejected rather than delivered.
+ *
+ * Opened to ADD, it fills a new sender and leaves the ones this site already
+ * has alone — which is what makes "send as Jamie" an address beside the
+ * others rather than a rename of the only one.
  *
  * ## Who is on the list
  *
@@ -137,7 +161,7 @@ interface SenderCandidate {
  * them are a different thing from ones that happen because a card mounted.
  */
 export function SendingSenderDrawer(props: SendingSenderDrawerProps) {
-  const { open, hostId, view, onClose, onSaved } = props
+  const { open, hostId, view, senderId, onClose, onSaved } = props
   const call = useSendingApi()
   const firestore = useFirestore()
 
@@ -147,21 +171,39 @@ export function SendingSenderDrawer(props: SendingSenderDrawerProps) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
+  /**
+   * The row being edited, or null while adding one.
+   *
+   * Resolved from the view the card already holds rather than read again here:
+   * the list and the editor open from one answer, so they cannot disagree
+   * about what a sender currently is.
+   */
+  const editing = senderId
+    ? ((view?.senders ?? []).find((sender) => sender.id === senderId) ?? null)
+    : null
+
   /*
    * The stored values are copied in when the drawer OPENS, not on every
    * render of the card.
    *
    * A settings form seeded from a prop that keeps arriving would discard what
    * somebody was halfway through typing the moment the card re-read the
-   * identity behind them.
+   * identity behind them — so the dependencies are the row's FIELDS and not
+   * the array they came in, which is a new array on every read.
    */
   useEffect(() => {
     if (!open) return
-    setMailbox(view?.localPart ?? '')
-    setFromName(view?.fromName ?? '')
-    setReplyTo(view?.replyTo ?? '')
+    setMailbox(editing?.localPart ?? '')
+    setFromName(editing?.fromName ?? '')
+    setReplyTo(editing?.replyTo ?? '')
     setError('')
-  }, [open, view?.localPart, view?.fromName, view?.replyTo])
+  }, [
+    open,
+    senderId,
+    editing?.localPart,
+    editing?.fromName,
+    editing?.replyTo,
+  ])
 
   /*
    * The org this site belongs to, as the identity route resolved it.
@@ -410,6 +452,8 @@ export function SendingSenderDrawer(props: SendingSenderDrawerProps) {
        */
       body: {
         hostId,
+        action: senderId ? 'updateSender' : 'createSender',
+        ...(senderId ? { senderId } : {}),
         ...(checked?.localPart ? { localPart: checked.localPart } : {}),
         fromName: fromName.trim(),
         replyTo: replyTo.trim(),
@@ -419,9 +463,20 @@ export function SendingSenderDrawer(props: SendingSenderDrawerProps) {
     if (!response.ok) {
       return setError(payload?.error ?? 'Could not save who this site sends as')
     }
-    onSaved()
+    onSaved(String(payload?.senderId ?? '') || undefined)
     onClose()
-  }, [busy, call, hostId, mailbox, pooled, fromName, replyTo, onSaved, onClose])
+  }, [
+    busy,
+    call,
+    hostId,
+    senderId,
+    mailbox,
+    pooled,
+    fromName,
+    replyTo,
+    onSaved,
+    onClose,
+  ])
 
   const applyCandidate = useCallback((candidate: SenderCandidate) => {
     const at = candidate.email.lastIndexOf('@')
@@ -453,7 +508,7 @@ export function SendingSenderDrawer(props: SendingSenderDrawerProps) {
             <SrOnly>close drawer</SrOnly>
           </IconButton>
           <Typography variant="h6" component="div">
-            {'Who this site sends as'}
+            {senderId ? 'Edit this sender' : 'Add a sender'}
           </Typography>
         </>
       }
@@ -461,12 +516,19 @@ export function SendingSenderDrawer(props: SendingSenderDrawerProps) {
       <Container gutterY>
         <Stack spacing={2}>
           <Typography variant="body2" color="text.secondary">
-            {'The address your email leaves on, and the name in front of it. ' +
-              'The domain is your site’s verified sending domain and cannot ' +
-              'be changed here — the part before the @ can. To have replies ' +
-              'reach a personal or company mailbox, use the reply address: ' +
-              'sending as an address on somebody else’s mail provider is ' +
-              'refused by the receiving side, not delivered.'}
+            {'An address your email may leave on, and the name in front of ' +
+              'it. The domain is your site’s verified sending domain and ' +
+              'cannot be changed here — the part before the @ can. To have ' +
+              'replies reach a personal or company mailbox, use the reply ' +
+              'address: sending as an address on somebody else’s mail ' +
+              'provider is refused by the receiving side, not delivered.'}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {editing?.isDefault
+              ? 'Every email you compose picks a sender. This is the one an ' +
+                'email that names no other goes out as.'
+              : 'Every email you compose picks a sender, and this will be ' +
+                'one of the choices.'}
           </Typography>
 
           {candidates.length ? (
@@ -574,7 +636,7 @@ export function SendingSenderDrawer(props: SendingSenderDrawerProps) {
             disabled={busy || !view}
             onClick={() => void handleSave()}
           >
-            {busy ? 'Saving…' : 'Save sender'}
+            {busy ? 'Saving…' : senderId ? 'Save sender' : 'Add sender'}
           </Button>
         </Stack>
       </Container>

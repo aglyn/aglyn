@@ -1232,6 +1232,12 @@ export function EmailDetail(props: EmailDetailProps) {
             body: composedBody,
             fromName: String(email?.fromName ?? ''),
             replyTo: String(email?.replyTo ?? ''),
+            /*
+             * The sender this email is set to go out as, so reopening a draft
+             * does not silently move it onto whichever sender has become the
+             * site's default since it was saved.
+             */
+            senderId: String(email?.senderId ?? ''),
             preheader: String(email?.preheader ?? ''),
             audience: String(email?.audience ?? ''),
             listId: String(email?.listId ?? ''),
