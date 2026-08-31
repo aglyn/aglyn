@@ -1,0 +1,159 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/**
+ * Budget the first-load weight of a published tenant page.
+ *
+ * ```
+ * npm run check:tenant-page-weight             # the gate
+ * npm run check:tenant-page-weight -- --list   # what is in the graph
+ * npm run check:tenant-page-weight -- --write  # re-baseline, deliberately
+ * npm run check:tenant-page-weight -- --json
+ * ```
+ *
+ * `check:aglyn-barrel` and `check:jsx-barrel` pin WHICH third-party packages a
+ * published page can reach. Neither can see the failure this one exists for:
+ * first-party code growing without adding a single new dependency, which is the
+ * same bill at the end of the month. The measurement, the verdict and the
+ * reasoning behind both live in `lib/tenant-page-weight.mjs`; the forced reds
+ * are in its test file.
+ *
+ * `--write` is not a way to make a red go away. It records a DECISION: the
+ * number moves in the same diff as the import that moved it, so a reviewer sees
+ * the new figure next to the change that bought it.
+ *
+ * Exit codes: 0 within budget · 1 over budget, or the entry moved.
+ */
+
+import { readFileSync, statSync, writeFileSync } from 'node:fs'
+import { dirname, join, relative } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+import { createResolver } from '../lint-rules/lib/app-router-graph.mjs'
+import {
+  TENANT_PAGE_ENTRY,
+  WHY_PAGE_WEIGHT,
+  budgetFor,
+  evaluatePageWeight,
+  measurePageWeight,
+} from './lib/tenant-page-weight.mjs'
+
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
+const BUDGET_PATH = join(REPO_ROOT, 'tools', 'tenant-page-budget.json')
+
+const args = process.argv.slice(2)
+const kb = (n) => `${(n / 1024).toFixed(1)} KB`
+
+function main() {
+  let measured
+  try {
+    const entry = join(REPO_ROOT, TENANT_PAGE_ENTRY)
+    // Stat the entry first. A resolver handed a path that does not exist walks
+    // no edges and reports zero bytes, and zero bytes is under every budget —
+    // so an entry that moved would PASS this gate while measuring nothing.
+    statSync(entry)
+    measured = measurePageWeight({
+      entry,
+      read: (file) => readFileSync(file, 'utf8'),
+      resolve: createResolver(REPO_ROOT),
+      size: (file) => statSync(file).size,
+    })
+  } catch (error) {
+    console.error(
+      `check:tenant-page-weight — cannot measure ${TENANT_PAGE_ENTRY}: ` +
+        `${error.message}\n` +
+        "If the published page's client root moved, point TENANT_PAGE_ENTRY " +
+        'at the new one and re-baseline in the same commit. An unmeasurable ' +
+        'entry is a red, never a pass.',
+    )
+    return 1
+  }
+
+  if (args.includes('--write')) {
+    const budget = budgetFor(measured)
+    writeFileSync(BUDGET_PATH, `${JSON.stringify(budget, null, 2)}\n`)
+    console.log(
+      `Wrote ${relative(REPO_ROOT, BUDGET_PATH)}\n` +
+        `  ${kb(budget.baselineBytes)} of first-party source across ` +
+        `${budget.baselineModules} modules (budget ${kb(budget.budgetBytes)})`,
+    )
+    return 0
+  }
+
+  const budget = JSON.parse(readFileSync(BUDGET_PATH, 'utf8'))
+
+  if (args.includes('--json')) {
+    console.log(
+      JSON.stringify(
+        {
+          entry: TENANT_PAGE_ENTRY,
+          bytes: measured.bytes,
+          moduleCount: measured.moduleCount,
+          budgetBytes: budget.budgetBytes,
+          packages: measured.packages,
+        },
+        null,
+        2,
+      ),
+    )
+  }
+
+  if (args.includes('--list')) {
+    console.log(
+      `First-load first-party graph of ${TENANT_PAGE_ENTRY}\n` +
+        `  ${kb(measured.bytes)} across ${measured.moduleCount} modules\n`,
+    )
+    for (const [file, size] of measured.files.slice(0, 60)) {
+      console.log(`  ${kb(size).padStart(9)}  ${relative(REPO_ROOT, file)}`)
+    }
+    console.log(`\n  third-party packages reached: ${measured.packages.length}`)
+  }
+
+  const verdict = evaluatePageWeight(measured, budget)
+
+  if (verdict.entryMoved) {
+    console.error(
+      `check:tenant-page-weight — the recorded budget is for ${budget.entry}, ` +
+        `but this run measured ${TENANT_PAGE_ENTRY}. Re-baseline with --write ` +
+        'in the commit that moved the entry.',
+    )
+    return 1
+  }
+
+  if (verdict.over) {
+    console.error(
+      "check:tenant-page-weight — a published page's first load grew past " +
+        'its budget.\n\n' +
+        `  measured  ${kb(measured.bytes)}  (${measured.moduleCount} modules)\n` +
+        `  budget    ${kb(budget.budgetBytes)}\n` +
+        `  over by   ${kb(verdict.overBy)}\n\n` +
+        WHY_PAGE_WEIGHT,
+    )
+    return 1
+  }
+
+  if (!args.includes('--list') && !args.includes('--json')) {
+    console.log(
+      `check:tenant-page-weight — ${kb(measured.bytes)} of first-party ` +
+        `source across ${measured.moduleCount} modules ` +
+        `(budget ${kb(budget.budgetBytes)})`,
+    )
+  }
+  return 0
+}
+
+process.exit(main())

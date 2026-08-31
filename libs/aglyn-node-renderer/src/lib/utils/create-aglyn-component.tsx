@@ -15,16 +15,22 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+// Type-only: a VALUE namespace import of the core barrel is opaque to a
+// bundler — it cannot know which exports are read, so every module the barrel
+// reaches is pinned into the published page's first load. The values this file
+// needs are named below, where the bundler can see them.
+import type * as Aglyn from '@aglyn/aglyn'
 import {
   AGLYN_OF,
   type AglynExoticComponent,
   COMPONENT_ELEMENT_TYPE,
+  FEATURE_FLAG,
 } from '@aglyn/aglyn'
+// Deep import, NOT the barrel — see the note in `leaf.tsx`.
 import {
   type ErrorBoundaryProps,
   withErrorBoundary,
-} from '@aglyn/shared-ui-jsx'
+} from '@aglyn/shared-ui-jsx/components/error-boundary.component'
 import { styled } from '@aglyn/shared-ui-theme'
 import { cloneDeep } from '@aglyn/shared-util-tools'
 import { hoistNonReactStatics, pascalCase } from '@aglyn/shared-util-vendor'
@@ -47,7 +53,7 @@ export function createAglynComponent<P extends JSX.AnyProps = any, C = any>(
   )}`
 
   const Component =
-    flags?.emotion === Aglyn.FEATURE_FLAG.DISABLED
+    flags?.emotion === FEATURE_FLAG.DISABLED
       ? component
       : styled(component, styledOptions)({})
 
