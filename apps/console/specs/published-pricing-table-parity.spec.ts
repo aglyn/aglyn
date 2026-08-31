@@ -662,13 +662,15 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * charges ~$1,396-1,493/mo for 100 sites, BigCommerce Enterprise starts
      * at $1,499, Shopify Plus at $2,300. $1,299 still undercuts all three.
      *
-     * ⛔ NOTHING HERE MAKES THIS LIVE. `/pricing` still publishes $799, and
-     * Stripe prices are immutable — the live SKUs are `aglyn_agency_v2` at
-     * $799 and `_yearly` at $7,788, and charging $1,299 needs NEW Stripe
-     * prices plus new `STRIPE_PRICE_AGENCY` / `STRIPE_PRICE_AGENCY_YEARLY`
-     * values. Until both happen this constant is what the console DISPLAYS
-     * and not what any customer is charged, and that gap is the thing this
-     * case exists to keep visible.
+     * STRIPE CHARGES THIS. `aglyn_agency_v2` is $1,299/month and
+     * `_yearly` is $12,588 — new price objects, since a Stripe price is
+     * immutable and the $799 pair is archived. `STRIPE_PRICE_AGENCY` and
+     * `STRIPE_PRICE_AGENCY_YEARLY` name the new ids.
+     *
+     * ⛔ `/pricing` still publishes $799, so the remaining gap is the
+     * PUBLISHED page trailing the charge — the opposite direction from the
+     * one this case was opened for, and the more urgent of the two: a page
+     * quoting less than checkout takes is a price a customer can point at.
      */
     it('monthly — six columns unchanged, Agency at $1,299', () => {
       const PUBLISHED: Row = [0, 25, 56, 139, 249, 399, 799]
