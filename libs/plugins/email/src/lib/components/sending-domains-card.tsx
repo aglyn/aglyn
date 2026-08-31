@@ -25,6 +25,7 @@ import {
   Alert,
   Button,
   Chip,
+  Divider,
   IconButton,
   Stack,
   Table,
@@ -175,15 +176,24 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
       }}
     >
       <Stack spacing={1.5}>
+        {/*
+          THE LADDER, IN THE ORDER A READER NEEDS IT.
+
+          What already works, then what does not, then the two ways out. One
+          claim per block: the same material as one paragraph is the same
+          material nobody finishes, and the sentence a merchant came for —
+          "do my receipts send?" — was the one buried in the middle of it.
+         */}
         <Typography variant="body2" color="text.secondary">
-          {'Receipts, password resets and other account email from this site ' +
-            'always send — on a shared Aglyn address until you have a domain ' +
-            'of your own. Delivery reputation on that shared address is ' +
-            'pooled with the other sites using it, which is why marketing ' +
-            'email does not leave on it: a campaign’s complaint rate would be ' +
-            'charged against everybody’s receipts. Marketing needs a domain ' +
-            'of this site’s own, and a domain you already own moves that ' +
-            'reputation onto a name your recipients recognize.'}
+          {'Receipts, password resets, booking confirmations and other ' +
+            'account email send on every plan, including Free. Nothing here ' +
+            'has to be finished first.'}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          {'Campaigns and other marketing email are different: they need a ' +
+            'sending domain of this site’s own. The shared address carries ' +
+            'every other site’s receipts, so one campaign’s complaint rate ' +
+            'there would be charged against all of them.'}
         </Typography>
 
         {/*
@@ -205,24 +215,80 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
             {view.identitySource === 'shared' && !view.refusal ? (
               <Typography variant="body2" sx={{ mt: 0.5 }}>
                 {'Recipients see an Aglyn address, and replies still reach ' +
-                  'you. What they do not see is your own domain, and the ' +
-                  'sending reputation on this address is shared with the ' +
-                  'other sites using it rather than being yours. Marketing ' +
-                  'email does not send from here.'}
+                  'you. The sending reputation on it is shared with the other ' +
+                  'sites using it rather than being yours.'}
               </Typography>
             ) : null}
           </Alert>
         ) : null}
 
-        {view && !view.entitled ? (
-          <Alert severity="info">
-            {'Sending as a domain you own starts on the Pro plan. Account ' +
-              'email from this site sends without it — the address is shown ' +
-              'above.'}
-          </Alert>
+        {/*
+          THE TWO WAYS TO GET A DOMAIN, WITH WHAT EACH COSTS THE MERCHANT.
+
+          Both are shown whatever this site already has, because they are not
+          steps in a sequence — they are a choice, and a site already on the
+          one we provision is exactly the reader who has not been told the
+          other exists. They name the same tier today and are still two
+          sentences: what separates them is the DNS work and the name in the
+          `From:` line, which is what a merchant is actually choosing between.
+
+          The plan names come from the server, which derives them from the
+          entitlement tables. A tier written in here is pricing copy that keeps
+          rendering after the gate beneath it moves.
+         */}
+        {view ? (
+          <>
+            <Divider />
+            <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+              {'Two ways to get one'}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {view.platformDomain
+                ? `A domain we set up. This site has one — ${view.platformDomain} — ` +
+                  'with no records for you to publish, and the sending ' +
+                  'reputation on it is this site’s alone. Recipients see an ' +
+                  'address on our domain rather than on yours.'
+                : 'A domain we set up' +
+                  (view.dedicatedDomainPlan
+                    ? `, which comes with ${view.dedicatedDomainPlan}`
+                    : '') +
+                  '. There is nothing for you to publish, and the sending ' +
+                  'reputation on it is this site’s alone. Recipients see an ' +
+                  'address on our domain rather than on yours.'}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {(view.customDomainPlan
+                ? 'A domain you already own. Sending as your own domain ' +
+                  `starts on the ${view.customDomainPlan} plan.`
+                : 'A domain you already own.') +
+                ' Your own name in the From: line and a sending reputation ' +
+                'that is entirely yours. The trade is the DNS work: you ' +
+                'publish three records in your zone, and we never write to it.'}
+            </Typography>
+            {/*
+              A PLAN GATE ON THE DOMAIN IS NOT A GATE ON THE MAIL.
+
+              Said only to the reader it applies to, and said here rather than
+              as an alert: the address this site sends account email from is
+              already named above, and repeating "you cannot" in a colored box
+              would read as an outage on a site that is sending perfectly well.
+             */}
+            {!view.entitled ? (
+              <Typography variant="body2" color="text.secondary">
+                {'Account email from this site sends without it either way — ' +
+                  'the address is shown above.'}
+              </Typography>
+            ) : null}
+            <Divider />
+          </>
         ) : null}
 
-        {view && view.entitled && !view.canManage ? (
+        {/*
+          The role gate holds whatever the plan says, so it is stated whatever
+          the plan says. Nesting it under `entitled` left the reader who is
+          BOTH un-entitled and unable to manage with no explanation of either.
+         */}
+        {view && !view.canManage ? (
           <Alert severity="info">
             {'Adding a domain and choosing what this site sends as needs the ' +
               'organization admin role. You can see the current state here.'}

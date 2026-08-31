@@ -538,11 +538,10 @@ export async function releaseSendingDomain(
  * wrong choice puts a merchant's list quality onto the domain the platform's
  * own invoices and password resets leave on.
  *
- * It used to fall through to `USAGE_EMAIL_FROM` whenever a site had selected
- * nothing, which was almost every site — so the platform domain was not a
- * fallback so much as the default, and it covered transactional mail as well
- * as marketing. A site with no domain of its own now REFUSES, and provisioning
- * is what makes that state temporary.
+ * A site that has selected NOTHING does not reach `USAGE_EMAIL_FROM` either.
+ * Its transactional mail goes on the shared pool member `hostSharedFrom`
+ * assigns it, and its marketing mail is refused — which is the whole of what
+ * keeps the pool usable, since it carries every pooled site's receipts.
  */
 export async function resolveHostSendingIdentity(options: {
   orgId: string | null | undefined

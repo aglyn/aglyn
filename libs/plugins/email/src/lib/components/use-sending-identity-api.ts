@@ -81,6 +81,22 @@ export interface SendingDomainView {
 export interface SendingIdentityView {
   orgId: string | null
   selected: string
+  /**
+   * The site's own provisioned domain inside the platform mail apex, or `''`
+   * when it has none and its transactional mail rides the shared pool.
+   */
+  platformDomain: string
+  /**
+   * The plan that carries sending as a domain the CUSTOMER owns, and the plan
+   * that carries a domain the platform provisions for the site — as names
+   * ready to print, `null` when no plan carries that gate.
+   *
+   * Both come from the server because both are derived from the entitlement
+   * tables there. A tier name written into this component would be pricing
+   * copy that keeps rendering after the gate beneath it moves.
+   */
+  customDomainPlan: string | null
+  dedicatedDomainPlan: string | null
   localPart: string
   identity: string
   /**

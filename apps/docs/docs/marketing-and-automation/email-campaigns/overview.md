@@ -1,7 +1,7 @@
 ---
 sidebar_position: 1
 title: Email Campaigns
-description: Send email to audiences built from your contacts, with tiered send caps and unsubscribe handling.
+description: Campaigns to audiences built from your contacts. Campaign email starts at Pro and needs a sending domain of the site's own; receipts and account email send on every plan.
 ---
 
 # Email Campaigns
@@ -19,8 +19,14 @@ flowchart LR
 ```
 
 :::info Plan availability
-**Paid**, with **tiered send caps** — how many emails you can send per period depends on
-your plan.
+**Campaign email starts at Pro.** Free and Starter include a monthly campaign allowance
+of zero, so a campaign of any size is refused before it sends. From Pro up the allowance
+rises with the plan.
+
+**Account email is not part of that.** Order receipts, password resets, booking
+confirmations and replies to form submissions send on **every** plan, Free included, and
+are never refused by a campaign cap. See [sending domains](#sending-domains) for why the
+two are treated differently.
 :::
 
 ![The email campaigns page with sent and scheduled sends](/img/email-campaigns/campaigns-tab.png)
@@ -74,20 +80,59 @@ These fields sit under the audience picker, and they are per email rather than p
 Left empty, the from name falls back to your workspace's branding and no reply-to or
 preheader is set.
 
-### Sending from your own domain {#sending-domains}
+### Which domain your mail leaves on {#sending-domains}
 
-**Emails → Sending** is where a workspace proves it owns the domain its mail comes from.
+**Emails → Sending** is where you see what this site sends as, and where a workspace
+proves it owns a domain of its own.
 
-Two kinds of email leave your site, and they are treated differently:
+#### Account email sends on every plan {#account-email-always-sends}
 
-- **Account email** — order receipts, password resets, booking confirmations, replies to
-  form submissions — always sends, on every plan. Until your site has a domain of its
-  own it leaves on a shared Aglyn address, which works and means the delivery reputation
-  on that address is pooled with the other sites using it rather than being yours.
-- **Campaigns and other marketing email** need a domain of this site's own. They are not
-  sent from the shared address, because one campaign's complaint rate would be charged
-  against every other site's receipts on it — including the sites that never sent a
-  campaign at all.
+Order receipts, password resets, booking confirmations and replies to form submissions
+leave on every plan, Free included, with nothing to set up first. A site that has no
+domain of its own sends them from a shared Aglyn address — `notifications@shared1.mail.aglyn.app`
+and three siblings. Which of the four a site uses is fixed, so the address recipients see
+is the same one every time.
+
+That works, and it means the delivery reputation on that address is **pooled** with the
+other sites using it rather than being yours.
+
+#### Marketing email needs a domain of this site's own {#marketing-needs-a-domain}
+
+Campaigns, members posts, cart reminders and back-in-stock alerts are not sent from the
+shared address. It carries every other site's receipts and password resets — mail with no
+alternative and no way to opt out of the consequence — and one campaign's complaint rate
+there would be charged against all of it.
+
+That is a deliverability rule rather than a billing one. It lines up with the plans
+because a site entitled to send campaigns is a site entitled to a domain of its own.
+
+#### The two ways to get one {#two-ways-to-get-a-domain}
+
+Both arrive with **Pro**, and what separates them is not the price:
+
+|  | A domain we set up | A domain you own |
+| --- | --- | --- |
+| **Looks like** | `hello@yoursite.mail.aglyn.app` | `hello@yoursite.com` |
+| **Comes with** | Pro and above | Pro and above |
+| **DNS work** | None — we publish the records | Three records, published in your zone |
+| **Reputation** | This site's alone | Entirely yours |
+| **Recipients see** | An Aglyn address | Your own name |
+
+**A domain you already own is the better of the two.** Your brand in the `From:` line,
+and a sending history that belongs to you rather than to a name inside `aglyn.app`. The
+trade is the DNS work: the records go in your zone, and we never write to it.
+
+**The domain we set up** costs you no DNS work at all and is provisioned when your
+workspace moves to a plan that carries one — not at signup. Its name is **pinned** at that
+moment from the site's address, and renaming the site afterwards does not move it. That is
+deliberate: a sending domain's value is its age with the mailbox providers, and a new name
+starts at zero. Ask support if you want the sending name changed anyway.
+
+**Nothing stops while a domain is being set up, and the two kinds differ here.** A domain
+*we* set up is our work, so while it is still coming up your account email carries on
+going out on the shared address as before. A domain *you* own is your instruction about
+what recipients will see, so until its records verify this site does not send at all
+rather than quietly sending as something else. Campaigns wait for either to finish.
 
 Add a domain and you are given the exact DNS records to publish — an authorization
 record, a signing key and a bounce-routing record. Publish them wherever your DNS is
@@ -107,9 +152,11 @@ is not the problem and there is nothing to edit. Try again in a few minutes.
 
 A domain is proved once for the whole workspace; which site sends as it is a separate
 choice, made with **Send this site's email as this domain** on the domain's own page.
-Removing a domain does **not** move a site sending as it back to the shared address —
-that site stops sending until you choose another identity, which is deliberate: quietly
-changing the address your recipients see is not a safe way to fail.
+Removing a domain **you own** does not move a site sending as it onto any other address.
+That site stops sending altogether, receipts included, until you choose another identity
+— deliberately, because quietly changing the address your recipients see is not a safe
+way to fail. Removing the domain **we set up** is the gentler case: receipts go back to
+the shared address and only marketing stops.
 
 Adding a domain and choosing what a site sends as need the organization admin role.
 
@@ -145,13 +192,19 @@ which is the way to check how a mail client renders it. See [Send a test](#send-
 
 ### Your monthly send cap {#monthly-send-cap}
 
-Every plan includes a number of **campaign** emails per calendar month. The count resets
-on the 1st; it does not roll over.
+From **Pro** up, a plan includes a number of **campaign** emails per calendar month. The
+count resets on the 1st; it does not roll over.
+
+**On Free and Starter that number is zero**, which is a refusal rather than a formality:
+campaign email starts at Pro, so a campaign of any size is refused before a message
+leaves. Everything else on this page — audiences, topics, suppressions, the preference
+page — still works, and a Starter site builds the list it will mail after it upgrades.
 
 **Only campaigns count against it.** Transactional mail — order confirmations, booking
 reminders, password resets, teammate invites, workflow notifications — is never refused
-by this cap on any plan. A busy month of orders cannot use up your campaign allowance,
-and reaching the cap never stops a receipt from reaching a buyer.
+by this cap on any plan, Free and Starter included. A busy month of orders cannot use up
+your campaign allowance, and reaching the cap never stops a receipt from reaching a
+buyer.
 
 You can see where you stand in two places, without having to be refused first:
 
@@ -559,9 +612,9 @@ recipient is still subscribed to.
 
 This is the option that is missing almost everywhere, and it is worth having
 for a plain reason: the alternative to letting somebody choose "monthly" is
-letting them choose "report spam", and a complaint on your shared sending
-domain costs you and every other Aglyn site far more than a slower cadence
-does.
+letting them choose "report spam", and a complaint costs you far more than a
+slower cadence does. Campaigns leave on a sending domain of this site's own, so
+that complaint lands on your reputation and nobody else's.
 
 Nothing is cancelled. A message that arrives too soon **waits** — the person
 stays on every audience they were on, and the next one due reaches them. A
@@ -624,9 +677,8 @@ skipped by **all five** of the message types above, from that point on.
 ### The daily limit {#frequency-cap}
 
 One person receives at most **five marketing messages from one site per
-24 hours**. It is the same number on every plan, because it protects the
-sending domain your mail shares with every other Aglyn site rather than
-anything you buy.
+24 hours**. It is the same number on every plan, because it protects your
+sending reputation with the mailbox providers rather than anything you buy.
 
 In practice it cannot reach a normal week: a campaign plus a cart reminder
 plus a restock alert plus a members post is four. What it stops is a loop — a
