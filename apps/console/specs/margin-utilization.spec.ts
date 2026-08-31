@@ -57,6 +57,7 @@ import {
 } from '@aglyn/aglyn'
 import type { OrgPlan } from '@aglyn/aglyn'
 import { ESTIMATED_PAGE_TRANSFER_BYTES } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { ASSIST_CREDIT_COST_USD } from '@aglyn/aglyn/app-utils/assist-credits'
 import {
   BANDS_WITHOUT_A_UNIT_COST,
   UTILIZATION_BANDS,
@@ -267,19 +268,26 @@ describe('the bands are real, and the plan is what selects them', () => {
     // The rollup stores `assistCostUsd` — our provider bill. The band is
     // credits. Comparing the two directly would be a unit error two orders of
     // magnitude wide, and `assistCreditsFromUsd` is the one conversion.
+    /*
+     * The band comes from the entitlement and the spend is derived from it,
+     * so the case keeps testing the CONVERSION rather than a copy of Pro's
+     * allowance. A retyped band strands the moment the ladder is resized and
+     * says nothing about the unit error it exists to catch; the band values
+     * are pinned in `plan-entitlements.spec.ts`.
+     */
+    const band = PLAN_ENTITLEMENTS.pro.assistCreditsPerMonth
+    const halfUsd = (band / 2) * ASSIST_CREDIT_COST_USD
     const row = orgMarginRow({
       orgId: 'pro-1',
       org: orgOn('pro') as never,
       month: '2026-07',
-      // $3.75 of provider spend at $0.001 a credit is 3,750 credits, against
-      // Pro's band of 7,500 — exactly half.
-      rollup: { assistCostUsd: 3.75 },
+      rollup: { assistCostUsd: halfUsd },
     })
-    expect(row.bands.assistCredits.used).toBe(3750)
-    expect(row.bands.assistCredits.included).toBe(7500)
+    expect(row.bands.assistCredits.used).toBe(band / 2)
+    expect(row.bands.assistCredits.included).toBe(band)
     expect(row.bands.assistCredits.fraction).toBeCloseTo(0.5, 9)
     // The dollars still reach the COST, which is where they belong.
-    expect(row.cogs.breakdown.assist).toBeCloseTo(3.75, 9)
+    expect(row.cogs.breakdown.assist).toBeCloseTo(halfUsd, 9)
   })
 
   it('reads a STARTER org’s Assist band as no allowance, not as 0% used', () => {
