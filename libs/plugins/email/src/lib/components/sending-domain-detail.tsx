@@ -35,6 +35,7 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   describeSendingDomain,
+  describeSendingDomainRemoval,
   INCONCLUSIVE_CHECK,
 } from '../model/sending-domain-status'
 import {
@@ -265,40 +266,21 @@ export function SendingDomainDetail(props: SendingDomainDetailProps) {
 
   const handleRelease = useCallback(async () => {
     if (!identity?.orgId) return
+    /*
+     * The consequence stated rather than implied, and it is not one
+     * consequence — see `describeSendingDomainRemoval`, which holds all three.
+     *
+     * Taken from the model rather than written here because the LIST asks to
+     * remove the same record from its row menu. Two confirmations describing
+     * one action differently is how a merchant learns to dismiss the harsher
+     * of them.
+     */
     const ok = await confirm({
-      title: `Remove ${domain}?`,
-      /*
-       * The consequence stated rather than implied, and it is not one
-       * consequence.
-       *
-       * Releasing the claim leaves the host's selection pointing at a record
-       * that no longer exists, and `resolveHostSendingIdentity` reads WHOSE
-       * name it is from the domain itself. A platform subdomain drops to the
-       * shared pool, so receipts carry on; a domain the customer owns refuses,
-       * because sending as something else would contradict what they told us
-       * their recipients would see.
-       *
-       * Two different warnings, and printing the harsher one for both would
-       * teach a merchant to dismiss it.
-       */
-      description:
-        identity.selected === domain
-          ? domain === identity.platformDomain
-            ? `This site is currently sending as ${domain}. Removing it moves ` +
-              `receipts and account email back to the shared address, ` +
-              `and stops marketing email until this site has a domain of its ` +
-              `own again. Nothing in your own DNS is involved — we published ` +
-              `these records and we remove them.`
-            : `This site is currently sending as ${domain}. Removing the ` +
-              `domain does not move it onto another address — not the one ` +
-              `this site is issued, and not the shared address. It stops ` +
-              `this site sending at all, receipts included, until you choose ` +
-              `another identity. The DNS records stay in your zone; nothing ` +
-              `is changed at your registrar.`
-          : `The claim and the signing key are dropped. The DNS records stay ` +
-            `in your zone — nothing is changed at your registrar — and you ` +
-            `can add the domain again later, which issues a new key.`,
-      confirmationText: 'Remove domain',
+      ...describeSendingDomainRemoval({
+        domain,
+        selected: identity.selected,
+        platformDomain: identity.platformDomain,
+      }),
       confirmationButtonProps: { color: 'error' },
     })
       // `confirm` resolves with no value and REJECTS on cancel, so the

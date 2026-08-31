@@ -18,8 +18,24 @@
 
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
-import { CardDisplay, Container, MdiIcon, SrOnly } from '@aglyn/shared-ui-jsx'
+import {
+  mdiDeleteOutline,
+  mdiDnsOutline,
+  mdiEmailCheckOutline,
+  mdiRefresh,
+} from '@aglyn/shared-data-mdi'
+import {
+  CardDisplay,
+  Container,
+  HelpTip,
+  MdiIcon,
+  SrOnly,
+  useConfirmationContext,
+} from '@aglyn/shared-ui-jsx'
 import { NavigationDrawerComponent } from '@aglyn/shared-ui-jsx/components/navigation-drawer.component'
+import RowActionsMenu, {
+  type RowActionsMenuItem,
+} from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
@@ -38,7 +54,11 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { describeSendingDomain } from '../model/sending-domain-status'
+import {
+  describeSendingDomain,
+  describeSendingDomainRemoval,
+  INCONCLUSIVE_CHECK,
+} from '../model/sending-domain-status'
 import SendingSenderDrawer from './sending-sender-drawer'
 import {
   useSendingApi,
@@ -78,6 +98,7 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
   const { hostId, basePath } = props
   const call = useSendingApi()
   const router = useRouter()
+  const { confirm } = useConfirmationContext()
   const { enqueueSnackbar } = useSnackbar()
   /*
    * The snackbar held in a REF, for the reason `use-campaign-send-api` holds
@@ -105,6 +126,8 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
   } | null>(null)
   /** The row a list action is in flight for, so only its buttons go quiet. */
   const [senderBusy, setSenderBusy] = useState('')
+  /** The same, for the domains table below it. */
+  const [domainBusy, setDomainBusy] = useState('')
   const [addingBusy, setAddingBusy] = useState(false)
   const [newDomain, setNewDomain] = useState('')
   const [addError, setAddError] = useState('')
@@ -138,6 +161,21 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
   }, [load])
 
   /**
+   * A DOMAIN'S OWN PAGE, BUILT IN ONE PLACE.
+   *
+   * Three things navigate here — the row, the row's menu, and the redirect
+   * after adding a domain — and the `sending/` segment is the whole address:
+   * `${basePath}/{domain}` resolves to no section and renders an empty page,
+   * which is the worst possible landing for all three, because every one of
+   * them happens at the moment somebody needs the DNS records. Derived once
+   * so a second copy cannot be written without it.
+   */
+  const domainPath = useCallback(
+    (domain: string) => `${basePath}/sending/${encodeURIComponent(domain)}`,
+    [basePath],
+  )
+
+  /**
    * The list's own two actions — move the default, and remove a sender.
    *
    * Both are a POST and a re-read rather than a local edit of `view`. The
@@ -165,6 +203,133 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
     [call, hostId, load],
   )
 
+  /*
+   * THE ROW'S OWN ACTIONS.
+   *
+   * Each one posts to the route that owns the decision rather than to a route
+   * that happens to be nearby: checking DNS and releasing a claim are facts
+   * about the ORG's domain, and which of them this SITE sends as is a per-site
+   * selection. That split is the reason there are two routes, and a menu that
+   * collapsed it would be the surface deciding an agency's client sends as
+   * another client's name.
+   *
+   * All three re-read afterwards instead of patching `view`. The server
+   * decides what the identity resolves to, and a list that edited itself from
+   * a response body would be the second opinion this card exists not to be.
+   */
+  const handleVerifyDomain = useCallback(
+    async (domain: string) => {
+      if (!view?.orgId || domainBusy) return
+      setDomainBusy(domain)
+      const { response, payload } = await call({
+        path: 'sending-domains',
+        method: 'POST',
+        body: { orgId: view.orgId, domain, action: 'verify' },
+      })
+      setDomainBusy('')
+      /*
+       * THE THIRD OUTCOME, held here exactly as the domain's own page holds
+       * it. A `503` means the lookup got no answer, so nothing about the
+       * record changed; reporting it as a failed check is how a customer
+       * whose DNS is perfect ends up editing a zone that has nothing wrong
+       * with it.
+       */
+      if (response.status === 503) {
+        return void notifyRef.current(INCONCLUSIVE_CHECK.text, {
+          variant: 'info',
+        })
+      }
+      if (!response.ok) {
+        return void notifyRef.current(
+          payload?.error ?? 'The check could not run',
+          { variant: 'warning' },
+        )
+      }
+      await load()
+      notifyRef.current(
+        payload?.verified
+          ? `Verified — ${domain} can send`
+          : `Checked. Some of ${domain}’s records are still missing.`,
+        { variant: payload?.verified ? 'success' : 'info' },
+      )
+    },
+    [call, view?.orgId, domainBusy, load],
+  )
+
+  const handleUseDomain = useCallback(
+    async (domain: string) => {
+      if (domainBusy) return
+      setDomainBusy(domain)
+      const { response, payload } = await call({
+        path: 'sending-identity',
+        method: 'POST',
+        body: { hostId, domain },
+      })
+      setDomainBusy('')
+      if (!response.ok) {
+        return void notifyRef.current(
+          payload?.error ?? 'Could not change the identity',
+          { variant: 'warning' },
+        )
+      }
+      await load()
+      // The address the ROUTE settled on, not the one this click asked for —
+      // only the response knows what the `From:` line now says.
+      notifyRef.current(
+        payload?.from
+          ? `This site now sends as ${payload.from}`
+          : 'This site’s sending address was changed',
+        { variant: 'success' },
+      )
+    },
+    [call, hostId, domainBusy, load],
+  )
+
+  const handleReleaseDomain = useCallback(
+    async (domain: string) => {
+      if (!view?.orgId || domainBusy) return
+      const ok = await confirm({
+        // The same three sentences the domain's own page asks with. Two
+        // confirmations describing one action differently is how a merchant
+        // learns to dismiss the harsher of them.
+        ...describeSendingDomainRemoval({
+          domain,
+          selected: view.selected,
+          platformDomain: view.platformDomain,
+        }),
+        confirmationButtonProps: { color: 'error' },
+      })
+        // `confirm` resolves with no value and REJECTS on cancel, so the
+        // resolved value alone can never gate this.
+        .then(() => true)
+        .catch(() => false)
+      if (!ok) return
+      setDomainBusy(domain)
+      const { response, payload } = await call({
+        path: 'sending-domains',
+        method: 'DELETE',
+        query: { orgId: view.orgId, domain },
+      })
+      setDomainBusy('')
+      if (!response.ok) {
+        return void notifyRef.current(
+          payload?.error ?? 'Could not remove the domain',
+          { variant: 'warning' },
+        )
+      }
+      await load()
+    },
+    [
+      call,
+      confirm,
+      domainBusy,
+      view?.orgId,
+      view?.selected,
+      view?.platformDomain,
+      load,
+    ],
+  )
+
   const handleAdd = useCallback(async () => {
       const domain = newDomain.trim()
       if (!domain || addingBusy) return
@@ -188,10 +353,8 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
        * "Publish the records" with the records one click further away would
        * make the next step something they have to go looking for.
        */
-      router.push(
-        `${basePath}/sending/${encodeURIComponent(payload?.domain ?? domain)}`,
-      )
-  }, [call, view?.orgId, basePath, router, newDomain, addingBusy])
+      router.push(domainPath(payload?.domain ?? domain))
+  }, [call, view?.orgId, domainPath, router, newDomain, addingBusy])
 
   /**
    * ASK FOR THE PLATFORM SUBDOMAIN.
@@ -220,17 +383,128 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
     setClaimingDedicated(false)
     if (!response.ok) {
       return void notifyRef.current(
-        payload?.error ?? 'Could not set up a sending domain for this site',
+        payload?.error ?? 'Could not ask for a sending domain for this site',
         { variant: 'warning' },
       )
     }
+    /*
+     * "Asked for", not "is being set up". The claim is the only thing this
+     * press completed; creating the domain happens on our side afterwards and
+     * can be held at the provider's domain allowance, so a message promising
+     * setup would be promising the half that is not ours to promise. The
+     * domain's row is where the answer arrives, which is why this points at
+     * it rather than restating it.
+     */
     notifyRef.current(
-      `${payload?.selected} is being set up. Account email keeps sending ` +
-        'meanwhile, and campaigns can go out once it verifies.',
+      `${payload?.selected} has been asked for. Its row below says where the ` +
+        'setup has got to. Account email keeps sending meanwhile, and ' +
+        'campaigns can go out once the domain verifies.',
       { variant: 'success' },
     )
     await load()
   }, [call, hostId, claimingDedicated, load])
+
+  /**
+   * WHAT MAY BE DONE TO ONE DOMAIN, AND WHY NOT WHEN NOT.
+   *
+   * Every item here is an operation the routes behind this card can actually
+   * perform, and one whose gate this card can see. Nothing is offered on a
+   * guess: a menu entry that 403s teaches a reader the console does not know
+   * its own rules, and it costs them a round trip to find out.
+   *
+   * DISABLED WITH A REASON rather than hidden, for the reason
+   * `RowActionsMenuItem.disabledReason` exists: an absent control and an
+   * inapplicable one look identical, so a viewer who cannot remove a domain
+   * would otherwise be left wondering whether the console can remove domains
+   * at all.
+   *
+   * The gates are not one gate, because the routes are not one route:
+   *
+   *   - Open is navigation and needs nothing.
+   *   - Check DNS and Remove go to the DOMAINS route, which is owner/admin on
+   *     the org AND carries the own-domain entitlement across the whole
+   *     handler — so both conditions are read here.
+   *   - Sending as a domain goes to the IDENTITY route, whose write gate is
+   *     `org.settings` alone. It also refuses an unverified domain, which is
+   *     a state this list can already see, so it is named rather than
+   *     discovered.
+   */
+  const domainActions = useCallback(
+    (record: SendingIdentityView['domains'][number]): RowActionsMenuItem[] => {
+      const working = Boolean(domainBusy)
+      const manage = view?.canManage === true
+      const entitled = view?.entitled === true
+      const selected = view?.selected === record.domain
+      const orgAdminReason =
+        'Managing sending domains needs the organization admin role.'
+      const domainRouteReason = !manage
+        ? orgAdminReason
+        : !entitled
+          ? 'Managing sending domains needs a plan that carries sending as ' +
+            'your own domain.'
+          : ''
+
+      return [
+        {
+          key: 'open',
+          label: 'Open domain',
+          icon: <MdiIcon path={mdiDnsOutline.path} size={0.8} />,
+          // An `href`, so the domain's page is middle-clickable and copyable
+          // like any other link rather than only reachable by this handler.
+          href: domainPath(record.domain),
+        },
+        {
+          key: 'verify',
+          label: 'Check DNS',
+          icon: <MdiIcon path={mdiRefresh.path} size={0.8} />,
+          disabled:
+            working || record.status === 'requested' || Boolean(domainRouteReason),
+          disabledReason:
+            record.status === 'requested'
+              ? 'No records have been issued for this domain yet, so there ' +
+                'is nothing to look for. Open it to see what it is waiting on.'
+              : domainRouteReason || undefined,
+          onClick: () => void handleVerifyDomain(record.domain),
+        },
+        {
+          key: 'use',
+          label: 'Send this site’s email as this domain',
+          icon: <MdiIcon path={mdiEmailCheckOutline.path} size={0.8} />,
+          disabled:
+            working || selected || record.status !== 'verified' || !manage,
+          disabledReason: selected
+            ? 'This site already sends as this domain.'
+            : record.status !== 'verified'
+              ? 'Only a verified domain can be sent as. Publish its records ' +
+                'and check DNS first.'
+              : !manage
+                ? 'Choosing what this site sends as needs the organization ' +
+                  'admin role.'
+                : undefined,
+          onClick: () => void handleUseDomain(record.domain),
+        },
+        {
+          key: 'release',
+          label: 'Remove domain',
+          icon: <MdiIcon path={mdiDeleteOutline.path} size={0.8} />,
+          destructive: true,
+          disabled: working || Boolean(domainRouteReason),
+          disabledReason: domainRouteReason || undefined,
+          onClick: () => void handleReleaseDomain(record.domain),
+        },
+      ]
+    },
+    [
+      domainBusy,
+      domainPath,
+      view?.canManage,
+      view?.entitled,
+      view?.selected,
+      handleVerifyDomain,
+      handleUseDomain,
+      handleReleaseDomain,
+    ],
+  )
 
   const domains = view?.domains ?? []
   const senders = view?.senders ?? []
@@ -385,9 +659,32 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
         {view ? (
           <>
             <Divider />
-            <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-              {'Senders'}
-            </Typography>
+            {/*
+              The card's own help affordance points at the domain half, which
+              is what the header is about. A site's senders are a different
+              question with a section of their own, so the block that asks it
+              carries its own tip rather than sending a reader to the top of a
+              page about domains.
+             */}
+            <Stack
+              direction="row"
+              spacing={0.5}
+              sx={{ alignItems: 'center' }}
+            >
+              <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                {'Senders'}
+              </Typography>
+              <HelpTip
+                {...pluginDocsHelp('emailCampaigns', {
+                  anchor: '#senders',
+                  title: 'Senders',
+                  excerpt:
+                    'The addresses this site may send as — a mailbox, a name ' +
+                    'and a reply address each. A campaign picks one; the ' +
+                    'default is what an email that names no other goes out as.',
+                })}
+              />
+            </Stack>
             <Typography variant="body2" color="text.secondary">
               {'The addresses this site may send as. Every email you compose ' +
                 'picks one of them; the default is what an email that names ' +
@@ -492,46 +789,130 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
         ) : null}
 
         {/*
-          THE TWO WAYS TO GET A DOMAIN, WITH WHAT EACH COSTS THE MERCHANT.
+          THE THREE PLACES A SITE'S MAIL CAN LEAVE FROM, AND WHICH OF THEM IS
+          A PROMISE.
 
-          Both are shown whatever this site already has, because they are not
-          steps in a sequence — they are a choice, and a site already on the
-          one we provision is exactly the reader who has not been told the
-          other exists. They name the same tier today and are still two
-          sentences: what separates them is the DNS work and the name in the
-          `From:` line, which is what a merchant is actually choosing between.
+          It read as "two ways to get one", which was two errors in four words.
+          The shared address is not a way to get a domain and is not an absence
+          of one either — it is where every site starts, it needs nothing, and
+          it is the only one of the three that is always available. Leaving it
+          out of the list made the two that are conditional read as the whole
+          of the model, so a site that had neither looked broken.
 
-          The plan names come from the server, which derives them from the
+          The order is what is guaranteed, then what a merchant can take, then
+          what they can ask for. That ranking is the honest one and it is not
+          the order of preference somebody would guess: the domain a CUSTOMER
+          owns is the better `From:` line AND the one nothing on our side can
+          hold up, because it costs our zone nothing.
+
+          A domain we set up is last because it is the one this card must not
+          oversell. The plan admits the REQUEST; the provider's account-wide
+          domain allowance decides whether it is filled, and a claim made with
+          no room waits. It used to arrive by itself — at site creation, on the
+          upgrade webhook, from a sweep — so a merchant who upgraded may be
+          looking for something that is now a button, which is the other half
+          of what these sentences have to say.
+
+          Plan names come from the server, which derives them from the
           entitlement tables. A tier written in here is pricing copy that keeps
           rendering after the gate beneath it moves.
-
-          The one we provision carries an ACTION, and it is the only place in
-          the product that claims one. It used to arrive by itself — at site
-          creation, on the upgrade webhook, from a sweep — which made the
-          platform's domain count grow with paying customers rather than with
-          anybody's decision, against a provider allowance that grows only by
-          purchase. Offering it here is what makes the count something people
-          choose rather than something that happens.
          */}
         {view ? (
           <>
             <Divider />
-            <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-              {'Two ways to get one'}
+            {/*
+              Pointed at the section that says a domain we set up is asked for
+              rather than included, which is the thing a merchant most needs
+              before they choose between the two conditional options and the
+              thing that reads worst when it is discovered afterwards.
+             */}
+            <Stack
+              direction="row"
+              spacing={0.5}
+              sx={{ alignItems: 'center' }}
+            >
+              <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                {'Where this site’s mail can leave from'}
+              </Typography>
+              <HelpTip
+                {...pluginDocsHelp('emailCampaigns', {
+                  anchor: '#a-domain-we-set-up-is-a-request',
+                  title: 'A domain we set up is asked for',
+                  excerpt:
+                    'The shared address is always there. A domain you own you ' +
+                    'add yourself. A domain we set up is a request against a ' +
+                    'limited allowance, so it can wait — receipts and account ' +
+                    'email keep sending whichever you are on.',
+                })}
+              />
+            </Stack>
+            <Typography variant="body2" color="text.secondary">
+              <Typography
+                component="span"
+                variant="body2"
+                sx={{ fontWeight: 'bold' }}
+              >
+                {'The shared Aglyn address. '}
+              </Typography>
+              {'Every plan, nothing to set up, and the one thing here you are ' +
+                'never waiting for. It carries receipts and account email ' +
+                'only, and its sending reputation is shared with the other ' +
+                'sites on it rather than being this site’s.'}
             </Typography>
             <Typography variant="body2" color="text.secondary">
+              <Typography
+                component="span"
+                variant="body2"
+                sx={{ fontWeight: 'bold' }}
+              >
+                {'A domain you already own. '}
+              </Typography>
+              {(view.customDomainPlan
+                ? `Sending as your own domain starts on the ${view.customDomainPlan} plan. `
+                : '') +
+                'Your own name in the From: line and a sending reputation ' +
+                'that is entirely yours. The trade is the DNS work: you ' +
+                'publish three records in your zone, and we never write to ' +
+                'it. Nothing on our side can hold this one up.'}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              <Typography
+                component="span"
+                variant="body2"
+                sx={{ fontWeight: 'bold' }}
+              >
+                {'A domain we set up. '}
+              </Typography>
               {view.platformDomain
-                ? `A domain we set up. This site has one — ${view.platformDomain} — ` +
-                  'with no records for you to publish, and the sending ' +
-                  'reputation on it is this site’s alone. Recipients see an ' +
-                  'address on our domain rather than on yours.'
-                : 'A domain we set up' +
+                ? `This site has one — ${view.platformDomain} — with no ` +
+                  'records for you to publish, and the sending reputation on ' +
+                  'it is this site’s alone. Recipients see an address on our ' +
+                  'domain rather than on yours.'
+                : 'Nothing for you to publish, and a sending reputation this ' +
+                  'site holds alone; recipients see an address on our domain ' +
+                  'rather than on yours. ' +
+                  /*
+                   * THE PART A MERCHANT WOULD OTHERWISE FEEL CHEATED BY, said
+                   * before they press rather than in the refusal afterwards.
+                   *
+                   * Each of these domains is a slot in the mail provider's
+                   * account-wide allowance plus three records in our own zone.
+                   * A card that named a tier and stopped would be promising an
+                   * inclusion the platform does not sell — and the sentence
+                   * that has to travel with the correction is the one about
+                   * what does not stop meanwhile, because "we might not have
+                   * room" reads as an outage without it.
+                   */
                   (view.dedicatedDomainPlan
-                    ? `, which comes with ${view.dedicatedDomainPlan}`
-                    : '') +
-                  '. There is nothing for you to publish, and the sending ' +
-                  'reputation on it is this site’s alone. Recipients see an ' +
-                  'address on our domain rather than on yours.'}
+                    ? `It needs ${view.dedicatedDomainPlan}, and the plan ` +
+                      'admits the request rather than handing you the domain: '
+                    : 'It is a request rather than something a plan hands ' +
+                      'you: ') +
+                  'we hold a limited number of sending domains with our mail ' +
+                  'provider, so one asked for when there is no room waits ' +
+                  'until there is. Nothing stops while it waits — this site ' +
+                  'keeps sending receipts and account email on the address ' +
+                  'above, and only campaigns wait with the domain.'}
             </Typography>
             {/*
               The action, beside the sentence that describes it rather than in
@@ -550,22 +931,22 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
                 disabled={claimingDedicated}
                 onClick={() => void handleClaimDedicated()}
               >
+                {/*
+                  THE LABEL NAMES WHAT THE PRESS DOES, which is ask.
+
+                  "Set up" promises the outcome, and the outcome is not this
+                  button's to promise: creating the domain happens afterwards
+                  and can be held at the provider's domain allowance. A label
+                  that overstated it would make the waiting state read as a
+                  failure of something that had already happened.
+                 */}
                 {claimingDedicated
-                  ? 'Setting up…'
+                  ? 'Asking…'
                   : view.dedicated.proposed
-                    ? `Set up ${view.dedicated.proposed}`
-                    : 'Set up a domain for this site'}
+                    ? `Ask for ${view.dedicated.proposed}`
+                    : 'Ask for a domain for this site'}
               </Button>
             ) : null}
-            <Typography variant="body2" color="text.secondary">
-              {(view.customDomainPlan
-                ? 'A domain you already own. Sending as your own domain ' +
-                  `starts on the ${view.customDomainPlan} plan.`
-                : 'A domain you already own.') +
-                ' Your own name in the From: line and a sending reputation ' +
-                'that is entirely yours. The trade is the DNS work: you ' +
-                'publish three records in your zone, and we never write to it.'}
-            </Typography>
             {/*
               A PLAN GATE ON THE DOMAIN IS NOT A GATE ON THE MAIL.
 
@@ -576,8 +957,8 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
              */}
             {!view.entitled ? (
               <Typography variant="body2" color="text.secondary">
-                {'Account email from this site sends without it either way — ' +
-                  'the address is shown above.'}
+                {'Account email from this site sends without either of those ' +
+                  '— the address is shown above.'}
               </Typography>
             ) : null}
             <Divider />
@@ -607,6 +988,15 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
                 <TableCell>{'Domain'}</TableCell>
                 <TableCell>{'State'}</TableCell>
                 <TableCell>{'Used by this site'}</TableCell>
+                {/*
+                  Named for a screen reader and blank on screen. A visible
+                  header over an overflow column labels the menus rather than
+                  the data, and every other actions column in this console is
+                  headed the same way.
+                 */}
+                <TableCell align="right">
+                  <SrOnly>{'Actions'}</SrOnly>
+                </TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -619,17 +1009,19 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
                   // difference between "no credential" and "the provider
                   // refused" is spelled out.
                   pendingProvider: record.status === 'requested',
+                  // The REASON is the exception to that, because one of its
+                  // values is not a fault. A claim held at the provider's
+                  // domain allowance would otherwise read here as "waiting on
+                  // a signing key", whose whole instruction is to press a
+                  // button that cannot move it.
+                  issueError: record.lastIssueError ?? null,
                 })
                 return (
                   <TableRow
                     key={record.domain}
                     hover
                     sx={{ cursor: 'pointer' }}
-                    onClick={() =>
-                      router.push(
-                        `${basePath}/sending/${encodeURIComponent(record.domain)}`,
-                      )
-                    }
+                    onClick={() => router.push(domainPath(record.domain))}
                   >
                     <TableCell sx={{ fontFamily: 'monospace' }}>
                       {record.domain}
@@ -650,6 +1042,19 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
                           {'—'}
                         </Typography>
                       )}
+                    </TableCell>
+                    {/*
+                      The overflow, which the menu itself keeps from taking
+                      the row's own navigation with it: `RowActionsMenu` stops
+                      propagation on open, so pressing the button does not
+                      also push the domain's page out from under the menu it
+                      just opened.
+                     */}
+                    <TableCell align="right" padding="none">
+                      <RowActionsMenu
+                        label={record.domain}
+                        items={domainActions(record)}
+                      />
                     </TableCell>
                   </TableRow>
                 )

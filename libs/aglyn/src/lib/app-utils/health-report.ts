@@ -1866,7 +1866,7 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     target: '/api/admin/reap-sending-domains',
     graceMinutes: 90,
     drives:
-      'Releases the provider domain object and the zone records of every sending domain whose site or workspace is gone. If it stops, each deleted site keeps one of a small number of plan-capped provider slots forever — until the ceiling is reached and NEW sites can no longer send at all — and leaves a live DKIM key in our zone under a label a future site can claim and inherit a stranger’s signature from.',
+      'Releases the provider domain object and the zone records of every sending domain whose site or workspace is gone. If it stops, each deleted site keeps one of a bounded number of provider domain slots forever — until the ceiling is reached and a site that asks for a domain of its own is refused one, which leaves it on the shared pool rather than stopping its mail — and leaves a live DKIM key in our zone under a label a future site can claim and inherit a stranger’s signature from.',
   },
   {
     id: 'usage-email',
@@ -1985,7 +1985,7 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     target: 'consoleFastCrons → console /api/admin/provision-sending-domains',
     graceMinutes: 45,
     drives:
-      'Turns a site’s sending-domain claim into a DKIM key and the DNS records that carry it. If it stops, every site whose claim has not been provisioned refuses EVERY send with "this site has no sending domain yet" — not a degraded send on a shared address, but no mail at all, including receipts and password resets.',
+      'Turns a site’s sending-domain claim into a DKIM key and the DNS records that carry it. If it stops, every site that has ASKED for a domain of its own waits on a claim with no records to publish, so campaigns from those sites are refused. Receipts and account email keep leaving on the shared pool throughout, which makes this a stall in reputation isolation rather than stopped mail — and it is invisible to the merchant, who sees only a domain that never finishes.',
   },
   {
     id: 'plugin-jobs-beat',

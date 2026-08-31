@@ -166,6 +166,16 @@ export interface SendingIdentityView {
     status: SendingDomainView['status']
     verifiedAtMs: number | null
     lastCheckedAtMs: number | null
+    /**
+     * Why the last attempt to issue a key produced none, or `null`.
+     *
+     * Carried in the LIST and not only on the domain's own page, because one
+     * of its values is not a fault: a claim held at the mail provider's domain
+     * allowance is `requested` with a reason, and a list that could not see
+     * the reason would label it "Waiting on a signing key" — a state whose
+     * whole instruction is to press a button that will not move it.
+     */
+    lastIssueError?: string | null
   }[]
   canManage: boolean
   entitled: boolean
