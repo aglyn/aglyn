@@ -207,7 +207,9 @@ export function CampaignConversionsCard(props: CampaignConversionsCardProps) {
 
   const webList = usePagedCollection<ConversionRow>(
     (pageLimit) =>
-      collectionPage(
+      campaignId
+        ? null
+        : collectionPage(
             query(
               attributions(),
               where('kind', '==', kind),

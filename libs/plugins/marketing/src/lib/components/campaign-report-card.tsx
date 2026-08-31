@@ -620,6 +620,11 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
           * expects the sum to be.
           *=========================================*/}
         <Section title="Conversions">
+          {conversionsReport.caveats.map((caveat) => (
+            <Alert key={caveat.id} severity="info">
+              {caveat.message}
+            </Alert>
+          ))}
           {conversionsReport.any ? (
             <Stack spacing={1}>
               <Stack
