@@ -312,6 +312,12 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       "The email mirror of TENANT_APEX. `shared-util-email` is tagged scope:shared and cannot import @aglyn/aglyn, so the copy is structural; apps/console/specs/email-media-src-drift.spec.ts holds the two to the same answer, including under a configured apex.",
   },
   {
+    file: 'libs/shared/util/email/src/lib/platform-sending-domain.ts',
+    count: 1,
+    reason:
+      "`tenantWebApex()` — the mail layer's reader of NEXT_PUBLIC_TENANT_DOMAIN, and the literal is only its `||` default. The same structural copy as email-media-src.ts above and for the same reason: `shared-util-email` is tagged scope:shared and cannot import TENANT_APEX from @aglyn/aglyn. The mail apex built on it is separately configurable through AGLYN_TENANT_MAIL_APEX and defaults to `mail.{web apex}`, so an operator who sets the tenant domain gets a sending namespace inside their own zone rather than inside ours; platform-sending-domain.spec.ts holds this function to the configured value, so the default cannot become the answer for a deployment that set one.",
+  },
+  {
     file: 'libs/aglyn/src/lib/app-utils/host-naming.ts',
     count: 1,
     reason:
