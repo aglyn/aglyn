@@ -53,6 +53,8 @@ const mockVerifyIdToken = jest.fn()
  */
 let mockStoredDocs = new Map<string, Record<string, unknown>>()
 let mockAutoId = 0
+/** The roster entry `resolveOrgMembership` returns — org-wide unless a test says otherwise. */
+let mockMember: Record<string, unknown> = { id: 'm-1' }
 
 function mockMakeDoc(path: string): any {
   return {
@@ -169,7 +171,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     Response.json({ error: 'Verify your email' }, { status: 403 }),
   memberHasOrgPermission: async () => true,
   readOrgBilling: async () => ({ stripeCustomerId: 'cus_test_1' }),
-  resolveOrgMembership: async () => ({ orgId: 'org-1', member: { id: 'm-1' } }),
+  resolveOrgMembership: async () => ({ orgId: 'org-1', member: mockMember }),
   writeOrgBilling: async () => undefined,
   lockdownRefusal: async () => null,
   logOrgActivity: async () => undefined,
@@ -179,6 +181,11 @@ jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
   isLiveSubscriptionStatus: jest.requireActual('@aglyn/aglyn/app-utils/org-billing-doc')
     .isLiveSubscriptionStatus,
+  // REAL, for the same reason the margin functions below are: stubbing the
+  // scope predicate `true` would delete the collaborator guard from this suite
+  // while every other assertion stayed green.
+  isOrgWideMember: jest.requireActual('@aglyn/aglyn/app-utils/organizations')
+    .isOrgWideMember,
   buildRoute: () => '/acme/manage/billing',
   Route: { MANAGE_BILLING: 'MANAGE_BILLING' },
   isCustomPricedPlan: (plan: string) => plan === 'enterprise',
@@ -283,6 +290,7 @@ function detailDocs(): Array<Record<string, unknown>> {
 beforeEach(() => {
   mockStoredDocs = new Map()
   mockAutoId = 0
+  mockMember = { id: 'm-1' }
   capturedCouponBody = null
   capturedSubUpdateBody = null
   subscriptionFields = {}
@@ -327,6 +335,33 @@ describe('/api/billing/retention — survey (AGL-1863)', () => {
     const post = loadRoute(ROUTE)
     const response = await call(post, { action: 'survey' }, { bearer: false })
     expect(response.status).toBe(401)
+  })
+
+  /*
+   * SCOPE, not only permission. `memberHasOrgPermission` is mocked TRUE for
+   * this whole suite, so the org-wide check is the only thing that can refuse
+   * these — and cancelling or discounting the organization's subscription is
+   * not a claim a collaborator on one of its sites holds.
+   */
+  const SURVEY = {
+    action: 'survey',
+    surface: 'subscription_cancel',
+    reason: 'too_expensive',
+  }
+
+  it('REFUSES a site collaborator, permission granted and all', async () => {
+    mockMember = { role: 'viewer', allHosts: false, hostAccess: { 'site-1': true } }
+    const post = loadRoute(ROUTE)
+    expect((await call(post, SURVEY)).status).toBe(403)
+  })
+
+  it('POSITIVE CONTROL: the same member unscoped is admitted', async () => {
+    // Both directions on one axis, and on an otherwise identical request.
+    // Without this the refusal above is satisfied by a route that refuses
+    // everyone — or by a body the route would have rejected anyway.
+    mockMember = { role: 'viewer', allHosts: true }
+    const post = loadRoute(ROUTE)
+    expect((await call(post, SURVEY)).status).toBe(200)
   })
 
   it('stores the survey org-scoped and hands back the funnelId', async () => {
@@ -509,7 +544,11 @@ describe('/api/billing/retention — winback (AGL-1863 / AGL-1620)', () => {
       expect(response.status).toBe(409)
       const payload = await response.json()
       expect(payload.code).toBe('margin_floor')
-      expect(payload.rating.rating).toBe('block')
+      // The VERDICT only. `DiscountMarginResult` carries `infraCogsUsd`,
+      // `marginPct` and `floorPct` — our cost, our margin and the floor we
+      // underwrite to — and this response goes to the customer.
+      expect(payload.rating).toBe('block')
+      expect(JSON.stringify(payload)).not.toMatch(/infraCogsUsd|marginPct|floorPct/)
       // Stripe was never reached, so no coupon exists to be redeemed later.
       expect(capturedCouponBody).toBeNull()
       expect(capturedSubUpdateBody).toBeNull()
