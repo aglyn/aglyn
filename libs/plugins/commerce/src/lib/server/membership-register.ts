@@ -20,6 +20,7 @@ import { memberNameSearchFields } from './member-name-search'
 import {
   checkVisitorRecordCeiling,
   HOST_TOKENS,
+  marketingConsentFieldsForHost,
   SITE_MEMBER_CEILING_CODE,
   SITE_MEMBER_UNAVAILABLE_MESSAGE,
   SITE_MEMBERS_MAX_PER_HOST,
@@ -145,9 +146,13 @@ export const membershipRegisterHandler: PluginApiHandler = async (req, res) => {
          * the checkbox exists and why it defaults unchecked — so the omitted
          * case stores nothing and reads back as an unrecorded basis rather
          * than as a refusal.
+         *
+         * Under this site's key even though `siteMembers` already lives
+         * beneath it, so that one reader answers for every silo — see
+         * `addHostLead`, which makes the same write for the same reason.
          */
         ...(marketingConsent
-          ? { marketingConsent: true, marketingConsentAtMs: Date.now() }
+          ? marketingConsentFieldsForHost(hostId, Date.now())
           : {}),
         createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       })

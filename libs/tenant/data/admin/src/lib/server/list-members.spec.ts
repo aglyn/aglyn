@@ -64,7 +64,28 @@ const docHandle = (path: string): any => ({
   },
   get: async () => snapshotFor(path),
   set: async (data: Record<string, any>, options?: { merge?: boolean }) => {
-    store[path] = { ...(options?.merge ? (store[path] ?? {}) : {}), ...data }
+    // Nested maps MERGE, as Firestore's `{ merge: true }` does. A shallow
+    // fake would let a write that erases every other site's consent entry
+    // pass here and erase them in production.
+    const deepMerge = (
+      into: Record<string, any>,
+      from: Record<string, any>,
+    ): Record<string, any> => {
+      const next = { ...into }
+      for (const [key, value] of Object.entries(from)) {
+        next[key] =
+          value &&
+          typeof value === 'object' &&
+          !Array.isArray(value) &&
+          next[key] &&
+          typeof next[key] === 'object' &&
+          !Array.isArray(next[key])
+            ? deepMerge(next[key], value)
+            : value
+      }
+      return next
+    }
+    store[path] = options?.merge ? deepMerge(store[path] ?? {}, data) : data
   },
   collection: (name: string) => ({
     doc: (id: string) => docHandle(`${path}/${name}/${id}`),
@@ -76,13 +97,22 @@ const firestoreHandle: any = {
 }
 
 import { enrollListMember } from './list-members'
-import { personKey } from '@aglyn/aglyn/server'
+import {
+  personKey,
+  readMarketingBasis,
+  soloConsentGroup,
+} from '@aglyn/aglyn/server'
 
 const KEY = personKey(EMAIL) as string
+/** The site the enrollment is made in the name of. */
+const HOST = 'site-1'
+/** A sister brand on the same org — the list is shared, the basis is not. */
+const OTHER_HOST = 'site-2'
 
 const enroll = (input: Record<string, unknown> = {}) =>
   enrollListMember({
     listRef: docHandle(LIST_PATH),
+    group: soloConsentGroup(HOST),
     email: EMAIL,
     source: 'test',
     ...input,
@@ -147,13 +177,58 @@ describe('a stored refusal on the membership', () => {
 })
 
 describe('the basis a row records', () => {
+  /** The entry the enrolling site's basis lives in. */
+  const entryFor = (hostId: string) =>
+    theRow()?.marketingConsentByHost?.[hostId] ?? {}
+  /** And the same fact through the reader the send path uses. */
+  const basisFor = (hostId: string) =>
+    readMarketingBasis(theRow() ?? null, soloConsentGroup(hostId)).basis
+
   it('reads a ticked checkbox as an opt-in, asserted by nobody', async () => {
     const before = Date.now()
     await enroll({ marketingConsent: true })
-    expect(theRow().marketingConsent).toBe(true)
-    expect(theRow().marketingConsentBasis).toBe('contact-opt-in')
-    expect(theRow().marketingConsentByUid).toBeNull()
-    expect(theRow().marketingConsentAtMs).toBeGreaterThanOrEqual(before)
+    expect(basisFor(HOST)).toBe('granted')
+    expect(entryFor(HOST).marketingConsentBasis).toBe('contact-opt-in')
+    expect(entryFor(HOST).marketingConsentByUid).toBeNull()
+    expect(entryFor(HOST).marketingConsentAtMs).toBeGreaterThanOrEqual(before)
+  })
+
+  /**
+   * A LIST IS ORG-SHARED AND ITS CONSENT IS NOT.
+   *
+   * Every site in the org can send to this list, so a basis written at the
+   * top of the row would enroll somebody into one client's newsletter and
+   * make them mailable by every client the agency runs.
+   */
+  it('records the basis for the enrolling site and for nobody else', async () => {
+    await enroll({ marketingConsent: true })
+    expect(basisFor(HOST)).toBe('granted')
+    expect(basisFor(OTHER_HOST)).toBe('unrecorded')
+    expect('marketingConsent' in theRow()).toBe(false)
+  })
+
+  /** And the capture attribution, which is a separate fact. */
+  it('stamps the enrolling site as the capturing one', async () => {
+    await enroll({ marketingConsent: true })
+    expect(theRow().capturedByHostIds).toEqual([HOST])
+  })
+
+  /**
+   * A second site enrolling the same person ADDS a grant. A write that
+   * replaced the map would silently revoke the first site's basis, which is
+   * the leak inverted and equally invisible.
+   */
+  it('adds a second site’s basis without erasing the first', async () => {
+    await enroll({ marketingConsent: true })
+    await enrollListMember({
+      listRef: docHandle(LIST_PATH),
+      group: soloConsentGroup(OTHER_HOST),
+      email: EMAIL,
+      source: 'test',
+      marketingConsent: true,
+    } as never)
+    expect(basisFor(HOST)).toBe('granted')
+    expect(basisFor(OTHER_HOST)).toBe('granted')
   })
 
   it('keeps an attestation’s account and moment', async () => {
@@ -161,9 +236,9 @@ describe('the basis a row records', () => {
     await enroll({
       consent: { basis: 'operator-attested', atMs, byUid: 'editor-uid' },
     })
-    expect(theRow().marketingConsentBasis).toBe('operator-attested')
-    expect(theRow().marketingConsentByUid).toBe('editor-uid')
-    expect(theRow().marketingConsentAtMs).toBe(atMs)
+    expect(entryFor(HOST).marketingConsentBasis).toBe('operator-attested')
+    expect(entryFor(HOST).marketingConsentByUid).toBe('editor-uid')
+    expect(entryFor(HOST).marketingConsentAtMs).toBe(atMs)
   })
 
   /*
@@ -174,16 +249,16 @@ describe('the basis a row records', () => {
    */
   it('writes no consent field at all when the caller has no basis', async () => {
     await enroll()
-    expect(theRow().marketingConsent).toBeUndefined()
-    expect(theRow().marketingConsentBasis).toBeUndefined()
+    expect(theRow().marketingConsentByHost).toBeUndefined()
     expect('marketingConsent' in theRow()).toBe(false)
+    expect(basisFor(HOST)).toBe('unrecorded')
   })
 
   it('never erases a basis given on an earlier enrollment', async () => {
     await enroll({ marketingConsent: true })
     await enroll({ source: 'newsletter' })
-    expect(theRow().marketingConsent).toBe(true)
-    expect(theRow().marketingConsentBasis).toBe('contact-opt-in')
+    expect(basisFor(HOST)).toBe('granted')
+    expect(entryFor(HOST).marketingConsentBasis).toBe('contact-opt-in')
   })
 
   /*
@@ -204,9 +279,10 @@ describe('the basis a row records', () => {
 
     expect(result).toMatchObject({ enrolled: true, memberId: legacyId, adopted: true })
     expect(rowCount()).toBe(1)
-    expect(store[`${MEMBERS_PATH}/${legacyId}`].marketingConsentBasis).toBe(
-      'contact-opt-in',
-    )
+    expect(
+      store[`${MEMBERS_PATH}/${legacyId}`].marketingConsentByHost?.[HOST]
+        ?.marketingConsentBasis,
+    ).toBe('contact-opt-in')
   })
 })
 

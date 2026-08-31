@@ -718,13 +718,53 @@ service cloud.firestore {
       // customer list and showing them none of it, none is the only defensible
       // one. A collaborator who genuinely needs their site's leads should get
       // them through a server route that filters, not a widened rule.
+      /**
+       * The CRM, scoped like `datasets` and `media` rather than org-wide.
+       *
+       * A contact document is shared by every site that has captured the
+       * person — one human is one row, which is the dedupe the shared address
+       * book exists for and the reason an org is billed once for them. Who
+       * may READ that row is a different question, and it was not being
+       * asked: `isOrgWideMember()` admitted every site in the account to
+       * every contact in it, so an agency running twelve client brands had
+       * one address book with twelve readers.
+       *
+       * `canReadScoped()` is the same predicate the client's
+       * `array-contains-any` filter uses, which is what makes a filtered
+       * query provable per-document and an UNFILTERED one denied outright
+       * rather than quietly returning the collection.
+       *
+       * DELETE IS SOLE-HOLDER ONLY, and that is the load-bearing clause.
+       * Removing a contact from one site's CRM is a DETACH — drop that
+       * holder's facet, its consent entries and its scope tokens — because
+       * another site that captured the same person keeps its own notes,
+       * order history and consent, none of which the deleting site ever had a
+       * claim on. `hasOnly` is the reference count: the document may only be
+       * destroyed by a caller who is the last thing holding it, and every
+       * other case has to be an update. A privacy ERASURE is not this path
+       * and goes through the Admin SDK, which these rules do not gate.
+       */
       match /contacts/{contactId} {
-        allow read: if isStaff() || isOrgWideMember();
-        allow write: if isStaff() || canWriteOrgWideData();
+        allow read: if isStaff() || canReadScoped();
+        allow create: if isStaff() ||
+          (canWriteOrgData() && canCreateScoped());
+        allow update: if isStaff() ||
+          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()));
+        allow delete: if isStaff() ||
+          (canWriteScopedOrgData() &&
+           resource.data.visibleTo.hasOnly(
+             orgMember().get('scopeTokens', ['org'])));
       }
+      // Segments are saved filters over the contacts above and are stamped
+      // org-wide at creation, so they follow the same scoped predicate: a
+      // segment nobody may see is a campaign audience nobody may resolve.
       match /contactSegments/{segmentId} {
-        allow read: if isStaff() || isOrgWideMember();
-        allow write: if isStaff() || canWriteOrgWideData();
+        allow read: if isStaff() || canReadScoped();
+        allow create: if isStaff() ||
+          (canWriteOrgData() && canCreateScoped());
+        allow update: if isStaff() ||
+          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()));
+        allow delete: if isStaff() || canWriteScopedOrgData();
       }
 
       // Email topics: the streams a recipient may leave one at a time.

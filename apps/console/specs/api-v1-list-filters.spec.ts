@@ -189,6 +189,12 @@ jest.mock('@aglyn/aglyn/server', () => {
   return {
     __esModule: true,
     ...jest.requireActual(
+      '../../../libs/aglyn/src/lib/app-utils/marketing-consent',
+    ),
+    ...jest.requireActual(
+      '../../../libs/aglyn/src/lib/app-utils/consent-groups',
+    ),
+    ...jest.requireActual(
       '../../../libs/aglyn/src/lib/app-utils/api-idempotency',
     ),
     // The REAL normalizer. This is the whole point of the `?email=` test —

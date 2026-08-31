@@ -23,6 +23,8 @@
  */
 
 import {
+  consentGroupForHost,
+  type ConsentGroup,
   checkHostCollaboratorQuota,
   checkSeatQuota,
   countCollaboratorSeats,
@@ -1954,4 +1956,33 @@ export async function registerOrgHost(
   await syncOrgAuthProjections(orgId, hostId)
   // Seed the per-user projection for everyone who can reach the new host.
   await syncHostProjectionForMembers(orgId, hostId)
+}
+
+/**
+ * The consent group a site belongs to, read off its owning org.
+ *
+ * The ONE server-side door to pooling. Every capture surface and every send
+ * path resolves a group through this rather than reading
+ * `CONSENT_GROUPS_FIELD` itself, so there is one place that decides what a
+ * site's consent covers and one place a mistake could live.
+ *
+ * FAILS TO THE GROUP OF ONE. An org that cannot be resolved, or a read that
+ * throws, answers "this site alone" — which withholds mail from an org that
+ * had legitimately pooled and never sends mail on a pooling nobody could
+ * confirm. That is the only direction a failure here may fall.
+ *
+ * The org read is `React.cache`-deduped per request by {@link getOrgForHost},
+ * so a send that already resolved the org for its policy pays nothing extra.
+ */
+export async function consentGroupForSite(
+  hostId: string,
+  org?: Record<string, unknown> | null,
+): Promise<ConsentGroup> {
+  if (!hostId) throw new Error('[organizations] no site to resolve a group for')
+  if (org) return consentGroupForHost(org, hostId)
+  const resolved = await getOrgForHost(hostId).catch(() => null)
+  return consentGroupForHost(
+    (resolved?.org as Record<string, unknown> | undefined) ?? null,
+    hostId,
+  )
 }

@@ -137,6 +137,19 @@ let orgFixture: any = { id: 'org-1', plan: 'business', ownerUid: 'owner-1' }
 let orgReadError: Error | null = null
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  /*
+   * The real resolution's shape: an org that declared no pooling resolves
+   * every site to a group of ONE. Faked rather than imported because this
+   * file mocks the whole module — but faked to the NARROW answer, which is
+   * the direction a wrong group may fail in.
+   */
+  consentGroupForSite: async (hostId: string) => ({
+    hostId,
+    groupId: hostId,
+    name: null,
+    hostIds: [hostId],
+    declared: false,
+  }),
   firebaseAdmin: {
     app: () => ({ firestore: () => fakeFirestore }),
     firestore: {

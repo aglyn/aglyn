@@ -8254,5 +8254,123 @@ describe('a custom sending domain is unwritable and unreadable from any client',
   })
 })
 
+/**
+ * THE CRM IS SCOPED, AND ITS DELETE IS A DETACH.
+ *
+ * `contacts` was `isOrgWideMember()` on both sides, so every site in an
+ * account read every contact in it: an agency running twelve client brands
+ * had one address book with twelve readers. The predicate is now the one
+ * `datasets` uses, which is also the one the client's `array-contains-any`
+ * filter matches — that pairing is what makes an UNFILTERED list denied
+ * rather than quietly returning the collection.
+ *
+ * `EDITOR` is the persona that matters: a site collaborator, scoped to one
+ * host, which is exactly the shape an agency's client has.
+ */
+describe('contacts are per-site, and letting go of one is not a delete', () => {
+  const MINE = `host:${HOST}`
+  const THEIRS = 'host:host-b'
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'orgs', ORG, 'contacts', 'mine'), {
+        email: 'mine@acme.test',
+        visibleTo: [MINE],
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'contacts', 'theirs'), {
+        email: 'theirs@acme.test',
+        visibleTo: [THEIRS],
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'contacts', 'shared'), {
+        email: 'shared@acme.test',
+        visibleTo: [MINE, THEIRS],
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'contacts', 'unscoped'), {
+        email: 'unscoped@acme.test',
+      })
+    })
+  })
+
+  it('refuses a scoped collaborator another site’s contact', async () => {
+    await assertFails(
+      getDoc(doc(authed(EDITOR), 'orgs', ORG, 'contacts', 'theirs')),
+    )
+    // A document nobody scoped is seen by nobody, which is the fail-open
+    // this change closed — the field was present and said `['org']`, or was
+    // absent and read as org-wide. Neither is "this site may see it".
+    await assertFails(
+      getDoc(doc(authed(EDITOR), 'orgs', ORG, 'contacts', 'unscoped')),
+    )
+  })
+
+  /**
+   * THE CONTROL. Every assertion above passes against a rules file that
+   * denies the whole collection, which would take Contacts away from
+   * everybody. This is the door still opening.
+   */
+  it('still admits the collaborator’s OWN contacts', async () => {
+    await assertSucceeds(
+      getDoc(doc(authed(EDITOR), 'orgs', ORG, 'contacts', 'mine')),
+    )
+    await assertSucceeds(
+      getDoc(doc(authed(EDITOR), 'orgs', ORG, 'contacts', 'shared')),
+    )
+    // And an org-wide member is the org, so they read everything.
+    await assertSucceeds(
+      getDoc(doc(authed(OWNER), 'orgs', ORG, 'contacts', 'theirs')),
+    )
+  })
+
+  /**
+   * An unfiltered LIST is denied outright rather than filtered. That is the
+   * property that makes the rule provable per-document — and the one whose
+   * absence let a console page with no `where()` stream the whole
+   * collection.
+   */
+  it('denies an unfiltered list and allows the scoped one', async () => {
+    await assertFails(
+      getDocs(collection(authed(EDITOR), 'orgs', ORG, 'contacts')),
+    )
+    const scoped = await assertSucceeds(
+      getDocs(
+        query(
+          collection(authed(EDITOR), 'orgs', ORG, 'contacts'),
+          where('visibleTo', 'array-contains-any', ['org', MINE]),
+        ),
+      ),
+    )
+    assert.deepEqual(
+      scoped.docs.map((entry) => entry.id).sort(),
+      ['mine', 'shared'],
+    )
+  })
+
+  /**
+   * DELETE IS SOLE-HOLDER ONLY. Another site that captured the same person
+   * keeps its own notes, order history and consent, and the deleting site
+   * never had a claim on any of it — so letting go is an UPDATE that drops
+   * this holder's half, and the document dies with the last holder.
+   */
+  it('refuses to destroy a contact another site still holds', async () => {
+    await assertFails(
+      deleteDoc(doc(authed(EDITOR), 'orgs', ORG, 'contacts', 'shared')),
+    )
+  })
+
+  it('allows the LAST holder to delete, and the detach in between', async () => {
+    await assertSucceeds(
+      deleteDoc(doc(authed(EDITOR), 'orgs', ORG, 'contacts', 'mine')),
+    )
+    // The detach: the same collaborator drops their own half of the shared
+    // row, which is an update and is allowed.
+    await assertSucceeds(
+      updateDoc(doc(authed(OWNER), 'orgs', ORG, 'contacts', 'shared'), {
+        'facets.host-a': deleteField(),
+      }),
+    )
+  })
+})
+
 
 assert.ok(true)

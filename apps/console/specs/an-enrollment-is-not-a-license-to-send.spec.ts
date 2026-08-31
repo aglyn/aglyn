@@ -170,6 +170,30 @@ const suppressionKey = (email: string) =>
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   /*
+   * The campaign-touch lookup, answering "no campaign".
+   *
+   * The double was missing it entirely, so the newsletter route threw on its
+   * first line and the enrollment under test never ran. Answering null is the
+   * honest default for a request carrying no touch, and it is what keeps this
+   * file about enrollment rather than about attribution.
+   */
+  resolveCampaignTouch: async () => null,
+  // The real resolution's shape: an org that declared no pooling resolves
+  // every site to a group of ONE — the narrow answer, which is the direction
+  // a wrong group may fail in.
+  consentGroupForSite: async (hostId: string) => ({
+    hostId,
+    groupId: hostId,
+    name: null,
+    hostIds: [hostId],
+    declared: false,
+  }),
+  // The literal three call sites compare against — the unsubscribe writes
+  // it, the resubscribe link refuses to reverse anything else, and the
+  // preference page reads it. A mock that omitted it would write `undefined`
+  // and every one of those comparisons would silently stop matching.
+  UNSUBSCRIBE_SUPPRESSION_REASON: 'unsubscribe',
+  /*
    * The unsubscribe-link signer and URL builder are the REAL ones. They need
    * nothing but `crypto`, and a double would let a spec assert on a URL shape
    * the product does not actually mint — which is the whole failure mode of a
@@ -390,8 +414,15 @@ beforeEach(() => {
    */
   mockStore[`${MEMBERS_PATH}/aaa-other`] = {
     email: OTHER,
-    marketingConsent: true,
-    marketingConsentAtMs: Date.UTC(2025, 0, 1),
+    // Recorded against THIS SITE. A list lives on the org and every site in
+    // it can mail one, so a basis at the top of the row would be a grant no
+    // brand was actually given.
+    marketingConsentByHost: {
+      [HOST_ID]: {
+        marketingConsent: true,
+        marketingConsentAtMs: Date.UTC(2025, 0, 1),
+      },
+    },
   }
 })
 
@@ -426,8 +457,12 @@ describe('a person added from the Inbox, then suppressed', () => {
     // the two would destroy the record that says the person asked to be here.
     expect(mockStore[`${MEMBERS_PATH}/${suppressionKey(SENDER)}`]).toMatchObject({
       email: SENDER,
-      marketingConsent: true,
-      marketingConsentBasis: 'operator-attested',
+      marketingConsentByHost: {
+        [HOST_ID]: {
+          marketingConsent: true,
+          marketingConsentBasis: 'operator-attested',
+        },
+      },
     })
   })
 

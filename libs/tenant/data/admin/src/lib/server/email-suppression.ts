@@ -132,6 +132,50 @@ export type EmailSuppressionReason =
   /** Recorded by staff (a written request, a court order, a correction). */
   | 'staff'
 
+/**
+ * The reasons that may be filed PLATFORM-WIDE, as a runtime set.
+ *
+ * ## The split this constant enforces
+ *
+ * A bounce and a complaint are facts about a MAILBOX and about the sending
+ * domain every tenant's mail leaves by: the address does not exist for
+ * anybody, and somebody who pressed "report spam" on `noreply@aglyn.com` has
+ * told every sender behind that domain at once. Those belong everywhere,
+ * immediately.
+ *
+ * An UNSUBSCRIBE is not that. It is a preference a person expressed to ONE
+ * brand — the sender line they read, the newsletter they joined — and an
+ * agency running twelve unrelated clients out of one account would, on a
+ * platform-wide entry, stop mailing that person on behalf of eleven brands
+ * they never heard from. So an unsubscribe lives only in
+ * `hosts/{hostId}/suppressions`, and {@link suppressEmail} refuses it.
+ *
+ * ## Why a runtime refusal and not just the type
+ *
+ * {@link EmailSuppressionReason} already excludes it, and a type is not a
+ * guard: every caller here builds its reason from a webhook payload or a
+ * ternary, `as` casts exist, and the plugin API surface is untyped at the
+ * boundary. The cost of the type being wrong once is an opt-out from one
+ * brand silently applied to every brand in the account, which is invisible
+ * from the console — the mail simply never arrives, and the merchant's own
+ * suppression list does not mention it.
+ */
+export const PLATFORM_SUPPRESSION_REASONS: readonly EmailSuppressionReason[] = [
+  'bounce',
+  'complaint',
+  'staff',
+]
+
+/**
+ * The reason a self-service opt-out is filed under, on the PER-SITE list.
+ *
+ * Named because three call sites compare against it — the unsubscribe writes
+ * it, the resubscribe link refuses to reverse anything else, and the
+ * preference page reads it to decide whether an address may opt back in. A
+ * literal in three places is a literal that can be changed in two.
+ */
+export const UNSUBSCRIBE_SUPPRESSION_REASON = 'unsubscribe'
+
 export interface EmailSuppressionRecord {
   /** The address, in the clear, lowercased. The id is its hash. */
   email: string
@@ -202,6 +246,12 @@ export async function suppressEmail(input: SuppressEmailInput): Promise<{
   const key = emailSuppressionKey(input.email)
   if (!key) {
     throw new Error('[email-suppression] cannot key a suppression for that value')
+  }
+  if (!PLATFORM_SUPPRESSION_REASONS.includes(input.reason)) {
+    throw new Error(
+      `[email-suppression] ${input.reason} is a per-site preference and ` +
+        'cannot be filed platform-wide',
+    )
   }
   const db = input.firestore ?? defaultFirestore()
   const ref = db.collection(EMAIL_SUPPRESSIONS_COLLECTION).doc(key)

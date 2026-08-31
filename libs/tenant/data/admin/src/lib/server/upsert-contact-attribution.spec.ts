@@ -98,6 +98,12 @@ jest.mock('./firebase-admin', () => ({
 }))
 
 jest.mock('./organizations', () => ({
+  // The real resolution, which for an org that declared nothing is the
+  // group of one — the shape every case in this file exercises.
+  consentGroupForSite: async (hostId: string) =>
+    jest
+      .requireActual('@aglyn/aglyn/app-utils/consent-groups')
+      .soloConsentGroup(hostId),
   getOrgForHost: async () => ({ orgId: 'org1', org: { plan: 'free' } }),
   orgDataCollectionForHost: async () => contactsRef,
   scopedToHost: (ref: unknown) => ref,
@@ -109,6 +115,12 @@ jest.mock('@aglyn/aglyn/server', () => {
   )
   return {
     ...contactsModule,
+    // The real consent and scope helpers. Reimplementing them here is the
+    // unfaithful-double trap: a fake that wrote a basis at the top of the
+    // document, or scoped a new contact org-wide, would pass this file while
+    // shipping the leak.
+    ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/consent-groups'),
+    ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/marketing-consent'),
     ORG_SCOPE_TOKEN: 'org',
     checkContactQuota: () => ({ allowed: quotaAllowed }),
   }

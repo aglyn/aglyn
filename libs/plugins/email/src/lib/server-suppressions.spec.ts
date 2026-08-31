@@ -81,6 +81,24 @@ function makeCollectionRef(path: string): any {
 let decoded: { uid: string } | Error = { uid: 'uid-editor' }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  // The literal three call sites compare against — the unsubscribe writes
+  // it, the resubscribe link refuses to reverse anything else, and the
+  // preference page reads it. A mock that omitted it would write `undefined`
+  // and every one of those comparisons would silently stop matching.
+  UNSUBSCRIBE_SUPPRESSION_REASON: 'unsubscribe',
+  /*
+   * The real resolution's shape: an org that declared no pooling resolves
+   * every site to a group of ONE. Faked rather than imported because this
+   * file mocks the whole module — but faked to the NARROW answer, which is
+   * the direction a wrong group may fail in.
+   */
+  consentGroupForSite: async (hostId: string) => ({
+    hostId,
+    groupId: hostId,
+    name: null,
+    hostIds: [hostId],
+    declared: false,
+  }),
   __esModule: true,
   // The REAL derivation. A double would let this suite certify a route that
   // files entries under a key nothing looks up — the one failure here that is

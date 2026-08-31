@@ -28,6 +28,7 @@ import {
   enrollListMember,
   firebaseAdmin,
   meterHostEmail,
+  consentGroupForSite,
   orgDataCollectionForHost,
   recordPendingTopicConfirmation,
   resolveCampaignTouch,
@@ -82,6 +83,7 @@ async function enrollInList(options: {
     if (!listSnapshot.exists) return
     await enrollListMember({
       listRef,
+      group: await consentGroupForSite(options.hostId),
       email: options.email,
       ...(options.name ? { name: options.name } : {}),
       source: 'newsletter',

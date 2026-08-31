@@ -19,6 +19,8 @@ import { createHash } from 'crypto'
 import {
   emailSuppressionKey,
   filterSendableForHost,
+  suppressEmail,
+  UNSUBSCRIBE_SUPPRESSION_REASON,
   filterSuppressedEmails,
   filterTopicSendable,
   isEmailSuppressed,
@@ -578,5 +580,63 @@ describe('filterTopicSendable', () => {
     await expect(
       filterTopicSendable(HOST, 'newsletter', ['not-an-address'], firestore),
     ).resolves.toEqual(['not-an-address'])
+  })
+})
+
+/**
+ * THE SPLIT BETWEEN A FACT AND A PREFERENCE.
+ *
+ * A permanent bounce and a spam complaint are facts about a MAILBOX and about
+ * the sending domain every tenant's mail leaves by — they apply everywhere,
+ * immediately. An UNSUBSCRIBE is a preference given to one brand, and an
+ * agency running twelve unrelated clients out of one account would, on a
+ * platform-wide entry, stop mailing that person on behalf of eleven brands
+ * they never heard from.
+ */
+describe('only address-level facts may be filed platform-wide', () => {
+  const firestore = () => {
+    const store = new Map<string, Record<string, unknown>>()
+    return {
+      store,
+      collection: () => ({
+        doc: (id: string) => ({
+          get: async () => ({
+            exists: store.has(id),
+            get: (field: string) => store.get(id)?.[field],
+          }),
+          set: async (data: Record<string, unknown>) => {
+            store.set(id, { ...(store.get(id) ?? {}), ...data })
+          },
+        }),
+      }),
+    }
+  }
+
+  it('refuses a per-site preference rather than over-applying it', async () => {
+    const db = firestore()
+    await expect(
+      suppressEmail({
+        email: 'left@example.test',
+        reason: UNSUBSCRIBE_SUPPRESSION_REASON as never,
+        firestore: db,
+      }),
+    ).rejects.toThrow(/per-site preference/)
+    // Nothing was written, so the refusal is not a throw after the fact.
+    expect(db.store.size).toBe(0)
+  })
+
+  /**
+   * ANTI-VACUITY. The assertion above passes against a `suppressEmail` that
+   * refuses everything, which would leave a dead mailbox on every list in the
+   * product. These are the two reasons that MUST reach the platform list.
+   */
+  it('still files a bounce and a complaint, which are facts about the address', async () => {
+    for (const reason of ['bounce', 'complaint', 'staff'] as const) {
+      const db = firestore()
+      await expect(
+        suppressEmail({ email: 'dead@example.test', reason, firestore: db }),
+      ).resolves.toMatchObject({ created: true })
+      expect(db.store.size).toBe(1)
+    }
   })
 })

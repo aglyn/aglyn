@@ -59,6 +59,7 @@ import {
   getOrgForHost,
   meterHostEmail,
   notifyHostManagers,
+  consentGroupForSite,
   orgDataCollectionForHost,
   orgDataQueryForHost,
   resolveOrgIdForHost,
@@ -682,6 +683,7 @@ async function executeAction(
         // would be a second answer to which document describes which person.
         await enrollListMember({
           listRef: listDoc.ref,
+          group: await consentGroupForSite(hostId),
           email,
           source: `action:${actionId}`,
         })

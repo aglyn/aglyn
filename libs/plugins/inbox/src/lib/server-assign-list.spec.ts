@@ -66,6 +66,19 @@ jest.mock('@aglyn/aglyn/server', () => ({
 }))
 
 const HOST_ID = 'site-1'
+
+/**
+ * A contact whose basis is recorded against THIS site.
+ *
+ * The grant is per (person, controller) now, so a fixture writing it at the
+ * top of the document would be asserting the pre-host model — and would pass
+ * against a reader that had lost the host dimension entirely.
+ */
+const grantedHere = (atMs = Date.now()) => ({
+  marketingConsentByHost: {
+    [HOST_ID]: { marketingConsent: true, marketingConsentAtMs: atMs },
+  },
+})
 const ORG_ID = 'org-1'
 const LIST_ID = 'list-1'
 const LIST_PATH = `orgs/${ORG_ID}/lists/${LIST_ID}`
@@ -88,6 +101,15 @@ const assignmentRows = () =>
     path.startsWith(`${SUBMISSION_PATH}/listAssignments/`),
   )
 const theMember = () => store[memberRows()[0]]
+/**
+ * The enrolling site's own consent entry on the membership row.
+ *
+ * A list is org-shared and every site in the org can mail it, so the basis a
+ * membership carries lives under the controller it was given to rather than
+ * at the top of the row.
+ */
+const memberEntry = (row: Record<string, any> = theMember()) =>
+  row?.marketingConsentByHost?.[HOST_ID] ?? {}
 
 const snapshotFor = (path: string) => ({
   id: path.slice(path.lastIndexOf('/') + 1),
@@ -151,6 +173,19 @@ const firestoreHandle: any = {
 }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  /*
+   * The real resolution's shape: an org that declared no pooling resolves
+   * every site to a group of ONE. Faked rather than imported because this
+   * file mocks the whole module — but faked to the NARROW answer, which is
+   * the direction a wrong group may fail in.
+   */
+  consentGroupForSite: async (hostId: string) => ({
+    hostId,
+    groupId: hostId,
+    name: null,
+    hostIds: [hostId],
+    declared: false,
+  }),
   __esModule: true,
   emailSuppressionKey: (email: string) =>
     email.includes('@') ? `key:${email.trim().toLowerCase()}` : null,
@@ -272,8 +307,10 @@ describe('a stored refusal', () => {
     const out = await assign({ attestConsent: true })
     expect(out.code).toBe(409)
     expect(out.body.reason).toBe('declined')
+    // The row is left exactly as it was found — an unscoped refusal, which
+    // `readMarketingBasis` honors against every site.
     expect(theMember().marketingConsent).toBe(false)
-    expect(theMember().marketingConsentBasis).toBeUndefined()
+    expect(memberEntry().marketingConsentBasis).toBeUndefined()
   })
 
   it('is reported to the merchant before they choose a list', async () => {
@@ -313,10 +350,10 @@ describe('no consent record', () => {
     expect(out.code).toBe(200)
     expect(out.body.basis).toBe('operator-attested')
     const member = theMember()
-    expect(member.marketingConsent).toBe(true)
-    expect(member.marketingConsentBasis).toBe('operator-attested')
-    expect(member.marketingConsentByUid).toBe('editor-uid')
-    expect(member.marketingConsentAtMs).toBeGreaterThanOrEqual(before)
+    expect(memberEntry(member).marketingConsent).toBe(true)
+    expect(memberEntry(member).marketingConsentBasis).toBe('operator-attested')
+    expect(memberEntry(member).marketingConsentByUid).toBe('editor-uid')
+    expect(memberEntry(member).marketingConsentAtMs).toBeGreaterThanOrEqual(before)
   })
 
   /*
@@ -345,7 +382,7 @@ describe('a stored opt-in', () => {
   const OPTED_IN_AT = Date.UTC(2025, 2, 14)
 
   it('enrolls with no assertion, as a pass-through', async () => {
-    seedContact({ marketingConsent: true, marketingConsentAtMs: OPTED_IN_AT })
+    seedContact(grantedHere(OPTED_IN_AT))
     const out = await assign()
     expect(out.code).toBe(200)
     expect(out.body.basis).toBe('contact-opt-in')
@@ -358,25 +395,25 @@ describe('a stored opt-in', () => {
    * compliance answer cannot afford.
    */
   it('keeps their date and attributes the basis to nobody', async () => {
-    seedContact({ marketingConsent: true, marketingConsentAtMs: OPTED_IN_AT })
+    seedContact(grantedHere(OPTED_IN_AT))
     await assign()
-    expect(theMember().marketingConsentAtMs).toBe(OPTED_IN_AT)
-    expect(theMember().marketingConsentByUid).toBeNull()
+    expect(memberEntry().marketingConsentAtMs).toBe(OPTED_IN_AT)
+    expect(memberEntry().marketingConsentByUid).toBeNull()
   })
 
   it('supersedes an earlier attestation without inheriting its account', async () => {
     await assign({ attestConsent: true })
-    expect(theMember().marketingConsentByUid).toBe('editor-uid')
-    seedContact({ marketingConsent: true, marketingConsentAtMs: OPTED_IN_AT })
+    expect(memberEntry().marketingConsentByUid).toBe('editor-uid')
+    seedContact(grantedHere(OPTED_IN_AT))
     await assign()
-    expect(theMember().marketingConsentBasis).toBe('contact-opt-in')
-    expect(theMember().marketingConsentByUid).toBeNull()
+    expect(memberEntry().marketingConsentBasis).toBe('contact-opt-in')
+    expect(memberEntry().marketingConsentByUid).toBeNull()
   })
 })
 
 describe('a suppressed address', () => {
   it('is refused on the platform list, however good its consent', async () => {
-    seedContact({ marketingConsent: true })
+    seedContact(grantedHere())
     isEmailSuppressed.mockResolvedValue(true)
     const out = await assign()
     expect(out.code).toBe(409)
@@ -385,7 +422,7 @@ describe('a suppressed address', () => {
   })
 
   it('is refused on this site’s own list', async () => {
-    seedContact({ marketingConsent: true })
+    seedContact(grantedHere())
     store[`hosts/${HOST_ID}/suppressions/key:${SENDER}`] = { email: SENDER }
     const out = await assign()
     expect(out.code).toBe(409)
@@ -403,7 +440,7 @@ describe('who may do it', () => {
    * people into an audience every other site in the org can mail.
    */
   it('refuses a site collaborator who is not an org-wide member', async () => {
-    seedContact({ marketingConsent: true })
+    seedContact(grantedHere())
     membership = {
       orgId: ORG_ID,
       member: { role: 'editor', allHosts: false, hostAccess: { [HOST_ID]: 'editor' } },
@@ -414,7 +451,7 @@ describe('who may do it', () => {
   })
 
   it('refuses an org viewer even with an editor role on the site', async () => {
-    seedContact({ marketingConsent: true })
+    seedContact(grantedHere())
     membership = { orgId: ORG_ID, member: { role: 'viewer', allHosts: true } }
     expect((await assign()).code).toBe(403)
   })
@@ -443,7 +480,7 @@ describe('the address is the submission’s', () => {
    * through one function that either of them could stop using.
    */
   it('ignores an address in the request body', async () => {
-    seedContact({ marketingConsent: true })
+    seedContact(grantedHere())
     const out = await assign({ to: 'someone-else@example.com' })
     expect(out.code).toBe(200)
     expect(out.body.to).toBe(SENDER)
@@ -458,7 +495,7 @@ describe('the address is the submission’s', () => {
   })
 
   it('refuses an unknown list rather than creating one', async () => {
-    seedContact({ marketingConsent: true })
+    seedContact(grantedHere())
     const out = await assign({ listId: 'nope' })
     expect(out.code).toBe(404)
     expect(store[`orgs/${ORG_ID}/lists/nope`]).toBeUndefined()
@@ -472,7 +509,7 @@ describe('the two acts stay apart', () => {
    * thing would be doing the consequential one.
    */
   it('replying enrolls nobody and writes no consent', async () => {
-    seedContact({ marketingConsent: true })
+    seedContact(grantedHere())
     const out = await drive(inboxReplyHandler, {
       hostId: HOST_ID,
       submissionId: 'sub-1',

@@ -549,7 +549,7 @@ export const emailListImportRunHandler: PluginApiHandler = async (req, res) => {
         continue
       }
       const decision = assignmentBasis({
-        stored: resolution.stored.get(verdict.email) ?? readMarketingBasis(null),
+        stored: resolution.stored.get(verdict.email) ?? readMarketingBasis(null, resolution.group),
         attested,
         actingUid: attestingUid,
         nowMs,
@@ -561,6 +561,7 @@ export const emailListImportRunHandler: PluginApiHandler = async (req, res) => {
       const row = byEmail.get(verdict.email)
       const enrollment = await enrollListMember({
         listRef: context.listRef,
+        group: resolution.group,
         email: verdict.email,
         ...(row?.n ? { name: row.n } : {}),
         source: CONSOLE_IMPORT_SOURCE,

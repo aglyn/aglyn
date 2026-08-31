@@ -70,6 +70,25 @@ jest.mock('@aglyn/aglyn/server', () => ({
 }))
 
 const HOST_ID = 'site-1'
+
+/**
+ * A contact whose basis is recorded against THIS site, and the enrolling
+ * site's own entry on a membership row.
+ *
+ * Consent is per (person, controller): a fixture writing a grant at the top
+ * of the document would be asserting the pre-host model, and an assertion
+ * reading one from there would pass against a reader that had lost the host
+ * dimension entirely. A REFUSAL is deliberately left unscoped — it names no
+ * controller and is honored against every one.
+ */
+const grantedHere = (atMs: number) => ({
+  marketingConsentByHost: {
+    [HOST_ID]: { marketingConsent: true, marketingConsentAtMs: atMs },
+  },
+})
+const entryOf = (row: Record<string, any> | undefined) =>
+  (row?.['marketingConsentByHost']?.[HOST_ID] ?? {}) as Record<string, any>
+
 const ORG_ID = 'org-1'
 const LIST_ID = 'list-1'
 const LIST_PATH = `orgs/${ORG_ID}/lists/${LIST_ID}`
@@ -189,6 +208,19 @@ const firestoreHandle: any = {
 }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  /*
+   * The real resolution's shape: an org that declared no pooling resolves
+   * every site to a group of ONE. Faked rather than imported because this
+   * file mocks the whole module — but faked to the NARROW answer, which is
+   * the direction a wrong group may fail in.
+   */
+  consentGroupForSite: async (hostId: string) => ({
+    hostId,
+    groupId: hostId,
+    name: null,
+    hostIds: [hostId],
+    declared: false,
+  }),
   __esModule: true,
   enrollListMember: jest.requireActual(
     '@aglyn/tenant-data-admin/server/list-members',
@@ -291,10 +323,7 @@ beforeEach(() => {
     memberRoles: { 'editor-uid': 'editor' },
   }
   store[LIST_PATH] = { name: 'Newsletter' }
-  seedContact(OPTED_IN, {
-    marketingConsent: true,
-    marketingConsentAtMs: OPTED_IN_AT,
-  })
+  seedContact(OPTED_IN, grantedHere(OPTED_IN_AT))
   seedContact(REFUSED, { marketingConsent: false })
 })
 
@@ -374,25 +403,31 @@ describe('the consent basis an import records', () => {
   it('records an attested address as an OPERATOR assertion and never as the person', async () => {
     await importFile(`${UNKNOWN}`, true)
     const member = memberFor(UNKNOWN)
-    expect(member?.['marketingConsentBasis']).toBe('operator-attested')
-    expect(member?.['marketingConsentByUid']).toBe('editor-uid')
+    expect(entryOf(member)['marketingConsentBasis']).toBe('operator-attested')
+    expect(entryOf(member)['marketingConsentByUid']).toBe('editor-uid')
     const { readMarketingBasis } = jest.requireActual(
       '@aglyn/aglyn/app-utils/marketing-consent',
     )
-    expect(readMarketingBasis(member).assertedBy).toBe('operator')
-    expect(readMarketingBasis(member).assertedBy).not.toBe('person')
+    const { soloConsentGroup } = jest.requireActual(
+      '@aglyn/aglyn/app-utils/consent-groups',
+    )
+    expect(readMarketingBasis(member, soloConsentGroup(HOST_ID)).assertedBy).toBe('operator')
+    expect(readMarketingBasis(member, soloConsentGroup(HOST_ID)).assertedBy).not.toBe('person')
   })
 
   it('carries a stored opt-in across with the PERSON’s own date', async () => {
     await importFile(`${OPTED_IN}`, true)
     const member = memberFor(OPTED_IN)
-    expect(member?.['marketingConsentBasis']).toBe('contact-opt-in')
-    expect(member?.['marketingConsentAtMs']).toBe(OPTED_IN_AT)
-    expect(member?.['marketingConsentByUid']).toBeNull()
+    expect(entryOf(member)['marketingConsentBasis']).toBe('contact-opt-in')
+    expect(entryOf(member)['marketingConsentAtMs']).toBe(OPTED_IN_AT)
+    expect(entryOf(member)['marketingConsentByUid']).toBeNull()
     const { readMarketingBasis } = jest.requireActual(
       '@aglyn/aglyn/app-utils/marketing-consent',
     )
-    expect(readMarketingBasis(member).assertedBy).toBe('person')
+    const { soloConsentGroup } = jest.requireActual(
+      '@aglyn/aglyn/app-utils/consent-groups',
+    )
+    expect(readMarketingBasis(member, soloConsentGroup(HOST_ID)).assertedBy).toBe('person')
   })
 
   it('refuses an address with nothing on record when nobody attested', async () => {
@@ -415,8 +450,8 @@ describe('the consent basis an import records', () => {
       true,
     )
     const member = memberFor(UNKNOWN)
-    expect(member?.['marketingConsentReason']).toContain('Trade show')
-    expect(member?.['marketingConsentReason']).toContain('2024-03-01')
+    expect(entryOf(member)['marketingConsentReason']).toContain('Trade show')
+    expect(entryOf(member)['marketingConsentReason']).toContain('2024-03-01')
   })
 
   it('never dresses a pass-through opt-in in the file’s declaration', async () => {
@@ -424,7 +459,7 @@ describe('the consent basis an import records', () => {
       ['Email,Opt-in source', `${OPTED_IN},Bought from a broker`].join('\n'),
       true,
     )
-    expect(memberFor(OPTED_IN)?.['marketingConsentReason']).toBe('')
+    expect(entryOf(memberFor(OPTED_IN))['marketingConsentReason']).toBe('')
   })
 
   it('attributes the basis to the account that ATTESTED, not the one that resumed', async () => {
@@ -436,7 +471,7 @@ describe('the consent basis an import records', () => {
     decodedToken = { uid: 'colleague-uid' }
     store[`hosts/${HOST_ID}`]['memberRoles']['colleague-uid'] = 'admin'
     await runImport({ importId: started.body.importId })
-    expect(memberFor(UNKNOWN)?.['marketingConsentByUid']).toBe('editor-uid')
+    expect(entryOf(memberFor(UNKNOWN))['marketingConsentByUid']).toBe('editor-uid')
   })
 
   it('stamps the import as the membership source', async () => {

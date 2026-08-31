@@ -47,6 +47,24 @@ const mockState: {
 } = { store: {}, sent: [] }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  // The literal three call sites compare against — the unsubscribe writes
+  // it, the resubscribe link refuses to reverse anything else, and the
+  // preference page reads it. A mock that omitted it would write `undefined`
+  // and every one of those comparisons would silently stop matching.
+  UNSUBSCRIBE_SUPPRESSION_REASON: 'unsubscribe',
+  /*
+   * The real resolution's shape: an org that declared no pooling resolves
+   * every site to a group of ONE. Faked rather than imported because this
+   * file mocks the whole module — but faked to the NARROW answer, which is
+   * the direction a wrong group may fail in.
+   */
+  consentGroupForSite: async (hostId: string) => ({
+    hostId,
+    groupId: hostId,
+    name: null,
+    hostIds: [hostId],
+    declared: false,
+  }),
   /*
    * The unsubscribe-link signer and URL builder are the REAL ones. They need
    * nothing but `crypto`, and a double would let a spec assert on a URL shape
@@ -251,8 +269,10 @@ afterAll(() => {
  * addition to whatever name field the case is really about.
  */
 const CONSENT_GRANTED = {
-  marketingConsent: true,
-  marketingConsentAtMs: Date.UTC(2026, 7, 1),
+  // The basis belongs to the site sending, not to the org.
+  marketingConsentByHost: {
+    'host-1': { marketingConsent: true, marketingConsentAtMs: Date.UTC(2026, 7, 1) },
+  },
 }
 
 beforeEach(() => {

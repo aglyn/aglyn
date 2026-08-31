@@ -40,6 +40,7 @@ import { productPriceRange } from '@aglyn/plugins-commerce/model'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { hostPublicOrigin } from '@aglyn/aglyn/server'
 import {
+  consentGroupForSite,
   orgDataCollectionForHost,
   orgDataQueryForHost,
   filterSendableForHost,
@@ -982,13 +983,27 @@ export async function performCampaignSend(
    * An audience whose members carry no consent field records an `unrecorded`
    * basis — a THIRD state, handled by the policy, and never a quiet `true`.
    */
+  /*
+   * THE CONTROLLER THIS SEND IS MADE BY — the declared group of sites that
+   * are one sender, or this site alone.
+   *
+   * Resolved before the sweep because every consent read below is about a
+   * controller and not about a site: three sites a business declared as one
+   * sender share a basis, and twelve unrelated client brands in an agency's
+   * account share nothing. The org read is deduped per request, so the policy
+   * lookup further down pays nothing for this.
+   */
+  const consentGroup = await consentGroupForSite(hostId)
   const consent = new Map<string, MarketingConsentRecord>()
   const collectConsent = (email: string, data: unknown) => {
     const cleaned = email.trim().toLowerCase()
     if (!cleaned) return
     consent.set(
       cleaned,
-      readMarketingBasis(data as Record<string, unknown> | null | undefined),
+      readMarketingBasis(
+        data as Record<string, unknown> | null | undefined,
+        consentGroup,
+      ),
     )
   }
   const collectName = (email: string, name: unknown) => {
@@ -1278,7 +1293,9 @@ export async function performCampaignSend(
    */
   if (proofAddress && !consent.has(proofAddress)) {
     const stored = await readStoredConsent(hostId, proofAddress)
-    if (stored) consent.set(proofAddress, readMarketingBasis(stored))
+    if (stored) {
+      consent.set(proofAddress, readMarketingBasis(stored, consentGroup))
+    }
   }
   if (proofAddress && consent.get(proofAddress)?.basis === 'declined') {
     throw new CampaignSendError(
@@ -1292,6 +1309,7 @@ export async function performCampaignSend(
     proofAddress ? resolved.filter((one) => one !== proofAddress) : resolved,
     consent,
     consentPolicy,
+    consentGroup,
   )
   if (proofAddress) consentSplit.mailable.unshift(proofAddress)
   if (!consentSplit.mailable.length) {

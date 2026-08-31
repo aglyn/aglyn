@@ -65,6 +65,19 @@ const mockIsEmailSuppressed = jest.fn(async () => false)
 const mockMeterHostEmail = jest.fn(async () => undefined)
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  /*
+   * The real resolution's shape: an org that declared no pooling resolves
+   * every site to a group of ONE. Faked rather than imported because this
+   * file mocks the whole module — but faked to the NARROW answer, which is
+   * the direction a wrong group may fail in.
+   */
+  consentGroupForSite: async (hostId: string) => ({
+    hostId,
+    groupId: hostId,
+    name: null,
+    hostIds: [hostId],
+    declared: false,
+  }),
   // A `jest.mock` factory is a CLOSED WORLD: anything the module under test
   // imports and this object omits arrives as `undefined`. That is not a
   // hypothetical here — `meterHostEmail` was missing from this factory, so
