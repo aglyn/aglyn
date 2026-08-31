@@ -352,59 +352,147 @@ const perThousand = (v: number | null): string =>
 const perGbMonth = (v: number | null): string =>
   v == null ? NO : `${money(v)} / GB-mo`
 
+/**
+ * A `PLAN_PRICING` field that states an add-on or overage rate.
+ *
+ * Every one of them is a price a customer is billed, and the `extra` prefix
+ * is what the completeness check below enumerates — see `UNPUBLISHED_RATES`.
+ */
+type RateKey = {
+  [K in keyof (typeof PLAN_PRICING)['pro']]: K extends `extra${string}`
+    ? K
+    : never
+}[keyof (typeof PLAN_PRICING)['pro']]
+
 interface UsageRow {
   label: string
   /** The frame's label for this row; it is the shorter one throughout. */
   frameLabel: string
-  value: (p: Plan) => string
-  /** The same rate written the way the frame writes it. */
-  frameValue: (p: Plan) => string
+  /**
+   * The `PLAN_PRICING` field this row publishes.
+   *
+   * Structural, not an annotation. Both renderings below are derived from it,
+   * so a row cannot claim to publish one rate while printing another — and
+   * `UNPUBLISHED_RATES` enumerates the same keys off `PLAN_PRICING` itself to
+   * find the ones NO row publishes, which is how the email-send and assist
+   * rates came to be billed against a page that stated neither.
+   */
+  rate: RateKey
+  /** The unit decoration the frame writes this rate with. */
+  decorate: (v: number | null) => string
 }
 
 const USAGE_ROWS: UsageRow[] = [
   {
     label: 'Extra site, per month',
     frameLabel: 'Extra site / host',
-    value: (p) => money(PLAN_PRICING[p].extraHostMonthlyUsd),
-    frameValue: (p) => perMo(PLAN_PRICING[p].extraHostMonthlyUsd),
+    rate: 'extraHostMonthlyUsd',
+    decorate: perMo,
   },
   {
     label: 'Extra team seat, per month',
     frameLabel: 'Extra team seat',
-    value: (p) => money(PLAN_PRICING[p].extraSeatMonthlyUsd),
-    frameValue: (p) => perMo(PLAN_PRICING[p].extraSeatMonthlyUsd),
+    rate: 'extraSeatMonthlyUsd',
+    decorate: perMo,
   },
   {
     label: 'Extra site collaborator, per month',
     frameLabel: 'Extra site collaborator',
-    value: (p) => money(PLAN_PRICING[p].extraCollaboratorMonthlyUsd),
-    frameValue: (p) => perMo(PLAN_PRICING[p].extraCollaboratorMonthlyUsd),
+    rate: 'extraCollaboratorMonthlyUsd',
+    decorate: perMo,
   },
   {
     label: 'Extra dataset, per month',
     frameLabel: 'Extra dataset',
-    value: (p) => money(PLAN_PRICING[p].extraDatasetMonthlyUsd),
-    frameValue: (p) => perMo(PLAN_PRICING[p].extraDatasetMonthlyUsd),
+    rate: 'extraDatasetMonthlyUsd',
+    decorate: perMo,
   },
   {
     label: 'Extra data storage, per GB-month',
     frameLabel: 'Extra data storage',
-    value: (p) => money(PLAN_PRICING[p].extraDataGbMonthlyUsd),
-    frameValue: (p) => perGbMonth(PLAN_PRICING[p].extraDataGbMonthlyUsd),
+    rate: 'extraDataGbMonthlyUsd',
+    decorate: perGbMonth,
   },
   {
     label: 'API requests, per 1,000 over limit',
     frameLabel: 'API requests over limit',
-    value: (p) => money(PLAN_PRICING[p].extraApiRequestsUsdPer1k),
-    frameValue: (p) => perThousand(PLAN_PRICING[p].extraApiRequestsUsdPer1k),
+    rate: 'extraApiRequestsUsdPer1k',
+    decorate: perThousand,
   },
   {
     label: 'Contacts, per 1,000 over the included band',
     frameLabel: 'Contacts over included band',
-    value: (p) => money(PLAN_PRICING[p].extraContactsUsdPer1k),
-    frameValue: (p) => perThousand(PLAN_PRICING[p].extraContactsUsdPer1k),
+    rate: 'extraContactsUsdPer1k',
+    decorate: perThousand,
+  },
+  /*
+   * EMAIL SENDS AND ASSIST — billed everywhere, published nowhere until now.
+   *
+   * Both rates were already charged. `priceEmailSendOverage` reads
+   * `extraEmailSendsUsdPer1k` and `report-usage` puts the result on the
+   * invoice; `priceAssistCreditOverage` reads `extraAssistCreditsUsdPer1k` the
+   * same way. Neither had a row on this table, so `/pricing` stated an email
+   * ALLOWANCE ("Email sends / mo") and an assist CAPABILITY ("AI assist ✓")
+   * while stating the price of exceeding either nowhere at all.
+   *
+   * The rates are published exactly as the code carries them. No price moves
+   * here, which matters under the launch freeze: a charged figure that has
+   * never been disclosed is fixed by disclosing it, not by repricing it.
+   *
+   * Both are RETAIL rates set beside the two rows above, NOT the
+   * infrastructure pass-through, and neither is derived from `METERED_MARKUP`.
+   * Our own costs — `ORG_COGS_UNIT_RATES_USD.perEmailSend` and
+   * `ASSIST_CREDIT_COST_USD` — are cost-model inputs and stay off this table;
+   * the pass-through strip is the only place a cost column is published, and
+   * only because its heading claims one.
+   */
+  {
+    label: 'Email sends, per 1,000 over the included band',
+    frameLabel: 'Email sends over included band',
+    rate: 'extraEmailSendsUsdPer1k',
+    decorate: perThousand,
+  },
+  {
+    /*
+     * Credits, not messages, and the label has to say so: a credit is a fixed
+     * quantity of provider spend, so one question and one generated screen
+     * draw wildly different amounts. "Per 1,000 assists" would price them the
+     * same and be wrong by two orders of magnitude.
+     *
+     * Starter's dash is CORRECT rather than a gap, and for the opposite
+     * reason to the email row above. Assist is refused at the band on every
+     * tier, so a plan with no rate simply stops; email cannot be refused —
+     * transactional mail goes out at every tier — so a null there would be
+     * unbounded absorbed spend. Same-looking cell, different fact.
+     */
+    label: 'AI assist, per 1,000 credits over the included band',
+    frameLabel: 'Assist credits over included band',
+    rate: 'extraAssistCreditsUsdPer1k',
+    decorate: perThousand,
   },
 ]
+
+/** The bare rate, as the compare-style tables print it. */
+const rowValue = (r: UsageRow, p: Plan): string => money(PLAN_PRICING[p][r.rate])
+/** The same rate wearing the frame's unit decoration. */
+const rowFrameValue = (r: UsageRow, p: Plan): string =>
+  r.decorate(PLAN_PRICING[p][r.rate])
+
+/**
+ * Rates `PLAN_PRICING` carries that NO row above publishes.
+ *
+ * The enumeration is the guard. Read off the pricing table itself rather than
+ * from a list somebody maintains beside it, so a rate added to the code with
+ * no row here is reported the day it lands — which is the failure that had to
+ * be found by hand this time: `extraEmailSendsUsdPer1k` and
+ * `extraAssistCreditsUsdPer1k` were both billed, and the only artifact that
+ * could have noticed was this table, which did not read them.
+ */
+const RATE_KEYS = Object.keys(PLAN_PRICING.pro).filter((k) =>
+  k.startsWith('extra'),
+) as RateKey[]
+const PUBLISHED_RATES = new Set<RateKey>(USAGE_ROWS.map((r) => r.rate))
+const UNPUBLISHED_RATES = RATE_KEYS.filter((k) => !PUBLISHED_RATES.has(k))
 
 // ---------------------------------------------------------------- emit
 
@@ -443,10 +531,11 @@ const usage = {
   highlightPlan: 'pro' as const,
   rows: USAGE_ROWS.map((r) => ({
     label: r.label,
+    rate: r.rate,
     values: Object.fromEntries(
       USAGE_PLANS.map((p) => [
         p,
-        p === 'enterprise' ? CUSTOM_LABEL : r.value(p),
+        p === 'enterprise' ? CUSTOM_LABEL : rowValue(r, p),
       ]),
     ),
   })),
@@ -1188,11 +1277,31 @@ interface Divergence {
  * frame group was not found at all, so that nothing was compared and the
  * silence read as agreement.
  */
-const reconciler = (table: string, declared: Record<string, Divergence>) => {
+const reconciler = (
+  table: string,
+  declared: Record<string, Divergence>,
+  /**
+   * Rows we PUBLISH that the frame carries nowhere, each with the reason.
+   *
+   * The compare grid has had `EXPECTED_MISSING` for this since AGL-1278; the
+   * five tables below had nothing, so a row added to the code with no surface
+   * on the page could only ever be reported as a flat failure. That is not a
+   * theoretical shape: the email-send and assist rates are billed today and
+   * appear on no breakpoint, so publishing them here has to be sayable.
+   *
+   * Checked in BOTH directions, like every other declaration in this file. A
+   * key resolves — and fails until the entry is deleted — the moment every
+   * breakpoint carries the row, because at that point the cells can be
+   * compared for real and an exemption would only hide them again.
+   */
+  expectedAbsent: Record<string, string> = {},
+) => {
   const diffs: string[] = []
   const absent: string[] = []
   /** Keys where at least one breakpoint still shows the declared value. */
   const stillStale = new Set<string>()
+  /** Declared-absent keys at least one breakpoint really did not carry. */
+  const stillAbsent = new Set<string>()
   const seen = new Set<string>()
   let compared = 0
   return {
@@ -1215,6 +1324,22 @@ const reconciler = (table: string, declared: Record<string, Divergence>) => {
     absent(what: string, where: string) {
       absent.push(`${what} [${where}]`)
     },
+    /**
+     * Records a NAMED row a breakpoint does not carry, honoring a declaration.
+     *
+     * Separate from `absent` above because only a named row can be declared:
+     * the structural complaints that go through `absent` ("no plan header",
+     * "an unrecognized column header") describe a frame we cannot read at all,
+     * and excusing one of those would excuse the reader silently finding
+     * nothing — which is the failure this whole section exists to make loud.
+     */
+    absentRow(key: string, where: string) {
+      if (key in expectedAbsent) {
+        stillAbsent.add(key)
+        return
+      }
+      absent.push(`${key} [${where}]`)
+    },
     /** How many cells this table actually compared, for the summary line. */
     get compared() {
       return compared
@@ -1232,6 +1357,21 @@ const reconciler = (table: string, declared: Record<string, Divergence>) => {
       fail(
         `${table}: declared stale but no breakpoint carries that cell — delete the declaration`,
         Object.keys(declared).filter((k) => !seen.has(k)),
+      )
+      // The absence declaration, checked the way every other one here is: an
+      // entry that has stopped diverging fails. Nothing reported the row
+      // missing, so either every breakpoint now carries it — in which case the
+      // cells can be compared for real and the entry would go on excusing
+      // them — or the row is no longer emitted and the entry excuses a row
+      // that does not exist. Both readings end in deleting it, which is why
+      // one message can name both.
+      fail(
+        `${table}: declared absent from the frame but no breakpoint reported it ` +
+          `missing — either the page has caught up (delete the declaration and ` +
+          `let the cells compare) or the row is gone (delete it with the row)`,
+        frames.length
+          ? Object.keys(expectedAbsent).filter((k) => !stillAbsent.has(k))
+          : [],
       )
       if (frames.length && compared === 0) {
         problems.push(
@@ -1435,12 +1575,79 @@ tierStrip.finish()
  *=========================================*/
 const USAGE_STALE: Record<string, Divergence> = {}
 
-const addOnRates = reconciler('add-on capacity', USAGE_STALE)
+/**
+ * The two rates the product BILLS and the page has never stated.
+ *
+ * Not a design opinion and not a stale cell — there is no cell. Every
+ * breakpoint's add-on table runs Extra site → Contacts and stops, so both rows
+ * below are compared against nothing until the page carries them. Declared so
+ * the gap is a recorded fact with an owner rather than a red the next person
+ * silences, and so it fails the moment the page catches up, at which point the
+ * cells become comparable and this stops being the right way to describe them.
+ *
+ * What guards the rates MEANWHILE is `--check` diffing the committed
+ * `tables.json` against this generator: the figures now exist in a generated
+ * artifact, so moving `extraEmailSendsUsdPer1k` or
+ * `extraAssistCreditsUsdPer1k` without regenerating fails CI. That is strictly
+ * more than they had, which was nothing — but it is NOT a comparison against
+ * the page, and the distinction is the whole reason this map states its
+ * reasons instead of listing two labels.
+ */
+const USAGE_EXPECTED_ABSENT: Record<string, string> = {
+  'Email sends over included band':
+    'the page states an email ALLOWANCE ("Email sends / mo" in the compare grid) and no overage rate, while `priceEmailSendOverage` bills `extraEmailSendsUsdPer1k` on every paid tier — and the cap refuses campaigns only, so transactional mail carries an org past its band with nothing able to stop it. Resolves when `/pricing` carries the row',
+  'Assist credits over included band':
+    'the page states an assist CAPABILITY ("AI assist ✓" in the compare grid) and no overage rate, while `priceAssistCreditOverage` bills `extraAssistCreditsUsdPer1k` from Pro up. Resolves when `/pricing` carries the row',
+}
+
+const addOnRates = reconciler(
+  'add-on capacity',
+  USAGE_STALE,
+  USAGE_EXPECTED_ABSENT,
+)
 const usageByFrameLabel = new Map(USAGE_ROWS.map((r) => [r.frameLabel, r] as const))
+
+// A declaration keyed at a row we do not emit excuses nothing while reading as
+// a considered decision — the same both-directions rule `EXPECTED_MISSING` is
+// held to. Checked here rather than inside `finish()` because only this scope
+// knows which rows exist.
+fail(
+  'add-on capacity: declared absent but there is no such add-on row — delete the declaration',
+  Object.keys(USAGE_EXPECTED_ABSENT).filter(
+    (label) => !usageByFrameLabel.has(label),
+  ),
+)
+
+/*
+ * THE COMPLETENESS CHECK — a rate the code charges must have a row.
+ *
+ * Every guard above compares a row we emit against the page. None of them
+ * could see a rate with NO row, which is exactly what email sends and assist
+ * credits were: billed on real invoices, absent from all six tables, and
+ * therefore agreed with by every check in the repo. A reader that only
+ * validates what it was pointed at cannot report what it was never pointed at.
+ *
+ * So the keys are enumerated off `PLAN_PRICING` itself. A rate added to the
+ * code with no row here fails on the commit that adds it, rather than after
+ * somebody notices an invoice line with no published price.
+ */
+if (RATE_KEYS.length === 0) {
+  // The naming rule stopped matching — a rename would leave this checking an
+  // empty set against an empty set and reporting clean.
+  problems.push(
+    'the add-on rate completeness check enumerated ZERO `extra*` keys from ' +
+      'PLAN_PRICING — the naming rule no longer matches, so it is guarding nothing',
+  )
+}
+fail(
+  'rates PLAN_PRICING carries that the add-on capacity table does not publish ' +
+    '(the product charges them; the page would state them nowhere)',
+  UNPUBLISHED_RATES,
+)
 
 /** What a plan's cell should say, Enterprise's "Custom" included. */
 const usageCell = (row: UsageRow, p: Plan) =>
-  p === 'enterprise' ? CUSTOM_LABEL : row.frameValue(p)
+  p === 'enterprise' ? CUSTOM_LABEL : rowFrameValue(row, p)
 
 for (const v of frames) {
   const wide = records(v, 'Usage pricing', 'Metered table')
@@ -1457,7 +1664,7 @@ for (const v of frames) {
     for (const row of USAGE_ROWS) {
       const rec = wide.find((r) => r.cells[0] === row.frameLabel)
       if (!rec) {
-        addOnRates.absent(row.frameLabel, v.name)
+        addOnRates.absentRow(row.frameLabel, v.name)
         continue
       }
       order.forEach((p, i) => {
@@ -1489,18 +1696,33 @@ for (const v of frames) {
     addOnRates.absent(`an unrecognized selected plan "${narrow[0]?.cells[0]}"`, v.name)
     continue
   }
+  const carried = new Set<string>()
   for (const rec of narrow.slice(1)) {
     const row = usageByFrameLabel.get(rec.cells[0])
     if (!row) {
       addOnRates.absent(`an add-on row we do not emit: "${rec.cells[0]}"`, v.name)
       continue
     }
+    carried.add(row.frameLabel)
     addOnRates.cell(
       `${row.frameLabel} · ${PLAN_LABELS[selected]}`,
       usageCell(row, selected),
       rec.cells[1],
       v.name,
     )
+  }
+  /*
+   * The other direction, which this branch never checked.
+   *
+   * It walks the FRAME's records and looks each one up, so it reported rows
+   * the frame carries and we do not — and was structurally blind to rows we
+   * publish and the frame does not, the exact half the wide branch above has
+   * always reported. A rate could therefore be missing from the mobile page
+   * and from this reconciler at the same time, and mobile is the breakpoint
+   * whose shape differs most, so it is the likeliest one to fall behind.
+   */
+  for (const row of USAGE_ROWS) {
+    if (!carried.has(row.frameLabel)) addOnRates.absentRow(row.frameLabel, v.name)
   }
 }
 
@@ -1667,6 +1889,15 @@ addonCards.finish()
  *     returns nothing, and `/product/plugins` is silent too. Comparing
  *     against a surface that does not exist is the one thing this file must
  *     not pretend to do; it is reconciled the day the disclosure ships.
+ *
+ *   The EMAIL-SEND and ASSIST overage rates, declared in
+ *     `USAGE_EXPECTED_ABSENT`. Both are emitted into the add-on capacity
+ *     table and both are billed today, and no breakpoint states either, so
+ *     there is no cell to compare against — the same "no surface exists"
+ *     shape as the marketplace take rate above, differing only in that these
+ *     two now HAVE a generated figure for the besigner edit to transcribe.
+ *     `--check` guards them against code drift meanwhile; it does not
+ *     compare them against the page, and will not until the rows ship.
  *
  *   `addons.rows[].maxQuantity`, `.scope`, `.included` — the cards publish a
  *     price and a sentence. `POS_REGISTERS_ADDON_MAX` in particular is a

@@ -597,6 +597,155 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     assert.match(run.stderr, /CDN & responsive images · Free/)
   })
 
+  /*==========================================
+   * THE TWO RATES THAT ARE BILLED AND UNPUBLISHED.
+   *
+   * `extraEmailSendsUsdPer1k` and `extraAssistCreditsUsdPer1k` are charged by
+   * `priceEmailSendOverage` and `priceAssistCreditOverage` and appear on no
+   * breakpoint of `/pricing`. They are now emitted into the add-on capacity
+   * table and declared in `USAGE_EXPECTED_ABSENT`, which is a NEW kind of
+   * declaration — "we publish this, the frame carries it nowhere" — and it
+   * gets the same both-directions treatment as every other one here.
+   *=========================================*/
+
+  /** One wide-table record for a per-1k rate, in the frame's own decoration. */
+  const rateRecord = (label, rates) => ({ cells: [label, ...rates] })
+  const EMAIL_LABEL = 'Email sends over included band'
+  /** Starter→Agency then Enterprise, exactly as the code renders them. */
+  const EMAIL_CELLS = [
+    '+$2.5 / 1k',
+    '+$2.25 / 1k',
+    '+$2 / 1k',
+    '+$1.9 / 1k',
+    '+$1.85 / 1k',
+    '+$1.8 / 1k',
+    'Custom',
+  ]
+
+  it('holds the absence declaration while the page carries the row NOWHERE', () => {
+    // The committed state, asserted rather than assumed: no breakpoint states
+    // an email overage rate, and that is exactly what the declaration says.
+    // Without this the two cases below could both pass against a fixture set
+    // that had quietly gained the row.
+    resetFixtures()
+    for (const bp of BREAKPOINTS) {
+      const text = readFileSync(framePath(bp), 'utf8')
+      assert.ok(!text.includes(EMAIL_LABEL), `${bp} already carries ${EMAIL_LABEL}`)
+    }
+    const run = check()
+    assert.equal(run.status, 0)
+    assert.match(run.stdout, /reconciliation clean/)
+  })
+
+  it('fails when the page CATCHES UP on a row declared absent', () => {
+    // The declaration's expiry. Once every breakpoint states the rate the
+    // cells can be compared for real, and leaving the entry in place would go
+    // on excusing them — the same rule `FRAME_STALE_METERED` is held to,
+    // pointed at a row rather than a cell.
+    resetFixtures()
+    editWide('Usage pricing', 'Metered table', (table) => {
+      table.records.push(rateRecord(EMAIL_LABEL, EMAIL_CELLS))
+    })
+    const mobile = readFrame('mobile')
+    groupOf(mobile, 'Usage pricing', 'Add-on rates · selected plan').records.push(
+      rateRecord(EMAIL_LABEL, ['+$2.25 / 1k']),
+    )
+    writeFrame(mobile, 'mobile')
+
+    const run = check()
+    assert.equal(run.status, 1)
+    assert.match(run.stderr, /declared absent from the frame but no breakpoint reported it/)
+    assert.match(run.stderr, /Email sends over included band/)
+  })
+
+  it('keeps the absence declaration alive while ONE breakpoint still lacks it', () => {
+    // The counter-case. Declarations are not qualified by breakpoint, so
+    // three exports catching up must NOT resolve one written for all four —
+    // otherwise the fourth rots quietly behind a declaration that no longer
+    // describes it.
+    resetFixtures()
+    editWide('Usage pricing', 'Metered table', (table) => {
+      table.records.push(rateRecord(EMAIL_LABEL, EMAIL_CELLS))
+    })
+
+    const run = check()
+    assert.equal(run.status, 0)
+    assert.match(run.stdout, /reconciliation clean/)
+  })
+
+  it('reports a row MOBILE drops, which it never used to', () => {
+    // The blind spot the two new rows made load-bearing. The mobile branch
+    // walked the FRAME's records and looked each one up, so it reported rows
+    // the frame carries and we do not — and was structurally incapable of
+    // reporting rows we publish and the frame does not, the half the wide
+    // branch has always reported. A rate could be missing from the mobile
+    // page and from this reconciler at once, and mobile is the breakpoint
+    // whose shape differs most, so it is the likeliest to fall behind.
+    //
+    // Perturbs a row that is NOT declared absent, so the failure can only
+    // come from the reader and never from a declaration.
+    resetFixtures()
+    const data = readFrame('mobile')
+    const rates = groupOf(data, 'Usage pricing', 'Add-on rates · selected plan')
+    const before = rates.records.length
+    rates.records = rates.records.filter(
+      (r) => r.cells[0] !== 'Contacts over included band',
+    )
+    assert.equal(rates.records.length, before - 1, 'fixture lost no row')
+    writeFrame(data, 'mobile')
+
+    const run = check()
+    assert.equal(run.status, 1)
+    assert.match(run.stderr, /add-on capacity: rows the frame does not carry/)
+    assert.match(run.stderr, /Contacts over included band \[mobile\]/)
+  })
+
+  it('publishes both billed rates, at the values the billing code reads', () => {
+    // The rates themselves, pinned in the generated artifact. `--check` diffs
+    // the committed `tables.json` byte for byte, so moving either constant
+    // without regenerating already fails; this states WHICH figures the page
+    // would carry, so a regenerated-but-wrong table is legible as a diff here
+    // rather than only as a silent change in a 1,200-line JSON file.
+    resetFixtures()
+    const tables = JSON.parse(readFileSync(TABLES, 'utf8'))
+    const row = (rate) => tables.usage.rows.find((r) => r.rate === rate)
+
+    const email = row('extraEmailSendsUsdPer1k')
+    assert.ok(email, 'the email overage row is not published')
+    assert.deepEqual(email.values, {
+      starter: '$2.5',
+      pro: '$2.25',
+      business: '$2',
+      scale: '$1.9',
+      advanced: '$1.85',
+      agency: '$1.8',
+      enterprise: 'Custom',
+    })
+
+    const assist = row('extraAssistCreditsUsdPer1k')
+    assert.ok(assist, 'the assist overage row is not published')
+    // Starter's dash is CORRECT, not a gap: assist is refused at the band on
+    // every tier, so a plan with no rate simply stops. Email's dash would mean
+    // the opposite — transactional mail cannot be refused — which is why the
+    // email row above carries a rate on every paid tier and this one does not.
+    assert.deepEqual(assist.values, {
+      starter: '—',
+      pro: '$3',
+      business: '$2.75',
+      scale: '$2.5',
+      advanced: '$2.25',
+      agency: '$2',
+      enterprise: 'Custom',
+    })
+
+    // Neither row may publish an internal COST. $0.001 per assist credit and
+    // the per-email COGS are cost-model inputs; the pass-through strip is the
+    // only place a cost column is published, and only because its heading
+    // claims one.
+    const published = JSON.stringify([email.values, assist.values])
+    assert.ok(!published.includes('0.001'), 'an assist COST reached the page')
+  })
+
   it('leaves the COMMITTED fixtures byte-identical throughout', () => {
     // The corruptions above are the point of the suite, and a suite that
     // proved its guard by editing the shared checkout would be worse than no
