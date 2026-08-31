@@ -148,9 +148,7 @@ jest.mock('./organizations', () => ({
 }))
 
 import {
-  claimOrgSendingDomains,
-  claimUnprovisionedHosts,
-  ensureHostSendingDomain,
+  requestHostSendingDomain,
   listPendingSendingDomains,
   readHostSendingTeardown,
   releaseHostSendingDomain,
@@ -194,10 +192,11 @@ describe('a site gets a sending domain', () => {
   it('claims the label, records the domain and points the host at it', async () => {
     seedHost(HOST, 'northwind-coffee')
 
-    const result = await ensureHostSendingDomain({
+    const result = await requestHostSendingDomain({
       hostId: HOST,
       orgId: ORG,
       subdomain: 'northwind-coffee',
+      requestedBy: 'merchant',
     })
 
     expect(result.created).toBe(true)
@@ -212,10 +211,11 @@ describe('a site gets a sending domain', () => {
 
   it('never puts a site on aglyn.com', async () => {
     seedHost(HOST, 'northwind-coffee')
-    const result = await ensureHostSendingDomain({
+    const result = await requestHostSendingDomain({
       hostId: HOST,
       orgId: ORG,
       subdomain: 'northwind-coffee',
+      requestedBy: 'merchant',
     })
     expect(result.domain).not.toContain('aglyn.com')
   })
@@ -232,10 +232,11 @@ describe('provisioning is idempotent under retry', () => {
   it('returns the same domain on every retry, and creates nothing twice', async () => {
     seedHost(HOST, 'acme')
 
-    const first = await ensureHostSendingDomain({
+    const first = await requestHostSendingDomain({
       hostId: HOST,
       orgId: ORG,
       subdomain: 'acme',
+      requestedBy: 'merchant',
     })
     const labelDocs = () =>
       [...store.keys()].filter((key) => key.startsWith('sendingLabels/'))
@@ -246,10 +247,11 @@ describe('provisioning is idempotent under retry', () => {
     expect(domainDocs()).toHaveLength(1)
 
     for (let attempt = 0; attempt < 5; attempt += 1) {
-      const retry = await ensureHostSendingDomain({
+      const retry = await requestHostSendingDomain({
         hostId: HOST,
         orgId: ORG,
         subdomain: 'acme',
+        requestedBy: 'merchant',
       })
       expect(retry.domain).toBe(first.domain)
       expect(retry.created).toBe(false)
@@ -267,16 +269,18 @@ describe('provisioning is idempotent under retry', () => {
    */
   it('ignores the subdomain it is passed once a label is pinned', async () => {
     seedHost(HOST, 'acme')
-    const first = await ensureHostSendingDomain({
+    const first = await requestHostSendingDomain({
       hostId: HOST,
       orgId: ORG,
       subdomain: 'acme',
+      requestedBy: 'merchant',
     })
 
-    const retry = await ensureHostSendingDomain({
+    const retry = await requestHostSendingDomain({
       hostId: HOST,
       orgId: ORG,
       subdomain: 'something-completely-different',
+      requestedBy: 'merchant',
     })
 
     expect(retry.domain).toBe(first.domain)
@@ -293,15 +297,17 @@ describe('provisioning is idempotent under retry', () => {
     seedHost(HOST, 'acme')
     seedHost(OTHER_HOST, 'acme')
 
-    const first = await ensureHostSendingDomain({
+    const first = await requestHostSendingDomain({
       hostId: HOST,
       orgId: ORG,
       subdomain: 'acme',
+      requestedBy: 'merchant',
     })
-    const second = await ensureHostSendingDomain({
+    const second = await requestHostSendingDomain({
       hostId: OTHER_HOST,
       orgId: ORG,
       subdomain: 'acme',
+      requestedBy: 'merchant',
     })
 
     expect(first.domain).toBe(`acme.${MAIL_APEX}`)
@@ -312,10 +318,11 @@ describe('provisioning is idempotent under retry', () => {
 
   it('refuses a site whose name yields no usable label', async () => {
     seedHost(HOST, '!!!')
-    const result = await ensureHostSendingDomain({
+    const result = await requestHostSendingDomain({
       hostId: HOST,
       orgId: ORG,
       subdomain: '!!!',
+      requestedBy: 'merchant',
     })
     expect(result.domain).toBeNull()
     expect(result.error).toBe('no-label')
@@ -330,7 +337,7 @@ describe('a half-provisioned domain is recoverable', () => {
    */
   it('finishes a claim whose host pointer was never written', async () => {
     seedHost(HOST, 'acme')
-    await ensureHostSendingDomain({ hostId: HOST, orgId: ORG, subdomain: 'acme' })
+    await requestHostSendingDomain({ hostId: HOST, orgId: ORG, subdomain: 'acme', requestedBy: 'merchant' })
 
     // Simulate the crash: the host pointer is gone, the claim and the record
     // remain. This is the state a death between write 2 and write 3 leaves.
@@ -375,92 +382,99 @@ describe('a half-provisioned domain is recoverable', () => {
   })
 })
 
-describe('a site with no claim is picked up by the sweep', () => {
+/*==========================================
+  Nothing claims a domain on a site's behalf
+==========================================*/
+
+/**
+ * THE ABSENCE OF AUTOMATIC PROVISIONING, AS A TEST.
+ *
+ * A dedicated subdomain used to be claimed at three moments nobody chose: site
+ * creation, the billing webhook's upgrade transition, and a sweep that walked
+ * hosts looking for entitled sites without one. Each was defensible on its own
+ * and together they made demand for a bounded resource — the provider's
+ * account-wide domain allowance, and three records in our zone apiece — grow
+ * with every paying site rather than with anybody's decision.
+ *
+ * The guarantee is now structural rather than behavioral: `requestedBy` has no
+ * default, so a process has nothing honest to put there. This block is what
+ * notices if one is invented anyway. It asserts on the STORE rather than on a
+ * return value, because a re-introduced automatic claim would most likely
+ * arrive as a side effect somewhere else in the file's flow, and the store is
+ * the one place every claim has to land.
+ */
+describe('a site holds no sending domain until somebody asks', () => {
+  it('does not claim on the plan alone, however entitled the org', async () => {
+    seedOrgPlan('agency')
+    seedHost(HOST, 'northwind-coffee')
+
+    // Everything a claim needs is present except the asking. The site sends
+    // regardless — that is the pool's job — so nothing is waiting on this.
+    expect(store.get(`hosts/${HOST}`).sendingLabel).toBeUndefined()
+    expect(store.get(`hosts/${HOST}`).sendingDomain).toBeUndefined()
+    expect(store.has('sendingLabels/northwind-coffee')).toBe(false)
+    expect(await listPendingSendingDomains(25)).toEqual([])
+  })
+
   /**
-   * Creation claims, so in steady state there is nothing here. It runs anyway
-   * because creation covers only sites made after it shipped, and a site with
-   * no claim REFUSES every send — a worse failure than the shared domain it
-   * replaced, and one nobody sees until a merchant asks why their receipts
-   * stopped.
+   * The CONTROL. Every assertion above is satisfied by a claim path that is
+   * simply broken, so the same fixture has to produce a domain the moment the
+   * request is made.
    */
-  it('claims for a site that predates provisioning', async () => {
-    store.set(`hosts/${HOST}`, { subdomain: 'northwind-coffee', orgId: ORG })
+  it('claims the moment one is asked for, from the same fixture', async () => {
+    seedOrgPlan('agency')
+    seedHost(HOST, 'northwind-coffee')
 
-    const result = await claimUnprovisionedHosts(25)
+    const result = await requestHostSendingDomain({
+      hostId: HOST,
+      orgId: ORG,
+      subdomain: 'northwind-coffee',
+      requestedBy: 'merchant',
+    })
 
-    expect(result.claimed).toBe(1)
+    expect(result.created).toBe(true)
     expect(store.get(`hosts/${HOST}`).sendingDomain).toBe(
       `northwind-coffee.${MAIL_APEX}`,
     )
-  })
-
-  /** Idempotent: a second run must not re-claim or re-name anything. */
-  it('leaves an already-claimed site alone', async () => {
-    store.set(`hosts/${HOST}`, { subdomain: 'northwind-coffee', orgId: ORG })
-    await claimUnprovisionedHosts(25)
-    const before = { ...store.get(`hosts/${HOST}`) }
-
-    const second = await claimUnprovisionedHosts(25)
-
-    expect(second.claimed).toBe(0)
-    expect(store.get(`hosts/${HOST}`)).toEqual(before)
+    expect(await listPendingSendingDomains(25)).toHaveLength(1)
   })
 
   /**
-   * A host with no org cannot be claimed — the record lives in an org
-   * subcollection. Skipped rather than guessed at, and it must not stop the
-   * sweep reaching the sites that CAN be claimed.
-   */
-  it('skips a host with no org and still claims the rest', async () => {
-    store.set(`hosts/${OTHER_HOST}`, { subdomain: 'orphan' })
-    store.set(`hosts/${HOST}`, { subdomain: 'northwind-coffee', orgId: ORG })
-
-    const result = await claimUnprovisionedHosts(25)
-
-    expect(result.claimed).toBe(1)
-    expect(store.get(`hosts/${OTHER_HOST}`).sendingDomain).toBeUndefined()
-  })
-
-  /**
-   * Both skips above are READ-SAVING, and that is why they are asserted on
-   * reads rather than only on outcomes.
+   * WHO ASKED is stored with the claim.
    *
-   * `ensureHostSendingDomain` is idempotent, so calling it for an
-   * already-claimed or org-less host produces the same result — it just re-
-   * reads the host document to find that out. On a sweep that runs every few
-   * minutes across every site on the platform, a read per host per run is the
-   * standing cost of a guard nobody notices is missing, which is exactly the
-   * shape a scan-on-mount takes.
-   *
-   * So: ONE read of the hosts collection for the listing, and none after it,
-   * when every host in the page is one the sweep should skip.
+   * At the ceiling the only question worth answering is which slots somebody
+   * actually wanted, and a claim that recorded nothing would leave that
+   * answerable only by reading a year of logs.
    */
-  it('re-reads nothing for the hosts it skips', async () => {
-    // One already claimed, and one with no name to build a label from. Both
-    // are skips, and each is skipped by a different guard.
-    store.set(`hosts/${HOST}`, {
-      subdomain: 'northwind-coffee',
+  it.each(['merchant', 'staff'] as const)('records that %s asked', async (who) => {
+    seedOrgPlan('pro')
+    seedHost(HOST, 'northwind')
+
+    await requestHostSendingDomain({
+      hostId: HOST,
       orgId: ORG,
-      sendingLabel: 'northwind-coffee',
+      subdomain: 'northwind',
+      requestedBy: who,
     })
-    store.set(`hosts/${OTHER_HOST}`, { orgId: ORG })
 
-    const reads: string[] = []
-    const original = db.collection
-    db.collection = ((name: string) => {
-      reads.push(name)
-      return original(name)
-    }) as typeof db.collection
+    expect(store.get(`hosts/${HOST}`).sendingDomainRequestedBy).toBe(who)
+    expect(store.get(`hosts/${HOST}`).sendingDomainRequestedAtMs).toEqual(
+      expect.any(Number),
+    )
+  })
 
-    try {
-      const result = await claimUnprovisionedHosts(25)
-      expect(result.claimed).toBe(0)
-    } finally {
-      db.collection = original
-    }
+  it('reads an unrecognized requester as the merchant rather than storing it', async () => {
+    seedOrgPlan('pro')
+    seedHost(HOST, 'northwind')
 
-    // The listing, and nothing else.
-    expect(reads).toEqual(['hosts'])
+    await requestHostSendingDomain({
+      hostId: HOST,
+      orgId: ORG,
+      subdomain: 'northwind',
+      requestedBy: 'a-cron-job' as never,
+    })
+
+    expect(store.get(`hosts/${HOST}`).sendingDomainRequestedBy).toBe('merchant')
   })
 })
 
@@ -476,10 +490,11 @@ describe('the sending domain survives a host rename', () => {
    */
   it('keeps the domain, the label and the identity across a rename', async () => {
     seedHost(HOST, 'northwind-coffee')
-    const before = await ensureHostSendingDomain({
+    const before = await requestHostSendingDomain({
       hostId: HOST,
       orgId: ORG,
       subdomain: 'northwind-coffee',
+      requestedBy: 'merchant',
     })
 
     // Verify it, so the identity is a real sending one on both sides.
@@ -515,10 +530,11 @@ describe('the sending domain survives a host rename', () => {
    */
   it('leaves the claim and its records exactly where they were', async () => {
     seedHost(HOST, 'northwind-coffee')
-    await ensureHostSendingDomain({
+    await requestHostSendingDomain({
       hostId: HOST,
       orgId: ORG,
       subdomain: 'northwind-coffee',
+      requestedBy: 'merchant',
     })
     const claimBefore = { ...store.get('sendingLabels/northwind-coffee') }
 
@@ -526,10 +542,11 @@ describe('the sending domain survives a host rename', () => {
       ...store.get(`hosts/${HOST}`),
       subdomain: 'acme-coffee',
     })
-    await ensureHostSendingDomain({
+    await requestHostSendingDomain({
       hostId: HOST,
       orgId: ORG,
       subdomain: 'acme-coffee',
+      requestedBy: 'merchant',
     })
 
     expect(store.get('sendingLabels/northwind-coffee')).toEqual(claimBefore)
@@ -546,10 +563,11 @@ describe('the sending domain survives a host rename', () => {
    */
   it('is unaffected by another site taking the freed web subdomain', async () => {
     seedHost(HOST, 'northwind-coffee')
-    const mine = await ensureHostSendingDomain({
+    const mine = await requestHostSendingDomain({
       hostId: HOST,
       orgId: ORG,
       subdomain: 'northwind-coffee',
+      requestedBy: 'merchant',
     })
     store.set(`hosts/${HOST}`, {
       ...store.get(`hosts/${HOST}`),
@@ -559,10 +577,11 @@ describe('the sending domain survives a host rename', () => {
     // Site B claims the freed WEB slug. Its MAIL label is de-collided,
     // because the mail claim is still held.
     seedHost(OTHER_HOST, 'northwind-coffee')
-    const theirs = await ensureHostSendingDomain({
+    const theirs = await requestHostSendingDomain({
       hostId: OTHER_HOST,
       orgId: ORG,
       subdomain: 'northwind-coffee',
+      requestedBy: 'merchant',
     })
 
     expect(theirs.domain).not.toBe(mine.domain)
@@ -576,10 +595,11 @@ describe('the sending domain survives a host rename', () => {
    */
   it('moves the sending name only when asked outright', async () => {
     seedHost(HOST, 'northwind-coffee')
-    const before = await ensureHostSendingDomain({
+    const before = await requestHostSendingDomain({
       hostId: HOST,
       orgId: ORG,
       subdomain: 'northwind-coffee',
+      requestedBy: 'merchant',
     })
     store.set(`hosts/${HOST}`, {
       ...store.get(`hosts/${HOST}`),
@@ -590,6 +610,7 @@ describe('the sending domain survives a host rename', () => {
       hostId: HOST,
       orgId: ORG,
       subdomain: 'acme-coffee',
+      requestedBy: 'merchant',
     })
 
     expect(teardown.domain).toBe(before.domain)
@@ -604,10 +625,11 @@ describe('the sending domain survives a host rename', () => {
 describe('deleting a site cleans up', () => {
   async function provisionAndIssue() {
     seedHost(HOST, 'acme')
-    const result = await ensureHostSendingDomain({
+    const result = await requestHostSendingDomain({
       hostId: HOST,
       orgId: ORG,
       subdomain: 'acme',
+      requestedBy: 'merchant',
     })
     store.set(`orgs/${ORG}/sendingDomains/${result.domain}`, {
       ...store.get(`orgs/${ORG}/sendingDomains/${result.domain}`),
@@ -663,10 +685,11 @@ describe('deleting a site cleans up', () => {
     await releaseHostSendingDomain(await readHostSendingTeardown(HOST))
 
     seedHost(OTHER_HOST, 'acme')
-    const next = await ensureHostSendingDomain({
+    const next = await requestHostSendingDomain({
       hostId: OTHER_HOST,
       orgId: ORG,
       subdomain: 'acme',
+      requestedBy: 'merchant',
     })
 
     expect(next.domain).toBe(`acme.${MAIL_APEX}`)
@@ -717,10 +740,11 @@ describe('the identity a site sends on, from a hostId alone', () => {
    */
   it('resolves the site domain for a provisioned, verified site', async () => {
     seedHost(HOST, 'acme')
-    const provisioned = await ensureHostSendingDomain({
+    const provisioned = await requestHostSendingDomain({
       hostId: HOST,
       orgId: ORG,
       subdomain: 'acme',
+      requestedBy: 'merchant',
     })
     store.set(`orgs/${ORG}/sendingDomains/${provisioned.domain}`, {
       ...store.get(`orgs/${ORG}/sendingDomains/${provisioned.domain}`),
@@ -777,10 +801,11 @@ describe('the identity a site sends on, from a hostId alone', () => {
     'sends on the pool while its own dedicated domain is still %s',
     async (status) => {
       seedHost(HOST, 'acme')
-      const provisioned = await ensureHostSendingDomain({
+      const provisioned = await requestHostSendingDomain({
         hostId: HOST,
         orgId: ORG,
         subdomain: 'acme',
+        requestedBy: 'merchant',
       })
       store.set(`orgs/${ORG}/sendingDomains/${provisioned.domain}`, {
         ...store.get(`orgs/${ORG}/sendingDomains/${provisioned.domain}`),
@@ -803,10 +828,11 @@ describe('the identity a site sends on, from a hostId alone', () => {
    */
   it('sends on the pool when the dedicated domain was refused for capacity', async () => {
     seedHost(HOST, 'acme')
-    const provisioned = await ensureHostSendingDomain({
+    const provisioned = await requestHostSendingDomain({
       hostId: HOST,
       orgId: ORG,
       subdomain: 'acme',
+      requestedBy: 'merchant',
     })
     store.set(`orgs/${ORG}/sendingDomains/${provisioned.domain}`, {
       ...store.get(`orgs/${ORG}/sendingDomains/${provisioned.domain}`),
@@ -829,7 +855,7 @@ describe('the identity a site sends on, from a hostId alone', () => {
    */
   it('still refuses MARKETING while the dedicated domain is unverified', async () => {
     seedHost(HOST, 'acme')
-    await ensureHostSendingDomain({ hostId: HOST, orgId: ORG, subdomain: 'acme' })
+    await requestHostSendingDomain({ hostId: HOST, orgId: ORG, subdomain: 'acme', requestedBy: 'merchant' })
 
     const verdict = await resolveHostSendingIdentity({
       orgId: ORG,
@@ -957,10 +983,11 @@ describe('a dedicated domain is claimed by need, not by existence', () => {
     seedOrgPlan('pro')
     seedHost(HOST, 'northwind')
 
-    const result = await ensureHostSendingDomain({
+    const result = await requestHostSendingDomain({
       hostId: HOST,
       orgId: ORG,
       subdomain: 'northwind',
+      requestedBy: 'merchant',
     })
 
     expect(result.created).toBe(true)
@@ -974,10 +1001,11 @@ describe('a dedicated domain is claimed by need, not by existence', () => {
       seedOrgPlan(plan)
       seedHost(HOST, 'northwind')
 
-      const result = await ensureHostSendingDomain({
+      const result = await requestHostSendingDomain({
         hostId: HOST,
         orgId: ORG,
         subdomain: 'northwind',
+        requestedBy: 'merchant',
       })
 
       expect(result.created).toBe(false)
@@ -997,65 +1025,42 @@ describe('a dedicated domain is claimed by need, not by existence', () => {
       store.clear()
       seedOrgPlan(plan)
       seedHost(HOST, 'northwind')
-      const result = await ensureHostSendingDomain({
+      const result = await requestHostSendingDomain({
         hostId: HOST,
         orgId: ORG,
         subdomain: 'northwind',
+        requestedBy: 'merchant',
       })
       expect([plan, result.created]).toEqual([plan, true])
     }
   })
 
   /**
-   * The sweep, which is where the blanket spend actually happened: it walked a
-   * page of hosts and claimed for each one regardless of tier.
+   * ONE REQUEST CLAIMS ONE SITE.
    *
-   * Both orgs are swept in ONE run, so this cannot pass by the sweep having
-   * done nothing.
+   * The org is the unit the PLAN is read from and the site is the unit a
+   * domain is spent on, and the two used to be conflated: an upgrade claimed
+   * for every site in the workspace at once, so an agency moving to Pro spent
+   * a provider slot and three zone records per client site in one webhook
+   * delivery, for sites whose merchants had asked for nothing.
    */
-  it('sweeps past the sites that cannot use one and claims the ones that can', async () => {
-    seedOrgPlan('free', 'orgFree')
+  it('claims only the site that was asked about, not the org', async () => {
     seedOrgPlan('pro', 'orgPro')
-    seedHost('HostFree', 'freesite', 'orgFree')
     seedHost('HostPro', 'prosite', 'orgPro')
+    seedHost('HostSibling', 'sibling', 'orgPro')
 
-    const result = await claimUnprovisionedHosts(25)
-
-    expect(result.claimed).toBe(1)
-    expect(result.skippedUnentitled).toBe(1)
-    expect(store.get('hosts/HostPro')?.sendingLabel).toBe('prosite')
-    expect(store.get('hosts/HostFree')?.sendingLabel).toBeUndefined()
-  })
-
-  /**
-   * The upgrade path. This is what makes the sweep a backstop rather than the
-   * schedule — the sweep reads an unordered, uncursored page of `hosts`, so
-   * past a few hundred sites it would never reach an org that just upgraded.
-   */
-  it('claims for one org on demand, and only that org', async () => {
-    seedOrgPlan('pro', 'orgPro')
-    seedOrgPlan('pro', 'orgOther')
-    seedHost('HostPro', 'prosite', 'orgPro')
-    seedHost('HostOther', 'othersite', 'orgOther')
-
-    const result = await claimOrgSendingDomains('orgPro')
-
-    expect(result.claimed).toBe(1)
-    expect(store.get('hosts/HostPro')?.sendingLabel).toBe('prosite')
-    // The other org's site is untouched — it gets claimed by its OWN upgrade
-    // event, not by somebody else's.
-    expect(store.get('hosts/HostOther')?.sendingLabel).toBeUndefined()
-  })
-
-  it('claims nothing on demand for an org still below the floor', async () => {
-    seedOrgPlan('starter', 'orgFree')
-    seedHost('HostFree', 'freesite', 'orgFree')
-
-    expect(await claimOrgSendingDomains('orgFree')).toEqual({
-      scanned: 0,
-      claimed: 0,
+    const result = await requestHostSendingDomain({
+      hostId: 'HostPro',
+      orgId: 'orgPro',
+      subdomain: 'prosite',
+      requestedBy: 'merchant',
     })
-    expect(store.get('hosts/HostFree')?.sendingLabel).toBeUndefined()
+
+    expect(result.created).toBe(true)
+    expect(store.get('hosts/HostPro')?.sendingLabel).toBe('prosite')
+    // The sibling site under the same org and the same plan is untouched. It
+    // gets one when its own admin asks for it.
+    expect(store.get('hosts/HostSibling')?.sendingLabel).toBeUndefined()
   })
 
   /**
@@ -1069,13 +1074,14 @@ describe('a dedicated domain is claimed by need, not by existence', () => {
   it('leaves a domain already claimed alone when the plan falls', async () => {
     seedOrgPlan('pro')
     seedHost(HOST, 'northwind')
-    await ensureHostSendingDomain({ hostId: HOST, orgId: ORG, subdomain: 'northwind' })
+    await requestHostSendingDomain({ hostId: HOST, orgId: ORG, subdomain: 'northwind', requestedBy: 'merchant' })
 
     seedOrgPlan('free')
-    const again = await ensureHostSendingDomain({
+    const again = await requestHostSendingDomain({
       hostId: HOST,
       orgId: ORG,
       subdomain: 'northwind',
+      requestedBy: 'merchant',
     })
 
     expect(again.domain).toBe(`northwind.${MAIL_APEX}`)
@@ -1101,10 +1107,11 @@ describe('a dedicated domain is claimed by need, not by existence', () => {
     seedOrgPlan('free')
     seedHost(HOST, 'freesite')
 
-    const claim = await ensureHostSendingDomain({
+    const claim = await requestHostSendingDomain({
       hostId: HOST,
       orgId: ORG,
       subdomain: 'freesite',
+      requestedBy: 'merchant',
     })
     expect(claim.created).toBe(false)
     expect(claim.error).toBe('plan-no-dedicated-domain')
@@ -1122,10 +1129,11 @@ describe('a dedicated domain is claimed by need, not by existence', () => {
     seedHost(HOST, 'northwind')
     store.delete(`orgs/${ORG}`)
 
-    const result = await ensureHostSendingDomain({
+    const result = await requestHostSendingDomain({
       hostId: HOST,
       orgId: ORG,
       subdomain: 'northwind',
+      requestedBy: 'merchant',
     })
 
     expect(result.created).toBe(false)

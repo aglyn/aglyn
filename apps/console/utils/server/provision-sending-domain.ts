@@ -304,12 +304,58 @@ async function countProvisionedDomains(): Promise<number> {
   return Number(snapshot.data().count) || 0
 }
 
+/**
+ * The share of the ceiling that has to be spent before an operator is warned.
+ *
+ * A ceiling reported only as a boolean is one that is first observed at the
+ * moment it has already cost something, and the remedy — buy the provider's
+ * domain add-on, then set the new allowance and deploy — is hours of billing
+ * and configuration work, not minutes. So the warning has to arrive with
+ * enough headroom left to complete it.
+ *
+ * A share rather than a fixed number of domains because deployments differ by
+ * two orders of magnitude: 20 spare would be most of a default self-host
+ * allowance of 10 and almost nothing against a 1,100 self-serve ceiling.
+ * {@link SendingDomainCapacityReport.remaining} carries the absolute figure
+ * beside it, so a reader never has to do the arithmetic to know what "80%"
+ * leaves.
+ */
+const CAPACITY_WARNING_SHARE = 0.8
+
 /** Where this deployment stands against its sending-domain ceiling. */
 export interface SendingDomainCapacityReport {
   held: number
   capacity: number
+  /**
+   * Slots left before a new domain is refused, or `null` when there is no
+   * ceiling to count against.
+   *
+   * NULL RATHER THAN A LARGE NUMBER, and never `Infinity`. An uncapped
+   * deployment has no headroom figure — it has no ceiling — and
+   * `JSON.stringify(Infinity)` is `null` anyway, which a reader would then
+   * have to interpret without being told which of the two it meant.
+   */
+  remaining: number | null
+  /**
+   * How much of the ceiling is spent, `0`–`1`, or `null` when uncapped.
+   *
+   * The fraction is what makes the ceiling watchable rather than merely
+   * discoverable: an operator reading `0.62` knows they have time, and one
+   * reading `0.94` knows they do not, without holding either number in their
+   * head from the last time they looked.
+   */
+  used: number | null
   /** True once a new domain would be refused. `capacity: -1` is never true. */
   atCapacity: boolean
+  /**
+   * True inside the warning band and not yet at the ceiling.
+   *
+   * Deliberately false once `atCapacity` is true. The two are different
+   * events with different remedies — one is "buy headroom soon", the other is
+   * "merchants are being pooled right now" — and a surface that showed both
+   * would be showing the milder one at the moment it stopped being true.
+   */
+  low: boolean
 }
 
 /**
@@ -321,17 +367,28 @@ export interface SendingDomainCapacityReport {
  * moving. That is the same silence the loud log exists to break, arriving at
  * the one surface an operator visits on purpose.
  *
- * It answers `atCapacity: false` for a negative capacity, which is the
- * configured way to switch the check off, and for a count that cannot be read.
- * Both are the same claim: this deployment has no ceiling to be at.
+ * Every derived field is `null` for a negative capacity, which is the
+ * configured way to switch the check off, and for a count that could not be
+ * read. Both are the same claim: there is no ceiling here to be a fraction of,
+ * and a `0` in that position would read as an empty account rather than as an
+ * absent limit.
  */
 export async function readSendingDomainCapacity(): Promise<SendingDomainCapacityReport> {
   const capacity = sendingDomainCapacity()
   const held = await countProvisionedDomains().catch(() => -1)
+  const bounded = capacity > 0 && held >= 0
+  const remaining = bounded ? Math.max(0, capacity - held) : null
+  const atCapacity = capacity >= 0 && held >= 0 && held >= capacity
   return {
     held,
     capacity,
-    atCapacity: capacity >= 0 && held >= 0 && held >= capacity,
+    remaining,
+    // Clamped at 1 so an account carrying hand-added domains past the
+    // configured ceiling reports a full bar rather than "112% used", which
+    // reads as a bug in the meter rather than as a real state.
+    used: bounded ? Math.min(1, held / capacity) : null,
+    atCapacity,
+    low: bounded && !atCapacity && held / capacity >= CAPACITY_WARNING_SHARE,
   }
 }
 

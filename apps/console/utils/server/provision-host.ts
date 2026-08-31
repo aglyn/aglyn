@@ -21,7 +21,6 @@ import {
   suggestSubdomains,
 } from '@aglyn/aglyn/server'
 import {
-  ensureHostSendingDomain,
   firebaseAdmin,
   registerOrgHost,
 } from '@aglyn/tenant-data-admin'
@@ -227,26 +226,21 @@ export async function claimHostForOrg(
   await registerOrgHost(orgId, hostId, subdomain)
 
   /*
-   * CLAIM THE SITE'S SENDING DOMAIN.
+   * NO SENDING DOMAIN IS CLAIMED HERE, AND THE SITE CAN SEND ANYWAY.
    *
-   * Here rather than at first send, even though the claim itself is cheap
-   * enough to make anywhere. Creation is the moment the site's name is
-   * decided, and pinning the mail label from the name it was CREATED under is
-   * what makes a later rename free of consequences — the label is a snapshot
-   * of the slug at one instant, and the earliest instant is the least
-   * surprising one.
+   * A new site's transactional mail leaves on the shared pool from its first
+   * request — that is the floor `resolveSendingIdentity` guarantees, and it
+   * needs no provisioning, no DNS and no vendor call. So creation has nothing
+   * to wait for and nothing to claim.
    *
-   * It claims a name and nothing more. The provider call and the DNS write
-   * belong to the console sweep, which runs on its own schedule, so a site's
-   * creation never waits on a vendor and never fails because one is down.
-   *
-   * Best-effort, and deliberately AFTER the host is registered. A site that
-   * exists but cannot yet send is a site the sweep completes within the hour;
-   * a create that failed because a mail claim did not is a site the customer
-   * does not have. The sweep re-derives the claim from the host document, so
-   * nothing is lost by this returning nothing.
+   * A DEDICATED subdomain used to be claimed right here, which made the
+   * platform's domain count grow with signups filtered by plan rather than
+   * with anybody's decision: a slot in the provider's account-wide allowance,
+   * three records in our own zone and a permanent place in the re-verification
+   * sweep, spent on every paying site whether or not it wanted an
+   * Aglyn-branded sending name. It is now requested from the sending domains
+   * card, by somebody who chose it.
    */
-  await ensureHostSendingDomain({ hostId, orgId, subdomain }).catch(() => null)
 
   return { allowed: true, hostId }
 }

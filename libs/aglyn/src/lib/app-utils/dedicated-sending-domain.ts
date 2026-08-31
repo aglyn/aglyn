@@ -49,8 +49,16 @@
  *
  * Provisioning by SIGNUP spends all three on sites that may never send a
  * message. Provisioning by PLAN spends them on sites whose revenue covers
- * them, and — more to the point — keeps the totals proportional to a number
- * that grows slowly instead of one that grows with every free signup.
+ * them — better, and still the wrong curve, because revenue is the number the
+ * platform is trying to grow while the provider's allowance grows only by
+ * purchase.
+ *
+ * So this gate is the second of two conditions and not the only one. A domain
+ * is claimed when a merchant ASKS for one, from the sending-identity route,
+ * and this decides whether their plan carries what they asked for. Demand is
+ * then proportional to the merchants who want an Aglyn-branded sending name
+ * rather than to everyone who pays, and the shared pool carries the rest with
+ * no per-site cost at all.
  *
  * ## Why a plan comparison and not an entitlement flag
  *
