@@ -552,7 +552,7 @@ export function EmailDetail(props: EmailDetailProps) {
         )
       }
       enqueueSnackbar('Draft discarded', { variant: 'success', persist: false })
-      router.push(`${basePath}/emails`)
+      router.push(`${basePath}/messages`)
     } catch (error) {
       console.error(error)
       enqueueSnackbar('This draft could not be discarded', {
@@ -715,11 +715,11 @@ export function EmailDetail(props: EmailDetailProps) {
       <Button
         component={AppLink as any}
         {...({ componentVariant: 'naked', nativeButton: false } as any)}
-        href={`${basePath}/emails`}
+        href={`${basePath}/messages`}
         size="small"
         color="primary"
       >
-        {'All emails'}
+        {'All messages'}
       </Button>
       {templateScreenId ? (
         <Button

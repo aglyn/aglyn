@@ -81,7 +81,7 @@ export const PLUGIN_SECTIONS: Readonly<Record<string, readonly string[]>> = {
     'analytics',
   ],
   emails: [
-    'emails',
+    'messages',
     'templates',
     'audiences',
     'topics',

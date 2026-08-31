@@ -66,9 +66,9 @@ function sectionBody(
   consentGroup: ConsentGroup,
 ): ReactNode {
   switch (section) {
-    case 'emails':
+    case 'messages':
       /*
-       * `/emails/emails/{emailId}` is ONE MESSAGE — the thing that was or
+       * `/emails/messages/{emailId}` is ONE MESSAGE — the thing that was or
        * will be sent, as against the campaign that groups messages and the
        * template they are built from. A ROUTE rather than an expanded row: it
        * is linkable, which is what a merchant wants to paste into a message
@@ -89,10 +89,7 @@ function sectionBody(
       )
     case 'templates':
       /*
-       * `/emails/templates/{screenId}` is one TEMPLATE's page. The section id
-       * stays `designs` while the label says Templates — an id appears in
-       * links people keep, so the vocabulary moves and the URL does not
-       * break.
+       * `/emails/templates/{screenId}` is one TEMPLATE's page.
        *
        * A route for the same reasons a message's page is one: it is
        * linkable, and the listing above it is a cheaper surface a reader who
@@ -146,7 +143,7 @@ function sectionBody(
       )
     case 'topics':
       // Create is a drawer on the list; EDIT is the topic's own route, which
-      // is the section owning its own subtree exactly as `emails` does.
+      // is the section owning its own subtree exactly as `messages` does.
       return detail[0] ? (
         <EmailTopicDetail
           hostId={hostId}

@@ -85,7 +85,7 @@ beforeEach(() => {
 jest.mock('next/navigation', () => ({
   __esModule: true,
   useRouter: () => ({ push: (href: string) => mockPushed.push(href) }),
-  usePathname: () => '/acme/hosts/site/emails/emails/msg_1',
+  usePathname: () => '/acme/hosts/site/emails/messages/msg_1',
   useSearchParams: () => new URLSearchParams(),
   useParams: () => ({ orgSlug: 'acme', host: 'site' }),
 }))
@@ -508,7 +508,7 @@ describe('discarding a draft', () => {
      * record that no longer exists, which renders the "could not be loaded"
      * branch and reads as a failure.
      */
-    expect(mockPushed).toContain('/acme/hosts/site/emails/emails')
+    expect(mockPushed).toContain('/acme/hosts/site/emails/messages')
   })
 })
 

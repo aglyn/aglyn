@@ -276,7 +276,7 @@ describe('a send reached through a campaign URL says what it is', () => {
      */
     const link = screen.getByRole('link', { name: 'Spring sale' })
     expect(link.getAttribute('href')).toBe(
-      '/acme/hosts/site/emails/emails/camp_1',
+      '/acme/hosts/site/emails/messages/camp_1',
     )
   })
 

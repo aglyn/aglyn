@@ -198,7 +198,7 @@ export function EmailsListCard(props: EmailsListCardProps) {
     [emails, page, pageSize],
   )
 
-  const emailHref = (email: any) => `${basePath}/emails/${email.$id}`
+  const emailHref = (email: any) => `${basePath}/messages/${email.$id}`
 
   const { confirm } = useConfirmationContext()
   const { enqueueSnackbar } = useSnackbar()
@@ -402,7 +402,7 @@ export function EmailsListCard(props: EmailsListCardProps) {
           )
         }
         setCreateOpen(false)
-        router.push(`${basePath}/emails/${payload.campaignId}`)
+        router.push(`${basePath}/messages/${payload.campaignId}`)
       } catch (error) {
         console.error(error)
         enqueueSnackbar('This email could not be created', {
@@ -418,7 +418,7 @@ export function EmailsListCard(props: EmailsListCardProps) {
 
   return (
     <CardDisplay
-      header={'Emails'}
+      header={'Messages'}
       help={emailsDocsHelp}
       HeaderProps={{
         action: (

@@ -18,7 +18,7 @@
 import type { ConsoleNavSection } from '@aglyn/aglyn'
 
 export type EmailsConsoleSectionId =
-  | 'emails'
+  | 'messages'
   | 'templates'
   | 'audiences'
   | 'topics'
@@ -33,9 +33,11 @@ export type EmailsConsoleSectionId =
  * body on the id the shell resolves back.
  *
  * Ids appear in links people keep — treat them as persisted, and prefer
- * renaming a LABEL over an id. `audiences` and `suppressions` are also the
- * `?tab=` ids this page deep-linked by before its sections became routes, so
- * a bookmark that named one of those tabs still names the same section.
+ * renaming a LABEL over an id. Where the two have to move together, the old
+ * path is kept alive by a redirect rather than by an id that no longer says
+ * what the section is. `audiences` and `suppressions` are also the `?tab=`
+ * ids this page deep-linked by before its sections became routes, so a
+ * bookmark that named one of those tabs still names the same section.
  *
  * No `navTabId` on any of them: every section ships with the surface, so they
  * inherit the Emails nav item's gate.
@@ -45,13 +47,26 @@ export const EMAILS_CONSOLE_SECTIONS: readonly ConsoleNavSection[] = [
    * The individual messages: one row per email that was or will be sent, each
    * with its own report.
    *
-   * A message is what this surface is about. The CAMPAIGN that groups
-   * messages is a marketing object — a window of dates, a set of lists, a
-   * topic and revenue attribution, which happens to reach people by email —
-   * so it is a section of the Marketing console and an email's page links out
-   * to it.
+   * A message is what this surface is about, and this section is named for
+   * the record rather than for the surface holding it. The shell prints the
+   * surface and the section together — in the header, in the breadcrumb and
+   * in the browser tab — so a section whose name repeats its surface's says
+   * nothing about which of the six is open, which is the one job a section
+   * name has. `messages` is also the word the rest of this surface already
+   * uses for the record: a message's own page, a template's sends table and
+   * the campaign detail all call it that.
+   *
+   * `/emails/emails/{id}` is answered by a permanent redirect in the console's
+   * `next.config.js`, on the terms the Workflows → Automation move set: a URL
+   * somebody pasted keeps resolving, and it resolves to the one address the
+   * console generates.
+   *
+   * The CAMPAIGN that groups messages is a marketing object — a window of
+   * dates, a set of lists, a topic and revenue attribution, which happens to
+   * reach people by email — so it is a section of the Marketing console and a
+   * message's page links out to it.
    */
-  { id: 'emails', label: 'Emails' },
+  { id: 'messages', label: 'Messages' },
   /*
    * The reusable besigner documents a message is built from.
    *

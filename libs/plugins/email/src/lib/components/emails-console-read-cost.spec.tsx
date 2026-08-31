@@ -337,7 +337,7 @@ function shellSections() {
 /**
  * @param section the section id the URL names.
  * @param detail  segments BENEATH the section — `['msg_1']` for
- *                `/emails/emails/msg_1`. A section owns its own subtree,
+ *                `/emails/messages/msg_1`. A section owns its own subtree,
  *                so what those cost is a question this meter has to be able
  *                to ask.
  */
@@ -374,8 +374,8 @@ describe('emails console read cost (AGL-2501)', () => {
    * listen, and it listens for its OWN collection.
    */
   it('CONTROL: the open section does listen, and for its own collection', async () => {
-    await renderConsole('emails')
-    summarize('emails section', mockListens)
+    await renderConsole('messages')
+    summarize('messages section', mockListens)
     expect(mockListens.length).toBeGreaterThan(0)
     expect(listenedCollections()).toContain('campaigns')
   })

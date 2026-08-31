@@ -100,7 +100,7 @@ export function registerEmailConsole(): void {
         label: 'Emails',
         href: '/emails',
         icon: { path: mdiEmailOutline.path },
-        // Sections as ROUTES (AGL-2501): `/emails/emails` and friends are
+        // Sections as ROUTES (AGL-2501): `/emails/messages` and friends are
         // real URLs the shell resolves and gates, so the page mounts the one
         // being read instead of subscribing all six.
         sections: EMAILS_CONSOLE_SECTIONS,

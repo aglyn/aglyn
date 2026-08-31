@@ -312,7 +312,7 @@ describe('the list page never carries the composer', () => {
 
     // The same shape the table's own rows link to: the hub path, then the
     // `emails` section, then the id.
-    expect(pushed).toBe('/acme/hosts/site/emails/emails/msg_new')
+    expect(pushed).toBe('/acme/hosts/site/emails/messages/msg_new')
   })
 
   it('mounts NO composer on the list, before or after creating', async () => {
