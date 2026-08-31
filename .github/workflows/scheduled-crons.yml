@@ -159,8 +159,11 @@ on:
     # `campaigns/process-scheduled` (every 15 minutes) and
     # `finish-domain-attachments` (every 20) used to be here and are now
     # driven by `consoleFastCrons` in `cloud/functions/src/index.ts`, on
-    # Cloud Scheduler. They are still POSTable by hand from the
-    # `workflow_dispatch` list below — that is what it is for.
+    # Cloud Scheduler, alongside `lists/materialize`. All three are still
+    # POSTable by hand from the `workflow_dispatch` list below — that is what
+    # it is for, and it is the only way to force one of them between ticks or
+    # to ask, via the deploy-state step, whether the route is in the deployed
+    # tree at all.
     #
     # WHY. GitHub coalesces and silently DROPS scheduled triggers under load,
     # per workflow, and this one carried fourteen `- cron:` entries with each
@@ -199,6 +202,7 @@ on:
           - /api/admin/firestore-export
           - /api/campaigns/process-scheduled
           - /api/admin/finish-domain-attachments
+          - /api/lists/materialize
       force:
         # Only /api/admin/reverify-plugin-versions reads this (AGL-1086). A
         # stored verdict is skipped while it is current, which is what makes
