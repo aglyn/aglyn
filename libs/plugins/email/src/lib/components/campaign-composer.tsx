@@ -37,6 +37,7 @@ import { collection, doc, limit, query } from 'firebase/firestore'
 import { createEmailScreen } from '../utils/create-email-screen'
 import { useCampaignSendApi } from './use-campaign-send-api'
 import { useSendingApi } from './use-sending-identity-api'
+import { describeCallFailure } from './authorized-token'
 import CampaignTestSendDrawer from './campaign-test-send-drawer'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -514,8 +515,21 @@ export function CampaignComposer(props: CampaignComposerProps) {
             | 'platform'
             | null,
         })
-      } catch {
-        if (active) setPreview(null)
+      } catch (error) {
+        /*
+         * A REFUSAL IS NOT A LOADING STATE.
+         *
+         * `null` is the value this holds before the first answer, and the
+         * readout renders it as "Counting recipients…". A call that failed
+         * before it ever reached the route — authorization that could not be
+         * obtained — has to read as the refusal it is, or the composer sits
+         * on a sentence about work it has stopped doing and the confirm
+         * dialog reports an unreadable count without saying why.
+         */
+        if (active)
+          setPreview({
+            error: describeCallFailure(error, 'Could not count this audience'),
+          })
       }
     }, COUNT_DEBOUNCE_MS)
     return () => {
@@ -602,8 +616,11 @@ export function CampaignComposer(props: CampaignComposerProps) {
           html: String(payload?.html ?? ''),
           text: String(payload?.text ?? ''),
         })
-      } catch {
-        if (active) setRendered({ error: 'Could not render this email' })
+      } catch (error) {
+        if (active)
+          setRendered({
+            error: describeCallFailure(error, 'Could not render this email'),
+          })
       }
     }, RENDER_DEBOUNCE_MS)
     return () => {
@@ -773,8 +790,17 @@ export function CampaignComposer(props: CampaignComposerProps) {
       }
       onSent?.()
     } catch (error) {
+      /*
+       * A CLICK THAT DID NOTHING HAS TO SAY SO.
+       *
+       * This covers the failures that never reach the route at all — chiefly
+       * an ID token that cannot be obtained, which is awaited in front of the
+       * request. `describeCallFailure` lets that one name itself, because
+       * "nothing was sent, you are signed out" and "the send failed" call for
+       * different things from the person reading it.
+       */
       console.error(error)
-      enqueueSnackbar('An error has occurred', {
+      enqueueSnackbar(describeCallFailure(error, 'An error has occurred'), {
         variant: 'error',
         allowDuplicate: true,
       })
@@ -848,7 +874,7 @@ export function CampaignComposer(props: CampaignComposerProps) {
       enqueueSnackbar('Draft saved', { variant: 'success', persist: false })
     } catch (error) {
       console.error(error)
-      enqueueSnackbar('Draft not saved', {
+      enqueueSnackbar(describeCallFailure(error, 'Draft not saved'), {
         variant: 'error',
         allowDuplicate: true,
       })

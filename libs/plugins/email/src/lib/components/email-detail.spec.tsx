@@ -96,8 +96,9 @@ const mockPushed: string[] = []
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   __esModule: true,
   useFirestore: () => ({ __firestore: true }),
-  // Nobody signed in, so the recipients card never issues its request.
-  useUser: () => ({ data: null }),
+  // Signed in and able to mint an ID token: every campaign call this page
+  // makes is authorized from one, and issues nothing without it.
+  useUser: () => ({ data: { uid: 'uid-test', getIdToken: async () => 'token' } }),
   useFirestoreDoc: (build: () => { __path?: string } | null) => {
     const path = build()?.__path ?? ''
     const data = mockDocs.get(path)
@@ -119,6 +120,20 @@ jest.mock('./campaign-composer', () => ({
     composerProps = props
     return <div>{'composer mounted'}</div>
   },
+}))
+
+/**
+ * The recipients table, stubbed for the same reason as the composer.
+ *
+ * It loads its own page of the delivery log over the campaign API, and every
+ * request counted in this file is one the PAGE made. A second component
+ * fetching on mount would be an extra call in front of each of them.
+ */
+jest.mock('./email-recipients-card', () => ({
+  __esModule: true,
+  // Its heading, so the assertion on where the page places the card still has
+  // something to measure from.
+  default: () => <div>{'Recipients'}</div>,
 }))
 
 /** The props the composer was mounted with, or null while it is not. */

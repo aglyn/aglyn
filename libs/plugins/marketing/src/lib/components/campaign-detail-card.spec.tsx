@@ -114,9 +114,10 @@ jest.mock('@aglyn/plugins-email/components/use-org-email-topics', () => ({
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => FIRESTORE,
   useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1' }),
-  // Nobody signed in. The delete posts through `useCampaignManageApi`, which
-  // reads the user to mint a token; the `fetch` double answers regardless.
-  useUser: () => ({ data: null }),
+  // Signed in and able to mint an ID token: the delete posts through
+  // `useCampaignManageApi`, which authorizes from one and issues nothing
+  // without it.
+  useUser: () => ({ data: { uid: 'uid-test', getIdToken: async () => 'token' } }),
   useFirestoreDoc: (build: () => any) => {
     const built = build()
     const id = String(built?.path ?? '').split('/').pop() ?? ''

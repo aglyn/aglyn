@@ -83,10 +83,10 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => FIRESTORE,
-  // Nobody signed in. The card's create action posts through
-  // `useCampaignSendApi`, which reads the user to mint a token; no test here
-  // creates, so the hook only has to exist.
-  useUser: () => ({ data: null }),
+  // Signed in and able to mint an ID token: the card's actions post through
+  // `useCampaignSendApi` and `useCampaignManageApi`, which authorize from one
+  // and issue nothing without it.
+  useUser: () => ({ data: { uid: 'uid-test', getIdToken: async () => 'token' } }),
   useFirestoreCollection: () => ({
     data: emailDocs,
     status: 'success',
