@@ -322,6 +322,39 @@ describe('the grid holds until the plan is KNOWN (AGL-1864 · AGL-1422)', () => 
       screen.getByRole('button', { name: /Show \d+ lower plans?/ }),
     ).toBeTruthy()
   })
+
+  it('counts the plans it draws, so the folded one is visible in the total', () => {
+    /*
+     * The count has to include Enterprise, which the grid renders outside
+     * `PLAN_ORDER`. Counting only that array said seven while the grid drew
+     * seven cards — six self-serve tiers plus Enterprise — so the arithmetic
+     * came out even and Free, folded behind the lower-tier disclosure, was
+     * invisible in it: a reader counted the cards, got the promised number,
+     * and had no reason to look for an eighth.
+     *
+     * An org on Pro has Free and Starter below it, so the true total is the
+     * seven self-serve tiers plus Enterprise, and the grid draws six of them
+     * until the disclosure is pressed.
+     */
+    render(<BillingPage />)
+    const compare = screen.getByRole('button', { name: /Compare all/ })
+    expect(compare.textContent).toBe('Compare all 8 plans')
+
+    fireEvent.click(compare)
+    const drawn = Object.values(PLAN_LABELS).filter((label) =>
+      Boolean(cardFor(label)),
+    ).length
+    const folded = Number(
+      /Show (\d+) lower plans?/.exec(
+        screen.getByRole('button', { name: /Show \d+ lower plans?/ })
+          .textContent ?? '',
+      )?.[1] ?? 0,
+    )
+    // Every plan the button promises is either on screen or named by the
+    // disclosure. Nothing is unaccounted for.
+    expect(folded).toBeGreaterThan(0)
+    expect(drawn + folded).toBe(8)
+  })
 })
 
 describe('the quoted interval survives the jump (AGL-1864 · AGL-1989)', () => {

@@ -1382,7 +1382,20 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
           interval={interval}
           taglines={taglines}
           brand={branding.productName}
-          totalCount={PLAN_ORDER.length}
+          /*
+           * Enterprise is a plan the grid draws, and it lives outside
+           * `PLAN_ORDER`. Counting only that array named seven while the grid
+           * drew seven CARDS — the six self-serve tiers at or above the
+           * reader's own, plus Enterprise — so the arithmetic came out even
+           * and Free, folded behind the lower-tier disclosure, was invisible
+           * in it. A reader counted the cards, got the promised number, and
+           * had no reason to look for an eighth.
+           *
+           * The fold itself is deliberate and stays: reaching a downgrade
+           * costs a second explicit act. Naming the true total is what makes
+           * that fold a disclosure rather than an omission.
+           */
+          totalCount={PLAN_ORDER.length + 1}
           subscribeCollectsNotice={subscribeCollectsNotice}
           onSelect={onSelect}
           onCompare={() => setCompareAll(true)}

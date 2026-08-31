@@ -224,7 +224,12 @@ describe('the page opens on the decision, not the catalogue', () => {
 
   it('the way to every other plan is a real control, not a hint', () => {
     renderCards({ plan: 'pro' })
-    const compare = screen.getByRole('button', { name: /Compare all 7 plans/ })
+    // EIGHT, not seven: the seven self-serve tiers plus Enterprise, which the
+    // grid draws from outside `PLAN_ORDER`. Seven was the count of the array
+    // alone, and it happened to equal the number of CARDS an org on Pro sees,
+    // so the total agreed with the page while Free — folded behind the
+    // lower-tier disclosure — was absent from both.
+    const compare = screen.getByRole('button', { name: /Compare all 8 plans/ })
     // Named, counted, and NOT de-emphasized. A quiet route to the cheaper end
     // is the dark-pattern version of collapsing it.
     expect(compare.className).toMatch(/MuiButton-outlined/)
