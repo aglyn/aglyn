@@ -486,6 +486,20 @@ beforeAll(() => {
   process.env.USAGE_EMAIL_FROM = 'noreply@aglyn.com'
   process.env.EMAIL_UNSUBSCRIBE_SECRET = 'secret'
   process.env.CRON_SECRET = 'cron-secret'
+  /*
+   * NO PROVIDER, SO NO PACE.
+   *
+   * `sendEmail` is stubbed here, so nothing reaches a rate limit — and three
+   * thousand messages spread at the provider's request rate is six minutes of
+   * waiting for a file whose subject is which people six batches address. The
+   * interval itself is proven in `campaign-send-pace.spec`, against a
+   * provider that actually refuses.
+   */
+  process.env.EMAIL_PROVIDER_REQUESTS_PER_SECOND = '0'
+})
+
+afterAll(() => {
+  delete process.env.EMAIL_PROVIDER_REQUESTS_PER_SECOND
 })
 
 beforeEach(seed)
