@@ -124,6 +124,27 @@ export interface CampaignReportCardProps {
  * through this component that prints a percentage without saying what it is a
  * percentage of.
  *
+ * ## What the page is about comes before how the mail did
+ *
+ * A campaign of one email is the ordinary shape, and this card is the page it
+ * gets: the URL names a send, so there is no container above it and no list of
+ * emails to draw. That collapse is honest, but it decided what the page was
+ * ABOUT — delivery, engagement and rates are mechanics of a message, and a
+ * page that led with them at length read as a mail report wearing the word
+ * campaign.
+ *
+ * So the outcomes lead: what it caused, what it earned, where it sent people.
+ * Two of those headings are the ones `campaign-reach-sections.tsx` puts at the
+ * top of a campaign holding SEVERAL emails, and they are the same words here
+ * deliberately — a merchant who opens a campaign of one and a campaign of six
+ * is asking the same question and should not have to learn two vocabularies to
+ * find the answer. The email's own figures follow, under a row that names the
+ * message they belong to.
+ *
+ * Nothing about the reads changed with the order. The conversions, revenue and
+ * destination figures were already on this page and already came from the four
+ * documents below; they were simply underneath the mail.
+ *
  * ## Three documents, whatever the campaign's size
  *
  * The whole screen is one campaign document plus one link-rollup document
@@ -304,180 +325,90 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
         ))}
 
         {/*==========================================
-          * THE EMAIL THESE FIGURES CAME FROM.
+          * WHAT THIS CAMPAIGN CAUSED — the page's first section, and the
+          * heading a campaign of several emails leads with too.
           *
-          * This screen is reached at `/marketing/campaigns/{sendId}`, which
-          * is a CAMPAIGN url resolving to a send — the fall-through that keeps
-          * every unsubscribe footer and every pasted report link working. So
-          * a reader arrives from the campaigns table, where the row carries a
-          * "Single send" chip, and lands on a page of delivery and engagement
-          * figures with nothing on it naming what was delivered.
+          * The same join as the revenue below, credited under the same rule,
+          * answering it for people who were anonymous until the moment being
+          * counted: they arrived from a campaign link, browsed, and only
+          * became somebody when they submitted a form, signed up or booked.
           *
-          * Figures with no visible source read as a campaign holding no
-          * emails while reporting real numbers, which is a contradiction
-          * rather than a shortage of detail. Naming the one email — and
-          * saying it IS the campaign, which is what the chip already claims
-          * and what `campaignListRows` already does at read time — is what
-          * makes the page answer the question it raises.
+          * THE FOUR FIGURES ARE NEVER ADDED. One person filling in one form
+          * writes a submission, a contact and a lead, so a total would count
+          * that visit three times — and it would look like a bigger version
+          * of a real number, which is why the model carries no total for this
+          * JSX to reach for and the caveat says so in words above them.
           *
-          * One row, from the document this card already read: no query, no
-          * second listen, and the two-document cost the header describes is
-          * unchanged.
+          * They are laid out in a row of independent `Figure`s rather than in
+          * a table with a footer, because a footer row is where a reader
+          * expects the sum to be.
           *=========================================*/}
-        <Section title="The email in this campaign">
-          <Stack spacing={1}>
-            <Stack
-              direction="row"
-              spacing={1}
-              useFlexGap
-              sx={{ alignItems: 'center', flexWrap: 'wrap' }}
-            >
-              {/*
-                The MESSAGE's own page, which the Emails console owns — hence
-                the sibling hub rather than this surface's `basePath`. Plain
-                text until that hub resolves: a link with no destination is
-                worse than none, and the subject is what the reader came for
-                either way.
-               */}
-              {emailsHub ? (
-                <AppLink href={`${emailsHub}/messages/${campaignId}`}>
-                  {subject}
-                </AppLink>
-              ) : (
-                <Typography variant="body2">{subject}</Typography>
-              )}
-              {/*
-                What the email is DOING, not the field it stores. One
-                delivering an audience larger than one batch is written back
-                as `scheduled` between runs, so a chip rendering the status
-                said "Scheduled" at the head of a report of five hundred
-                deliveries.
-               */}
-              <Chip
-                size="small"
-                label={campaignSendDisplay(campaign as never).label}
-              />
-              <Chip
-                size="small"
-                variant="outlined"
-                label="Single send"
-                title={
-                  'One email, sent on its own rather than as part of a ' +
-                  'campaign of several. Its report and its unsubscribe links ' +
-                  'are unchanged.'
-                }
-              />
+        <Section title="What it caused">
+          {conversionsReport.caveats.map((caveat) => (
+            <Alert key={caveat.id} severity="info">
+              {caveat.message}
+            </Alert>
+          ))}
+          {conversionsReport.any ? (
+            <Stack spacing={1}>
+              <Stack
+                direction="row"
+                spacing={4}
+                useFlexGap
+                sx={{ flexWrap: 'wrap' }}
+              >
+                {conversionsReport.kinds.map((entry) => (
+                  <Figure
+                    key={entry.kind}
+                    label={entry.label}
+                    value={entry.value}
+                    note={entry.note}
+                  />
+                ))}
+              </Stack>
               <Typography variant="caption" color="text.secondary">
-                {sendTimeMs
-                  ? new Date(sendTimeMs).toLocaleString()
-                  : 'not recorded'}
+                {`Credited ${conversionsReport.model === 'last-click' ? 'to the last campaign whose link the visitor clicked' : `under the ${conversionsReport.model} model`}, ` +
+                  `within ${conversionsReport.windowDays} days of that click. ` +
+                  'Somebody who converted without ever following a campaign ' +
+                  'link is credited to no campaign at all — nothing is ' +
+                  'inferred from a referrer — so these are a floor rather ' +
+                  'than everything this campaign influenced. The ones ' +
+                  'credited to nobody are counted under Conversions in the ' +
+                  'marketing console.'}
               </Typography>
+              {/*
+                THE RECORDS BEHIND THE FIGURES. The rollup says how many; the
+                list says which, and it is the only place the uncredited half
+                is counted. A link rather than a table here — the records are
+                a paged read and this page's whole cost model is a fixed
+                number of documents whatever the audience.
+               */}
+              <Box>
+                <Button
+                  component={AppLink as any}
+                  {...({
+                    componentVariant: 'naked',
+                    nativeButton: false,
+                  } as any)}
+                  href={`${basePath}/conversions/${campaignId}`}
+                  size="small"
+                  color="primary"
+                >
+                  {'See these conversions'}
+                </Button>
+              </Box>
             </Stack>
-            <Typography variant="caption" color="text.secondary">
-              {'This campaign is one email. Everything below is that ' +
-                'email — open it for the message itself, the links it ' +
-                'carried and the people it reached.'}
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              {conversionsReport.recorded
+                ? 'Nothing has been credited to this campaign yet.'
+                : 'No conversions have been attributed to this campaign. A ' +
+                  'form submission, lead, contact or booking is credited to ' +
+                  'the last campaign whose link the visitor clicked, within ' +
+                  `${conversionsReport.windowDays} days — a campaign sent ` +
+                  'before that was recorded will never show a figure here.'}
             </Typography>
-          </Stack>
-        </Section>
-
-        <Divider />
-
-        {/*==========================================
-          * WHAT HAPPENED TO THE MAIL.
-          *
-          * Counts first and rates second, in that order and not the other
-          * way round, because a rate is only readable once you know what it
-          * was taken over — and because the counts are the part that is
-          * always true. Every rate below can be absent; none of these can.
-          *=========================================*/}
-        <Section title="Delivery">
-          <Stack direction="row" spacing={4} useFlexGap sx={{ flexWrap: 'wrap' }}>
-            <Figure
-              label="Addressed"
-              value={report.recipients}
-              note="after the per-send cap"
-            />
-            <Figure
-              label="Sent"
-              value={report.sent}
-              note="accepted by the provider"
-            />
-            <Figure
-              label="Delivered"
-              value={report.delivered}
-              note="accepted by the receiving server"
-            />
-            <Figure label="Bounced" value={report.bounced} note="of sent" />
-            <Figure
-              label="Marked as spam"
-              value={report.complained}
-              note="of delivered"
-            />
-          </Stack>
-        </Section>
-
-        <Divider />
-
-        <Section title="Engagement">
-          {/*
-           * BOTH the event count and the distinct count, side by side.
-           *
-           * `Opens` is every open event — one reader opening four times is
-           * four — and it is the number this product has always shown. It
-           * cannot be a rate numerator: divided by anything it exceeds 100%
-           * the moment somebody reads an email twice. `Readers who opened`
-           * is the distinct count, and it is what the rate below divides.
-           * Showing only one of them would either hide activity or invite a
-           * rate nobody can defend, so both are here with different names.
-           */}
-          <Stack direction="row" spacing={4} useFlexGap sx={{ flexWrap: 'wrap' }}>
-            <Figure
-              label="Opens"
-              value={report.opens}
-              note="every open, repeats included"
-            />
-            <Figure
-              label="Readers who opened"
-              value={report.uniqueOpens}
-              note="distinct recipients"
-            />
-            <Figure
-              label="Clicks"
-              value={report.clicks}
-              note="every click, repeats included"
-            />
-            <Figure
-              label="Readers who clicked"
-              value={report.uniqueClicks}
-              note="distinct recipients"
-            />
-            <Figure
-              label="Unsubscribed"
-              value={report.unsubscribes}
-              note="through this campaign's link"
-            />
-          </Stack>
-        </Section>
-
-        <Divider />
-
-        <Section title="Rates">
-          <Stack spacing={1}>
-            <RateRow label="Delivery rate" rate={report.rates.delivery} />
-            <RateRow label="Open rate" rate={report.rates.open} />
-            <RateRow label="Click rate" rate={report.rates.click} />
-            <RateRow
-              label="Click-to-open rate"
-              rate={report.rates.clickToOpen}
-            />
-            <RateRow label="Bounce rate" rate={report.rates.bounce} />
-            <RateRow label="Complaint rate" rate={report.rates.complaint} />
-            <RateRow
-              label="Unsubscribe rate"
-              rate={report.rates.unsubscribe}
-            />
-          </Stack>
+          )}
         </Section>
 
         <Divider />
@@ -601,133 +532,16 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
 
         <Divider />
 
-        {/*==========================================
-          * WHAT THIS CAMPAIGN CAUSED.
-          *
-          * The same join as the revenue above, credited under the same rule,
-          * answering it for people who were anonymous until the moment being
-          * counted: they arrived from a campaign link, browsed, and only
-          * became somebody when they submitted a form, signed up or booked.
-          *
-          * THE FOUR FIGURES ARE NEVER ADDED. One person filling in one form
-          * writes a submission, a contact and a lead, so a total would count
-          * that visit three times — and it would look like a bigger version
-          * of a real number, which is why the model carries no total for this
-          * JSX to reach for and the caveat says so in words above them.
-          *
-          * They are laid out in a row of independent `Figure`s rather than in
-          * a table with a footer, because a footer row is where a reader
-          * expects the sum to be.
-          *=========================================*/}
-        <Section title="Conversions">
-          {conversionsReport.caveats.map((caveat) => (
-            <Alert key={caveat.id} severity="info">
-              {caveat.message}
-            </Alert>
-          ))}
-          {conversionsReport.any ? (
-            <Stack spacing={1}>
-              <Stack
-                direction="row"
-                spacing={4}
-                useFlexGap
-                sx={{ flexWrap: 'wrap' }}
-              >
-                {conversionsReport.kinds.map((entry) => (
-                  <Figure
-                    key={entry.kind}
-                    label={entry.label}
-                    value={entry.value}
-                    note={entry.note}
-                  />
-                ))}
-              </Stack>
-              <Typography variant="caption" color="text.secondary">
-                {`Credited ${conversionsReport.model === 'last-click' ? 'to the last campaign whose link the visitor clicked' : `under the ${conversionsReport.model} model`}, ` +
-                  `within ${conversionsReport.windowDays} days of that click. ` +
-                  'Somebody who converted without ever following a campaign ' +
-                  'link is credited to no campaign at all — nothing is ' +
-                  'inferred from a referrer — so these are a floor rather ' +
-                  'than everything this campaign influenced. The ones ' +
-                  'credited to nobody are counted under Conversions in the ' +
-                  'marketing console.'}
-              </Typography>
-              {/*
-                THE RECORDS BEHIND THE FIGURES. The rollup says how many; the
-                list says which, and it is the only place the uncredited half
-                is counted. A link rather than a table here — the records are
-                a paged read and this page's whole cost model is a fixed
-                number of documents whatever the audience.
-               */}
-              <Box>
-                <Button
-                  component={AppLink as any}
-                  {...({
-                    componentVariant: 'naked',
-                    nativeButton: false,
-                  } as any)}
-                  href={`${basePath}/conversions/${campaignId}`}
-                  size="small"
-                  color="primary"
-                >
-                  {'See these conversions'}
-                </Button>
-              </Box>
-            </Stack>
-          ) : (
-            <Typography variant="body2" color="text.secondary">
-              {conversionsReport.recorded
-                ? 'Nothing has been credited to this campaign yet.'
-                : 'No conversions have been attributed to this campaign. A ' +
-                  'form submission, lead, contact or booking is credited to ' +
-                  'the last campaign whose link the visitor clicked, within ' +
-                  `${conversionsReport.windowDays} days — a campaign sent ` +
-                  'before that was recorded will never show a figure here.'}
-            </Typography>
-          )}
-        </Section>
-
-        {report.populations.length ? (
-          <>
-            <Divider />
-            <Section title="Who this went to">
-              {/*
-               * The populations the SEND measured, recorded at send time.
-               *
-               * Not recomputed here, and the note under the heading says so:
-               * consent records change and addresses get suppressed, so
-               * asking the list today produces a number that is true of the
-               * list and false of the campaign.
-               */}
-              <Typography variant="body2" color="text.secondary">
-                {'Measured when this campaign was sent, and stored as it was ' +
-                  'then. These figures describe the send, not the audience ' +
-                  'as it stands today.'}
-              </Typography>
-              <Table size="small">
-                <TableBody>
-                  {report.populations.map((population) => (
-                    <TableRow key={population.id}>
-                      <TableCell>{population.label}</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>
-                        {population.count.toLocaleString()}
-                      </TableCell>
-                      <TableCell align="right">
-                        <Typography variant="caption" color="text.secondary">
-                          {`of ${population.of.toLocaleString()} ${population.ofLabel}`}
-                        </Typography>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </Section>
-          </>
-        ) : null}
-
-        <Divider />
-
-        <Section title="Links">
+        <Section title="Where it sent people">
+          {/*
+            The heading a campaign of several emails carries over the same
+            question, so the two shapes of campaign page read alike. A
+            campaign owns no page — this is where its mail was actually
+            followed to, which is the only account of it the data holds.
+           */}
+          <Typography variant="body2" color="text.secondary">
+            {'The pages this campaign’s links were followed to.'}
+          </Typography>
           {linkReport.rows.length ? (
             <>
               <Table size="small">
@@ -794,6 +608,225 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
             </Typography>
           )}
         </Section>
+
+        <Divider />
+
+        {/*==========================================
+          * THE EMAIL THE FIGURES BELOW CAME FROM — and the hinge between the
+          * two halves of this page.
+          *
+          * This screen is reached at `/marketing/campaigns/{sendId}`, which
+          * is a CAMPAIGN url resolving to a send — the fall-through that keeps
+          * every unsubscribe footer and every pasted report link working. So
+          * a reader arrives from the campaigns table, where the row carries a
+          * "Single send" chip, and everything under this row is a fact about
+          * a message rather than about the campaign.
+          *
+          * Figures with no visible source read as a campaign holding no
+          * emails while reporting real numbers, which is a contradiction
+          * rather than a shortage of detail. Naming the one email — and
+          * saying it IS the campaign, which is what the chip already claims
+          * and what `campaignListRows` already does at read time — is what
+          * makes the page answer the question it raises.
+          *
+          * One row, from the document this card already read: no query, no
+          * second listen, and the two-document cost the header describes is
+          * unchanged.
+          *=========================================*/}
+        <Section title="The email in this campaign">
+          <Stack spacing={1}>
+            <Stack
+              direction="row"
+              spacing={1}
+              useFlexGap
+              sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+            >
+              {/*
+                The MESSAGE's own page, which the Emails console owns — hence
+                the sibling hub rather than this surface's `basePath`. Plain
+                text until that hub resolves: a link with no destination is
+                worse than none, and the subject is what the reader came for
+                either way.
+               */}
+              {emailsHub ? (
+                <AppLink href={`${emailsHub}/messages/${campaignId}`}>
+                  {subject}
+                </AppLink>
+              ) : (
+                <Typography variant="body2">{subject}</Typography>
+              )}
+              {/*
+                What the email is DOING, not the field it stores. One
+                delivering an audience larger than one batch is written back
+                as `scheduled` between runs, so a chip rendering the status
+                said "Scheduled" at the head of a report of five hundred
+                deliveries.
+               */}
+              <Chip
+                size="small"
+                label={campaignSendDisplay(campaign as never).label}
+              />
+              <Chip
+                size="small"
+                variant="outlined"
+                label="Single send"
+                title={
+                  'One email, sent on its own rather than as part of a ' +
+                  'campaign of several. Its report and its unsubscribe links ' +
+                  'are unchanged.'
+                }
+              />
+              <Typography variant="caption" color="text.secondary">
+                {sendTimeMs
+                  ? new Date(sendTimeMs).toLocaleString()
+                  : 'not recorded'}
+              </Typography>
+            </Stack>
+            <Typography variant="caption" color="text.secondary">
+              {'This campaign is one email, so the sections above are what ' +
+                'that one email caused. What follows is the mail itself — ' +
+                'how it was delivered and how it was read. Open the message ' +
+                'for its body and the people it reached.'}
+            </Typography>
+          </Stack>
+        </Section>
+
+        <Divider />
+
+        {/*==========================================
+          * WHAT HAPPENED TO THE MAIL.
+          *
+          * Counts first and rates second, in that order and not the other
+          * way round, because a rate is only readable once you know what it
+          * was taken over — and because the counts are the part that is
+          * always true. Every rate below can be absent; none of these can.
+          *=========================================*/}
+        <Section title="Delivery">
+          <Stack direction="row" spacing={4} useFlexGap sx={{ flexWrap: 'wrap' }}>
+            <Figure
+              label="Addressed"
+              value={report.recipients}
+              note="after the per-send cap"
+            />
+            <Figure
+              label="Sent"
+              value={report.sent}
+              note="accepted by the provider"
+            />
+            <Figure
+              label="Delivered"
+              value={report.delivered}
+              note="accepted by the receiving server"
+            />
+            <Figure label="Bounced" value={report.bounced} note="of sent" />
+            <Figure
+              label="Marked as spam"
+              value={report.complained}
+              note="of delivered"
+            />
+          </Stack>
+        </Section>
+
+        <Divider />
+
+        <Section title="Engagement">
+          {/*
+           * BOTH the event count and the distinct count, side by side.
+           *
+           * `Opens` is every open event — one reader opening four times is
+           * four — and it is the number this product has always shown. It
+           * cannot be a rate numerator: divided by anything it exceeds 100%
+           * the moment somebody reads an email twice. `Readers who opened`
+           * is the distinct count, and it is what the rate below divides.
+           * Showing only one of them would either hide activity or invite a
+           * rate nobody can defend, so both are here with different names.
+           */}
+          <Stack direction="row" spacing={4} useFlexGap sx={{ flexWrap: 'wrap' }}>
+            <Figure
+              label="Opens"
+              value={report.opens}
+              note="every open, repeats included"
+            />
+            <Figure
+              label="Readers who opened"
+              value={report.uniqueOpens}
+              note="distinct recipients"
+            />
+            <Figure
+              label="Clicks"
+              value={report.clicks}
+              note="every click, repeats included"
+            />
+            <Figure
+              label="Readers who clicked"
+              value={report.uniqueClicks}
+              note="distinct recipients"
+            />
+            <Figure
+              label="Unsubscribed"
+              value={report.unsubscribes}
+              note="through this campaign's link"
+            />
+          </Stack>
+        </Section>
+
+        <Divider />
+
+        <Section title="Rates">
+          <Stack spacing={1}>
+            <RateRow label="Delivery rate" rate={report.rates.delivery} />
+            <RateRow label="Open rate" rate={report.rates.open} />
+            <RateRow label="Click rate" rate={report.rates.click} />
+            <RateRow
+              label="Click-to-open rate"
+              rate={report.rates.clickToOpen}
+            />
+            <RateRow label="Bounce rate" rate={report.rates.bounce} />
+            <RateRow label="Complaint rate" rate={report.rates.complaint} />
+            <RateRow
+              label="Unsubscribe rate"
+              rate={report.rates.unsubscribe}
+            />
+          </Stack>
+        </Section>
+
+        {report.populations.length ? (
+          <>
+            <Divider />
+            <Section title="Who this went to">
+              {/*
+               * The populations the SEND measured, recorded at send time.
+               *
+               * Not recomputed here, and the note under the heading says so:
+               * consent records change and addresses get suppressed, so
+               * asking the list today produces a number that is true of the
+               * list and false of the campaign.
+               */}
+              <Typography variant="body2" color="text.secondary">
+                {'Measured when this campaign was sent, and stored as it was ' +
+                  'then. These figures describe the send, not the audience ' +
+                  'as it stands today.'}
+              </Typography>
+              <Table size="small">
+                <TableBody>
+                  {report.populations.map((population) => (
+                    <TableRow key={population.id}>
+                      <TableCell>{population.label}</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>
+                        {population.count.toLocaleString()}
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="caption" color="text.secondary">
+                          {`of ${population.of.toLocaleString()} ${population.ofLabel}`}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Section>
+          </>
+        ) : null}
       </Stack>
     </CardDisplay>
   )
