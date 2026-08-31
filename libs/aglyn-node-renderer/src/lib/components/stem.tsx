@@ -15,8 +15,13 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
-import { ErrorBoundaryComponent } from '@aglyn/shared-ui-jsx'
+// Type-only: this file names `Aglyn.NodeSchema` and nothing else, and a
+// VALUE namespace import of the core barrel is opaque to a bundler — it
+// cannot know which exports are read, so every module the barrel reaches
+// is pinned into the published page's first load.
+import type * as Aglyn from '@aglyn/aglyn'
+// Deep import, NOT the barrel — see the note in `leaf.tsx`.
+import { ErrorBoundaryComponent } from '@aglyn/shared-ui-jsx/components/error-boundary.component'
 import { observer } from 'mobx-react-lite'
 import { forwardRef } from 'react'
 import RendererComponents from '../contexts/renderer-components'
