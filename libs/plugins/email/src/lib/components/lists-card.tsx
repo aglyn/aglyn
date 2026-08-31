@@ -59,6 +59,7 @@ import {
   usePagedCollection,
   useUser,
 } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
 export interface OrgListsCardProps {
   hostId: string
@@ -238,13 +239,9 @@ export function OrgListsCard(props: OrgListsCardProps) {
     // Admin SDK can recursiveDelete, so this goes through the erase route
     // (AGL-946).
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/resources/erase', {
+      const response = await authorizedFetch(user, '/api/resources/erase', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           scope: scope[0],
           scopeId: scope[1],

@@ -50,6 +50,7 @@ import {
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
 import CommerceStatTile from './commerce-stat-tile.component'
 import OrderDetailDialog, {
@@ -287,29 +288,32 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
           globalThis.crypto?.randomUUID?.() ??
           `${Date.now()}-${Math.random().toString(36).slice(2)}`
       }
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/commerce/draft-order', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // Stable across a retry of THIS attempt (AGL-1697), so a
-          // double-click cannot mint two live payment links.
-          'Idempotency-Key': draftAttemptKey.current,
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      const response = await authorizedFetch(
+        user,
+        '/api/commerce/draft-order',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            // Stable across a retry of THIS attempt (AGL-1697), so a
+            // double-click cannot mint two live payment links.
+            'Idempotency-Key': draftAttemptKey.current,
+          },
+          body: JSON.stringify({
+            hostId,
+            productId: draft.productId,
+            variantId: draft.variantId || undefined,
+            quantity: Number(draft.quantity) || 1,
+            email: draft.email || undefined,
+            // A request, never an instruction: the server resolves the
+            // rates for this country AND restricts the payment link's
+            // collectable addresses to it, so declaring one cannot buy a
+            // cheaper zone's rate than the address the buyer then enters
+            // (AGL-1721).
+            ...(draft.shipTo ? { shippingCountry: draft.shipTo } : {}),
+          }),
         },
-        body: JSON.stringify({
-          hostId,
-          productId: draft.productId,
-          variantId: draft.variantId || undefined,
-          quantity: Number(draft.quantity) || 1,
-          email: draft.email || undefined,
-          // A request, never an instruction: the server resolves the rates for
-          // this country AND restricts the payment link's collectable
-          // addresses to it, so declaring one cannot buy a cheaper zone's rate
-          // than the address the buyer then enters (AGL-1721).
-          ...(draft.shipTo ? { shippingCountry: draft.shipTo } : {}),
-        }),
-      })
+      )
       const payload = await response.json()
       if (!response.ok) {
         // The merchant's rates differ by destination, so the server will not

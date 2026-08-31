@@ -16,6 +16,11 @@
  */
 'use client'
 
+import {
+  authorizedFetch,
+  type MaybeTokenSource,
+} from '@aglyn/shared-util-http/authorized-token'
+
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 /**
@@ -50,8 +55,8 @@ export interface UseMediaQuarantineOptions {
   mediaIds: string[]
   orgId?: string | null
   hostId?: string | null
-  /** The signed-in user, for its `getIdToken()`. */
-  user?: unknown
+  /** The signed-in account, which authorizes the probe. */
+  user?: MaybeTokenSource
   /** Test seam — the real one is `fetch`. */
   fetcher?: typeof fetch
 }
@@ -79,21 +84,21 @@ export function useMediaQuarantine(
     const ticket = ++latest.current
     const run = async () => {
       try {
-        const idToken = await (user as { getIdToken?: () => Promise<string> })
-          ?.getIdToken?.()
-        if (!idToken || cancelled) return
-        const response = await (fetcher ?? fetch)('/api/media/quarantine', {
-          method: 'POST',
-          headers: {
-            authorization: `Bearer ${idToken}`,
-            'content-type': 'application/json',
+        if (cancelled) return
+        const response = await authorizedFetch(
+          user,
+          '/api/media/quarantine',
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              orgId: orgId ?? undefined,
+              hostId: hostId ?? undefined,
+              mediaIds: idKey.split(','),
+            }),
           },
-          body: JSON.stringify({
-            orgId: orgId ?? undefined,
-            hostId: hostId ?? undefined,
-            mediaIds: idKey.split(','),
-          }),
-        })
+          { fetchImpl: fetcher },
+        )
         if (!response.ok || cancelled) return
         const payload = (await response.json()) as {
           quarantined?: MediaQuarantineMap

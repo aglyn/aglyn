@@ -35,6 +35,7 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 import { TABLE_PAGE_SIZE_DEFAULT } from '../constants/shared'
 import { useStaffRole } from '../hooks/use-is-staff'
@@ -170,12 +171,11 @@ export default function StaffOrgRefundCard({
   const [busy, setBusy] = useState(false)
 
   const refresh = useCallback(async () => {
-    const idToken = await (user as any)?.getIdToken?.()
-    if (!idToken || !orgId) return
+    if (!orgId) return
     try {
-      const response = await fetch(
+      const response = await authorizedFetch(
+        user,
         `/api/admin/org-refund?orgId=${encodeURIComponent(orgId)}`,
-        { headers: { Authorization: `Bearer ${idToken}` } },
       )
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
@@ -315,13 +315,9 @@ export default function StaffOrgRefundCard({
     if (!confirmed) return
     setBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/admin/org-refund', {
+      const response = await authorizedFetch(user, '/api/admin/org-refund', {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${idToken}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           orgId,
           chargeId: selected.id,

@@ -26,6 +26,7 @@ import {
 import { ACTIVITY_LIST_FILTER_FIELDS } from '../utils/list-filters'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { Chip } from '@mui/material'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ActivityTable from './activity-table.component'
@@ -102,10 +103,6 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
     async (targetPage: number, cursor: string | null) => {
       setLoading(true)
       try {
-        const idToken = await (
-          userRef.current as { getIdToken?: () => Promise<string> } | undefined
-        )?.getIdToken?.()
-        if (!idToken) return
         const url = new URL(endpoint, window.location.origin)
         url.searchParams.set('pageSize', String(pageSize))
         const filter = filterRef.current
@@ -117,9 +114,7 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
         // A narrowed feed is a different query, not a page of the old one, so
         // it carries no cursor — resuming one would page the UNFILTERED feed.
         if (cursor && !filter) url.searchParams.set('cursor', cursor)
-        const response = await fetch(url.toString(), {
-          headers: { Authorization: `Bearer ${idToken}` },
-        })
+        const response = await authorizedFetch(userRef.current, url.toString())
         if (!response.ok) {
           setUnreadable(true)
           setRows([])

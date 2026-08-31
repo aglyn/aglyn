@@ -31,6 +31,7 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import LockdownNotice from '../lockdown-notice.component'
 import { taxExplanation } from '../../utils/tax-explanation'
 
@@ -128,13 +129,9 @@ export default function BillingPlanQuoteComponent({
       setBusy(true)
       setFailed(false)
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/billing/checkout', {
+        const response = await authorizedFetch(user, '/api/billing/checkout', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             action: 'preview',
             orgId,

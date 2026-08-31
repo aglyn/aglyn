@@ -48,6 +48,7 @@ import { useParams } from 'next/navigation'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth, useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
 import CardColumns from '../../../../../components/card-columns.component'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
@@ -422,10 +423,9 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
     let active = true
     void (async () => {
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch(
+        const response = await authorizedFetch(
+          user,
           `/api/admin/users/detail?uid=${encodeURIComponent(uid)}`,
-          { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
         )
         const payload = await response.json()
         if (!active) return
@@ -463,13 +463,9 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
     if (!uid || editBusy) return
     setEditBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/admin/users/manage', {
+      const response = await authorizedFetch(user, '/api/admin/users/manage', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'updateProfile', uid, ...edit }),
       })
       const payload = await response.json().catch(() => ({}))
@@ -494,13 +490,9 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
   // verbatim to know what to do next.
   const callManage = useCallback(
     async (payload: Record<string, unknown>) => {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/admin/users/manage', {
+      const response = await authorizedFetch(user, '/api/admin/users/manage', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ uid, ...payload }),
       })
       const body = await response.json().catch(() => ({}))

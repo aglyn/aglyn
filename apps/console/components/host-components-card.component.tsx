@@ -83,6 +83,7 @@ import { docsHelp } from '../constants/docs-links'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
 import useCurrentOrg from '../hooks/use-current-org'
 import { useLiveArtifactCount } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { hostArtifactQuery } from '../utils/host-artifact-queries'
 import SaveAsTemplateDialog, {
   type SaveAsTemplateSource,
@@ -261,13 +262,9 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
     if (!publisher || !publisher.name.trim() || publisher.busy) return
     setPublisher((prev) => (prev ? { ...prev, busy: true } : prev))
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/marketplace/publish', {
+      const response = await authorizedFetch(user, '/api/marketplace/publish', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           hostId,
           componentId: publisher.id,
@@ -436,7 +433,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
           hostId,
           kind: 'component',
           id: definition.$id,
-          idToken: await (user as any)?.getIdToken?.(),
+          user,
         }))()
       const confirmed = await confirm({
         title: 'Delete this component?',

@@ -35,6 +35,7 @@ import {
 import { useRouter } from 'next/navigation'
 import { useCallback, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { buildRoute, Route } from '../constants/route-links'
 import { useOrgScope } from '../hooks/use-org-scope'
 
@@ -67,13 +68,9 @@ export function CreateHostDialog(props: CreateHostDialogProps) {
     if (!name.trim() || !validSubdomain || busy) return
     setBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/hosts/create', {
+      const response = await authorizedFetch(user, '/api/hosts/create', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           displayName: name.trim(),
           subdomain,

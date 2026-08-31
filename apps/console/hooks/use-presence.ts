@@ -33,6 +33,11 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
+  describeCallFailure,
+  resolveIdToken,
+  type MaybeTokenSource,
+} from '@aglyn/shared-util-http/authorized-token'
+import {
   createAuthInstance,
   useAuthPersistence,
 } from '@aglyn/tenant-feature-instance'
@@ -1201,12 +1206,10 @@ export function usePresence(options: {
       .trim() || 'Someone'
   const photoURL =
     (user as { photoURL?: string } | undefined)?.photoURL || idp.photoURL
-  // The token getter is called inside an effect that must NOT depend on
-  // the user object; a ref keeps the latest without re-triggering.
-  const getIdTokenRef = useRef<(() => Promise<string>) | undefined>(undefined)
-  getIdTokenRef.current = (
-    user as { getIdToken?: () => Promise<string> } | undefined
-  )?.getIdToken?.bind(user)
+  // The account is read inside an effect that must NOT depend on the user
+  // object; a ref keeps the latest without re-triggering.
+  const userRef = useRef<MaybeTokenSource>(undefined)
+  userRef.current = user as MaybeTokenSource
   const [entries, setEntries] = useState<PresenceEntry[]>([])
   const [people, setPeople] = useState<PresencePerson[]>([])
   const [ownOtherSessions, setOwnOtherSessions] = useState(0)
@@ -1262,14 +1265,22 @@ export function usePresence(options: {
           }
           return
         }
-        const idToken = await getIdTokenRef.current?.()
-        if (!idToken) {
+        // Under a deadline: this token is awaited in front of the broker
+        // call, so an unanswered refresh leaves presence in `connecting`
+        // for the life of the page with no fault to show for it.
+        let idToken: string
+        try {
+          idToken = await resolveIdToken(userRef.current)
+        } catch (error) {
           if (active) {
             report(setStatus, setFault, 'error', {
               kind: 'signed-out',
               stage: 'sign-in',
               code: 'no-id-token',
-              message: 'The console session produced no ID token.',
+              message: describeCallFailure(
+                error,
+                'The console session produced no ID token.',
+              ),
             })
           }
           return

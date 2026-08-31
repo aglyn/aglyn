@@ -44,6 +44,7 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import StaffOnly from '../../../../components/staff-only.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import { docsHelp } from '../../../../constants/docs-links'
@@ -133,13 +134,9 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
   })
 
   const refresh = useCallback(async () => {
-    const idToken = await (user as any)?.getIdToken?.()
-    if (!idToken) return
     setLoading(true)
     try {
-      const response = await fetch('/api/admin/coupons', {
-        headers: { Authorization: `Bearer ${idToken}` },
-      })
+      const response = await authorizedFetch(user, '/api/admin/coupons')
       if (response.status === 501) {
         setCoupons([])
         return
@@ -177,16 +174,11 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
     setForm((previous) => ({ ...previous, ...patch }))
 
   const create = async () => {
-    const idToken = await (user as any)?.getIdToken?.()
-    if (!idToken) return
     setBusy(true)
     try {
-      const response = await fetch('/api/admin/coupons', {
+      const response = await authorizedFetch(user, '/api/admin/coupons', {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${idToken}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: form.name.trim() || undefined,
           percentOff: form.kind === 'percent' ? Number(form.percentOff) : undefined,

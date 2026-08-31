@@ -20,6 +20,7 @@
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Alert,
   AlertTitle,
@@ -241,15 +242,9 @@ export function ReportIssueDialog(props: ReportIssueDialogProps) {
     if (!ready || busy) return
     setBusy(true)
     try {
-      const idToken = await (
-        user as { getIdToken?: () => Promise<string> } | undefined
-      )?.getIdToken?.()
-      const response = await fetch('/api/issue-reports', {
+      const response = await authorizedFetch(user, '/api/issue-reports', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           kind,
           summary: summary.trim(),

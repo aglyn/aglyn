@@ -17,6 +17,7 @@
 
 import { useCallback } from 'react'
 import { useUser } from './firebase/firebase-services'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
 /**
  * Parents that carry besigner version history (AGL-1369).
@@ -69,13 +70,9 @@ export function useHostVersionApi(): (
   const { data: user } = useUser()
   return useCallback(
     async ({ hostId, kind, parentId, id, data, sourceVersionId }) => {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/hosts/versions', {
+      const response = await authorizedFetch(user, '/api/hosts/versions', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           hostId,
           kind,

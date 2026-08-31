@@ -103,6 +103,7 @@ import { ICON_VARIANT_SYMBOL_FLAG } from '@aglyn/shared-data-enums'
 import { AppLink, CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Alert,
   Button,
@@ -524,27 +525,20 @@ function AdminAbuseReports() {
     { atMs: number; text: string; confirmed: boolean }[]
   >([])
 
-  const idToken = useCallback(
-    async () => (await (user as any)?.getIdToken?.()) as string | undefined,
-    [user],
-  )
-
   /**
    * Read the queue. Open to every staff role — triage is the larger half of
    * the work and `support` can do all of it without ever learning who filed a
    * report, which is exactly why the route redacts rather than refuses.
    */
   const load = useCallback(async () => {
-    const token = await idToken()
-    if (!token) return
     const params = new URLSearchParams()
     if (statusFilter !== 'all') params.set('status', statusFilter)
     const query = params.toString()
     setBusy(true)
     try {
-      const response = await fetch(
+      const response = await authorizedFetch(
+        user,
         `/api/admin/abuse-reports${query ? `?${query}` : ''}`,
-        { headers: { Authorization: `Bearer ${token}` } },
       )
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
@@ -589,16 +583,16 @@ function AdminAbuseReports() {
       setBusy(false)
       setLoaded(true)
     }
-  }, [idToken, statusFilter, enqueueSnackbar])
+  }, [user, statusFilter, enqueueSnackbar])
 
   const signedInUid = (user as any)?.uid
   useEffect(() => {
     if (!signedInUid) return
     void load()
     // Keyed on WHO is signed in and WHICH filter is chosen, not on `load`.
-    // `useUser` returns a fresh object every render, so `idToken` and
-    // therefore `load` change identity every render — depending on the
-    // callback would re-query the collection on each one.
+    // `useUser` returns a fresh object every render, so `load` changes
+    // identity every render — depending on the callback would re-query the
+    // collection on each one.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signedInUid, statusFilter])
 
@@ -637,25 +631,27 @@ function AdminAbuseReports() {
    */
   const applyStatus = useCallback(
     async (report: AbuseReportRow, draft: StatusDraft) => {
-      const token = await idToken()
-      if (!token) return
       setBusy(true)
       try {
-        const response = await fetch('/api/admin/abuse-reports', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
+        const response = await authorizedFetch(
+          user,
+          '/api/admin/abuse-reports',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: report.id,
+              status: draft.status,
+              resolution: draft.resolution.trim(),
+              ...(draft.repeatInfringerDecision?.trim()
+                ? {
+                    repeatInfringerDecision:
+                      draft.repeatInfringerDecision.trim(),
+                  }
+                : {}),
+            }),
           },
-          body: JSON.stringify({
-            id: report.id,
-            status: draft.status,
-            resolution: draft.resolution.trim(),
-            ...(draft.repeatInfringerDecision?.trim()
-              ? { repeatInfringerDecision: draft.repeatInfringerDecision.trim() }
-              : {}),
-          }),
-        })
+        )
         const payload = await response.json().catch(() => ({}))
         /**
          * The §512(i) gate, answered in place rather than as an error.
@@ -715,7 +711,7 @@ function AdminAbuseReports() {
         setBusy(false)
       }
     },
-    [idToken, enqueueSnackbar, load],
+    [user, enqueueSnackbar, load],
   )
 
   /**
@@ -731,22 +727,21 @@ function AdminAbuseReports() {
    */
   const applyCounterNotice = useCallback(
     async (notice: CounterNoticeRow, draft: CounterNoticeDraft) => {
-      const token = await idToken()
-      if (!token) return
       setBusy(true)
       try {
-        const response = await fetch('/api/admin/abuse-reports', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
+        const response = await authorizedFetch(
+          user,
+          '/api/admin/abuse-reports',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              counterNoticeId: notice.id,
+              counterNoticeStatus: draft.status,
+              resolution: draft.resolution.trim(),
+            }),
           },
-          body: JSON.stringify({
-            counterNoticeId: notice.id,
-            counterNoticeStatus: draft.status,
-            resolution: draft.resolution.trim(),
-          }),
-        })
+        )
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
           throw new Error(payload.error ?? `Failed (${response.status})`)
@@ -791,7 +786,7 @@ function AdminAbuseReports() {
         setBusy(false)
       }
     },
-    [idToken, enqueueSnackbar, load],
+    [user, enqueueSnackbar, load],
   )
 
   const copyUrl = useCallback(

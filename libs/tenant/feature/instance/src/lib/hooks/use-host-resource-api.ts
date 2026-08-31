@@ -17,6 +17,7 @@
 
 import { useCallback } from 'react'
 import { useUser } from './firebase/firebase-services'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
 /**
  * Quota-governed host resource kinds served by `POST /api/hosts/resources`
@@ -72,13 +73,9 @@ export function useHostResourceApi(): (options: {
   const { data: user } = useUser()
   return useCallback(
     async ({ hostId, resource, data, id, parentId }) => {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/hosts/resources', {
+      const response = await authorizedFetch(user, '/api/hosts/resources', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           hostId,
           resource,

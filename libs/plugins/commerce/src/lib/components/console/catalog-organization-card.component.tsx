@@ -49,6 +49,7 @@ import {
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { pluginDocsHelp } from '@aglyn/aglyn'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
 /**
  * How many category documents the card reads.
@@ -542,25 +543,25 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
           fromCache: Boolean(draftId) && collectionsFromCache,
         },
         async () => {
-          const idToken = await (user as any)?.getIdToken?.()
-          const response = await fetch('/api/hosts/collections', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          const response = await authorizedFetch(
+            user,
+            '/api/hosts/collections',
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                hostId,
+                action: draftId ? 'update' : 'create',
+                kind: 'catalog',
+                ...(draftId ? { id: draftId } : {}),
+                data: {
+                  ...data,
+                  name: collectionDraft.name.trim().slice(0, 80),
+                  slug: draftSlug,
+                },
+              }),
             },
-            body: JSON.stringify({
-              hostId,
-              action: draftId ? 'update' : 'create',
-              kind: 'catalog',
-              ...(draftId ? { id: draftId } : {}),
-              data: {
-                ...data,
-                name: collectionDraft.name.trim().slice(0, 80),
-                slug: draftSlug,
-              },
-            }),
-          })
+          )
           const result = await response.json().catch(() => ({}))
           if (!response.ok) {
             throw new Error(result?.error ?? 'Collection save failed')
@@ -621,13 +622,9 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
       // also refuses rather than cascading; the 409's message names the
       // blockers and is surfaced by the catch below.
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/resources/erase', {
+        const response = await authorizedFetch(user, '/api/resources/erase', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             scope: 'hosts',
             scopeId: hostId,

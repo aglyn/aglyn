@@ -21,6 +21,7 @@ import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { ceilingedWindow, useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Alert,
   AlertTitle,
@@ -221,10 +222,9 @@ const AdminMarginUtilization: NextPageWithLayout<Record<string, never>> = () => 
       setLoading(true)
       setError(null)
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch(
+        const response = await authorizedFetch(
+          user,
           `/api/admin/margin-utilization${after ? `?after=${encodeURIComponent(after)}` : ''}`,
-          { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
         )
         const payload = await response.json()
         if (!response.ok) {

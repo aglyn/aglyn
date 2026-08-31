@@ -36,6 +36,7 @@ import {
   activityHref,
   activityPrimaryText,
 } from '@aglyn/aglyn/app-utils/activity-presenter'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 import { TABLE_PAGE_SIZE_DEFAULT } from '../constants/shared'
 import { formatWireTimestamp } from '../utils/staff-timestamps'
@@ -159,10 +160,6 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
       const current = () => requestRef.current === request
       setLoading(true)
       try {
-        const idToken = await (
-          userRef.current as { getIdToken?: () => Promise<string> } | undefined
-        )?.getIdToken?.()
-        if (!idToken) return
         const url = new URL('/api/orgs/activity', window.location.origin)
         url.searchParams.set('orgId', orgId)
         url.searchParams.set('pageSize', String(pageSize))
@@ -172,9 +169,7 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
         if (orgWide) url.searchParams.set('scope', 'org-wide')
         else if (targetId) url.searchParams.set('targetId', targetId)
         if (cursor) url.searchParams.set('cursor', cursor)
-        const response = await fetch(url.toString(), {
-          headers: { Authorization: `Bearer ${idToken}` },
-        })
+        const response = await authorizedFetch(userRef.current, url.toString())
         if (!response.ok) {
           // 403 is the permission answering, and the honest render of it is
           // an empty feed. Anything else means the read broke.

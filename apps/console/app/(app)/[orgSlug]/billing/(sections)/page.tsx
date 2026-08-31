@@ -105,6 +105,7 @@ import {
   subscribeCheckoutPending,
 } from '@aglyn/aglyn/app-utils/platform-ad-conversions'
 import { platformAdvertisingAllowed } from '@aglyn/aglyn/app-utils/platform-visitor-consent'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import LockdownNotice from '../../../../../components/lockdown-notice.component'
 import { useReleaseFlag } from '../../../../../hooks/use-release-flags'
 import { docsHelp } from '../../../../../constants/docs-links'
@@ -381,15 +382,15 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
 
   const subscriptionRequest = useCallback(
     async (body: Record<string, unknown>) => {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/billing/subscription', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      const response = await authorizedFetch(
+        user,
+        '/api/billing/subscription',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orgId, ...body }),
         },
-        body: JSON.stringify({ orgId, ...body }),
-      })
+      )
       const payload = await response.json().catch(() => ({}))
       if (response.status === 501) {
         enqueueSnackbar('Billing is not configured yet — Stripe keys are pending.', {
@@ -628,21 +629,19 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
       // sitting above the cards after the lock lifted would be its own lie.
       setCheckoutLockdown(null)
       try {
-        const idToken = await (user as any)?.getIdToken?.()
         const attemptScope = `${orgId}:${targetPlan}:${interval}`
         const attemptKey =
           checkoutAttempts.current.get(attemptScope) ??
           (globalThis.crypto?.randomUUID?.() ??
             `${Date.now()}-${Math.random().toString(36).slice(2)}`)
         checkoutAttempts.current.set(attemptScope, attemptKey)
-        const response = await fetch('/api/billing/checkout', {
+        const response = await authorizedFetch(user, '/api/billing/checkout', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             // Stable across a retry of THIS attempt (AGL-1697), so a
             // double-click cannot open two subscription checkouts.
             'Idempotency-Key': attemptKey,
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
           },
           // The browser's GA client id rides along so the SERVER-side
           // `purchase` from the Stripe webhook can be attributed to the

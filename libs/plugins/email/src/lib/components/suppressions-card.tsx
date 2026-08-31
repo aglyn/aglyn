@@ -72,6 +72,7 @@ import {
   usePagedCollection,
   useUser,
 } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
 export interface SuppressionsCardProps {
   hostId: string
@@ -308,16 +309,15 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
     if (!typed || busy) return
     setBusy(true)
     try {
-      const idToken = await (user as { getIdToken?: () => Promise<string> })
-        ?.getIdToken?.()
-      const response = await fetch('/api/email/suppression-add', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      const response = await authorizedFetch(
+        user,
+        '/api/email/suppression-add',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hostId, emails: typed, note: addNote.trim() }),
         },
-        body: JSON.stringify({ hostId, emails: typed, note: addNote.trim() }),
-      })
+      )
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
         return void enqueueSnackbar(
@@ -382,16 +382,15 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
   const isBlockedPlatformWide = useCallback(
     async (email: string): Promise<boolean> => {
       try {
-        const idToken = await (user as { getIdToken?: () => Promise<string> })
-          ?.getIdToken?.()
-        const response = await fetch('/api/email/suppression-status', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        const response = await authorizedFetch(
+          user,
+          '/api/email/suppression-status',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ hostId, emails: email }),
           },
-          body: JSON.stringify({ hostId, emails: email }),
-        })
+        )
         if (!response.ok) return false
         const payload = await response.json().catch(() => ({}))
         return ((payload?.platform ?? []) as string[]).length > 0

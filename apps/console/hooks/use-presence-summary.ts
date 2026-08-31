@@ -17,6 +17,10 @@
 'use client'
 
 import { useUser } from '@aglyn/tenant-feature-instance'
+import {
+  authorizedFetch,
+  type MaybeTokenSource,
+} from '@aglyn/shared-util-http/authorized-token'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PresentPerson } from '../app/api/_lib/presence-summary'
 
@@ -67,28 +71,25 @@ export function usePresenceSummary(hostId: string | undefined): {
 } {
   const { data: user } = useUser()
   const [summary, setSummary] = useState<PresenceSummary>({})
-  // The token getter is read through a ref so the polling effect does not
-  // re-arm every time the user object is re-created — the same trap that once
-  // made presence re-mint a token on every render.
-  const getIdTokenRef = useRef<(() => Promise<string>) | undefined>(undefined)
-  getIdTokenRef.current = (
-    user as { getIdToken?: () => Promise<string> } | undefined
-  )?.getIdToken?.bind(user)
+  // The account is read through a ref so the polling effect does not re-arm
+  // every time the user object is re-created — the same trap that once made
+  // presence re-mint a token on every render.
+  const userRef = useRef<MaybeTokenSource>(undefined)
+  userRef.current = user as MaybeTokenSource
   const uid = (user as { uid?: string } | undefined)?.uid
 
   const load = useCallback(async () => {
     if (!hostId) return
     try {
-      const idToken = await getIdTokenRef.current?.()
-      if (!idToken) return
-      const response = await fetch('/api/presence/summary', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${idToken}`,
+      const response = await authorizedFetch(
+        userRef.current,
+        '/api/presence/summary',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hostId }),
         },
-        body: JSON.stringify({ hostId }),
-      })
+      )
       if (!response.ok) {
         // A refusal here is not worth a console error on every list render —
         // it is the ordinary answer for a viewer without access.

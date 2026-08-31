@@ -34,7 +34,7 @@
  */
 
 import { act, fireEvent, render, screen } from '@testing-library/react'
-import { ID_TOKEN_TIMEOUT_MS } from './authorized-token'
+import { ID_TOKEN_TIMEOUT_MS } from '@aglyn/shared-util-http/authorized-token'
 
 jest.setTimeout(30_000)
 

@@ -294,6 +294,7 @@ describe('the funnel never traps a customer who wants out (AGL-1863)', () => {
       subscriptionActive: false,
     })
     await answerSurvey('Something else')
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled())
     const body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body)
     expect(body).toMatchObject({ surface: 'account_delete', reason: 'other' })
     expect(

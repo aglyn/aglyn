@@ -87,6 +87,7 @@ import {
   type MarkdownEditorContext,
   type MarkdownVisualEditorHandle,
 } from '@aglyn/aglyn-markdown-editor'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import EntryAnalyticsCard from '../analytics/entry-analytics-card.component'
 import { useDeclareDocumentSubject } from '../document-subject'
 import EntryCoverImageField from './entry-cover-image-field.component'
@@ -790,13 +791,9 @@ export function EntryDetailPage() {
     }
     setAiBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/ai/assist', {
+      const response = await authorizedFetch(user, '/api/ai/assist', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           // The request NAMES the org it is metered against (AGL-2073) — the
           // route no longer resolves it from the signed-in user, because a

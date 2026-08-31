@@ -27,6 +27,7 @@ import { collection, doc, getCountFromServer, getDoc } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { useFirestore, useScopeTokens, useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { buildRoute, Route } from '../constants/route-links'
 import { useHostId } from '../components/host-id-provider'
 import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
@@ -277,12 +278,9 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
     // orgs that had only spent collaborator seats.
     void (async () => {
       try {
-        const idToken = await (user as { getIdToken?: () => Promise<string> })
-          ?.getIdToken?.()
-        if (!idToken) return
-        const response = await fetch(
+        const response = await authorizedFetch(
+          user,
           `/api/orgs/members?orgId=${encodeURIComponent(orgId)}&counts=1`,
-          { headers: { Authorization: `Bearer ${idToken}` } },
         )
         if (!response.ok) return void clearSeatCache(cacheKey)
         const payload = await response.json().catch(() => null)

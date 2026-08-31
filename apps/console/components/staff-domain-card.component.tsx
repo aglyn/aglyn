@@ -21,6 +21,7 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Alert, Button, Chip, Stack, Typography } from '@mui/material'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 import {
   domainChipFor,
@@ -98,10 +99,9 @@ export function StaffDomainCard(props: StaffDomainCardProps) {
     if (!connected) return void setStatus(null)
     setLoading(true)
     try {
-      const idToken = await (userRef.current as any)?.getIdToken?.()
-      const response = await fetch(
+      const response = await authorizedFetch(
+        userRef.current,
         `/api/domains/status?hostId=${encodeURIComponent(hostId)}`,
-        idToken ? { headers: { Authorization: `Bearer ${idToken}` } } : undefined,
       )
       // Same rule as the customer's card: a status read that did not answer
       // leaves the card saying what it said before, never "broken". A staff
@@ -123,15 +123,15 @@ export function StaffDomainCard(props: StaffDomainCardProps) {
     if (!connected || busy) return
     setBusy(true)
     try {
-      const idToken = await (userRef.current as any)?.getIdToken?.()
-      const response = await fetch('/api/admin/host', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      const response = await authorizedFetch(
+        userRef.current,
+        '/api/admin/host',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hostId, action: 'reattach-domain' }),
         },
-        body: JSON.stringify({ hostId, action: 'reattach-domain' }),
-      })
+      )
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
         return void enqueueSnackbar(payload?.error ?? 'Re-attach failed', {

@@ -22,7 +22,7 @@ import {
   describeCallFailure,
   resolveIdToken,
   type TokenSource,
-} from './authorized-token'
+} from '@aglyn/shared-util-http/authorized-token'
 
 /** What one call answered with. `payload` is `{}` on an unparseable body. */
 export interface SendingApiResult {

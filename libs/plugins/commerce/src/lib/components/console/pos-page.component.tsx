@@ -56,6 +56,7 @@ import {
   useFirestoreCollection,
 } from '@aglyn/tenant-feature-instance'
 import { useOrgPlan } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
 /** How a sale is being settled. Passed to `settle` explicitly (AGL-1682). */
 type Tender = 'cash' | 'link' | 'folio'
@@ -424,13 +425,11 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
         `${Date.now()}-${Math.random().toString(36).slice(2)}`
     }
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/commerce/pos-order', {
+      const response = await authorizedFetch(user, '/api/commerce/pos-order', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Idempotency-Key': attemptKey.current,
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
         },
         body: JSON.stringify({
           hostId,

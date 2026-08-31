@@ -41,6 +41,7 @@
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Alert,
   AlertTitle,
@@ -110,12 +111,10 @@ export function MaintenanceJobCard({
 
   const call = useCallback(
     async (body: Record<string, unknown> | null) => {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch(job.path, {
+      const response = await authorizedFetch(user, job.path, {
         method: body ? 'POST' : 'GET',
         headers: {
           ...(body ? { 'Content-Type': 'application/json' } : {}),
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
         },
         ...(body ? { body: JSON.stringify(body) } : {}),
       })

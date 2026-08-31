@@ -79,6 +79,7 @@ import MediaPickerDialog from '../media/media-picker-dialog.component'
 import RowActionsMenu, {
   type RowActionsMenuItem,
 } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../../constants/docs-links'
 import { buildRoute, Route } from '../../constants/route-links'
 import CreateArtifactDrawer from '../create-artifact-drawer.component'
@@ -195,30 +196,31 @@ export function CollectionEntriesPage() {
       async (event: { target: { value: string } }) => {
         const value = event.target.value
         try {
-          const idToken = await (user as any)?.getIdToken?.()
-          const response = await fetch('/api/hosts/collections', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          const response = await authorizedFetch(
+            user,
+            '/api/hosts/collections',
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                hostId,
+                action: 'templates',
+                id: collectionId,
+                // `null` is the clear — `deleteField()` does not survive
+                // JSON, and an empty string has meant cleared in older
+                // documents too.
+                data:
+                  kind === 'list'
+                    ? { listScreenId: value || null }
+                    : {
+                        entryScreenId: value || null,
+                        // Superseded AGL-105 pointer; clear it so the entry
+                        // select stays the single source of truth.
+                        templateScreenId: null,
+                      },
+              }),
             },
-            body: JSON.stringify({
-              hostId,
-              action: 'templates',
-              id: collectionId,
-              // `null` is the clear — `deleteField()` does not survive JSON,
-              // and an empty string has meant cleared in older documents too.
-              data:
-                kind === 'list'
-                  ? { listScreenId: value || null }
-                  : {
-                      entryScreenId: value || null,
-                      // Superseded AGL-105 pointer; clear it so the entry
-                      // select stays the single source of truth.
-                      templateScreenId: null,
-                    },
-            }),
-          })
+          )
           const result = await response.json().catch(() => ({}))
           if (!response.ok) {
             throw new Error(result?.error ?? 'Template assignment failed')
@@ -349,13 +351,9 @@ export function CollectionEntriesPage() {
     // feedback in this dialog. Rules deny a client create.
     let id: string
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/hosts/collections', {
+      const response = await authorizedFetch(user, '/api/hosts/collections', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(
           collectionCreateBody({ hostId, displayName, slug }),
         ),
@@ -393,15 +391,11 @@ export function CollectionEntriesPage() {
     })
     if (templateBodies.length) {
       try {
-        const idToken = await (user as any)?.getIdToken?.()
         await Promise.all(
           templateBodies.map((body) =>
-            fetch('/api/hosts/collections', {
+            authorizedFetch(user, '/api/hosts/collections', {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-              },
+              headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(body),
             }),
           ),
@@ -478,13 +472,9 @@ export function CollectionEntriesPage() {
     if (!displayName || !slug || editorSlugOwner !== null) return
     setEditorBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/hosts/collections', {
+      const response = await authorizedFetch(user, '/api/hosts/collections', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           hostId,
           action: 'update',
@@ -604,16 +594,12 @@ export function CollectionEntriesPage() {
     const deletedId = selected.$id
     setDeleteBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
       // RecursiveDelete is Admin-SDK-only and the rules deny a client delete of
       // a collection doc (AGL-947), so this goes through the shared erase route
       // — never a hand-rolled loop over `entries`.
-      const response = await fetch('/api/resources/erase', {
+      const response = await authorizedFetch(user, '/api/resources/erase', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           scope: 'hosts',
           scopeId: hostId,

@@ -51,6 +51,7 @@ import {
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
@@ -343,13 +344,11 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
           globalThis.crypto?.randomUUID?.() ??
           `${Date.now()}-${Math.random().toString(36).slice(2)}`
         try {
-          const idToken = await (user as any)?.getIdToken?.()
-          const response = await fetch('/api/bookings/refund', {
+          const response = await authorizedFetch(user, '/api/bookings/refund', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               'Idempotency-Key': attemptKey,
-              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
             },
             body: JSON.stringify({ hostId, bookingId: booking.$id }),
           })

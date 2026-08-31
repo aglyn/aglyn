@@ -25,6 +25,7 @@ import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { isLiveSubscriptionStatus } from '@aglyn/aglyn'
 import { overLimitSummary } from '../../utils/over-limit-summary'
 import { type OrgPlan } from '@aglyn/aglyn'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import DataExportCard from '../data-export-card.component'
 import { RetentionFunnelDialog } from '../billing/retention-funnel.dialog'
 import { docsHelp } from '../../constants/docs-links'
@@ -76,13 +77,9 @@ export function OrgDeleteCard() {
     action: 'request' | 'cancel',
     funnelId?: string | null,
   ) => {
-    const idToken = await (user as any)?.getIdToken?.()
-    const response = await fetch('/api/orgs/delete', {
+    const response = await authorizedFetch(user, '/api/orgs/delete', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         orgId: currentOrg?.$id,
         action,
@@ -132,19 +129,19 @@ export function OrgDeleteCard() {
   const handleDeleteDownsell = async (targetPlan: OrgPlan) => {
     setBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/billing/subscription', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      const response = await authorizedFetch(
+        user,
+        '/api/billing/subscription',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orgId: currentOrg?.$id,
+            action: 'switch',
+            plan: targetPlan,
+          }),
         },
-        body: JSON.stringify({
-          orgId: currentOrg?.$id,
-          action: 'switch',
-          plan: targetPlan,
-        }),
-      })
+      )
       if (!response.ok) {
         enqueueSnackbar('Could not switch plans — nothing has changed.', {
           variant: 'warning',

@@ -49,7 +49,10 @@ jest.mock('firebase/firestore', () => ({
 }))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
-  useUser: () => ({ uid: 'user-1', getIdToken: async () => 'token' }),
+  // `{ data: … }`, which is the shape the real hook answers with. Flattened,
+  // every consumer reads `undefined` for the account and this suite asserts
+  // authorized requests against a double that is signed out.
+  useUser: () => ({ data: { uid: 'user-1', getIdToken: async () => 'token' } }),
 }))
 jest.mock('../hooks/use-org-hosts', () => ({
   useOrgHosts: () => ({ hosts: [] }),

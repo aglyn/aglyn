@@ -15,6 +15,11 @@
  * limitations under the License.
  */
 
+import {
+  authorizedFetch,
+  type MaybeTokenSource,
+} from '@aglyn/shared-util-http/authorized-token'
+
 /**
  * The Support page's HTTP helper, extracted so it can be tested (AGL-1158).
  *
@@ -38,8 +43,13 @@
  */
 
 export interface SupportRequestDeps {
-  /** Resolves the caller's ID token, or nothing when signed out. */
-  getIdToken: () => Promise<string | undefined>
+  /**
+   * The signed-in account, NOT a token the caller resolved. Every call is
+   * authorized from it under a deadline, so a stalled token endpoint cannot
+   * leave a Support page waiting forever, and a call that cannot be
+   * authorized is refused here rather than sent without credentials.
+   */
+  user: MaybeTokenSource
   /** Scopes every call; absent until the org resolves (AGL-1154). */
   orgId?: string
   /** Surfaced to the user. Called at most once per failed request. */
@@ -71,28 +81,29 @@ export async function supportRequest(
   method: string,
   body?: Record<string, unknown>,
 ): Promise<unknown | null> {
-  const { getIdToken, orgId, onError, fetchImpl = fetch } = deps
+  const { user, orgId, onError, fetchImpl } = deps
   try {
-    const idToken = await getIdToken()
     const scoped = scopeToOrg(path, orgId)
     const sendsBody = !BODYLESS.has(method.toUpperCase())
-    const response = await fetchImpl(scoped, {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+    const response = await authorizedFetch(
+      user,
+      scoped,
+      {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        // The `orgId` in the body is belt-and-braces for POSTs (AGL-1147);
+        // the query above is what the routes actually prefer.
+        ...(sendsBody && (body || orgId)
+          ? {
+              body: JSON.stringify({
+                ...(body ?? {}),
+                ...(orgId ? { orgId } : {}),
+              }),
+            }
+          : {}),
       },
-      // The `orgId` in the body is belt-and-braces for POSTs (AGL-1147); the
-      // query above is what the routes actually prefer.
-      ...(sendsBody && (body || orgId)
-        ? {
-            body: JSON.stringify({
-              ...(body ?? {}),
-              ...(orgId ? { orgId } : {}),
-            }),
-          }
-        : {}),
-    })
+      { fetchImpl },
+    )
     const payload = await response.json().catch(() => ({}))
     if (!response.ok) {
       onError(

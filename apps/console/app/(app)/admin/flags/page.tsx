@@ -45,6 +45,7 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import StaffOnly from '../../../../components/staff-only.component'
 import { useIsStaff } from '../../../../hooks/use-is-staff'
@@ -98,13 +99,9 @@ const AdminFlags: NextPageWithLayout<Record<string, never>> = () => {
   const canEdit = role === 'super'
 
   const refresh = useCallback(async () => {
-    const idToken = await (user as any)?.getIdToken?.()
-    if (!idToken) return
     setLoading(true)
     try {
-      const response = await fetch('/api/admin/flags', {
-        headers: { Authorization: `Bearer ${idToken}` },
-      })
+      const response = await authorizedFetch(user, '/api/admin/flags')
       if (!response.ok) throw new Error(`Load failed (${response.status})`)
       const payload = await response.json()
       setRows(payload.flags ?? [])
@@ -131,16 +128,11 @@ const AdminFlags: NextPageWithLayout<Record<string, never>> = () => {
   }
 
   const save = async (row: FlagRow) => {
-    const idToken = await (user as any)?.getIdToken?.()
-    if (!idToken) return
     setSavingKey(row.key)
     try {
-      const response = await fetch('/api/admin/flags', {
+      const response = await authorizedFetch(user, '/api/admin/flags', {
         method: 'PUT',
-        headers: {
-          Authorization: `Bearer ${idToken}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           key: row.key,
           enabled: row.value.enabled,

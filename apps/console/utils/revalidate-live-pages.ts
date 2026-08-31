@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+
 /**
  * Drop the live site's cached HTML after a publish (AGL-1150).
  *
@@ -140,14 +142,9 @@ export async function revalidateLivePages(
   const { user, hostId, screenId, layoutId, componentId } = options
   if (!hostId || (!screenId && !layoutId && !componentId)) return null
   try {
-    const idToken = await user?.getIdToken?.()
-    if (!idToken) return null
-    const response = await fetch('/api/screens/revalidate', {
+    const response = await authorizedFetch(user, '/api/screens/revalidate', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${idToken}`,
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         hostId,
         ...(screenId ? { screenId } : {}),

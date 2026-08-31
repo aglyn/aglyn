@@ -41,6 +41,7 @@ import {
   useFirestoreDoc,
   useUser,
 } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { Alert, Box, Button, Stack, TextField, Typography } from '@mui/material'
 import { collection, doc, limit, orderBy, query } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -125,13 +126,9 @@ export function SubmissionReply(props: SubmissionReplyProps) {
     if (busy) return
     setBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/inbox/reply', {
+      const response = await authorizedFetch(user, '/api/inbox/reply', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           hostId,
           submissionId: submission.$id,

@@ -70,6 +70,7 @@ import ListTable, {
   ListRowActions,
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { checkOrgQuota } from '../../constants/entitlements'
 import { TABLE_ROW_HEIGHT } from '../../constants/shared'
@@ -374,15 +375,15 @@ export function HostTemplatesCard({
       }
       setUpdating(template.$id)
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/marketplace/install-template', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        const response = await authorizedFetch(
+          user,
+          '/api/marketplace/install-template',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ listingId, hostId }),
           },
-          body: JSON.stringify({ listingId, hostId }),
-        })
+        )
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
           // An installs lock is not a broken template (AGL-1532).

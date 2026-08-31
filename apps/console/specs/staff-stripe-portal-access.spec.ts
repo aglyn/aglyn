@@ -63,7 +63,12 @@ describe('the staff door into a customer’s Stripe portal', () => {
   it('the staff org page asks the subscription route for a portal session', () => {
     const source = read(STAFF_ORG_PAGE)
     expect(source).toContain("action: 'portal'")
-    expect(source).toContain("fetch('/api/billing/subscription'")
+    // `authorizedFetch`, not a bare `fetch`: the route answers 401 without a
+    // bearer token, so a header assembled conditionally would send an
+    // operator's portal request anonymously and report it as a refusal.
+    expect(source).toMatch(
+      /authorizedFetch\(\s*user,\s*'\/api\/billing\/subscription'/,
+    )
     expect(source).toContain('Open Stripe billing portal')
   })
 

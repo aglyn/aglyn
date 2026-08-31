@@ -19,6 +19,7 @@
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Alert,
   Button,
@@ -121,13 +122,11 @@ export default function StaffEmailSuppressionsCard() {
    */
   const pagination = useStaffListPagination<PlatformSuppression>({
     fetchPage: async (cursor, _pageIndex, pageSize) => {
-      const idToken = await (user as { getIdToken?: () => Promise<string> })
-        ?.getIdToken?.()
       const params = new URLSearchParams({ limit: String(pageSize) })
       if (cursor) params.set('cursor', cursor)
-      const response = await fetch(
+      const response = await authorizedFetch(
+        user,
         `/api/admin/emails/suppressions?${params.toString()}`,
-        { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
       )
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
@@ -152,16 +151,15 @@ export default function StaffEmailSuppressionsCard() {
       if (busy) return
       setBusy(true)
       try {
-        const idToken = await (user as { getIdToken?: () => Promise<string> })
-          ?.getIdToken?.()
-        const response = await fetch('/api/admin/emails/suppressions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        const response = await authorizedFetch(
+          user,
+          '/api/admin/emails/suppressions',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, note: note.trim() }),
           },
-          body: JSON.stringify({ email, note: note.trim() }),
-        })
+        )
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
           return void enqueueSnackbar(

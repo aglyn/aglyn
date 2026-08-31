@@ -39,6 +39,7 @@ import {
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { Grid, InputAdornment } from '@mui/material'
 import { deleteField } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
@@ -914,19 +915,19 @@ export function HostSettingsScopeProvider({
       const displayNameChanged =
         typeof fields.displayName === 'string' &&
         fields.displayName !== data?.displayName
-      const idToken = await (user as any)?.getIdToken?.()
 
       // A duplicate display name is allowed, so this check stays advisory.
       if (displayNameChanged) {
         try {
-          const response = await fetch('/api/hosts/validate-name', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          const response = await authorizedFetch(
+            user,
+            '/api/hosts/validate-name',
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ hostId, displayName: fields.displayName }),
             },
-            body: JSON.stringify({ hostId, displayName: fields.displayName }),
-          })
+          )
           const validation = response.ok ? await response.json() : null
           if (validation?.displayNameCollision) {
             enqueueSnackbar(
@@ -949,12 +950,9 @@ export function HostSettingsScopeProvider({
       let renamedTo: string | null = null
       if (subdomainChanged) {
         try {
-          const response = await fetch('/api/hosts/rename', {
+          const response = await authorizedFetch(user, '/api/hosts/rename', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ hostId, subdomain: fields.subdomain }),
           })
           const payload = await response.json().catch(() => null)
@@ -1020,12 +1018,9 @@ export function HostSettingsScopeProvider({
           // every member's hostMemberships row (AGL-844). Fire-and-forget: a
           // miss self-heals on the next membership change or backfill.
           if (displayNameChanged) {
-            void fetch('/api/hosts/sync-memberships', {
+            void authorizedFetch(user, '/api/hosts/sync-memberships', {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-              },
+              headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ hostId }),
             }).catch(() => undefined)
           }
