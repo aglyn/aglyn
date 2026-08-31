@@ -903,6 +903,20 @@ function tablesWithoutFooters(): string[] {
  */
 const NOT_A_LIST: Array<[string, string]> = [
   [
+    'apps/console/app/(app)/admin/margin-utilization/page.tsx',
+    'Two tables, and neither wants a footer. The first is one row per BAND — ' +
+      'a fixed vocabulary, the same rows on every load, so a pager would ' +
+      'offer to page a constant. The second IS a window over a growing ' +
+      'collection, and its pager is the SCAN: the route pages an id-ordered ' +
+      'walk with a truncation probe and the page reports the cursor as a ' +
+      'banner plus a "scan the next page" control, because four Firestore ' +
+      'reads per organization is a cost that must be asked for rather than ' +
+      'spent by a footer click. A second pager over rows already in memory ' +
+      'would page a slice while the collection continued past it — the exact ' +
+      'shape this file exists to stop — and the rendered window is bounded ' +
+      'by `ceilingedWindow`, which discloses when it bit.',
+  ],
+  [
     'libs/plugins/email/src/lib/components/list-import-drawer.tsx',
     'The import drawer’s two tables are BOUNDED READOUTS of one act, not ' +
       'windows onto a collection. The first shows at most ten of the sampled ' +
@@ -1360,6 +1374,10 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // the same version history the component and layout ones do, read the
     // same unordered way, and is blocked on the same `createdAt` audit.
     expect(OWES_A_FOOTER).toHaveLength(15)
+    // 36 since the staff margin surface arrived: one table is a fixed band
+    // taxonomy, and the other is windowed by an explicit SCAN rather than by
+    // a footer, because its rows cost four Firestore reads each.
+    //
     // 35 since the Emails surface grew a page per message, per template and
     // per topic and an import drawer on an audience's own page, and since the
     // forms catalog joined them: `FORMS_MAX_PER_HOST` is a flat platform
@@ -1371,7 +1389,7 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // not follow the size of the file it describes — which is the property
     // this list exists to record. Raised here deliberately rather than by a
     // walk that quietly stopped reaching a file.
-    expect(NOT_A_LIST).toHaveLength(35)
+    expect(NOT_A_LIST).toHaveLength(36)
   })
 })
 

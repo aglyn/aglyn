@@ -39,7 +39,12 @@ interface UsageBudgetState {
   month: string
   spend: {
     meteredUsd: number
-    assistUsd: number
+    /**
+     * Assist consumption in CREDITS, never dollars — the stored figure behind
+     * it is our provider bill, and the server converts it before it crosses
+     * the wire. A dollar field here would be an invitation to render one.
+     */
+    assistCredits: number
     totalUsd: number
     assistBilled: boolean
     /** FALSE when no rollup exists for this month yet. */
@@ -315,15 +320,33 @@ export default function BillingUsageBudgetCardComponent({
             <strong>${spend.totalUsd.toFixed(2)}</strong> of metered usage so
             far in {state.month}
             {spend.assistBilled
-              ? ` — $${spend.meteredUsd.toFixed(
-                  2,
-                )} usage, $${spend.assistUsd.toFixed(2)} Assist`
+              ? ` — $${spend.meteredUsd.toFixed(2)} usage`
               : ''}
             {budgetSet && amountUsd != null
               ? ` of your $${amountUsd.toFixed(0)} budget`
               : ''}
             .
           </Typography>
+          {/*
+            ASSIST CONSUMPTION, IN CREDITS AND ON ITS OWN LINE.
+
+            A customer seeing what they consumed is the point of this card. What
+            they may not see is what it cost US — the figure behind a credit is
+            `assistUsage/{month}.estCostUsd`, our provider bill at the serving
+            model's list rates, and publishing it would put our model choice and
+            our margin on a billing page.
+
+            Separate from the dollar sentence above rather than appended to it,
+            because credits are not money and a clause reading "$4.10 usage,
+            2,300 Assist" invites exactly the arithmetic the unit change exists
+            to prevent.
+          */}
+          {spend.assistCredits > 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              {spend.assistCredits.toLocaleString()} Assist credits used this
+              month.
+            </Typography>
+          ) : null}
           {budgetSet ? (
             <LinearProgress
               variant="determinate"

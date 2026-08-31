@@ -130,15 +130,6 @@ const firestoreHandle: any = {
 }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
-  /*
-   * The campaign-touch lookup, answering "no campaign".
-   *
-   * The double was missing it entirely, so the newsletter route threw on its
-   * first line and the enrollment under test never ran. Answering null is the
-   * honest default for a request carrying no touch, and it is what keeps this
-   * file about enrollment rather than about attribution.
-   */
-  resolveCampaignTouch: async () => null,
   // The real resolution's shape: an org that declared no pooling resolves
   // every site to a group of ONE — the narrow answer, which is the direction
   // a wrong group may fail in.
