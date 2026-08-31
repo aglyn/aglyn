@@ -641,12 +641,24 @@ function capped(rows: string[]): { shown: string[]; more: number } {
  * page opens on and the grid is where the dead control lives — a reader who
  * met the explanation in only one of them would meet the control in the other.
  */
-function PlanWithoutSubscriptionNotice({ label }: { label: string }) {
+function PlanWithoutSubscriptionNotice({
+  label,
+  /*
+   * The grid's action carries `mb: 1.5` and the focused view's does not, so a
+   * single hard-coded offset cannot sit correctly under both. `-1` cancels
+   * most of the grid's gap; the focused view asks for a positive one instead
+   * of inheriting a pull-up meant for a margin it does not have.
+   */
+  topGap = -1,
+}: {
+  label: string
+  topGap?: number
+}) {
   return (
     <Typography
       variant="caption"
       color="text.secondary"
-      sx={{ display: 'block', mt: -1, mb: 1.5 }}
+      sx={{ display: 'block', mt: topGap, mb: 1.5 }}
     >
       {`Your organization is on ${label} with no subscription behind it, so ` +
         'there is nothing here to cancel or move down from. Reach out and we ' +
@@ -922,7 +934,13 @@ function FocusedTierView(props: {
                   </Button>
                 )}
 
-                {role === 'recommended' && subscribeCollectsNotice ? (
+                {/* Every rung whose button opens the subscribe flow, not
+                    only the emphasized one. Business is as much an upgrade as
+                    Pro, and meeting an address form unannounced is the same
+                    small betrayal of a button labelled Upgrade whichever card
+                    it was pressed on. */}
+                {(role === 'recommended' || role === 'higher') &&
+                subscribeCollectsNotice ? (
                   <Typography
                     variant="caption"
                     color="text.secondary"
@@ -938,7 +956,7 @@ function FocusedTierView(props: {
                     nothing for having pressed Compare first. Said here too,
                     once, on the card the sentence is about. */}
                 {role === 'current' && planWithoutSubscription ? (
-                  <PlanWithoutSubscriptionNotice label={label} />
+                  <PlanWithoutSubscriptionNotice label={label} topGap={1} />
                 ) : null}
 
                 <Divider sx={{ my: 1.5 }} />

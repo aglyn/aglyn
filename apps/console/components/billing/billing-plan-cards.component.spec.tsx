@@ -840,6 +840,32 @@ describe('the upgrade path leads (AGL-1864)', () => {
     expect(screen.getAllByRole('button', { name: 'Downgrade' }).length).toBeGreaterThan(0)
   })
 
+  it('EVERY upgrade rung says what the next screen will ask for', () => {
+    /*
+     * The notice was drawn only under the emphasized rung, so the focused
+     * view told a reader pressing "Upgrade to Pro" that a card and an address
+     * would be collected, and told a reader pressing "Upgrade to Business"
+     * nothing — though both open the same flow. The grid already gets this
+     * right for every tier above the current one.
+     */
+    const notice = 'We will ask for a payment method as you go.'
+    renderCards({ plan: 'starter', subscribeCollectsNotice: notice })
+
+    // Starter's focused view is Starter (current), Pro (recommended) and
+    // Business (the rung above that) — so both upgrade cards are on screen.
+    expect(within(cardFor('Pro')).getByText(notice)).toBeTruthy()
+    expect(within(cardFor('Business')).getByText(notice)).toBeTruthy()
+  })
+
+  it('CONTROL: the current plan is not an upgrade and says nothing of the sort', () => {
+    // Without this, drawing the notice on every card would satisfy the case
+    // above while telling somebody already on Starter that a payment method
+    // is about to be collected.
+    const notice = 'We will ask for a payment method as you go.'
+    renderCards({ plan: 'starter', subscribeCollectsNotice: notice })
+    expect(within(cardFor('Starter')).queryByText(notice)).toBeNull()
+  })
+
   it('the TOP self-serve tier recommends nothing — there is nothing above it', () => {
     renderGrid({ plan: 'agency' })
     expect(screen.queryByText('Recommended')).toBeNull()
