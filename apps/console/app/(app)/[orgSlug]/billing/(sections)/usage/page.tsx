@@ -22,6 +22,7 @@ import {
   ORG_BILLING_SUBCOLLECTION,
   type AglynOrgBilling,
 } from '@aglyn/aglyn'
+import { Box, CircularProgress } from '@mui/material'
 import { CardDisplay, GridItems } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useMemo } from 'react'
@@ -54,7 +55,7 @@ import useOrgPermissions from '../../../../../../hooks/use-org-permissions'
 const BillingUsageSection: NextPageWithLayout<Record<string, never>> = () => {
   const firestore = useFirestore()
   const { data: user } = useUser()
-  const { org: orgDoc, orgId } = useCurrentOrg()
+  const { org: orgDoc, orgId, ready: orgReady } = useCurrentOrg()
   const { can } = useOrgPermissions()
   // Org-scoped (AGL-236): the meters must count this workspace's hosts, not
   // every host the viewer can reach.
@@ -72,6 +73,25 @@ const BillingUsageSection: NextPageWithLayout<Record<string, never>> = () => {
     () => mergeOrgBillingOverOrg(orgDoc as Record<string, unknown>, orgBilling),
     [orgDoc, orgBilling],
   )
+
+  /*
+   * Hold until the org is known. The plan defaults to `free` while the read
+   * is in flight, and every meter below divides by that plan's quotas — so
+   * the loading window would draw a paying workspace its own usage against
+   * Free allowances, which is AGL-1422 wearing a different hat.
+   *
+   * The section layout holds too, and duplicating a HOLD is safe in a way
+   * duplicating a grant never is: the worst case is a spinner nobody needed.
+   * This copy keeps the invariant where the value is actually read, so a
+   * refactor of the layout cannot take it away without anyone noticing.
+   */
+  if (!orgReady) {
+    return (
+      <Box sx={{ p: 2 }}>
+        <CircularProgress size={24} />
+      </Box>
+    )
+  }
 
   return (
     <GridItems
