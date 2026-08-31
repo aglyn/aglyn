@@ -281,7 +281,7 @@
               "name": "Frame",
               "cells": [
                 "For high-growth stores and multi-site teams that have outgrown Business.",
-                "15 sites · 75 collaborators · 1% commerce fees · 300k API requests/mo · 25,000 products per site · 2.5 TB bandwidth"
+                "15 sites · 75 collaborators · 1% commerce fees · 300k API requests/mo · 25,000 products per site · 700 GB bandwidth"
               ]
             },
             {
@@ -1257,9 +1257,9 @@
                 "+$10/mo",
                 "+$8/mo",
                 "+$5/mo",
-                "+$5/mo",
-                "+$4/mo",
-                "+$3/mo",
+                "+$8/mo",
+                "+$8/mo",
+                "+$8/mo",
                 "Custom"
               ]
             },
@@ -1310,12 +1310,12 @@
               "name": "row",
               "cells": [
                 "Extra data storage",
-                "$0.25 / GB-mo",
-                "$0.25 / GB-mo",
-                "$0.25 / GB-mo",
-                "$0.25 / GB-mo",
-                "$0.25 / GB-mo",
-                "$0.25 / GB-mo",
+                "$0.36 / GB-mo",
+                "$0.36 / GB-mo",
+                "$0.36 / GB-mo",
+                "$0.36 / GB-mo",
+                "$0.36 / GB-mo",
+                "$0.36 / GB-mo",
                 "Custom"
               ]
             },
@@ -1342,8 +1342,8 @@
                 "+$0.75 / 1k",
                 "+$0.50 / 1k",
                 "+$0.40 / 1k",
-                "+$0.25 / 1k",
-                "+$0.20 / 1k",
+                "+$0.40 / 1k",
+                "+$0.40 / 1k",
                 "Custom"
               ]
             }
@@ -1439,7 +1439,7 @@
               "figmaNodeId": "92:140",
               "name": null,
               "cells": [
-                "Online payments run on Stripe; Aglyn’s transaction fee (see the comparison table) applies on top of Stripe’s processing fees. Dataset storage over your included amount is billed separately at $0.25 / GB-mo."
+                "Online payments run on Stripe; Aglyn’s transaction fee (see the comparison table) applies on top of Stripe’s processing fees. Dataset storage over your included amount is billed separately at $0.36 / GB-mo."
               ]
             }
           ]
