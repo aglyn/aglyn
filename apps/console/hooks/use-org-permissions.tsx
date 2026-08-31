@@ -28,7 +28,13 @@ import {
   type OrgPermissions,
 } from '@aglyn/aglyn'
 import { doc, getDoc } from 'firebase/firestore'
-import { useEffect, useState } from 'react'
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import useOrgScope from './use-org-scope'
 import firestoreOneShotRetry from '../utils/firestore-one-shot-retry'
@@ -132,7 +138,7 @@ export type OrgPermissionsStatus = 'loading' | 'ready' | 'error'
  *
  * Callers that would otherwise spin forever should read `errored` and say so.
  */
-export function useOrgPermissions(): {
+export interface OrgPermissionsValue {
   /** The legacy six PLUS every registered plugin key (AGL-2474). */
   permissions: OrgPermissions & Record<string, boolean>
   /** Granular permission check (AGL-243). */
@@ -148,7 +154,38 @@ export function useOrgPermissions(): {
   /** The member read failed. `granted`/`permissions` are all false. */
   errored: boolean
   status: OrgPermissionsStatus
-} {
+}
+
+/**
+ * The value a mounted `OrgPermissionsProvider` shares, or `null` where none
+ * is mounted.
+ *
+ * `null` and NOT an inert default, which is the one difference from
+ * `DashboardWidgetPrefsContext` next door — and the difference matters.
+ * A missing widget-preference provider can answer "no preferences", because
+ * that context can only ever SUBTRACT cards; every value it could take is a
+ * safe one. A permission context has no such value: an inert default is an
+ * authorization answer, and whichever way it leaned it would be wrong for
+ * somebody. So the absence is representable, and the hook below resolves for
+ * itself rather than reading a made-up answer out of a constant.
+ */
+export const OrgPermissionsContext = createContext<OrgPermissionsValue | null>(
+  null,
+)
+
+/**
+ * The member read itself — TWO `getDoc`s, and the reason the provider exists.
+ *
+ * `enabled: false` makes it completely inert: the effect returns before it
+ * touches Firestore, so an instance whose answer is coming from the context
+ * costs nothing. It is a parameter rather than two hooks because hooks cannot
+ * be called conditionally, and `useOrgPermissions` has to decide at render
+ * time whether a provider is above it.
+ *
+ * NOT exported. A second caller is a second pair of reads, which is the whole
+ * defect; the only legitimate one is `OrgPermissionsProvider`.
+ */
+function useOrgPermissionsResolution(enabled: boolean): OrgPermissionsValue {
   const { data: user } = useUser()
   const firestore = useFirestore()
   const { currentOrg, loading: orgsLoading } = useOrgScope()
@@ -176,6 +213,9 @@ export function useOrgPermissions(): {
   })
 
   useEffect(() => {
+    // FIRST, before any state is touched. A disabled instance must not read,
+    // must not publish, and must not race the provider's own resolution.
+    if (!enabled) return
     const uid = (user as any)?.uid as string | undefined
     if (orgsLoading || !uid) return
     if (!orgId) {
@@ -254,7 +294,7 @@ export function useOrgPermissions(): {
     return () => {
       active = false
     }
-  }, [user, firestore, orgId, orgsLoading])
+  }, [enabled, user, firestore, orgId, orgsLoading])
 
   return {
     // PLUGIN KEYS RIDE ALONG (AGL-2474), in the server resolver's own order:
@@ -287,6 +327,66 @@ export function useOrgPermissions(): {
     errored: state.status === 'error',
     status: state.status,
   }
+}
+
+/**
+ * Resolves the reader's permissions ONCE for the whole console and shares
+ * them with every consumer.
+ *
+ * Mounted inside `OrgScopeProvider` in `firebase-app.layout.tsx`, above both
+ * route groups, so every surface reads the same answer from the same pair of
+ * document reads. Before this, `useOrgPermissions` did its own two `getDoc`s
+ * per call site: the host dashboard alone mounts four widget slots and a
+ * customize dialog, and gating those slots on permission — which they were
+ * not — would have made a five-instance page a ten-read page.
+ *
+ * This is the shape `DashboardWidgetPrefsProvider` already uses one file over
+ * for the identical problem on the identical surface, for the identical
+ * reason. The one thing it does differently is the missing-provider case:
+ * see `OrgPermissionsContext`.
+ *
+ * Sharing rather than DEFERRING is the deliberate part. The standing rule is
+ * that an expensive read needs an ask and not a mount — but a permission is
+ * an input to rendering correctly, not a payload some surface happens to
+ * want, so there is nothing to defer it behind. The read was always going to
+ * happen on every console page; what it must not do is happen once per
+ * consumer.
+ */
+export function OrgPermissionsProvider(props: { children?: ReactNode }) {
+  const value = useOrgPermissionsResolution(true)
+  return (
+    <OrgPermissionsContext.Provider value={value}>
+      {props.children}
+    </OrgPermissionsContext.Provider>
+  )
+}
+OrgPermissionsProvider.displayName = 'OrgPermissionsProvider'
+
+/**
+ * The reader's permissions in the current org workspace.
+ *
+ * Unchanged as an API and unchanged in what it answers — the doc block above
+ * `useOrgPermissionsResolution` is still the contract. What changed is WHERE
+ * the answer comes from: under the provider it is read from context and costs
+ * nothing, and the local resolution is inert.
+ *
+ * Off the provider it resolves for itself, exactly as it always did. That
+ * fallback is not a hedge, it is the correct answer to a real case: this hook
+ * is rendered in unit tests, in error boundaries above the provider, and
+ * potentially in a subtree some future layout mounts outside it. The
+ * alternative — throwing, or handing back a made-up default — trades a shared
+ * read for either a crash or a wrong authorization answer, and the fallback
+ * costs a reader nothing they were not already paying before this change.
+ *
+ * The saving therefore rests on the provider actually being mounted above the
+ * console, which `plugin-widget-slot-permission-gate.spec.tsx` asserts against
+ * the layout source rather than trusting.
+ */
+export function useOrgPermissions(): OrgPermissionsValue {
+  const shared = useContext(OrgPermissionsContext)
+  // Called unconditionally, as hooks must be, and told whether to do anything.
+  const own = useOrgPermissionsResolution(shared === null)
+  return shared ?? own
 }
 
 export default useOrgPermissions
