@@ -66,15 +66,82 @@ export interface CampaignEmailTemplate {
   subject?: string
 }
 
+/**
+ * WHERE THE MESSAGE COMES FROM — one source, named.
+ *
+ * A union rather than two optional fields, and that is the whole point. The
+ * design already supplies BOTH parts an inbox receives: `renderEmailHtml`
+ * returns the HTML and a plain-text rendering of the same nodes, links
+ * included. So on a designed send a typed BODY — the whole message of a
+ * plain-text email — has no part to occupy, and the earlier shape, which
+ * accepted both and read the body only when no template was given, computed it
+ * and threw it away without saying so.
+ *
+ * What an author actually wants there is named for its job instead:
+ * `plainText`, the text HALF of a designed message, generated from the design
+ * by default. That is a different offer from reinterpreting a body, and
+ * deliberately — see the field.
+ *
+ * Two members and not three: a saved TEMPLATE is a besigner email screen, the
+ * same document the design picker offers, so "designed" and "from a template"
+ * name one thing.
+ *
+ * With the two collapsed into a union the discard is not merely refused, it is
+ * unsayable: the designed branch has no `body` in scope to drop, and a caller
+ * holding both has to decide which it means before it can call at all.
+ */
+export type CampaignEmailContent =
+  | {
+      /** Written in the composer; the HTML part is synthesized from it. */
+      mode: 'text'
+      /** The plain-text body, after any A/B variant override. */
+      body: string
+    }
+  | {
+      /** Built in the besigner; the HTML part comes from the nodes. */
+      mode: 'design'
+      template: CampaignEmailTemplate
+      /**
+       * The author's OWN plain-text part, replacing the one the design
+       * generates. Absent — not empty — means generated.
+       *
+       * Presence is the whole signal, which is why this is a separate
+       * optional field rather than a flag beside a string: a flag and a value
+       * are two things that can disagree, and the disagreement is invisible.
+       *
+       * Worth having because the generated text is good but not perfect. A
+       * button and a product keep their URLs in it; an inline link inside an
+       * `emailRichtext` block does not — the synthesis strips tags, so the
+       * href goes with them. An author who cares about what a text-only
+       * reader can actually follow needs a way to say so.
+       */
+      plainText?: string
+    }
+
+/** Which of the two ways one email is written. */
+export type CampaignMessageMode = CampaignEmailContent['mode']
+
+/**
+ * Which mode a stored email is in, from the one field that decides it.
+ *
+ * Naming a template IS being designed — there is no separate flag, and adding
+ * one would be a second answer to drift from this one. Read by the composer,
+ * by the surfaces that describe a message and by the send path, so a record
+ * cannot be shown as one thing and mailed as another.
+ */
+export function campaignMessageMode(record: {
+  templateScreenId?: string | null
+}): CampaignMessageMode {
+  return record.templateScreenId ? 'design' : 'text'
+}
+
 export interface CampaignEmailRenderInput {
   /** The campaign's subject, after any A/B variant override. */
   subject: string
-  /** The campaign's plain-text body, after any A/B variant override. */
-  body: string
+  /** The one source this message is written from. */
+  content: CampaignEmailContent
   /** The composer's preview line; overrides the template's own. */
   preheader?: string
-  /** Set for a designed campaign; the body becomes the text fallback. */
-  template?: CampaignEmailTemplate | null
   /** Who this copy is being personalized for. */
   recipient: MergeTagRecipient
   /** The site's own public origin, absolutizing media and product links. */
@@ -92,6 +159,62 @@ export interface RenderedCampaignEmail {
   html: string
   /** The plain-text part, ending in the opt-out line. */
   text: string
+  /**
+   * The message's own plain text, WITHOUT the opt-out line.
+   *
+   * What the composer fills an authored plain-text part from. Prefilling from
+   * `text` would fold this send's footer into the stored override, and the
+   * next send would append a second one — so the two are reported apart
+   * rather than the caller trying to trim one off the other.
+   */
+  messageText: string
+}
+
+/**
+ * WHERE A DESIGNED EMAIL'S PLAIN-TEXT PART COMES FROM, and whether it still
+ * describes the design.
+ *
+ * Two facts a composer has to state rather than imply. An authored text part
+ * is not overwritten when the design is edited — losing somebody's writing
+ * because they touched the canvas afterwards is not a trade worth making —
+ * which leaves the other half of the problem: an override written against a
+ * design that has since changed says something the HTML no longer says, and
+ * nothing about it is visible. A value that cannot be read scores the same as
+ * one that is absent, which is the shape of the defect this whole area is
+ * being fixed for.
+ *
+ * So the design's VERSION is recorded beside the override, and the two are
+ * compared here. Pure, and read by the composer, so the notice a merchant sees
+ * and the state the record is in cannot disagree.
+ */
+export interface CampaignPlainTextState {
+  /** `authored` when somebody wrote it; `generated` from the design. */
+  source: 'generated' | 'authored'
+  /**
+   * An authored part written against a design that has moved since.
+   *
+   * False for a generated part, which cannot go stale — it is derived from
+   * whatever the design says at send time — and false when either version is
+   * unknown, because an unanswerable question must not render as a warning.
+   */
+  stale: boolean
+}
+
+export function campaignPlainTextState(
+  record: {
+    plainText?: string | null
+    /** The design version the override was written against. */
+    plainTextVersionId?: string | null
+  },
+  /** The design's version as it stands now. */
+  currentVersionId?: string | null,
+): CampaignPlainTextState {
+  if (!record.plainText?.trim()) return { source: 'generated', stale: false }
+  const written = record.plainTextVersionId ?? ''
+  return {
+    source: 'authored',
+    stale: Boolean(written && currentVersionId && written !== currentVersionId),
+  }
 }
 
 /**
@@ -107,12 +230,12 @@ export interface RenderedCampaignEmail {
 export function renderCampaignEmail(
   input: CampaignEmailRenderInput,
 ): RenderedCampaignEmail {
-  const { template, recipient, siteBase = '', hostId, unsubscribeUrl } = input
+  const { content, recipient, siteBase = '', hostId, unsubscribeUrl } = input
+  const template = content.mode === 'design' ? content.template : null
   const subject = resolveMergeTags(
     input.subject || template?.subject || '',
     recipient,
   )
-  const body = resolveMergeTags(input.body ?? '', recipient)
   const preheader = input.preheader?.trim() || template?.preheader || ''
   const name = (recipient.name ?? '').trim()
   /*
@@ -127,13 +250,19 @@ export function renderCampaignEmail(
     ? `\n\n—\nChoose which emails you get, or unsubscribe: ${unsubscribeUrl}`
     : ''
 
-  if (!template) {
-    const text = `${body}${unsubscribeLine}`
-    return { subject, html: renderTextEmailHtml(text, subject, preheader), text }
+  if (content.mode === 'text') {
+    const messageText = resolveMergeTags(content.body, recipient)
+    const text = `${messageText}${unsubscribeLine}`
+    return {
+      subject,
+      html: renderTextEmailHtml(text, subject, preheader),
+      text,
+      messageText,
+    }
   }
 
   const rendered = renderEmailHtml({
-    nodes: template.nodes as never,
+    nodes: content.template.nodes as never,
     // Besigner maps are rooted at `_@_`, not the renderer's default `root`:
     // rendering one as `root` finds no root and emits an empty 600px shell.
     rootId: EMAIL_NODE_ROOT_ID,
@@ -153,7 +282,7 @@ export function renderCampaignEmail(
       unsubscribeUrl: unsubscribeUrl ?? '',
     },
     products: Object.fromEntries(
-      Object.entries(template.products ?? {}).map(([id, product]) => [
+      Object.entries(content.template.products ?? {}).map(([id, product]) => [
         id,
         product && {
           ...product,
@@ -164,10 +293,28 @@ export function renderCampaignEmail(
       ]),
     ),
   })
+  /*
+   * THE PLAIN-TEXT PART: the design's own, unless somebody wrote one.
+   *
+   * Merge tags are resolved in an authored part exactly as they are in a
+   * plain-text campaign's body — a text part that ships `{{firstName|there}}`
+   * literally is worse than the generated one it replaced. The design's own
+   * text arrives already substituted, through `renderEmailHtml`'s `merge` map.
+   *
+   * The opt-out line is appended either way, and it is a BARE URL rather than
+   * an anchor: markup is invisible in a text part, so a link a text-only
+   * reader can copy is the only form that works. It is the one part of the
+   * footer an author cannot write away.
+   */
+  const authored = content.plainText?.trim()
+  const messageText = authored
+    ? resolveMergeTags(authored, recipient)
+    : rendered.text
   return {
     subject,
     html: rendered.html,
-    text: `${rendered.text}${unsubscribeLine}`,
+    text: `${messageText}${unsubscribeLine}`,
+    messageText,
   }
 }
 

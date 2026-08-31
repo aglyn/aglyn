@@ -285,6 +285,14 @@ export class CampaignSendDeferredError extends CampaignSendError {
 export interface CampaignSendOptions {
   hostId: string
   subject: string
+  /**
+   * The MESSAGE of a plain-text email — what recipients read, and what the
+   * HTML part is synthesized from.
+   *
+   * Not read on a designed send, where the nodes are the message. The route
+   * refuses a request carrying both rather than accepting one and dropping it,
+   * which is what it used to do.
+   */
   body: string
   audience: string
   segmentId?: string
@@ -309,10 +317,23 @@ export interface CampaignSendOptions {
   experimentId?: string
   /**
    * Designed email template (AGL-349): screen id of a besigner email
-   * document. When set, the render pipeline produces the HTML body and
-   * `body` becomes the plain-text fallback.
+   * document, which is what makes this a DESIGNED send.
+   *
+   * The nodes produce both parts an inbox receives — the HTML and a plain-text
+   * rendering of the same design — so `body` has no job here and is not read.
+   * `plainText` below is the one thing an author may substitute.
    */
   templateScreenId?: string
+  /**
+   * The author's own PLAIN-TEXT PART for a designed email.
+   *
+   * Empty means the design generates it, which is the default and what every
+   * designed campaign did before this existed. Read only on the designed
+   * path: a plain-text campaign's text part IS its body, and a second string
+   * claiming to be the text part beside it would be the two-sources problem
+   * again under a new name.
+   */
+  plainText?: string
   /**
    * The sender's DISPLAY NAME for this campaign, overriding the org's
    * branding default.
@@ -1813,6 +1834,22 @@ export async function performCampaignSend(
   const template = options.templateScreenId
     ? await loadEmailTemplate(hostId, options.templateScreenId)
     : null
+  /**
+   * The message's SOURCE, settled once for the whole send.
+   *
+   * A designed email supplies both parts an inbox receives from the same
+   * nodes, so `options.body` has nowhere to go on this branch and the union
+   * gives it nowhere to be put. Deciding it here rather than inside the
+   * per-recipient loop is also what stops the two ever disagreeing across a
+   * batch.
+   */
+  const designedContent = template
+    ? ({
+        mode: 'design',
+        template,
+        ...(options.plainText ? { plainText: options.plainText } : {}),
+      } as const)
+    : null
 
   // Email A/B (AGL-255): each recipient deterministically lands in a
   // variant whose subject/body overrides apply; sends count as that
@@ -2137,9 +2174,20 @@ export async function performCampaignSend(
        */
       const message = renderCampaignEmail({
         subject: variant?.subject?.trim() || subject,
-        body: variant?.body?.trim() || body,
         preheader: options.preheader,
-        template,
+        /*
+         * ONE SOURCE, chosen once for the whole send.
+         *
+         * `designedContent` is resolved above the loop because the mode is a
+         * property of the EMAIL, not of the recipient. A designed message
+         * carries no body at all — the union has no field for one — so the
+         * variant's body override is only reachable on the text branch, which
+         * is the only branch where a body is the message.
+         */
+        content: designedContent ?? {
+          mode: 'text',
+          body: variant?.body?.trim() || body,
+        },
         /*
          * The persona where a proof named one, and the actual recipient
          * everywhere else.
@@ -2471,6 +2519,13 @@ export async function performCampaignSend(
       ...(options.templateScreenId
         ? { templateScreenId: options.templateScreenId }
         : {}),
+      /*
+       * The plain-text part somebody wrote, recorded beside the design it
+       * belongs to. `storedSendOptionsFrom` reads it back, so a follow-up
+       * mails the same text half the first batch did rather than regenerating
+       * one from a design that may have moved since.
+       */
+      ...(options.plainText ? { plainText: options.plainText } : {}),
       // What this send actually left as, recorded beside the copy: the report
       // is read months later, by which time the org's branding default may be
       // a different name than the one this campaign went out under.
@@ -3066,6 +3121,13 @@ function storedSendOptionsFrom(
     audience,
     ...(emails?.length ? { emails } : {}),
     ...(templateScreenId ? { templateScreenId } : {}),
+    /*
+     * The plain-text part somebody wrote, read back with everything else the
+     * record holds. A follow-up or a `sendNow` that re-generated it from the
+     * design instead would mail a different text part to the second half of
+     * an audience than the first half received.
+     */
+    ...optional('plainText'),
     ...optional('segmentId'),
     ...optional('listId'),
     ...optional('topicId'),
@@ -3140,6 +3202,22 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
   const audience = String(req.body?.audience ?? 'leads')
   const templateScreenId = String(req.body?.templateScreenId ?? '')
   /*
+   * THE AUTHOR'S OWN PLAIN-TEXT PART, for a designed email.
+   *
+   * Capped like the body and NOT flattened like the header fields beside it:
+   * this is a message part rather than a header value, so its line breaks are
+   * the formatting a text-only reader gets rather than an injection shape.
+   */
+  const plainText = String(req.body?.plainText ?? '')
+    .trim()
+    .slice(0, 20000)
+  /*
+   * Which design version that part was written against, so a composer can say
+   * when it has gone stale. Validated as a document id because it is stored
+   * and compared against one.
+   */
+  const plainTextVersionId = String(req.body?.plainTextVersionId ?? '')
+  /*
    * The composer's sender fields, and the one rule they all obey: a value a
    * merchant typed reaches a MIME header, so it is flattened to a single line
    * before it goes anywhere. `applyFromName` quotes the display name and
@@ -3189,6 +3267,9 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
   const senderId = String(req.body?.senderId ?? '')
   if (senderId && !isDocumentId(senderId)) {
     return res.status(400).json({ error: 'Invalid sender' })
+  }
+  if (plainTextVersionId && !isDocumentId(plainTextVersionId)) {
+    return res.status(400).json({ error: 'Invalid design version' })
   }
   // The campaign this send joins. Validated as a document id here because it
   // is stored and later queried as one.
@@ -3247,6 +3328,59 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
     action !== 'update'
   if (mails && !templateScreenId && (!subject || !body)) {
     return res.status(400).json({ error: 'Missing subject or body' })
+  }
+  /*==========================================
+   * ONE MESSAGE, ONE SOURCE.
+   *
+   * `body` is the MESSAGE of a plain-text email — the thing recipients read,
+   * from which the HTML part is synthesized. `plainText` is the text HALF of a
+   * designed email, whose message lives in the nodes. Two strings of plain
+   * text, two different jobs, and each belongs to exactly one mode.
+   *
+   * A `body` arriving beside a template used to be accepted, computed for
+   * merge tags and then dropped: `renderCampaignEmail` read it only when no
+   * template was given, and both gates — this one and the composer's — passed
+   * on EITHER input, so a merchant who picked a design and also wrote a
+   * message lost the message with nothing said.
+   *
+   * It is refused rather than quietly reinterpreted as the text part. Copy
+   * written as "the message" is not copy reviewed as "what a text-only reader
+   * gets", and promoting it would start mailing unreviewed text out of records
+   * that already exist. What the author wants is offered explicitly instead —
+   * `plainText`, which they can see, edit and preview — and the composer
+   * shows a stranded body rather than adopting it.
+   *
+   * `plainText` without a template is refused for the mirror reason: a
+   * plain-text email's text part IS its body, so a second string claiming to
+   * be the text part is the same two-sources problem under a new name.
+   *
+   * Only the actions that carry COMPOSED copy are checked. `preview`
+   * substitutes placeholder copy and reads neither; `followUp`, `sendNow`,
+   * `update` and `cancel` mail what the record already holds, and a record
+   * written before this rule may legitimately still carry an inert body
+   * beside its template — refusing those would strand an existing draft over
+   * a field its send has never read.
+   *=========================================*/
+  const carriesComposedCopy =
+    action === 'send' ||
+    action === 'schedule' ||
+    action === 'draft' ||
+    action === 'test' ||
+    action === 'renderPreview'
+  if (carriesComposedCopy && templateScreenId && body) {
+    return res.status(400).json({
+      error:
+        'This email is built from a design, which carries its own message. ' +
+        'Write the plain-text version instead, or switch this email to ' +
+        'plain text.',
+    })
+  }
+  if (carriesComposedCopy && !templateScreenId && plainText) {
+    return res.status(400).json({
+      error:
+        'A plain-text email has no separate text version — what you type is ' +
+        'the message.',
+    })
   }
   if (!['leads', 'members', 'manual', 'segment', 'list'].includes(audience)) {
     return res.status(400).json({ error: 'Unknown audience' })
@@ -3380,6 +3514,10 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
         audience: 'manual',
         emails: [testEmail],
         templateScreenId: templateScreenId || undefined,
+        // A proof mails the message as composed, the text half included:
+        // checking the plain-text version in a real inbox is one of the three
+        // things a proof is asked.
+        ...(plainText ? { plainText } : {}),
         fromName,
         replyTo,
         // The proof leaves as the sender the composer has chosen, so what a
@@ -3435,9 +3573,14 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
        */
       const rendered = renderCampaignEmail({
         subject,
-        body,
         preheader,
-        template,
+        content: template
+          ? {
+              mode: 'design',
+              template,
+              ...(plainText ? { plainText } : {}),
+            }
+          : { mode: 'text', body },
         recipient: {
           email: String(decoded.email ?? ''),
           name: String((decoded as Record<string, unknown>)['name'] ?? ''),
@@ -3638,7 +3781,32 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
           ...(req.body?.experimentId
             ? { experimentId: String(req.body.experimentId) }
             : {}),
-          ...(templateScreenId ? { templateScreenId } : {}),
+          /*
+           * THE TEMPLATE IS CLEARED WHEN THERE IS NONE, not merely omitted.
+           *
+           * `templateScreenId` is the field that decides which of the two ways
+           * this email is written — see `campaignMessageMode` — so leaving it
+           * standing under `merge: true` is not a stale pointer, it is the
+           * wrong mode. A draft moved from a design to a typed message would
+           * be stored carrying BOTH, reopen as designed, and mail the design
+           * while the message the merchant just wrote sat unread on the
+           * record. The same discard this pair of fields already produced
+           * once, arriving by the save path instead of the send path.
+           */
+          templateScreenId:
+            templateScreenId || firebaseAdmin.firestore.FieldValue.delete(),
+          /*
+           * The authored plain-text part, and the design version it was
+           * written against. Cleared together and for the same reason the
+           * template is: an override left standing under `merge: true` after
+           * somebody switched this email to plain text would be a text part
+           * for a design the record no longer names, and the staleness the
+           * version id exists to expose would be measured against nothing.
+           */
+          plainText: plainText || firebaseAdmin.firestore.FieldValue.delete(),
+          plainTextVersionId:
+            (plainText && plainTextVersionId) ||
+            firebaseAdmin.firestore.FieldValue.delete(),
           // The composer's sender fields ride on the stored campaign so the
           // scheduled processor mails the message that was composed rather
           // than one that reverts to the org's branding defaults.
@@ -3872,6 +4040,7 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
       campaignId: sendId,
       experimentId: String(req.body?.experimentId ?? ''),
       templateScreenId: templateScreenId || undefined,
+      ...(plainText ? { plainText } : {}),
       fromName,
       replyTo,
       ...(senderId ? { senderId } : {}),

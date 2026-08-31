@@ -39,6 +39,9 @@
  */
 
 
+/** The `FieldValue.delete()` marker, resolved by the document double below. */
+const DELETE_SENTINEL = '__delete__'
+
 const store = new Map<string, Record<string, any>>()
 const sent: Array<Record<string, any>> = []
 
@@ -79,7 +82,20 @@ function docRef(path: string): any {
     },
     set: async (value: Record<string, any>) => {
       reject()
-      store.set(path, { ...(store.get(path) ?? {}), ...value })
+      /*
+       * `FieldValue.delete()` REMOVES the field rather than storing a marker.
+       * A double that merged the sentinel in as a value would leave the field
+       * set to it — which is exactly the leftover the delete exists to clear,
+       * so a double that kept it would pass a test the product fails.
+       */
+      const merged: Record<string, any> = {
+        ...(store.get(path) ?? {}),
+        ...value,
+      }
+      for (const [field, entry] of Object.entries(value)) {
+        if (entry === DELETE_SENTINEL) delete merged[field]
+      }
+      store.set(path, merged)
     },
     collection: (name: string) => collectionRef(`${path}/${name}`),
   }
@@ -173,6 +189,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       FieldValue: {
         increment: (value: number) => ({ increment: value }),
         serverTimestamp: () => 'server-timestamp',
+        // Recognized by the document double above, which removes the field
+        // rather than storing this marker.
+        delete: () => DELETE_SENTINEL,
       },
       FieldPath: { documentId: () => '__name__' },
     },

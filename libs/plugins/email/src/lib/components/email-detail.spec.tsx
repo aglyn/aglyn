@@ -107,12 +107,12 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 }))
 
 /**
- * The composer, recorded rather than mounted.
+ * The composer, recorded if anything ever mounts one.
  *
- * The email's page mounts it for a draft or a scheduled email, and the real
- * one opens four listens of its own against hooks no tree here provides. What
- * belongs in this file is WHETHER the page offers a composer for a given
- * state, not what the composer does once it has one.
+ * It no longer belongs on this page at all — writing an email is its own
+ * route — and this mock is what proves it rather than assuming it. A page
+ * that quietly regained the form would set `composerProps` here and fail the
+ * tests below instead of passing them by never importing the module.
  */
 jest.mock('./campaign-composer', () => ({
   __esModule: true,
@@ -136,7 +136,7 @@ jest.mock('./email-recipients-card', () => ({
   default: () => <div>{'Recipients'}</div>,
 }))
 
-/** The props the composer was mounted with, or null while it is not. */
+/** The props the composer was mounted with — always null on this page now. */
 let composerProps: Record<string, any> | null = null
 
 const EMAIL_PATH = 'hosts/site1/campaigns/msg_1'
@@ -753,35 +753,121 @@ describe('editing what a sent email says was delivered', () => {
     expect(body.templateScreenId).toBeUndefined()
   })
 
-  it('never offers the composer on a sent email', async () => {
+  it('mounts NO composer, whatever state the email is in', async () => {
     /*
-     * The copy of a delivered message is not editable from anywhere, and the
-     * composer is the only thing on this page that could change it.
+     * The page is a REPORT. Writing the email is its own route, so this page
+     * carries the form for no state at all — not for a draft either, which is
+     * the state it used to carry it for.
      */
     await renderEmail()
     expect(composerProps).toBeNull()
-  })
 
-  it('never offers the composer on a canceled email', async () => {
     await renderEmail({ email: { status: 'canceled' } })
+    expect(composerProps).toBeNull()
+
+    await renderEmail({
+      email: { status: 'draft', sentAt: undefined, stats: undefined },
+    })
     expect(composerProps).toBeNull()
   })
 
-  it('DOES offer the composer on a draft, seeded from the record', async () => {
+  it('links a draft to where it is written', async () => {
     await renderEmail({
       email: {
         status: 'draft',
         sentAt: undefined,
         stats: undefined,
         subject: 'Half written',
-        body: 'So far',
       },
     })
-    expect(composerProps).not.toBeNull()
-    // The record's own id, so Save and Send land on THIS email rather than
-    // minting a second one.
-    expect(composerProps?.campaignId).toBe('msg_1')
-    expect(composerProps?.initial?.subject).toBe('Half written')
+    const link = screen.getByText('Write this email').closest('a')
+    // The record's own id, so the composer that opens edits THIS email rather
+    // than minting a second one.
+    expect(link?.getAttribute('href')).toBe(
+      '/acme/hosts/site/emails/messages/msg_1/edit',
+    )
+  })
+
+  it('withholds the link on a SENT email, whose copy is in inboxes', async () => {
+    await renderEmail()
+    expect(screen.queryByText('Write this email')).toBeNull()
+  })
+
+  it('withholds the link while a send is part way through', async () => {
+    /*
+     * A send between batches is stored as `scheduled`, so the stored status
+     * alone would offer a way to rewrite the copy of a message that is
+     * already reaching inboxes.
+     */
+    await renderEmail({
+      email: {
+        status: 'scheduled',
+        sentAt: undefined,
+        sendAtMs: 2_000_000_000_000,
+        stats: { sent: 500, audienceSize: 3000 },
+        resume: { remaining: 2500, batch: 1, nextAtMs: 2_000_000_000_000 },
+      },
+    })
+    expect(screen.getByText(/Sending — reached 500/)).toBeTruthy()
+    expect(screen.queryByText('Write this email')).toBeNull()
+  })
+})
+
+describe('a plain-text version that no longer matches its design', () => {
+  /*==========================================
+   * WHY THIS PAGE AND NOT ONLY THE COMPOSER.
+   *
+   * An email can be scheduled and then have its design edited. Nobody opens
+   * the composer again, and the send goes out with a styled half and a text
+   * half that disagree — which nothing anywhere says. This page is where a
+   * scheduled email is looked at, so this is where the fact has to be
+   * readable. The template in this fixture is at `ver_1`.
+   *=========================================*/
+  const SCHEDULED = {
+    status: 'scheduled',
+    sentAt: undefined,
+    sendAtMs: 2_000_000_000_000,
+    stats: undefined,
+  }
+
+  it('says so on an email that has not gone out yet', async () => {
+    await renderEmail({
+      email: {
+        ...SCHEDULED,
+        plainText: 'Written a while ago',
+        plainTextVersionId: 'ver_0',
+      },
+    })
+
+    expect(screen.getByText(/design has been edited since/i)).toBeTruthy()
+  })
+
+  it('says nothing when the two still describe each other', async () => {
+    // The control: same shape, current version, no warning — so the notice is
+    // a comparison rather than a banner that appears whenever a text part
+    // exists.
+    await renderEmail({
+      email: {
+        ...SCHEDULED,
+        plainText: 'Written against this very design',
+        plainTextVersionId: 'ver_1',
+      },
+    })
+
+    expect(screen.queryByText(/design has been edited since/i)).toBeNull()
+  })
+
+  it('says nothing on a SENT email, whose text part is history', async () => {
+    // A design edited after the mail went is expected, and the preview's own
+    // note already says the design is drawn as it stands today.
+    await renderEmail({
+      email: {
+        plainText: 'Written a while ago',
+        plainTextVersionId: 'ver_0',
+      },
+    })
+
+    expect(screen.queryByText(/design has been edited since/i)).toBeNull()
   })
 })
 

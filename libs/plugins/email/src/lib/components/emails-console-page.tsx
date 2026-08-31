@@ -23,6 +23,7 @@ import {
 } from '@aglyn/aglyn'
 import { HubSections } from '@aglyn/shared-ui-next'
 import { useMemo, type ReactNode } from 'react'
+import EmailComposeCard from './email-compose-card'
 import EmailDetail from './email-detail'
 import EmailScreensCard from './email-screens-card'
 import EmailTemplateDetail from './email-template-detail'
@@ -79,11 +80,32 @@ function sectionBody(
        * a section of the Marketing console.
        */
       return detail[0] ? (
-        <EmailDetail
-          hostId={hostId}
-          emailId={detail[0]}
-          basePath={basePath}
-        />
+        /*
+         * `…/{emailId}/edit` WRITES the email; `…/{emailId}` reports on it.
+         *
+         * Two jobs with two shapes: a form with one irreversible button, and
+         * a page of figures each over its own denominator. Carrying both on
+         * one route made the reader of a report scroll past a composer. It is
+         * also the grammar the audiences section already reads by — a record,
+         * and `…/edit` beside it — and creating stays a drawer on the list.
+         *
+         * Ternaries rather than a lookup for the reason this whole function
+         * is shaped that way: only the branch taken is constructed, so the
+         * composer's listens are not paid for by somebody reading a report.
+         */
+        detail[1] === 'edit' ? (
+          <EmailComposeCard
+            hostId={hostId}
+            emailId={detail[0]}
+            basePath={basePath}
+          />
+        ) : (
+          <EmailDetail
+            hostId={hostId}
+            emailId={detail[0]}
+            basePath={basePath}
+          />
+        )
       ) : (
         <EmailsListCard hostId={hostId} basePath={basePath} />
       )

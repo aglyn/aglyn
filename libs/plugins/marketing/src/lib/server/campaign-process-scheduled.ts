@@ -118,6 +118,13 @@ export const campaignProcessScheduledHandler: PluginApiHandler = async (
           campaignId: campaignDoc.id,
           experimentId: String(data['experimentId'] ?? ''),
           templateScreenId: String(data['templateScreenId'] ?? '') || undefined,
+          /*
+           * The plain-text part the author wrote, read back with the design.
+           * Regenerating one from the design at cron time would mail a text
+           * half the merchant never reviewed — and a different one from what
+           * the composer previewed and the test send delivered.
+           */
+          plainText: String(data['plainText'] ?? '') || undefined,
           // The sender fields the composer chose. Read back rather than
           // resolved fresh: a scheduled campaign must go out as the message
           // that was composed, not as whatever the org's branding says an hour

@@ -155,6 +155,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       FieldValue: {
         increment: (value: number) => ({ increment: value }),
         serverTimestamp: () => 'server-timestamp',
+        /*
+         * The real Admin SDK REMOVES the field. This double stores a flat
+         * object, so `undefined` is the closest thing to absence it has —
+         * which is exactly what the assertions on a cleared field read.
+         */
+        delete: () => undefined,
       },
       FieldPath: { documentId: () => '__name__' },
     },
@@ -575,5 +581,343 @@ describe('the composer’s sender fields', () => {
     expect(stored?.fromName).toBe('Acme Studio')
     expect(stored?.replyTo).toBe('hello@acme.example')
     expect(stored?.preheader).toBe('Half price until Sunday')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// One message, one source — and the plain-text half a designed email sends
+// ---------------------------------------------------------------------------
+
+/**
+ * A designed email in the store: a `kind: 'email'` screen and the version
+ * holding its nodes. The first version is a plain map, which is the one shape
+ * `decodeStoredNodes` reads without decompressing.
+ */
+function seedDesign(versionId = 'ver_1') {
+  store.set(`hosts/${HOST}/screens/scr_1`, {
+    kind: 'email',
+    displayName: 'Spring promo',
+    versionId,
+  })
+  store.set(`hosts/${HOST}/screens/scr_1/versions/${versionId}`, {
+    nodes: {
+      '_@_': { componentId: 'emailSection', nodes: ['t1', 'b1'] },
+      t1: {
+        componentId: 'emailText',
+        props: { children: 'Designed copy here' },
+      },
+      b1: {
+        componentId: 'emailButton',
+        props: { children: 'Shop now', href: 'https://acme.example/sale' },
+      },
+    },
+  })
+}
+
+describe('what a campaign is written from', () => {
+  /*==========================================
+   * THE DEFECT: a merchant who picked a design AND wrote a message lost the
+   * message.
+   *
+   * `renderCampaignEmail` read the typed body only when no template was given,
+   * and both gates in front of it accepted EITHER input — so the request went
+   * through carrying two sources and one was silently discarded.
+   *
+   * The renderer can no longer be handed both; these are about the boundary,
+   * which is what holds for every caller that is not the composer.
+   *=========================================*/
+
+  it('refuses a design and a typed message in the same request', async () => {
+    seedDesign()
+    const result = await post({
+      hostId: HOST,
+      subject: 'Spring sale',
+      body: 'Ends Sunday',
+      templateScreenId: 'scr_1',
+      audience: 'leads',
+    })
+
+    // A 400 and NOT a 200 that mailed the design. The difference between the
+    // two is the whole defect: one tells the merchant, the other does not.
+    expect(result.status).toBe(400)
+    expect(sent).toEqual([])
+  })
+
+  it('refuses a text version on an email that has no design', async () => {
+    // The mirror: a plain-text email's text part IS its body.
+    const result = await post({
+      hostId: HOST,
+      subject: 'Spring sale',
+      body: 'Ends Sunday',
+      plainText: 'Ends Sunday, really',
+      audience: 'leads',
+    })
+
+    expect(result.status).toBe(400)
+    expect(sent).toEqual([])
+  })
+
+  it('refuses the pair on a DRAFT too, which is where copy is stored', async () => {
+    seedDesign()
+    const result = await post({
+      hostId: HOST,
+      action: 'draft',
+      campaignId: 'msg_1',
+      subject: 'Spring sale',
+      body: 'Ends Sunday',
+      templateScreenId: 'scr_1',
+    })
+
+    expect(result.status).toBe(400)
+    expect(store.get(`hosts/${HOST}/campaigns/msg_1`)).toBeUndefined()
+  })
+
+  it('mails a plain-text campaign from the typed body, with an HTML part', async () => {
+    const result = await post({
+      hostId: HOST,
+      subject: 'Spring sale',
+      body: 'Ends Sunday',
+      audience: 'leads',
+    })
+
+    expect(result.status).toBe(200)
+    expect(String(sent[0].text)).toContain('Ends Sunday')
+    /*
+     * A message with no HTML part has no anchors, so its links are inert and
+     * click tracking has nothing to rewrite — every such send reports a
+     * structurally zero click rate. The synthesis is what stops that.
+     */
+    expect(String(sent[0].html)).toContain('Ends Sunday')
+  })
+
+  it('mails a designed campaign from the design, in both parts', async () => {
+    seedDesign()
+    const result = await post({
+      hostId: HOST,
+      subject: 'Spring sale',
+      templateScreenId: 'scr_1',
+      audience: 'leads',
+    })
+
+    expect(result.status).toBe(200)
+    expect(String(sent[0].html)).toContain('Designed copy here')
+    expect(String(sent[0].text)).toContain('Designed copy here')
+    // A button keeps its destination in the text half, which is the only half
+    // a text-only reader can act on.
+    expect(String(sent[0].text)).toContain('https://acme.example/sale')
+  })
+
+  it('leaves a text-only reader a usable unsubscribe address', async () => {
+    /*
+     * Compliance, and the one thing markup cannot do here: an anchor is
+     * invisible in a text part, so the opt-out has to be the bare URL.
+     */
+    seedDesign()
+    await post({
+      hostId: HOST,
+      subject: 'Spring sale',
+      templateScreenId: 'scr_1',
+      audience: 'leads',
+    })
+
+    expect(String(sent[0].text)).toMatch(/unsubscribe: https?:\/\/\S+/i)
+    expect(String(sent[0].text)).not.toContain('<a ')
+  })
+
+  it('THE CONTROL: the source decides, and one path is not always taken', async () => {
+    /*==========================================
+     * Every test above passes against a route that ignored the source and
+     * always took one path — the plain-text ones against a text-only route,
+     * the designed ones against a design-only one. This is the pair that does
+     * not: the same subject and the same site, differing only in whether a
+     * design was named, asserted to mail two different messages with neither
+     * one's copy appearing in the other.
+     *=========================================*/
+    seedDesign()
+    await post({
+      hostId: HOST,
+      subject: 'Spring sale',
+      body: 'Typed copy here',
+      audience: 'leads',
+    })
+    const asText = { ...sent[0] }
+    sent.length = 0
+
+    await post({
+      hostId: HOST,
+      subject: 'Spring sale',
+      templateScreenId: 'scr_1',
+      audience: 'leads',
+    })
+    const asDesign = { ...sent[0] }
+
+    expect(String(asText.text)).toContain('Typed copy here')
+    expect(String(asText.text)).not.toContain('Designed copy here')
+    expect(String(asDesign.text)).toContain('Designed copy here')
+    expect(String(asDesign.text)).not.toContain('Typed copy here')
+    expect(asText.html).not.toBe(asDesign.html)
+  })
+})
+
+describe('the plain-text half a designed email sends', () => {
+  it('generates it from the design when nobody wrote one', async () => {
+    seedDesign()
+    await post({
+      hostId: HOST,
+      subject: 'Spring sale',
+      templateScreenId: 'scr_1',
+      audience: 'leads',
+    })
+
+    expect(String(sent[0].text)).toContain('Designed copy here')
+  })
+
+  it('mails the one somebody wrote, instead of the generated one', async () => {
+    seedDesign()
+    await post({
+      hostId: HOST,
+      subject: 'Spring sale',
+      templateScreenId: 'scr_1',
+      plainText: 'Sale ends Sunday: https://acme.example/sale',
+      audience: 'leads',
+    })
+
+    expect(String(sent[0].text)).toContain('Sale ends Sunday')
+    expect(String(sent[0].text)).not.toContain('Designed copy here')
+    // And it changes nothing about the styled half.
+    expect(String(sent[0].html)).toContain('Designed copy here')
+  })
+
+  it('resolves merge tags in it', async () => {
+    // A text part shipping `{{firstName|there}}` literally is worse than none.
+    seedDesign()
+    await post({
+      hostId: HOST,
+      subject: 'Spring sale',
+      templateScreenId: 'scr_1',
+      plainText: 'Hello {{firstName|there}} — the sale ends Sunday.',
+      audience: 'leads',
+    })
+
+    expect(String(sent[0].text)).toContain('Hello Dana')
+    expect(String(sent[0].text)).not.toContain('{{firstName')
+  })
+
+  it('records it, so a follow-up mails the same text half', async () => {
+    seedDesign()
+    const result = await post({
+      hostId: HOST,
+      subject: 'Spring sale',
+      templateScreenId: 'scr_1',
+      plainText: 'Sale ends Sunday.',
+      audience: 'leads',
+    })
+
+    const stored = store.get(`hosts/${HOST}/campaigns/${result.body.campaignId}`)
+    expect(stored?.plainText).toBe('Sale ends Sunday.')
+  })
+
+  it('stores it on a draft with the design version it was written against', async () => {
+    seedDesign()
+    await post({
+      hostId: HOST,
+      action: 'draft',
+      campaignId: 'msg_1',
+      subject: 'Spring sale',
+      templateScreenId: 'scr_1',
+      plainText: 'Sale ends Sunday.',
+      plainTextVersionId: 'ver_1',
+    })
+
+    const stored = store.get(`hosts/${HOST}/campaigns/msg_1`)
+    expect(stored?.plainText).toBe('Sale ends Sunday.')
+    // What a composer compares against the design's current version to say
+    // whether the two have parted. Without it staleness is unanswerable, and
+    // an unanswerable question renders as no warning at all.
+    expect(stored?.plainTextVersionId).toBe('ver_1')
+  })
+
+  it('refuses a design version that names a path', async () => {
+    // Stored and compared as a document id.
+    seedDesign()
+    const result = await post({
+      hostId: HOST,
+      action: 'draft',
+      campaignId: 'msg_1',
+      subject: 'Spring sale',
+      templateScreenId: 'scr_1',
+      plainText: 'Sale ends Sunday.',
+      plainTextVersionId: 'a/b/c',
+    })
+
+    expect(result.status).toBe(400)
+  })
+})
+
+describe('a draft that changes how it is written', () => {
+  it('clears the design when it becomes a plain-text email', async () => {
+    /*==========================================
+     * The same discard, arriving by the SAVE path.
+     *
+     * `templateScreenId` used to be written only when present, under
+     * `merge: true` — so a draft moved from a design to a typed message kept
+     * the design, was stored carrying both, reopened as designed and mailed
+     * the design while the message the merchant had just written sat unread on
+     * the record.
+     *=========================================*/
+    seedDesign()
+    await post({
+      hostId: HOST,
+      action: 'draft',
+      campaignId: 'msg_1',
+      subject: 'Spring sale',
+      templateScreenId: 'scr_1',
+      plainText: 'Sale ends Sunday.',
+      plainTextVersionId: 'ver_1',
+    })
+    expect(store.get(`hosts/${HOST}/campaigns/msg_1`)?.templateScreenId).toBe(
+      'scr_1',
+    )
+
+    await post({
+      hostId: HOST,
+      action: 'draft',
+      campaignId: 'msg_1',
+      subject: 'Spring sale',
+      body: 'Ends Sunday',
+    })
+
+    const stored = store.get(`hosts/${HOST}/campaigns/msg_1`)
+    expect(stored?.body).toBe('Ends Sunday')
+    expect(stored?.templateScreenId).toBeUndefined()
+    // The text half goes with the design it belonged to, version stamp and
+    // all — an override for a design the record no longer names measures its
+    // staleness against nothing.
+    expect(stored?.plainText).toBeUndefined()
+    expect(stored?.plainTextVersionId).toBeUndefined()
+  })
+
+  it('clears the typed body when it becomes a designed email', async () => {
+    seedDesign()
+    await post({
+      hostId: HOST,
+      action: 'draft',
+      campaignId: 'msg_1',
+      subject: 'Spring sale',
+      body: 'Ends Sunday',
+    })
+
+    await post({
+      hostId: HOST,
+      action: 'draft',
+      campaignId: 'msg_1',
+      subject: 'Spring sale',
+      templateScreenId: 'scr_1',
+    })
+
+    const stored = store.get(`hosts/${HOST}/campaigns/msg_1`)
+    expect(stored?.templateScreenId).toBe('scr_1')
+    // Not left behind to be read as a second source by anything later.
+    expect(stored?.body).toBe('')
   })
 })

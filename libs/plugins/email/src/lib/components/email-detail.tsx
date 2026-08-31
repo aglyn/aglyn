@@ -61,7 +61,7 @@ import {
   emailSendTimeMs,
   emailSentAs,
 } from '@aglyn/shared-ui-email-campaigns/model/email-record'
-import CampaignComposer from './campaign-composer'
+import { campaignPlainTextState } from '../model'
 import { useMarketingHubPath } from './use-marketing-hub-path'
 import EmailDesignPreview from './email-design-preview'
 import EmailEditDrawer from './email-edit-drawer'
@@ -179,6 +179,27 @@ export function EmailDetail(props: EmailDetailProps) {
           )
         : null,
     [firestore, hostId, templateScreenId, templateVersionId],
+  )
+
+  /**
+   * A hand-written plain-text version that no longer describes the design.
+   *
+   * Said HERE and not only in the composer, because an email can be scheduled
+   * and then have its design edited — after which nobody opens the composer
+   * again, and the send goes out with a styled half and a text half that
+   * disagree. This page is where somebody looks at a scheduled email, so it is
+   * where the fact has to be readable.
+   *
+   * Only while the email is unsent. On a sent one the text part that went out
+   * is history; the design moving afterwards is expected and is what the
+   * preview's own note already says.
+   */
+  const plainTextState = campaignPlainTextState(
+    {
+      plainText: String(email?.plainText ?? ''),
+      plainTextVersionId: String(email?.plainTextVersionId ?? ''),
+    },
+    template?.versionId,
   )
 
   const report = useMemo(() => campaignReport(email?.stats), [email])
@@ -721,6 +742,22 @@ export function EmailDetail(props: EmailDetailProps) {
       </Button>
     ) : null
 
+  /**
+   * WHERE THIS EMAIL IS WRITTEN, which is no longer this page.
+   *
+   * A page cannot both be "what this email did" and "write this email" — the
+   * first is a report the reader scrolls, the second is a form with one
+   * irreversible button — so the composer is its own route and this is the
+   * link to it. Naked, because navigation should read as navigation; the one
+   * CONTAINED button on this page stays the primary act of the state.
+   *
+   * Offered only while the copy can still be changed. An email part way
+   * through a send is stored as `scheduled`, so `midFlight` is what keeps the
+   * link off a message that is already reaching inboxes — the same distinction
+   * "Send now" is withheld on.
+   */
+  const editHref = `${basePath}/messages/${emailId}/edit`
+
   const headerActions = (
     <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
       <Button
@@ -732,6 +769,17 @@ export function EmailDetail(props: EmailDetailProps) {
       >
         {'All messages'}
       </Button>
+      {(draft || scheduled) && !midFlight ? (
+        <Button
+          component={AppLink as any}
+          {...({ componentVariant: 'naked', nativeButton: false } as any)}
+          href={editHref}
+          size="small"
+          color="primary"
+        >
+          {'Write this email'}
+        </Button>
+      ) : null}
       {templateScreenId ? (
         <Button
           component={AppLink as any}
@@ -786,6 +834,14 @@ export function EmailDetail(props: EmailDetailProps) {
               {caveat.message}
             </Alert>
           ))}
+          {unsent && plainTextState.stale ? (
+            <Alert severity="warning">
+              {'The design has been edited since this email’s plain-text ' +
+                'version was written, so the two halves may no longer say the ' +
+                'same thing. Nothing has overwritten what was written — open ' +
+                'this email to read it, or take the design’s text instead.'}
+            </Alert>
+          ) : null}
 
           <Divider />
 
@@ -1010,8 +1066,8 @@ export function EmailDetail(props: EmailDetailProps) {
                     'here once the send finishes.'
                   : draft
                     ? 'This email has not been sent, so there is nothing to ' +
-                      'report yet. Write it below, then send it or put it on ' +
-                      'the schedule.'
+                      'report yet. Write this email — the link is in the ' +
+                      'header — then send it or put it on the schedule.'
                     : 'This email has not been sent yet. Its figures appear ' +
                       'here once it goes out.'}
               </Typography>
@@ -1202,52 +1258,6 @@ export function EmailDetail(props: EmailDetailProps) {
         </Stack>
       </CardDisplay>
 
-      {/*==========================================
-        * THE COMPOSER, ON THE EMAIL'S OWN PAGE.
-        *
-        * This is where an email is written, and the only place. The create
-        * drawer on the Emails list collects the name and the campaign, mints
-        * the record and routes here — so a list page carries no form, and
-        * editing happens on the record's own surface exactly as it does for
-        * screens, components, layouts and templates.
-        *
-        * Mounted only while the email can still be changed. It opens listens
-        * of its own — the site's email designs, the org's lists and segments,
-        * the running experiments — and a reader who came to read the report
-        * of a sent email must not pay for a composer that could not edit it
-        * anyway.
-        *=========================================*/}
-      {draft || scheduled ? (
-        <CampaignComposer
-          hostId={hostId}
-          campaignId={emailId}
-          emailCampaignId={
-            email?.[CAMPAIGN_SEND_CONTAINER_FIELD]
-              ? String(email[CAMPAIGN_SEND_CONTAINER_FIELD])
-              : undefined
-          }
-          displayName={displayName || undefined}
-          initial={{
-            subject: String(email?.subject ?? ''),
-            body: composedBody,
-            fromName: String(email?.fromName ?? ''),
-            replyTo: String(email?.replyTo ?? ''),
-            /*
-             * The sender this email is set to go out as, so reopening a draft
-             * does not silently move it onto whichever sender has become the
-             * site's default since it was saved.
-             */
-            senderId: String(email?.senderId ?? ''),
-            preheader: String(email?.preheader ?? ''),
-            audience: String(email?.audience ?? ''),
-            listId: String(email?.listId ?? ''),
-            segmentId: String(email?.segmentId ?? ''),
-            topicId: String(email?.topicId ?? ''),
-            templateScreenId: templateScreenId ?? '',
-          }}
-        />
-      ) : null}
-
       <EmailRecipientsCard hostId={hostId} emailId={emailId} />
 
       {/*
@@ -1336,7 +1346,8 @@ export function EmailDetail(props: EmailDetailProps) {
               'cancel it, from this page.'
             : unsent
               ? 'The name is for finding this email in your own lists. The ' +
-                'subject and the message are written in the composer below.'
+                'subject and the message are written on this email’s own ' +
+                'compose page.'
               : 'This email has been sent, so its subject, message and ' +
                 'audience describe mail that is already in inboxes and can ' +
                 'no longer be changed. Its name is yours and stays editable.'
