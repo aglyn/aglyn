@@ -18,6 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiInboxArrowDown } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
+import { INBOX_CONSOLE_SECTIONS } from './components/inbox-console-sections'
 import { BUNDLE_ID } from './constants/bundle-common'
 
 /** Code-split: the Inbox console page only loads when opened. */
@@ -30,10 +31,11 @@ const InboxGlanceCard = lazy(
 
 /**
  * Inbox feature plugin (AGL-395). Console-only — form submissions, site
- * members/leads, orders, and campaigns live in Firestore and have no canvas
- * element, so there is no UI bundle. The console half declares the Inbox
- * nav + page through the ConsoleExtension registry (always-on). Depends on
- * the commerce + email plugins for the borrowed Orders/Campaigns tabs.
+ * members/leads and campaigns live in Firestore and have no canvas element,
+ * so there is no UI bundle. The console half declares the Inbox nav + its
+ * three sections through the ConsoleExtension registry (always-on). Depends
+ * on the marketing plugin for the borrowed Campaigns section and for the
+ * conversion attribution shown inside a submission.
  */
 export function registerInboxConsole(): void {
   Aglyn.registerConsoleExtension({
@@ -54,6 +56,9 @@ export function registerInboxConsole(): void {
       {
         label: 'Inbox',
         href: '/inbox',
+        // Sections as ROUTES (AGL-2501): each is a real URL the shell
+        // resolves and gates, so the page mounts the one being read.
+        sections: INBOX_CONSOLE_SECTIONS,
         navTabId: 'nav-tab-inbox',
         icon: { path: mdiInboxArrowDown.path },
         header: {

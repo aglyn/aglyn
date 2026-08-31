@@ -21,7 +21,7 @@ equivalent to read.
 | Console-only plugin | `libs/plugins/redirects` | The minimal shape: one nav item + page, server-side enforcement, no canvas bundle |
 | Full-stack feature | `libs/plugins/commerce` | Pages, widgets, canvas components, page resolvers, APIs, billing hooks — everything at once |
 | Site enricher + runtime pair | `libs/plugins/marketing` | Server enricher writes page props; the registered runtime reads them back |
-| Plugin→plugin composition | `libs/plugins/inbox` | Composes tabs from commerce + email — the dependency direction plugins are allowed |
+| Plugin→plugin composition | `libs/plugins/inbox` | Composes a section from marketing — the dependency direction plugins are allowed |
 | Site canvas components | `libs/plugins/bookings` | Canvas component + console manager + APIs + a config schema (`maxDaysAhead`) and a scheduled job |
 | Custom field type | `libs/plugins/marketplace` (`rating`) | Pure-data type + client Input, registered from both surfaces |
 | Plugin permissions | `libs/plugins/commerce` (`managePos`) | Per-tier defaults riding every resolved role set |
