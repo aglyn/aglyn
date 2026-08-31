@@ -18,6 +18,7 @@
 
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { useCallback, useRef } from 'react'
+import { resolveIdToken, type TokenSource } from './authorized-token'
 
 /** What one call to the campaign API answered with. */
 export interface CampaignSendApiResult {
@@ -70,6 +71,16 @@ export function useCampaignManageApi(hostId: string) {
  * URL from a component would be a way for a caller to post the console's
  * credentials somewhere the console does not own, which is why neither
  * exported hook accepts one.
+ *
+ * ## The token is obtained under a deadline, and its absence is an ERROR
+ *
+ * `resolveIdToken` throws rather than answering with nothing, and it gives up
+ * rather than waiting forever. Both matter here because the token is awaited
+ * IN FRONT of the request: a refresh that never answers means this call never
+ * reaches `fetch` at all — no request, no response, no failure to report —
+ * and a token that came back empty would otherwise post the send
+ * unauthenticated and turn "you are signed out" into a refusal from the
+ * route. Callers are expected to let the error reach the person.
  */
 function useCampaignApi(hostId: string, path: string) {
   const { data: user } = useUser()
@@ -77,12 +88,14 @@ function useCampaignApi(hostId: string, path: string) {
   userRef.current = user
   return useCallback(
     async (payload: Record<string, unknown>): Promise<CampaignSendApiResult> => {
-      const idToken = await (userRef.current as any)?.getIdToken?.()
+      const idToken = await resolveIdToken(
+        userRef.current as TokenSource | null | undefined,
+      )
       const response = await fetch(path, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          Authorization: `Bearer ${idToken}`,
         },
         body: JSON.stringify({ hostId, ...payload }),
       })

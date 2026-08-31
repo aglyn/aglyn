@@ -56,7 +56,10 @@ let formValues: Record<string, any> = {}
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => FIRESTORE,
-  useUser: () => ({ data: { uid: 'uid-test' } }),
+  // Signed in and able to mint an ID token: the row actions post through
+  // `useCampaignManageApi`, which authorizes from one and issues nothing
+  // without it.
+  useUser: () => ({ data: { uid: 'uid-test', getIdToken: async () => 'token' } }),
   useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1' }),
   useConsoleHostRoute: () => ({
     base: null,
