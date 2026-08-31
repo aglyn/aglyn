@@ -125,9 +125,41 @@ export interface InteractionNode {
  * given; there is nothing to follow, and guessing at a lookup table this
  * module does not have would be worse than answering honestly.
  */
+/** A single node rather than a map of them: it names itself. */
+function isInteractionNodeLike(value: unknown): boolean {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    typeof (value as { $id?: unknown }).$id === 'string'
+  )
+}
+
 export function* walkInteractionNodes(
   root: InteractionNode | null | undefined,
 ): Generator<InteractionNode> {
+  /*
+   * A NORMALIZED map is the shape the tenant actually composes.
+   *
+   * `composeScreenNodes` returns `{ [id]: node }` with children as id
+   * STRINGS, and the enricher handed that straight here. The old code took
+   * the map itself for a node: it carries no `$id` and no `interactions`, its
+   * `nodes` property does not exist, so the walk yielded one useless object
+   * and stopped. Every node interaction on every published page was dropped —
+   * silently, because an empty automation list is what a page with none looks
+   * like.
+   *
+   * A map is recognisable without guessing: no `$id`, no `nodes` array, and
+   * every value an object carrying its own `$id`. Yielding its values is
+   * exact rather than a lookup this module would have to invent — the map is
+   * already flat, so there is nothing to follow.
+   */
+  if (root && typeof root === 'object' && !isInteractionNodeLike(root)) {
+    const values = Object.values(root as Record<string, unknown>)
+    if (values.length && values.every((v) => isInteractionNodeLike(v))) {
+      for (const node of values) yield node as InteractionNode
+      return
+    }
+  }
   if (!root || typeof root !== 'object') return
   yield root
   const children = (root as { nodes?: unknown }).nodes
@@ -162,11 +194,50 @@ export interface CollectedNodeInteraction {
  * one place that decides what runs (it also applies the plan trims), and two
  * places deciding is how a step gets dropped for a reason nobody can find.
  */
+/**
+ * Step selectors, re-pointed at the ids the graft actually stamped.
+ *
+ * A trigger needs no help: the node IS the selector, derived above from the
+ * composed id. A STEP is different — it names another element, and it was
+ * written when the component was authored, so it holds that component's own
+ * id. Grafting an instance re-stamps every id with the instance's prefix, so
+ * `[data-aglyn="leaf:panel"]` names nothing on a page that renders
+ * `leaf:cmp__inst__panel`, and a mega menu opens nothing.
+ *
+ * Rewritten only when the bare id is absent AND exactly the prefixed sibling
+ * is present: an interaction that legitimately targets a page-level element
+ * from inside a component keeps working, and an unresolvable selector is left
+ * exactly as written rather than pointed somewhere plausible.
+ */
+function regraftStepSelectors(
+  steps: HostAction['steps'],
+  nodeId: string,
+  present: ReadonlySet<string>,
+): HostAction['steps'] {
+  const boundary = nodeId.lastIndexOf('__')
+  if (boundary < 0) return steps
+  const prefix = nodeId.slice(0, boundary + 2)
+  if (!prefix) return steps
+  return (steps ?? []).map((step) => {
+    const targetId = nodeIdFromInteractionSelector(
+      (step as { selector?: unknown })?.selector,
+    )
+    if (!targetId || present.has(targetId)) return step
+    const grafted = `${prefix}${targetId}`
+    if (!present.has(grafted)) return step
+    return { ...step, selector: nodeInteractionSelector(grafted) }
+  }) as HostAction['steps']
+}
+
 export function collectNodeInteractions(
   nodes: Iterable<InteractionNode | null | undefined>,
 ): CollectedNodeInteraction[] {
   const collected: CollectedNodeInteraction[] = []
-  for (const node of nodes) {
+  const all = [...nodes]
+  const present = new Set(
+    all.map((node) => node?.$id).filter((id): id is string => !!id),
+  )
+  for (const node of all) {
     const nodeId = node?.$id
     if (!nodeId || !Array.isArray(node?.interactions)) continue
     let index = 0
@@ -178,6 +249,15 @@ export function collectNodeInteractions(
         id: nodeInteractionId(nodeId, interaction.id || String(index)),
         action: {
           ...interaction,
+          ...(Array.isArray((interaction as { steps?: unknown }).steps)
+            ? {
+                steps: regraftStepSelectors(
+                  (interaction as unknown as HostAction).steps,
+                  nodeId,
+                  present,
+                ),
+              }
+            : {}),
           trigger: {
             ...interaction.trigger,
             // Derived here and nowhere else — see the note above on why it

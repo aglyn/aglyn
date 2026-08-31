@@ -247,3 +247,72 @@ describe('the id says where the interaction lives', () => {
     }
   })
 })
+
+/**
+ * THE TWO WAYS A NODE INTERACTION USED TO REACH NOBODY.
+ *
+ * Both were silent: an empty automation list is exactly what a page with no
+ * interactions looks like, and a step selector naming an absent element fails
+ * the way a mis-authored one does.
+ */
+describe('a composed page keeps the interactions authored on it', () => {
+  const ixNode = (id: string, extra: Record<string, unknown> = {}) => ({
+    $id: id,
+    interactions: [
+      {
+        id: 'open',
+        enabled: true,
+        trigger: { event: 'elementHoverEnter', everyTime: true },
+        steps: [{ type: 'showElement', selector: '[data-aglyn="leaf:panel"]' }],
+      },
+    ],
+    ...extra,
+  })
+
+  it('walks the NORMALIZED map the tenant actually composes', () => {
+    // `composeScreenNodes` returns `{ [id]: node }` with children as id
+    // strings. Handed that, the old walker took the map itself for a node and
+    // yielded nothing — every interaction on every published page dropped.
+    const map = { trigger: ixNode('trigger'), panel: { $id: 'panel' } }
+    const walked = [...walkInteractionNodes(map as never)]
+    expect(walked.map((n) => n.$id).sort()).toEqual(['panel', 'trigger'])
+  })
+
+  it('THE CONTROL: a real denormalized tree still walks as before', () => {
+    // Without this, a walker that ONLY understood maps would pass the case
+    // above while breaking the canvas, which passes a tree.
+    const tree = { ...ixNode('root'), nodes: [{ $id: 'child' }] }
+    expect([...walkInteractionNodes(tree as never)].map((n) => n.$id)).toEqual([
+      'root',
+      'child',
+    ])
+  })
+
+  it('re-points a step at the id the graft stamped', () => {
+    const collected = collectNodeInteractions([
+      ixNode('cmp__inst__trigger'),
+      { $id: 'cmp__inst__panel' },
+    ] as never)
+    expect(collected[0].action.steps?.[0]).toMatchObject({
+      selector: '[data-aglyn="leaf:cmp__inst__panel"]',
+    })
+  })
+
+  it('leaves a page-level target alone, and an unresolvable one untouched', () => {
+    // A component may legitimately drive an element outside itself, and a
+    // selector that resolves nowhere must not be pointed somewhere plausible.
+    const pageLevel = collectNodeInteractions([
+      ixNode('cmp__inst__trigger'),
+      { $id: 'panel' },
+    ] as never)
+    expect(pageLevel[0].action.steps?.[0]).toMatchObject({
+      selector: '[data-aglyn="leaf:panel"]',
+    })
+    const orphan = collectNodeInteractions([
+      ixNode('cmp__inst__trigger'),
+    ] as never)
+    expect(orphan[0].action.steps?.[0]).toMatchObject({
+      selector: '[data-aglyn="leaf:panel"]',
+    })
+  })
+})
