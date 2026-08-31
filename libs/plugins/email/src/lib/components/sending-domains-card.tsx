@@ -39,6 +39,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { describeSendingDomain } from '../model/sending-domain-status'
+import SendingSenderDrawer from './sending-sender-drawer'
 import {
   useSendingApi,
   type SendingIdentityView,
@@ -92,6 +93,7 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
   const [view, setView] = useState<SendingIdentityView | null>(null)
   const [loading, setLoading] = useState(true)
   const [adding, setAdding] = useState(false)
+  const [editingSender, setEditingSender] = useState(false)
   const [addingBusy, setAddingBusy] = useState(false)
   const [newDomain, setNewDomain] = useState('')
   const [addError, setAddError] = useState('')
@@ -164,14 +166,33 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
       contentBordered="all"
       HeaderProps={{
         action: view?.canManage ? (
-          <Button
-            size="small"
-            variant="contained"
-            disabled={!view?.entitled || !view?.orgId}
-            onClick={() => setAdding(true)}
-          >
-            {'Add domain'}
-          </Button>
+          <Stack direction="row" spacing={1}>
+            {/*
+              The sender is offered on every plan, unlike the domain beside
+              it. A site on the pooled Aglyn address cannot rename its
+              mailbox — the drawer says so and disables that one field — but
+              the name in front of the address and where replies land are
+              honored on the pool exactly as they are on a site's own domain,
+              and gating them behind the paid tier would withhold the free
+              half of a capability over the paid half.
+             */}
+            <Button
+              size="small"
+              variant="outlined"
+              disabled={!view}
+              onClick={() => setEditingSender(true)}
+            >
+              {'Edit sender'}
+            </Button>
+            <Button
+              size="small"
+              variant="contained"
+              disabled={!view?.entitled || !view?.orgId}
+              onClick={() => setAdding(true)}
+            >
+              {'Add domain'}
+            </Button>
+          </Stack>
         ) : null,
       }}
     >
@@ -217,6 +238,36 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
                 {'Recipients see an Aglyn address, and replies still reach ' +
                   'you. The sending reputation on it is shared with the other ' +
                   'sites using it rather than being yours.'}
+              </Typography>
+            ) : null}
+            {/*
+              THE SENDER, beside the address rather than only inside the
+              drawer that sets it.
+
+              A person reading this card is asking what their recipients see,
+              and the address alone does not answer it: an inbox shows the
+              name first. Reply-to is named only when one is set, because a
+              message without one takes replies at the sending address and
+              saying "none" would read as replies going nowhere.
+             */}
+            {view.fromName || view.replyTo ? (
+              <Typography variant="body2" sx={{ mt: 0.5 }}>
+                {view.fromName
+                  ? `Recipients see it from ${view.fromName}.`
+                  : 'Recipients see the address with no name in front of it.'}
+                {view.replyTo ? ` Replies go to ${view.replyTo}.` : ''}
+              </Typography>
+            ) : null}
+            {/*
+              A stored mailbox that is not the one in use, said out loud. The
+              alternative is a settings drawer showing `sales` beside mail
+              that is leaving as `notifications@`.
+             */}
+            {view.localPart && !view.localPartInUse && !view.refusal ? (
+              <Typography variant="body2" sx={{ mt: 0.5 }}>
+                {`This site is set to send as ${view.localPart}@, which ` +
+                  'takes effect once it has a domain of its own. The shared ' +
+                  'address has one fixed mailbox for every site on it.'}
               </Typography>
             ) : null}
           </Alert>
@@ -361,6 +412,20 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
           </Typography>
         )}
       </Stack>
+
+      {/*
+        Editing the sender is a drawer too, for the standing reason a create
+        is: the alternative is a form stacked above the table of domains,
+        which puts an open editor between a reader and the thing they came to
+        read.
+       */}
+      <SendingSenderDrawer
+        open={editingSender}
+        hostId={hostId}
+        view={view}
+        onClose={() => setEditingSender(false)}
+        onSaved={() => void load()}
+      />
 
       {/*
         Creating is a drawer, the same as every other create in the console.

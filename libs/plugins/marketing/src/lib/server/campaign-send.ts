@@ -118,6 +118,7 @@ import {
   rateLimitedRetryAtMs,
   sendEmail,
   sendingIdentityRefusal,
+  sentAsStamp,
   type SendingIdentitySource,
   type EmailRampVerdict,
 } from '@aglyn/shared-util-email'
@@ -2370,6 +2371,20 @@ export async function performCampaignSend(
       // a different name than the one this campaign went out under.
       ...(options.fromName ? { fromName: options.fromName } : {}),
       ...(options.replyTo ? { replyTo: options.replyTo } : {}),
+      /*
+       * THE ADDRESS, beside the name and for the same reason.
+       *
+       * The two fields above are what the COMPOSER submitted; this is what
+       * the recipient saw. They part company on a campaign that named no
+       * display name, which goes out under the org's branding default — and
+       * on every campaign once the site's sending identity moves, because a
+       * domain verified in November does not change what left in March.
+       */
+      ...sentAsStamp({
+        from: sendingIdentity.from,
+        fromName: options.fromName || branding.fromName,
+        replyTo: options.replyTo,
+      }),
       ...(options.preheader ? { preheader: options.preheader } : {}),
       ...(options.displayName ? { displayName: options.displayName } : {}),
       ...(options.emailCampaignId

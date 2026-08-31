@@ -27,6 +27,7 @@ import {
   emailIsUnsent,
   emailListTimeMs,
   emailSendTimeMs,
+  emailSentAs,
   emailStateLabel,
 } from './email-record'
 
@@ -200,5 +201,51 @@ describe('which audience a message went to', () => {
     expect(emailAudienceLabel({ audience: 'list' })).toContain(
       'did not record',
     )
+  })
+})
+
+describe('the sender a message actually left with', () => {
+  it('reports an unstamped message as unrecorded rather than composing one', () => {
+    const historical = emailSentAs({ status: 'sent', subject: 'March offer' })
+    expect(historical.recorded).toBe(false)
+    expect(historical.from).toBeNull()
+    expect(historical.fromName).toBeNull()
+    expect(historical.replyTo).toBeNull()
+  })
+
+  it('reads what the send wrote down', () => {
+    expect(
+      emailSentAs({
+        sentAs: {
+          from: 'jamie@acme.com',
+          fromName: 'Jamie at Acme',
+          replyTo: 'jamie@acme-corp.com',
+        },
+      }),
+    ).toEqual({
+      recorded: true,
+      from: 'jamie@acme.com',
+      fromName: 'Jamie at Acme',
+      replyTo: 'jamie@acme-corp.com',
+    })
+  })
+
+  it('separates a sender with no reply address from one that was not recorded', () => {
+    const stamped = emailSentAs({ sentAs: { from: 'hello@acme.com' } })
+    expect(stamped.recorded).toBe(true)
+    // Recorded, and pointing replies at the sending address by saying nothing.
+    expect(stamped.replyTo).toBeNull()
+    expect(stamped.fromName).toBeNull()
+  })
+
+  it('does not report a stamp with no address as recorded', () => {
+    // A partial write. Reporting it would put a name on screen beside an
+    // address nothing supplied.
+    expect(emailSentAs({ sentAs: { fromName: 'Jamie' } }).recorded).toBe(false)
+  })
+
+  it('answers for a record that is not there at all', () => {
+    expect(emailSentAs(null).recorded).toBe(false)
+    expect(emailSentAs(undefined).recorded).toBe(false)
   })
 })

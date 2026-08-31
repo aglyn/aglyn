@@ -97,7 +97,21 @@ export interface SendingIdentityView {
    */
   customDomainPlan: string | null
   dedicatedDomainPlan: string | null
+  /** The mailbox this site sends as — the part before the `@`. */
   localPart: string
+  /**
+   * Whether that mailbox is the one actually in use.
+   *
+   * False for a site on the pooled Aglyn address, whose mailbox is fixed. The
+   * stored value is real and is kept; it takes effect when the site has a
+   * domain of its own, and until then the card says so rather than showing a
+   * name that no recipient will see.
+   */
+  localPartInUse: boolean
+  /** The site's default sender name, or null. Composers start from it. */
+  fromName: string | null
+  /** The site's default reply address, or null. */
+  replyTo: string | null
   identity: string
   /**
    * `'custom'` for a domain this site has verified, `'shared'` for the pooled

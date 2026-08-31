@@ -85,9 +85,11 @@ describe('campaignConversionsReport', () => {
    * export surface is asserted rather than only the report's shape.
    */
   it('exports no reducer over the kinds', () => {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const module = require('./campaign-conversions')
-    const suspicious = Object.keys(module).filter((name) =>
+    // Named anything but `module`, which is a Next-reserved identifier: the
+    // bundler rewrites assignments to it, so a binding by that name is a lint
+    // error rather than a style note.
+    const exported = require('./campaign-conversions')
+    const suspicious = Object.keys(exported).filter((name) =>
       /total|sum|all|combined/i.test(name),
     )
     expect(suspicious).toEqual([])

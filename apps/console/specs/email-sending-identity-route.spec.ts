@@ -356,8 +356,10 @@ describe('a selection is only accepted for a verified domain', () => {
    * choosing "stop using our own domain" would silently switch their receipts
    * off.
    *
-   * `sendingLocalPart` is still deleted — the mailbox reverts to the default
-   * while the domain becomes the site's provisioned one.
+   * The MAILBOX is left where its owner put it. Which mailbox a site sends as
+   * and which domain it sends on are set from different controls and answer
+   * different questions, so moving the domain must not also rename the
+   * address — that was one control silently taking two decisions.
    */
   it('returns the site to its own provisioned domain, not to aglyn.com', async () => {
     mockHostDoc = { subdomain: 'acme', sendingLabel: 'acme' }
@@ -367,6 +369,154 @@ describe('a selection is only accepted for a verified domain', () => {
     expect(response.status).toBe(200)
     expect(mockState.written.sendingDomain).toBe('acme.mail.aglyn.app')
     expect(mockState.written.sendingDomain).not.toContain('aglyn.com')
-    expect(mockState.written.sendingLocalPart).toBe('__delete__')
+    expect(mockState.written.sendingLocalPart).toBeUndefined()
+  })
+
+  it('keeps a chosen mailbox when the domain moves back to the issued one', async () => {
+    mockHostDoc = {
+      subdomain: 'acme',
+      sendingLabel: 'acme',
+      sendingLocalPart: 'jamie',
+    }
+
+    const response = await write({ domain: 'platform' })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ localPart: 'jamie' })
+    expect(mockState.written.sendingLocalPart).toBeUndefined()
+  })
+})
+
+/**
+ * THE MAILBOX A SITE SENDS AS.
+ *
+ * The domain is never a merchant's to choose — DMARC on the sending apex is
+ * published `adkim=s`, so the `From:` domain must be the domain whose DKIM key
+ * signed the message. The part in front of the `@` is, and it reaches an SMTP
+ * envelope and a header, so what it is refused for is the load-bearing half of
+ * this block.
+ */
+describe('choosing the mailbox this site sends as', () => {
+  it('refuses a mailbox name rather than silently answering hello', async () => {
+    mockHostDoc = { subdomain: 'acme', sendingLabel: 'acme' }
+
+    const response = await write({ localPart: 'sales team!' })
+
+    expect(response.status).toBe(400)
+    const payload = await response.json()
+    expect(payload.error).toContain('letters, numbers')
+    expect(mockState.written).toBeNull()
+  })
+
+  it('refuses a mailbox name carrying a second header', async () => {
+    mockHostDoc = { subdomain: 'acme', sendingLabel: 'acme' }
+
+    const response = await write({
+      localPart: `sales${String.fromCharCode(10)}Bcc: attacker@evil.test`,
+    })
+
+    expect(response.status).toBe(400)
+    expect(mockState.written).toBeNull()
+  })
+
+  it('refuses an operational mailbox', async () => {
+    mockHostDoc = { subdomain: 'acme', sendingLabel: 'acme' }
+
+    const response = await write({ localPart: 'postmaster' })
+
+    expect(response.status).toBe(400)
+    expect((await response.json()).error).toContain('reserved')
+    expect(mockState.written).toBeNull()
+  })
+
+  /**
+   * A body with no `domain` key is not a decision about the domain.
+   *
+   * An empty one has always meant "move this site back to the address Aglyn
+   * issues it", and the drawer that edits the sender must not be able to say
+   * that by accident: a site sending as its own verified `acme.com` would
+   * have its selection reset the first time somebody renamed the mailbox.
+   */
+  it('does not touch the domain when the body names none', async () => {
+    mockHostDoc = {
+      subdomain: 'acme',
+      sendingLabel: 'acme',
+      sendingDomain: 'acme.com',
+    }
+
+    const response = await write({ localPart: 'jamie', fromName: 'Jamie' })
+
+    expect(response.status).toBe(200)
+    expect(mockState.written.sendingDomain).toBeUndefined()
+    expect(mockState.written.sendingLocalPart).toBe('jamie')
+    expect(mockState.written.sendingFromName).toBe('Jamie')
+  })
+
+  /**
+   * The pooled address has ONE fixed mailbox, shared by every site on it.
+   *
+   * `resolveSendingIdentity` builds its shared arm from the operator's own
+   * address and never reads the site's `localPart`, so storing one for a
+   * pooled site would store a setting with no effect — and put a merchant's
+   * own department name on a domain they plainly do not own.
+   */
+  it('refuses a mailbox for a site with no domain of its own', async () => {
+    mockHostDoc = { subdomain: 'acme' }
+
+    const response = await write({ localPart: 'sales' })
+
+    expect(response.status).toBe(409)
+    expect((await response.json()).error).toContain('shared Aglyn address')
+    expect(mockState.written).toBeNull()
+  })
+
+  /**
+   * The half of "send as a person" that does not depend on owning a name.
+   *
+   * A display name and a reply address are honored on the pooled address
+   * exactly as they are on a site's own domain, so refusing the whole save
+   * over the one field a pooled site cannot set would withhold the free half
+   * of a capability over the paid half.
+   */
+  it('accepts a sender name and reply address on the pooled address', async () => {
+    mockHostDoc = { subdomain: 'acme' }
+
+    const response = await write({
+      fromName: 'Jamie at Acme',
+      replyTo: 'jamie@acme-corp.com',
+    })
+
+    expect(response.status).toBe(200)
+    expect(mockState.written.sendingFromName).toBe('Jamie at Acme')
+    expect(mockState.written.sendingReplyTo).toBe('jamie@acme-corp.com')
+  })
+
+  it('refuses a reply address that is not an address', async () => {
+    mockHostDoc = { subdomain: 'acme', sendingLabel: 'acme' }
+
+    const response = await write({ replyTo: 'jamie at acme dot com' })
+
+    expect(response.status).toBe(400)
+    expect((await response.json()).error).toContain('full email address')
+    expect(mockState.written).toBeNull()
+  })
+
+  /**
+   * Clearing an optional field unsets it rather than storing an empty string.
+   *
+   * A stored `''` reads as a value on every surface that tests for presence,
+   * which is the shape that makes an absent setting render as a real one.
+   */
+  it('unsets a cleared sender name instead of storing it empty', async () => {
+    mockHostDoc = {
+      subdomain: 'acme',
+      sendingLabel: 'acme',
+      sendingFromName: 'Jamie',
+    }
+
+    const response = await write({ fromName: '' })
+
+    expect(response.status).toBe(200)
+    expect(mockState.written.sendingFromName).toBe('__delete__')
   })
 })

@@ -583,6 +583,25 @@ export function CampaignComposer(props: CampaignComposerProps) {
       })
       if (!active || !response.ok) return
       setIdentityOptions(payload?.options ?? [])
+      /*
+       * THE SITE'S SENDER, AS A STARTING POINT AND NOT AS AN OVERRIDE.
+       *
+       * A site can name who its mail comes from — a person's name and where
+       * their replies land — and this is where that reaches a campaign. It is
+       * applied only to a field that is still empty, so it seeds a new
+       * composer and never rewrites a value somebody typed, and never one a
+       * saved email already carries.
+       *
+       * Seeding rather than falling back at the send is the difference
+       * between a merchant SEEING who this will come from and finding out
+       * afterwards. It also keeps one answer on the record: the send stores
+       * the fields the composer submitted, so what the report says went out
+       * is what was on screen when somebody pressed the button.
+       */
+      const siteFromName = String(payload?.fromName ?? '')
+      const siteReplyTo = String(payload?.replyTo ?? '')
+      if (siteFromName) setFromName((current) => current || siteFromName)
+      if (siteReplyTo) setReplyTo((current) => current || siteReplyTo)
     })().catch(() => undefined)
     return () => {
       active = false
@@ -1108,7 +1127,16 @@ export function CampaignComposer(props: CampaignComposerProps) {
           size="small"
           type="email"
           sx={{ flex: 1 }}
-          helperText="Where replies go, if not the sending address"
+          /*
+           * The one field here that may name a mailbox on a domain nobody has
+           * verified, and the helper says so — because the alternative is a
+           * merchant reaching for the From fields to be reachable at their
+           * own address. A `From:` on somebody else's mail provider cannot
+           * align under the strict DMARC policy the sending apex publishes,
+           * so it would be refused by the receiving side rather than
+           * delivered; a reply address carries no such requirement.
+           */
+          helperText="Where replies go. Any mailbox, including a personal one"
         />
       </Stack>
       <TextField
