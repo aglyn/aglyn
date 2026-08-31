@@ -236,7 +236,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     _topicId: string,
     emails: string[],
   ) => emails.filter((email) => !topicOptOuts.has(email)),
-  getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'starter' } }),
+  getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'pro' } }),
   resolveHostSendingIdentity: async () =>
     jest.requireActual('@aglyn/shared-util-email').resolveSendingIdentity({
       selection: null,

@@ -465,7 +465,7 @@
             "duplicateOf": null,
             "values": {
               "free": "—",
-              "starter": "500",
+              "starter": "—",
               "pro": "5,000",
               "business": "25,000",
               "scale": "40,000",
@@ -1023,7 +1023,7 @@
         "label": "Email sends, per 1,000 over the included band",
         "rate": "extraEmailSendsUsdPer1k",
         "values": {
-          "starter": "$2.5",
+          "starter": "—",
           "pro": "$2.25",
           "business": "$2",
           "scale": "$1.9",

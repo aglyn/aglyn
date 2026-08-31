@@ -70,6 +70,7 @@ import {
   PLAN_PRICING,
   SELF_SERVE_PLANS,
   UNLIMITED,
+  emailSendsOverage,
   isCustomPricedPlan,
   priceEmailSendOverage,
   resolveOrgEntitlements,
@@ -78,8 +79,21 @@ import type { OrgPlan } from '@aglyn/aglyn'
 
 const PLAN_KEYS = Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]
 
-/** The paid, self-serve tiers — the ones with both a band and a list price. */
+/** The paid, self-serve tiers — the ones with a list price. */
 const PAID = SELF_SERVE_PLANS.filter((plan) => plan !== 'free')
+
+/**
+ * The paid tiers that actually SELL campaign email — the ones with a band as
+ * well as a price.
+ *
+ * Derived from the entitlements rather than listed, so a tier that gains or
+ * loses the allowance moves this set on the commit that moves the band. A
+ * hand-written list would go on describing the old ladder while every
+ * assertion below it passed.
+ */
+const SELLS_EMAIL = PAID.filter(
+  (plan) => PLAN_ENTITLEMENTS[plan].emailSendsPerMonth > 0,
+)
 
 /** Included email COGS as a fraction of the tier's monthly price. */
 function includedEmailCogsShare(
@@ -141,11 +155,17 @@ describe('the detectors answer differently for different inputs', () => {
     expect(PLAN_ENTITLEMENTS.free.emailSendsPerMonth).toBe(0)
     expect(PLAN_ENTITLEMENTS.agency.emailSendsPerMonth).toBeGreaterThan(0)
     // …and the bands are genuinely different between tiers, so a table that
-    // collapsed to one number cannot pass either.
+    // collapsed to one number cannot pass either. SEVEN distinct values
+    // across eight plans: Free and Starter share the zero, and every tier
+    // that sells email has a band of its own.
     expect(
       new Set(PLAN_KEYS.map((plan) => PLAN_ENTITLEMENTS[plan].emailSendsPerMonth))
         .size,
-    ).toBe(8)
+    ).toBe(7)
+    expect(
+      new Set(SELLS_EMAIL.map((plan) => PLAN_ENTITLEMENTS[plan].emailSendsPerMonth))
+        .size,
+    ).toBe(SELLS_EMAIL.length)
     expect(ORG_COGS_UNIT_RATES_USD.perEmailSend).toBeGreaterThan(0)
   })
 })
@@ -160,9 +180,12 @@ describe('the included campaign-email bands', () => {
    * The unchanged three are asserted as loudly as the changed five, and that
    * is the point of writing them out rather than testing only what moved: a
    * sweep that lowered every tier would satisfy "Business is 25,000" and be a
-   * different, much worse change. Free is 0 because Free sends no campaigns
-   * at all, and Starter and Pro did not move because their email COGS was
-   * already 1.8% and 8.0% of price.
+   * different, much worse change.
+   *
+   * Free and Starter are both 0: campaign email begins at Pro, because a site
+   * that may send needs its own verified provider sending domain and
+   * provisioning one is a per-site operational cost. Pro did not move — its
+   * email COGS was already 8.0% of price.
    */
   it('are exactly these, on every plan', () => {
     expect(
@@ -171,7 +194,7 @@ describe('the included campaign-email bands', () => {
       ),
     ).toEqual({
       free: 0,
-      starter: 500,
+      starter: 0,
       pro: 5_000,
       business: 25_000,
       scale: 40_000,
@@ -186,6 +209,10 @@ describe('the included campaign-email bands', () => {
       (plan) => PLAN_ENTITLEMENTS[plan].emailSendsPerMonth,
     )
     expect(ladder).toEqual([...ladder].sort((a, b) => a - b))
+    // The ladder now starts with TWO zeros, and monotonicity alone cannot
+    // tell that from one — or from eight. Where it starts rising is the
+    // product decision, so it is asserted as one.
+    expect(SELLS_EMAIL).toEqual(['pro', 'business', 'scale', 'advanced', 'agency'])
     expect(PLAN_ENTITLEMENTS.enterprise.emailSendsPerMonth).toBeGreaterThan(
       PLAN_ENTITLEMENTS.agency.emailSendsPerMonth,
     )
@@ -252,7 +279,8 @@ describe('the included campaign-email bands', () => {
         ).toFixed(1),
       )
     expect(Object.fromEntries(PAID.map((plan) => [plan, share(plan)]))).toEqual({
-      starter: 1.8,
+      // No band, so no included COGS — the axis costs this tier nothing.
+      starter: 0,
       pro: 8,
       business: 16.2,
       scale: 14.5,
@@ -289,7 +317,7 @@ describe('the billed rate and the cost rate are different numbers', () => {
       ),
     ).toEqual({
       free: null,
-      starter: 2.5,
+      starter: null,
       pro: 2.25,
       business: 2,
       scale: 1.9,
@@ -301,7 +329,10 @@ describe('the billed rate and the cost rate are different numbers', () => {
     // — which is what it would be if somebody derived it from the wrong
     // table by reflex.
     const cost1k = ORG_COGS_UNIT_RATES_USD.perEmailSend * 1000
-    for (const plan of PAID) {
+    // The tiers that carry a rate. A null read as a number is 0, which sits
+    // below every comparison here and would pass the two "not the cost"
+    // assertions while failing the one that matters.
+    for (const plan of SELLS_EMAIL) {
       const rate = PLAN_PRICING[plan].extraEmailSendsUsdPer1k as number
       expect(`${plan}: ${rate === cost1k}`).toBe(`${plan}: false`)
       expect(`${plan}: ${rate === cost1k * METERED_MARKUP}`).toBe(
@@ -413,9 +444,13 @@ describe('the billed rate and the cost rate are different numbers', () => {
   })
 
   it('descends with the tier, the way contacts and API requests do', () => {
-    const ladder = PAID.map(
+    // Over the tiers that SELL email. Starter carries no rate at all, and a
+    // null read as a number is 0, which would make any ladder look like it
+    // ended in a free tier rather than starting above one.
+    const ladder = SELLS_EMAIL.map(
       (plan) => PLAN_PRICING[plan].extraEmailSendsUsdPer1k as number,
     )
+    expect(ladder.every((rate) => typeof rate === 'number')).toBe(true)
     expect(ladder).toEqual([...ladder].sort((a, b) => b - a))
     // Strictly, not merely non-increasing — a flat ladder is not a ladder.
     expect(new Set(ladder).size).toBe(ladder.length)
@@ -610,10 +645,17 @@ describe('band and rate agree about whether an "over" exists', () => {
     expect(offenders).toEqual([])
   })
 
-  it('every paid tier with a finite band carries a rate', () => {
+  it('every paid tier with a POSITIVE band carries a rate', () => {
     // The converse, and the one that bites here: usage past a bounded band
     // with no rate is silently free, and the bound achieves nothing.
-    for (const plan of PAID) {
+    //
+    // POSITIVE, not merely finite. `emailSendsOverage` returns 0 for any
+    // non-positive band, so a tier banded at 0 can never have an excess to
+    // price and a rate there would be the Agency-contacts defect again — a
+    // published fee that cannot be charged. The two conditions are the same
+    // rule, and reading `finite` for `positive` would demand a rate on
+    // exactly the tiers where one is impossible.
+    for (const plan of SELLS_EMAIL) {
       expect(`${plan}: ${PLAN_PRICING[plan].extraEmailSendsUsdPer1k}`).not.toBe(
         `${plan}: null`,
       )
@@ -621,16 +663,46 @@ describe('band and rate agree about whether an "over" exists', () => {
         true,
       )
     }
+    // And the guard is guarding something: a rule quantified over an empty
+    // set passes by saying nothing, which is how a tier could lose its band
+    // and its rate together and read as clean.
+    expect(SELLS_EMAIL.length).toBeGreaterThan(0)
   })
 
-  it('Free and Enterprise are the two deliberate nulls', () => {
+  it('a ZERO band carries no rate, on paid tiers too', () => {
+    // The same pair read from the other side, and the half that Starter now
+    // exercises. `emailSendsOverage(total, 0)` is 0 at every volume, so the
+    // rate would price nothing while telling a customer it prices something.
+    const offenders = PLAN_KEYS.filter(
+      (plan) =>
+        PLAN_ENTITLEMENTS[plan].emailSendsPerMonth === 0 &&
+        PLAN_PRICING[plan].extraEmailSendsUsdPer1k != null,
+    )
+    expect(offenders).toEqual([])
+    // The behaviour the rule rests on, not just the constants.
+    expect(emailSendsOverage(50_000, 0)).toBe(0)
+  })
+
+  it('Free, Starter and Enterprise are the three deliberate nulls', () => {
     // Free's band is 0 and it has no subscription to hang a metered item on —
-    // the same reason every other `extra*` rate is null there. Enterprise
-    // publishes no list price at all; its terms are the agreement.
+    // the same reason every other `extra*` rate is null there. Starter's band
+    // is 0 because campaign email begins at Pro; unlike Free it DOES carry a
+    // subscription, so the null there is a decision to absorb its
+    // transactional volume rather than an absence of anything to bill.
+    // Enterprise publishes no list price at all; its terms are the agreement.
     expect(PLAN_PRICING.free.extraEmailSendsUsdPer1k).toBeNull()
     expect(PLAN_PRICING.free.basePriceMonthlyUsd).toBe(0)
+    expect(PLAN_PRICING.starter.extraEmailSendsUsdPer1k).toBeNull()
+    expect(PLAN_PRICING.starter.basePriceMonthlyUsd).toBeGreaterThan(0)
     expect(PLAN_PRICING.enterprise.extraEmailSendsUsdPer1k).toBeNull()
     expect(isCustomPricedPlan('enterprise')).toBe(true)
+    // Exactly three, enumerated rather than spot-checked: a fourth null
+    // appearing anywhere is a tier that quietly stopped billing.
+    expect(
+      PLAN_KEYS.filter(
+        (plan) => PLAN_PRICING[plan].extraEmailSendsUsdPer1k === null,
+      ),
+    ).toEqual(['free', 'starter', 'enterprise'])
   })
 })
 

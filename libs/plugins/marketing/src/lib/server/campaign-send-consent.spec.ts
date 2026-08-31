@@ -37,7 +37,7 @@ const mockState: {
   metered: Array<[string, number, string]>
   reserved: number[]
   org: Record<string, unknown>
-} = { store: {}, sent: [], metered: [], reserved: [], org: { plan: 'starter' } }
+} = { store: {}, sent: [], metered: [], reserved: [], org: { plan: 'pro' } }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   // The literal three call sites compare against — the unsubscribe writes
@@ -297,7 +297,7 @@ function seedLeads() {
   mockState.sent = []
   mockState.metered = []
   mockState.reserved = []
-  mockState.org = { plan: 'starter' }
+  mockState.org = { plan: 'pro' }
 }
 
 /**
@@ -311,7 +311,7 @@ function seedLeads() {
  * this file's meaning without a word of it changing.
  */
 const configurePolicy = (mode: 'forward' | 'strict') => {
-  mockState.org = { plan: 'starter', marketingConsentPolicy: { mode } }
+  mockState.org = { plan: 'pro', marketingConsentPolicy: { mode } }
 }
 
 const send = (over: Record<string, unknown> = {}) =>

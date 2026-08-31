@@ -461,13 +461,22 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * republished since; the marketing site is besigner-published content and
      * moves on its own change.
      *
-     * The code has moved beneath it. Email sending is now priced: our cost is
-     * $0.90 per 1,000 delivered messages, and against the old bands that ran
-     * 28-36% of the subscription at Business and above. The included bands
-     * came down to land every changed tier near 15%, and an overage rate went
-     * on beside them. No CHARGED price moved — Business $139, Scale $249,
-     * Advanced $399 and Agency $799 are untouched, which is what keeps this
-     * inside the Sept 1 freeze.
+     * The code has moved beneath it, in two separate steps.
+     *
+     * Email sending is now priced: our cost is $0.90 per 1,000 delivered
+     * messages, and against the old bands that ran 28-36% of the subscription
+     * at Business and above. The included bands came down to land every
+     * changed tier near 15%, and an overage rate went on beside them.
+     *
+     * Then campaign email moved UP to Pro. A site that may send campaigns
+     * needs its own verified provider sending domain, and provisioning one is
+     * a per-site operational cost; holding the allowance at 0 on Starter
+     * keeps that cost attached to the tiers that carry it. Starter's column
+     * therefore reads as a dash, exactly like Free's.
+     *
+     * No CHARGED price moved in either step — Starter $25, Business $139,
+     * Scale $249, Advanced $399 and Agency $799 are untouched, which is what
+     * keeps this inside the Sept 1 freeze.
      *
      * ## Why this asserts the DIVERGENCE instead of the new numbers
      *
@@ -488,21 +497,32 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       /** What the published page still says, per column. */
       const PUBLISHED = [NONE, 500, 5000, 50000, 100000, 125000, 250000] satisfies Row
       /** What the code now enforces and bills against. */
-      const CODE = [NONE, 500, 5000, 25000, 40000, 65000, 130000] satisfies Row
+      const CODE = [NONE, NONE, 5000, 25000, 40000, 65000, 130000] satisfies Row
 
       it('the code holds the reduced bands', () => {
         expect(quotaColumn('emailSendsPerMonth')).toEqual(CODE)
       })
 
-      it('the reduction is confined to Business and above', () => {
-        // Free, Starter and Pro were already under 10% email COGS, so they did
-        // not move — and asserting that here is what stops a sweep that
-        // lowered all seven from reading as this change.
-        expect(CODE.slice(0, 3)).toEqual(PUBLISHED.slice(0, 3))
+      it('moves Starter to zero and reduces Business and above', () => {
+        // TWO changes, asserted apart, because a sweep that lowered all seven
+        // columns would satisfy either one on its own.
+        //
+        // Free was already 0 and Pro did not move: Pro's email COGS was 8% of
+        // its price, which is the band the deliverability reduction was
+        // aiming at, and it is the tier campaign email now starts on.
+        expect(CODE[0]).toBe(PUBLISHED[0])
+        expect(CODE[2]).toBe(PUBLISHED[2])
+        // Starter went to nothing rather than to a smaller number. A reduced
+        // band still sells the feature; zero is the feature not being sold,
+        // and `reserveCampaignEmailSends` refuses every campaign against it.
+        expect(CODE[1]).toBe(0)
+        expect(PUBLISHED[1]).toBeGreaterThan(0)
+        // Business and above kept an allowance and it came down.
         for (let column = 3; column < CODE.length; column += 1) {
           expect(`col${column}: ${CODE[column] < PUBLISHED[column]}`).toBe(
             `col${column}: true`,
           )
+          expect(`col${column}: ${CODE[column] > 0}`).toBe(`col${column}: true`)
         }
       })
 
@@ -529,6 +549,7 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
             CODE[column],
           ]).filter(([, was, now]) => was !== now),
         ).toEqual([
+          ['starter', 500, 0],
           ['business', 50000, 25000],
           ['scale', 100000, 40000],
           ['advanced', 125000, 65000],

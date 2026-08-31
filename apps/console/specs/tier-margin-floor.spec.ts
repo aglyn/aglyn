@@ -572,7 +572,7 @@ describe('no self-serve tier loses money at full utilization', () => {
         PAID.map((plan) => [plan, [0.03, 0.25, 0.5, 1].map((u) => pct(plan, u))]),
       ),
     ).toEqual({
-      starter: [92, 90.4, 80.7, 61.5],
+      starter: [92, 90.8, 81.6, 63.3],
       pro: [89.3, 77.5, 55, 10],
       business: [85.6, 77.7, 55.5, 10.9],
       scale: [88, 77.1, 54.1, 8.3],
@@ -591,7 +591,8 @@ describe('no self-serve tier loses money at full utilization', () => {
    *
    * Non-negative is the survival condition. This is the shape the tiers hold
    * once every cost is counted: each paid worst case sits between 6.5% and
-   * 62%, with Advanced setting the low end at 6.70%. A tier landing under it
+   * 64%, with Advanced setting the low end at 6.70% and Starter — which sells
+   * no campaign email and no assist — the high end at 63.3%. A tier landing under it
    * is not losing money — it is carrying a ceiling thinner than any other
    * rung, which is the position Pro was in, and the reason a floor of zero is
    * not enough on its own to keep the ladder coherent.
@@ -814,19 +815,20 @@ describe('no self-serve tier loses money at full utilization', () => {
 
   /**
    * STARTER IS NOT IN THE SAME POSITION, and the arithmetic is here rather
-   * than asserted by absence. Its bands imply $9.63 against a $25 price —
-   * the widest paid margin on the ladder — and bandwidth is 91% of that,
+   * than asserted by absence. Its bands imply $9.18 against a $25 price —
+   * the widest paid margin on the ladder — and bandwidth is 95% of that,
    * $8.74. The lever Pro needed exists on Starter and is not called for.
    *
-   * It is also THE CONTROL FOR THE BAND RESIZE. Starter sells no assist, so
-   * its cost and its margin are the same figures before and after the eighth
-   * term and before and after the assist ladder came down. A sweep that
-   * touched every tier would move this one too.
+   * It is also THE CONTROL FOR THE BAND RESIZE. Starter sells neither assist
+   * nor campaign email, so those two terms are ZERO here and the tier's cost
+   * is the same figure before and after the eighth term and before and after
+   * the assist ladder came down. A sweep that touched every tier would move
+   * this one too.
    */
   it('leaves Starter where it is, with room the ladder does not have', () => {
     const price = PLAN_PRICING.starter.basePriceMonthlyUsd
     expect(price).toBe(25)
-    expect(tierCostUsd('starter', 1)).toBeCloseTo(9.63, 2)
+    expect(tierCostUsd('starter', 1)).toBeCloseTo(9.18, 2)
     expect(PLAN_ENTITLEMENTS.starter.bandwidthGb).toBe(50)
     // Untouched by the eighth term, because there is no band to price: the
     // assist term is present and it is ZERO, which is a different statement
@@ -835,6 +837,23 @@ describe('no self-serve tier loses money at full utilization', () => {
     expect(bandCostTerms('starter').assistCredits).toBe(0)
     expect(PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth).toBe(0)
     expect(PLAN_ENTITLEMENTS.starter.features.aiAssist).toBe(false)
+    /*
+     * The email axis, read the same way and for the same reason. Campaign
+     * email begins at Pro, so the term is present and ZERO rather than
+     * absent — a missing term would drop $0.45 of Starter's cost by
+     * arithmetic instead of by entitlement, and every margin below would read
+     * the same either way.
+     *
+     * The band moving to 0 REMOVED cost from this tier: the term was $0.45,
+     * so the worst case improved from 61.5% to 63.3%. Nothing here was
+     * loosened to accommodate it.
+     */
+    expect(Object.keys(bandCostTerms('starter'))).toContain('emailSends')
+    expect(bandCostTerms('starter').emailSends).toBe(0)
+    expect(PLAN_ENTITLEMENTS.starter.emailSendsPerMonth).toBe(0)
+    expect(
+      500 * ORG_COGS_UNIT_RATES_USD.perEmailSend + tierCostUsd('starter', 1),
+    ).toBeCloseTo(9.63, 2)
     // Doubling the dominant rate is the move this ladder is thin against.
     // Starter still clears 26% there; Pro does not survive it on either band,
     // which is what makes the page-view rate the figure to calibrate next.

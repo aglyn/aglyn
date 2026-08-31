@@ -134,7 +134,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         !mockState.store[`hosts/${hostId}/suppressions/${key}`]
       )
     }),
-  getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'starter' } }),
+  getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'pro' } }),
   orgDataCollectionForHost: async () =>
     mockFirestore().collection('orgs/org-1/contacts'),
   orgDataQueryForHost: async () => ({

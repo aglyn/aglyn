@@ -40,7 +40,10 @@ const mockState: {
     localPart: string
     missing?: string[]
   } | null
-} = { store: {}, sent: [], metered: [], sendingDomain: null }
+  /** The owning org's plan. What `getOrgForHost` answers, and the only
+   *  input that decides whether the campaign cap admits a send. */
+  plan: OrgPlan
+} = { store: {}, sent: [], metered: [], sendingDomain: null, plan: 'pro' }
 
 // The module graph behind `@aglyn/tenant-data-admin` reaches the admin SDK,
 // which does not load under the jest environment. Nothing real is needed:
@@ -120,9 +123,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         !mockState.store[`hosts/${hostId}/suppressions/${key}`]
       )
     }),
-  // A plan whose emailSendsPerMonth is non-zero, or the cap refuses the send
-  // before any of this is reached. Free is 0 by design.
-  getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'starter' } }),
+  // The owning org, whose plan decides the campaign cap. Defaulted to a plan
+  // whose `emailSendsPerMonth` is non-zero, or the cap refuses the send
+  // before any of this is reached — campaign email starts at Pro, and Free
+  // and Starter are both 0 by design. `mockState.plan` is what the tier tests
+  // at the bottom of this file move.
+  getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: mockState.plan } }),
   /*
    * The sending identity. The REAL `resolveSendingIdentity` runs — only the
    * document reads behind it are faked — so these tests exercise the decision
@@ -254,6 +260,8 @@ jest.mock('@aglyn/shared-util-email', () => ({
 }))
 
 import { compress } from '@aglyn/aglyn/server'
+import { PLAN_ENTITLEMENTS } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import type { OrgPlan } from '@aglyn/aglyn'
 import { CampaignSendError, performCampaignSend } from './campaign-send'
 
 /** The id the besigner roots every stored node map at. */
@@ -406,6 +414,7 @@ function seed(nodes: unknown) {
   mockState.sent = []
   mockState.metered = []
   mockState.sendingDomain = null
+  mockState.plan = 'pro'
 }
 
 /**
@@ -597,6 +606,15 @@ describe('a designed campaign whose version is stored compressed (AGL-1394)', ()
  * instead of writing the counter itself.
  */
 describe('the campaign cap and the cost meter (AGL-1438)', () => {
+  /*
+   * The band the fixture org actually has, read from the entitlements
+   * rather than written as a literal. A cap test that hardcodes a number
+   * stops testing the cap the day the tier's band moves: it either seeds
+   * short of a raised band and sends, or past a lowered one and refuses
+   * for the wrong reason.
+   */
+  const CAP = PLAN_ENTITLEMENTS.pro.emailSendsPerMonth
+
   const recorded = () =>
     performCampaignSend({
       hostId: 'host-1',
@@ -634,9 +652,9 @@ describe('the campaign cap and the cost meter (AGL-1438)', () => {
   it('ignores transactional volume when deciding the cap', async () => {
     seed(NODES)
     const month = new Date().toISOString().slice(0, 7)
-    // Starter includes 500/mo. Nine thousand transactional sends is far past
-    // it, and must not matter at all.
-    mockState.store['hosts/host-1/counters/emailSends'] = { [month]: 9_000 }
+    // Transactional volume far past the plan's campaign band, which must not
+    // matter at all: the cap is measured against campaigns alone.
+    mockState.store['hosts/host-1/counters/emailSends'] = { [month]: CAP * 2 }
 
     await expect(recorded()).resolves.toMatchObject({ sent: 1 })
     expect(mockState.sent).toHaveLength(1)
@@ -646,7 +664,7 @@ describe('the campaign cap and the cost meter (AGL-1438)', () => {
     seed(NODES)
     const month = new Date().toISOString().slice(0, 7)
     mockState.store['orgs/org-1/counters/campaignEmailSends'] = {
-      [month]: 500,
+      [month]: CAP,
     }
 
     await expect(recorded()).rejects.toThrow(/campaign email limit/i)
@@ -666,7 +684,7 @@ describe('the campaign cap and the cost meter (AGL-1438)', () => {
     seed(NODES)
     const month = new Date().toISOString().slice(0, 7)
     mockState.store['hosts/host-1/counters/campaignEmailSends'] = {
-      [month]: 500,
+      [month]: CAP,
     }
 
     await expect(recorded()).resolves.toMatchObject({ sent: 1 })
@@ -686,7 +704,7 @@ describe('the campaign cap and the cost meter (AGL-1438)', () => {
   it('is ONE allowance across the org, not one per site (AGL-2267)', async () => {
     seed(NODES)
     const month = new Date().toISOString().slice(0, 7)
-    mockState.store['orgs/org-1/counters/campaignEmailSends'] = { [month]: 500 }
+    mockState.store['orgs/org-1/counters/campaignEmailSends'] = { [month]: CAP }
     // A DIFFERENT site of the same org, with no counter of its own.
     mockState.store['hosts/host-2'] = { subdomain: 'acme-two' }
     mockState.store['hosts/host-2/leads/lead-1'] = {
@@ -1014,5 +1032,116 @@ describe('a killed marketplace email stops sending', () => {
     seedInstalled()
 
     await expect(send()).resolves.toMatchObject({ sent: 1 })
+  })
+})
+
+/**
+ * WHICH TIERS MAY SEND A CAMPAIGN AT ALL.
+ *
+ * Campaign email begins at Pro. A site that may send needs its own verified
+ * provider sending domain, and provisioning one is a per-site operational
+ * cost, so the allowance is attached to the tiers that carry it rather than
+ * to every paid tier.
+ *
+ * ## Why this drives the SEND and not the entitlement
+ *
+ * `PLAN_ENTITLEMENTS.starter.emailSendsPerMonth === 0` is one line and it
+ * proves nothing about behavior: it would pass identically against a build
+ * where the cap was never read, or read against the wrong counter, or read
+ * and then ignored. So each case here runs the whole of
+ * `performCampaignSend` — audience resolution, the consent join, the
+ * suppression filters, the reservation — and asserts on what came out of the
+ * sender.
+ *
+ * The tier is the ONLY thing moved between cases: same site, same lead, same
+ * consent, same template. That is what makes the difference between them
+ * attributable to the plan.
+ */
+describe('campaign email begins at Pro', () => {
+  const attempt = (plan: OrgPlan) => {
+    seed(NODES)
+    mockState.plan = plan
+    return send()
+  }
+
+  it('refuses a STARTER org, and nothing goes out', async () => {
+    await expect(attempt('starter')).rejects.toThrow(/campaign email limit/i)
+    // The refusal is the point, not merely the rejection: no message was
+    // handed to the sender and no delivery was metered. A cap that threw
+    // after the batch had gone out would satisfy `rejects` alone.
+    expect(mockState.sent).toHaveLength(0)
+    expect(mockState.metered).toHaveLength(0)
+    // And no claim was written. `reserveCampaignEmailSends` writes NOTHING on
+    // a refusal, so a Starter org that tries every day does not accumulate a
+    // counter it could never spend.
+    const month = new Date().toISOString().slice(0, 7)
+    expect(
+      mockState.store['orgs/org-1/counters/campaignEmailSends']?.[month],
+    ).toBeUndefined()
+  })
+
+  it('refuses a FREE org the same way', async () => {
+    // Starter is now in exactly the shape Free has always been in, said in
+    // the only terms that matter: the same refusal, from the same gate, on
+    // the same audience.
+    await expect(attempt('free')).rejects.toThrow(/campaign email limit/i)
+    expect(mockState.sent).toHaveLength(0)
+  })
+
+  it('CONTROL: a PRO org still sends', async () => {
+    // Without this the cases above are satisfied by a build that refuses
+    // every campaign on every tier — which would pass every entitlement
+    // assertion in the repo while shipping a dead feature.
+    await expect(attempt('pro')).resolves.toMatchObject({ sent: 1 })
+    expect(mockState.sent).toHaveLength(1)
+    expect(mockState.metered).toEqual([['host-1', 1, 'campaign']])
+  })
+
+  it('CONTROL: every tier above Pro sends too', async () => {
+    // The control widened. One passing tier could still be a gate admitting
+    // exactly one plan; the claim is that the refusal is confined to the two
+    // tiers banded at zero.
+    for (const plan of ['business', 'scale', 'advanced', 'agency'] as const) {
+      await expect(attempt(plan)).resolves.toMatchObject({ sent: 1 })
+    }
+  })
+
+  it('refuses on the BAND, not on a list of plan names', async () => {
+    // The mutation that would make the block above pass for the wrong
+    // reason: a gate hard-coded to plan names rather than reading the
+    // entitlement. Every tier refused above has a band of 0 and every tier
+    // admitted has one above 0, read from the table the sender itself reads.
+    for (const plan of ['free', 'starter'] as const) {
+      expect(`${plan}: ${PLAN_ENTITLEMENTS[plan].emailSendsPerMonth}`).toBe(
+        `${plan}: 0`,
+      )
+    }
+    for (const plan of [
+      'pro',
+      'business',
+      'scale',
+      'advanced',
+      'agency',
+    ] as const) {
+      expect(`${plan}: ${PLAN_ENTITLEMENTS[plan].emailSendsPerMonth > 0}`).toBe(
+        `${plan}: true`,
+      )
+    }
+  })
+
+  it('names the band in the message, so the reason is legible', async () => {
+    // A merchant reading "limit reached (0)" is being told the plan includes
+    // none, which is the actual state — not that they have spent an
+    // allowance they had. The upgrade path is in the same sentence.
+    await expect(attempt('starter')).rejects.toThrow(
+      /Monthly campaign email limit reached \(0\)/,
+    )
+    await expect(attempt('starter')).rejects.toThrow(/upgrade in Billing/i)
+    // Transactional mail is excluded in the same breath, because a Starter
+    // store still confirms its orders and the refusal must not read as
+    // though it stopped that too.
+    await expect(attempt('starter')).rejects.toThrow(
+      /Transactional mail .* keeps sending/,
+    )
   })
 })

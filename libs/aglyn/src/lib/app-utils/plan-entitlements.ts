@@ -378,7 +378,26 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     servicesPerHost: 1,
     redirectsPerHost: 25,
     contactsPerHost: 1000,
-    emailSendsPerMonth: 500,
+    // Campaign email starts at Pro. A site that may send campaigns needs its
+    // own verified provider sending domain, and provisioning one is a real
+    // per-site operational cost that a campaign allowance commits the platform
+    // to the moment the tier includes it. Holding the allowance at 0 here
+    // keeps that cost attached to the tiers that carry it.
+    //
+    // Zero is a REFUSAL, not a formality: `reserveCampaignEmailSends` compares
+    // `used + count > limit` inside its transaction, so any campaign of one or
+    // more recipients is refused before a message leaves.
+    //
+    // It does NOT stop transactional mail. Receipts, invites, booking
+    // reminders, workflow notifications and password resets are refused by no
+    // quota at any tier (see `emailSendsPerMonth` on `OrgEntitlements`), so a
+    // Starter store still confirms its orders. Those sends still count on the
+    // `emailSends` cost meter; they are simply not billable here, because
+    // `emailSendsOverage` yields 0 against a non-positive band.
+    //
+    // The contacts band above is untouched: holding an audience is not sending
+    // to it, and the CRM is what a Starter site builds before it upgrades.
+    emailSendsPerMonth: 0,
     actionRunsPerMonth: 0,
     assistCreditsPerMonth: 0,
     apiRequestsPerMonth: 0,
@@ -1158,13 +1177,22 @@ export interface PlanPricing {
    * is what the contacts ladder did when it reached $0.25 against a $0.20
    * cost.
    *
-   * Null on free, whose band is 0 and which has no subscription to hang a
-   * metered item on, and null on enterprise, where every rate is the
-   * "not for sale" sentinel and the terms are contractual. Every OTHER paid
-   * tier carries one, Starter and Pro included: their bands are small but
-   * real, and transactional mail cannot be refused at any tier, so a null
-   * there is not "no overage" — it is unbounded absorbed spend on the two
-   * cheapest subscriptions the platform sells.
+   * Null wherever the plan has no email band to be over, and null on
+   * enterprise, where every rate is the "not for sale" sentinel and the terms
+   * are contractual. Free and Starter are the two banded at 0: campaign email
+   * begins at Pro, and `emailSendsOverage` yields 0 against a non-positive
+   * band, so a rate on either would advertise a fee that can never be
+   * computed — the same defect as a rate beside an UNLIMITED band.
+   *
+   * Every tier whose band is POSITIVE carries one, Pro upward. A finite band
+   * with no rate is silently free past the band, and since transactional mail
+   * cannot be refused at any tier that would be unbounded absorbed spend
+   * rather than "no overage".
+   *
+   * The Starter null therefore leaves that tier's transactional mail — the
+   * only mail it can send — unbilled at any volume. Bounded in practice by
+   * `hostLimit: 1` and a 1,000-contact CRM, and the alternative prices a
+   * password reset, but it is the one place this axis absorbs cost by design.
    */
   extraEmailSendsUsdPer1k: number | null
   /**
@@ -1217,7 +1245,11 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraApiRequestsUsdPer1k: null,
     extraAssistCreditsUsdPer1k: null,
     extraContactsUsdPer1k: 1,
-    extraEmailSendsUsdPer1k: 2.5,
+    // No email band to be "over" — see `emailSendsPerMonth` on the Starter
+    // entitlements. `emailSendsOverage` returns 0 for any non-positive band,
+    // so a rate here would price volume that can never be computed, which is
+    // the same defect as a rate beside an UNLIMITED band.
+    extraEmailSendsUsdPer1k: null,
     meteredInfraPassThrough: true,
   },
   pro: {

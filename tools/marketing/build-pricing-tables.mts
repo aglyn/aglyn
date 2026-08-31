@@ -1040,6 +1040,10 @@ const FRAME_STALE_CELLS: Record<string, { frame: string; why: string }> = {
     frame: '—',
     why: 'AGL-1152 moved the CDN to every plan, Free included; the frame still shows the pre-AGL-1152 split',
   },
+  'Email sends / mo · Starter': {
+    frame: '500',
+    why: 'campaign email begins at Pro — a site that may send needs its own verified provider sending domain, so the allowance attaches to the tiers that carry that cost. Starter is banded at 0 like Free; the frame still draws the allowance. Resolves when the four responsive /pricing frames are hand-edited',
+  },
 }
 
 const diffs: string[] = []

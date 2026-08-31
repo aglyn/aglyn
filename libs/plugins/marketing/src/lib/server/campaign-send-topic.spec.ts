@@ -196,7 +196,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // Nobody in these fixtures is suppressed; the topic is what is under test.
   filterSendableForHost: async (_hostId: string, emails: string[]) => emails,
   // Starter, so the monthly campaign cap does not refuse before the write.
-  getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'starter' } }),
+  getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'pro' } }),
   // No site here selects a custom sending domain, so every send resolves to
   // the platform identity — the behavior these suites were written against.
   resolveHostSendingIdentity: async () =>

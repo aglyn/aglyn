@@ -144,7 +144,9 @@ describe('the free plan carries no price on any billable dimension', () => {
     expect(PLAN_PRICING.free.extraApiRequestsUsdPer1k).toBeNull()
     expect(PLAN_PRICING.free.extraContactsUsdPer1k).toBeNull()
     // Free's campaign band is 0 and it has no subscription to hang a metered
-    // item on, so email past the band is structurally free here too.
+    // item on, so email past the band is structurally free here too. Starter
+    // shares this null since campaign email moved to Pro, so the positive
+    // control below prices the axis at Pro rather than here.
     expect(PLAN_PRICING.free.extraEmailSendsUsdPer1k).toBeNull()
     expect(PLAN_PRICING.free.basePriceMonthlyUsd).toBe(0)
     expect(planMetersInfraOverage(freeOrg())).toBe(false)
@@ -157,8 +159,15 @@ describe('the free plan carries no price on any billable dimension', () => {
     expect(PLAN_PRICING.starter.meteredInfraPassThrough).toBe(true)
     expect(PLAN_PRICING.starter.extraDataGbMonthlyUsd).toBe(0.36)
     expect(PLAN_PRICING.starter.extraContactsUsdPer1k).toBe(1)
-    expect(PLAN_PRICING.starter.extraEmailSendsUsdPer1k).toBe(2.5)
     expect(planMetersInfraOverage(paidOrg())).toBe(true)
+    // Email is the one axis Starter does NOT price, and Free's null above is
+    // therefore no longer distinguishing on its own — Starter shares it.
+    // Campaign email begins at Pro, so Pro is where this axis stops being
+    // free, and the control moves with it rather than being dropped.
+    expect(PLAN_ENTITLEMENTS.starter.emailSendsPerMonth).toBe(0)
+    expect(PLAN_PRICING.starter.extraEmailSendsUsdPer1k).toBeNull()
+    expect(PLAN_ENTITLEMENTS.pro.emailSendsPerMonth).toBeGreaterThan(0)
+    expect(PLAN_PRICING.pro.extraEmailSendsUsdPer1k).toBe(2.25)
   })
 
   it('BANDWIDTH NOW HAS BRACES TOO (AGL-2155), and they are free-only', () => {

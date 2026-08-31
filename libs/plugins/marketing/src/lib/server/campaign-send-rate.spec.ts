@@ -252,7 +252,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     emails: string[],
   ) => emails,
   filterSendableForHost: async (_hostId: string, emails: string[]) => emails,
-  getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'starter' } }),
+  getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'pro' } }),
   // No site here selects a custom sending domain, so every send resolves to
   // the platform identity — the behavior these suites were written against.
   resolveHostSendingIdentity: async () =>
