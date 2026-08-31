@@ -109,10 +109,22 @@ For developers and operators. None of this is needed to use the feature.
 ### How usage is counted
 
 Bandwidth is derived from page views rather than measured byte-for-byte at the edge. The
-platform uses a fixed estimate of **600 KB per page view** and converts in both directions,
-so the meter you read in GB and the counters the analytics pipeline writes are the same
-number expressed differently. On Free, 2 GB works out to roughly **3,500 page views** a
-month.
+platform uses a fixed accounting figure of **600 KB per page view** and converts in both
+directions, so the meter you read in GB and the counters the analytics pipeline writes are
+the same number expressed differently. On Free, 2 GB works out to roughly **3,500 page
+views** a month; on Starter, 50 GB is roughly **87,000**, and the same division gives every
+other band.
+
+That 600 KB is a **billing convention, not a measurement of your pages**, and the
+difference currently runs in your favor. A real page load measured against our own site
+comes in nearer **1 MB**, so the 3,500 views a Free plan converts to move closer to 3.5 GB
+of actual traffic than to 2 GB. Your allowance is charged at the convention, so the extra is
+not billed to you and not deducted from your band.
+
+Two things follow. Pages heavier than 600 KB do **not** consume your allowance faster —
+the counter moves per view, whatever the page weighs. And a page you make lighter does not
+stretch the allowance further, for the same reason: if you want more views, the lever is the
+plan's band, not the page.
 
 Page views are read from the per-host `analytics/{YYYY-MM-DD}` documents that already
 exist for the Analytics screens — evaluating a cap adds no Firestore reads to the serving

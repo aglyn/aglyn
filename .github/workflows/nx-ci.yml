@@ -298,6 +298,14 @@ jobs:
       - run: npm run test:tenant-page-weight
       - run: npm run check:tenant-page-weight
 
+      # The PRICE that weight is charged at. `perPageView` is a cost per page
+      # view billed at cost + 30%, and the budget above cannot see that the
+      # rate was calibrated against a page the code no longer builds. This
+      # pins the rate to the recorded wire measurement, and the measurement to
+      # the module graph it was taken against.
+      - run: npm run test:page-view-rate
+      - run: npm run check:page-view-rate
+
       # The affected run, REDIRECTED to a file (AGL-1617). It used to be
       # `| tee`, and the tee was the reason the artifact was useless: a pipe
       # makes nx's stdout ASYNCHRONOUS, and nx ends a failed run with

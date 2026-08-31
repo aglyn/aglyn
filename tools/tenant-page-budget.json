@@ -2,5 +2,16 @@
   "entry": "apps/tenant/app/[host]/[[...slug]]/catch-all-client.tsx",
   "baselineBytes": 2784135,
   "budgetBytes": 3480576,
-  "baselineModules": 333
+  "baselineModules": 333,
+  "wireCalibration": {
+    "pricedForKb": 627,
+    "measuredKb": 1054.3,
+    "acknowledgedShortfall": 1.69,
+    "sourceGraphBytes": 2784135,
+    "sourceGraphTolerance": 0.15,
+    "measuredPage": "https://aglyn.com/ at 1280x720",
+    "measuredBasis": "cold load in a fresh tab; first-party encoded bytes (Resource Timing encodedBodySize), every lazy image forced to load and all 11 accounted for, brotli as served by Vercel. Third-party tags are excluded: they are served from someone else's egress and cost us nothing. 792.4 KB of it is JavaScript and does not vary; the rest is images, which do vary with the viewport the srcset resolves against (1157.1 KB at 1440x900). The narrower reading is recorded because it is the one that argues for the smaller correction.",
+    "measuredAgainst": "the production deployment of 97daf952, which predates the tenant page-weight reduction on main",
+    "notMeasured": "/press is not a second reference. It is a brand-asset download page: forcing its 45 images plus its asset fetches pulled 17.7 MB, which is a download and not a page render, and no page-view rate should be calibrated against it."
+  }
 }

@@ -105,14 +105,32 @@ export function measurePageWeight({ entry, read, resolve, size }) {
   }
 }
 
-/** The budget a measurement should be pinned at, given the measurement. */
-export function budgetFor(measured) {
-  return {
+/**
+ * The budget a measurement should be pinned at, given the measurement.
+ *
+ * `wireCalibration` is carried through from the existing file VERBATIM, and
+ * deliberately not re-derived. It records what a real cold load of a published
+ * page weighed over the wire and which graph it was measured against, and
+ * `check-page-view-rate.mjs` prices `perPageView` off it. Re-stamping it here
+ * would let a `--write` silently re-certify a measurement nobody took — the
+ * whole point is that re-baselining a grown page leaves the calibration
+ * pinned to the old graph, so the pricing gate goes red and the rate gets
+ * looked at in the same diff.
+ *
+ * Dropping it would be worse still: the field would vanish from the file and
+ * the pricing gate would fail as unreadable rather than as stale.
+ */
+export function budgetFor(measured, existing = {}) {
+  const budget = {
     entry: TENANT_PAGE_ENTRY,
     baselineBytes: measured.bytes,
     budgetBytes: Math.ceil((measured.bytes * HEADROOM) / 1024) * 1024,
     baselineModules: measured.moduleCount,
   }
+  if (existing.wireCalibration) {
+    budget.wireCalibration = existing.wireCalibration
+  }
+  return budget
 }
 
 /**

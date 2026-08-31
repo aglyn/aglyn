@@ -1724,7 +1724,10 @@ export const METERED_MARKUP = 1.3
  * $0.026 and form submissions $0.0005 → $0.00005 — and MUST be changed here
  * and in `METERED_UNIT_RATES_USD` together. See that table for each figure's
  * basis; it is the one a customer is billed against, so it is the one that
- * carries the working. Lowering the two here lowers measured COGS, which
+ * carries the working — including the open one, which is that `perPageView`
+ * is calibrated against a 627 KB page and the real one now measures 1054.3 KB.
+ * `npm run check:page-view-rate` holds that gap at the size it was last
+ * reviewed at. Lowering the two here lowers measured COGS, which
  * changes no guardrail verdict: `INFRA_COGS_PER_SITE_USD × sites` is the
  * floor, and it already outran measured cost by five orders of magnitude.
  */

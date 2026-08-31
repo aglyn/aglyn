@@ -84,7 +84,16 @@ function main() {
   }
 
   if (args.includes('--write')) {
-    const budget = budgetFor(measured)
+    // Read the file we are about to overwrite, so the wire calibration inside
+    // it survives a re-baseline. See `budgetFor`.
+    let existing = {}
+    try {
+      existing = JSON.parse(readFileSync(BUDGET_PATH, 'utf8'))
+    } catch {
+      // No readable budget yet — a first `--write` writes one without a
+      // calibration, and `check:page-view-rate` says so rather than passing.
+    }
+    const budget = budgetFor(measured, existing)
     writeFileSync(BUDGET_PATH, `${JSON.stringify(budget, null, 2)}\n`)
     console.log(
       `Wrote ${relative(REPO_ROOT, BUDGET_PATH)}\n` +
