@@ -37,7 +37,7 @@ import {
 } from '@aglyn/aglyn/app-utils/platform-brand'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { BillingPlanCardsComponent } from './billing-plan-cards.component'
 
 /**
@@ -335,6 +335,18 @@ describe('the page opens on the decision, not the catalogue', () => {
     renderCards({ plan: 'starter' })
     expect(screen.queryAllByText(/contacts \(\+\$[\d.]+\/1k over\)/).length).toBeGreaterThan(0)
     expect(screen.queryAllByText(/hosts? \(\+\$[\d.]+\/extra\)/).length).toBeGreaterThan(0)
+    // Email past the band bills too, and mostly it is TRANSACTIONAL mail that
+    // carries an org there — the cap refuses campaigns, so campaign volume
+    // cannot pass it. A row printing only the number reads as a wall.
+    expect(
+      screen.queryAllByText(
+        /campaign emails\/mo \(\+\$\d+\.\d{2}\/1k over\)/,
+      ).length,
+    ).toBeGreaterThan(0)
+    // Cents, always: "$2.5" reads as a typo on a price.
+    expect(
+      screen.queryAllByText(/campaign emails\/mo \(\+\$\d+\.\d\/1k over\)/),
+    ).toHaveLength(0)
   })
 
   it('and Enterprise, which has no meter, prints no rate', () => {
@@ -376,6 +388,167 @@ describe('the page opens on the decision, not the catalogue', () => {
     ).toHaveLength(0)
     // The ladder is still reachable — it just is not what it opens on.
     expect(screen.getByRole('button', { name: /Compare all/ })).toBeTruthy()
+  })
+})
+
+/**
+ * THE ENTERPRISE CARD IS A RUNG, NOT A DIFFERENT KIND OF OBJECT.
+ *
+ * In the comparison grid it used to render five highlight lines and nothing
+ * else — no allowances, no feature sections — squeezed into a third of a
+ * half-width card beside the agreement note, so "Unlimited sites, screens,
+ * seats, and storage" wrapped every two or three words against a card that
+ * was otherwise empty. The focused view had already been given the shared
+ * body; the grid had not.
+ *
+ * A comparison grid is read ACROSS. A reader travels along one row — team
+ * seats, contacts, campaign emails — and compares. The tier a reader most
+ * needs to compare against was the one column that had no rows at all, and
+ * the figure this change introduces (a contracted email band that is a NUMBER
+ * rather than "Unlimited") would have had nowhere to appear.
+ */
+describe('the Enterprise card in the comparison grid', () => {
+  /** The Enterprise `Card` element, scoped so neighbours cannot satisfy a query. */
+  function enterpriseCard(): HTMLElement {
+    const heading = screen
+      .queryAllByText('Enterprise')
+      .map((node) => node.closest('.MuiCard-root'))
+      .find(Boolean)
+    if (!heading) throw new Error('no Enterprise card in the grid')
+    return heading as HTMLElement
+  }
+
+  function agencyCard(): HTMLElement {
+    const heading = screen
+      .queryAllByText('Agency')
+      .map((node) => node.closest('.MuiCard-root'))
+      .find(Boolean)
+    if (!heading) throw new Error('no Agency card in the grid')
+    return heading as HTMLElement
+  }
+
+  it('renders the same allowance rows as the tier beside it', () => {
+    renderGrid({ plan: 'agency' })
+    const enterprise = within(enterpriseCard())
+    // One row per axis, in the order every other card prints them. Asserted
+    // by LABEL rather than by value, because the values differ by design and
+    // the shared structure is the property.
+    expect(enterprise.getAllByText(/hosts?$/).length).toBeGreaterThan(0)
+    expect(enterprise.getByText(/screens per host/)).toBeTruthy()
+    expect(enterprise.getByText(/shared layouts/)).toBeTruthy()
+    expect(enterprise.getByText(/saved templates per host/)).toBeTruthy()
+    expect(enterprise.getAllByText(/ storage$/).length).toBeGreaterThan(0)
+    expect(enterprise.getByText(/bandwidth$/)).toBeTruthy()
+    expect(enterprise.getAllByText(/team seats?$/).length).toBeGreaterThan(0)
+    expect(enterprise.getAllByText(/site collaborators?$/).length).toBeGreaterThan(0)
+    expect(enterprise.getByText('Unlimited member accounts')).toBeTruthy()
+    expect(enterprise.getByText(/contacts$/)).toBeTruthy()
+    expect(enterprise.getByText(/form submissions\/mo/)).toBeTruthy()
+    expect(enterprise.getByText(/variables ·/)).toBeTruthy()
+    expect(enterprise.getByText(/org datasets ×/)).toBeTruthy()
+    expect(enterprise.getByText(/API requests\/mo/)).toBeTruthy()
+    // `getAll`: the highlight above says "0% platform fees on storefront
+    // sales and bookings" and the tier row below says "0% platform fees" —
+    // the per-org claim and the comparable row, deliberately both.
+    expect(enterprise.getAllByText(/platform fees/).length).toBeGreaterThan(0)
+  })
+
+  it('renders the sectioned feature checklist too', () => {
+    renderGrid({ plan: 'agency' })
+    const enterprise = within(enterpriseCard())
+    for (const section of [
+      'Build & publish',
+      'Grow & automate',
+      'Commerce',
+      'Platform & enterprise',
+    ]) {
+      expect(enterprise.getByText(section)).toBeTruthy()
+    }
+    // The two Enterprise-only flags, ticked on the card that sells them.
+    expect(enterprise.getByText('SAML / OIDC single sign-on')).toBeTruthy()
+    expect(enterprise.getByText('Full white-label')).toBeTruthy()
+  })
+
+  it('BOTH WAYS: the two cards carry the SAME row labels', () => {
+    // The comparison property itself, rather than a list of rows that happen
+    // to be present. If either card grows or loses a row the other does not,
+    // the grid stops being readable across and this goes red.
+    renderGrid({ plan: 'agency' })
+    const rowLabels = (card: HTMLElement) =>
+      [...card.querySelectorAll('.MuiTypography-body2')]
+        .map((node) => (node.textContent ?? '').trim())
+        .filter(Boolean).length
+    // Not equality of TEXT — the numbers differ — but of row COUNT, which is
+    // what a reader's eye travels along.
+    expect(rowLabels(enterpriseCard())).toBeGreaterThan(40)
+    expect(rowLabels(enterpriseCard())).toBeGreaterThanOrEqual(
+      rowLabels(agencyCard()),
+    )
+  })
+
+  it('states the contracted campaign-email band as a NUMBER', () => {
+    // The figure this whole change introduces, on the surface where a
+    // customer meets it. A card that could not render allowances would have
+    // hidden the one Enterprise band that is no longer unlimited.
+    renderGrid({ plan: 'agency' })
+    const enterprise = within(enterpriseCard())
+    expect(enterprise.getByText('250,000 campaign emails/mo')).toBeTruthy()
+    // …and no overage rate beside it: Enterprise publishes none, and quoting
+    // one on a contract-priced tier would advertise a fee nobody agreed to.
+    expect(enterprise.queryByText(/campaign emails\/mo \(\+/)).toBeNull()
+    // Never the sentinel, in either of the shapes it takes when mishandled.
+    expect(enterprise.queryByText(/Unlimited campaign emails/)).toBeNull()
+    expect(enterprise.queryByText(/∞|Infinity|null campaign/)).toBeNull()
+    // And Agency's own band beside it, so the row can be read across.
+    expect(
+      within(agencyCard()).getByText(
+        '130,000 campaign emails/mo (+$1.80/1k over)',
+      ),
+    ).toBeTruthy()
+  })
+
+  it('keeps the highlights, exactly once, and keeps the agreement note', () => {
+    // The highlights are NOT replaced by the allowance rows. They are the one
+    // per-ORG answer on the card: `isEnterpriseOrg` is true for a comped
+    // marker and a negotiated price as well as for the plan, and those two
+    // grant nothing (AGL-2297). The allowance rows read the TIER, like every
+    // other card, so they cannot express that distinction.
+    renderGrid({ plan: 'pro', enterprise: true })
+    const enterprise = within(enterpriseCard())
+    expect(
+      enterprise.getAllByText('SAML / OIDC single sign-on for your whole team'),
+    ).toHaveLength(1)
+    expect(enterprise.getByText('YOUR AGREEMENT')).toBeTruthy()
+    expect(
+      enterprise.getByText(/on an Enterprise agreement/),
+    ).toBeTruthy()
+    expect(
+      enterprise.getByRole('button', { name: 'Contact us to change' }),
+    ).toBeTruthy()
+  })
+
+  it('a PROSPECT is offered the tier, with a live route to sales', () => {
+    renderGrid({ plan: 'agency' })
+    const enterprise = within(enterpriseCard())
+    expect(enterprise.getByText('WHAT AN AGREEMENT INCLUDES')).toBeTruthy()
+    const contact = enterprise.getByRole('link', { name: 'Contact sales' })
+    expect(contact.getAttribute('href')).toBeTruthy()
+    // No agreement, so no note about one.
+    expect(enterprise.queryByText(/on an Enterprise agreement/)).toBeNull()
+  })
+
+  it('a comped org is told what its agreement does NOT include', () => {
+    // The AGL-2297 guard, still live through the restructure: a comped org
+    // reads as Enterprise and holds none of it.
+    renderGrid({
+      plan: 'pro',
+      enterprise: true,
+      org: { $id: 'org-comped', plan: 'pro', enterprise: true } as never,
+    })
+    const enterprise = within(enterpriseCard())
+    expect(
+      enterprise.getByText(/does not currently enable everything/),
+    ).toBeTruthy()
   })
 })
 

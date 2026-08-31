@@ -36,6 +36,7 @@ import {
   FORM_ABUSE_CEILING_MULTIPLE,
   FORM_ABUSE_CEILING_UNLIMITED,
   FORMS_PER_HOST_CEILING,
+  ENTERPRISE_EMAIL_SENDS_PER_MONTH,
   planMetersInfraOverage,
   isBillingSubscription,
   isCustomPricedPlan,
@@ -250,6 +251,7 @@ describe('plan entitlements', () => {
         extraDataGbMonthlyUsd: null,
         extraApiRequestsUsdPer1k: null,
         extraContactsUsdPer1k: null,
+        extraEmailSendsUsdPer1k: null,
         meteredInfraPassThrough: false,
       },
       starter: {
@@ -262,6 +264,7 @@ describe('plan entitlements', () => {
         extraDataGbMonthlyUsd: 0.25,
         extraApiRequestsUsdPer1k: null,
         extraContactsUsdPer1k: 1,
+        extraEmailSendsUsdPer1k: 2.5,
         meteredInfraPassThrough: true,
       },
       pro: {
@@ -274,6 +277,7 @@ describe('plan entitlements', () => {
         extraDataGbMonthlyUsd: 0.25,
         extraApiRequestsUsdPer1k: null,
         extraContactsUsdPer1k: 0.75,
+        extraEmailSendsUsdPer1k: 2.25,
         meteredInfraPassThrough: true,
       },
       business: {
@@ -286,6 +290,7 @@ describe('plan entitlements', () => {
         extraDataGbMonthlyUsd: 0.25,
         extraApiRequestsUsdPer1k: 0.5,
         extraContactsUsdPer1k: 0.5,
+        extraEmailSendsUsdPer1k: 2,
         meteredInfraPassThrough: true,
       },
       scale: {
@@ -298,6 +303,7 @@ describe('plan entitlements', () => {
         extraDataGbMonthlyUsd: 0.25,
         extraApiRequestsUsdPer1k: 0.35,
         extraContactsUsdPer1k: 0.4,
+        extraEmailSendsUsdPer1k: 1.9,
         meteredInfraPassThrough: true,
       },
       advanced: {
@@ -309,7 +315,8 @@ describe('plan entitlements', () => {
         extraDatasetMonthlyUsd: 1,
         extraDataGbMonthlyUsd: 0.25,
         extraApiRequestsUsdPer1k: 0.2,
-        extraContactsUsdPer1k: 0.25,
+        extraContactsUsdPer1k: 0.4,
+        extraEmailSendsUsdPer1k: 1.85,
         meteredInfraPassThrough: true,
       },
       agency: {
@@ -322,6 +329,7 @@ describe('plan entitlements', () => {
         extraDataGbMonthlyUsd: 0.25,
         extraApiRequestsUsdPer1k: 0.15,
         extraContactsUsdPer1k: null,
+        extraEmailSendsUsdPer1k: 1.8,
         meteredInfraPassThrough: true,
       },
       // Enterprise (AGL-1118) is quoted per deal — these zeros/nulls are the
@@ -337,6 +345,7 @@ describe('plan entitlements', () => {
         extraDataGbMonthlyUsd: null,
         extraApiRequestsUsdPer1k: null,
         extraContactsUsdPer1k: null,
+        extraEmailSendsUsdPer1k: null,
         meteredInfraPassThrough: false,
       },
     })
@@ -391,9 +400,20 @@ describe('plan entitlements', () => {
       // deal that needs a larger one takes a per-org override, which is the
       // instrument for exactly this and leaves the ceiling alone.
       if (key === 'formsPerHost') continue
+      // Nor is the email allowance, and for a related reason one axis over.
+      // Every other band here is infrastructure we already meter and price
+      // into the deal; email is a third party's per-message charge, so an
+      // unbounded band is an unbounded liability the negotiation never named.
+      // It is a DEFAULT — a contract raises it through the same per-org
+      // override `formsPerHost` uses — and it is FINITE, because
+      // `JSON.stringify(Infinity)` is `null` and reads back as a cap of zero
+      // on the most expensive plan on the price list.
+      if (key === 'emailSendsPerMonth') continue
       expect([key, value]).toEqual([key, UNLIMITED])
     }
     expect(resolved.formsPerHost).toBe(FORMS_PER_HOST_CEILING)
+    expect(resolved.emailSendsPerMonth).toBe(ENTERPRISE_EMAIL_SENDS_PER_MONTH)
+    expect(Number.isFinite(resolved.emailSendsPerMonth)).toBe(true)
     expect(resolved.transactionFeePhysicalPct).toBe(0)
     expect(resolved.transactionFeeDigitalPct).toBe(0)
     expect(resolved.marketplaceFeePct).toBe(20)

@@ -368,29 +368,82 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
     })
 
     /**
-     * RE-TRANSCRIBED 2026-08-30, against the published page after the
-     * allowance change — the only row on this table whose fetch date is not
-     * 2026-08-19.
+     * ⚠️ THE ONE ROW WHERE THE CODE AND THE PUBLISHED PAGE DISAGREE ON PURPOSE.
      *
-     * This is the sanctioned case the header describes, not the frozen-price
-     * case it warns about. No CHARGED price moved: Advanced stays $399 and
-     * Agency stays $799. Two included allowances came DOWN, by an owner
-     * decision recorded in the Drive Pricing Decision Log and mirrored to
-     * `docs/DECISION_LOG.md`, because Agency sold 1,000,000 sends a month
-     * against a platform that can deliver 360,000. The published page and the
-     * Figma frames were updated in the same pass, which is what makes editing
-     * this fixture legitimate rather than a way of silencing a red.
+     * The transcription below is what `aglyn.com/pricing` served — the four
+     * upper figures re-transcribed 2026-08-30 after the deliverability
+     * reduction, the rest fetched 2026-08-19. The page has NOT been
+     * republished since; the marketing site is besigner-published content and
+     * moves on its own change.
+     *
+     * The code has moved beneath it. Email sending is now priced: our cost is
+     * $0.90 per 1,000 delivered messages, and against the old bands that ran
+     * 28-36% of the subscription at Business and above. The included bands
+     * came down to land every changed tier near 15%, and an overage rate went
+     * on beside them. No CHARGED price moved — Business $139, Scale $249,
+     * Advanced $399 and Agency $799 are untouched, which is what keeps this
+     * inside the Sept 1 freeze.
+     *
+     * ## Why this asserts the DIVERGENCE instead of the new numbers
+     *
+     * Editing the transcription to match would be the one move the header
+     * forbids: these rows are a record of what a customer READ, and a
+     * transcription is only worth anything if it was transcribed. Nobody has
+     * fetched the page since the constants moved, so writing the new figures
+     * here would be asserting a fetch that did not happen — the guard would
+     * still be green and would have stopped watching the thing it exists for.
+     *
+     * So both sides are pinned, separately, and the gap is named. This goes
+     * red if the code moves again, and red if somebody edits the published
+     * side without the page behind it. When `/pricing` is republished,
+     * collapse this back into one `toEqual` against the code, with the new
+     * fetch date — that is what closing the gap looks like.
      */
-    it('Email sends / mo — — · 500 · 5k · 50k · 100k · 125k · 250k', () => {
-      expect(quotaColumn('emailSendsPerMonth')).toEqual([
-        NONE,
-        500,
-        5000,
-        50000,
-        100000,
-        125000,
-        250000,
-      ] satisfies Row)
+    describe('Email sends / mo — the code is ahead of the page', () => {
+      /** What the published page still says, per column. */
+      const PUBLISHED = [NONE, 500, 5000, 50000, 100000, 125000, 250000] satisfies Row
+      /** What the code now enforces and bills against. */
+      const CODE = [NONE, 500, 5000, 25000, 40000, 65000, 130000] satisfies Row
+
+      it('the code holds the reduced bands', () => {
+        expect(quotaColumn('emailSendsPerMonth')).toEqual(CODE)
+      })
+
+      it('the reduction is confined to Business and above', () => {
+        // Free, Starter and Pro were already under 10% email COGS, so they did
+        // not move — and asserting that here is what stops a sweep that
+        // lowered all seven from reading as this change.
+        expect(CODE.slice(0, 3)).toEqual(PUBLISHED.slice(0, 3))
+        for (let column = 3; column < CODE.length; column += 1) {
+          expect(`col${column}: ${CODE[column] < PUBLISHED[column]}`).toBe(
+            `col${column}: true`,
+          )
+        }
+      })
+
+      it('no CHARGED price moved with it — the freeze holds', () => {
+        expect(
+          PUBLISHED_COLUMNS.map((plan) => PLAN_PRICING[plan].basePriceMonthlyUsd),
+        ).toEqual([0, 25, 56, 139, 249, 399, 799] satisfies Row)
+      })
+
+      it('names the republish this change is waiting on', () => {
+        // The gap, as numbers rather than prose, so the size of what has to be
+        // republished is legible from the failure output. Delete this case
+        // together with `PUBLISHED` once the page carries `CODE`.
+        expect(
+          PUBLISHED_COLUMNS.map((plan, column) => [
+            plan,
+            PUBLISHED[column],
+            CODE[column],
+          ]).filter(([, was, now]) => was !== now),
+        ).toEqual([
+          ['business', 50000, 25000],
+          ['scale', 100000, 40000],
+          ['advanced', 125000, 65000],
+          ['agency', 250000, 130000],
+        ])
+      })
     })
 
     it.each([
@@ -582,17 +635,38 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       )
     })
 
-    it('Contacts per 1,000 over band — $1 · $0.75 · $0.50 · $0.40 · $0.25 · —', () => {
-      // Agency is NULL, and the em dash on the published page is the whole
-      // point (AGL-2482). Its `contactsPerHost` is UNLIMITED, so an overage
-      // rate there advertises a fee that cannot be charged:
-      // `checkContactQuota` computes `Math.max(0, used - Infinity)`, which is
-      // 0 at every usage level. No charged price moves either way — the rate
-      // was unreachable — so this is the published page agreeing with what
-      // the code does.
-      expect(PAID.map((p) => PLAN_PRICING[p].extraContactsUsdPer1k)).toEqual([
-        1, 0.75, 0.5, 0.4, 0.25, null,
-      ])
+    /**
+     * ⚠️ A SECOND ROW WHERE THE CODE IS AHEAD OF THE PAGE — see the email
+     * sends row above for the full reasoning, which is identical here.
+     *
+     * Advanced's $0.25 was the last step of a ladder that descended past its
+     * own cost floor: `ORG_COGS_UNIT_RATES_USD.perContactMonth` is $0.0002,
+     * which is $0.20 per 1,000, so the published rate carried a 20% line
+     * margin — thinner than the 23% the infrastructure pass-through earns by
+     * construction, on a line sold as a retail price rather than as cost
+     * recovery. It is now floored at $0.40, the same figure Scale carries.
+     *
+     * Agency stays NULL, and the em dash on the published page is the whole
+     * point (AGL-2482): its `contactsPerHost` is UNLIMITED, so an overage
+     * rate there advertises a fee that cannot be charged —
+     * `checkContactQuota` computes `Math.max(0, used - Infinity)`, which is 0
+     * at every usage level.
+     */
+    it('Contacts per 1,000 over band — the Advanced step is floored', () => {
+      const PUBLISHED = [1, 0.75, 0.5, 0.4, 0.25, null]
+      const CODE = [1, 0.75, 0.5, 0.4, 0.4, null]
+      expect(PAID.map((p) => PLAN_PRICING[p].extraContactsUsdPer1k)).toEqual(
+        CODE,
+      )
+      // The gap, named, so its size is legible from a failure. Collapse this
+      // into one `toEqual` when `/pricing` is republished.
+      expect(
+        PAID.map((plan, column) => [plan, PUBLISHED[column], CODE[column]])
+          .filter(([, was, now]) => was !== now),
+      ).toEqual([['advanced', 0.25, 0.4]])
+      // Agency's em dash did not move.
+      expect(PLAN_PRICING.agency.extraContactsUsdPer1k).toBeNull()
+      expect(PLAN_ENTITLEMENTS.agency.contactsPerHost).toBe(UNLIMITED)
     })
   })
 

@@ -145,6 +145,48 @@ export function restoreQuotaLimit(
 }
 
 /**
+ * Campaign emails an Enterprise agreement includes per month, before the
+ * contract says otherwise.
+ *
+ * ## Why the one Enterprise quota that is a number
+ *
+ * Every other Enterprise band is `UNLIMITED` because the thing behind it is
+ * infrastructure we already meter and price into the deal — storage, page
+ * views, seats. Email is not that. It is a per-message charge from a third
+ * party, so an unbounded allowance is an unbounded liability with no meter
+ * underneath it and no ceiling a negotiation ever had to name.
+ *
+ * `UNLIMITED` was also unrepresentable off-process. It is
+ * `Number.POSITIVE_INFINITY`, `JSON.stringify(Infinity)` is `null`, and
+ * `Number(null)` is `0` — so the most expensive plan on the price list
+ * serialised to a cap of ZERO through any route that did not also send the
+ * explicit flag `restoreQuotaLimit` rebuilds from. A finite number crosses
+ * the wire as itself.
+ *
+ * ## Why this number
+ *
+ * It is what the sending platform can actually deliver to one workspace with
+ * room to spare. At the shipped constants a workspace's share is 500 messages
+ * an hour and a projected month is 720 hours, so 360,000 is the ceiling
+ * nothing can exceed however it is sold. 250,000 spends 500 of those 720
+ * hours, leaving the rest for bursts, retries and domain warm-up —
+ * `email-ceiling-dimensioning.spec.ts` holds that relation, and holds the
+ * platform rate still so the gap cannot be closed by quietly raising it.
+ *
+ * Selling more than that would be selling mail that cannot leave the
+ * building: the hourly ceiling DEFERS rather than refuses, so the excess does
+ * not bounce, it simply never sends.
+ *
+ * ## It is a DEFAULT, and a contract raises it
+ *
+ * `resolveOrgEntitlements` applies a per-org `entitlements.emailSendsPerMonth`
+ * override ahead of this, so a deal that buys more email buys it on that org
+ * without moving the figure every other agreement is measured against — the
+ * same mechanism `formsPerHost` uses for the same reason.
+ */
+export const ENTERPRISE_EMAIL_SENDS_PER_MONTH = 250_000
+
+/**
  * Plan → default entitlements. Versioned with the app so pricing changes are
  * code-reviewed; per-org overrides live on `org.entitlements` and win
  * key-by-key. Tier table aligned to the Tenant Billing & SaaS Plans proposal
@@ -443,7 +485,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
     contactsPerHost: 100000,
-    emailSendsPerMonth: 50000,
+    emailSendsPerMonth: 25000,
     actionRunsPerMonth: 50000,
     apiRequestsPerMonth: 100_000,
     datasetsPerOrg: 100,
@@ -516,7 +558,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
     contactsPerHost: 500000,
-    emailSendsPerMonth: 100000,
+    emailSendsPerMonth: 40000,
     actionRunsPerMonth: 100000,
     apiRequestsPerMonth: 300000,
     datasetsPerOrg: 250,
@@ -586,7 +628,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
     contactsPerHost: 1000000,
-    emailSendsPerMonth: 125000,
+    emailSendsPerMonth: 65000,
     actionRunsPerMonth: 250000,
     apiRequestsPerMonth: 1_000_000,
     datasetsPerOrg: 500,
@@ -660,7 +702,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
     contactsPerHost: UNLIMITED,
-    emailSendsPerMonth: 250000,
+    emailSendsPerMonth: 130000,
     actionRunsPerMonth: 1000000,
     apiRequestsPerMonth: 5000000,
     datasetsPerOrg: 2000,
@@ -715,13 +757,16 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
   // Enterprise (AGL-1118): the top of the ladder and the ONLY custom-priced
   // tier — staff-provisioned per deal (AGL-1110), never sold self-serve, so it
   // is excluded from `SELF_SERVE_PLANS` and carries no list price in
-  // `PLAN_PRICING`. Capacity is Agency's, uncapped: EVERY quota is UNLIMITED,
-  // byte-size ones included — infra cost is metered and priced into the deal,
-  // so a hard wall would only break a customer already paying for the usage.
-  // This is the one tier where the AGL-67 "media storage exceeds the
-  // published-site cap" invariant is vacuous: both are unbounded.
+  // `PLAN_PRICING`. Capacity is Agency's, uncapped: every quota that costs
+  // infrastructure is UNLIMITED, byte-size ones included — infra cost is
+  // metered and priced into the deal, so a hard wall would only break a
+  // customer already paying for the usage. This is the one tier where the
+  // AGL-67 "media storage exceeds the published-site cap" invariant is
+  // vacuous: both are unbounded.
   // White-label AND SSO ship on the plan itself rather than through the
   // per-org `entitlements` override that Enterprise-as-a-label needed.
+  //
+  // `emailSendsPerMonth` is the ONE exception, and see the constant for why.
   enterprise: {
     hostLimit: UNLIMITED,
     screensPerHost: UNLIMITED,
@@ -742,7 +787,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
     contactsPerHost: UNLIMITED,
-    emailSendsPerMonth: UNLIMITED,
+    emailSendsPerMonth: ENTERPRISE_EMAIL_SENDS_PER_MONTH,
     actionRunsPerMonth: UNLIMITED,
     apiRequestsPerMonth: UNLIMITED,
     datasetsPerOrg: UNLIMITED,
@@ -939,6 +984,50 @@ export interface PlanPricing {
    */
   extraContactsUsdPer1k: number | null
   /**
+   * Retail overage per 1,000 emails beyond `emailSendsPerMonth`.
+   *
+   * ## What it prices, which is not what the cap refuses
+   *
+   * The cap is enforced against CAMPAIGN sends alone and refuses them at the
+   * band — a campaign is discretionary, so the plan is allowed to say no.
+   * Transactional mail is never refused at any tier, so an org finishes the
+   * month above its band whenever receipts, invites, booking reminders and
+   * workflow notifications carry it there. That excess is real provider spend
+   * that no gate could have stopped, and this is the rate it bills at.
+   *
+   * ## Retail, NOT the infrastructure pass-through
+   *
+   * `meteredInfraPassThrough` covers exactly three meters — storage, page
+   * views, form submissions — and the published term for those is "at cost +
+   * 30%", which makes the figure in `METERED_BILLED_RATES_USD` the claim
+   * itself. Email is not in that set and this rate is not derived from
+   * `METERED_MARKUP`: it is a price, set beside `extraContactsUsdPer1k` and
+   * `extraApiRequestsUsdPer1k`, and it descends with the tier the way both of
+   * those do. Describing it as "at cost" anywhere would make the pass-through
+   * sentence false about three meters that really are.
+   *
+   * Our own per-email cost is `ORG_COGS_UNIT_RATES_USD.perEmailSend`, and it
+   * is a cost-model input rather than anything a customer is quoted.
+   *
+   * ## The floor, and why the ladder stops descending
+   *
+   * Every retail line must carry at least a 50% margin, and at a cost of
+   * $0.90 per 1,000 that floor is $1.80. The ladder still steps down with
+   * volume the way contacts and API requests do — a larger plan pays less per
+   * message — it simply stops at the floor instead of running past it, which
+   * is what the contacts ladder did when it reached $0.25 against a $0.20
+   * cost.
+   *
+   * Null on free, whose band is 0 and which has no subscription to hang a
+   * metered item on, and null on enterprise, where every rate is the
+   * "not for sale" sentinel and the terms are contractual. Every OTHER paid
+   * tier carries one, Starter and Pro included: their bands are small but
+   * real, and transactional mail cannot be refused at any tier, so a null
+   * there is not "no overage" — it is unbounded absorbed spend on the two
+   * cheapest subscriptions the platform sells.
+   */
+  extraEmailSendsUsdPer1k: number | null
+  /**
    * Whether the plan carries the metered infrastructure pass-through
    * (AGL-41, turned on in AGL-1280): media storage, bandwidth (page views)
    * and form submissions BEYOND the plan's included bands, billed at
@@ -973,6 +1062,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDataGbMonthlyUsd: null,
     extraApiRequestsUsdPer1k: null,
     extraContactsUsdPer1k: null,
+    extraEmailSendsUsdPer1k: null,
     meteredInfraPassThrough: false,
   },
   starter: {
@@ -985,6 +1075,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDataGbMonthlyUsd: 0.25,
     extraApiRequestsUsdPer1k: null,
     extraContactsUsdPer1k: 1,
+    extraEmailSendsUsdPer1k: 2.5,
     meteredInfraPassThrough: true,
   },
   pro: {
@@ -997,6 +1088,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDataGbMonthlyUsd: 0.25,
     extraApiRequestsUsdPer1k: null,
     extraContactsUsdPer1k: 0.75,
+    extraEmailSendsUsdPer1k: 2.25,
     meteredInfraPassThrough: true,
   },
   business: {
@@ -1009,6 +1101,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDataGbMonthlyUsd: 0.25,
     extraApiRequestsUsdPer1k: 0.5,
     extraContactsUsdPer1k: 0.5,
+    extraEmailSendsUsdPer1k: 2,
     meteredInfraPassThrough: true,
   },
   scale: {
@@ -1021,6 +1114,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDataGbMonthlyUsd: 0.25,
     extraApiRequestsUsdPer1k: 0.35,
     extraContactsUsdPer1k: 0.4,
+    extraEmailSendsUsdPer1k: 1.9,
     meteredInfraPassThrough: true,
   },
   advanced: {
@@ -1032,7 +1126,13 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDatasetMonthlyUsd: 1,
     extraDataGbMonthlyUsd: 0.25,
     extraApiRequestsUsdPer1k: 0.2,
-    extraContactsUsdPer1k: 0.25,
+    // FLOORED at the 50% retail margin, not stepped down again. The ladder
+    // above it descends $1.00 → $0.75 → $0.50 → $0.40, and one more step
+    // would have reached $0.25 against a `perContactMonth` cost of $0.20 per
+    // 1,000 — a 20% line margin on a retail price, thinner than the 23% the
+    // infrastructure pass-through earns while being sold as cost recovery.
+    extraContactsUsdPer1k: 0.4,
+    extraEmailSendsUsdPer1k: 1.85,
     meteredInfraPassThrough: true,
   },
   agency: {
@@ -1051,6 +1151,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     // stop advertising a fee we could never collect. The plan card and
     // `/pricing` both already suppress the suffix when this is null.
     extraContactsUsdPer1k: null,
+    extraEmailSendsUsdPer1k: 1.8,
     meteredInfraPassThrough: true,
   },
   // Enterprise (AGL-1118) has NO list price — every figure here is the
@@ -1071,6 +1172,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDataGbMonthlyUsd: null,
     extraApiRequestsUsdPer1k: null,
     extraContactsUsdPer1k: null,
+    extraEmailSendsUsdPer1k: null,
     meteredInfraPassThrough: false,
   },
 }
@@ -1442,9 +1544,24 @@ export const METERED_MARKUP = 1.3
  * The three added here are operator-tuned estimates of the same quality as
  * the existing three — Firestore-backed dataset storage is priced well above
  * object storage because it is, and API requests and contacts are priced off
- * the reads behind them. Treat all six as provisional until validated against
- * a real Firebase + Vercel invoice month; AGL-1134 says so out loud rather
- * than implying the numbers are derived.
+ * the reads behind them. Treat every operator-tuned figure here as
+ * provisional until validated against a real Firebase + Vercel invoice month;
+ * AGL-1134 says so out loud rather than implying the numbers are derived.
+ * `perEmailSend` is the exception and carries its own basis below.
+ *
+ * ## Three of these are shared with the billed table. The rest are NOT.
+ *
+ * `storagePerGbMonth`, `perPageView` and `perFormSubmission` are the metered
+ * infrastructure pass-through, and the customer is charged those figures
+ * times `METERED_MARKUP`. They therefore appear in `METERED_UNIT_RATES_USD`
+ * as well, with identical values, and must be changed in both places at once.
+ *
+ * Everything else here is a cost-model input ONLY. `dataStoragePerGbMonth`,
+ * `perApiRequest`, `perContactMonth` and `perEmailSend` price what an org
+ * costs us; what an org is CHARGED on those axes is a retail rate on
+ * `PLAN_PRICING` that descends with the tier and is not derived from cost.
+ * Adding one of them to `METERED_UNIT_RATES_USD` would put it inside the
+ * "at cost + 30%" claim, which is true of exactly three meters.
  *
  * The first three were corrected 2026-08-09 (AGL-1280) — storage $0.03 →
  * $0.026 and form submissions $0.0005 → $0.00005 — and MUST be changed here
@@ -1462,6 +1579,21 @@ export const ORG_COGS_UNIT_RATES_USD = {
   dataStoragePerGbMonth: 0.18,
   perApiRequest: 0.000002,
   perContactMonth: 0.0002,
+  /**
+   * One delivered email, whatever produced it — $0.90 per 1,000.
+   *
+   * Unlike its five neighbours this is not an operator-tuned estimate. It is
+   * the provider's own blended rate at the tier above the account's current
+   * one ($90 / 100,000) and also the marginal overage rate on both that tier
+   * and the current one, so it does not fall as volume grows and is the
+   * conservative figure at any usage the platform can reach.
+   *
+   * It prices EVERY send on the cost meter — campaigns, receipts, invites,
+   * password resets — because every one of them is a message the provider
+   * charges for. The band on the plan and the retail overage rate beside it
+   * both concern a smaller quantity; this is the whole bill.
+   */
+  perEmailSend: 0.0009,
 }
 
 /** The rollup fields `orgMonthlyCogsUsd` prices. All optional and all absent-safe. */
@@ -1473,6 +1605,16 @@ export interface OrgUsageRollupInput {
   dataStorageMb?: number | null
   apiRequests?: number | null
   contactsCount?: number | null
+  /**
+   * Every email the org sent this month, campaigns and transactional alike —
+   * the `emailSends` cost meter, not `campaignEmailSends`.
+   *
+   * The cost meter is the right input precisely because the campaign meter is
+   * the one with a cap on it. What this org cost us is every message the
+   * provider charged for, and most of them are messages no quota could have
+   * refused.
+   */
+  emailSends?: number | null
   /**
    * Aglyn Assist provider spend for the month, ALREADY IN DOLLARS (AGL-2280).
    *
@@ -1541,6 +1683,11 @@ export function orgMonthlyCogsUsd(
     dataStorage: (num(rollup?.dataStorageMb) / 1024) * rates.dataStoragePerGbMonth,
     apiRequests: num(rollup?.apiRequests) * rates.perApiRequest,
     contacts: num(rollup?.contactsCount) * rates.perContactMonth,
+    // Every send, not the overage — the provider bills the first message of
+    // the month as much as the last, so a cost model that started counting at
+    // the plan's included band would report an org that stayed inside its
+    // allowance as free.
+    emailSends: num(rollup?.emailSends) * rates.perEmailSend,
     /*==========================================
      * AGLYN ASSIST PROVIDER SPEND (AGL-2280).
      *
@@ -1586,7 +1733,7 @@ export function orgMonthlyCogsUsd(
  * UNITS, because the field names do not all say: `storageGb` and
  * `dataStorageMb` are gigabytes and MEGABYTES respectively (the conversion
  * lives in `orgMonthlyCogsUsd`, with its own test); `pageViews`,
- * `formSubmissions` and `apiRequests` are counts FOR THE MONTH;
+ * `formSubmissions`, `apiRequests` and `emailSends` are counts FOR THE MONTH;
  * `contactsCount` is a point-in-time headcount, not a monthly flow.
  */
 export function orgCogsInputFrom(
@@ -1604,6 +1751,7 @@ export function orgCogsInputFrom(
     dataStorageMb: read('dataStorageMb'),
     apiRequests: read('apiRequests'),
     contactsCount: read('contactsCount'),
+    emailSends: read('emailSends'),
     // AGL-2280. Dollars, not a meter — the projection still has to forward it
     // or the model prices Assist at nothing, which is the direction that
     // approves a discount.
@@ -3362,6 +3510,81 @@ export function checkContactQuota(
       overageRateUsd === null
         ? 0
         : Math.round((overageContacts / 1000) * overageRateUsd * 100) / 100,
+    overageRateUsd,
+  }
+}
+
+/**
+ * Volume above the plan's included band, in emails.
+ *
+ * Transactional mail is never refused, so an org CAN and will finish a month
+ * over its included allowance. That is not an error and not a failed send —
+ * it is the overage the cap chose not to enforce, and recording it is what
+ * keeps it from being a surprise at invoicing. `UNLIMITED` (and any
+ * non-positive limit, which is how "no included allowance" is expressed)
+ * yields 0 rather than the whole month's volume.
+ *
+ * DEFINED HERE and re-exported from `email-metering.ts` (AGL-2155's move):
+ * the billing page renders this figure before anything is invoiced, and it
+ * is a client component that cannot pull in the Admin SDK. One subtraction,
+ * so the readout and the invoice cannot disagree.
+ */
+export function emailSendsOverage(total: number, limit: number): number {
+  const sends = Number(total)
+  const included = Number(limit)
+  if (!Number.isFinite(sends) || sends <= 0) return 0
+  if (!Number.isFinite(included) || included <= 0) return 0
+  return Math.max(0, sends - included)
+}
+
+export interface EmailSendOveragePrice {
+  /** Emails past the plan's included band, as handed in. */
+  overageSends: number
+  /** Estimated charge this month at the plan's per-1,000 rate. */
+  overageMonthlyUsd: number
+  /** Per-1,000 rate; null when the plan carries no email overage price. */
+  overageRateUsd: number | null
+}
+
+/**
+ * Prices email volume past a plan's included band.
+ *
+ * ## No `allowed`, deliberately
+ *
+ * Every other meter's helper here answers "may this proceed" alongside "what
+ * does it cost", because on those axes one gate decides both. Email has two
+ * gates that are not the same gate: `reserveCampaignEmailSends` refuses a
+ * CAMPAIGN at the band inside a transaction, and nothing at all refuses
+ * transactional mail at any tier. A field named `allowed` on this result
+ * would be a plausible-looking thing for a sender to consult, and a
+ * transactional sender consulting it is how a password reset stops going out.
+ * So the result carries money and nothing else.
+ *
+ * ## Takes the overage, does not recompute it
+ *
+ * `emailSendsOverage` already derives the excess from the cost meter and the
+ * resolved band, on the path that records it. Re-deriving it here from a raw
+ * total would be a second overage model to drift from the first — which is
+ * the shape AGL-1402 documented, where two figures that should have been one
+ * disagreed by 20-45% for years.
+ *
+ * A null rate yields zero, structurally rather than by a check, which is what
+ * keeps free at zero on this axis for the same reason it is zero on the other
+ * three.
+ */
+export function priceEmailSendOverage(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  overageSends: number,
+): EmailSendOveragePrice {
+  const overageRateUsd = PLAN_PRICING[resolvePlan(org)].extraEmailSendsUsdPer1k
+  const sends = Number(overageSends)
+  const over = Number.isFinite(sends) && sends > 0 ? sends : 0
+  return {
+    overageSends: over,
+    overageMonthlyUsd:
+      overageRateUsd === null
+        ? 0
+        : Math.round((over / 1000) * overageRateUsd * 100) / 100,
     overageRateUsd,
   }
 }

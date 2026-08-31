@@ -22,6 +22,8 @@ import {
   checkContactQuota,
   checkDatasetQuota,
   checkSeatQuota,
+  emailSendsOverage,
+  priceEmailSendOverage,
   resolveHostCollaboratorCap,
   resolveOrgEntitlements,
   UNLIMITED,
@@ -370,6 +372,20 @@ export function BillingUsageComponent(props: BillingUsageProps) {
    */
   const [campaignEmails, setCampaignEmails] = useState<number | null>(null)
   /*
+   * TOTAL email sends this month, org-wide — the COST meter beside the one
+   * above, and the one the invoice is computed from.
+   *
+   * The two meters answer different questions and this surface needs both.
+   * The cap refuses campaigns, so campaign volume can never pass the band;
+   * transactional mail cannot be refused at any tier, so the band is passed by
+   * receipts, invites, booking reminders and password resets, and that excess
+   * is what bills. Priced off `campaignEmails` the overage would read as
+   * permanently zero, which is the wrong answer stated confidently.
+   *
+   * `null` until read: an unread counter has no honest overage to quote.
+   */
+  const [totalEmails, setTotalEmails] = useState<number | null>(null)
+  /*
    * The HOURLY campaign ceiling, and how much of this hour is already spent.
    *
    * A second, independent limit on the same unit. `claimOrgEmailSendBudget`
@@ -454,6 +470,21 @@ export function BillingUsageComponent(props: BillingUsageProps) {
       })
       .catch(() => {
         // Meter keeps its "not yet metered" state on failure.
+      })
+    // The sibling counter in the same subcollection: one more single-document
+    // read, on a path this component already reads.
+    void getDoc(doc(firestore, 'orgs', orgId, 'counters', 'emailSends'))
+      .then((snapshot) => {
+        if (active) {
+          const monthKey = new Date().toISOString().slice(0, 7)
+          setTotalEmails(
+            snapshot.exists() ? Number(snapshot.data()?.[monthKey] ?? 0) : 0,
+          )
+        }
+      })
+      .catch(() => {
+        // The overage caption stays hidden rather than quoting a charge off a
+        // reading that never arrived.
       })
     // Dataset storage comes from the monthly rollup (report-usage); the
     // current month may not exist yet, so fall back to the previous one. The
@@ -593,6 +624,25 @@ export function BillingUsageComponent(props: BillingUsageProps) {
    * cannot be charged.
    */
   const apiQuota = checkApiRequestQuota(org, apiRequests ?? 0)
+  /*
+   * Email past the plan's included band, and what it costs.
+   *
+   * Two calls rather than one because the two answer different questions and
+   * the SERVER splits them the same way: `emailSendsOverage` is the count
+   * `report-usage` records, and `priceEmailSendOverage` is the money it adds
+   * into `billedCents`. Both are the shared implementations — a caption that
+   * subtracted and multiplied for itself would be a second billing model on
+   * the page whose whole job is to agree with the invoice.
+   *
+   * `totalEmails` is `null` until the counter is read, and `?? 0` then yields
+   * an overage of 0, which suppresses the caption. That is the right default:
+   * an unread meter must not print a charge.
+   */
+  const emailOverage = emailSendsOverage(
+    totalEmails ?? 0,
+    entitlements.emailSendsPerMonth,
+  )
+  const emailOveragePrice = priceEmailSendOverage(org, emailOverage)
   // ...unless the invoice is withholding it (AGL-1658). AGL-1604 stopped the
   // usage cron putting `contactsOverageUsd` into `billedCents` while
   // `release_contacts` is off for the org, and this caption kept quoting the
@@ -766,6 +816,37 @@ export function BillingUsageComponent(props: BillingUsageProps) {
             month: 'short',
             timeZone: 'UTC',
           })} at 00:00 UTC. Unused allowance does not roll over.`}
+        </Typography>
+      ) : null}
+      {/* WHAT PASSING THE BAND COSTS, and why passing it is possible at all
+          on a quota that refuses.
+
+          Measured on the TOTAL email meter, not the campaign one above. The
+          cap refuses campaigns at the band, so campaign volume cannot pass
+          it; transactional mail cannot be refused at any tier, so receipts,
+          invites, booking reminders and password resets are what carry an org
+          over — and a merchant reading a charge needs the sentence that says
+          so, or the meter above looks like it is lying.
+
+          Rendered only once the counter has been read and only when there is
+          both an overage and a rate to price it at, which is the same pair
+          the API overage caption below the meters requires. */}
+      {emailOverage > 0 && emailOveragePrice.overageRateUsd != null ? (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ display: 'block', mt: -1.5, mb: 2 }}
+        >
+          {/* `toFixed(2)` on the rate for the reason the API caption records:
+              a rate of 2.5 interpolates as "$2.5", a price missing its cents
+              column on the one line that is about money. */}
+          {`${emailOverage.toLocaleString()} emails over your included ` +
+            `${entitlements.emailSendsPerMonth.toLocaleString()} this month ` +
+            `at $${emailOveragePrice.overageRateUsd.toFixed(2)}/1,000 — ` +
+            `≈$${emailOveragePrice.overageMonthlyUsd.toFixed(2)} on this ` +
+            "month's invoice. Transactional mail — receipts, invites, " +
+            'password resets — is never refused at the cap, so it is what ' +
+            'takes an organization past the band.'}
         </Typography>
       ) : null}
       {/*

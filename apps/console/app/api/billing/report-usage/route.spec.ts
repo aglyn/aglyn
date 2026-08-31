@@ -196,6 +196,9 @@ jest.mock('@aglyn/aglyn/server', () => {
     checkApiRequestQuota: entitlements.checkApiRequestQuota,
     checkContactQuota: entitlements.checkContactQuota,
     checkDataStorageQuota: entitlements.checkDataStorageQuota,
+    // Same allow-list hazard the note below records — omit it and the
+    // TypeError is swallowed per org rather than failing the assertion.
+    priceEmailSendOverage: entitlements.priceEmailSendOverage,
     resolveOrgEntitlements: entitlements.resolveOrgEntitlements,
     // The org's effective tier, REAL (AGL-2486): the release-flag gates in
     // this route are evaluated against it, and an allow-list mock that omits

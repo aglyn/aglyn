@@ -143,6 +143,9 @@ describe('the free plan carries no price on any billable dimension', () => {
     expect(PLAN_PRICING.free.extraDataGbMonthlyUsd).toBeNull()
     expect(PLAN_PRICING.free.extraApiRequestsUsdPer1k).toBeNull()
     expect(PLAN_PRICING.free.extraContactsUsdPer1k).toBeNull()
+    // Free's campaign band is 0 and it has no subscription to hang a metered
+    // item on, so email past the band is structurally free here too.
+    expect(PLAN_PRICING.free.extraEmailSendsUsdPer1k).toBeNull()
     expect(PLAN_PRICING.free.basePriceMonthlyUsd).toBe(0)
     expect(planMetersInfraOverage(freeOrg())).toBe(false)
   })
@@ -154,6 +157,7 @@ describe('the free plan carries no price on any billable dimension', () => {
     expect(PLAN_PRICING.starter.meteredInfraPassThrough).toBe(true)
     expect(PLAN_PRICING.starter.extraDataGbMonthlyUsd).toBe(0.25)
     expect(PLAN_PRICING.starter.extraContactsUsdPer1k).toBe(1)
+    expect(PLAN_PRICING.starter.extraEmailSendsUsdPer1k).toBe(2.5)
     expect(planMetersInfraOverage(paidOrg())).toBe(true)
   })
 

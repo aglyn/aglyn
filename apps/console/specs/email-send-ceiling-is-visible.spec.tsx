@@ -60,6 +60,16 @@ import {
 
 /** The org counter the MONTHLY meter reads, so both rows have real numbers. */
 let mockMonthlyCampaignSends: number
+/**
+ * The COST meter beside it — every send, campaigns and transactional alike.
+ *
+ * Two counters, and the overage caption must read THIS one. The cap refuses
+ * campaigns at the band, so campaign volume can never pass it; what carries an
+ * org over is receipts, invites, booking reminders and password resets, which
+ * are refused nowhere. Priced off the campaign meter the caption would read as
+ * permanently absent.
+ */
+let mockMonthlyTotalSends: number
 /** What `/api/billing/email-ceiling` answers, or `'error'` for a failed read. */
 let mockCeilingPayload: Record<string, unknown> | 'error'
 /** Every URL the component fetched, so per-site fan-out is detectable. */
@@ -96,11 +106,17 @@ jest.mock('firebase/firestore', () => ({
   }),
   getCountFromServer: async () => ({ data: () => ({ count: 0 }) }),
   getDoc: async (ref: { path: string }) => {
+    const month = new Date().toISOString().slice(0, 7)
     if (ref.path === 'orgs/org-1/counters/campaignEmailSends') {
-      const month = new Date().toISOString().slice(0, 7)
       return {
         exists: () => true,
         data: () => ({ [month]: mockMonthlyCampaignSends }),
+      }
+    }
+    if (ref.path === 'orgs/org-1/counters/emailSends') {
+      return {
+        exists: () => true,
+        data: () => ({ [month]: mockMonthlyTotalSends }),
       }
     }
     return { exists: () => false, data: () => ({}) }
@@ -111,8 +127,24 @@ import BillingUsageComponent from '../components/billing/billing-usage.component
 
 /** Pro: `hostLimit: 3`, `emailSendsPerMonth: 5,000`. */
 const PRO = { $id: 'org-1', plan: 'pro' } as any
-/** Enterprise: `emailSendsPerMonth: UNLIMITED` — the sentinel's home. */
+/** Enterprise: a finite CONTRACTED default, no longer the sentinel's home. */
 const ENTERPRISE = { $id: 'org-1', plan: 'enterprise' } as any
+/**
+ * An org whose agreement grants an uncapped monthly allowance.
+ *
+ * No PLAN sells one any more — every row in `PLAN_ENTITLEMENTS` is finite,
+ * because `JSON.stringify(Infinity)` is `null` and reads back as a cap of
+ * zero. A per-org override can still produce the sentinel, and
+ * `resolveOrgEntitlements` applies it ahead of the plan, so this surface has
+ * to keep rendering it correctly. The tests below are what say so; without an
+ * org in this shape they would be asserting against a state the table can no
+ * longer reach.
+ */
+const UNCAPPED_BY_CONTRACT = {
+  $id: 'org-1',
+  plan: 'enterprise',
+  entitlements: { emailSendsPerMonth: UNLIMITED },
+} as any
 const HOSTS = [
   { $id: 'host-a', displayName: 'Site A' },
   { $id: 'host-b', displayName: 'Site B' },
@@ -157,6 +189,7 @@ const MONTHLY = 'Campaign emails (this month, organization)'
 
 beforeEach(() => {
   mockMonthlyCampaignSends = 0
+  mockMonthlyTotalSends = 0
   mockCeilingPayload = ceiling()
   mockFetched = []
   global.fetch = jest.fn(async (input: any) => {
@@ -291,16 +324,16 @@ describe('one request for the organization, not one per site', () => {
 })
 
 describe('the UNLIMITED sentinel (AGL-2482)', () => {
-  it('an unlimited PLAN reads as unlimited, never as spent', async () => {
+  it('an unlimited ALLOWANCE reads as unlimited, never as spent', async () => {
     mockMonthlyCampaignSends = 900_000
-    render(<BillingUsageComponent org={ENTERPRISE} hosts={HOSTS} />)
+    render(<BillingUsageComponent org={UNCAPPED_BY_CONTRACT} hosts={HOSTS} />)
 
     await waitFor(() => {
       expect(screen.getByText(HOURLY)).toBeTruthy()
     })
-    expect(resolveOrgEntitlements(ENTERPRISE).emailSendsPerMonth).toBe(
-      UNLIMITED,
-    )
+    expect(
+      resolveOrgEntitlements(UNCAPPED_BY_CONTRACT).emailSendsPerMonth,
+    ).toBe(UNLIMITED)
     const monthly = meterRow(MONTHLY)
     expect(monthly.textContent).toContain('900000 / Unlimited')
     // The two shapes the sentinel takes when it is mishandled: a cap of 0, and
@@ -311,8 +344,8 @@ describe('the UNLIMITED sentinel (AGL-2482)', () => {
     expect(screen.queryByText(/Unused allowance does not roll over/)).toBeNull()
   })
 
-  it('an unlimited plan is still told what the pace can deliver', async () => {
-    render(<BillingUsageComponent org={ENTERPRISE} hosts={HOSTS} />)
+  it('an unlimited allowance is still told what the pace can deliver', async () => {
+    render(<BillingUsageComponent org={UNCAPPED_BY_CONTRACT} hosts={HOSTS} />)
     await waitFor(() => {
       expect(
         screen.getByText(/more campaign email a month than this pace/),
@@ -326,6 +359,29 @@ describe('the UNLIMITED sentinel (AGL-2482)', () => {
     // …and that reaching it defers rather than refuses, which is the whole
     // difference between a pace and a cap.
     expect(screen.getByText(/deferred to the next hour, not/)).toBeTruthy()
+  })
+
+  it('the enterprise PLAN itself now carries a finite, contracted band', async () => {
+    // The row that used to be the sentinel. It resolves to a real number, it
+    // renders as one, and the reset promise — suppressed for an uncapped
+    // allowance because there is nothing to wait for — is back.
+    mockMonthlyCampaignSends = 1_000
+    const entitled = resolveOrgEntitlements(ENTERPRISE).emailSendsPerMonth
+    expect(Number.isFinite(entitled)).toBe(true)
+    expect(entitled).toBe(250_000)
+    render(<BillingUsageComponent org={ENTERPRISE} hosts={HOSTS} />)
+    await waitFor(() => {
+      expect(screen.getByText(HOURLY)).toBeTruthy()
+    })
+    const monthly = meterRow(MONTHLY)
+    expect(monthly.textContent).toContain('1000 / 250000')
+    expect(monthly.textContent).not.toContain('Unlimited')
+    // The two shapes a flattened sentinel takes, neither of which may appear.
+    expect(monthly.textContent).not.toContain('/ 0')
+    expect(monthly.textContent).not.toContain('null')
+    expect(
+      screen.getByText(/Unused allowance does not roll over/),
+    ).toBeTruthy()
   })
 
   it('a plan INSIDE the deliverable ceiling is told nothing of the sort', async () => {
@@ -389,5 +445,75 @@ describe('the monthly allowance says when it comes back', () => {
     expect(
       screen.getByText(new RegExp(`Resets ${firstOfNextMonth}`)),
     ).toBeTruthy()
+  })
+})
+
+/**
+ * THE OVERAGE CAPTION — the surface where a customer learns email now costs
+ * something, and learns WHY the meter above can read "inside your allowance"
+ * while a charge appears anyway.
+ *
+ * The two counters answer different questions and the caption reads the one
+ * the invoice reads. `report-usage` computes the same figure from the same
+ * `emailSendsOverage` and prices it with the same `priceEmailSendOverage`, so
+ * this page and the invoice cannot disagree by construction rather than by
+ * anyone keeping them in step.
+ */
+describe('the email overage caption', () => {
+  const OVERAGE = /emails over your included/
+
+  it('prices the excess on the COST meter, at the plan rate', async () => {
+    // Pro includes 5,000. The campaign meter is well inside the band — as it
+    // always is, since the cap refuses campaigns — and 6,200 total sends put
+    // the org 1,200 over on transactional mail.
+    mockMonthlyCampaignSends = 900
+    mockMonthlyTotalSends = 6_200
+    render(<BillingUsageComponent org={PRO} hosts={HOSTS} />)
+    await waitFor(() => {
+      expect(screen.getByText(OVERAGE)).toBeTruthy()
+    })
+    const caption = screen.getByText(OVERAGE).textContent ?? ''
+    expect(caption).toContain('1,200 emails over your included 5,000')
+    // Pro's rate is $2.25/1,000, so 1,200 over is $2.70. Cents on the rate,
+    // because "$2.25" is a price and "$2.2" is a typo.
+    expect(caption).toContain('$2.25/1,000')
+    expect(caption).toContain('$2.70')
+    // …and the sentence that stops the meter above looking like a lie.
+    expect(caption).toContain('Transactional mail')
+  })
+
+  it('MUTATION GUARD: the campaign meter alone would show nothing', async () => {
+    // Same org, same 900 campaigns, no transactional overflow. If the caption
+    // were computed from the campaign counter it would be absent in the case
+    // above too — this is what makes that green mean something.
+    mockMonthlyCampaignSends = 900
+    mockMonthlyTotalSends = 900
+    render(<BillingUsageComponent org={PRO} hosts={HOSTS} />)
+    await waitFor(() => {
+      expect(screen.getByText(HOURLY)).toBeTruthy()
+    })
+    expect(screen.queryByText(OVERAGE)).toBeNull()
+  })
+
+  it('is absent for a plan that carries no rate', async () => {
+    // Enterprise is contract-billed and publishes no overage rate, so a
+    // caption quoting one would advertise a fee nobody agreed to.
+    mockMonthlyCampaignSends = 1_000
+    mockMonthlyTotalSends = 400_000
+    render(<BillingUsageComponent org={ENTERPRISE} hosts={HOSTS} />)
+    await waitFor(() => {
+      expect(screen.getByText(HOURLY)).toBeTruthy()
+    })
+    expect(screen.queryByText(OVERAGE)).toBeNull()
+  })
+
+  it('quotes nothing before the counter has been read', async () => {
+    // An unread meter has no honest charge to state. `null` yields an
+    // overage of 0, which suppresses the caption rather than printing $0.00 —
+    // the loading-default-answers-a-question shape, on a line about money.
+    mockMonthlyCampaignSends = 0
+    mockMonthlyTotalSends = 0
+    render(<BillingUsageComponent org={PRO} hosts={HOSTS} />)
+    expect(screen.queryByText(OVERAGE)).toBeNull()
   })
 })
