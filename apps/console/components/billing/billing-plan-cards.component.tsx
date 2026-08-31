@@ -75,6 +75,17 @@ const planTaglines = (brand: string): Record<OrgPlan, string> => ({
  * and, for an org already ON an Enterprise arrangement, whether it actually
  * holds each one (AGL-2297).
  *
+ * ## Two renderings, two different claims
+ *
+ * In the FOCUSED view the Enterprise rung carries no feature checklist, so
+ * these labels ARE its tick list: an offer, describing the tier, ticked in
+ * full because every line is accurate about it.
+ *
+ * In the comparison grid the card carries the whole tier body — allowances and
+ * the sectioned checklist, like every card beside it — so the block is drawn
+ * only for an org that HAS an agreement, where each row is a per-org answer
+ * the tier rows cannot give. For a prospect it would only restate them.
+ *
  * ## Why every row carries a predicate
  *
  * This was a bare `string[]` rendered with a green tick beside each line,
@@ -1018,6 +1029,13 @@ function FocusedTierView(props: {
  * the lower tiers do not exist is a dark pattern, and it also loses the
  * downsell the retention funnel depends on (AGL-1863). What changes is the
  * DEFAULT: the upgrade path is what the page leads with.
+ *
+ * ⚠️ `Compare all N plans` ARRIVES HERE ALREADY EXPANDED, and this control
+ * then reads "Hide lower plans". A button that promises a number has to
+ * deliver that number: it named eight and landed the reader on six, with the
+ * two cheapest still folded behind a second control they had no reason to
+ * expect. The fold is a choice a reader makes from the grid, not a toll on the
+ * way in.
  */
 function LowerTierDisclosure(props: {
   count: number
@@ -1073,7 +1091,14 @@ function LowerTierDisclosure(props: {
  * collapsed behind {@link LowerTierDisclosure} and, once shown, dimmed with a
  * quiet text CTA. Nothing is removed and nothing is disabled — the whole
  * ladder stays one click away, which is the line between de-emphasis and a
- * dark pattern.
+ * dark pattern. `Compare all N plans` is that one click, and it lands on all
+ * N: a control that names a number and then withholds two of them is an
+ * omission wearing a disclosure's clothes.
+ *
+ * The deliberateness a downgrade needs is at the CONFIRM, not at the card: the
+ * billing page prices the move, states the end-of-cycle terms and posts
+ * nothing on a decline (AGL-1859 §2), and a subscriber's route to Free is the
+ * cancel flow (AGL-2156).
  *
  * Only the SELF-SERVE tiers appear in the grid (AGL-1118). Enterprise is
  * custom-priced and staff-provisioned, so it gets a full-width contact-sales
@@ -1346,6 +1371,9 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
   // Starter card (AGL-1117) — collapsing the tier the visitor explicitly
   // clicked would make the link look broken, and de-emphasis is a default,
   // not an override of a stated intent.
+  //
+  // `Compare all N plans` is the other thing that overrides it — see the
+  // handler passed to {@link FocusedTierView} below.
   const [showLowerTiers, setShowLowerTiers] = useState(
     () => highlightIndex >= 0 && currentIndex >= 0 && highlightIndex < currentIndex,
   )
@@ -1391,14 +1419,34 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
            * in it. A reader counted the cards, got the promised number, and
            * had no reason to look for an eighth.
            *
-           * The fold itself is deliberate and stays: reaching a downgrade
-           * costs a second explicit act. Naming the true total is what makes
-           * that fold a disclosure rather than an omission.
+           * This is a PROMISE ABOUT THE NEXT SCREEN, which is why the handler
+           * below has to keep it: eight is the true total, so all eight have
+           * to be drawn on arrival.
            */
           totalCount={PLAN_ORDER.length + 1}
           subscribeCollectsNotice={subscribeCollectsNotice}
           onSelect={onSelect}
-          onCompare={() => setCompareAll(true)}
+          /*
+           * `Compare all` MEANS ALL — it expands the lower tiers as it opens
+           * the grid.
+           *
+           * The two states are independent, and left that way the button
+           * named eight plans and landed the reader on six: Free and Starter
+           * stayed folded behind a second control, below the fold, that
+           * nothing on the way in mentioned. "Compare" is a request for the
+           * whole price list, and answering it with a subset is an omission
+           * however honestly the remaining control is labelled.
+           *
+           * The fold is not lost — the disclosure now reads "Hide lower
+           * plans", so a reader weighing only an upgrade can put them away.
+           * That is a choice made FROM the grid rather than a toll on the way
+           * to it, and the default for a reader who never presses Compare is
+           * untouched: the page still opens on the focused view.
+           */
+          onCompare={() => {
+            setCompareAll(true)
+            setShowLowerTiers(true)
+          }}
         />
       </Grid>
     )
@@ -1451,8 +1499,10 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                     : 'divider',
                 borderWidth: isCurrent || isRecommended ? 2 : 1,
                 // De-emphasis is visual only — every figure stays readable and
-                // no control is disabled. Dimming a card the customer just
-                // asked to see would be a dark pattern, not a nudge.
+                // no control is disabled. It is what keeps the upgrade path
+                // leading on a grid that draws all eight plans: quiet, not
+                // absent. Dimming a card the customer just asked to see would
+                // be a dark pattern, not a nudge.
                 ...(isLower ? { opacity: 0.66 } : {}),
               }}
             >
@@ -1667,79 +1717,101 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                 {'Contact sales'}
               </Button>
             )}
-            {enterprise ? (
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                sx={{ display: 'block', mt: -1, mb: 1.5 }}
-              >
-                {'Your organization is on an Enterprise agreement — reach ' +
-                  'out for any change to it.'}
-              </Typography>
-            ) : null}
+            {/* What an agreement adds that no entitlement row can carry:
+                the price, the invoice and the terms are negotiated, which is
+                the one Enterprise promise that is not a flag or a quota. For
+                an org already on one, the same slot says where a change to it
+                happens — a contract is not altered from a card. */}
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ display: 'block', mt: -1, mb: 1.5 }}
+            >
+              {enterprise
+                ? 'Your organization is on an Enterprise agreement — reach ' +
+                  'out for any change to it.'
+                : 'Priced, invoiced, and contracted to your organization. ' +
+                  'Everything below is what an agreement includes.'}
+            </Typography>
             <Divider sx={{ mb: 1.5 }} />
-            {/* WHAT THIS ORG HOLDS, which the rows below cannot say.
+            {/* WHAT THIS ORG HOLDS, which the rows below cannot say — and
+                which only exists to be said for an org that HAS an agreement.
                 `PlanCardBody` renders the TIER on every card, and for
                 Enterprise the tier and the org come apart: `isEnterpriseOrg`
                 is true for a comped marker and for a negotiated price as well
                 as for the plan, and those two are display overlays on a lower
-                base plan that grant nothing (AGL-2297). So the highlights
-                stay, above the tier rows, as the only place a per-org answer
-                is given — and the caption below them is the route to fixing a
-                gap. A prospect sees the offer ticked in full, because every
-                line of it is accurate about the tier. */}
-            <Stack spacing={0.5} sx={{ mb: 1.5 }}>
-              <Typography
-                variant="overline"
-                color="text.secondary"
-                sx={{ lineHeight: 1.6 }}
-              >
-                {enterprise ? 'YOUR AGREEMENT' : 'WHAT AN AGREEMENT INCLUDES'}
-              </Typography>
-              {ENTERPRISE_HIGHLIGHTS.map(({ label, holds }) => {
-                const held = enterprise ? holds(org) : true
-                return (
-                  <Stack
-                    key={label}
-                    direction="row"
-                    spacing={0.75}
-                    sx={{ alignItems: 'center' }}
+                base plan that grant nothing (AGL-2297). So the per-org answer
+                stays, above the tier rows, with the caption below it as the
+                route to fixing a gap.
+
+                ⚠️ IT IS NOT SHOWN TO A PROSPECT, and the reason is the same
+                sentence read the other way. With no agreement to describe,
+                every row is forced true and the block stops being a per-org
+                answer: four of its five lines then restate rows printed a few
+                inches lower — "Unlimited sites, screens, seats, and storage"
+                over "Unlimited hosts · Unlimited screens per host · Unlimited
+                team seats · Unlimited storage", SSO and white-label over their
+                own checklist ticks, the fee line over the fee row — and the
+                card says everything twice. The offer is not reduced by
+                dropping it: the rows below state the tier in full, ticked, in
+                the shape every other card uses, which is what makes the
+                Enterprise column readable across in the first place. */}
+            {enterprise ? (
+              <>
+                <Stack spacing={0.5} sx={{ mb: 1.5 }}>
+                  <Typography
+                    variant="overline"
+                    color="text.secondary"
+                    sx={{ lineHeight: 1.6 }}
                   >
-                    <MdiIcon
-                      fontSize="inherit"
-                      sx={{ color: held ? 'success.main' : 'text.disabled' }}
-                      path={
-                        held
-                          ? ICON_VARIANT_SYMBOL_CONFIRMED.path
-                          : ICON_VARIANT_SYMBOL_MINUS.path
-                      }
-                    />
+                    {'YOUR AGREEMENT'}
+                  </Typography>
+                  {ENTERPRISE_HIGHLIGHTS.map(({ label, holds }) => {
+                    const held = holds(org)
+                    return (
+                      <Stack
+                        key={label}
+                        direction="row"
+                        spacing={0.75}
+                        sx={{ alignItems: 'center' }}
+                      >
+                        <MdiIcon
+                          fontSize="inherit"
+                          sx={{ color: held ? 'success.main' : 'text.disabled' }}
+                          path={
+                            held
+                              ? ICON_VARIANT_SYMBOL_CONFIRMED.path
+                              : ICON_VARIANT_SYMBOL_MINUS.path
+                          }
+                        />
+                        <Typography
+                          variant="body2"
+                          color={held ? 'text.primary' : 'text.secondary'}
+                        >
+                          {label}
+                        </Typography>
+                      </Stack>
+                    )
+                  })}
+                  {ENTERPRISE_HIGHLIGHTS.some(({ holds }) => !holds(org)) ? (
+                    // Actionable, not just honest: the fix for a legacy
+                    // arrangement is a per-org entitlements override or a move
+                    // onto the real plan, and neither is something the admin
+                    // can do from here.
                     <Typography
-                      variant="body2"
-                      color={held ? 'text.primary' : 'text.secondary'}
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ pt: 0.5 }}
                     >
-                      {label}
+                      {'Your agreement does not currently enable everything ' +
+                        'Enterprise can include — talk to us to turn the rest ' +
+                        'on.'}
                     </Typography>
-                  </Stack>
-                )
-              })}
-              {enterprise &&
-              ENTERPRISE_HIGHLIGHTS.some(({ holds }) => !holds(org)) ? (
-                // Actionable, not just honest: the fix for a legacy
-                // arrangement is a per-org entitlements override or a move
-                // onto the real plan, and neither is something the admin can
-                // do from here.
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  sx={{ pt: 0.5 }}
-                >
-                  {'Your agreement does not currently enable everything ' +
-                    'Enterprise can include — talk to us to turn the rest on.'}
-                </Typography>
-              ) : null}
-            </Stack>
-            <Divider sx={{ mb: 1.5 }} />
+                  ) : null}
+                </Stack>
+                <Divider sx={{ mb: 1.5 }} />
+              </>
+            ) : null}
             {/* The tier's own numbers, in the same order as every card to the
                 left. Most read "Unlimited"; `emailSendsPerMonth` is the one
                 that does not, and a contracted default a customer cannot see
