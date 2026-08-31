@@ -1,0 +1,73 @@
+# Changing a price
+
+Every place a charged price has to reach, and the order to reach them in.
+
+A price lives in eight places. Six are in this repo, one is at Stripe, and one
+is a page somebody edits by hand — and the last of those is the one that has
+been missed, twice. This file exists because the failure is not forgetting to
+change a price; it is changing it in five places and believing that was all of
+them.
+
+## Why the order matters
+
+Two of these surfaces face customers and they fail in opposite directions:
+
+- **Stripe ahead of the page** — checkout takes more than `/pricing` quotes.
+  This is the urgent one. A page quoting less than checkout is a price a
+  customer can point at, and it is a refund conversation at best.
+- **The page ahead of Stripe** — the page promises a price checkout does not
+  honor. Less dangerous, still wrong.
+
+So the page and Stripe move as close together as a human can manage, and
+everything else can follow.
+
+## The surfaces
+
+| #   | Surface                                                              | What it is                                        | How it changes                                                                |
+| --- | -------------------------------------------------------------------- | ------------------------------------------------- | ----------------------------------------------------------------------------- |
+| 1   | `libs/aglyn/src/lib/app-utils/plan-entitlements.ts` → `PLAN_PRICING` | The number the product computes from              | edit                                                                          |
+| 2   | Stripe price objects                                                 | What a card is actually charged                   | **new objects** — a Stripe price is immutable; create and archive, never edit |
+| 3   | `STRIPE_PRICE_*` env vars                                            | Which price id checkout uses                      | Vercel env, console project, then **redeploy** — env is injected at build     |
+| 4   | `tools/scripts/check-pricing-drift.mjs` → `LOCKED`                   | The independent pin the lock is enforced against  | edit, **only with #5**                                                        |
+| 5   | `docs/DECISION_LOG.md`                                               | The record of who decided and on what evidence    | append an entry, newest first                                                 |
+| 6   | `tools/marketing/pricing-copy/tables.json`                           | The generated source the site is transcribed from | regenerate, do not hand-edit                                                  |
+| 7   | **`/pricing` on the marketing site**                                 | What a visitor reads                              | **by hand in the besigner** — see below                                       |
+| 8   | Figma pricing frames                                                 | The design of record                              | by hand; the reconciler reports the gap but cannot close it                   |
+
+Plus the Drive source-of-truth doc (Pricing & Packaging → 00-Pricing-Source-of-Truth),
+which is the non-engineering record and is not checked by anything here.
+
+## The one that gets missed
+
+**#7 is not generated.** `tables.json` holding the new figure is not the page
+holding it. The marketing site is built by clicking in the besigner, so
+regenerating #6 changes a file the page was transcribed from and nothing that
+a visitor sees. Nothing in CI can tell you the page is stale, because the page
+is not in this repo.
+
+`apps/console/specs/published-pricing-table-parity.spec.ts` carries the
+`PUBLISHED` rows as literals for exactly this reason: they are what the page
+says, maintained by hand, so a difference between them and `PLAN_PRICING` is
+the gap made visible. **When you republish the page, update those literals in
+the same commit** — otherwise the spec goes on describing a gap that no longer
+exists, and the next reader believes it.
+
+## Checking
+
+```bash
+npm run check:pricing-drift     # code ↔ pin ↔ Stripe, every charged price
+npm run check:pricing-tables    # code ↔ the generated tables
+npm run check:decision-log      # a watched value moved without a log entry
+```
+
+`check:pricing-drift` exits 2 rather than 0 when it could compare nothing — a
+run that checked nothing is not a run that found nothing.
+
+## ⚑ The pin is not a formality
+
+`LOCKED` in `check-pricing-drift.mjs` is an independent record of what was
+decided, not a mirror of the code. Editing it to make a red check go green
+turns the one control that can catch a silent price change into a value that
+agrees with whatever the code says.
+
+Move it **with** the Decision Log entry, in the same commit, or not at all.

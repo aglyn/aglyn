@@ -92,6 +92,20 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-08-31 — Agency is $1,299/mo and $1,049 annual, and the pin catches up to it
+
+- **Decided by:** the account owner, confirming the raise made under the authorization to fix tier margins — Agency was the worst margin on the ladder and the most underpriced against the field.
+- **Scope:** pricing
+- **Evidence:** `PLAN_PRICING.agency.basePriceMonthlyUsd` 799 → 1299 and `basePriceAnnualMonthlyUsd` 649 → 1049 in `a1e8aaaca`; Stripe `aglyn_agency_v2` $1,299 and `aglyn_agency_v2_yearly` $12,588, both new objects since a Stripe price is immutable and the $799 pair is archived; `npm run check:pricing-drift`.
+
+**A charged price moves.** This is the first entry since the Sept-1 lock that says so, and the lock is not being weakened — the pin moves *with* this record, which is the procedure the lock defines rather than an exception to it.
+
+Agency included 100 hosts, 20 TB of bandwidth and an unbounded form-submission band against $799. Bandwidth is the driver: one GB is 1,748 page views at `ESTIMATED_PAGE_TRANSFER_BYTES`, so 20 TB alone measured about $3,495/month of platform cost against a $799 subscription. The bands came down in the same change; the price had to move as well because the two were set in different places at different times and nothing had ever multiplied one by the other.
+
+$1,299 still undercuts every comparable: Duda charges roughly $1,396–1,493/mo for 100 sites, BigCommerce Enterprise starts at $1,499, Shopify Plus at $2,300.
+
+**⛔ One surface still trails and it is the customer-facing one.** `/pricing` publishes $799 while checkout takes $1,299. A page quoting less than checkout is a price a customer can point at, so it is the more urgent direction of the two — and it is a besigner edit made by hand, not a generated artifact. `tools/marketing/pricing-copy/tables.json` already carries $1,299/$1,049; the page has not been republished from it. `docs/PRICING_SURFACES.md` lists every place a price change has to reach, and why this one is the surface that gets missed.
+
 ## 2026-08-31 — A custom sending domain starts at Pro, and the platform subdomain becomes best-effort
 
 - **Decided by:** the account owner — the cheap shape is unlocked down the ladder and the expensive one is made degradable, so the platform's domain count stops growing with paying sites.
@@ -247,7 +261,7 @@ column is the working that led to dropping it. The shipped number is one flat
 | Business $139 | 500 | past every published competitor number |
 | Scale $249 | 1,000 | — |
 | Advanced $399 | Unlimited | matches the tier's "headroom on every limit" posture |
-| Agency $799 | Unlimited | — |
+| Agency $1,299 | Unlimited | — |
 | Enterprise | Unlimited | contract-bound |
 
 **Nobody loses capacity.** Starter is set at exactly the flat 50 every plan had,
