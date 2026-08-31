@@ -32,9 +32,12 @@ import {
 // half, so a console card named there ships to every published page. The
 // component path reaches the same module without crossing that entry point.
 import { default as HostCampaignsCard } from '@aglyn/plugins-marketing/components/campaigns-card'
+import { default as ConversionAttribution } from '@aglyn/plugins-marketing/components/conversion-attribution.component'
 import { default as HostOrdersCard } from '@aglyn/plugins-commerce/components/console/host-orders-card.component'
-import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { mdiBullhornOutline } from '@aglyn/shared-data-mdi'
+import { CardDisplay, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { HubTabs } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -395,6 +398,16 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
   // Mail reader (AGL-104): opening a submission shows the full message and
   // marks it read.
   const [reader, setReader] = useState<any | null>(null)
+  /*
+   * WHERE A LEAD CAME FROM, on request.
+   *
+   * A lead is a table row with no page of its own, and the attribution is one
+   * keyed document read — cheap on its own, and the page size times cheap in
+   * a column. So it is an overflow action that opens a dialog: the reader who
+   * wants the answer pays for it, and the reader who came to scan the list
+   * does not.
+   */
+  const [leadOrigin, setLeadOrigin] = useState<any | null>(null)
   const handleOpenReader = useCallback(
     (submission: any) => () => {
       setReader(submission)
@@ -827,7 +840,24 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
                             {lead.createdAt?.toDate?.().toLocaleString() ??
                               '--'}
                           </TableCell>
-                          <TableCell align="right">{'--'}</TableCell>
+                          <TableCell align="right" sx={{ width: 56 }}>
+                            <RowActionsMenu
+                              label={String(lead.email ?? lead.$id)}
+                              items={[
+                                {
+                                  key: 'origin',
+                                  label: 'Where this came from',
+                                  icon: (
+                                    <MdiIcon
+                                      path={mdiBullhornOutline.path}
+                                      size={0.8}
+                                    />
+                                  ),
+                                  onClick: () => setLeadOrigin(lead),
+                                },
+                              ]}
+                            />
+                          </TableCell>
                         </TableRow>
                       ))}
                   </TableBody>
@@ -875,6 +905,14 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
           <Typography variant="caption" color="text.secondary">
             {`Received ${reader?.createdAt?.toDate?.().toLocaleString() ?? ''}` +
               (reader?.screenId ? ` · screen ${reader.screenId}` : '')}
+            {/*
+              THE PAGE THE FORM WAS ON. Stored by the submit route since the
+              form existed and rendered by nothing, which is also the field
+              the marketing console's landing-page grouping joins on — a
+              reader who wants to check one row against that grouping has to
+              be able to see the row's own page.
+             */}
+            {reader?.path ? ` · ${String(reader.path)}` : ''}
           </Typography>
           <Divider sx={{ my: 1.5 }} />
           <Stack spacing={1.5}>
@@ -918,6 +956,24 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
             ))}
           </Stack>
           {/*
+            WHERE THIS SUBMISSION CAME FROM.
+
+            One keyed document read — the attribution's id is `form:{id}` and
+            the submission's id is that `{id}` — paid when a merchant opens a
+            submission rather than once per row of the list. A submission that
+            was credited to nobody renders the sentence saying so; it never
+            renders a campaign with a zero beside it.
+           */}
+          {reader?.$id ? (
+            <Box sx={{ mt: 2 }}>
+              <ConversionAttribution
+                hostId={hostId}
+                kind="form"
+                refId={String(reader.$id)}
+              />
+            </Box>
+          ) : null}
+          {/*
             Answering the person is the act the Inbox exists for, and it is
             inside the reader rather than on the row because a reply written
             without the message in front of you is the reply that answers the
@@ -959,6 +1015,36 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
             {'Mark unread'}
           </Button>
           <Button variant="contained" onClick={() => setReader(null)}>
+            {'Close'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      {/*
+        WHERE A LEAD CAME FROM.
+
+        Its own dialog rather than a column, for the reason the state above
+        gives: one keyed read, paid by the reader who asked the question. A
+        lead has no page of its own to put this on, and giving it one to carry
+        a single line would be a new record surface rather than attribution.
+       */}
+      <Dialog
+        open={Boolean(leadOrigin)}
+        onClose={() => setLeadOrigin(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>{leadOrigin?.email ?? 'Lead'}</DialogTitle>
+        <DialogContent>
+          {leadOrigin?.$id ? (
+            <ConversionAttribution
+              hostId={hostId}
+              kind="lead"
+              refId={String(leadOrigin.$id)}
+            />
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button variant="contained" onClick={() => setLeadOrigin(null)}>
             {'Close'}
           </Button>
         </DialogActions>

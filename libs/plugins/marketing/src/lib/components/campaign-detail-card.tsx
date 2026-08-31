@@ -599,6 +599,41 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
           <RateRow label="Click rate" rate={rollup.clickRate} />
           <RateRow label="Unsubscribe rate" rate={rollup.unsubscribeRate} />
         </Stack>
+        {/*
+          WHAT THE CAMPAIGN CAUSED — named here, counted elsewhere.
+
+          A conversion is credited to the EMAIL that carried the link, because
+          that is the id the click's touch records, so the rollup lives under
+          each message and is drawn on its report. Summing those here would
+          mean one more document read per email in the campaign — up to fifty
+          on this page — which is the per-record read every figure above was
+          arranged to avoid. Two links instead, and both are free.
+
+          Saying nothing would be worse than either: a campaign page silent
+          about conversions reads as a campaign that caused none.
+         */}
+        <Stack
+          direction="row"
+          spacing={1}
+          useFlexGap
+          sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+        >
+          <Typography variant="caption" color="text.secondary">
+            {'Form submissions, leads, contacts and bookings are credited to ' +
+              'the email whose link the visitor followed, so each email’s ' +
+              'report carries its own. The site-wide view also counts the ' +
+              'ones credited to no campaign at all.'}
+          </Typography>
+          <Button
+            component={AppLink as any}
+            {...({ componentVariant: 'naked', nativeButton: false } as any)}
+            href={`${basePath}/conversions`}
+            size="small"
+            color="primary"
+          >
+            {'All conversions'}
+          </Button>
+        </Stack>
 
         <Divider />
         <Stack

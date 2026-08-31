@@ -39,11 +39,35 @@ import { useParams } from 'next/navigation'
  * a link to nowhere.
  */
 export function useEmailsHubPath(): string | null {
+  return useConsoleHubPath('emails')
+}
+
+/**
+ * The MARKETING console's URL under the site being read.
+ *
+ * Named for the same reason the Emails one is, from the opposite direction: a
+ * converted record — a form submission in the Inbox, a contact in Contacts —
+ * links to the campaign it came from, and those surfaces are handed their own
+ * hub's `basePath`, not this one's.
+ */
+export function useMarketingHubPath(): string | null {
+  return useConsoleHubPath('marketing')
+}
+
+/**
+ * Any sibling hub's URL, by plugin slug.
+ *
+ * One implementation, because "read the org slug and the subdomain off the
+ * route rather than resolving the host document" is the property that keeps
+ * these links free, and a second copy of it is where somebody pays for the
+ * two `getDoc`s instead.
+ */
+export function useConsoleHubPath(pluginSlug: string): string | null {
   const params = useParams<{ orgSlug: string; host: string }>()
   const orgSlug = params?.orgSlug
   const host = params?.host
   if (!orgSlug || !host) return null
-  return buildRoute(Route.HOST_PLUGIN, { orgSlug, host, pluginSlug: 'emails' })
+  return buildRoute(Route.HOST_PLUGIN, { orgSlug, host, pluginSlug })
 }
 
 export default useEmailsHubPath

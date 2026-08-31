@@ -77,9 +77,24 @@ import {
  * pages, and the first page would still not be the alphabetical first page. A
  * caller that holds a whole CEILING may sort — see `ceilingedWindow` — because
  * it is sorting the entire collection rather than a slice of it.
+ *
+ * ## Why a `Query` is accepted and not only a `CollectionReference`
+ *
+ * A list is often a FILTERED collection — one kind of conversion, one channel
+ * — and a caller holding equality predicates could not reach this ordering
+ * without rebuilding it, which is how a second, unordered `limit()` comes to
+ * be written beside the one this module exists to replace. `query()` composes
+ * onto either, and a `CollectionReference` IS a `Query`, so widening the
+ * parameter adds no behavior: the walk is still ordered on the document name
+ * and is still total over the matching documents.
+ *
+ * Equality predicates only. A range filter or a second ordering would fight
+ * the `orderBy(documentId())` applied here — Firestore requires the range
+ * field to be ordered first — and such a query fails loudly at the listener
+ * rather than quietly returning the wrong rows.
  */
 export function collectionPage(
-  ref: CollectionReference,
+  ref: CollectionReference | Query,
   pageLimit: number,
 ): Query {
   return query(ref, orderBy(documentId()), limit(pageLimit))
@@ -93,7 +108,7 @@ export function collectionPage(
  * row before rendering.
  */
 export function collectionCeiling(
-  ref: CollectionReference,
+  ref: CollectionReference | Query,
   ceiling: number,
 ): Query {
   return query(ref, orderBy(documentId()), limit(ceiling + 1))

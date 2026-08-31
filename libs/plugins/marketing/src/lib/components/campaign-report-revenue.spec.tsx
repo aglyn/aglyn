@@ -272,7 +272,15 @@ describe('the revenue section names its denominator on screen', () => {
     // And the rule is still stated, from the default window rather than from
     // a stored one — a campaign with nothing to show is exactly where a
     // merchant asks what would have had to happen for a figure to appear.
-    expect(screen.getByText(/within 7 days/)).toBeTruthy()
+    //
+    // Matched against the REVENUE sentence rather than against the window on
+    // its own: the conversions section states the same window in its own
+    // words, and a bare `/within 7 days/` would pass on either.
+    expect(
+      screen.getByText(
+        /Orders are credited to the last campaign whose link the buyer clicked, within 7 days/,
+      ),
+    ).toBeTruthy()
   })
 
   it('says a campaign with a rollup and no orders earned nothing', async () => {
@@ -305,11 +313,16 @@ describe('the revenue section names its denominator on screen', () => {
     })
     expect(screen.getByText('Orders')).toBeTruthy()
     expect(screen.getByText('credited to this campaign')).toBeTruthy()
-    // No conversion rate anywhere, under any of the names it goes by. Orders
+    // No conversion RATE anywhere, under any of the names it goes by. Orders
     // over delivered is not a rate — one buyer can place two orders, so the
     // quotient passes 100% without anything being wrong, which is the defect
     // that keeps `opens` out of the open-rate numerator too.
-    expect(screen.queryByText(/[Cc]onversion/)).toBeNull()
+    //
+    // The word "conversions" alone is not the thing being refused: the report
+    // carries a Conversions section counting what the campaign caused, and
+    // those are counts for the same reason these are. What may never appear
+    // is a RATE taken over either population.
+    expect(screen.queryByText(/[Cc]onversion rate/)).toBeNull()
     expect(screen.queryByText(/[Oo]rder rate/)).toBeNull()
     expect(screen.queryByText(/[Pp]urchase rate/)).toBeNull()
   })

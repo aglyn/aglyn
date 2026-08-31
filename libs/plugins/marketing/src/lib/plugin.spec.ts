@@ -65,6 +65,12 @@ describe('marketing plugin', () => {
     )
     expect(
       (extension?.navItems?.[0]?.sections ?? []).map((section) => section.id),
-    ).toEqual(['overview', 'campaigns', 'overlays', 'experiments'])
+    ).toEqual([
+      'overview',
+      'campaigns',
+      'conversions',
+      'overlays',
+      'experiments',
+    ])
   })
 })

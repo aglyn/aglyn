@@ -20,6 +20,7 @@ import { pluginDocsHelp } from '@aglyn/aglyn'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import {
   Alert,
+  Box,
   Button,
   Chip,
   Divider,
@@ -43,6 +44,10 @@ import {
   campaignRevenueReport,
   type CampaignRevenueRollup,
 } from '@aglyn/shared-ui-email-campaigns/model/campaign-revenue'
+import {
+  campaignConversionsReport,
+  type CampaignConversionsRollup,
+} from '@aglyn/shared-ui-email-campaigns/model/campaign-conversions'
 /*
  * The three renderers every email report shares. Imported rather than kept
  * here, so "a rate prints its denominator" is one implementation and not a
@@ -195,6 +200,31 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
     [firestore, hostId, campaignId],
   )
 
+  /*
+   * The conversions rollup, a fourth single-document listen.
+   *
+   * Beside `reports/revenue` and read the same way, because it is the same
+   * join answering the other half of the question: revenue is what a campaign
+   * EARNED from people who named themselves at checkout, and this is what it
+   * CAUSED among people who were anonymous until the moment they submitted,
+   * signed up or booked. The cost model in this file's header is unchanged in
+   * the way that matters — a fixed number of documents whatever the audience,
+   * and no per-conversion read anywhere on the page.
+   */
+  const { data: conversions } = useFirestoreDoc<CampaignConversionsRollup>(
+    () =>
+      doc(
+        firestore,
+        'hosts',
+        hostId,
+        'campaigns',
+        campaignId,
+        'reports',
+        'conversions',
+      ),
+    [firestore, hostId, campaignId],
+  )
+
   const report = campaignReport(campaign?.stats)
   const linkReport = campaignLinkReport(links)
   const revenueReport = campaignRevenueReport({
@@ -211,6 +241,15 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
       ? campaignSendProgress(campaign as never).state === 'sending'
       : false,
   })
+  /*
+   * No denominator is handed in, unlike the revenue report. A conversion RATE
+   * over delivered messages would repeat the defect the revenue section
+   * refuses for orders — one visitor can submit two forms, so the quotient
+   * passes 100% without anything being wrong — and counting distinct people
+   * instead needs a document per person per campaign, which is the
+   * per-recipient read this screen's cost model exists to refuse.
+   */
+  const conversionsReport = campaignConversionsReport({ rollup: conversions })
   const subject = String(campaign?.subject ?? 'Campaign')
   const sendTimeMs = campaign ? emailSendTimeMs(campaign) : 0
 
@@ -556,6 +595,94 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
                   `clicked, within ${revenueReport.windowDays} days — a ` +
                   'campaign sent before that was recorded, or one on a site ' +
                   'with no store, will never show a figure here.'}
+            </Typography>
+          )}
+        </Section>
+
+        <Divider />
+
+        {/*==========================================
+          * WHAT THIS CAMPAIGN CAUSED.
+          *
+          * The same join as the revenue above, credited under the same rule,
+          * answering it for people who were anonymous until the moment being
+          * counted: they arrived from a campaign link, browsed, and only
+          * became somebody when they submitted a form, signed up or booked.
+          *
+          * THE FOUR FIGURES ARE NEVER ADDED. One person filling in one form
+          * writes a submission, a contact and a lead, so a total would count
+          * that visit three times — and it would look like a bigger version
+          * of a real number, which is why the model carries no total for this
+          * JSX to reach for and the caveat says so in words above them.
+          *
+          * They are laid out in a row of independent `Figure`s rather than in
+          * a table with a footer, because a footer row is where a reader
+          * expects the sum to be.
+          *=========================================*/}
+        <Section title="Conversions">
+          {conversionsReport.caveats.map((caveat) => (
+            <Alert key={caveat.id} severity="info">
+              {caveat.message}
+            </Alert>
+          ))}
+          {conversionsReport.any ? (
+            <Stack spacing={1}>
+              <Stack
+                direction="row"
+                spacing={4}
+                useFlexGap
+                sx={{ flexWrap: 'wrap' }}
+              >
+                {conversionsReport.kinds.map((entry) => (
+                  <Figure
+                    key={entry.kind}
+                    label={entry.label}
+                    value={entry.value}
+                    note={entry.note}
+                  />
+                ))}
+              </Stack>
+              <Typography variant="caption" color="text.secondary">
+                {`Credited ${conversionsReport.model === 'last-click' ? 'to the last campaign whose link the visitor clicked' : `under the ${conversionsReport.model} model`}, ` +
+                  `within ${conversionsReport.windowDays} days of that click. ` +
+                  'Somebody who converted without ever following a campaign ' +
+                  'link is credited to no campaign at all — nothing is ' +
+                  'inferred from a referrer — so these are a floor rather ' +
+                  'than everything this campaign influenced. The ones ' +
+                  'credited to nobody are counted under Conversions in the ' +
+                  'marketing console.'}
+              </Typography>
+              {/*
+                THE RECORDS BEHIND THE FIGURES. The rollup says how many; the
+                list says which, and it is the only place the uncredited half
+                is counted. A link rather than a table here — the records are
+                a paged read and this page's whole cost model is a fixed
+                number of documents whatever the audience.
+               */}
+              <Box>
+                <Button
+                  component={AppLink as any}
+                  {...({
+                    componentVariant: 'naked',
+                    nativeButton: false,
+                  } as any)}
+                  href={`${basePath}/conversions/${campaignId}`}
+                  size="small"
+                  color="primary"
+                >
+                  {'See these conversions'}
+                </Button>
+              </Box>
+            </Stack>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              {conversionsReport.recorded
+                ? 'Nothing has been credited to this campaign yet.'
+                : 'No conversions have been attributed to this campaign. A ' +
+                  'form submission, lead, contact or booking is credited to ' +
+                  'the last campaign whose link the visitor clicked, within ' +
+                  `${conversionsReport.windowDays} days — a campaign sent ` +
+                  'before that was recorded will never show a figure here.'}
             </Typography>
           )}
         </Section>
