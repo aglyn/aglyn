@@ -134,9 +134,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
    * The campaign-touch lookup, answering "no campaign".
    *
    * The double was missing it entirely, so the newsletter route threw on its
-   * first line and the enrollment under test never ran. Answering null is the
-   * honest default for a request carrying no touch, and it is what keeps this
-   * file about enrollment rather than about attribution.
+   * first line and the enrollment under test never ran. It has to be ANSWERED
+   * rather than omitted: the handler runs inside a try/catch, so a missing
+   * export surfaces here as an enrollment that silently never happened.
+   * Answering null is the honest default for a request carrying no touch, and
+   * it is what keeps this file about enrollment rather than about attribution.
    */
   resolveCampaignTouch: async () => null,
   // The real resolution's shape: an org that declared no pooling resolves
@@ -174,14 +176,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   notifyHostManagers: async () => undefined,
   dataStorageRefusal: async () => null,
   upsertHostContact: async () => undefined,
-  /*
-   * The newsletter route asks which campaign sent this visitor before it
-   * enrolls them. These requests carry no touch, so the honest answer is
-   * none — and it has to be ANSWERED rather than omitted: the handler runs
-   * inside a try/catch, so a missing export would surface here as an
-   * enrollment that silently never happened.
-   */
-  resolveCampaignTouch: async () => null,
   /*
    * The double opt-in seam, answering OFF.
    *
