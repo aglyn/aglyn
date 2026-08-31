@@ -43,6 +43,14 @@
  *     through it — remove the call from `campaign-send.ts` and the assertions
  *     below deliver to somebody this file expects to be spared.
  *  4. `sendEmail` is a spy. Delivery is read off what reached the wire.
+ *
+ * WHY IT LIVES IN THE INBOX PLUGIN. A test spanning two plugins has no
+ * obviously-correct home, and the console — which owns neither side — is the
+ * one home it may NOT have: `scope:app` may not depend on `aglyn:addons`,
+ * because the apps have to stay runnable with any plugin absent, and plugins
+ * reach them only through the generated loader manifests. Of the two owners,
+ * Inbox already imports Marketing, so hosting it here adds no graph edge that
+ * shipped code does not already carry.
  */
 
 const mockSentMessages: Array<Record<string, any>> = []
@@ -338,7 +346,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
 }))
 
-import { inboxAssignListHandler } from '@aglyn/plugins-inbox/server'
+import { inboxAssignListHandler } from './server'
 import { performCampaignSend } from '@aglyn/plugins-marketing/server/campaign-send'
 
 /** Drives the real Inbox route the merchant's button posts to. */

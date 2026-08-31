@@ -39,6 +39,13 @@
  *    migration: changing the derivation without this turns a defect that
  *    needed two routes into one that needs only a second visit.
  *  - THE ENROLLMENT DATE SURVIVES a re-subscribe.
+ *
+ * WHY IT LIVES IN THE COMMERCE PLUGIN. Two routes in different projects have
+ * no obviously-correct home, and the console — which owns neither — is the one
+ * home it may NOT have: `scope:app` may not depend on `aglyn:addons`, because
+ * the apps have to stay runnable with any plugin absent. Commerce already
+ * imports `@aglyn/tenant-runtime`, so hosting it beside `newsletter.ts` adds
+ * no graph edge that shipped code does not already carry.
  */
 
 const HOST_ID = 'site-1'
@@ -192,7 +199,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   }),
 }))
 
-import { newsletterHandler } from '@aglyn/plugins-commerce/server/newsletter'
+import { newsletterHandler } from './newsletter'
 import { runSingleAction } from '@aglyn/tenant-runtime/run-event-actions'
 
 /** Drives the commerce newsletter route the footer form posts to. */
