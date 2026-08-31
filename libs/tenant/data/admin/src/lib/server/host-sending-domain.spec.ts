@@ -996,6 +996,38 @@ describe('a dedicated domain is claimed by need, not by existence', () => {
     expect(store.get(`hosts/${HOST}`)?.sendingLabel).toBe('northwind')
   })
 
+  /**
+   * THE HEADLINE REQUIREMENT: being on Free costs a site its dedicated domain,
+   * and does NOT cost it the ability to send.
+   *
+   * Both halves in one test, on one org, because separately either half is
+   * satisfiable by a mistake. A gate that blocked everything would pass "no
+   * domain was claimed"; a gate that blocked nothing would pass "the site can
+   * still send".
+   *
+   * Free is not a tier that never sends. It has no storefront and a campaign
+   * quota of zero, but it collects form submissions and a merchant can reply to
+   * one from the inbox — a transactional message to a person who wrote in, and
+   * exactly the kind that must never be gated behind a plan.
+   */
+  it('gives a free site no domain of its own and sends its mail anyway', async () => {
+    seedOrgPlan('free')
+    seedHost(HOST, 'freesite')
+
+    const claim = await ensureHostSendingDomain({
+      hostId: HOST,
+      orgId: ORG,
+      subdomain: 'freesite',
+    })
+    expect(claim.created).toBe(false)
+    expect(claim.error).toBe('plan-no-dedicated-domain')
+
+    const verdict = await hostSendingIdentity(HOST)
+    expect(verdict.refusal).toBeNull()
+    expect(verdict.source).toBe('shared')
+    expect(verdict.from).toMatch(/^notifications@shared\d+\.mail\.aglyn\.app$/)
+  })
+
   it('claims nothing when the org cannot be read at all', async () => {
     // No `orgs/{id}` document. Failing CLOSED is the safe direction: the cost
     // of a late claim is one sweep, and the cost of an early one is a zone
