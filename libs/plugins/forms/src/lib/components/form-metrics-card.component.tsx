@@ -24,8 +24,9 @@ import {
   RateRow,
   Section,
 } from '@aglyn/shared-ui-jsx/components/measured-figures.component'
-import { Divider, Stack, Typography } from '@mui/material'
-import { pluginDocsHelp } from '@aglyn/aglyn'
+import { Divider, Stack, Tooltip, Typography } from '@mui/material'
+import { formPeriodSeries, formStatsWindow, pluginDocsHelp } from '@aglyn/aglyn'
+import { useMemo } from 'react'
 
 export interface FormMetricsCardProps {
   /** The stored counters, or `undefined` while the document is in flight. */
@@ -52,71 +53,122 @@ function recorded(value: unknown): number | null {
 /**
  * ONE FORM, MEASURED — and every rate naming its denominator.
  *
- * ## What the stored data actually supports
+ * ## Where every number here comes from
  *
- * A form document carries exactly three counters, and they are counters by
- * deliberate design: `/api/forms/submit` increments them on a write that was
- * happening anyway, because the alternative — counting `formSubmissions` when
- * a console surface renders — reads the one collection that grows without
- * bound and the one the customer is billed on. That decision is right, and it
- * is also the ceiling on what this card can say.
+ * Counters on the form document, each incremented on a write that was
+ * happening anyway. The alternative — counting `formSubmissions` when a
+ * console surface renders — reads the one collection that grows without bound
+ * and the one the customer is billed on, and it is the shape this product has
+ * created repeatedly.
  *
- *  - `stats.submissions` — every submission ever filed under this form's id.
- *  - `stats.lastSubmissionAtMs` — when the most recent one arrived.
- *  - `stats.leads` — declared on `FormStats` and **never written**. The submit
- *    route creates a lead through `addHostLead`, files it under
- *    `source: form:{id}`, and does not count it back onto the form.
+ *  - `stats.submissions` / `stats.leads` — `/api/forms/submit`, on the single
+ *    `update` it already issues per submission. `leads` counts submissions
+ *    this form FILED to the site's Leads; `addHostLead` keys one person to
+ *    one document, so a returning visitor's second submission is a second
+ *    capture and not a second person.
+ *  - `stats.views` / `stats.starts` — `/api/analytics/collect`, from the
+ *    form's own beacon, in the same shape the overlay counters use.
+ *  - `stats.periods` — all four again, keyed by month, riding the same
+ *    writes. This is the series drawn below AND the reason the rates can be
+ *    taken at all (see next).
  *
- * ## What this card therefore does NOT show, and why
+ * ## Why the rates are not lifetime over lifetime
  *
- * Each of these was considered and is absent on purpose. An absence with a
- * reason is a smaller lie than a number with none.
+ * `submissions` has counted since the form entity existed; `views` only since
+ * the beacon shipped. Dividing the lifetime totals would answer "submissions
+ * ever, over views since the day we started looking" — arbitrarily wrong, and
+ * wrong in the flattering direction. `formStatsWindow` sums both counters
+ * over exactly the months the denominator was live for, and answers zero
+ * periods when there are none, which renders as a dash.
  *
- *  - **Submissions over time.** Nothing per-form is stored per period. The
- *    only time series that exists is `hosts/{id}/counters/formSubmissions`,
- *    which is keyed by month and counts the SITE — it is the abuse ceiling's
- *    odometer, not a form's history. Deriving a per-form series would mean
- *    aggregating `formSubmissions` on mount, which is the expensive-read shape
- *    the counters exist to avoid.
- *  - **Completion, abandonment, or a conversion rate.** Nothing records a form
- *    being SEEN or STARTED. Every one of those rates needs a denominator of
- *    views, and no view is written anywhere, so all three would be a
- *    percentage over a population nobody counted.
+ * ## The view count is a CLIENT count, and this card says so
+ *
+ * A view is a beacon; a submission is a server write. A blocked beacon, a
+ * browser that runs no script, a visitor who leaves before the request goes
+ * out — each is a view that is missing from the denominator and a submission
+ * that is present in the numerator. So a completion rate here can exceed
+ * 100%, and it is printed as measured rather than clamped: a rate pinned at a
+ * tidy 100% would read as a form everybody finishes.
+ *
+ * ## What is still NOT measured, and why
+ *
+ * An absence with a reason is a smaller lie than a number with none.
+ *
  *  - **Per-field answer rates.** The values live on the submission documents
- *    in the Inbox; counting them is the same unbounded read.
- *  - **A lead rate**, until something increments `stats.leads`. It is rendered
- *    as a dash rather than dropped, so the row is already in place the day a
- *    writer appears — and so the gap is visible rather than merely missing.
+ *    in the Inbox, and counting them is the unbounded read every counter here
+ *    exists to avoid.
+ *  - **Anything before a counter started.** The series begins at the first
+ *    month with a record rather than padding backwards with zeros, and the
+ *    rates cover only the months their denominator was live.
  */
 export function FormMetricsCard(props: FormMetricsCardProps) {
   const { stats, fields, leadRouting, loading } = props
   const submissions = recorded(stats?.submissions)
   const leads = recorded(stats?.leads)
+  const views = recorded(stats?.views)
   const lastAt = recorded(stats?.lastSubmissionAtMs)
 
+  const series = useMemo(() => formPeriodSeries(stats), [stats])
+  /** The tallest month, which every bar below is drawn as a fraction of. */
+  const peak = useMemo(
+    () => series.reduce((high, point) => Math.max(high, point.submissions), 0),
+    [series],
+  )
+
   /*
-   * The one rate this form's data could support, and it cannot yet.
-   *
    * `measuredRate` returns `null` on an unrecorded numerator OR a zero
    * denominator, which is both halves of the rule at once: a form nobody has
-   * submitted to has no rate, and a form whose leads were never counted has no
-   * rate either. Neither is `0%`.
+   * submitted to has no rate, and a form whose leads were never counted has
+   * no rate either. Neither is `0%`.
    *
-   * The denominator is named `submissions` and not "people" on purpose. A lead
-   * is created only from a submission that carried an address, so a rate over
-   * every submission and a rate over the addressed ones are different numbers
-   * — and this is the one the counter could actually produce.
+   * The denominator is named `submissions` and not "people" on purpose. A
+   * lead is filed only from a submission that carried an address, so a rate
+   * over every submission and a rate over the addressed ones are different
+   * numbers — and this is the one the counter actually produces.
    */
   const leadRate = measuredRate(leads, submissions, 'submissions')
+  /*
+   * COMPLETION AND ABANDONMENT, each over the months its own denominator was
+   * recorded in — never over the lifetime totals, and never over each
+   * other's window. Views and starts began being counted on the same deploy
+   * but they do not stay in step: a form nobody typed into has views and no
+   * starts, so a shared window would silently take the abandonment rate over
+   * months that recorded no start at all.
+   */
+  const viewWindow = formStatsWindow(stats, 'views', 'submissions')
+  const startWindow = formStatsWindow(stats, 'starts', 'submissions')
+  const completionRate = viewWindow.periods
+    ? measuredRate(viewWindow.of, viewWindow.over, 'views')
+    : null
+  /*
+   * Abandonment is the starts that did NOT arrive, and it is withheld — not
+   * clamped — when there are more submissions than starts.
+   *
+   * That happens for a real reason rather than as an arithmetic edge: the
+   * start is a beacon and the submission is a server write, so a visitor
+   * whose beacon was blocked submits without ever having started. Clamping
+   * the difference at zero would publish "nobody abandons this form" out of a
+   * measurement that had gone incoherent, which is the loudest possible
+   * version of the mistake this whole card is written against.
+   */
+  const abandonRate =
+    startWindow.periods && startWindow.over >= startWindow.of
+      ? measuredRate(
+          startWindow.over - startWindow.of,
+          startWindow.over,
+          'starts',
+        )
+      : null
 
   return (
     <CardDisplay
       header="What this form has collected"
       help={pluginDocsHelp('forms', {
-        anchor: '#the-inbox',
+        anchor: '#one-forms-own-page',
         excerpt:
-          'Every submission reaches the Inbox. These counters ride the same ' +
-          'write, so reading them never re-counts the submissions.',
+          'Views and starts are counted in the visitor’s browser and ' +
+          'submissions on the server, and each rate covers only the months ' +
+          'its denominator was recorded.',
       })}
       contentGutterX
       contentGutterY
@@ -124,14 +176,19 @@ export function FormMetricsCard(props: FormMetricsCardProps) {
       <Stack spacing={2}>
         <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap', rowGap: 2 }}>
           <Figure
+            label="Views"
+            value={loading ? null : views}
+            note="times this form was rendered"
+          />
+          <Figure
             label="Submissions"
             value={loading ? null : submissions}
             note="since this form was created"
           />
           <Figure
-            label="Leads"
+            label="Lead captures"
             value={leads}
-            note="created from a submission"
+            note="submissions filed to Leads"
           />
           <Figure
             label="Declared fields"
@@ -141,6 +198,8 @@ export function FormMetricsCard(props: FormMetricsCardProps) {
         </Stack>
         <Divider />
         <Section title="Rates">
+          <RateRow label="Views that became a submission" rate={completionRate} />
+          <RateRow label="Started and never submitted" rate={abandonRate} />
           <RateRow label="Submissions that became a lead" rate={leadRate} />
           {!leadRouting ? (
             <Typography variant="caption" color="text.secondary">
@@ -148,6 +207,78 @@ export function FormMetricsCard(props: FormMetricsCardProps) {
                 'that rate to be over.'}
             </Typography>
           ) : null}
+          {/*
+            The measurement's own shape, on the surface rather than in a
+            docblock only a maintainer reads. Both facts change how the
+            numbers above should be read: which months they cover, and that
+            one side of them is counted in a browser.
+          */}
+          <Typography variant="caption" color="text.secondary">
+            {'Views and starts are counted in the visitor’s browser and ' +
+              'submissions on the server, so a blocked request is a view ' +
+              'this misses and a submission it does not. Each rate covers ' +
+              'only the months its denominator was being recorded.'}
+          </Typography>
+        </Section>
+        <Divider />
+        <Section title="Submissions by month">
+          {series.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              {'Nothing recorded yet. The series starts at the first month ' +
+                'this form collects something.'}
+            </Typography>
+          ) : (
+            /*
+              A bar per month, drawn from the counters themselves.
+              Deliberately starting at the first RECORDED month rather than a
+              rolling twelve: a month before the counter existed would draw as
+              a confident zero, which is a claim nobody measured.
+            */
+            <Stack spacing={0.5}>
+              {series.map((point) => (
+                <Stack
+                  key={point.period}
+                  direction="row"
+                  spacing={1}
+                  sx={{ alignItems: 'center' }}
+                >
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ minWidth: 64 }}
+                  >
+                    {point.period}
+                  </Typography>
+                  <Tooltip
+                    title={`${point.submissions.toLocaleString()} submissions${
+                      point.views
+                        ? `, ${point.views.toLocaleString()} views`
+                        : ''
+                    }`}
+                  >
+                    <Stack
+                      sx={{
+                        height: 8,
+                        borderRadius: 1,
+                        bgcolor: 'primary.main',
+                        // Zero keeps a hairline rather than vanishing: a row
+                        // with no bar at all reads as a missing month, and a
+                        // missing month is the one thing this series must
+                        // never be confused with.
+                        minWidth: 2,
+                        width: peak
+                          ? `${Math.round((point.submissions / peak) * 100)}%`
+                          : 2,
+                      }}
+                    />
+                  </Tooltip>
+                  <Typography variant="caption" sx={{ minWidth: 40 }}>
+                    {point.submissions.toLocaleString()}
+                  </Typography>
+                </Stack>
+              ))}
+            </Stack>
+          )}
         </Section>
         <Divider />
         <Section title="Most recent">
@@ -166,17 +297,21 @@ export function FormMetricsCard(props: FormMetricsCardProps) {
           */}
           <Stack component="ul" sx={{ pl: 2, m: 0 }} spacing={0.5}>
             <Typography component="li" variant="caption" color="text.secondary">
-              {'Submissions over time — nothing per-form is stored per period. ' +
-                'The only monthly counter belongs to the site, not to one form.'}
+              {'Per-field answer rates — which questions people skip. The ' +
+                'values live on the submission documents, and counting them ' +
+                'is a read of the whole collection every time this page ' +
+                'opens.'}
             </Typography>
             <Typography component="li" variant="caption" color="text.secondary">
-              {'Completion and abandonment — nothing records this form being ' +
-                'seen or started, so there is no population to divide by.'}
+              {'Anything before a counter started. The month series begins ' +
+                'where the record begins rather than padding backwards with ' +
+                'zeros, and a rate is taken only over the months its ' +
+                'denominator was live.'}
             </Typography>
             <Typography component="li" variant="caption" color="text.secondary">
-              {'Leads created — the submit route files a lead under this ' +
-                'form and does not count it back, so the figure above is a ' +
-                'dash rather than a zero.'}
+              {'Who abandoned, or where they stopped. A start is one signal ' +
+                'per form, not per field, so this says how often a form was ' +
+                'left and never which question lost the visitor.'}
             </Typography>
           </Stack>
         </Section>
