@@ -178,6 +178,169 @@ export interface FormStats {
   submissions?: number
   leads?: number
   lastSubmissionAtMs?: number
+  /**
+   * Form views, counted by the beacon at `/api/analytics/collect` — one per
+   * rendered form on a live page, the same shape and the same cost as an
+   * overlay impression.
+   *
+   * ⚠️ A CLIENT-SIDE COUNT, and every rate over it inherits that. A blocked
+   * beacon, a browser that never runs the script and a crawler that renders
+   * nothing are all views this does not hold, while `submissions` is counted
+   * on the server and holds every one. So a completion rate over this can
+   * legitimately exceed 100%, and it is reported rather than clamped: a
+   * number capped at a round 100% looks like a measurement of a full house.
+   */
+  views?: number
+  /** Forms a visitor typed into: one per form instance, on the first edit. */
+  starts?: number
+  /**
+   * The same four counters, per calendar month.
+   *
+   * The series the detail surface draws, and — more importantly — what makes
+   * a rate over `views` honest. The lifetime totals cannot be divided into
+   * each other: `submissions` has counted since the form entity existed and
+   * `views` only since the beacon shipped, so a lifetime completion rate
+   * would divide a long history by a short one. {@link formStatsWindow} takes
+   * every rate over the months that carry BOTH counters.
+   *
+   * Bounded by the calendar: twelve keys a year on a document with a megabyte
+   * to spend. Keys are `submissionMonthKey()` — the SAME function the
+   * site-wide counter and the abuse ceiling are keyed by, imported rather
+   * than restated, because a differently-derived month key reads zero on
+   * exactly the months it disagrees about.
+   */
+  periods?: Record<string, FormPeriodStats>
+}
+
+/** One month of {@link FormStats}. Every field absent until first written. */
+export interface FormPeriodStats {
+  submissions?: number
+  leads?: number
+  views?: number
+  starts?: number
+}
+
+/** The counters {@link FormPeriodStats} carries, in reading order. */
+export type FormStatKind = 'views' | 'starts' | 'submissions' | 'leads'
+
+export const FORM_STAT_KINDS: readonly FormStatKind[] = [
+  'views',
+  'starts',
+  'submissions',
+  'leads',
+] as const
+
+/** One month of a form's history, with every counter resolved to a number. */
+export interface FormPeriodPoint extends Record<FormStatKind, number> {
+  /** `YYYY-MM`. */
+  period: string
+}
+
+/** The next month after `period`, or `null` for a key that is not one. */
+function nextPeriod(period: string): string | null {
+  const match = /^(\d{4})-(\d{2})$/.exec(period)
+  if (!match) return null
+  const year = Number(match[1])
+  const month = Number(match[2])
+  if (month < 1 || month > 12) return null
+  return month === 12
+    ? `${year + 1}-01`
+    : `${year}-${String(month + 1).padStart(2, '0')}`
+}
+
+/**
+ * A form's history as a dense month series, from the first month anything was
+ * recorded to the last.
+ *
+ * ⛔ THE SERIES NEVER STARTS BEFORE THE COUNTER DID. A month with no key is
+ * two different facts — "nothing happened" and "nothing was counted yet" —
+ * and they are told apart by WHERE the month falls: inside the recorded range
+ * an absent key is a true zero, because the counter was live and wrote
+ * nothing; before it, there is no measurement to draw and the series simply
+ * does not extend there. Padding to a fixed twelve months would render the
+ * form's pre-counter history as a row of confident zeros.
+ *
+ * Interior gaps ARE filled, at zero, so a quiet month reads as a quiet month
+ * rather than closing up and making two distant months look adjacent.
+ *
+ * @param stats - the stored counters, or nothing.
+ * @param maxPeriods - how many of the most recent months to return.
+ * @returns oldest first, so a chart reads left to right. Empty when nothing
+ *          has ever been recorded.
+ */
+export function formPeriodSeries(
+  stats: FormStats | undefined | null,
+  maxPeriods = 12,
+): FormPeriodPoint[] {
+  const periods = stats?.periods
+  if (!periods) return []
+  const keys = Object.keys(periods)
+    .filter((key) => /^\d{4}-(0[1-9]|1[0-2])$/.test(key))
+    .sort()
+  if (!keys.length) return []
+  const series: FormPeriodPoint[] = []
+  const last = keys[keys.length - 1]
+  let cursor: string | null = keys[0]
+  // Bounded by the span rather than by a `while (true)`: a stored key far in
+  // the future would otherwise walk the calendar forever.
+  for (let step = 0; cursor && step <= 1200; step += 1) {
+    const month = periods[cursor] ?? {}
+    series.push({
+      period: cursor,
+      views: Number(month.views ?? 0),
+      starts: Number(month.starts ?? 0),
+      submissions: Number(month.submissions ?? 0),
+      leads: Number(month.leads ?? 0),
+    })
+    if (cursor === last) break
+    cursor = nextPeriod(cursor)
+  }
+  return maxPeriods > 0 && series.length > maxPeriods
+    ? series.slice(series.length - maxPeriods)
+    : series
+}
+
+/** Two counters summed over the months where the FIRST of them was recorded. */
+export interface FormStatsWindow {
+  /** Months the window covers. Zero means no rate can be taken. */
+  periods: number
+  /** The counter the window is defined by, summed over those months. */
+  over: number
+  /** The other counter, summed over the SAME months. */
+  of: number
+}
+
+/**
+ * Sum `of` and `over` across exactly the months in which `over` was recorded.
+ *
+ * This is what stops a rate being a lie of arithmetic. `views` began being
+ * counted the day the beacon shipped and `submissions` has counted since the
+ * form entity existed, so dividing the lifetime totals answers "submissions
+ * ever, over views since Tuesday" — a number that is not wrong by a little.
+ *
+ * A month is IN the window when it carries a non-zero `over`, not merely a
+ * key: a month the beacon never reported is not a month with no views, it is
+ * a month with no measurement, and including it would deflate every rate
+ * taken over the window by however long the counter was dark.
+ *
+ * @returns `periods: 0` when nothing qualifies, which every caller must
+ *          render as a dash rather than as a zero rate.
+ */
+export function formStatsWindow(
+  stats: FormStats | undefined | null,
+  over: FormStatKind,
+  of: FormStatKind,
+): FormStatsWindow {
+  const window: FormStatsWindow = { periods: 0, over: 0, of: 0 }
+  for (const month of Object.values(stats?.periods ?? {})) {
+    const denominator = Number(month?.[over] ?? 0)
+    if (!Number.isFinite(denominator) || denominator <= 0) continue
+    window.periods += 1
+    window.over += denominator
+    const numerator = Number(month?.[of] ?? 0)
+    if (Number.isFinite(numerator)) window.of += numerator
+  }
+  return window
 }
 
 export const FORM_SLUG_MAX_LENGTH = 64
