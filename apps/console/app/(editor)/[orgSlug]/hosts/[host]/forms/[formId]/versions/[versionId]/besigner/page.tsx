@@ -616,7 +616,12 @@ function FormBesignerPage() {
     <HostThemeDocumentContext.Provider value={hostTheme}>
       <Aglyn.ScreenLinkContext.Provider value={screenLinks}>
         <EntityPickerProvider hostId={hostId}>
-          <ReusableComponentsProvider hostId={hostId}>
+          {/* This canvas IS the form, and a form design names itself, so its
+              published copy is withheld from the placed-form graft. */}
+          <ReusableComponentsProvider
+            hostId={hostId}
+            editingFormId={formId as string}
+          >
             <BindingPickerProvider hostId={hostId}>
               <InteractionsProvider hostId={hostId}>
                 <BesignerMediaPickerProvider hostId={hostId}>

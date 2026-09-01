@@ -435,6 +435,12 @@ export function DocumentPreview(props: DocumentPreviewProps) {
     // for the real nav a beat later — a visible flash of chrome that the live
     // site never shows.
     if (!definitions || !formDesigns) return
+    const previewableFormDesigns =
+      kind === 'form' && docId && docId in formDesigns
+        ? Object.fromEntries(
+            Object.entries(formDesigns).filter(([id]) => id !== docId),
+          )
+        : formDesigns
     const resolved: PreviewStateIds = { hostId, kind, docId, versionId }
 
     const applyState = () => {
@@ -453,7 +459,12 @@ export function DocumentPreview(props: DocumentPreviewProps) {
             // Placed forms resolve here too, in the SAME call the tenant makes
             // — one graft that expands a component inside a form design and a
             // form inside a component, in either nesting order.
-            [Aglyn.placedFormPlacement(formDesigns as any)],
+            //
+            // Except the form being PREVIEWED. `checkFormContract` requires a
+            // form design's `form` node to name its own form, so previewing a
+            // form finds itself in the map — and would render the published
+            // version in place of the draft this preview exists to show.
+            [Aglyn.placedFormPlacement(previewableFormDesigns as any)],
           ) as any,
         ),
       )
