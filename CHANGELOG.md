@@ -19,6 +19,7 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **security:** the measurement allowlist names the LinkedIn shards and the cross-client collector
 - **marketing:** the campaign figures import the forms subpath, not the barrel ([AGL-830](https://linear.app/aglyn/issue/AGL-830), [AGL-1349](https://linear.app/aglyn/issue/AGL-1349))
 - **email:** the footer link opens the preference page, on every marketing path and in both parts
 - **billing:** a deferred reduction moves the line the target phase actually carries
