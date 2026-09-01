@@ -40,7 +40,11 @@
  * the probe memo is module-level with a 5-minute TTL, so a shared module
  * would serve every test the first test's answer.
  */
-import { SCHEDULED_JOBS } from '@aglyn/aglyn/server'
+import {
+  CRON_BEAT_DEGRADED_DOC,
+  CRON_DEGRADED_WINDOW_CONTINUITY_MS,
+  SCHEDULED_JOBS,
+} from '@aglyn/aglyn/server'
 
 const DAY = 86_400_000
 
@@ -50,6 +54,8 @@ let mockStore: Record<string, Record<string, unknown>> = {}
 let mockWrites: Array<{ doc: string; data: Record<string, unknown> }> = []
 /** Set to make the collection read throw, i.e. we cannot see the jobs. */
 let mockListThrows = false
+/** Set to make writes throw, i.e. the record cannot be kept. */
+let mockWriteThrows = false
 
 jest.mock('firebase-admin/app', () => ({
   __esModule: true,
@@ -79,6 +85,7 @@ jest.mock('firebase-admin/firestore', () => ({
             return { get: (field: string) => mockStore[id]?.[field] }
           },
           set: async (data: Record<string, unknown>) => {
+            if (mockWriteThrows) throw new Error('firestore refused the write')
             mockWrites.push({ doc: id, data })
             mockStore[id] = { ...(mockStore[id] ?? {}), ...data }
           },
@@ -268,7 +275,12 @@ describe('/api/health/crons', () => {
     mockStore = { 'watch-window': { startedAtMs: Date.now() - 30 * DAY } }
     const { GET } = await freshRoute()
     await GET()
-    expect(mockWrites).toEqual([])
+    // Asserted against the bootstrap document specifically. Nothing has
+    // reported and the window opened a month ago, so every row is legitimately
+    // red here and the degraded record IS written — that is a different write
+    // with its own tests, and a bare "wrote nothing" would fail on it while
+    // saying nothing about the window this test is named for.
+    expect(mockWrites.some((write) => write.doc === 'watch-window')).toBe(false)
   })
 
   it('memoises, so a public endpoint cannot be made to read in a loop', async () => {
@@ -398,5 +410,142 @@ describe('/api/health/crons', () => {
     // Every row is degraded by contract in this branch, so the count in the
     // line is what distinguishes it from a single silent job at a glance.
     expect(output).toContain(`/${SCHEDULED_JOBS.length}`)
+  })
+  /*==========================================
+   * The record is what actually outlives the window.
+   *=========================================*/
+  it('records the failing rows where they survive the window', async () => {
+    // A console.error does not outlive it: the drain drops `level: "error"`
+    // by design, so the line is gone in about an hour. Firestore is the sink
+    // the endpoint already holds a handle to.
+    const now = Date.now()
+    mockStore = healthyStore(now)
+    mockStore['report-usage'] = { jobId: 'report-usage', atMs: now - 3 * DAY }
+    const { GET } = await freshRoute()
+    expect((await GET()).status).toBe(503)
+
+    const record = mockWrites.find((w) => w.doc === CRON_BEAT_DEGRADED_DOC)
+    expect(record).toBeDefined()
+    const data = record?.data as any
+    expect(data.failingCount).toBe(1)
+    expect(data.totalCount).toBe(SCHEDULED_JOBS.length)
+    expect(data.failing[0].jobId).toBe('report-usage')
+    expect(data.failing[0].schedule).toBe('0 2 * * *')
+    expect(data.failing[0].code).toBe('job-silent')
+    // The window has to be answerable as a span, not just a moment.
+    expect(data.firstSeenAtMs).toBeGreaterThanOrEqual(now)
+    expect(typeof data.firstSeenAt).toBe('string')
+  })
+
+  it('writes nothing at all while the board is green', async () => {
+    // The cost argument: bounded by the probe, and zero when healthy.
+    mockStore = healthyStore(Date.now())
+    const { GET } = await freshRoute()
+    expect((await GET()).status).toBe(200)
+
+    expect(mockWrites.some((w) => w.doc === CRON_BEAT_DEGRADED_DOC)).toBe(false)
+  })
+
+  it('keeps one window open rather than restarting it each probe', async () => {
+    // THE POINT OF THE RECORD. Both red windows were unattributable partly
+    // because nothing said when they OPENED. A record that reset its start on
+    // every probe would answer "five minutes ago" for a seven-hour outage.
+    const now = Date.now()
+    const opened = now - 3 * 60 * 60_000
+    mockStore = healthyStore(now)
+    mockStore['report-usage'] = { jobId: 'report-usage', atMs: now - 3 * DAY }
+    mockStore[CRON_BEAT_DEGRADED_DOC] = {
+      signature: 'report-usage',
+      firstSeenAtMs: opened,
+      lastSeenAtMs: now - 60_000,
+    }
+
+    const { GET } = await freshRoute()
+    expect((await GET()).status).toBe(503)
+
+    const data = mockWrites.find((w) => w.doc === CRON_BEAT_DEGRADED_DOC)
+      ?.data as any
+    expect(data.firstSeenAtMs).toBe(opened)
+    expect(data.lastSeenAtMs).toBeGreaterThan(opened)
+  })
+
+  it('opens a NEW window when a different job is the one failing', async () => {
+    // Same continuity check, the other way: yesterday's outage must not
+    // absorb today's, or the span it reports is fiction.
+    const now = Date.now()
+    mockStore = healthyStore(now)
+    mockStore['report-usage'] = { jobId: 'report-usage', atMs: now - 3 * DAY }
+    mockStore[CRON_BEAT_DEGRADED_DOC] = {
+      signature: 'audit-archive',
+      firstSeenAtMs: now - 5 * 60 * 60_000,
+      lastSeenAtMs: now - 60_000,
+    }
+
+    const { GET } = await freshRoute()
+    await GET()
+
+    const data = mockWrites.find((w) => w.doc === CRON_BEAT_DEGRADED_DOC)
+      ?.data as any
+    expect(data.signature).toBe('report-usage')
+    expect(data.firstSeenAtMs).toBeGreaterThanOrEqual(now)
+  })
+
+  it('opens a new window after a long enough gap', async () => {
+    // A stale record with the SAME signature is a separate outage, not a
+    // continuation — otherwise one job that dies every night reports a single
+    // window weeks long.
+    const now = Date.now()
+    mockStore = healthyStore(now)
+    mockStore['report-usage'] = { jobId: 'report-usage', atMs: now - 3 * DAY }
+    mockStore[CRON_BEAT_DEGRADED_DOC] = {
+      signature: 'report-usage',
+      firstSeenAtMs: now - 2 * DAY,
+      lastSeenAtMs: now - CRON_DEGRADED_WINDOW_CONTINUITY_MS - 1,
+    }
+
+    const { GET } = await freshRoute()
+    await GET()
+
+    const data = mockWrites.find((w) => w.doc === CRON_BEAT_DEGRADED_DOC)
+      ?.data as any
+    expect(data.firstSeenAtMs).toBeGreaterThanOrEqual(now)
+  })
+
+  it('never lets a failed record break the health answer', async () => {
+    // A probe that 500s while reporting that something else is unhealthy is
+    // the worse failure. The verdict is still owed to the caller.
+    const now = Date.now()
+    mockStore = healthyStore(now)
+    mockStore['report-usage'] = { jobId: 'report-usage', atMs: now - 3 * DAY }
+    mockWriteThrows = true
+
+    const { GET } = await freshRoute()
+    const response = await GET()
+    const body = await response.json()
+
+    expect(response.status).toBe(503)
+    expect(body.checks['report-usage'].ok).toBe(false)
+  })
+
+  it('does not read its own record as a job that never reported', async () => {
+    // The record lives in the same collection as the marks. Read as a beat it
+    // would be an unknown job with no `atMs` — or worse, a row on the board.
+    const now = Date.now()
+    mockStore = healthyStore(now)
+    mockStore[CRON_BEAT_DEGRADED_DOC] = {
+      signature: 'report-usage',
+      firstSeenAtMs: now - 60_000,
+      lastSeenAtMs: now - 60_000,
+    }
+
+    const { GET } = await freshRoute()
+    const response = await GET()
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(Object.keys(body.checks)).not.toContain(CRON_BEAT_DEGRADED_DOC)
+    expect(Object.keys(body.checks).sort()).toEqual(
+      SCHEDULED_JOBS.map((job) => job.id).sort(),
+    )
   })
 })
