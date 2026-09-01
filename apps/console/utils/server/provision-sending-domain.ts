@@ -71,7 +71,7 @@ import {
   isPlatformSendingDomain,
   platformZoneNamesFor,
   platformZoneRecords,
-  sendingDomainRequiredRecords,
+  sendingDomainPublishableRecords,
   sendingDomainTeardownRefusal,
   tenantWebApex,
   type SendingDomainRecord,
@@ -239,11 +239,20 @@ export async function provisionSendingDomain(options: {
     return { domain, outcome: 'skipped', detail: issued.detail }
   }
 
-  // Step 2. The records the customer would otherwise publish, addressed the
-  // way an API to our own zone addresses them. Same generator the verifier
-  // compares against, so what is written is what is looked for.
-  const required = sendingDomainRequiredRecords(issued.record)
-  const zoned = platformZoneRecords(required, tenantWebApex())
+  /*
+   * Step 2. The records the customer would otherwise publish, addressed the
+   * way an API to our own zone addresses them. Same generator the verifier
+   * compares against, so what is written is what is looked for.
+   *
+   * PUBLISHABLE, not merely required. The two differ by the click-tracking
+   * host, which verification must not wait on and which there is nobody to
+   * ask about here — this is our zone. Writing only the required set is what
+   * left every platform subdomain measuring a structural 0% click rate:
+   * one flag was answering two questions, and the conservative answer to
+   * "does verification wait on this" silently decided "do we publish it".
+   */
+  const publishable = sendingDomainPublishableRecords(issued.record)
+  const zoned = platformZoneRecords(publishable, tenantWebApex())
   if (!zoned.length) {
     await recordSendingDomainIssueFailure({
       orgId: options.orgId,

@@ -150,6 +150,7 @@ export function readSendingDomainRecord(
     dkimPublicKey: data.dkimPublicKey ?? null,
     returnPathHost: data.returnPathHost ?? null,
     providerDomainId: data.providerDomainId ?? null,
+    trackingTarget: data.trackingTarget ?? null,
     createdAtMs: Number(data.createdAtMs) || null,
     verifiedAtMs: Number(data.verifiedAtMs) || null,
     lastCheckedAtMs: Number(data.lastCheckedAtMs) || null,
@@ -234,6 +235,12 @@ export async function recordIssuedSendingDomain(options: {
   dkimSelector?: string
   returnPathHost?: string
   providerDomainId?: string
+  /**
+   * The provider's tracking host, when it issued one — see
+   * `SendingDomainRecord.trackingTarget`. Absent leaves the domain sending
+   * and unmeasured rather than unsent.
+   */
+  trackingTarget?: string | null
 }): Promise<SendingDomainResult> {
   const domain = normalizeSendingDomain(options?.domain)
   const key = String(options?.dkimPublicKey ?? '').trim()
@@ -294,6 +301,12 @@ export async function recordIssuedSendingDomain(options: {
         : {}),
       ...(options.providerDomainId
         ? { providerDomainId: String(options.providerDomainId) }
+        : {}),
+      // Only when the provider issued one. Writing an empty value would put a
+      // tracking CNAME with no target in front of a customer, which is the
+      // blank-record shape `sendingDnsRecords` refuses everywhere else.
+      ...(String(options.trackingTarget ?? '').trim()
+        ? { trackingTarget: String(options.trackingTarget).trim() }
         : {}),
       // A previous failure is not part of the record once it succeeded.
       lastIssueError: firebaseAdmin.firestore.FieldValue.delete(),

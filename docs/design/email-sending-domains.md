@@ -82,6 +82,8 @@ and documents the three separate issues that came from breaking it.
 | **DKIM** | `<issued selector>._domainkey.<domain>` — `aglyn-{orgId}` until a provider names its own | `p=<issued public key>` | yes |
 | **Return path** | `send.<domain>` | `MX 10 feedback-smtp.us-east-1.amazonses.com` | yes |
 | **DMARC** | `_dmarc.<domain>` | **read, never written** — `v=DMARC1; p=none; rua=…` offered as a suggestion | no |
+| **Tracking** | `links.<domain>` | `CNAME <issued tracking host>` — the provider's, like DKIM | no |
+| **Tracking CAA** | `<domain>` | `0 issue "amazon.com"` — only for a domain that already publishes CAA | no |
 
 SPF and the return path sit on the `send.` subdomain deliberately: the
 customer's existing root SPF keeps authenticating their Workspace or Microsoft
@@ -91,6 +93,66 @@ closed and is easy to exhaust.
 The SPF include and return-path host are configurable
 (`AGLYN_EMAIL_SPF_INCLUDE`, `AGLYN_EMAIL_RETURN_PATH_HOST`) so a self-host
 operator fronting a different provider is not stuck with ours.
+
+### Click tracking, and why its records never block verification
+
+A provider measures a click by rewriting every `<a href>` in the HTML part to
+point at a tracking host on the sending domain and redirecting from it. Both
+`click_tracking` and `open_tracking` default **off** at the provider, and
+tracking only engages once a tracking subdomain is verified — so a domain
+created without them reports a click rate of exactly 0%, forever. That reads
+on a dashboard as an audience that does not click rather than as a domain that
+cannot count, which is why it survived: the same shape as the `"html": ""`
+defect, one layer up.
+
+`POST /domains` therefore asks for both flags and the `links` subdomain at
+creation, and the CNAME target comes back on the response like the DKIM key.
+It is the provider's infrastructure, so it is stored on the record
+(`trackingTarget`) rather than derived — a value of ours would point a
+customer's zone at a host we do not operate.
+
+Both records are `required: false`, and that is load-bearing in two
+directions. Verification is about AUTHENTICATION — whether a domain can prove
+it sent the mail — so a customer with SPF, DKIM and the return path published
+sends perfectly well and must not sit at `requested` over a record that only
+decides whether clicks can be counted. And making them required would
+un-verify every domain already verified without them.
+
+That leaves a gap the required set cannot express: a platform subdomain lives
+in a zone we own, where there is nobody to ask and no reason to leave the
+click rate at zero. `sendingDomainPublishableRecords` is what the provisioner
+writes — the required set plus the tracking CNAME. Reusing
+`sendingDomainRequiredRecords` there is what left every platform subdomain
+untracked: one flag was answering two different questions, and the
+conservative answer to "does verification wait on this" silently decided "do
+we publish it".
+
+**⚠️ The CAA record is the one that can hurt.** CAA restricts which
+authorities may issue a certificate for a name, and the lookup stops at the
+first name in the tree that publishes any. A domain publishing no CAA today
+needs nothing — any authority may already issue — and adding this record would
+be the change that *starts* restricting them. A domain that does publish CAA
+has to add this one alongside what it has, never in place of it; replacing the
+set is how a zone stops its own web certificates renewing. The record is
+emitted on the sending domain rather than the registrable root so a customer
+following it verbatim scopes the permission to the name we put a tracking host
+under; deriving the root would need a public-suffix list this library does not
+have, and a guess prints a record for the wrong name.
+
+For `aglyn.app` the CAA is published **once at the zone root**, alongside the
+`letsencrypt.org`, `sectigo.com` and `pki.goog` entries that were already
+there. Adding a fourth `issue` entry widens the permitted set; it does not
+narrow it, so Vercel's certificates for every tenant site are untouched. That
+one record covers every pool member and every future dedicated subdomain, so
+the per-domain CAA is deliberately excluded from the publishable set.
+
+**⚠️ Tearing a domain down breaks links in mail already delivered.** A
+tracking subdomain cannot be removed at the provider, only changed, precisely
+because live mail points at it. `release()` deletes the whole domain object,
+which takes the tracking host with it — so every tracked link in every message
+that domain has already sent stops resolving. This is a real cost of tracking
+on a domain that can be released, and it is not a cost the platform pool pays,
+because pool members are never released.
 
 ### DMARC is read, never written
 

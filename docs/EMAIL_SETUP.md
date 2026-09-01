@@ -550,6 +550,25 @@ What matters more than a ramp, and is tracked separately:
   the link no longer unsubscribes the recipient. Still open: no
   `mailto:` fallback in the header, because it needs a monitored
   inbox (see "Later hardening" below).
+- **Click and open tracking are on for every sending domain.** A provider
+  measures a click by rewriting each `<a href>` in the HTML part to a tracking
+  host on the sending domain; both flags default OFF and tracking engages only
+  once that host is verified, so a domain without one reports a click rate of
+  exactly 0% for ever. `aglyn.com` was turned on by hand; the four shared pool
+  members (`shared{1..4}.mail.aglyn.app`) were left off and carried every
+  tenant campaign, which is where the 0% actually lived. All five now run
+  `click_tracking` and `open_tracking` with a verified `links.` host, and
+  `POST /domains` asks for both at creation so a dedicated subdomain or a
+  customer's own domain cannot be issued without them. `aglyn.app` publishes
+  one root CAA entry for `amazon.com` alongside the three it already had —
+  additive, so Vercel's certificates for tenant sites are untouched — which
+  covers every name in the zone. See `docs/design/email-sending-domains.md`
+  for the record table, why the tracking records never block verification, and
+  the two caveats: a CAA must never replace a set a customer already
+  publishes, and releasing a domain breaks tracked links in mail it already
+  sent. `/api/admin/email-health?probe=1` reports a pool member whose tracking
+  is off as a `notices` entry rather than a blocker — it delivers fine, it just
+  cannot count.
 - **Topics and a preference center are shipped.** A campaign belongs to a
   topic (`orgs/{orgId}/emailTopics`, org-shared like `lists`, with four
   built-in defaults that need no migration), and the topic is signed into the

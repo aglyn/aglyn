@@ -124,6 +124,7 @@ export async function issueSendingDomainRecords(options: {
     dkimPublicKey: issue.dkimPublicKey,
     dkimSelector: issue.dkimSelector,
     providerDomainId: issue.providerDomainId,
+    trackingTarget: issue.trackingTarget,
   })
 
   if (stored.error) {

@@ -319,6 +319,47 @@ describe('the shared sending pool', () => {
     expect(report.domains.find((d) => d.domain === POOL[1])?.present).toBe(false)
   })
 
+  it('names a member that delivers but cannot COUNT a click', async () => {
+    /*
+     * The invisible fault. A domain with no tracking host still delivers, and
+     * reports a click rate of exactly 0% — which reads as an audience that
+     * does not click rather than as a domain that cannot count. The last time
+     * this was wrong it was found by reading a delivered message's source,
+     * not by looking at the numbers.
+     */
+    global.fetch = respond({
+      data: [
+        { name: POOL[0], status: 'verified', click_tracking: true, open_tracking: true },
+        { name: POOL[1], status: 'verified', click_tracking: false, open_tracking: false },
+      ],
+    }) as never
+    const report = await checkSharedSendingPool({
+      pool: POOL,
+      readApiKey: 'read-key',
+    })
+
+    expect(report.untracked).toEqual([POOL[1]])
+    expect(report.detail).toContain('Click tracking is off')
+    // NOT degraded. That word is read as "transactional mail is failing right
+    // now" and is treated as a blocker; this member is delivering fine.
+    expect(report.status).toBe('ok')
+    expect(report.unusable).toEqual([])
+  })
+
+  it('does not report a member as untracked when the provider did not say', async () => {
+    // A listing missing the field is a question this probe could not ask.
+    // Reporting it as "off" sends an operator to fix a setting they can see
+    // is already on.
+    global.fetch = respond(verified(POOL)) as never
+    const report = await checkSharedSendingPool({
+      pool: POOL,
+      readApiKey: 'read-key',
+    })
+
+    expect(report.untracked).toEqual([])
+    expect(report.domains[0].clickTracking).toBeNull()
+  })
+
   it('THE CONTROL: no read key is UNREADABLE, never ok', async () => {
     // The bug this file exists for. The sending key cannot read domains, so
     // asking it yields an authorization error that says nothing about the

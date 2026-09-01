@@ -178,6 +178,17 @@ export interface SendingDomainRecord {
    * the object in the provider's dashboard. Never a credential.
    */
   providerDomainId?: string | null
+  /**
+   * The host the provider redirects tracked link clicks through, as a CNAME
+   * target (`links1.resend-dns.com` and the like).
+   *
+   * From the PROVIDER, like the DKIM key and unlike the SPF include: the
+   * target names infrastructure the provider chose and can move, and a value
+   * of ours would point a customer's zone at a host we do not operate. Absent
+   * until a domain is issued with tracking on, and absent forever for one
+   * issued before it was.
+   */
+  trackingTarget?: string | null
   createdAtMs?: number | null
   verifiedAtMs?: number | null
   lastCheckedAtMs?: number | null
@@ -400,12 +411,41 @@ export function sendingReturnPathHost(): string {
   )
 }
 
+/**
+ * The label the CLICK-TRACKING host hangs off the sending domain.
+ *
+ * An ESP measures clicks by rewriting every `<a href>` to point at this host
+ * and redirecting from it, so it needs a name of its own with a TLS
+ * certificate. `links` is what the platform's own domains already use, and
+ * keeping one label across every domain class means an operator reading a
+ * zone sees the same name everywhere.
+ */
+export const SENDING_TRACKING_SUBDOMAIN = 'links'
+
+/**
+ * The certificate authority the tracking host's TLS certificate comes from.
+ *
+ * Only ever consulted to build a CAA record, and only matters for a domain
+ * that ALREADY publishes CAA — see the note on the record itself. Configurable
+ * for the same reason {@link sendingSpfInclude} is: a self-host operator
+ * fronting a different provider fronts a different CA.
+ */
+export function sendingTrackingCertAuthority(): string {
+  return process.env.AGLYN_EMAIL_TRACKING_CA || 'amazon.com'
+}
+
 /** What a record is for, so a surface can group and explain rather than dump. */
-export type SendingRecordPurpose = 'spf' | 'dkim' | 'return-path' | 'dmarc'
+export type SendingRecordPurpose =
+  | 'spf'
+  | 'dkim'
+  | 'return-path'
+  | 'dmarc'
+  | 'tracking'
+  | 'tracking-caa'
 
 /** One DNS record, as the customer's registrar labels it. */
 export interface SendingDnsRecord {
-  type: 'TXT' | 'MX'
+  type: 'TXT' | 'MX' | 'CNAME' | 'CAA'
   /** Fully-qualified name the record goes on. */
   name: string
   value: string
@@ -438,7 +478,11 @@ export interface SendingDnsRecord {
 export function sendingDnsRecords(
   record: Pick<
     SendingDomainRecord,
-    'domain' | 'dkimSelector' | 'dkimPublicKey' | 'returnPathHost'
+    | 'domain'
+    | 'dkimSelector'
+    | 'dkimPublicKey'
+    | 'returnPathHost'
+    | 'trackingTarget'
   >,
 ): SendingDnsRecord[] {
   const domain = normalizeSendingDomain(record?.domain)
@@ -481,6 +525,84 @@ export function sendingDnsRecords(
         'suppressed. It is on the send subdomain and does not affect mail ' +
         'delivered to your normal inboxes.',
     },
+    ...trackingRecords(domain, record?.trackingTarget),
+  ]
+}
+
+/**
+ * The two records that make CLICK TRACKING work, and neither is required.
+ *
+ * An ESP measures a click by rewriting every `<a href>` in the HTML part to
+ * point at a tracking host on the sending domain, then redirecting. No host,
+ * no rewriting, and the click rate is structurally 0% — which reads on a
+ * dashboard as low engagement rather than as a wiring fault, so it stays
+ * unnoticed. That is the same shape as the `"html": ""` defect this library
+ * already carries a fix for, one layer up.
+ *
+ * ## Why `required: false`
+ *
+ * Verification is about AUTHENTICATION — can this domain prove it sent the
+ * mail. Tracking is measurement. A customer who publishes SPF, DKIM and the
+ * return path can send perfectly well and must not be held at `requested`
+ * over a record that only decides whether we can count clicks; and making
+ * these required would un-verify every domain already verified without them.
+ * {@link sendingDomainPublishableRecords} is what puts them in a zone we own.
+ *
+ * ## ⚠️ The CAA record is the one that can hurt
+ *
+ * CAA restricts which authorities may issue a certificate for a name, and the
+ * lookup stops at the FIRST name in the tree that publishes any. So:
+ *
+ *  - A domain publishing NO CAA today needs nothing. Any authority may
+ *    already issue, and adding this record would be the change that starts
+ *    restricting them.
+ *  - A domain that DOES publish CAA has to ADD this one alongside what it has,
+ *    never in place of it. Replacing the set is how a zone stops its own web
+ *    certificates renewing.
+ *
+ * It is emitted on the sending domain rather than on the registrable root so
+ * that a customer following it verbatim scopes the permission to the name we
+ * put a tracking host under, instead of widening it across everything they
+ * own. Deriving the registrable root would need a public-suffix list this
+ * library does not have, and a guess at it prints a record for the wrong name.
+ *
+ * @returns nothing at all until the provider has issued a tracking target.
+ *          A CNAME with no value is a record that says nothing while looking
+ *          published, the same rule the DKIM row follows.
+ */
+function trackingRecords(
+  domain: string,
+  trackingTarget: string | null | undefined,
+): SendingDnsRecord[] {
+  const target = String(trackingTarget ?? '').trim()
+  if (!domain || !target) return []
+  const authority = sendingTrackingCertAuthority()
+
+  return [
+    {
+      type: 'CNAME',
+      name: `${SENDING_TRACKING_SUBDOMAIN}.${domain}`,
+      value: target,
+      purpose: 'tracking',
+      required: false,
+      note:
+        'Counts link clicks. Every link in an email is rewritten to point ' +
+        'here and redirected, so without it clicks cannot be measured at ' +
+        'all — mail still sends, and the click rate reads a permanent 0%.',
+    },
+    {
+      type: 'CAA',
+      name: domain,
+      value: `0 issue "${authority}"`,
+      purpose: 'tracking-caa',
+      required: false,
+      note:
+        `Only needed if this domain already publishes CAA records. Add this ` +
+        `one ALONGSIDE them — replacing the set would stop your other ` +
+        `certificates renewing. If you publish no CAA at all, skip it: any ` +
+        `authority may already issue, and ${authority} is the one that ` +
+        `issues the certificate for the tracking host above.`,
+    },
   ]
 }
 
@@ -490,6 +612,33 @@ export function sendingDomainRequiredRecords(
 ): SendingDnsRecord[] {
   return sendingDnsRecords(record).filter(
     (entry) => entry.required && Boolean(entry.value),
+  )
+}
+
+/**
+ * Everything worth WRITING into a zone this platform owns.
+ *
+ * Deliberately wider than {@link sendingDomainRequiredRecords}, and the gap
+ * between them is the whole point. `required` answers "does verification wait
+ * on this", which tracking must not; this answers "should we publish it",
+ * which tracking must be — a platform subdomain's zone is ours, so there is
+ * nobody to ask and no reason to leave the click rate at zero.
+ *
+ * Reusing the required set here is what left the platform's own subdomains
+ * untracked: one flag was being asked two different questions, and the
+ * conservative answer to the first silently decided the second.
+ *
+ * DMARC is still excluded — it carries `required: false` too, but a policy is
+ * the domain owner's to choose and this platform publishes one deliberately
+ * elsewhere, not as a side effect of provisioning.
+ */
+export function sendingDomainPublishableRecords(
+  record: Parameters<typeof sendingDnsRecords>[0],
+): SendingDnsRecord[] {
+  return sendingDnsRecords(record).filter(
+    (entry) =>
+      Boolean(entry.value) &&
+      (entry.required || entry.purpose === 'tracking'),
   )
 }
 

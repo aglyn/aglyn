@@ -74,6 +74,7 @@ import {
   normalizeSendingDomain,
   RESEND_DOMAINS_ENDPOINT,
   safeProviderDetail,
+  SENDING_TRACKING_SUBDOMAIN,
 } from '@aglyn/shared-util-email'
 
 /*==========================================
@@ -114,6 +115,15 @@ export interface SendingDomainIssue {
   dkimSelector: string | null
   /** The provider's id for the domain object. Never a credential. */
   providerDomainId: string | null
+  /**
+   * The CNAME target tracked link clicks redirect through, read off the
+   * provider's response — see `SendingDomainRecord.trackingTarget`.
+   *
+   * Null when the provider issued no tracking host, which is what a domain
+   * created before tracking was requested looks like. It is not an error: the
+   * domain sends, and only the click rate is missing.
+   */
+  trackingTarget: string | null
   /** A short code from a fixed vocabulary. Safe to store, log and show. */
   detail: string | null
 }
@@ -150,6 +160,7 @@ function issueResult(
     dkimPublicKey: null,
     dkimSelector: null,
     providerDomainId: null,
+    trackingTarget: null,
     detail: null,
     ...extra,
   }
@@ -262,6 +273,33 @@ interface ProviderRecord {
  * name we cannot read that way is a record we do not understand, and the
  * caller fails rather than guessing at a selector.
  */
+/**
+ * The CNAME target the provider redirects tracked clicks through.
+ *
+ * Matched on the record's own `Tracking` label first and on the host shape
+ * second, for the same reason {@link readIssuedDkim} matches two ways: a
+ * provider that renames its labels must not silently stop the tracking host
+ * being published, because the symptom is a click rate of zero and nothing
+ * else.
+ */
+export function readIssuedTrackingTarget(
+  domain: string,
+  records: unknown,
+): string | null {
+  const list = Array.isArray(records) ? (records as ProviderRecord[]) : []
+  const suffix = `.${normalizeSendingDomain(domain)}`
+  const entry = list.find((item) => {
+    if (String(item?.type ?? '').toUpperCase() !== 'CNAME') return false
+    const label = String(item?.record ?? '').toUpperCase()
+    if (label === 'TRACKING') return true
+    const name = String(item?.name ?? '').trim().toLowerCase()
+    const host = name.endsWith(suffix) ? name.slice(0, -suffix.length) : name
+    return host === SENDING_TRACKING_SUBDOMAIN
+  })
+  const value = String(entry?.value ?? '').trim().replace(/\.$/, '')
+  return value || null
+}
+
 export function readIssuedDkim(
   domain: string,
   records: unknown,
@@ -350,7 +388,31 @@ export const RESEND_SENDING_DOMAIN_PROVIDER: SendingDomainProvider = {
           Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ name: domain }),
+        /*
+         * TRACKING IS ASKED FOR AT CREATION, not left to a later toggle.
+         *
+         * Both flags default OFF at the provider, and a domain created
+         * without them measures nothing: an ESP counts a click by rewriting
+         * every `<a href>` to a tracking host, so with no host there is
+         * nothing to rewrite and the click rate is a structural 0% rather
+         * than a slow start. Every platform domain that predates this had to
+         * be turned on by hand, which is the shape that leaves the next one
+         * off.
+         *
+         * The tracking host needs its own DNS, so asking here is also what
+         * makes the provider return the CNAME target the records are built
+         * from — see `readIssuedTrackingTarget`.
+         *
+         * ⚠️ The consequence, accepted: link rewriting is per-DOMAIN, not
+         * per-message, so a password reset or a receipt leaving this domain
+         * is rewritten too. There is no per-message opt-out at the provider.
+         */
+        body: JSON.stringify({
+          name: domain,
+          click_tracking: true,
+          open_tracking: true,
+          tracking_subdomain: SENDING_TRACKING_SUBDOMAIN,
+        }),
         signal: deadline(),
       })
       const payload = await response.json().catch(() => null)
@@ -368,6 +430,10 @@ export const RESEND_SENDING_DOMAIN_PROVIDER: SendingDomainProvider = {
           dkimPublicKey: dkim.publicKey,
           dkimSelector: dkim.selector,
           providerDomainId: providerId(payload),
+          trackingTarget: readIssuedTrackingTarget(
+            domain,
+            (payload as { records?: unknown })?.records,
+          ),
         })
       }
 
@@ -503,6 +569,16 @@ async function adoptExisting(
     dkimPublicKey: dkim.publicKey,
     dkimSelector: dkim.selector,
     providerDomainId: id,
+    /*
+     * Read from the adopted object rather than assumed from the request. This
+     * arm resolves a domain the account ALREADY holds, which may predate
+     * tracking being asked for — and a target invented here would publish a
+     * CNAME at a host the provider does not redirect from.
+     */
+    trackingTarget: readIssuedTrackingTarget(
+      domain,
+      (existing as { records?: unknown })?.records,
+    ),
   })
 }
 

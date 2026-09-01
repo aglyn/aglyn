@@ -34,6 +34,7 @@ import {
   assessSendingRecords,
   resolveSendingIdentity,
   sendingDnsRecords,
+  sendingDomainPublishableRecords,
   sendingDomainRequiredRecords,
   sendingRecordKey,
   pooledMarketingRefusal,
@@ -45,6 +46,8 @@ import { isMarketingMessage } from './marketing-send'
 
 const DOMAIN = 'acme.com'
 const DKIM_KEY = 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAexamplekey'
+/** The host a provider redirects tracked link clicks through. */
+const TRACKING = 'links1.resend-dns.com'
 
 function record(overrides: Record<string, unknown> = {}) {
   return {
@@ -256,6 +259,74 @@ describe('sendingDnsRecords', () => {
     expect(formatSendingRecord(mx)).toBe(
       'MX     send.acme.com  →  10 feedback-smtp.us-east-1.amazonses.com',
     )
+  })
+
+  it('issues the click-tracking host once the provider names one', () => {
+    const records = sendingDnsRecords(record({ trackingTarget: TRACKING }))
+    const tracking = records.find((entry) => entry.purpose === 'tracking')
+
+    // Every link in the HTML part is rewritten to this host and redirected.
+    // No host, no rewriting, and the click rate is a structural 0%.
+    expect(tracking.type).toBe('CNAME')
+    expect(tracking.name).toBe('links.acme.com')
+    expect(tracking.value).toBe(TRACKING)
+  })
+
+  it('issues NOTHING for tracking until the provider names a target', () => {
+    // A CNAME with no target is a record that says nothing while looking
+    // published — the same rule the DKIM row follows.
+    const records = sendingDnsRecords(record())
+    expect(records.some((entry) => entry.purpose === 'tracking')).toBe(false)
+    expect(records.some((entry) => entry.purpose === 'tracking-caa')).toBe(false)
+  })
+
+  it('never lets a tracking record hold up verification', () => {
+    /*
+     * Verification is about AUTHENTICATION. A domain that publishes SPF, DKIM
+     * and the return path sends perfectly well, and holding it at `requested`
+     * over a record that only decides whether clicks can be COUNTED would
+     * also un-verify every domain already verified without one.
+     */
+    const withTracking = record({ trackingTarget: TRACKING })
+    expect(sendingDomainRequiredRecords(withTracking)).toHaveLength(3)
+    for (const entry of sendingDnsRecords(withTracking)) {
+      if (entry.purpose.startsWith('tracking')) expect(entry.required).toBe(false)
+    }
+  })
+
+  it('publishes the tracking host into a zone we own, and never the CAA', () => {
+    /*
+     * The two sets differ by exactly the tracking CNAME, which is the whole
+     * reason `sendingDomainPublishableRecords` exists: `required` answers
+     * "does verification wait on this" and must not decide "do we publish it".
+     *
+     * The CAA stays out. It belongs at or above the tracking host and a
+     * platform zone publishes one for the whole apex, so writing a per-domain
+     * copy would add a record that narrows nothing and has to be cleaned up.
+     */
+    const publishable = sendingDomainPublishableRecords(
+      record({ trackingTarget: TRACKING }),
+    )
+    const purposes = publishable.map((entry) => entry.purpose).sort()
+
+    expect(purposes).toEqual(['dkim', 'return-path', 'spf', 'tracking'])
+  })
+
+  it('warns that the CAA is only for a domain that already publishes one', () => {
+    /*
+     * The footgun. CAA restricts which authorities may issue, and the lookup
+     * stops at the first name in the tree that publishes any — so a domain
+     * with no CAA today needs nothing, and adding one would be the change
+     * that starts restricting its OTHER certificates.
+     */
+    const caa = sendingDnsRecords(record({ trackingTarget: TRACKING })).find(
+      (entry) => entry.purpose === 'tracking-caa',
+    )
+
+    expect(caa.type).toBe('CAA')
+    expect(caa.value).toBe('0 issue "amazon.com"')
+    expect(caa.note).toContain('ALONGSIDE')
+    expect(caa.note).toContain('skip it')
   })
 
   it('keys a record without leaking the DKIM public key', () => {
