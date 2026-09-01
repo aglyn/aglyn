@@ -35,19 +35,19 @@ name: Firewall posture drift
 #
 # ## Why there is no push / pull_request trigger
 #
-# Same reasoning as legal-drift.yml. This job cannot run without a
-# `VERCEL_TOKEN` repo secret, and that secret DOES NOT EXIST YET — creating it
-# is the action, not a code change. Wiring this to `push` today would turn
-# every merge in the repo red for something no engineer can fix, and the
-# remedy for that is always "add continue-on-error", which would leave a guard
-# that cannot fail. So it gates nothing and blocks nobody; it is loud instead.
+# Same reasoning as legal-drift.yml: a scheduled read-back that gates nothing
+# and blocks nobody, and is loud instead.
 #
-# Once the secret exists, ADD a push trigger scoped to these paths so a change
-# to the checker is exercised by the change itself:
-#   push: { branches: [main], paths: [ tools/scripts/check-firewall-posture.mjs,
-#           tools/scripts/lib/firewall-posture.mjs,
-#           tools/scripts/lib/firewall-posture.test.mjs,
-#           .github/workflows/firewall-drift.yml ] }
+# The `VERCEL_TOKEN` secret exists as of 2026-08-23, so the push trigger below
+# is now scoped to the checker's own files — a change to the checker is
+# exercised by the change itself. It stays off every other path, because a
+# token or API refusal is an exit-2 "cannot check" that no engineer touching
+# unrelated code can fix, and the usual remedy for that is a
+# `continue-on-error` that leaves a guard which cannot fail.
+#
+# A schedule alone is not enough on its own evidence: the run was red on
+# 2026-08-30, 08-31 and 09-01 for undeclared bypass rules, and three daily
+# failures in a row went unread.
 #
 # ## Configuration this workflow needs
 #
@@ -71,6 +71,13 @@ on:
     # pause on 60-day-quiet repos; a green history is not proof of continuous
     # coverage.)
     - cron: '29 8 * * *'
+  push:
+    branches: [main]
+    paths:
+      - tools/scripts/check-firewall-posture.mjs
+      - tools/scripts/lib/firewall-posture.mjs
+      - tools/scripts/lib/firewall-posture.test.mjs
+      - .github/workflows/firewall-drift.yml
   workflow_dispatch:
 
 concurrency:

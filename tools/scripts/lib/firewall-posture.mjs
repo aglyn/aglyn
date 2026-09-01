@@ -141,6 +141,34 @@ const PROBE_BYPASS_RULE = Object.freeze({
 })
 
 /**
+ * The link-preview crawler allowlist, named once so the tenant and docs
+ * entries cannot drift apart by transcription.
+ *
+ * A User-Agent match is the WEAKEST condition in this table, and it is here
+ * because the strong ones are unavailable: `bot_category` and `bot_name`,
+ * which Vercel verifies by reverse DNS rather than by a spoofable string,
+ * both answer `401 This feature requires an Advanced Project` on our plan.
+ *
+ * What that costs is bounded. The rule bypasses the bot challenge and nothing
+ * else, and everything it admits is public HTML that anyone may already fetch
+ * by solving a challenge in a headless browser. The exposure is function
+ * invocations, not confidentiality — so the proportionate control if it is
+ * ever abused is a rate limit on this User-Agent set, not a deny.
+ */
+const SOCIAL_CRAWLER_BYPASS_RULE = Object.freeze({
+  name: 'Social preview crawler bypass',
+  why: 'a link-preview crawler cannot solve a JavaScript challenge, so a 429 checkpoint means it never reads og:image and every shared link renders bare',
+  conditions: Object.freeze([
+    Object.freeze({
+      type: 'user_agent',
+      op: 're',
+      value:
+        'facebookexternalhit|Facebot|Twitterbot|LinkedInBot|Slackbot|WhatsApp|TelegramBot|Discordbot|Pinterest|redditbot|SkypeUriPreview|Applebot|Embedly|Iframely|Cardyb|Mastodon|GoogleImageProxy',
+    }),
+  ]),
+})
+
+/**
  * ═══════════════════════════════════════════════════════════════════════════
  * EXPECTED POSTURE — the whole declaration. Adding a project or a bypass rule
  * is an edit to THIS TABLE, never to the logic below.
@@ -284,6 +312,70 @@ export const EXPECTED_POSTURE = Object.freeze([
           }),
         ]),
       }),
+      Object.freeze({
+        name: 'Publish revalidate bypass',
+        why: 'the publish path revalidates through this endpoint, and a challenge left published changes serving stale until the cache expired on its own',
+        // BOTH conditions are load-bearing, for the same reason as the job
+        // runner above: path-only would leave cache invalidation open to the
+        // internet, and header-only would unchallenge the site for anyone who
+        // guessed the header name.
+        conditions: Object.freeze([
+          Object.freeze({ type: 'path', op: 'eq', value: '/api/revalidate' }),
+          Object.freeze({ type: 'header', op: 'ex', key: 'x-revalidate-secret' }),
+        ]),
+      }),
+      Object.freeze({
+        name: 'Public asset delivery bypass',
+        why: 'the media CDN serves og:image and every image in every campaign email, and a challenge made both unfetchable by the only clients that request them',
+        // ADDED 2026-09-01. The og:image on aglyn.com answered 429 to every
+        // link-preview crawler and to Gmail's image proxy, so a shared link
+        // rendered with no card and a mailed image rendered broken.
+        //
+        // WHY PATH-ONLY IS CORRECT HERE, where the job runner carries a header
+        // condition as well: `/api/media/cdn` is ANONYMOUS PUBLIC DELIVERY by
+        // design — the route is annotated `lockdown-423: exempt` precisely
+        // because there is no caller identity to verdict. The callers are
+        // crawlers, mailbox image proxies and visitors' browsers, none of
+        // which we configure and none of which will send a header we invent.
+        //
+        // What the bypass does NOT remove: `serveMediaCdn` enforces lockdown
+        // itself since AGL-1520, answering a neutral 410 for security and
+        // manual locks. This removes a proof-of-work the real callers cannot
+        // perform; it does not remove the check that decides what is served.
+        //
+        // `pre` is a prefix, so this rule is exactly as narrow as the
+        // `/api/media/cdn` namespace is kept — every route under it must stay
+        // public and secrets-free.
+        conditions: Object.freeze([
+          Object.freeze({ type: 'path', op: 'pre', value: '/api/media/cdn' }),
+        ]),
+      }),
+      Object.freeze({
+        name: 'Crawler metadata bypass',
+        why: 'robots.txt and sitemap.xml answered 429, so the exclusions and the URL set a crawler is meant to read were both unreachable',
+        // EXACT PATHS, NOT A PREFIX. `/api/manifest` and `/api/collections-rss`
+        // are the two API routes the middleware rewrites the public
+        // `/manifest.webmanifest` and feed paths onto; naming them exactly
+        // keeps the neighboring `/api/*` namespace challenged.
+        //
+        // All five are public, read-only and secrets-free, and every client
+        // that fetches them — a search crawler, a feed reader, an install
+        // prompt — is by definition not a browser that can solve a challenge.
+        conditions: Object.freeze([
+          Object.freeze({
+            type: 'path',
+            op: 'eq',
+            valueAnyOf: Object.freeze([
+              '/robots.txt',
+              '/sitemap.xml',
+              '/manifest.webmanifest',
+              '/api/manifest',
+              '/api/collections-rss',
+            ]),
+          }),
+        ]),
+      }),
+      SOCIAL_CRAWLER_BYPASS_RULE,
     ]),
   }),
   Object.freeze({
@@ -291,7 +383,21 @@ export const EXPECTED_POSTURE = Object.freeze([
     label: 'docs',
     expect: 'protected',
     serves: 'docs.aglyn.com',
-    bypassRules: Object.freeze([PROBE_BYPASS_RULE]),
+    bypassRules: Object.freeze([
+      PROBE_BYPASS_RULE,
+      SOCIAL_CRAWLER_BYPASS_RULE,
+      Object.freeze({
+        name: 'Crawler metadata bypass',
+        why: 'robots.txt and sitemap.xml answered 429, so the exclusions and the URL set a crawler is meant to read were both unreachable',
+        conditions: Object.freeze([
+          Object.freeze({
+            type: 'path',
+            op: 'eq',
+            valueAnyOf: Object.freeze(['/robots.txt', '/sitemap.xml']),
+          }),
+        ]),
+      }),
+    ]),
   }),
   Object.freeze({
     project: 'aglyn-console',
@@ -409,6 +515,28 @@ export const EXPECTED_POSTURE = Object.freeze([
         // the same reason `/api/health` is above.
         alsoAllowsGroups: Object.freeze([
           Object.freeze({ type: 'path', op: 'pre', value: '/api/plugin-host-origins' }),
+        ]),
+      }),
+      Object.freeze({
+        name: 'Public asset delivery bypass',
+        why: "every image in every campaign email is served from this project's media CDN, and Gmail's image proxy cannot solve a challenge, so all of them rendered broken",
+        // ADDED 2026-09-01, alongside the tenant rule of the same name.
+        // `render-system-email.ts` resolves mailed images to the CONSOLE's
+        // `/api/media/cdn` mount rather than the tenant's, so protecting this
+        // project on 2026-08-21 broke images in mail without touching a site.
+        //
+        // Same scope argument as the tenant rule: anonymous public delivery,
+        // no caller identity to verdict, and `serveMediaCdn` still enforces
+        // lockdown on both mounts.
+        conditions: Object.freeze([
+          Object.freeze({ type: 'path', op: 'pre', value: '/api/media/cdn' }),
+        ]),
+      }),
+      Object.freeze({
+        name: 'Crawler metadata bypass',
+        why: 'a crawler must be able to read robots.txt for its exclusions to be honored at all',
+        conditions: Object.freeze([
+          Object.freeze({ type: 'path', op: 'eq', value: '/robots.txt' }),
         ]),
       }),
     ]),
