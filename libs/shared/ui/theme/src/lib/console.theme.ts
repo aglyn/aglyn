@@ -54,6 +54,12 @@ const colorScheme = {
       main: '#404C5C',
       contrastText: '#FFFFFF',
     },
+    // The brand gradient's violet (see the marketing CTA band), so an accent
+    // chip and the gradient stop read from the same slot.
+    violet: {
+      main: '#7A5CF0',
+      contrastText: '#FFFFFF',
+    },
     surface: {
       main: `#F8F9FA`,
       contrastText: '#000000',
@@ -68,6 +74,10 @@ const colorScheme = {
       primary: '#E6F5FF',
       secondary: '#FBE6FE',
       tertiary: '#EEF0F2',
+      violet: '#EFEAFD',
+      info: '#E7F0FB',
+      success: '#EAF6EB',
+      warning: '#FFF4E5',
     },
     // MUI's own outlined-input border weight, promoted to a token so a field
     // drawn outside MUI can match one drawn by it (see `PaletteOptions`).
@@ -145,6 +155,12 @@ const colorScheme = {
       main: '#7C8CA3',
       contrastText: '#000000DE',
     },
+    // Lifted the same way tertiary is: `#7A5CF0` reads 3.1 against this
+    // scheme's page, so dark gets a lighter violet that keeps dark ink.
+    violet: {
+      main: '#9F86FF',
+      contrastText: '#000000DE',
+    },
     surface: {
       main: `#202934`,
       contrastText: '#FFFFFF',
@@ -157,6 +173,10 @@ const colorScheme = {
       primary: '#143043',
       secondary: '#3D1443',
       tertiary: '#262B31',
+      violet: '#241B45',
+      info: '#12293E',
+      success: '#16301C',
+      warning: '#3F2F14',
     },
     inputOutline: 'rgba(255, 255, 255, 0.23)',
     background: {

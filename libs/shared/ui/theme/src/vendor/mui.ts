@@ -110,6 +110,10 @@ declare module '@mui/material/styles' {
     primary: string
     secondary: string
     tertiary: string
+    violet: string
+    info: string
+    success: string
+    warning: string
   }
 
   /**
@@ -178,6 +182,13 @@ declare module '@mui/material/styles' {
     background?: PaletteOptions['background']
     tertiary?: ExtraColorOptions
     surface?: ExtraColorOptions
+    /**
+     * The brand gradient's violet, promoted to a token: the marketing CTA
+     * band paints `rgb(122, 92, 240)` between the primary blue and
+     * `secondary.main`, and accent chips that want that same ink had nothing
+     * to reference — every use was a fresh literal.
+     */
+    violet?: ExtraColorOptions
     tint?: Partial<PaletteTint>
     inputOutline?: string
     svgBackground?: IActionStates
@@ -192,6 +203,7 @@ declare module '@mui/material/styles' {
     background: Palette['background']
     tertiary: ExtraColor
     surface: ExtraColor
+    violet: ExtraColor
     inputOutline: string
     tint: PaletteTint
     svgBackground: IActionStates
