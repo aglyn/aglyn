@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.35 — 2026-09-01
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.34...v1.0.0-beta.35)
+
+### Fixed
+
+- **docs:** status.aglyn.com served a second copy of the whole docs site
+
 ## v1.0.0-beta.34 — 2026-09-01
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.32...v1.0.0-beta.34)
