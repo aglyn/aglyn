@@ -42,6 +42,19 @@ import { useOrgScope } from '../hooks/use-org-scope'
 export interface CreateHostDialogProps {
   open: boolean
   onClose: () => void
+  /**
+   * Where to land once the site exists, given the workspace slug the server
+   * reserved. Defaults to the new site's Setup page.
+   *
+   * This dialog is the zero-org onboarding path: it provisions the workspace
+   * as a side effect of the first site, so the visitor who arrives from a
+   * marketing plan CTA with no workspace at all reaches billing through here
+   * and nowhere else (AGL-1117). The jump page passes a builder that carries
+   * that intent. The dialog does not read the intent itself: the page that
+   * owns the intent owns the destination, and the in-workspace callers — the
+   * sites list and the host switcher, which have no intent — keep the default.
+   */
+  destination?: (orgSlug: string) => string
 }
 
 /**
@@ -50,7 +63,7 @@ export interface CreateHostDialogProps {
  * the new host's Setup page.
  */
 export function CreateHostDialog(props: CreateHostDialogProps) {
-  const { open, onClose } = props
+  const { open, onClose, destination } = props
   const router = useRouter()
   const { data: user } = useUser()
   const { currentOrg } = useOrgScope()
@@ -105,10 +118,11 @@ export function CreateHostDialog(props: CreateHostDialogProps) {
         // passing `hostId` missed the `host` param entirely and buildRoute
         // emitted a literal `<host?>` segment into the URL.
         void router.push(
-          buildRoute(Route.HOST_SETUP, {
-            orgSlug,
-            host: payload.subdomain ?? subdomain,
-          }),
+          destination?.(orgSlug) ??
+            buildRoute(Route.HOST_SETUP, {
+              orgSlug,
+              host: payload.subdomain ?? subdomain,
+            }),
         )
       }
     } catch (error) {
@@ -120,7 +134,17 @@ export function CreateHostDialog(props: CreateHostDialogProps) {
     } finally {
       setBusy(false)
     }
-  }, [name, subdomain, validSubdomain, busy, user, currentOrg, router, enqueueSnackbar])
+  }, [
+    name,
+    subdomain,
+    validSubdomain,
+    busy,
+    user,
+    currentOrg,
+    router,
+    destination,
+    enqueueSnackbar,
+  ])
 
   return (
     <Dialog

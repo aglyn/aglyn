@@ -300,6 +300,7 @@ function OrgJump() {
                 <CreateHostDialog
                   open={creatingSite}
                   onClose={() => setCreatingSite(false)}
+                  destination={intent ? enterOrg : undefined}
                 />
               </Stack>
             ) : (
@@ -332,9 +333,16 @@ function OrgJump() {
                     </Stack>
                   }
                 />
+                {/* The first site provisions the workspace, so this is the
+                    whole of the zero-org buyer's path: someone arriving from
+                    a plan CTA with no workspace at all has no picker and no
+                    create-workspace dialog to carry the intent for them. The
+                    prop is passed only when there IS an intent, so an
+                    ordinary first site still lands on its Setup page. */}
                 <CreateHostDialog
                   open={creatingSite}
                   onClose={() => setCreatingSite(false)}
+                  destination={intent ? enterOrg : undefined}
                 />
               </>
             )
