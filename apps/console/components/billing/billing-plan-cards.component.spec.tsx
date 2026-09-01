@@ -81,6 +81,31 @@ jest.mock('../../hooks/use-branding', () => ({
   default: () => mockBranding,
 }))
 
+/**
+ * Contacts is RELEASED and SETTLED for every case in this file.
+ *
+ * The audience rate is the one card row gated on a release flag rather than a
+ * plan (AGL-1604/1658), and the unmocked context is `ready: false`, so without
+ * this the cards would print no contacts rate at all and the rate assertions
+ * below would be measuring the gate instead of the card. This file is about
+ * what a card SAYS; the gate itself — billed, not-billed, and not-yet-settled,
+ * driven through the real provider rather than a stubbed hook — is
+ * `specs/plan-cards-contacts-overage-release-gate.spec.tsx`.
+ *
+ * ⚠️ Pinned ON deliberately. Pinning it off would make these assertions pass
+ * against the unbilled wording and quietly stop guarding the billed one.
+ */
+jest.mock('../../hooks/use-release-flags', () => ({
+  __esModule: true,
+  useReleaseFlag: () => ({
+    released: true,
+    visible: true,
+    staffPreview: false,
+    isStaff: false,
+    ready: true,
+  }),
+}))
+
 
 function renderCards(
   overrides: Partial<

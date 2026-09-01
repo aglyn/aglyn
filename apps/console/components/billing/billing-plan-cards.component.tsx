@@ -47,6 +47,7 @@ import {
 } from '@mui/material'
 import { useState } from 'react'
 import useBranding from '../../hooks/use-branding'
+import { useReleaseFlag } from '../../hooks/use-release-flags'
 import { ENTERPRISE_CONTACT_URL } from '../../constants/shared'
 import { DocsHelpTip } from '../docs-help-tip.component'
 
@@ -451,9 +452,32 @@ export interface BillingPlanCardsProps {
  * what a billing page opens with. These are the numbers a customer actually
  * hits a ceiling on — the full list is one click away and unchanged.
  */
+/**
+ * Whether this org's audience overage actually reaches an invoice — `null`
+ * until the release verdict has settled.
+ *
+ * ⚠️ `released`, deliberately NOT `visible`. `visible` adds the staff bypass,
+ * and staff looking at a page does not put a line on the customer's invoice;
+ * billing text has to follow what is billed, not who is reading. That is the
+ * same distinction `billing-usage.component.tsx` records for the overage
+ * caption, and both surfaces have to reach the identical answer or the card
+ * and the meter disagree about one org.
+ */
+function useContactsOverageBilled(): boolean | null {
+  const { released, ready } = useReleaseFlag('release_contacts')
+  return ready ? released : null
+}
+
 function headlineLimits(
   entitlements: (typeof PLAN_ENTITLEMENTS)[OrgPlan],
   pricing: (typeof PLAN_PRICING)[OrgPlan],
+  /**
+   * Whether the org's audience overage is actually invoiced — `null` while the
+   * verdict has not settled. See `contactsPer` below; this is the same
+   * `isReleaseFlagOnForOrg` answer `report-usage` bills from, not an
+   * approximation of it.
+   */
+  contactsOverageBilled: boolean | null,
 ): string[] {
   /*
    * ⚠️ THE PER-UNIT PRICE IS PART OF THE LIMIT, not decoration on it.
@@ -478,6 +502,33 @@ function headlineLimits(
   // money. Same reasoning the API overage caption records on the usage page.
   const perThousand = (rate: number | null | undefined) =>
     rate != null ? ` (+$${rate.toFixed(2)}/1k over)` : ''
+  /*
+   * The audience band is the one row here whose rate is gated on a RELEASE
+   * FLAG rather than on the plan, so `per` is wrong for it (AGL-1604/1658).
+   * `report-usage` withholds the contacts overage while `release_contacts` is
+   * off, and the flag is default-off — so a bare "(+$1/1k over)" quotes a
+   * charge that no invoice carries, on the card a customer reads to choose a
+   * tier. That is the same defect the usage caption already fixed, one surface
+   * over.
+   *
+   * The rate itself STAYS. It is a real published rate — `/pricing` lists it
+   * per tier and `billing-and-plans/overview.md` tells the same customer it
+   * applies once Contacts opens — so deleting it would swap a phantom charge
+   * for a phantom wall. Only the tense is wrong, and only the tense changes.
+   *
+   * THREE states, because "not settled yet" is not either answer. Before
+   * Remote Config activates, every flag reads its registry default and
+   * `release_contacts` is default-off — so an unguarded card would assert the
+   * unbilled wording for one paint on a staff-granted org that IS billed
+   * (AGL-1635). `null` prints no rate rather than guessing one: a billing
+   * claim is not made until the verdict that decides it has settled.
+   */
+  const contactsPer = (rate: number | null | undefined) => {
+    if (rate == null || contactsOverageBilled == null) return ''
+    return contactsOverageBilled
+      ? ` (+$${rate}/1k over)`
+      : ` (+$${rate}/1k over once Contacts opens)`
+  }
   return [
     `${quotaLabel(entitlements.hostLimit)} host${
       entitlements.hostLimit === 1 ? '' : 's'
@@ -496,9 +547,8 @@ function headlineLimits(
     `${quotaLabel(entitlements.membersPerHost)} site collaborator${
       entitlements.membersPerHost === 1 ? '' : 's'
     }${per(pricing.extraCollaboratorMonthlyUsd, '/extra')}`,
-    `${quotaCount(entitlements.contactsPerHost)} contacts${per(
+    `${quotaCount(entitlements.contactsPerHost)} contacts${contactsPer(
       pricing.extraContactsUsdPer1k,
-      '/1k over',
     )}`,
     /*
      * CAMPAIGN sends, and only those (AGL-1438). The cap does not apply to
@@ -790,6 +840,7 @@ function FocusedTierView(props: {
     onSelect,
     onCompare,
   } = props
+  const contactsOverageBilled = useContactsOverageBilled()
   const current = PLAN_ENTITLEMENTS[currentTier]
   const price = (tier: OrgPlan) =>
     interval === 'year'
@@ -1000,6 +1051,7 @@ function FocusedTierView(props: {
                     PLAN_PRICING[
                       rung === 'enterprise' ? 'enterprise' : (rung as OrgPlan)
                     ],
+                    contactsOverageBilled,
                   ).map((line) => (
                     <Typography
                       key={line}
@@ -1243,6 +1295,7 @@ function PlanCardBody({
   pricing: (typeof PLAN_PRICING)[OrgPlan]
   groups: ReturnType<typeof featureGroups>
 }) {
+  const contactsOverageBilled = useContactsOverageBilled()
   return (
     <>
     <Stack spacing={0.5} sx={{ mb: 1.5 }}>
@@ -1310,11 +1363,18 @@ function PlanCardBody({
       <Typography variant="body2">
         {'Unlimited member accounts'}
       </Typography>
-      {/* Audience band (AGL-890): paid tiers meter overage. */}
+      {/* Audience band (AGL-890): paid tiers meter overage — but only once
+          `release_contacts` is on. Same three-state rule and same reasoning as
+          `contactsPer` in `headlineLimits`: the rate stays, the tense follows
+          what `report-usage` actually invoices, and an unsettled verdict
+          prints no rate at all. */}
       <Typography variant="body2">
         {`${quotaCount(entitlements.contactsPerHost)} contacts`}
-        {pricing.extraContactsUsdPer1k != null
-          ? ` (+$${pricing.extraContactsUsdPer1k}/1k over)`
+        {pricing.extraContactsUsdPer1k != null &&
+        contactsOverageBilled != null
+          ? contactsOverageBilled
+            ? ` (+$${pricing.extraContactsUsdPer1k}/1k over)`
+            : ` (+$${pricing.extraContactsUsdPer1k}/1k over once Contacts opens)`
           : ''}
       </Typography>
       {/* CAMPAIGN sends only (AGL-1438) — transactional mail is
