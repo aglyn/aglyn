@@ -255,12 +255,27 @@ export default function BillingAddonsCardComponent({
         )
         const currency = String(preview.currency ?? 'usd').toUpperCase()
         const prorationUsd = (Math.abs(prorationCents) / 100).toFixed(2)
+        // What actually leaves the account today, tax included — not the
+        // pre-tax proration. Added capacity is invoiced immediately, so this
+        // confirm is the last thing before a card is charged and the figure on
+        // it has to be the figure taken. A REMOVAL still raises no charge:
+        // there is nothing to collect, and the unused time returns as credit.
+        const chargedNowCents = Number(preview.chargedNowCents ?? 0)
+        const chargedNowUsd = (Math.abs(chargedNowCents) / 100).toFixed(2)
+        const taxIncluded = Number(preview.taxCents ?? 0) > 0
+        const taxCaveat =
+          preview.taxComplete === false
+            ? ', plus sales tax — Stripe could not finish calculating tax for ' +
+              'your billing address, so your invoice may be higher'
+            : taxIncluded
+              ? ' including tax'
+              : ''
         const accepted = await confirm({
           title: `${row.label}: ${quantity}?`,
           description:
             (prorationCents >= 0
-              ? `Prorated for the rest of this period: $${prorationUsd} ` +
-                `${currency}, billed on your next invoice. Ongoing: `
+              ? `$${chargedNowUsd} ${currency}${taxCaveat} will be charged to ` +
+                `your card now, prorated for the rest of this period. Ongoing: `
               : `Unused time credits $${prorationUsd} ${currency} back ` +
                 'on your next invoice. Ongoing: ') +
             (quantity === 0

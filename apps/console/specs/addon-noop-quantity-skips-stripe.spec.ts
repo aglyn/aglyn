@@ -33,14 +33,16 @@
  * period, cancelling exactly. That is Stripe's proration pair for a
  * subscription-item update where nothing moved: `/api/billing/addons` guarded
  * only one no-op ("no item, quantity 0") and happily POSTed
- * `subscriptions/{id}` with `proration_behavior: 'create_prorations'` when the
+ * `subscriptions/{id}` with `proration_behavior: 'always_invoice'` when the
  * requested quantity already WAS the current quantity.
  *
  * The assertion surface is therefore the Stripe call list, not the response —
  * the old code answered `ok: true` with the right quantities too. What
  * separates fixed from broken is that Stripe is never asked.
  *
- * `create_prorations` for REAL changes is deliberate (AGL-535) and is asserted
+ * `always_invoice` for REAL changes is deliberate — capacity bought now is
+ * invoiced and charged now, superseding the AGL-535 choice to defer it to the
+ * next renewal — and is asserted
  * here as well, so a future "fix" that suppresses prorations outright — which
  * would stop billing genuine upgrades — goes red instead of green.
  *
@@ -302,42 +304,42 @@ describe('a no-op add-on quantity change never reaches Stripe (AGL-2486)', () =>
 })
 
 describe('REAL changes still reach Stripe and still prorate (AGL-535)', () => {
-  it('an increase updates the item with create_prorations', async () => {
+  it('an increase updates the item with always_invoice', async () => {
     const post = loadAddons()
     expect((await setDatasets(post, 5)).status).toBe(200)
     const body = subscriptionUpdate()
     expect(body?.get('items[0][id]')).toBe('si_dataset')
     expect(body?.get('items[0][quantity]')).toBe('5')
-    expect(body?.get('proration_behavior')).toBe('create_prorations')
+    expect(body?.get('proration_behavior')).toBe('always_invoice')
   })
 
-  it('a decrease updates the item with create_prorations', async () => {
+  it('a decrease updates the item with always_invoice', async () => {
     datasetItem.quantity = 5
     const post = loadAddons()
     expect((await setDatasets(post, 1)).status).toBe(200)
     const body = subscriptionUpdate()
     expect(body?.get('items[0][quantity]')).toBe('1')
-    expect(body?.get('proration_behavior')).toBe('create_prorations')
+    expect(body?.get('proration_behavior')).toBe('always_invoice')
   })
 
-  it('a removal deletes the item with create_prorations', async () => {
+  it('a removal deletes the item with always_invoice', async () => {
     const post = loadAddons()
     expect((await setDatasets(post, 0)).status).toBe(200)
     const body = subscriptionUpdate()
     expect(body?.get('items[0][id]')).toBe('si_dataset')
     expect(body?.get('items[0][deleted]')).toBe('true')
     expect(body?.get('items[0][quantity]')).toBeNull()
-    expect(body?.get('proration_behavior')).toBe('create_prorations')
+    expect(body?.get('proration_behavior')).toBe('always_invoice')
   })
 
-  it('a first purchase adds the item with create_prorations', async () => {
+  it('a first purchase adds the item with always_invoice', async () => {
     datasetItem = null
     const post = loadAddons()
     expect((await setDatasets(post, 2)).status).toBe(200)
     const body = subscriptionUpdate()
     expect(body?.get('items[0][price]')).toBe('price_starter_dataset')
     expect(body?.get('items[0][quantity]')).toBe('2')
-    expect(body?.get('proration_behavior')).toBe('create_prorations')
+    expect(body?.get('proration_behavior')).toBe('always_invoice')
   })
 
   it('a REAL preview still asks Stripe to quote it', async () => {
@@ -351,7 +353,7 @@ describe('REAL changes still reach Stripe and still prorate (AGL-535)', () => {
       billingCalls().filter((entry) => entry.href.includes('/invoices/upcoming')),
     ).toHaveLength(1)
     expect(billingCalls()[0].href).toContain(
-      'subscription_proration_behavior=create_prorations',
+      'subscription_proration_behavior=always_invoice',
     )
     expect((await response.json()).prorationCents).toBe(200)
   })

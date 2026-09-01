@@ -536,30 +536,66 @@ async function handler(request: Request): Promise<Response> {
         `invoices/upcoming?customer=${encodeURIComponent(String(customerId))}` +
           `&subscription=${encodeURIComponent(subscription.id)}` +
           query +
-          '&subscription_proration_behavior=create_prorations' +
+          // The SAME behaviour the set-action applies, so the quote and the
+          // charge are computed the same way. Under `always_invoice` the
+          // preview is the proration-only invoice that would be raised now,
+          // rather than the whole next renewal with the proration buried in
+          // it — which is what makes a tax-inclusive "charged now" figure
+          // readable off it at all.
+          '&subscription_proration_behavior=always_invoice' +
           // Preview under the same tax setting the set-action applies
           // (AGL-1537), so the quoted proration matches the invoice.
           '&automatic_tax[enabled]=true',
       )
-      // amount_due is the WHOLE next invoice (renewal included); the cost
-      // of this change is its proration lines — negative on removals
-      // (credit). Nothing is charged today with create_prorations
-      // (AGL-535).
+      // The cost of this change is its proration lines — negative on removals
+      // (credit).
       const prorationCents = (preview?.lines?.data ?? [])
         .filter((line: any) => line?.proration)
         .reduce(
           (sum: number, line: any) => sum + Number(line?.amount ?? 0),
           0,
         )
+      // What is actually taken today, tax included.
+      //
+      // Quoted separately from `prorationCents` rather than instead of it: the
+      // proration is the figure that explains WHY the amount is what it is
+      // (part of a period, or a credit), and the total is the figure that
+      // leaves the account. A confirm that showed only the pre-tax proration
+      // would name a number no invoice uses, which is the defect this same
+      // page carries on its plan card.
+      const taxCents = Number(preview?.tax ?? 0)
+      const chargedNowCents = Number(preview?.amount_due ?? 0)
       return Response.json({
-        amountDueCents: preview?.amount_due ?? 0,
+        amountDueCents: chargedNowCents,
         prorationCents,
+        taxCents,
+        chargedNowCents,
+        // Whether Stripe finished resolving tax for this address. A zero tax
+        // is legitimate in some jurisdictions and meaningless in others, and
+        // the caller cannot tell them apart without this.
+        taxComplete: preview?.automatic_tax?.status === 'complete',
         currency: preview?.currency ?? 'usd',
       }, { status: 200 })
     }
 
     const params = new URLSearchParams({
-      proration_behavior: 'create_prorations',
+      /*
+       * Capacity bought now is INVOICED now.
+       *
+       * `create_prorations` files the proration as a pending invoice item and
+       * settles it on the next renewal, so a customer who bought a site at the
+       * start of a period waited a month to be charged for it and the console
+       * had nothing to show them in between. `always_invoice` draws the
+       * proration onto an invoice immediately and charges the default payment
+       * method, which is what "buy capacity" already implies to the person
+       * clicking it.
+       *
+       * The charge is what changes, not the proration arithmetic: the amount
+       * is the same figure either behaviour computes for the remainder of the
+       * period. `automatic_tax` below applies to that invoice, so the amount
+       * taken is tax-inclusive and the confirm has to quote it that way.
+       */
+      proration_behavior: 'always_invoice',
       // Stripe Tax (AGL-1537): an add-on purchase is a subscription update,
       // and updates are where subscriptions created before automatic tax
       // gain it — same rule as the plan-switch route. No-op when already on.
@@ -568,12 +604,27 @@ async function handler(request: Request): Promise<Response> {
     for (const [key, value] of itemParams) {
       params.set(`items[0][${key}]`, value)
     }
+    // The invoice `always_invoice` raises, expanded on the same call that
+    // causes it. Under `create_prorations` there was nothing to report — the
+    // proration sat as a pending item and no money moved — so `ok: true` was
+    // the whole truth. It is not any more: this request now charges a card,
+    // and a charge that fails has to reach the customer as a failure rather
+    // than as a purchase that quietly did not get paid for.
+    params.set('expand[]', 'latest_invoice.payment_intent')
     const updated = await stripeRequest(
       secretKey,
       'POST',
       `subscriptions/${subscription.id}`,
       params,
     )
+    const addonInvoice = updated?.latest_invoice ?? null
+    const addonIntent = addonInvoice?.payment_intent ?? null
+    // `paid` is the only affirmative. An invoice can be `open` because the
+    // card was declined, or because the issuer wants authentication — the
+    // second is recoverable from the browser and the first is not, so they are
+    // named apart rather than collapsed into "something went wrong".
+    const chargePaid = addonInvoice ? addonInvoice.status === 'paid' : true
+    const chargeRequiresAction = addonIntent?.status === 'requires_action'
     // A pending downgrade holds an item list snapshotted when it was
     // requested (AGL-2150) — refresh it, or the seats just bought and
     // prorated disappear at the period end.
@@ -606,7 +657,24 @@ async function handler(request: Request): Promise<Response> {
     const quantities = addonQuantitiesFromItems(updated?.items?.data ?? [])
     await orgSnapshot.ref.set({ seatAddons: quantities }, { merge: true })
     return Response.json(
-      { ok: true, quantities, ...(scheduleRefreshFailed ? { scheduleRefreshFailed: true } : {}) },
+      {
+        ok: true,
+        quantities,
+        // The capacity is granted either way — Stripe applied the item, and
+        // the webhook mirrors it — so this reports the CHARGE, not the change.
+        // A customer whose card failed still has the seats and now has an
+        // unpaid invoice, and the page has to be able to say so.
+        chargedNowCents: Number(addonInvoice?.amount_due ?? 0),
+        chargeCurrency: String(addonInvoice?.currency ?? 'usd'),
+        chargePaid,
+        ...(chargeRequiresAction && addonIntent?.client_secret
+          ? {
+              chargeRequiresAction: true,
+              chargeClientSecret: String(addonIntent.client_secret),
+            }
+          : {}),
+        ...(scheduleRefreshFailed ? { scheduleRefreshFailed: true } : {}),
+      },
       { status: 200 },
     )
   } catch (error) {
