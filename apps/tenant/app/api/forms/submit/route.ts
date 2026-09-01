@@ -446,6 +446,25 @@ export async function POST(request: Request): Promise<Response> {
           sanitizedFields,
         )
       : readDeclaredMarketingConsent(payload, fields)
+    /*
+     * THE CAMPAIGNS THE FORM IS FILED UNDER.
+     *
+     * Off the form document this route has already read, so it costs nothing,
+     * and off the VERIFIED form for the same reason the id is: a membership
+     * taken from the request body would let anyone file people into any
+     * campaign on any site.
+     *
+     * ⚠️ NOT the campaign touch resolved below, and the two never write each
+     * other's field. The touch is where this visitor came FROM and is
+     * browser-supplied; this is which campaigns the merchant put the form in,
+     * and it is true of every person who fills that form in — including the
+     * one who arrived by typing the address. Recording only the touch is what
+     * left three forms assigned to a campaign producing contacts that belonged
+     * to none.
+     */
+    const formCampaignIds = form
+      ? Aglyn.readCampaignIds(form.data() as Record<string, unknown>)
+      : []
     // One instant for the whole submission. The attribution window is
     // measured against it in three places below, and three calls to
     // `Date.now()` would let a slow write decide whether a touch was inside
@@ -456,6 +475,22 @@ export async function POST(request: Request): Promise<Response> {
       // never reaches the row, so the per-form list cannot be written into
       // from outside.
       ...(form ? { formId: form.id } : {}),
+      /*
+       * The form's campaign membership, copied onto the row.
+       *
+       * A STAMP of what the form said at the moment this arrived, not a live
+       * edge: nothing edits a submission's campaigns afterwards, and refiling
+       * the form later does not rewrite the submissions it already produced.
+       * That is why this collection is not in
+       * `CAMPAIGN_MEMBER_HOST_COLLECTIONS` — the deletion pass walks the
+       * collections a PICKER writes, and a campaign's removal must not rewrite
+       * an unbounded, billed history collection to tidy up a field that is
+       * only ever read alongside the campaigns a picker still offers.
+       *
+       * Written only when the form names one, so the field is absent on the
+       * rows that would carry an empty array forever.
+       */
+      ...(formCampaignIds.length ? { campaignIds: formCampaignIds } : {}),
       formName: resolvedFormName,
       path: String(path ?? '').slice(0, 500),
       fields: sanitizedFields,
@@ -530,9 +565,29 @@ export async function POST(request: Request): Promise<Response> {
         interaction: {
           refId: submissionRef.id,
           summary: `Submitted "${resolvedFormName.slice(0, 60)}"`,
+          /*
+           * THE ENTRY POINT, on the contact's own timeline.
+           *
+           * Which form and which page a person came in through is a fact about
+           * this capture, so it rides the interaction the capture already
+           * writes rather than a second structure beside it. `sources` says
+           * only that SOME form produced this contact — every form sets the
+           * same flag — and answering "which one" by reading the submission
+           * back would be a document read per row of a timeline the console
+           * renders straight out of the contact.
+           *
+           * The id only for a VERIFIED form, matching the submission: an
+           * unverified id never reaches a stored row on this path.
+           */
+          ...(form ? { formId: form.id } : {}),
+          ...(typeof path === 'string' && path ? { path } : {}),
         },
         ...(declaredMarketingConsent ? { marketingConsent: true } : {}),
         ...(campaignTouch ? { campaignTouch } : {}),
+        // Filed under the form's campaigns, inside this site's own facet on a
+        // row the whole org shares. Membership is not consent, and this passes
+        // none: `marketingConsent` above is the only input that records one.
+        ...(formCampaignIds.length ? { campaignIds: formCampaignIds } : {}),
       })
       /*
        * A lead, when the FORM says it is one (`docs/specs/reusable-forms.md`

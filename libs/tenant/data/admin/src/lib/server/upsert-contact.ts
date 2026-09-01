@@ -24,6 +24,7 @@ import {
   type ContactSource,
   marketingConsentFieldsForGroup,
   mergeContactInteraction,
+  normalizeCampaignIds,
   readContactFacet,
   normalizeContactEmail,
   ORG_SCOPE_TOKEN,
@@ -123,6 +124,21 @@ export async function upsertHostContact(options: {
    * visitor action reaches several writers and the touch lookup is paid once.
    */
   campaignTouch?: ResolvedCampaignTouch | null
+  /**
+   * The campaigns the CAPTURE SURFACE is filed under.
+   *
+   * ⚠️ A different fact from {@link campaignTouch} beside it, and the two must
+   * never be folded together. A touch is where the visitor came FROM — an ad,
+   * a link, a browser-supplied label resolved through an allowlist. This is
+   * which campaigns the merchant put the form itself in, which is the
+   * merchant's own act and is true of everybody who fills that form in,
+   * including the visitor who arrived by typing the address.
+   *
+   * ⛔ And it is not consent. Filing a form under a campaign says nothing
+   * about what the person agreed to; `marketingConsent` above is the only
+   * input that records a basis.
+   */
+  campaignIds?: readonly string[]
 }): Promise<void> {
   try {
     const email = normalizeContactEmail(options.email)
@@ -192,7 +208,25 @@ export async function upsertHostContact(options: {
       ...(options.interaction.summary
         ? { summary: options.interaction.summary.slice(0, 200) }
         : {}),
+      // The entry point, when the door knows it. Written only when present:
+      // an absent field is a door that has none, and Firestore rejects
+      // `undefined` inside an array element outright.
+      ...(options.interaction.formId
+        ? { formId: String(options.interaction.formId).slice(0, 128) }
+        : {}),
+      ...(options.interaction.path
+        ? { path: String(options.interaction.path).slice(0, 500) }
+        : {}),
     }
+
+    /*
+     * THE CAMPAIGNS THIS CAPTURE FILES THE PERSON UNDER.
+     *
+     * Normalized here rather than trusted, because it reaches this function
+     * from a public endpoint's document read and every reader of the stored
+     * array goes through the same coercion.
+     */
+    const campaignIds = normalizeCampaignIds(options.campaignIds ?? [])
 
     /*==========================================
      * THE DEDUPE LOOKUP IS UNSCOPED, AND HAS TO BE.
@@ -256,6 +290,26 @@ export async function upsertHostContact(options: {
               sources: merged.sources,
               interactions: merged.interactions,
               ...(merged.name ? { name: merged.name } : {}),
+              /*
+               * ADDED TO, never replaced. A person who filled in the spring
+               * form and later the summer one is in both pushes, and an
+               * assignment that overwrote would take a campaign a merchant
+               * filed them under back out with nothing on screen to say so —
+               * the reason `campaign-membership.ts` made the field an array
+               * and the automation step has always used `arrayUnion`.
+               *
+               * Nested under the group id rather than written at
+               * `contactCampaignFieldPath`, because this is a merge-`set`: a
+               * `set` treats a dotted string as a literal field NAME and would
+               * mint a top-level key with dots in it. Only `update()` reads
+               * dots as a path. The nested form is what Firestore deep-merges,
+               * so it reaches one holder's facet and leaves every other
+               * holder's alone — the same guarantee the dotted path gives the
+               * automation step, in the shape this write is allowed to take.
+               */
+              ...(campaignIds.length
+                ? { campaignIds: FieldValue.arrayUnion(...campaignIds) }
+                : {}),
               ...(options.purchaseCents
                 ? {
                     ltvCents: FieldValue.increment(options.purchaseCents),
@@ -375,6 +429,9 @@ export async function upsertHostContact(options: {
           sources: { [options.source]: true },
           interactions: [interaction],
           tags: [],
+          // A create has nothing to union with, so the normalized list is the
+          // whole membership.
+          ...(campaignIds.length ? { campaignIds } : {}),
           ...(options.name
             ? { name: options.name.slice(0, 120) }
             : {}),
