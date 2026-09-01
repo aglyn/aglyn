@@ -46,6 +46,18 @@ export interface CreateOrgDialogProps {
    * the person doesn't have to type it a second time. Editable as ever.
    */
   initialName?: string
+  /**
+   * Where to land once the workspace exists, given its reserved slug.
+   * Defaults to the new workspace's sites.
+   *
+   * The org jump page passes a builder that carries the marketing plan intent
+   * (AGL-1117), so a workspace created while `?plan=` is on the URL opens on
+   * billing with that plan rather than on an empty site list. The dialog does
+   * not read the intent itself: the page that owns the intent owns the
+   * destination, and the org switcher — which has no intent — keeps the
+   * default.
+   */
+  destination?: (orgSlug: string) => string
 }
 
 /**
@@ -55,7 +67,7 @@ export interface CreateOrgDialogProps {
  * subdomain when workspace subdomains are live.
  */
 export function CreateOrgDialog(props: CreateOrgDialogProps) {
-  const { open, onClose, initialName } = props
+  const { open, onClose, initialName, destination } = props
   const { data: user } = useUser()
   const router = useRouter()
   const { enqueueSnackbar } = useSnackbar()
@@ -105,7 +117,10 @@ export function CreateOrgDialog(props: CreateOrgDialogProps) {
       onClose()
       // The server returns the reserved slug — land in the new workspace.
       const createdSlug = payload.slug ?? slug.trim()
-      router.push(buildRoute(Route.HOST_LIST, { orgSlug: createdSlug }))
+      router.push(
+        destination?.(createdSlug) ??
+          buildRoute(Route.HOST_LIST, { orgSlug: createdSlug }),
+      )
     } catch (error) {
       console.error(error)
       enqueueSnackbar('Creating the organization failed', { variant: 'error' })
