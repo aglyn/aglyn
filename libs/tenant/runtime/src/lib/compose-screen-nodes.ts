@@ -265,7 +265,20 @@ async function expandCollectionEntryBlocks(
  */
 export async function composeNodesWithChrome(options: {
   hostId: string
-  layoutId?: string | null
+  /**
+   * The layout binding, or a PROMISE of it.
+   *
+   * The unresolved form exists for the same reason `screenNodes` accepts one
+   * (AGL-1428): the binding may live on the version document (key-present
+   * wins over the screen's), and awaiting the version before this call would
+   * put every host-scoped read back behind it. Only the layout-chain walk
+   * consumes the binding, so it alone waits; the rest of the chrome bundle
+   * still starts immediately.
+   */
+  layoutId?:
+    | string
+    | null
+    | Promise<string | null | undefined>
   /**
    * The screen's own nodes, or a PROMISE of them (AGL-1428).
    *
@@ -309,7 +322,8 @@ export async function composeNodesWithChrome(options: {
   const walkLayoutChain = async () => {
     const chain: Array<Record<string, any> | undefined> = []
     const seen = new Set<string>()
-    let currentLayoutId = layoutId ? String(layoutId) : undefined
+    const boundLayoutId = await layoutId
+    let currentLayoutId = boundLayoutId ? String(boundLayoutId) : undefined
     while (
       currentLayoutId &&
       !seen.has(currentLayoutId) &&
@@ -557,7 +571,20 @@ export async function composeScreenNodes(options: {
    */
   const composed = composeNodesWithChrome({
     hostId,
-    layoutId: screen.layoutId as string | undefined,
+    // Version-first (key-present wins, null = explicitly no layout), screen
+    // fallback — resolved as a promise so only the layout-chain walk waits on
+    // the version read; the rest of the chrome bundle keeps the AGL-1428
+    // overlap. A failed version read falls back to the screen binding; the
+    // whole compose is discarded on that path anyway.
+    layoutId: versionPromise.then(
+      (res) =>
+        res.version && 'layoutId' in res.version
+          ? ((res.version as Aglyn.AglynScreenVersion).layoutId as
+              | string
+              | null)
+          : (screen.layoutId as string | undefined),
+      () => screen.layoutId as string | undefined,
+    ),
     screenNodes: versionPromise.then(
       (res) => (res.version?.nodes ?? {}) as any,
       () => ({}) as any,

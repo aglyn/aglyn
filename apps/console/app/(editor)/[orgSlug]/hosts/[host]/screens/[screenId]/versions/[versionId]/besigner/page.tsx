@@ -245,8 +245,26 @@ function BesignerPage(props) {
   // The browser tab names THIS document, not just its site (AGL-2486).
   // The server put the id in the title; this swaps in the loaded name.
   useDeclareDocumentSubject(screenId, screenResult?.data?.displayName)
-  const layoutId = screenResult?.data?.layoutId
   const firestore = useFirestore()
+  const { doc: result, setDoc: updateVersionDoc } = useScreenVersion({
+    hostId: hostId as string,
+    screenId: screenId as string,
+    versionId: versionId as string,
+  })
+  /**
+   * The layout binding is per-VERSION with a screen-document fallback:
+   * key-present on the version wins (a `null` there means explicitly no
+   * layout), an absent key inherits the screen's binding. This is what lets
+   * a scheduled version bring its own chrome live at publish time without
+   * reframing the version the site is currently serving — the tenant
+   * runtime (`composeScreenNodes`) resolves the same way.
+   */
+  const versionLayoutBound = Boolean(
+    result?.data && 'layoutId' in result.data,
+  )
+  const layoutId = versionLayoutBound
+    ? ((result?.data as { layoutId?: string | null })?.layoutId ?? undefined)
+    : screenResult?.data?.layoutId
   /**
    * Is the version being edited the one the site is SERVING?
    *
@@ -283,11 +301,6 @@ function BesignerPage(props) {
       : undefined,
     componentDefinitions,
   )
-  const { doc: result } = useScreenVersion({
-    hostId: hostId as string,
-    screenId: screenId as string,
-    versionId: versionId as string,
-  })
   const screenVersionRef = useScreenVersionRef({
     hostId: hostId as string,
     screenId: screenId as string,
@@ -618,15 +631,31 @@ function BesignerPage(props) {
   const handleLayoutChange = useCallback(
     async (event) => {
       const value = event.target.value as string
-      const nextLayoutId = value === '__none__' ? undefined : value
-      await updateScreenDoc({
-        layoutId: nextLayoutId ?? (deleteField() as any),
-      } as any)
+      /**
+       * Written to the VERSION, never the screen: the screen-level binding
+       * is the inherited default for versions that carry no key of their
+       * own, and writing it from here would reframe the live version while
+       * editing a scheduled one. "Inherit" deletes the version's key;
+       * "None" stores an explicit `null` so a version can opt out of a
+       * layout its screen still binds.
+       */
+      const update =
+        value === '__inherit__'
+          ? { layoutId: deleteField() as any }
+          : { layoutId: value === '__none__' ? null : value }
+      await updateVersionDoc(update as any)
         .then(() => {
-          enqueueSnackbar(nextLayoutId ? 'Layout assigned' : 'Layout removed', {
-            variant: 'success',
-            persist: false,
-          })
+          enqueueSnackbar(
+            value === '__inherit__'
+              ? 'Layout inherited from screen'
+              : value === '__none__'
+                ? 'Layout removed for this version'
+                : 'Layout assigned to this version',
+            {
+              variant: 'success',
+              persist: false,
+            },
+          )
         })
         .catch((e) => {
           enqueueSnackbar(`Error: ${JSON.stringify(e)}`, {
@@ -635,7 +664,7 @@ function BesignerPage(props) {
           })
         })
     },
-    [updateScreenDoc, enqueueSnackbar],
+    [updateVersionDoc, enqueueSnackbar],
   )
 
   // Publishing: the tenant site only serves paths present in the host's
@@ -1691,16 +1720,30 @@ function BesignerPage(props) {
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
                         {
-                          'Wraps this screen in chrome (appbar, footer, …) maintained once for every bound screen. Saved immediately.'
+                          'Wraps this VERSION in chrome (appbar, footer, …) maintained once for every bound screen. Applies per version — publishing this version brings its layout with it. Saved immediately.'
                         }
                       </Typography>
                       <TextField
                         select
                         size="small"
                         label="Layout"
-                        value={layoutId ?? '__none__'}
+                        value={
+                          versionLayoutBound
+                            ? (layoutId ?? '__none__')
+                            : '__inherit__'
+                        }
                         onChange={handleLayoutChange}
                       >
+                        <MenuItem value="__inherit__">
+                          {screenResult?.data?.layoutId
+                            ? `Inherit from screen (${
+                                (layoutOptions ?? []).find(
+                                  (layout) =>
+                                    layout.$id === screenResult.data?.layoutId,
+                                )?.displayName ?? screenResult.data.layoutId
+                              })`
+                            : 'Inherit from screen (none)'}
+                        </MenuItem>
                         <MenuItem value="__none__">{'None'}</MenuItem>
                         {(layoutOptions ?? []).map((layout) => (
                           <MenuItem key={layout.$id} value={layout.$id}>

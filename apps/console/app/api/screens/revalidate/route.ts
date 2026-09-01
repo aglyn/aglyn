@@ -180,9 +180,45 @@ async function screenIdsUsingLayout(
     layoutId: doc.get('layoutId'),
     versionId: doc.get('versionId'),
   })
+  /**
+   * The binding is per-VERSION with a screen fallback (key-present on the
+   * live version wins, `null` there means no layout) — the same resolution
+   * `composeScreenNodes` runs. Matching only the screen docs would leave a
+   * version-bound screen serving stale chrome for the whole revalidate
+   * window, so each live version doc is read and its binding, when present,
+   * replaces the screen's before the walk.
+   */
+  const screenCandidates = screenDocs.docs.map(toCandidate)
+  const versionRefs = screenCandidates
+    .filter((candidate) => candidate.versionId)
+    .map((candidate) =>
+      hostRef
+        .collection('screens')
+        .doc(candidate.id)
+        .collection('versions')
+        .doc(String(candidate.versionId)),
+    )
+  if (versionRefs.length) {
+    const versionSnapshots = await firestore.getAll(...versionRefs)
+    const byPath = new Map(
+      versionSnapshots.map((snapshot) => [snapshot.ref.path, snapshot]),
+    )
+    for (const candidate of screenCandidates) {
+      if (!candidate.versionId) continue
+      const snapshot = byPath.get(
+        hostRef
+          .collection('screens')
+          .doc(candidate.id)
+          .collection('versions')
+          .doc(String(candidate.versionId)).path,
+      )
+      const data = snapshot?.exists ? snapshot.data() : undefined
+      if (data && 'layoutId' in data) candidate.layoutId = data.layoutId
+    }
+  }
   return screenIdsUsingLayoutDeep(
     layoutId,
-    screenDocs.docs.map(toCandidate),
+    screenCandidates,
     layoutDocs.docs.map(toCandidate),
   )
 }
