@@ -9,6 +9,26 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.40 — 2026-09-01
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.39...v1.0.0-beta.40)
+
+### Fixed
+
+- **infra:** a link preview and a mailed image can reach what they need ([AGL-2483](https://linear.app/aglyn/issue/AGL-2483))
+- **commerce:** related products read a stable sample, not an arbitrary one
+
+### Performance
+
+- **tenant:** site search stops paying for datasets it cannot link to
+
+<details>
+<summary>Also in this release: 1 test</summary>
+
+- **aglyn:** a sibling tenant's blanked Origin stays refused, and is pinned as such
+
+</details>
+
 ## v1.0.0-beta.39 — 2026-09-01
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.38...v1.0.0-beta.39)
