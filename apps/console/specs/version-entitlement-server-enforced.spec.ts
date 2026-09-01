@@ -144,6 +144,11 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // The REAL plan rules. Stubbing `checkEntitlement` would leave the only
   // assertion that matters — Free is refused, Pro is not — proving nothing.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),
+  // The REAL node codec (AGL-1151). The route under test compresses any
+  // `nodes` it writes, and this factory is a CLOSED WORLD — an absent export
+  // throws inside the route and its own catch answers 500, which reads
+  // exactly like the behaviour under test regressing.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/stored-nodes'),
   // The REAL host-role gate (AGL-2334). These routes ask
   // `hostRoleCanWrite` whether the caller may write at all, and this factory
   // is a CLOSED WORLD — anything it does not name is `undefined`, so leaving
@@ -162,6 +167,11 @@ jest.mock('@aglyn/aglyn/server', () => ({
 }))
 
 import { POST } from '../app/api/hosts/versions/route'
+import { compress } from '@aglyn/aglyn/app-utils/compress'
+import {
+  decodeStoredNodes,
+  storedNodesForm,
+} from '@aglyn/aglyn/app-utils/stored-nodes'
 
 const createVersion = (body: Record<string, unknown> = {}) =>
   POST(
@@ -272,7 +282,47 @@ describe('version creation is entitlement-gated server-side (AGL-1369)', () => {
       // means "what is stored", and a client that could substitute the node
       // map could write any content under the label of a copy.
       expect(written.displayName).toBe('Copy of v1')
-      expect(written.nodes).toEqual({ root: { id: 'root' } })
+      // Compared through the decoder because the route stores the tree
+      // compressed (AGL-1151); the property under test is still WHOSE tree
+      // was written, and the client's `{ evil: true }` is not in it.
+      expect(decodeStoredNodes(written.nodes)).toEqual({ root: { id: 'root' } })
+    })
+
+    /**
+     * A version is BORN compressed (AGL-1151).
+     *
+     * This route is where every screen, layout, component and form version
+     * first exists, and it wrote `nodes` as a plain Firestore map — so a
+     * document arrived at roughly 1.4x the bytes of the form the besigner
+     * writes, against the same 1 MiB ceiling, and stayed that way until
+     * somebody happened to open it and press Save.
+     */
+    it('stores a seeded tree as msgpack, not as a plain map', async () => {
+      state.versions = []
+      const response = await createVersion({
+        data: { nodes: { root: { id: 'root' } } },
+      })
+      expect(response.status).toBe(200)
+      const [written] = mockCreate.mock.calls[0] as [Record<string, unknown>]
+      expect(storedNodesForm(written.nodes)).toBe('bytes')
+      expect(decodeStoredNodes(written.nodes)).toEqual({ root: { id: 'root' } })
+    })
+
+    /**
+     * The snapshot branch reads `source.data()`, which hands back a `Buffer`
+     * for a compressed source — and msgpack of msgpack decodes to a byte
+     * array rather than a node map, which no reader would recognise and none
+     * would throw on.
+     */
+    it('does not re-encode a source that is already compressed', async () => {
+      state.versionData = {
+        v1: { nodes: Buffer.from(compress({ root: { id: 'root' } })) },
+      }
+      const response = await createVersion({ sourceVersionId: 'v1' })
+      expect(response.status).toBe(200)
+      const [written] = mockCreate.mock.calls[0] as [Record<string, unknown>]
+      // One decode, not two, is what proves it was not encoded again.
+      expect(decodeStoredNodes(written.nodes)).toEqual({ root: { id: 'root' } })
     })
 
     it('404s when the source is missing rather than writing an empty version', async () => {

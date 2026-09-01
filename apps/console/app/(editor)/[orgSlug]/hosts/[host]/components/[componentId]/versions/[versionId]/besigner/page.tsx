@@ -61,7 +61,7 @@ import ComponentPropsDialog from '../../../../../../../../../../components/compo
 import revalidateLivePages, {
   describeRevalidateShortfall,
 } from '../../../../../../../../../../utils/revalidate-live-pages'
-import { collection, doc, limit, query, updateDoc } from 'firebase/firestore'
+import { Bytes, collection, doc, limit, query, updateDoc } from 'firebase/firestore'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { observer } from 'mobx-react-lite'
 import dynamic from 'next/dynamic'
@@ -491,7 +491,12 @@ function ComponentBesignerPage(props) {
       await updateDoc(
         doc(firestore, 'hosts', hostId, 'components', componentId),
         {
-          nodes: publishedNodes,
+          // Compressed at rest (AGL-1151), like the version this promotes
+          // from. A definition is grafted into every page that places it, so
+          // it is copied far more often than it is written — and it was the
+          // one document in the family still stored as a plain map, at about
+          // 1.4x the bytes against the same 1 MiB ceiling.
+          nodes: Bytes.fromUint8Array(Aglyn.encodeStoredNodes(publishedNodes)!),
           ...(rootId ? { rootId } : {}),
           props: declaredProps ?? [],
           versionId,

@@ -40,22 +40,42 @@ import { join } from 'node:path'
 
 const HOOKS_DIR = join(__dirname)
 
+/**
+ * Every converter that compresses `nodes`, by path from this directory.
+ *
+ * `use-form-version.tsx`, `use-host-template.tsx` and the shared
+ * `besigner-nodes-converter.ts` joined the original three as compression
+ * reached the rest of the besigner kinds (AGL-1151). The list is the point:
+ * the guard below is what each of them has to carry, and a converter added
+ * without it is exactly the document AGL-1250 destroyed.
+ */
 const VERSION_HOOKS = [
   'use-screen-version.tsx',
   'use-layout-version.tsx',
   'use-component-version.tsx',
+  'use-form-version.tsx',
+  'use-host-template.tsx',
+  'helpers/besigner-nodes-converter.ts',
 ]
 
 describe('version converters: a partial write keeps the nodes (AGL-1250)', () => {
   it.each(VERSION_HOOKS)('%s guards toFirestore on undefined nodes', (file) => {
     const source = readFileSync(join(HOOKS_DIR, file), 'utf8')
-    // The guard must come before any compression, so a payload without
-    // nodes never reaches `compress`.
+    // The guard must come before any encoding, so a payload without nodes
+    // never reaches the encoder.
     expect(source).toContain('rest?.nodes === undefined')
     const guardAt = source.indexOf('rest?.nodes === undefined')
-    const compressAt = source.indexOf('compress(')
+    // Either name for the encoder: the older converters call `compress`
+    // directly, the newer ones go through `encodeStoredNodes`, and both are
+    // the thing that must not run before the guard.
+    const encodeAt = Math.min(
+      ...[source.indexOf('compress('), source.indexOf('encodeStoredNodes(')]
+        .filter((at) => at > -1)
+        .concat(Number.MAX_SAFE_INTEGER),
+    )
     expect(guardAt).toBeGreaterThan(-1)
-    expect(compressAt).toBeGreaterThan(guardAt)
+    expect(encodeAt).toBeGreaterThan(guardAt)
+    expect(encodeAt).toBeLessThan(Number.MAX_SAFE_INTEGER)
   })
 
   it.each(VERSION_HOOKS)(
@@ -65,9 +85,25 @@ describe('version converters: a partial write keeps the nodes (AGL-1250)', () =>
       // `compress(rest?.nodes || {})` is the exact bug: the `|| {}` is what
       // turned "no nodes in this write" into "the tree is now empty".
       expect(source).not.toMatch(/compress\(\s*rest\??\.?\??nodes\s*\|\|\s*\{\}\s*\)/)
+      expect(source).not.toMatch(
+        /encodeStoredNodes\(\s*rest\??\.?\??nodes\s*\|\|\s*\{\}\s*\)/,
+      )
       expect(source).not.toContain('|| {}))')
     },
   )
+
+  /**
+   * The READ half, which the original three did not need stating because
+   * they were the only compressed kinds. Now that every besigner document is
+   * compressed, a converter that encodes on write and does NOT decode on
+   * read is the worse half of the pair: the editor seeds its canvas and its
+   * conflict baseline from this value, so the stored form would reach four
+   * comparisons that expect a node map.
+   */
+  it.each(VERSION_HOOKS)('%s decodes on the way back out', (file) => {
+    const source = readFileSync(join(HOOKS_DIR, file), 'utf8')
+    expect(source).toMatch(/decompress\(|decodeStoredNodes\(/)
+  })
 })
 
 /**

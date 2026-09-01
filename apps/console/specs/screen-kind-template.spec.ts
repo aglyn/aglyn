@@ -269,6 +269,11 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // the behaviour under test had regressed. Stubbed `() => true` it would be
   // worse: the suite would pass against a route that admits anybody.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/organizations'),
+  // The REAL node codec (AGL-1151). `/api/hosts/resources` compresses any
+  // `nodes` a create carries, and this factory is a CLOSED WORLD — an absent
+  // export throws inside the route and its own catch answers 500, which reads
+  // exactly like the CAP arithmetic under test regressing.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/stored-nodes'),
   createResourceUid: () => `made-${++mockNextUid}`,
   nameSearchKey: (value: string) => value.toLowerCase(),
   pluginRequestFromWeb: async (request: Request) => ({

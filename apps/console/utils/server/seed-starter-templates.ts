@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { encodeStoredNodes } from '@aglyn/aglyn/server'
 import {
   buildAllStarterTemplateDocs,
   type StarterTemplateDoc,
@@ -156,8 +157,13 @@ export async function materializeStarterTemplate(
     // `set`, not `create`: a double-click would abort a `create` batch and
     // leave genuinely missing pages unwritten, whereas both writers here
     // produce byte-identical platform content.
+    // Compressed at rest (AGL-1151). A starter's `nodes` is a whole page
+    // built from code constants, so this seed writes the same volume the
+    // besigner does and against the same per-document ceiling.
+    const packed = encodeStoredNodes(entry.data['nodes'])
     batch.set(templates.doc(entry.id), {
       ...entry.data,
+      ...(packed ? { nodes: Buffer.from(packed) } : {}),
       hostId,
       createdAt: now,
       updatedAt: now,

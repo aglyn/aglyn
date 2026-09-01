@@ -383,7 +383,10 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
               hostId,
               displayName: 'Initial version',
               rootId: definition.rootId ?? null,
-              nodes: definition.nodes ?? {},
+              // BOTH stored forms (AGL-1151). This list is a raw paged
+              // query, so a promoted definition arrives as `Bytes` — seeding
+              // a version with the wrapper would open an uneditable canvas.
+              nodes: Aglyn.decodeStoredNodes(definition.nodes) ?? {},
             },
           })
           await updateDoc(
@@ -621,11 +624,15 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
                   kind: 'component',
                   displayName: definition.displayName ?? '',
                   // Unlike screens and layouts, a component definition holds
-                  // its own nodes — there is no version doc to fetch.
-                  loadNodes: async () =>
-                    definition.nodes
-                      ? { nodes: definition.nodes, rootId: definition.rootId }
-                      : null,
+                  // its own nodes — there is no version doc to fetch. Decoded
+                  // for the same reason the screen and layout loaders decode
+                  // theirs (AGL-1151): what this returns is posted as the new
+                  // template's tree, so an undecoded one saves a template
+                  // whose whole content is a byte array.
+                  loadNodes: async () => {
+                    const nodes = Aglyn.decodeStoredNodes(definition.nodes)
+                    return nodes ? { nodes, rootId: definition.rootId } : null
+                  },
                 }),
             },
             {

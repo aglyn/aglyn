@@ -217,6 +217,11 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // throws and every assertion reads a 500 as a regression, so the actuals are
   // spread rather than enumerated.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),
+  // The REAL node codec (AGL-1151). The route under test compresses any
+  // `nodes` it writes, and this factory is a CLOSED WORLD — an absent export
+  // throws inside the route and its own catch answers 500, which reads
+  // exactly like the behaviour under test regressing.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/stored-nodes'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/actions'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/collection-entries'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/collection-kind'),

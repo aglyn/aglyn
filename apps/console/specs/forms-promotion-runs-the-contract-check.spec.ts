@@ -321,8 +321,14 @@ describe('the promote route is gated on the resolver', () => {
   it('publishes the declaration alongside the design', () => {
     const text = source()
     const wroteAt = text.indexOf('await formRef.update({')
-    const write = text.slice(wroteAt, wroteAt + 300)
-    expect(write).toContain('nodes: resolved.nodes')
+    const write = text.slice(wroteAt, wroteAt + 600)
+    // The tree the contract check RESOLVED is the tree that is written.
+    // Matched on the identifier rather than on a whole expression: the
+    // storage form is a separate decision — msgpack now (AGL-1151) — and
+    // pinning the encoding here would fail this spec for a change it is not
+    // about.
+    expect(write).toContain('resolved.nodes')
+    expect(write).toMatch(/nodes:\s*Buffer\.from\(encodeStoredNodes\(/)
     expect(write).toContain('fields: resolved.fields')
     expect(write).toContain('versionId,')
   })

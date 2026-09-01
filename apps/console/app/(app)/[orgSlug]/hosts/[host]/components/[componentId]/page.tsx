@@ -181,6 +181,11 @@ const ComponentDetails: NextPageWithLayout<Record<string, never>> = () => {
         if (!versionId) {
           versionId = Aglyn.createResourceUid()
           const timestamp = Timestamp.now()
+          // BOTH stored forms (AGL-1151) — see the guard below for what a
+          // raw read would do to it.
+          const decodedNodes = Aglyn.decodeStoredNodes<Record<string, unknown>>(
+            definition?.nodes,
+          )
           // Minting the first version rides /api/hosts/versions (AGL-1369):
           // rules deny the client create, and the route allows a resource's
           // FIRST version on every plan — which this always is, since the
@@ -199,8 +204,13 @@ const ComponentDetails: NextPageWithLayout<Record<string, never>> = () => {
               // absence: components created before AGL-693 hold `nodes: {}`,
               // which `??` happily passes through, minting a version that
               // opens uneditable (AGL-753).
-              nodes: Object.keys(definition?.nodes ?? {}).length
-                ? definition.nodes
+              //
+              // DECODED first (AGL-1151). This document is read raw, so a
+              // promoted definition arrives as `Bytes` — and `Object.keys`
+              // over the wrapper is non-empty, so the AGL-753 guard passes
+              // and mints exactly the uneditable version it exists to stop.
+              nodes: Object.keys(decodedNodes ?? {}).length
+                ? decodedNodes
                 : {
                     [Aglyn.CANVAS_ROOT_ELEMENT_ID]: {
                       $id: Aglyn.CANVAS_ROOT_ELEMENT_ID,

@@ -192,10 +192,15 @@ describe('the besigner publish path is gated on the contract', () => {
     // straight back apart after the check passed.
     const text = source()
     const publishedAt = text.indexOf("updateDoc(doc(firestore, 'hosts', hostId, 'forms', formId)")
-    const write = text.slice(publishedAt, publishedAt + 400)
+    const write = text.slice(publishedAt, publishedAt + 600)
     expect(text).toContain('formFieldDeclsFromNodes')
     expect(write).toContain('fields,')
-    expect(write).toContain('nodes: publishedNodes')
+    // The tree that was CHECKED is the tree that is written. Matched on the
+    // identifier rather than on a whole expression, because the storage form
+    // is a separate decision — it is msgpack now (AGL-1151) — and pinning the
+    // encoding here would make this spec fail for a change it is not about.
+    expect(write).toContain('publishedNodes')
+    expect(write).toMatch(/nodes:\s*Bytes\.fromUint8Array\(/)
   })
 })
 
