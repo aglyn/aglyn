@@ -384,11 +384,11 @@ describe('newResourceScopeFields (AGL-1478)', () => {
  * the same question this module keeps being asked wrongly (AGL-1466/1480).
  *
  * Every helper above answers "may this be seen", where a missing field reads
- * as org-wide because the AGL-1040 docs predate the backfill. An EDITOR asks
- * a different question — "what is stored" — and four call sites in two files
- * each wrote their own `Array.isArray(x) ? x : ['org']` for it, which is the
- * first question's answer given to the second one. That is how a folder no
- * site could see reported "All sites" for three weeks.
+ * as visible to nobody. An EDITOR asks a different question — "what is
+ * stored" — and four call sites in two files each wrote their own
+ * `Array.isArray(x) ? x : ['org']` for it, which is the first question's
+ * answer given to the second one. That is how a folder no site could see
+ * reported "All sites" for three weeks.
  */
 describe('storedScope (AGL-1480)', () => {
   it('answers null when nothing is stored', () => {

@@ -855,10 +855,14 @@ export async function serveMediaCdn(
     }
     // Scope check (AGL-1043). The bare `org:` form serves ORG-WIDE assets
     // only; a restricted asset must be requested through the form that
-    // names the site using it. Today every asset is `['org']` after the
-    // AGL-1040 backfill, so this is a no-op on existing URLs and starts
-    // biting exactly when someone restricts an asset — which is when
-    // AGL-1045's confirmation already warns which pages are affected.
+    // names the site using it, which is when AGL-1045's confirmation already
+    // warns which pages are affected.
+    //
+    // An asset carrying no `visibleTo` is refused here rather than treated as
+    // org-wide: absent is "nobody has said who may see this", not "everybody"
+    // (`app-utils/scope-tokens`). The scope backfill stamps such documents and
+    // the weekly drift detector reports the ones it has not reached, so the
+    // repair is a stamp rather than a wider read.
     //
     // 404 rather than 403: whether a restricted asset exists is itself
     // something the caller has no standing to learn. Short max-age so
