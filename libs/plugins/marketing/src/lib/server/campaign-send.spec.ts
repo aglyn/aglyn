@@ -138,6 +138,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   resolveHostSendingIdentity: async (options: {
     selectedDomain?: string
     selectedLocalPart?: string
+    purpose?: string
   }) => {
     /*
      * Mirrors the real store rather than short-circuiting it: the record is
@@ -161,6 +162,16 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         // set, so the platform address is supplied here to match. In the
         // product both read the same variable and cannot disagree.
         platformFrom: process.env.USAGE_EMAIL_FROM || 'noreply@aglyn.com',
+        /*
+         * Both of these are what the REAL `resolveHostSendingIdentity` passes
+         * unconditionally, and a mock that omitted them would model a world
+         * the product does not have: a site selecting nothing would reach
+         * `USAGE_EMAIL_FROM`, which is the one address tenant mail may never
+         * leave on.
+         */
+        audience: 'tenant',
+        sharedFrom: 'notifications@shared1.mail.aglyn.app',
+        ...(options?.purpose ? { purpose: options.purpose } : {}),
       })
   },
   orgDataCollectionForHost: jest.fn(),
@@ -897,13 +908,35 @@ describe('a campaign on a verified sending domain', () => {
     expect(preview.identity).toContain('news@acme.com')
   })
 
-  it('names the platform domain when the site selects nothing', async () => {
+  /**
+   * ⛔ THE CONTROL FOR POOLED CAMPAIGNS. A site that has bought no domain and
+   * asked for none can run a campaign, and it goes out on the pool member it
+   * is assigned — not refused, and not on the platform's own address.
+   */
+  it('sends on the pool when the site selects nothing', async () => {
     selectSendingDomain(null)
 
     const preview = await campaign({ dryRun: true })
 
-    expect(preview.identitySource).toBe('platform')
-    expect(preview.identity).toMatch(/shared platform domain/i)
+    expect(preview.identitySource).toBe('shared')
+    expect(preview.identity).toContain('notifications@shared1.mail.aglyn.app')
+    // Never `aglyn.com`. Admitting a campaign to the pool must not have
+    // opened a second route to the domain Aglyn's own invoices leave on.
+    expect(preview.identity).not.toContain('aglyn.com')
+  })
+
+  /**
+   * …and the merchant is told what the pool costs them, in the composer,
+   * before they press Send. Pooled reputation is a real trade and a surface
+   * that reported only the address would be reporting half of it.
+   */
+  it('tells a pooled composer that campaigns are graded more tightly', async () => {
+    selectSendingDomain(null)
+
+    const preview = await campaign({ dryRun: true })
+
+    expect(preview.identity).toMatch(/pooled/i)
+    expect(preview.identity).toMatch(/stricter/i)
   })
 
   it('ignores a sending domain named in the request', async () => {
@@ -916,9 +949,9 @@ describe('a campaign on a verified sending domain', () => {
      * would let them send as any domain they can name — including one this
      * org never claimed and never proved.
      *
-     * The site here has selected NOTHING, so the platform identity is the
-     * correct answer and a request-supplied domain is the only way the custom
-     * one could appear.
+     * The site here has selected NOTHING, so the pool is the correct answer
+     * and a request-supplied domain is the only way the custom one could
+     * appear.
      */
     selectSendingDomain(null)
 
@@ -928,7 +961,7 @@ describe('a campaign on a verified sending domain', () => {
       sendingLocalPart: 'ceo',
     })
 
-    expect(preview.identitySource).toBe('platform')
+    expect(preview.identitySource).toBe('shared')
     expect(preview.identity).not.toContain('acme.com')
   })
 })

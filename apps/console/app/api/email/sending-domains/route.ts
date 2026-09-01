@@ -139,8 +139,8 @@ async function handler(request: Request): Promise<Response> {
       {
         error:
           'Sending as your own domain starts on the Pro plan. Until then this ' +
-          'site sends on a shared Aglyn address, which carries receipts and ' +
-          'account email but not campaigns.',
+          'site sends on a shared Aglyn address, whose delivery reputation is ' +
+          'pooled with the other sites on it.',
       },
       { status: 403 },
     )

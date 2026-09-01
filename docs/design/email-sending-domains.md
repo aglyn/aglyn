@@ -476,7 +476,7 @@ Domain count is `O(1) + O(customers who want isolation)`, never `O(hosts)`:
 
 | Shape | Reputation | Provider slots | Our zone records | Who |
 | --- | --- | --- | --- | --- |
-| **Shared pool** | Pooled across the sites on one member | 4 | **12** | Every site with no domain of its own. Transactional ONLY. |
+| **Shared pool** | Pooled across the sites on one member | 4 | **12** | Every site with no domain of its own. Marketing and transactional, campaigns graded `strict`. |
 | **Customer-owned** | Fully the customer's | 1 each | **0** | Pro and above (`customSendingDomain`), for anyone who wants isolation and a name recipients recognize |
 | **Dedicated platform subdomain** | Fully the site's | 1 each | 3 each | Pro and above (`dedicatedSendingDomain`), **requested by the merchant**, best-effort |
 
@@ -520,8 +520,8 @@ DNS.
 
 **The subdomain is an optimization; the pool is the guarantee.** A site whose
 subdomain has not been provisioned — the ceiling reached, a zone write failed,
-the sweep not yet run — sends its transactional mail on the pool and keeps
-sending it. That is what makes a platform-wide ceiling a safe thing to enforce
+the sweep not yet run — sends its mail on the pool and keeps sending it,
+campaigns included. That is what makes a platform-wide ceiling a safe thing to enforce
 rather than a fatal one: hitting it costs delivery *isolation*, never receipts.
 `resolveSendingIdentity` draws the line at whose domain it is, not at whether
 one is verified — a customer's own unverified domain still refuses, because

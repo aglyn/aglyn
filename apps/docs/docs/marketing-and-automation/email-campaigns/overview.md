@@ -145,26 +145,31 @@ and three siblings. Which of the four a site uses is fixed, so the address recip
 is the same one every time.
 
 That works, and it means the delivery reputation on that address is **pooled** with the
-other sites using it rather than being yours.
+other sites using it rather than being yours. Campaigns send from it too — see below for
+what the pooling costs you.
 
-#### Marketing email needs a domain of this site's own {#marketing-needs-a-domain}
+#### Campaigns on the shared address are graded more tightly {#marketing-needs-a-domain}
 
-Campaigns, members posts, cart reminders and back-in-stock alerts are not sent from the
-shared address. It carries every other site's receipts and password resets — mail with no
-alternative and no way to opt out of the consequence — and one campaign's complaint rate
-there would be charged against all of it.
+Campaigns, member posts, cart reminders and back-in-stock alerts send from the shared
+address too. Nothing has to be bought or published first.
 
-That is a deliverability rule rather than a billing one. It lines up with the plans
-because a site entitled to send campaigns is a site entitled to a domain of its own — to
-**ask** for one, at least, which is not quite the same thing and is the subject of
-[a domain we set up is asked for, not included](#a-domain-we-set-up-is-a-request).
+What changes is how closely the sending is watched. The shared address carries every
+other site's receipts and password resets — mail with no alternative — so a campaign there
+is held to tighter limits than one on a domain of your own: spam complaints must stay
+under **0.10%** and permanent bounces under **5%**, measured over the last seven days.
+Cross either and this site's campaigns pause until the bad addresses are cleaned out and
+the week rolls off. Your receipts and account email keep sending throughout, and nobody is
+removed from your audience.
+
+On a domain of this site's own the limits are the looser ones (0.30% and 10%), because
+there the only reputation being spent is yours.
 
 #### The two ways to get a domain of this site's own {#two-ways-to-get-a-domain}
 
 A site's mail can leave from three places, and only the first is guaranteed. **The shared
-address** above needs nothing, is there on every plan, and carries account email at any
-tier — it is where a site sits until one of the two below is in place, and it is where it
-goes back to if one is removed. The two below both need **Pro** or above, and what
+address** above needs nothing, is there on every plan, and carries every kind of mail at
+any tier — it is where a site sits until one of the two below is in place, and it is where
+it goes back to if one is removed. The two below both need **Pro** or above, and what
 separates them is not the price:
 
 |  | A domain we set up | A domain you own |
@@ -189,10 +194,10 @@ the mailbox providers, and a new name starts at zero. Ask support if you want th
 name changed anyway.
 
 **Nothing stops while a domain is being set up, and the two kinds differ here.** A domain
-*we* set up is our work, so while it is still coming up your account email carries on
-going out on the shared address as before. A domain *you* own is your instruction about
-what recipients will see, so until its records verify this site does not send at all
-rather than quietly sending as something else. Campaigns wait for either to finish.
+*we* set up is our work, so while it is still coming up your mail carries on going out on
+the shared address as before, campaigns included. A domain *you* own is your instruction
+about what recipients will see, so until its records verify this site does not send at all
+rather than quietly sending as something else.
 
 The Sending card offers both:
 
@@ -200,14 +205,14 @@ The Sending card offers both:
   recipients see your name, and the reputation you build belongs to you wherever you go
   next. It needs three DNS records published at your registrar.
 - **Ask us to set this site up with one** — press **Ask for yoursite.mail.aglyn.app** and
-  there is nothing for you to publish. It unblocks campaigns and gives this site a sending
-  reputation of its own, separate from the shared pool. The trade is the name: recipients
-  see an Aglyn address rather than yours.
+  there is nothing for you to publish. It gives this site a sending reputation of its own,
+  separate from the shared pool and graded on the looser limits. The trade is the name:
+  recipients see an Aglyn address rather than yours.
 
 Pick the first if you can publish DNS records. Pick the second if you cannot — an agency
 client whose domain somebody else administers, or a registrar you do not have access to.
-Neither is issued automatically, and a site with neither keeps sending account email on
-the shared address in the meantime.
+Neither is issued automatically, and a site with neither keeps sending on the shared
+address in the meantime.
 
 #### A domain we set up is asked for, not included {#a-domain-we-set-up-is-a-request}
 
@@ -227,10 +232,10 @@ held rather than filled, and the domain reads **Waiting for room** on the Sendin
 until we have some. We would rather tell you that than show you a set of records that is
 not coming.
 
-**Being held is not stopped mail.** A site waiting on a domain keeps sending its receipts,
-password resets and booking confirmations on the shared address exactly as before, and
-nothing you have set up is lost. What is waiting is the reputation of its own — and, with
-it, campaigns.
+**Being held is not stopped mail.** A site waiting on a domain keeps sending on the shared
+address exactly as before — receipts, password resets, booking confirmations and campaigns
+— and nothing you have set up is lost. What is waiting is the reputation of its own, and
+the looser complaint and bounce limits that come with it.
 
 **If you would rather not wait, add a domain you own.** A domain you publish records for
 is never held this way, and it gives you the better `From:` line as well. It is the option
@@ -249,7 +254,7 @@ hosted, then press **Check DNS**. A domain has six things it can be telling you:
 | State | What it means | What to do |
 | --- | --- | --- |
 | **Waiting on a signing key** | The domain is claimed, but no key has been issued for it yet, so there is nothing to publish. | Nothing at your registrar will help. Press **Request records**. |
-| **Waiting for room** | We are at our mail provider's limit on sending domains, so this one — which is a domain we set up, inside our own namespace — has not been created yet. | Nothing, and nothing at your registrar is involved. This site keeps sending account email on the shared address. A domain you own instead of this one is never held this way. |
+| **Waiting for room** | We are at our mail provider's limit on sending domains, so this one — which is a domain we set up, inside our own namespace — has not been created yet. | Nothing, and nothing at your registrar is involved. This site keeps sending on the shared address. A domain you own instead of this one is never held this way. |
 | **Key request failed** | The mail provider refused to issue a key. | Press **Request records** again; it creates no second domain. If it persists, this is ours to fix. |
 | **Publish the records** | The records are issued and waiting for you. | Add them at your DNS host, then **Check DNS**. |
 | **Verified** | Every required record is live and we can see it. | Nothing — this domain can send. |
@@ -265,7 +270,7 @@ Removing a domain **you own** does not move a site sending as it onto any other 
 That site stops sending altogether, receipts included, until you choose another identity
 — deliberately, because quietly changing the address your recipients see is not a safe
 way to fail. Removing the domain **we set up** is the gentler case: receipts go back to
-the shared address and only marketing stops.
+the shared address, where campaigns are held to the tighter complaint and bounce limits.
 
 Adding a domain and choosing what a site sends as need the organization admin role.
 

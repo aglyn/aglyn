@@ -640,15 +640,18 @@ describe('choosing the mailbox this site sends as', () => {
     /*
      * AND IT SAYS WHAT WAS LOST.
      *
-     * Clearing to the pool stops campaigns, because marketing does not leave
-     * on a shared address. That is a real demotion and the merchant chose it;
-     * what it must not be is silent, which is the whole reason this branch is
-     * allowed to clear instead of quietly claiming a domain to avoid the
-     * conversation.
+     * Clearing to the pool does not stop mail, campaigns included — what it
+     * gives up is a reputation of this site's own, and with it the looser
+     * complaint and bounce limits. That is a real demotion and the merchant
+     * chose it; what it must not be is silent, which is the whole reason this
+     * branch is allowed to clear instead of quietly claiming a domain to avoid
+     * the conversation.
      */
     expect(body.pooled).toBe(true)
-    expect(body.warning).toMatch(/campaigns are blocked/i)
-    expect(body.warning).toMatch(/receipts/i)
+    expect(body.warning).toMatch(/pooled with the other sites/i)
+    expect(body.warning).toMatch(/tighter complaint and bounce limits/i)
+    // NOT a claim that anything stopped sending. It did not.
+    expect(body.warning).not.toMatch(/blocked/i)
   })
 
   /**
@@ -738,9 +741,9 @@ describe('a dedicated sending domain is requested, not issued', () => {
     expect(response.status).toBe(403)
     expect(error).toContain(DEDICATED_PLAN_LABEL)
     // And it says the mail is still going out, because a merchant reading
-    // "not on your plan" about their email needs to know their receipts are
-    // not what was refused.
-    expect(error).toMatch(/receipts and account email/i)
+    // "not on your plan" about their email needs to know that none of it —
+    // receipts or campaigns — is what was refused.
+    expect(error).toMatch(/sends on the shared address/i)
     expect(mockState.written).toBeNull()
   })
 

@@ -539,9 +539,10 @@ export async function releaseSendingDomain(
  * own invoices and password resets leave on.
  *
  * A site that has selected NOTHING does not reach `USAGE_EMAIL_FROM` either.
- * Its transactional mail goes on the shared pool member `hostSharedFrom`
- * assigns it, and its marketing mail is refused — which is the whole of what
- * keeps the pool usable, since it carries every pooled site's receipts.
+ * All of its mail goes on the shared pool member `hostSharedFrom` assigns it,
+ * marketing included. What keeps the pool usable is measurement rather than
+ * prohibition: a pooled campaign is graded against the stricter reputation
+ * thresholds, so the site earning complaints is the one that stops.
  */
 export async function resolveHostSendingIdentity(options: {
   orgId: string | null | undefined
