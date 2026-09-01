@@ -17,6 +17,17 @@
           "value": "status.aglyn.com"
         }
       ]
+    },
+    {
+      "source": "/:path((?!status$|assets/|img/|search-index\\.json$).*)",
+      "destination": "https://docs.aglyn.com/:path",
+      "permanent": true,
+      "has": [
+        {
+          "type": "host",
+          "value": "status.aglyn.com"
+        }
+      ]
     }
   ],
   "headers": [

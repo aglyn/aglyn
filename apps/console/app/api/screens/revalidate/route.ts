@@ -51,6 +51,7 @@ import {
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import {
   screenIdsUsingComponentDeep,
+  screenIdsUsingFormDeep,
   screenIdsUsingLayoutDeep,
 } from '../../../../utils/server/scan-artifact-usage'
 import { readUsageCandidates } from '../../../../utils/server/read-usage-candidates'
@@ -241,9 +242,27 @@ async function screenIdsUsingComponent(
   hostId: string,
   componentId: string,
 ): Promise<{ screenIds: string[]; truncated: boolean }> {
+  const sources = await readPlacementSources(firestore, hostId)
+  return {
+    screenIds: screenIdsUsingComponentDeep(componentId, sources.candidates),
+    truncated: sources.truncated,
+  }
+}
+
+/**
+ * Every screen, layout and component of a site, with their node trees — what
+ * both tree-searching scans walk.
+ *
+ * Each collection ONCE, in memory: a query per level would multiply round
+ * trips by the nesting depth of the graph. Shared by the component and form
+ * scans so the two read the same corpus under the same bound, and a change to
+ * one cannot quietly narrow the other.
+ */
+async function readPlacementSources(
+  firestore: FirebaseFirestore.Firestore,
+  hostId: string,
+) {
   const hostRef = firestore.collection('hosts').doc(hostId)
-  // Each collection ONCE, walked in memory — a query per level would multiply
-  // round trips by the nesting depth of the component graph.
   const [screens, layouts, components] = await Promise.all([
     readUsageCandidates(hostRef, 'screens', { withNodes: true, limit: SCAN_LIMIT }),
     readUsageCandidates(hostRef, 'layouts', { withNodes: true, limit: SCAN_LIMIT }),
@@ -253,12 +272,33 @@ async function screenIdsUsingComponent(
     }),
   ])
   return {
-    screenIds: screenIdsUsingComponentDeep(componentId, {
+    candidates: {
       screens: screens.candidates,
       layouts: layouts.candidates,
       components: components.candidates,
-    }),
+    },
     truncated: screens.truncated || layouts.truncated || components.truncated,
+  }
+}
+
+/**
+ * Every live screen whose output places the form `formId`.
+ *
+ * The same read the component scan makes, because it answers the same shape of
+ * question: a placement is found by searching node trees, so the published
+ * body of every screen and layout has to be in hand. Sharing the read means a
+ * form publish and a component publish cannot disagree about which pages
+ * exist.
+ */
+async function screenIdsUsingForm(
+  firestore: FirebaseFirestore.Firestore,
+  hostId: string,
+  formId: string,
+): Promise<{ screenIds: string[]; truncated: boolean }> {
+  const sources = await readPlacementSources(firestore, hostId)
+  return {
+    screenIds: screenIdsUsingFormDeep(formId, sources.candidates),
+    truncated: sources.truncated,
   }
 }
 
@@ -324,11 +364,22 @@ export async function POST(request: Request): Promise<Response> {
     const redirectPath = String(
       (payload as { redirectPath?: unknown })?.redirectPath ?? '',
     )
-    if (!hostId || (!screenId && !layoutId && !componentId && !redirectPath)) {
+    // Publishing a FORM changes every page that PLACES it, because a placed
+    // form renders the entity's published design rather than the fields the
+    // page holds. Before that graft existed a form publish changed nothing a
+    // visitor could see, so nothing announced it; now it changes the form on
+    // every page at once, and the only alternative to this is waiting out the
+    // hour-long `tenant-data:{hostId}` backstop while the besigner says the
+    // live sites already serve the new design.
+    const formId = String((payload as { formId?: unknown })?.formId ?? '')
+    if (
+      !hostId ||
+      (!screenId && !layoutId && !componentId && !formId && !redirectPath)
+    ) {
       return Response.json(
         {
           error:
-            'Missing hostId, and one of screenId, layoutId, componentId or redirectPath',
+            'Missing hostId, and one of screenId, layoutId, componentId, formId or redirectPath',
         },
         { status: 400 },
       )
@@ -389,6 +440,10 @@ export async function POST(request: Request): Promise<Response> {
       const scan = await screenIdsUsingComponent(firestore, hostId, componentId)
       affectedScreenIds = scan.screenIds
       scanTruncated = scan.truncated
+    } else if (formId) {
+      const scan = await screenIdsUsingForm(firestore, hostId, formId)
+      affectedScreenIds = scan.screenIds
+      scanTruncated = scan.truncated
     } else if (layoutId) {
       affectedScreenIds = await screenIdsUsingLayout(firestore, hostId, layoutId)
     } else {
@@ -414,7 +469,8 @@ export async function POST(request: Request): Promise<Response> {
         JSON.stringify({
           tag: 'AGL-1161:component-scan-truncated',
           hostId,
-          componentId,
+          ...(componentId ? { componentId } : {}),
+          ...(formId ? { formId } : {}),
           limit: SCAN_LIMIT,
         }),
       )

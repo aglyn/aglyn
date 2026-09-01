@@ -34,6 +34,7 @@ import {
   isFormPromotionRefusal,
   resolveFormPromotion,
 } from '../../../../../utils/promote-form-version'
+import { announceFormPublish } from '../../../../../utils/server/announce-form-publish'
 
 /**
  * PROMOTING A FORM: make one version the one the site serves.
@@ -180,6 +181,16 @@ async function handler(request: Request): Promise<Response> {
       versionId,
       updatedAt: Timestamp.now(),
     })
+    /*
+     * The pages that place this form are now serving fields it no longer has.
+     *
+     * Fired without awaiting, exactly as the component publish path does: the
+     * write above already succeeded, the scan reads every screen, layout and
+     * component on the site, and nobody is watching one URL for a form publish
+     * the way they watch a page after publishing it. `announceFormPublish`
+     * absorbs its own failures — the render cache's TTL is the backstop.
+     */
+    void announceFormPublish({ firestore, hostId, formId })
     // A form files under `content`: `HostActivityTarget['type']` is a
     // PERSISTED value `activity-presenter.ts` branches on, and a member no
     // presenter knows renders as an unlinked row.

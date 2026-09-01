@@ -593,6 +593,31 @@ export function placesFormEntity(
 }
 
 /**
+ * Whether any node in this map places THIS form.
+ *
+ * The per-id half of {@link placesFormEntity}, and the predicate a usage scan
+ * asks of a screen, a layout or a component definition. Deliberately the same
+ * reader the graft resolves against: a scan that disagreed about what counts
+ * as a placement would drop the caches of the wrong pages, and the pages it
+ * missed would serve the old form for the whole revalidate window with nothing
+ * recording that they were skipped.
+ */
+export function nodesPlaceForm(
+  nodes: Record<NodeId, AglynNodeSchema | undefined> | undefined | null,
+  formId: string,
+): boolean {
+  if (!formId) return false
+  for (const node of Object.values(nodes ?? {})) {
+    if (node?.componentId !== FORM_COMPONENT_ID) continue
+    const bound = (node.props as Record<string, unknown> | undefined)?.[
+      FORM_ID_PROP
+    ]
+    if (typeof bound === 'string' && bound.trim() === formId) return true
+  }
+  return false
+}
+
+/**
  * The placement kind that makes a placed form render its ENTITY'S design.
  *
  * Until this existed the entity's tree was written on every publish and read
