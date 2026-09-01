@@ -165,3 +165,117 @@ export async function checkEmailCredentials(): Promise<EmailCredentialReport> {
     }
   }
 }
+
+/** One pool member, as the provider reports it. */
+export interface SharedPoolDomainReport {
+  domain: string
+  /** `verified` when the provider will accept mail on it. */
+  status: string
+  /** False when the provider has never heard of it. */
+  present: boolean
+}
+
+export type SharedPoolStatus =
+  /** No platform pool applies to this deployment. */
+  | 'not-applicable'
+  /** No read credential, so the pool cannot be inspected. */
+  | 'unreadable'
+  | 'ok'
+  | 'degraded'
+
+export interface SharedPoolReport {
+  status: SharedPoolStatus
+  domains: SharedPoolDomainReport[]
+  /** Members the provider will not accept mail on right now. */
+  unusable: string[]
+  detail?: string
+}
+
+/**
+ * Whether the shared platform pool can actually carry mail.
+ *
+ * The pool is the delivery floor: a site with no domain of its own sends its
+ * receipts, password resets and booking confirmations from a member of it. So
+ * a degraded pool is not a warning about a future problem, it is every such
+ * site's transactional mail already failing — which is why the caller treats
+ * this as a blocker rather than a note.
+ *
+ * Read with `RESEND_READ_API_KEY`, deliberately, and never with the sending
+ * key. A sending-scoped key has no read permission, so asking it about domains
+ * yields an authorization error that says nothing about the domains — which is
+ * exactly how a pool the key could not send from reported healthy. Without a
+ * read key this answers `unreadable`, which is the honest answer and not a
+ * pass: the caller must not treat "I could not look" as "I looked and it was
+ * fine".
+ *
+ * `not-applicable` covers the self-host shape. The pool is a property of the
+ * Aglyn platform; an operator running their own deployment sends from their
+ * own domain and has no pool to be degraded.
+ */
+export async function checkSharedSendingPool(options: {
+  pool: string[]
+  readApiKey?: string
+  endpoint?: string
+}): Promise<SharedPoolReport> {
+  const pool = options.pool.filter(Boolean)
+  if (!pool.length) return { status: 'not-applicable', domains: [], unusable: [] }
+
+  const key = String(options.readApiKey ?? '').trim()
+  if (!key) {
+    return {
+      status: 'unreadable',
+      domains: [],
+      unusable: [],
+      detail:
+        'RESEND_READ_API_KEY is not set, so the shared pool cannot be ' +
+        'inspected. The sending key has no read permission and would report ' +
+        'an authorization error rather than the state of the domains.',
+    }
+  }
+
+  try {
+    const response = await fetch(options.endpoint ?? RESEND_DOMAINS_ENDPOINT, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${key}` },
+    })
+    if (response.status < 200 || response.status >= 300) {
+      return {
+        status: 'unreadable',
+        domains: [],
+        unusable: [],
+        detail: `The provider answered ${response.status} to the domain read.`,
+      }
+    }
+    const payload = (await response.json().catch(() => null)) as
+      | { data?: Array<{ name?: unknown; status?: unknown }> }
+      | null
+    const byName = new Map<string, string>()
+    for (const row of payload?.data ?? []) {
+      const name = String(row?.name ?? '').toLowerCase()
+      if (name) byName.set(name, String(row?.status ?? 'unknown'))
+    }
+    const domains = pool.map((domain) => {
+      const status = byName.get(domain.toLowerCase())
+      return {
+        domain,
+        status: status ?? 'absent',
+        present: status !== undefined,
+      }
+    })
+    const unusable = domains
+      .filter((entry) => entry.status !== 'verified')
+      .map((entry) => entry.domain)
+    return {
+      status: unusable.length ? 'degraded' : 'ok',
+      domains,
+      unusable,
+    }
+  } catch (error) {
+    return {
+      status: 'unreadable',
+      domains: [],
+      unusable: [],
+      detail: String((error as Error)?.message ?? error).slice(0, 300),
+    }
+  }
+}
