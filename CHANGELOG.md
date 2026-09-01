@@ -9,6 +9,23 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.36 — 2026-09-01
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.34...v1.0.0-beta.36)
+
+### Fixed
+
+- **console:** publishing a form drops the caches of the pages that place it
+- **docs:** status.aglyn.com served a second copy of the whole docs site
+
+<details>
+<summary>Also in this release: 2 chore</summary>
+
+- **release:** carry v1.0.0-beta.35 into the lockfile ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
+- **release:** v1.0.0-beta.35 ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
+
+</details>
+
 ## v1.0.0-beta.35 — 2026-09-01
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.34...v1.0.0-beta.35)
