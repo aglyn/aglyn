@@ -469,9 +469,17 @@ export class CanvasManager {
     (nodeOrId: NodeId | NodeSchema<any>): NodeBreadcrumbPath => {
       const hierarchy = [NODE_ROOT_ID]
 
+      // Visited ids, not just the root check: the root terminates the walk on
+      // a well-formed document, but two nodes that parent each other
+      // terminate nothing. An unbounded ancestor walk is a synchronous
+      // infinite loop on the renderer's main thread — the tab stops answering
+      // input entirely — so a malformed tree has to cost a truncated
+      // breadcrumb instead.
+      const seen = new Set<string>()
       let currentId: string | undefined =
         typeof nodeOrId !== 'string' ? nodeOrId?.$id : nodeOrId
-      while (currentId && !this.isRootNodeId(currentId)) {
+      while (currentId && !this.isRootNodeId(currentId) && !seen.has(currentId)) {
+        seen.add(currentId)
         hierarchy.splice(1, 0, currentId)
         currentId = this.getNode(currentId)?.parentId
       }
