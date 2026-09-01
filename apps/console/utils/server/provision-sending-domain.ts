@@ -71,13 +71,15 @@ import {
   isPlatformSendingDomain,
   platformZoneNamesFor,
   platformZoneRecords,
-  sendingDomainRequiredRecords,
+  sendingDomainPublishableRecords,
   sendingDomainTeardownRefusal,
+  sendingTrackingRetentionDays,
   tenantWebApex,
   type SendingDomainRecord,
 } from '@aglyn/shared-util-email'
 import {
   firebaseAdmin,
+  holdTrackedSendingDomain,
   listPendingSendingDomains,
   readSendingDomainRecord,
   recordSendingDomainIssueFailure,
@@ -239,11 +241,20 @@ export async function provisionSendingDomain(options: {
     return { domain, outcome: 'skipped', detail: issued.detail }
   }
 
-  // Step 2. The records the customer would otherwise publish, addressed the
-  // way an API to our own zone addresses them. Same generator the verifier
-  // compares against, so what is written is what is looked for.
-  const required = sendingDomainRequiredRecords(issued.record)
-  const zoned = platformZoneRecords(required, tenantWebApex())
+  /*
+   * Step 2. The records the customer would otherwise publish, addressed the
+   * way an API to our own zone addresses them. Same generator the verifier
+   * compares against, so what is written is what is looked for.
+   *
+   * PUBLISHABLE, not merely required. The two differ by the click-tracking
+   * host, which verification must not wait on and which there is nobody to
+   * ask about here — this is our zone. Writing only the required set is what
+   * left every platform subdomain measuring a structural 0% click rate:
+   * one flag was answering two questions, and the conservative answer to
+   * "does verification wait on this" silently decided "do we publish it".
+   */
+  const publishable = sendingDomainPublishableRecords(issued.record)
+  const zoned = platformZoneRecords(publishable, tenantWebApex())
   if (!zoned.length) {
     await recordSendingDomainIssueFailure({
       orgId: options.orgId,
@@ -463,6 +474,18 @@ export interface TeardownResult {
  */
 export async function teardownSendingDomain(
   teardown: HostSendingDomainTeardown,
+  options?: {
+    /**
+     * Release now, whatever the tracked-link hold says.
+     *
+     * For an ERASURE and nothing else. A person asking to be erased outranks
+     * a link in somebody's inbox, and a retention window that could delay it
+     * would turn a measurement convenience into a compliance failure.
+     */
+    immediate?: boolean
+    /** Evaluation instant, injectable so the hold is testable. */
+    nowMs?: number
+  },
 ): Promise<TeardownResult> {
   const domain = String(teardown?.domain ?? '')
 
@@ -494,6 +517,41 @@ export async function teardownSendingDomain(
 
   const label = sendingDomainLabel(domain) || teardown.label
   if (!label) return { outcome: 'skipped', detail: 'no-label' }
+
+  /*==========================================
+   * THE TRACKED-LINK HOLD.
+   *
+   * Every link in every message this domain has already sent points at its
+   * tracking host, and the provider deletes that host along with the domain —
+   * a tracking subdomain cannot be removed on its own precisely because live
+   * mail points at it. So releasing today does not merely stop future
+   * tracking, it retroactively breaks links for recipients who did nothing.
+   *
+   * Held BEFORE the provider release rather than after, because the release
+   * is the irreversible half: the zone records below can be rewritten, a
+   * deleted domain object's tracking host cannot be brought back.
+   *
+   * The hold is stamped once and re-read on later passes, so the daily reaper
+   * finishes the job when the window is up rather than restarting the clock.
+   *=========================================*/
+  const nowMs = options?.nowMs ?? Date.now()
+  if (!options?.immediate && String(teardown.trackingTarget ?? '').trim()) {
+    const windowMs = sendingTrackingRetentionDays() * 24 * 60 * 60 * 1000
+    const until = await holdTrackedSendingDomain({
+      orgId: teardown.orgId,
+      domain,
+      nowMs,
+      windowMs,
+    })
+    if (until && nowMs < until) {
+      console.warn(
+        `[provision-sending-domain] holding ${domain} until ` +
+          `${new Date(until).toISOString()} — releasing it now would break ` +
+          'the tracked links in mail it has already sent.',
+      )
+      return { outcome: 'skipped', detail: 'tracking-retention' }
+    }
+  }
 
   const released = await releaseProviderDomain(teardown.providerDomainId)
   if (released === 'failed') {

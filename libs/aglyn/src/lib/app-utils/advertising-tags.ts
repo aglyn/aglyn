@@ -57,7 +57,7 @@
  *   that order, for the AGL-1608 reason: sweeping first deletes the cookies
  *   and immediately gets them back.
  *
- * ## The five conditions, all independent, all required
+ * ## The six conditions, all independent, all required
  *
  * 1. **{@link isPlatformMarketingHost}** — Aglyn's own marketing site, never a
  *    customer's. This is the DPA §3.2 boundary: Aglyn promises customers it
@@ -82,6 +82,30 @@
  *    logic in this file.
  * 5. **A configured, well-formed account id for a KNOWN vendor.** The gate
  *    describes what may load; the host document decides what is configured.
+ * 6. **{@link readInternalTrafficOverride} is false** — this browser has not
+ *    been declared one of ours. A GA4 data filter is PROPERTY-scoped: it drops
+ *    `traffic_type: internal` hits from the GA4 property and has no reach into
+ *    an `AW-`/Meta/LinkedIn destination at all, which are separate products
+ *    reached by separate requests. Measured on `aglyn.com`: a flagged browser's
+ *    pageview is correctly absent from GA4 while the same pageview still sends
+ *    `ccm/collect`, `pagead/1p-user-list` (`is_vtc=1`) and
+ *    `viewthroughconversion` to Google Ads, joining our own staff to the
+ *    remarketing audiences those requests build. Excluding ourselves from the
+ *    reports while still training the bidding on ourselves is the worse half of
+ *    the problem, because it is the half nobody can see in a report.
+ *
+ *    This is the same browser-scoped opt-in the GA4 stamp uses, so one visit to
+ *    `?aglyn_internal=1` covers both, and the two cannot drift apart into a
+ *    browser that is internal for one product and external for the other. Note
+ *    it is the BROWSER, not the account: staff ID-token claims are the console
+ *    mechanism (AGL-1582) and there is no account to consult here.
+ *
+ *    {@link analyticsEnvironmentForcesInternal} is the other half of the same
+ *    condition. Condition 2 passes under the non-production escape hatch, and a
+ *    build that emits because someone asked it to is ours by definition — so
+ *    the hatch must not hand a dev or preview build the real `AW-` id. Without
+ *    this the hatch reopens precisely the hole condition 2 closes, which is why
+ *    `INTERNAL_TRAFFIC_FORCED_SNIPPET` exists on the GA side.
  *
  * ## What is NOT wired, and why that is the point
  *
@@ -106,10 +130,12 @@ import {
   META_PIXEL_ID_PATTERN,
 } from './visitor-consent'
 import {
+  analyticsEnvironmentForcesInternal,
   analyticsMayEmit,
   type AnalyticsEnvironment,
   readAnalyticsEnvironment,
 } from './analytics-environment'
+import { readInternalTrafficOverride } from './internal-traffic'
 import { isPlatformMarketingHost } from './platform-marketing-host'
 import {
   ADVERTISING_COOKIE_PREFIXES,
@@ -495,21 +521,39 @@ export interface ResolvedAdvertisingTag {
  *
  * Pure, and empty is the answer to every question it cannot answer — an absent
  * host, an unreadable record, an unknown vendor id, a malformed account id.
- * See the module comment for the five conditions and why each one is separate.
+ * See the module comment for the six conditions and why each one is separate.
  *
  * `stored` is the CLIENT-resolved record. Like the GA gate, this is evaluated
  * after hydration only: tenant pages are ISR-cached, so the server HTML must
  * be identical for every visitor and cannot carry a tag one of them granted.
+ *
+ * `internal` is read the same way and for the same reason. Taking it as a
+ * defaulted parameter rather than calling into the browser mid-verdict is what
+ * keeps this function testable in both directions — a gate that can only be
+ * exercised one way is the shape that ships broken (AGL-2067).
  */
 export function resolveAdvertisingTags(
   host: AdvertisingTagHost | null | undefined,
   stored: StoredVisitorConsent | null | undefined,
   env: AnalyticsEnvironment = readAnalyticsEnvironment(),
+  internal: boolean = readInternalTrafficOverride(),
 ): ResolvedAdvertisingTag[] {
   if (isPlatformMarketingHost(host) === false) return []
   if (analyticsMayEmit(env) === false) return []
   if (hostConsentRequired(host) === false) return []
   if (advertisingGrantedByRecord(host, stored) === false) return []
+  // Condition 6. Structural, like every other clause here: the tag is not
+  // mounted rather than mounted-and-suppressed, because a resident tag fires
+  // on its own and a `_gcl_*` cookie is written by the first automatic event.
+  //
+  // The environment half is not redundant with `analyticsMayEmit` above. That
+  // clause passes under the non-production escape hatch, and a build emitting
+  // because someone asked it to is ours by definition — so the hatch must not
+  // hand a dev or preview build the real `AW-` id and let it build remarketing
+  // audiences out of our own engineers, which is the hole condition 2 exists
+  // to close. Same reasoning as `INTERNAL_TRAFFIC_FORCED_SNIPPET`.
+  if (internal === true) return []
+  if (analyticsEnvironmentForcesInternal(env) === true) return []
   const configured = host?.analytics?.adTags
   if (!configured) return []
   const tags: ResolvedAdvertisingTag[] = []

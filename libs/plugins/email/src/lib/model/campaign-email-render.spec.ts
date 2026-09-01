@@ -135,6 +135,39 @@ describe('a plain-text message', () => {
     expect(text).toContain('Hello Dana')
   })
 
+  it('labels the HTML footer in WORDS, never with the raw signed URL', () => {
+    /*
+     * The footer used to be linkified out of the text part, which labelled
+     * the anchor with the URL itself — a hundred characters of `hostId`,
+     * `sig` and `cid` where the one sentence telling a recipient they can
+     * leave a single stream should be. The href is unchanged, so the
+     * provider's click rewriting is unaffected: it keys on the target, not
+     * on the label.
+     */
+    const { html } = rendered()
+    expect(html).toContain(`>${UNSUBSCRIBE_FOOTER_LABEL}</a>`)
+    // The bare URL must not survive as visible text anywhere in the HTML.
+    expect(html).not.toContain('>https://acme.example/opt-out<')
+  })
+
+  it('keeps the bare URL in the TEXT part, where markup is invisible', () => {
+    // The two halves differ on purpose: a text reader needs an address they
+    // can copy, and cannot use an anchor.
+    expect(rendered().text).toContain('https://acme.example/opt-out')
+  })
+
+  it('still linkifies the links the AUTHOR typed', () => {
+    // Only the generated footer gets a written label. A URL somebody typed
+    // into their own copy is theirs, and showing it is what they meant.
+    const { html } = renderCampaignEmail({
+      subject: 'Spring sale',
+      content: { mode: 'text', body: 'Read more at https://acme.example/sale' },
+      recipient: RECIPIENT,
+      unsubscribeUrl: 'https://acme.example/opt-out',
+    })
+    expect(html).toContain('https://acme.example/sale</a>')
+  })
+
   it('ends on the opt-out line, which is where a text reader finds it', () => {
     expect(rendered().text.trimEnd()).toMatch(
       /https:\/\/acme\.example\/opt-out$/,

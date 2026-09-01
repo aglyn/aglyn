@@ -142,6 +142,30 @@ async function handler(request: Request): Promise<Response> {
           })
         : null
 
+    /*
+     * A measurement fault, reported APART from the blockers.
+     *
+     * `blockers` means delivery is stopped, and this is not that: mail on an
+     * untracked domain arrives exactly as it should and only the click rate
+     * is a lie. Folding it in would either page somebody about healthy
+     * delivery or teach them that a blocker can be ignored, and the second is
+     * how the real one gets missed.
+     *
+     * It is reported at all because the symptom is invisible: a click rate of
+     * 0% reads as an audience that does not click rather than as a domain
+     * that cannot count, and the last time this was wrong nobody found it in
+     * the numbers.
+     */
+    const notices: string[] = []
+    if (pool?.untracked?.length) {
+      notices.push(
+        `Click tracking is off for ${pool.untracked.join(', ')}. Mail from ` +
+          'these domains delivers normally and reports a click rate of ' +
+          'exactly 0% — a provider rewrites links only on a domain with a ' +
+          'verified tracking subdomain.',
+      )
+    }
+
     if (pool?.status === 'degraded') {
       blockers.push(
         `The shared sending pool cannot carry mail on ${pool.unusable.join(', ')}. ` +
@@ -157,6 +181,7 @@ async function handler(request: Request): Promise<Response> {
       credentials,
       pool,
       blockers,
+      notices,
       /*
        * True only when nothing known is standing in the way of delivery.
        *

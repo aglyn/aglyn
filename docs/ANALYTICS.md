@@ -1305,6 +1305,32 @@ Being per-origin is a feature as much as a cost: it is what makes it
 impossible for an opt-in on our console to leak a stamp into a CUSTOMER's
 property while we click through their published site.
 
+⚠️ **The flag now does two jobs, because the GA4 filter only does one.** A GA4
+data filter is **property-scoped**. It drops `traffic_type: internal` hits from
+property `302497406` and has no reach whatsoever into an `AW-` / Meta /
+LinkedIn destination — those are separate products reached by separate
+requests, and no setting in GA4 governs them.
+
+Measured on `aglyn.com` 2026-09-01: a flagged browser's pageview was correctly
+absent from GA4, while the **same** pageview still sent
+`www.google.com/ccm/collect?tid=AW-18401436785`,
+`pagead/1p-user-list/18401436785` (`is_vtc=1`) and `viewthroughconversion` —
+none of which carry the `tt` parameter at all. Staff were excluded from the
+reports and still joined the remarketing audiences those requests build, which
+is the worse half: it is the half no report can show.
+
+So `readInternalTrafficOverride()` is the **sixth condition** on
+`resolveAdvertisingTags` (`libs/aglyn/src/lib/app-utils/advertising-tags.ts`),
+alongside the five in that module's comment. A flagged browser mounts no
+advertising tag at all — structural, like every other clause there, because a
+resident tag fires on its own. One visit to `?aglyn_internal=1` therefore
+covers both products, and the two cannot drift into a browser that is internal
+for GA4 and external for Ads.
+
+⚑ **The tell to remember:** GA4 promotes `traffic_type` out of `ep.` into a
+top-level **`tt`** field on `/g/collect`. Grepping a collect URL for
+`ep.traffic_type` finds nothing and reads as a missing stamp. Look for `tt=`.
+
 **Three implementations, one definition.** `INTERNAL_TRAFFIC_PARAM` /
 `INTERNAL_TRAFFIC_VALUE` and both readers live in
 `libs/aglyn/src/lib/app-utils/internal-traffic.ts`:

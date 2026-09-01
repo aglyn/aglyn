@@ -254,7 +254,32 @@ export function renderCampaignEmail(
     const text = `${messageText}${unsubscribeLine}`
     return {
       subject,
-      html: renderTextEmailHtml(text, subject, preheader),
+      /*
+       * THE HTML FOOTER IS RENDERED, NOT LINKIFIED OUT OF THE TEXT.
+       *
+       * Synthesizing the HTML from `text` — footer included — used to work,
+       * and produced a footer whose visible words were the raw signed URL:
+       * `renderTextEmailHtml` turns a bare URL into an anchor labelled with
+       * itself, which is right for a link the AUTHOR typed and wrong for the
+       * one line this renderer writes. A hundred characters of `hostId`,
+       * `sig` and `cid` is not a thing a person reads, and it buries the only
+       * sentence in the message that tells them they can leave one stream
+       * instead of all of them.
+       *
+       * So the message is linkified WITHOUT the footer, and the footer is
+       * appended by the same helper the designed branch uses — same styling,
+       * same words, tracking-rewritten by the provider exactly as before,
+       * because rewriting keys on the `href` and not on the label.
+       *
+       * The TEXT part keeps the bare URL. Markup is invisible there and an
+       * address a reader can copy is the only form that works.
+       */
+      html: unsubscribeUrl
+        ? appendUnsubscribeHtml(
+            renderTextEmailHtml(messageText, subject, preheader),
+            unsubscribeUrl,
+          )
+        : renderTextEmailHtml(text, subject, preheader),
       text,
       messageText,
     }

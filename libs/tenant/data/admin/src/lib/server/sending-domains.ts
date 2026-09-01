@@ -77,6 +77,7 @@ import {
   resolveSendingIdentity,
   safeProviderDetail,
   SENDING_SUBDOMAIN,
+  SENDING_TRACKING_SUBDOMAIN,
   sendingDnsRecords,
   sendingDomainRequiredRecords,
   sendingRecordKey,
@@ -91,7 +92,7 @@ import {
   type SendingVerification,
 } from '@aglyn/shared-util-email'
 import firebaseAdmin from './firebase-admin'
-import { lookupMx, lookupTxt } from './dns-probe'
+import { lookupCaa, lookupMx, lookupTxt } from './dns-probe'
 import { getOrgForHost } from './organizations'
 
 const firestore = () => firebaseAdmin.app().firestore()
@@ -150,6 +151,7 @@ export function readSendingDomainRecord(
     dkimPublicKey: data.dkimPublicKey ?? null,
     returnPathHost: data.returnPathHost ?? null,
     providerDomainId: data.providerDomainId ?? null,
+    trackingTarget: data.trackingTarget ?? null,
     createdAtMs: Number(data.createdAtMs) || null,
     verifiedAtMs: Number(data.verifiedAtMs) || null,
     lastCheckedAtMs: Number(data.lastCheckedAtMs) || null,
@@ -234,6 +236,12 @@ export async function recordIssuedSendingDomain(options: {
   dkimSelector?: string
   returnPathHost?: string
   providerDomainId?: string
+  /**
+   * The provider's tracking host, when it issued one — see
+   * `SendingDomainRecord.trackingTarget`. Absent leaves the domain sending
+   * and unmeasured rather than unsent.
+   */
+  trackingTarget?: string | null
 }): Promise<SendingDomainResult> {
   const domain = normalizeSendingDomain(options?.domain)
   const key = String(options?.dkimPublicKey ?? '').trim()
@@ -294,6 +302,12 @@ export async function recordIssuedSendingDomain(options: {
         : {}),
       ...(options.providerDomainId
         ? { providerDomainId: String(options.providerDomainId) }
+        : {}),
+      // Only when the provider issued one. Writing an empty value would put a
+      // tracking CNAME with no target in front of a customer, which is the
+      // blank-record shape `sendingDnsRecords` refuses everywhere else.
+      ...(String(options.trackingTarget ?? '').trim()
+        ? { trackingTarget: String(options.trackingTarget).trim() }
         : {}),
       // A previous failure is not part of the record once it succeeded.
       lastIssueError: firebaseAdmin.firestore.FieldValue.delete(),
@@ -385,6 +399,100 @@ export async function readDmarcPolicy(
   // a customer under p=reject that they have no protection.
   if (!lookup.answered) return null
   return assessDmarc(lookup.records)
+}
+
+/**
+ * Start (or read) the hold that keeps a tracked domain's links alive.
+ *
+ * Stamped on FIRST sighting rather than computed from an orphan timestamp,
+ * because there is no reliable one: a label reassignment leaves no record of
+ * when it happened, and the reaper re-infers the orphan on every pass. The
+ * stamp is the record of when the hold began, so a domain cannot be held
+ * forever by a sweep that keeps starting the clock over.
+ *
+ * @returns the instant the domain may be released, or `null` when there is
+ *          nothing to stamp it on — a domain with no org record cannot be
+ *          held, and refusing to release it on the strength of a hold nobody
+ *          can see would strand a provider slot permanently.
+ */
+export async function holdTrackedSendingDomain(options: {
+  orgId: string | null
+  domain: string
+  nowMs: number
+  windowMs: number
+}): Promise<number | null> {
+  const orgId = String(options?.orgId ?? '').trim()
+  const domain = normalizeSendingDomain(options?.domain)
+  if (!orgId || !domain || options.windowMs <= 0) return null
+
+  const ref = domainRef(orgId, domain)
+  const snapshot = await ref.get().catch(() => null)
+  if (!snapshot?.exists) return null
+
+  const held = Number(snapshot.get('trackingRetentionUntilMs')) || 0
+  if (held > 0) return held
+
+  const until = options.nowMs + options.windowMs
+  await ref
+    .set({ trackingRetentionUntilMs: until }, { merge: true })
+    // A stamp we could not write is a hold we cannot prove later, so the
+    // caller is told there is none rather than being asked to wait on a
+    // deadline that will restart on the next pass.
+    .catch(() => null)
+  return until
+}
+
+/**
+ * Whether this domain publishes a CAA policy that would REFUSE the tracking
+ * host's certificate.
+ *
+ * The question decides whether a customer is shown a CAA record at all, and
+ * asking it is the difference between guidance and a footgun. CAA restricts
+ * which authorities may issue, and the lookup stops at the first name in the
+ * tree publishing any record — so:
+ *
+ *  - A domain publishing NOTHING needs nothing. Any authority may already
+ *    issue, and handing over a CAA record to paste would be the change that
+ *    STARTS restricting them, breaking whatever else renews on that name.
+ *  - A domain that publishes some, none of which name our authority, has to
+ *    add one ALONGSIDE what it has.
+ *  - A domain that already names our authority is done.
+ *
+ * Walks up from the tracking host exactly as a certificate authority does,
+ * and stops where a real lookup stops: at the first name with any record.
+ *
+ * @returns `null` when DNS could not be reached, which is not "they publish
+ *          none" — telling a customer to add a CAA on the strength of an
+ *          unanswered lookup is how a working zone gets narrowed by mistake.
+ */
+export async function readTrackingCaaNeed(
+  rawDomain: string,
+  authority: string,
+): Promise<'not-needed' | 'must-add' | 'satisfied' | null> {
+  const domain = normalizeSendingDomain(rawDomain)
+  const ca = String(authority ?? '').trim().toLowerCase()
+  if (!domain || !ca) return null
+
+  /*
+   * From the tracking host upward. Every label is asked because a CAA on a
+   * closer name overrides a broader one — a customer who already scoped a
+   * policy to `links.` must not be told to widen their root.
+   */
+  const labels = `${SENDING_TRACKING_SUBDOMAIN}.${domain}`.split('.')
+  for (let index = 0; index < labels.length - 1; index += 1) {
+    const name = labels.slice(index).join('.')
+    const lookup = await lookupCaa(name)
+    if (!lookup.answered) return null
+    if (!lookup.records.length) continue
+    // The first name with any record is where issuance is decided.
+    const issuers = lookup.records
+      .filter((entry) => / issue "/.test(entry))
+      .map((entry) => entry.toLowerCase())
+    return issuers.some((entry) => entry.includes(`"${ca}"`))
+      ? 'satisfied'
+      : 'must-add'
+  }
+  return 'not-needed'
 }
 
 /**

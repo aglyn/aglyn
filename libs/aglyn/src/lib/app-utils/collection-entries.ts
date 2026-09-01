@@ -16,6 +16,7 @@
  */
 
 import type { AglynNodeSchema, NodeId } from '../foundation'
+import type { ContentAuthorRecord } from './content-authors'
 import { resolveNamedTokens } from './resolve-named-tokens'
 
 /**
@@ -251,6 +252,13 @@ export interface CollectionEntryRecord {
    * on any entry whose editor chose a one-off byline instead of a record.
    */
   authorId?: string
+  /**
+   * The resolved author record, attached by the tenant runtime alongside the
+   * `authorName` it denormalizes (`get-collection-content.ts`). Carries the
+   * portrait, which is why the byline can show the author's own face rather
+   * than the site's mark — see {@link expandCollectionEntryMeta}.
+   */
+  author?: ContentAuthorRecord | null
   body?: string
   coverImage?: string
   /** Search-result title override (AGL-582); falls back to `title`. */
@@ -1407,6 +1415,26 @@ export function expandCollectionEntryMeta<
       }
       if (!values[key]) continue
       filled[key] = values[key]
+    }
+    // The byline avatar follows the BYLINE, and is the second narrow
+    // exception to "an authored value always wins" (after `dateFormat`).
+    //
+    // `avatarImage` was introduced as a block-level pick because entries then
+    // carried a byline STRING and no portrait anywhere, so the site's brand
+    // mark chosen once on the template was the only answer available. Custom
+    // authors changed that: an entry resolves to a record, and a record has
+    // an `image`. Keeping the authored mark in front of it would print the
+    // company logo beside a named person — the wrong face, on every post that
+    // person wrote, which is worse than the generic mark it was standing in
+    // for.
+    //
+    // Deliberately narrow, so nothing else moves: only a resolved author
+    // RECORD that actually carries an image displaces the authored value. A
+    // legacy string byline, an author with no portrait, and an entry with no
+    // author at all all leave the template's mark exactly where it was.
+    const authorImage = String(entry.author?.image ?? '').trim()
+    if (authorImage && props['showAvatar'] !== false) {
+      filled['avatarImage'] = authorImage
     }
     if (!Object.keys(filled).length) continue
     next[containerId] = { ...container, props: { ...props, ...filled } as any }

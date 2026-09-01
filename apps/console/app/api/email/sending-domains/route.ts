@@ -23,6 +23,7 @@ import {
   listSendingDomains,
   lockdownRefusal,
   readDmarcPolicy,
+  readTrackingCaaNeed,
   releaseSendingDomain,
   requestSendingDomain,
   verifySendingDomain,
@@ -31,10 +32,46 @@ import {
   dmarcRecommendation,
   formatSendingRecord,
   sendingDnsRecords,
+  sendingTrackingCertAuthority,
+  type SendingDnsRecord,
 } from '@aglyn/shared-util-email'
 import { issueSendingDomainRecords } from '../../../../utils/server/issue-sending-domain'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * The records for one domain, with the CAA shown only to a domain that needs
+ * it.
+ *
+ * `sendingDnsRecords` is pure and cannot ask DNS anything, so the decision
+ * lives here beside the DMARC read — the same shape, for the same reason: a
+ * fact about the customer's live zone that changes what we tell them, and
+ * that a pure generator must not pretend to know.
+ *
+ * ⚠️ The CAA is the one record in the set that can BREAK something. It
+ * restricts which authorities may issue a certificate for a name, and the
+ * lookup stops at the first name in the tree publishing any — so a domain
+ * with none needs nothing, and pasting one in would be the change that starts
+ * restricting whatever else renews there. Shipping it with a cautionary note
+ * and hoping it is read is not the same as not shipping it: the record is
+ * dropped outright unless the zone already publishes CAA that would refuse
+ * the tracking host's certificate.
+ *
+ * An unreachable lookup drops it too. "We could not tell" must resolve toward
+ * the instruction that cannot hurt.
+ */
+async function recordsFor(
+  record: Parameters<typeof sendingDnsRecords>[0],
+): Promise<SendingDnsRecord[]> {
+  const records = sendingDnsRecords(record)
+  if (!records.some((entry) => entry.purpose === 'tracking-caa')) return records
+  const need = await readTrackingCaaNeed(
+    record.domain,
+    sendingTrackingCertAuthority(),
+  )
+  if (need === 'must-add') return records
+  return records.filter((entry) => entry.purpose !== 'tracking-caa')
+}
 
 /**
  * The records a customer must publish to send as their own domain, and the
@@ -151,7 +188,7 @@ async function handler(request: Request): Promise<Response> {
     return Response.json({
       domains: await Promise.all(
         domains.map(async (record) => {
-          const records = sendingDnsRecords(record)
+          const records = await recordsFor(record)
           return {
             ...record,
             records,
@@ -203,7 +240,7 @@ async function handler(request: Request): Promise<Response> {
       status: result.record?.status ?? null,
       verified: result.record?.status === 'verified',
       missing: result.missing,
-      records: result.record ? sendingDnsRecords(result.record) : [],
+      records: result.record ? await recordsFor(result.record) : [],
       dmarc: await readDmarcPolicy(domain),
     })
   }
@@ -224,7 +261,7 @@ async function handler(request: Request): Promise<Response> {
    * which is exactly what `pendingProvider` below reports.
    */
   const issued = await issueSendingDomainRecords({ orgId, record: result.record })
-  const records = sendingDnsRecords(issued.record)
+  const records = await recordsFor(issued.record)
   return Response.json(
     {
       ...issued.record,

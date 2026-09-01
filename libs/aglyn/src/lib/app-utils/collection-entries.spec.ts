@@ -1944,6 +1944,69 @@ describe('expandCollectionEntryMeta (AGL-1385)', () => {
     expect(nodes['meta'].props.tags).toBe('forms, datasets')
   })
 
+  it("shows the author's own portrait instead of the template's mark", () => {
+    // The live blogEntryTmpl pins the SITE's brand mark on the block, chosen
+    // when a byline was a string and no portrait existed anywhere. Once the
+    // entry resolves to an author record with an image, the mark is the wrong
+    // face beside a named person.
+    const authored = metaNodes()
+    authored['meta'].props = {
+      ...authored['meta'].props,
+      avatarImage: 'media:org:jWmGooWE3L/brandMark',
+    }
+    const withAuthor = {
+      ...entry,
+      author: { name: 'Zach Gover', image: 'media:org:jWmGooWE3L/portrait' },
+    }
+
+    const nodes = expandCollectionEntryMeta(authored, withAuthor, categories)
+
+    expect(nodes['meta'].props.avatarImage).toBe('media:org:jWmGooWE3L/portrait')
+  })
+
+  it("keeps the template's mark when the author carries no portrait", () => {
+    // Narrow on purpose: a legacy string byline, or a record with no image,
+    // must leave the block exactly as authored.
+    const authored = metaNodes()
+    authored['meta'].props = {
+      ...authored['meta'].props,
+      avatarImage: 'media:org:jWmGooWE3L/brandMark',
+    }
+
+    const legacy = expandCollectionEntryMeta(
+      authored,
+      { ...entry, authorName: 'The Aglyn Team' },
+      categories,
+    )
+    expect(legacy['meta'].props.avatarImage).toBe(
+      'media:org:jWmGooWE3L/brandMark',
+    )
+
+    const imageless = expandCollectionEntryMeta(
+      authored,
+      { ...entry, author: { name: 'Zach Gover' } },
+      categories,
+    )
+    expect(imageless['meta'].props.avatarImage).toBe(
+      'media:org:jWmGooWE3L/brandMark',
+    )
+  })
+
+  it('leaves the avatar alone when the block hides it', () => {
+    // `showAvatar: false` is the author saying "no face here"; a portrait
+    // arriving later must not turn it back on.
+    const hidden = metaNodes()
+    hidden['meta'].props = { ...hidden['meta'].props, showAvatar: false }
+
+    const nodes = expandCollectionEntryMeta(
+      hidden,
+      { ...entry, author: { name: 'Zach Gover', image: 'media:x/portrait' } },
+      categories,
+    )
+
+    expect(nodes['meta'].props.avatarImage).toBeUndefined()
+  })
+
   it('skips the per-entry clones a listing block produced', () => {
     // A card inside a Collection entries block resolves its OWN entry's
     // tokens; stamping the routed entry here would date every card the same.

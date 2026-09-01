@@ -261,7 +261,16 @@ async function handler(request: Request): Promise<Response> {
        * slot either.
        */
       const result = await eraseOrg(org.id, {
-        tearDownSendingDomain: teardownSendingDomain,
+        /*
+         * `immediate`, and this is the one caller that passes it. A tracked
+         * sending domain is ordinarily held before release so the links in
+         * mail it already sent keep resolving — but an erasure has a legal
+         * clock on it, and a person asking to be erased outranks a link in
+         * somebody's inbox. The hold would turn a measurement convenience
+         * into a compliance failure.
+         */
+        tearDownSendingDomain: (teardown) =>
+          teardownSendingDomain(teardown, { immediate: true }),
       }).catch((error) => {
         console.error(`run-erasures: erasure failed for ${org.id}`, error)
         return { ok: false, skippedReason: 'erase-failed' }

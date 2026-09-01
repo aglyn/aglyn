@@ -297,6 +297,9 @@ describe('erasing a site releases its sending domain', () => {
       domain: DOMAIN,
       providerDomainId: PROVIDER_ID,
       dkimSelector: SELECTOR,
+      // Read even when absent, because it decides WHEN the domain may be
+      // released — see the tracked-link hold in `teardownSendingDomain`.
+      trackingTarget: null,
     })
 
     expect(result.sendingDomain).toBe('released')
@@ -448,6 +451,9 @@ describe('a vendor that refuses does not hold up the erasure', () => {
       domain: DOMAIN,
       providerDomainId: PROVIDER_ID,
       dkimSelector: SELECTOR,
+      // Read even when absent, because it decides WHEN the domain may be
+      // released — see the tracked-link hold in `teardownSendingDomain`.
+      trackingTarget: null,
     })
   })
 

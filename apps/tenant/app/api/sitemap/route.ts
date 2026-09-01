@@ -309,9 +309,16 @@ async function buildSitemapUrls(
         if (!categorySlug) continue
         urls.push(`${base}${collectionListUrl({ collectionSlug, categorySlug })}`)
       }
+      // `select('slug')` for the same reason the screens read above carries
+      // one: a sitemap needs an address per entry and nothing else, while an
+      // entry document carries the whole post body. Firestore bills the
+      // document either way, so this buys no reads — it stops 200 articles'
+      // worth of prose crossing the wire and being deserialized to build a
+      // list of URLs.
       const entries = await docSnapshot.ref
         .collection('entries')
         .where('status', '==', 'published')
+        .select('slug')
         .limit(200)
         .get()
       for (const entryDoc of entries.docs) {

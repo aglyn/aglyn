@@ -2198,6 +2198,34 @@ export const collectionPresets: Aglyn.PresetSchema[] = [
     },
   },
   {
+    // Every author-placeable component needs a preset: the element drawer is
+    // built from PRESETS alone (`ComponentManager.schemasByCategory` iterates
+    // `this.presets`), so a component with only a schema renders correctly
+    // once a node exists but can never be put on a canvas by clicking.
+    //
+    // This one earns its place in the drawer because the entries block's own
+    // search field cannot leave that block, and the toolbar row wants the
+    // search beside the category pills rather than above the entries.
+    $id: generatePresetId(SEARCH_ID),
+    type: Aglyn.NodeType.PRESET,
+    displayName: 'Collection Search',
+    pluginId: BUNDLE_ID,
+    description:
+      'Search box for a collection, with a dropdown of matching entries',
+    category: Aglyn.ComponentCategory.NAVIGATION,
+    icon: { path: mdiMagnify.path, sx: { color: 'secondary.main' } },
+    data: {
+      $id: null,
+      componentId: SEARCH_ID,
+      pluginId: BUNDLE_ID,
+      // Deliberately no seeded props. Both attributes read blank as a real
+      // choice — `collectionSlug` blank means "take the collection from the
+      // URL", which is correct on the list templates this block is for, and
+      // `searchPlaceholder` blank means the designed "Search posts…".
+      props: {},
+    },
+  },
+  {
     $id: generatePresetId(ENTRY_META_ID),
     type: Aglyn.NodeType.PRESET,
     displayName: 'Entry Meta',

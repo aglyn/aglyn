@@ -82,6 +82,8 @@ and documents the three separate issues that came from breaking it.
 | **DKIM** | `<issued selector>._domainkey.<domain>` — `aglyn-{orgId}` until a provider names its own | `p=<issued public key>` | yes |
 | **Return path** | `send.<domain>` | `MX 10 feedback-smtp.us-east-1.amazonses.com` | yes |
 | **DMARC** | `_dmarc.<domain>` | **read, never written** — `v=DMARC1; p=none; rua=…` offered as a suggestion | no |
+| **Tracking** | `links.<domain>` | `CNAME <issued tracking host>` — the provider's, like DKIM | no |
+| **Tracking CAA** | `<domain>` | `0 issue "amazon.com"` — only for a domain that already publishes CAA | no |
 
 SPF and the return path sit on the `send.` subdomain deliberately: the
 customer's existing root SPF keeps authenticating their Workspace or Microsoft
@@ -91,6 +93,89 @@ closed and is easy to exhaust.
 The SPF include and return-path host are configurable
 (`AGLYN_EMAIL_SPF_INCLUDE`, `AGLYN_EMAIL_RETURN_PATH_HOST`) so a self-host
 operator fronting a different provider is not stuck with ours.
+
+### Click tracking, and why its records never block verification
+
+A provider measures a click by rewriting every `<a href>` in the HTML part to
+point at a tracking host on the sending domain and redirecting from it. Both
+`click_tracking` and `open_tracking` default **off** at the provider, and
+tracking only engages once a tracking subdomain is verified — so a domain
+created without them reports a click rate of exactly 0%, forever. That reads
+on a dashboard as an audience that does not click rather than as a domain that
+cannot count, which is why it survived: the same shape as the `"html": ""`
+defect, one layer up.
+
+`POST /domains` therefore asks for both flags and the `links` subdomain at
+creation, and the CNAME target comes back on the response like the DKIM key.
+It is the provider's infrastructure, so it is stored on the record
+(`trackingTarget`) rather than derived — a value of ours would point a
+customer's zone at a host we do not operate.
+
+Both records are `required: false`, and that is load-bearing in two
+directions. Verification is about AUTHENTICATION — whether a domain can prove
+it sent the mail — so a customer with SPF, DKIM and the return path published
+sends perfectly well and must not sit at `requested` over a record that only
+decides whether clicks can be counted. And making them required would
+un-verify every domain already verified without them.
+
+That leaves a gap the required set cannot express: a platform subdomain lives
+in a zone we own, where there is nobody to ask and no reason to leave the
+click rate at zero. `sendingDomainPublishableRecords` is what the provisioner
+writes — the required set plus the tracking CNAME. Reusing
+`sendingDomainRequiredRecords` there is what left every platform subdomain
+untracked: one flag was answering two different questions, and the
+conservative answer to "does verification wait on this" silently decided "do
+we publish it".
+
+**⚠️ The CAA record is the one that can hurt, so it is only shown to a domain
+that needs it.** CAA restricts which authorities may issue a certificate for a
+name, and the lookup stops at the first name in the tree that publishes any. A
+domain publishing no CAA today needs nothing — any authority may already issue
+— and pasting this record in would be the change that *starts* restricting
+them, breaking whatever else renews on that name.
+
+Shipping it with a cautionary note and hoping the note is read is not the same
+as not shipping it. `sendingDnsRecords` is pure and cannot ask DNS anything,
+so the route decides: `readTrackingCaaNeed` walks up from the tracking host
+exactly as a certificate authority does, stops at the first name publishing
+any record, and answers `not-needed`, `must-add` or `satisfied`. The record is
+returned **only** for `must-add`. An unreachable lookup drops it too — "we
+could not tell" has to resolve toward the instruction that cannot hurt.
+
+When it is shown, it is emitted on the sending domain rather than the
+registrable root, so a customer following it verbatim scopes the permission to
+the name we put a tracking host under; deriving the root would need a
+public-suffix list this library does not have, and a guess prints a record for
+the wrong name.
+
+For `aglyn.app` the CAA is published **once at the zone root**, alongside the
+`letsencrypt.org`, `sectigo.com` and `pki.goog` entries that were already
+there. Adding a fourth `issue` entry widens the permitted set; it does not
+narrow it, so Vercel's certificates for every tenant site are untouched. That
+one record covers every pool member and every future dedicated subdomain, so
+the per-domain CAA is deliberately excluded from the publishable set.
+
+**Tearing a domain down would break links in mail already delivered, so it
+waits.** A tracking subdomain cannot be removed at the provider, only changed,
+precisely because live mail points at it — and `release()` deletes the whole
+domain object, taking the tracking host with it. A same-day teardown therefore
+does not merely stop future tracking, it retroactively breaks links for
+recipients who did nothing.
+
+`teardownSendingDomain` holds a domain that carries a `trackingTarget` for
+`AGLYN_SENDING_TRACKING_RETENTION_DAYS` (default 30) before releasing it,
+stamping `trackingRetentionUntilMs` on the record the first time it sees it.
+The stamp is what makes the hold terminate: the reaper re-infers an orphan on
+every pass, so a deadline recomputed each run would hold the domain for ever.
+The daily reaper finishes the job once the window is up, and reports
+`tracking-retention` meanwhile.
+
+Two things deliberately do not wait. An **erasure** passes `immediate` — a
+person asking to be erased outranks a link in somebody's inbox, and a
+retention window that delayed it would turn a measurement convenience into a
+compliance failure. An **untracked** domain has no links to preserve and is
+released the same day, so the hold never spends a scarce provider slot for
+nothing. The pool pays none of this either: pool members are never released.
 
 ### DMARC is read, never written
 

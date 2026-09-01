@@ -377,6 +377,15 @@ export interface HostSendingDomainTeardown {
    * exists, ready to be inherited by whoever claims the label next.
    */
   dkimSelector: string | null
+  /**
+   * The provider's tracking host, when this domain had one.
+   *
+   * Read because it changes WHEN the domain may be released, not just what is
+   * deleted: links in mail this domain has already sent point at that host,
+   * and deleting the domain object takes it with them. See the retention
+   * window in `teardownSendingDomain`.
+   */
+  trackingTarget: string | null
 }
 
 /**
@@ -410,6 +419,7 @@ export async function readHostSendingTeardown(
 
   let providerDomainId: string | null = null
   let dkimSelector: string | null = null
+  let trackingTarget: string | null = null
   if (orgId && domain) {
     const record = readSendingDomainRecord(
       await firestore()
@@ -421,9 +431,18 @@ export async function readHostSendingTeardown(
     )
     providerDomainId = record?.providerDomainId ?? null
     dkimSelector = String(record?.dkimSelector ?? '').trim() || null
+    trackingTarget = String(record?.trackingTarget ?? '').trim() || null
   }
 
-  return { hostId: id, orgId, label, domain, providerDomainId, dkimSelector }
+  return {
+    hostId: id,
+    orgId,
+    label,
+    domain,
+    providerDomainId,
+    dkimSelector,
+    trackingTarget,
+  }
 }
 
 /**

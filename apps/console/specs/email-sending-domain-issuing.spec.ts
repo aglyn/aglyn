@@ -39,6 +39,8 @@
 const DOMAIN = 'acme.com'
 const PUBLIC_KEY = 'MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCexamplekeymaterial'
 const KEY = 're_domains_notarealkey_0123456789abcdef'
+/** The host the provider redirects tracked link clicks through. */
+const TRACKING_TARGET = 'links1.resend-dns.com'
 
 const mockRecordIssued = jest.fn()
 const mockRecordFailure = jest.fn()
@@ -229,6 +231,12 @@ describe('with a credential', () => {
     name: DOMAIN,
     records: [
       { record: 'DKIM', name: 'resend._domainkey', type: 'TXT', value: `p=${PUBLIC_KEY}` },
+      {
+        record: 'Tracking',
+        name: `links.${DOMAIN}`,
+        type: 'CNAME',
+        value: TRACKING_TARGET,
+      },
     ],
     ...overrides,
   })
@@ -257,10 +265,77 @@ describe('with a credential', () => {
       dkimPublicKey: PUBLIC_KEY,
       dkimSelector: 'resend',
       providerDomainId: 'domain-id-1',
+      trackingTarget: TRACKING_TARGET,
     })
     // The return path is OURS — `sendingReturnPathHost()` — so nothing from
     // the provider's own SPF guidance is copied onto the record.
     expect(mockRecordIssued.mock.calls[0][0]).not.toHaveProperty('returnPathHost')
+  })
+
+  it('ASKS for click tracking, because the provider defaults it off', async () => {
+    /*
+     * The click rate is 0% for a domain with no tracking host, and 0% reads
+     * as an audience that does not click rather than as a domain that cannot
+     * count — so a domain created without this is wrong in a way nobody sees.
+     */
+    stubbed = [{ ok: true, status: 200, json: resendPayload() }]
+    mockRecordIssued.mockResolvedValue({
+      record: { ...requestedRecord(), status: 'records-issued', dkimPublicKey: PUBLIC_KEY },
+      error: null,
+      status: 200,
+    })
+
+    await issueSendingDomainRecords({
+      orgId: 'org-1',
+      record: requestedRecord() as never,
+    })
+
+    const body = JSON.parse(String((global.fetch as any).mock.calls[0][1].body))
+    expect(body).toMatchObject({
+      name: DOMAIN,
+      click_tracking: true,
+      open_tracking: true,
+      tracking_subdomain: 'links',
+    })
+  })
+
+  it('stores NO tracking target when the provider issued no tracking host', async () => {
+    /*
+     * A domain created before tracking was asked for, adopted through the
+     * duplicate path. Inventing a target would publish a CNAME at a host the
+     * provider does not redirect from — a link that resolves to nothing,
+     * which is worse than an unmeasured click.
+     */
+    stubbed = [
+      {
+        ok: true,
+        status: 200,
+        json: resendPayload({
+          records: [
+            {
+              record: 'DKIM',
+              name: 'resend._domainkey',
+              type: 'TXT',
+              value: `p=${PUBLIC_KEY}`,
+            },
+          ],
+        }),
+      },
+    ]
+    mockRecordIssued.mockResolvedValue({
+      record: { ...requestedRecord(), status: 'records-issued', dkimPublicKey: PUBLIC_KEY },
+      error: null,
+      status: 200,
+    })
+
+    await issueSendingDomainRecords({
+      orgId: 'org-1',
+      record: requestedRecord() as never,
+    })
+
+    expect(mockRecordIssued.mock.calls[0][0]).toMatchObject({
+      trackingTarget: null,
+    })
   })
 
   /*========================================

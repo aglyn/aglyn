@@ -37,12 +37,25 @@ import {
 } from '@aglyn/tenant-data-admin/render-cache'
 
 /**
- * Only the compose-time source is cached (AGL-1302): a Collection entries
- * block in a shared layout re-read up to ~100 entry docs on EVERY page of
- * the site. The routed-page reader (`getCollectionContent`) stays uncached —
- * it is amortized by the page's own ISR entry, and its scheduled-entry flip
- * (`flipDueEntry`) is a write a cache must not suppress. The 60s TTL means
- * a scheduled entry's lazy flip waits at most one extra window.
+ * ONE cached read per collection, shared by every surface that lists it
+ * (AGL-1302).
+ *
+ * It began as the compose-time source only: a Collection entries block in a
+ * shared layout re-read up to ~100 entry docs on EVERY page of the site. The
+ * routed listing was left out on the argument that the page's own ISR entry
+ * amortized it — which is true of ONE address and false of a collection,
+ * because a collection is not one address. `/blog`, `/blog/page/2…10`, a
+ * `/blog/category/{slug}` per category and `/blog/rss.xml` are all the same
+ * data, each paying its own `1 + entries + authors` per window, beside a
+ * cache already holding exactly that.
+ *
+ * The other half of that argument was real and is answered rather than
+ * dropped: `flipDueEntry` is a write, and nothing else publishes a content
+ * entry, so a cache that stored a collection with a schedule still pending
+ * would suppress the render that publishes it. `getPublishedCollectionSource`
+ * therefore declines to STORE exactly those collections — see its `store`
+ * predicate — which leaves scheduled publishing on the render window it has
+ * always been on, and puts everything else on this TTL.
  */
 const COLLECTION_SOURCE_TTL_SECONDS = PUBLISHED_SITE_DATA_TTL_SECONDS
 
@@ -166,6 +179,29 @@ function mapCollectionCategories(value: unknown): CollectionCategory[] {
         item.name.trim() !== '',
     )
     .map((item) => ({ id: item.id, name: item.name }))
+}
+
+/**
+ * The routed view of a collection DOCUMENT (AGL-551): its name and the
+ * template screens its list and entry routes render through.
+ *
+ * `slug` is the slug that was ASKED FOR rather than the one stored, which is
+ * what every caller of this file has always returned — a listing has to build
+ * its own URLs out of the segment the reader is standing on.
+ */
+function mapCollectionDoc(
+  collectionDoc: FirebaseFirestore.QueryDocumentSnapshot,
+  collectionSlug: string,
+): CollectionContent['collection'] {
+  return {
+    $id: collectionDoc.id,
+    displayName: collectionDoc.get('displayName') ?? collectionSlug,
+    slug: collectionSlug,
+    templateScreenId: collectionDoc.get('templateScreenId') ?? undefined,
+    listScreenId: collectionDoc.get('listScreenId') ?? undefined,
+    entryScreenId: collectionDoc.get('entryScreenId') ?? undefined,
+    categories: mapCollectionCategories(collectionDoc.get('categories')),
+  }
 }
 
 /**
@@ -444,6 +480,20 @@ interface LiveEntriesRead {
   entries: CollectionEntrySummary[]
   /** The query came back holding its own `.limit()`. */
   reachedBound: boolean
+  /**
+   * The read saw a `scheduled` entry whose `publishAt` has NOT arrived and
+   * which has not been terminally refused — a schedule this collection is
+   * still waiting on.
+   *
+   * Nothing promotes a content entry on a beat: `publish-schedule-job.ts` is
+   * screens-only, so `isLive`/`flipDueEntry` running during a render is the
+   * entire mechanism. A cached source therefore does not merely serve stale
+   * entries, it withholds the render that would have published one, for as
+   * long as the entry stays cached. This is what lets the cache decline to
+   * store exactly those collections, so a schedule keeps landing on the
+   * render window rather than on the TTL.
+   */
+  pendingSchedule: boolean
 }
 
 /**
@@ -490,6 +540,18 @@ async function listLiveEntries(
   // one line down that number is gone for good.
   const reachedBound = entriesQuery.docs.length >= COLLECTION_SOURCE_MAX
 
+  // Also measured on the RAW docs, and for the same reason: a not-yet-due
+  // entry is filtered out one line down, so this is the last place that can
+  // see one at all.
+  const pendingSchedule = entriesQuery.docs.some((entryDoc) => {
+    const value = entryDoc.data()
+    return (
+      value['status'] === 'scheduled' &&
+      !scheduleAlreadyRefused(value) &&
+      !isDueScheduled(value)
+    )
+  })
+
   const entries = entriesQuery.docs
     .filter((entryDoc) => isLive(entryDoc.data(), permission))
     .map((entryDoc) => {
@@ -511,13 +573,32 @@ async function listLiveEntries(
       (a, b) => (b.publishedAt?.seconds ?? 0) - (a.publishedAt?.seconds ?? 0),
     )
 
-  return { entries, reachedBound }
+  return { entries, reachedBound, pendingSchedule }
 }
 
 /** Compose-time view of a collection: its live entries and its taxonomy. */
 export interface PublishedCollectionSource {
+  /**
+   * The collection DOCUMENT this source was read from — its display name and
+   * its template screen ids — or null when the slug names no content
+   * collection.
+   *
+   * Carried so a routed listing can be served ENTIRELY from this cached
+   * source. `getCollectionContent` used to resolve the same document itself
+   * and then read the same entries again uncached, which meant `/blog`,
+   * every `/blog/page/{n}`, every `/blog/category/{slug}` and the RSS feed
+   * each paid a full collection read per regeneration while the identical
+   * data already sat in this cache for every OTHER page on the site.
+   */
+  collection: CollectionContent['collection']
   entries: CollectionEntrySummary[]
   categories: CollectionCategory[]
+  /**
+   * Whether the read saw a schedule it is still waiting on — see
+   * {@link LiveEntriesRead.pendingSchedule}. Never stored, only consulted by
+   * the cache above, so no consumer has to know about it.
+   */
+  pendingSchedule?: boolean
   /**
    * Whether the entries read stopped at {@link COLLECTION_SOURCE_MAX}
    * (AGL-1516) — carried out of the loader because `entries.length` cannot
@@ -548,6 +629,20 @@ export async function getPublishedCollectionSource(options: {
       revalidate: COLLECTION_SOURCE_TTL_SECONDS,
       tags: [tenantDataTag(options.hostId)],
       read: () => readPublishedCollectionSource(options),
+      // A collection with a schedule still pending is SERVED but not STORED.
+      //
+      // No beat publishes a content entry — `flipDueEntry` during a render is
+      // the whole mechanism — so storing this source would suppress the very
+      // renders that would have noticed the entry coming due, and the post
+      // would wait out the TTL rather than land at its time. Declining to
+      // store leaves those collections exactly as uncached as they were
+      // before this cache existed, which is the only cost this cache is not
+      // allowed to reduce.
+      //
+      // Also refuses a collection that resolved to nothing, for the reason
+      // `withRenderCache` states about negatives generally: a slug that
+      // misses once must not miss for an hour.
+      store: (value) => Boolean(value.collection) && !value.pendingSchedule,
     })
   } catch (error) {
     console.error(error)
@@ -567,9 +662,14 @@ async function readPublishedCollectionSource(
       options.collectionSlug,
     )
     if (!collectionDoc) {
-      return { entries: [], categories: [], reachedBound: false }
+      return {
+        collection: null,
+        entries: [],
+        categories: [],
+        reachedBound: false,
+      }
     }
-    const { entries, reachedBound } = await listLiveEntries(
+    const { entries, reachedBound, pendingSchedule } = await listLiveEntries(
       collectionDoc.ref.collection('entries'),
       options.hostId,
     )
@@ -580,13 +680,20 @@ async function readPublishedCollectionSource(
     // read amortized across every page of the site that carries the block.
     await attachEntryAuthors(options.hostId, entries)
     return {
+      collection: mapCollectionDoc(collectionDoc, options.collectionSlug),
       entries,
       categories: mapCollectionCategories(collectionDoc.get('categories')),
       reachedBound,
+      ...(pendingSchedule ? { pendingSchedule: true } : {}),
     }
   } catch (error) {
     console.error(error)
-    return { entries: [], categories: [], reachedBound: false }
+    return {
+      collection: null,
+      entries: [],
+      categories: [],
+      reachedBound: false,
+    }
   }
 }
 
@@ -596,6 +703,56 @@ export async function getPublishedCollectionEntries(options: {
   collectionSlug: string
 }): Promise<CollectionEntrySummary[]> {
   return (await getPublishedCollectionSource(options)).entries
+}
+
+/**
+ * Narrows a listing to its routed category and stamps its pagination
+ * (AGL-1321 / AGL-620).
+ *
+ * Category first, ALWAYS: the two have to describe the same set. Counting
+ * pages over the whole collection and then filtering would advertise pages
+ * that render empty and hide entries that exist.
+ *
+ * `entriesReachedBound` is read by the caller BEFORE this runs, because a
+ * category route hands its already-narrowed entries to compose and the
+ * entries block's "measure the raw set, not the filtered one" rule then has
+ * nothing raw left to measure (AGL-1516).
+ */
+function applyCategoryAndPagination(
+  data: CollectionContent,
+  options: { page?: number; perPage?: number; categorySlug?: string },
+): void {
+  const { page = 1, perPage } = options
+  const routedCategory = (options.categorySlug ?? '').trim()
+  if (routedCategory) {
+    const match = resolveCollectionCategoryBySlug(
+      data.collection?.categories,
+      routedCategory,
+    )
+    data.category = {
+      slug: collectionCategorySlug(routedCategory),
+      ...(match ? { id: match.id } : {}),
+      name: match?.name ?? routedCategory,
+      known: Boolean(match),
+    }
+    data.entries = data.entries.filter((entry) =>
+      entryMatchesCategoryRoute(
+        entry,
+        { slug: routedCategory, ...(match ? { category: match } : {}) },
+        data.collection?.categories,
+      ),
+    )
+  }
+
+  if (perPage && perPage > 0) {
+    const totalEntries = data.entries.length
+    data.pagination = {
+      page,
+      perPage,
+      totalEntries,
+      totalPages: collectionTotalPages(totalEntries, perPage),
+    }
+  }
 }
 
 /**
@@ -619,7 +776,7 @@ export async function getCollectionContent(options: {
    */
   categorySlug?: string
 }): Promise<CollectionContent> {
-  const { hostId, collectionSlug, entrySlug, page = 1, perPage } = options
+  const { hostId, collectionSlug, entrySlug } = options
   const data: CollectionContent = {
     collection: null,
     entries: [],
@@ -629,103 +786,72 @@ export async function getCollectionContent(options: {
     error: null,
   }
   try {
-    const collectionDoc = await findContentCollection(hostId, collectionSlug)
-    if (!collectionDoc) return data
-    data.collection = {
-      $id: collectionDoc.id,
-      displayName: collectionDoc.get('displayName') ?? collectionSlug,
-      slug: collectionSlug,
-      templateScreenId: collectionDoc.get('templateScreenId') ?? undefined,
-      listScreenId: collectionDoc.get('listScreenId') ?? undefined,
-      entryScreenId: collectionDoc.get('entryScreenId') ?? undefined,
-      categories: mapCollectionCategories(collectionDoc.get('categories')),
-    }
-
-    const entriesRef = collectionDoc.ref.collection('entries')
-    if (entrySlug) {
-      const entryQuery = await entriesRef
-        .where('slug', '==', entrySlug)
-        .limit(5)
-        .get()
-      // Same two-step as `listLiveEntries`: only pay for the org read when
-      // something is due, and record the refusal on its own pass because a
-      // refused entry never becomes the `entryDoc` below (AGL-471).
-      const dueHere = entryQuery.docs.filter((docSnapshot) =>
-        isDueScheduled(docSnapshot.data()),
-      )
-      const permission: SchedulePermission = dueHere.length
-        ? await scheduledPublishingPermission(hostId)
-        : 'allowed'
-      if (permission !== 'allowed') {
-        for (const docSnapshot of dueHere) {
-          flipDueEntry(docSnapshot.ref, docSnapshot.data(), permission)
-        }
-      }
-      const entryDoc = entryQuery.docs.find((docSnapshot) =>
-        isLive(docSnapshot.data(), permission),
-      )
-      if (entryDoc) {
-        const value = entryDoc.data()
-        flipDueEntry(entryDoc.ref, value, permission)
-        data.entry = {
-          $id: entryDoc.id,
-          title: value['title'] ?? entrySlug,
-          slug: entrySlug,
-          body: value['body'] ?? '',
-          ...mapEntryFields(value),
-          publishedAt: (value['publishedAt'] ?? value['publishAt'])
-            ? {
-                seconds: (value['publishedAt'] ?? value['publishAt']).seconds,
-              }
-            : null,
-        }
-        await attachEntryAuthors(hostId, [data.entry])
-      }
+    // A LIST route is served entirely from the CACHED source, which every
+    // other page on the site already shares. It used to resolve the
+    // collection and re-read its entries here, uncached, on every
+    // regeneration of every listing address — `/blog`, nine `/blog/page/{n}`,
+    // one `/blog/category/{slug}` per category, and the RSS feed — so a
+    // collection of N live entries cost `1 + N + authors` reads per address
+    // per window, for data byte-identical to what the cache was already
+    // holding for the home page's "Latest posts" rail.
+    //
+    // An ENTRY route stays where it was: it reads ONE document by slug and
+    // has nothing to share.
+    if (!entrySlug) {
+      const source = await getPublishedCollectionSource({
+        hostId,
+        collectionSlug,
+      })
+      if (!source.collection) return data
+      data.collection = source.collection
+      data.entries = source.entries
+      data.entriesReachedBound = source.reachedBound
+      applyCategoryAndPagination(data, options)
       return data
     }
 
-    const read = await listLiveEntries(entriesRef, hostId)
-    data.entries = read.entries
-    // Recorded BEFORE the category filter below (AGL-1516). A category route
-    // hands its already-narrowed `entries` to compose, so the entries block's
-    // "measure the raw set, not the filtered one" rule has nothing raw left to
-    // measure — this flag is what survives that narrowing.
-    data.entriesReachedBound = read.reachedBound
-    await attachEntryAuthors(hostId, data.entries)
+    const collectionDoc = await findContentCollection(hostId, collectionSlug)
+    if (!collectionDoc) return data
+    data.collection = mapCollectionDoc(collectionDoc, collectionSlug)
 
-    // Category filter (AGL-1321). Applied HERE, before pagination, because
-    // the two have to describe the same set: counting pages over the whole
-    // collection and then filtering would advertise pages that render empty
-    // and hide entries that exist.
-    const routedCategory = (options.categorySlug ?? '').trim()
-    if (routedCategory) {
-      const match = resolveCollectionCategoryBySlug(
-        data.collection.categories,
-        routedCategory,
-      )
-      data.category = {
-        slug: collectionCategorySlug(routedCategory),
-        ...(match ? { id: match.id } : {}),
-        name: match?.name ?? routedCategory,
-        known: Boolean(match),
+    const entryQuery = await collectionDoc.ref
+      .collection('entries')
+      .where('slug', '==', entrySlug)
+      .limit(5)
+      .get()
+    // Same two-step as `listLiveEntries`: only pay for the org read when
+    // something is due, and record the refusal on its own pass because a
+    // refused entry never becomes the `entryDoc` below (AGL-471).
+    const dueHere = entryQuery.docs.filter((docSnapshot) =>
+      isDueScheduled(docSnapshot.data()),
+    )
+    const permission: SchedulePermission = dueHere.length
+      ? await scheduledPublishingPermission(hostId)
+      : 'allowed'
+    if (permission !== 'allowed') {
+      for (const docSnapshot of dueHere) {
+        flipDueEntry(docSnapshot.ref, docSnapshot.data(), permission)
       }
-      data.entries = data.entries.filter((entry) =>
-        entryMatchesCategoryRoute(
-          entry,
-          { slug: routedCategory, ...(match ? { category: match } : {}) },
-          data.collection?.categories,
-        ),
-      )
     }
-
-    if (perPage && perPage > 0) {
-      const totalEntries = data.entries.length
-      data.pagination = {
-        page,
-        perPage,
-        totalEntries,
-        totalPages: collectionTotalPages(totalEntries, perPage),
+    const entryDoc = entryQuery.docs.find((docSnapshot) =>
+      isLive(docSnapshot.data(), permission),
+    )
+    if (entryDoc) {
+      const value = entryDoc.data()
+      flipDueEntry(entryDoc.ref, value, permission)
+      data.entry = {
+        $id: entryDoc.id,
+        title: value['title'] ?? entrySlug,
+        slug: entrySlug,
+        body: value['body'] ?? '',
+        ...mapEntryFields(value),
+        publishedAt: (value['publishedAt'] ?? value['publishAt'])
+          ? {
+              seconds: (value['publishedAt'] ?? value['publishAt']).seconds,
+            }
+          : null,
       }
+      await attachEntryAuthors(hostId, [data.entry])
     }
   } catch (error) {
     console.error(error)

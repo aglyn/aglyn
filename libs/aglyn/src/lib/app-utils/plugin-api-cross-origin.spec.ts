@@ -164,6 +164,82 @@ describe('isCrossOriginPluginWrite', () => {
     ).toBe(true)
   })
 
+  describe('a page whose own referrer policy blanks its Origin', () => {
+    /*
+     * `Referrer-Policy: no-referrer` governs the Origin header on a
+     * navigation, so a top-level form POST from such a page arrives with
+     * `Origin: null` — opaque, and never equal to any host. Every
+     * recipient-facing email page sets that policy on purpose, so a signed
+     * opt-out URL cannot leak through a `Referer`.
+     *
+     * The result was that the preference centre's own Save button was
+     * refused 403 as cross-site while a `fetch()` from the same document
+     * succeeded: the privacy hardening had disabled the control it was
+     * protecting. Reproduced in production on 2026-09-01.
+     */
+    it('ALLOWS the page its own form POST, on the browser’s word', () => {
+      expect(
+        isCrossOriginPluginWrite({
+          path: 'email/preferences',
+          request: req('POST', {
+            origin: 'null',
+            'sec-fetch-site': 'same-origin',
+            host: 'shop.aglyn.app',
+          }),
+        }),
+      ).toBe(false)
+    })
+
+    it('ALLOWS a request the user began themselves', () => {
+      // `none` is a typed URL or a bookmark — no other site involved.
+      expect(
+        isCrossOriginPluginWrite({
+          path: 'email/preferences',
+          request: req('POST', {
+            origin: 'null',
+            'sec-fetch-site': 'none',
+            host: 'shop.aglyn.app',
+          }),
+        }),
+      ).toBe(false)
+    })
+
+    it('STILL refuses an opaque origin with no browser statement', () => {
+      // The sandboxed-iframe shape the module was written to stop. Nothing
+      // vouches for it, so it fails the comparison exactly as before.
+      expect(
+        isCrossOriginPluginWrite({
+          path: 'email/preferences',
+          request: req('POST', {
+            origin: 'null',
+            host: 'shop.aglyn.app',
+          }),
+        }),
+      ).toBe(true)
+    })
+
+    it('STILL refuses when the browser says ANOTHER SITE sent it', () => {
+      /*
+       * The load-bearing half. `sec-fetch-site` is consulted only to allow —
+       * a cross-site value must not become a way in, and an attacker who
+       * sets the header by hand is not a browser and does not get the
+       * allowance either.
+       */
+      for (const site of ['cross-site', 'same-site']) {
+        expect(
+          isCrossOriginPluginWrite({
+            path: 'membership/account',
+            request: req('POST', {
+              origin: 'https://evil.aglyn.app',
+              'sec-fetch-site': site,
+              host: 'victim.aglyn.app',
+            }),
+          }),
+        ).toBe(true)
+      }
+    })
+  })
+
   describe('deliberate exemptions', () => {
     it.each(['GET', 'HEAD', 'OPTIONS'])(
       'leaves a cross-origin %s read alone',

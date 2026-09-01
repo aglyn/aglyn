@@ -192,6 +192,7 @@ export async function readSendingDomainTeardownByLabel(
 
   let providerDomainId = debt.providerDomainId
   let dkimSelector = debt.dkimSelector
+  let trackingTarget: string | null = null
   if (debt.orgId && (!providerDomainId || !dkimSelector)) {
     const record = readSendingDomainRecord(
       await firestore()
@@ -204,6 +205,7 @@ export async function readSendingDomainTeardownByLabel(
     )
     providerDomainId = providerDomainId ?? record?.providerDomainId ?? null
     dkimSelector = dkimSelector ?? (String(record?.dkimSelector ?? '').trim() || null)
+    trackingTarget = String(record?.trackingTarget ?? '').trim() || null
   }
 
   return {
@@ -213,6 +215,7 @@ export async function readSendingDomainTeardownByLabel(
     domain,
     providerDomainId,
     dkimSelector,
+    trackingTarget,
   }
 }
 

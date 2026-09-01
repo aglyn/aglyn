@@ -754,7 +754,7 @@ export function platformSendingLabel(
 
 /** One record to write into the zone, as a DNS API addresses it. */
 export interface PlatformZoneRecord {
-  type: 'TXT' | 'MX'
+  type: 'TXT' | 'MX' | 'CNAME' | 'CAA'
   /**
    * Name RELATIVE to the ZONE — `send.acme.mail`, not
    * `send.acme.mail.aglyn.app`.
@@ -791,7 +791,7 @@ export interface PlatformZoneRecord {
  */
 export function platformZoneRecords(
   records: readonly {
-    type: 'TXT' | 'MX'
+    type: 'TXT' | 'MX' | 'CNAME' | 'CAA'
     name: string
     value: string
     priority?: number
