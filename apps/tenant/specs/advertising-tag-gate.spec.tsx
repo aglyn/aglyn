@@ -39,6 +39,11 @@ import {
   resolveAdvertisingTags,
   revokeAdvertisingTags,
 } from '@aglyn/aglyn/app-utils/advertising-tags'
+import { analyticsMayEmit } from '@aglyn/aglyn/app-utils/analytics-environment'
+import {
+  INTERNAL_TRAFFIC_STORAGE_KEY,
+  INTERNAL_TRAFFIC_VALUE,
+} from '@aglyn/aglyn/app-utils/internal-traffic'
 import { PLATFORM_GA_MEASUREMENT_ID } from '@aglyn/aglyn/app-utils/platform-marketing-host'
 import {
   storeVisitorConsent,
@@ -459,6 +464,141 @@ describe('the advertising-tag gate', () => {
           ),
         ).toHaveLength(0)
       }
+    })
+  })
+
+  describe('(h) a browser we have declared OURS gets no advertising tag', () => {
+    /*
+     * The GA4 data filter cannot do this job, and believing it does is the
+     * trap. That filter is PROPERTY-scoped: it drops `traffic_type: internal`
+     * hits from the GA4 property, and Google Ads, Meta and LinkedIn are
+     * separate products reached by separate requests it never sees.
+     *
+     * Measured on aglyn.com 2026-09-01: a flagged browser's pageview is
+     * correctly absent from GA4 while the SAME pageview still sends
+     * `ccm/collect`, `pagead/1p-user-list` (`is_vtc=1`) and
+     * `viewthroughconversion` to `AW-18401436785`. Excluding ourselves from
+     * the reports while still training the remarketing audiences is the worse
+     * half, because it is the half no report can show.
+     */
+    it('the pure verdict refuses, and the SAME inputs load without the flag', () => {
+      const stored = storeVisitorConsent(HOST_ID, {
+        status: 'accepted',
+        country: 'US',
+        advertising: true,
+      })
+      const production = {
+        nodeEnv: 'production',
+        deployEnv: 'production',
+      } as const
+      // Both directions off ONE fixture, so neither can pass on a typo in the
+      // other's setup — a gate exercised one way only is the shape that ships
+      // broken.
+      expect(
+        resolveAdvertisingTags(OUR_HOST as any, stored, production, false),
+      ).toHaveLength(1)
+      expect(
+        resolveAdvertisingTags(OUR_HOST as any, stored, production, true),
+      ).toHaveLength(0)
+    })
+
+    it('refuses the GOOGLE ADS vendor too — the one actually deployed', () => {
+      const stored = storeVisitorConsent(HOST_ID, {
+        status: 'accepted',
+        country: 'US',
+        advertising: true,
+      })
+      const production = {
+        nodeEnv: 'production',
+        deployEnv: 'production',
+      } as const
+      // The live id, so this case is the deployment and not a near-miss.
+      const host = {
+        ...OUR_HOST,
+        analytics: {
+          ...OUR_HOST.analytics,
+          adTags: { [GOOGLE_ADS_VENDOR.id]: 'AW-18401436785' },
+        },
+      }
+      expect(
+        resolveAdvertisingTags(host as any, stored, production, false),
+      ).toHaveLength(1)
+      expect(
+        resolveAdvertisingTags(host as any, stored, production, true),
+      ).toHaveLength(0)
+    })
+
+    /*
+     * The escape hatch is the other half. `analyticsMayEmit` PASSES under it,
+     * so before this clause a `next dev` or preview build with the hatch on
+     * would have loaded the real `AW-` id and built remarketing audiences out
+     * of our own engineers — the exact hole condition 2 exists to close,
+     * reopened by the thing standing beside it.
+     */
+    it('the non-production escape hatch does not reopen condition 2', () => {
+      const stored = storeVisitorConsent(HOST_ID, {
+        status: 'accepted',
+        country: 'US',
+        advertising: true,
+      })
+      // The hatch on a development build: `analyticsMayEmit` is true here, so
+      // this case reaches condition 6 and nothing earlier can be what stops it.
+      const hatched = {
+        nodeEnv: 'development',
+        deployEnv: 'development',
+        allowNonProduction: '1',
+      } as const
+      expect(analyticsMayEmit(hatched)).toBe(true)
+      expect(
+        resolveAdvertisingTags(OUR_HOST as any, stored, hatched, false),
+      ).toHaveLength(0)
+      // Production with the same un-flagged browser still loads, so the clause
+      // above is the hatch and not a blanket refusal.
+      expect(
+        resolveAdvertisingTags(
+          OUR_HOST as any,
+          stored,
+          { nodeEnv: 'production', deployEnv: 'production' },
+          false,
+        ),
+      ).toHaveLength(1)
+    })
+
+    /*
+     * The WIRE, not the verdict. The test above would keep passing if the
+     * component never consulted the browser at all — it passes the flag in by
+     * hand. This one sets only what a real flagged browser has and renders the
+     * real component, so it fails if the default argument is dropped.
+     */
+    it('and the COMPONENT reads the flag itself, with no tag reaching the document', async () => {
+      storeVisitorConsent(HOST_ID, {
+        status: 'accepted',
+        country: 'US',
+        advertising: true,
+      })
+
+      // Positive control in the same test: this fixture DOES produce a tag.
+      const granted = await renderGate(OUR_HOST)
+      expect(vendorScripts()).toHaveLength(2)
+
+      // Unmount to take the control's own elements back out, so the assertion
+      // below is about the second render and not about cleanup.
+      granted.unmount()
+      expect(vendorScripts()).toHaveLength(0)
+
+      window.localStorage.setItem(
+        INTERNAL_TRAFFIC_STORAGE_KEY,
+        INTERNAL_TRAFFIC_VALUE,
+      )
+      const flagged = await renderGate(OUR_HOST)
+      expect(vendorScripts()).toHaveLength(0)
+
+      // And back, so the zero above is attributable to the FLAG and not to
+      // some once-per-file state that would make any second render empty.
+      flagged.unmount()
+      window.localStorage.removeItem(INTERNAL_TRAFFIC_STORAGE_KEY)
+      await renderGate(OUR_HOST)
+      expect(vendorScripts()).toHaveLength(2)
     })
   })
 
