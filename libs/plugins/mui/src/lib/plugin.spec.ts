@@ -163,6 +163,49 @@ describe('plugins-mui', () => {
     }
   })
 
+  it('gives every element a preset, so the drawer can reach it', () => {
+    // The drawer is built from PRESETS ONLY: `ComponentManager
+    // .schemasByCategory` iterates `this.presets`, and the line that would
+    // also iterate `this.schemas` is commented out. So a component
+    // registered without a preset is unreachable by clicking — it renders
+    // fine once a node exists, which is why this never looked broken from
+    // the code side, but no author can ever put one on a canvas.
+    //
+    // `collectionSearch` shipped exactly that way (AGL-1516): a complete
+    // schema, a working renderer, and no preset. It was invisible in both
+    // the palette and the picker, which left the marketing frames'
+    // pills-left / search-right toolbar row unbuildable — the one job the
+    // block was added to do — and the gap surfaced only when someone tried
+    // to build that row by hand and could not find the element.
+    //
+    // A component nobody thought about lands here and the test goes red
+    // until someone answers: should an author be able to place this? If
+    // yes, give it a preset. If no, add it below with the reason.
+    const NOT_AUTHOR_PLACEABLE: readonly string[] = [
+      // The wrapper the besigner inserts for a SAVED reusable component.
+      // It is created by "Save as reusable component" and by dropping an
+      // instance from the Components list, never from the element drawer,
+      // and it is meaningless without a component id to point at.
+      'reusableInstance',
+    ]
+
+    const reachable = new Set<string>()
+    const walk = (node: any) => {
+      if (!node) return
+      reachable.add(node.componentId)
+      for (const child of node.nodes ?? []) walk(child)
+    }
+    for (const entry of MUI_BUNDLE) {
+      for (const preset of entry.presets ?? []) walk(preset.data)
+    }
+
+    const unreachable = MUI_BUNDLE.map((entry) => entry.schema.$id as string)
+      .filter((id) => !reachable.has(id))
+      .sort()
+
+    expect(unreachable).toEqual([...NOT_AUTHOR_PLACEABLE].sort())
+  })
+
   it('gives every preset a component that is registered (AGL-1201)', () => {
     // A preset pointing at an unregistered componentId drops onto the
     // canvas as an empty box with no error anywhere.
