@@ -44,6 +44,13 @@
  *   - one future, not two. A schedule that already carries a pending phase is
  *     EDITED; appending a second would extend the subscription by a period.
  *
+ * The QUOTE has to describe the same thing. `invoices/upcoming` under
+ * `always_invoice` returns the credit a reduction would raise IF it applied
+ * today, and it does not apply today — so pricing one at all produces a number
+ * describing a refund nobody will receive. A reduction is therefore answered
+ * without asking Stripe to price it, which is why the assertion below is that
+ * the call never happens rather than that its answer was zero.
+ *
  * And the response has to say so. `pendingAddonChange` is the only thing that
  * tells the console a change is in flight, and `quantities` deliberately
  * reports the CURRENT map — what the workspace may use until the period ends
@@ -65,6 +72,10 @@ const ORG_ID = 'org-1'
 const PERIOD_END = 1767225600
 const PERIOD_START = PERIOD_END - 2592000
 
+/** The org document — its `plan` decides which prices the route sells. */
+let orgDoc: any
+/** The base plan item on the subscription. */
+let planItem: any
 /** The dataset add-on item on the subscription. */
 let datasetItem: any
 /**
@@ -85,10 +96,15 @@ let createdSchedule: any
 let stripeCalls: Array<{ href: string; method: string; body: string }> = []
 /** Everything written to `org.seatAddons`. */
 let orgMirrorWrites: any[] = []
+/**
+ * `subscription.current_period_end`. `null` omits the field, which is the
+ * shape a quote has to survive rather than invent a date for.
+ */
+let periodEnd: number | null
 
 const orgRef = {
   get: async () => ({
-    data: () => ({ plan: 'starter', seatAddons: { datasets: 4 } }),
+    data: () => orgDoc,
     ref: {
       set: async (value: unknown) => {
         orgMirrorWrites.push(value)
@@ -160,8 +176,10 @@ const ORIGINAL_FETCH = global.fetch
 const STRIPE_ENV = {
   STRIPE_SECRET_KEY: 'sk_test_fake',
   STRIPE_PRICE_STARTER: 'price_starter_monthly',
+  STRIPE_PRICE_PRO: 'price_pro_monthly',
   STRIPE_PRICE_METERED: 'price_metered_usage',
   STRIPE_PRICE_STARTER_EXTRA_DATASET: 'price_starter_dataset',
+  STRIPE_PRICE_PRO_EXTRA_DATASET: 'price_pro_dataset',
 }
 
 function loadAddons() {
@@ -193,11 +211,7 @@ function setDatasets(quantity: number) {
 /** The subscription's items, in the order Stripe reports them. */
 function liveItems() {
   return [
-    {
-      id: 'si_plan',
-      quantity: 1,
-      price: { id: 'price_starter_monthly', recurring: { interval: 'month' } },
-    },
+    planItem,
     ...(datasetItem ? [datasetItem] : []),
     ...(unknownItem ? [unknownItem] : []),
     {
@@ -261,6 +275,13 @@ function writtenPhaseCount(): number {
 beforeEach(() => {
   stripeCalls = []
   orgMirrorWrites = []
+  orgDoc = { plan: 'starter', seatAddons: { datasets: 4 } }
+  periodEnd = PERIOD_END
+  planItem = {
+    id: 'si_plan',
+    quantity: 1,
+    price: { id: 'price_starter_monthly', recurring: { interval: 'month' } },
+  }
   datasetItem = {
     id: 'si_dataset',
     quantity: 4,
@@ -320,8 +341,8 @@ beforeEach(() => {
             id: 'sub_1',
             status: 'active',
             currency: 'usd',
-            current_period_end: PERIOD_END,
-            metadata: { plan: 'starter', orgId: ORG_ID },
+            ...(periodEnd ? { current_period_end: periodEnd } : {}),
+            metadata: { plan: orgDoc.plan, orgId: ORG_ID },
             ...(scheduleOnSubscription
               ? { schedule: scheduleOnSubscription }
               : {}),
@@ -336,7 +357,16 @@ beforeEach(() => {
     } else if (href.includes('/subscription_schedules')) {
       payload = createdSchedule
     } else if (href.includes('/invoices/upcoming')) {
-      payload = { amount_due: 0, currency: 'usd', lines: { data: [] } }
+      // A real proration for two more datasets: $6.00 of remaining time plus
+      // $0.46 of tax. Non-zero on purpose — a quote that answered zero here
+      // could not tell "priced at zero" from "never priced".
+      payload = {
+        amount_due: 646,
+        tax: 46,
+        currency: 'usd',
+        automatic_tax: { status: 'complete' },
+        lines: { data: [{ proration: true, amount: 600 }] },
+      }
     } else if (href.includes('/subscriptions/sub_1')) {
       payload = { id: 'sub_1', status: 'active', items: { data: liveItems() } }
     } else {
@@ -414,6 +444,100 @@ describe('what the response tells the console', () => {
     // the period end. The webhook rewrites it when the phase flips.
     await setDatasets(1)
     expect(orgMirrorWrites).toEqual([])
+  })
+})
+
+describe('a reduction is QUOTED as deferred, not priced', () => {
+  const previewDatasets = (quantity: number) =>
+    call({ action: 'preview', kind: 'datasets', quantity })
+
+  it('never asks Stripe to price it at all', async () => {
+    // THE CONTRACT. `invoices/upcoming` under `always_invoice` answers with
+    // the credit a reduction WOULD raise if it still applied today — a refund
+    // for time the customer has not finished using and will not be given
+    // back. Asserting only that the quote reads zero would pass on a route
+    // that priced the change and threw the answer away, which leaves the
+    // wrong figure one refactor from the screen again.
+    await previewDatasets(1)
+    expect(
+      stripeCalls.some((entry) => entry.href.includes('/invoices/upcoming')),
+    ).toBe(false)
+  })
+
+  it('quotes zero on every money field, and says why', async () => {
+    // Every field a priced quote carries, so the caller reads one shape
+    // whichever branch answered — and `defersToPeriodEnd` is the one thing
+    // that distinguishes "costs nothing" from "costs nothing YET".
+    const payload = await (await previewDatasets(1)).json()
+    expect(payload).toMatchObject({
+      amountDueCents: 0,
+      prorationCents: 0,
+      taxCents: 0,
+      chargedNowCents: 0,
+      currency: 'usd',
+      defersToPeriodEnd: true,
+    })
+    // Nothing is being taxed, so tax resolution is not pending on anything.
+    // `false` would put the card into its "we could not work out tax yet"
+    // caveat about an amount that is zero.
+    expect(payload.taxComplete).toBe(true)
+  })
+
+  it('names the date the change lands', async () => {
+    // The confirm says the capacity ends on this date; it is the only part of
+    // the quote that carries information at all.
+    const payload = await (await previewDatasets(1)).json()
+    expect(payload.effectiveAt).toBe('2026-01-01T00:00:00.000Z')
+  })
+
+  it('and answers null when the subscription has no period end', async () => {
+    // A missing period end is a date nobody can state. Null says so; a
+    // fabricated or epoch-zero date would have the card promise a day.
+    periodEnd = null
+    const payload = await (await previewDatasets(1)).json()
+    expect(payload.effectiveAt).toBeNull()
+    expect(payload.defersToPeriodEnd).toBe(true)
+  })
+
+  it('a removal is quoted the same way', async () => {
+    const payload = await (await previewDatasets(0)).json()
+    expect(payload.defersToPeriodEnd).toBe(true)
+    expect(payload.chargedNowCents).toBe(0)
+    expect(
+      stripeCalls.some((entry) => entry.href.includes('/invoices/upcoming')),
+    ).toBe(false)
+  })
+})
+
+/**
+ * The rule is "a REDUCTION is not priced", not "a preview is not priced".
+ * Without these, a route that answered every quote with zeros — and so quoted
+ * nothing for a purchase that charges a card — would pass every assertion
+ * above.
+ */
+describe('CONTROL — an INCREASE preview is still priced', () => {
+  it('prices it through invoices/upcoming under always_invoice', async () => {
+    await call({ action: 'preview', kind: 'datasets', quantity: 6 })
+    const priced = stripeCalls.filter((entry) =>
+      entry.href.includes('/invoices/upcoming'),
+    )
+    expect(priced).toHaveLength(1)
+    // The same behavior the set-action applies, so the quote and the charge
+    // are computed the same way.
+    expect(priced[0].href).toContain(
+      'subscription_proration_behavior=always_invoice',
+    )
+  })
+
+  it('and quotes a real, tax-inclusive amount', async () => {
+    const payload = await (
+      await call({ action: 'preview', kind: 'datasets', quantity: 6 })
+    ).json()
+    expect(payload.chargedNowCents).toBe(646)
+    expect(payload.taxCents).toBe(46)
+    expect(payload.prorationCents).toBe(600)
+    // Nothing defers, so the card must not tell the customer the charge waits.
+    expect(payload.defersToPeriodEnd).toBeUndefined()
   })
 })
 
@@ -518,6 +642,138 @@ describe('a schedule that already has a future phase is EDITED', () => {
   it('answers with the schedule it reused', async () => {
     const payload = await (await setDatasets(1)).json()
     expect(payload.pendingAddonChange.scheduleId).toBe('sub_sched_9')
+  })
+})
+
+/**
+ * A pending PLAN DOWNGRADE is the case where the two item lists disagree.
+ *
+ * The subscription carries Pro's prices; the schedule's target phase carries
+ * Starter's, because that is the plan it flips to. Rebuilding that phase from
+ * the LIVE items — which is what a reduction used to do — replaced Starter's
+ * prices with Pro's and left `metadata[plan]` still naming Starter: a phase
+ * billing the plan the customer is leaving while telling the webhook mirror to
+ * write the plan they are moving to. Nothing on any screen would disagree, and
+ * the downgrade the customer asked for would simply not have happened.
+ *
+ * A same-plan future phase cannot catch that — the two lists are identical
+ * there, so both readings produce the same bytes. This fixture is the one that
+ * tells them apart.
+ */
+describe('a reduction on top of a pending plan DOWNGRADE', () => {
+  beforeEach(() => {
+    // Live today: Pro, with four extra datasets and the unclassifiable line.
+    orgDoc = { plan: 'pro', seatAddons: { datasets: 4 } }
+    planItem = {
+      id: 'si_plan',
+      quantity: 1,
+      price: { id: 'price_pro_monthly', recurring: { interval: 'month' } },
+    }
+    datasetItem = {
+      id: 'si_dataset',
+      quantity: 4,
+      price: { id: 'price_pro_dataset', recurring: { interval: 'month' } },
+    }
+    scheduleOnSubscription = 'sub_sched_9'
+    existingSchedule = {
+      id: 'sub_sched_9',
+      status: 'active',
+      end_behavior: 'release',
+      phases: [
+        {
+          start_date: PERIOD_START,
+          end_date: PERIOD_END,
+          items: livePhaseItems(),
+          discounts: [{ coupon: { id: 'coupon_winback_1' } }],
+          automatic_tax: { enabled: true },
+        },
+        // The downgrade as its own path left it: STARTER prices, and the
+        // metadata the webhook mirror reads at the flip.
+        {
+          start_date: PERIOD_END,
+          items: [
+            { price: 'price_starter_monthly', quantity: 1 },
+            { price: 'price_starter_dataset', quantity: 4 },
+            { price: 'price_legacy_negotiated', quantity: 2 },
+            { price: 'price_metered_usage' },
+          ],
+          metadata: { plan: 'starter', orgId: ORG_ID },
+          automatic_tax: { enabled: true },
+        },
+      ],
+    }
+  })
+
+  it('the target phase keeps the TARGET plan price, not the live one', async () => {
+    // The whole defect in one assertion: Pro's price appearing here means the
+    // customer keeps being billed for the plan they scheduled themselves off.
+    await setDatasets(1)
+    expect(phaseQuantity(1, 'price_starter_monthly')).toBe('1')
+    expect(phasePrices(1)).not.toContain('price_pro_monthly')
+  })
+
+  it('and its metadata still names the plan it flips to', async () => {
+    // The metadata is what the webhook writes to the org doc at the flip. Left
+    // beside Pro prices it becomes the active lie: billed Pro, mirrored
+    // Starter, with the entitlement resolver reading the mirror.
+    await setDatasets(1)
+    expect(scheduleUpdate()?.get('phases[1][metadata][plan]')).toBe('starter')
+    expect(scheduleUpdate()?.get('phases[1][metadata][orgId]')).toBe(ORG_ID)
+  })
+
+  it('every other line on that phase is untouched', async () => {
+    // Including the one the route cannot classify. A phase is an absolute
+    // list, so a rebuild that misses it deletes it at the flip.
+    await setDatasets(1)
+    expect(phaseQuantity(1, 'price_legacy_negotiated')).toBe('2')
+    expect(phasePrices(1)).toContain('price_metered_usage')
+    expect(phasePrices(1)).not.toContain('price_pro_dataset')
+  })
+
+  it('phase 0 still describes what is billed today', async () => {
+    // The present is Pro, and stays Pro. A reduction must not move the plan in
+    // either direction or either phase.
+    await setDatasets(1)
+    expect(phaseQuantity(0, 'price_pro_monthly')).toBe('1')
+    expect(phaseQuantity(0, 'price_pro_dataset')).toBe('4')
+    expect(scheduleUpdate()?.get('phases[0][discounts][0][coupon]')).toBe(
+      'coupon_winback_1',
+    )
+  })
+
+  it('still edits in place — no third phase, and the same schedule', async () => {
+    const payload = await (await setDatasets(1)).json()
+    expect(writtenPhaseCount()).toBe(2)
+    expect(payload.pendingAddonChange).toMatchObject({
+      kind: 'datasets',
+      quantity: 1,
+      scheduleId: 'sub_sched_9',
+    })
+  })
+
+  /**
+   * THE REDUCTION NEVER REACHES THE TARGET PHASE. Marked `it.failing` so it
+   * turns red the moment that is fixed, rather than sitting as prose nobody
+   * runs.
+   *
+   * `withAddonMoved` matches an item by the price id the org's CURRENT plan
+   * sells — here `price_pro_dataset`. The target phase holds the price the
+   * plan it flips TO sells, `price_starter_dataset`, put there by the
+   * downgrade's own `buildTargetItems`. No item matches, so the list is
+   * restated unchanged and the phase still carries four datasets.
+   *
+   * The route answers `pendingAddonChange: { quantity: 1 }` regardless, so the
+   * console tells the customer their reduction lands at the renewal and at the
+   * renewal they are delivered — and billed for — four. It is the same shape
+   * as the defect above it, one layer down: the phase is right about the plan
+   * and wrong about the add-on.
+   *
+   * Same-plan schedules are unaffected, because there the two price ids are
+   * the same string; the block above covers that path and passes.
+   */
+  it.failing('moves the add-on line on that phase to the new quantity', async () => {
+    await setDatasets(1)
+    expect(phaseQuantity(1, 'price_starter_dataset')).toBe('1')
   })
 })
 
