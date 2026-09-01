@@ -33,6 +33,7 @@
 
 import type { AglynNodeSchema, NodeId } from '../foundation/definitions/components.types'
 import type { PlacementKind } from './compose-reusable-components'
+import { submissionMonthKey } from './form-abuse-ceiling'
 
 /**
  * The `componentId` of the node that RENDERS a form, and of the node that
@@ -361,6 +362,129 @@ export function formStatsWindow(
     if (Number.isFinite(numerator)) window.of += numerator
   }
   return window
+}
+
+/**
+ * A span of calendar months, both ends inclusive, keyed as `YYYY-MM`.
+ *
+ * An absent end is OPEN rather than zero: a span that starts in March and
+ * never closes covers every month from March onward. A span with neither end
+ * is not a span, and {@link formStatsTotals} answers it with lifetime totals.
+ */
+export interface FormPeriodRange {
+  from?: string | null
+  to?: string | null
+}
+
+/**
+ * The month key a moment falls in, or `null` for a moment that is not one.
+ *
+ * UTC, through {@link submissionMonthKey}, because that is the function every
+ * writer of `stats.periods` keys by. A month derived any other way reads zero
+ * on exactly the months the two definitions disagree about — which is the
+ * boundary month, the one a reader is most likely to be asking about.
+ */
+export function formPeriodKey(atMs: number | null | undefined): string | null {
+  if (typeof atMs !== 'number' || !Number.isFinite(atMs)) return null
+  return submissionMonthKey(new Date(atMs))
+}
+
+/**
+ * A form's four counters, summed, with what the sum covers.
+ *
+ * Every counter is `number | null` and the distinction is load-bearing. A
+ * counter is `null` when nothing was recorded for it at all: `leads` is
+ * incremented only by a form whose `routing.lead` is set, so a form that does
+ * not route leads has no leads measurement rather than a measured zero, and a
+ * `0` in that slot states a result nobody took.
+ */
+export interface FormStatsTotals {
+  views: number | null
+  starts: number | null
+  submissions: number | null
+  leads: number | null
+  /**
+   * Month keys that contributed. `null` when the totals are lifetime, which
+   * is what tells a caller whether the figures are confined to a span.
+   */
+  periods: number | null
+}
+
+/** The counters, with nothing recorded for any of them. */
+function emptyTotals(periods: number | null): FormStatsTotals {
+  return { views: null, starts: null, submissions: null, leads: null, periods }
+}
+
+/** A stored counter as a number, or `null` where nothing was stored. */
+function countedStat(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+/**
+ * Sum a form's counters — over its whole history, or over a span of months.
+ *
+ * ## Lifetime and windowed are different questions, and the caller picks
+ *
+ * The flat counters on {@link FormStats} have counted since the form entity
+ * existed. Passing no range returns those, and `periods: null` says so, so a
+ * surface can label the figure lifetime instead of implying it belongs to
+ * whatever the surface is about.
+ *
+ * Passing a range sums `stats.periods` instead, over exactly the month keys
+ * inside it. The two can differ by a lot in both directions: the month series
+ * began later than the flat counters, so a windowed total over a form's whole
+ * history can still be smaller than its lifetime total.
+ *
+ * ## What `null` means here, and why an in-range zero is not it
+ *
+ * A counter stays `null` unless some in-range month actually carries it. This
+ * is the same rule {@link formStatsWindow} applies to a rate's denominator,
+ * and it exists for the same reason: a month that carries `submissions` and
+ * no `leads` key is not a month with zero leads, it is a month in which
+ * nothing counted leads.
+ *
+ * ## Whole months, and a range boundary that lands inside one
+ *
+ * `stats.periods` is keyed by calendar month, so the finest a windowed total
+ * can be is a month. A range that starts on the 20th takes that whole month,
+ * including the days before it. A caller reporting a windowed figure has to
+ * say the window is measured in whole months; nothing here can narrow it.
+ *
+ * @param stats - the stored counters, or nothing.
+ * @param range - the months to confine the sum to. Omitted, or with neither
+ *                end, gives lifetime totals.
+ */
+export function formStatsTotals(
+  stats: FormStats | undefined | null,
+  range?: FormPeriodRange | null,
+): FormStatsTotals {
+  const from = range?.from ?? null
+  const to = range?.to ?? null
+  if (!from && !to) {
+    return {
+      views: countedStat(stats?.views),
+      starts: countedStat(stats?.starts),
+      submissions: countedStat(stats?.submissions),
+      leads: countedStat(stats?.leads),
+      periods: null,
+    }
+  }
+  const totals = emptyTotals(0)
+  for (const [key, month] of Object.entries(stats?.periods ?? {})) {
+    // The same key shape `formPeriodSeries` accepts. A stored key of another
+    // shape is not a month and cannot be compared against a range as one.
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(key)) continue
+    // Lexical comparison IS chronological for a zero-padded `YYYY-MM`.
+    if (from && key < from) continue
+    if (to && key > to) continue
+    totals.periods = (totals.periods ?? 0) + 1
+    for (const kind of FORM_STAT_KINDS) {
+      const value = countedStat(month?.[kind])
+      if (value === null) continue
+      totals[kind] = (totals[kind] ?? 0) + value
+    }
+  }
+  return totals
 }
 
 export const FORM_SLUG_MAX_LENGTH = 64
