@@ -66,8 +66,8 @@
  */
 
 import {
-  DEFAULT_CAMPAIGN_TOPIC_ID,
   consentGroupForHost,
+  flowEmailTopicId,
   readMarketingBasis,
   marketingConsentDecision,
   resolveMarketingConsentPolicy,
@@ -233,10 +233,7 @@ export async function flowEmailRefusal(options: {
     return 'consent-withheld'
   }
 
-  const named = String(options.topicId ?? '').trim()
-  // An immediate reply belongs to no stream unless the step named one; a
-  // scheduled send belongs to the default stream, as a campaign does.
-  const topicId = immediate ? named : named || DEFAULT_CAMPAIGN_TOPIC_ID
+  const topicId = flowEmailTopicId(options.topicId, options.scope)
   if (!topicId) return null
   const sendable = await filterTopicSendable(
     options.hostId,

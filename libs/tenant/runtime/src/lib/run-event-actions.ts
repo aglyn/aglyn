@@ -26,6 +26,7 @@ import {
   evaluateStepGuard,
   evaluateTriggerConditions,
   FLOW_TIMED_OUT_FIELD,
+  flowEmailTopicId,
   hostPublicOrigin,
   isClientActionStep,
   isFlowSuspendingStep,
@@ -596,12 +597,21 @@ async function executeAction(
          * domain. Both refusals are permanent for this message, so the
          * enrollment moves on rather than retrying.
          */
+        const scope = enrollmentRef ? 'scheduled' : 'immediate'
+        /*
+         * The stream this message belongs to, resolved ONCE and read twice:
+         * the gate below filters on it, and it rides the `marketing` context
+         * so the opt-out link the seam mints names it. Without that the
+         * preference page opens on a list of every stream the site has, and
+         * the recipient has to find the one they were trying to leave.
+         */
+        const topicId = flowEmailTopicId(step.topicId, scope)
         const gate = await flowEmailRefusal({
           hostId,
           email: to,
           topicId: step.topicId ?? null,
           org: env.org,
-          scope: enrollmentRef ? 'scheduled' : 'immediate',
+          scope,
         })
         if (gate) {
           stepErrors.push(
@@ -633,7 +643,9 @@ async function executeAction(
            * the same step to the same person.
            */
           ...(enrollmentRef ? { priority: 'bulk' as const } : {}),
-          marketing: { hostId, siteBase },
+          // `topicId` is `''` for a step that belongs to no stream, which
+          // every reader of it treats as absent — see `flowEmailTopicId`.
+          marketing: { hostId, siteBase, topicId },
         })
         /*
          * DEFERRED IS NOT FAILED, and it is not SENT either.

@@ -135,7 +135,7 @@ const DECLARES_MARKETING = /\bmarketing:\s*\{/
  * left it. So the sweep is what notices, the same way it notices a sender
  * that forgets `marketing` altogether.
  */
-const DECLARES_TOPIC = /marketing:\s*\{[^{}]*\btopicId\s*:/
+const DECLARES_TOPIC = /marketing:\s*\{[^{}]*\btopicId\s*[:,}]/
 
 /**
  * Audience senders that name their stream somewhere other than the
@@ -144,8 +144,6 @@ const DECLARES_TOPIC = /marketing:\s*\{[^{}]*\btopicId\s*:/
 const TOPIC_EXEMPT: Record<string, string> = {
   'libs/plugins/marketing/src/lib/server/campaign-send.ts':
     'A campaign carries a topic chosen by its author, resolved per send rather than fixed per sender, and filters the whole audience through `filterTopicSendable` in one keyed read before the recipient count is shown. Naming a stream in the `marketing` context would be naming a second, constant one.',
-  'libs/tenant/runtime/src/lib/run-event-actions.ts':
-    'A workflow step carries its own `step.topicId`, which the executor hands to `flowEmailRefusal` before the send. That gate also decides whether an unnamed stream resolves to the default one, which turns on whether the step is a scheduled campaign or an immediate reply — a distinction the `marketing` context cannot express.',
 }
 
 /**
