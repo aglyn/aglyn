@@ -109,6 +109,51 @@ async function readWatchStart(
   return now
 }
 
+/**
+ * Name the rows that failed, in the log, at the moment the verdict is formed.
+ *
+ * The body already says which job is late — but only to whoever is holding
+ * it. The uptime probe reads the STATUS and throws the body away, so a red
+ * window leaves nothing behind saying what was red. Two of those windows in
+ * one week (2026-08-27 08:00–14:00 and 2026-08-31 22:00 → 09-01 04:00, ~170
+ * 503s each, all answered in under a second) were unattributable afterwards
+ * for exactly that reason: Cloud Scheduler had fired normally throughout and
+ * the every-minute beat never gapped, so the jobs were fine and the row that
+ * flipped could not be recovered.
+ *
+ * A `console.error` is enough BECAUSE of the log drain. The same argument in
+ * `../route.ts` rejects it — "a log retained for about an hour, so by the
+ * time anyone asked why, the answer was gone" — and that was true when the
+ * only sink was Vercel's own buffer. Runtime logs now ship to Cloud Logging,
+ * where this line is queryable for days.
+ *
+ * Written where the PROBE resolves rather than per request, so the rate is
+ * the read's (one per TTL at most), not the caller's. A burst of monitors,
+ * HEAD requests and staff opening /admin/health inside one window shares a
+ * single line instead of each emitting their own.
+ *
+ * Returns its input so it can wrap a return without moving anything.
+ */
+function reportDegradedCrons(
+  checks: Record<string, CronJobCheck>,
+): Record<string, CronJobCheck> {
+  const failing = Object.entries(checks).filter(([, check]) => !check.ok)
+  if (!failing.length) return checks
+  console.error(
+    `health/crons degraded (${failing.length}/${Object.keys(checks).length}): ` +
+      failing
+        .map(
+          ([jobId, check]) =>
+            `${jobId} schedule="${check.schedule}" runner=${check.runner} ` +
+            `dueAt=${check.dueAt ?? 'none'} ` +
+            `lastBeatAgeMinutes=${check.lastBeatAgeMinutes ?? 'never'} ` +
+            `graceMinutes=${check.graceMinutes}`,
+        )
+        .join(' | '),
+  )
+  return checks
+}
+
 const cronsProbe = memoizeWithTtl<Record<string, CronJobCheck>>(
   PROBE_TTL_MS,
   async () => {
@@ -125,12 +170,16 @@ const cronsProbe = memoizeWithTtl<Record<string, CronJobCheck>>(
         .filter((doc) => doc.id !== CRON_BEAT_WATCH_DOC)
         .map((doc) => ({ jobId: doc.id, atMs: Number(doc.get('atMs')) }))
         .filter((beat) => Number.isFinite(beat.atMs))
-      return cronJobsHealth(beats, watchStartedAtMs, Date.now() - startedAt, now)
+      return reportDegradedCrons(
+        cronJobsHealth(beats, watchStartedAtMs, Date.now() - startedAt, now),
+      )
     } catch {
       // A null census is degraded for every row, by contract. "We cannot see
       // whether the jobs are running" is the condition this endpoint exists
       // to catch, not a reason to report calm.
-      return cronJobsHealth(null, Date.now(), Date.now() - startedAt)
+      return reportDegradedCrons(
+        cronJobsHealth(null, Date.now(), Date.now() - startedAt),
+      )
     }
   },
 )
