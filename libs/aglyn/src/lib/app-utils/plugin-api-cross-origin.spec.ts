@@ -218,6 +218,30 @@ describe('isCrossOriginPluginWrite', () => {
       ).toBe(true)
     })
 
+    it('STILL refuses an opaque origin the browser calls SAME-SITE', () => {
+      /*
+       * The adversarial twin of the bug above, and the case the allow-clause
+       * must never reach. A SIBLING tenant page that also sets
+       * `Referrer-Policy: no-referrer` posting at another tenant arrives with
+       * its Origin blanked by the very same mechanism — `null` — and
+       * `sec-fetch-site: same-site`, because the two share a registrable
+       * domain. It is refused today because `null` equals no host, but
+       * nothing pinned that: a later "simplification" treating a blank origin
+       * as trusted whenever any `sec-fetch-site` is present would open
+       * cross-tenant writes and every other test here would still pass.
+       */
+      expect(
+        isCrossOriginPluginWrite({
+          path: 'membership/account',
+          request: req('POST', {
+            origin: 'null',
+            'sec-fetch-site': 'same-site',
+            host: 'victim.aglyn.app',
+          }),
+        }),
+      ).toBe(true)
+    })
+
     it('STILL refuses when the browser says ANOTHER SITE sent it', () => {
       /*
        * The load-bearing half. `sec-fetch-site` is consulted only to allow —
