@@ -893,7 +893,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       abandonedCart: true,
       dropshipRouting: true,
       commerceAnalytics: true,
-      // White-Label Phase 1: the Agency-tier ($799) differentiator. Only
+      // White-Label Phase 1: the Agency-tier ($1,299) differentiator. Only
       // this tier and Enterprise ship white-label by default.
       whiteLabel: true,
       ssoEnabled: false,

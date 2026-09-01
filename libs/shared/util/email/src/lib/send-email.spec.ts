@@ -595,6 +595,131 @@ describe('sendEmail', () => {
     })
   })
 
+  /*==========================================
+   * MARKETING MAIL ON THE POOLED IDENTITY.
+   *
+   * The pool carries campaigns for every site that has no domain of its own.
+   * What bounds one site's spending of a shared reputation is the grading in
+   * `sender-reputation.ts`, applied where the campaign is sent; the only thing
+   * refused here is bulk mail a recipient cannot stop.
+   *=========================================*/
+  describe('marketing on the pooled identity', () => {
+    const pooled = {
+      from: 'notifications@shared1.mail.aglyn.app',
+      source: 'shared' as const,
+      domain: 'shared1.mail.aglyn.app',
+      summary: 'Sending as notifications@shared1.mail.aglyn.app.',
+      refusal: null,
+    }
+
+    /**
+     * ⛔ THE CONTROL. A campaign from a site with no domain of its own leaves,
+     * on the pool member it is assigned. Refusing this made the whole campaign
+     * feature unreachable for every merchant who had not bought a domain.
+     */
+    it('sends a campaign on the pool member', async () => {
+      configure('re_test', FROM)
+      const fetchMock = mockFetch({})
+
+      const result = await sendEmail({
+        to: 'a@b.com',
+        subject: 'Sale',
+        text: 'Sale',
+        context: 'campaign',
+        audience: 'tenant',
+        sendingIdentity: pooled,
+        // The campaign sender composes its own one-click pair upstream and
+        // passes no marketing context, which is the shape this must admit.
+        headers: {
+          'List-Unsubscribe': '<https://shop.example/u/abc>',
+          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+        },
+      })
+
+      expect(result.sent).toBe(true)
+      expect(lastBody(fetchMock).from).toBe(
+        'notifications@shared1.mail.aglyn.app',
+      )
+    })
+
+    /**
+     * ⛔ AND THE ONE THAT STAYS REFUSED. The same campaign with its unsubscribe
+     * link gone does not go out at other sites' expense.
+     */
+    it('refuses a pooled campaign carrying no unsubscribe', async () => {
+      configure('re_test', FROM)
+      const fetchMock = mockFetch({})
+
+      const result = await sendEmail({
+        to: 'a@b.com',
+        subject: 'Sale',
+        text: 'Sale',
+        context: 'campaign',
+        audience: 'tenant',
+        sendingIdentity: pooled,
+      })
+
+      expect(result.sent).toBe(false)
+      expect((result as { reason?: string }).reason).toBe('unverified-domain')
+      expect((result as { detail?: string }).detail).toMatch(/unsubscribe/i)
+      // Refused BEFORE the provider call. A message that reached Resend and
+      // was then reported as refused would already have been delivered.
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    /**
+     * The same message on a domain the merchant owns SENDS. The refusal is
+     * about a shared reputation, so it must not follow the message onto a
+     * reputation that is nobody else's.
+     */
+    it('sends the same unsubscribe-less campaign on a custom domain', async () => {
+      configure('re_test', FROM)
+      const fetchMock = mockFetch({})
+
+      const result = await sendEmail({
+        to: 'a@b.com',
+        subject: 'Sale',
+        text: 'Sale',
+        context: 'campaign',
+        audience: 'tenant',
+        sendingIdentity: {
+          from: 'hello@acme.com',
+          source: 'custom' as const,
+          domain: 'acme.com',
+          summary: 'Sending as hello@acme.com on your verified domain acme.com.',
+          refusal: null,
+        },
+      })
+
+      expect(result.sent).toBe(true)
+      expect(lastBody(fetchMock).from).toBe('hello@acme.com')
+    })
+
+    /**
+     * A TRANSACTIONAL message is never asked the question. A receipt has no
+     * unsubscribe link by design, and refusing one on a pool member would turn
+     * a deliverability control into an outage on somebody's checkout.
+     */
+    it('never refuses a receipt for want of an unsubscribe link', async () => {
+      configure('re_test', FROM)
+      const fetchMock = mockFetch({})
+
+      const result = await sendEmail({
+        to: 'a@b.com',
+        subject: 'Your order',
+        text: 'Thanks',
+        context: 'order-receipt',
+        audience: 'tenant',
+        sendingIdentity: pooled,
+      })
+
+      expect(result.sent).toBe(true)
+      expect(lastBody(fetchMock).from).toBe(
+        'notifications@shared1.mail.aglyn.app',
+      )
+    })
+  })
+
 
   describe('failure handling', () => {
     beforeEach(() => configure('re_test', FROM))

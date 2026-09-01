@@ -47,6 +47,14 @@ const FIRESTORE = {}
 /** Every `/api/campaigns/send` body this render posted, in order. */
 let posted: Array<Record<string, any>> = []
 
+/** The screen and version creates a one-off design mints, capturable. */
+// Typed to ACCEPT an argument, because the assertions below read the payload
+// the composer passes. A zero-arity mock infers `calls` as `[][]`, so
+// `calls[0][0]` is a tuple index that does not exist and the spec config
+// fails to compile while jest itself runs it happily.
+const mockCreateResource = jest.fn(async (_input?: unknown) => ({ id: 'new' }))
+const mockCreateVersion = jest.fn(async () => ({ id: 'v1' }))
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => FIRESTORE,
   useUser: () => ({
@@ -56,8 +64,8 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useOrgPlan: () => ({ org: { $id: 'org-1', plan: 'scale' }, ready: true }),
   useHostOrgId: () => 'org-1',
   useConsoleHostRoute: () => ({ base: null, orgSlug: null, subdomain: null }),
-  useHostResourceApi: () => jest.fn().mockResolvedValue({ id: 'new' }),
-  useHostVersionApi: () => jest.fn().mockResolvedValue({ id: 'v1' }),
+  useHostResourceApi: () => mockCreateResource,
+  useHostVersionApi: () => mockCreateVersion,
   useFirestoreDoc: () => ({ data: undefined, status: 'success' }),
   useFirestoreCollection: (build: () => any) => {
     const built = build()
@@ -555,5 +563,58 @@ describe('what the mode needs before it can send', () => {
       (screen.getByText('Send campaign').closest('button') as HTMLButtonElement)
         .disabled,
     ).toBe(true)
+  })
+})
+
+describe('a one-off email gets a design of its own, not a "template"', () => {
+  beforeEach(() => {
+    mockCreateResource.mockClear()
+    mockCreateVersion.mockClear()
+  })
+
+  it('names the created design after the email it belongs to', async () => {
+    await mount({ campaignId: 'msg_1', displayName: 'August newsletter' })
+    await asDesigned()
+
+    fireEvent.click(screen.getByText('Design this email'))
+
+    await waitFor(() => expect(mockCreateResource).toHaveBeenCalledTimes(1))
+    const created = mockCreateResource.mock.calls[0][0] as any
+    expect(created.data.kind).toBe('email')
+    // The name is the only thing that tells one design from another in the
+    // picker; a list of identical "Untitled email" rows tells nobody
+    // anything.
+    expect(created.data.displayName).toBe('August newsletter')
+  })
+
+  it('falls back to the subject when the email carries no display name', async () => {
+    await mount({ campaignId: 'msg_1' })
+    type('Subject', 'Spring clearance')
+    await asDesigned()
+
+    fireEvent.click(screen.getByText('Design this email'))
+
+    await waitFor(() => expect(mockCreateResource).toHaveBeenCalledTimes(1))
+    expect((mockCreateResource.mock.calls[0][0] as any).data.displayName).toBe(
+      'Spring clearance',
+    )
+  })
+
+  it('records the created design on the record before leaving for the editor', async () => {
+    await mount({ campaignId: 'msg_1', displayName: 'August newsletter' })
+    await asDesigned()
+
+    fireEvent.click(screen.getByText('Design this email'))
+
+    // Without this write the design would exist while the record still
+    // pointed at nothing, and the author would have to come back and find
+    // their own screen in the picker.
+    await waitFor(() =>
+      expect(posted.some((body) => body.action === 'draft')).toBe(true),
+    )
+    const draft = posted.find((body) => body.action === 'draft') as any
+    const created = mockCreateResource.mock.calls[0][0] as any
+    expect(draft.templateScreenId).toBe(created.id)
+    expect(draft.campaignId).toBe('msg_1')
   })
 })

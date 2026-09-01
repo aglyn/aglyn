@@ -230,7 +230,15 @@ export function ReusableComponentsProvider(
         const snapshot = await getDoc(
           doc(firestore, 'hosts', hostId, 'components', refId),
         )
-        const definition = snapshot.data() as any
+        const stored = snapshot.data() as any
+        // BOTH stored forms (AGL-1151). A converter-less `getDoc`, so a
+        // promoted definition arrives as `Bytes` — and `detachInstanceSubtree`
+        // below walks `definition.nodes` to materialize the subtree, so an
+        // undecoded one writes a byte array into the author's canvas.
+        const definition = stored && {
+          ...stored,
+          nodes: Aglyn.decodeStoredNodes(stored.nodes),
+        }
         if (!definition?.nodes || !definition?.rootId) {
           throw new Error('Definition missing')
         }

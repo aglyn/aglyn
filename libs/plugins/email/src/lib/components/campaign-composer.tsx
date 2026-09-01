@@ -471,7 +471,7 @@ export function CampaignComposer(props: CampaignComposerProps) {
    *
    * TWO modes, because the data model has two things and not three: a saved
    * TEMPLATE is a besigner email screen — the same `kind: 'email'` document
-   * the picker below lists and "New email template" creates — so "designed"
+   * the picker below lists and "Design this email" creates — so "designed"
    * and "from a template" are one mode under two names. There is no third
    * thing to offer.
    *
@@ -546,24 +546,60 @@ export function CampaignComposer(props: CampaignComposerProps) {
     (screen: any) => screen.$id === templateScreenId,
   )
 
-  const handleCreateTemplate = useCallback(async () => {
+  /*
+   * The draft save, reachable from above its declaration. `handleCreateDesign`
+   * persists the created design onto the record through the same save the
+   * Save draft button uses, and that callback closes over most of the form —
+   * a ref keeps this one from having to depend on all of it.
+   */
+  const handleSaveDraftRef = useRef<
+    ((overrides?: { templateScreenId?: string }) => Promise<void>) | null
+  >(null)
+
+  /**
+   * A DESIGN FOR THIS EMAIL, without making the author think in templates.
+   *
+   * A one-off campaign does not want a reusable artifact — it wants its own
+   * design document. The data model has only one shape for that (a `kind:
+   * 'email'` screen, the same document the picker lists), so this mints one,
+   * but named after the email it belongs to rather than "Untitled email":
+   * the name is the only thing that tells one design from another in the
+   * picker, and a list of identical "Untitled email" rows tells nobody
+   * anything. Saved templates stay what they are — picking one from the
+   * select above is the reuse path.
+   *
+   * The selection is written onto the record before the editor navigation
+   * unmounts this form; without that, the design would exist while the
+   * campaign still pointed at nothing, and the author would have to come
+   * back and find their own screen in the picker.
+   */
+  const handleCreateDesign = useCallback(async () => {
     try {
+      const designName = displayName?.trim() || subject.trim() || undefined
       const { screenId, versionId } = await createEmailScreen(
         hostId,
         createHostResource,
         createHostVersion,
+        designName,
       )
+      setTemplateScreenId(screenId)
+      if (campaignId) {
+        await handleSaveDraftRef.current?.({ templateScreenId: screenId })
+      }
       if (orgSlug && subdomain) {
         void router.push(besignerHref(orgSlug, subdomain, screenId, versionId))
       }
     } catch (error: any) {
       console.error(error)
-      enqueueSnackbar(error?.message ?? 'Creating the email template failed', {
+      enqueueSnackbar(error?.message ?? 'Creating the email design failed', {
         variant: 'error',
       })
     }
   }, [
     hostId,
+    displayName,
+    subject,
+    campaignId,
     createHostResource,
     createHostVersion,
     orgSlug,
@@ -1249,8 +1285,17 @@ export function CampaignComposer(props: CampaignComposerProps) {
    * time somebody opened a composer and changed their mind.
    *=========================================*/
   const [saving, setSaving] = useState(false)
-  const handleSaveDraft = useCallback(async () => {
+  const handleSaveDraft = useCallback(
+    /*
+     * `overrides.templateScreenId` exists for `handleCreateDesign`: it has
+     * just minted a design and set it into state, but state set this tick is
+     * not yet in `sentTemplateScreenId`, so the save it fires immediately
+     * after would record the record's previous design — or none.
+     */
+    async (overrides?: { templateScreenId?: string }) => {
     if (!campaignId || saving) return
+    const savedTemplateScreenId =
+      overrides?.templateScreenId ?? sentTemplateScreenId
     setSaving(true)
     try {
       const { response, payload } = await authorizedPost({
@@ -1262,8 +1307,8 @@ export function CampaignComposer(props: CampaignComposerProps) {
         ...(segmentId ? { segmentId } : {}),
         ...(listId ? { listId } : {}),
         ...(experimentId ? { experimentId } : {}),
-        ...(sentTemplateScreenId
-          ? { templateScreenId: sentTemplateScreenId }
+        ...(savedTemplateScreenId
+          ? { templateScreenId: savedTemplateScreenId }
           : {}),
         ...(sentPlainText
           ? {
@@ -1319,6 +1364,8 @@ export function CampaignComposer(props: CampaignComposerProps) {
     preheader,
     enqueueSnackbar,
   ])
+  // Kept current every render; see the ref's declaration above.
+  handleSaveDraftRef.current = handleSaveDraft
 
   const quotaLimit = useMemo(
     () =>
@@ -1689,7 +1736,7 @@ export function CampaignComposer(props: CampaignComposerProps) {
         submitted, and the record stores one source rather than two.
 
         Two options and not three. A saved TEMPLATE is a besigner email screen
-        — the same document this picker lists and "New email template" creates
+        — the same document this picker lists and "Design this email" creates
         — so "designed" and "from a saved template" are one mode under two
         names, and offering both would be a distinction the data model does not
         have.
@@ -1721,7 +1768,7 @@ export function CampaignComposer(props: CampaignComposerProps) {
             onChange={(event) => setTemplateScreenId(event.target.value)}
             size="small"
             sx={{ minWidth: 220 }}
-            helperText="The template this email is built from"
+            helperText="This email's own design, or a saved template to reuse"
           >
             <MenuItem value="">{'Choose a design…'}</MenuItem>
             {emailScreens.map((screen: any) => (
@@ -1748,8 +1795,14 @@ export function CampaignComposer(props: CampaignComposerProps) {
               {'Edit design'}
             </Button>
           ) : null}
-          <Button size="small" onClick={() => void handleCreateTemplate()}>
-            {'New email template'}
+          {/*
+            The one-off path. A design minted here belongs to THIS email —
+            named after it, selected on it — and never asks the author to
+            think in templates. Reuse is the picker above: a saved template
+            is chosen, not created, from a campaign.
+           */}
+          <Button size="small" onClick={() => void handleCreateDesign()}>
+            {'Design this email'}
           </Button>
         </Stack>
       ) : null}

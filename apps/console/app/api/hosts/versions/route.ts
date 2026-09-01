@@ -15,7 +15,13 @@
  * limitations under the License.
  */
 
-import { checkEntitlement, createResourceUid, hostRoleCanWrite, pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import {
+  checkEntitlement,
+  createResourceUid,
+  encodeStoredNodes,
+  hostRoleCanWrite,
+  pluginRequestFromWeb,
+} from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -262,6 +268,24 @@ async function handler(request: Request): Promise<Response> {
       typeof body?.id === 'string' && body.id
         ? String(body.id).slice(0, 64)
         : createResourceUid()
+    /*
+     * COMPRESSED AT REST, like every besigner save of the same document.
+     *
+     * This route is where a version is BORN, and it wrote `nodes` as a plain
+     * Firestore map — so a screen, layout, component or form arrived plain and
+     * only became msgpack when somebody happened to open it and press Save.
+     * A tree costs roughly 1.4x as many bytes stored that way, against a hard
+     * 1 MiB per-document ceiling, and the seed a template hands this route is
+     * a whole page.
+     *
+     * `encodeStoredNodes` passes ALREADY-encoded input through, which is what
+     * makes the snapshot branch above safe: `source.data()` hands back a
+     * Buffer for a compressed source, and msgpack of msgpack decodes to
+     * nothing any reader understands.
+     */
+    const packed = encodeStoredNodes(payload['nodes'])
+    if (packed) payload['nodes'] = Buffer.from(packed)
+
     await versionsRef.doc(id).create({
       ...payload,
       // Stamped server-side, like every other create route: a client clock is

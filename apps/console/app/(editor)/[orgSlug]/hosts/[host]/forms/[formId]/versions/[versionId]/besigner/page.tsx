@@ -31,7 +31,6 @@ import {
   type BesignerSaveBaseline,
   type WorkspaceEditorComponentProps,
   clearServerDraft,
-  writeServerDraft,
 } from '@aglyn/besigner-ui'
 import {
   ICON_VARIANT_MODIFY_ADD,
@@ -57,7 +56,7 @@ import {
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import { Stack, Typography } from '@mui/material'
-import { collection, doc, limit, query, updateDoc } from 'firebase/firestore'
+import { Bytes, collection, doc, limit, query, updateDoc } from 'firebase/firestore'
 import { observer } from 'mobx-react-lite'
 import dynamic from 'next/dynamic'
 import { useParams } from 'next/navigation'
@@ -310,6 +309,7 @@ function FormBesignerPage() {
     remoteChanged,
     draft,
     handleSave,
+    saveWorkingDraft,
     hasError,
     notFound,
   } = useBesignerDocument({
@@ -451,7 +451,9 @@ function FormBesignerPage() {
         formNodeId as Aglyn.NodeId,
       )
       await updateDoc(doc(firestore, 'hosts', hostId, 'forms', formId), {
-        nodes: publishedNodes,
+        // Compressed at rest (AGL-1151), like the version this promotes from
+        // and like the server promote route that writes the same document.
+        nodes: Bytes.fromUint8Array(Aglyn.encodeStoredNodes(publishedNodes)!),
         ...(rootId ? { rootId } : {}),
         fields,
         versionId,
@@ -479,19 +481,10 @@ function FormBesignerPage() {
    * Saves the working draft rather than the form the sites are serving.
    */
   const handleSaveDraft = useCallback(async () => {
-    const nodes = Aglyn.canvas.toJSON().nodes as Aglyn.ProcessableNodes
-    const wrote = await writeServerDraft(
-      firestore,
-      { scope: hostId, kind: 'form', docId: formId, versionId },
-      {
-        nodes,
-        baseStamp: Aglyn.versionStamp(
-          (formDoc as { updatedAt?: unknown } | undefined)?.updatedAt,
-        ),
-        updatedByUid: user?.uid ?? null,
-        updatedByEmail: user?.email ?? null,
-      },
-    ).catch(() => 'failed' as const)
+    const wrote = await saveWorkingDraft({
+      uid: user?.uid,
+      email: user?.email,
+    })
     if (wrote === 'failed') {
       enqueueSnackbar('Could not save the draft — your work is still here.', {
         variant: 'error',
@@ -515,7 +508,7 @@ function FormBesignerPage() {
       variant: 'success',
       persist: false,
     })
-  }, [firestore, hostId, formId, versionId, formDoc, user, enqueueSnackbar])
+  }, [saveWorkingDraft, user, enqueueSnackbar])
 
   /**
    * Do the live sites already match this version?

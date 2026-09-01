@@ -240,7 +240,7 @@ export const INCONCLUSIVE_CHECK = {
  *     customer published records saying what their recipients would see, and
  *     falling back to any other address would contradict them.
  *   - a domain WE set up, currently in use. It drops to the shared pool, so
- *     receipts carry on and only marketing stops.
+ *     all of its mail carries on, on an address whose reputation is shared.
  *   - a domain nothing is sending as. The claim and the key go; no mail moves.
  *
  * Printing the harshest of the three for all of them would be the surface
@@ -266,8 +266,9 @@ export function describeSendingDomainRemoval(input: {
         'the domain again later, which issues a new key.'
       : ours
         ? `This site is currently sending as ${domain}. Removing it moves ` +
-          'receipts and account email back to the shared address, and stops ' +
-          'marketing email until this site has a domain of its own again. ' +
+          'all of this site’s email back to the shared address, whose ' +
+          'delivery reputation is pooled with the other sites on it — so ' +
+          'campaigns there are held to tighter complaint and bounce limits. ' +
           'Nothing in your own DNS is involved — we published these records ' +
           'and we remove them.'
         : `This site is currently sending as ${domain}. Removing the domain ` +

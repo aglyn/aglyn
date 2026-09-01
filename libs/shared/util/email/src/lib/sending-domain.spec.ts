@@ -36,7 +36,7 @@ import {
   sendingDnsRecords,
   sendingDomainRequiredRecords,
   sendingRecordKey,
-  sharedIdentityMarketingRefusal,
+  pooledMarketingRefusal,
   validateSendingDomain,
   type SendingDomainSelection,
   type SendingDomainStatus,
@@ -537,7 +537,7 @@ describe('the shared identity carries transactional mail only', () => {
     expect(verdict.source).toBe('shared')
   })
 
-  it('refuses marketing, and names the remedy rather than a wait', () => {
+  it('sends marketing on the pool, on the same address as everything else', () => {
     const verdict = resolveSendingIdentity({
       selection: null,
       platformFrom: 'noreply@aglyn.com',
@@ -546,26 +546,48 @@ describe('the shared identity carries transactional mail only', () => {
       purpose: 'marketing',
     })
 
-    expect(verdict.from).toBeNull()
-    expect(verdict.source).toBeNull()
-    expect(verdict.refusal.code).toBe('shared-identity-marketing')
-    expect(verdict.refusal.message).toMatch(/domain of this site/i)
-    // NOT "try again shortly". A campaign will never leave on the pool however
-    // well provisioned it is, so a message promising a later success would send
-    // the merchant to wait for something that is not coming.
-    expect(verdict.refusal.message).not.toMatch(/try again/i)
+    expect(verdict.refusal).toBeNull()
+    expect(verdict.source).toBe('shared')
+    expect(verdict.from).toBe(SHARED_FROM)
+    // Not the platform's own address. A campaign admitted to the pool must
+    // still be unable to reach the domain Aglyn's own invoices leave on.
+    expect(verdict.from).not.toContain('aglyn.com')
   })
 
-  it('refuses marketing the same way when no pool is configured at all', () => {
-    // The marketing check sits ABOVE the "is a shared identity available"
-    // check, so the answer does not change with the deployment's plumbing.
+  it('tells a pooled campaign that its reputation is shared and graded', () => {
+    // The composer prints this verbatim, so the merchant learns the trade at
+    // the point of sending rather than from a refusal.
+    const marketing = resolveSendingIdentity({
+      selection: null,
+      sharedFrom: SHARED_FROM,
+      audience: 'tenant',
+      purpose: 'marketing',
+    })
+    expect(marketing.summary).toMatch(/pooled/i)
+    expect(marketing.summary).toMatch(/stricter/i)
+
+    // A transactional resolution says the reputation is pooled and stops
+    // there — the stricter grade is a campaign rule, and claiming it on a
+    // receipt would describe a control that does not apply to it.
+    const transactional = resolveSendingIdentity({
+      selection: null,
+      sharedFrom: SHARED_FROM,
+      audience: 'tenant',
+    })
+    expect(transactional.summary).toMatch(/pooled/i)
+    expect(transactional.summary).not.toMatch(/stricter/i)
+  })
+
+  it('refuses marketing as an OPERATOR fault when no pool is configured', () => {
+    // Nothing about marketing changes this arm: with no shared identity there
+    // is no address to send ANY tenant mail on, and that is ours to fix.
     const verdict = resolveSendingIdentity({
       selection: null,
       sharedFrom: '',
       audience: 'tenant',
       purpose: 'marketing',
     })
-    expect(verdict.refusal.code).toBe('shared-identity-marketing')
+    expect(verdict.refusal.code).toBe('tenant-identity-unprovisioned')
   })
 
   it('refuses transactional as an OPERATOR fault when no pool is configured', () => {
@@ -748,12 +770,12 @@ describe('a platform subdomain that has not verified falls back to the pool', ()
   })
 
   /**
-   * MARKETING is unchanged by any of this. The reason a campaign may not leave
-   * on the pool is one merchant's complaint rate landing on every other site's
-   * password resets, which has nothing to do with why this site's subdomain is
-   * unfinished.
+   * The dedicated subdomain is an OPTIMIZATION and the pool is the GUARANTEE,
+   * and that now covers campaigns too: a site waiting on a subdomain we have
+   * not finished provisioning keeps sending, on the pool, under the pooled
+   * grade.
    */
-  it('refuses marketing from a site whose subdomain has not verified', () => {
+  it('sends marketing on the pool while the subdomain is unfinished', () => {
     const verdict = resolveSendingIdentity({
       selection: issued('records-issued'),
       sharedFrom: SHARED_FROM,
@@ -761,8 +783,9 @@ describe('a platform subdomain that has not verified falls back to the pool', ()
       purpose: 'marketing',
     })
 
-    expect(verdict.from).toBeNull()
-    expect(verdict.refusal.code).toBe('shared-identity-marketing')
+    expect(verdict.refusal).toBeNull()
+    expect(verdict.source).toBe('shared')
+    expect(verdict.from).toBe(SHARED_FROM)
   })
 
   /**
@@ -784,61 +807,65 @@ describe('a platform subdomain that has not verified falls back to the pool', ()
   })
 })
 
-describe('sharedIdentityMarketingRefusal — the backstop at the send', () => {
-  /**
-   * The half that does not depend on anybody remembering. An identity is
-   * resolved once and reused for thousands of messages, so the send path
-   * re-examines the verdict with the message in hand.
-   */
-  it('refuses a marketing message whose identity turned out to be pooled', () => {
-    const verdict = resolveSendingIdentity({
+describe('pooledMarketingRefusal — the one thing the pool will not carry', () => {
+  const pooled = () =>
+    resolveSendingIdentity({
       selection: null,
       sharedFrom: SHARED_FROM,
       audience: 'tenant',
     })
 
+  /**
+   * ⛔ THE CONTROL. Bulk mail nobody can stop does not go out on an address
+   * other sites depend on. Every other reputation control in the product is
+   * downstream of the recipient having a cheaper alternative than the spam
+   * button, and a seven-day window cannot catch this one in time.
+   */
+  it('refuses pooled marketing that carries no unsubscribe', () => {
+    const verdict = pooled()
     expect(verdict.source).toBe('shared')
-    const refusal = sharedIdentityMarketingRefusal(verdict)
-    expect(refusal.code).toBe('shared-identity-marketing')
+
+    const refusal = pooledMarketingRefusal(verdict, false)
+    expect(refusal.code).toBe('shared-identity-no-unsubscribe')
     expect(refusal.domain).toBe('shared1.mail.aglyn.app')
+    expect(refusal.message).toMatch(/unsubscribe/i)
+  })
+
+  /**
+   * ⛔ AND IT IS NOT A MARKETING GATE. The pool carries campaigns — that is
+   * the whole point of admitting them — so a message that has its unsubscribe
+   * link passes, and this must never widen back into a blanket refusal.
+   */
+  it('admits pooled marketing that carries one', () => {
+    expect(pooledMarketingRefusal(pooled(), true)).toBeNull()
   })
 
   it('says nothing about a verified custom domain or the platform identity', () => {
-    // A merchant on their own domain may send marketing — it is their
-    // reputation to spend. This must not become a blanket marketing gate.
+    // On their own domain a merchant may send whatever they like, unsubscribe
+    // link or not: the reputation being spent is theirs. The refusal exists
+    // because the pool's is not.
     const custom = resolveSendingIdentity({
       selection: selection('verified'),
       sharedFrom: SHARED_FROM,
       audience: 'tenant',
     })
     expect(custom.source).toBe('custom')
-    expect(sharedIdentityMarketingRefusal(custom)).toBeNull()
+    expect(pooledMarketingRefusal(custom, false)).toBeNull()
 
     const platform = resolveSendingIdentity({
       selection: null,
       platformFrom: 'noreply@aglyn.com',
     })
-    expect(sharedIdentityMarketingRefusal(platform)).toBeNull()
-    expect(sharedIdentityMarketingRefusal(null)).toBeNull()
+    expect(pooledMarketingRefusal(platform, false)).toBeNull()
+    expect(pooledMarketingRefusal(null, false)).toBeNull()
   })
 
-  it('gives the same message the resolver does', () => {
-    // One string, produced from two places. Two copies is how the route comes
-    // to explain one rule while the backstop explains another.
-    const declared = resolveSendingIdentity({
-      selection: null,
-      sharedFrom: SHARED_FROM,
-      audience: 'tenant',
-      purpose: 'marketing',
-    })
-    const caught = sharedIdentityMarketingRefusal(
-      resolveSendingIdentity({
-        selection: null,
-        sharedFrom: SHARED_FROM,
-        audience: 'tenant',
-      }),
-    )
-    expect(caught.message).toBe(declared.refusal.message)
+  it('names the defect rather than asking the merchant to buy a domain', () => {
+    // Every marketing path in the product attaches a link, so arriving here
+    // means one went missing. Telling a merchant to fix it by purchasing a
+    // domain would charge them for our fault.
+    const refusal = pooledMarketingRefusal(pooled(), false)
+    expect(refusal.message).toMatch(/worth reporting/i)
   })
 })
 

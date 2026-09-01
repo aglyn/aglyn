@@ -112,6 +112,12 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   // the page passed it, which is the one thing this spec disproves.
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
     .writeGuardedBySeed,
+  // Compression at rest (AGL-1151). This factory is a closed world, so an
+  // absent export is `undefined` and the page throws before it renders —
+  // which reads exactly like the AGL-1358 guard regressing. The double
+  // returns the ref untouched: nothing here reaches Firestore, and what this
+  // spec is about is which SUBJECT reaches a write.
+  withBesignerNodes: (ref: unknown) => ref,
 }))
 
 jest.mock('@aglyn/shared-ui-snackstack', () => ({

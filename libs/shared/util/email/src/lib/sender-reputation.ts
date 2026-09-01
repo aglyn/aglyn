@@ -147,6 +147,42 @@ export function normalizeEmailReputationPolicy(
     : EMAIL_REPUTATION_DEFAULT_POLICY
 }
 
+/**
+ * WHICH POLICY THIS SENDER IS ACTUALLY GRADED ON, given whose domain it is.
+ *
+ * A pooled sender shares one domain with every other site that has no domain
+ * of its own, so a complaint it earns is charged to their receipts as much as
+ * to its own. That asymmetry used to be handled by keeping marketing off the
+ * pool altogether. It is handled here instead: on the pool a campaign is
+ * graded `strict`, which stops it on the WATCH thresholds — Google's "keep
+ * under" 0.10% complaint rate and a 5% bounce rate — rather than waiting for
+ * the trip levels three and two times higher.
+ *
+ * On a domain the merchant owns, the org's own setting stands. The reputation
+ * being spent there is theirs alone, and how fast they spend it is theirs to
+ * decide.
+ *
+ * ## The pool overrides `none`, and that is the point
+ *
+ * A workspace that has switched its own breaker off must not thereby switch
+ * off the one protecting the other sites on its pool member. Same posture as
+ * the platform marketing frequency ceiling, which is the same number on every
+ * plan for the same reason: a control that exists to protect tenants from each
+ * other cannot be something one tenant sets aside.
+ *
+ * @param source the resolved {@link SendingIdentitySource}. Anything that is
+ *        not `'shared'` — a custom domain, the platform's own identity, or an
+ *        unresolved send — takes the configured policy, because only the pool
+ *        spends somebody else's reputation.
+ */
+export function effectiveReputationPolicy(
+  source: string | null | undefined,
+  configured: unknown,
+): EmailReputationPolicy {
+  if (source === 'shared') return 'strict'
+  return normalizeEmailReputationPolicy(configured)
+}
+
 /** Which measurement produced a finding. */
 export type EmailReputationFindingCode = 'complaint-rate' | 'bounce-rate'
 

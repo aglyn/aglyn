@@ -180,9 +180,45 @@ async function screenIdsUsingLayout(
     layoutId: doc.get('layoutId'),
     versionId: doc.get('versionId'),
   })
+  /**
+   * The binding is per-VERSION with a screen fallback (key-present on the
+   * live version wins, `null` there means no layout) — the same resolution
+   * `composeScreenNodes` runs. Matching only the screen docs would leave a
+   * version-bound screen serving stale chrome for the whole revalidate
+   * window, so each live version doc is read and its binding, when present,
+   * replaces the screen's before the walk.
+   */
+  const screenCandidates = screenDocs.docs.map(toCandidate)
+  const versionRefs = screenCandidates
+    .filter((candidate) => candidate.versionId)
+    .map((candidate) =>
+      hostRef
+        .collection('screens')
+        .doc(candidate.id)
+        .collection('versions')
+        .doc(String(candidate.versionId)),
+    )
+  if (versionRefs.length) {
+    const versionSnapshots = await firestore.getAll(...versionRefs)
+    const byPath = new Map(
+      versionSnapshots.map((snapshot) => [snapshot.ref.path, snapshot]),
+    )
+    for (const candidate of screenCandidates) {
+      if (!candidate.versionId) continue
+      const snapshot = byPath.get(
+        hostRef
+          .collection('screens')
+          .doc(candidate.id)
+          .collection('versions')
+          .doc(String(candidate.versionId)).path,
+      )
+      const data = snapshot?.exists ? snapshot.data() : undefined
+      if (data && 'layoutId' in data) candidate.layoutId = data.layoutId
+    }
+  }
   return screenIdsUsingLayoutDeep(
     layoutId,
-    screenDocs.docs.map(toCandidate),
+    screenCandidates,
     layoutDocs.docs.map(toCandidate),
   )
 }
@@ -277,12 +313,29 @@ export async function POST(request: Request): Promise<Response> {
     const componentId = String(
       (payload as { componentId?: unknown })?.componentId ?? '',
     )
-    if (!hostId || (!screenId && !layoutId && !componentId)) {
+    // A REDIRECT RULE changed. Rule edits are client Firestore writes with no
+    // publish step, and the rules list sits behind the hour-long
+    // `tenant-data:{hostId}` backstop — so without this announcement a new
+    // rule waits out the TTL while the manager UI promises ~30 seconds. The
+    // caller names the rule's source path; this drops that path's cached HTML
+    // and busts the host tag so the next render reads fresh rules. For a
+    // prefix or regex rule the literal source is only the best single path —
+    // other matching pages catch up on their own ISR window.
+    const redirectPath = String(
+      (payload as { redirectPath?: unknown })?.redirectPath ?? '',
+    )
+    if (!hostId || (!screenId && !layoutId && !componentId && !redirectPath)) {
       return Response.json(
         {
           error:
-            'Missing hostId, and one of screenId, layoutId or componentId',
+            'Missing hostId, and one of screenId, layoutId, componentId or redirectPath',
         },
+        { status: 400 },
+      )
+    }
+    if (redirectPath && !redirectPath.startsWith('/')) {
+      return Response.json(
+        { error: 'redirectPath must be a site path like /old-page' },
         { status: 400 },
       )
     }
@@ -329,7 +382,10 @@ export async function POST(request: Request): Promise<Response> {
 
     let scanTruncated = false
     let affectedScreenIds: string[]
-    if (componentId) {
+    if (redirectPath) {
+      // The rule's source is already a URL path; no screen graph to walk.
+      affectedScreenIds = []
+    } else if (componentId) {
       const scan = await screenIdsUsingComponent(firestore, hostId, componentId)
       affectedScreenIds = scan.screenIds
       scanTruncated = scan.truncated
@@ -339,9 +395,14 @@ export async function POST(request: Request): Promise<Response> {
       affectedScreenIds = [screenId]
     }
 
-    const routePaths = affectedScreenIds
-      .map((id) => screens[id])
-      .filter((path): path is string => Boolean(path))
+    // Already URL-shaped for a redirect source; routing-map values need the
+    // leading-slash conversion.
+    const routePaths = redirectPath
+      ? [redirectPath]
+      : affectedScreenIds
+          .map((id) => screens[id])
+          .filter((path): path is string => Boolean(path))
+          .map((path) => screenRoutePathToUrl(path))
 
     if (scanTruncated) {
       // Say it, in the log and in the response. A publish that scanned a
@@ -377,7 +438,7 @@ export async function POST(request: Request): Promise<Response> {
     const result = await postTenantRevalidate({
       subdomain,
       hostId,
-      paths: routePaths.map((path) => screenRoutePathToUrl(path)),
+      paths: routePaths,
       // A site with a domain attached caches its pages under a SECOND key
       // (`cname--acme.com`), and that is the one visitors read — see
       // `postTenantRevalidate`. Without this a publish dropped only the

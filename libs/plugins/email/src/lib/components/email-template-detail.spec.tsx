@@ -34,7 +34,7 @@
  * the sandbox entirely. So the assertion reads the attribute's VALUE.
  */
 
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import type {
   CampaignStats,
@@ -45,11 +45,15 @@ const mockDocs = new Map<string, unknown>()
 /** What each `useFirestoreCollection` call answers, keyed by path. */
 const mockCollections = new Map<string, unknown[]>()
 
+/** Every write the rename made, so a patch is a claim this file checks. */
+const mockUpdateDoc = jest.fn().mockResolvedValue(undefined)
+
 jest.mock('firebase/firestore', () => ({
   __esModule: true,
   doc: (_db: unknown, ...segments: string[]) => ({
     __path: segments.join('/'),
   }),
+  updateDoc: (...args: unknown[]) => mockUpdateDoc(...args),
   collection: (_db: unknown, ...segments: string[]) => ({
     __path: segments.join('/'),
   }),
@@ -75,6 +79,12 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestoreCollection: (build: () => { __path?: string } | null) => ({
     data: mockCollections.get(build()?.__path ?? '') ?? [],
   }),
+}))
+
+const mockEnqueueSnackbar = jest.fn()
+jest.mock('@aglyn/shared-ui-snackstack', () => ({
+  __esModule: true,
+  useSnackbar: () => ({ enqueueSnackbar: mockEnqueueSnackbar }),
 }))
 
 /** Every route the page pushed, so a row click is a claim this file checks. */
@@ -450,5 +460,41 @@ describe('the template preview sits at the bottom of the page', () => {
     await renderDetail()
     expect(screen.getByText('Preview')).toBeTruthy()
     expect(document.querySelector('[title="Preview"]')).toBeNull()
+  })
+})
+
+describe('the design can be renamed on its own page', () => {
+  beforeEach(() => mockUpdateDoc.mockClear())
+
+  it('seeds the field from the document and writes ONLY the typed name', async () => {
+    await renderDetail()
+
+    const field = screen.getByLabelText('Design name') as HTMLInputElement
+    expect(field.value).toBe('Spring promo')
+
+    fireEvent.change(field, { target: { value: 'August newsletter' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Rename' }))
+
+    await waitFor(() => expect(mockUpdateDoc).toHaveBeenCalledTimes(1))
+    const [ref, patch] = mockUpdateDoc.mock.calls[0] as [
+      { __path: string },
+      Record<string, unknown>,
+    ]
+    expect(ref.__path).toBe(SCREEN_PATH)
+    // One field. A patch carrying anything else would write a seed the
+    // reader never touched back over the live document.
+    expect(patch).toEqual({ displayName: 'August newsletter' })
+  })
+
+  it('cannot save an untouched field — there is nothing to write', async () => {
+    await renderDetail()
+
+    const rename = screen
+      .getByRole('button', { name: 'Rename' })
+      .closest('button') as HTMLButtonElement
+    expect(rename.disabled).toBe(true)
+
+    fireEvent.click(rename)
+    expect(mockUpdateDoc).not.toHaveBeenCalled()
   })
 })

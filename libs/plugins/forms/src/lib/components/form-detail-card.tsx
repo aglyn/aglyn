@@ -129,6 +129,21 @@ export function FormDetailCard(props: FormDetailCardProps) {
   // `undefined`, and an editable form over a mistyped id reads as data loss.
   const notFound = status !== 'loading' && !form
 
+  /**
+   * The published design, in BOTH stored forms (AGL-1151).
+   *
+   * The read above is converter-less, so `nodes` arrives exactly as stored —
+   * msgpack for a design promoted since forms were compressed, a plain map
+   * for everything older. Decoded once here because two surfaces below need
+   * it and both fail silently on the raw value: `checkFormContract` reports
+   * bogus violations against a tree it cannot walk, and the AGL-753 empty
+   * guard passes on a `Bytes` because `Object.keys` counts the wrapper.
+   */
+  const formNodes = useMemo(
+    () => Aglyn.decodeStoredNodes<Record<string, any>>(form?.nodes),
+    [form?.nodes],
+  )
+
   // No orderBy: the oldest version docs predate `createdAt`, and Firestore
   // drops documents missing the ordered field.
   const { data: versionDocs } = useFirestoreCollection<any>(
@@ -217,8 +232,8 @@ export function FormDetailCard(props: FormDetailCardProps) {
                 : {}),
             },
             formId,
-            nodes: form.nodes,
-            formNodeId: findFormNodeId(form.nodes),
+            nodes: formNodes as never,
+            formNodeId: findFormNodeId(formNodes as never),
           })
         : [],
     [form, formId, effectiveLead, effectiveConsent],
@@ -352,9 +367,12 @@ export function FormDetailCard(props: FormDetailCardProps) {
               displayName: 'Initial version',
               // Emptiness, not just absence: a form that holds no `nodes` and
               // `??` would pass an empty map straight through to a version
-              // that opens uneditable (AGL-753).
-              nodes: Object.keys(form?.nodes ?? {}).length
-                ? form.nodes
+              // that opens uneditable (AGL-753). Measured on the DECODED
+              // tree — `Object.keys` over a stored `Bytes` is non-empty, so
+              // the raw value passes this guard and mints exactly the
+              // uneditable version it exists to stop (AGL-1151).
+              nodes: Object.keys(formNodes ?? {}).length
+                ? formNodes
                 : {
                     [Aglyn.CANVAS_ROOT_ELEMENT_ID]: {
                       $id: Aglyn.CANVAS_ROOT_ELEMENT_ID,

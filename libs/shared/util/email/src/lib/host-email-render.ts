@@ -16,6 +16,7 @@
  */
 
 import { hostEmailOrigin } from './email-media-src'
+import { decodeEmailNodes } from './stored-email-nodes'
 import {
   EMAIL_NODE_ROOT_ID,
   renderEmailHtml,
@@ -123,12 +124,18 @@ export async function loadHostEmail(
       .collection('versions')
       .doc(String(versionId))
       .get()
-    // Plain map, deliberately: the email besigner saves with a bare `setDoc`
-    // and no converter, so unlike a SCREEN version this is not msgpack bytes
-    // and must not be run through `decodeStoredNodes` (AGL-1223).
-    const nodes = versionSnapshot.get('nodes') as
-      | Record<string, unknown>
-      | undefined
+    // BOTH stored forms. The email besigner compresses like every other
+    // besigner document (AGL-1151), and every version written before it did
+    // is still a plain map — a plain map comes back unchanged, so a single
+    // call serves both and keeps serving both.
+    //
+    // Reading the field raw is the failure the guard below cannot catch: over
+    // a `Buffer`, `Object.keys` counts BYTE INDICES, so the emptiness test
+    // passes and the caller renders an empty email instead of falling back to
+    // its built-in copy (AGL-1223).
+    const nodes = decodeEmailNodes<Record<string, unknown>>(
+      versionSnapshot.get('nodes'),
+    )
     if (!nodes || !Object.keys(nodes).length) return null
 
     let origin = options.origin

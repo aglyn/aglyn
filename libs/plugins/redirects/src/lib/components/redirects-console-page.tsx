@@ -20,6 +20,7 @@ import { checkQuota, pluginDocsHelp } from '@aglyn/aglyn'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
 import { isExternalRedirectDestination, isSelfRedirect, matchRedirect, normalizeRedirectDestination, normalizeRedirectSource, REDIRECT_DEFAULT_PRIORITY, validateRedirectRule, REDIRECT_STATUS_CODES } from '../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
@@ -329,6 +330,29 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
     })
   }, [entitled, org, enforcedCount, enqueueSnackbar])
 
+  /**
+   * Tell the tenant a rule changed (best effort, never awaited into the save
+   * outcome). Rule writes are client Firestore writes with no publish step,
+   * and the tenant's rules list sits behind the hour-long
+   * `tenant-data:{hostId}` backstop — without this call a new rule waits out
+   * that TTL while the snackbar above promises ~30 seconds. The route busts
+   * the host tag and drops the source path's cached HTML; a regex pattern has
+   * no single literal path, so it announces `/` for the tag bust alone and
+   * the matching pages catch up on their own ISR window.
+   */
+  const announceRuleChange = useCallback(
+    (source: string | undefined) => {
+      const redirectPath =
+        typeof source === 'string' && source.startsWith('/') ? source : '/'
+      void authorizedFetch(currentUser, '/api/screens/revalidate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hostId, redirectPath }),
+      }).catch(() => undefined)
+    },
+    [currentUser, hostId],
+  )
+
   const handleSave = useCallback(async () => {
     if (!draft) return
     const kind = draft.kind || 'exact'
@@ -497,6 +521,15 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
         // it also re-checks the `redirects` entitlement server-side.
         await createHostResource({ hostId, resource: 'redirect', data: fields })
       }
+      // The changed rule, and — when an edit moved the source — the path
+      // that just STOPPED redirecting, so its page refreshes too.
+      announceRuleChange(source)
+      if (draft.id) {
+        const previous = (redirects ?? []).find(
+          (rule: any) => rule.$id === draft.id,
+        )?.source
+        if (previous && previous !== source) announceRuleChange(previous)
+      }
       setDraft(null)
       enqueueSnackbar('Redirect saved — live within ~30 seconds', {
         variant: 'success',
@@ -520,6 +553,7 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
     enqueueSnackbar,
     redirectsStatus,
     redirectsFromCache,
+    announceRuleChange,
   ])
 
   /**
@@ -554,11 +588,12 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
           doc(firestore, 'hosts', hostId, 'redirects', redirect.$id),
           { enabled: event.target.checked, updatedAt: Timestamp.now() },
         )
+        announceRuleChange(redirect.source)
       } catch (error: any) {
         reportWriteFailure(error)
       }
     },
-    [firestore, hostId, reportWriteFailure],
+    [firestore, hostId, reportWriteFailure, announceRuleChange],
   )
 
   const handleDelete = useCallback(
@@ -577,11 +612,12 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
           doc(firestore, 'hosts', hostId, 'redirects', redirect.$id),
           { deletedAt: Timestamp.now(), enabled: false },
         )
+        announceRuleChange(redirect.source)
       } catch (error: any) {
         reportWriteFailure(error)
       }
     },
-    [confirm, firestore, hostId, reportWriteFailure],
+    [confirm, firestore, hostId, reportWriteFailure, announceRuleChange],
   )
 
   return (

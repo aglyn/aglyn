@@ -66,19 +66,24 @@
  * provider's domain allowance degrades delivery reputation rather than
  * stopping the mail.
  *
- * ## The shared identity is TRANSACTIONAL only
+ * ## The shared identity carries marketing too, and is GRADED for it
  *
- * The shared identity pools reputation across every site using it, which is
- * acceptable for mail a recipient asked for by acting — a receipt, a reset, a
- * booking confirmation — and is not acceptable for mail a merchant chose to
- * send. Complaints follow bulk sending, so one merchant's imported list would
- * be charged against every other site's password resets, and the pool would
- * stop delivering the messages that have no alternative.
+ * The shared identity pools reputation across every site using it, so one
+ * merchant's imported list is charged against every other site's password
+ * resets. The answer to that is measurement, not exclusion: refusing marketing
+ * outright made campaigns unreachable for every site that had not bought a
+ * domain, while doing nothing about the pooled site whose receipts were already
+ * bouncing.
  *
- * That is a REPUTATION rule and not a pricing one. It happens to line up with
- * the tiers — a site entitled to send marketing is a site entitled to a domain
- * of its own — but it would hold if the price list changed tomorrow, and
- * nothing here reads a plan.
+ * So a pooled campaign is graded against the STRICTER reputation thresholds —
+ * the watch levels in `sender-reputation.ts` rather than the trip levels — and
+ * the site earning the complaints is the one that stops. `sendEmail` refuses
+ * outright only the case a seven-day window cannot catch in time: bulk mail
+ * carrying no unsubscribe link, which is {@link pooledMarketingRefusal}.
+ *
+ * That is a REPUTATION rule and not a pricing one. Which plans may run a
+ * campaign at all is an entitlement decided elsewhere, and nothing here reads
+ * a plan.
  *
  * The failure mode this guards against is the house one. `USAGE_EMAIL_FROM`
  * was empty in production for weeks; because mail is best-effort at every
@@ -804,8 +809,9 @@ export type SendingIdentitySource =
   /** A domain this site has verified — its own name, or one inside our apex. */
   | 'custom'
   /**
-   * The pooled tenant identity on the mail apex. Transactional mail from a
-   * site that has no domain of its own.
+   * The pooled tenant identity on the mail apex. Every kind of mail from a
+   * site that has no domain of its own, campaigns included — graded more
+   * tightly, because the member is shared with other sites.
    */
   | 'shared'
   /** `USAGE_EMAIL_FROM`. Aglyn's own mail, never a tenant's. */
@@ -835,18 +841,23 @@ export type SendingIdentityRefusalCode =
    */
   | 'tenant-identity-unprovisioned'
   /**
-   * MARKETING mail from a site that has no domain of its own.
+   * MARKETING mail on the pooled identity, carrying no way out.
    *
-   * The shared identity carries transactional mail for every site using it, so
-   * admitting one merchant's campaign would charge that campaign's complaint
-   * rate against every other site's receipts and password resets — the messages
-   * with no alternative and no way to opt out of the consequence.
+   * The pool is shared with every other site that has no domain of its own, so
+   * a complaint earned here is charged against their mail as well. Nothing
+   * earns complaints faster than bulk mail a recipient cannot stop, which is
+   * why this is the one thing the pool will not carry.
    *
-   * Distinct from `tenant-identity-unprovisioned` because the remedy is
-   * different in kind: that one is waiting on us, and this one is waiting on
-   * the merchant to have a domain whose reputation is theirs to spend.
+   * Deliberately narrow. Marketing on the pool is allowed — a merchant with no
+   * domain of their own may run campaigns — and it is bounded by the
+   * per-workspace reputation breaker, the new-sender ramp and the suppression
+   * and cadence checks. This refuses only the message that has defeated the
+   * unsubscribe mechanism those controls assume.
+   *
+   * On a domain the merchant owns the same message sends: there the complaint
+   * lands on their own name, and how they spend it is theirs to decide.
    */
-  | 'shared-identity-marketing'
+  | 'shared-identity-no-unsubscribe'
 
 export interface SendingIdentityRefusal {
   code: SendingIdentityRefusalCode
@@ -859,32 +870,22 @@ export interface SendingIdentityRefusal {
 }
 
 /**
- * What a merchant is told when marketing meets the pooled identity.
+ * What a merchant is told when bulk mail with no opt-out meets the pool.
  *
- * ONE string, because it is produced from two places that must not drift: the
- * resolver, when a caller declares the purpose up front, and
- * {@link sharedIdentityMarketingRefusal}, when the send path notices at the
- * last moment. Two copies is how the route comes to explain one rule while the
- * backstop explains another.
- *
- * It names the remedy in both forms a merchant can actually reach — verify a
- * domain of their own, or ask for one on our apex — because "not allowed"
- * without a next action is the refusal shape this module exists to avoid.
- *
- * Neither is something the site already has. A dedicated subdomain is claimed
- * when somebody asks for it rather than issued on an upgrade, so a message
- * pointing at "the one this site is issued" would name a thing most sites do
- * not have and give a merchant nothing to do about it. It names the SCREEN
- * instead, where both remedies live and where the state of each is legible.
+ * It names a DEFECT rather than a policy, because that is what it is: every
+ * marketing path in the product attaches an unsubscribe link, so a message
+ * arriving here without one has lost it somewhere a merchant cannot see. The
+ * text therefore points at support and at the workaround that is genuinely
+ * theirs to take, instead of asking them to fix something they did not break.
  */
-const SHARED_IDENTITY_MARKETING_MESSAGE =
-  'Marketing email does not leave on the shared Aglyn address. That address ' +
-  'carries receipts and password resets for every site using it, and one ' +
-  'campaign’s complaint rate would be charged against all of them. Send ' +
-  'marketing from a domain of this site’s own: at Emails → Sending, add a ' +
-  'domain you already own, or ask there for an Aglyn sending domain for this ' +
-  'site. Either one unblocks campaigns; the domain you own is the one your ' +
-  'recipients will recognize.'
+const POOLED_MARKETING_NO_UNSUBSCRIBE_MESSAGE =
+  'This marketing message has no unsubscribe link, so it was not sent on the ' +
+  'shared Aglyn address. That address is shared with other sites, and bulk ' +
+  'mail nobody can stop earns complaints that are charged against all of ' +
+  'them. Every campaign and automated email the product sends carries an ' +
+  'unsubscribe link, so this is a fault worth reporting. A sending domain of ' +
+  'this site’s own — added or requested at Emails → Sending — is not subject ' +
+  'to this check.'
 
 export interface SendingIdentityVerdict {
   /** Null whenever `refusal` is set. */
@@ -1062,39 +1063,19 @@ export function resolveSendingIdentity(
     const shared =
       sharedLocal && sharedDomain ? `${sharedLocal}@${sharedDomain}` : ''
 
-    /*
-     * Marketing first, and BEFORE the "is a shared identity configured" check.
-     *
-     * Otherwise a deployment with no pool would answer a campaign with "your
-     * domain is being set up, try again shortly" — which is a promise that a
-     * later attempt will succeed, and it will not: marketing never leaves on
-     * the pool however well provisioned it is. A refusal that misdescribes
-     * what is wrong sends a merchant to wait for something that is not coming.
-     */
-    if (purpose === 'marketing') {
-      return {
-        from: null,
-        source: null,
-        domain: null,
-        summary: 'Blocked: marketing needs a sending domain of its own.',
-        refusal: {
-          code: 'shared-identity-marketing',
-          domain: null,
-          missing: [],
-          message: SHARED_IDENTITY_MARKETING_MESSAGE,
-        },
-      }
-    }
-
     if (shared) {
       return {
         from: shared,
         source: 'shared',
         domain: sharedDomain,
         summary:
-          `Sending as ${shared} on a shared Aglyn domain. Delivery ` +
-          'reputation there is pooled with the other sites using it, and ' +
-          'only receipts and account email leave on it.',
+          purpose === 'marketing'
+            ? `Sending as ${shared} on a shared Aglyn domain. Delivery ` +
+              'reputation there is pooled with the other sites using it, so ' +
+              'campaigns are graded against the stricter complaint and ' +
+              'bounce limits until this site sends from a domain of its own.'
+            : `Sending as ${shared} on a shared Aglyn domain. Delivery ` +
+              'reputation there is pooled with the other sites using it.',
         refusal: null,
       }
     }
@@ -1162,36 +1143,54 @@ export function sendingIdentityRefusal(
 }
 
 /**
- * The refusal a MARKETING message owes when its resolved identity turns out to
- * be a pooled one, or null.
+ * The one thing the pool will not carry: MARKETING mail with no way out.
  *
- * The second half of the marketing rule, and the half that does not depend on
- * anybody remembering. {@link resolveSendingIdentity} refuses marketing when it
- * is TOLD the purpose — which the campaign route does, so the merchant gets a
- * `409` naming the cause. But identities are resolved once and reused for
- * thousands of messages, sometimes by a caller that does not know what will be
- * sent through them, and the default purpose is `transactional` because the
- * cost of guessing wrong in the other direction is a dropped password reset.
+ * ## What this is not
  *
- * So the verdict is re-examined at the send, where the message itself is in
- * hand and the question "is this marketing" has a structural answer rather than
- * a declared one. Same shape as the send-rate governor, which is likewise
- * enforced at the route and again here: a resolution is skippable and a
- * declaration is forgettable, so neither may be the only thing between a
- * merchant's list and the pool that carries everybody's receipts.
+ * It is not a marketing gate. A site with no domain of its own may run
+ * campaigns on the pool — that is the point of the pool, and refusing it made
+ * the whole marketing feature unreachable for every site that had not bought
+ * a domain. What bounds one site's ability to spend the pool's reputation is
+ * measurement rather than prohibition: the per-workspace reputation breaker
+ * grades seven days of complaints and bounces and stops the workspace that is
+ * earning them, the new-sender ramp keeps a first import off the pool, and the
+ * suppression, topic, cadence and frequency checks refuse the individual
+ * message. Those act on the site responsible, which a blanket refusal never
+ * did.
+ *
+ * ## Why THIS one still refuses
+ *
+ * Every one of those controls is downstream of the recipient being able to
+ * stop the mail. Bulk mail with no unsubscribe mechanism does not accumulate
+ * complaints slowly enough for a seven-day window to catch it, and on a shared
+ * member the complaints are charged to sites that did nothing. So it is
+ * refused outright, at the send, where the message is in hand.
+ *
+ * It is a DEFECT check rather than a policy: every marketing path in the
+ * product attaches a link, so this fires only when one has gone missing —
+ * an unset `EMAIL_UNSUBSCRIBE_SECRET`, a host with no public origin, or a new
+ * caller that forgot. On the pool that misconfiguration is charged to other
+ * people, which is what makes it a refusal here and a logged warning on a
+ * domain the merchant owns.
  *
  * Takes the verdict rather than the source string so a caller cannot pass the
  * wrong field, and returns the same refusal shape every other arm produces so
  * `sendEmail` has one thing to print.
+ *
+ * @param hasUnsubscribe whether the message carries an opt-out — a minted URL
+ *        or a caller-supplied `List-Unsubscribe` header. Passed in because
+ *        this module never sees the message.
  */
-export function sharedIdentityMarketingRefusal(
+export function pooledMarketingRefusal(
   verdict: SendingIdentityVerdict | null | undefined,
+  hasUnsubscribe: boolean,
 ): SendingIdentityRefusal | null {
   if (verdict?.source !== 'shared') return null
+  if (hasUnsubscribe) return null
   return {
-    code: 'shared-identity-marketing',
+    code: 'shared-identity-no-unsubscribe',
     domain: verdict?.domain ?? null,
     missing: [],
-    message: SHARED_IDENTITY_MARKETING_MESSAGE,
+    message: POOLED_MARKETING_NO_UNSUBSCRIBE_MESSAGE,
   }
 }

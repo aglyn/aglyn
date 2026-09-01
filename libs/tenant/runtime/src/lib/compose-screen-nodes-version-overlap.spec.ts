@@ -214,9 +214,50 @@ describe('composeScreenNodes overlaps the version read (AGL-1428)', () => {
       expect(start).toBeGreaterThan(-1)
       expect(start).toBeLessThan(versionEnd)
     }
-    // The layout walk is the longest host-scoped chain, and it too must be
-    // under way rather than queued behind the version.
-    expect(order.indexOf('layout1:start')).toBeLessThan(versionEnd)
+    // The layout walk is the ONE deliberate exception: the binding is
+    // per-version (key-present on the version wins over the screen's), so
+    // the walk cannot know which layout to fetch until the version doc is in
+    // hand. It waits alone; everything else in the bundle keeps the overlap.
+    expect(order.indexOf('layout1:start')).toBeGreaterThan(versionEnd)
+  })
+
+  it('walks the layout the VERSION binds when the version carries the key', async () => {
+    // The reason the walk waits: a scheduled version brings its own chrome.
+    // Key-present wins — here the version binds L9 while the screen still
+    // says L1 — and an explicit null must suppress the walk entirely.
+    setup(PLAIN_SCREEN_NODES, 2)
+    mockGetScreenVersion.mockImplementation(
+      tracked(
+        'version',
+        { version: { nodes: PLAIN_SCREEN_NODES, layoutId: 'L9' } },
+        2,
+      ),
+    )
+    await composeScreenNodes({
+      hostId: 'h1',
+      screenId: 's1',
+      screen: screenDoc,
+    })
+    expect(mockGetPublishedLayoutVersion).toHaveBeenCalledWith({
+      hostId: 'h1',
+      layoutId: 'L9',
+    })
+
+    jest.clearAllMocks()
+    setup(PLAIN_SCREEN_NODES, 2)
+    mockGetScreenVersion.mockImplementation(
+      tracked(
+        'version',
+        { version: { nodes: PLAIN_SCREEN_NODES, layoutId: null } },
+        2,
+      ),
+    )
+    await composeScreenNodes({
+      hostId: 'h1',
+      screenId: 's1',
+      screen: screenDoc,
+    })
+    expect(mockGetPublishedLayoutVersion).not.toHaveBeenCalled()
   })
 
   it('CONTROL — the datasets read still waits for the nodes, then overlaps', async () => {

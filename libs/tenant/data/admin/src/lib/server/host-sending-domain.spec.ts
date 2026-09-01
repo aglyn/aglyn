@@ -862,14 +862,14 @@ describe('the identity a site sends on, from a hostId alone', () => {
   })
 
   /**
-   * The fallback is TRANSACTIONAL only, and the pool rule is unchanged by it.
+   * The fallback carries MARKETING too.
    *
-   * A campaign from a site whose dedicated domain has not verified still
-   * refuses, because the reason marketing may not use the pool — one
-   * merchant's complaint rate charged against everybody's receipts — has
-   * nothing to do with why this site has no domain yet.
+   * The dedicated subdomain is an optimization and the pool is the guarantee,
+   * and everything that leaves this site's subdomain unfinished is ours: the
+   * provider allowance, a zone write, a sweep that has not run. None of it is
+   * a reason to stop a merchant's campaign.
    */
-  it('still refuses MARKETING while the dedicated domain is unverified', async () => {
+  it('sends MARKETING on the pool while the dedicated domain is unverified', async () => {
     seedHost(HOST, 'acme')
     await requestHostSendingDomain({ hostId: HOST, orgId: ORG, subdomain: 'acme', requestedBy: 'merchant' })
 
@@ -880,8 +880,8 @@ describe('the identity a site sends on, from a hostId alone', () => {
       purpose: 'marketing',
     })
 
-    expect(verdict.from).toBeNull()
-    expect(verdict.refusal).not.toBeNull()
+    expect(verdict.refusal).toBeNull()
+    expect(verdict.source).toBe('shared')
   })
 
   /**

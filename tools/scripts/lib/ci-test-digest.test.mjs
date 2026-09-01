@@ -666,19 +666,69 @@ describe('nx-ci.yml must not re-create the invocation that went red (AGL-1617)',
     )
   })
 
-  it('every nx affected step still runs AFTER nx-set-shas', () => {
+  it('every nx affected step still runs AFTER the base is resolved', () => {
     // Splitting one step into three is only safe because NX_BASE / NX_HEAD
-    // are environment variables the action exports through $GITHUB_ENV, which
-    // every LATER step in the job inherits. A step that drifted above the
-    // action would silently fall back to a different base and shrink what CI
-    // tests — a quieter and worse bug than the red being fixed.
-    const shas = steps.indexOf('nrwl/nx-set-shas')
-    assert.ok(shas > -1, 'nx-ci.yml must still use nrwl/nx-set-shas')
+    // are environment variables the resolve step exports through $GITHUB_ENV,
+    // which every LATER step in the job inherits. A step that drifted above
+    // it would silently fall back to a different base and shrink what CI
+    // tests — a quieter and worse bug than any red.
+    const resolve = steps.indexOf('name: resolve affected base')
+    assert.ok(resolve > -1, 'nx-ci.yml must resolve the affected base itself')
     for (const match of steps.matchAll(/npx nx affected -t \w+/g)) {
       assert.ok(
-        match.index > shas,
-        `"${match[0]}" must come after nx-set-shas, not before it`,
+        match.index > resolve,
+        `"${match[0]}" must come after the base is resolved, not before it`,
       )
     }
+  })
+
+  it('pins the affected base to the event rather than to a past run', () => {
+    // `nrwl/nx-set-shas` resolves the base from the last successful run on
+    // `main`, and this workflow's push trigger is `production` only — so it
+    // has no such run to find and falls back to a commit off `origin/main`
+    // that is frequently already inside NX_HEAD's history. `nx affected` then
+    // selects nothing and both the test and build steps report success having
+    // run zero tasks. The two events are the only honest sources.
+    assert.ok(
+      !steps.includes('nrwl/nx-set-shas'),
+      'nx-ci.yml must not resolve NX_BASE from the last successful run',
+    )
+    assert.match(
+      steps,
+      /github\.event\.pull_request\.base\.sha/,
+      'a pull_request must be based on the branch it merges into',
+    )
+    assert.match(
+      steps,
+      /github\.event\.before/,
+      'a push must be based on the commit the branch was on before it',
+    )
+    assert.match(
+      steps,
+      /echo "NX_BASE=\$base"\n\s*echo "NX_HEAD=\$head"\n\s*} >> "\$GITHUB_ENV"/,
+      'the resolved base must reach later steps through $GITHUB_ENV',
+    )
+  })
+
+  it('reports what the base selected, so an empty selection is visible', () => {
+    // The failure this whole block guards is a green tick from a job that
+    // looked at nothing. `nx affected` says only "No tasks were run" in that
+    // case, which reads as a fast pass; naming the count up front is what
+    // makes the difference legible.
+    assert.match(
+      steps,
+      /name: affected projects/,
+      'nx-ci.yml must name the affected projects before running them',
+    )
+    assert.match(
+      steps,
+      /npx nx show projects --affected/,
+      'the affected project list must be printed, not inferred',
+    )
+    assert.match(
+      steps,
+      /::warning::No project is affected/,
+      'an empty affected list must raise an annotation',
+    )
   })
 })

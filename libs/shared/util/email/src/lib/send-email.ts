@@ -32,7 +32,7 @@ import {
 import { renderTextEmailHtml } from './text-email-html'
 import {
   sendingIdentityRefusal,
-  sharedIdentityMarketingRefusal,
+  pooledMarketingRefusal,
   type SendingIdentityAudience,
   type SendingIdentityVerdict,
 } from './sending-domain'
@@ -588,38 +588,6 @@ export async function sendEmail(
     }
   }
 
-  /*
-   * MARKETING MAIL DOES NOT LEAVE ON THE POOLED IDENTITY.
-   *
-   * The identity above may have resolved perfectly well and still be the wrong
-   * one for THIS message. A shared address carries transactional mail for every
-   * site assigned to it, so admitting one merchant's campaign charges that
-   * campaign's complaint rate against every other site's receipts — the
-   * messages that have no alternative and whose recipients never opted into the
-   * consequence.
-   *
-   * Checked here rather than only where the identity is resolved, because those
-   * are different moments with different information. A verdict is resolved
-   * ONCE and reused across thousands of messages, sometimes by a batch sender
-   * that does not yet know what each one will be; the message is in hand only
-   * here. `resolveSendingIdentity` still refuses when a caller declares the
-   * purpose — that is what gives the campaign route a `409` a merchant can
-   * read — and this is what holds when nobody declared anything.
-   *
-   * The classification is DERIVED, never declared. See `isMarketingMessage`.
-   */
-  const marketingRefusal = isMarketingMessage(options)
-    ? sharedIdentityMarketingRefusal(options.sendingIdentity)
-    : null
-  if (marketingRefusal) {
-    console.warn(`${label} refused — ${marketingRefusal.message}`)
-    return {
-      sent: false,
-      reason: 'unverified-domain',
-      detail: marketingRefusal.message,
-    }
-  }
-
   // A resolved identity outranks the configured sender: it is the server's
   // answer to which verified address this message leaves on. Without one, the
   // white-label display name is applied to the configured verified sender
@@ -778,6 +746,40 @@ export async function sendEmail(
         `${label} carries no unsubscribe link — set ` +
           'EMAIL_UNSUBSCRIBE_SECRET and publish the site on a domain',
       )
+    }
+  }
+
+  /*
+   * BULK MAIL WITH NO WAY OUT DOES NOT LEAVE ON THE POOLED IDENTITY.
+   *
+   * The pool carries marketing for every site that has no domain of its own,
+   * and what keeps that survivable is that a recipient can always stop it: the
+   * complaint that would otherwise be charged to every other site on the member
+   * has a cheaper alternative one click away. A message that lost its
+   * unsubscribe link removes that alternative, so it is refused here rather
+   * than sent at other people's expense.
+   *
+   * Asked AFTER the gate, because only here is the answer known. The URL may
+   * arrive from the caller, from the gate that mints one per recipient, or —
+   * for a campaign, which composes its own one-click pair upstream — as a
+   * `List-Unsubscribe` header and no marketing context at all. Reading only one
+   * of the three would refuse the senders that are behaving.
+   *
+   * The classification is DERIVED, never declared. See `isMarketingMessage`.
+   */
+  const pooledRefusal = isMarketingMessage(options)
+    ? pooledMarketingRefusal(
+        options.sendingIdentity,
+        Boolean(unsubscribeUrl) ||
+          Boolean(options.headers?.['List-Unsubscribe']),
+      )
+    : null
+  if (pooledRefusal) {
+    console.warn(`${label} refused — ${pooledRefusal.message}`)
+    return {
+      sent: false,
+      reason: 'unverified-domain',
+      detail: pooledRefusal.message,
     }
   }
 

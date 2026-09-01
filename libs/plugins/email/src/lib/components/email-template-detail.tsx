@@ -45,6 +45,7 @@ import {
   TableCell,
   TableHead,
   TableRow,
+  TextField,
   Typography,
 } from '@mui/material'
 import {
@@ -54,10 +55,12 @@ import {
   limit,
   orderBy,
   query,
+  updateDoc,
   where,
 } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
+import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   CAMPAIGN_SEND_CONTAINER_FIELD,
 } from '@aglyn/shared-ui-email-campaigns/model/campaign-container'
@@ -163,6 +166,40 @@ export function EmailTemplateDetail(props: EmailTemplateDetailProps) {
   const marketingHub = useMarketingHubPath()
   const firestore = useFirestore()
   const router = useRouter()
+  const { enqueueSnackbar } = useSnackbar()
+
+  /*==========================================
+   * RENAMING THE DESIGN, on its own page.
+   *
+   * The name is the only thing that tells one design from another in the
+   * campaign composer's picker, and until now nothing could change it — so a
+   * site accumulated indistinguishable "Untitled email" rows. Edit lives
+   * here, on the record's detail page, like every other record edit.
+   *
+   * `null` means "not editing": the field shows the live document's name
+   * until the reader types, so an untouched field never writes a stale seed
+   * back — only a value the reader actually entered is ever saved, and only
+   * the one field.
+   *=========================================*/
+  const [nameDraft, setNameDraft] = useState<string | null>(null)
+  const [renaming, setRenaming] = useState(false)
+  const handleRename = async () => {
+    const next = (nameDraft ?? '').trim()
+    if (!next || renaming) return
+    setRenaming(true)
+    try {
+      await updateDoc(doc(firestore, 'hosts', hostId, 'screens', screenId), {
+        displayName: next,
+      })
+      setNameDraft(null)
+      enqueueSnackbar('Design renamed', { variant: 'success', persist: false })
+    } catch (error) {
+      console.error(error)
+      enqueueSnackbar('The design could not be renamed', { variant: 'error' })
+    } finally {
+      setRenaming(false)
+    }
+  }
 
   const { data: screen, status } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId, 'screens', screenId),
@@ -419,6 +456,28 @@ export function EmailTemplateDetail(props: EmailTemplateDetailProps) {
               {caveat.message}
             </Alert>
           ))}
+
+          <Section title="Name">
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
+              <TextField
+                label="Design name"
+                size="small"
+                value={nameDraft ?? String(screen?.displayName ?? '')}
+                onChange={(event) => setNameDraft(event.target.value)}
+                sx={{ minWidth: 280 }}
+                helperText="What the campaign composer's design picker shows"
+              />
+              <Button
+                size="small"
+                disabled={nameDraft === null || !nameDraft.trim() || renaming}
+                onClick={() => void handleRename()}
+              >
+                {renaming ? 'Saving…' : 'Rename'}
+              </Button>
+            </Stack>
+          </Section>
+
+          <Divider />
 
           {/*==========================================
             * WHAT HAPPENED TO THE MAIL, SUMMED.

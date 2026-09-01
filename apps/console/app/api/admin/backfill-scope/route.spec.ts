@@ -180,6 +180,31 @@ describe('the scope-drift detector (AGL-1478)', () => {
     expect(notification.body).toContain('1 datasets')
   })
 
+  it('opens the one page a reader can act on', async () => {
+    seeded.media = [{ id: 'a', data: {} }]
+    await call(CRON)
+    const { link } = mockNotifyStaff.mock.calls[0][0] as { link: string }
+    // The repair stays a human act (docs/SCOPE_DRIFT.md), so the alert has
+    // to land somewhere that human can take it. Asserted by reading the page
+    // rather than by naming the path: the link is only as good as the card
+    // being on the other end of it, and either one can move.
+    const { readFileSync } = require('node:fs')
+    const { join } = require('node:path')
+    const page = readFileSync(
+      join(
+        __dirname,
+        '..',
+        '..',
+        '..',
+        '(app)',
+        link.replace(/^\//, ''),
+        'page.tsx',
+      ),
+      'utf8',
+    )
+    expect(page).toContain('ScopeDriftCard')
+  })
+
   it('stays quiet and green when everything is stamped', async () => {
     seeded.datasets = [{ id: 'a', data: { visibleTo: ['org'] } }]
     // An EMPTY array is a stored "visible to nobody", not drift — the

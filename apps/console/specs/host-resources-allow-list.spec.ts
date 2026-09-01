@@ -140,6 +140,11 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // The REAL entitlement/quota rules and the REAL collection-kind reader: a
   // spec that stubbed them would pass against a route enforcing nothing.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),
+  // The REAL node codec (AGL-1151). The route under test compresses any
+  // `nodes` it writes, and this factory is a CLOSED WORLD — an absent export
+  // throws inside the route and its own catch answers 500, which reads
+  // exactly like the behaviour under test regressing.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/stored-nodes'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/actions'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/collection-kind'),
   // The REAL screen kinds too (AGL-1400): both routes now read them, and a
@@ -165,6 +170,10 @@ jest.mock('@aglyn/aglyn/server', () => ({
   }),
 }))
 
+import {
+  decodeStoredNodes,
+  storedNodesForm,
+} from '@aglyn/aglyn/app-utils/stored-nodes'
 import { POST as COLLECTIONS_POST } from '../app/api/hosts/collections/route'
 import { POST as RESOURCES_POST } from '../app/api/hosts/resources/route'
 import { POST as VERSIONS_POST } from '../app/api/hosts/versions/route'
@@ -400,8 +409,30 @@ describe('/api/hosts/resources stores an allow-list (AGL-1377)', () => {
       // Field by field rather than a whole-object match: the failure message
       // then names the key that stopped round-tripping.
       for (const [key, value] of Object.entries(data)) {
-        expect({ [key]: stored[key] }).toEqual({ [key]: value })
+        // `nodes` round-trips through the ENCODING (AGL-1151) — the route
+        // stores every besigner tree as msgpack. What is asserted is still
+        // that the caller's value survives, which is what the allow-list is
+        // about; the storage form is asserted separately below.
+        const round = key === 'nodes' ? decodeStoredNodes(stored[key]) : stored[key]
+        expect({ [key]: round }).toEqual({ [key]: value })
       }
+    })
+
+    /**
+     * COMPRESSED AT REST (AGL-1151).
+     *
+     * Three of the kinds this route creates seed a besigner tree — a
+     * template, a reusable component and a form — and all three wrote it as a
+     * plain Firestore map, at roughly 1.4x the bytes of the form the besigner
+     * itself writes and against the same 1 MiB ceiling. "Save as template"
+     * seeds this route with a whole page.
+     */
+    it('stores a besigner tree as msgpack, not as a plain map', async () => {
+      if (!('nodes' in data)) return
+      const response = await postResource(resource, data)
+      expect(response.status).toBe(200)
+      const stored = mockWrite.mock.calls[0][0] as Record<string, unknown>
+      expect(storedNodesForm(stored['nodes'])).toBe('bytes')
     })
 
     it('stores nothing the caller did not send', async () => {
@@ -605,8 +636,13 @@ describe('/api/hosts/versions stores an allow-list too (AGL-1377)', () => {
     expect(response.status).toBe(200)
     const stored = mockWrite.mock.calls[0][0] as Record<string, unknown>
     for (const [key, value] of Object.entries(seed)) {
-      expect({ [key]: stored[key] }).toEqual({ [key]: value })
+      // `nodes` round-trips through the ENCODING (AGL-1151): a version is
+      // born compressed rather than waiting for its first save.
+      const round =
+        key === 'nodes' ? decodeStoredNodes(stored[key]) : stored[key]
+      expect({ [key]: round }).toEqual({ [key]: value })
     }
+    expect(storedNodesForm(stored['nodes'])).toBe('bytes')
   })
 
   it('stores nothing the besigner did not seed', async () => {
@@ -619,7 +655,7 @@ describe('/api/hosts/versions stores an allow-list too (AGL-1377)', () => {
     expect(stored).not.toHaveProperty('role')
     expect(stored['createdAt']).not.toBe(UNEXPECTED.createdAt)
     expect(stored['updatedAt']).not.toBe(UNEXPECTED.updatedAt)
-    expect(stored['nodes']).toEqual(seed.nodes)
+    expect(decodeStoredNodes(stored['nodes'])).toEqual(seed.nodes)
   })
 })
 

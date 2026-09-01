@@ -857,6 +857,18 @@ export interface AglynScreenVersion<N = AglynNodeSchema>
   createdAt?: ITimestamp
   updatedAt?: ITimestamp
   nodes?: Record<NodeId, N>
+  /**
+   * Shared layout THIS VERSION renders inside (see {@link AglynLayout}).
+   *
+   * Key-present wins over the screen document's {@link AglynScreen.layoutId}:
+   * a `LayoutUid` binds the version to that layout, an explicit `null` renders
+   * the version with no layout, and an absent key inherits the screen's
+   * binding. Per-version binding is what lets a scheduled version bring its
+   * own chrome live at publish time without reframing the currently served
+   * version. On layout versions ({@link AglynLayoutVersion}) this same key is
+   * instead the back-pointer to the owning layout document.
+   */
+  layoutId?: LayoutUid | null
 }
 
 /** Unique id of a host-level reusable component definition. */

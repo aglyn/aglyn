@@ -54,9 +54,36 @@ async function readComponents(hostId: Aglyn.HostUid) {
       for (const docSnapshot of res.docs) {
         const value = docSnapshot.data() as Aglyn.AglynHostComponent
         if (value?.deletedAt || !value?.nodes || !value?.rootId) continue
+        /*
+         * BOTH STORED FORMS, on the hot path (AGL-1151).
+         *
+         * A published definition is msgpack for anything promoted since
+         * components were compressed and a plain map for everything older,
+         * and nothing migrates them — `decodeStoredNodes` returns a map
+         * unchanged, so one call serves both forever.
+         *
+         * It has to be here rather than at the caller because the failure is
+         * silent and cached: `composeReusableComponentNodes` looks up
+         * `nodes[rootId]` on the value below, finds nothing in a `Buffer`,
+         * and grafts an empty wrapper — so every instance of the component
+         * disappears from every page of the site, and the result is stored
+         * under the render cache for the rest of its TTL.
+         *
+         * The decode costs no new dependency: this module already imports
+         * `@aglyn/aglyn/server`, and the tenant's published-page CLIENT
+         * bundle never reaches this file.
+         */
+        const nodes = Aglyn.decodeStoredNodes<
+          Aglyn.ReusableComponentTree['nodes']
+        >(value.nodes)
+        // An undecodable definition is skipped rather than grafted empty. It
+        // is the same outcome for the page either way, but `decodeStoredNodes`
+        // logs the reason, and a definition that silently became `{}` would
+        // not say why the component vanished.
+        if (!nodes) continue
         data.definitions[docSnapshot.id] = {
           rootId: value.rootId,
-          nodes: value.nodes as Aglyn.ReusableComponentTree['nodes'],
+          nodes,
           // Declared props (AGL-1247): without these the graft leaves every
           // `{{prop.*}}` token unresolved on the published page.
           ...(value.props?.length && { props: value.props }),

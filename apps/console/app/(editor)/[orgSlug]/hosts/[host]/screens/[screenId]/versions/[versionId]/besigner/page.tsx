@@ -42,7 +42,6 @@ import {
   type ComponentPropagationChange,
   type WorkspaceEditorComponentProps,
   clearServerDraft,
-  writeServerDraft,
 } from '@aglyn/besigner-ui'
 // Import '@aglyn/foundation-feature-singleton'
 import {
@@ -245,8 +244,26 @@ function BesignerPage(props) {
   // The browser tab names THIS document, not just its site (AGL-2486).
   // The server put the id in the title; this swaps in the loaded name.
   useDeclareDocumentSubject(screenId, screenResult?.data?.displayName)
-  const layoutId = screenResult?.data?.layoutId
   const firestore = useFirestore()
+  const { doc: result, setDoc: updateVersionDoc } = useScreenVersion({
+    hostId: hostId as string,
+    screenId: screenId as string,
+    versionId: versionId as string,
+  })
+  /**
+   * The layout binding is per-VERSION with a screen-document fallback:
+   * key-present on the version wins (a `null` there means explicitly no
+   * layout), an absent key inherits the screen's binding. This is what lets
+   * a scheduled version bring its own chrome live at publish time without
+   * reframing the version the site is currently serving — the tenant
+   * runtime (`composeScreenNodes`) resolves the same way.
+   */
+  const versionLayoutBound = Boolean(
+    result?.data && 'layoutId' in result.data,
+  )
+  const layoutId = versionLayoutBound
+    ? ((result?.data as { layoutId?: string | null })?.layoutId ?? undefined)
+    : screenResult?.data?.layoutId
   /**
    * Is the version being edited the one the site is SERVING?
    *
@@ -283,11 +300,6 @@ function BesignerPage(props) {
       : undefined,
     componentDefinitions,
   )
-  const { doc: result } = useScreenVersion({
-    hostId: hostId as string,
-    screenId: screenId as string,
-    versionId: versionId as string,
-  })
   const screenVersionRef = useScreenVersionRef({
     hostId: hostId as string,
     screenId: screenId as string,
@@ -336,6 +348,17 @@ function BesignerPage(props) {
   })
 
   const screenKind = screenResult?.data?.kind
+  /**
+   * An email screen has NO site publish, so the draft/promote split protects
+   * nothing on it. Campaign sends and the composer's preview read
+   * `screens/{id}.versionId` and render THAT version — there is no routed
+   * page, no slug and no live-site state a draft could shield. A save that
+   * stops short of promoting the pointer is a save the send path never sees,
+   * silently, which is exactly the trap the split exists to prevent on a
+   * routed screen. So for `kind: 'email'` the save control collapses to one
+   * action that saves and promotes together.
+   */
+  const isEmailScreen = screenKind === 'email'
 
   // Conditional write (AGL-1301): the transaction re-checks the baseline
   // against what Firestore actually holds, so a save racing another writer's
@@ -365,6 +388,7 @@ function BesignerPage(props) {
     remoteChanged,
     draft,
     handleSave,
+    saveWorkingDraft,
     jsonOpen,
     openJsonEditor,
     closeJsonEditor,
@@ -396,7 +420,9 @@ function BesignerPage(props) {
     // `handleSaveDraft` writes, and what the restore prompt now prefers.
     // Undefined off the live version, so that editor keeps the local crash net
     // alone and never offers a draft that should not exist there.
-    firestore: editingLiveVersion ? firestore : undefined,
+    // An email screen's save IS the promote, so a working draft would be a
+    // second copy of state the send path never reads — it stays off there.
+    firestore: editingLiveVersion && !isEmailScreen ? firestore : undefined,
     // The crash-recovery prompt is withheld while anyone else is in this
     // room (AGL-2486): the mirror already has the unsaved work, so there is
     // nothing to recover and both of its buttons could only take something
@@ -415,7 +441,12 @@ function BesignerPage(props) {
     // because it does not touch it.
     savedMessage:
       versionId && versionId === screenResult?.data?.versionId
-        ? 'Screen saved — your live page is refreshing now'
+        ? isEmailScreen
+          ? // The email publish toast below says what a save means for an
+            // email screen; "your live page" would name a page that does
+            // not exist.
+            undefined
+          : 'Screen saved — your live page is refreshing now'
         : undefined,
     queueLoading,
     // The refusal half of `onSaved` — the two together are what let
@@ -618,15 +649,31 @@ function BesignerPage(props) {
   const handleLayoutChange = useCallback(
     async (event) => {
       const value = event.target.value as string
-      const nextLayoutId = value === '__none__' ? undefined : value
-      await updateScreenDoc({
-        layoutId: nextLayoutId ?? (deleteField() as any),
-      } as any)
+      /**
+       * Written to the VERSION, never the screen: the screen-level binding
+       * is the inherited default for versions that carry no key of their
+       * own, and writing it from here would reframe the live version while
+       * editing a scheduled one. "Inherit" deletes the version's key;
+       * "None" stores an explicit `null` so a version can opt out of a
+       * layout its screen still binds.
+       */
+      const update =
+        value === '__inherit__'
+          ? { layoutId: deleteField() as any }
+          : { layoutId: value === '__none__' ? null : value }
+      await updateVersionDoc(update as any)
         .then(() => {
-          enqueueSnackbar(nextLayoutId ? 'Layout assigned' : 'Layout removed', {
-            variant: 'success',
-            persist: false,
-          })
+          enqueueSnackbar(
+            value === '__inherit__'
+              ? 'Layout inherited from screen'
+              : value === '__none__'
+                ? 'Layout removed for this version'
+                : 'Layout assigned to this version',
+            {
+              variant: 'success',
+              persist: false,
+            },
+          )
         })
         .catch((e) => {
           enqueueSnackbar(`Error: ${JSON.stringify(e)}`, {
@@ -635,7 +682,7 @@ function BesignerPage(props) {
           })
         })
     },
-    [updateScreenDoc, enqueueSnackbar],
+    [updateVersionDoc, enqueueSnackbar],
   )
 
   // Publishing: the tenant site only serves paths present in the host's
@@ -748,17 +795,10 @@ function BesignerPage(props) {
    * that already contains them would re-apply them.
    */
   const handleSaveDraft = useCallback(async () => {
-    const nodes = Aglyn.canvas.toJSON().nodes as Aglyn.ProcessableNodes
-    const wrote = await writeServerDraft(
-      firestore,
-      { scope: hostId, kind: 'screen', docId: screenId, versionId },
-      {
-        nodes,
-        baseStamp: Aglyn.versionStamp(screenResult?.data?.updatedAt),
-        updatedByUid: user?.uid ?? null,
-        updatedByEmail: user?.email ?? null,
-      },
-    ).catch(() => 'failed' as const)
+    const wrote = await saveWorkingDraft({
+      uid: user?.uid,
+      email: user?.email,
+    })
     if (wrote === 'failed') {
       enqueueSnackbar('Could not save the draft — your work is still here.', {
         variant: 'error',
@@ -784,15 +824,7 @@ function BesignerPage(props) {
       variant: 'success',
       persist: false,
     })
-  }, [
-    firestore,
-    hostId,
-    screenId,
-    versionId,
-    screenResult?.data?.updatedAt,
-    user,
-    enqueueSnackbar,
-  ])
+  }, [saveWorkingDraft, user, enqueueSnackbar])
 
   /**
    * SAVE, THEN MAKE THIS VERSION THE LIVE ONE (AGL-1152).
@@ -890,12 +922,16 @@ function BesignerPage(props) {
     // the live page stale for the rest of its window. Discarding the
     // result is how a publish came to report itself complete over a page
     // that kept serving the old HTML.
-    void revalidateLivePages({ user, hostId, screenId }).then((result) => {
-      const shortfall = describeRevalidateShortfall(result)
-      if (shortfall) {
-        enqueueSnackbar(shortfall, { variant: 'warning', persist: false })
-      }
-    })
+    // An email screen routes no live pages, so there is no cached HTML to
+    // drop — the promoted version is read fresh by every campaign render.
+    if (!isEmailScreen) {
+      void revalidateLivePages({ user, hostId, screenId }).then((result) => {
+        const shortfall = describeRevalidateShortfall(result)
+        if (shortfall) {
+          enqueueSnackbar(shortfall, { variant: 'warning', persist: false })
+        }
+      })
+    }
     // The draft has been published, so it must stop being offered — otherwise
     // the next open invites the author to restore the state they just moved
     // past. Best effort, like the cache drop above.
@@ -907,13 +943,19 @@ function BesignerPage(props) {
     })
     setDraftPending(false)
     enqueueSnackbar(
-      livePointer === versionId
-        ? 'Saved and published — the live pages are refreshing now.'
-        : 'Published this version — it is now what the live site serves.',
+      isEmailScreen
+        ? // The version pointer is what `loadEmailTemplate` and the
+          // composer's preview read, so this names the readers a save
+          // actually reaches — there is no live site to speak of.
+          'Saved — campaigns and previews use this version now.'
+        : livePointer === versionId
+          ? 'Saved and published — the live pages are refreshing now.'
+          : 'Published this version — it is now what the live site serves.',
       { variant: 'success', persist: false },
     )
   }, [
     handleSave,
+    isEmailScreen,
     livePublished,
     remoteChanged,
     screenResult?.data?.versionId,
@@ -1402,7 +1444,13 @@ function BesignerPage(props) {
                               ? { path: ICON_VARIANT_MODIFY_SAVE.path }
                               : { path: ICON_VARIANT_SYMBOL_CONFIRMED.path },
                             children: saveAvailable ? 'Save' : 'Up to Date',
-                            onClick: handleSave,
+                            // The menu's Save means the same thing the
+                            // toolbar's does: on an email screen that is
+                            // save-and-promote, everywhere else the plain
+                            // version save.
+                            onClick: isEmailScreen
+                              ? handleSaveAndPublish
+                              : handleSave,
                           },
                           {
                             id: 'center-nav-file-close',
@@ -1515,9 +1563,20 @@ function BesignerPage(props) {
                           detailsUrl={detailUrl}
                           presence={<PresenceAvatars presence={presence} />}
                           onSave={
-                            editingLiveVersion ? handleSaveDraft : handleSave
+                            // An email screen's only reader is the campaign
+                            // send path, which follows the version pointer —
+                            // so its Save promotes, always, and the control
+                            // collapses to a single button (no publish
+                            // handler means no draft/publish split to offer).
+                            isEmailScreen
+                              ? handleSaveAndPublish
+                              : editingLiveVersion
+                                ? handleSaveDraft
+                                : handleSave
                           }
-                          onSaveAndPublish={handleSaveAndPublish}
+                          onSaveAndPublish={
+                            isEmailScreen ? undefined : handleSaveAndPublish
+                          }
                           // Live only when the parent's pointer names THIS version.
                           livePublished={livePublished}
                           onPreview={handlePreview}
@@ -1691,16 +1750,30 @@ function BesignerPage(props) {
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
                         {
-                          'Wraps this screen in chrome (appbar, footer, …) maintained once for every bound screen. Saved immediately.'
+                          'Wraps this VERSION in chrome (appbar, footer, …) maintained once for every bound screen. Applies per version — publishing this version brings its layout with it. Saved immediately.'
                         }
                       </Typography>
                       <TextField
                         select
                         size="small"
                         label="Layout"
-                        value={layoutId ?? '__none__'}
+                        value={
+                          versionLayoutBound
+                            ? (layoutId ?? '__none__')
+                            : '__inherit__'
+                        }
                         onChange={handleLayoutChange}
                       >
+                        <MenuItem value="__inherit__">
+                          {screenResult?.data?.layoutId
+                            ? `Inherit from screen (${
+                                (layoutOptions ?? []).find(
+                                  (layout) =>
+                                    layout.$id === screenResult.data?.layoutId,
+                                )?.displayName ?? screenResult.data.layoutId
+                              })`
+                            : 'Inherit from screen (none)'}
+                        </MenuItem>
                         <MenuItem value="__none__">{'None'}</MenuItem>
                         {(layoutOptions ?? []).map((layout) => (
                           <MenuItem key={layout.$id} value={layout.$id}>

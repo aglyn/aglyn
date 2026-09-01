@@ -166,6 +166,47 @@ node tools/scripts/deploy-firestore-rules.mjs   # from a checkout pinned to the 
 
 Delete this subsection once `check:rules-drift` reports firestore clean.
 
+### 5 — Deploy the Cloud Functions the batch contains
+
+`cloud/functions` does not ride the merge either. The promotion deploys the
+Next.js apps on Vercel; the scheduled functions are a standalone package that
+no workflow deploys, so a merged PR touching `cloud/functions/src/index.ts` is
+not evidence that anything is scheduled.
+
+```bash
+npm --prefix cloud/functions run deploy   # firebase deploy --only functions
+```
+
+**This step has a deadline the rules step does not.** `SCHEDULED_JOBS` in
+`libs/aglyn/src/lib/app-utils/health-report.ts` is the inventory
+`/api/health/crons` judges against, and production begins judging a new
+`runner: 'cloud-scheduler'` row the moment the promotion serves it — while the
+Cloud Scheduler job that drives it exists only after the deploy above. The
+watch floor in `readWatchStart` is a single stored document, created once, so
+it grants a bootstrap window to the jobs present when the watch began and none
+at all to a row added later: the new job is judged from its first fire time.
+
+A batch that adds a scheduled job and skips this step therefore ships a job
+that does not run, and says so within the job's grace — `/api/health/crons`
+returns 503, the `Scheduled jobs` monitor goes red, and the card of the same
+name on `docs.aglyn.com/status` goes degraded in front of customers. The
+endpoint is working correctly when that happens; the scheduler is missing.
+
+Verify against the two things that can disagree — what is deployed, and what
+production thinks:
+
+```bash
+gcloud scheduler jobs list --location=us-central1 --project=aglyn-main
+curl -s https://app.aglyn.com/api/health/crons   # 200 ok, or 503 naming the job
+```
+
+`/api/health*` is exempt from the bot challenge on both Vercel projects, so
+this one needs no `x-aglyn-probe` header; a page route would answer `429`.
+Every `cloud-scheduler` row is either an export in `cloud/functions/src/index.ts`
+or an entry in `CONSOLE_FAST_CRON_ROUTES`, and `scheduled-crons-wiring.spec.ts`
+proves that mapping in both directions — but it proves it about the **source**,
+which is the half a stale deploy does not change.
+
 ## The gate
 
 ```bash

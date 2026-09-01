@@ -232,9 +232,11 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // read (AGL-1383, AGL-1399) — including the one that decides whether a
   // bundle can raise the flat non-page cap at all.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/screen-route'),
-  // The REAL decode too (AGL-1391). Stubbing it would let the export ship an
-  // opaque Buffer envelope and this suite would still be green — which is
-  // exactly how the feature shipped broken.
+  // The REAL codec, both halves (AGL-1391, AGL-1151). Stubbing the decode
+  // would let the export ship an opaque Buffer envelope and this suite would
+  // still be green — which is exactly how the feature shipped broken. The
+  // encode is what the import writes documents through, and a stub of
+  // `undefined` there throws rather than merely mis-storing.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/stored-nodes'),
   // The REAL flat platform caps (AGL-2266) — the import route reads both.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/actions'),
@@ -267,7 +269,11 @@ import {
   IMPORTABLE_FIELDS,
 } from '../app/api/_lib/site-export'
 // Through the mocked specifier, which re-exports the REAL implementation above.
-import { compress } from '@aglyn/aglyn/server'
+import {
+  compress,
+  decodeStoredNodes,
+  storedNodesForm,
+} from '@aglyn/aglyn/server'
 // The REAL Admin `Timestamp`, not a stand-in: what a document's timestamp
 // fields actually hold when `doc.data()` hands them back, and the class the
 // restored value has to BE for a range query to see it (AGL-1392).
@@ -912,6 +918,28 @@ describe('the export/import round trip is lossless (AGL-1382)', () => {
       // then names the key that stopped round-tripping.
       for (const [key, value] of Object.entries({ ...doc, ...restored })) {
         if (dropped?.includes(key)) continue
+        /*
+         * `nodes` round-trips through the ENCODING (AGL-1151). A restore
+         * lands a site in the shape the product writes, which is msgpack —
+         * so the tree is compared through the decoder, and the stored form
+         * gets its own assertion below rather than being smuggled into this
+         * field-by-field loop.
+         *
+         * The bundle itself still carries the DECODED map: that is the
+         * AGL-1391 decision and it is unchanged. A backup nobody can read is
+         * most of the way to no backup.
+         */
+        if (key === 'nodes') {
+          expect({ key, nodes: decodeStoredNodes(stored[key]) }).toEqual({
+            key,
+            nodes: value,
+          })
+          expect({ key, form: storedNodesForm(stored[key]) }).toEqual({
+            key,
+            form: 'bytes',
+          })
+          continue
+        }
         /**
          * `toStrictEqual`, not `toEqual` — and this is the whole AGL-1392
          * trap in one line.
@@ -1008,7 +1036,10 @@ describe('a besigner-saved version survives the round trip (AGL-1391)', () => {
     const bundle = await runExport()
     await runImport(bundle)
     const stored = storedAt(VERSION_PATH)
-    const nodes = stored['nodes'] as Record<string, any>
+    // Decoded: a restore lands the tree in the form the product stores
+    // (msgpack, AGL-1151), and what this test is about is whether the tree
+    // that lands is REACHABLE.
+    const nodes = decodeStoredNodes(stored['nodes']) as Record<string, any>
 
     // "The key survived" is what the pre-AGL-1391 suite proved, and it is not
     // enough: `{type:'Buffer'}` is a present `nodes` too. A page renders only
@@ -1036,7 +1067,9 @@ describe('a besigner-saved version survives the round trip (AGL-1391)', () => {
     expect(version.nodes.type).toBe('Buffer')
 
     await runImport(bundle)
-    const nodes = storedAt(VERSION_PATH)['nodes'] as Record<string, any>
+    const nodes = decodeStoredNodes(
+      storedAt(VERSION_PATH)['nodes'],
+    ) as Record<string, any>
     expect(nodes['root']?.componentId).toBe('container')
     expect(nodes).toEqual(BESIGNER_NODES)
   })
@@ -1478,7 +1511,9 @@ describe('a restored component can still be edited (AGL-1392)', () => {
     expect(stored).not.toHaveProperty('versionId')
     // The tree still restores: the component document is the renderable one.
     expect(stored['rootId']).toBe('root')
-    expect(stored['nodes']).toEqual({
+    // Decoded — a restored component is compressed like a promoted one
+    // (AGL-1151), and `get-components.ts` decodes both forms on the hot path.
+    expect(decodeStoredNodes(stored['nodes'])).toEqual({
       root: { $id: 'root', componentId: 'div', nodes: [] },
     })
   })

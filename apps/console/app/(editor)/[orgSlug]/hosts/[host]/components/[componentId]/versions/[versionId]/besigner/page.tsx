@@ -32,7 +32,6 @@ import {
   type BesignerSaveBaseline,
   type WorkspaceEditorComponentProps,
   clearServerDraft,
-  writeServerDraft,
 } from '@aglyn/besigner-ui'
 import {
   ICON_VARIANT_MODIFY_ADD,
@@ -61,7 +60,7 @@ import ComponentPropsDialog from '../../../../../../../../../../components/compo
 import revalidateLivePages, {
   describeRevalidateShortfall,
 } from '../../../../../../../../../../utils/revalidate-live-pages'
-import { collection, doc, limit, query, updateDoc } from 'firebase/firestore'
+import { Bytes, collection, doc, limit, query, updateDoc } from 'firebase/firestore'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { observer } from 'mobx-react-lite'
 import dynamic from 'next/dynamic'
@@ -307,6 +306,7 @@ function ComponentBesignerPage(props) {
     remoteChanged,
     draft,
     handleSave,
+    saveWorkingDraft,
     markOwnWrite,
     jsonOpen,
     openJsonEditor,
@@ -491,7 +491,12 @@ function ComponentBesignerPage(props) {
       await updateDoc(
         doc(firestore, 'hosts', hostId, 'components', componentId),
         {
-          nodes: publishedNodes,
+          // Compressed at rest (AGL-1151), like the version this promotes
+          // from. A definition is grafted into every page that places it, so
+          // it is copied far more often than it is written — and it was the
+          // one document in the family still stored as a plain map, at about
+          // 1.4x the bytes against the same 1 MiB ceiling.
+          nodes: Bytes.fromUint8Array(Aglyn.encodeStoredNodes(publishedNodes)!),
           ...(rootId ? { rootId } : {}),
           props: declaredProps ?? [],
           versionId,
@@ -577,17 +582,10 @@ function ComponentBesignerPage(props) {
    * a draft is for.
    */
   const handleSaveDraft = useCallback(async () => {
-    const nodes = Aglyn.canvas.toJSON().nodes as Aglyn.ProcessableNodes
-    const wrote = await writeServerDraft(
-      firestore,
-      { scope: hostId, kind: 'component', docId: componentId, versionId },
-      {
-        nodes,
-        baseStamp: Aglyn.versionStamp(componentResult?.data?.updatedAt),
-        updatedByUid: user?.uid ?? null,
-        updatedByEmail: user?.email ?? null,
-      },
-    ).catch(() => 'failed' as const)
+    const wrote = await saveWorkingDraft({
+      uid: user?.uid,
+      email: user?.email,
+    })
     if (wrote === 'failed') {
       enqueueSnackbar('Could not save the draft — your work is still here.', {
         variant: 'error',
@@ -613,15 +611,7 @@ function ComponentBesignerPage(props) {
       variant: 'success',
       persist: false,
     })
-  }, [
-    firestore,
-    hostId,
-    componentId,
-    versionId,
-    componentResult?.data?.updatedAt,
-    user,
-    enqueueSnackbar,
-  ])
+  }, [saveWorkingDraft, user, enqueueSnackbar])
 
   /**
    * Do the live sites already match this version?

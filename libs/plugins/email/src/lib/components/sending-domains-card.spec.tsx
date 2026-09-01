@@ -229,18 +229,23 @@ describe('a workspace with no verified domain', () => {
   })
 
   /**
-   * The disclosure has to name the LIMIT too, not just the pooling.
+   * The disclosure has to name what the pooling COSTS, not just that it
+   * happens.
    *
    * A merchant who reads "your mail sends on a shared address" and then finds
-   * their campaign refused has been told half of an arrangement. The pool
-   * carries receipts and account mail; marketing needs a domain of the site's
-   * own, and the card is where that is learned rather than at the send.
+   * their campaigns paused has been told half of an arrangement. Campaigns
+   * send from the pool, and they are graded against tighter complaint and
+   * bounce limits there — the card is where that is learned rather than from a
+   * paused sender.
    */
-  it('says marketing does not send from the shared address', async () => {
+  it('says campaigns on the shared address are held to tighter limits', async () => {
     await mount()
 
     expect(
-      screen.getByText(/marketing email are different: they need a sending domain/i),
+      screen.getByText(/Campaigns send on the shared address too/i),
+    ).toBeTruthy()
+    expect(
+      screen.getByText(/tighter complaint and bounce limits/i),
     ).toBeTruthy()
   })
 

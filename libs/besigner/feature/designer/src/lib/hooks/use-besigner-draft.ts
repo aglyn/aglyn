@@ -422,8 +422,15 @@ export function useBesignerDraft(
   const discard = useCallback(() => {
     const currentIds = idsRef.current
     setOffer(null)
-    if (currentIds) clearBesignerDraft(currentIds)
-  }, [])
+    if (!currentIds) return
+    clearBesignerDraft(currentIds)
+    // Whichever store the offer came from. The shared draft is PREFERRED over
+    // the local one when both exist, so declining an offer that clearing only
+    // localStorage cannot reach leaves the author declining the same thing on
+    // every reload, with no way to stop being asked. It is the same rule the
+    // clean-canvas cleanup already follows.
+    if (firestore) void clearServerDraft(firestore, currentIds)
+  }, [firestore])
 
   return useMemo(() => {
     if (!key || !offer) return EMPTY_STATE
