@@ -9,6 +9,24 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.30 — 2026-09-01
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.29...v1.0.0-beta.30)
+
+### Added
+
+- **forms:** a placed form renders the entity's published design
+- **email:** an audience can be built from a campaign
+- **forms:** a submission files the person under the form's own campaigns
+- **theme:** the floating-mockup shadow is a theme token with a CSS var
+- **theme:** the accent washes and the brand violet are palette tokens
+
+### Fixed
+
+- **console,email:** email health can see the shared pool it never looked at
+
+2 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
 ## v1.0.0-beta.29 — 2026-09-01
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/07eaadb6e...v1.0.0-beta.29)
