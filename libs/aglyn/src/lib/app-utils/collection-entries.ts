@@ -920,6 +920,68 @@ export function buildCollectionSearchIndex(
 }
 
 /**
+ * The collection blocks that can be BOUND to a collection by name, rather
+ * than inheriting the routed one.
+ *
+ * The same three `scanCollectionBlocks` resolves a source for, and the same
+ * three that can therefore put a collection's entries on a page that is not
+ * one of the collection's own routes — a "Latest posts" rail on the home
+ * page, a category pill strip in a layout's chrome, a search box in a header.
+ *
+ * Related posts is deliberately absent. It resolves against the routed
+ * collection and renders nothing without a current entry in context, so it
+ * only ever appears on an entry page, which the entry's own address already
+ * covers.
+ */
+const COLLECTION_BOUND_COMPONENT_IDS: readonly string[] = [
+  COLLECTION_ENTRIES_COMPONENT_ID,
+  COLLECTION_CATEGORIES_COMPONENT_ID,
+  COLLECTION_SEARCH_COMPONENT_ID,
+]
+
+/**
+ * Does this tree render the collection `collectionSlug` away from the
+ * collection's own routes?
+ *
+ * The content twin of {@link nodesPlaceForm}, and it exists for the same
+ * reason: an entry edit changes every page that renders the collection, and
+ * those pages are found by SEARCHING node trees rather than by matching a
+ * pointer. A collection's own addresses are derivable from its slug; a rail
+ * on the home page is not derivable from anything.
+ *
+ * Matches only an EXPLICIT `collectionSlug`. A block that names none inherits
+ * the routed collection — which means it renders nothing at all off-route
+ * (`scanCollectionBlocks` adds no slug, so the block is left untouched) and
+ * renders the routed collection on-route, where the collection's own list and
+ * entry addresses already reach it. Treating an unbound block as a dependent
+ * of every collection on the site would make every entry save drop every page
+ * that carries one.
+ *
+ * The comparison is against the slug rather than the document id because that
+ * is what the binding stores, and what `scanCollectionBlocks` resolves. A
+ * collection whose slug was just changed is a different question, and one the
+ * slug change itself has to answer.
+ */
+export function nodesRenderCollection(
+  nodes: Record<NodeId, AglynNodeSchema | undefined> | undefined | null,
+  collectionSlug: string,
+): boolean {
+  const wanted = String(collectionSlug ?? '').trim()
+  if (!wanted) return false
+  for (const node of Object.values(nodes ?? {})) {
+    if (!node) continue
+    if (!COLLECTION_BOUND_COMPONENT_IDS.includes(String(node.componentId))) {
+      continue
+    }
+    const bound = (node.props as Record<string, unknown> | undefined)?.[
+      'collectionSlug'
+    ]
+    if (typeof bound === 'string' && bound.trim() === wanted) return true
+  }
+  return false
+}
+
+/**
  * Collection entries blocks (AGL-551): a `collectionEntries` container
  * treats its children as the item template and renders them once per
  * published entry, with `{{entry.*}}` tokens in cloned string props replaced

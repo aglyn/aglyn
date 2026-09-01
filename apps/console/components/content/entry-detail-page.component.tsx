@@ -315,6 +315,7 @@ export function EntryDetailPage() {
     contentHref,
     collectionHref,
     entryHref,
+    announceEntryChange,
     togglePublish,
     deleteEntry,
     openScheduler,
@@ -679,6 +680,21 @@ export function EntryDetailPage() {
     if (editor.id) {
       logActivity('Updated entry', { type: 'content', id, name: title })
     }
+    /**
+     * Drop the live site's caches for what was just written.
+     *
+     * A DRAFT is not on the site, so there is nothing cached of it to drop —
+     * publishing it is what makes it visible, and `togglePublish` announces
+     * that. Everything else here is a change to a page visitors are being
+     * served right now.
+     *
+     * Both slugs when the address moved. The new one has never been rendered;
+     * the OLD one is a cached page that now belongs to no entry, and leaving
+     * it is how a renamed post keeps answering at an address it no longer has.
+     */
+    if (stored?.status && stored.status !== 'draft') {
+      announceEntryChange([effectiveSlug, stored.slug])
+    }
   }, [
     editor,
     selected,
@@ -694,6 +710,9 @@ export function EntryDetailPage() {
     logActivity,
     router,
     collectionHref,
+    stored?.status,
+    stored?.slug,
+    announceEntryChange,
   ])
 
   /**

@@ -46,6 +46,7 @@
  * reason an override exists at all.
  */
 
+import { UNSUBSCRIBE_FOOTER_LABEL } from '@aglyn/shared-util-email'
 import {
   campaignMessageMode,
   campaignPlainTextState,
@@ -58,6 +59,20 @@ const NODES = {
   '_@_': { componentId: 'emailSection', nodes: ['t1'] },
   t1: { componentId: 'emailText', props: { children: 'Designed copy here' } },
 } as Record<string, unknown>
+
+/** The same nodes, with the author's OWN opt-out link in a button. */
+const LINKED_NODES = {
+  '_@_': { componentId: 'emailSection', nodes: ['t1', 'b1'] },
+  t1: { componentId: 'emailText', props: { children: 'Designed copy here' } },
+  b1: {
+    componentId: 'emailButton',
+    props: { children: 'Leave this list', href: '{{unsubscribeUrl}}' },
+  },
+} as Record<string, unknown>
+
+/** Signed, so the `&` between its parameters is there to be escaped. */
+const SIGNED_URL =
+  'https://acme.example/api/email/preferences?hostId=h&email=d%40e.co&sig=abc'
 
 const RECIPIENT = { email: 'dana@example.com', name: 'Dana Reed' }
 
@@ -230,6 +245,43 @@ describe('the plain-text half of a designed message', () => {
     })
     expect(text).toContain('https://acme.example/opt-out')
     expect(text).not.toContain('<a ')
+  })
+
+  it('gives the HTML part the same visible opt-out the text part gets', () => {
+    /*
+     * THE HALF ALMOST EVERY RECIPIENT ACTUALLY READS.
+     *
+     * A designed template carries an opt-out only if its author placed a
+     * `{{unsubscribeUrl}}` somewhere, and nothing makes them: a footer block
+     * that says only the copyright line shipped an HTML part with no way out
+     * of the list at all, while the text part had one — so the defect was
+     * invisible to anyone reading their own test send.
+     */
+    const { html } = renderCampaignEmail({
+      subject: 'Spring sale',
+      content: { mode: 'design', template: { nodes: NODES } },
+      recipient: RECIPIENT,
+      unsubscribeUrl: 'https://acme.example/opt-out',
+    })
+    expect(html).toContain('https://acme.example/opt-out')
+    expect(html).toContain('</a>')
+  })
+
+  it('leaves an author’s OWN placement alone rather than adding a second', () => {
+    // `{{unsubscribeUrl}}` in a link lands in an `href`, where the renderer
+    // escapes it — so the check that spots it has to look for the escaped
+    // form too, or the templates that did the right thing get two footers.
+    const { html } = renderCampaignEmail({
+      subject: 'Spring sale',
+      content: {
+        mode: 'design',
+        template: { nodes: LINKED_NODES },
+      },
+      recipient: RECIPIENT,
+      unsubscribeUrl: SIGNED_URL,
+    })
+    expect(html.split('Leave this list').length - 1).toBe(1)
+    expect(html).not.toContain(UNSUBSCRIBE_FOOTER_LABEL)
   })
 
   it('reports the message text WITHOUT the footer, for the composer', () => {

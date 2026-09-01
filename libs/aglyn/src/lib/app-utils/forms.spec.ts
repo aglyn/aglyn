@@ -20,7 +20,9 @@ import {
   collectFormFieldNodeIds,
   FORMS_MAX_PER_HOST,
   formFieldDeclsFromNodes,
+  formPeriodKey,
   formPeriodSeries,
+  formStatsTotals,
   formStatsWindow,
   discoverFormNodes,
   matchSubmissionToForm,
@@ -508,5 +510,100 @@ describe('a rate is taken only over the months its denominator was live', () => 
       'submissions',
     )
     expect(window.periods).toBe(0)
+  })
+})
+
+describe('a total says which months it covers', () => {
+  /*
+   * The counters a form carries are LIFETIME, and a surface that reports one
+   * under a heading with dates on it has misreported the thing it is about.
+   * These are the controls for the two ways that goes wrong: summing the flat
+   * counters when a window exists, and reading an unmeasured counter as a
+   * measured zero.
+   */
+  const stats = {
+    submissions: 40,
+    leads: 9,
+    views: 300,
+    starts: 120,
+    periods: {
+      '2026-01': { submissions: 10, views: 100, starts: 40 },
+      '2026-02': { submissions: 12, leads: 4, views: 90, starts: 35 },
+      '2026-03': { submissions: 8, leads: 5, views: 60, starts: 25 },
+    },
+  }
+
+  it('answers the flat counters, and says so, when no range is given', () => {
+    const totals = formStatsTotals(stats)
+    expect(totals.submissions).toBe(40)
+    expect(totals.leads).toBe(9)
+    // `null` periods is the whole signal a caller has that this figure is
+    // lifetime and must not be labeled as belonging to a window.
+    expect(totals.periods).toBeNull()
+  })
+
+  it('sums only the months inside the range', () => {
+    const totals = formStatsTotals(stats, { from: '2026-02', to: '2026-03' })
+    expect(totals.submissions).toBe(20)
+    expect(totals.periods).toBe(2)
+    // The control: the lifetime figure must NOT come back from a windowed
+    // call. Summing the flat counters here is exactly the misreport.
+    expect(totals.submissions).not.toBe(stats.submissions)
+  })
+
+  it('leaves an open end open', () => {
+    // A campaign with a start and no end runs to the last month recorded, and
+    // substituting a closing month would drop the month still moving.
+    expect(formStatsTotals(stats, { from: '2026-02' }).submissions).toBe(20)
+    expect(formStatsTotals(stats, { to: '2026-01' }).submissions).toBe(10)
+  })
+
+  it('reports a counter no month carries as unrecorded, not as zero', () => {
+    // January carries no `leads` key: the form was not routing leads, which
+    // is not the same fact as it having produced none.
+    const totals = formStatsTotals(stats, { from: '2026-01', to: '2026-01' })
+    expect(totals.leads).toBeNull()
+    expect(totals.submissions).toBe(10)
+  })
+
+  it('reports every counter as unrecorded when no month is in range', () => {
+    const totals = formStatsTotals(stats, { from: '2027-01' })
+    expect(totals.periods).toBe(0)
+    expect(totals.submissions).toBeNull()
+    expect(totals.views).toBeNull()
+  })
+
+  it('windows a form with lifetime counters and no month series to nothing', () => {
+    /*
+     * The counters predate the month series, so a form can carry a large
+     * lifetime total and no months at all. A windowed read of it is genuinely
+     * unmeasured — and answering 0 would state that the campaign's months
+     * were quiet, which nobody measured.
+     */
+    const totals = formStatsTotals({ submissions: 500 }, { from: '2026-01' })
+    expect(totals.submissions).toBeNull()
+    expect(totals.periods).toBe(0)
+    expect(formStatsTotals({ submissions: 500 }).submissions).toBe(500)
+  })
+
+  it('ignores a stored key that is not a month', () => {
+    const totals = formStatsTotals(
+      {
+        periods: {
+          total: { submissions: 99 },
+          '2026-02': { submissions: 3 },
+        },
+      },
+      { from: '2026-01', to: '2026-12' },
+    )
+    expect(totals.submissions).toBe(3)
+  })
+
+  it('keys a moment by the same function every writer keys by', () => {
+    // A month derived any other way reads zero on the boundary month, which
+    // is the one a reader is most likely asking about.
+    expect(formPeriodKey(Date.UTC(2026, 1, 15))).toBe('2026-02')
+    expect(formPeriodKey(null)).toBeNull()
+    expect(formPeriodKey(Number.NaN)).toBeNull()
   })
 })

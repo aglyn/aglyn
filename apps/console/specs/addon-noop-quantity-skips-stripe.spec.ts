@@ -40,11 +40,19 @@
  * the old code answered `ok: true` with the right quantities too. What
  * separates fixed from broken is that Stripe is never asked.
  *
- * `always_invoice` for REAL changes is deliberate — capacity bought now is
+ * `always_invoice` for an INCREASE is deliberate — capacity bought now is
  * invoiced and charged now, superseding the AGL-535 choice to defer it to the
- * next renewal — and is asserted
- * here as well, so a future "fix" that suppresses prorations outright — which
- * would stop billing genuine upgrades — goes red instead of green.
+ * next renewal — and is asserted here as well, so a future "fix" that
+ * suppresses prorations outright — which would stop billing genuine upgrades —
+ * goes red instead of green.
+ *
+ * A DECREASE is the other half and is not symmetric: it is scheduled onto the
+ * period end and charges and credits nothing, so `subscriptions/{id}` is never
+ * called for one at all. The deferral's own contract lives in
+ * `addon-reduction-defers-to-period-end.spec.ts`; what the two cases below
+ * hold is the boundary between the halves — that a reduction leaves the live
+ * subscription alone, and that the no-op guard above it is still the thing
+ * that stops an unchanged quantity from reaching Stripe by either route.
  *
  * NO STRIPE PATH IS EXERCISED. `fetch` is mocked and never calls out;
  * localhost carries the LIVE key.
@@ -53,6 +61,12 @@
 export {}
 
 const ORG_ID = 'org-1'
+
+/**
+ * The renewal a scheduled reduction lands on — 2026-01-01T00:00:00.000Z, the
+ * value `effectiveAt` is derived from.
+ */
+const PERIOD_END = 1767225600
 
 /** The dataset add-on item on the subscription; `null` means no item at all. */
 let datasetItem: any
@@ -179,6 +193,49 @@ function subscriptionUpdate(): URLSearchParams | null {
   return entry ? new URLSearchParams(entry.body) : null
 }
 
+/** The captured body of the one `POST subscription_schedules/{id}`. */
+function scheduleUpdate(): URLSearchParams | null {
+  const entry = stripeCalls.find(
+    (call) =>
+      call.method === 'POST' && call.href.includes('/subscription_schedules/'),
+  )
+  return entry ? new URLSearchParams(entry.body) : null
+}
+
+/** The price ids a schedule phase was written with, in order. */
+function phasePrices(index: number): string[] {
+  const body = scheduleUpdate()
+  const prices: string[] = []
+  for (let i = 0; ; i += 1) {
+    const price = body?.get(`phases[${index}][items][${i}][price]`)
+    if (!price) return prices
+    prices.push(price)
+  }
+}
+
+/** A phase's quantity for one price, or null when the phase has no such line. */
+function phaseQuantity(index: number, price: string): string | null {
+  const at = phasePrices(index).indexOf(price)
+  if (at < 0) return null
+  return scheduleUpdate()?.get(`phases[${index}][items][${at}][quantity]`) ?? null
+}
+
+/** The subscription's items, in the order Stripe reports them. */
+function liveItems() {
+  return [
+    {
+      id: 'si_plan',
+      quantity: 1,
+      price: { id: 'price_starter_monthly', recurring: { interval: 'month' } },
+    },
+    ...(datasetItem ? [datasetItem] : []),
+    {
+      id: 'si_metered',
+      price: { id: 'price_metered_usage', recurring: { interval: 'month' } },
+    },
+  ]
+}
+
 beforeEach(() => {
   // The invoice's own shape: Starter, one extra dataset.
   datasetItem = {
@@ -203,26 +260,29 @@ beforeEach(() => {
             id: 'sub_1',
             status: 'active',
             currency: 'usd',
-            items: {
-              data: [
-                {
-                  id: 'si_plan',
-                  quantity: 1,
-                  price: {
-                    id: 'price_starter_monthly',
-                    recurring: { interval: 'month' },
-                  },
-                },
-                ...(datasetItem ? [datasetItem] : []),
-                {
-                  id: 'si_metered',
-                  price: {
-                    id: 'price_metered_usage',
-                    recurring: { interval: 'month' },
-                  },
-                },
-              ],
-            },
+            current_period_end: PERIOD_END,
+            metadata: { plan: 'starter', orgId: ORG_ID },
+            items: { data: liveItems() },
+          },
+        ],
+      }
+    } else if (href.includes('/subscription_schedules')) {
+      // A schedule created `from_subscription` comes back with ONE phase —
+      // the present, filled from the subscription's own items. The same doc
+      // answers the update POST; only the request body is under test.
+      payload = {
+        id: 'sub_sched_1',
+        status: 'not_started',
+        end_behavior: 'release',
+        phases: [
+          {
+            start_date: PERIOD_END - 2592000,
+            end_date: PERIOD_END,
+            items: liveItems().map((item) => ({
+              price: item.price.id,
+              ...(item.quantity == null ? {} : { quantity: item.quantity }),
+            })),
+            automatic_tax: { enabled: true },
           },
         ],
       }
@@ -303,7 +363,7 @@ describe('a no-op add-on quantity change never reaches Stripe (AGL-2486)', () =>
   })
 })
 
-describe('REAL changes still reach Stripe and still prorate (AGL-535)', () => {
+describe('REAL changes still reach Stripe (AGL-535)', () => {
   it('an increase updates the item with always_invoice', async () => {
     const post = loadAddons()
     expect((await setDatasets(post, 5)).status).toBe(200)
@@ -313,23 +373,42 @@ describe('REAL changes still reach Stripe and still prorate (AGL-535)', () => {
     expect(body?.get('proration_behavior')).toBe('always_invoice')
   })
 
-  it('a decrease updates the item with always_invoice', async () => {
+  it('a decrease is SCHEDULED, and never touches the live subscription', async () => {
+    // The two directions are not symmetric. An increase is capacity the
+    // customer asked for now and is invoiced now; a decrease is capacity they
+    // have already paid to hold until the period ends, so it moves at the
+    // renewal and `subscriptions/{id}` is not called at all — there is no
+    // proration to raise and nothing to credit.
     datasetItem.quantity = 5
     const post = loadAddons()
-    expect((await setDatasets(post, 1)).status).toBe(200)
-    const body = subscriptionUpdate()
-    expect(body?.get('items[0][quantity]')).toBe('1')
-    expect(body?.get('proration_behavior')).toBe('always_invoice')
+    const response = await setDatasets(post, 1)
+    expect(response.status).toBe(200)
+    expect(subscriptionUpdate()).toBeNull()
+    expect(scheduleUpdate()?.get('proration_behavior')).toBe('none')
+    // Phase 0 is today, unchanged; phase 1 is the smaller quantity.
+    expect(phaseQuantity(0, 'price_starter_dataset')).toBe('5')
+    expect(phaseQuantity(1, 'price_starter_dataset')).toBe('1')
+    expect((await response.json()).pendingAddonChange).toMatchObject({
+      kind: 'datasets',
+      quantity: 1,
+    })
   })
 
-  it('a removal deletes the item with always_invoice', async () => {
+  it('a removal is SCHEDULED too — the line survives to the renewal', async () => {
+    // Removal is the same reduction at its limit. The item stays on the
+    // subscription, so the dataset stays readable, and the target phase is
+    // the one that no longer carries the line.
     const post = loadAddons()
-    expect((await setDatasets(post, 0)).status).toBe(200)
-    const body = subscriptionUpdate()
-    expect(body?.get('items[0][id]')).toBe('si_dataset')
-    expect(body?.get('items[0][deleted]')).toBe('true')
-    expect(body?.get('items[0][quantity]')).toBeNull()
-    expect(body?.get('proration_behavior')).toBe('always_invoice')
+    const response = await setDatasets(post, 0)
+    expect(response.status).toBe(200)
+    expect(subscriptionUpdate()).toBeNull()
+    expect(scheduleUpdate()?.get('proration_behavior')).toBe('none')
+    expect(phasePrices(0)).toContain('price_starter_dataset')
+    expect(phasePrices(1)).not.toContain('price_starter_dataset')
+    expect((await response.json()).pendingAddonChange).toMatchObject({
+      kind: 'datasets',
+      quantity: 0,
+    })
   })
 
   it('a first purchase adds the item with always_invoice', async () => {
@@ -370,6 +449,12 @@ describe('quantity 0 vs absent vs no item at all', () => {
     // `Number(undefined)` is NaN, and a `|| 0` here would read this item as
     // "already zero" and answer ok:true having deleted nothing — the add-on
     // keeps billing while the console says it is gone.
+    //
+    // It removes IMMEDIATELY rather than at the period end, because an absent
+    // quantity is not a number the deferral rule can compare against: there is
+    // no "current quantity" to say the requested one is below. An item with no
+    // quantity is a metered variant, which carries no purchased capacity to
+    // run out, so there is nothing the customer paid to hold to the renewal.
     datasetItem = {
       id: 'si_dataset',
       price: { id: 'price_starter_dataset', recurring: { interval: 'month' } },

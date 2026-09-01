@@ -9,6 +9,57 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.38 — 2026-09-01
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/2cdfabc72...v1.0.0-beta.38)
+
+### Added
+
+- **besigner:** a link says where it opens, in words an author already knows ([AGL-1191](https://linear.app/aglyn/issue/AGL-1191))
+
+### Fixed
+
+- **security:** the measurement allowlist names the LinkedIn shards and the cross-client collector
+- **marketing:** the campaign figures import the forms subpath, not the barrel ([AGL-830](https://linear.app/aglyn/issue/AGL-830), [AGL-1349](https://linear.app/aglyn/issue/AGL-1349))
+- **email:** the footer link opens the preference page, on every marketing path and in both parts
+- **billing:** a deferred reduction moves the line the target phase actually carries
+
+### Documentation
+
+- **forms:** the parity spec says why its fixture has no leads figure
+
+<details>
+<summary>Also in this release: 1 test</summary>
+
+- **billing:** a deferred reduction is quoted as deferred, and spares a pending downgrade
+
+</details>
+
+## v1.0.0-beta.37 — 2026-09-01
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.36...v1.0.0-beta.37)
+
+### Added
+
+- **marketing:** a campaign shows what its forms hold, apart from what it caused
+
+### Fixed
+
+- **console:** saving a content entry drops the caches of the pages that show it ([AGL-1150](https://linear.app/aglyn/issue/AGL-1150))
+- **billing:** a deferred reduction is quoted as deferred, and keeps a pending plan change intact
+
+### Documentation
+
+- **forms:** the leads column documents when a figure is absent, not that none is written
+
+<details>
+<summary>Also in this release: 1 test, 1 ci</summary>
+
+- **billing:** an add-on reduction is held to the period end, not the card
+- **selfhost:** wait for the tenant to serve the request under test, not merely to start ([AGL-2433](https://linear.app/aglyn/issue/AGL-2433))
+
+</details>
+
 ## v1.0.0-beta.36 — 2026-09-01
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.34...v1.0.0-beta.36)

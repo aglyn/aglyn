@@ -92,15 +92,14 @@ export interface HostFormsCardProps {
  * of the artifact BEFORE the first one exists, which is what the components
  * list has always done.
  *
- * ## The two numeric columns, and the one that is honestly blank
+ * ## The two numeric columns, and when one is honestly blank
  *
- * `stats.submissions` is incremented by `/api/forms/submit` on a write that
- * was happening anyway, so it is a real number and it is rendered as one.
- * `stats.leads` is DECLARED on `FormStats` and no writer anywhere increments
- * it — so it renders as a dash and never as `0`. A zero would say this form
- * has produced no leads, which is a measurement nobody took: the route creates
- * leads through `addHostLead` and files them under `source: form:{id}` without
- * counting them back onto the form.
+ * `stats.submissions` and `stats.leads` are both incremented by
+ * `/api/forms/submit` on a write that was happening anyway, so both are real
+ * numbers. `leads` is counted only for a form whose `routing.lead` is set, so
+ * a form that does not route to leads carries no figure at all and renders as
+ * a dash rather than as `0`. A zero would say this form has produced no leads,
+ * which for an unrouted form is a measurement nobody took.
  */
 export function HostFormsCard(props: HostFormsCardProps) {
   const { hostId, basePath, org } = props
@@ -277,14 +276,12 @@ export function HostFormsCard(props: HostFormsCardProps) {
       align: 'right',
       headerAlign: 'right',
       /*
-       * Always a dash, and deliberately.
+       * A dash rather than a `0` whenever the field is absent.
        *
-       * `FormStats.leads` exists on the type and nothing increments it — the
-       * submit route creates a lead through `addHostLead` and never counts it
-       * back. Reading the field anyway is what keeps this column honest the
-       * day a writer appears: it renders the recorded number if there is one
-       * and a dash if there is not, and it never renders a `0` that would read
-       * as "this form has produced no leads".
+       * `stats.leads` is incremented only for a form whose `routing.lead` is
+       * set, so a form that does not route to leads has no recorded figure.
+       * Rendering `0` there would read as "this form has produced no leads",
+       * which is a claim about a measurement nobody took.
        */
       valueGetter: (_value: any, row: any) =>
         typeof row?.stats?.leads === 'number' ? row.stats.leads : null,

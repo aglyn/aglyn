@@ -35,10 +35,12 @@
  */
 
 import {
+  appendUnsubscribeHtml,
   EMAIL_NODE_ROOT_ID,
   renderEmailHtml,
   renderTextEmailHtml,
   resolveMergeTags,
+  UNSUBSCRIBE_FOOTER_LABEL,
   type EmailRenderProduct,
   type MergeTagRecipient,
 } from '@aglyn/shared-util-email'
@@ -239,15 +241,12 @@ export function renderCampaignEmail(
   const preheader = input.preheader?.trim() || template?.preheader || ''
   const name = (recipient.name ?? '').trim()
   /*
-   * The plain-text footer, named for what the link actually opens.
-   *
-   * "Choose which emails you get" in front of "or unsubscribe" is the only
-   * place a text-only reader learns that leaving one stream is an option at
-   * all, and the word "unsubscribe" stays in the line because that is what a
-   * recipient scans a footer for.
+   * The plain-text footer, named for what the link actually opens — see
+   * {@link UNSUBSCRIBE_FOOTER_LABEL}, which the non-campaign marketing paths
+   * write into their own footers from the same constant.
    */
   const unsubscribeLine = unsubscribeUrl
-    ? `\n\n—\nChoose which emails you get, or unsubscribe: ${unsubscribeUrl}`
+    ? `\n\n—\n${UNSUBSCRIBE_FOOTER_LABEL}: ${unsubscribeUrl}`
     : ''
 
   if (content.mode === 'text') {
@@ -312,7 +311,25 @@ export function renderCampaignEmail(
     : rendered.text
   return {
     subject,
-    html: rendered.html,
+    /*
+     * THE HTML PART GETS THE SAME FOOTER THE TEXT PART GETS.
+     *
+     * A designed template carries an opt-out only if its author placed a
+     * `{{unsubscribeUrl}}` somewhere, and nothing made them: a template whose
+     * footer block says only the copyright line renders an HTML part with no
+     * way out of the list at all, which is the half of the message almost
+     * every recipient reads. The text part had the link and the HTML did not,
+     * so the defect was invisible to anyone reading their own test send.
+     *
+     * `appendUnsubscribeHtml` is idempotent by URL, so an author who DID
+     * place the merge token keeps their own placement and gets no second
+     * footer — the same rule `sendEmail` applies to every other marketing
+     * path, applied here because the campaign sender passes no `marketing`
+     * context and so never reaches that append.
+     */
+    html: unsubscribeUrl
+      ? appendUnsubscribeHtml(rendered.html, unsubscribeUrl)
+      : rendered.html,
     text: `${messageText}${unsubscribeLine}`,
     messageText,
   }

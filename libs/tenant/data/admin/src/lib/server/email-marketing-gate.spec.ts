@@ -88,11 +88,40 @@ describe('the gate consults BOTH suppression lists', () => {
 
     expect(verdict.allowed).toBe(true)
     expect(verdict.refusal).toBeUndefined()
+    // The link a PERSON clicks opens the preference page, where leaving the
+    // stream this message belongs to sits beside leaving the site entirely.
     expect(verdict.unsubscribeUrl).toContain(
-      `${SITE_BASE}/api/email/unsubscribe`,
+      `${SITE_BASE}/api/email/preferences`,
     )
     expect(verdict.unsubscribeUrl).toContain(`hostId=${HOST}`)
     expect(verdict.unsubscribeUrl).toContain('sig=')
+  })
+
+  it('mints the header URL on the ONE-CLICK route, under the same signature', async () => {
+    const verdict = await ask(fakeFirestore())
+
+    /*
+     * A mailbox provider POSTs `List-Unsubscribe` with nobody present and
+     * reads the 200 as "done", which a page of checkboxes cannot honor — so
+     * the two links are different routes over one signature. A second
+     * signature is how one of them comes to refuse what the other accepted.
+     */
+    expect(verdict.oneClickUrl).toContain(`${SITE_BASE}/api/email/unsubscribe`)
+    expect(verdict.oneClickUrl).not.toContain('/api/email/preferences')
+    const sigOf = (url: string) => new URL(url).searchParams.get('sig')
+    expect(sigOf(verdict.oneClickUrl ?? '')).toBe(
+      sigOf(verdict.unsubscribeUrl ?? ''),
+    )
+  })
+
+  it('carries the TOPIC on both links, so the page opens on that stream', async () => {
+    const verdict = await ask(fakeFirestore(), { topicId: 'newsletter' })
+
+    // Without it the preference page opens on a list the recipient has to
+    // search for the stream they were actually trying to leave.
+    const topicOf = (url: string) => new URL(url).searchParams.get('tid')
+    expect(topicOf(verdict.unsubscribeUrl ?? '')).toBe('newsletter')
+    expect(topicOf(verdict.oneClickUrl ?? '')).toBe('newsletter')
   })
 
   it('refuses an address on the PLATFORM list', async () => {
@@ -514,7 +543,7 @@ describe('the sunset refuses a send and reduces nobody', () => {
       expect(verdict).toMatchObject({ allowed: false, refusal: 'unengaged' })
       // It still hands back a way out. A refusal is not a reason to withhold
       // the unsubscribe link from the log line that reports it.
-      expect(verdict.unsubscribeUrl).toContain('/api/email/unsubscribe')
+      expect(verdict.unsubscribeUrl).toContain('/api/email/preferences')
     })
   })
 
@@ -765,7 +794,8 @@ describe('the pace the recipient asked for', () => {
 
   it('still offers the unsubscribe URL on a refusal', async () => {
     const refused = await ask(withCadence('weekly', NOW - 3 * DAY))
-    expect(refused.unsubscribeUrl).toContain('/api/email/unsubscribe')
+    expect(refused.unsubscribeUrl).toContain('/api/email/preferences')
+    expect(refused.oneClickUrl).toContain('/api/email/unsubscribe')
   })
 
   it('treats an unreadable or absent choice as no choice', async () => {

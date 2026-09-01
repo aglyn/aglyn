@@ -132,28 +132,90 @@ jobs:
           # runbook gives, which is the command that should be under test.
           docker compose up -d tenant
 
-          # A container that never listens must FAIL this step, not slip past
-          # it: every assertion below is about the response, and no response is
-          # not a passing one.
-          listening=no
-          for _ in $(seq 1 60); do
-            if curl -sS -o /dev/null -m 5 http://127.0.0.1:4500/ 2>/dev/null; then
-              listening=yes
+          # `up -d` returns when the container is STARTED, which is not when the
+          # Next.js server inside it is serving. Two warm-ups sit between those
+          # two moments and the request under test pays for both:
+          #
+          #  - the standalone server has to boot and bind :4500;
+          #  - the middleware `await`s a lockdown verdict from this same
+          #    container's own `/api/lockdown-verdict` (AGL-1501) with no
+          #    timeout of its own, and memoizes it PER RESOLVED TENANT HOST.
+          #    Against placeholder Firebase the first fetch for a cold host has
+          #    no bound on how long it takes to fail.
+          #
+          # So the wait is driven with the EXACT request the assertions make. A
+          # probe on a different `Host` resolves to a different tenant host, so
+          # it warms a different memo entry and proves nothing about this one; a
+          # probe on the bare port proves only that something accepted a socket.
+          #
+          # It asks ONLY whether a response arrived, never what the response
+          # said. A tenant that redirects its own apex — the AGL-2177 failure —
+          # answers this probe immediately and is then failed by the assertions
+          # below, which is the order that has to hold. Reading the status here
+          # would spin on that regression until the budget ran out and report it
+          # as a readiness timeout.
+          probe() {
+            curl -sS -o /dev/null -m 10 \
+              -H 'Host: acme.sites.example.com' http://127.0.0.1:4500/ 2>/dev/null
+          }
+          ready=no
+          attempts=0
+          reason='no attempt completed'
+          started=$(date +%s)
+          deadline=$((started + 300))
+          while [ "$(date +%s)" -lt "$deadline" ]; do
+            attempts=$((attempts + 1))
+            rc=0
+            probe || rc=$?
+            if [ "$rc" -eq 0 ]; then
+              ready=yes
               break
             fi
+            # curl's own codes separate "nothing is listening" from "listening
+            # but not answering", which are different container faults and are
+            # worth telling apart in the failure message.
+            case "$rc" in
+              7) reason='connection refused, nothing is listening on :4500' ;;
+              28) reason='connected, but no response within 10s' ;;
+              *) reason="curl exited $rc" ;;
+            esac
             sleep 2
           done
-          if [ "$listening" != "yes" ]; then
+          waited=$(( $(date +%s) - started ))
+
+          # A container that never serves must FAIL this step, not slip past it:
+          # every assertion below is about the response, and no response is not
+          # a passing one. The wording matters as much as the exit — this is the
+          # image failing to serve at all, which is a different defect from the
+          # image serving and routing wrongly.
+          if [ "$ready" != "yes" ]; then
             docker compose logs tenant || true
-            echo "::error::the tenant container never answered on :4500"
+            echo "::error::the tenant container never became ready: $attempts attempts over ${waited}s, last failure: $reason. The routing assertions never ran."
             exit 1
           fi
+          echo "tenant ready after $attempts attempt(s) in ${waited}s"
 
-          code=$(curl -s -o /dev/null -w '%{http_code}' -m 15 \
-            -H 'Host: acme.sites.example.com' http://127.0.0.1:4500/)
-          location=$(curl -s -o /dev/null -w '%{redirect_url}' -m 15 \
-            -H 'Host: acme.sites.example.com' http://127.0.0.1:4500/)
-          echo "status=$code location=${location:-<none>}"
+          # ONE request, read three ways. The server is warm, so the routing
+          # answer is deterministic and this is asked exactly once: retrying an
+          # assertion could only turn a real regression green.
+          headers=$(mktemp)
+          rc=0
+          summary=$(curl -s -o /dev/null -D "$headers" \
+            -w '%{http_code} %{redirect_url}' -m 30 \
+            -H 'Host: acme.sites.example.com' http://127.0.0.1:4500/) || rc=$?
+          if [ "$rc" -ne 0 ]; then
+            docker compose logs tenant || true
+            echo "::error::the tenant answered the readiness probe and then failed to answer the assertion request (curl exit $rc)."
+            exit 1
+          fi
+          code=${summary%% *}
+          location=${summary#* }
+          # Resolved through the apex the rewrite is the bare subdomain,
+          # `/acme/`; fallen through to the custom-domain branch it is
+          # `/cname--acme.sites.example.com/`.
+          rewrite=$(tr -d '\r' < "$headers" |
+            awk 'tolower($1) == "x-middleware-rewrite:" { print $2 }')
+          echo "status=$code location=${location:-<none>} x-middleware-rewrite=${rewrite:-<none>}"
           docker compose logs tenant || true
 
           # Aglyn's own host in the redirect is the sharpest form of the
@@ -182,14 +244,7 @@ jobs:
           # and a host that falls through to the custom-domain branch BOTH
           # answer 404. A check that only reads the status cannot tell them
           # apart, which is a check that certifies its own subject.
-          #
-          # `x-middleware-rewrite` can. Resolved through the apex it is the bare
-          # subdomain — `/acme/`; fallen through it is the custom-domain form,
-          # `/cname--acme.sites.example.com/`.
-          rewrite=$(curl -s -o /dev/null -D- -m 15 \
-            -H 'Host: acme.sites.example.com' http://127.0.0.1:4500/ \
-            | tr -d '\r' | awk 'tolower($1) == "x-middleware-rewrite:" { print $2 }')
-          echo "x-middleware-rewrite=${rewrite:-<none>}"
+          # `x-middleware-rewrite` can.
           case "${rewrite:-}" in
             /acme/*|/acme)
               ;;

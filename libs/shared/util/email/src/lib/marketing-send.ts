@@ -73,6 +73,7 @@
  * one and a cycle between the two would resolve differently under swc and
  * jest.
  */
+import { escapeEmailHtml } from './email-render'
 import { resolveSendPriority, type EmailSendPriority } from './send-rate'
 
 /** What a marketing send declares about itself. */
@@ -100,6 +101,18 @@ export interface MarketingSendContext {
    * minted — one link per message, whoever made it.
    */
   unsubscribeUrl?: string
+  /**
+   * The `List-Unsubscribe` URL, when the caller minted its own pair.
+   *
+   * Separate from {@link unsubscribeUrl} because the two are read by
+   * different readers. This one is POSTed by a mailbox provider with nobody
+   * present, so it must name the route that writes on POST; the other is
+   * clicked by a person, so it names the preference page. Absent, the header
+   * falls back to `unsubscribeUrl` — which is right for a caller that minted
+   * only one link, and wrong only for one that minted a page and did not say
+   * so.
+   */
+  oneClickUrl?: string
   /**
    * Whether a frequency cap may refuse this message.
    *
@@ -217,11 +230,22 @@ export interface MarketingSendGateVerdict {
   /** Human-readable, for the log and the `detail` on the result. */
   detail?: string
   /**
-   * The signed unsubscribe URL for this recipient, when the gate could mint
-   * one. Absent leaves the message without unsubscribe headers, which is a
-   * misconfiguration to fix and not a reason to refuse mail.
+   * The signed opt-out URL a PERSON clicks, when the gate could mint one.
+   * Points at the preference page, where the stream this message belongs to
+   * is one of the things they can stop instead of all of it. Absent leaves
+   * the message without unsubscribe headers, which is a misconfiguration to
+   * fix and not a reason to refuse mail.
    */
   unsubscribeUrl?: string
+  /**
+   * The same signature over the one-click route, for `List-Unsubscribe`.
+   *
+   * A mailbox provider POSTs that header with no human present and expects
+   * the act to have happened when it reads the 200, so it must never name a
+   * page of checkboxes somebody has to submit. Absent, the header falls back
+   * to {@link unsubscribeUrl}.
+   */
+  oneClickUrl?: string
 }
 
 /**
@@ -640,6 +664,23 @@ export function unsubscribeHeaders(
 }
 
 /**
+ * What the visible opt-out is CALLED, in every part of every message.
+ *
+ * The link opens the preference page, where leaving one stream is a choice
+ * alongside leaving all of them — and a footer that says only "Unsubscribe"
+ * is the only place a recipient would have learned that, so it never gets
+ * said. The word "unsubscribe" stays in the line because that is what a
+ * recipient scans a footer for.
+ *
+ * Named once and shared with `renderCampaignEmail`, which writes this same
+ * line into a campaign's text part: two spellings of one sentence is how the
+ * idempotency checks below come to append a second footer to a message that
+ * already had one.
+ */
+export const UNSUBSCRIBE_FOOTER_LABEL =
+  'Choose which emails you get, or unsubscribe'
+
+/**
  * The visible opt-out, appended to the plain-text part.
  *
  * The headers are for the mailbox provider; this is for the person. CAN-SPAM
@@ -655,7 +696,7 @@ export function appendUnsubscribeText(
   unsubscribeUrl: string,
 ): string {
   if (!unsubscribeUrl || (text && text.includes(unsubscribeUrl))) return text
-  return `${text ?? ''}\n\n—\nUnsubscribe: ${unsubscribeUrl}`
+  return `${text ?? ''}\n\n—\n${UNSUBSCRIBE_FOOTER_LABEL}: ${unsubscribeUrl}`
 }
 
 /**
@@ -664,8 +705,15 @@ export function appendUnsubscribeText(
  * Appended to whatever the sender produced rather than woven into it, because
  * the HTML may be a merchant-designed template this module knows nothing
  * about. A designed template that already renders `{{unsubscribeUrl}}`
- * carries the URL, so the `includes` check leaves it alone and the merchant's
- * own placement wins.
+ * carries the URL, so the check below leaves it alone and the merchant's own
+ * placement wins.
+ *
+ * ⚠️ That check has to look for the ESCAPED URL as well. A signed opt-out
+ * link carries `&` between its query parameters, and a renderer putting it
+ * into an `href` escapes it — so `renderEmailHtml` emits `…&amp;sig=…` and a
+ * plain `includes` of the unescaped URL matches nothing. Every designed
+ * template in the product goes through that renderer, which means the
+ * merchants who DID place the token were the ones getting two footers.
  *
  * Styles are inline and literal because this is email HTML: mail clients
  * strip `<style>` blocks and support no CSS variables, so a theme token
@@ -675,13 +723,21 @@ export function appendUnsubscribeHtml(
   html: string,
   unsubscribeUrl: string,
 ): string {
-  if (!unsubscribeUrl || (html && html.includes(unsubscribeUrl))) return html
+  if (!unsubscribeUrl) return html
+  if (
+    html &&
+    (html.includes(unsubscribeUrl) ||
+      html.includes(escapeEmailHtml(unsubscribeUrl)))
+  ) {
+    return html
+  }
   const footer =
     '<div style="margin:24px auto 0;max-width:600px;padding:16px 24px;' +
     "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto," +
     'Helvetica,Arial,sans-serif;font-size:12px;line-height:1.5;' +
     'color:#616161;text-align:center">' +
-    `<a href="${unsubscribeUrl}" style="color:#616161">Unsubscribe</a>` +
+    `<a href="${escapeEmailHtml(unsubscribeUrl)}" style="color:#616161">` +
+    `${UNSUBSCRIBE_FOOTER_LABEL}</a>` +
     '</div>'
   return `${html ?? ''}${footer}`
 }

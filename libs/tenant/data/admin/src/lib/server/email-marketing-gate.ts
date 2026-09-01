@@ -569,11 +569,41 @@ export async function marketingSendVerdict(
     }
   }
 
-  const unsubscribeUrl = buildUnsubscribeUrl({
+  // Normalized once, and read by both the links below and the topic check
+  // further down: two spellings of "which stream is this" is how a link comes
+  // to carry a topic the gate did not check.
+  const topicId = String(request.topicId ?? '').trim()
+
+  /*
+   * TWO URLS OVER ONE SIGNATURE, the same split `campaign-send.ts` makes and
+   * for the same reason (RFC 8058).
+   *
+   * `oneClickUrl` is what `List-Unsubscribe` names: a mailbox provider POSTs
+   * it with nobody present and expects the act to have happened when it reads
+   * the 200, so it points at the route whose POST writes immediately.
+   *
+   * `unsubscribeUrl` is the link a PERSON clicks in the footer, and it points
+   * at the preference page. Every caller on this path — the abandoned-cart
+   * sweep, the restock notice, the newsletter welcome, the automation step —
+   * names a topic, and a footer pointing at the one-click route gives the
+   * recipient of one of those exactly one choice: stop hearing from this site
+   * entirely. The page offers leaving that one stream instead, with
+   * "Unsubscribe from everything" still on it.
+   *
+   * The topic rides both links, so the page opens on the stream the message
+   * belonged to rather than on a list the recipient has to search.
+   */
+  const link = {
     siteBase: request.siteBase,
     hostId: request.hostId,
     email,
+    ...(topicId ? { topicId } : {}),
+  }
+  const unsubscribeUrl = buildUnsubscribeUrl({
+    ...link,
+    surface: 'preferences',
   })
+  const oneClickUrl = buildUnsubscribeUrl({ ...link, surface: 'one-click' })
 
   /*
    * THE STREAM THIS MESSAGE BELONGS TO — the third list, and the narrowest.
@@ -599,7 +629,6 @@ export async function marketingSendVerdict(
    * reason is no reason to withhold a message from somebody the two lists
    * above already cleared.
    */
-  const topicId = String(request.topicId ?? '').trim()
   if (topicId) {
     const onTopic = await filterTopicSendable(
       request.hostId,
@@ -623,6 +652,7 @@ export async function marketingSendVerdict(
           'This address has left the email topic this message belongs to. ' +
           'They still receive the other streams from this site.',
         unsubscribeUrl,
+        oneClickUrl,
       }
     }
   }
@@ -689,6 +719,7 @@ export async function marketingSendVerdict(
         `message ${CADENCE_PHRASES[state.cadence]}. The next one may go on ` +
         `${new Date(cadence.nextAllowedAtMs).toISOString()}.`,
       unsubscribeUrl,
+      oneClickUrl,
     }
   }
 
@@ -740,6 +771,7 @@ export async function marketingSendVerdict(
           `for longer than the ${sunset.days}-day engagement window. It ` +
           `becomes mailable again as soon as they engage.`,
         unsubscribeUrl,
+        oneClickUrl,
       }
     }
   }
@@ -753,6 +785,7 @@ export async function marketingSendVerdict(
         `This address has already received ${verdict.used} marketing ` +
         `messages from this site today (the ceiling is ${verdict.cap}).`,
       unsubscribeUrl,
+      oneClickUrl,
     }
   }
 
@@ -790,7 +823,7 @@ export async function marketingSendVerdict(
       })
   }
 
-  return { allowed: true, unsubscribeUrl }
+  return { allowed: true, unsubscribeUrl, oneClickUrl }
 }
 
 /**

@@ -48,8 +48,12 @@ import {
 } from '../../../../utils/server/billing-addons'
 import {
   buildTargetItems,
+  phaseItemsOf,
+  preservePhaseTerms,
   restateExistingPhase,
   subscriptionItemsAsPhaseItems,
+  writePhaseItems,
+  type PhaseItem,
 } from '../../../../utils/server/billing-schedule'
 import {
   capacityReductionRefusal,
@@ -207,6 +211,183 @@ async function refreshScheduleTargetPhase(options: {
     `subscription_schedules/${encodeURIComponent(scheduleId)}`,
     params,
   )
+}
+
+/**
+ * Move an add-on DOWN at the period end instead of now.
+ *
+ * Capacity that has been paid for runs to the end of the period it was paid
+ * for, exactly as a cancelled plan does. Reducing an add-on therefore changes
+ * nothing today: the item keeps its quantity, the site keeps working, and the
+ * smaller quantity starts at the renewal.
+ *
+ * Nothing is credited, and that is the point rather than an omission. An
+ * immediate reduction under `always_invoice` would refund unused time for
+ * capacity the customer can still use for the rest of the period — paying them
+ * back for something they have not stopped having. Deferring the reduction and
+ * crediting nothing are two halves of one decision.
+ *
+ * `proration_behavior: 'none'` on the schedule is what keeps it that way. The
+ * phase boundary is a clean period start, so there is no partial period for
+ * Stripe to price on either side of it.
+ *
+ * Returns the period end the change lands on, or null when the subscription
+ * cannot carry a schedule.
+ */
+async function scheduleAddonReduction(options: {
+  secretKey: string
+  subscription: any
+  /** The subscription's items as they stand TODAY, unchanged. */
+  items: readonly any[]
+  /** The add-on price being reduced, at the plan the org is on TODAY. */
+  priceId: string
+  /**
+   * The add-on being reduced, as a kind rather than a price.
+   *
+   * A price id identifies "datasets ON STARTER", not "datasets". A phase
+   * belonging to a pending downgrade prices its add-ons at the TARGET plan, so
+   * the line to move there has a different id from the one the org holds now —
+   * and matching by id alone silently matches nothing, restating the phase
+   * verbatim while the response still promises the reduction.
+   */
+  kind: AddonKind
+  /** Its quantity from the period end; 0 removes the item entirely. */
+  quantity: number
+}): Promise<{ effectiveAt: string; scheduleId: string } | null> {
+  const { secretKey, subscription, items, priceId, kind, quantity } = options
+  /**
+   * One line moved on an otherwise untouched item list.
+   *
+   * Built from whichever list already describes the future, because a phase is
+   * an ABSOLUTE list: anything not written back is deleted at the flip, and
+   * that has already cost this codebase a customer's unclassified items once.
+   */
+  const withAddonMoved = (
+    base: readonly PhaseItem[],
+    matchPrice: string,
+  ): PhaseItem[] =>
+    base
+      .map((item) =>
+        item.price === matchPrice
+          ? quantity === 0
+            ? null
+            : { ...item, quantity }
+          : item,
+      )
+      .filter((item): item is PhaseItem => item !== null)
+
+  /**
+   * The id this add-on carries ON a given phase.
+   *
+   * Derived from the phase's own base price rather than from the subscription,
+   * because those disagree exactly when it matters: a pending downgrade's phase
+   * is already priced at the plan it moves to. Falls back to today's id when
+   * the phase names no plan this route sells — a phase it cannot classify is
+   * safer restated than rewritten against a guess.
+   */
+  const addonPriceOnPhase = (phase: any): string => {
+    const base = (phase?.items ?? [])
+      .map((item: any) =>
+        typeof item?.price === 'string' ? item.price : item?.price?.id,
+      )
+      .map((id: string) => planAndIntervalFromPriceId(id))
+      .find((match: unknown) => match) as
+      | ReturnType<typeof planAndIntervalFromPriceId>
+      | undefined
+    const phasePlan = (phase?.metadata?.plan ?? base?.plan) as
+      | Parameters<typeof addonPriceId>[1]
+      | undefined
+    if (!phasePlan) return priceId
+    return addonPriceId(kind, phasePlan, base?.interval ?? 'month') ?? priceId
+  }
+
+  const existingScheduleId =
+    typeof subscription?.schedule === 'string'
+      ? subscription.schedule
+      : subscription?.schedule?.id
+  const schedule = existingScheduleId
+    ? await stripeRequest(
+        secretKey,
+        'GET',
+        `subscription_schedules/${encodeURIComponent(String(existingScheduleId))}`,
+      )
+    : await stripeRequest(
+        secretKey,
+        'POST',
+        'subscription_schedules',
+        new URLSearchParams({ from_subscription: subscription.id }),
+      )
+  if (!schedule?.id) return null
+
+  const phases: any[] = Array.isArray(schedule?.phases) ? schedule.phases : []
+  if (!phases.length) return null
+  const params = new URLSearchParams({
+    end_behavior: String(schedule?.end_behavior ?? 'release'),
+    proration_behavior: 'none',
+  })
+  // A schedule freshly created `from_subscription` has ONE phase — the
+  // present. An existing one already carries a future phase, from a pending
+  // plan change, and that phase is the one to edit: two futures cannot both
+  // be the future, and appending a second would silently extend the
+  // subscription by a period.
+  if (phases.length === 1) {
+    // No future yet: the future is a copy of the present with the line moved.
+    restateExistingPhase(params, 0, phases[0])
+    preservePhaseTerms(params, 1, phases[0], { current: false })
+    writePhaseItems(
+      params,
+      1,
+      withAddonMoved(subscriptionItemsAsPhaseItems(items), priceId),
+    )
+    params.set('phases[1][iterations]', '1')
+    params.set('phases[1][automatic_tax][enabled]', 'true')
+    // Carried so the webhook's mirror still reads a plan at the flip; without
+    // it the phase replaces the subscription's metadata with nothing.
+    const plan = subscription?.metadata?.plan
+    const orgId = subscription?.metadata?.orgId
+    if (plan) params.set('phases[1][metadata][plan]', String(plan))
+    if (orgId) params.set('phases[1][metadata][orgId]', String(orgId))
+  } else {
+    /*
+     * A future phase already exists — a pending plan change — and it is the
+     * one to edit. Its OWN items are the base, never the live subscription's.
+     *
+     * That distinction is the whole correctness of this branch. A pending
+     * downgrade's target phase carries the TARGET plan's prices, while the
+     * live subscription still carries the current plan's. Rebuilding the phase
+     * from the live items would quietly replace the downgrade's prices with
+     * today's and leave `metadata[plan]` still naming the target — a phase
+     * that bills the old plan while telling the webhook to mirror the new one,
+     * with nothing on any screen disagreeing.
+     *
+     * Editing the phase in place also means the plan change keeps every term
+     * it was scheduled with; only the add-on line moves.
+     */
+    const targetIndex = phases.length - 1
+    phases.forEach((phase, index) => {
+      restateExistingPhase(
+        params,
+        index,
+        phase,
+        index === targetIndex
+          ? withAddonMoved(phaseItemsOf(phase), addonPriceOnPhase(phase))
+          : undefined,
+      )
+    })
+  }
+  const updated = await stripeRequest(
+    secretKey,
+    'POST',
+    `subscription_schedules/${encodeURIComponent(String(schedule.id))}`,
+    params,
+  )
+  const periodEnd = Number(subscription?.current_period_end ?? 0)
+  return {
+    scheduleId: String(updated?.id ?? schedule.id),
+    effectiveAt: periodEnd
+      ? new Date(periodEnd * 1000).toISOString()
+      : '',
+  }
 }
 
 /**
@@ -525,6 +706,45 @@ async function handler(request: Request): Promise<Response> {
         : [['id', String(existing.id)], ['quantity', String(quantity)]]
       : [['price', priceId], ['quantity', String(quantity)]]
 
+    /*
+     * A REDUCTION is quoted as what it is: nothing today.
+     *
+     * Answered here rather than by pricing it, because there is nothing to
+     * price. `invoices/upcoming` under `always_invoice` returns the credit a
+     * reduction WOULD raise if it applied now — and it no longer applies now,
+     * so that figure describes a refund the customer will never receive. A
+     * confirm quoting money back for a change that returns none is the same
+     * defect as a confirm quoting a discount that never reaches the charge;
+     * it just points the other way.
+     *
+     * Placed above the priced preview so the two can never disagree: there is
+     * one branch for reductions and it is this one.
+     */
+    if (
+      action === 'preview' &&
+      currentQuantity !== null &&
+      quantity < currentQuantity
+    ) {
+      const periodEnd = Number(subscription?.current_period_end ?? 0)
+      return Response.json(
+        {
+          amountDueCents: 0,
+          prorationCents: 0,
+          taxCents: 0,
+          chargedNowCents: 0,
+          taxComplete: true,
+          currency: String(subscription?.currency ?? 'usd'),
+          // What the caller needs to describe the change honestly: it happens,
+          // but later, and it costs nothing either way.
+          defersToPeriodEnd: true,
+          effectiveAt: periodEnd
+            ? new Date(periodEnd * 1000).toISOString()
+            : null,
+        },
+        { status: 200 },
+      )
+    }
+
     if (action === 'preview') {
       const query = itemParams
         .map(([key, value]) =>
@@ -576,6 +796,57 @@ async function handler(request: Request): Promise<Response> {
         taxComplete: preview?.automatic_tax?.status === 'complete',
         currency: preview?.currency ?? 'usd',
       }, { status: 200 })
+    }
+
+    /*
+     * A REDUCTION waits for the period end. Nothing is charged, nothing is
+     * credited, and the capacity keeps working until then.
+     *
+     * Only an increase is immediate. The two directions are not symmetric and
+     * treating them alike is what made the earlier behaviour wrong in both:
+     * an addition the customer wants now was deferred a month, and a removal
+     * would refund unused time for a site they can still publish to.
+     *
+     * `seatAddons` is deliberately NOT written here. It mirrors what the
+     * subscription is carrying, and the subscription is still carrying the old
+     * quantity — the webhook rewrites it when the phase flips. Writing the
+     * smaller number today would tell every entitlement check the capacity was
+     * already gone, which is the opposite of what was just promised.
+     */
+    if (currentQuantity !== null && quantity < currentQuantity) {
+      const scheduled = await scheduleAddonReduction({
+        secretKey,
+        subscription,
+        items,
+        priceId,
+        kind,
+        quantity,
+      })
+      if (!scheduled) {
+        return Response.json(
+          {
+            error:
+              'We could not schedule that change. Nothing has changed and ' +
+              'nothing has been charged.',
+          },
+          { status: 502 },
+        )
+      }
+      return Response.json(
+        {
+          ok: true,
+          // The CURRENT map, unchanged: what the workspace may use until the
+          // period ends is what it has now.
+          quantities: addonQuantitiesFromItems(items),
+          pendingAddonChange: {
+            kind,
+            quantity,
+            effectiveAt: scheduled.effectiveAt,
+            scheduleId: scheduled.scheduleId,
+          },
+        },
+        { status: 200 },
+      )
     }
 
     const params = new URLSearchParams({

@@ -71,6 +71,26 @@ export interface RevalidateLivePagesOptions {
    * while the besigner says the live sites already serve it.
    */
   formId?: string
+  /**
+   * A content ENTRY changed — saved, published, unpublished, re-dated or
+   * deleted. The caller names the COLLECTION rather than the entry, because
+   * the collection is what decides both halves of the answer: its slug gives
+   * the listing and entry addresses, which the catch-all serves whether or not
+   * a template screen exists, and its slug is also what a Collection entries
+   * rail elsewhere on the site is bound to.
+   *
+   * There is no publish step to hang this off. An entry is written straight to
+   * Firestore from the browser, so before this the only thing standing between
+   * an edited post and the site was the hour-long `tenant-data:{hostId}`
+   * document cache underneath the ten-minute page window.
+   */
+  collectionId?: string
+  /**
+   * The changed entry's own slug, plus the slug it had before when a save
+   * renamed it. Optional: a change with no single entry behind it — a category
+   * rename, a collection setting — still has listings to drop.
+   */
+  entrySlugs?: string[]
 }
 
 /**
@@ -109,12 +129,20 @@ export interface RevalidateLivePagesResult {
  * One sentence for a drop that did not cover the whole site, or `null` when it
  * did.
  *
- * Lives beside the call rather than at each call site so the two publish
- * surfaces cannot word this differently — the same omission-repeated-per-caller
- * shape the helper itself exists to prevent.
+ * Lives beside the call rather than at each call site so the publish surfaces
+ * cannot word this differently — the same omission-repeated-per-caller shape
+ * the helper itself exists to prevent.
+ *
+ * `lead` names the act that just succeeded, because only that word differs
+ * between surfaces and only that word can be wrong: a content entry is SAVED,
+ * and telling someone who fixed a typo in a draft that they published it is a
+ * worse error than the staleness the sentence is about. Everything after it —
+ * what is stale, for how long, and that it fixes itself — is the same fact
+ * whatever was written.
  */
 export function describeRevalidateShortfall(
   result: RevalidateLivePagesResult | null,
+  lead = 'Published.',
 ): string | null {
   if (!result) return null
   const { pathsDropped, scanTruncated, reason } = result
@@ -130,7 +158,7 @@ export function describeRevalidateShortfall(
     // hint did not — so the honest sentence is that the site catches up on its
     // own, with a bound rather than a shrug.
     return (
-      'Published. The live pages could not be refreshed just now, so they ' +
+      `${lead} The live pages could not be refreshed just now, so they ` +
       'may show the previous version for up to an hour.'
     )
   }
@@ -142,7 +170,7 @@ export function describeRevalidateShortfall(
     ? `${pathsDropped} page${pathsDropped === 1 ? '' : 's'}`
     : 'Some pages'
   return (
-    `Published. ${stale} that use this are too many to refresh at once — ` +
+    `${lead} ${stale} that use this are too many to refresh at once — ` +
     'they update on their own within a minute.'
   )
 }
@@ -150,8 +178,20 @@ export function describeRevalidateShortfall(
 export async function revalidateLivePages(
   options: RevalidateLivePagesOptions,
 ): Promise<RevalidateLivePagesResult | null> {
-  const { user, hostId, screenId, layoutId, componentId, formId } = options
-  if (!hostId || (!screenId && !layoutId && !componentId && !formId)) {
+  const {
+    user,
+    hostId,
+    screenId,
+    layoutId,
+    componentId,
+    formId,
+    collectionId,
+    entrySlugs,
+  } = options
+  if (
+    !hostId ||
+    (!screenId && !layoutId && !componentId && !formId && !collectionId)
+  ) {
     return null
   }
   try {
@@ -164,6 +204,8 @@ export async function revalidateLivePages(
         ...(layoutId ? { layoutId } : {}),
         ...(componentId ? { componentId } : {}),
         ...(formId ? { formId } : {}),
+        ...(collectionId ? { collectionId } : {}),
+        ...(entrySlugs?.length ? { entrySlugs } : {}),
       }),
     })
     if (!response.ok) return null
