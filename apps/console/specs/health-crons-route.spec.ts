@@ -339,11 +339,11 @@ describe('/api/health/crons', () => {
   it('logs WHICH job went quiet, not merely that something did', async () => {
     // The body names the late job, but only to whoever is holding it, and
     // the uptime probe reads the status and discards the body. Production
-    // spent roughly seven hours red on 2026-08-27 and seven more overnight
-    // into 2026-09-01 — ~170 503s each, every one answered in under a second
-    // — and afterwards nothing said which row had flipped. Scheduler had
-    // fired throughout and the every-minute beat never gapped, so the jobs
-    // were healthy and the evidence was simply gone.
+    // spent 08:00:53-14:43:26 red on 2026-08-27 (169 x 503) and
+    // 02:01:07-05:00:58 red on 2026-09-01 (77 x 503), and afterwards nothing
+    // said which row had flipped. 337 of the 346 answered in under a second,
+    // so the endpoint had decided quickly and kept no record of what it
+    // decided.
     const now = Date.now()
     mockStore = healthyStore(now)
     mockStore['report-usage'] = { jobId: 'report-usage', atMs: now - 3 * DAY }

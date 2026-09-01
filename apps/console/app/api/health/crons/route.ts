@@ -115,11 +115,19 @@ async function readWatchStart(
  * The body already says which job is late — but only to whoever is holding
  * it. The uptime probe reads the STATUS and throws the body away, so a red
  * window leaves nothing behind saying what was red. Two of those windows in
- * one week (2026-08-27 08:00–14:00 and 2026-08-31 22:00 → 09-01 04:00, ~170
- * 503s each, all answered in under a second) were unattributable afterwards
- * for exactly that reason: Cloud Scheduler had fired normally throughout and
- * the every-minute beat never gapped, so the jobs were fine and the row that
- * flipped could not be recovered.
+ * one week were unattributable afterwards for exactly that reason:
+ *
+ *   2026-08-27  08:00:53 → 14:43:26 UTC   169 × 503   median 83ms
+ *   2026-09-01  02:01:07 → 05:00:58 UTC    77 × 503   median 158ms
+ *
+ * Both answered fast — 337 of the 346 in under a second — so these were
+ * deliberate refusals, not a Firestore read timing out into a 503. Which
+ * makes the absence the interesting part: the endpoint decided, quickly,
+ * that a row was late, and kept no record of which one.
+ *
+ * Neither start time lands on any single job's schedule plus its grace, so
+ * they cannot be attributed by arithmetic after the fact either. That is the
+ * whole argument for logging the verdict where it is formed.
  *
  * A `console.error` is enough BECAUSE of the log drain. The same argument in
  * `../route.ts` rejects it — "a log retained for about an hour, so by the
