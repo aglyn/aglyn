@@ -164,9 +164,30 @@ export function purchaseConfirmQuote(
       `plus tax.`
   }
 
+  // What the plan price does NOT cover.
+  //
+  // Every figure above describes the subscription, and a subscription is not
+  // the whole bill: storage, page views and form submissions are metered past
+  // what the plan includes and settle on a later invoice. A confirm that named
+  // only the recurring price would be accurate about the part it quoted and
+  // silent about the part that varies — and the month a site is busy is
+  // exactly when the difference is noticed, which is far too late for it to
+  // have been disclosed here.
+  //
+  // Deliberately no rates. The charged figures live in
+  // `METERED_BILLED_RATES_USD` and descend by tier for the retail meters, so a
+  // rate copied into this sentence is a second place for a price to drift from
+  // the one the invoice uses. The meters are named and the surface that holds
+  // the live numbers is pointed at instead.
+  const overage =
+    ` Usage past what ${planLabel} includes is billed on top: storage, page ` +
+    `views and form submissions are metered and settle on a later invoice, ` +
+    `so a busy month can cost more than the plan price. Billing → Usage ` +
+    `shows the current rates and what this workspace has used.`
+
   return {
     title: `Subscribe to ${planLabel}?`,
-    description: `${planLabel}, ${cadence}. ${charge}${discountLine}${renewal}`,
+    description: `${planLabel}, ${cadence}. ${charge}${discountLine}${renewal}${overage}`,
     // The amount on the BUTTON, so the last thing under the cursor is the
     // figure and not a verb. Dropped to a plain label when the total is not
     // final, because a button that names a price is a promise about it.

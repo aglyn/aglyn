@@ -803,10 +803,88 @@ export function composeReusableComponentNodes<
     composed = pruned
   }
 
+  /**
+   * Which definition each graft brought in, keyed by the id prefix its nodes
+   * carry — the ancestry a node cannot expand into again.
+   *
+   * `alreadyGrafted` bounds an instance against ITSELF: once a node's children
+   * carry its prefix, that node is done. It cannot see the other shape, where
+   * a definition's own subtree contains a FRESH instance naming the same
+   * definition. Each pass mints a new instance id, so that node looks new to
+   * every check there was, and the graft ran again on its own output until
+   * {@link MAX_COMPONENT_DEPTH} stopped it.
+   *
+   * A depth cap is the right backstop for a reusable component, where
+   * self-reference is an authoring mistake. It is the wrong bound for a FORM:
+   * `checkFormContract` REQUIRES a form design's tree to contain a `form` node
+   * naming that same form, so a placed form does not merely risk grafting into
+   * itself — it always does, to the cap, every render. Six nested `<form>`
+   * elements is invalid HTML, so the server parser drops the inner ones and
+   * the client tree then disagrees with the server tree, which is a hydration
+   * failure on a public page.
+   *
+   * Keyed by prefix because the prefix chain IS the ancestry: a node grafted
+   * inside instance X has an id beginning with X's prefix, and one nested two
+   * deep begins with both. Testing `startsWith` against a definition already
+   * open above therefore asks exactly the right question — "is this the same
+   * definition, inside its own expansion?" — while leaving a genuinely
+   * different form placed inside a form free to expand.
+   */
+  const graftedAncestry: Array<{ prefix: string; refId: string }> = []
+
+  /**
+   * The definition id a node points at, and the placement that claims it.
+   *
+   * Scoped to placements that REPLACE authored children. That is what a form
+   * does and what a reusable-component instance does not, and the difference
+   * is the whole reason this guard is narrow: for a component, a definition
+   * naming itself is an authoring mistake whose documented behaviour is a
+   * depth-bounded expansion, and collapsing it here would change a semantic
+   * this fix has no business touching. For a placement that replaces children,
+   * the instance and the definition's root denote the same thing.
+   */
+  const replacingRefOf = (
+    node: N | undefined,
+  ): { refId: string; placement: PlacementKind<N> } | null => {
+    for (const placement of placements) {
+      if (!placement.replacesAuthoredChildren) continue
+      // `componentId` sits on the NODE and the ref on its props, matching
+      // `resolvePlacement` exactly — a predicate that drifted from that one
+      // would not fail loudly, it would simply never match and leave the guard
+      // switched off.
+      if (node?.componentId !== placement.componentId) continue
+      const refId = (node.props as any)?.[placement.refProp]
+      if (typeof refId === 'string' && refId) return { refId, placement }
+    }
+    return null
+  }
+
+  /** Just the id, for the two call sites that do not need the placement. */
+  const refIdOf = (node: N | undefined): string | null =>
+    replacingRefOf(node)?.refId ?? null
+
+  /**
+   * Is this node an instance of a definition already open above it?
+   *
+   * Left completely untouched when so — not pruned, not emptied. An unexpanded
+   * form node renders its own authored children, which is the same thing an
+   * unresolvable ref does, and matches the rule that a missing definition must
+   * never take a published page down.
+   */
+  const withinOwnExpansion = (id: NodeId, node: N): boolean => {
+    const refId = refIdOf(node)
+    if (!refId) return false
+    return graftedAncestry.some(
+      (entry) => entry.refId === refId && id.startsWith(entry.prefix),
+    )
+  }
+
   for (let depth = 0; depth < MAX_COMPONENT_DEPTH; depth++) {
     const pending = Object.entries(composed).filter(
       ([id, node]) =>
-        Boolean(resolvePlacement(node)) && !alreadyGrafted(id, node),
+        Boolean(resolvePlacement(node)) &&
+        !alreadyGrafted(id, node) &&
+        !withinOwnExpansion(id, node),
     )
     if (!pending.length) break
 
@@ -818,6 +896,11 @@ export function composeReusableComponentNodes<
         }
       ).definition
       const prefix = instancePrefix(instanceId)
+      // Recorded BEFORE the subtree is written, so the nodes this graft is
+      // about to produce are already inside its ancestry when the next pass
+      // considers them.
+      const grafting = refIdOf(instanceNode)
+      if (grafting) graftedAncestry.push({ prefix, refId: grafting })
       const prefixId = (id: NodeId) => `${prefix}${id}`
       // Style overrides (AGL-1306 root, AGL-1332 per leaf): merged over
       // each definition node's own sx as this instance's copy is grafted —
@@ -900,9 +983,48 @@ export function composeReusableComponentNodes<
           prefixId(definition.rootId),
         ),
       )
-      next[instanceId] = {
-        ...instanceNode,
-        nodes: [prefixId(definition.rootId)],
+      /*
+       * A definition whose ROOT names the definition itself is grafted
+       * UNWRAPPED — its root's children attach to the instance, and the
+       * duplicate root is dropped.
+       *
+       * Bounding the recursion above stops the runaway, but one graft of a
+       * self-naming design still produces two of the same element nested: the
+       * placed node, and the design's root inside it. For a form that is a
+       * `<form>` inside a `<form>`, which is invalid HTML — the server parser
+       * drops the inner one, the client keeps it, and the two trees disagree.
+       * Six of them or two, the page still fails to hydrate.
+       *
+       * Unwrapping is not a special case bolted on for forms: the instance and
+       * the definition's root denote THE SAME THING here, and rendering both
+       * was always the duplicate. `checkFormContract` is what makes a form
+       * design always take this shape, so for forms this branch is the normal
+       * path rather than the exception.
+       *
+       * The instance keeps its own props: it is the node the page authored,
+       * carrying the id everything else resolves against.
+       */
+      const graftedRootId = prefixId(definition.rootId)
+      const definitionRoot = definition.nodes[definition.rootId] as N | undefined
+      const rootNamesItself =
+        Boolean(grafting) && refIdOf(definitionRoot) === grafting
+      const graftedRoot = next[graftedRootId]
+      if (rootNamesItself && graftedRoot) {
+        const adopted = Array.isArray(graftedRoot.nodes)
+          ? (graftedRoot.nodes as NodeId[])
+          : []
+        for (const childId of adopted) {
+          if (next[childId]) {
+            next[childId] = { ...next[childId], parentId: instanceId }
+          }
+        }
+        delete next[graftedRootId]
+        next[instanceId] = { ...instanceNode, nodes: adopted }
+      } else {
+        next[instanceId] = {
+          ...instanceNode,
+          nodes: [graftedRootId],
+        }
       }
     }
     composed = next

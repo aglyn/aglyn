@@ -568,8 +568,35 @@ describe('Upgrade with nothing on file', () => {
       orgId: 'org-1',
     })
     expect(typeof subscribes()[0].plan).toBe('string')
-    // The purchase is last. Every collection call precedes it.
-    expect(callLog.indexOf('checkout:subscribe')).toBe(callLog.length - 1)
+    // The purchase is last of the calls that BUILD it: every collection and
+    // every quote precedes it, and nothing that could still change the price
+    // runs after.
+    //
+    // Stated against the collecting calls rather than as "subscribe is the
+    // final entry", because a profile READ does follow it — the page re-reads
+    // the commercial record so the surfaces describing an upcoming purchase
+    // stop describing one. That read cannot affect what was charged, and
+    // pinning the assertion to the end of the log would forbid it while
+    // claiming to be about ordering.
+    const subscribeAt = callLog.indexOf('checkout:subscribe')
+    const collectingAt = callLog
+      .map((entry, index) => ({ entry, index }))
+      .filter(
+        ({ entry }) =>
+          entry.startsWith('profile:') &&
+          // `get` is the READ the hook issues on load and on reload. It
+          // collects nothing and cannot change what is charged, so it is not
+          // one of the calls this ordering is about.
+          entry !== 'profile:get' &&
+          entry !== 'profile:undefined',
+      )
+      .map(({ index }) => index)
+    expect(subscribeAt).toBeGreaterThan(-1)
+    expect(Math.max(...collectingAt)).toBeLessThan(subscribeAt)
+    // And it happens ONCE. That is the half of "last" worth keeping: the
+    // ordering above says nothing about a second charge, and a duplicate
+    // subscribe is the failure this whole flow is built to prevent.
+    expect(callLog.filter((entry) => entry === 'checkout:subscribe')).toHaveLength(1)
   }, 20000)
 
   it('a tax ID given during the flow is on file BEFORE the quote it changes', async () => {
