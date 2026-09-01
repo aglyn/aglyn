@@ -177,8 +177,9 @@ describe('both publish paths announce', () => {
     expect(source).toMatch(/const formId = String\(/)
     expect(source).toMatch(/screenIdsUsingForm\(firestore, hostId, formId\)/)
     // The 400 has to name the new key, or a caller sending one gets told the
-    // field it just sent is not a field.
-    expect(source).toMatch(/componentId, formId or redirectPath/)
+    // field it just sent is not a field. Matched inside the list rather than
+    // at its end: the route has since grown a sixth accepted target.
+    expect(source).toMatch(/screenId, layoutId, componentId, formId[,]/)
   })
 
   it('the client helper forwards it', () => {

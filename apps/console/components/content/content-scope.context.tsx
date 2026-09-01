@@ -57,6 +57,9 @@ import {
   usePagedCollection,
   useUser,
 } from '@aglyn/tenant-feature-instance'
+import revalidateLivePages, {
+  describeRevalidateShortfall,
+} from '../../utils/revalidate-live-pages'
 import { useHostId, useHostSubdomain } from '../host-id-provider'
 import { buildRoute, Route } from '../../constants/route-links'
 import { hasEntitlement } from '../../constants/entitlements'
@@ -222,6 +225,12 @@ export interface ContentScope {
   claimNavigation: (key: string) => void
 
   /* ── shared entry actions ──────────────────────────────────────────── */
+  /**
+   * Drop the live site's caches for this collection after an entry changed —
+   * best effort, never awaited. `entrySlugs` names the entry's own address,
+   * and its previous one too when a save renamed it.
+   */
+  announceEntryChange: (entrySlugs?: string[]) => void
   togglePublish: (entry: any) => Promise<void>
   deleteEntry: (entry: any) => Promise<boolean>
   openScheduler: (entry: any) => void
@@ -669,6 +678,55 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
     [firestore, hostId, selected?.$id],
   )
 
+  /**
+   * Tell the live site that an entry changed.
+   *
+   * The content half of the publish drop every besigner surface performs
+   * (AGL-1150 and after). It was missing here, and the omission is invisible
+   * in exactly the way the arc's other omissions were: the write lands, the
+   * console shows it immediately from its own listener, and the site keeps
+   * serving the old post for the rest of the window while nothing anywhere
+   * says so.
+   *
+   * The window is the LONGER of the two, not the page's. A routed entry page
+   * regenerates on the catch-all's ten-minute ISR window, but a Collection
+   * entries rail elsewhere on the site reads the compose-time collection
+   * source, which is cached for an hour under `tenant-data:{hostId}` — so a
+   * new post could sit on `/blog/my-post` for fifty minutes while the home
+   * page's "Latest" strip still led with the one before it. Only the tenant
+   * route can bust that tag, and the console route is what reaches it.
+   *
+   * ONE definition, because both surfaces change entries: the list's row menu
+   * publishes, unpublishes, re-dates and deletes, and the detail page saves.
+   * Per-caller copies of this call are the shape AGL-1150 spent three issues
+   * removing.
+   *
+   * Live entries only, at the caller's discretion — a draft is not on the
+   * site, so there is no cached page of it to drop and no shortfall worth
+   * reporting about one.
+   *
+   * BEST EFFORT, never awaited. The write has already landed, so a cache hint
+   * that fails must not make a successful save look failed; the caches expire
+   * underneath it either way.
+   */
+  const announceEntryChange = useCallback(
+    (entrySlugs: string[] = []) => {
+      if (!selected) return
+      void revalidateLivePages({
+        user,
+        hostId,
+        collectionId: selected.$id,
+        entrySlugs: entrySlugs.filter(Boolean),
+      }).then((result) => {
+        // "Saved", not "Published": most of what reaches here is an edit to a
+        // post that was already live, and the two are different acts.
+        const shortfall = describeRevalidateShortfall(result, 'Saved.')
+        if (shortfall) enqueueSnackbar(shortfall, { variant: 'info' })
+      })
+    },
+    [user, hostId, selected, enqueueSnackbar],
+  )
+
   const togglePublish = useCallback(
     async (entry: any) => {
       if (!selected) return
@@ -707,8 +765,12 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
         id: entry.$id,
         name: entry.title,
       })
+      // Unconditional: both directions change what the site serves — one adds
+      // the post to every listing that shows it, the other takes it away and
+      // leaves its own address cached as a page that no longer exists.
+      announceEntryChange([entry.slug])
     },
-    [selected, entryRef, enqueueSnackbar, logActivity],
+    [selected, entryRef, enqueueSnackbar, logActivity, announceEntryChange],
   )
 
   /**
@@ -740,9 +802,20 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
         id: entry.$id,
         name: entry.title,
       })
+      // A deleted DRAFT was never on the site; a deleted live entry leaves its
+      // own address cached as a page whose document is gone, and its listings
+      // still advertising it.
+      if (entry.status !== 'draft') announceEntryChange([entry.slug])
       return true
     },
-    [selected, confirm, entryRef, enqueueSnackbar, logActivity],
+    [
+      selected,
+      confirm,
+      entryRef,
+      enqueueSnackbar,
+      logActivity,
+      announceEntryChange,
+    ],
   )
 
   /* ── the two date dialogs, owned here ──────────────────────────────── */
@@ -831,6 +904,9 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
       id: scheduler.entry.$id,
       name: scheduler.entry.title,
     })
+    // A future `publishAt` takes a published entry back OFF the live set until
+    // the date arrives, so scheduling one is a change the site has to see.
+    announceEntryChange([scheduler.entry.slug])
     setScheduler(null)
   }, [
     scheduler,
@@ -840,6 +916,7 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
     orgReady,
     enqueueSnackbar,
     logActivity,
+    announceEntryChange,
   ])
 
   /**
@@ -890,8 +967,20 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
       id: publishDate.entry.$id,
       name: publishDate.entry.title,
     })
+    // `publishedAt` is both `Article.datePublished` and the key every listing
+    // sorts on, so re-dating a live post moves it in every list that shows it.
+    if (publishDate.entry.status !== 'draft') {
+      announceEntryChange([publishDate.entry.slug])
+    }
     setPublishDate(null)
-  }, [publishDate, selected, entryRef, enqueueSnackbar, logActivity])
+  }, [
+    publishDate,
+    selected,
+    entryRef,
+    enqueueSnackbar,
+    logActivity,
+    announceEntryChange,
+  ])
 
   /* ── the category manager, opened from both surfaces ───────────────── */
 
@@ -909,8 +998,13 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
         doc(firestore, 'hosts', hostId, 'collections', selected.$id),
         { categories: next },
       )
+      // A category's NAME is its listing address — `/blog/category/{slug}` is
+      // built from it — and it is the label every pill strip and entry meta
+      // block prints. Renaming or removing one therefore changes live pages
+      // exactly as an entry does, and needs the same announcement.
+      announceEntryChange()
     },
-    [selected, firestore, hostId],
+    [selected, firestore, hostId, announceEntryChange],
   )
   const handleAddCategory = useCallback(async () => {
     const name = newCategoryName.trim()
@@ -997,6 +1091,7 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
       entryHref,
       claimNavigation,
       togglePublish,
+      announceEntryChange,
       deleteEntry,
       openScheduler,
       openPublishDate,
@@ -1030,6 +1125,7 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
       entryHref,
       claimNavigation,
       togglePublish,
+      announceEntryChange,
       deleteEntry,
       openScheduler,
       openPublishDate,
