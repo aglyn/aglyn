@@ -400,10 +400,11 @@ dimension so a dynamic list can draw from silos other than contacts:
 
 ```
 rule:
-  sources: ['contacts' | 'leads' | 'siteMembers']   // which silos to draw from
+  sources: ['contacts' | 'leads' | 'siteMembers' | 'formSubmissions']
   segmentId?: string                                 // reuse an existing saved segment
   tags?:      string[]                               // contacts only
   captureSources?: ContactSource[]                   // form | member | order | booking | newsletter | api
+  campaignIds?: string[]                             // contacts + formSubmissions — filed under a campaign
   behavior?:                                         // contacts only — the Klaviyo dimension
     ordersCountAtLeast?:  number
     ltvCentsAtLeast?:     number
@@ -413,6 +414,17 @@ rule:
 
 Every field above maps to a value **already written** on the contact document.
 Nothing new is collected.
+
+`campaignIds` is the membership `campaign-membership.ts` defines — the field
+the forms and screens consoles write, propagated onto a submission and onto
+the capturing holder's contact facet by the submit route. It is **not** the
+campaign a visitor was attributed to: a touch says which ad brought somebody
+in, this says which push the merchant filed the record under, and the two are
+separate fields that never write each other. A lead and a site member carry no
+membership, so the dimension is skipped for those silos rather than failed.
+
+⛔ Membership is not consent. A rule that selects a campaign's people enrolls
+them with no basis at all, exactly as every other dimension does — see §3f.
 
 ### 3d. The membership document holds a pointer, not a person
 

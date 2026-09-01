@@ -281,7 +281,7 @@ export const NodeLeaf = observer(
     // be persisted into the document that placed it. Same shape as the
     // binding resolution above, which renders a resolved copy while
     // selection and dnd keep the original node.
-    const { definitions } = useContext(ComponentPromotionContext)
+    const { definitions, formDesigns } = useContext(ComponentPromotionContext)
     const instanceTree = useMemo(() => {
       if (node?.componentId !== Aglyn.REUSABLE_INSTANCE_COMPONENT_ID) {
         return undefined
@@ -353,6 +353,55 @@ export const NodeLeaf = observer(
       definitions,
     ])
 
+    /**
+     * A placed form draws its ENTITY'S published fields, not the page's copy
+     * of them (`docs/specs/reusable-forms.md`).
+     *
+     * The same render-copy treatment the instance above gets, and for the same
+     * reason: the entity's nodes stay out of the canvas, so there is nothing to
+     * lock, nothing to strip before a save, and no way for a form's fields to
+     * be persisted into the screen that placed it.
+     *
+     * It runs the REAL graft rather than reading `design.nodes` directly, so a
+     * component nested inside the form design expands here exactly as it will
+     * on the published page — one resolution path, not a second that could
+     * disagree.
+     *
+     * When it resolves, the node's own children are not rendered (below): the
+     * published page discards them, and a canvas that drew both would show the
+     * author a page that does not exist. Where the entity has no published
+     * design the memo is `undefined`, the children render, and the form the
+     * author drew is the form they see — which is every form built before the
+     * entity existed.
+     */
+    const placedFormTree = useMemo(() => {
+      if (node?.componentId !== Aglyn.FORM_COMPONENT_ID) return undefined
+      const formId = (node?.props as { formId?: unknown } | undefined)?.formId
+      if (typeof formId !== 'string' || !formId) return undefined
+      const composed = Aglyn.composeReusableComponentNodes(
+        {
+          [node.$id]: {
+            $id: node.$id,
+            componentId: Aglyn.FORM_COMPONENT_ID,
+            // Plain snapshot: props are MobX observables, as above.
+            props: JSON.parse(JSON.stringify(node.props ?? {})),
+            nodes: [],
+          } as any,
+        },
+        // Component definitions ride along so an instance INSIDE the form
+        // design expands; the map is safe to pass whole for the reason the
+        // instance graft above states — the one node handed in is this form.
+        definitions as any,
+        [Aglyn.placedFormPlacement(formDesigns as any)],
+      )
+      const graftedRootId = (composed[node.$id]?.nodes as string[])?.[0]
+      return graftedRootId
+        ? denormalizeTree(composed, graftedRootId)
+        : undefined
+      // Observable props: the JSON string keys the memo, as above.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [node, JSON.stringify(node?.props ?? {}), definitions, formDesigns])
+
     return (
       <DraggableDroppable
         node={node}
@@ -386,7 +435,19 @@ export const NodeLeaf = observer(
           data-aglyn-bound={boundProps.length ? '' : undefined}
           {...rest}
         >
-          {children}
+          {/* A resolved form entity REPLACES the page's own fields, exactly
+              as the published page composes it — see `placedFormTree`. */}
+          {placedFormTree ? null : children}
+          {placedFormTree ? (
+            // Inert and click-through like the instance preview below: the
+            // fields belong to the form, and they are edited in the form's own
+            // besigner, so the only selectable thing here is the placement.
+            <Box sx={{ pointerEvents: 'none' }} data-aglyn-form-preview="">
+              <RendererComponents.Provider value={INERT_RENDERER as any}>
+                <Stem node={placedFormTree} />
+              </RendererComponents.Provider>
+            </Box>
+          ) : null}
           {instanceTree ? (
             // `pointerEvents: none` so a click anywhere on the rendered
             // component still lands on the instance beneath it — the

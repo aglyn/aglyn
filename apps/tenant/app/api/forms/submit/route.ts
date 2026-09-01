@@ -446,6 +446,25 @@ export async function POST(request: Request): Promise<Response> {
           sanitizedFields,
         )
       : readDeclaredMarketingConsent(payload, fields)
+    /*
+     * THE CAMPAIGNS THE FORM IS FILED UNDER.
+     *
+     * Off the form document this route has already read, so it costs nothing,
+     * and off the VERIFIED form for the same reason the id is: a membership
+     * taken from the request body would let anyone file people into any
+     * campaign on any site.
+     *
+     * ⚠️ NOT the campaign touch resolved below, and the two never write each
+     * other's field. The touch is where this visitor came FROM and is
+     * browser-supplied; this is which campaigns the merchant put the form in,
+     * and it is true of every person who fills that form in — including the
+     * one who arrived by typing the address. Recording only the touch is what
+     * left three forms assigned to a campaign producing contacts that belonged
+     * to none.
+     */
+    const formCampaignIds = form
+      ? Aglyn.readCampaignIds(form.data() as Record<string, unknown>)
+      : []
     // One instant for the whole submission. The attribution window is
     // measured against it in three places below, and three calls to
     // `Date.now()` would let a slow write decide whether a touch was inside
@@ -456,6 +475,22 @@ export async function POST(request: Request): Promise<Response> {
       // never reaches the row, so the per-form list cannot be written into
       // from outside.
       ...(form ? { formId: form.id } : {}),
+      /*
+       * The form's campaign membership, copied onto the row.
+       *
+       * A STAMP of what the form said at the moment this arrived, not a live
+       * edge: nothing edits a submission's campaigns afterwards, and refiling
+       * the form later does not rewrite the submissions it already produced.
+       * That is why this collection is not in
+       * `CAMPAIGN_MEMBER_HOST_COLLECTIONS` — the deletion pass walks the
+       * collections a PICKER writes, and a campaign's removal must not rewrite
+       * an unbounded, billed history collection to tidy up a field that is
+       * only ever read alongside the campaigns a picker still offers.
+       *
+       * Written only when the form names one, so the field is absent on the
+       * rows that would carry an empty array forever.
+       */
+      ...(formCampaignIds.length ? { campaignIds: formCampaignIds } : {}),
       formName: resolvedFormName,
       path: String(path ?? '').slice(0, 500),
       fields: sanitizedFields,
@@ -487,6 +522,17 @@ export async function POST(request: Request): Promise<Response> {
     // Contacts ingestion (AGL-197): forms don't guarantee an email field —
     // best-effort extraction; never blocks the submission.
     const contactEmail = extractEmailFromFields(sanitizedFields)
+    /*
+     * Whether this submission was filed to the site's Leads.
+     *
+     * A CAPTURE, not a person. `addHostLead` keys one person to one document,
+     * so a returning visitor's second submission updates the lead it created
+     * the first time — and both submissions did route. The counter this feeds
+     * is therefore "submissions this form filed as a lead", which is the
+     * numerator the form's own lead rate needs; how many distinct people are
+     * on the list is the Leads list's count and is a different number.
+     */
+    let leadStored = false
     /*
      * THE CAMPAIGN TOUCH, RESOLVED ONCE FOR THE WHOLE SUBMISSION.
      *
@@ -530,9 +576,29 @@ export async function POST(request: Request): Promise<Response> {
         interaction: {
           refId: submissionRef.id,
           summary: `Submitted "${resolvedFormName.slice(0, 60)}"`,
+          /*
+           * THE ENTRY POINT, on the contact's own timeline.
+           *
+           * Which form and which page a person came in through is a fact about
+           * this capture, so it rides the interaction the capture already
+           * writes rather than a second structure beside it. `sources` says
+           * only that SOME form produced this contact — every form sets the
+           * same flag — and answering "which one" by reading the submission
+           * back would be a document read per row of a timeline the console
+           * renders straight out of the contact.
+           *
+           * The id only for a VERIFIED form, matching the submission: an
+           * unverified id never reaches a stored row on this path.
+           */
+          ...(form ? { formId: form.id } : {}),
+          ...(typeof path === 'string' && path ? { path } : {}),
         },
         ...(declaredMarketingConsent ? { marketingConsent: true } : {}),
         ...(campaignTouch ? { campaignTouch } : {}),
+        // Filed under the form's campaigns, inside this site's own facet on a
+        // row the whole org shares. Membership is not consent, and this passes
+        // none: `marketingConsent` above is the only input that records one.
+        ...(formCampaignIds.length ? { campaignIds: formCampaignIds } : {}),
       })
       /*
        * A lead, when the FORM says it is one (`docs/specs/reusable-forms.md`
@@ -557,7 +623,24 @@ export async function POST(request: Request): Promise<Response> {
        * never fail the submission that produced it.
        */
       if (form?.get('routing')?.lead === true) {
-        void addHostLead({
+        /*
+         * AWAITED, unlike the contact upsert beside it, and only because the
+         * answer is counted.
+         *
+         * The form's `stats.leads` rides the SAME `update` the submission
+         * counters ride a few lines below — one write, not two — and that
+         * update has to know whether a lead was really filed. A `void` call
+         * with the counter chained onto its `then` would put the one figure
+         * on this page that is about routing on a promise the runtime is free
+         * to abandon once the response is sent, so the lead rate would
+         * under-report by however often that happened and would look like
+         * forms quietly failing to route.
+         *
+         * The posture is unchanged: `addHostLead` catches everything and
+         * answers `false`, so awaiting it cannot fail the submission any more
+         * than voiding it could.
+         */
+        leadStored = await addHostLead({
           hostRef,
           hostId,
           lead: {
@@ -725,12 +808,31 @@ export async function POST(request: Request): Promise<Response> {
      * That is the `overlays` stats rule, and a form needs it for the same
      * reason. A missing document makes this throw, which the catch swallows —
      * bookkeeping must not turn a stored submission into a 500.
+     *
+     * The PER-MONTH keys ride the same update and cost nothing extra: a
+     * document write is priced per write, not per field, so a lifetime total
+     * and a month series are the same one write. `monthKey` is the key the
+     * site-wide counter above was just incremented under, reused rather than
+     * re-derived — a per-form series keyed differently from the site's would
+     * put a submission in one month on one surface and the next month on the
+     * other.
+     *
+     * `stats.leads` is here rather than beside `addHostLead` for the same
+     * reason: a second write to say a lead was filed would be a second write
+     * per submission on the collection the customer is billed against.
      */
     if (form) {
       try {
         await form.ref.update({
           'stats.submissions': FieldValue.increment(1),
           'stats.lastSubmissionAtMs': Date.now(),
+          [`stats.periods.${monthKey}.submissions`]: FieldValue.increment(1),
+          ...(leadStored
+            ? {
+                'stats.leads': FieldValue.increment(1),
+                [`stats.periods.${monthKey}.leads`]: FieldValue.increment(1),
+              }
+            : {}),
         })
       } catch (error) {
         console.error('form stats increment failed', error)

@@ -181,6 +181,13 @@ export function DocumentPreview(props: DocumentPreviewProps) {
   const [definitions, setDefinitions] = useState<
     Record<string, Aglyn.ReusableComponentTree> | undefined
   >(undefined)
+  // The published design of each form entity, keyed by id, on the same
+  // "`undefined` means still loading" contract. Read beside the definitions
+  // because a placed form resolves the same way an instance does, and Preview
+  // has to agree with the tenant about both.
+  const [formDesigns, setFormDesigns] = useState<
+    Record<string, Aglyn.PlacedFormDesign> | undefined
+  >(undefined)
   // Consent-banner region simulation (AGL-1498); see ConsentSimulation.
   const [consentSim, setConsentSim] = useState<ConsentSimulation>('off')
   const [consentHost, setConsentHost] = useState<Aglyn.VisitorConsentHost | null>(
@@ -349,6 +356,37 @@ export function DocumentPreview(props: DocumentPreviewProps) {
         console.error(error)
         if (!cancelled) setDefinitions({})
       })
+
+    // Form entities (`docs/specs/reusable-forms.md`), read the same way and
+    // failing open the same way: an empty map leaves each placed form
+    // rendering the fields the document itself holds, which is what Preview
+    // showed before entities existed.
+    firestoreOneShotRetry(
+      () =>
+        getDocs(
+          query(collection(firestore, 'hosts', hostId, 'forms'), limit(200)),
+        ),
+      'forms',
+    )
+      .then((res) => {
+        if (cancelled) return
+        const next: Record<string, Aglyn.PlacedFormDesign> = {}
+        for (const docSnapshot of res.docs) {
+          const value = docSnapshot.data() as Aglyn.FormDocument
+          if (!value?.nodes || !value?.rootId) continue
+          // BOTH stored forms (AGL-1151), mirroring `get-forms.ts`.
+          const nodes = Aglyn.decodeStoredNodes<
+            NonNullable<Aglyn.FormDocument['nodes']>
+          >(value.nodes)
+          if (!nodes?.[value.rootId]) continue
+          next[docSnapshot.id] = { rootId: value.rootId, nodes }
+        }
+        setFormDesigns(next)
+      })
+      .catch((error) => {
+        console.error(error)
+        if (!cancelled) setFormDesigns({})
+      })
     // A read that never SETTLES is the case the `.catch` above cannot cover,
     // and it is the one that produced "Preview opens a tab that never
     // finishes loading": with `definitions` still `undefined` the apply
@@ -372,6 +410,17 @@ export function DocumentPreview(props: DocumentPreviewProps) {
         )
         return {}
       })
+      // The forms read is gated by the same apply effect, so a hang there
+      // holds the tab blank exactly as a hung components read would.
+      setFormDesigns((current) => {
+        if (current) return current
+        console.warn(
+          `[preview] the host forms read did not settle within ` +
+            `${DEFINITIONS_TIMEOUT_MS}ms — rendering each placed form from ` +
+            'the document itself rather than holding a blank page.',
+        )
+        return {}
+      })
     }, DEFINITIONS_TIMEOUT_MS)
     return () => {
       cancelled = true
@@ -385,7 +434,7 @@ export function DocumentPreview(props: DocumentPreviewProps) {
     // with a "loading" empty map would render the placeholder and then swap it
     // for the real nav a beat later — a visible flash of chrome that the live
     // site never shows.
-    if (!definitions) return
+    if (!definitions || !formDesigns) return
     const resolved: PreviewStateIds = { hostId, kind, docId, versionId }
 
     const applyState = () => {
@@ -401,6 +450,10 @@ export function DocumentPreview(props: DocumentPreviewProps) {
           Aglyn.composeReusableComponentNodes(
             state.nodes as any,
             definitions as any,
+            // Placed forms resolve here too, in the SAME call the tenant makes
+            // — one graft that expands a component inside a form design and a
+            // form inside a component, in either nesting order.
+            [Aglyn.placedFormPlacement(formDesigns as any)],
           ) as any,
         ),
       )
@@ -414,7 +467,7 @@ export function DocumentPreview(props: DocumentPreviewProps) {
     }
     window.addEventListener('storage', handleStorage)
     return () => window.removeEventListener('storage', handleStorage)
-  }, [hostId, kind, docId, versionId, definitions])
+  }, [hostId, kind, docId, versionId, definitions, formDesigns])
 
   // Interactions parity (AGL-830): mount the registered site runtimes exactly
   // like the tenant page, each fed the page-props slice it rebuilds

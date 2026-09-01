@@ -40,6 +40,11 @@ let listDoc: Record<string, any> | undefined
 const FIRESTORE = {}
 const SCOPE = { scope: ['orgs', 'org-1'] }
 const NO_SEGMENTS = { data: [] }
+const SITE_CAMPAIGNS = {
+  options: [{ value: 'camp_spring', label: 'Spring push' }],
+  truncated: false,
+  ready: true,
+}
 const mockPush = jest.fn()
 
 jest.mock('next/navigation', () => ({
@@ -53,6 +58,11 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: { uid: 'uid-test' } }),
   useFirestoreCollection: () => NO_SEGMENTS,
   useFirestoreDoc: () => ({ data: listDoc, status: 'success' }),
+  // The site's campaigns behind the "In campaign" picker. Offered rather than
+  // empty, so a rule that already names one renders the campaign it names —
+  // a picker whose value is not among its options draws blank, and a save
+  // from that screen would erase the reference.
+  useHostCampaigns: () => SITE_CAMPAIGNS,
 }))
 
 const updateDoc = jest.fn().mockResolvedValue(undefined)
@@ -92,6 +102,7 @@ const FULL_RULE = {
   tags: ['vip'],
   captureSources: ['order'],
   formNames: ['Contact us'],
+  campaignIds: ['camp_spring'],
   createdAfterMs: Date.parse('2026-01-01'),
   createdBeforeMs: Date.parse('2026-06-30'),
   behavior: {
@@ -156,6 +167,10 @@ describe('the edit page writes the WHOLE rule', () => {
     expect(rule.captureSources).toEqual(['order'])
     expect(rule.createdBeforeMs).toBe(FULL_RULE.createdBeforeMs)
     expect(rule.behavior).toEqual(FULL_RULE.behavior)
+    // The campaign the audience is built from. A save that dropped it would
+    // widen the list from the people in one push to the whole silo, and the
+    // sweep would enroll them on the next beat.
+    expect(rule.campaignIds).toEqual(['camp_spring'])
   })
 
   it('carries an edited field through and leaves the rest alone', async () => {

@@ -1149,8 +1149,20 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
                       SOURCE_LABELS[interaction.type] ??
                       interaction.type}
                   </Typography>
+                  {/*
+                    The entry point, beside the timestamp rather than in the
+                    summary above it. The summary is the sentence the door
+                    wrote; the page is a fact the door recorded, and appending
+                    it to the sentence would put the two on one line where a
+                    long path pushes out the thing the row is about.
+
+                    Only the PAGE. The form is already named in the summary
+                    the capture wrote, and the id it stores is not a caption.
+                   */}
                   <Typography variant="caption" color="text.secondary">
-                    {new Date(interaction.atMs).toLocaleString()}
+                    {interaction.path
+                      ? `${new Date(interaction.atMs).toLocaleString()} · ${interaction.path}`
+                      : new Date(interaction.atMs).toLocaleString()}
                   </Typography>
                 </Stack>
               ))}

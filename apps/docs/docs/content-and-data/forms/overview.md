@@ -310,6 +310,46 @@ offering a Send that would fail.
 
 <!-- screenshot: forms/inbox-submission-reader.png per SCREENSHOT_PLAN.md -->
 
+### One form's own page {#one-forms-own-page}
+
+The Inbox answers "who is waiting for a reply" for the whole site. **Forms →** a form
+answers a different question: how this one form is doing. Open it from the Forms list.
+
+**What this form has collected** carries the counters:
+
+- **Views** — times the form was rendered on a live page. Not times it was *seen*: a
+  form below the fold that nobody scrolled to still counts, and a form in a popup counts
+  only when the popup opens. Views of the form in the besigner or in Preview are never
+  counted — that would put you in your own numbers.
+- **Submissions** — everything filed under this form's id.
+- **Lead captures** — submissions this form filed to **Members & leads**. One person is
+  one lead, so someone who submits twice is two captures and one lead.
+- **Views that became a submission**, **Started and never submitted**, and **Submissions
+  that became a lead** — each printed with the population it is over, so you can see what
+  is being divided by what.
+
+**Submissions by month** starts at the first month this form recorded anything and runs
+to the present. Months in between with nothing are drawn at zero; months *before* the
+counter existed are not drawn at all, because nothing was counting then and a zero would
+be a claim.
+
+Two things to know before you read the rates:
+
+- **Views and starts are counted in the visitor's browser; submissions are counted on
+  our servers.** A visitor whose browser blocks the measurement can still submit, so a
+  completion rate can read above 100%. We show what was measured rather than capping it
+  at a tidy number.
+- **Each rate covers only the months its denominator was being recorded**, which is why a
+  form with years of submissions may show a completion rate over a much shorter period.
+
+**Submissions to this form** is the same table the Inbox shows, narrowed to this form,
+and it loads when you press **Show submissions** rather than on every visit — reading
+messages is a query over everything the site has ever collected, and most visits to this
+page are about the form's settings.
+
+Submissions collected before a form became a form entity are filed under the name they
+were sent with rather than this form's id, so they stay in the Inbox under **All forms**.
+
 ## Related
 
 - [Datasets & dynamic content](../datasets/overview.md)

@@ -63,11 +63,14 @@ import {
   dynamicListRuleIsEmpty,
   dynamicListRuleListIds,
   dynamicListRuleWithoutListReference,
+  dynamicListRuleNeedsCampaigns,
   dynamicListRuleNeedsEngagement,
   extractEmailFromFields,
   normalizeContactEmail,
   normalizeDynamicListRule,
   personKey,
+  readCampaignIds,
+  readContactCampaignIds,
   type DynamicListCandidate,
   type DynamicListRule,
   type DynamicListSource,
@@ -76,7 +79,11 @@ import {
 import { firebaseAdmin } from './firebase-admin'
 import { readPersonEngagementByKeys } from './email-delivery-log'
 import { enrollListMember } from './list-members'
-import { orgDataCollectionForHost, scopedToHost } from './organizations'
+import {
+  consentGroupForSite,
+  orgDataCollectionForHost,
+  scopedToHost,
+} from './organizations'
 
 /**
  * Documents one sweep run may READ across all sources.
@@ -119,6 +126,16 @@ const PAGE_SIZE = 500
  *   the inbox reply route read.
  *
  * A new writer of any of those four must stamp `createdAt` or be added here.
+ *
+ * ## Campaign membership is read the same way — off the paged document
+ *
+ * `campaignIds` is applied in memory too, and for a second reason beyond the
+ * one above: it is an ARRAY, so a Firestore `array-contains-any` could express
+ * only the single-campaign case and would need a composite index the moment it
+ * met any other filter in the rule. The membership is already on the document
+ * this scan has read, on a submission at the top and on a contact inside the
+ * reading holder's facet, so matching it costs nothing the page did not
+ * already pay.
  */
 
 /** Where a partial sweep stopped, so the next run resumes rather than restarts. */
@@ -193,10 +210,19 @@ const millis = (value: unknown): number | null => {
   return null
 }
 
-/** Reads one silo document into the shape the rule matcher understands. */
+/**
+ * Reads one silo document into the shape the rule matcher understands.
+ *
+ * @param groupId the consent group whose contact facet the campaign membership
+ *   is read from, or `null` when the rule names no campaign and none was
+ *   resolved. A contact row is shared by every site in the org and its
+ *   membership lives inside one holder's facet, so there is no expression here
+ *   that returns another holder's filing.
+ */
 function toCandidate(
   source: DynamicListSource,
   doc: QueryDocumentSnapshot,
+  groupId: string | null,
 ): DynamicListCandidate | null {
   const data = doc.data() as Record<string, unknown>
   const email =
@@ -225,10 +251,21 @@ function toCandidate(
           ordersCount: Number(data['ordersCount'] ?? 0),
           ltvCents: Number(data['ltvCents'] ?? 0),
           lastPurchaseAtMs: millis(data['lastPurchaseAtMs']),
+          // Inside the holder's facet, never the top of the document. A rule
+          // with no campaign clause resolves no group and reads nothing here,
+          // which is what keeps the group lookup an opt-in cost.
+          ...(groupId
+            ? { campaignIds: readContactCampaignIds(data, groupId) }
+            : {}),
         }
       : {}),
     ...(source === 'formSubmissions'
-      ? { formName: String(data['formName'] ?? '') }
+      ? {
+          formName: String(data['formName'] ?? ''),
+          // At the TOP of a submission, because a submission belongs to one
+          // site — the same shape every other host resource carries it in.
+          campaignIds: readCampaignIds(data),
+        }
       : {}),
   }
 }
@@ -430,6 +467,20 @@ export async function collectDynamicListCandidates(options: {
   // the org for every page would be a read per page for an unchanging answer.
   const enrichment = await planEnrichment(rule, options.hostId)
 
+  /*
+   * THE HOLDER whose contact facet a campaign clause is read from.
+   *
+   * The same group the writers use — the sites declared to be one sender, or
+   * this site alone — because a facet written under one group id and read
+   * under another is a membership that silently matches nobody. Resolved once,
+   * and only for a rule that names a campaign: a rule with no campaign clause
+   * pays no org read at all, which is the shape the engagement and list
+   * lookups already take.
+   */
+  const campaignGroupId = dynamicListRuleNeedsCampaigns(rule)
+    ? (await consentGroupForSite(options.hostId)).groupId
+    : null
+
   /** Matched people, de-duplicated across silos by their person key. */
   const matches = new Map<string, DynamicListCandidate>()
   let read = 0
@@ -479,7 +530,7 @@ export async function collectDynamicListCandidates(options: {
       for (const doc of snapshot.docs) {
         read += 1
         after = doc.id
-        const candidate = toCandidate(source, doc)
+        const candidate = toCandidate(source, doc, campaignGroupId)
         if (candidate) pageCandidates.push(candidate)
       }
       read += await enrichCandidates(pageCandidates, enrichment)

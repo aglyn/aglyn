@@ -17,7 +17,7 @@
  * that listens with `limit(100)` to draw ten rows is buying a hundred.
  */
 
-import { render } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
 /**
@@ -291,5 +291,46 @@ describe('forms console read cost', () => {
     // for the two aggregates the quota readout takes.
     expect(paths()).not.toContain('hosts/site1/forms')
     expect(paths().some((path) => path.endsWith('#count'))).toBe(false)
+  })
+
+  /*
+   * THE SUBMISSIONS TABLE IS AN ASK.
+   *
+   * `formSubmissions` is the collection that grows without bound and the one
+   * the customer is billed on. A table that opened its own paged listener on
+   * mount would read a page of it on every visit to this surface — including
+   * every visit that came to rename the form, change where it routes, or
+   * publish a version, none of which asked to read anybody's messages.
+   */
+  it('one form does NOT read its submissions until asked', async () => {
+    await renderConsole(['form-abc'])
+    summarize('one form, unasked')
+    expect(
+      paths().some((path) => path.includes('formSubmissions')),
+    ).toBe(false)
+    expect(documentCeiling()).toBeLessThanOrEqual(ONE_FORM_DOCUMENT_CEILING)
+  })
+
+  it('THE CONTROL: pressing the ask DOES open the submissions listen', async () => {
+    // Otherwise the assertion above is satisfied by a page with no
+    // submissions table at all, which is the state this work started from.
+    await renderConsole(['form-abc'])
+    fireEvent.click(screen.getByRole('button', { name: 'Show submissions' }))
+    expect(paths()).toContain('hosts/site1/formSubmissions')
+    // And BOUNDED when it does open: the reader is paged, not a walk of the
+    // collection sliced small.
+    const listen = mockListens.find(
+      (entry) => entry.path === 'hosts/site1/formSubmissions',
+    )
+    expect(listen && listen.limit > 0).toBe(true)
+  })
+
+  it('the scoped table does NOT read the site’s form catalog', async () => {
+    // The picker is the catalog read's only consumer, and a card narrowed to
+    // one form renders no picker. Reading fifty form documents to draw a
+    // control that is not on screen is the read this scope removes.
+    await renderConsole(['form-abc'])
+    fireEvent.click(screen.getByRole('button', { name: 'Show submissions' }))
+    expect(paths()).not.toContain('hosts/site1/forms')
   })
 })

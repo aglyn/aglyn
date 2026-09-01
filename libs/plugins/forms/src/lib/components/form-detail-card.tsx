@@ -59,6 +59,7 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
 import FormDesignPreview from './form-design-preview.component'
 import FormMetricsCard from './form-metrics-card.component'
+import FormSubmissionsCard from './form-submissions-card.component'
 import useFormPromoteApi from './use-form-promote-api'
 
 export interface FormDetailCardProps {
@@ -723,6 +724,16 @@ export function FormDetailCard(props: FormDetailCardProps) {
               </Stack>
             </CardDisplay>
           ),
+        },
+        {
+          /*
+            THE MESSAGES THEMSELVES, under the numbers that describe them.
+            Full width because it is a table of people and what they wrote,
+            and it sits below the metrics because those are read at a glance
+            and this is read a row at a time.
+           */
+          size: { xs: 12 },
+          children: <FormSubmissionsCard hostId={hostId} formId={formId} />,
         },
         {
           // Full width: the frame is a document, and a document in a

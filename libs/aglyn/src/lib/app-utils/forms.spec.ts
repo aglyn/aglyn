@@ -20,6 +20,8 @@ import {
   collectFormFieldNodeIds,
   FORMS_MAX_PER_HOST,
   formFieldDeclsFromNodes,
+  formPeriodSeries,
+  formStatsWindow,
   discoverFormNodes,
   matchSubmissionToForm,
   normalizeFormSlug,
@@ -371,5 +373,140 @@ describe('the listing bound is not the allowance', () => {
     const largest = Math.max(...finiteAllowances.map(([, value]) => value))
     expect(largest).toBeGreaterThan(0)
     expect(FORMS_MAX_PER_HOST).toBeGreaterThan(largest)
+  })
+})
+
+describe('a form’s month series never draws a month nobody measured', () => {
+  it('starts at the first RECORDED month, not a rolling window', () => {
+    /*
+     * The defect this shape exists to prevent. A series padded backwards to a
+     * fixed twelve months renders every month before the counter shipped as a
+     * confident zero — "this form collected nothing in March" over a March
+     * nothing was counting in. Absent-because-quiet and
+     * absent-because-unmeasured are opposite claims, and only the position of
+     * the month tells them apart.
+     */
+    const series = formPeriodSeries({
+      periods: { '2026-07': { submissions: 3 }, '2026-08': { submissions: 5 } },
+    })
+    expect(series.map((point) => point.period)).toEqual(['2026-07', '2026-08'])
+  })
+
+  it('fills an INTERIOR gap at zero', () => {
+    // Inside the recorded range the counter was live and wrote nothing, so
+    // the month really is zero. Closing the gap instead would make two
+    // months a quarter apart draw as neighbours.
+    const series = formPeriodSeries({
+      periods: { '2026-06': { submissions: 2 }, '2026-09': { submissions: 4 } },
+    })
+    expect(series.map((point) => point.period)).toEqual([
+      '2026-06',
+      '2026-07',
+      '2026-08',
+      '2026-09',
+    ])
+    expect(series.map((point) => point.submissions)).toEqual([2, 0, 0, 4])
+  })
+
+  it('crosses a year boundary', () => {
+    const series = formPeriodSeries({
+      periods: { '2025-11': { views: 1 }, '2026-01': { views: 1 } },
+    })
+    expect(series.map((point) => point.period)).toEqual([
+      '2025-11',
+      '2025-12',
+      '2026-01',
+    ])
+  })
+
+  it('keeps the most recent months when the history is longer than asked for', () => {
+    const periods: Record<string, { submissions: number }> = {}
+    for (let month = 1; month <= 12; month += 1) {
+      periods[`2026-${String(month).padStart(2, '0')}`] = { submissions: month }
+    }
+    const series = formPeriodSeries({ periods }, 3)
+    expect(series.map((point) => point.period)).toEqual([
+      '2026-10',
+      '2026-11',
+      '2026-12',
+    ])
+  })
+
+  it('answers empty for a form nothing has been recorded for', () => {
+    expect(formPeriodSeries(undefined)).toEqual([])
+    expect(formPeriodSeries({ submissions: 40 })).toEqual([])
+  })
+
+  it('ignores a key that is not a month', () => {
+    // The map is written by dotted field paths on a public write path. A key
+    // that is not `YYYY-MM` cannot be placed on the calendar, and walking
+    // from one would run the month cursor off the end.
+    const series = formPeriodSeries({
+      periods: {
+        'not-a-month': { submissions: 9 },
+        '2026-13': { submissions: 9 },
+        '2026-08': { submissions: 1 },
+      } as never,
+    })
+    expect(series.map((point) => point.period)).toEqual(['2026-08'])
+  })
+})
+
+describe('a rate is taken only over the months its denominator was live', () => {
+  /*
+   * THE ARITHMETIC LIE THIS PREVENTS.
+   *
+   * `submissions` has counted since the form entity existed; `views` only
+   * since the beacon shipped. Dividing the lifetime totals answers
+   * "submissions ever, over views since Tuesday" — and it is wrong in the
+   * flattering direction, so nothing about the number invites a second look.
+   */
+  const stats = {
+    submissions: 500,
+    views: 60,
+    periods: {
+      '2026-06': { submissions: 200 },
+      '2026-07': { submissions: 300, views: 40 },
+      '2026-08': { submissions: 100, views: 20 },
+    },
+  }
+
+  it('sums both counters over the months the denominator carries', () => {
+    const window = formStatsWindow(stats, 'views', 'submissions')
+    expect(window.periods).toBe(2)
+    expect(window.over).toBe(60)
+    // 400, NOT the lifetime 500: June had submissions and no view counter.
+    expect(window.of).toBe(400)
+  })
+
+  it('excludes a month the denominator did not record', () => {
+    const window = formStatsWindow(stats, 'views', 'submissions')
+    const everything = Object.values(stats.periods).reduce(
+      (sum, month) => sum + month.submissions,
+      0,
+    )
+    expect(window.of).toBeLessThan(everything)
+  })
+
+  it('answers zero periods when the denominator was never recorded', () => {
+    // Which every caller must render as a dash. A window of nothing is not a
+    // rate of nought.
+    expect(formStatsWindow(stats, 'starts', 'submissions')).toEqual({
+      periods: 0,
+      over: 0,
+      of: 0,
+    })
+  })
+
+  it('treats a month recorded at zero as no measurement', () => {
+    // A key present at zero is the beacon having written nothing that month,
+    // not the month having had no views. Counting it would deflate every rate
+    // by however long the counter was dark.
+    const window = formStatsWindow(
+      { periods: { '2026-08': { submissions: 10, views: 0 } } },
+      'views',
+      'submissions',
+    )
+    expect(window.periods).toBe(0)
   })
 })

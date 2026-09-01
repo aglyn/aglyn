@@ -338,6 +338,55 @@ function instancePrefix(instanceId: NodeId) {
 }
 
 /**
+ * One kind of node that STANDS FOR a tree stored on another document, and
+ * where that tree comes from.
+ *
+ * A reusable-component instance was the first such node; a placed form is the
+ * second (`componentId: 'form'`, `props.formId` → `hosts/{hostId}/forms/{id}`,
+ * whose published `rootId`/`nodes` are the fields the page renders). They are
+ * one mechanism described twice, so they run through one expansion rather than
+ * two passes that would have to agree about id namespacing, depth bounding and
+ * cycle safety — and, more sharply, could not see each other: a form placed
+ * inside a shared component only exists after the component graft, and a
+ * reusable instance inside a form design only exists after the form graft.
+ * Passing both kinds to {@link composeReusableComponentNodes} expands each
+ * against the other, in either nesting order, within the same depth bound.
+ */
+export interface PlacementKind<N extends AglynNodeSchema = AglynNodeSchema> {
+  /** The `componentId` a node must carry to be expanded by this kind. */
+  componentId: string
+  /** The prop naming the document whose tree is grafted. */
+  refProp: string
+  /** Resolvable trees, keyed by the id `refProp` holds. */
+  definitionsById:
+    | Record<string, ReusableComponentTree<N> | undefined>
+    | undefined
+  /**
+   * Whether a resolved graft DISCARDS what the placement node already held.
+   *
+   * Off for reusable instances, which never hold anything: the editor refuses
+   * a drop into them (`flags.dropping: DISABLED`), so replacing the child list
+   * with the grafted root is the whole of what the graft has to do.
+   *
+   * On for placed forms, which do — a form node accepts fields, and every form
+   * on the site was built that way before the form entity existed. Those
+   * inline fields are the node's OWN content, so they cannot merely be
+   * unlinked: left in the map they would still be walked by every later
+   * compose stage, still ship in the page payload, and still answer to any
+   * scan that reads `formField` nodes out of a flat map. The subtree is
+   * dropped with the child list, exactly as `detachInstanceSubtree` drops what
+   * it replaces.
+   *
+   * ⚠️ This is the one thing here that can take content off a page that
+   * renders today, so it is deliberately gated on the graft RESOLVING: a
+   * placement whose document is missing, unpublished, or holds no design is
+   * left untouched, inline children and all. See
+   * {@link composeReusableComponentNodes}.
+   */
+  replacesAuthoredChildren?: boolean
+}
+
+/**
  * The declared-prop name a stored value references when it is EXACTLY one
  * `{{prop.<name>}}` token (whitespace inside the braces tolerated, matching
  * `resolveNamedTokens`' grammar), else `null`.
@@ -655,6 +704,18 @@ export function pruneHiddenNodes<N extends AglynNodeSchema = AglynNodeSchema>(
  *   which is how one hero renders with a mockup on `/product` and without
  *   one on `/press`.
  * - Inputs are never mutated.
+ *
+ * `morePlacements` adds further node kinds that stand for a stored tree — a
+ * placed form is the second one ({@link PlacementKind}) — expanded in the same
+ * passes as instances, so the two nest inside each other in either order.
+ *
+ * ⛔ **A placement is expanded only when its tree RESOLVES**, meaning the
+ * document is in the map AND carries a `rootId` its `nodes` actually hold. An
+ * unresolvable one is left exactly as authored. That is what makes the
+ * child-replacing kind safe to introduce on a live site: a form bound to an
+ * entity that has never been published still renders the fields drawn on the
+ * page, and the graft can only ever swap a page's copy of a form for the
+ * entity's own.
  */
 export function composeReusableComponentNodes<
   N extends AglynNodeSchema = AglynNodeSchema,
@@ -663,29 +724,99 @@ export function composeReusableComponentNodes<
   definitionsById:
     | Record<string, ReusableComponentTree<N> | undefined>
     | undefined,
+  morePlacements?: readonly PlacementKind<N>[],
 ): NormalizedNodes<N> {
-  if (!definitionsById) return nodes
+  const placements: PlacementKind<N>[] = [
+    {
+      componentId: REUSABLE_INSTANCE_COMPONENT_ID,
+      refProp: 'refId',
+      definitionsById,
+    },
+    ...(morePlacements ?? []),
+  ].filter((placement) => placement.definitionsById)
+  if (!placements.length) return nodes
+
+  /**
+   * The kind and tree this node stands for, or `undefined` when it stands for
+   * nothing resolvable.
+   *
+   * The `nodes[rootId]` check is the resolution rule stated once: a document
+   * whose root is not among its own nodes has no design to graft, and wiring
+   * the placement's only child to an id nothing holds would blank it on the
+   * page while reading, downstream, as already expanded.
+   */
+  const resolvePlacement = (node: N | undefined) => {
+    for (const placement of placements) {
+      if (node?.componentId !== placement.componentId) continue
+      const refId = (node.props as any)?.[placement.refProp]
+      if (typeof refId !== 'string' || !refId) continue
+      const definition = placement.definitionsById?.[refId]
+      if (!definition?.rootId || !definition.nodes?.[definition.rootId]) continue
+      return { placement, definition }
+    }
+    return undefined
+  }
+
+  /** Expanded by an earlier pass — its children already carry its prefix. */
+  const alreadyGrafted = (id: NodeId, node: N) => {
+    const childIds = Array.isArray(node.nodes) ? (node.nodes as NodeId[]) : []
+    return childIds.some(
+      (childId) =>
+        typeof childId === 'string' && childId.startsWith(instancePrefix(id)),
+    )
+  }
 
   let composed: NormalizedNodes<N> = nodes
+
+  /*
+   * WHAT A RESOLVED FORM REPLACES, DROPPED BEFORE ANYTHING IS GRAFTED.
+   *
+   * Ahead of the passes rather than inside them so the drop is decided against
+   * the authored tree alone. Inside a pass it would race the expansions
+   * running beside it: an inline field that was itself a component instance
+   * could be grafted in the same pass that discards it, and its grafted
+   * subtree — keyed off ids this walk never sees — would survive its own
+   * parent as unreachable nodes on a published page.
+   */
+  const doomed = new Set<NodeId>()
+  const emptied: NodeId[] = []
+  for (const [id, node] of Object.entries(nodes)) {
+    if (!node || !resolvePlacement(node)?.placement.replacesAuthoredChildren) {
+      continue
+    }
+    if (alreadyGrafted(id, node)) continue
+    const descendants = collectDescendantIds(nodes, id)
+    if (!descendants.size) continue
+    for (const descendantId of descendants) doomed.add(descendantId)
+    emptied.push(id)
+  }
+  if (doomed.size) {
+    const pruned: NormalizedNodes<N> = {}
+    for (const [id, node] of Object.entries(nodes)) {
+      if (!doomed.has(id)) pruned[id] = node as N
+    }
+    for (const id of emptied) {
+      // A replaced form nested in another replaced form's authored children is
+      // gone with it, so there is nothing left here to empty.
+      if (pruned[id]) pruned[id] = { ...pruned[id], nodes: [] }
+    }
+    composed = pruned
+  }
+
   for (let depth = 0; depth < MAX_COMPONENT_DEPTH; depth++) {
-    const pending = Object.entries(composed).filter(([id, node]) => {
-      if (node?.componentId !== REUSABLE_INSTANCE_COMPONENT_ID) return false
-      const refId = (node.props as any)?.refId as string | undefined
-      if (!refId || !definitionsById[refId]) return false
-      // Already expanded in a previous pass?
-      const childIds = Array.isArray(node.nodes) ? (node.nodes as NodeId[]) : []
-      return !childIds.some(
-        (childId) =>
-          typeof childId === 'string' &&
-          childId.startsWith(instancePrefix(id)),
-      )
-    })
+    const pending = Object.entries(composed).filter(
+      ([id, node]) =>
+        Boolean(resolvePlacement(node)) && !alreadyGrafted(id, node),
+    )
     if (!pending.length) break
 
     const next: NormalizedNodes<N> = { ...composed }
     for (const [instanceId, instanceNode] of pending) {
-      const refId = (instanceNode.props as any).refId as string
-      const definition = definitionsById[refId] as ReusableComponentTree<N>
+      const definition = (
+        resolvePlacement(instanceNode) as {
+          definition: ReusableComponentTree<N>
+        }
+      ).definition
       const prefix = instancePrefix(instanceId)
       const prefixId = (id: NodeId) => `${prefix}${id}`
       // Style overrides (AGL-1306 root, AGL-1332 per leaf): merged over

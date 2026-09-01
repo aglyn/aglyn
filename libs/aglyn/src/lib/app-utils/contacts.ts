@@ -89,6 +89,30 @@ export interface ContactInteraction {
    * met this person, not which of them produced any particular visit.
    */
   hostId?: string
+  /**
+   * THE ENTRY POINT: the form this capture came in through.
+   *
+   * `sources` answers "what KIND of surface met this person" and is what the
+   * console's capture filter reads; it cannot answer "which form", because
+   * every form on the site sets the same `form` flag. The id rather than the
+   * name, for the reason the submission carries the id: a form's caption is
+   * editable and a stored name splits the moment somebody renames it.
+   *
+   * Beside {@link refId} rather than derived from it. The submission the
+   * interaction names does carry the form, but reading it back would be a
+   * document read per row of a timeline the console renders straight out of
+   * the contact.
+   */
+  formId?: string
+  /**
+   * THE ENTRY POINT: the page the person was on when this happened.
+   *
+   * The same `path` the submission stores. It belongs on the interaction and
+   * not on the contact, because a person who came in through the pricing page
+   * and returned through a blog post has two entry points and one row —
+   * a single field at the top would keep whichever capture wrote last.
+   */
+  path?: string
 }
 
 /** `orgs/{orgId}/contacts/{contactId}` doc shape. */
