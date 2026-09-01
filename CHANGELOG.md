@@ -9,6 +9,31 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.37 — 2026-09-01
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.36...v1.0.0-beta.37)
+
+### Added
+
+- **marketing:** a campaign shows what its forms hold, apart from what it caused
+
+### Fixed
+
+- **console:** saving a content entry drops the caches of the pages that show it ([AGL-1150](https://linear.app/aglyn/issue/AGL-1150))
+- **billing:** a deferred reduction is quoted as deferred, and keeps a pending plan change intact
+
+### Documentation
+
+- **forms:** the leads column documents when a figure is absent, not that none is written
+
+<details>
+<summary>Also in this release: 1 test, 1 ci</summary>
+
+- **billing:** an add-on reduction is held to the period end, not the card
+- **selfhost:** wait for the tenant to serve the request under test, not merely to start ([AGL-2433](https://linear.app/aglyn/issue/AGL-2433))
+
+</details>
+
 ## v1.0.0-beta.36 — 2026-09-01
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.34...v1.0.0-beta.36)
