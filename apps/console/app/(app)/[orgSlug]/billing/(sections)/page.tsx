@@ -1006,6 +1006,26 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             { variant: 'warning', persist: false },
           )
         }
+        // The purchase is made, so the surfaces that describe an UPCOMING one
+        // have to stop describing it.
+        //
+        // Nothing here cleared either of them, and the quote card is driven by
+        // `?plan=` on the URL — which a completed purchase does not remove. So
+        // the card went on reading "What you will pay / Total today $0.80"
+        // over money that had already left the account, above a promotion code
+        // still offering Apply. A single-use code is exhausted by the charge
+        // that just succeeded, so that box was inviting a customer to re-apply
+        // something that can no longer resolve.
+        //
+        // It corrected itself on a reload, which is the reason it survived:
+        // every check made after refreshing the page shows the right thing,
+        // and only the person who actually bought something sees the wrong
+        // one.
+        setAppliedPromotionCode('')
+        // And re-read the commercial record the page renders from. The webhook
+        // is what grants the plan, so this is not the source of the new state
+        // — it is the read that picks it up without the customer pressing F5.
+        billingProfile.reload()
         enqueueSnackbar(
           `You are on ${PLAN_LABELS[targetPlan] ?? targetPlan}. Your ` +
             'workspace updates as soon as Stripe confirms the payment.',
@@ -1030,6 +1050,10 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
       confirm,
       queueLoading,
       enqueueSnackbar,
+      // The member, not the hook's return value: `useBillingProfile` builds a
+      // fresh object every render, so depending on it would rebuild this
+      // callback on every one. `reload` is memoized and is what this uses.
+      billingProfile.reload,
     ],
   )
 
