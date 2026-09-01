@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.41 — 2026-09-01
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.40...v1.0.0-beta.41)
+
+### Fixed
+
+- **infra:** a red crons window says which job went quiet
+
 ## v1.0.0-beta.40 — 2026-09-01
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.39...v1.0.0-beta.40)

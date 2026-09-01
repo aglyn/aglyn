@@ -111,10 +111,23 @@ function healthyStore(now: number) {
   return seeded
 }
 
+/**
+ * The route names its failing rows on `console.error` by design, so half the
+ * cases here log. Silenced suite-wide rather than per test: without it every
+ * degraded case prints, and the tests that DO assert on the line need a
+ * handle anyway.
+ */
+let errorLog: jest.SpyInstance
+
 beforeEach(() => {
   mockStore = {}
   mockWrites = []
   mockListThrows = false
+  errorLog = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+})
+
+afterEach(() => {
+  errorLog.mockRestore()
 })
 
 describe('/api/health/crons', () => {
@@ -318,5 +331,72 @@ describe('/api/health/crons', () => {
     mockStore['report-usage'] = { jobId: 'report-usage', atMs: 0 }
     expect((await HEAD()).status).toBe(200)
     expect(mockWrites.length).toBe(writesAfterGet)
+  })
+
+  /*==========================================
+   * The red window has to be attributable AFTER it closes.
+   *=========================================*/
+  it('logs WHICH job went quiet, not merely that something did', async () => {
+    // The body names the late job, but only to whoever is holding it, and
+    // the uptime probe reads the status and discards the body. Production
+    // spent roughly seven hours red on 2026-08-27 and seven more overnight
+    // into 2026-09-01 — ~170 503s each, every one answered in under a second
+    // — and afterwards nothing said which row had flipped. Scheduler had
+    // fired throughout and the every-minute beat never gapped, so the jobs
+    // were healthy and the evidence was simply gone.
+    const now = Date.now()
+    mockStore = healthyStore(now)
+    mockStore['report-usage'] = { jobId: 'report-usage', atMs: now - 3 * DAY }
+    const { GET } = await freshRoute()
+    expect((await GET()).status).toBe(503)
+
+    const output = errorLog.mock.calls.map((call) => String(call[0])).join('\n')
+    // The name is the whole point — everything else is context for it.
+    expect(output).toContain('report-usage')
+    // With the numbers that decide the verdict, so the line answers "by how
+    // much" without needing the body it was never given.
+    expect(output).toMatch(/lastBeatAgeMinutes=\d+/)
+    expect(output).toMatch(/graceMinutes=\d+/)
+    expect(output).toContain('schedule="0 2 * * *"')
+  })
+
+  it('says nothing at all while the board is green', async () => {
+    // A probe that logged every read would bury the one line that matters
+    // under a day of noise, and the drain bills for it.
+    mockStore = healthyStore(Date.now())
+    const { GET } = await freshRoute()
+    expect((await GET()).status).toBe(200)
+
+    expect(errorLog).not.toHaveBeenCalled()
+  })
+
+  it('logs once per PROBE, not once per caller', async () => {
+    // The rate has to be the read's, not the monitor's. During a red window
+    // the uptime probe, its HEAD twin and every staff member opening
+    // /admin/health arrive inside the same memo window; one line each would
+    // turn a seven-hour outage into thousands.
+    const now = Date.now()
+    mockStore = healthyStore(now)
+    mockStore['report-usage'] = { jobId: 'report-usage', atMs: now - 3 * DAY }
+    const { GET, HEAD } = await freshRoute()
+    await GET()
+    await GET()
+    await HEAD()
+
+    expect(errorLog).toHaveBeenCalledTimes(1)
+  })
+
+  it('names the blackout itself when the marks cannot be read', async () => {
+    // "We cannot see the jobs" is the other way this goes red, and it is the
+    // one most likely to be mistaken for the jobs being fine.
+    mockListThrows = true
+    const { GET } = await freshRoute()
+    expect((await GET()).status).toBe(503)
+
+    const output = errorLog.mock.calls.map((call) => String(call[0])).join('\n')
+    expect(output).toContain('health/crons degraded')
+    // Every row is degraded by contract in this branch, so the count in the
+    // line is what distinguishes it from a single silent job at a glance.
+    expect(output).toContain(`/${SCHEDULED_JOBS.length}`)
   })
 })
