@@ -51,6 +51,28 @@ const matches = (haystack: string | undefined, needle: string) =>
 const SEARCH_TTL_SECONDS = PUBLISHED_SITE_DATA_TTL_SECONDS
 
 /**
+ * Records scanned per REACHABLE dataset when answering one search.
+ *
+ * Substring matching happens in this process, so recall over a dataset is
+ * bounded by whatever is read — there is no query that finds a match beyond
+ * the page without reading it. That makes this number a straight trade of
+ * cost against recall, and the honest way to set it is against what search
+ * can actually show: at most {@link DATASET_RESULTS_PER_SET} rows per
+ * dataset reach the results page.
+ *
+ * 50 keeps a full page of candidates for every dataset small enough to be
+ * browsed as a page (the console lists records ten at a time), while cutting
+ * the worst case for a site that repeats over many datasets by four. A
+ * dataset larger than this is not searched exhaustively — it never was; the
+ * old bound of 200 had the same hole one page further out, and answered from
+ * an arbitrary subset on top of it.
+ */
+const DATASET_RECORD_SCAN_LIMIT = 50
+
+/** Rows one dataset may contribute to a single result page. */
+const DATASET_RESULTS_PER_SET = 5
+
+/**
  * Site search (AGL-88), cached per query (AGL-1525).
  *
  * The uncached read below costs on the order of forty Firestore round trips
@@ -263,15 +285,18 @@ async function readSearchContent(options: {
     const datasetName = String(
       datasetDoc.get('displayName') ?? datasetDoc.get('name') ?? '',
     )
-    const records = await datasetDoc.ref
-      .collection('records')
-      .limit(200)
-      .get()
-    const matching = records.docs.filter((record) =>
-      Object.values((record.get('values') ?? {}) as Record<string, string>)
-        .some((value) => matches(String(value), needle)),
-    )
-    if (!matching.length) continue
+    // Reachability BEFORE the records read, not after it.
+    //
+    // A record only becomes a result through a screen that repeats over its
+    // dataset — `targetPath == null` discards the dataset entirely. Reading
+    // the records first meant every unreachable dataset cost its full page
+    // of documents to produce nothing: 20 datasets x 200 records is 4,000
+    // reads an uncached query could spend and throw away, and a site
+    // typically repeats over few of the datasets it stores.
+    //
+    // The screen-nodes map this consults is bounded at 30 version reads and
+    // memoised for the whole call, so the trade is at most 30 reads once
+    // against up to 200 per unreachable dataset.
     const screenNodes = await loadScreenNodes()
     let targetPath: string | undefined
     for (const [screenId, nodes] of screenNodes) {
@@ -289,7 +314,24 @@ async function readSearchContent(options: {
       }
     }
     if (targetPath == null) continue
-    for (const record of matching.slice(0, 5)) {
+    // Ordered by document id so the scanned page is the SAME page every
+    // time. A bare `limit()` leaves the backend free to choose, so a dataset
+    // larger than the bound answered one query from one arbitrary subset and
+    // the next from another — search that contradicted itself between cache
+    // windows. Ordering by a DATA field would be worse than the disease: it
+    // drops every record missing that field. The id is on all of them, which
+    // is the same reasoning `dynamic-list-materialize.ts` settled on.
+    const records = await datasetDoc.ref
+      .collection('records')
+      .orderBy(firebaseAdmin.firestore.FieldPath.documentId())
+      .limit(DATASET_RECORD_SCAN_LIMIT)
+      .get()
+    const matching = records.docs.filter((record) =>
+      Object.values((record.get('values') ?? {}) as Record<string, string>)
+        .some((value) => matches(String(value), needle)),
+    )
+    if (!matching.length) continue
+    for (const record of matching.slice(0, DATASET_RESULTS_PER_SET)) {
       const values = (record.get('values') ?? {}) as Record<string, string>
       results.push({
         title:
