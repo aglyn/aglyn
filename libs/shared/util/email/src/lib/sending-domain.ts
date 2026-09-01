@@ -434,6 +434,29 @@ export function sendingTrackingCertAuthority(): string {
   return process.env.AGLYN_EMAIL_TRACKING_CA || 'amazon.com'
 }
 
+/**
+ * How long a tracked domain is held before its provider object is released.
+ *
+ * Every link in every message a tracked domain has already sent points at
+ * that domain's tracking host, and the provider deletes the host with the
+ * domain — a tracking subdomain cannot even be removed on its own, precisely
+ * because live mail points at it. So a same-day teardown does not merely stop
+ * future tracking, it retroactively breaks the links in mail already
+ * delivered, for recipients who have done nothing.
+ *
+ * 30 days is the window most campaign clicks arrive in, and it costs one
+ * provider domain slot per released site for that long — the trade is
+ * deliberate and the ceiling is documented in `provision-sending-domain.ts`.
+ * `0` disables the hold for an operator who would rather have the slot back.
+ *
+ * ⚠️ It does NOT gate an erasure. A person asking to be erased outranks a
+ * link, and the caller passes `immediate` for that path.
+ */
+export function sendingTrackingRetentionDays(): number {
+  const raw = Number(process.env.AGLYN_SENDING_TRACKING_RETENTION_DAYS)
+  return Number.isFinite(raw) && raw >= 0 ? raw : 30
+}
+
 /** What a record is for, so a surface can group and explain rather than dump. */
 export type SendingRecordPurpose =
   | 'spf'

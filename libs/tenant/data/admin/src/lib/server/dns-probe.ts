@@ -94,6 +94,60 @@ export async function lookupTxt(host: string): Promise<DnsLookupResult<string>> 
   }
 }
 
+/**
+ * CAA records at `host`, as `<flags> <tag> "<value>"` strings.
+ *
+ * NOT walked up the tree. The caller asks about one exact name, because the
+ * question this exists for is "does THIS name publish a policy of its own",
+ * and a walk would answer a different one — a parent's policy is inherited by
+ * resolution, not by publication, and reporting the parent's records as the
+ * child's would say a name restricts issuance when it publishes nothing.
+ */
+export async function lookupCaa(host: string): Promise<DnsLookupResult<string>> {
+  const normalize = (records: unknown[]) =>
+    records
+      .map((entry) => {
+        const row = entry as { critical?: number; issue?: string; issuewild?: string; iodef?: string }
+        const tag = row?.issue !== undefined
+          ? 'issue'
+          : row?.issuewild !== undefined
+            ? 'issuewild'
+            : row?.iodef !== undefined
+              ? 'iodef'
+              : ''
+        if (!tag) return ''
+        const value = String(
+          row.issue ?? row.issuewild ?? row.iodef ?? '',
+        ).trim()
+        return `${Number(row?.critical) || 0} ${tag} "${value}"`
+      })
+      .filter(Boolean)
+
+  try {
+    const resolver = new CallbackResolver()
+    resolver.setServers(PUBLIC_DNS_RESOLVERS)
+    const records = await new Promise<unknown[]>((resolve, reject) => {
+      resolver.resolveCaa(host, (error, addresses) =>
+        error ? reject(error) : resolve(addresses as unknown[]),
+      )
+    })
+    return { answered: true, records: normalize(records) }
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException)?.code
+    if (isConclusiveDnsCode(code)) return { answered: true, records: [] }
+    try {
+      return {
+        answered: true,
+        records: normalize((await dns.resolveCaa(host)) as unknown[]),
+      }
+    } catch (fallbackError) {
+      const fallbackCode = (fallbackError as NodeJS.ErrnoException)?.code
+      if (isConclusiveDnsCode(fallbackCode)) return { answered: true, records: [] }
+      return { answered: false, records: [] }
+    }
+  }
+}
+
 export interface MxRecord {
   exchange: string
   priority: number

@@ -127,17 +127,26 @@ untracked: one flag was answering two different questions, and the
 conservative answer to "does verification wait on this" silently decided "do
 we publish it".
 
-**⚠️ The CAA record is the one that can hurt.** CAA restricts which
-authorities may issue a certificate for a name, and the lookup stops at the
-first name in the tree that publishes any. A domain publishing no CAA today
-needs nothing — any authority may already issue — and adding this record would
-be the change that *starts* restricting them. A domain that does publish CAA
-has to add this one alongside what it has, never in place of it; replacing the
-set is how a zone stops its own web certificates renewing. The record is
-emitted on the sending domain rather than the registrable root so a customer
-following it verbatim scopes the permission to the name we put a tracking host
-under; deriving the root would need a public-suffix list this library does not
-have, and a guess prints a record for the wrong name.
+**⚠️ The CAA record is the one that can hurt, so it is only shown to a domain
+that needs it.** CAA restricts which authorities may issue a certificate for a
+name, and the lookup stops at the first name in the tree that publishes any. A
+domain publishing no CAA today needs nothing — any authority may already issue
+— and pasting this record in would be the change that *starts* restricting
+them, breaking whatever else renews on that name.
+
+Shipping it with a cautionary note and hoping the note is read is not the same
+as not shipping it. `sendingDnsRecords` is pure and cannot ask DNS anything,
+so the route decides: `readTrackingCaaNeed` walks up from the tracking host
+exactly as a certificate authority does, stops at the first name publishing
+any record, and answers `not-needed`, `must-add` or `satisfied`. The record is
+returned **only** for `must-add`. An unreachable lookup drops it too — "we
+could not tell" has to resolve toward the instruction that cannot hurt.
+
+When it is shown, it is emitted on the sending domain rather than the
+registrable root, so a customer following it verbatim scopes the permission to
+the name we put a tracking host under; deriving the root would need a
+public-suffix list this library does not have, and a guess prints a record for
+the wrong name.
 
 For `aglyn.app` the CAA is published **once at the zone root**, alongside the
 `letsencrypt.org`, `sectigo.com` and `pki.goog` entries that were already
@@ -146,13 +155,27 @@ narrow it, so Vercel's certificates for every tenant site are untouched. That
 one record covers every pool member and every future dedicated subdomain, so
 the per-domain CAA is deliberately excluded from the publishable set.
 
-**⚠️ Tearing a domain down breaks links in mail already delivered.** A
-tracking subdomain cannot be removed at the provider, only changed, precisely
-because live mail points at it. `release()` deletes the whole domain object,
-which takes the tracking host with it — so every tracked link in every message
-that domain has already sent stops resolving. This is a real cost of tracking
-on a domain that can be released, and it is not a cost the platform pool pays,
-because pool members are never released.
+**Tearing a domain down would break links in mail already delivered, so it
+waits.** A tracking subdomain cannot be removed at the provider, only changed,
+precisely because live mail points at it — and `release()` deletes the whole
+domain object, taking the tracking host with it. A same-day teardown therefore
+does not merely stop future tracking, it retroactively breaks links for
+recipients who did nothing.
+
+`teardownSendingDomain` holds a domain that carries a `trackingTarget` for
+`AGLYN_SENDING_TRACKING_RETENTION_DAYS` (default 30) before releasing it,
+stamping `trackingRetentionUntilMs` on the record the first time it sees it.
+The stamp is what makes the hold terminate: the reaper re-infers an orphan on
+every pass, so a deadline recomputed each run would hold the domain for ever.
+The daily reaper finishes the job once the window is up, and reports
+`tracking-retention` meanwhile.
+
+Two things deliberately do not wait. An **erasure** passes `immediate` — a
+person asking to be erased outranks a link in somebody's inbox, and a
+retention window that delayed it would turn a measurement convenience into a
+compliance failure. An **untracked** domain has no links to preserve and is
+released the same day, so the hold never spends a scarce provider slot for
+nothing. The pool pays none of this either: pool members are never released.
 
 ### DMARC is read, never written
 

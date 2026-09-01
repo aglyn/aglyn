@@ -563,12 +563,17 @@ What matters more than a ramp, and is tracked separately:
   one root CAA entry for `amazon.com` alongside the three it already had —
   additive, so Vercel's certificates for tenant sites are untouched — which
   covers every name in the zone. See `docs/design/email-sending-domains.md`
-  for the record table, why the tracking records never block verification, and
-  the two caveats: a CAA must never replace a set a customer already
-  publishes, and releasing a domain breaks tracked links in mail it already
-  sent. `/api/admin/email-health?probe=1` reports a pool member whose tracking
-  is off as a `notices` entry rather than a blocker — it delivers fine, it just
-  cannot count.
+  for the record table and why the tracking records never block verification.
+  Two hazards are handled rather than documented-and-hoped: the CAA record is
+  shown ONLY to a domain whose live zone already publishes CAA that would
+  refuse the tracking certificate (`readTrackingCaaNeed`), because handing one
+  to a domain with none would start restricting it; and a tracked domain is
+  held for `AGLYN_SENDING_TRACKING_RETENTION_DAYS` (default 30) before its
+  provider object is released, because deleting it takes the tracking host
+  down and retroactively breaks links in mail already delivered. An erasure
+  bypasses the hold. `/api/admin/email-health?probe=1` reports a pool member
+  whose tracking is off as a `notices` entry rather than a blocker — it
+  delivers fine, it just cannot count.
 - **Topics and a preference center are shipped.** A campaign belongs to a
   topic (`orgs/{orgId}/emailTopics`, org-shared like `lists`, with four
   built-in defaults that need no migration), and the topic is signed into the

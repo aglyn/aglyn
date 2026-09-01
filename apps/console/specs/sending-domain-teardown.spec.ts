@@ -38,6 +38,8 @@ const mockRemove = jest.fn(async (_names: readonly string[]) => ({
   created: 0,
   detail: null,
 }))
+/** Retention stamps, keyed by domain — the store, standing in for Firestore. */
+const mockHeldUntil = new Map<string, number>()
 const mockProviderConfigured = jest.fn(() => true)
 const mockZoneConfigured = jest.fn(() => true)
 
@@ -79,6 +81,24 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     sendingDomainLabel: (domain: string) =>
       email.platformSendingLabel(domain, email.platformSendingApex()),
     listPendingSendingDomains: async () => [],
+    /*
+     * A real stamp, in memory, rather than a constant. The property under
+     * test is that the deadline is written ONCE and re-read — a double that
+     * recomputed it would hold the domain for ever and the test would still
+     * pass.
+     */
+    holdTrackedSendingDomain: async (options: {
+      domain: string
+      nowMs: number
+      windowMs: number
+    }) => {
+      if (options.windowMs <= 0) return null
+      const held = mockHeldUntil.get(options.domain)
+      if (held) return held
+      const until = options.nowMs + options.windowMs
+      mockHeldUntil.set(options.domain, until)
+      return until
+    },
     readSendingDomainRecord: () => null,
     recordSendingDomainIssueFailure: async () => undefined,
     firebaseAdmin: { app: () => ({ firestore: () => ({}) }) },
@@ -95,15 +115,21 @@ const TENANT = {
   domain: 'northwind.mail.aglyn.app',
   providerDomainId: 'dom_live_1',
   dkimSelector: 'resend',
+  trackingTarget: null,
 }
+
+/** A fixed instant, so the hold's arithmetic is not clock-dependent. */
+const NOW = 1_800_000_000_000
 
 beforeEach(() => {
   jest.clearAllMocks()
+  mockHeldUntil.clear()
   mockProviderConfigured.mockReturnValue(true)
   mockZoneConfigured.mockReturnValue(true)
   mockRelease.mockResolvedValue(true)
   mockRemove.mockResolvedValue({ outcome: 'written', created: 0, detail: null })
   jest.spyOn(console, 'error').mockImplementation(() => undefined)
+  jest.spyOn(console, 'warn').mockImplementation(() => undefined)
 })
 
 afterEach(() => {
@@ -132,6 +158,7 @@ describe('⛔ a shared pool member', () => {
         domain,
         providerDomainId: 'dom_pool_member',
         dkimSelector: 'resend',
+        trackingTarget: null,
       })
 
       expect(result).toEqual({ outcome: 'skipped', detail: 'shared-pool' })
@@ -149,6 +176,7 @@ describe('⛔ a shared pool member', () => {
       domain: 'northwind.mail.aglyn.app',
       providerDomainId: 'dom_pool_member',
       dkimSelector: 'resend',
+      trackingTarget: null,
     })
 
     expect(result.detail).toBe('shared-pool')
@@ -237,6 +265,72 @@ describe('running it twice', () => {
     })
 
     expect(mockRelease).not.toHaveBeenCalled()
+    expect(result.outcome).toBe('removed')
+  })
+})
+
+/*==========================================
+  The tracked-link hold
+==========================================*/
+
+describe('a domain whose links are still being clicked', () => {
+  /*
+   * Deleting the provider's domain object deletes its tracking host, and
+   * every link in every message that domain has already sent points at it —
+   * so a same-day teardown does not merely stop future tracking, it
+   * retroactively breaks links for recipients who did nothing. The provider
+   * will not even let a tracking subdomain be removed on its own, for exactly
+   * this reason.
+   */
+  const tracked = {
+    hostId: 'HostAbc',
+    orgId: 'org123',
+    label: 'northwind',
+    domain: 'northwind.mail.aglyn.app',
+    providerDomainId: 'dom_tracked',
+    dkimSelector: 'resend',
+    trackingTarget: 'links1.resend-dns.com',
+  }
+
+  it('is HELD rather than released, and neither vendor is called', async () => {
+    const result = await teardownSendingDomain(tracked, { nowMs: NOW })
+
+    expect(result).toEqual({ outcome: 'skipped', detail: 'tracking-retention' })
+    expect(mockRelease).not.toHaveBeenCalled()
+    expect(mockRemove).not.toHaveBeenCalled()
+  })
+
+  it('is released once the window is up, on a later pass', async () => {
+    // The stamp is what makes this terminate: a sweep that re-derived the
+    // deadline every run would hold the domain for ever.
+    await teardownSendingDomain(tracked, { nowMs: NOW })
+    const result = await teardownSendingDomain(tracked, {
+      nowMs: NOW + 31 * 24 * 60 * 60 * 1000,
+    })
+
+    expect(result.outcome).toBe('removed')
+    expect(mockRelease).toHaveBeenCalledWith('dom_tracked')
+  })
+
+  it('an ERASURE is never held — a person outranks a link', async () => {
+    const result = await teardownSendingDomain(tracked, {
+      nowMs: NOW,
+      immediate: true,
+    })
+
+    expect(result.outcome).toBe('removed')
+    expect(mockRelease).toHaveBeenCalledWith('dom_tracked')
+  })
+
+  it('an UNTRACKED domain is released the same day, as before', async () => {
+    // The hold exists for links that would break. A domain that never
+    // rewrote one has nothing to preserve, and holding its provider slot for
+    // a month would spend a scarce resource on nothing.
+    const result = await teardownSendingDomain(
+      { ...tracked, trackingTarget: null },
+      { nowMs: NOW },
+    )
+
     expect(result.outcome).toBe('removed')
   })
 })
