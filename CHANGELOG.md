@@ -9,6 +9,19 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.42 — 2026-09-01
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.41...v1.0.0-beta.42)
+
+### Fixed
+
+- **infra:** a degraded crons verdict is recorded where it outlives the window
+
+### Documentation
+
+- **release:** drop the rules-drift warning its own condition retired
+- **infra:** the crons red windows, as measured rather than recalled
+
 ## v1.0.0-beta.41 — 2026-09-01
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.40...v1.0.0-beta.41)

@@ -141,31 +141,6 @@ Run it **before** promoting to see what is owed, and again after deploying to
 confirm it converged. `PENDING DEPLOY` is the ledger; it is information, not a
 failure, until you have merged the batch and not deployed.
 
-#### ⚠️ Currently owed, and security-relevant (AGL-2501)
-
-The live Firestore ruleset is **behind** `origin/production` and omits the
-org search-key deny-list. Until it is deployed, an org **admin or owner can
-write `nameLower` / `nameTokens` / `nameReversed` on their own workspace from
-any Firestore client** — choosing the name their workspace is *found* by,
-independently of the name it displays. A workspace can be made reachable under
-somebody else's brand, or made unfindable on the staff organization list while
-looking entirely normal to the people in it.
-
-Nothing is broken for customers today, which is exactly why this is easy to
-defer: the fields are derived and written by every server writer through
-`nameSearchFields`, so search works and the gap is invisible until somebody
-uses it. It is an open write path, not a failing feature.
-
-It is called out here rather than left as one of several `PENDING DEPLOY`
-lines because a hardening change that rides along unlabelled is one that gets
-deferred again. Deploy it with the next promotion:
-
-```bash
-node tools/scripts/deploy-firestore-rules.mjs   # from a checkout pinned to the promoted SHA
-```
-
-Delete this subsection once `check:rules-drift` reports firestore clean.
-
 ### 5 — Deploy the Cloud Functions the batch contains
 
 `cloud/functions` does not ride the merge either. The promotion deploys the

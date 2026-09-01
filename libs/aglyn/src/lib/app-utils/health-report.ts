@@ -1714,6 +1714,36 @@ export const CRON_BEAT_COLLECTION = 'platformCronBeats'
  */
 export const CRON_BEAT_WATCH_DOC = 'watch-window'
 
+/**
+ * Where a degraded verdict is recorded, so a red window survives it.
+ *
+ * The response body names the late job, but only to whoever is holding it,
+ * and the uptime probe reads the status and discards the body. Vercel's
+ * runtime log keeps a `console.error` for about an hour, and the Cloud
+ * Logging drain deliberately does not forward one — `isServerErrorEntry`
+ * drops `level: 'error'`, because that is every fail-soft line the beacons
+ * write and forwarding it is what a self-feeding bill is made of. So the
+ * only sink that outlives the window is the one the endpoint already holds
+ * a handle to.
+ *
+ * Written by the READER, like the verdict itself. One document, replaced on
+ * each degraded probe, holding the failing rows and when the window opened.
+ * Same collision argument as the watch document: a plain slug, and no job id
+ * contains `degraded`.
+ */
+export const CRON_BEAT_DEGRADED_DOC = 'last-degraded'
+
+/**
+ * How long a gap may be before the next degraded probe counts as a NEW
+ * window rather than a continuation of the one on file.
+ *
+ * Three probe TTLs. Long enough that an instance answering intermittently
+ * does not split one outage into a dozen, short enough that yesterday's
+ * window is never mistaken for today's. The comparison is against the
+ * failing set as well, so a different set always opens a new window.
+ */
+export const CRON_DEGRADED_WINDOW_CONTINUITY_MS = 15 * 60_000
+
 /** Who fires the job. The two are operated, and fail, differently. */
 export type CronRunner = 'github-actions' | 'cloud-scheduler'
 
