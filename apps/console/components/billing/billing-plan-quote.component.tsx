@@ -44,6 +44,8 @@ interface QuoteState {
     currency: string
     taxComplete: boolean
     taxReason: string | null
+    /** What the discounts took off, positive cents; absent on older payloads. */
+    discountCents?: number
   }
   customerTaxExempt?: string | null
   hasTaxId?: boolean
@@ -58,6 +60,24 @@ export interface BillingPlanQuoteProps {
   plan: string | null
   interval: 'month' | 'year'
   canManage: boolean
+  /**
+   * The code Stripe resolved and applied to the quote above, or '' for none.
+   *
+   * ⚠️ Owned by the page, not by this card. The purchase is made by
+   * `startSubscribe` on the Billing page and the code has to reach the body it
+   * POSTs; held in this component's own `useState` it reached the preview and
+   * nothing else, so the quote re-priced, this card said the total already
+   * included the code, and the card was charged the undiscounted amount.
+   */
+  appliedCode: string
+  /**
+   * Report what the SERVER applied — never what was typed.
+   *
+   * The value handed back is `promotionCodeApplied` off the priced preview, so
+   * a code Stripe declined to resolve leaves the page's copy empty and cannot
+   * be carried into a purchase as though it had worked.
+   */
+  onAppliedCodeChange: (code: string) => void
 }
 
 function money(cents: number, currency: string): string {
@@ -102,13 +122,14 @@ export default function BillingPlanQuoteComponent({
   plan,
   interval,
   canManage,
+  appliedCode,
+  onAppliedCodeChange,
 }: BillingPlanQuoteProps) {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
   const [quote, setQuote] = useState<QuoteState | null>(null)
   const [codeInput, setCodeInput] = useState('')
-  const [appliedCode, setAppliedCode] = useState('')
   const [codeError, setCodeError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(false)
@@ -153,14 +174,14 @@ export default function BillingPlanQuoteComponent({
         }
         setCodeError(null)
         setQuote(payload as QuoteState)
-        setAppliedCode(payload?.promotionCodeApplied ?? '')
+        onAppliedCodeChange(payload?.promotionCodeApplied ?? '')
       } catch {
         setFailed(true)
       } finally {
         setBusy(false)
       }
     },
-    [orgId, plan, interval, user, enqueueSnackbar],
+    [orgId, plan, interval, user, enqueueSnackbar, onAppliedCodeChange],
   )
 
   useEffect(() => {
@@ -210,6 +231,13 @@ export default function BillingPlanQuoteComponent({
     taxReason: preview.taxReason,
     customerTaxExempt: quote?.customerTaxExempt,
   })
+  // Stripe's `subtotal` is PRE-discount and its `total` is POST-discount, so
+  // the rows below cannot be made to add up while the discount is missing from
+  // them: $25.00 subtotal, $0.05 tax and a $0.80 total is a card that asks the
+  // reader to believe arithmetic that does not work. `?? 0` is the honest
+  // reading of a payload without the field — no discount row rather than a
+  // fabricated one.
+  const discountCents = preview.discountCents ?? 0
 
   return (
     <Stack spacing={1.5}>
@@ -219,6 +247,19 @@ export default function BillingPlanQuoteComponent({
           {money(preview.subtotalCents, preview.currency)}
         </Typography>
       </Stack>
+      {/* The line that makes the other three reconcile. Rendered only when
+          something was actually discounted, and labelled with the code that
+          did it so the row names its own cause. */}
+      {discountCents > 0 ? (
+        <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
+          <Typography variant="body2">
+            {appliedCode ? `Discount (${appliedCode})` : 'Discount'}
+          </Typography>
+          <Typography variant="body2" color="success.main">
+            {`−${money(discountCents, preview.currency)}`}
+          </Typography>
+        </Stack>
+      ) : null}
       <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
         <Typography variant="body2">{'Tax'}</Typography>
         <Typography variant="body2">
@@ -289,6 +330,35 @@ export default function BillingPlanQuoteComponent({
             >
               {'Apply'}
             </Button>
+            {/*
+              The way back OFF a code, which Apply cannot be.
+
+              Apply is disabled on an empty box, so once a code resolved there
+              was no gesture that removed it — harmless while the code only
+              re-priced a quote, and not harmless now that it decides what the
+              card is charged. A customer who applied the wrong one of two
+              codes could otherwise only get rid of it by leaving the page.
+
+              Re-quotes with an empty code, so the total, the discount row and
+              the page's copy of the applied code are all re-established by the
+              SERVER rather than cleared locally into a state Stripe never
+              agreed to.
+            */}
+            {appliedCode ? (
+              <Button
+                size="small"
+                color="inherit"
+                disabled={busy}
+                onClick={() => {
+                  setCodeInput('')
+                  const dequeue = queueLoading()
+                  void fetchQuote('').finally(dequeue)
+                }}
+                sx={{ mt: 0.5 }}
+              >
+                {'Remove'}
+              </Button>
+            ) : null}
           </Stack>
           {codeError ? (
             <Alert severity="warning" sx={{ mt: 1 }} onClose={() => setCodeError(null)}>

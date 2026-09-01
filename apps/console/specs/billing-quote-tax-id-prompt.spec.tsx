@@ -88,6 +88,8 @@ describe('the tax ID prompt', () => {
         plan="starter"
         interval="month"
         canManage
+        appliedCode=""
+        onAppliedCodeChange={() => undefined}
       />,
     )
     await waitFor(() => expect(screen.getByText(PROMPT)).toBeTruthy())
@@ -105,6 +107,8 @@ describe('the tax ID prompt', () => {
         plan="starter"
         interval="month"
         canManage
+        appliedCode=""
+        onAppliedCodeChange={() => undefined}
       />,
     )
     await waitFor(() => expect(screen.getByText(/Subtotal/)).toBeTruthy())
@@ -124,6 +128,8 @@ describe('the tax ID prompt', () => {
         plan="starter"
         interval="month"
         canManage
+        appliedCode=""
+        onAppliedCodeChange={() => undefined}
       />,
     )
     await waitFor(() => expect(screen.getByText(/reverse charge/i)).toBeTruthy())
@@ -140,6 +146,8 @@ describe('the tax ID prompt', () => {
         plan="starter"
         interval="month"
         canManage
+        appliedCode=""
+        onAppliedCodeChange={() => undefined}
       />,
     )
     await waitFor(() =>
@@ -159,6 +167,8 @@ describe('the tax ID prompt', () => {
         plan="starter"
         interval="month"
         canManage
+        appliedCode=""
+        onAppliedCodeChange={() => undefined}
       />,
     )
     const said = (await screen.findByText(PROMPT)).textContent ?? ''
