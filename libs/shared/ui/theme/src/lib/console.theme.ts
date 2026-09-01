@@ -248,8 +248,27 @@ function createShadowInset(...px: number[]) {
   ].join(',')
 }
 
+/**
+ * The marketing "floating mockup" shadow (see `Theme.shadowFloating`). Named
+ * here once so the theme field and the CSS custom property below can never
+ * disagree about the value.
+ */
+const shadowFloating =
+  '0px 32px 64px -12px rgba(0, 0, 0, 0.18), 0px 8px 24px -6px rgba(0, 0, 0, 0.12)'
+
 const baseOptions: ThemeOptions = {
+  shadowFloating,
   components: {
+    // The bridge from theme tokens to canvas-authored sx: a besigner document
+    // can only hold strings, so tokens without a palette-keyed sx prop reach
+    // it as CSS custom properties (`var(--aglyn-…, fallback)`, AGL-1331).
+    MuiCssBaseline: {
+      styleOverrides: {
+        ':root': {
+          '--aglyn-shadow-floating': shadowFloating,
+        },
+      },
+    },
     MuiAppBar: {
       defaultProps: {
         enableColorOnDark: true,
