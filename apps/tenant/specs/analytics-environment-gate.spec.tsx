@@ -13,6 +13,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * @jest-environment jsdom
+ * @jest-environment-options {"url": "https://aglyn.com/"}
  */
 
 /**
@@ -36,6 +39,22 @@
  * Planted reds, verified: drop `analyticsMayEmit()` from the condition → the
  * dev and preview cases; make `analyticsEnvironmentForcesInternal` ignore the
  * hatch → the escape-hatch case.
+ *
+ * ## The document URL, and the one signal these cases do NOT drive
+ *
+ * Every case states its own `NODE_ENV` and `NEXT_PUBLIC_DEPLOY_ENV`, but the
+ * gate reads a fourth signal — the HOSTNAME — and that one is fixed per file:
+ * jsdom builds `location` once and leaves it non-configurable, so it can only
+ * be set through the `@jest-environment-options` pragma in the first docblock.
+ * Serving the file from a real name is what keeps the two negative cases
+ * honest. Under jsdom's default `localhost` they went green on the loopback
+ * rule and never reached the `NODE_ENV` and deploy-environment rules they are
+ * named for, which is a case that cannot fail.
+ *
+ * The loopback rule itself is proven on the function instead, over every form
+ * of it (`127.0.0.0/8`, `::1`, `0.0.0.0`, the reserved `.localhost` tree) and
+ * against the self-host default it must not swallow, in
+ * `libs/aglyn/src/lib/app-utils/analytics-environment.spec.ts`.
  */
 import {
   ANALYTICS_ALLOW_NONPROD_ENV,
