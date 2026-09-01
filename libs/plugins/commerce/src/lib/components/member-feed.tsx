@@ -166,6 +166,7 @@ export const schema: Aglyn.ComponentSchema<MemberFeedProps> = {
       label: 'Max posts',
       description: 'Cap the number shown (default 20).',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
+      type: 'number',
     },
   ],
 }

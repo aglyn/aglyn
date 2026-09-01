@@ -76,6 +76,7 @@ import {
   SCREEN_LINK_FIELD_COMPONENT,
 } from './screen-link-field.component'
 import { besignerDocsUrl } from '../utils/docs-help'
+import { numericTextValue } from '../utils/numeric-text-value'
 import ElementInfoDetails from './element-info-details.component'
 import useInsertTokenOptions from '../hooks/use-insert-token-options'
 import {
@@ -270,6 +271,41 @@ export const elementPropsComponentMapper = {
   // A placed plugin's declared settings as real fields (AGL-1049); the
   // attributes memo rewrites the plugin's JSON attribute to it.
   [PLUGIN_SETTINGS_FIELD_COMPONENT]: PluginSettingsField,
+}
+
+/**
+ * A number-typed field persists a NUMBER, not the text that was typed.
+ *
+ * Every control in this panel can only hand back a string, and for a prop
+ * the renderer reads as a number that changes what the value DOES: MUI
+ * renders `size: 24` as 24px and passes the string `'24'` through verbatim,
+ * where it is not CSS and the declaration is dropped — the icon silently
+ * goes back to its default size. Clearing the box to retype the same number
+ * is enough to do it.
+ *
+ * Gated on the field's declared `type: 'number'` rather than on the value's
+ * shape, which is how the styles panel decides ({@link numericTextValue}):
+ * every value there is CSS, while an attribute holds arbitrary authored
+ * content, and a Text element reading `2026` is text that must stay text.
+ *
+ * Implemented as final-form's `parse` rather than data-driven-forms'
+ * `dataType`, which converts the same way but ALSO attaches a pattern
+ * validator. These fields are token-capable, so a `{{var:id}}` binding —
+ * legitimate in a numeric prop — would make the form invalid, and this
+ * panel's autosave only commits while it is valid: every attribute on the
+ * element would stop saving, with nothing on screen to say so.
+ */
+export function withNumericValueParse<T extends Record<string, unknown>>(
+  field: T,
+): T {
+  if (field['type'] !== 'number') return field
+  return {
+    ...field,
+    FieldProps: {
+      ...((field['FieldProps'] as Record<string, unknown>) ?? {}),
+      parse: numericTextValue,
+    },
+  }
 }
 
 /**
@@ -1331,12 +1367,13 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
     const animationFields = useMemo(() => buildAnimationFields(), [])
 
     const formFieldSchema = useMemo(
-      () => [
-        ...attributes,
-        ...instancePropFields,
-        ...visibilityFields,
-        ...animationFields,
-      ],
+      () =>
+        [
+          ...attributes,
+          ...instancePropFields,
+          ...visibilityFields,
+          ...animationFields,
+        ].map(withNumericValueParse),
       [attributes, instancePropFields, visibilityFields, animationFields],
     )
 
@@ -1578,6 +1615,18 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       handleBrowseInstanceMedia,
     ])
 
+    // The field names whose value is a number, instance overrides included
+    // under the `propValues.` path the schema names them by.
+    const numericFieldNames = useMemo(
+      () =>
+        new Set(
+          formFieldSchema
+            .filter((field: any) => field?.type === 'number')
+            .map((field: any) => field.name as string),
+        ),
+      [formFieldSchema],
+    )
+
     const handleFormCancel = useCallback((e: SyntheticEvent, reason?: string) => {}, [])
     const handleElementSave = useCallback(
       (values: Record<string, unknown>) => {
@@ -1591,9 +1640,16 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                 (bindingFunctions ?? {}) as any,
               )
             : value
+        // Numbers typed as text are converted by the field's own `parse`
+        // (see `withNumericValueParse`) — repeated here because a document
+        // authored before that landed carries the string, and an untouched
+        // field never parses. The element goes on rendering at its default
+        // until something rewrites the prop, so the next commit does.
+        const normalizeNumeric = (name: string, value: unknown) =>
+          numericFieldNames.has(name) ? numericTextValue(value) : value
         const normalized: Record<string, unknown> = { ...values }
         for (const [key, value] of Object.entries(values)) {
-          normalized[key] = normalizeToken(value)
+          normalized[key] = normalizeNumeric(key, normalizeToken(value))
         }
         // A component instance's overrides sit one level down (AGL-1247),
         // so the walk above skips them — normalize inside, or a hand-typed
@@ -1602,7 +1658,10 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
         if (overrides && typeof overrides === 'object') {
           const nextOverrides: Record<string, unknown> = {}
           for (const [key, value] of Object.entries(overrides)) {
-            nextOverrides[key] = normalizeToken(value)
+            nextOverrides[key] = normalizeNumeric(
+              `${Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY}.${key}`,
+              normalizeToken(value),
+            )
           }
           normalized[Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY] = nextOverrides
         }
@@ -1625,7 +1684,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
         }
         Aglyn.canvas.updateNodeProps(node, normalized)
       },
-      [node, bindingVariables, bindingFunctions],
+      [node, bindingVariables, bindingFunctions, numericFieldNames],
     )
 
     return (

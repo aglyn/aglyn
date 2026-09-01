@@ -184,6 +184,7 @@ export const schema: Aglyn.ComponentSchema<GatedVideoProps> = {
       label: 'Video number',
       description: 'Which of the product’s videos to play (1st = 0).',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
+      type: 'number',
     },
     {
       name: 'lockedText',

@@ -131,6 +131,7 @@ export const schema: Aglyn.ComponentSchema<IconProps> = {
       description: 'Icon size in pixels (default 24).',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'Size (px)',
+      type: 'number',
     },
     {
       name: 'color',

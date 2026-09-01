@@ -195,6 +195,7 @@ export const schema: Aglyn.ComponentSchema<RelatedProductsProps> = {
       label: 'Max items',
       description: 'Cap the strip (default 6).',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
+      type: 'number',
     },
   ],
 }
