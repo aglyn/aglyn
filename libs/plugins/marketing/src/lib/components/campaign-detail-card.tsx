@@ -680,8 +680,18 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
           two are not the same list — a landing page can be assigned to a
           campaign no email ever linked to, and a campaign's mail can drive
           traffic to a page assigned to nothing.
+
+          The dates go with it. A form's counters are lifetime, so a campaign
+          with a window has to be able to confine them to its own months; a
+          campaign without one is told so, and says its figures are lifetime
+          rather than implying they are its own.
          */}
-        <CampaignMembersSection hostId={hostId} campaignId={campaignId} />
+        <CampaignMembersSection
+          hostId={hostId}
+          campaignId={campaignId}
+          startAtMs={campaign.startAtMs}
+          endAtMs={campaign.endAtMs}
+        />
 
         <Divider />
         {/*

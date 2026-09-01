@@ -36,6 +36,20 @@
  *     there is no query that also filters by campaign. The section says so
  *     rather than leaving contacts out, which would read as "a contact cannot
  *     be assigned" — the opposite of the truth.
+ *
+ * The forms now carry figures, which adds three more — the ways a membership
+ * number turns into a claim the campaign cannot support:
+ *
+ *  4. **A windowed campaign reports windowed figures.** A form's flat
+ *     counters are lifetime and include submissions from before it was ever
+ *     filed here.
+ *  5. **A campaign with no dates says its figures are lifetime.** The number
+ *     is honest; the label is what stops it reading as the campaign's.
+ *  6. **A form in two campaigns says so on its row.** The same submissions
+ *     count toward both, and the total is disclosed as non-exclusive.
+ *
+ * And the figures cost NOTHING: the counters ride on the documents the
+ * membership query already returns, so no new listener may appear.
  */
 
 import { render, screen } from '@testing-library/react'
@@ -100,8 +114,15 @@ beforeEach(() => {
   rows.clear()
 })
 
-const draw = () =>
-  render(<CampaignMembersSection hostId={HOST} campaignId={CAMPAIGN} />)
+const draw = (span?: { startAtMs?: number | null; endAtMs?: number | null }) =>
+  render(
+    <CampaignMembersSection
+      hostId={HOST}
+      campaignId={CAMPAIGN}
+      startAtMs={span?.startAtMs ?? null}
+      endAtMs={span?.endAtMs ?? null}
+    />,
+  )
 
 describe('finding the records that name this campaign', () => {
   it('asks each collection for the documents whose array CONTAINS it', () => {
@@ -212,5 +233,153 @@ describe('what the section refuses to claim', () => {
     draw()
     expect(screen.getByText('Contacts')).toBeTruthy()
     for (const built of queries) expect(built).not.toContain('contacts')
+  })
+
+  it('offers the Contacts page and admits the link is unfiltered', () => {
+    // A link that implied a campaign filter would promise a screen the query
+    // rule above makes impossible to build.
+    draw()
+    const link = screen.getByText('Open Contacts').closest('a')
+    expect(link?.getAttribute('href')).toBe('/acme/hosts/shop/contacts')
+    expect(screen.getByText(/opens unfiltered/)).toBeTruthy()
+  })
+
+  it('refuses a screen views column and says where views are measured', () => {
+    /*
+     * A screen keeps no counter on its own document — traffic is a day doc
+     * per screen — so a figure here would be a read across screens times days
+     * on every open, for a paid entitlement this section does not resolve.
+     */
+    rows.set(queryKey('screens'), [
+      { $id: 'landing', displayName: 'Spring landing page', versionId: 'v1' },
+    ])
+
+    draw()
+
+    expect(screen.getByText(/Page views are not shown here/)).toBeTruthy()
+    const link = screen
+      .getByText('The site’s analytics measures it by screen.')
+      .closest('a')
+    expect(link?.getAttribute('href')).toBe('/acme/hosts/shop/analytics')
+  })
+})
+
+/**
+ * A form's counters, arranged so lifetime and windowed answers differ.
+ *
+ * Forty submissions ever, twenty of them in February and March. A fixture
+ * where the two agreed would pass whichever one the component printed.
+ */
+const FORM_WITH_HISTORY = {
+  $id: 'contact',
+  displayName: 'Contact',
+  campaignIds: [CAMPAIGN],
+  stats: {
+    submissions: 40,
+    views: 400,
+    starts: 150,
+    periods: {
+      '2026-01': { submissions: 20, views: 200, starts: 80 },
+      '2026-02': { submissions: 12, views: 120, starts: 40 },
+      '2026-03': { submissions: 8, views: 80, starts: 30 },
+    },
+  },
+}
+
+describe('what the forms in a campaign hold', () => {
+  it('reports each form’s counters without opening another listener', () => {
+    // The counters ride on documents the membership query already returned.
+    // A third query here would be a read this page did not have to make.
+    rows.set(queryKey('forms'), [FORM_WITH_HISTORY])
+
+    draw()
+
+    expect(queries).toHaveLength(2)
+    expect(screen.getByText('What these forms hold')).toBeTruthy()
+  })
+
+  it('windows the figures to a dated campaign’s months', () => {
+    // The control for property (4). The lifetime 40 is the number a naive
+    // sum would print, and it is the wrong one for a campaign that ran in
+    // February and March.
+    rows.set(queryKey('forms'), [FORM_WITH_HISTORY])
+
+    draw({ startAtMs: Date.UTC(2026, 1, 10), endAtMs: Date.UTC(2026, 2, 20) })
+
+    expect(screen.getAllByText('20').length).toBeGreaterThan(0)
+    expect(screen.queryAllByText('40')).toHaveLength(0)
+    expect(screen.getByText(/Whole calendar months/)).toBeTruthy()
+  })
+
+  it('says a dateless campaign’s figures are lifetime', () => {
+    // The control for property (5). The number is right; unlabeled, it reads
+    // as something this campaign produced.
+    rows.set(queryKey('forms'), [FORM_WITH_HISTORY])
+
+    draw()
+
+    expect(screen.getAllByText('40').length).toBeGreaterThan(0)
+    expect(screen.getByText(/lifetime totals/)).toBeTruthy()
+    expect(screen.getByText(/each form’s whole history/)).toBeTruthy()
+  })
+
+  it('never lets a figure read as something the campaign caused', () => {
+    rows.set(queryKey('forms'), [FORM_WITH_HISTORY])
+
+    draw()
+
+    expect(
+      screen.getByText(/not this campaign’s results/),
+    ).toBeTruthy()
+  })
+
+  it('discloses a form that lends its figures to another campaign', () => {
+    // The control for property (6).
+    rows.set(queryKey('forms'), [
+      { ...FORM_WITH_HISTORY, campaignIds: [CAMPAIGN, 'summer-2026'] },
+    ])
+
+    draw()
+
+    expect(screen.getByText('Also in 1 other campaign')).toBeTruthy()
+    expect(screen.getByText(/not exclusive to this campaign/)).toBeTruthy()
+  })
+
+  it('draws a counter nobody wrote as a dash, never as a zero', () => {
+    /*
+     * `stats.leads` is incremented only for a form whose routing declares it.
+     * A zero would say these forms produced no leads, which is a measurement
+     * nobody took.
+     */
+    rows.set(queryKey('forms'), [FORM_WITH_HISTORY])
+
+    draw()
+
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0)
+    expect(screen.queryAllByText('0')).toHaveLength(0)
+    expect(screen.getAllByText('not recorded').length).toBeGreaterThan(0)
+  })
+
+  it('adds nothing for a form that recorded nothing in the campaign’s months', () => {
+    /*
+     * A form whose counters predate the month series has no windowed figure.
+     * Counting it as zero would claim its quiet months were measured; the
+     * note says how many forms the total actually covers instead.
+     */
+    rows.set(queryKey('forms'), [
+      FORM_WITH_HISTORY,
+      { $id: 'old', displayName: 'Legacy form', stats: { submissions: 500 } },
+    ])
+
+    draw({ startAtMs: Date.UTC(2026, 1, 10), endAtMs: Date.UTC(2026, 2, 20) })
+
+    expect(screen.getAllByText('across 1 of 2 forms').length).toBeGreaterThan(0)
+    expect(screen.queryAllByText('500')).toHaveLength(0)
+  })
+
+  it('draws no holdings block for a campaign with no forms', () => {
+    // Nothing to total is not a total of nothing.
+    draw()
+    expect(screen.queryByText('What these forms hold')).toBeNull()
   })
 })
