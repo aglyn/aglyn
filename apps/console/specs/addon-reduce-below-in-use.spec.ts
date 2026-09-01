@@ -37,6 +37,14 @@
  * Assertions are on the REFUSAL, the message's numbers, and the quantity that
  * reaches Stripe — never on rendered output.
  *
+ * A PERMITTED reduction reaches Stripe as a subscription SCHEDULE, not as a
+ * subscription update: capacity already paid for runs to the period end, so
+ * the smaller quantity is written into the schedule's target phase and nothing
+ * moves today. That is what "reaches Stripe" means in the control block below,
+ * and it is the assertion that keeps the controls load-bearing — a gate that
+ * refused every reduction would answer 409, but one that accepted every
+ * reduction and then quietly failed to write anything would answer 200.
+ *
  * NO STRIPE PATH IS EXERCISED. `fetch` is mocked and never calls out;
  * localhost carries the LIVE key.
  */
@@ -44,6 +52,9 @@
 export {}
 
 const ORG_ID = 'org-1'
+
+/** The renewal a scheduled reduction lands on. */
+const PERIOD_END = 1767225600
 
 /** The org document the route reads plan, entitlements and seatAddons from. */
 let mockOrg: Record<string, unknown> = {}
@@ -205,6 +216,37 @@ function updatedQuantity(): string | null {
   return entry ? new URLSearchParams(entry.body).get('items[0][quantity]') : null
 }
 
+/** The captured body of the one `POST subscription_schedules/{id}`, if any. */
+function scheduleUpdate(): URLSearchParams | null {
+  const entry = mockStripeCalls.find(
+    (call) =>
+      call.method === 'POST' && call.href.includes('/subscription_schedules/'),
+  )
+  return entry ? new URLSearchParams(entry.body) : null
+}
+
+/** The price ids the schedule's TARGET phase was written with, in order. */
+function targetPhasePrices(): string[] {
+  const body = scheduleUpdate()
+  const prices: string[] = []
+  for (let i = 0; ; i += 1) {
+    const price = body?.get(`phases[1][items][${i}][price]`)
+    if (!price) return prices
+    prices.push(price)
+  }
+}
+
+/**
+ * The quantity the TARGET phase carries for one price — the figure a permitted
+ * reduction actually moves. `null` when the phase carries no such line, which
+ * is what a removal looks like.
+ */
+function scheduledQuantity(price: string): string | null {
+  const at = targetPhasePrices().indexOf(price)
+  if (at < 0) return null
+  return scheduleUpdate()?.get(`phases[1][items][${at}][quantity]`) ?? null
+}
+
 beforeEach(() => {
   mockStripeCalls = []
   mockOrgWrites = []
@@ -265,7 +307,30 @@ beforeEach(() => {
             id: 'sub_1',
             status: 'active',
             currency: 'usd',
+            current_period_end: PERIOD_END,
+            metadata: { plan: 'starter', orgId: ORG_ID },
             items: { data: mockItems },
+          },
+        ],
+      }
+    } else if (href.includes('/subscription_schedules')) {
+      // A schedule created `from_subscription` carries ONE phase — the
+      // present, filled from the subscription's own items. The reduction
+      // appends the target phase to it; the same doc answers the update POST,
+      // since only the request body is under test.
+      payload = {
+        id: 'sub_sched_1',
+        status: 'not_started',
+        end_behavior: 'release',
+        phases: [
+          {
+            start_date: PERIOD_END - 2592000,
+            end_date: PERIOD_END,
+            items: (mockItems as any[]).map((item) => ({
+              price: item.price.id,
+              ...(item.quantity == null ? {} : { quantity: item.quantity }),
+            })),
+            automatic_tax: { enabled: true },
           },
         ],
       }
@@ -374,35 +439,49 @@ describe('reducing org-wide capacity below what it carries is refused', () => {
  * that refused every reduction would pass every assertion above.
  */
 describe('CONTROL — what the gate must still let through', () => {
-  it('reducing to EXACTLY the in-use count is allowed and reaches Stripe', async () => {
+  it('reducing to EXACTLY the in-use count is allowed and is scheduled', async () => {
     // 4 sites, 1 included, so 3 of the 5 bought sites are carrying something.
     // Dropping the other 2 costs nobody anything.
+    //
+    // Permitted, and therefore WRITTEN: the target phase carries 3. A status
+    // code on its own would be satisfied by a gate that let the request in and
+    // then did nothing with it.
     const response = await setQuantity('hosts', 3)
     expect(response.status).toBe(200)
-    expect(updatedQuantity()).toBe('3')
+    expect(scheduledQuantity('price_starter_host')).toBe('3')
+    // Deferred, so the live subscription keeps all 5 until the renewal.
+    expect(updatedQuantity()).toBeNull()
   })
 
   it('the same boundary holds for datasets and seats', async () => {
     expect((await setQuantity('datasets', 3)).status).toBe(200)
-    expect(updatedQuantity()).toBe('3')
+    expect(scheduledQuantity('price_starter_dataset')).toBe('3')
     mockStripeCalls = []
     expect((await setQuantity('managers', 2)).status).toBe(200)
-    expect(updatedQuantity()).toBe('2')
+    expect(scheduledQuantity('price_starter_seat')).toBe('2')
   })
 
   it('increasing is untouched', async () => {
+    // The gate only reads on a reduction, and an increase is still immediate:
+    // it is the subscription that moves, today, not a phase.
     const response = await setQuantity('hosts', 7)
     expect(response.status).toBe(200)
     expect(updatedQuantity()).toBe('7')
+    expect(scheduleUpdate()).toBeNull()
   })
 
   it('an unreadable count refuses nothing', async () => {
     // A count nobody could read is not a reason to refuse a customer — that
     // is our outage charged to them. It is also not zero; it simply cannot
     // decide, so the reduction proceeds as it did before this gate existed.
+    //
+    // Proceeding means the removal is SCHEDULED: the host line is gone from
+    // the target phase and still on the phase the org is billed for today.
     mockSiteCount = null
     const response = await setQuantity('hosts', 0)
     expect(response.status).toBe(200)
+    expect(targetPhasePrices()).not.toContain('price_starter_host')
+    expect(targetPhasePrices()).toContain('price_starter_monthly')
     expect(updatedQuantity()).toBeNull()
   })
 
@@ -442,6 +521,13 @@ describe('CONTROL — what the gate must still let through', () => {
     ]
     const response = await setQuantity('eventCalendar', 0)
     expect(response.status).toBe(200)
+    // Not gated, so it is written — off at the renewal, on until then, which
+    // is the same "paid for, so kept" rule every other reduction follows.
+    expect(targetPhasePrices()).not.toContain('price_cal')
+    expect((await response.json()).pendingAddonChange).toMatchObject({
+      kind: 'eventCalendar',
+      quantity: 0,
+    })
   })
 })
 

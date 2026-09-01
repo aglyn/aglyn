@@ -35,6 +35,14 @@
  * Assertions are on the REFUSAL and on the Stripe call list — the stored
  * quantity and the money — never on rendered output.
  *
+ * A PERMITTED reduction reaches Stripe as a subscription SCHEDULE rather than
+ * as a subscription update: pool seats already paid for run to the period end,
+ * so the smaller quantity is written into the schedule's target phase and
+ * nothing moves today. That is what the control block below means by "reaches
+ * Stripe", and asserting the written quantity rather than the status code is
+ * what keeps those controls from passing on a guard that accepts a reduction
+ * and then does nothing with it.
+ *
  * NO STRIPE PATH IS EXERCISED. `fetch` is mocked and never calls out;
  * localhost carries the LIVE key.
  */
@@ -42,6 +50,9 @@
 export {}
 
 const ORG_ID = 'org-1'
+
+/** The renewal a scheduled reduction lands on. */
+const PERIOD_END = 1767225600
 
 /** The org document the route reads plan, seatAddons and allocations from. */
 let mockOrg: Record<string, unknown> = {}
@@ -184,6 +195,37 @@ function updatedQuantity(): string | null {
   return entry ? new URLSearchParams(entry.body).get('items[0][quantity]') : null
 }
 
+/** The captured body of the one `POST subscription_schedules/{id}`, if any. */
+function scheduleUpdate(): URLSearchParams | null {
+  const entry = mockStripeCalls.find(
+    (call) =>
+      call.method === 'POST' && call.href.includes('/subscription_schedules/'),
+  )
+  return entry ? new URLSearchParams(entry.body) : null
+}
+
+/** The price ids the schedule's TARGET phase was written with, in order. */
+function targetPhasePrices(): string[] {
+  const body = scheduleUpdate()
+  const prices: string[] = []
+  for (let i = 0; ; i += 1) {
+    const price = body?.get(`phases[1][items][${i}][price]`)
+    if (!price) return prices
+    prices.push(price)
+  }
+}
+
+/**
+ * The quantity the TARGET phase carries for one price — the figure a permitted
+ * reduction actually moves. `null` when the phase carries no such line, which
+ * is what a removal looks like.
+ */
+function scheduledQuantity(price: string): string | null {
+  const at = targetPhasePrices().indexOf(price)
+  if (at < 0) return null
+  return scheduleUpdate()?.get(`phases[1][items][${at}][quantity]`) ?? null
+}
+
 beforeEach(() => {
   mockStripeCalls = []
   mockOrgWrites = []
@@ -233,7 +275,30 @@ beforeEach(() => {
             id: 'sub_1',
             status: 'active',
             currency: 'usd',
+            current_period_end: PERIOD_END,
+            metadata: { plan: 'business', orgId: ORG_ID },
             items: { data: mockItems },
+          },
+        ],
+      }
+    } else if (href.includes('/subscription_schedules')) {
+      // A schedule created `from_subscription` carries ONE phase — the
+      // present, filled from the subscription's own items. The reduction
+      // appends the target phase to it; the same doc answers the update POST,
+      // since only the request body is under test.
+      payload = {
+        id: 'sub_sched_1',
+        status: 'not_started',
+        end_behavior: 'release',
+        phases: [
+          {
+            start_date: PERIOD_END - 2592000,
+            end_date: PERIOD_END,
+            items: (mockItems as any[]).map((item) => ({
+              price: item.price.id,
+              ...(item.quantity == null ? {} : { quantity: item.quantity }),
+            })),
+            automatic_tax: { enabled: true },
           },
         ],
       }
@@ -308,16 +373,25 @@ describe('reducing a pooled add-on below what is assigned is refused', () => {
  * write — would pass every assertion above.
  */
 describe('CONTROL — what the guard must still let through', () => {
-  it('reducing to EXACTLY the assigned count is allowed and reaches Stripe', async () => {
+  it('reducing to EXACTLY the assigned count is allowed and is scheduled', async () => {
+    // Permitted, and therefore WRITTEN: the target phase carries 3 registers.
+    // A status code on its own would be satisfied by a guard that let the
+    // request in and then did nothing with it.
     const response = await setQuantity('posRegisters', 3)
     expect(response.status).toBe(200)
-    expect(updatedQuantity()).toBe('3')
+    expect(scheduledQuantity('price_pos_register')).toBe('3')
+    // Deferred, so all 4 keep working on the live subscription until the
+    // renewal — the three assigned registers included.
+    expect(updatedQuantity()).toBeNull()
   })
 
   it('increasing is untouched', async () => {
+    // Only reductions defer. Buying a register is immediate, so it is the
+    // subscription that moves rather than a phase.
     const response = await setQuantity('posRegisters', 6)
     expect(response.status).toBe(200)
     expect(updatedQuantity()).toBe('6')
+    expect(scheduleUpdate()).toBeNull()
   })
 
   it('an EMPTY allocation map is "none assigned", not "not a pool"', async () => {
@@ -326,6 +400,10 @@ describe('CONTROL — what the guard must still let through', () => {
     mockOrg = { ...mockOrg, registerAllocations: {} }
     const response = await setQuantity('posRegisters', 0)
     expect(response.status).toBe(200)
+    // Proceeding means the removal is scheduled: gone from the target phase,
+    // still on the phase the org is billed for today.
+    expect(targetPhasePrices()).not.toContain('price_pos_register')
+    expect(targetPhasePrices()).toContain('price_business_monthly')
   })
 
   it('an org-wide kind with NO allocation map is not gated by this', async () => {
@@ -340,6 +418,6 @@ describe('CONTROL — what the guard must still let through', () => {
     // that one permits — which is why the doubles above count for real.
     const response = await setQuantity('managers', 1)
     expect(response.status).toBe(200)
-    expect(updatedQuantity()).toBe('1')
+    expect(scheduledQuantity('price_business_seat')).toBe('1')
   })
 })
