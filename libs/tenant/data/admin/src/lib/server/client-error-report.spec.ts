@@ -327,6 +327,37 @@ describe('reportServerError (AGL-1921)', () => {
     expect(serialized).not.toContain('acme-industries')
   })
 
+  it('stamps the environment, so a laptop is separable from production', async () => {
+    const realEnv = process.env['VERCEL_ENV']
+    try {
+      // A local console serving against the platform project holds the same
+      // credential and writes to the same log. Without this field the only
+      // reader the log can have — a log-match alert policy — has nothing to
+      // exclude on, and a developer's throw pages whoever is on call.
+      delete process.env['VERCEL_ENV']
+      const devFetch = okFetch()
+      const devMod = await load(HEALTHY_APP)
+      await devMod.reportServerError({ message: 'boom' }, { service: 'console-web' })
+      expect(
+        JSON.parse(devFetch.mock.calls[0][1].body).entries[0].jsonPayload.environment,
+      ).toBe('development')
+
+      // Asserted in BOTH directions: a field hardcoded to either answer would
+      // pass one of these and is exactly as useless as no field at all.
+      jest.resetModules()
+      process.env['VERCEL_ENV'] = 'production'
+      const prodFetch = okFetch()
+      const prodMod = await load(HEALTHY_APP)
+      await prodMod.reportServerError({ message: 'boom' }, { service: 'console-web' })
+      expect(
+        JSON.parse(prodFetch.mock.calls[0][1].body).entries[0].jsonPayload.environment,
+      ).toBe('production')
+    } finally {
+      if (realEnv === undefined) delete process.env['VERCEL_ENV']
+      else process.env['VERCEL_ENV'] = realEnv
+    }
+  })
+
   it('uses the stack as the message when there is one', async () => {
     const fetchMock = okFetch()
     const mod = await load(HEALTHY_APP)
