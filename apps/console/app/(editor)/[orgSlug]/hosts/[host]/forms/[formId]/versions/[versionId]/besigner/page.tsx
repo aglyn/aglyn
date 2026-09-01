@@ -80,6 +80,7 @@ import {
 } from '../../../../../../../../../../constants/route-links'
 import useCollectionTemplates from '../../../../../../../../../../hooks/use-collection-templates'
 import useOpenPreview from '../../../../../../../../../../hooks/use-open-preview'
+import revalidateLivePages from '../../../../../../../../../../utils/revalidate-live-pages'
 import useScreenLinkRoutes from '../../../../../../../../../../hooks/use-screen-link-routes'
 import {
   useHostId,
@@ -460,6 +461,17 @@ function FormBesignerPage() {
         updatedAt: Timestamp.now(),
       })
       setSavedSincePublish(false)
+      /*
+       * Make the sentence below true.
+       *
+       * Every page that PLACES this form renders the design just written, so
+       * each of them is now serving fields the form no longer has. The console
+       * route owns the fan-out — it is the side holding both the node graph and
+       * the tenant's cache keys — and this fires without awaiting, as every
+       * other publish surface does: the write already landed, and a cache hint
+       * that fails must never make a successful publish look failed.
+       */
+      void revalidateLivePages({ user, hostId, formId: formId as string })
       enqueueSnackbar(
         'Published. The live sites now serve this design, and the form’s ' +
           'declared fields match it.',

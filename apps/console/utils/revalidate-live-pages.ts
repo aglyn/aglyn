@@ -60,6 +60,17 @@ export interface RevalidateLivePagesOptions {
    * is watching one specific URL for it to change.
    */
   componentId?: string
+  /**
+   * Publishing a FORM invalidates every page that places it, found the same
+   * way a component's dependents are — by searching node trees, so a form
+   * inside a layout's chrome or inside a reusable component is reached too.
+   *
+   * A form publish had nothing to announce until a placed form began rendering
+   * its entity's published design. Now it changes the form on every page at
+   * once, and without this the change waits out the hour-long document cache
+   * while the besigner says the live sites already serve it.
+   */
+  formId?: string
 }
 
 /**
@@ -139,8 +150,10 @@ export function describeRevalidateShortfall(
 export async function revalidateLivePages(
   options: RevalidateLivePagesOptions,
 ): Promise<RevalidateLivePagesResult | null> {
-  const { user, hostId, screenId, layoutId, componentId } = options
-  if (!hostId || (!screenId && !layoutId && !componentId)) return null
+  const { user, hostId, screenId, layoutId, componentId, formId } = options
+  if (!hostId || (!screenId && !layoutId && !componentId && !formId)) {
+    return null
+  }
   try {
     const response = await authorizedFetch(user, '/api/screens/revalidate', {
       method: 'POST',
@@ -150,6 +163,7 @@ export async function revalidateLivePages(
         ...(screenId ? { screenId } : {}),
         ...(layoutId ? { layoutId } : {}),
         ...(componentId ? { componentId } : {}),
+        ...(formId ? { formId } : {}),
       }),
     })
     if (!response.ok) return null

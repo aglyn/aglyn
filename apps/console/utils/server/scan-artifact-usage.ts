@@ -16,6 +16,7 @@
  */
 
 import {
+  nodesPlaceForm,
   nodesReferenceComponent,
   nodesReferenceScreen,
 } from '@aglyn/aglyn/server'
@@ -409,6 +410,67 @@ export function screenIdsUsingComponentDeep(
       }
     }
     frontier = next
+  }
+
+  return [...screenIds]
+}
+
+/**
+ * Every live screen whose rendered output contains the form `formId`, however
+ * indirectly.
+ *
+ * The form twin of {@link screenIdsUsingComponentDeep}, and the same walk for
+ * the same reason: a placed form is found by SEARCHING node trees, not by
+ * matching a pointer, and it can sit on a screen, inside page chrome, or
+ * inside a reusable component that a third component nests. Publishing a form
+ * changes every page that renders it, so anything this misses keeps serving
+ * the old fields for the whole revalidate window while the editor reports that
+ * the live sites now serve the new design.
+ *
+ * The first level is the only thing that differs from the component walk: a
+ * document uses a form by PLACING it. After that the fan-out is identical, so
+ * it is delegated rather than restated — a component that holds the form is
+ * reached by whatever reaches that component, and a layout by whatever renders
+ * inside it.
+ *
+ * Pure, and separate from the Firestore read, so the closure is testable
+ * without a database. Cycle-safe by delegation: both walks it defers to bound
+ * themselves.
+ */
+export function screenIdsUsingFormDeep(
+  formId: string,
+  sources: {
+    screens: UsageCandidate[]
+    layouts: UsageCandidate[]
+    components: UsageCandidate[]
+  },
+): string[] {
+  if (!formId) return []
+  const screenIds = new Set<string>()
+
+  for (const candidate of sources.screens) {
+    if (!isLive(candidate)) continue
+    if (nodesPlaceForm(candidate.nodes, formId)) screenIds.add(candidate.id)
+  }
+  for (const candidate of sources.layouts) {
+    if (!isLive(candidate)) continue
+    if (!nodesPlaceForm(candidate.nodes, formId)) continue
+    // The layout itself renders no URL; the screens beneath it do.
+    for (const screenId of screenIdsUsingLayoutDeep(
+      candidate.id,
+      sources.screens,
+      sources.layouts,
+    )) {
+      screenIds.add(screenId)
+    }
+  }
+  for (const candidate of sources.components) {
+    if (!isLive(candidate)) continue
+    if (!nodesPlaceForm(candidate.nodes, formId)) continue
+    // And a component renders wherever it is placed, however deeply nested.
+    for (const screenId of screenIdsUsingComponentDeep(candidate.id, sources)) {
+      screenIds.add(screenId)
+    }
   }
 
   return [...screenIds]
