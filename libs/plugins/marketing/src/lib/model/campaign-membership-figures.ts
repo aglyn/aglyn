@@ -41,6 +41,10 @@
  *     more than one campaign and no total here is exclusive.
  */
 
+// Import the form-stat helpers from the context-free forms subpath, NOT the
+// `@aglyn/aglyn` barrel: this file is in the marketing model, which the
+// plugin's SERVER graph re-exports, and the full barrel pulls client React
+// contexts (createContext) that break the RSC server build (AGL-830).
 import {
   formPeriodKey,
   formStatsTotals,
@@ -49,7 +53,7 @@ import {
   type FormStatKind,
   type FormStats,
   type FormStatsTotals,
-} from '@aglyn/aglyn'
+} from '@aglyn/aglyn/app-utils/forms'
 
 /** The dates a campaign container carries, as this module reads them. */
 export interface CampaignSpan {
