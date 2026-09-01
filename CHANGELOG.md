@@ -9,6 +9,16 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.39 — 2026-09-01
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.38...v1.0.0-beta.39)
+
+### Fixed
+
+- **email:** the CAA reaches only the zones that need it, and a tracked domain outlives its own links
+- **plugins-mui:** a Collection Search preset, so the element drawer can reach the block
+- **email:** a sending domain is issued able to count a click, and says so when it cannot
+
 ## v1.0.0-beta.38 — 2026-09-01
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/2cdfabc72...v1.0.0-beta.38)
