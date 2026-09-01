@@ -24,9 +24,20 @@ import {
 } from '@aglyn/tenant-data-admin/render-cache'
 
 /**
- * Cached exactly as the components read is (AGL-1302): a form publish busts
- * `tenant-data:{hostId}` through the console revalidate route, and the TTL is
- * only the backstop for writes that never announce themselves.
+ * Cached under the same key and TTL the components read uses (AGL-1302), and
+ * busted by the same `tenant-data:{hostId}` tag.
+ *
+ * ⚠️ Unlike a component publish, a FORM publish does not announce itself yet.
+ * `/api/screens/revalidate` takes a `screenId`, `layoutId`, `componentId` or
+ * `redirectPath` and drops the pages that render them; it has no `formId`
+ * branch, and neither publish path — the besigner's write nor
+ * `/api/hosts/forms/promote` — calls it. So a republished form reaches live
+ * pages when this TTL lapses rather than within the minute, and the besigner's
+ * "the live sites now serve this design" is that much ahead of itself.
+ *
+ * What that needs is the form half of `screenIdsUsingComponentDeep`: a placed
+ * form is reachable from a screen, a layout or a component, so the scan is the
+ * same walk with a different first-level predicate.
  */
 const FORMS_TTL_SECONDS = PUBLISHED_SITE_DATA_TTL_SECONDS
 
