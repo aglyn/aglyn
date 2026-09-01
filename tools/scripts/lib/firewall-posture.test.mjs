@@ -57,6 +57,18 @@ const bypass = (action = 'bypass') => ({
   mitigate: { redirect: null, action, rateLimit: null, actionDuration: null },
 })
 
+/**
+ * Read off the declaration rather than transcribed, for the same reason the
+ * table names `PROBE_HEADER_CONDITION` once: a sixteen-alternative regex
+ * copied by hand into a fixture drifts silently, and the resulting red reads
+ * as a checker bug rather than a typo. The cases that matter for this
+ * condition are the damage tests below, which mutate it away from whatever it
+ * is; none of them depend on the literal.
+ */
+const CRAWLER_UA_PATTERN = EXPECTED_POSTURE.find(
+  (e) => e.project === 'aglyn-tenant',
+).bypassRules.find((r) => r.name === 'Social preview crawler bypass').conditions[0].value
+
 /** The live-good aglyn-tenant config, with the probe secret stubbed. */
 function healthyTenantConfig() {
   return {
@@ -97,6 +109,66 @@ function healthyTenantConfig() {
         valid: true,
         action: bypass(),
         conditionGroup: [{ conditions: [{ type: 'path', op: 'pre', value: '/api/health' }] }],
+      },
+      {
+        name: 'Email link bypass',
+        id: 'rule_email_link_bypass_Kp2Vd1',
+        active: true,
+        valid: true,
+        action: bypass(),
+        conditionGroup: [
+          '/api/email/unsubscribe',
+          '/api/email/preferences',
+          '/api/email/resubscribe',
+          '/api/email/confirm',
+        ].map((value) => ({ conditions: [{ type: 'path', op: 'eq', value }] })),
+      },
+      {
+        name: 'Publish revalidate bypass',
+        id: 'rule_publish_revalidate_bypass_Qs7Tn4',
+        active: true,
+        valid: true,
+        action: bypass(),
+        conditionGroup: [
+          {
+            conditions: [
+              { type: 'path', op: 'eq', value: '/api/revalidate' },
+              { op: 'ex', type: 'header', key: 'x-revalidate-secret', value: '' },
+            ],
+          },
+        ],
+      },
+      {
+        name: 'Public asset delivery bypass',
+        id: 'rule_public_asset_delivery_bypass_Zb9Hm6',
+        active: true,
+        valid: true,
+        action: bypass(),
+        conditionGroup: [{ conditions: [{ type: 'path', op: 'pre', value: '/api/media/cdn' }] }],
+      },
+      {
+        name: 'Crawler metadata bypass',
+        id: 'rule_crawler_metadata_bypass_Rj3Wc8',
+        active: true,
+        valid: true,
+        action: bypass(),
+        conditionGroup: [
+          '/robots.txt',
+          '/sitemap.xml',
+          '/manifest.webmanifest',
+          '/api/manifest',
+          '/api/collections-rss',
+        ].map((value) => ({ conditions: [{ type: 'path', op: 'eq', value }] })),
+      },
+      {
+        name: 'Social preview crawler bypass',
+        id: 'rule_social_preview_crawler_bypass_Vt5Ly2',
+        active: true,
+        valid: true,
+        action: bypass(),
+        conditionGroup: [
+          { conditions: [{ type: 'user_agent', op: 're', value: CRAWLER_UA_PATTERN }] },
+        ],
       },
     ],
   }
@@ -159,6 +231,22 @@ function healthyConsoleConfig() {
           { conditions: [{ op: 'eq', type: 'path', value: '/api/marketplace/listing-versions' }] },
           { conditions: [{ op: 'pre', type: 'path', value: '/api/plugin-host-origins' }] },
         ],
+      },
+      {
+        name: 'Public asset delivery bypass',
+        id: 'rule_public_asset_console',
+        active: true,
+        valid: true,
+        action: bypass(),
+        conditionGroup: [{ conditions: [{ type: 'path', op: 'pre', value: '/api/media/cdn' }] }],
+      },
+      {
+        name: 'Crawler metadata bypass',
+        id: 'rule_crawler_metadata_console',
+        active: true,
+        valid: true,
+        action: bypass(),
+        conditionGroup: [{ conditions: [{ type: 'path', op: 'eq', value: '/robots.txt' }] }],
       },
     ],
   }
@@ -369,7 +457,7 @@ test('a THIRTEENTH group for an undeclared path fails', () => {
   })
   const result = evalConsole(config)
   assert.equal(result.ok, false)
-  assert.match(result.findings.join('\n'), /NO LONGER REQUIRES path eq one of 11 declared paths/)
+  assert.match(result.findings.join('\n'), /NO LONGER REQUIRES path eq one of 14 declared paths/)
 })
 
 test('the finding NAMES what the offending group bypasses', () => {
@@ -565,7 +653,32 @@ function configsMatchingLiveToday() {
 
 function docsConfig() {
   const config = healthyTenantConfig()
-  config.rules = config.rules.filter((r) => r.name === 'CI and uptime probe bypass')
+  // Not a filter of the tenant's rules: docs declares a NARROWER metadata set
+  // (no manifest, no feed), so the tenant's five-group rule would fail here on
+  // the paths docs does not declare.
+  config.rules = [
+    ...config.rules.filter((r) => r.name === 'CI and uptime probe bypass'),
+    {
+      name: 'Social preview crawler bypass',
+      id: 'rule_social_preview_docs',
+      active: true,
+      valid: true,
+      action: bypass(),
+      conditionGroup: [
+        { conditions: [{ type: 'user_agent', op: 're', value: CRAWLER_UA_PATTERN }] },
+      ],
+    },
+    {
+      name: 'Crawler metadata bypass',
+      id: 'rule_crawler_metadata_docs',
+      active: true,
+      valid: true,
+      action: bypass(),
+      conditionGroup: ['/robots.txt', '/sitemap.xml'].map((value) => ({
+        conditions: [{ type: 'path', op: 'eq', value }],
+      })),
+    },
+  ]
   return config
 }
 

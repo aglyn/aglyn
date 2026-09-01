@@ -144,13 +144,13 @@ repo are world-readable.
 
 ## Current posture
 
-Measured 2026-08-23.
+Measured 2026-09-01.
 
 | Project | Serves | Posture |
 | --- | --- | --- |
-| `aglyn-tenant` | every customer site on `*.aglyn.app` + custom domains | ✅ protected — challenge, 3 scoped bypass rules |
-| `aglyn-docs` | `docs.aglyn.com` | ✅ protected — challenge, 1 scoped bypass rule |
-| `aglyn-console` | `app.aglyn.com` — sign-in, billing, staff surfaces | ✅ protected — challenge, 3 scoped bypass rules |
+| `aglyn-tenant` | every customer site on `*.aglyn.app` + custom domains | ✅ protected — challenge, 7 scoped bypass rules |
+| `aglyn-docs` | `docs.aglyn.com` | ✅ protected — challenge, 3 scoped bypass rules |
+| `aglyn-console` | `app.aglyn.com` — sign-in, billing, staff surfaces | ✅ protected — challenge, 6 scoped bypass rules |
 | `aglyn-plugins` | `plugins.aglyn.com` — plugin loader origin | ⚠️ **no WAF config** — reviewed, deliberate |
 
 ### How the console was closed, and why the order mattered
@@ -315,9 +315,64 @@ rationale, so it is reported as a loud `GAP` on every run and fails under
 `--strict`. It is still asserted: if it quietly *gains* a config, the run
 **fails**, so the table can never silently describe a fiction.
 
+### How link previews and email images were unblocked
+
+A link to `aglyn.com` pasted into iMessage rendered with **no card**. The Open
+Graph markup was never the problem — it was complete and correct, and the image
+behind it was a valid 1200×630 PNG. Every social crawler was simply being
+answered **429 + `x-vercel-mitigated: challenge`**, so none of them ever read
+the `og:image` tag.
+
+The same 429 reached three more classes of caller nobody had enumerated:
+
+| Caller | Was reaching | Consequence |
+| --- | --- | --- |
+| `facebookexternalhit`, `Slackbot`, `Twitterbot`, `LinkedInBot`, `WhatsApp` | every page on every site | no link preview anywhere, including customer sites |
+| Gmail's image proxy | the **console's** `/api/media/cdn` | every image in every campaign email rendered broken |
+| any crawler or feed reader | `/robots.txt`, `/sitemap.xml`, `/manifest.webmanifest`, RSS | exclusions and URL sets unreadable |
+
+The email one is worth its own line, because it does not follow from
+"the marketing site is challenged": `render-system-email.ts` resolves mailed
+images to the **console's** CDN mount, not the tenant's. Protecting the console
+on 2026-08-21 therefore broke images in mail without touching a site.
+
+**`bot_category` and `bot_name` are unavailable on our plan.** Both are the
+right condition type here — Vercel verifies them by reverse DNS rather than by
+a spoofable string — and both answer `401 This feature requires an Advanced
+Project`. The crawler rule therefore matches on `user_agent`, which is the
+weakest condition in the table. That is bounded on the merits: it bypasses the
+bot challenge and nothing else, and everything it admits is public HTML anyone
+could already fetch by solving a challenge in a headless browser. The exposure
+is function invocations, so the proportionate control if it is ever abused is a
+**rate limit** on that User-Agent set, not a deny.
+
+The asset rules need no User-Agent at all and are the durable half:
+`/api/media/cdn` is annotated `lockdown-423: exempt` precisely because it is
+anonymous public delivery with no caller identity to verdict, and
+`serveMediaCdn` still enforces lockdown behind the bypass.
+
+Measured 2026-09-01, both directions:
+
+```text
+facebookexternalhit  /                    200   (og:image now read)
+anonymous            /api/media/cdn/…     200   image/png, 1200x630
+GoogleImageProxy     console /api/media/… 404   challenge bypassed, app answered
+anonymous            /robots.txt          200
+anonymous            /                    429   (the page challenge still stands)
+anonymous            app.aglyn.com/       429
+```
+
+The console 404 is the useful one: a bogus media id reaching the app and being
+refused *there* proves the challenge was bypassed and the routing was not.
+
+**The general lesson, restated:** the marketing site's own pages are not the
+only thing a challenge hides. Enumerate what fetches your **metadata** and your
+**assets**, not just your HTML — crawlers, mailbox image proxies, feed readers
+and install prompts are all non-browsers, and each one fails silently.
+
 ## Guarding the guard
 
-`npm run test:firewall-posture` runs 48 cases, each damaging exactly one thing
+`npm run test:firewall-posture` runs 56 cases, each damaging exactly one thing
 in a known-good config and asserting the **specific** finding — not merely that
 the result is false. A test that only checks `ok === false` passes just as
 happily when the detector has collapsed into `return false`.

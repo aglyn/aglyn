@@ -48,7 +48,14 @@ const NEEDLE = 'zeppelin'
 // evaluates the real graph to derive its shape.
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
-  firebaseAdmin: { app: jest.fn() },
+  // `firestore.FieldPath` is part of the double because the records read
+  // orders by document id. A stub missing it throws inside the branch under
+  // test, which reads as "no results" — the same silent shape this suite
+  // exists to catch.
+  firebaseAdmin: {
+    app: jest.fn(),
+    firestore: { FieldPath: { documentId: () => '__name__' } },
+  },
   orgDataQueryForHost: jest.fn(),
 }))
 jest.mock('@aglyn/tenant-runtime/template-screens', () => ({
@@ -146,9 +153,12 @@ const snapshot = (id: string, data: Record<string, any> | undefined) => ({
 
 /** Counts the version reads so the memoised path can be told from the cold one. */
 let versionReads: string[] = []
+/** Datasets whose `records` subcollection was actually read (AGL-168 cost). */
+let recordReads: string[] = []
 
 const seed = (screens: ScreenSeed[], datasets: DatasetSeed[]) => {
   versionReads = []
+  recordReads = []
   const screenById = new Map(screens.map((screen) => [screen.id, screen]))
   const hostRef = {
     collection: (name: string) => {
@@ -205,16 +215,25 @@ const seed = (screens: ScreenSeed[], datasets: DatasetSeed[]) => {
             get: (field: string) =>
               field === 'displayName' ? dataset.displayName : undefined,
             ref: {
-              collection: () => ({
-                limit: () => ({
-                  get: async () => ({
-                    docs: dataset.records.map((values) => ({
-                      get: (field: string) =>
-                        field === 'values' ? values : undefined,
-                    })),
-                  }),
-                }),
-              }),
+              collection: () => {
+                // `orderBy` is part of the shape now, and the counter sits on
+                // `get` rather than on `collection` so it records the READ,
+                // not the query being built.
+                const page = {
+                  orderBy: () => page,
+                  limit: () => page,
+                  get: async () => {
+                    recordReads.push(dataset.id)
+                    return {
+                      docs: dataset.records.map((values) => ({
+                        get: (field: string) =>
+                          field === 'values' ? values : undefined,
+                      })),
+                    }
+                  },
+                }
+                return page
+              },
             },
           })),
         }),
@@ -339,5 +358,48 @@ describe('searchContent dataset records', () => {
     // One read per screen for two datasets — the second dataset was answered
     // warm, which is the read this test exists to cover.
     expect(versionReads).toEqual(['s_airships/v1', 's_crew/v7'])
+  })
+
+  /**
+   * A dataset no published screen repeats over can never produce a result:
+   * the loop resolves no `targetPath` and drops it. Reading its records first
+   * therefore bought nothing and cost a page of documents per dataset — up to
+   * 20 x 200 on one uncached query, spent and discarded.
+   *
+   * This asserts the WIRE, not the answer: both orderings return the same
+   * empty result set, so only the read counter can tell them apart.
+   */
+  it('does not read records for a dataset no screen repeats over', async () => {
+    const { host } = seed(
+      [
+        {
+          id: 's_airships',
+          path: 'airships',
+          versionId: 'v1',
+          nodes: repeaterNodes('ds_airships'),
+        },
+      ],
+      // `ds_crew` is stored but unreachable — nothing repeats over it.
+      DATASETS,
+    )
+
+    const results = await searchContent({ host, query: NEEDLE })
+
+    expect(recordReads).toEqual(['ds_airships'])
+    expect(results.map((result) => result.url)).toEqual(['/airships'])
+  })
+
+  it('reads no records at all when the site repeats over nothing', async () => {
+    // The floor: a site with datasets and no repeater pays for the bounded
+    // screen walk and nothing else.
+    const { host } = seed(
+      [{ id: 's_plain', path: 'plain', versionId: 'v1', nodes: {} }],
+      DATASETS,
+    )
+
+    const results = await searchContent({ host, query: NEEDLE })
+
+    expect(recordReads).toEqual([])
+    expect(results.filter((result) => result.kind === 'data')).toEqual([])
   })
 })
