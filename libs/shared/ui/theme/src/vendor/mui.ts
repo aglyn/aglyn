@@ -279,20 +279,11 @@ declare module '@mui/material/styles' {
 
   interface ThemeOptions {
     shadowsInset?: Shadows
-    shadowFloating?: string
   }
 
   interface Theme {
     palette: Palette
     shadowsInset: Shadows
-    /**
-     * The marketing "floating mockup" shadow — the deep, soft drop under a
-     * product screenshot presented over a page (hero and section mockups).
-     * One value rather than a ramp: nothing stacks these, so there is no
-     * elevation to walk. Emitted as `--aglyn-shadow-floating` by the
-     * CssBaseline override so canvas-authored sx can reference it.
-     */
-    shadowFloating: string
   }
 
   interface Theme {
