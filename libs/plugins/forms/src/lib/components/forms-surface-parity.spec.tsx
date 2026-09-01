@@ -226,8 +226,9 @@ describe('the forms list is a table in both of its states', () => {
     expect(
       screen.getByRole('gridcell', { name: '12' }).className,
     ).toContain('MuiDataGrid-cell--textRight')
-    // `stats.leads` is declared on `FormStats` and has no writer anywhere. A
-    // `0` here would report a measured absence of leads; nobody measured.
+    // This fixture routes nowhere, so `/api/forms/submit` never wrote
+    // `stats.leads` for it. A `0` here would report a measured absence of
+    // leads; nobody measured.
     const row = screen.getByRole('row', { name: /Contact us/ })
     expect(row.textContent).toContain('--')
     expect(row.textContent).not.toContain('0')
