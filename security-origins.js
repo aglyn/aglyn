@@ -1046,6 +1046,24 @@ const MEASUREMENT_IMAGE_ORIGINS = [
   'https://*.analytics.google.com',
   // Google Signals.
   'https://stats.g.doubleclick.net',
+  /*
+   * GA4 → Google Ads AUDIENCE BUILDING, and a separate host from the Signals
+   * beacon above rather than a duplicate of it.
+   *
+   * With ads personalization on, gtag follows its collect hit with an image to
+   * `td.doubleclick.net/td/ga/rul?tid=<measurement id>` — the redirect that
+   * joins the GA4 session to the Ads cookie so a property's audiences can
+   * export. `stats.g.doubleclick.net` does NOT cover it: they are different
+   * hosts, and CSP matches hosts.
+   *
+   * Measured blocked on aglyn.com: a live probe raised
+   * `securitypolicyviolation { effectiveDirective: 'img-src', blockedURI:
+   * 'https://td.doubleclick.net/td/ga/rul' }` while every other Google
+   * endpoint on this list passed. It is the failure shape the block comment
+   * above warns about — the tag loads, the site looks fine, and the thing that
+   * goes quiet is remarketing, which reports nothing anywhere.
+   */
+  'https://td.doubleclick.net',
   // Google Ads conversion tracking.
   'https://googleads.g.doubleclick.net',
   'https://www.googleadservices.com',

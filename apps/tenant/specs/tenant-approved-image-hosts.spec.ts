@@ -196,6 +196,16 @@ describe('measurement image origins (AGL-1152)', () => {
     }
   })
 
+  it('admits the audience-building redirect, a host of its own', () => {
+    // `td.doubleclick.net/td/ga/rul` is what joins a GA4 session to the Ads
+    // cookie so audiences can export, and it is NOT reached by
+    // `stats.g.doubleclick.net` — different hosts, and CSP matches hosts.
+    // Measured blocked on aglyn.com as an `img-src` violation while every
+    // other Google endpoint passed, which is remarketing going quiet with
+    // nothing in any report saying why.
+    expect(withMeasurement).toContain('https://td.doubleclick.net')
+  })
+
   it('admits the Meta pixel, configured as a first-class ad tag', () => {
     // NOT via GTM — nothing on the platform has a container. The id lives at
     // `analytics.adTags.meta`, `advertising-tags.ts` loads
