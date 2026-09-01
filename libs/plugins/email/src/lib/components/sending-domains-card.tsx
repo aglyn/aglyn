@@ -579,10 +579,11 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
             'has to be finished first.'}
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          {'Campaigns and other marketing email are different: they need a ' +
-            'sending domain of this site’s own. The shared address carries ' +
-            'every other site’s receipts, so one campaign’s complaint rate ' +
-            'there would be charged against all of them.'}
+          {'Campaigns send on the shared address too. Its delivery ' +
+            'reputation is pooled with the other sites on it, so campaigns ' +
+            'there are held to tighter complaint and bounce limits — a ' +
+            'domain of this site’s own lifts that, and is the name your ' +
+            'recipients will recognize.'}
         </Typography>
 
         {/*

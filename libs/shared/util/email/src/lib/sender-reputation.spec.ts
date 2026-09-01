@@ -40,6 +40,7 @@ import {
   emailReputationRate,
   emailReputationVerdict,
   formatReputationRate,
+  effectiveReputationPolicy,
   normalizeEmailReputationPolicy,
   reputationDayKey,
   reputationWindowDayKeys,
@@ -208,6 +209,69 @@ describe('the three policies', () => {
         now: NOW,
       }).blocked,
     ).toBe(true)
+  })
+})
+
+/*==========================================
+ * WHOSE REPUTATION A CAMPAIGN SPENDS.
+ *
+ * The pool carries marketing for every site with no domain of its own, so what
+ * bounds one site's spending of a shared reputation is this grade rather than a
+ * refusal at the door.
+ *=========================================*/
+describe('the pooled grade', () => {
+  /**
+   * ⛔ THE CONTROL. On a shared member a campaign is held to the WATCH
+   * thresholds, because the complaints it earns are charged to sites that did
+   * nothing.
+   */
+  it('grades a pooled sender `strict` whatever the org configured', () => {
+    expect(effectiveReputationPolicy('shared', 'standard')).toBe('strict')
+    expect(effectiveReputationPolicy('shared', undefined)).toBe('strict')
+    // ⛔ INCLUDING `none`. A workspace that switched its own breaker off must
+    // not thereby switch off the one protecting its pool neighbours.
+    expect(effectiveReputationPolicy('shared', 'none')).toBe('strict')
+  })
+
+  /**
+   * …and NOT on a domain the merchant owns. There the only reputation being
+   * spent is theirs, so the setting they chose is the one that binds — this
+   * must not become a platform-wide tightening nobody asked for.
+   */
+  it('leaves every other identity on the org’s own setting', () => {
+    expect(effectiveReputationPolicy('custom', 'none')).toBe('none')
+    expect(effectiveReputationPolicy('custom', 'standard')).toBe('standard')
+    expect(effectiveReputationPolicy('platform', 'none')).toBe('none')
+    // An unresolved send is not pooled either, and an unreadable setting still
+    // falls back to `standard` rather than to `none`.
+    expect(effectiveReputationPolicy(null, 'nonsense')).toBe('standard')
+    expect(effectiveReputationPolicy(undefined, undefined)).toBe('standard')
+  })
+
+  /**
+   * The grade is the whole mechanism, so the thresholds it moves are asserted
+   * rather than assumed: a rate between the watch and trip levels stops a
+   * pooled sender and does not stop one on its own domain.
+   */
+  it('stops a pooled sender at a rate a custom-domain sender survives', () => {
+    // Above the watch level, below the trip level.
+    const counts = complaints(EMAIL_COMPLAINT_RATE_WATCH * 10_000 + 5)
+
+    expect(
+      emailReputationVerdict({
+        counts,
+        policy: effectiveReputationPolicy('shared', 'standard'),
+        now: NOW,
+      }).blocked,
+    ).toBe(true)
+
+    expect(
+      emailReputationVerdict({
+        counts,
+        policy: effectiveReputationPolicy('custom', 'standard'),
+        now: NOW,
+      }).blocked,
+    ).toBe(false)
   })
 })
 

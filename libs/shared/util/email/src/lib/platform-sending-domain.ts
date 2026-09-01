@@ -29,7 +29,8 @@
  *                             receipt is still the tenant speaking.
  *   `shared{n}.mail.aglyn.app`  A FIXED, SMALL POOL. Every site that has no
  *                             domain of its own is assigned one member and
- *                             stays there. Transactional ONLY.
+ *                             stays there. Marketing AND transactional, under
+ *                             a stricter reputation grade.
  *
  * The FIRST line is WHO IS SPEAKING, and it is absolute. A booking reminder
  * that bounces is the tenant's list problem, and charging it against the
@@ -37,13 +38,12 @@
  * degrades every other merchant's password reset. No tenant message reaches
  * `aglyn.com` under any configuration.
  *
- * The SECOND line — promotional or not — divides only the two tenant names,
- * and only because the lower one is shared. On a site's own domain the
- * distinction does not matter: the merchant is the only person whose
- * reputation is at stake, so they may spend it how they like. On the pooled
- * identity it is the whole of what keeps the pool usable, because complaints
- * follow bulk sending and one imported list would be charged against every
- * other site's receipts.
+ * Neither tenant line is split by whether a message is promotional. What
+ * differs is how tightly the sender is graded: on a site's own domain the
+ * merchant is the only person whose reputation is at stake, so they may spend
+ * it how they like, and on a pool member a campaign is held to the stricter
+ * complaint and bounce thresholds because the cost of a bad list is felt by
+ * the other sites on that member.
  *
  * ## Why the mail name is its own namespace and not the site's own subdomain
  *
@@ -153,11 +153,13 @@
  * ## What the pool costs the product, and what bounds it
  *
  * Reputation on a member is pooled across the sites assigned to it, which is
- * the trade the console discloses in as many words. It is bounded by keeping
- * MARKETING mail off the pool entirely — see `resolveSendingIdentity`, which
- * admits only transactional mail. Complaints follow bulk sending, and a
- * merchant's purchased list is exactly what would otherwise be charged against
- * every other site's receipts.
+ * the trade the console discloses in as many words. It is bounded by GRADING
+ * rather than by exclusion. Marketing mail sends here, and the site that earns
+ * complaints is the one that stops: a pooled campaign is held to the WATCH
+ * thresholds in `sender-reputation.ts` rather than the trip levels, the
+ * new-sender ramp keeps a first import off the member, and `sendEmail` refuses
+ * outright the one thing a seven-day window cannot catch in time — bulk mail
+ * carrying no unsubscribe link.
  *
  * ## The web apex sends nothing, and says so
  *
@@ -230,9 +232,9 @@ export function platformSendingApex(): string {
  *
  * `notifications` rather than `hello`, which is what a site's own domain
  * defaults to. The two are different promises: `hello@northwind.mail.aglyn.app`
- * is a site inviting a reply, and this one is a platform address carrying
- * transactional mail for whichever site the display name in front of it names.
- * Calling it `hello` would invite replies to a mailbox belonging to no site.
+ * is a site inviting a reply, and this one is a platform address carrying mail
+ * for whichever site the display name in front of it names. Calling it `hello`
+ * would invite replies to a mailbox belonging to no site.
  */
 export const SHARED_TENANT_LOCAL_PART = 'notifications'
 

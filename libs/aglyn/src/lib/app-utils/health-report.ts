@@ -1985,7 +1985,7 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     target: 'consoleFastCrons → console /api/admin/provision-sending-domains',
     graceMinutes: 45,
     drives:
-      'Turns a site’s sending-domain claim into a DKIM key and the DNS records that carry it. If it stops, every site that has ASKED for a domain of its own waits on a claim with no records to publish, so campaigns from those sites are refused. Receipts and account email keep leaving on the shared pool throughout, which makes this a stall in reputation isolation rather than stopped mail — and it is invisible to the merchant, who sees only a domain that never finishes.',
+      'Turns a site’s sending-domain claim into a DKIM key and the DNS records that carry it. If it stops, every site that has ASKED for a domain of its own waits on a claim with no records to publish. Their mail keeps leaving on the shared pool throughout, which makes this a stall in reputation isolation rather than stopped mail — and it is invisible to the merchant, who sees only a domain that never finishes.',
   },
   {
     id: 'plugin-jobs-beat',

@@ -115,6 +115,7 @@ import {
   EMAIL_MAX_RECIPIENTS_PER_SEND,
   campaignBatchPlan,
   createProviderRequestPacer,
+  effectiveReputationPolicy,
   HOST_SENDERS_COLLECTION,
   isEmailConfigured,
   rateLimitedRetryAtMs,
@@ -1289,6 +1290,128 @@ export async function performCampaignSend(
    */
   const orgForHost = await getOrgForHost(hostId).catch(() => null)
   const orgId = String(orgForHost?.orgId ?? '')
+
+  /*
+   * THE SENDING IDENTITY, and the refusal when it is not usable.
+   *
+   * Resolved ABOVE the dry run on purpose. `preview` is where a merchant finds
+   * out what a send will do before writing copy, so it must answer the same
+   * question a real send would — both which identity the mail leaves on, and
+   * whether it may leave at all. Resolving after this point would let
+   * `preview` report a healthy dry run for a campaign that Send then refuses.
+   *
+   * The address comes from the org document by way of the host's selection,
+   * never from `options`. A `From:` assembled from request input is the
+   * spoofing path the verified-identity rule exists to close.
+   *
+   * A refusal is a 409 rather than a silent no-op because that is the whole
+   * point: `USAGE_EMAIL_FROM` was empty in production for weeks and no surface
+   * ever said so, since every sender treats mail as best-effort. A tenant
+   * whose DNS is unfinished has to be told, by name, at the composer.
+   */
+  /*
+   * The DOMAIN is the site's standing selection, and nothing a request says
+   * moves it.
+   *
+   * No option reaches it. It is read from the host document, so a request
+   * cannot name a domain to send as — which is the spoofing path — and cannot
+   * drop the selection to reach the shared platform domain either, which is
+   * the reputation path. Both used to be one field.
+   *
+   * The MAILBOX in front of it is chosen per send, and by id: `senderId` names
+   * a row in `hosts/{hostId}/senders` that an org admin configured, so it can
+   * only reach an address this site was already set up to send as. That is the
+   * whole difference between it and the free `sendingIdentity` the route reads
+   * from nobody.
+   */
+  /*
+   * WHICH SENDER, and the refusal when the campaign names one this site does
+   * not hold.
+   *
+   * The one line that decides the mailbox a campaign leaves on. A site's
+   * senders are `hosts/{hostId}/senders/{senderId}`, and the host's
+   * `sendingLocalPart` is the DEFAULT sender's projection — so a send that
+   * names nobody resolves exactly as it did before the collection existed,
+   * including on a site that has never written to it.
+   *
+   * An unknown id is REFUSED rather than defaulted, and that is the whole
+   * reason this is a read and not a `??`. Quietly sending as the default is
+   * the same class of failure as the mailbox validation that used to answer
+   * `hello` to a name it could not parse: a merchant is told their campaign
+   * went out as the sender they picked, and it did not.
+   *
+   * Refused HERE, above the dry run, so `preview` answers it too — the
+   * composer finds out at the picker rather than from the Send button.
+   */
+  const senderId = String(options.senderId ?? '').trim()
+  const senderSnapshot = senderId
+    ? await hostRef.collection(HOST_SENDERS_COLLECTION).doc(senderId).get()
+    : null
+  if (senderId && !senderSnapshot?.exists) {
+    throw new CampaignSendError(
+      'The sender this email is set to go out as is no longer one this site ' +
+        'holds. Pick a sender in the composer, or add it back under ' +
+        'Emails → Sending.',
+      404,
+    )
+  }
+  const chosenSender = senderSnapshot?.exists
+    ? readHostSender({
+        id: senderId,
+        data: senderSnapshot.data() as Record<string, unknown>,
+      })
+    : null
+
+  /*
+   * `purpose: 'marketing'` is what makes the SUMMARY name the arrangement. A
+   * campaign is the one send site that knows for certain what it is carrying,
+   * so it says so, and a site on the pool is told in the composer that its
+   * reputation is shared and graded more tightly for it.
+   */
+  const sendingIdentity = await resolveHostSendingIdentity({
+    orgId,
+    hostId,
+    selectedDomain: hostSnapshot.get('sendingDomain'),
+    selectedLocalPart:
+      chosenSender?.localPart || hostSnapshot.get('sendingLocalPart'),
+    poolMember: hostSnapshot.get('sendingPoolMember'),
+    purpose: 'marketing',
+  })
+  const identityRefusal = sendingIdentityRefusal(sendingIdentity)
+  if (identityRefusal) {
+    const missing = identityRefusal.missing?.length
+      ? ` Missing: ${identityRefusal.missing.join(', ')}.`
+      : ''
+    throw new CampaignSendError(`${identityRefusal.message}${missing}`, 409)
+  }
+  /**
+   * WHOSE REPUTATION THIS CAMPAIGN SPENDS.
+   *
+   * A pooled sender shares one domain with every other site that has no domain
+   * of its own, so a complaint it earns is charged to their receipts as much as
+   * to its own. That asymmetry is the whole reason the pool used to refuse
+   * marketing outright, and it is answered by grading rather than by
+   * prohibition: on the pool a campaign is held to `strict`, which stops it on
+   * the WATCH thresholds — Google's "keep under" 0.10% complaint rate and a 5%
+   * bounce rate — instead of waiting for the trip levels three and two times
+   * higher.
+   *
+   * On a domain the merchant owns, the org's own setting stands. There the
+   * reputation being spent is theirs alone, and how fast they spend it is
+   * theirs to decide.
+   *
+   * It overrides `none` as well, which is the point rather than an oversight:
+   * a workspace that has switched its own breaker off must not thereby switch
+   * off the one protecting the other sites on its pool member. Same posture as
+   * the platform frequency ceiling, which is the same number on every plan for
+   * the same reason.
+   */
+  const reputationPolicy = effectiveReputationPolicy(
+    sendingIdentity.source,
+    (orgForHost?.org as Record<string, unknown> | undefined)?.[
+      'emailReputationPolicy'
+    ],
+  )
   const consentPolicy = resolveMarketingConsentPolicy(
     (orgForHost?.org as Record<string, unknown> | undefined)?.[
       'marketingConsentPolicy'
@@ -1405,9 +1528,7 @@ export async function performCampaignSend(
     /** This workspace's seven-day grade, and the window both controls read. */
     const reputation: SenderReputationRead = await readSenderReputation({
       orgId,
-      policy: (orgForHost?.org as Record<string, unknown> | undefined)?.[
-        'emailReputationPolicy'
-      ],
+      policy: reputationPolicy,
       reinstatedUntilMs: (
         orgForHost?.org as Record<string, unknown> | undefined
       )?.['emailReputationReinstatedUntilMs'],
@@ -1645,102 +1766,6 @@ export async function performCampaignSend(
    * read — so an early return here leaves no campaign document, no
    * counter and no id behind.
    */
-  /*
-   * THE SENDING IDENTITY, and the refusal when it is not usable.
-   *
-   * Resolved ABOVE the dry run on purpose. `preview` is where a merchant finds
-   * out what a send will do before writing copy, so it must answer the same
-   * question a real send would — both which identity the mail leaves on, and
-   * whether it may leave at all. Resolving after this point would let
-   * `preview` report a healthy dry run for a campaign that Send then refuses.
-   *
-   * The address comes from the org document by way of the host's selection,
-   * never from `options`. A `From:` assembled from request input is the
-   * spoofing path the verified-identity rule exists to close.
-   *
-   * A refusal is a 409 rather than a silent no-op because that is the whole
-   * point: `USAGE_EMAIL_FROM` was empty in production for weeks and no surface
-   * ever said so, since every sender treats mail as best-effort. A tenant
-   * whose DNS is unfinished has to be told, by name, at the composer.
-   */
-  /*
-   * The DOMAIN is the site's standing selection, and nothing a request says
-   * moves it.
-   *
-   * No option reaches it. It is read from the host document, so a request
-   * cannot name a domain to send as — which is the spoofing path — and cannot
-   * drop the selection to reach the shared platform domain either, which is
-   * the reputation path. Both used to be one field.
-   *
-   * The MAILBOX in front of it is chosen per send, and by id: `senderId` names
-   * a row in `hosts/{hostId}/senders` that an org admin configured, so it can
-   * only reach an address this site was already set up to send as. That is the
-   * whole difference between it and the free `sendingIdentity` the route reads
-   * from nobody.
-   */
-  /*
-   * WHICH SENDER, and the refusal when the campaign names one this site does
-   * not hold.
-   *
-   * The one line that decides the mailbox a campaign leaves on. A site's
-   * senders are `hosts/{hostId}/senders/{senderId}`, and the host's
-   * `sendingLocalPart` is the DEFAULT sender's projection — so a send that
-   * names nobody resolves exactly as it did before the collection existed,
-   * including on a site that has never written to it.
-   *
-   * An unknown id is REFUSED rather than defaulted, and that is the whole
-   * reason this is a read and not a `??`. Quietly sending as the default is
-   * the same class of failure as the mailbox validation that used to answer
-   * `hello` to a name it could not parse: a merchant is told their campaign
-   * went out as the sender they picked, and it did not.
-   *
-   * Refused HERE, above the dry run, so `preview` answers it too — the
-   * composer finds out at the picker rather than from the Send button.
-   */
-  const senderId = String(options.senderId ?? '').trim()
-  const senderSnapshot = senderId
-    ? await hostRef.collection(HOST_SENDERS_COLLECTION).doc(senderId).get()
-    : null
-  if (senderId && !senderSnapshot?.exists) {
-    throw new CampaignSendError(
-      'The sender this email is set to go out as is no longer one this site ' +
-        'holds. Pick a sender in the composer, or add it back under ' +
-        'Emails → Sending.',
-      404,
-    )
-  }
-  const chosenSender = senderSnapshot?.exists
-    ? readHostSender({
-        id: senderId,
-        data: senderSnapshot.data() as Record<string, unknown>,
-      })
-    : null
-
-  /*
-   * `purpose: 'marketing'` is what makes the refusal below name the real
-   * cause. A campaign is the one send site that knows for certain what it is
-   * carrying, so it says so — and a site with no domain of its own is then
-   * told that marketing needs one, rather than being handed the shared pool
-   * and refused later by `sendEmail` with the merchant already past the
-   * composer. `sendEmail` still re-checks; this is the check a person reads.
-   */
-  const sendingIdentity = await resolveHostSendingIdentity({
-    orgId,
-    hostId,
-    selectedDomain: hostSnapshot.get('sendingDomain'),
-    selectedLocalPart:
-      chosenSender?.localPart || hostSnapshot.get('sendingLocalPart'),
-    poolMember: hostSnapshot.get('sendingPoolMember'),
-    purpose: 'marketing',
-  })
-  const identityRefusal = sendingIdentityRefusal(sendingIdentity)
-  if (identityRefusal) {
-    const missing = identityRefusal.missing?.length
-      ? ` Missing: ${identityRefusal.missing.join(', ')}.`
-      : ''
-    throw new CampaignSendError(`${identityRefusal.message}${missing}`, 409)
-  }
-
   if (options.dryRun) {
     return {
       campaignId: '',

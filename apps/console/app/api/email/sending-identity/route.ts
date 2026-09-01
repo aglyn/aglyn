@@ -110,8 +110,9 @@
  *
  * So it is offered rather than issued. The `GET` reports it as an offer under
  * `dedicated` for an entitled site that has none, which is what stops the
- * option being invisible to the merchant who needs it: the marketing refusal
- * names this screen, and this screen is where the two ways out of it live.
+ * option being invisible to the merchant who needs it: the pooled-sender
+ * disclosure names this screen, and this screen is where both ways off the
+ * pool live.
  *
  * It is one of the four `action` values this route dispatches on, and the only
  * one about the DOMAIN — the other three manage the sender list. They are read
@@ -919,12 +920,11 @@ async function handler(request: Request): Promise<Response> {
             ? dedicatedDomainPlan
               ? `Asking for a sending domain of this site’s own needs ${dedicatedDomainPlan}, ` +
                 'which admits the request rather than including the domain. ' +
-                'Until then this site sends its receipts and account email on ' +
-                'the shared address, and marketing email needs a domain of ' +
-                'its own.'
+                'Until then this site sends on the shared address, whose ' +
+                'reputation is pooled with the other sites on it.'
               : 'This site’s plan does not carry a sending domain of its own. ' +
-                'It sends its receipts and account email on the shared ' +
-                'address meanwhile.'
+                'It sends on the shared address meanwhile, whose reputation ' +
+                'is pooled with the other sites on it.'
             : 'We could not set up a sending domain for this site just now. ' +
               'Nothing has changed and account email is still sending — try ' +
               'again shortly.',
@@ -1222,10 +1222,11 @@ async function handler(request: Request): Promise<Response> {
         : {
             pooled: true,
             warning:
-              'This site now sends on the shared Aglyn address. Receipts and ' +
-              'account email keep going out; marketing email does not leave ' +
-              'on that address, so campaigns are blocked until this site has ' +
-              'a domain of its own again.',
+              'This site now sends on the shared Aglyn address. All of its ' +
+              'email keeps going out, but that address’s delivery reputation ' +
+              'is pooled with the other sites on it, so campaigns from this ' +
+              'site are held to tighter complaint and bounce limits until it ' +
+              'has a domain of its own again.',
           }),
     })
   }
