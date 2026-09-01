@@ -25,11 +25,17 @@ import { BUNDLE_ID } from '../constants/bundle-common'
 import {
   FIELD_COLOR,
   FIELD_FULL_WIDTH,
+  FIELD_LINK_TARGET,
+  FIELD_LINK_TARGET_NAME,
   FIELD_SIZE,
   FIELD_TEXT_CONTENT,
 } from '../constants/field-presets'
 import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
+import {
+  type LinkTargetChoice,
+  linkTargetProps,
+} from '../utils/link-target-props'
 
 // Component ids are persisted in screen documents; never rename.
 export const ID: Aglyn.ComponentId = 'muiScreenLink'
@@ -56,6 +62,14 @@ export interface ScreenLinkProps extends ButtonProps {
    *   that navigates announces as the link it is.
    */
   renderAs?: 'button' | 'link' | 'linkButton'
+  /**
+   * Where the link opens. Persisted in screen documents; never rename a
+   * value, and `undefined` must keep meaning `'_self'` — every link authored
+   * before this existed stays in the tab.
+   */
+  target?: LinkTargetChoice
+  /** Window name used only when `target` is `'custom'`. */
+  targetName?: string
 }
 
 /**
@@ -92,7 +106,14 @@ const STYLED_LINK_PLACEHOLDER = { component: 'span', role: undefined } as const
  * footer as outlined pills.
  */
 const ScreenLink = forwardRef<any, ScreenLinkProps>((props, ref) => {
-  const { screenId, href: externalHref, renderAs, ...spread } = props
+  const {
+    screenId,
+    href: externalHref,
+    renderAs,
+    target,
+    targetName,
+    ...spread
+  } = props
   // A CLEARED attribute persists as null, and null is not "use the default"
   // in React — `color={null}` reaches MUI, which capitalizes it and throws
   // error #7 during SSR, 500ing the page (AGL-1226). This is the site's
@@ -103,8 +124,13 @@ const ScreenLink = forwardRef<any, ScreenLinkProps>((props, ref) => {
   // Id-vs-URL precedence and the `javascript:`/`data:` guard live in
   // `useLinkTarget` (AGL-1335) — one copy for every linking element, and
   // the only place that knows a `screen:`-prefixed value is a reference.
-  const { href, suppressNavigation, editorInert, broken } =
+  const { href, suppressNavigation, editorInert, broken, leavesSite } =
     Aglyn.useLinkTarget(screenId, externalHref)
+  // Resolved rather than spread: `'custom'` is an authoring sentinel, and an
+  // anchor carrying `target="custom"` would open a window literally named
+  // that. The pair is destructured OUT of `spread` above, so the inert canvas
+  // branches below never see either half.
+  const targetAttrs = linkTargetProps(target, targetName, leavesSite)
   /**
    * The same dead-target problem Tabs had, on the element there are 326 of
    * (AGL-1893). Here it is less violent — an unresolved Screen Link already
@@ -165,12 +191,19 @@ const ScreenLink = forwardRef<any, ScreenLinkProps>((props, ref) => {
     )
   }
   return asLink ? (
-    <AppLink ref={ref} underline="hover" href={href} {...rest} />
+    <AppLink
+      ref={ref}
+      underline="hover"
+      href={href}
+      {...targetAttrs}
+      {...rest}
+    />
   ) : (
     <AppLink
       ref={ref}
       componentVariant="button"
       href={href}
+      {...targetAttrs}
       // The whole defect in one attribute. `ButtonBase` adds `role="button"`
       // to every non-`<button>` root, so the button LOOK used to drag the
       // button ROLE onto a navigating anchor. It spreads the caller's props
@@ -224,6 +257,8 @@ export const schema: Aglyn.ComponentSchema<ScreenLinkProps> = {
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'External URL',
     },
+    FIELD_LINK_TARGET,
+    FIELD_LINK_TARGET_NAME,
     {
       name: 'renderAs',
       description:

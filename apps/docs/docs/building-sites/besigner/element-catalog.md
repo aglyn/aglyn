@@ -137,6 +137,24 @@ The **FAQ** preset drops three complete panels at once.
 | **Language switcher** / **Theme mode switcher** | Locale and light/dark controls. |
 | **Table of Contents** | An "On this page" list built from the headings of a [Markdown](long-form-markdown.md) element on the same screen. |
 
+### Where a link opens
+
+**Screen Link** and **Button** both carry an **Open link in** dropdown once they point at
+a screen or a URL:
+
+- **Same tab** — the default, and what you want for navigation inside your own site. The
+  visitor keeps their back button and their history.
+- **New tab** — for a download, a PDF, or an outside site you want them to come back
+  from. Whether the browser makes that a tab or a window is the visitor's own setting, not
+  something the page gets to decide.
+- **Custom window name** — reveals a **Window name** box. Every link sharing a name reuses
+  that one window instead of opening another, so a set of links can drive a single
+  companion window. Leave the box empty and the link behaves as **Same tab**.
+
+Links that open elsewhere are marked up so the new page can't reach back into the one it
+came from. **Link Container** has the same choice as a simple **Open in a new tab**
+switch, which applies to external destinations only.
+
 ### Tabs
 
 Type the tab names into **Tabs**, one per line. Then each **Tab Panel** child names the tab
