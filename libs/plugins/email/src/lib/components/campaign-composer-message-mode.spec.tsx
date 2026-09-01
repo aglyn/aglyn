@@ -48,7 +48,11 @@ const FIRESTORE = {}
 let posted: Array<Record<string, any>> = []
 
 /** The screen and version creates a one-off design mints, capturable. */
-const mockCreateResource = jest.fn(async () => ({ id: 'new' }))
+// Typed to ACCEPT an argument, because the assertions below read the payload
+// the composer passes. A zero-arity mock infers `calls` as `[][]`, so
+// `calls[0][0]` is a tuple index that does not exist and the spec config
+// fails to compile while jest itself runs it happily.
+const mockCreateResource = jest.fn(async (_input?: unknown) => ({ id: 'new' }))
 const mockCreateVersion = jest.fn(async () => ({ id: 'v1' }))
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
