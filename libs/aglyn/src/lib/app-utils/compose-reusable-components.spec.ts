@@ -35,6 +35,7 @@ import {
   REUSABLE_INSTANCE_COMPONENT_ID,
   STYLE_OVERRIDES_ROOT_KEY,
 } from './compose-reusable-components'
+import { placedFormPlacement } from './forms'
 import { mergeNodeSx } from './merge-node-sx'
 
 const instance = (id: string, refId: string) => ({
@@ -2362,5 +2363,221 @@ describe('instance attribute overrides (AGL-1899)', () => {
     // The fork has to look identical to what the page was showing.
     expect(cta.props.variant).toBe('outlined')
     expect(cta.props.size).toBe('medium')
+  })
+})
+
+describe('placed forms render their entity (docs/specs/reusable-forms.md)', () => {
+  const design = {
+    rootId: 'f-root',
+    nodes: {
+      'f-root': { $id: 'f-root', componentId: 'muiStack', nodes: ['f-email'] },
+      'f-email': {
+        $id: 'f-email',
+        componentId: 'formField',
+        parentId: 'f-root',
+        props: { fieldName: 'email', label: 'Work email' },
+      },
+    },
+  } as any
+
+  /** A form node holding the fields a page drew before entities existed. */
+  const pageWithInlineForm = (props: Record<string, unknown>) =>
+    ({
+      _root_: { $id: '_root_', componentId: 'div', nodes: ['form-node'] },
+      'form-node': {
+        $id: 'form-node',
+        componentId: 'form',
+        parentId: '_root_',
+        props,
+        nodes: ['inline-name'],
+      },
+      'inline-name': {
+        $id: 'inline-name',
+        componentId: 'formField',
+        parentId: 'form-node',
+        props: { fieldName: 'name', label: 'Your name' },
+      },
+    }) as any
+
+  const compose = (nodes: any, forms: any) =>
+    composeReusableComponentNodes(nodes, undefined, [
+      placedFormPlacement(forms),
+    ])
+
+  it("renders the entity's fields in place of the page's own copy", () => {
+    const composed = compose(pageWithInlineForm({ formId: 'contact' }), {
+      contact: design,
+    })
+
+    expect(composed['form-node'].nodes).toEqual(['cmp__form-node__f-root'])
+    expect(composed['cmp__form-node__f-email']).toMatchObject({
+      componentId: 'formField',
+      parentId: 'cmp__form-node__f-root',
+      props: { fieldName: 'email' },
+    })
+    // Dropped, not merely unlinked: left in the map the page's copy would
+    // still ship in the payload and still answer a `formField` scan.
+    expect(composed['inline-name']).toBeUndefined()
+  })
+
+  it('leaves an UNBOUND form exactly as authored', () => {
+    const composed = compose(pageWithInlineForm({ formName: 'Contact' }), {
+      contact: design,
+    })
+
+    expect(composed['form-node'].nodes).toEqual(['inline-name'])
+    expect(composed['inline-name']).toBeDefined()
+  })
+
+  it('leaves a form bound to an entity with no published design alone', () => {
+    for (const forms of [
+      {},
+      { contact: undefined },
+      // Published-but-rootless: a root its own nodes do not hold is no design.
+      { contact: { rootId: 'gone', nodes: design.nodes } },
+      { contact: { rootId: 'f-root', nodes: {} } },
+    ]) {
+      const composed = compose(
+        pageWithInlineForm({ formId: 'contact' }),
+        forms as any,
+      )
+      expect(composed['form-node'].nodes).toEqual(['inline-name'])
+      expect(composed['inline-name']).toBeDefined()
+    }
+  })
+
+  it('gives two placements of one form disjoint ids', () => {
+    const nodes = {
+      _root_: { $id: '_root_', componentId: 'div', nodes: ['one', 'two'] },
+      one: {
+        $id: 'one',
+        componentId: 'form',
+        parentId: '_root_',
+        props: { formId: 'contact' },
+        nodes: [],
+      },
+      two: {
+        $id: 'two',
+        componentId: 'form',
+        parentId: '_root_',
+        props: { formId: 'contact' },
+        nodes: [],
+      },
+    } as any
+    const composed = compose(nodes, { contact: design })
+
+    expect(composed['one'].nodes).toEqual(['cmp__one__f-root'])
+    expect(composed['two'].nodes).toEqual(['cmp__two__f-root'])
+    expect(composed['cmp__one__f-email'].parentId).toBe('cmp__one__f-root')
+    expect(composed['cmp__two__f-email'].parentId).toBe('cmp__two__f-root')
+  })
+
+  it('never mutates the page or the entity', () => {
+    const nodes = pageWithInlineForm({ formId: 'contact' })
+    compose(nodes, { contact: design })
+
+    expect(nodes['form-node'].nodes).toEqual(['inline-name'])
+    expect(nodes['inline-name']).toBeDefined()
+    expect(Object.keys(design.nodes)).toEqual(['f-root', 'f-email'])
+  })
+
+  it('is idempotent — a second compose regrafts nothing', () => {
+    const once = compose(pageWithInlineForm({ formId: 'contact' }), {
+      contact: design,
+    })
+
+    expect(compose(once, { contact: design })).toEqual(once)
+  })
+
+  it('expands a reusable component nested INSIDE a form design', () => {
+    const withInstance = {
+      rootId: 'f-root',
+      nodes: {
+        'f-root': { $id: 'f-root', componentId: 'muiStack', nodes: ['cta'] },
+        cta: {
+          $id: 'cta',
+          parentId: 'f-root',
+          componentId: REUSABLE_INSTANCE_COMPONENT_ID,
+          props: { refId: 'card' },
+          nodes: [],
+        },
+      },
+    } as any
+    const definition = {
+      rootId: 'd-root',
+      nodes: {
+        'd-root': { $id: 'd-root', componentId: 'muiButton', nodes: [] },
+      },
+    } as any
+
+    const composed = composeReusableComponentNodes(
+      pageWithInlineForm({ formId: 'contact' }),
+      { card: definition },
+      [placedFormPlacement({ contact: withInstance })],
+    )
+
+    const instanceId = 'cmp__form-node__cta'
+    expect(composed[instanceId].nodes).toEqual([`cmp__${instanceId}__d-root`])
+    expect(composed[`cmp__${instanceId}__d-root`].componentId).toBe('muiButton')
+  })
+
+  it('expands a form placed INSIDE a reusable component', () => {
+    const definition = {
+      rootId: 'd-root',
+      nodes: {
+        'd-root': { $id: 'd-root', componentId: 'muiStack', nodes: ['signup'] },
+        signup: {
+          $id: 'signup',
+          parentId: 'd-root',
+          componentId: 'form',
+          props: { formId: 'contact' },
+          nodes: [],
+        },
+      },
+    } as any
+    const nodes = {
+      _root_: { $id: '_root_', componentId: 'div', nodes: ['a'] },
+      a: instance('a', 'card'),
+    } as any
+
+    const composed = composeReusableComponentNodes(
+      nodes,
+      { card: definition },
+      [placedFormPlacement({ contact: design })],
+    )
+
+    const formNodeId = 'cmp__a__signup'
+    expect(composed[formNodeId].nodes).toEqual([`cmp__${formNodeId}__f-root`])
+    expect(composed[`cmp__${formNodeId}__f-email`]).toMatchObject({
+      props: { fieldName: 'email' },
+    })
+  })
+
+  it('leaves no orphan behind when an inline field was an instance', () => {
+    const definition = {
+      rootId: 'd-root',
+      nodes: {
+        'd-root': { $id: 'd-root', componentId: 'muiButton', nodes: [] },
+      },
+    } as any
+    const nodes = pageWithInlineForm({ formId: 'contact' })
+    nodes['form-node'].nodes = ['inline-name', 'inline-instance']
+    nodes['inline-instance'] = {
+      ...instance('inline-instance', 'card'),
+      parentId: 'form-node',
+    }
+
+    const composed = composeReusableComponentNodes(
+      nodes,
+      { card: definition },
+      [placedFormPlacement({ contact: design })],
+    )
+
+    expect(composed['inline-instance']).toBeUndefined()
+    // The discarded instance must not leave its graft behind either: an
+    // unreachable subtree still costs payload on every render of the page.
+    expect(
+      Object.keys(composed).filter((id) => id.startsWith('cmp__inline-')),
+    ).toEqual([])
   })
 })

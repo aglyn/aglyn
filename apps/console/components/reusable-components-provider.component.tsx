@@ -39,6 +39,7 @@ import { hasEntitlement } from '../constants/entitlements'
 import { buildRoute, Route } from '../constants/route-links'
 import useCurrentOrg from '../hooks/use-current-org'
 import useHostComponentDefinitions from '../hooks/use-host-component-definitions'
+import useHostFormDesigns from '../hooks/use-host-form-designs'
 import { useOrgSlug } from '../hooks/use-org-scope'
 import { useHostSubdomain } from './host-id-provider'
 
@@ -91,6 +92,13 @@ export function ReusableComponentsProvider(
   // one listener, one set of skip rules for both readers.
   const { docs: componentDocs, definitions } =
     useHostComponentDefinitions(hostId)
+
+  // The same arrangement for form entities: a placed form draws the fields its
+  // entity publishes, so the canvas shows what the page will render rather
+  // than the copy of the fields the screen happens to hold. Read here because
+  // this provider already wraps every besigner surface — a second provider
+  // would be a second place for the canvas to be told what a document is.
+  const { designs: formDesigns } = useHostFormDesigns(hostId)
 
   // Element drawer: one preset per definition, category "Your components".
   useEffect(() => {
@@ -342,8 +350,15 @@ export function ReusableComponentsProvider(
       onDemote: handleDemote,
       onEditComponent: handleEditComponent,
       definitions,
+      formDesigns,
     }),
-    [handlePromote, handleDemote, handleEditComponent, definitions],
+    [
+      handlePromote,
+      handleDemote,
+      handleEditComponent,
+      definitions,
+      formDesigns,
+    ],
   )
 
   return (

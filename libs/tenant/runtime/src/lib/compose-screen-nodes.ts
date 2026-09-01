@@ -19,6 +19,7 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import applyDuePublishSchedule from './apply-publish-schedule'
 import getComponents from './get-components'
 import getDatasets from './get-datasets'
+import getForms from './get-forms'
 import {
   getPublishedCollectionSource,
   type PublishedCollectionSource,
@@ -409,6 +410,15 @@ export async function composeNodesWithChrome(options: {
   const screenDatasetsPromise = Aglyn.hasRepeatableNodes(screenNodes)
     ? getDatasets({ hostId })
     : undefined
+  // Does the SCREEN itself place a form entity? Gated and re-asked exactly
+  // like the datasets read beside it (AGL-1440): most pages carry no form, and
+  // the ones that do usually say so on their own document, so the read goes
+  // out here alongside the chrome reads instead of as a serial tail. It is not
+  // the correctness gate — a placed form can arrive from a layout or a grafted
+  // component — so the composed tree is asked again below.
+  const screenFormsPromise = Aglyn.placesFormEntity(screenNodes)
+    ? getForms({ hostId })
+    : undefined
   // Issued HERE, beside the datasets read and before the chrome bundle is
   // awaited, so the collection read overlaps it instead of trailing it.
   const prefetchedSources = prefetchCollectionSources(
@@ -424,10 +434,42 @@ export async function composeNodesWithChrome(options: {
     layoutNodesChain as any,
     screenNodes as any,
   )
-  const grafted = Aglyn.composeReusableComponentNodes(
+  const graftedComponents = Aglyn.composeReusableComponentNodes(
     composedNodes as any,
     componentsRes.definitions as any,
   )
+  /*
+   * PLACED FORMS RESOLVE AGAINST THEIR ENTITY (`docs/specs/reusable-forms.md`).
+   *
+   * A form node bound to `hosts/{hostId}/forms/{formId}` renders that entity's
+   * published design, so a form is edited once and every page placing it
+   * follows. Without this the entity's tree was written on every publish and
+   * read by nothing: the fields had to be redrawn per page, and the two copies
+   * diverged the moment either was touched.
+   *
+   * The gate is the COMPONENT-grafted tree, not the screen's own nodes, for
+   * the reason the repeatables gate below states: a form placed inside a
+   * layout or a shared component does not exist in `screenNodes`, and a page
+   * that renders one would silently keep its stale inline copy.
+   *
+   * The second graft re-runs the component expansion deliberately. Instances
+   * already expanded are skipped by their own prefix, so the repeat costs a
+   * scan, and passing BOTH placement kinds is what expands a reusable
+   * component nested inside a form's design — which the first pass could not
+   * have seen, because that subtree was not in the tree yet.
+   */
+  const forms =
+    (await screenFormsPromise)?.forms ??
+    (Aglyn.placesFormEntity(graftedComponents as any)
+      ? (await getForms({ hostId })).forms
+      : undefined)
+  const grafted = forms
+    ? Aglyn.composeReusableComponentNodes(
+        graftedComponents as any,
+        componentsRes.definitions as any,
+        [Aglyn.placedFormPlacement(forms as any)],
+      )
+    : graftedComponents
   // Computed variables (AGL-129): workflow-backed values resolve once per
   // compose; failures keep each variable's stored fallback.
   const variables = Aglyn.resolveComputedVariables(

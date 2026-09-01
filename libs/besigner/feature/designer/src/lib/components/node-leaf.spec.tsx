@@ -906,3 +906,110 @@ describe('canvas reveal through the rendered tree (AGL-592)', () => {
     expect(leafFor('panel').hasAttribute('data-aglyn-revealed')).toBe(true)
   })
 })
+
+/**
+ * A placed form draws its ENTITY'S published fields
+ * (`docs/specs/reusable-forms.md`).
+ *
+ * The canvas has to show what the published page will render, and the
+ * published page replaces a bound form's children with the entity's design. So
+ * the two cases that matter are symmetrical: when the entity resolves the
+ * page's own fields must NOT be drawn beside the entity's, and when it does
+ * not resolve they must be drawn exactly as before — which is every form built
+ * before the entity existed.
+ */
+describe('placed form preview', () => {
+  const design = {
+    rootId: 'f-root',
+    nodes: {
+      'f-root': { $id: 'f-root', componentId: 'div', nodes: ['f-email'] },
+      'f-email': {
+        $id: 'f-email',
+        componentId: 'div',
+        parentId: 'f-root',
+        props: { children: 'Work email' },
+      },
+    },
+  } as any
+
+  const formNode = (props: Record<string, unknown>) =>
+    ({
+      $id: 'form1',
+      type: 'node',
+      componentId: 'form',
+      props,
+      sx: {},
+      nodes: [],
+    }) as any
+
+  const leafText = (root: HTMLElement) =>
+    Array.from(root.querySelectorAll('aglyn-text'))
+      .map((element) => element.textContent ?? '')
+      .join(' ')
+
+  /** The page's own fields stand in as one identifiable child. */
+  const renderForm = (node: any, formDesigns: any = { contact: design }) =>
+    render(
+      <ComponentPromotionContext.Provider value={{ formDesigns }}>
+        <ElementLeafComponent node={node}>
+          <span data-testid="page-fields" />
+        </ElementLeafComponent>
+      </ComponentPromotionContext.Provider>,
+    )
+
+  it("renders the entity's fields, with ids namespaced per placement", () => {
+    const { baseElement } = renderForm(formNode({ formId: 'contact' }))
+
+    expect(leafText(baseElement)).toContain('Work email')
+    expect(
+      baseElement.querySelector('[data-aglyn="leaf:cmp__form1__f-email"]'),
+    ).toBeTruthy()
+  })
+
+  it("stops drawing the page's own fields once the entity resolves", () => {
+    const { queryByTestId } = renderForm(formNode({ formId: 'contact' }))
+
+    // Drawing both would show the author a page that does not exist: the
+    // published compose keeps only the entity's fields.
+    expect(queryByTestId('page-fields')).toBeNull()
+  })
+
+  it('leaves an UNBOUND form drawing its own fields', () => {
+    const { baseElement, queryByTestId } = renderForm(
+      formNode({ formName: 'Contact' }),
+    )
+
+    expect(queryByTestId('page-fields')).toBeTruthy()
+    expect(
+      baseElement.querySelector('[data-aglyn-form-preview]'),
+    ).toBeNull()
+  })
+
+  it('negative control: an entity with no published design changes nothing', () => {
+    const { baseElement, queryByTestId } = renderForm(
+      formNode({ formId: 'contact' }),
+      {},
+    )
+
+    expect(queryByTestId('page-fields')).toBeTruthy()
+    expect(baseElement.querySelector('[data-aglyn-form-preview]')).toBeNull()
+    expect(leafText(baseElement)).not.toContain('Work email')
+  })
+
+  it('marks the preview non-interactive so clicks select the placement', () => {
+    const { baseElement } = renderForm(formNode({ formId: 'contact' }))
+    const preview = baseElement.querySelector('[data-aglyn-form-preview]')
+
+    expect(preview).toBeTruthy()
+    expect(emotionCssFor(preview as HTMLElement)).toContain(
+      'pointer-events:none',
+    )
+  })
+
+  it("never puts the entity's nodes into the canvas store", () => {
+    renderForm(formNode({ formId: 'contact' }))
+
+    const canvasIds = Object.keys(Aglyn.canvas.toJSON()?.nodes ?? {})
+    expect(canvasIds.some((id) => id.startsWith('cmp__form1__'))).toBe(false)
+  })
+})

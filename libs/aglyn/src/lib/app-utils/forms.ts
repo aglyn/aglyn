@@ -32,6 +32,26 @@
  */
 
 import type { AglynNodeSchema, NodeId } from '../foundation/definitions/components.types'
+import type { PlacementKind } from './compose-reusable-components'
+
+/**
+ * The `componentId` of the node that RENDERS a form, and of the node that
+ * renders one of its fields.
+ *
+ * Persisted in screen, layout, component and form documents — never rename.
+ * Restated as constants because the walkers below, the promotion route and the
+ * graft all have to name the same two ids, and a copy that drifted would read
+ * as "this page has no form" rather than as an error.
+ */
+export const FORM_COMPONENT_ID = 'form'
+export const FORM_FIELD_COMPONENT_ID = 'formField'
+
+/**
+ * The prop on a `form` node naming the entity it is a placement OF.
+ *
+ * Persisted in screen documents — never rename.
+ */
+export const FORM_ID_PROP = 'formId'
 
 /**
  * How many forms one query for a site's catalog reads.
@@ -251,7 +271,7 @@ function childIdsOf(node: AglynNodeSchema | undefined): NodeId[] {
 export function collectFormFieldNodeIds(
   nodes: Record<NodeId, AglynNodeSchema | undefined> | undefined | null,
   formNodeId: NodeId,
-  formFieldComponentId = 'formField',
+  formFieldComponentId = FORM_FIELD_COMPONENT_ID,
 ): NodeId[] {
   if (!nodes?.[formNodeId]) return []
   const found: NodeId[] = []
@@ -293,7 +313,7 @@ export function collectFormFieldNodeIds(
 export function formFieldDeclsFromNodes(
   nodes: Record<NodeId, AglynNodeSchema | undefined> | undefined | null,
   formNodeId: NodeId,
-  formFieldComponentId = 'formField',
+  formFieldComponentId = FORM_FIELD_COMPONENT_ID,
 ): FormFieldDecl[] {
   const declarations: FormFieldDecl[] = []
   const claimed = new Set<string>()
@@ -347,8 +367,8 @@ export function discoverFormNodes(
   source: { kind: DiscoveredFormNode['sourceKind']; id: string; name?: string },
   ids: { form?: string; formField?: string } = {},
 ): DiscoveredFormNode[] {
-  const formComponentId = ids.form ?? 'form'
-  const formFieldComponentId = ids.formField ?? 'formField'
+  const formComponentId = ids.form ?? FORM_COMPONENT_ID
+  const formFieldComponentId = ids.formField ?? FORM_FIELD_COMPONENT_ID
   const found: DiscoveredFormNode[] = []
   for (const [nodeId, node] of Object.entries(nodes ?? {})) {
     if (node?.componentId !== formComponentId) continue
@@ -368,6 +388,88 @@ export function discoverFormNodes(
     })
   }
   return found
+}
+
+/**
+ * A form entity's published design, in the shape the graft consumes: the
+ * `rootId`/`nodes` snapshot that lives on `hosts/{hostId}/forms/{formId}`.
+ *
+ * Structurally a component definition minus the parts a form does not have —
+ * no declared props, no icon — which is why the graft can take both. It is
+ * `Pick`ed off {@link FormDocument} rather than restated so the storage
+ * contract stays the single description of what is written there.
+ */
+export type PlacedFormDesign<N = AglynNodeSchema> = Required<
+  Pick<FormDocument<N>, 'rootId' | 'nodes'>
+>
+
+/**
+ * Whether any node in this map PLACES a form entity (as opposed to merely
+ * drawing an unbound form inline).
+ *
+ * The cost gate in front of the forms read, and cheap on purpose: one scan of
+ * a map the caller already holds, against a read that is a whole collection
+ * query. Most pages carry no form at all, and a page whose form nodes are all
+ * unbound has nothing an entity could contribute — either way there is nothing
+ * for the graft to resolve, so the query buys nothing.
+ *
+ * Says nothing about whether the named form EXISTS or is published; that is
+ * settled by the graft, against documents this cannot see.
+ */
+export function placesFormEntity(
+  nodes: Record<NodeId, AglynNodeSchema | undefined> | undefined | null,
+): boolean {
+  for (const node of Object.values(nodes ?? {})) {
+    if (node?.componentId !== FORM_COMPONENT_ID) continue
+    const formId = (node.props as Record<string, unknown> | undefined)?.[
+      FORM_ID_PROP
+    ]
+    if (typeof formId === 'string' && formId.trim()) return true
+  }
+  return false
+}
+
+/**
+ * The placement kind that makes a placed form render its ENTITY'S design.
+ *
+ * Until this existed the entity's tree was written on every publish and read
+ * by nothing: a form's fields had to be redrawn on each page that placed it,
+ * and editing the form propagated nowhere. The two documents disagreed the
+ * moment either changed, and the page always won.
+ *
+ * `replacesAuthoredChildren` is what makes that propagation real, and it is
+ * the reason the resolution rule is strict. The rule, stated once:
+ *
+ * - Entity has a published design → the entity's fields ARE the form. Whatever
+ *   the page drew inside the form node is discarded, exactly as a reusable
+ *   instance's child list is replaced by its definition's. This is what "edit
+ *   the form once" means; a merge would render a page's stale copy of a field
+ *   beside the entity's current one.
+ * - Entity has no published design, is archived away, or the `formId` names
+ *   nothing → the form node is left completely alone, inline fields included.
+ *   Every form built before the entity existed is in this state, so this is
+ *   the branch that keeps the live site rendering exactly what it renders
+ *   today.
+ *
+ * A deleted or unpublished entity therefore degrades to the page's own copy
+ * rather than to an empty form — the same fail-open posture the component
+ * graft takes for an unresolvable `refId`, and for the same reason: a
+ * document going missing must not take a published page's content with it.
+ *
+ * The discard is a COMPOSE-time one, so it takes nothing away permanently:
+ * the page's fields stay in its document, and clearing the binding brings
+ * them straight back. That is what makes binding an existing hand-built form
+ * to an entity a reversible act rather than a destructive one.
+ */
+export function placedFormPlacement<N extends AglynNodeSchema = AglynNodeSchema>(
+  formsById: Record<string, PlacedFormDesign<N> | undefined> | undefined,
+): PlacementKind<N> {
+  return {
+    componentId: FORM_COMPONENT_ID,
+    refProp: FORM_ID_PROP,
+    definitionsById: formsById,
+    replacesAuthoredChildren: true,
+  }
 }
 
 /**
