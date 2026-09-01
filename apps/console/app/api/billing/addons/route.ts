@@ -239,12 +239,22 @@ async function scheduleAddonReduction(options: {
   subscription: any
   /** The subscription's items as they stand TODAY, unchanged. */
   items: readonly any[]
-  /** The add-on price being reduced. */
+  /** The add-on price being reduced, at the plan the org is on TODAY. */
   priceId: string
+  /**
+   * The add-on being reduced, as a kind rather than a price.
+   *
+   * A price id identifies "datasets ON STARTER", not "datasets". A phase
+   * belonging to a pending downgrade prices its add-ons at the TARGET plan, so
+   * the line to move there has a different id from the one the org holds now —
+   * and matching by id alone silently matches nothing, restating the phase
+   * verbatim while the response still promises the reduction.
+   */
+  kind: AddonKind
   /** Its quantity from the period end; 0 removes the item entirely. */
   quantity: number
 }): Promise<{ effectiveAt: string; scheduleId: string } | null> {
-  const { secretKey, subscription, items, priceId, quantity } = options
+  const { secretKey, subscription, items, priceId, kind, quantity } = options
   /**
    * One line moved on an otherwise untouched item list.
    *
@@ -252,16 +262,44 @@ async function scheduleAddonReduction(options: {
    * an ABSOLUTE list: anything not written back is deleted at the flip, and
    * that has already cost this codebase a customer's unclassified items once.
    */
-  const withAddonMoved = (base: readonly PhaseItem[]): PhaseItem[] =>
+  const withAddonMoved = (
+    base: readonly PhaseItem[],
+    matchPrice: string,
+  ): PhaseItem[] =>
     base
       .map((item) =>
-        item.price === priceId
+        item.price === matchPrice
           ? quantity === 0
             ? null
             : { ...item, quantity }
           : item,
       )
       .filter((item): item is PhaseItem => item !== null)
+
+  /**
+   * The id this add-on carries ON a given phase.
+   *
+   * Derived from the phase's own base price rather than from the subscription,
+   * because those disagree exactly when it matters: a pending downgrade's phase
+   * is already priced at the plan it moves to. Falls back to today's id when
+   * the phase names no plan this route sells — a phase it cannot classify is
+   * safer restated than rewritten against a guess.
+   */
+  const addonPriceOnPhase = (phase: any): string => {
+    const base = (phase?.items ?? [])
+      .map((item: any) =>
+        typeof item?.price === 'string' ? item.price : item?.price?.id,
+      )
+      .map((id: string) => planAndIntervalFromPriceId(id))
+      .find((match: unknown) => match) as
+      | ReturnType<typeof planAndIntervalFromPriceId>
+      | undefined
+    const phasePlan = (phase?.metadata?.plan ?? base?.plan) as
+      | Parameters<typeof addonPriceId>[1]
+      | undefined
+    if (!phasePlan) return priceId
+    return addonPriceId(kind, phasePlan, base?.interval ?? 'month') ?? priceId
+  }
 
   const existingScheduleId =
     typeof subscription?.schedule === 'string'
@@ -296,7 +334,11 @@ async function scheduleAddonReduction(options: {
     // No future yet: the future is a copy of the present with the line moved.
     restateExistingPhase(params, 0, phases[0])
     preservePhaseTerms(params, 1, phases[0], { current: false })
-    writePhaseItems(params, 1, withAddonMoved(subscriptionItemsAsPhaseItems(items)))
+    writePhaseItems(
+      params,
+      1,
+      withAddonMoved(subscriptionItemsAsPhaseItems(items), priceId),
+    )
     params.set('phases[1][iterations]', '1')
     params.set('phases[1][automatic_tax][enabled]', 'true')
     // Carried so the webhook's mirror still reads a plan at the flip; without
@@ -328,7 +370,7 @@ async function scheduleAddonReduction(options: {
         index,
         phase,
         index === targetIndex
-          ? withAddonMoved(phaseItemsOf(phase))
+          ? withAddonMoved(phaseItemsOf(phase), addonPriceOnPhase(phase))
           : undefined,
       )
     })
@@ -777,6 +819,7 @@ async function handler(request: Request): Promise<Response> {
         subscription,
         items,
         priceId,
+        kind,
         quantity,
       })
       if (!scheduled) {

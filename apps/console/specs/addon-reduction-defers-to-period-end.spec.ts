@@ -752,26 +752,23 @@ describe('a reduction on top of a pending plan DOWNGRADE', () => {
   })
 
   /**
-   * THE REDUCTION NEVER REACHES THE TARGET PHASE. Marked `it.failing` so it
-   * turns red the moment that is fixed, rather than sitting as prose nobody
-   * runs.
+   * The reduction is matched on the target phase by the price THAT PHASE
+   * carries, not the one the org holds today.
    *
-   * `withAddonMoved` matches an item by the price id the org's CURRENT plan
-   * sells — here `price_pro_dataset`. The target phase holds the price the
-   * plan it flips TO sells, `price_starter_dataset`, put there by the
-   * downgrade's own `buildTargetItems`. No item matches, so the list is
-   * restated unchanged and the phase still carries four datasets.
+   * A price id names "datasets ON PRO", not "datasets". A pending downgrade's
+   * phase is already priced at the plan it flips to, so its dataset line is
+   * `price_starter_dataset` while the live subscription's is
+   * `price_pro_dataset`. Matching on the live id finds nothing there, and
+   * finding nothing is silent: the phase is restated verbatim, still carrying
+   * four datasets, while the route answers `pendingAddonChange: {quantity: 1}`
+   * and the console tells the customer the reduction lands at the renewal. At
+   * the renewal they would be delivered, and billed for, four.
    *
-   * The route answers `pendingAddonChange: { quantity: 1 }` regardless, so the
-   * console tells the customer their reduction lands at the renewal and at the
-   * renewal they are delivered — and billed for — four. It is the same shape
-   * as the defect above it, one layer down: the phase is right about the plan
-   * and wrong about the add-on.
-   *
-   * Same-plan schedules are unaffected, because there the two price ids are
-   * the same string; the block above covers that path and passes.
+   * `addonPriceOnPhase` resolves the id from the phase's own plan for exactly
+   * this reason. Same-plan schedules never exercised it — there both ids are
+   * the same string — which is why only a cross-plan fixture can hold this.
    */
-  it.failing('moves the add-on line on that phase to the new quantity', async () => {
+  it('moves the add-on line on that phase to the new quantity', async () => {
     await setDatasets(1)
     expect(phaseQuantity(1, 'price_starter_dataset')).toBe('1')
   })
