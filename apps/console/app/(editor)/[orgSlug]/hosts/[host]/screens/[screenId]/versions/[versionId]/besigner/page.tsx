@@ -42,7 +42,6 @@ import {
   type ComponentPropagationChange,
   type WorkspaceEditorComponentProps,
   clearServerDraft,
-  writeServerDraft,
 } from '@aglyn/besigner-ui'
 // Import '@aglyn/foundation-feature-singleton'
 import {
@@ -365,6 +364,7 @@ function BesignerPage(props) {
     remoteChanged,
     draft,
     handleSave,
+    saveWorkingDraft,
     jsonOpen,
     openJsonEditor,
     closeJsonEditor,
@@ -748,17 +748,10 @@ function BesignerPage(props) {
    * that already contains them would re-apply them.
    */
   const handleSaveDraft = useCallback(async () => {
-    const nodes = Aglyn.canvas.toJSON().nodes as Aglyn.ProcessableNodes
-    const wrote = await writeServerDraft(
-      firestore,
-      { scope: hostId, kind: 'screen', docId: screenId, versionId },
-      {
-        nodes,
-        baseStamp: Aglyn.versionStamp(screenResult?.data?.updatedAt),
-        updatedByUid: user?.uid ?? null,
-        updatedByEmail: user?.email ?? null,
-      },
-    ).catch(() => 'failed' as const)
+    const wrote = await saveWorkingDraft({
+      uid: user?.uid,
+      email: user?.email,
+    })
     if (wrote === 'failed') {
       enqueueSnackbar('Could not save the draft — your work is still here.', {
         variant: 'error',
@@ -784,15 +777,7 @@ function BesignerPage(props) {
       variant: 'success',
       persist: false,
     })
-  }, [
-    firestore,
-    hostId,
-    screenId,
-    versionId,
-    screenResult?.data?.updatedAt,
-    user,
-    enqueueSnackbar,
-  ])
+  }, [saveWorkingDraft, user, enqueueSnackbar])
 
   /**
    * SAVE, THEN MAKE THIS VERSION THE LIVE ONE (AGL-1152).

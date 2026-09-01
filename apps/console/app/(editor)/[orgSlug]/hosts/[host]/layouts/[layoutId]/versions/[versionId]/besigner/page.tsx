@@ -34,7 +34,6 @@ import {
   type BesignerSaveBaseline,
   type WorkspaceEditorComponentProps,
   clearServerDraft,
-  writeServerDraft,
 } from '@aglyn/besigner-ui'
 import {
   ICON_VARIANT_MODIFY_ADD,
@@ -252,6 +251,7 @@ function LayoutBesignerPage(props) {
     remoteChanged,
     draft,
     handleSave,
+    saveWorkingDraft,
     jsonOpen,
     openJsonEditor,
     closeJsonEditor,
@@ -383,17 +383,10 @@ function LayoutBesignerPage(props) {
    * the screens editor for why this cannot be a write to the version itself.
    */
   const handleSaveDraft = useCallback(async () => {
-    const nodes = Aglyn.canvas.toJSON().nodes as Aglyn.ProcessableNodes
-    const wrote = await writeServerDraft(
-      firestore,
-      { scope: hostId, kind: 'layout', docId: layoutId, versionId },
-      {
-        nodes,
-        baseStamp: Aglyn.versionStamp(layoutResult?.data?.updatedAt),
-        updatedByUid: user?.uid ?? null,
-        updatedByEmail: user?.email ?? null,
-      },
-    ).catch(() => 'failed' as const)
+    const wrote = await saveWorkingDraft({
+      uid: user?.uid,
+      email: user?.email,
+    })
     if (wrote === 'failed') {
       enqueueSnackbar('Could not save the draft — your work is still here.', {
         variant: 'error',
@@ -419,15 +412,7 @@ function LayoutBesignerPage(props) {
       variant: 'success',
       persist: false,
     })
-  }, [
-    firestore,
-    hostId,
-    layoutId,
-    versionId,
-    layoutResult?.data?.updatedAt,
-    user,
-    enqueueSnackbar,
-  ])
+  }, [saveWorkingDraft, user, enqueueSnackbar])
 
   /**
    * Does the live site already match this version? Hoisted out of the

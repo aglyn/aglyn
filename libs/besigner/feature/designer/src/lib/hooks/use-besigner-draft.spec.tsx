@@ -51,6 +51,17 @@ jest.mock('@aglyn/aglyn', () => {
   })
 })
 
+/** The SHARED working draft's document — the other store an offer can come from. */
+const mockReadServerDraft = jest.fn(async () => null as unknown)
+const mockClearServerDraft = jest.fn(async () => undefined)
+
+jest.mock('../drafts/besigner-server-draft', () => ({
+  writeServerDraft: jest.fn(async () => 'written'),
+  readServerDraft: (...args: unknown[]) => mockReadServerDraft(...(args as [])),
+  clearServerDraft: (...args: unknown[]) =>
+    mockClearServerDraft(...(args as [])),
+}))
+
 /**
  * What the crash net may and may not do once a document is shared
  * (AGL-2486).
@@ -103,6 +114,9 @@ describe('useBesignerDraft restore verdict (AGL-2486)', () => {
     mockCanvas.applyNodes.mockClear()
     mockCanvas.hasRemoteEdits = false
     mockCanvas.isInitialSame = true
+    mockReadServerDraft.mockClear()
+    mockReadServerDraft.mockResolvedValue(null)
+    mockClearServerDraft.mockClear()
   })
 
   it('offers the restore when the canvas is the author’s alone', () => {
@@ -123,13 +137,83 @@ describe('useBesignerDraft restore verdict (AGL-2486)', () => {
 
     expect(state().restoreBlockedBy).toBe('saved-since')
     expect(screen.queryByRole('button', { name: 'Restore' })).toBeNull()
-    // Reload is offered instead — this banner is now standing in for the
-    // conflict one rather than contradicting it.
-    expect(screen.getByRole('button', { name: 'Reload' })).toBeTruthy()
+    // No Reload, because nothing here is stale: the save landed before this
+    // session opened, so the canvas already holds it and saving is not
+    // paused. Offering the way out of a conflict, over a document with no
+    // conflict, is what sent an author reloading to find a colleague who
+    // was never there.
+    expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull()
+    expect(screen.getByRole('alert').textContent).not.toContain(
+      'saving is paused',
+    )
 
     // And the action agrees with the offer, not just the button.
     act(() => state().restore())
     expect(mockCanvas.applyNodes).not.toHaveBeenCalled()
+  })
+
+  /**
+   * The same stranded draft, but with a colleague's save landing DURING this
+   * session. Now saving really is paused and a reload really is the way out,
+   * so the banner says so — and the difference between the two is the whole
+   * point of splitting the copy.
+   */
+  it('says saving is paused only when a save landed while editing', () => {
+    seedDraft('ms:100')
+    const seen: BesignerDraftState[] = []
+    function Harness() {
+      const draft = useBesignerDraft({
+        ids: IDS,
+        loaded: true,
+        dirty: true,
+        storedStamp: 'ms:200',
+      })
+      seen.push(draft)
+      return (
+        <BesignerDraftAlertComponent draft={draft} noun="screen" remoteChanged />
+      )
+    }
+    render(<Harness />)
+
+    expect(seen[seen.length - 1]?.restoreBlockedBy).toBe('saved-since')
+    expect(screen.getByRole('alert').textContent).toContain('saving is paused')
+    expect(screen.getByRole('button', { name: 'Reload' })).toBeTruthy()
+  })
+
+  it('reaches the shared draft when the author discards the offer', async () => {
+    // The offer came from the SHARED store, which is where a "less than a
+    // minute ago" draft on a five-day-old document comes from. Clearing only
+    // localStorage leaves it there to be offered again on the next load, and
+    // on every load after that: a question the author cannot stop being
+    // asked.
+    mockReadServerDraft.mockResolvedValueOnce({
+      nodes: DRAFT_NODES,
+      baseStamp: 'ms:100',
+      updatedByUid: null,
+      updatedByEmail: null,
+    })
+    const firestore = {} as never
+    const seen: BesignerDraftState[] = []
+    function Harness() {
+      const draft = useBesignerDraft({
+        ids: IDS,
+        firestore,
+        loaded: true,
+        dirty: true,
+        storedStamp: 'ms:100',
+      })
+      seen.push(draft)
+      return <BesignerDraftAlertComponent draft={draft} noun="screen" />
+    }
+    render(<Harness />)
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(seen[seen.length - 1]?.available).toBe(true)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
+
+    expect(mockClearServerDraft).toHaveBeenCalledWith(firestore, IDS)
   })
 
   it('says nothing at all while a co-editor’s work is on the canvas', () => {
@@ -158,10 +242,9 @@ describe('useBesignerDraft restore verdict (AGL-2486)', () => {
 
     expect(localStorage.getItem(besignerDraftKey(IDS))).toBeNull()
     expect(state().available).toBe(false)
-    // And that is ALL it does, which is worth pinning: the button deletes
-    // this browser's snapshot and never touches the canvas, the mirror or
-    // the stored document. Pressed on a shared canvas, nothing anyone can
-    // see changes. The hazard was never that it destroyed other people's
+    // It deletes the draft and nothing else: not the canvas, not the mirror,
+    // not the stored document. Pressed on a shared canvas, nothing anyone
+    // can see changes. The hazard was never that it destroyed other people's
     // work — it is that a prompt offering to destroy work appears over a
     // canvas that is not this author's alone (AGL-2486).
     expect(mockCanvas.applyNodes).not.toHaveBeenCalled()
