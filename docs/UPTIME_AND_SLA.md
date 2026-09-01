@@ -371,41 +371,52 @@ colour (AGL-2496); the rules themselves are pure functions in
 
 ### `status.aglyn.com`
 
-Unclaimed today: it resolves through the `*.aglyn.com` wildcard to Vercel and
-answers `404 DEPLOYMENT_NOT_FOUND`. **When it is claimed, point it at
-`aglyn-docs` and serve `/status` — not at a besigner screen on the marketing
-site.** A marketing screen cannot probe anything live, cannot tell `unknown`
-from `down`, and would put the status page on `aglyn-tenant`, the runtime it is
-supposed to report on. Pointing it at UptimeRobot instead is the $144/yr option
-above.
+Claimed, and pointed at `aglyn-docs` as an **alias** — the host serves the
+build, it does not redirect to `docs.aglyn.com`. `status.aglyn.com/status` is
+therefore a live copy of `docs.aglyn.com/status`, and before the rules below
+every other route in the build was live on the second host too: measured
+2026-09-01, `status.aglyn.com/enterprise/uptime-and-status`, `/getting-started`
+and `/sitemap.xml` each answered `200` at that URL.
 
-The footer of every marketing page already links `docs.aglyn.com/status`, so
-this is about giving the existing surface a memorable name, not about building
-a second one. **Two surfaces competing to be "the status page" is the failure
-mode to avoid** — whichever way this is done, one URL must end up serving the
-other.
+**Two surfaces competing to be "the status page" is the failure mode to avoid**
+— the footer of every marketing page, the `/pricing` FAQ and AGL-2411 F2 all
+name `docs.aglyn.com/status`, so that is the URL search engines have to end up
+holding.
 
-**Exact steps (account owner — this is a domain change, not an agent action):**
+`apps/docs/vercel.json` settles it without a domain change:
 
-1. Vercel → `aglyn-docs` → Settings → Domains → **Add** `status.aglyn.com`.
-   The apex is already on Vercel DNS, so no registrar work is needed and the
-   certificate issues automatically.
-2. Choose **redirect**, not rewrite: set the domain's redirect target to
-   `docs.aglyn.com` (Vercel offers this in the same dialog). A visitor typing
-   `status.aglyn.com` lands on the real page at its canonical URL, and there is
-   exactly one indexable copy.
-3. Add `{ "source": "/", "destination": "/status", "permanent": false }` to
-   `apps/docs/vercel.json`'s `redirects` **only if** step 2's redirect lands on
-   `/` rather than `/status` — check before adding, since a redirect chain is
-   worse than either link alone.
-4. Verify from a **browser**, not curl (`aglyn-docs` challenges anonymous
-   clients with 429): `status.aglyn.com` must end on the status page with
-   cards rendered, and `docs.aglyn.com/status` must still work unchanged.
+- `/` on the status host redirects to `/status`, so the bare hostname still
+  lands on the page it is named for.
+- Every other path on the status host is a **301 to the same path on
+  `docs.aglyn.com`**, which removes the several hundred duplicate pages
+  outright rather than asking a crawler to fold them away.
+- `/status`, `/assets/`, `/img/` and `/search-index.json` are the exceptions.
+  The first is the page being preserved; the rest are what it loads from its
+  own origin, and `@easyops-cn/docusaurus-search-local` fetches that index with
+  no CORS headers waiting on the far side.
 
-A rewrite (serving the page at `status.aglyn.com` without changing the URL) is
-the tempting option and the wrong one here: it produces two live copies of the
-same page, and every footer link, the `/pricing` FAQ and AGL-2411 F2 all name
-`docs.aglyn.com/status`.
+That leaves exactly one duplicated page, `/status` itself, and Docusaurus
+already emits an absolute `<link rel="canonical" href="https://docs.aglyn.com/status">`
+on it (built from `url` in `docusaurus.config.ts`) to consolidate it. See
+`apps/docs/specs/status-host-redirects.spec.ts`.
+
+⛔ Not `X-Robots-Tag: noindex` on the status host. It contradicts the canonical
+on the same response — one says drop this URL, the other says fold it into
+`docs.aglyn.com/status` — and the risk is that the `noindex` travels with the
+canonical and takes the real page out of the index.
+
+**Verify from a browser, not curl** (`aglyn-docs` challenges anonymous clients
+with 429): `status.aglyn.com` ends on the status page with cards rendered and
+search working, `status.aglyn.com/getting-started` ends on `docs.aglyn.com`,
+and `docs.aglyn.com/status` is unchanged.
+
+An account-owner alternative is a Vercel domain-level redirect (Settings →
+Domains → redirect `status.aglyn.com` to `docs.aglyn.com`). It is the stronger
+signal — no copy at all — at the cost of the vanity URL never staying in the
+address bar. Pointing the hostname at a besigner screen on the marketing site
+is the one option that is simply wrong: a marketing screen cannot probe
+anything live, cannot tell `unknown` from `down`, and would put the status page
+on `aglyn-tenant`, the runtime it is supposed to report on.
 
 ## The probe
 
