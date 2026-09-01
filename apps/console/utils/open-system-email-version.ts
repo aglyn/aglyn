@@ -15,13 +15,14 @@
  * limitations under the License.
  */
 
-import { createResourceUid } from '@aglyn/aglyn'
+import { createResourceUid, encodeStoredNodes } from '@aglyn/aglyn'
 import {
   SYSTEM_EMAIL_COLLECTION,
   buildDefaultEmailNodeMap,
   type SystemEmailTemplateDefinition,
 } from '@aglyn/shared-util-email'
 import {
+  Bytes,
   doc,
   getDoc,
   setDoc,
@@ -66,8 +67,12 @@ export async function openSystemEmailVersion(
       createdAt: timestamp,
       updatedAt: timestamp,
       // Same builder the send-time default render uses (AGL-766), so the
-      // version staff open is exactly what a test/send produces.
-      nodes: buildDefaultEmailNodeMap(definition),
+      // version staff open is exactly what a test/send produces. Compressed
+      // at rest like every other besigner document (AGL-1151), matching the
+      // form the editor's converter writes on every save after this one.
+      nodes: Bytes.fromUint8Array(
+        encodeStoredNodes(buildDefaultEmailNodeMap(definition))!,
+      ),
     },
   )
   await setDoc(

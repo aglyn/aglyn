@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { encode } from '@msgpack/msgpack'
 import {
   loadHostEmail,
   renderHostEmail,
@@ -288,5 +289,99 @@ describe('renderHostEmail (AGL-770)', () => {
     )
     expect(result?.subject).not.toContain('{{')
     expect(result?.html).not.toContain('{{')
+  })
+
+  /**
+   * THE SEND PATH READS BOTH STORED FORMS (AGL-1223).
+   *
+   * `nodes` is msgpack for anything the besigner has saved since AGL-1151, and
+   * a plain map for every version written before it — and nothing migrates
+   * those, so both are live forever.
+   *
+   * The failure this pins is silent rather than loud. `loadHostEmail` guards
+   * on `!Object.keys(nodes).length`, and over a `Buffer` those keys are BYTE
+   * INDICES: the guard passes, `renderEmailHtml` walks byte numbers, finds no
+   * root, and the customer gets an empty email — where returning null would
+   * have fallen back to the built-in copy and sent something correct.
+   */
+  describe('both stored forms of the version', () => {
+    /**
+     * What firebase-admin actually hands back for a bytes field: a Node
+     * `Buffer` carved out of the shared allocation pool, so `byteOffset` is
+     * non-zero and the backing `ArrayBuffer` is bigger than the field. A
+     * zero-offset buffer would pass even against a decoder that ignores the
+     * offset, which is the mistake most likely to come back.
+     */
+    const pooledNodes = () => {
+      const bytes = encode(NODES)
+      const pool = Buffer.allocUnsafeSlow(Buffer.poolSize)
+      const packed = pool.subarray(64, 64 + bytes.byteLength)
+      packed.set(bytes)
+      return packed
+    }
+
+    it('renders a version stored as msgpack bytes', async () => {
+      const packed = pooledNodes()
+      // Guard the premise, or this passes for the wrong reason.
+      expect(packed.byteOffset).toBeGreaterThan(0)
+      expect(packed.buffer.byteLength).toBeGreaterThan(packed.byteLength)
+
+      const reads = { templates: 0, versions: 0 }
+      const fs = fakeFirestore(
+        { versionId: 'v1', subject: 'See you {{name}}' },
+        { nodes: packed },
+        reads,
+      )
+      const result = await renderHostEmail(
+        fs,
+        'h1',
+        'booking-confirmed',
+        { name: 'Alex' },
+        { sanitize: SANITIZE },
+      )
+      expect(result?.subject).toBe('See you Alex')
+      expect(result?.html).toContain('Hi Alex')
+    })
+
+    it('gives both forms the same output', async () => {
+      const render = async (nodes: unknown) => {
+        const reads = { templates: 0, versions: 0 }
+        return renderHostEmail(
+          fakeFirestore(
+            { versionId: 'v1', subject: 'See you {{name}}' },
+            { nodes },
+            reads,
+          ),
+          'h1',
+          'booking-confirmed',
+          { name: 'Alex' },
+          { sanitize: SANITIZE },
+        )
+      }
+      expect(await render(pooledNodes())).toEqual(await render(NODES))
+    })
+
+    it('falls back rather than sending an empty design it could not decode', async () => {
+      const spy = jest
+        .spyOn(console, 'error')
+        .mockImplementation(() => undefined)
+      try {
+        const reads = { templates: 0, versions: 0 }
+        const fs = fakeFirestore(
+          { versionId: 'v1', subject: 'Hi' },
+          { nodes: Buffer.from([0xc1, 0xc1, 0xc1]) },
+          reads,
+        )
+        expect(
+          await renderHostEmail(fs, 'h1', 'booking-confirmed', {}, {
+            sanitize: SANITIZE,
+          }),
+        ).toBeNull()
+        // Silence is how an undecodable design becomes an empty send.
+        expect(spy).toHaveBeenCalled()
+      } finally {
+        spy.mockRestore()
+      }
+    })
   })
 })

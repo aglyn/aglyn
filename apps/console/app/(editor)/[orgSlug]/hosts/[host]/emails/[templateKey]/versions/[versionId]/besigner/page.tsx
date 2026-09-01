@@ -50,6 +50,7 @@ import {
   saveNodesGuarded,
   useFirestore,
   useUser,
+  withBesignerNodes,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { Alert, Button, Stack, TextField, Typography } from '@mui/material'
@@ -187,14 +188,21 @@ function HostEmailBesignerPage() {
   } = useFirestoreDoc<HostEmailVersionState>(
     () =>
       editable && hostId
-        ? doc(
-            firestore,
-            'hosts',
-            hostId,
-            TENANT_EMAIL_COLLECTION,
-            templateKey,
-            'versions',
-            versionId,
+        ? // Compressed at rest (AGL-1151). The converter has to be on the READ
+          // as well as the write: `useBesignerDocument` and `saveNodesGuarded`
+          // both compare the stored `nodes` against a baseline taken from this
+          // snapshot, so the two must arrive in the same shape or every save
+          // reads as somebody else's write.
+          withBesignerNodes<HostEmailVersionState>(
+            doc(
+              firestore,
+              'hosts',
+              hostId,
+              TENANT_EMAIL_COLLECTION,
+              templateKey,
+              'versions',
+              versionId,
+            ),
           )
         : null,
     [firestore, hostId, templateKey, versionId, editable],
@@ -213,16 +221,18 @@ function HostEmailBesignerPage() {
       // writer's commit aborts server-side instead of clobbering it. The
       // pointer write below stays outside the guard — it carries no nodes.
       await saveNodesGuarded(
-        doc(
-          firestore,
-          'hosts',
-          hostId,
-          TENANT_EMAIL_COLLECTION,
-          templateKey,
-          'versions',
-          versionId,
+        withBesignerNodes<HostEmailVersionState>(
+          doc(
+            firestore,
+            'hosts',
+            hostId,
+            TENANT_EMAIL_COLLECTION,
+            templateKey,
+            'versions',
+            versionId,
+          ),
         ),
-        { templateKey, nodes: nextNodes, updatedAt: stamp },
+        { templateKey, nodes: nextNodes, updatedAt: stamp } as never,
         baseline,
       )
     },

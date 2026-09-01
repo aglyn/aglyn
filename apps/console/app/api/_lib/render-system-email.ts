@@ -29,6 +29,7 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
   PLATFORM_BRANDING_PROFILE,
   brandMergeTokens,
+  decodeStoredNodes,
   sanitizeAuthorHtml,
 } from '@aglyn/aglyn/server'
 
@@ -146,12 +147,17 @@ export async function loadSystemEmail(
       .collection('versions')
       .doc(String(versionId))
       .get()
-    // Plain map, deliberately: the email besigner saves with a bare `setDoc`
-    // and no converter, so unlike a SCREEN version this is not msgpack bytes
-    // and must not be run through `decodeStoredNodes` (AGL-1223).
-    const nodes = versionSnapshot.get('nodes') as
-      | Record<string, unknown>
-      | undefined
+    // BOTH stored forms (AGL-1223). The email besigner compresses like every
+    // other besigner document, and versions written before it did are still
+    // plain maps — `decodeStoredNodes` returns those unchanged.
+    //
+    // Reading raw is the failure the guard below cannot catch: over a
+    // `Buffer`, `Object.keys` counts BYTE INDICES, so the emptiness test
+    // passes and a staff-authored email renders empty rather than falling
+    // back to its built-in copy.
+    const nodes = decodeStoredNodes<Record<string, unknown>>(
+      versionSnapshot.get('nodes'),
+    )
     if (!nodes || !Object.keys(nodes).length) return null
 
     return {
