@@ -15,6 +15,7 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **email:** the preference page can save again — its own privacy header was refusing its own form
 - **email:** the opt-out footer reads as a sentence, not as a hundred characters of signature
 - **analytics:** a browser we have declared ours loads no advertising tag
 - **aglyn:** a byline shows the author's own portrait, not the site's mark
