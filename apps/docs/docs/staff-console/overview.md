@@ -429,6 +429,14 @@ costs more than the floor, which no organization's usage does yet.
 **Existing coupons** lists every Stripe coupon with its promotion codes, redemption
 count, and a **valid** or **expired** state.
 
+Each promotion code carries **Activate** / **Deactivate**. Checkout only resolves a code
+that is active, so a deactivated code is reported to the customer as one we do not
+recognize — deactivating is how a code is pulled mid-campaign, and activating is how a
+code that was turned off is put back. Both directions ask for confirmation first and are
+recorded in the staff audit log; turning a code back on for a discount of 40% or more
+also asks for the same sign-off creating it would. A discount already applied to a
+subscription is unaffected either way.
+
 ### Do not contact {#contact-suppressions}
 
 The platform do-not-contact list for **phone numbers** — calls and texts. It is not the
