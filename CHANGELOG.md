@@ -9,6 +9,46 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.29 — 2026-09-01
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/07eaadb6e...v1.0.0-beta.29)
+
+### Added
+
+- **email:** a campaign sends from the shared pool, graded for the company it keeps
+- **email:** a one-off email designs itself without minting a "template"
+- **tools:** a dry-run backfill for the nodes still stored as plain maps
+- **besigner:** the working draft is compressed like the version it shadows
+- **besigner,tenant:** a screen version carries its own layout binding ([AGL-1428](https://linear.app/aglyn/issue/AGL-1428))
+
+### Fixed
+
+- **email:** a zero-arity mock makes its own call payload unreadable
+- **redirects:** a rule edit announces itself instead of waiting out the hour backstop
+- **email:** the resource mock is typed to the argument the assertions read
+- **console:** the menubar tells Base UI its rendered elements are native buttons
+- **console:** an email screen's save is the save the send path sees
+- **besigner:** a working draft is stamped against the document it is measured against
+- **console:** the interactions panel lists what the element actually carries
+- **console:** every remaining besigner document is compressed at rest ([AGL-753](https://linear.app/aglyn/issue/AGL-753), [AGL-1391](https://linear.app/aglyn/issue/AGL-1391))
+- **email:** an email design is compressed at rest and read in both forms ([AGL-1151](https://linear.app/aglyn/issue/AGL-1151))
+- **ci:** nx affected measures against the commit the run is about
+- **tenant,console:** the media CDN names an asset no site can see, and the alert opens the repair
+- **monitoring:** a server error says which deployment threw it
+- **tenant-data-admin,aglyn:** the media scope guard asserts the rule the code enforces
+
+### Documentation
+
+- **releasing:** a promoted batch deploys the functions it schedules
+
+<details>
+<summary>Also in this release: 2 test</summary>
+
+- **tenant:** the media-ref specs stop paying for the whole plugin graph
+- **tenant:** the render path is pinned against both stored forms
+
+</details>
+
 ## v1.0.0-beta.28 — 2026-08-31
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/97daf9521...v1.0.0-beta.28)
