@@ -9,6 +9,45 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.32 — 2026-09-01
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.29...v1.0.0-beta.32)
+
+### Added
+
+- **console:** staff can turn a promotion code back on without the Stripe Dashboard
+- **forms:** a form's page lists its submissions and measures what it could only name
+- **forms:** a placed form renders the entity's published design
+- **email:** an audience can be built from a campaign
+- **forms:** a submission files the person under the form's own campaigns
+- **theme:** the floating-mockup shadow is a theme token with a CSS var
+- **theme:** the accent washes and the brand violet are palette tokens
+
+### Fixed
+
+- **console:** a form editor shows the draft, not the form's published copy
+- **besigner:** the hierarchy's ancestor walk stops instead of locking the tab
+- **console:** a promotion code reaches the charge, and the charge is confirmed first
+- **console:** the priced quote names the discount and how long it lasts
+- **besigner:** a number-typed attribute stores a number, not the text typed ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **console:** the first site carries the plan the visitor came to buy
+- **console:** the workspace picker carries the plan the visitor came to buy ([AGL-1149](https://linear.app/aglyn/issue/AGL-1149))
+- **console,email:** email health can see the shared pool it never looked at
+
+### Documentation
+
+- **tenant:** the forms read says the TTL is all a form publish has
+
+<details>
+<summary>Also in this release: 2 chore</summary>
+
+- **release:** v1.0.0-beta.31 ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
+- **release:** v1.0.0-beta.30 ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
+
+</details>
+
+2 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
 ## v1.0.0-beta.31 — 2026-09-01
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.29...v1.0.0-beta.31)
