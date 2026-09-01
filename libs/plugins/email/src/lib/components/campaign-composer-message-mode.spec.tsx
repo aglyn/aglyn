@@ -48,7 +48,10 @@ const FIRESTORE = {}
 let posted: Array<Record<string, any>> = []
 
 /** The screen and version creates a one-off design mints, capturable. */
-const mockCreateResource = jest.fn(async () => ({ id: 'new' }))
+// Typed to the argument it receives: a no-parameter `jest.fn` infers its
+// calls as an empty tuple, so reading `calls[0][0]` — which is the whole
+// point of the assertions below — does not typecheck.
+const mockCreateResource = jest.fn(async (_input: unknown) => ({ id: 'new' }))
 const mockCreateVersion = jest.fn(async () => ({ id: 'v1' }))
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
