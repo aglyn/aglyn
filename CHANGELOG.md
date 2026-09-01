@@ -9,6 +9,21 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.33 — 2026-09-01
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.32...v1.0.0-beta.33)
+
+### Added
+
+- **billing:** capacity bought now is charged now, for the amount the confirm names ([AGL-535](https://linear.app/aglyn/issue/AGL-535))
+
+### Fixed
+
+- **billing:** the purchase confirm names usage, and the quote stops quoting once bought
+- **forms:** a placed form renders once instead of nesting inside itself
+- **console:** a plan card quotes the contacts rate only when it is billed ([AGL-1604](https://linear.app/aglyn/issue/AGL-1604), [AGL-1658](https://linear.app/aglyn/issue/AGL-1658), [AGL-1635](https://linear.app/aglyn/issue/AGL-1635))
+- **analytics:** a production build on localhost is not a production deployment ([AGL-2067](https://linear.app/aglyn/issue/AGL-2067))
+
 ## v1.0.0-beta.32 — 2026-09-01
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.29...v1.0.0-beta.32)
