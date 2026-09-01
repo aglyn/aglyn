@@ -270,14 +270,23 @@ export default function BillingAddonsCardComponent({
             : taxIncluded
               ? ' including tax'
               : ''
+        // A reduction is stated as what it is: nothing today, and the capacity
+        // keeps working until the period the customer already paid for ends.
+        // Saying "credits back" here would promise a refund that is not coming
+        // — the change costs nothing in either direction.
+        const effectiveOn = preview.effectiveAt
+          ? new Date(String(preview.effectiveAt)).toLocaleDateString()
+          : null
         const accepted = await confirm({
           title: `${row.label}: ${quantity}?`,
           description:
-            (prorationCents >= 0
-              ? `$${chargedNowUsd} ${currency}${taxCaveat} will be charged to ` +
-                `your card now, prorated for the rest of this period. Ongoing: `
-              : `Unused time credits $${prorationUsd} ${currency} back ` +
-                'on your next invoice. Ongoing: ') +
+            (preview.defersToPeriodEnd
+              ? `Nothing is charged and nothing is refunded. You keep this ` +
+                `capacity for the rest of the period you have paid for` +
+                (effectiveOn ? `, and it ends on ${effectiveOn}` : '') +
+                '. From then: '
+              : `$${chargedNowUsd} ${currency}${taxCaveat} will be charged to ` +
+                `your card now, prorated for the rest of this period. Ongoing: `) +
             (quantity === 0
               ? 'nothing — this add-on is removed.'
               : `$${monthlyUsd}/mo` +
