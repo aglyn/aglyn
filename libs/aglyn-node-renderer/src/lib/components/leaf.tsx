@@ -23,6 +23,7 @@
 import type * as Aglyn from '@aglyn/aglyn'
 import { components } from '@aglyn/aglyn/aglyn'
 import { sanitizeAuthorSx } from '@aglyn/aglyn/app-utils/author-css'
+import { pinRampedTypographySx } from '@aglyn/aglyn/app-utils/responsive-typography-sx'
 import {
   NODE_HIDE_IF_PROP,
   NODE_HIDE_UNLESS_PROP,
@@ -177,13 +178,21 @@ export const Leaf = observer(
     // deliberately left alone. The scrub is scheme-only and returns its
     // input by identity when nothing is refused, so the overwhelmingly
     // common case (no `url()` at all) costs one walk and no new object.
+    // Responsive type ramp: LAST of the three sx passes, and it has to be —
+    // it moves a scalar `fontSize` into the `xs` slice so the author's
+    // explicit size sorts after the variant's `responsiveFontSizes` at-rules,
+    // and the scheme pass above is what collapses a dark-scheme slice down
+    // into that same top level. Running it earlier would leave a dark
+    // override's font size unpinned.
     const authorSx = sanitizeAuthorSx(node?.sx)
-    const composedSx = resolvePaletteVarsSx(
-      resolveSchemeSx(
-        mergeSxProps(sx as any, propsSx as any, authorSx as any),
-        activeScheme,
+    const composedSx = pinRampedTypographySx(
+      resolvePaletteVarsSx(
+        resolveSchemeSx(
+          mergeSxProps(sx as any, propsSx as any, authorSx as any),
+          activeScheme,
+        ),
+        theme?.palette,
       ),
-      theme?.palette,
     )
     /**
      * Author visibility — the eye on the hierarchy row.
