@@ -131,7 +131,129 @@ jobs:
       # of the first two was visible until CI (or a hand-run gate) hit it.
       - run: npm ci --prefix apps/docs
 
-      - uses: nrwl/nx-set-shas@v5
+      # THE AFFECTED BASE, PINNED TO THE EVENT.
+      #
+      # `nrwl/nx-set-shas` answers a different question than this workflow
+      # asks. It searches for the last SUCCESSFUL run of this workflow on
+      # `main-branch-name`, and pushes here only ever happen on `production`
+      # (see the trigger at the top of this file), so that search finds
+      # nothing on `main` and the action falls back to `HEAD~1` of
+      # `origin/main` — a commit chosen for its position on a branch the run
+      # is not about. Whether it sits inside NX_HEAD's history is luck, and
+      # when it does, `nx affected` selects NOTHING: run 33451476550 resolved
+      # a base of main's own tip against a PR merge ref that already contained
+      # it, and reported success having run zero tests and zero builds. Run
+      # 33447786974 did the same on a push to `production` — measured against
+      # this graph, its base selected 0 projects where the previous production
+      # tip selects 53.
+      #
+      # A base that selects nothing is worse than a red. It is a green tick
+      # from a job that never looked, on the two events where looking is the
+      # whole point. The honest base is a property of the event:
+      #
+      #   pull_request  the tip of the branch being merged INTO. On a
+      #                 promotion PR that is `production`, so the range is the
+      #                 entire promotion delta — every commit the release
+      #                 carries, which is what the PR is asking for a verdict
+      #                 on. On any other PR it is the fork point, so the range
+      #                 is that PR's own work.
+      #   push          `github.event.before`, the commit `production` was
+      #                 deployed from before this push. The range is exactly
+      #                 what the deploy adds.
+      #
+      # Both go through `git merge-base` against HEAD, so a rewritten or
+      # force-pushed base widens the range rather than inverting it. When no
+      # candidate names a commit this checkout has, there is no honest base
+      # and the fallback is the ROOT commit, which marks every project
+      # affected: running everything is the right answer to "what changed is
+      # unknown", and running nothing is not.
+      - name: resolve affected base
+        env:
+          PUSH_BEFORE: ${{ github.event.before }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+
+          head="$GITHUB_SHA"
+
+          # In preference order. `origin/<base ref>` is the branch as it
+          # stands now and is always present under `fetch-depth: 0`;
+          # `base.sha` is the same branch as of the last PR synchronize, and
+          # covers a base ref that cannot be resolved by name.
+          case "$GITHUB_EVENT_NAME" in
+            pull_request) candidates="origin/${GITHUB_BASE_REF:-} ${PR_BASE_SHA:-}" ;;
+            push) candidates="${PUSH_BEFORE:-}" ;;
+            *) candidates="" ;;
+          esac
+
+          base=''
+          for candidate in $candidates; do
+            resolved="$(git rev-parse --verify --quiet "${candidate}^{commit}")" || continue
+            base="$(git merge-base "$resolved" "$head")"
+            break
+          done
+
+          # No candidate resolved: what changed is UNKNOWN, which is a
+          # different answer from "nothing changed" and takes the wider
+          # fallback. A base that resolved and happens to equal HEAD is kept
+          # as it is — the range really is empty, and the step below says so.
+          if [ -z "$base" ]; then
+            base="$(git rev-list --max-parents=0 "$head" | tail -n 1)"
+            echo "::warning::No usable affected base for ${GITHUB_EVENT_NAME}; using the root commit, so every project is affected."
+          fi
+
+          {
+            echo "NX_BASE=$base"
+            echo "NX_HEAD=$head"
+          } >> "$GITHUB_ENV"
+
+          echo "NX_BASE=$base"
+          echo "NX_HEAD=$head"
+
+      # What that base actually selected, named once and up front.
+      #
+      # `nx affected` prints its project list inside each target's own step
+      # and prints nothing but "No tasks were run" when the list is empty, so
+      # an empty selection reads as a fast green rather than as a job that
+      # tested nothing. This states the range, the file count and the project
+      # count in the run summary, and raises an annotation when the count is
+      # zero. It does not fail on zero — a commit that touches only workflow
+      # files legitimately affects no project — and it does not narrow what
+      # the steps below run.
+      - name: affected projects
+        run: |
+          set -euo pipefail
+
+          files="$(git diff --name-only "$NX_BASE" "$NX_HEAD" | wc -l | tr -d ' ')"
+
+          # --json, because the plain renderer prints the literal string `[]`
+          # for an empty selection — a line, which any line count reads as one
+          # project and which would leave the zero case silent again.
+          projects="$(npx nx show projects --affected --json |
+            node -e 'let s="";process.stdin.on("data",(d)=>{s+=d}).on("end",()=>console.log(JSON.parse(s).sort().join("\n")))')"
+          count="$(printf '%s\n' "$projects" | grep -c . || true)"
+
+          {
+            echo "### Affected"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| base | \`$NX_BASE\` |"
+            echo "| head | \`$NX_HEAD\` |"
+            echo "| changed files | $files |"
+            echo "| affected projects | $count |"
+            echo
+            echo '```'
+            echo "$projects"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "$count affected project(s) over $files changed file(s):"
+          echo "$projects"
+
+          if [ "$count" -eq 0 ]; then
+            echo "::warning::No project is affected by ${NX_BASE}..${NX_HEAD}; the lint, test and build steps below will run nothing."
+          fi
 
       # Native TypeScript 7 compiler; whole-workspace check runs in seconds
       # and is the only type gate (builds transpile with swc, no type-check).
@@ -408,13 +530,17 @@ jobs:
       # `additionalProperties: false`, so the extra option is ignored rather
       # than fatal for them.
       #
-      # nrwl/nx-set-shas above is untouched by this split. It exports NX_BASE
-      # and NX_HEAD through $GITHUB_ENV; nx re-reads them from process.env on
-      # every invocation (nx/src/utils/command-line-utils.js), and all three
-      # steps here still run after it in the same job — so all three resolve
-      # the identical affected set. Verified locally: two separate
+      # Splitting one invocation into three is safe because the base is an
+      # ENVIRONMENT variable, not an argument. `resolve affected base` above
+      # exports NX_BASE and NX_HEAD through $GITHUB_ENV; nx re-reads them from
+      # process.env on every invocation (nx/src/utils/command-line-utils.js),
+      # and all three steps here run after it in the same job — so all three
+      # resolve the identical affected set. Verified locally: two separate
       # `nx show projects --affected` invocations under one exported
-      # NX_BASE/NX_HEAD return byte-identical project lists.
+      # NX_BASE/NX_HEAD return byte-identical project lists. A step that
+      # drifted ABOVE the resolve step would fall back to nx's own default
+      # base and quietly test something else; `test:ci-test-digest` asserts
+      # the ordering.
       - run: npx nx affected -t lint --parallel=3
 
       - name: test
