@@ -310,19 +310,51 @@ export function parseMediaCdnScope(
 }
 
 /**
- * Whether the asset may be served under this URL. Host-library assets are
- * private by construction and carry no `visibleTo`, so only the org branch
- * is checked.
+ * The three ways an org asset can be refused under a CDN URL.
+ *
+ * They are one 404 on the wire — whether a restricted asset exists is not
+ * something an anonymous caller has standing to learn — and three different
+ * faults to whoever is looking at the broken page:
+ *
+ * - `restricted` — the asset carries a scope and this URL is not in it. The
+ *   URL is what is wrong: a restricted asset has to be requested through the
+ *   form that names the site (`hostQualifiedCdnPath`), and the same asset
+ *   serves normally from the site it is shared with.
+ * - `unscoped` — no `visibleTo` at all, so the asset is undeliverable under
+ *   EVERY URL form there is. The document is what is wrong, and it means a
+ *   creation path wrote it without a scope: `newResourceScopeFields` is what
+ *   stops that at compile time, and the scope backfill is what repairs the
+ *   documents already written (`docs/SCOPE_DRIFT.md`).
+ * - `no-sites` — a stored empty array: somebody chose nobody. Equally
+ *   undeliverable, and NOT repairable by the backfill, which leaves an empty
+ *   array alone rather than widening a resource nobody asked to widen — so
+ *   this one needs a person either way.
  */
+export type MediaCdnScopeRefusal = 'restricted' | 'unscoped' | 'no-sites'
+
+/** Why the asset is refused under this URL; `null` when it is not. */
+export function mediaCdnScopeRefusal(
+  scope: MediaCdnScope,
+  visibleTo: unknown,
+): MediaCdnScopeRefusal | null {
+  // Host-library assets are private by construction and carry no
+  // `visibleTo`, so only the org branch is scoped at all.
+  if (!scope.isOrg) return null
+  if (!Array.isArray(visibleTo)) return 'unscoped'
+  if (!visibleTo.length) return 'no-sites'
+  const scoped = visibleTo as string[]
+  const allowed = scope.contextHostId
+    ? visibleToHost(scoped, scope.contextHostId)
+    : isOrgWideScope(scoped)
+  return allowed ? null : 'restricted'
+}
+
+/** Whether the asset may be served under this URL. */
 export function mediaCdnAllows(
   scope: MediaCdnScope,
   visibleTo: unknown,
 ): boolean {
-  if (!scope.isOrg) return true
-  const scoped = Array.isArray(visibleTo) ? (visibleTo as string[]) : undefined
-  return scope.contextHostId
-    ? visibleToHost(scoped, scope.contextHostId)
-    : isOrgWideScope(scoped)
+  return mediaCdnScopeRefusal(scope, visibleTo) === null
 }
 
 /**
@@ -868,7 +900,29 @@ export async function serveMediaCdn(
     // something the caller has no standing to learn. Short max-age so
     // re-widening a scope propagates quickly instead of being pinned by a
     // long-lived negative cache entry.
-    if (!mediaCdnAllows(scope, snapshot.get('visibleTo'))) {
+    const refusal = mediaCdnScopeRefusal(scope, snapshot.get('visibleTo'))
+    if (refusal) {
+      /**
+       * A `restricted` refusal is the gate WORKING and is deliberately
+       * silent: it is the ordinary consequence of an internal asset's URL
+       * being shared outside the site it belongs to, it can be provoked by
+       * anyone who can guess a scope segment, and a log line per anonymous
+       * request would make this route amplify traffic into the drain.
+       *
+       * The other two cannot be provoked from outside — they are properties
+       * of the document, not of the request — and they are the ones nothing
+       * else says out loud. An asset undeliverable under every URL form
+       * shows up as an image that stopped rendering on a live site, and
+       * until the weekly drift detector runs the only trace it leaves is a
+       * 404 indistinguishable from a deleted asset. Naming it here is what
+       * makes the next occurrence readable from the logs.
+       */
+      if (refusal !== 'restricted') {
+        console.error(
+          '[media-cdn] asset has no site it can be served to',
+          JSON.stringify({ scopeId, mediaId, refusal }),
+        )
+      }
       res.setHeader('Cache-Control', 'public, max-age=60')
       res.status(404).json({ error: 'Not found' })
       return

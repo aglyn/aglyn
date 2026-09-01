@@ -37,8 +37,10 @@ route refuses `dryRun: false` to that caller. It plans, counts, and reports:
 ```
 
 With `drift.total > 0` it returns **HTTP 207** — which fails the workflow run —
-and sends a staff notification naming the collections and counts. With zero it
-returns 200 and says nothing.
+and sends a staff notification naming the collections and counts. The
+notification opens `/admin/health`, where the **Sharing-scope drift** card
+below runs the same scan and performs the repair. With zero it returns 200 and
+says nothing.
 
 ### Why it does not repair
 
@@ -62,10 +64,38 @@ scan being read by a person is the entire feature.
 
 An **empty** `visibleTo: []` is never counted. That is a stored "visible to
 nobody", and widening it to `['org']` is the one direction nothing may move a
-resource unasked.
+resource unasked. It is equally invisible, so the CDN names it separately —
+see below.
 
 `totals.legacyHostDatasets` counts documents still under the pre-AGL-237
 `hosts/{hostId}/datasets` fallback. It is reported, never touched.
+
+## Between Mondays: the media CDN says it out loud
+
+`/api/media/cdn/...` reads the media document by id through the Admin SDK, so
+neither layer that fails closed underneath the sharing model is in play there —
+no `array-contains-any` is issued and no rule is evaluated. `mediaCdnAllows` is
+the whole of the enforcement, and an unscoped asset is a public **404**: a
+broken image on a live site, indistinguishable on the wire from one that was
+deleted.
+
+The wire has to stay that way — whether a restricted asset exists is not an
+anonymous caller's business — so the difference is logged instead:
+
+```
+[media-cdn] asset has no site it can be served to {"scopeId":"…","mediaId":"…","refusal":"unscoped"}
+```
+
+| `refusal` | Means | Fix |
+| --- | --- | --- |
+| `unscoped` | no `visibleTo` at all; dark under every URL form | a creation path skipped the field; the backfill repairs the document |
+| `no-sites` | a stored `[]`; equally dark, and the backfill leaves it alone | a person decides who it is for |
+| *(silent)* | `restricted` — scoped, just not to this URL | the URL: request it through `org:{orgId}:{hostId}` |
+
+`restricted` is deliberately not logged. It is the gate working, any anonymous
+request can provoke it by guessing a scope segment, and a line per request
+would make a public image route amplify traffic into the log drain. The other
+two are properties of the document and cannot be provoked from outside.
 
 ## Repairing what it finds
 
