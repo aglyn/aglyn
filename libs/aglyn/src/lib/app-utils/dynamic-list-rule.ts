@@ -37,13 +37,16 @@
  * Nothing here collects anything new. `tags`, `captureSources` and the
  * `behavior` figures are contact fields; `formNames` is the `formName` a
  * submission already stores; `createdAfterMs`/`createdBeforeMs` read the
- * `createdAt` all three person silos already stamp.
+ * `createdAt` all three person silos already stamp; `campaignIds` reads the
+ * membership `campaign-membership.ts` defines, which the forms console writes
+ * and the submit route propagates.
  *
  * ⚠️ A rule selects an AUDIENCE. It does not grant consent — a person matched
  * by "submitted a form" has not opted in by submitting it. Membership and
  * basis are separate joins and `marketing-consent.ts` owns the second one.
  */
 
+import { normalizeCampaignIds } from './campaign-membership'
 import { contactMatchesSegment, type ContactSource } from './contacts'
 
 /** The silos a dynamic list may draw people from. */
@@ -58,6 +61,24 @@ export type DynamicListSource =
    * it (`sources.form`), so `captureSources` cannot express the question.
    */
   | 'formSubmissions'
+
+/**
+ * The silos whose rows can be filed under a campaign.
+ *
+ * A contact carries the membership inside the holder's own facet and a form
+ * submission carries the membership its form had when it arrived. A lead and a
+ * site member carry none — nothing writes one — so the campaign dimension is
+ * SKIPPED for them rather than failed, which is the same discipline every
+ * silo-specific dimension here follows.
+ *
+ * Stated as a value because both the matcher and the materializer's enrichment
+ * decide off it, and two lists would drift into a rule that selects a silo the
+ * scan never reads the field for.
+ */
+export const CAMPAIGN_MEMBER_SILOS: DynamicListSource[] = [
+  'contacts',
+  'formSubmissions',
+]
 
 /** Purchase-history filters. Contacts only — no other silo stores RFM. */
 export interface DynamicListBehavior {
@@ -120,6 +141,23 @@ export interface DynamicListDimensions {
   captureSources?: ContactSource[]
   /** `formSubmissions` only: at least one of these form names, case-insensitive. */
   formNames?: string[]
+  /**
+   * {@link CAMPAIGN_MEMBER_SILOS} only: filed under at least one of these
+   * campaigns, by campaign id.
+   *
+   * ⚠️ NOT the campaign a person's browser was attributed TO. A campaign
+   * TOUCH says which ad or link brought somebody in and lives on the
+   * attribution record; this says which campaign the merchant FILED the
+   * record under. The two are different facts about different acts and a
+   * single dimension over both would answer neither question — see
+   * `campaign-attribution.ts` for the other one.
+   *
+   * ⛔ And membership is not consent. A person selected by this dimension has
+   * opted in to nothing: they are here because a merchant put a form in a
+   * campaign, which is the merchant's own act. The materializer enrolls with
+   * no basis at all, and this dimension does not change that.
+   */
+  campaignIds?: string[]
   /** Any silo: the record was created at or after this instant. */
   createdAfterMs?: number
   /** Any silo: the record was created strictly before this instant. */
@@ -200,6 +238,16 @@ export interface DynamicListCandidate {
   lastPurchaseAtMs?: number | null
   /** `formSubmissions` only. */
   formName?: string
+  /**
+   * {@link CAMPAIGN_MEMBER_SILOS} only — the campaigns this row is filed
+   * under.
+   *
+   * Read from a different place in each of the two silos and normalized to one
+   * shape by the scan: a submission carries the field at the top of its
+   * document, a contact carries it inside the reading holder's facet, because
+   * a contact row is shared by every site in the org.
+   */
+  campaignIds?: string[]
   /*
    * ENRICHMENT — filled by a keyed lookup, not by the silo document.
    *
@@ -318,6 +366,11 @@ function normalizeDimensions(value: Record<string, unknown>): DynamicListDimensi
   const tags = asStringArray(value['tags'])
   const captureSources = asStringArray(value['captureSources']) as ContactSource[]
   const formNames = asStringArray(value['formNames'])
+  // Through the campaign field's own normalizer rather than the local string
+  // coercion: the cap, the dedupe and the trim are properties of the stored
+  // membership, and a second reading of them here would let a rule name more
+  // campaigns than any record is allowed to be filed under.
+  const campaignIds = normalizeCampaignIds(value['campaignIds'])
   const createdAfterMs = asPositiveNumber(value['createdAfterMs'])
   const createdBeforeMs = asPositiveNumber(value['createdBeforeMs'])
   const inListIds = asStringArray(value['inListIds']).slice(
@@ -332,6 +385,7 @@ function normalizeDimensions(value: Record<string, unknown>): DynamicListDimensi
     ...(tags.length ? { tags } : {}),
     ...(captureSources.length ? { captureSources } : {}),
     ...(formNames.length ? { formNames } : {}),
+    ...(campaignIds.length ? { campaignIds } : {}),
     ...(createdAfterMs !== undefined ? { createdAfterMs } : {}),
     ...(createdBeforeMs !== undefined ? { createdBeforeMs } : {}),
     ...(Object.keys(normalizedBehavior).length
@@ -505,6 +559,32 @@ function matchesDimensions(
     }
   }
 
+  /*
+   * FILED UNDER A CAMPAIGN — the two silos that can be, and only those.
+   *
+   * OR within the dimension, like every other list here: a merchant naming
+   * three campaigns means anyone in any of them, not the handful of people
+   * filed under all three at once.
+   *
+   * A row in a silo that carries no membership is SKIPPED rather than failed,
+   * so "people in the spring push, and every site member" contributes members
+   * — the same reading `tags` gets for a lead. ⚠️ Which also means a NEGATED
+   * branch whose only filter is this one excludes those silos entirely; that
+   * is the honest consequence of the skip rule, stated on the branch flag
+   * itself.
+   */
+  if (
+    rule.campaignIds?.length &&
+    CAMPAIGN_MEMBER_SILOS.includes(candidate.silo)
+  ) {
+    // An absent field reads as "filed under nothing", which is what a row
+    // written before the form named a campaign actually says.
+    const filed = new Set(candidate.campaignIds ?? [])
+    if (!rule.campaignIds.some((campaignId) => filed.has(campaignId))) {
+      return false
+    }
+  }
+
   if (candidate.silo === 'contacts') {
     const segmentFilters = {
       tags: [...(options.segment?.tags ?? []), ...(rule.tags ?? [])],
@@ -631,6 +711,20 @@ export function dynamicListRuleNeedsEngagement(rule: DynamicListRule): boolean {
     (dimensions) =>
       dimensions.engagement !== undefined &&
       Object.keys(dimensions.engagement).length > 0,
+  )
+}
+
+/**
+ * Does evaluating this rule need a contact's campaign membership?
+ *
+ * Asked by the materializer before it resolves the consent group the facet is
+ * keyed by — one org read, and only for a rule that names a campaign. A
+ * submission's membership is on the row the sweep already paged and costs
+ * nothing either way, so this answers about the CONTACTS silo's extra work.
+ */
+export function dynamicListRuleNeedsCampaigns(rule: DynamicListRule): boolean {
+  return allDimensions(rule).some(
+    (dimensions) => (dimensions.campaignIds?.length ?? 0) > 0,
   )
 }
 

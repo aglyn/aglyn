@@ -75,6 +75,8 @@ import {
   Typography,
 } from '@mui/material'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useHostCampaigns } from '@aglyn/tenant-feature-instance'
+import CampaignPicker from '@aglyn/shared-ui-email-campaigns/components/campaign-picker.component'
 import { useOrgContactSegments } from '../hooks/use-org-contact-segments'
 import { useOrgLists } from '../hooks/use-org-lists'
 
@@ -113,6 +115,8 @@ export interface DynamicListRuleNames {
   lists?: Record<string, string>
   /** Segment id → its name. */
   segments?: Record<string, string>
+  /** Campaign id → its name. */
+  campaigns?: Record<string, string>
 }
 
 /** An id, as its name when one is known and as itself when none is. */
@@ -137,6 +141,20 @@ function describeDimensions(
   }
   if (rule.formNames?.length) {
     clauses.push(`Submitted any of: ${rule.formNames.join(', ')}.`)
+  }
+  /*
+   * The clause names the SILOS the dimension applies to, like every other
+   * silo-specific clause here. A lead and a site member carry no campaign, so
+   * the sentence has to say that the filter passes them through rather than
+   * leaving a reader to conclude that a rule drawing from leads and naming a
+   * campaign selects no leads.
+   */
+  if (rule.campaignIds?.length) {
+    clauses.push(
+      `Filed under any of these campaigns: ${rule.campaignIds
+        .map((id) => named(id, names?.campaigns))
+        .join(', ')} — contacts and form submissions only.`,
+    )
   }
   if (rule.createdAfterMs !== undefined) {
     clauses.push(`Created on or after ${dayLabel(rule.createdAfterMs)}.`)
@@ -287,6 +305,8 @@ export interface DynamicListRuleDraft {
   tags: string
   captureSources: ContactSource[]
   formNames: string
+  /** Campaign ids, from the site's own campaigns picker. */
+  campaignIds: string[]
   /** `yyyy-mm-dd`, read as UTC — the same instant `Date.parse` gives it. */
   createdAfter: string
   createdBefore: string
@@ -310,6 +330,7 @@ export const EMPTY_RULE_DRAFT: DynamicListRuleDraft = {
   tags: '',
   captureSources: [],
   formNames: '',
+  campaignIds: [],
   createdAfter: '',
   createdBefore: '',
   ordersCountAtLeast: '',
@@ -381,6 +402,7 @@ export function ruleToDraft(rule: DynamicListRule): DynamicListRuleDraft {
     tags: list((block) => block.tags).join(', '),
     captureSources: list((block) => block.captureSources) as ContactSource[],
     formNames: list((block) => block.formNames).join(', '),
+    campaignIds: list((block) => block.campaignIds),
     createdAfter: dayStamp(first((block) => block.createdAfterMs)),
     createdBefore: dayStamp(first((block) => block.createdBeforeMs)),
     ordersCountAtLeast: number((block) => block.behavior?.ordersCountAtLeast),
@@ -431,6 +453,7 @@ function draftDimensions(draft: DynamicListRuleDraft): Record<string, unknown>[]
   }
   const formNames = splitRuleList(draft.formNames)
   if (formNames.length) blocks.push({ formNames })
+  if (draft.campaignIds.length) blocks.push({ campaignIds: draft.campaignIds })
   const createdAfterMs = draft.createdAfter
     ? Date.parse(draft.createdAfter)
     : undefined
@@ -531,6 +554,15 @@ export function draftToRule(draft: DynamicListRuleDraft): DynamicListRule {
 export interface DynamicListRuleFieldsProps {
   /** `['orgs', orgId]` — the resolved org scope the caller already holds. */
   scope: readonly [string, string]
+  /**
+   * The site whose campaigns the campaign picker offers.
+   *
+   * A list is org-owned and its rule is materialized against ONE site's silos,
+   * which is the same site whose campaigns a form or a screen can be filed
+   * under. Offering the org's every campaign would offer ids the sweep can
+   * never match, because the membership it reads was written by that site.
+   */
+  hostId: string
   draft: DynamicListRuleDraft
   onChange: (draft: DynamicListRuleDraft) => void
   /**
@@ -546,9 +578,18 @@ export interface DynamicListRuleFieldsProps {
 }
 
 export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
-  const { scope, draft, onChange, listId } = props
+  const { scope, hostId, draft, onChange, listId } = props
   const segmentDocs = useOrgContactSegments(scope)
   const listDocs = useOrgLists(scope)
+  /*
+   * The site's campaigns, read because this form is on screen.
+   *
+   * `enabled` is off by default on the hook for the surfaces that render a
+   * picker beside fields a reader came for; here the picker IS one of the
+   * fields the reader came for, and the same reasoning that opens the segment
+   * listen opens this one.
+   */
+  const siteCampaigns = useHostCampaigns(hostId, { enabled: true })
 
   /*
    * The saved segment the rule already names, even when the picker's window
@@ -582,8 +623,11 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
       segments: Object.fromEntries(
         segments.map((row) => [row.$id, row.name ?? row.$id]),
       ),
+      campaigns: Object.fromEntries(
+        siteCampaigns.options.map((option) => [option.value, option.label]),
+      ),
     }),
-    [listDocs, segments],
+    [listDocs, segments, siteCampaigns.options],
   )
 
   const set = <K extends keyof DynamicListRuleDraft>(
@@ -689,6 +733,29 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
           onChange={(event) => set('formNames', event.target.value)}
           sx={{ minWidth: 180 }}
         />
+        {/*
+          The campaign filter sits with the cross-silo controls rather than
+          under Contacts, because it reads on a form submission too — the
+          submission carries the campaigns its form was filed under at the
+          moment it arrived.
+
+          The SHARED picker, the one a form's page and a screen's page assign
+          with. A merchant who filed three forms under the spring push should
+          pick the campaign here from the same control and the same list of
+          names they filed them with; a second select over the same ids is how
+          one stored field comes to be presented two ways.
+         */}
+        <Box sx={{ minWidth: 240, flexGrow: 1, maxWidth: 360 }}>
+          <CampaignPicker
+            options={siteCampaigns.options}
+            value={draft.campaignIds}
+            onChange={(next) => set('campaignIds', next)}
+            label="In campaign"
+            helperText="Contacts and form submissions filed under any campaign picked. Being in a campaign is not consent to be emailed."
+            empty={siteCampaigns.ready && !siteCampaigns.options.length}
+            emptyText="This site has no campaigns yet. Create one from Marketing to build an audience from it."
+          />
+        </Box>
       </Stack>
 
       <Divider />

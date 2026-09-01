@@ -261,6 +261,7 @@ export function ListEditCard(props: ListEditCardProps) {
         {scope ? (
           <DynamicListRuleFields
             scope={scope as readonly [string, string]}
+            hostId={hostId}
             draft={draft}
             onChange={setDraft}
             listId={listId}
