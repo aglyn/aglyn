@@ -129,6 +129,11 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // enforcing nothing, which is the failure mode the assertions exist to
   // catch.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),
+  // The REAL node codec (AGL-1151). The route under test compresses any
+  // `nodes` it writes, and this factory is a CLOSED WORLD — an absent export
+  // throws inside the route and its own catch answers 500, which reads
+  // exactly like the behaviour under test regressing.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/stored-nodes'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/actions'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/collection-kind'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/screen-route'),

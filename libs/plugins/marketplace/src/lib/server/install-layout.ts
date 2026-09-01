@@ -15,7 +15,12 @@
  * limitations under the License.
  */
 
-import { checkQuota, createResourceUid } from '@aglyn/aglyn/server'
+import {
+  checkQuota,
+  createResourceUid,
+  decodeStoredNodes,
+  encodeStoredNodes,
+} from '@aglyn/aglyn/server'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
@@ -191,7 +196,13 @@ export const installLayoutHandler: PluginApiHandler = async (req, res) => {
         sha256: installedLayout.get('installedFrom.sha256'),
         current: {
           rootId: installedLayout.get('rootId'),
-          nodes: installedLayout.get('nodes'),
+          // DECODED, because the comparison is by value: the base snapshot
+          // recorded at install is a node map, and `hasDivergedFromBase`
+          // hashes a stable stringification of both sides. A stored `Bytes`
+          // never matches a map, so an untouched copy would read as edited
+          // and every re-install would be refused as a divergence
+          // (AGL-1151).
+          nodes: decodeStoredNodes(installedLayout.get('nodes')),
         },
       })
       if (diverged && req.body?.mode !== 'replace') {
@@ -272,7 +283,10 @@ export const installLayoutHandler: PluginApiHandler = async (req, res) => {
         displayName: String(listing.displayName ?? 'Layout').slice(0, 80),
         ...(listing.description && { description: listing.description }),
         rootId: layout.rootId,
-        nodes: layout.nodes,
+        // Compressed at rest, matching the template converter (AGL-1151).
+        // The provenance base recorded above keeps the decoded map: it is
+        // compared by value, never opened as a document.
+        nodes: Buffer.from(encodeStoredNodes(layout.nodes ?? {})!),
         source: {
           type: 'marketplace' as const,
           listingId,

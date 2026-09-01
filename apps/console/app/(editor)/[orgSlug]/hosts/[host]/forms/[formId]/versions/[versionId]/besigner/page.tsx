@@ -56,7 +56,7 @@ import {
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import { Stack, Typography } from '@mui/material'
-import { collection, doc, limit, query, updateDoc } from 'firebase/firestore'
+import { Bytes, collection, doc, limit, query, updateDoc } from 'firebase/firestore'
 import { observer } from 'mobx-react-lite'
 import dynamic from 'next/dynamic'
 import { useParams } from 'next/navigation'
@@ -451,7 +451,9 @@ function FormBesignerPage() {
         formNodeId as Aglyn.NodeId,
       )
       await updateDoc(doc(firestore, 'hosts', hostId, 'forms', formId), {
-        nodes: publishedNodes,
+        // Compressed at rest (AGL-1151), like the version this promotes from
+        // and like the server promote route that writes the same document.
+        nodes: Bytes.fromUint8Array(Aglyn.encodeStoredNodes(publishedNodes)!),
         ...(rootId ? { rootId } : {}),
         fields,
         versionId,

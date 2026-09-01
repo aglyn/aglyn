@@ -16,6 +16,7 @@
  */
 
 import {
+  Bytes,
   type Firestore,
   deleteDoc,
   doc,
@@ -24,7 +25,11 @@ import {
   setDoc,
 } from 'firebase/firestore'
 
-import { type ProcessableNodes } from '@aglyn/aglyn'
+import {
+  type ProcessableNodes,
+  decodeStoredNodes,
+  encodeStoredNodes,
+} from '@aglyn/aglyn'
 import type { BesignerDraftIds } from './besigner-draft-store'
 
 /**
@@ -58,6 +63,21 @@ import type { BesignerDraftIds } from './besigner-draft-store'
  * that document, to serve a value the tenant must never show. As its own
  * document it is read only by an editor that opens it, and it gets its own 1MB
  * budget rather than halving the target's.
+ *
+ * ## Compressed at rest, like the document it shadows
+ *
+ * A draft holds the WHOLE working tree, so it is the same size as the version
+ * it sits beside — and that version is msgpack. Stored as a plain Firestore
+ * map instead, the same tree costs about 1.4x as many bytes, which spends the
+ * budget above on encoding rather than on content: the largest page on the
+ * platform is 574,865 bytes as msgpack and 839,226 as a map, so its draft ran
+ * at 80% of the ceiling while the version sat at 55%.
+ *
+ * That gap also blinded the guard meant to catch it. `measureNodeMap` sizes a
+ * tree with the msgpack encoder — correctly, for the documents that use it —
+ * so the editor's near-limit warning read the version's 55% for a draft write
+ * that was actually at 80%, and the first thing an author would have learned
+ * about the ceiling is a save that stopped working.
  *
  * ## Co-editing
  *
@@ -167,10 +187,21 @@ export async function writeServerDraft(
     draft.updatedByUid ?? null,
   ])
   if (lastWritten.get(ref.path) === fingerprint) return 'unchanged'
+  // Compressed at rest, matching the version this shadows. `nodes` is taken
+  // out of the spread rather than overwritten after it, so the plain tree can
+  // never reach the write through a future edit that reorders these keys.
+  const { nodes, ...rest } = draft
+  const packed = encodeStoredNodes(nodes)
   // Not `merge`: a draft is the whole working tree, and merging a smaller
   // tree into a larger one would leave nodes from a previous save behind —
   // the shape of AGL-1445, where a partial write resurrects deleted content.
-  await setDoc(ref, { ...draft, updatedAt: serverTimestamp() })
+  await setDoc(ref, {
+    ...rest,
+    // `Bytes` is what the client SDK accepts for a bytes field;
+    // `encodeStoredNodes` returns a bare array so it can stay Firestore-free.
+    ...(packed ? { nodes: Bytes.fromUint8Array(packed) } : {}),
+    updatedAt: serverTimestamp(),
+  })
   lastWritten.set(ref.path, fingerprint)
   return 'written'
 }
@@ -184,12 +215,18 @@ export async function readServerDraft(
   const snapshot = await getDoc(ref)
   if (!snapshot.exists()) return null
   const data = snapshot.data() as Partial<BesignerServerDraft>
+  // BOTH stored forms, permanently. Drafts written before compression are
+  // plain maps and nothing migrates them, so a reader that understood only
+  // bytes would find no tree and report the draft absent — offering an author
+  // nothing where their unpublished work actually is. `decodeStoredNodes`
+  // returns a plain map unchanged, so one call covers both.
+  const nodes = decodeStoredNodes<ProcessableNodes>(data?.nodes)
   // A draft with no tree is not a draft. Guarding here rather than at the call
   // site because a half-written document should read as absent, not as an
   // empty canvas someone is about to publish over their page.
-  if (!data?.nodes) return null
+  if (!nodes) return null
   return {
-    nodes: data.nodes,
+    nodes,
     baseStamp: data.baseStamp ?? null,
     updatedByUid: data.updatedByUid ?? null,
     updatedByEmail: data.updatedByEmail ?? null,

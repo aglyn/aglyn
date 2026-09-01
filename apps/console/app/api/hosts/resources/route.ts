@@ -23,6 +23,7 @@ import {
   checkHostRegisterQuota,
   checkQuota,
   createResourceUid,
+  encodeStoredNodes,
   ENTRIES_MAX_PER_COLLECTION,
   nameSearchKey,
   NON_PAGE_SCREEN_MAX_PER_HOST,
@@ -733,6 +734,24 @@ async function handler(request: Request): Promise<Response> {
     for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
       if (allowed.has(key) && value !== undefined) doc[key] = value
     }
+    /*
+     * COMPRESSED AT REST (AGL-1151).
+     *
+     * Three of the resource kinds above seed a besigner tree at create —
+     * `template`, `reusableComponent` and `form` all carry `nodes` on their
+     * allow-list — and all three wrote it as a plain Firestore map. That
+     * costs roughly 1.4x the bytes of the msgpack form against a hard 1 MiB
+     * per-document ceiling, and "save as template" seeds this route with a
+     * whole page's tree.
+     *
+     * One line here rather than three at the kinds, because the hazard is a
+     * FOURTH kind gaining `nodes` and nobody remembering: this runs on
+     * whatever the allow-list let through, so a new kind is compressed the
+     * day it is added. `encodeStoredNodes` returns null for an absent field,
+     * which leaves a create that carries no design untouched.
+     */
+    const packedNodes = encodeStoredNodes(doc['nodes'])
+    if (packedNodes) doc['nodes'] = Buffer.from(packedNodes)
     // Normalized search key for the name-prefix query (AGL-835). Only screens
     // are queried by name (the switcher loads the rest client-side), so only
     // screens carry the field — stamping it on every resource kind would be an

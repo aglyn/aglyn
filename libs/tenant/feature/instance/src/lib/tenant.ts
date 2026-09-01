@@ -24,6 +24,7 @@ export * from './hooks/firebase/firebase-services'
 export * from './hooks/firebase/firestore-cache'
 export * from './hooks/helpers/use-doc'
 export * from './hooks/helpers/use-modify-doc-callback'
+export * from './hooks/helpers/besigner-nodes-converter'
 export * from './hooks/helpers/guarded-nodes-save'
 export * from './hooks/helpers/guarded-seed-write'
 

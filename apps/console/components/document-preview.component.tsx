@@ -328,9 +328,16 @@ export function DocumentPreview(props: DocumentPreviewProps) {
         for (const docSnapshot of res.docs) {
           const value = docSnapshot.data() as Aglyn.AglynHostComponent
           if (value?.deletedAt || !value?.nodes || !value?.rootId) continue
+          // BOTH stored forms (AGL-1151), mirroring `get-components.ts`: this
+          // surface has to agree with the tenant about what each definition
+          // contains, and a raw read agrees with nothing.
+          const nodes = Aglyn.decodeStoredNodes<
+            Aglyn.ReusableComponentTree['nodes']
+          >(value.nodes)
+          if (!nodes) continue
           next[docSnapshot.id] = {
             rootId: value.rootId,
-            nodes: value.nodes as Aglyn.ReusableComponentTree['nodes'],
+            nodes,
             // Preview is a third render surface (AGL-1247): it must agree
             // with the tenant about each instance's prop values.
             ...(value.props?.length && { props: value.props }),

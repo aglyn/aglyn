@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { hostRoleCanPublish, pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import {
+  encodeStoredNodes,
+  hostRoleCanPublish,
+  pluginRequestFromWeb,
+} from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -166,7 +170,11 @@ async function handler(request: Request): Promise<Response> {
     }
 
     await formRef.update({
-      nodes: resolved.nodes,
+      // Compressed at rest (AGL-1151). `resolveFormPromotion` hands back the
+      // DECODED tree because the contract check has to walk it; the storage
+      // form is decided here, at the write, and matches what the besigner's
+      // own publish writes to this same document.
+      nodes: Buffer.from(encodeStoredNodes(resolved.nodes)!),
       ...(resolved.rootId ? { rootId: resolved.rootId } : {}),
       fields: resolved.fields,
       versionId,

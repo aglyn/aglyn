@@ -15,7 +15,12 @@
  * limitations under the License.
  */
 
-import { checkEntitlement, createResourceUid } from '@aglyn/aglyn/server'
+import {
+  checkEntitlement,
+  createResourceUid,
+  decodeStoredNodes,
+  encodeStoredNodes,
+} from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
@@ -188,7 +193,12 @@ export const installHandler: PluginApiHandler = async (req, res) => {
         sha256: existing.docs[0].get('installedFrom.sha256'),
         current: {
           rootId: existing.docs[0].get('rootId'),
-          nodes: existing.docs[0].get('nodes'),
+          // DECODED, because the comparison is by value: the base snapshot
+          // recorded at install is a node map and `hasDivergedFromBase`
+          // hashes a stable stringification of both sides. A stored `Bytes`
+          // matches no map, so an untouched copy would read as edited and
+          // every re-install would 409 (AGL-1151).
+          nodes: decodeStoredNodes(existing.docs[0].get('nodes')),
         },
       })
       if (diverged && req.body?.mode !== 'replace') {
@@ -218,7 +228,10 @@ export const installHandler: PluginApiHandler = async (req, res) => {
         displayName: listing.displayName,
         ...(listing.description && { description: listing.description }),
         rootId: version.rootId,
-        nodes: version.nodes,
+        // Compressed at rest, matching what a promote writes onto this same
+        // document (AGL-1151). The provenance base above keeps the decoded
+        // map: it is compared by value, never rendered.
+        nodes: Buffer.from(encodeStoredNodes(version.nodes ?? {})!),
         deletedAt: null,
         marketplace: {
           listingId,

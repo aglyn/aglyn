@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { createResourceUid } from '@aglyn/aglyn/server'
+import {
+  createResourceUid,
+  decodeStoredNodes,
+  encodeStoredNodes,
+} from '@aglyn/aglyn/server'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
@@ -148,7 +152,13 @@ export const installEmailTemplateHandler: PluginApiHandler = async (
       .collection('versions')
       .doc(String(listing.latestVersion))
       .get()
-    const nodes = versionSnapshot.get('nodes') as Record<string, any> | undefined
+    // A listing version holds the sanitized tree as a plain map, and this
+    // decodes anyway: `decodeStoredNodes` returns one unchanged, and the
+    // alternative — reading raw — is a guard that passes on a `Buffer`
+    // because `Object.keys` counts byte indices (AGL-1223).
+    const nodes = decodeStoredNodes<Record<string, any>>(
+      versionSnapshot.get('nodes'),
+    )
     if (!nodes || !Object.keys(nodes).length) {
       return res.status(500).json({ error: 'Email template version missing' })
     }
@@ -205,7 +215,11 @@ export const installEmailTemplateHandler: PluginApiHandler = async (
       templateRef.collection('versions').doc(versionId),
       {
         rootId: versionSnapshot.get('rootId') ?? null,
-        nodes,
+        // Compressed at rest, matching what the email besigner writes on the
+        // first save after this install (AGL-1151). The provenance base above
+        // keeps the decoded map: it is compared by value, never stored as a
+        // document the editor opens.
+        nodes: Buffer.from(encodeStoredNodes(nodes)!),
         // Copy travels with the design but stays inert until activation.
         subject: String(versionSnapshot.get('subject') ?? ''),
         preheader: String(versionSnapshot.get('preheader') ?? ''),
