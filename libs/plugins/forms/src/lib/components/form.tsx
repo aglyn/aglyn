@@ -38,7 +38,14 @@ import RadioGroup from '@mui/material/RadioGroup'
 import Rating from '@mui/material/Rating'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
-import { type FormEvent, forwardRef, useCallback, useState } from 'react'
+import {
+  type FormEvent,
+  forwardRef,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 /*
  * The heading and the stack this block's form sits inside are mui elements,
@@ -159,6 +166,35 @@ export const formNavigation = {
 export const FORM_SUBMITTED_EVENT = 'aglyn:form-submitted'
 
 /**
+ * Report that a bound form was seen, or typed into.
+ *
+ * Fire-and-forget, and deliberately the same instrument the overlay counters
+ * use: `sendBeacon` hands the request to the browser, which delivers it
+ * outside the page's lifetime, so nothing here can delay a render or survive
+ * long enough to fail visibly.
+ *
+ * Requires a bound `formId`. An unbound form has no document to count on, and
+ * an id is never invented: the collector's `update` would find nothing, which
+ * is the right outcome but a pointless request.
+ */
+export function sendFormBeacon(
+  hostId: string | undefined,
+  formId: string | undefined,
+  event: 'view' | 'start',
+): void {
+  if (!hostId || !formId) return
+  try {
+    navigator.sendBeacon(
+      '/api/analytics/collect',
+      JSON.stringify({ hostId, formId, form: event }),
+    )
+  } catch {
+    // Beacons are best-effort. A view that does not report is a view this
+    // form's completion rate is measured without, which the console says.
+  }
+}
+
+/**
  * Lead-capture form (AGL-76): collects its field children's values and
  * posts them to the tenant's `/api/forms/submit` with the site's host id
  * from SiteContext. Without a site context (besigner canvas, preview) the
@@ -203,6 +239,41 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
   >(
     'idle',
   )
+  /*
+   * THE VIEW AND THE START — the two facts a completion rate is taken over.
+   *
+   * Both are reported ONCE per mounted form, from a ref rather than from
+   * state: a counter driven by a re-render would be a Firestore write per
+   * keystroke, which is the per-render write this must not become. The ref
+   * also survives the re-renders `status` causes, so a visitor who edits a
+   * field, submits, and is shown an error is one view and one start.
+   *
+   * Gated on `!suppressNavigation`, the editing-surface flag: the besigner
+   * canvas and the console's preview render this component for its author,
+   * and counting an author looking at their own draft as a visitor view would
+   * put the merchant into their own denominator.
+   */
+  const reported = useRef({ view: false, start: false })
+  useEffect(() => {
+    if (suppressNavigation || reported.current.view) return
+    reported.current.view = true
+    sendFormBeacon(hostId, formId, 'view')
+  }, [hostId, formId, suppressNavigation])
+
+  /**
+   * A START is the first edit anyone makes to this form.
+   *
+   * On the form's own `input`, which bubbles from every field — no listener
+   * registration, no per-field wiring, and nothing to keep in sync when a
+   * field type is added. Focus would be the looser reading and the wrong one:
+   * a form that is tabbed through and abandoned was never started, and
+   * counting it would inflate the denominator abandonment is measured over.
+   */
+  const handleFirstInput = useCallback(() => {
+    if (suppressNavigation || reported.current.start) return
+    reported.current.start = true
+    sendFormBeacon(hostId, formId, 'start')
+  }, [hostId, formId, suppressNavigation])
   /** The read-only lockdown's own words (AGL-1511); never a hardcoded line. */
   const [pausedMessage, setPausedMessage] = useState('')
   /** The abuse ceiling's visitor notice (AGL-1666); see `unavailable` below. */
@@ -396,6 +467,7 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
       component="form"
       spacing={2}
       onSubmit={handleSubmit}
+      onInput={handleFirstInput}
       {...rest}
     >
       {/* Hides the reveal target until submit (AGL-557); rendered by the

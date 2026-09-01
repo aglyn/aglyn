@@ -44,6 +44,8 @@ let mockUpdates: Array<{ path: string; patch: Record<string, any> }> = []
 let mockContactUpserts: Record<string, any>[] = []
 /** Every `addHostLead` call the route made. */
 let mockLeads: Record<string, any>[] = []
+/** What the lead writer answers: stored, or refused/failed. */
+let mockLeadStored = true
 
 jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
@@ -127,8 +129,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // Recorded rather than executed. `host-lead-dedupe.spec.ts` owns what the
   // writer does with a capture; what matters HERE is whether this route hands
   // one over at all, which it never did.
+  //
+  // The ANSWER is settable because the route now counts it: `false` is the
+  // ceiling refusal and every failure the writer swallows, and a form's lead
+  // counter must not move on either.
   addHostLead: async (options: Record<string, any>) => {
     mockLeads.push(options)
+    return mockLeadStored
   },
   visitorWriteRefusal: async () => null,
 }))
@@ -140,6 +147,11 @@ jest.mock('@aglyn/tenant-runtime', () => ({
 }))
 
 import { POST } from '../app/api/forms/submit/route'
+// The REAL key, not a hand-rolled `slice(0, 7)`: what is under test is that
+// the per-form series and the site-wide counter agree about which month a
+// submission belongs to, and a spec that derived its own would pass while
+// they disagreed.
+import { submissionMonthKey } from '@aglyn/aglyn/server'
 
 const submit = (body: Record<string, unknown> = {}) =>
   POST(
@@ -169,6 +181,7 @@ beforeEach(() => {
   mockUpdates = []
   mockContactUpserts = []
   mockLeads = []
+  mockLeadStored = true
 })
 
 describe('a submission is stamped with the form it was sent to', () => {
@@ -385,5 +398,87 @@ describe('a lead-capture form finally captures a lead', () => {
     }
     await submit({ formId: 'form-1' })
     expect(mockLeads[0]?.['lead']).not.toHaveProperty('marketingConsent')
+  })
+})
+
+/**
+ * THE COUNTERS THAT MAKE ONE FORM'S PAGE SAY SOMETHING.
+ *
+ * Each is a field on an `update` this route was already issuing — one write
+ * per submission, however many figures it feeds. The alternative is counting
+ * `formSubmissions` when a console surface renders, which reads the one
+ * collection that grows without bound and the one the customer is billed on.
+ */
+describe('a submission counts itself onto the form it names', () => {
+  const month = submissionMonthKey()
+  const statsPatch = () =>
+    mockUpdates.find((update) => update.path.endsWith('forms/form-1'))?.patch
+
+  beforeEach(() => {
+    mockStore[`hosts/${HOST_ID}/forms/form-1`] = {
+      displayName: 'Contact',
+      routing: { lead: true },
+    }
+  })
+
+  it('increments the month the site-wide counter used, not a second key', async () => {
+    // A per-form series keyed differently from the site's would file one
+    // submission under this month on one surface and the next month on the
+    // other, and the two would disagree forever with nothing to reconcile.
+    await submit({ formId: 'form-1' })
+    expect(statsPatch()?.[`stats.periods.${month}.submissions`]).toEqual({
+      __increment: 1,
+    })
+    expect(
+      mockStore[`hosts/${HOST_ID}/counters/formSubmissions`]?.[month],
+    ).toEqual({ __increment: 1 })
+  })
+
+  it('files the lifetime total and the month in ONE write', async () => {
+    await submit({ formId: 'form-1' })
+    // A second update to the form document would be one more write per
+    // submission, paid on the busiest thing a customer's site does — and a
+    // document write is priced per write, not per field, so the month series
+    // is free where a second write is not.
+    expect(
+      mockUpdates.filter((update) => update.path.endsWith('forms/form-1')),
+    ).toHaveLength(1)
+    expect(statsPatch()?.['stats.submissions']).toEqual({ __increment: 1 })
+  })
+
+  it('counts the lead back onto the form that filed it', async () => {
+    // The gap this closes: the route created the lead, filed it under
+    // `source: form:{id}` and never told the form, so `stats.leads` was
+    // declared, never written, and drawn as a dash for a reason no reader
+    // could see.
+    await submit({ formId: 'form-1' })
+    expect(statsPatch()?.['stats.leads']).toEqual({ __increment: 1 })
+    expect(statsPatch()?.[`stats.periods.${month}.leads`]).toEqual({
+      __increment: 1,
+    })
+  })
+
+  it('counts NO lead when the writer refused or failed', async () => {
+    // `addHostLead` answers false at the leads ceiling and on every error it
+    // swallows. Counting the CALL rather than the answer would report leads
+    // a site does not have, on exactly the sites that reached the ceiling.
+    mockLeadStored = false
+    await submit({ formId: 'form-1' })
+    expect(statsPatch()).not.toHaveProperty('stats.leads')
+    expect(statsPatch()?.['stats.submissions']).toEqual({ __increment: 1 })
+  })
+
+  it('counts NO lead when the form does not route to leads', async () => {
+    mockStore[`hosts/${HOST_ID}/forms/form-1`] = { displayName: 'Contact' }
+    await submit({ formId: 'form-1' })
+    expect(statsPatch()).not.toHaveProperty('stats.leads')
+  })
+
+  it('THE CONTROL: a submission with no address files and counts nothing', async () => {
+    // Otherwise both "counts no lead" assertions above are satisfied by a
+    // route that never counts one at all.
+    await submit({ formId: 'form-1', fields: { q1: 'blue' } })
+    expect(mockLeads).toEqual([])
+    expect(statsPatch()).not.toHaveProperty('stats.leads')
   })
 })

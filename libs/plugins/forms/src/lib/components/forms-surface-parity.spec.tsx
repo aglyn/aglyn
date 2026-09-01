@@ -414,8 +414,61 @@ describe('a form metric never invents a denominator', () => {
     const { container } = render(
       <FormMetricsCard stats={{ submissions: 4 }} fields={[]} leadRouting />,
     )
-    expect(container.textContent).toContain('Submissions over time')
-    expect(container.textContent).toContain('Completion and abandonment')
+    // The block is a PROMISE about what the numbers mean, so it names the
+    // gaps that are actually left: the values on the submission documents,
+    // which cannot be counted without reading the collection, and the history
+    // that predates each counter.
+    expect(container.textContent).toContain('Per-field answer rates')
+    expect(container.textContent).toContain('before a counter started')
+  })
+
+  it('takes NO rate over a lifetime total the denominator does not cover', () => {
+    // The trap the periods map exists to close. Submissions have counted
+    // since the form entity existed and views only since the beacon shipped,
+    // so lifetime-over-lifetime here would divide a long history by a short
+    // one and print a completion rate of 400%.
+    const { container } = render(
+      <FormMetricsCard
+        stats={{ submissions: 200, views: 50 }}
+        fields={[]}
+        leadRouting
+      />,
+    )
+    expect(container.textContent).not.toMatch(/\d+(\.\d+)?%/)
+  })
+
+  it('THE CONTROL: it DOES take completion over the months views were recorded', () => {
+    // Without this, the assertion above is satisfied by a card that can never
+    // print a completion rate at all.
+    const { container } = render(
+      <FormMetricsCard
+        stats={{
+          submissions: 200,
+          views: 50,
+          periods: { '2026-08': { submissions: 10, views: 40 } },
+        }}
+        fields={[]}
+        leadRouting
+      />,
+    )
+    // Over the MONTH's numbers, not the lifetime ones: 10 of 40.
+    expect(container.textContent).toContain('25.0%')
+    expect(container.textContent).toContain('10 of 40 views')
+  })
+
+  it('withholds abandonment when more submissions were counted than starts', () => {
+    // Starts are a browser beacon and submissions are a server write, so a
+    // blocked beacon really does produce this. A clamp would publish "nobody
+    // abandons this form" out of a measurement that had gone incoherent.
+    const { container } = render(
+      <FormMetricsCard
+        stats={{ periods: { '2026-08': { submissions: 9, starts: 4 } } }}
+        fields={[]}
+        leadRouting
+      />,
+    )
+    expect(container.textContent).toContain('Started and never submitted')
+    expect(container.textContent).not.toMatch(/\d+(\.\d+)?%/)
   })
 
   it('THE CONTROL: it DOES print a rate once both numbers are recorded', () => {

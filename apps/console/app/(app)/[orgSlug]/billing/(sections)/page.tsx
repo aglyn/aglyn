@@ -96,6 +96,7 @@ import BillingUpgradeDialogComponent from '../../../../../components/billing/bil
 import { useBillingProfile } from '../../../../../components/billing/use-billing-profile'
 import { getBrowserStripe } from '../../../../../utils/browser-stripe'
 import { prorationQuote } from '../../../../../utils/proration-quote'
+import { purchaseConfirmQuote } from '../../../../../utils/purchase-confirm-quote'
 import { subscriptionPeriodNotice } from '../../../../../utils/subscription-period-notice'
 import CardColumns from '../../../../../components/card-columns.component'
 import {
@@ -234,6 +235,21 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   const [collectingForPlan, setCollectingForPlan] = useState<OrgPlan | null>(
     null,
   )
+  /**
+   * The promotion code Stripe RESOLVED against the quote, or '' for none.
+   *
+   * Held here rather than inside the quote card because the card prices and
+   * this page buys. Owned by the card, the code reached the preview and
+   * nothing else: the quote re-priced, the card said the total already
+   * included it, and `startSubscribe` POSTed a body with no `promotionCode` in
+   * it — so the customer read a discounted total and was charged the list
+   * price. The server has always accepted the field on the subscribe path;
+   * this is the state that lets a caller send it.
+   *
+   * It holds what the SERVER applied, never what was typed, so a code Stripe
+   * declined cannot be carried into a purchase as though it had worked.
+   */
+  const [appliedPromotionCode, setAppliedPromotionCode] = useState('')
   // The plan the visitor picked on the marketing site, if they arrived by a
   // pricing CTA (AGL-1117). Read once off the URL: it preselects the toggle
   // and emphasizes the matching card, and nothing here submits on its own.
@@ -644,24 +660,190 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   const checkoutAttempts = useRef(new Map<string, string>())
 
   /**
+   * Price the purchase on the SERVER, immediately before offering to make it.
+   *
+   * The confirm below has to name the amount that is about to leave the card,
+   * and the only trustworthy source of that number is the same
+   * `/api/billing/checkout` preview that prices the plan card: Stripe's own
+   * invoice preview, with the promotion code resolved and applied and
+   * `automatic_tax` computed against the stored address. A total assembled
+   * here out of `PLAN_PRICING` would be a figure of ours shown in the one
+   * dialog where it must be Stripe's.
+   *
+   * Re-priced rather than read off the quote card, which is only mounted when
+   * the visitor arrived with `?plan=` and quotes whatever plan THAT named.
+   * Most purchases are made from the plan grid with no quote card on screen at
+   * all, and a confirm that could only speak when the card happened to be
+   * showing would be no confirm at all on the common path.
+   *
+   * The preview costs no idempotency key — the route answers it above the
+   * claim, deliberately, so comparing plans cannot burn the key that pays for
+   * one — so this cannot consume the attempt it is about to confirm.
+   *
+   * Returns null when there is no honest total to show, having already said
+   * why. Nothing is charged on that path: no quote, no confirm, no purchase.
+   */
+  const priceSubscribe = useCallback(
+    async (targetPlan: OrgPlan, promotionCode: string) => {
+      try {
+        const response = await authorizedFetch(user, '/api/billing/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'preview',
+            orgId,
+            plan: targetPlan,
+            interval,
+            promotionCode,
+          }),
+        })
+        const payload = await response.json().catch(() => ({}))
+        // The same refusals the subscribe has, answered the same way. They are
+        // reachable here first because every guard that produces them —
+        // the checkout lockdown, the membership and permission checks, the
+        // `subscription_exists` duplicate guard — sits above the preview
+        // branch in the route, so this call meets them one step earlier than
+        // the purchase would.
+        const locked = parseLockdownRefusal(response.status, payload)
+        if (locked) {
+          setCheckoutLockdown(locked)
+          return null
+        }
+        if (response.status === 501) {
+          enqueueSnackbar(
+            'Billing is not configured yet — Stripe keys are pending.',
+            { variant: 'info', persist: false },
+          )
+          return null
+        }
+        if (response.status === 409) {
+          enqueueSnackbar(
+            payload?.error ?? 'This workspace cannot subscribe yet.',
+            { variant: 'warning', persist: false },
+          )
+          return null
+        }
+        // The route answers 200 with these instead of a price when Stripe
+        // holds no customer or no address. Not a failure and not a total —
+        // the two cards that fix it are on this same page, above the grid.
+        if (payload?.needsBillingDetails || payload?.needsBillingAddress) {
+          enqueueSnackbar(
+            'Add a payment method and a billing address above before ' +
+              'subscribing — nothing has been charged.',
+            { variant: 'warning', persist: false },
+          )
+          return null
+        }
+        if (!response.ok || !payload?.preview) {
+          enqueueSnackbar(
+            'We could not price this plan just now, so nothing has been ' +
+              'charged. Try again in a moment.',
+            { variant: 'warning', persist: false },
+          )
+          return null
+        }
+        return payload
+      } catch (error) {
+        console.error(error)
+        enqueueSnackbar(
+          'We could not price this plan just now, so nothing has been ' +
+            'charged. Try again in a moment.',
+          { variant: 'warning', persist: false },
+        )
+        return null
+      }
+    },
+    [user, orgId, interval, enqueueSnackbar],
+  )
+
+  /**
    * The purchase itself, separated from the button that asks for it.
    *
    * It is its own function because there are now two ways to arrive at it:
    * a workspace that already has a card and an address goes straight here
-   * from the plan grid — the behaviour that shipped, with no extra clicks —
-   * and one that does not arrives from the collection dialog once it has
-   * both. ONE subscribe call either way, so SCA, the declined-card branch
-   * and the lockdown notice cannot be handled on one path and forgotten on
-   * the other.
+   * from the plan grid, and one that does not arrives from the collection
+   * dialog once it has both. ONE subscribe call either way, so SCA, the
+   * declined-card branch, the lockdown notice — and the confirm below —
+   * cannot be handled on one path and forgotten on the other.
+   *
+   * ## The confirm, and why it is HERE
+   *
+   * A workspace with a stored card and a stored address needs no Stripe
+   * screen, no card entry and no address form, so Upgrade on the plan grid was
+   * one click from choosing a plan to charging the card — a real charge with
+   * no statement of the amount and no last chance to stop. Every other
+   * irreversible act on this page asks first; this one now does too, on the
+   * priced total the server just quoted rather than on anything computed
+   * here.
+   *
+   * Placed inside this function and not in `handleUpgrade` for the same reason
+   * this function exists: the dialog route calls straight in, and a confirm
+   * mounted on the grid's caller would guard one path and leave the other
+   * charging on a click.
    */
   const startSubscribe = useCallback(
     async (targetPlan: OrgPlan) => {
-      const dequeue = queueLoading()
       // A fresh attempt clears the last refusal: a stale "checkout is paused"
       // sitting above the cards after the lock lifted would be its own lie.
       setCheckoutLockdown(null)
+      const promotionCode = appliedPromotionCode.trim()
+
+      const quoteDequeue = queueLoading()
+      let quote: any
       try {
-        const attemptScope = `${orgId}:${targetPlan}:${interval}`
+        quote = await priceSubscribe(targetPlan, promotionCode)
+      } finally {
+        quoteDequeue()
+      }
+      if (!quote) return
+      const priced = quote.preview
+      // The code the SERVER resolved on this very quote, not the one in state.
+      // A code that expired between applying it and pressing Upgrade prices as
+      // no discount, and the confirm has to describe the invoice Stripe just
+      // quoted rather than the one the page last remembered.
+      const pricedCode = String(quote.promotionCodeApplied ?? '')
+      const confirmQuote = purchaseConfirmQuote({
+        planLabel: PLAN_LABELS[targetPlan] ?? targetPlan,
+        interval,
+        subtotalCents: Number(priced.subtotalCents ?? 0),
+        discountCents: Number(priced.discountCents ?? 0),
+        totalCents: Number(priced.totalCents ?? 0),
+        currency: String(priced.currency ?? 'usd'),
+        taxComplete: priced.taxComplete !== false,
+        promotionCode: pricedCode,
+        promotionDuration: quote.promotionCodeDuration ?? null,
+        promotionDurationInMonths: quote.promotionCodeDurationInMonths ?? null,
+      })
+      const accepted = await confirm({
+        title: confirmQuote.title,
+        description: confirmQuote.description,
+        confirmationText: confirmQuote.confirmationText,
+      })
+        .then(() => true)
+        .catch(() => false)
+      // Dismissed. Nothing is POSTed, no attempt key is minted and no
+      // conversion is marked pending — the customer is exactly where they
+      // were, with the plan grid still in front of them.
+      if (!accepted) return
+
+      const dequeue = queueLoading()
+      try {
+        /**
+         * The promotion code is PART OF THE ATTEMPT (AGL-1697's scope,
+         * corrected).
+         *
+         * The key is reused per scope so a double-click cannot open two
+         * subscriptions, and Stripe honors that by REPLAYING the first
+         * response. With the code outside the scope, a subscribe that failed
+         * or was retried, followed by applying, changing or removing a code,
+         * presented the same key for a materially different purchase — and
+         * Stripe answered with the old one, so the new code was silently
+         * ignored and the customer was charged under the terms they had just
+         * changed. Including the resolved code makes a different code a
+         * different attempt, while a repeat of the SAME code still collapses
+         * to the one key the double-click guard needs.
+         */
+        const attemptScope = `${orgId}:${targetPlan}:${interval}:${pricedCode}`
         const attemptKey =
           checkoutAttempts.current.get(attemptScope) ??
           (globalThis.crypto?.randomUUID?.() ??
@@ -684,6 +866,15 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             plan: targetPlan,
             interval,
             orgId,
+            // The discount, on the request that actually spends the money.
+            // The route has always read `promotionCode` on this path and set
+            // `discounts[0][promotion_code]` from it; the field was simply
+            // never sent, so a code that re-priced the quote reached the
+            // preview and no further and the card was charged list price.
+            // The value is the one the SERVER resolved a moment ago on the
+            // priced quote the customer just confirmed, so the purchase and
+            // the confirmed figure describe the same invoice.
+            ...(pricedCode ? { promotionCode: pricedCode } : {}),
             gaClientId: await readGaClientId(
               process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
             ),
@@ -830,7 +1021,16 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
         dequeue()
       }
     },
-    [user, orgId, interval, queueLoading, enqueueSnackbar],
+    [
+      user,
+      orgId,
+      interval,
+      appliedPromotionCode,
+      priceSubscribe,
+      confirm,
+      queueLoading,
+      enqueueSnackbar,
+    ],
   )
 
   const handleUpgrade = useCallback(
@@ -1316,6 +1516,8 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                         plan={quotedPlan}
                         interval={interval}
                         canManage={can('billing.manage')}
+                        appliedCode={appliedPromotionCode}
+                        onAppliedCodeChange={setAppliedPromotionCode}
                       />
                     </CardDisplay>
                   ),
@@ -1552,6 +1754,8 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
           orgId={orgId}
           profile={billingProfile}
           canManage={can('billing.manage')}
+          appliedCode={appliedPromotionCode}
+          onAppliedCodeChange={setAppliedPromotionCode}
           onClose={() => setCollectingForPlan(null)}
           onConfirm={async () => {
             const targetPlan = collectingForPlan

@@ -25,6 +25,7 @@ import {
   candidateMatchesDynamicListRule,
   dynamicListRuleIsEmpty,
   dynamicListRuleListIds,
+  dynamicListRuleNeedsCampaigns,
   dynamicListRuleNeedsEngagement,
   dynamicListRuleWithoutListReference,
   normalizeDynamicListRule,
@@ -130,6 +131,110 @@ describe('the source dimension', () => {
     expect(normalizeDynamicListRule({ sources: ['contacts', 'customers'] })).toMatchObject(
       { sources: ['contacts'] },
     )
+  })
+})
+
+/*==========================================
+ * AN AUDIENCE BUILT FROM A CAMPAIGN.
+ *
+ * A merchant files three forms under the spring push and wants the people who
+ * came in through them. Two silos can answer: a contact carries the holder's
+ * filing, a submission carries the filing its form had when it arrived. The
+ * other two carry none, and the discipline that keeps them from being silently
+ * emptied is the same skip rule every other silo-specific dimension follows.
+ *=========================================*/
+
+describe('the campaign dimension', () => {
+  const SPRING = { sources: ['contacts'], campaignIds: ['camp_spring'] }
+
+  it('matches a contact filed under the campaign', () => {
+    expect(match({ campaignIds: ['camp_spring'] }, SPRING)).toBe(true)
+  })
+
+  it('excludes a contact filed under some other campaign', () => {
+    expect(match({ campaignIds: ['camp_summer'] }, SPRING)).toBe(false)
+  })
+
+  /** An absent field is a record nobody filed, not a record that matches. */
+  it('excludes a record with no membership at all', () => {
+    expect(match({}, SPRING)).toBe(false)
+  })
+
+  /**
+   * OR within the dimension. A merchant naming three campaigns means anyone
+   * in any of them — an AND would select the handful of people filed under
+   * all three at once, which is not what a list of campaigns reads as.
+   */
+  it('matches any one of the campaigns named', () => {
+    expect(
+      match(
+        { campaignIds: ['camp_summer'] },
+        { sources: ['contacts'], campaignIds: ['camp_spring', 'camp_summer'] },
+      ),
+    ).toBe(true)
+  })
+
+  it('matches a form submission on its own stamped membership', () => {
+    expect(
+      match(
+        { silo: 'formSubmissions', campaignIds: ['camp_spring'] },
+        { sources: ['formSubmissions'], campaignIds: ['camp_spring'] },
+      ),
+    ).toBe(true)
+  })
+
+  /**
+   * ⚠️ THE SKIP RULE. A lead carries no campaign, so a rule of "people in the
+   * spring push, and every lead" must still contribute leads. Failing the
+   * dimension instead would make the second source silently contribute
+   * nobody — the defect this rule language exists to avoid.
+   */
+  it('skips the dimension for a silo that carries no campaign', () => {
+    expect(
+      match(
+        { silo: 'leads' },
+        { sources: ['contacts', 'leads'], campaignIds: ['camp_spring'] },
+      ),
+    ).toBe(true)
+    expect(
+      match(
+        { silo: 'siteMembers' },
+        { sources: ['siteMembers'], campaignIds: ['camp_spring'] },
+      ),
+    ).toBe(true)
+  })
+
+  /**
+   * The honest consequence of the skip above, asserted so it is a decision
+   * rather than a surprise: a NEGATED branch whose only filter is a skipped
+   * dimension excludes that silo entirely, because the branch matched
+   * vacuously and the negation inverts it.
+   */
+  it('excludes a skipping silo from a negated branch', () => {
+    expect(
+      match(
+        { silo: 'leads' },
+        {
+          sources: ['contacts', 'leads'],
+          any: [{ campaignIds: ['camp_spring'], negate: true }],
+        },
+      ),
+    ).toBe(false)
+  })
+
+  it('coerces the stored list through the campaign field’s own normalizer', () => {
+    expect(
+      normalizeDynamicListRule({
+        sources: ['contacts'],
+        campaignIds: [' camp_a ', 'camp_a', 7, '', 'camp_b'],
+      }).campaignIds,
+    ).toEqual(['camp_a', 'camp_b'])
+  })
+
+  it('keeps no empty key, so a blank picker is not a filter', () => {
+    expect(
+      normalizeDynamicListRule({ sources: ['contacts'], campaignIds: [] }),
+    ).not.toHaveProperty('campaignIds')
   })
 })
 
@@ -499,6 +604,30 @@ describe('what a rule makes the materializer pay for', () => {
         normalizeDynamicListRule({
           sources: ['contacts'],
           any: [{ engagement: { openedWithinDays: 30 } }],
+        }),
+      ),
+    ).toBe(true)
+  })
+
+  /*
+   * The contact facet a campaign clause reads is keyed by a consent group,
+   * and resolving that group is an org read. A rule that names no campaign
+   * must not pay it — the same opt-in shape the engagement lookup takes.
+   */
+  it('reports no campaign lookup for a rule that asks for none', () => {
+    expect(
+      dynamicListRuleNeedsCampaigns(
+        normalizeDynamicListRule({ sources: ['contacts'], tags: ['vip'] }),
+      ),
+    ).toBe(false)
+  })
+
+  it('reports one for a rule whose only campaign clause is in a branch', () => {
+    expect(
+      dynamicListRuleNeedsCampaigns(
+        normalizeDynamicListRule({
+          sources: ['contacts'],
+          any: [{ campaignIds: ['camp_spring'] }],
         }),
       ),
     ).toBe(true)

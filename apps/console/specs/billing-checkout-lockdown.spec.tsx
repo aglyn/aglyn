@@ -252,6 +252,8 @@ const CHECKOUT_LOCK: LockdownState = {
 /** Queued `/api/billing/checkout` answers, consumed one per click. */
 let checkoutAnswers: Array<{ status: number; payload: unknown }>
 let checkoutCalls: Array<Record<string, unknown>>
+/** The calls that BUY — a checkout body with no `action` is the purchase. */
+const subscribeCalls = () => checkoutCalls.filter((call) => !call.action)
 
 function answerCheckout(
   ...answers: Array<{ status: number; payload: unknown }>
@@ -298,7 +300,37 @@ beforeEach(() => {
       }
     }
     if (url.startsWith('/api/billing/checkout')) {
-      checkoutCalls.push(JSON.parse(String(init?.body ?? '{}')))
+      const sent = JSON.parse(String(init?.body ?? '{}'))
+      checkoutCalls.push(sent)
+      // The purchase prices itself on the server before it offers its confirm
+      // — the amount in that dialog has to be Stripe's and not the page's — so
+      // a subscribe is now two calls to this route. Every case in this file is
+      // about how the PURCHASE is answered, so the preview is served a priced
+      // quote and the queued answers stay aimed at the call that spends money.
+      // The route refuses a locked preview identically, and that half is
+      // guarded in `billing-purchase-confirm-and-promotion-code.spec.tsx`.
+      if (sent.action === 'preview') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            preview: {
+              subtotalCents: 2500,
+              discountCents: 0,
+              taxCents: 206,
+              totalCents: 2706,
+              currency: 'usd',
+              taxComplete: true,
+              taxReason: 'standard_rated',
+            },
+            customerTaxExempt: 'none',
+            hasTaxId: false,
+            promotionCodeApplied: null,
+            promotionCodeDuration: null,
+            promotionCodeDurationInMonths: null,
+          }),
+        }
+      }
       const answer = checkoutAnswers.shift()
       if (!answer) throw new Error(`unqueued checkout call: ${url}`)
       return {
@@ -326,13 +358,13 @@ async function clickUpgrade() {
   const upgrades = await screen.findAllByRole('button', { name: /^Upgrade/ })
   fireEvent.click(upgrades[0])
   await waitFor(() => {
-    expect(checkoutCalls.length).toBeGreaterThan(0)
+    expect(subscribeCalls().length).toBeGreaterThan(0)
   })
 }
 
 /** The refusal is answered by the CHECKOUT route, not by some other fetch. */
 function expectCheckoutAttempt() {
-  expect(checkoutCalls[0]).toMatchObject({ plan: TARGET_PLAN, orgId: ORG.$id })
+  expect(subscribeCalls()[0]).toMatchObject({ plan: TARGET_PLAN, orgId: ORG.$id })
 }
 
 describe('AGL-1557 · a 423 from /api/billing/checkout renders the notice in the page', () => {
@@ -438,7 +470,7 @@ describe('AGL-1557 · the notice appears only when the server refuses', () => {
     answerCheckout({ status: 200, payload: { clientSecret: 'cs_test_123' } })
     await clickUpgrade()
     await waitFor(() => {
-      expect(checkoutCalls.length).toBe(1)
+      expect(subscribeCalls().length).toBe(1)
     })
     expect(screen.queryByRole('alert')).toBeNull()
     expect(screen.queryByText(/temporarily unavailable/i)).toBeNull()
@@ -468,7 +500,7 @@ describe('AGL-1557 · the notice appears only when the server refuses', () => {
 
     fireEvent.click(screen.getAllByRole('button', { name: /^Upgrade/ })[0])
     await waitFor(() => {
-      expect(checkoutCalls.length).toBe(2)
+      expect(subscribeCalls().length).toBe(2)
     })
     await waitFor(() => {
       expect(screen.queryByRole('alert')).toBeNull()

@@ -19,6 +19,7 @@ import {
   RESEND_DOMAINS_ENDPOINT,
   checkEmailCredentials,
   describeEmailConfig,
+  checkSharedSendingPool,
 } from './email-health'
 import { RESEND_SEND_ENDPOINT, sendEmail } from './send-email'
 
@@ -257,5 +258,94 @@ describe('checkEmailCredentials', () => {
     const [url, init] = fetchMock.mock.calls[0]
     expect(url).toBe(RESEND_SEND_ENDPOINT)
     expect(JSON.parse(init.body).to).toEqual(['someone@example.com'])
+  })
+})
+
+/**
+ * THE POOL IS THE DELIVERY FLOOR, AND THIS CHECK COULD NOT SEE IT.
+ *
+ * The sending key was scoped to one domain while the shared pool carried the
+ * transactional mail of every site without a domain of its own, and the health
+ * endpoint reported healthy the whole time. These pin the three answers apart:
+ * a pool that works, a pool that does not, and a pool nobody could look at —
+ * the last of which must never read as the first.
+ */
+describe('the shared sending pool', () => {
+  const POOL = ['shared1.mail.example.app', 'shared2.mail.example.app']
+  const respond = (body: unknown, status = 200) =>
+    jest.fn().mockResolvedValue({
+      status,
+      json: async () => body,
+      text: async () => JSON.stringify(body),
+    } as unknown as Response)
+
+  const verified = (names: string[]) => ({
+    data: names.map((name) => ({ name, status: 'verified' })),
+  })
+
+  it('is ok when every member is verified', async () => {
+    global.fetch = respond(verified(POOL)) as never
+    const report = await checkSharedSendingPool({
+      pool: POOL,
+      readApiKey: 'read-key',
+    })
+    expect(report.status).toBe('ok')
+    expect(report.unusable).toEqual([])
+  })
+
+  it('is DEGRADED when a member is unverified, and names it', async () => {
+    global.fetch = respond({
+      data: [
+        { name: POOL[0], status: 'verified' },
+        { name: POOL[1], status: 'pending' },
+      ],
+    }) as never
+    const report = await checkSharedSendingPool({
+      pool: POOL,
+      readApiKey: 'read-key',
+    })
+    expect(report.status).toBe('degraded')
+    expect(report.unusable).toEqual([POOL[1]])
+  })
+
+  it('is DEGRADED when the provider has never heard of a member', async () => {
+    // Absent is not the same failure as unverified, and both are undeliverable.
+    global.fetch = respond(verified([POOL[0]])) as never
+    const report = await checkSharedSendingPool({
+      pool: POOL,
+      readApiKey: 'read-key',
+    })
+    expect(report.status).toBe('degraded')
+    expect(report.domains.find((d) => d.domain === POOL[1])?.present).toBe(false)
+  })
+
+  it('THE CONTROL: no read key is UNREADABLE, never ok', async () => {
+    // The bug this file exists for. The sending key cannot read domains, so
+    // asking it yields an authorization error that says nothing about the
+    // pool — and "I could not look" must not be reported as "I looked".
+    const called = jest.fn()
+    global.fetch = called as never
+    const report = await checkSharedSendingPool({ pool: POOL, readApiKey: '' })
+    expect(report.status).toBe('unreadable')
+    expect(report.status).not.toBe('ok')
+    expect(called).not.toHaveBeenCalled()
+  })
+
+  it('a refused read is UNREADABLE rather than degraded', async () => {
+    // A key that cannot read tells us nothing about the domains; reporting
+    // that as degraded would page somebody about a healthy pool.
+    global.fetch = respond({ name: 'restricted_api_key' }, 401) as never
+    const report = await checkSharedSendingPool({
+      pool: POOL,
+      readApiKey: 'sending-key',
+    })
+    expect(report.status).toBe('unreadable')
+  })
+
+  it('a deployment with no pool is NOT-APPLICABLE', async () => {
+    // Self-host: the pool is a platform concept, and an operator sending from
+    // their own domain has none to be degraded by.
+    const report = await checkSharedSendingPool({ pool: [], readApiKey: 'k' })
+    expect(report.status).toBe('not-applicable')
   })
 })

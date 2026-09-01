@@ -94,6 +94,19 @@ export interface InvoiceAmounts {
    * front of a tax authority.
    */
   taxReason: string | null
+  /**
+   * What the invoice's discounts take off, as a POSITIVE number of cents.
+   *
+   * `subtotal` is PRE-discount and `total` is POST-discount, so on a
+   * discounted invoice the two figures beside each other do not reconcile and
+   * no arithmetic available to the reader closes the gap: a $25.00 subtotal,
+   * $0.05 of tax and a $0.80 total is three numbers that cannot all be true
+   * unless the missing line is named. This is that line, and it is carried
+   * for every invoice — zero when nothing was discounted — so a caller can
+   * render it on the one rule "show it when it is non-zero" rather than by
+   * inferring a discount from a subtotal that failed to add up.
+   */
+  discountCents: number
 }
 
 /**
@@ -116,6 +129,17 @@ export function describeInvoiceAmounts(invoice: any): InvoiceAmounts {
     : Array.isArray(invoice?.total_taxes)
       ? invoice.total_taxes
       : []
+  // The same defensive pair for the discount lines. `total_discount_amounts`
+  // is the pinned version's spelling; `total_discounts` is read alongside it
+  // so a version bump degrades to "no discount line shown" — the figures the
+  // customer already sees, minus one explanatory row — rather than to a
+  // number invented out of `subtotal - total`, which would also swallow tax
+  // and credits and report them as a discount.
+  const discountLines = Array.isArray(invoice?.total_discount_amounts)
+    ? invoice.total_discount_amounts
+    : Array.isArray(invoice?.total_discounts)
+      ? invoice.total_discounts
+      : []
   return {
     subtotalCents: Number(invoice?.subtotal ?? 0),
     taxCents: Number(invoice?.tax ?? 0),
@@ -123,6 +147,13 @@ export function describeInvoiceAmounts(invoice: any): InvoiceAmounts {
     currency: String(invoice?.currency ?? 'usd'),
     taxComplete: invoice?.automatic_tax?.status === 'complete',
     taxReason: taxLines[0]?.taxability_reason ?? null,
+    // Summed rather than read off `[0]`: several coupons can stack onto one
+    // invoice, and showing only the first would understate the discount while
+    // looking exactly as authoritative as the correct figure.
+    discountCents: discountLines.reduce(
+      (total: number, line: any) => total + Number(line?.amount ?? 0),
+      0,
+    ),
   }
 }
 
@@ -136,11 +167,32 @@ export function describeInvoiceAmounts(invoice: any): InvoiceAmounts {
  * charge is the worst version of this feature.
  *
  * Returns `{}` for an empty input so the common path costs no API call.
+ *
+ * ## Why the coupon's DURATION comes back with it
+ *
+ * `duration: once` discounts the first invoice and nothing after it. A
+ * customer who is shown "$0.80" and enrolled at $26.65 a month has been told
+ * the truth about today and misled about the subscription, which is the same
+ * defect as showing a discount that never reaches the charge — only harder to
+ * notice, because the first invoice agrees with the screen.
+ *
+ * The duration is taken from THIS lookup rather than from a second call or
+ * from an expanded invoice field: a promotion code carries its coupon inline,
+ * so the fact is already in a response the resolve path always reads, and
+ * reading it here cannot add a request to the purchase path.
  */
 export async function resolvePromotionCode(
   secretKey: string,
   code: string,
-): Promise<{ id?: string; code?: string; error?: string }> {
+): Promise<{
+  id?: string
+  code?: string
+  error?: string
+  /** Stripe's `coupon.duration` — `once`, `repeating` or `forever`. */
+  duration?: string | null
+  /** Stripe's `coupon.duration_in_months`, set only for `repeating`. */
+  durationInMonths?: number | null
+}> {
   const wanted = String(code ?? '').trim()
   if (!wanted) return {}
   const response = await fetch(
@@ -154,7 +206,20 @@ export async function resolvePromotionCode(
   if (!response.ok || !found?.id) {
     return { error: `We do not recognize the code “${wanted.slice(0, 40)}”.` }
   }
-  return { id: String(found.id), code: String(found.code ?? wanted) }
+  return {
+    id: String(found.id),
+    code: String(found.code ?? wanted),
+    // Reported, never defaulted. An absent duration answers "we do not know
+    // whether this discount persists", and the confirm says exactly that —
+    // guessing `forever` would promise a price nobody verified, and guessing
+    // `once` would frighten a customer off a discount they actually keep.
+    duration:
+      typeof found?.coupon?.duration === 'string' ? found.coupon.duration : null,
+    durationInMonths:
+      typeof found?.coupon?.duration_in_months === 'number'
+        ? found.coupon.duration_in_months
+        : null,
+  }
 }
 
 /**
@@ -398,6 +463,15 @@ async function handler(request: Request): Promise<Response> {
             ? quoteCustomerRecord.tax_ids.data.length > 0
             : false,
           promotionCodeApplied: promo.id ? promo.code : null,
+          // How long the discount lasts, so the purchase confirm can quote the
+          // RENEWAL and not only today. Everything above this pair describes
+          // the first invoice; a `once` coupon makes the first invoice the one
+          // month that does not represent the subscription, and there is no
+          // other field on this response from which that can be worked out.
+          promotionCodeDuration: promo.id ? (promo.duration ?? null) : null,
+          promotionCodeDurationInMonths: promo.id
+            ? (promo.durationInMonths ?? null)
+            : null,
         },
         { status: 200 },
       )

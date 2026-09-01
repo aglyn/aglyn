@@ -47,6 +47,7 @@ const FULL_RULE: DynamicListRule = {
   tags: ['vip', 'wholesale'],
   captureSources: ['form', 'order'],
   formNames: ['Contact us'],
+  campaignIds: ['camp_spring'],
   createdAfterMs: Date.parse('2026-01-01'),
   createdBeforeMs: Date.parse('2026-06-30'),
   behavior: {
@@ -72,6 +73,7 @@ const RULE_FIELDS = [
   'tags',
   'captureSources',
   'formNames',
+  'campaignIds',
   'createdAfterMs',
   'createdBeforeMs',
   'behavior',
@@ -107,7 +109,7 @@ describe('the rule editor reaches every field of the rule', () => {
     for (const field of ENGAGEMENT_FIELDS) {
       expect(FULL_RULE.engagement?.[field]).toBeDefined()
     }
-    expect(RULE_FIELDS).toHaveLength(11)
+    expect(RULE_FIELDS).toHaveLength(12)
     expect(BEHAVIOR_FIELDS).toHaveLength(4)
     expect(ENGAGEMENT_FIELDS).toHaveLength(4)
   })
@@ -344,6 +346,7 @@ describe('all, any and none', () => {
       tags: 'vip',
       captureSources: ['form'],
       formNames: 'Contact us',
+      campaignIds: ['camp_spring'],
       createdAfter: '2026-01-01',
       createdBefore: '2026-06-30',
       ordersCountAtLeast: '3',
@@ -357,7 +360,7 @@ describe('all, any and none', () => {
       inListIds: ['a'],
       notInListIds: ['b'],
     }
-    expect(draftToRule(everything).any).toHaveLength(15)
+    expect(draftToRule(everything).any).toHaveLength(16)
   })
 })
 
@@ -416,5 +419,76 @@ describe('the rule reads back as sentences', () => {
     })
     expect(sentence).toContain('Excludes anyone matching all of:')
     expect(sentence.match(/Excludes anyone/g)).toHaveLength(1)
+  })
+
+  it('names a campaign rather than printing its id', () => {
+    expect(
+      describeDynamicListRule(
+        { sources: ['contacts'], campaignIds: ['camp_spring'] },
+        { campaigns: { camp_spring: 'Spring push' } },
+      ).join(' '),
+    ).toContain('Spring push')
+  })
+
+  /*
+   * The sentence has to say which silos the filter applies to. A lead and a
+   * site member carry no campaign, and the matcher SKIPS the dimension for
+   * them rather than failing it — so a reader who was not told would conclude
+   * that a rule drawing from leads and naming a campaign selects no leads,
+   * which is the opposite of what it does.
+   */
+  it('says which silos a campaign filter applies to', () => {
+    expect(
+      clauses({
+        sources: ['contacts', 'leads'],
+        campaignIds: ['camp_spring'],
+      }),
+    ).toContain('contacts and form submissions only')
+  })
+})
+
+/*==========================================
+ * THE CAMPAIGN DIMENSION.
+ *
+ * The picker stores ids and the sentences render names, which is the same
+ * split every other id-valued control here takes. What is worth asserting is
+ * that a filter reachable from the form is a filter the engine reads: a
+ * campaign chosen on screen and dropped by `draftToRule` would build an
+ * audience of the whole site with nothing on screen to say so.
+ *=========================================*/
+
+describe('an audience built from a campaign', () => {
+  it('stores the ids the picker chose', () => {
+    expect(
+      draftToRule({ ...EMPTY_RULE_DRAFT, campaignIds: ['camp_a', 'camp_b'] })
+        .campaignIds,
+    ).toEqual(['camp_a', 'camp_b'])
+  })
+
+  it('writes no key at all when no campaign is picked', () => {
+    // An empty array is not the same stored rule as an absent field: the
+    // matcher reads a present-but-empty list as no constraint, and a writer
+    // that stored one would leave a rule reading as a campaign filter that
+    // filters nothing.
+    expect(draftToRule(EMPTY_RULE_DRAFT).campaignIds).toBeUndefined()
+  })
+
+  it('reopens with the campaigns it was saved with', () => {
+    expect(
+      ruleToDraft(
+        draftToRule({ ...EMPTY_RULE_DRAFT, campaignIds: ['camp_a'] }),
+      ).campaignIds,
+    ).toEqual(['camp_a'])
+  })
+
+  it('gets a branch of its own in any mode', () => {
+    expect(
+      draftToRule({
+        ...EMPTY_RULE_DRAFT,
+        match: 'any',
+        campaignIds: ['camp_a'],
+        tags: 'vip',
+      }).any,
+    ).toEqual([{ tags: ['vip'] }, { campaignIds: ['camp_a'] }])
   })
 })

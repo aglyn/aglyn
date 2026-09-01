@@ -80,10 +80,34 @@ import SubmissionReply from './submission-reply.component'
  * cannot be conditional, so a page holding every section's reads pays for all
  * of them whichever one the URL names.
  */
-export function SubmissionsCard({ hostId }: { hostId: string }) {
+export interface SubmissionsCardProps {
+  hostId: string
+  /**
+   * Narrow this card to ONE form, permanently.
+   *
+   * What the forms plugin's detail surface renders instead of a second
+   * submissions table. The reader has already chosen the subject by being on
+   * that page, so scoping here does three things a copy would have had to
+   * re-derive: the form picker is not rendered (there is nothing to pick),
+   * the site's `forms` collection is not read at all (the picker was its only
+   * consumer), and the empty state names the form rather than the site.
+   *
+   * Everything else — the paged walk, the reader dialog, read/unread,
+   * delete, reply, list assignment, attribution — is the same code answering
+   * a narrower query. That is the reason this is a prop rather than a second
+   * component: a per-form table written separately would be a second reader
+   * to keep in step, and it would have been the one to reintroduce the
+   * unordered `limit()` this card's own comment exists to warn about.
+   */
+  formId?: string
+}
+
+export function SubmissionsCard({ hostId, formId }: SubmissionsCardProps) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
+  /** Scoped to one form: the subject is fixed and nothing may widen it. */
+  const scoped = Boolean(formId)
 
   /*
    * The site's forms, for the Submissions filter.
@@ -104,12 +128,14 @@ export function SubmissionsCard({ hostId }: { hostId: string }) {
    */
   const { data: formDocs } = useFirestoreCollection<any>(
     () =>
-      query(
-        collection(firestore, 'hosts', hostId, 'forms'),
-        orderBy('__name__'),
-        limit(FORMS_MAX_PER_HOST + 1),
-      ),
-    [firestore, hostId],
+      scoped
+        ? null
+        : query(
+            collection(firestore, 'hosts', hostId, 'forms'),
+            orderBy('__name__'),
+            limit(FORMS_MAX_PER_HOST + 1),
+          ),
+    [firestore, hostId, scoped],
     { idField: '$id' },
   )
   /** More forms exist than the window shows; the filter has to say so. */
@@ -134,6 +160,15 @@ export function SubmissionsCard({ hostId }: { hostId: string }) {
    * subjects should do.
    */
   const [formFilter, setFormFilter] = useState<string | null>(null)
+  /**
+   * The form the query is actually narrowed to.
+   *
+   * The scope wins over the picker rather than seeding it. A scoped card
+   * renders no picker, so a `formFilter` that could outrank `formId` would be
+   * a filter with no control — reachable only by a state change nothing on
+   * screen can cause, and unclearable if one ever could.
+   */
+  const activeForm = formId ?? formFilter
 
   /*
    * The inbox WALKS its submissions instead of sampling them (AGL-2501,
@@ -168,11 +203,11 @@ export function SubmissionsCard({ hostId }: { hostId: string }) {
         // `cloud/firebase-firestore.indexes.json`, which must be deployed
         // before this ships — without it Firestore refuses the query rather
         // than answering it slowly.
-        ...(formFilter ? [where('formId', '==', formFilter)] : []),
+        ...(activeForm ? [where('formId', '==', activeForm)] : []),
         orderBy('createdAt', 'desc'),
         limit(pageLimit),
       ),
-    [firestore, hostId, formFilter],
+    [firestore, hostId, activeForm],
     { idField: '$id' },
   )
 
@@ -227,7 +262,7 @@ export function SubmissionsCard({ hostId }: { hostId: string }) {
   return (
     <>
       <CardDisplay
-        header={'Form Submissions'}
+        header={scoped ? 'Submissions to this form' : 'Form Submissions'}
         help={pluginDocsHelp('forms', {
           anchor: '#the-inbox',
           excerpt:
@@ -246,7 +281,12 @@ export function SubmissionsCard({ hostId }: { hostId: string }) {
           * Rendered only when the site HAS forms, so a site that has not
           * adopted any sees the page exactly as it was.
           */}
-        {forms.length > 0 ? (
+        {/*
+          * Withheld when the card is scoped: the subject is settled by the
+          * surface this is rendered on, and a picker offering to widen it
+          * would be a control that navigates away from the page it is on.
+          */}
+        {!scoped && forms.length > 0 ? (
           <TextField
             select
             size="small"
@@ -272,11 +312,15 @@ export function SubmissionsCard({ hostId }: { hostId: string }) {
         ) : null}
         {submissions.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
-            {formFilter
-              ? 'No submissions for this form yet. Submissions sent before ' +
-                'the form was created stay under All forms.'
-              : 'No form submissions yet. Add a Contact Form element to a ' +
-                'screen — visitor messages arrive here.'}
+            {scoped
+              ? 'No submissions carry this form’s id yet. Messages this ' +
+                'form’s design collected before it became a form entity are ' +
+                'in the Inbox, filed under the name they were sent with.'
+              : activeForm
+                ? 'No submissions for this form yet. Submissions sent before ' +
+                  'the form was created stay under All forms.'
+                : 'No form submissions yet. Add a Contact Form element to a ' +
+                  'screen — visitor messages arrive here.'}
           </Typography>
         ) : (
           <>

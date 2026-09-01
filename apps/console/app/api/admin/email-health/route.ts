@@ -16,7 +16,12 @@
  */
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
-import { checkEmailCredentials, describeEmailConfig } from '@aglyn/shared-util-email'
+import {
+  checkEmailCredentials,
+  checkSharedSendingPool,
+  describeEmailConfig,
+  sharedSendingPool,
+} from '@aglyn/shared-util-email'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -115,12 +120,52 @@ async function handler(request: Request): Promise<Response> {
       blockers.push('Resend rejected RESEND_API_KEY — rotate or re-scope it.')
     }
 
+    /*
+     * The shared pool, which this check could not see until now.
+     *
+     * `USAGE_EMAIL_FROM` describes ONE sender: the platform's own operational
+     * mail. Every tenant site without a domain of its own sends from a pool
+     * member instead, and nothing above looks at those. That gap is not
+     * hypothetical — the sending key was scoped to a single domain while the
+     * pool carried the transactional floor for every other site, and this
+     * endpoint reported healthy throughout.
+     *
+     * Only probed on request, for the same reason the credential probe is: an
+     * unauthenticated caller must not be able to make this deployment talk to
+     * the provider.
+     */
+    const pool =
+      String(query?.['probe'] ?? '') === '1'
+        ? await checkSharedSendingPool({
+            pool: sharedSendingPool(),
+            readApiKey: process.env['RESEND_READ_API_KEY'],
+          })
+        : null
+
+    if (pool?.status === 'degraded') {
+      blockers.push(
+        `The shared sending pool cannot carry mail on ${pool.unusable.join(', ')}. ` +
+          'Every site without a sending domain of its own sends its receipts ' +
+          'and password resets from a pool member, so this is those sites ' +
+          'already failing rather than a warning about later.',
+      )
+    }
+
     return Response.json({
       ...config,
       expectedFromDomain: EXPECTED_FROM_DOMAIN,
       credentials,
+      pool,
       blockers,
-      /** True only when nothing known is standing in the way of delivery. */
+      /*
+       * True only when nothing known is standing in the way of delivery.
+       *
+       * An UNREADABLE pool is deliberately not a blocker: without a read key
+       * this deployment cannot look, and refusing to call itself healthy for
+       * something it cannot observe would make the self-host shape
+       * permanently red. It is reported instead, so the difference between
+       * "looked and it was fine" and "could not look" stays visible.
+       */
       healthy: config.configured && !blockers.length,
     }, { status: 200 })
   } catch (error) {

@@ -43,6 +43,15 @@ export interface BillingUpgradeDialogProps {
   /** The page's single read of the Stripe customer, shared with the settings cards. */
   profile: BillingProfile
   canManage: boolean
+  /**
+   * The promotion code Stripe applied to the quote below, and the way to
+   * report a change to it. Both belong to the PAGE: this dialog collects and
+   * quotes, and the page is what buys, so a code typed here has to reach the
+   * subscribe body the page POSTs. Held any nearer to the box it is typed in,
+   * it re-prices the quote and never reaches the charge.
+   */
+  appliedCode: string
+  onAppliedCodeChange: (code: string) => void
   onClose: () => void
   /**
    * Subscribe. The SAME call the plan grid makes when nothing was missing —
@@ -103,6 +112,8 @@ export default function BillingUpgradeDialogComponent({
   orgId,
   profile,
   canManage,
+  appliedCode,
+  onAppliedCodeChange,
   onClose,
   onConfirm,
 }: BillingUpgradeDialogProps) {
@@ -259,6 +270,8 @@ export default function BillingUpgradeDialogComponent({
               plan={plan}
               interval={interval}
               canManage={canManage}
+              appliedCode={appliedCode}
+              onAppliedCodeChange={onAppliedCodeChange}
             />
           ) : (
             <Alert severity="info">

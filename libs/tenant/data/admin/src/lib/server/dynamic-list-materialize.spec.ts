@@ -46,12 +46,30 @@ jest.mock('./firebase-admin', () => ({
   },
 }))
 
+/** Every `consentGroupForSite` call the sweep made — a rule's opt-in org read. */
+let groupLookups: string[] = []
+/** The group this site's contacts were captured under, for the facet reads. */
+const GROUP_ID = 'group-acme'
+
 jest.mock('./organizations', () => ({
   orgDataCollectionForHost: async (_hostId: string, name: string) =>
     firestore.collection(`orgs/org-1/${name}`),
   // Identity: what `scopedToHost` narrows is asserted by its own suite, and a
   // fake filter here would only assert the fake.
   scopedToHost: (ref: unknown) => ref,
+  // A DECLARED group rather than the solo one, so a facet read keyed by the
+  // host id instead of the group id fails here rather than passing by
+  // coincidence — the two are the same string for an undeclared site.
+  consentGroupForSite: async (hostId: string) => {
+    groupLookups.push(hostId)
+    return {
+      hostId,
+      groupId: GROUP_ID,
+      name: 'Acme',
+      hostIds: [hostId],
+      declared: true,
+    }
+  },
 }))
 
 /**
@@ -153,6 +171,7 @@ const memberEmails = () =>
 
 beforeEach(() => {
   for (const key of Object.keys(store)) delete store[key]
+  groupLookups = []
   store['hosts/host-1'] = { subdomain: 'acme' }
   store[LIST] = { name: 'VIPs', kind: 'dynamic' }
 })
@@ -414,6 +433,153 @@ describe('the rule can draw from silos other than contacts', () => {
     })
     expect(result.matched).toBe(1)
     expect(memberEmails()).toEqual(['new@example.com'])
+  })
+})
+
+/*==========================================
+ * AN AUDIENCE BUILT FROM A CAMPAIGN.
+ *
+ * The merchant filed forms under a campaign; the submissions carry the filing
+ * they arrived with and the contacts carry it inside the capturing holder's
+ * facet. The scan reads both off documents it has already paged — no query, no
+ * index, nothing that can drop a document for missing a field.
+ *
+ * The assertion that matters most here is the LAST one: a campaign is not a
+ * consent basis, and a dimension that could select a whole contact list must
+ * not be a way to stamp one.
+ *=========================================*/
+
+const SPRING = 'camp_spring'
+
+describe('a campaign is an audience', () => {
+  /** A contact filed under `campaigns`, inside the capturing group's facet. */
+  function seedFiledContact(
+    id: string,
+    email: string,
+    campaigns: string[],
+  ) {
+    store[`orgs/org-1/contacts/${id}`] = {
+      email,
+      facets: { [GROUP_ID]: { sources: { form: true }, campaignIds: campaigns } },
+    }
+  }
+
+  it('enrolls the contacts one holder filed under the campaign', async () => {
+    seedFiledContact('c1', 'filed@example.com', [SPRING])
+    seedFiledContact('c2', 'elsewhere@example.com', ['camp_summer'])
+    seedFiledContact('c3', 'unfiled@example.com', [])
+    const result = await materializeDynamicList({
+      listRef: listRef(),
+      hostId: 'host-1',
+      rule: { sources: ['contacts'], campaignIds: [SPRING] },
+    })
+    expect(result.matched).toBe(1)
+    expect(memberEmails()).toEqual(['filed@example.com'])
+  })
+
+  /**
+   * ⛔ THE FACET IS THE HOLDER'S OWN RECORD.
+   *
+   * A contact row is shared by every site in the org, and which campaigns a
+   * merchant filed somebody under is that merchant's business record on the
+   * same footing as their notes. A read that fell back to the top of the
+   * document, or reached another group's facet, would build one agency
+   * client's audience out of another client's segmentation.
+   */
+  it('reads no other holder’s filing, and no top-level field', async () => {
+    store['orgs/org-1/contacts/c1'] = {
+      email: 'someone-elses@example.com',
+      campaignIds: [SPRING],
+      facets: { 'group-other': { campaignIds: [SPRING] } },
+    }
+    const result = await materializeDynamicList({
+      listRef: listRef(),
+      hostId: 'host-1',
+      rule: { sources: ['contacts'], campaignIds: [SPRING] },
+    })
+    expect(result.matched).toBe(0)
+    expect(memberRows()).toHaveLength(0)
+  })
+
+  it('enrolls the people who came in through the campaign’s forms', async () => {
+    store['hosts/host-1/formSubmissions/s1'] = {
+      formName: 'Spring signup',
+      campaignIds: [SPRING],
+      fields: { email: 'asker@example.com', name: 'Ada' },
+    }
+    store['hosts/host-1/formSubmissions/s2'] = {
+      formName: 'Support',
+      fields: { email: 'other@example.com' },
+    }
+    const result = await materializeDynamicList({
+      listRef: listRef(),
+      hostId: 'host-1',
+      rule: { sources: ['formSubmissions'], campaignIds: [SPRING] },
+    })
+    expect(memberEmails()).toEqual(['asker@example.com'])
+    expect(result.matched).toBe(1)
+  })
+
+  /**
+   * A lead carries no campaign at all, so the dimension is SKIPPED for that
+   * silo rather than failed. A rule of "the spring push, and every lead" that
+   * contributed no leads would be the silently-shrinking source this rule
+   * language exists to prevent.
+   */
+  it('still contributes the silos that carry no campaign', async () => {
+    seedFiledContact('c1', 'filed@example.com', [SPRING])
+    store['hosts/host-1/leads/l1'] = { email: 'lead@example.com' }
+    await materializeDynamicList({
+      listRef: listRef(),
+      hostId: 'host-1',
+      rule: { sources: ['contacts', 'leads'], campaignIds: [SPRING] },
+    })
+    expect(memberEmails()).toEqual(['filed@example.com', 'lead@example.com'])
+  })
+
+  /**
+   * The group lookup is an org read, and it is charged only to the rules that
+   * ask for it — the same opt-in shape the engagement and list lookups take.
+   */
+  it('resolves the holder once per sweep, and not at all without a campaign', async () => {
+    seedFiledContact('c1', 'filed@example.com', [SPRING])
+    await materializeDynamicList({
+      listRef: listRef(),
+      hostId: 'host-1',
+      rule: { sources: ['contacts'], campaignIds: [SPRING] },
+    })
+    expect(groupLookups).toEqual(['host-1'])
+
+    groupLookups = []
+    await materializeDynamicList({
+      listRef: listRef(),
+      hostId: 'host-1',
+      rule: VIP_RULE,
+    })
+    expect(groupLookups).toEqual([])
+  })
+
+  /**
+   * ⛔ MEMBERSHIP IN A CAMPAIGN IS NOT CONSENT.
+   *
+   * The reason the materializer passes no basis at all: a rule that stamped
+   * one would let any merchant manufacture consent for their whole contact
+   * list by writing a rule that selects it. A campaign dimension is the most
+   * tempting version of exactly that — the people it selects were filed under
+   * a marketing push — so the guarantee is asserted against this dimension
+   * specifically and not only against the tag rule above.
+   */
+  it('writes no consent basis onto a row a campaign selected', async () => {
+    seedFiledContact('c1', 'filed@example.com', [SPRING])
+    await materializeDynamicList({
+      listRef: listRef(),
+      hostId: 'host-1',
+      rule: { sources: ['contacts'], campaignIds: [SPRING] },
+    })
+    const [row] = memberRows()
+    expect(store[row]).not.toHaveProperty('marketingConsent')
+    expect(store[row]).not.toHaveProperty('marketingConsentAtMs')
+    expect(store[row]['via']).toBe('rule')
   })
 })
 

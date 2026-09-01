@@ -274,7 +274,10 @@ hosts/{hostId}/forms/{formId}
   fields         FormFieldDecl[]
   consentFieldName?  string    // names the field in `fields` that IS the opt-in
   routing        { datasetId?, datasetFieldMap?, lead?: boolean }
-  stats          { submissions, leads, lastSubmissionAtMs }   // §5
+  stats          { submissions, leads, views, starts,
+                   lastSubmissionAtMs,
+                   periods: { 'YYYY-MM': { submissions, leads,
+                                           views, starts } } }  // §5
   archivedAt?    timestamp
   createdAt      timestamp
   updatedAt      timestamp
@@ -613,11 +616,34 @@ the shape `tools/scripts/backfills/` already uses, and never in a request path.
 | Metric | Where it comes from | Cost per event |
 | --- | --- | --- |
 | **Submissions** | `forms/{formId}.stats.submissions`, `FieldValue.increment(1)` on the write the route is already making | one field on an existing write |
-| **Leads** | `stats.leads`, incremented on the same write when `routing.lead` produced one | same write |
+| **Leads** | `stats.leads`, incremented on the same write when `addHostLead` answered that it stored one | same write |
 | **Last submission** | `stats.lastSubmissionAtMs` | same write |
-| **Views** | `forms/{formId}.stats.views`, incremented by the analytics beacon | **one extra write per page view that contains a form** — see 5b |
-| **Conversion rate** | `submissions / views`, computed in the browser from two numbers already on one document | zero |
-| **Per-day series** | `hosts/{hostId}/formAnalytics/{formId}:{day}`, `{ views, submissions, expiresAt }` | one extra write per event, TTL-swept |
+| **Views** | `forms/{formId}.stats.views`, incremented by the analytics beacon | **one extra write per rendered form** — see 5b |
+| **Starts** | `stats.starts`, from the same beacon on a visitor's first edit | one extra write per form a visitor types into |
+| **Completion / abandonment / lead rate** | computed in the browser from counters already on the one document the page reads | zero |
+| **Per-month series** | `stats.periods['YYYY-MM']`, the same four counters keyed by `submissionMonthKey()`, riding the same writes | **zero** — a document write is priced per write, not per field |
+
+⚠️ **The rates are taken over the months the denominator was recorded in, not
+over the lifetime totals.** `submissions` has counted since the form entity
+existed and `views` only since the beacon shipped, so lifetime-over-lifetime
+divides a long history by a short one — wrong, and wrong in the flattering
+direction. `formStatsWindow` in `libs/aglyn/src/lib/app-utils/forms.ts` is the
+one place that pairing is made, and it answers "no window" rather than a rate
+when the denominator was never live.
+
+⚠️ **A view is a client count and a submission is a server count.** A blocked
+beacon is a view the denominator misses and a submission the numerator holds,
+so a completion rate can exceed 100%. It is reported as measured rather than
+clamped, and the card says which side of it is counted where.
+
+**The per-month map replaced the per-day `formAnalytics` collection this
+section originally proposed.** A day-doc series is one extra write per event
+and a TTL that eventually deletes the history; the month map rides writes that
+are already happening, costs nothing, and keeps the series for as long as the
+form exists. Twelve keys a year on a document with a megabyte to spend is not a
+growth problem. Day granularity is the thing given up, and no surface asks for
+it: the question a form's page answers is whether it is collecting more or less
+than it was, which is a monthly question.
 
 The increment-on-write pattern is not invented here. It is exactly
 `hosts/{hostId}/overlays/{overlayId}.stats.{impressions|clicks|dismissals}`
@@ -641,18 +667,29 @@ The one genuinely new cost is **the view counter**, and it must be argued for
 rather than assumed:
 
 - The beacon already fires once per page view and already writes two documents
-  (`analytics/{day}` and `screenAnalytics/{screenId}:{day}`). Adding a form
-  view makes it three on pages that contain a form.
-- It requires the *client* to know which forms rendered — which the tenant
-  runtime knows after `composeReusableComponentNodes`, and which it can report
-  as a `formIds` array on the existing pageview beacon rather than as a separate
-  request. **One array on an existing beacon, not a new endpoint.**
-- ⚠️ Multiple forms on one page means multiple increments per view. The array
-  must be bounded (the same `slice`-and-cap posture the route applies to
-  `fieldMap`).
-- ⚠️ A form inside a **popup** is not viewed when the page is. The popup
-  already reports `popupImpression`; a form inside one should take its view from
-  that event, not from the pageview.
+  (`analytics/{day}` and `screenAnalytics/{screenId}:{day}`). A form view is one
+  more `update()`, on the same endpoint, in the same shape the overlay counters
+  already use.
+- **The Form component reports it, not the pageview.** This section originally
+  proposed a bounded `formIds` array on the existing pageview beacon, resolved
+  server-side after `composeReusableComponentNodes`. That saves an HTTP request
+  and gets the count wrong in the two places the count is interesting: a form
+  composed into a page is not a form a visitor reached, and it settles the
+  popup question below the wrong way. The component knows when it MOUNTED,
+  which is the closest observable thing to the event being counted.
+- It is one beacon per mount, held on a ref rather than in state, so a
+  re-rendering form — every keystroke — reports nothing further.
+- ⚠️ A form inside a **popup** takes its view from its own mount, so a popup
+  that never opens contributes no view. Nothing has to be wired between the
+  overlay runtime and the form for that to hold.
+- ⚠️ A view is *rendered*, not *seen*. A form below the fold that nobody
+  scrolled to is a view, and the console's figure is labeled "times this form
+  was rendered" rather than implying an impression. Making it an impression
+  needs an `IntersectionObserver`, which is a real option and not this one.
+- ⚠️ Editing surfaces are excluded on `suppressNavigation` — the besigner
+  canvas and the console preview render the same component for its author, and
+  counting them would put the merchant into the denominator of their own
+  completion rate.
 
 **The cheaper alternative, and why it is not enough.** The denominator could be
 derived from `screenAnalytics` for the screens that place the form — no new

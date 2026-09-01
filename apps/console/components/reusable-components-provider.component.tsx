@@ -39,11 +39,26 @@ import { hasEntitlement } from '../constants/entitlements'
 import { buildRoute, Route } from '../constants/route-links'
 import useCurrentOrg from '../hooks/use-current-org'
 import useHostComponentDefinitions from '../hooks/use-host-component-definitions'
+import useHostFormDesigns from '../hooks/use-host-form-designs'
 import { useOrgSlug } from '../hooks/use-org-scope'
 import { useHostSubdomain } from './host-id-provider'
 
 export interface ReusableComponentsProviderProps {
   hostId: string
+  /**
+   * The form this canvas IS, when it is a form's own besigner.
+   *
+   * Its published design is withheld from the graft below, and the reason is
+   * structural rather than a preference: `checkFormContract` requires a form
+   * design's `form` node to name the form it is the design of, so the document
+   * open in a form editor always places itself. Grafting there would paint the
+   * last PUBLISHED version over the draft being edited — the author's unsaved
+   * fields would vanish behind the copy they are trying to replace.
+   *
+   * Only forms need this. A component definition cannot instance itself; the
+   * editor refuses the reference and the graft bounds it anyway.
+   */
+  editingFormId?: string
   children?: JSX.Children
 }
 
@@ -73,7 +88,7 @@ function collectSubtreeIds(
 export function ReusableComponentsProvider(
   props: ReusableComponentsProviderProps,
 ) {
-  const { hostId, children } = props
+  const { hostId, editingFormId, children } = props
   const firestore = useFirestore()
   const createHostResource = useHostResourceApi()
   const { enqueueSnackbar } = useSnackbar()
@@ -91,6 +106,23 @@ export function ReusableComponentsProvider(
   // one listener, one set of skip rules for both readers.
   const { docs: componentDocs, definitions } =
     useHostComponentDefinitions(hostId)
+
+  // The same arrangement for form entities: a placed form draws the fields its
+  // entity publishes, so the canvas shows what the page will render rather
+  // than the copy of the fields the screen happens to hold. Read here because
+  // this provider already wraps every besigner surface — a second provider
+  // would be a second place for the canvas to be told what a document is.
+  const { designs: hostFormDesigns } = useHostFormDesigns(hostId)
+  // A form's own editor is the one canvas that must NOT resolve itself — see
+  // `editingFormId`. Withheld here rather than at the graft so every consumer
+  // of the context sees one answer to "what does this canvas resolve".
+  const formDesigns = useMemo(() => {
+    if (!hostFormDesigns || !editingFormId) return hostFormDesigns
+    if (!(editingFormId in hostFormDesigns)) return hostFormDesigns
+    const next = { ...hostFormDesigns }
+    delete next[editingFormId]
+    return next
+  }, [hostFormDesigns, editingFormId])
 
   // Element drawer: one preset per definition, category "Your components".
   useEffect(() => {
@@ -342,8 +374,15 @@ export function ReusableComponentsProvider(
       onDemote: handleDemote,
       onEditComponent: handleEditComponent,
       definitions,
+      formDesigns,
     }),
-    [handlePromote, handleDemote, handleEditComponent, definitions],
+    [
+      handlePromote,
+      handleDemote,
+      handleEditComponent,
+      definitions,
+      formDesigns,
+    ],
   )
 
   return (
