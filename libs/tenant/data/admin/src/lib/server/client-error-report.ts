@@ -436,6 +436,14 @@ export async function reportServerError(
               route: clampString(event.route, MAX_URL) || undefined,
               method: clampString(event.method, 16) || undefined,
               digest: clampString(event.digest, 64) || undefined,
+              // WHICH DEPLOYMENT THREW, and the log-match policy has no other
+              // way to ask. The credential comes from the environment, so a
+              // developer serving the console locally against the platform
+              // project writes here under the same key as production and
+              // lands in the same log — a throw on a laptop is then
+              // indistinguishable from a 500 served to a customer. The
+              // heartbeat beside this already stamps it for that reason.
+              environment: deploymentEnvironmentLabel(),
             },
           },
         ],
