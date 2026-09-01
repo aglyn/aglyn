@@ -662,7 +662,23 @@ export async function sendEmail(
    * half lives in another library, and a deployment that never installs it
    * must still send.
    */
+  /*
+   * TWO URLS, and which one goes where is the whole RFC 8058 story.
+   *
+   * `unsubscribeUrl` is what a PERSON clicks in the footer below, and the
+   * gate points it at the preference page so the stream this message belongs
+   * to is one of the things they can stop instead of all of it.
+   * `oneClickUrl` is what `List-Unsubscribe` names, and it must stay on the
+   * route whose POST writes immediately — a mailbox provider POSTs it with
+   * nobody present and reads the 200 as "done", which a page of checkboxes
+   * cannot honor.
+   *
+   * It falls back to `unsubscribeUrl` for a caller that minted one link and
+   * named no page, which is the only shape that was ever possible before the
+   * gate minted the pair.
+   */
   let unsubscribeUrl = options.marketing?.unsubscribeUrl ?? ''
+  let oneClickUrl = options.marketing?.oneClickUrl ?? ''
   if (options.marketing) {
     if (to.length !== 1) {
       // Not a delivery outcome — a caller error, and one that would put the
@@ -735,6 +751,7 @@ export async function sendEmail(
         return { sent: false, reason, detail: verdict.detail }
       }
       unsubscribeUrl = unsubscribeUrl || verdict?.unsubscribeUrl || ''
+      oneClickUrl = oneClickUrl || verdict?.oneClickUrl || ''
     }
     if (!unsubscribeUrl) {
       // A marketing message with no way out is the defect this gate exists to
@@ -885,7 +902,7 @@ export async function sendEmail(
         // ships and a merchant-authored header is never silently replaced.
         ...(() => {
           const headers = {
-            ...unsubscribeHeaders(unsubscribeUrl),
+            ...unsubscribeHeaders(oneClickUrl || unsubscribeUrl),
             ...(options.headers ?? {}),
           }
           return Object.keys(headers).length ? { headers } : {}

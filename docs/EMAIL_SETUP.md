@@ -549,8 +549,7 @@ What matters more than a ramp, and is tracked separately:
   confirmation page, so a Safe Links / Proofpoint prescanner following
   the link no longer unsubscribes the recipient. Still open: no
   `mailto:` fallback in the header, because it needs a monitored
-  inbox (see "Later hardening" below), and nothing outside campaigns
-  carries an unsubscribe at all.
+  inbox (see "Later hardening" below).
 - **Topics and a preference center are shipped.** A campaign belongs to a
   topic (`orgs/{orgId}/emailTopics`, org-shared like `lists`, with four
   built-in defaults that need no migration), and the topic is signed into the
@@ -564,6 +563,25 @@ What matters more than a ramp, and is tracked separately:
     checkbox per topic, an "Unsubscribe from everything" button, and a result
     page with an undo. All three routes keep the safe-GET / mutating-POST
     split.
+
+  **Every marketing path makes that split, not only campaigns.** The
+  abandoned-cart sweep, the restock notice, the newsletter welcome and each
+  workflow email go out through `sendEmail`'s marketing seam, and
+  `marketingSendVerdict` mints the pair there — `unsubscribeUrl` on the
+  preference page for the footer, `oneClickUrl` on the write-on-POST route
+  for the header — with the sender's topic signed into both. A footer that
+  named the one-click route gave the recipient of one of those exactly one
+  choice: stop hearing from the site entirely.
+
+  The visible footer is on **both parts**. `sendEmail` appends it to the text
+  and the HTML of any gated message that does not already carry the link, and
+  `renderCampaignEmail` does the same for a campaign, which mints its own
+  pair and passes no marketing context. A designed template carries an
+  opt-out only where its author placed a `{{unsubscribeUrl}}`, so before that
+  a design whose footer block said only the copyright line mailed an HTML
+  part with no way out of the list — the half almost every recipient reads.
+  The idempotency check looks for the escaped URL as well, because a renderer
+  putting the link in an `href` writes `&amp;` between its parameters.
 
   Per-topic opt-outs are recorded at `hosts/{hostId}/topicOptOuts/{emailKey}`
   — per site, beside the suppression list, keyed on the same derivation — and

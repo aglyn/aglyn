@@ -313,6 +313,32 @@ export const DEFAULT_EMAIL_TOPICS: readonly EmailTopic[] = [
 export const DEFAULT_CAMPAIGN_TOPIC_ID = EMAIL_TOPIC_MARKETING
 
 /**
+ * WHICH STREAM AN AUTOMATED EMAIL BELONGS TO — the one answer, named once.
+ *
+ * An immediate reply belongs to no stream unless the step named one; anything
+ * that goes out on the merchant's schedule belongs to the default stream, as a
+ * campaign does. See `FlowEmailScope` for why the two differ.
+ *
+ * The rule is read TWICE per send — the flow gate filters on it, and the
+ * executor signs it into the opt-out link so the preference page opens on the
+ * stream the recipient was trying to leave rather than on a list they have to
+ * search — so it lives here, in the pure leaf both sides can import, rather
+ * than beside either reader. Two spellings of it is how a link comes to name
+ * a stream the gate did not check.
+ *
+ * @returns the topic id, or `''` for a message that belongs to no stream —
+ *          which is not "the default topic", and must not be signed into a
+ *          link as one.
+ */
+export function flowEmailTopicId(
+  topicId: string | null | undefined,
+  scope?: 'scheduled' | 'immediate',
+): string {
+  const named = String(topicId ?? '').trim()
+  return scope === 'immediate' ? named : named || DEFAULT_CAMPAIGN_TOPIC_ID
+}
+
+/**
  * Whether `value` may be a topic id.
  *
  * Two constraints, and the second is the load-bearing one. The id becomes a

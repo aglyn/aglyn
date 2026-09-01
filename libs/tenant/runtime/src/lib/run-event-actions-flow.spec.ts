@@ -219,6 +219,7 @@ jest.mock('@aglyn/shared-util-email', () => {
   }
 })
 
+import { DEFAULT_CAMPAIGN_TOPIC_ID } from '@aglyn/aglyn/app-utils/email-topics'
 import { enrollInFlow, type FlowEnrollment } from './flow-enrollments'
 import { resumeFlowEnrollment, runEventActions } from './run-event-actions'
 
@@ -472,6 +473,12 @@ describe('an email sent from a flow is still marketing mail', () => {
     { type: 'sendEmail', subject: 'Day one', body: 'a', topicId: 'promotions' },
   ]
 
+  /** The same scheduled step, with no stream of its own named. */
+  const withoutTopic = [
+    { type: 'wait', delayMinutes: 60 },
+    { type: 'sendEmail', subject: 'Day one', body: 'a' },
+  ]
+
   async function resumeOnce() {
     seedAction(oneWait)
     await runEventActions(HOST_ID, 'formSubmission', { email: 'a@b.co' })
@@ -509,6 +516,41 @@ describe('an email sent from a flow is still marketing mail', () => {
       expect.objectContaining({ hostId: HOST_ID }),
     )
     expect(sent[0].priority).toBe('bulk')
+  })
+
+  it('names the STREAM it belongs to, so the opt-out link can', async () => {
+    /*
+     * The gate mints the recipient's opt-out link, and it points at the
+     * preference page — where the stream this message belongs to is one of
+     * the things a person can stop instead of all of it. That only works if
+     * the send says which stream it was: without it the page opens on every
+     * stream the site has and the recipient has to find the one they were
+     * trying to leave.
+     *
+     * It is the SAME resolution the gate above filtered on, through the same
+     * `flowEmailTopicId`: a link naming a stream the gate did not check is
+     * what two spellings of that rule would produce.
+     */
+    await resumeOnce()
+
+    expect(sent[0].marketing).toEqual(
+      expect.objectContaining({ topicId: 'promotions' }),
+    )
+    expect(flowGateCalls.at(-1)?.['topicId']).toBe('promotions')
+  })
+
+  it('falls back to the DEFAULT stream for a scheduled step that names none', async () => {
+    // A scheduled send belongs to the default stream, as a campaign does —
+    // so the link it mints can still name one. `''` would leave the
+    // preference page unable to say which message the recipient came from.
+    seedAction(withoutTopic)
+    await runEventActions(HOST_ID, 'formSubmission', { email: 'a@b.co' })
+    const [id, enrollment] = onlyEnrollment()
+    await resumeFlowEnrollment(enrollment, enrollmentRef(id), { nowMs: NOW })
+
+    expect(sent.at(-1)?.marketing).toEqual(
+      expect.objectContaining({ topicId: DEFAULT_CAMPAIGN_TOPIC_ID }),
+    )
   })
 
   it('is REFUSED for someone who left the topic, and nothing is sent', async () => {

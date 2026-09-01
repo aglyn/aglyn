@@ -29,6 +29,7 @@ import {
   MARKETING_CADENCE_INTERVAL_MS,
   MARKETING_FREQUENCY_DEFAULT_PER_WINDOW,
   MARKETING_FREQUENCY_WINDOW_MS,
+  UNSUBSCRIBE_FOOTER_LABEL,
   appendUnsubscribeHtml,
   appendUnsubscribeText,
   marketingCadenceVerdict,
@@ -147,7 +148,23 @@ describe('the visible opt-out', () => {
   })
 
   it('appends a link to the text part', () => {
-    expect(appendUnsubscribeText('Hello', URL)).toContain(`Unsubscribe: ${URL}`)
+    expect(appendUnsubscribeText('Hello', URL)).toContain(
+      `${UNSUBSCRIBE_FOOTER_LABEL}: ${URL}`,
+    )
+  })
+
+  it('names the CHOICE, not only the exit', () => {
+    // The link opens the preference page, where leaving one stream sits
+    // beside leaving all of them. A footer that says only "Unsubscribe" is
+    // the one place a recipient would have learned that, so it never gets
+    // said — and the word stays in the line because that is what a recipient
+    // scans a footer for.
+    const text = appendUnsubscribeText('Hello', URL)
+    expect(text).toContain('Choose which emails you get')
+    expect(text).toContain('unsubscribe')
+    expect(appendUnsubscribeHtml('<p>Hello</p>', URL)).toContain(
+      `>${UNSUBSCRIBE_FOOTER_LABEL}</a>`,
+    )
   })
 
   it('leaves a body that already carries the link alone', () => {
@@ -159,10 +176,26 @@ describe('the visible opt-out', () => {
     expect(appendUnsubscribeHtml(html, URL)).toBe(html)
   })
 
+  it('recognizes the link a RENDERER escaped into an href', () => {
+    /*
+     * The check that keeps a merchant's own placement used to compare
+     * against the unescaped URL only. A signed link carries `&` between its
+     * query parameters and every renderer escapes that into an `href`, so
+     * `{{unsubscribeUrl}}` in a designed template produced `&amp;` — which
+     * matched nothing, and the templates that DID carry an opt-out were the
+     * ones that got a second one.
+     */
+    const html = `<p>bye <a href="${URL.replace(/&/g, '&amp;')}">out</a></p>`
+    expect(appendUnsubscribeHtml(html, URL)).toBe(html)
+  })
+
   it('appends an ANCHOR to the html part, not bare characters', () => {
     const appended = appendUnsubscribeHtml('<p>Hello</p>', URL)
     expect(appended).toContain('<p>Hello</p>')
-    expect(appended).toContain(`href="${URL}"`)
+    // Escaped, because an `&` sitting raw in an `href` is not valid HTML —
+    // and because appending twice must find its own link the second time.
+    expect(appended).toContain(`href="${URL.replace(/&/g, '&amp;')}"`)
+    expect(appendUnsubscribeHtml(appended, URL)).toBe(appended)
   })
 
   it('changes nothing when there is no URL to offer', () => {

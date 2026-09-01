@@ -49,10 +49,18 @@ Use these anywhere in text, rich text, or button links:
 | `{{contact.name}}` | Full name |
 | `{{contact.email}}` | Email address |
 | `{{site.url}}` | Your site's base URL |
-| `{{unsubscribeUrl}}` | Signed unsubscribe link |
+| `{{unsubscribeUrl}}` | Signed link to this recipient's email preferences |
 
 Unknown tokens stay visible in the output so a typo shows up in your
 test send instead of silently rendering blank.
+
+`{{unsubscribeUrl}}` opens the preference page, where the recipient can
+leave just the topic this email belongs to or unsubscribe from
+everything. You do not have to place it: a design that carries no
+opt-out gets one appended to the bottom of both the HTML and the
+plain-text part. Put it in your own footer if you would rather choose
+where it sits — the appended one is skipped when your design already
+has the link.
 
 ## Send it
 
