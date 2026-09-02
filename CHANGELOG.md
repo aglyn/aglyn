@@ -9,6 +9,17 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.53 — 2026-09-02
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/ea5217b32...v1.0.0-beta.53)
+
+### Fixed
+
+- **marketing:** a visibility trigger binds to an element that arrives late ([AGL-2512](https://linear.app/aglyn/issue/AGL-2512), [AGL-1285](https://linear.app/aglyn/issue/AGL-1285), [AGL-2510](https://linear.app/aglyn/issue/AGL-2510))
+- **tenant:** the designed 404 opens its nav, without pricing a 404 flood ([AGL-2511](https://linear.app/aglyn/issue/AGL-2511))
+- **besigner:** the draft spec typechecks, and the id ceiling catches up ([AGL-2508](https://linear.app/aglyn/issue/AGL-2508), [AGL-2507](https://linear.app/aglyn/issue/AGL-2507), [AGL-2512](https://linear.app/aglyn/issue/AGL-2512))
+- **tenant:** every page that renders the site's chrome now ships its behavior ([AGL-2510](https://linear.app/aglyn/issue/AGL-2510), [AGL-2509](https://linear.app/aglyn/issue/AGL-2509))
+
 ## v1.0.0-beta.52 — 2026-09-02
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.51...v1.0.0-beta.52)
