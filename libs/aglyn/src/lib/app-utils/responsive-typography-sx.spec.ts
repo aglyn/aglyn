@@ -45,7 +45,12 @@ describe('ramped typography sx', () => {
   })
 
   it('leaves a cleared font size scalar so it still means "theme decides"', () => {
-    const cleared = { fontSize: undefined, color: '#fff' }
+    // Annotated: a bare `undefined` literal infers as implicit `any` under
+    // the spec tsconfig, and the cleared state is the point of this case.
+    const cleared: { fontSize: string | undefined; color: string } = {
+      fontSize: undefined,
+      color: '#fff',
+    }
     expect(pinRampedTypographySx(cleared)).toBe(cleared)
   })
 
