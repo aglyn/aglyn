@@ -20,6 +20,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import {
   CollectionCategories,
   CollectionEntries,
+  CollectionEntryAuthor,
   CollectionEntryBody,
   CollectionEntryMeta,
   CollectionRelated,
@@ -27,6 +28,7 @@ import {
   CollectionShare,
   collectionCategoriesSchema,
   collectionEntriesSchema,
+  collectionEntryAuthorSchema,
   collectionEntryBodySchema,
   collectionEntryMetaSchema,
   collectionPresets,
@@ -1705,5 +1707,123 @@ describe('Entry Meta byline (AGL-1459)', () => {
       expect(container.querySelector('img')).toBeTruthy()
       expect(screen.getByText('The Aglyn Team · Jul 2026')).toBeTruthy()
     })
+  })
+})
+
+/**
+ * AGL-2486. Entry Meta prints a byline — a NAME, beside a date. The record
+ * behind that name carries a portrait, a bio and a url, and nothing could
+ * render them, so the live blogEntryTmpl closed every article with a card
+ * whose name and blurb were typed in as literal text. It said "The Aglyn
+ * Team" under posts written by somebody else, and no edit to the author
+ * record could reach it.
+ */
+describe('Entry Author card (AGL-2486)', () => {
+  it('registers under the persisted compose-time component id', () => {
+    expect(collectionEntryAuthorSchema.$id).toBe(
+      Aglyn.COLLECTION_ENTRY_AUTHOR_COMPONENT_ID,
+    )
+  })
+
+  it('renders the portrait, the byline and the bio', () => {
+    const { container } = render(
+      <CollectionEntryAuthor
+        name="Zach Gover"
+        bio="Building the open web platform."
+        image="media:org:jWmGooWE3L/4GF1hRJBUp"
+      />,
+    )
+    expect(screen.getByText('Zach Gover')).toBeTruthy()
+    expect(screen.getByText('Building the open web platform.')).toBeTruthy()
+    expect(container.querySelector('img')?.getAttribute('src')).toBe(
+      '/api/media/cdn/org:jWmGooWE3L/4GF1hRJBUp',
+    )
+    // Decorative: the card names the author in text right beside it.
+    expect(container.querySelector('img')?.getAttribute('alt')).toBe('')
+  })
+
+  it('renders nothing at all for an entry with no author', () => {
+    // Never an empty bordered box on a post nobody signed.
+    const { container } = render(<CollectionEntryAuthor />)
+    expect(container.textContent).toBe('')
+    expect(container.querySelectorAll('img')).toHaveLength(0)
+  })
+
+  it('drops each part on its own rather than leaving a gap', () => {
+    const { container } = render(<CollectionEntryAuthor name="Zach Gover" />)
+    expect(container.querySelectorAll('img')).toHaveLength(0)
+    expect(container.textContent).toBe('Zach Gover')
+  })
+
+  it('hides the portrait and the bio behind their Show switches', () => {
+    const { container } = render(
+      <CollectionEntryAuthor
+        name="Zach Gover"
+        bio="Building the open web platform."
+        image="https://cdn.example.com/portrait.png"
+        showAvatar={false}
+        showBio={false}
+      />,
+    )
+    expect(container.querySelectorAll('img')).toHaveLength(0)
+    expect(container.textContent).toBe('Zach Gover')
+  })
+
+  it('renders NO portrait rather than a broken one', () => {
+    // An unresolved token on a non-entry surface is not an image.
+    const { container } = render(
+      <CollectionEntryAuthor name="Zach Gover" image="{{entry.authorImage}}" />,
+    )
+    expect(container.querySelectorAll('img')).toHaveLength(0)
+  })
+
+  it('opens an off-site author page in a new tab', () => {
+    // The same guard the Social Links block applies: the value comes from a
+    // stored record, so the scheme has to be checked rather than trusted.
+    const { container } = render(
+      <CollectionEntryAuthor name="Zach Gover" url="https://example.com/zach" />,
+    )
+    const link = container.querySelector('a')
+    expect(link?.getAttribute('href')).toBe('https://example.com/zach')
+    expect(link?.getAttribute('target')).toBe('_blank')
+    expect(link?.getAttribute('rel')).toContain('noopener')
+  })
+
+  it('keeps a route on this site in the same tab', () => {
+    const { container } = render(
+      <CollectionEntryAuthor name="Zach Gover" url="/about" />,
+    )
+    const link = container.querySelector('a')
+    expect(link?.getAttribute('href')).toBe('/about')
+    expect(link?.getAttribute('target')).toBeNull()
+  })
+
+  it('renders the name as plain text for an href it will not follow', () => {
+    for (const url of ['javascript:alert(1)', 'data:text/html,x', 'mailto:x@y.z']) {
+      const { container, unmount } = render(
+        <CollectionEntryAuthor name="Zach Gover" url={url} />,
+      )
+      expect(container.querySelectorAll('a')).toHaveLength(0)
+      expect(container.textContent).toBe('Zach Gover')
+      unmount()
+    }
+  })
+
+  it('ships a preset that seeds nothing, so the server fill is the mechanism', () => {
+    const preset = collectionPresets.find(
+      (item) =>
+        item.data.componentId === Aglyn.COLLECTION_ENTRY_AUTHOR_COMPONENT_ID,
+    )
+    expect(preset).toBeTruthy()
+    expect(preset?.data.props).toEqual({})
+  })
+
+  it('hangs a media picker on the portrait field', () => {
+    // `Browse media` is attached by field NAME (element-props-form): a text
+    // field called `image` gets one, which is why it is not called `portrait`.
+    const image = (collectionEntryAuthorSchema.attributes ?? []).find(
+      (item) => item.name === 'image',
+    )
+    expect(image?.component).toBe(Aglyn.FieldComponentType.TEXT_FIELD)
   })
 })

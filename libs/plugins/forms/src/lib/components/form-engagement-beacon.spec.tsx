@@ -13,6 +13,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * @jest-environment jsdom
+ * @jest-environment-options {"url": "https://customer.example/"}
  */
 
 /**
@@ -27,6 +30,15 @@
  *
  * Every assertion below is about that. What is under test is not that a
  * request goes out — it is HOW MANY, and which renders are exempt.
+ *
+ * ## Why this file states a deployment
+ *
+ * These beacons share the metered collector with the pageview, so they share
+ * its gate: `sendAnalyticsBeacon` counts only from a real production surface,
+ * and jsdom's default document is served from `localhost`. Without the URL
+ * pragma above and the environment below, every case here would assert an
+ * absence it got for free from the loopback rule — a suite that cannot fail.
+ * The last case is the gate itself, so the arrangement stays honest.
  */
 
 import * as Aglyn from '@aglyn/aglyn'
@@ -36,8 +48,24 @@ import Form, { FormField } from './form'
 /** Every beacon body the component handed the browser, parsed. */
 let beacons: Record<string, any>[]
 
+/** `NODE_ENV` is typed read-only here as it is in the apps. One named cast. */
+const mutableEnv = process.env as Record<string, string | undefined>
+const savedEnv = {
+  nodeEnv: process.env.NODE_ENV,
+  deployEnv: process.env.NEXT_PUBLIC_DEPLOY_ENV,
+}
+
+afterEach(() => {
+  mutableEnv.NODE_ENV = savedEnv.nodeEnv
+  if (savedEnv.deployEnv === undefined) delete process.env.NEXT_PUBLIC_DEPLOY_ENV
+  else process.env.NEXT_PUBLIC_DEPLOY_ENV = savedEnv.deployEnv
+})
+
 beforeEach(() => {
   beacons = []
+  // The deployment every case but the last one describes: ours, in production.
+  mutableEnv.NODE_ENV = 'production'
+  process.env.NEXT_PUBLIC_DEPLOY_ENV = 'production'
   global.fetch = jest
     .fn()
     .mockResolvedValue({ ok: true, json: async () => ({}) }) as never
@@ -183,5 +211,32 @@ describe('the beacon can never break the form it measures', () => {
       fireEvent.input(input, { target: { value: 'a' } }),
     ).not.toThrow()
     expect(container.querySelector('form')).toBeTruthy()
+  })
+})
+
+
+describe('a form counts only where a pageview would', () => {
+  /**
+   * The same gate as the pageview beacon, for the same reason: these counters
+   * live on the metered collector and the tenant app names the PRODUCTION
+   * Firebase project in every environment, so a `next dev` and a preview
+   * deployment used to write a real customer's form views.
+   *
+   * Planted red, verified: send through a raw `navigator.sendBeacon` in
+   * `sendFormBeacon` → both cases go red.
+   */
+  it('reports nothing under next dev', () => {
+    mutableEnv.NODE_ENV = 'development'
+    renderForm()
+    expect(beacons).toEqual([])
+  })
+
+  it('reports nothing from a Vercel preview, whose NODE_ENV is production', () => {
+    process.env.NEXT_PUBLIC_DEPLOY_ENV = 'preview'
+    const { container } = renderForm()
+    fireEvent.input(container.querySelector('input[name="email"]') as Element, {
+      target: { value: 'a' },
+    })
+    expect(beacons).toEqual([])
   })
 })

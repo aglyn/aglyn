@@ -71,11 +71,34 @@ for the site.
 | Element | What it's for |
 | --- | --- |
 | **Box** | The plain container. No styling of its own — you give it padding, background and borders from the Styles panel. Renders as `div`, `span`, `p`, `figure`, `figcaption`, `blockquote` or `pre`. For landmarks, use **Section** instead. |
-| **Section** | Grouping inside a semantic HTML element (`section`, `article`, `aside`, `nav`, `header`, `footer`, `main`) with an accessible label, so the page keeps a meaningful document outline. |
+| **Section** | Grouping inside a semantic HTML element (`section`, `article`, `aside`, `nav`, `header`, `footer`) with an accessible label, so the page keeps a meaningful document outline. `main` is not on the list — see [The page's `main` landmark](#the-pages-main-landmark). |
 | **Container** | Centers content and caps its maximum width. |
 | **Stack** | One-dimensional row or column with a gap. Also the element that carries **repeat over a dataset**. |
 | **Grid** | Responsive 12-column layout. See [Grid](#grid) below. |
-| **Layout slot** | Where a bound layout injects the screen's own content. |
+| **Layout slot** | Where a bound layout injects the screen's own content. Its **HTML element** is `main` unless you change it — see below. |
+
+### The page's `main` landmark
+
+Every published page carries exactly one `main` element: the landmark assistive tech uses
+to skip past the nav straight to the content, and the target a "skip to content" link
+needs. You don't have to place it, and you can't accidentally end up with two.
+
+It goes on the page's content region, which the platform works out for you:
+
+- On a screen framed by a **shared layout**, the layout's **Layout slot** — everything
+  between the chrome. The site nav and the site footer stay outside it, which is the
+  whole point of the landmark.
+- On a screen with **no layout**, the **Document** layer at the top of the hierarchy.
+
+Both of those have an **HTML element** attribute if you want to say otherwise. Set the
+Document layer to `main` and the slot steps aside; set the slot to `section` (for a layout
+whose slot genuinely isn't the page's main content) and the Document layer takes it
+instead. Choose something other than `main` in both places and the page ships without one
+— your call, deliberately made.
+
+Nothing else can claim it: neither **Section**'s element picker nor
+[custom HTML](interactions-and-custom-html.md) will emit a `main`, because a second one
+makes the landmark ambiguous, which is worse than having none.
 
 ### Grid
 
@@ -128,7 +151,7 @@ The **FAQ** preset drops three complete panels at once.
 | Element | What it's for |
 | --- | --- |
 | **Screen Link** | A link that targets a screen by id, so it survives slug renames. Renders as a button or as a text link. |
-| **App bar** / **Toolbar** | The site header frame. |
+| **App bar** / **Toolbar Content** | The site header frame. The app bar is the band; **Toolbar Content** is the row inside it that holds the brand, the links and the actions, and it may only be dropped into an app bar. |
 | **Nav menu** / **Mega menu** | Dropdown and full-width navigation menus. |
 | **Drawer** / **Menu Button** | A panel that slides in from the **left, right, top or bottom**. Open it with a Menu Button or an interaction. **Width** applies to left/right drawers; top and bottom sheets span the viewport, and the control is hidden for them. The **Mobile Nav** preset wires a hamburger, a drawer and a desktop link row in one insert. |
 | **Tabs** / **Tab Panel** | A tab strip and its panels. See [Tabs](#tabs) below. |
@@ -245,6 +268,12 @@ member sign-in/sign-up elements. These are covered with the features they belong
 see [Forms](../../content-and-data/forms/overview.md),
 [Commerce](../../commerce-and-bookings/commerce/overview.md) and
 [Member accounts](../../guides/member-accounts.md).
+
+One element in this group belongs to neither:
+
+| Element | What it's for |
+| --- | --- |
+| **Function Widget** | Runs one of your no-code [functions](../../marketing-and-automation/workflows-and-actions/overview.md) on the live site and shows what it returns — a quote calculator, a shipping estimate, a score. **Function name** is the function from the site's Functions card; the widget draws an input per parameter, a run button you can relabel, and the result under a **Result label** prefix. The function runs server-side, so its logic is never in the page source. |
 
 ## Related
 

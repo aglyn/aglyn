@@ -120,6 +120,28 @@ For one-off protection without accounts, use a
 [per-screen password](../building-sites/site-protection/password-a-screen.md)
 instead.
 
+### Gate part of a page, not all of it
+
+Three blocks gate a **region** instead of a whole screen, so one public page
+can hold both the pitch and the members-only part:
+
+- **Members gate** — a container that shows its children only to entitled
+  members. Everyone else sees the **Teaser text** and a call-to-action button
+  you point wherever joining starts. **Required product id** names the product
+  whose buyers or subscribers get in; leave it blank to accept any live
+  subscription.
+- **Members video** — plays one of a product's videos for members entitled to
+  that product, and resumes where each member left off. **Video number** picks
+  which one (the first is `0`), and **Locked text** is what sits over the
+  poster frame for everyone else.
+- **Member feed** — posts only entitled members can see, newest first, with a
+  **Heading**, **Empty text** for when there are none, and a cap on how many
+  show. Non-members never receive the posts, not merely a hidden copy of them.
+
+A gated region is not a substitute for screen visibility when the whole page
+is for members — that setting keeps the content out of the anonymous page
+source entirely.
+
 ## 5. Manage members from the console
 
 The site's **Users** page has two cards: **Site users** (your members — this

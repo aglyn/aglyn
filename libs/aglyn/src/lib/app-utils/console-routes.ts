@@ -227,6 +227,15 @@ export enum Route {
   MANAGE_USER_SECURITY = '/manage/user/security',
   MANAGE_USER_CLOSE = '/manage/user/close',
   MANAGE_NOTIFICATIONS = '/manage/notifications',
+  /*
+   * A URL for the defect channel (AGL-2486). "Report an issue" was reachable
+   * only by opening the account menu, so nothing outside the console could
+   * send anyone to it — the repo's README pointed at GitHub issues, which we
+   * do not use, and every other "tell us about it" surface had the same
+   * problem. User-level rather than org-scoped because the dialog is: it
+   * needs no workspace, no role and no paid plan.
+   */
+  MANAGE_REPORT_ISSUE = '/manage/report-issue',
   AUTH_SIGN_IN = '/signin',
   AUTH_SIGN_OUT = '/signout',
   AUTH_SIGN_UP = '/signup',
@@ -523,6 +532,7 @@ export interface RoutePayload {
   [Route.MANAGE_USER_SECURITY]: undefined
   [Route.MANAGE_USER_CLOSE]: undefined
   [Route.MANAGE_NOTIFICATIONS]: undefined
+  [Route.MANAGE_REPORT_ISSUE]: undefined
   [Route.ORG_SETTINGS]: { orgSlug: string }
   [Route.ORG_SETTINGS_GENERAL]: { orgSlug: string }
   [Route.ORG_SETTINGS_PROFILE]: { orgSlug: string }

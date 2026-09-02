@@ -28,6 +28,7 @@ import { runInAction } from 'mobx'
 import * as AccordionComponents from './components/accordion'
 import * as AppBar from './components/app-bar'
 import * as Box from './components/box'
+import * as DocumentRoot from './components/document-root'
 import * as Breadcrumbs from './components/breadcrumbs'
 import * as Button from './components/button'
 import * as CardComponents from './components/card'
@@ -103,6 +104,9 @@ export const MUI_BUNDLE: Array<{
     { component: Collection.CollectionRelated, schema: Collection.collectionRelatedSchema },
     { component: Collection.CollectionShare, schema: Collection.collectionShareSchema },
     { component: Collection.CollectionEntryMeta, schema: Collection.collectionEntryMetaSchema },
+    // The author card that closes an article (AGL-2486): the byline block
+    // prints a name, and the record behind it also has a portrait and a bio.
+    { component: Collection.CollectionEntryAuthor, schema: Collection.collectionEntryAuthorSchema },
     // Category pills (AGL-1321): real anchors to /{collection}/category/{slug}.
     { component: Collection.CollectionCategories, schema: Collection.collectionCategoriesSchema },
     // The toolbar search box (AGL-1516): the entries block's own field cannot
@@ -138,6 +142,10 @@ export const MUI_BUNDLE: Array<{
     { component: Stack.default, schema: Stack.schema, presets: Stack.presets },
     // Layout & surface primitives (AGL-1201).
     { component: Box.default, schema: Box.schema, presets: Box.presets },
+    // The canvas ROOT (AGL-2486): registered so the Document layer has a
+    // schema — an element picker — instead of falling through to the
+    // renderer's unstyled div. No preset: it is not an element anybody drops.
+    { component: DocumentRoot.default, schema: DocumentRoot.schema },
     { component: Grid.default, schema: Grid.schema, presets: Grid.presets },
     { component: Paper.default, schema: Paper.schema, presets: Paper.presets },
     { component: CardComponents.default, schema: CardComponents.cardSchema, presets: CardComponents.cardPresets },

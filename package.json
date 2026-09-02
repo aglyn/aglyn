@@ -1,11 +1,11 @@
 {
   "name": "aglyn",
   "description": "",
-  "version": "1.0.0-beta.43",
+  "version": "1.0.0-beta.45",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": "github:aglyn/aglyn",
-  "bugs": "https://github.com/aglyn/aglyn/issues",
+  "bugs": "https://app.aglyn.com/manage/report-issue",
   "private": true,
   "engines": {
     "node": ">=24"

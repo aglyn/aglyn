@@ -17,6 +17,7 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
+import { sendAnalyticsBeacon } from '@aglyn/aglyn/app-utils/analytics-beacon'
 import {
   trackAuthoredEvent,
   trackEvent,
@@ -43,14 +44,15 @@ function sendOverlayBeacon(
   overlayId?: string,
 ) {
   if (!hostId) return
-  try {
-    navigator.sendBeacon(
-      '/api/analytics/collect',
-      JSON.stringify({ hostId, overlay, ...(overlayId ? { overlayId } : {}) }),
-    )
-  } catch {
-    // Beacons are best-effort.
-  }
+  // Best-effort, and refused outright from a non-production build or a browser
+  // marked ours — the same gate the pageview beacon passes. The GA mirror
+  // below is NOT gated here: `trackEvent` carries the taxonomy's own
+  // environment check and stamps `traffic_type` rather than dropping the hit.
+  sendAnalyticsBeacon({
+    hostId,
+    overlay,
+    ...(overlayId ? { overlayId } : {}),
+  })
   // GA mirror (wave v8): sites with Analytics configured see overlay
   // engagement in their own property; no-op without gtag.
   //

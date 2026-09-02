@@ -226,7 +226,9 @@ export const schema: Aglyn.ComponentSchema<MemberSignupProps> = {
     {
       name: 'heading',
       label: 'Heading',
-      description: 'Shown above the form.',
+      description:
+        'The title above the sign-up fields. Say what joining gets them; ' +
+        'blank renders no heading at all.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
     },
     {
@@ -239,7 +241,10 @@ export const schema: Aglyn.ComponentSchema<MemberSignupProps> = {
       name: 'continueFallback',
       label: 'After sign-up',
       description:
-        'Where members land when the URL has no continue param (default /).',
+        'Where a new member goes once the account EXISTS, when nothing sent ' +
+        'them here. A `?continue=` on the URL always wins. Point it at a ' +
+        'welcome or onboarding page rather than the home page if you have ' +
+        'one.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
     },
   ],

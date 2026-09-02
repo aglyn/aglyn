@@ -146,7 +146,10 @@ export const schema: Aglyn.ComponentSchema<LinkBoxProps> = {
     },
     {
       name: 'href',
-      description: 'External URL used only when no screen is selected above.',
+      description:
+        'Where the whole container goes when it points off this site. ' +
+        'Ignored while Screen names one. Everything inside the box becomes ' +
+        'part of this one link, so it should hold no other link.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'External URL',
     },

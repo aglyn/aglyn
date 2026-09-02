@@ -84,6 +84,9 @@ const PERSISTED_COMPONENT_IDS = [
  */
 const MUI_DECLARED_CONTAINERS: readonly string[] = [
   'collectionEntries',
+  // The canvas ROOT — the `Document` layer (AGL-2486). Every node on a page
+  // is one of its descendants, so it renders children by definition.
+  'div',
   'muiAccordion',
   'muiAccordionDetails',
   'muiAppBar',
@@ -182,6 +185,12 @@ describe('plugins-mui', () => {
     // until someone answers: should an author be able to place this? If
     // yes, give it a preset. If no, add it below with the reason.
     const NOT_AUTHOR_PLACEABLE: readonly string[] = [
+      // The canvas ROOT (AGL-2486). Every document has exactly one, created
+      // with the document itself and never dropped — a preset for it would
+      // offer an author a second page inside their page. It is registered
+      // for the other half of what a schema buys: an attributes panel, so
+      // the `Document` layer can be given an HTML element.
+      'div',
       // The wrapper the besigner inserts for a SAVED reusable component.
       // It is created by "Save as reusable component" and by dropping an
       // instance from the Components list, never from the element drawer,

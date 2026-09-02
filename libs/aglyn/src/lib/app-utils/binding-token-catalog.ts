@@ -74,6 +74,21 @@ export const ENTRY_TOKEN_CATALOG: readonly BindingTokenCatalogEntry[] = [
     description: 'The byline set on the entry.',
   },
   {
+    token: '{{entry.authorBio}}',
+    label: 'Author bio',
+    description: 'Blurb from the author’s record.',
+  },
+  {
+    token: '{{entry.authorImage}}',
+    label: 'Author portrait',
+    description: 'Portrait or logo from the author’s record.',
+  },
+  {
+    token: '{{entry.authorUrl}}',
+    label: 'Author link',
+    description: 'The author’s own page.',
+  },
+  {
     token: '{{entry.slug}}',
     label: 'Slug',
     description: 'URL-safe entry identifier.',

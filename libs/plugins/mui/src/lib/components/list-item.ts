@@ -96,7 +96,9 @@ export const schema: Aglyn.ComponentSchema<ListItemProps> = {
     {
       name: 'disableGutters',
       label: 'Disable gutters?',
-      description: 'If true, the left and right padding is removed.',
+      description:
+        'Removes this row’s side padding, so its text lines up with content ' +
+        'outside the list instead of being indented from it.',
       component: Aglyn.FieldComponentType.SWITCH,
     },
     {

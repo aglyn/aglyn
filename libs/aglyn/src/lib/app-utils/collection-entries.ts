@@ -43,6 +43,21 @@ export const COLLECTION_SHARE_COMPONENT_ID = 'collectionShare'
 export const COLLECTION_ENTRY_META_COMPONENT_ID = 'collectionEntryMeta'
 
 /**
+ * Persisted component id of the author card that closes an article
+ * (plugins-mui, AGL-2486).
+ *
+ * Entry Meta prints the byline — a NAME, on one line, beside the date. The
+ * author record it now resolves against carries a portrait, a bio, a job
+ * title and a url, and none of those have anywhere to render: a template that
+ * wanted the card the article frame draws had to type the name and the blurb
+ * as literal text, which then said "The Aglyn Team" under a post somebody
+ * else wrote and went stale the moment the author record was edited. The id
+ * lives here, with the other collection blocks, so the compose pipeline can
+ * fill the card without importing the bundle.
+ */
+export const COLLECTION_ENTRY_AUTHOR_COMPONENT_ID = 'collectionEntryAuthor'
+
+/**
  * Persisted component id of the "Category Pills" block (plugins-mui,
  * AGL-1321). Like the entries repeater, the id lives here so the tenant
  * compose pipeline can stamp the block's links without importing the bundle.
@@ -502,11 +517,51 @@ export function collectionEntryMetaValues(
     // The per-entry byline the editor already collects (AGL-686). It was
     // reachable in the entry's JSON-LD and nowhere on the page, which is what
     // made the frame's byline unauthorable (AGL-1459).
-    author: (entry.authorName ?? '').trim(),
+    //
+    // The resolved RECORD first, then the legacy string (AGL-2486) — the
+    // precedence `resolveEntryAuthor` applies, spelled the same way here. The
+    // tenant denormalizes the record's name onto `authorName` before this
+    // runs, so on a live render the two agree; reading the record directly is
+    // what makes that a convenience rather than the only thing holding the
+    // byline up.
+    author: (entry.author?.name || entry.authorName || '').trim(),
     // Entry model v2 (AGL-582): category resolves by stable ID against the
     // collection's taxonomy, falling back to the legacy free-typed string.
     category: resolveEntryCategoryName(entry, categories) ?? '',
     tags: (entry.tags ?? []).join(', '),
+  }
+}
+
+/**
+ * The values an Entry Author card shows (AGL-2486) — the fields of the
+ * resolved author RECORD, in the spellings the `{{entry.author*}}` tokens
+ * produce.
+ *
+ * Extracted for the reason {@link collectionEntryMetaValues} was: the card,
+ * the token map and {@link expandCollectionEntryAuthor} have to agree, and
+ * three copies of "name, falling back to the legacy string" would not.
+ *
+ * `image` stays RAW — a `media:` reference or a plain url, whichever the
+ * author saved — because the resolver that turns one into a fetchable src
+ * needs the rendering host and this function has no host (`resolveMediaSrc`,
+ * AGL-1215). Every other consumer of an image field in this file does the
+ * same.
+ */
+export function collectionEntryAuthorValues(entry: CollectionEntryRecord): {
+  name: string
+  bio: string
+  image: string
+  url: string
+} {
+  const author = entry.author
+  return {
+    // The record wins, then the legacy free-typed byline (AGL-686), which is
+    // the same precedence `resolveEntryAuthor` applies — an entry written
+    // before custom authors still fills a card, with the one field it has.
+    name: (author?.name ?? entry.authorName ?? '').trim(),
+    bio: (author?.bio ?? '').trim(),
+    image: (author?.image ?? '').trim(),
+    url: (author?.url ?? '').trim(),
   }
 }
 
@@ -522,6 +577,7 @@ export function collectionEntryTokens(
   categories?: CollectionCategory[],
 ): Record<string, string> {
   const meta = collectionEntryMetaValues(entry, categories)
+  const author = collectionEntryAuthorValues(entry)
   return {
     'entry.title': entry.title ?? '',
     'entry.excerpt': entry.excerpt ?? '',
@@ -533,6 +589,14 @@ export function collectionEntryTokens(
     // The byline (AGL-1459). Bindable by hand for the same reason every other
     // field is: a template that wants it somewhere Entry Meta does not reach.
     'entry.author': meta.author,
+    // The rest of the author RECORD (AGL-2486). Bindable by hand for the
+    // same reason `entry.author` is: a card laid out by the designer rather
+    // than dropped as the Entry Author block still has to say who wrote the
+    // piece, and typing the blurb in as literal text is how a byline starts
+    // naming the wrong person.
+    'entry.authorBio': author.bio,
+    'entry.authorImage': author.image,
+    'entry.authorUrl': author.url,
     // Entry model v2 (AGL-582): taxonomy + SEO tokens. The SEO pair falls
     // back to title/excerpt so templates can bind them unconditionally.
     'entry.category': meta.category,
@@ -1432,9 +1496,64 @@ export function expandCollectionEntryMeta<
     // RECORD that actually carries an image displaces the authored value. A
     // legacy string byline, an author with no portrait, and an entry with no
     // author at all all leave the template's mark exactly where it was.
+    //
+    // And only where a byline is actually PRINTED. This block is also the
+    // product's tag row — the article frame ends on one with `Show author`,
+    // `Show date` and `Show category` off and nothing but chips left — so a
+    // portrait filled in unconditionally lands beside the tags, halfway down
+    // the page from the byline it belongs to. The avatar is `alt=""` on the
+    // grounds that "the byline names the author in text right beside it",
+    // which is exactly the thing a chips-only block does not have.
     const authorImage = String(entry.author?.image ?? '').trim()
-    if (authorImage && props['showAvatar'] !== false) {
+    const bylineShown =
+      props['showAuthor'] !== false &&
+      Boolean(filled['author'] || String(props['author'] ?? '').trim())
+    if (authorImage && bylineShown && props['showAvatar'] !== false) {
       filled['avatarImage'] = authorImage
+    }
+    if (!Object.keys(filled).length) continue
+    next[containerId] = { ...container, props: { ...props, ...filled } as any }
+  }
+  return next
+}
+
+/**
+ * Fill Entry Author cards from the routed entry's author record (AGL-2486),
+ * on the same terms {@link expandCollectionEntryMeta} fills the byline:
+ *
+ *  - an authored value always wins, and a blank one is a blank, not a
+ *    request for the default — the way to hide a field is its Show switch;
+ *  - per-entry clones (`centry__`) are skipped, so a listing's cards keep
+ *    resolving their own tokens rather than every card naming the routed
+ *    entry's author;
+ *  - without a routed entry nothing is stamped, which leaves the besigner's
+ *    placeholder card visible on the canvas.
+ *
+ * Inputs are never mutated.
+ */
+export function expandCollectionEntryAuthor<
+  N extends AglynNodeSchema = AglynNodeSchema,
+>(
+  nodes: Record<NodeId, N>,
+  entry: CollectionEntryRecord | null | undefined,
+): Record<NodeId, N> {
+  if (!entry) return nodes
+  const containers = Object.entries(nodes).filter(
+    ([id, node]) =>
+      node?.componentId === COLLECTION_ENTRY_AUTHOR_COMPONENT_ID &&
+      !id.startsWith(COLLECTION_ENTRIES_NODE_ID_PREFIX),
+  )
+  if (!containers.length) return nodes
+
+  const values = collectionEntryAuthorValues(entry)
+  const next: Record<NodeId, N> = { ...nodes }
+  for (const [containerId, container] of containers) {
+    const props = (container.props ?? {}) as Record<string, unknown>
+    const filled: Record<string, string> = {}
+    for (const key of ['name', 'bio', 'image', 'url'] as const) {
+      if (String(props[key] ?? '').trim()) continue
+      if (!values[key]) continue
+      filled[key] = values[key]
     }
     if (!Object.keys(filled).length) continue
     next[containerId] = { ...container, props: { ...props, ...filled } as any }

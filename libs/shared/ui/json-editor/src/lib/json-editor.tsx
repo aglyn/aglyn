@@ -262,7 +262,12 @@ const JsonEditorRaw = forwardRef<any, JsonEditorProps>(
                       maxWidth: 620,
                     }}
                     action={
-                      <IconButton onClick={closeWarn} color="inherit">
+                      <IconButton
+                        onClick={closeWarn}
+                        color="inherit"
+                        aria-label="Dismiss this warning"
+                        title="Dismiss this warning"
+                      >
                         <MdiIcon path={ICON_VARIANT_CLOSE.path} />
                       </IconButton>
                     }

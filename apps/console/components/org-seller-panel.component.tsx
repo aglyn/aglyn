@@ -610,14 +610,14 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
             value={supportUrl}
             onChange={(event) => setSupportUrl(event.target.value)}
             size="small"
-            helperText="https:// only"
+            helperText="Where buyers go for help with your plugins — https:// only"
           />
           <TextField
             label="Website"
             value={website}
             onChange={(event) => setWebsite(event.target.value)}
             size="small"
-            helperText="https:// only"
+            helperText="Your own site, linked from your publisher page — https:// only"
           />
           {/* Fixed social set (AGL-1009): the storefront renders these as
               icons, so it is a known trio rather than a free-form list. */}

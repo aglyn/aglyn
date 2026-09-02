@@ -176,7 +176,9 @@ export const schema: Aglyn.ComponentSchema<MemberSigninProps> = {
     {
       name: 'heading',
       label: 'Heading',
-      description: 'Shown above the form.',
+      description:
+        'The title above the sign-in fields — "Welcome back" rather than ' +
+        '"Sign up". Blank renders no heading at all.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
     },
     {
@@ -195,7 +197,10 @@ export const schema: Aglyn.ComponentSchema<MemberSigninProps> = {
       name: 'continueFallback',
       label: 'After sign-in',
       description:
-        'Where members land when the URL has no continue param (default /).',
+        'Where a member goes after signing IN, when nothing sent them here. ' +
+        'A `?continue=` on the URL — added by the page that turned them ' +
+        'away — always wins, so this is the plain "went to sign in" case. ' +
+        'Blank is the home page.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
     },
   ],
