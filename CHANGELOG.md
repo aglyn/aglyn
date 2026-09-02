@@ -30,6 +30,7 @@ content on the marketing site and is written separately.
 ### Documentation
 
 - **besigner:** every element attribute explains itself, in its own words ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **console:** the sweep widened past element attributes ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
 
 ## v1.0.0-beta.44 — 2026-09-02
 
