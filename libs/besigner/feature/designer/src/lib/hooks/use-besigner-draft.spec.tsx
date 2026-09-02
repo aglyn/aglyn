@@ -16,7 +16,9 @@
  */
 
 import { act, fireEvent, render, screen } from '@testing-library/react'
-import BesignerDraftAlertComponent from '../components/besigner-draft-alert.component'
+import BesignerDraftAlertComponent, {
+  describeDraftOffer,
+} from '../components/besigner-draft-alert.component'
 import {
   besignerDraftKey,
   readBesignerDraft,
@@ -375,5 +377,53 @@ describe('recoverableRoomSessions (AGL-2486)', () => {
     expect(recoverableRoomSessions('unconfigured', 0)).toBe(0)
     expect(recoverableRoomSessions('unauthorized', 0)).toBe(0)
     expect(recoverableRoomSessions('error', 0)).toBe(0)
+  })
+})
+
+/**
+ * WHICH unsaved state the author is looking at (AGL-2508).
+ *
+ * The banner served one sentence for two different documents. Pressing
+ * `Save draft`, being told "Draft saved", and coming back to "Unsaved
+ * changes … were recovered from this browser" says the save failed and the
+ * browser caught it — wrong on both counts, and the reasonable reading is
+ * that the editor loses work.
+ */
+describe('describeDraftOffer origin (AGL-2508)', () => {
+  const base = {
+    available: true,
+    takenAt: Date.now(),
+    staleAgainstDocument: false,
+    restoreBlockedBy: null,
+    restore: () => undefined,
+    discard: () => undefined,
+  }
+  const shared: BesignerDraftState = { ...base, origin: 'shared' }
+  const browser: BesignerDraftState = { ...base, origin: 'browser' }
+
+  it('never calls a SAVED draft unsaved, or blames the browser for it', () => {
+    const copy = describeDraftOffer(shared, 'screen', Date.now())
+    expect(copy).not.toMatch(/unsaved/i)
+    expect(copy).not.toMatch(/this browser/i)
+    expect(copy).toMatch(/saved draft/i)
+    // It is on the server, so it is not this person's private copy.
+    expect(copy).toMatch(/stored with the site/i)
+  })
+
+  it('still describes the crash net as the crash net', () => {
+    const copy = describeDraftOffer(browser, 'screen', Date.now())
+    expect(copy).toMatch(/Unsaved changes/)
+    expect(copy).toMatch(/recovered from this browser/)
+  })
+
+  it('opens a saved draft and restores unsaved work', () => {
+    render(<BesignerDraftAlertComponent draft={shared} noun="screen" />)
+    expect(screen.getByRole('button', { name: 'Open draft' })).toBeTruthy()
+    screen.unmount?.()
+  })
+
+  it('offers Restore for the browser crash net', () => {
+    render(<BesignerDraftAlertComponent draft={browser} noun="screen" />)
+    expect(screen.getByRole('button', { name: 'Restore' })).toBeTruthy()
   })
 })

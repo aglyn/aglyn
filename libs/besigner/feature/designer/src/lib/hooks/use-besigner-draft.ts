@@ -66,6 +66,9 @@ export type BesignerDraftRestoreBlock =
    */
   'saved-since'
 
+/** Which store an offered draft came from. See `BesignerDraftState.origin`. */
+export type BesignerDraftOrigin = 'browser' | 'shared'
+
 export interface BesignerDraftState {
   /**
    * Unsaved work from a previous session is on hand and the author has not
@@ -80,6 +83,21 @@ export interface BesignerDraftState {
    * else saved while it was stranded (AGL-674).
    */
   staleAgainstDocument: boolean
+  /**
+   * WHERE the offered draft came from, which is the difference between two
+   * things the banner used to describe in one voice (AGL-2508).
+   *
+   * * `browser` — the local crash net. Work that was never saved, held in
+   *   this browser only, offered back after a reload or a crash.
+   * * `shared` — the WORKING DRAFT on the server. The author pressed Save
+   *   draft, was told it saved, and it did: this is that document coming
+   *   back, from any browser, for anyone with access.
+   *
+   * Telling an author their deliberately saved draft was "recovered from
+   * this browser" reads as a save that failed and a browser that rescued
+   * them. It is the opposite on both counts.
+   */
+  origin: BesignerDraftOrigin
   /**
    * Why {@link restore} is withheld, or null when it is safe to offer
    * (AGL-2486). A blocked restore is a no-op, not merely an unrendered
@@ -96,6 +114,7 @@ const EMPTY_STATE: BesignerDraftState = {
   available: false,
   takenAt: null,
   staleAgainstDocument: false,
+  origin: 'browser',
   restoreBlockedBy: null,
   restore: () => undefined,
   discard: () => undefined,
@@ -219,6 +238,13 @@ export function useBesignerDraft(
 
   /** The draft being offered, held in memory for the life of the offer. */
   const [offer, setOffer] = useState<BesignerDraft | null>(null)
+  /**
+   * Which store {@link offer} came from (AGL-2508). Tracked beside the offer
+   * rather than folded into `BesignerDraft`, because the stored shape is what
+   * both stores persist and neither one records where it ended up being read
+   * from — that is a fact about this load, not about the document.
+   */
+  const [offerOrigin, setOfferOrigin] = useState<BesignerDraftOrigin>('browser')
   /** Guards the read so it happens exactly once per document, before writes. */
   const readKeyRef = useRef<string | null>(null)
   const idsRef = useRef(ids)
@@ -264,6 +290,7 @@ export function useBesignerDraft(
     readKeyRef.current = key
     pruneBesignerDrafts()
     setOffer(readBesignerDraft(currentIds))
+    setOfferOrigin('browser')
     // The shared draft answers late, and wins when it answers. `readKeyRef`
     // has already latched, so a slow reply cannot re-offer a draft the author
     // has meanwhile restored or discarded — the guard covers both reads.
@@ -272,6 +299,7 @@ export function useBesignerDraft(
     void readServerDraft(firestore, currentIds)
       .then((server) => {
         if (!live || !server) return
+        setOfferOrigin('shared')
         setOffer({
           nodes: server.nodes,
           baseStamp: server.baseStamp,
@@ -443,6 +471,7 @@ export function useBesignerDraft(
       available: true,
       takenAt: offer.updatedAt ?? null,
       staleAgainstDocument,
+      origin: offerOrigin,
       restoreBlockedBy,
       restore,
       discard,
@@ -450,6 +479,7 @@ export function useBesignerDraft(
   }, [
     key,
     offer,
+    offerOrigin,
     roomIsShared,
     staleAgainstDocument,
     restoreBlockedBy,
