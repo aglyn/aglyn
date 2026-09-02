@@ -44,13 +44,19 @@ export const LAYOUT_SLOT_ELEMENTS = [
 ] as const
 export type LayoutSlotElement = (typeof LAYOUT_SLOT_ELEMENTS)[number]
 
-export interface LayoutSlotProps extends BoxProps {
+export interface LayoutSlotProps extends Omit<BoxProps, 'component'> {
   /**
    * The DOM element the slot renders as. Left unset, composition fills in
    * `main` — see {@link LAYOUT_SLOT_ELEMENTS}. Unknown values degrade to
    * `div` rather than reaching the DOM as an invented tag.
+   *
+   * Named `component` like Box's and Typography's, not `element` like
+   * Section's: the attribute means the same thing everywhere it appears.
+   * Narrower than the `ElementType` Box accepts — a canvas attribute is a
+   * persisted STRING, and an allow-list is what keeps `script` out of it —
+   * so `BoxProps`' own `component` is omitted rather than widened.
    */
-  element?: LayoutSlotElement | string
+  component?: LayoutSlotElement | string
   /**
    * Editor-only caption under the slot marker. Layouts render different
    * kinds of content — a doc body, a narrow article measure, a full page —
@@ -79,19 +85,19 @@ export const DEFAULT_SLOT_CAPTION = 'Screen content renders here'
  */
 const LayoutSlot = forwardRef<HTMLDivElement, LayoutSlotProps>(
   (props, ref) => {
-    const { children, sx, caption, element, ...rest } = props
+    const { children, sx, caption, component, ...rest } = props
     const hasChildren = Children.count(children) > 0
-    const component = (LAYOUT_SLOT_ELEMENTS as readonly string[]).includes(
-      String(element ?? ''),
+    const element = (LAYOUT_SLOT_ELEMENTS as readonly string[]).includes(
+      String(component ?? ''),
     )
-      ? (element as LayoutSlotElement)
+      ? (component as LayoutSlotElement)
       : 'div'
 
     if (hasChildren) {
       return (
         <Box
           ref={ref}
-          component={component}
+          component={element}
           data-aglyn-layout-slot=""
           sx={sx}
           {...rest}
@@ -172,7 +178,7 @@ export const schema: Aglyn.ComponentSchema<LayoutSlotProps> = {
       placeholder: DEFAULT_SLOT_CAPTION,
     },
     {
-      name: 'element',
+      name: 'component',
       label: 'HTML element',
       description:
         'The DOM element the screen content renders inside. Blank is ' +

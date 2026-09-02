@@ -811,8 +811,8 @@ describe('composeNodesWithChrome places the `main` landmark (AGL-2486)', () => {
       screenNodes: PLAIN_SCREEN_NODES,
     })
 
-    expect(findNode(composed, 'layout__lSlot')?.props?.element).toBe('main')
-    expect(findNode(composed, ROOT)?.props?.element).toBeUndefined()
+    expect(findNode(composed, 'layout__lSlot')?.props?.component).toBe('main')
+    expect(findNode(composed, ROOT)?.props?.component).toBeUndefined()
   })
 
   it('lands on the screen root when the screen has no layout', async () => {
@@ -822,7 +822,7 @@ describe('composeNodesWithChrome places the `main` landmark (AGL-2486)', () => {
       screenNodes: PLAIN_SCREEN_NODES,
     })
 
-    expect(findNode(composed, ROOT)?.props?.element).toBe('main')
+    expect(findNode(composed, ROOT)?.props?.component).toBe('main')
   })
 
   it('CONTROL — neither node carries it beforehand, so a pass is not vacuous', () => {

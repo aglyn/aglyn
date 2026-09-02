@@ -31,7 +31,7 @@ import { stampDocumentLandmark } from './document-landmark'
 const ROOT = '_@_'
 
 const elementOf = (node: AglynNodeSchema | undefined) =>
-  (node?.props as { element?: string } | undefined)?.element
+  (node?.props as { component?: string } | undefined)?.component
 
 const withLayout = (
   slotProps: Record<string, unknown> = {},
@@ -80,7 +80,7 @@ describe('stampDocumentLandmark (AGL-2486)', () => {
   })
 
   it('honours an author who claimed it on the Document layer', () => {
-    const nodes = stampDocumentLandmark(withLayout({}, { element: 'main' }))
+    const nodes = stampDocumentLandmark(withLayout({}, { component: 'main' }))
     expect(elementOf(nodes[ROOT])).toBe('main')
     // The slot does not also take one — that is the invariant.
     expect(elementOf(nodes['layout__slot'])).toBeUndefined()
@@ -89,14 +89,14 @@ describe('stampDocumentLandmark (AGL-2486)', () => {
   it('leaves an author’s non-main choice on the slot alone', () => {
     // A layout whose slot is genuinely not the page's main content says so,
     // and the landmark falls back to the root rather than overruling them.
-    const nodes = stampDocumentLandmark(withLayout({ element: 'section' }))
+    const nodes = stampDocumentLandmark(withLayout({ component: 'section' }))
     expect(elementOf(nodes['layout__slot'])).toBe('section')
     expect(elementOf(nodes[ROOT])).toBe('main')
   })
 
   it('never ships two, even when both nodes ask for it', () => {
     const nodes = stampDocumentLandmark(
-      withLayout({ element: 'main' }, { element: 'main' }),
+      withLayout({ component: 'main' }, { component: 'main' }),
     )
     expect(elementOf(nodes[ROOT])).toBe('main')
     expect(elementOf(nodes['layout__slot'])).toBe('div')
@@ -110,7 +110,7 @@ describe('stampDocumentLandmark (AGL-2486)', () => {
     // Both pickers were moved off `main` deliberately. Reinstating it would
     // make the field a suggestion rather than a choice.
     const nodes = stampDocumentLandmark(
-      withLayout({ element: 'article' }, { element: 'div' }),
+      withLayout({ component: 'article' }, { component: 'div' }),
     )
     expect(
       Object.values(nodes).filter((node) => elementOf(node) === 'main'),

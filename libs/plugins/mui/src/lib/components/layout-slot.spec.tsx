@@ -36,7 +36,7 @@ describe('Layout Slot renders the element composition chose (AGL-2486)', () => {
   it('renders each offered element', () => {
     for (const element of LAYOUT_SLOT_ELEMENTS) {
       const { unmount } = render(
-        <LayoutSlot element={element}>{element}</LayoutSlot>,
+        <LayoutSlot component={element}>{element}</LayoutSlot>,
       )
       expect(screen.getByText(element).tagName).toBe(element.toUpperCase())
       unmount()
@@ -44,17 +44,17 @@ describe('Layout Slot renders the element composition chose (AGL-2486)', () => {
   })
 
   it('degrades an unlisted element rather than emitting it', () => {
-    render(<LayoutSlot element="script">{'safe'}</LayoutSlot>)
+    render(<LayoutSlot component="script">{'safe'}</LayoutSlot>)
     expect(screen.getByText('safe').tagName).toBe('DIV')
   })
 
   it('keeps the slot marker attribute the composer keys on', () => {
-    const { container } = render(<LayoutSlot element="main">{'x'}</LayoutSlot>)
+    const { container } = render(<LayoutSlot component="main">{'x'}</LayoutSlot>)
     expect(container.querySelector('main[data-aglyn-layout-slot]')).toBeTruthy()
   })
 
   it('offers exactly the elements the renderer accepts', () => {
-    const field = (schema.attributes ?? []).find((a) => a.name === 'element')
+    const field = (schema.attributes ?? []).find((a) => a.name === 'component')
     const options = (field as unknown as { options: { value: string }[] })
       .options
     expect(options.map((o) => o.value)).toEqual([...LAYOUT_SLOT_ELEMENTS])

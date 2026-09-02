@@ -53,8 +53,13 @@ export const DOCUMENT_LANDMARK_ELEMENT = 'main'
 /** What a node renders as when it is not the landmark. */
 const PLAIN_ELEMENT = 'div'
 
+/**
+ * The element a node was told to render as. `component`, the name Box and
+ * Typography already use for it — Section's `element` is the outlier, and it
+ * cannot mint a `main` anyway.
+ */
 const elementOf = (node: AglynNodeSchema | undefined): string =>
-  String((node?.props as { element?: unknown } | undefined)?.element ?? '')
+  String((node?.props as { component?: unknown } | undefined)?.component ?? '')
 
 /** Assign the document's single `main` landmark. See the module comment. */
 export function stampDocumentLandmark<
@@ -99,14 +104,14 @@ export function stampDocumentLandmark<
       ...next[landmarkId],
       props: {
         ...(next[landmarkId].props as object),
-        element: DOCUMENT_LANDMARK_ELEMENT,
+        component: DOCUMENT_LANDMARK_ELEMENT,
       },
     } as N
   }
   if (demoteId) {
     next[demoteId] = {
       ...next[demoteId],
-      props: { ...(next[demoteId].props as object), element: PLAIN_ELEMENT },
+      props: { ...(next[demoteId].props as object), component: PLAIN_ELEMENT },
     } as N
   }
   return next

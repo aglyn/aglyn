@@ -55,8 +55,12 @@ export interface DocumentRootProps {
    * The DOM element rendered; defaults to `div`. On a screen with no shared
    * layout, composition fills in `main` — with no slot to carry it, the root
    * IS the page's content region.
+   *
+   * Named `component` like Box's and Typography's, not `element` like
+   * Section's: the attribute means the same thing everywhere it appears, and
+   * two names for it is one the author has to learn twice.
    */
-  element?: DocumentRootElement | string
+  component?: DocumentRootElement | string
   children?: ReactNode
 }
 
@@ -70,16 +74,16 @@ export interface DocumentRootProps {
  */
 const DocumentRoot = forwardRef<HTMLDivElement, DocumentRootProps>(
   (props, ref) => {
-    const { element, children, ...rest } = props
+    const { component, children, ...rest } = props
     // Unknown values degrade to `div` rather than reaching the DOM as an
     // invented tag — the resolver pattern `Section` uses.
-    const component = (
-      DOCUMENT_ROOT_ELEMENTS as readonly string[]
-    ).includes(String(element ?? ''))
-      ? (element as DocumentRootElement)
+    const element = (DOCUMENT_ROOT_ELEMENTS as readonly string[]).includes(
+      String(component ?? ''),
+    )
+      ? (component as DocumentRootElement)
       : 'div'
     return (
-      <MuiBox ref={ref} component={component} {...rest}>
+      <MuiBox ref={ref} component={element} {...rest}>
         {children}
       </MuiBox>
     )
@@ -97,7 +101,7 @@ export const schema: Aglyn.ComponentSchema<DocumentRootProps> = {
   icon: { path: mdiFileDocumentOutline.path, sx: { color: '#607d8b' } },
   attributes: [
     {
-      name: 'element',
+      name: 'component',
       label: 'HTML element',
       description:
         'The DOM element the page renders as. On a screen framed by a ' +

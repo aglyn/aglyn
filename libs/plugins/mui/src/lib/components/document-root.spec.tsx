@@ -43,7 +43,7 @@ describe('the document root (AGL-2486)', () => {
   it('renders each offered element', () => {
     for (const element of DOCUMENT_ROOT_ELEMENTS) {
       const { unmount } = render(
-        <DocumentRoot element={element}>{element}</DocumentRoot>,
+        <DocumentRoot component={element}>{element}</DocumentRoot>,
       )
       expect(screen.getByText(element).tagName).toBe(element.toUpperCase())
       unmount()
@@ -53,12 +53,12 @@ describe('the document root (AGL-2486)', () => {
   it('degrades an unlisted element rather than emitting it', () => {
     // The value is persisted and rendered verbatim, so anything but an
     // allow-list would put `script` into every visitor's page.
-    render(<DocumentRoot element="script">{'safe'}</DocumentRoot>)
+    render(<DocumentRoot component="script">{'safe'}</DocumentRoot>)
     expect(screen.getByText('safe').tagName).toBe('DIV')
   })
 
   it('offers exactly the elements the renderer accepts', () => {
-    const field = (schema.attributes ?? []).find((a) => a.name === 'element')
+    const field = (schema.attributes ?? []).find((a) => a.name === 'component')
     const options = (field as unknown as { options: { value: string }[] })
       .options
     expect(options.map((o) => o.value)).toEqual([...DOCUMENT_ROOT_ELEMENTS])
