@@ -688,33 +688,34 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
-  # THE PRODUCTION BUILDS, SPLIT APPS-vs-REST (AGL-2505).
+  # THE PRODUCTION BUILDS, IN ONE JOB (AGL-2505).
   #
-  # 6m52s as a single `nx affected -t build --parallel=3`, and the three Next
-  # and docusaurus app builds are nearly all of it. One app per runner also
-  # gives the strongest form of the constraint the test note below argues for:
-  # a production build can no longer contend with anything, for memory or for
-  # cores.
+  # 6m52s, and deliberately NOT split further. Two measurements say so.
   #
-  # ⛔ THE `build-rest` JOB BELOW IS NOT OPTIONAL. **51** projects carry a
-  # `build` target, not three — every buildable lib does too. A matrix over
-  # `[console, tenant, docs]` alone would silently stop building the other 48
-  # and still report green, which is the exact shape of gap this file guards
-  # against everywhere else. `build-rest` is `--exclude` of these same three,
-  # so the two jobs are complements BY CONSTRUCTION and their union is
-  # `nx affected -t build` with nothing dropped and nothing built twice.
+  # It is not the pole: the eight test shards run 7-9m, so a faster build job
+  # would not move the wall clock at all.
   #
-  # `nx affected` still decides whether either has work: a project outside the
-  # range resolves to no task and the job is seconds. The repo is public, so
-  # the runners are free either way.
+  # And the obvious split does not work. `nx affected -t build
+  # --projects=<app>` was tried and failed on run 33678823983: `--projects` is
+  # not a flag `affected` consumes, so nx did what the note below the lint
+  # step already warns it does with unrecognised flags — appended it to the
+  # command STRING of every `nx:run-commands` target. `cloud-functions:build`
+  # shells out to tsc and died on
+  #
+  #   error TS5023: Unknown compiler option '--projects=console'.
+  #
+  # while the run still built all 51 projects in each of the three jobs,
+  # because the filter never applied. `--exclude` IS consumed by nx and works;
+  # `--projects` is not, on `affected`. Splitting this needs `--exclude` on
+  # both halves, and it is not worth it while test is the pole.
+  #
+  # ⚑ 51 projects carry a `build` target, not the three apps — every buildable
+  # lib does too. Any future split must keep the halves exact complements, or
+  # it stops building libraries and stays green.
   build:
     needs: base
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        app: [console, tenant, docs]
     steps:
       # Before the local action, never after: `uses: ./…` is resolved from
       # the runner's disk, so the repo must already be there. See the note at
@@ -727,33 +728,9 @@ jobs:
         with:
           nx-base: ${{ needs.base.outputs.base }}
           nx-head: ${{ needs.base.outputs.head }}
-          cache-scope: build-${{ matrix.app }}
+          cache-scope: build
 
-      - run: npx nx affected -t build --projects=${{ matrix.app }}
-
-  # The complement of the matrix above: every OTHER buildable project. See the
-  # ⛔ note there — the `--exclude` list and the matrix must stay identical, or
-  # a project falls between them and stops being built without anything going
-  # red.
-  build-rest:
-    needs: base
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      # Before the local action, never after: `uses: ./…` is resolved from
-      # the runner's disk, so the repo must already be there. See the note at
-      # the top of the action.
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - uses: ./.github/actions/nx-ci-setup
-        with:
-          nx-base: ${{ needs.base.outputs.base }}
-          nx-head: ${{ needs.base.outputs.head }}
-          cache-scope: build-rest
-
-      - run: npx nx affected -t build --exclude=console,tenant,docs --parallel=3
+      - run: npx nx affected -t build --parallel=3
 
   # ONE CHECK NAME FOR BRANCH PROTECTION TO REQUIRE (AGL-1777, AGL-2505).
   #
@@ -771,7 +748,7 @@ jobs:
   # otherwise the one job protection depends on would go green precisely when
   # its dependencies never ran.
   ci:
-    needs: [typecheck, checks, lint, test, build, build-rest]
+    needs: [typecheck, checks, lint, test, build]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
