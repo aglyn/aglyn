@@ -193,6 +193,19 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
     any
   > | null>(null)
   const [unlockError, setUnlockError] = useState(false)
+  /**
+   * The enricher slice that arrives WITH a gated page's nodes (AGL-2510).
+   *
+   * A protected or members-only page ships `nodes: null`, so its automations,
+   * overlays and experiments cannot ride in the page props the way every
+   * other page's do — they come back from the same endpoint that opens the
+   * gate. Held here and merged into what the site runtimes read, so the nav
+   * the visitor just unlocked behaves like the nav on every other page.
+   */
+  const [gatedPageProps, setGatedPageProps] = useState<Record<
+    string,
+    any
+  > | null>(null)
   // Members-only content (AGL-109): fetched with the session cookie.
   const [memberNodes, setMemberNodes] = useState<Record<string, any> | null>(
     null,
@@ -216,8 +229,10 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
       if (!response.ok) return setMemberDenied(true)
       const payload = await response.json()
       if (payload?.nodes) {
-        canvas.setNodes(payload.nodes)
-        setMemberNodes(payload.nodes)
+        const { nodes: memberTree, ...enriched } = payload
+        canvas.setNodes(memberTree)
+        setMemberNodes(memberTree)
+        setGatedPageProps(enriched)
       }
     })()
     return () => {
@@ -443,8 +458,10 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
             if (!response.ok) return setUnlockError(true)
             const payload = await response.json()
             if (payload?.nodes) {
-              canvas.setNodes(payload.nodes)
-              setUnlockedNodes(payload.nodes)
+              const { nodes: unlockedTree, ...enriched } = payload
+              canvas.setNodes(unlockedTree)
+              setUnlockedNodes(unlockedTree)
+              setGatedPageProps(enriched)
             } else {
               setUnlockError(true)
             }
@@ -762,7 +779,13 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
           key={runtimeId}
           hostId={props.data?.host?.$id}
           screens={props.data?.host?.screens}
-          page={props as Record<string, any>}
+          // A gated page's slice arrives with its nodes, after this render
+          // (AGL-2510); every other page has it in `props` and merges nothing.
+          page={
+            gatedPageProps
+              ? { ...(props as Record<string, any>), ...gatedPageProps }
+              : (props as Record<string, any>)
+          }
         />
       ))}
       <AglynNodeRenderer node={canvas.getNode(NODE_ROOT_ID)} />
