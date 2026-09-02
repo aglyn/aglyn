@@ -38,136 +38,115 @@ concurrency:
 env:
   NX_NO_CLOUD: 'true'
 
+
+# FOUR PARALLEL JOBS BEHIND ONE BASE RESOLUTION (AGL-2505).
+#
+# This was a single `main` job running typecheck → guards → lint → test →
+# build in sequence, so the wall clock was their sum: a median of ~43m over
+# the green runs, 47.4m at the top. The step breakdown of run 33666851764:
+#
+#   setup + three npm ci     1m46s
+#   typecheck                5m03s
+#   the 22 guard steps         31s
+#   lint                     2m14s
+#   test                    19m16s   ← 67% of the job
+#   build                    skipped (the test step was red)
+#
+# Those are the numbers from a red run, where build never ran. The green run
+# 33663395549 measured 44m total: test 25m46s, build 6m52s, typecheck 6m03s,
+# lint 2m52s. So `test` is 59% of a green run and everything else is noise
+# beside it.
+#
+# No phase needs another's output, so they are jobs now, and `test` is split
+# four ways on top of that (see its own note). The wall clock becomes the
+# longest job rather than the sum:
+#
+#   base        ~0m30s   git only, no install
+#   checks      ~8m      typecheck 6m03s + the guards + setup
+#   lint        ~5m      2m52s + setup
+#   test x4     ~9m      25m46s over four shards + setup
+#   build       ~9m      6m52s + setup
+#
+# — call it ~10m against the 44m it replaces. The repo is PUBLIC, so the extra
+# runner-minutes are free; latency on the release gate was the only real cost,
+# and a 40-minute gate is what makes a flaky rerun expensive enough to argue
+# about rather than just do.
+#
+# WHY `base` IS ITS OWN JOB. `nx affected` is only honest if every job agrees
+# on the range, and the preferred candidate — `origin/<base ref>` — names the
+# base branch AS IT STANDS NOW. Resolving per job would let a promotion
+# landing on `production` mid-run hand two jobs different bases, and the run
+# would return one verdict over two different affected sets. The old single
+# job could not do that because it resolved once. So this one resolves once
+# too, and hands the answer down. It needs git and nothing else, so it costs
+# a checkout rather than an install.
+#
+# WHY `build` DOES NOT WAIT FOR `test`. It used to, for two reasons: builds
+# must not compete with the jest fleet for the runner's 16 GB, and a red test
+# made the build pointless. The first is now satisfied structurally and
+# better — build has its OWN runner and cannot contend with jest at all. The
+# second traded a verdict for time no longer being spent: with the jobs
+# parallel, waiting would cost the whole build duration on every GREEN run to
+# save it on a red one. Running both means a red run also answers "is the
+# build broken too" rather than needing a second ~43m round to find out.
+#
+# WHAT THIS DOES NOT CHANGE: `--maxWorkers=2`, test and build as separate
+# invocations, and every guard below. The parallelism added here is across
+# RUNNERS. Do not spend it inside one — the runner is 4 vCPU and `test`
+# already runs `--parallel=3 --maxWorkers=2` on it. The long note in the test
+# job records what raising that cost last time.
 jobs:
-  main:
+  # THE AFFECTED BASE, PINNED TO THE EVENT, RESOLVED ONCE.
+  #
+  # `nrwl/nx-set-shas` answers a different question than this workflow
+  # asks. It searches for the last SUCCESSFUL run of this workflow on
+  # `main-branch-name`, and pushes here only ever happen on `production`
+  # (see the trigger at the top of this file), so that search finds
+  # nothing on `main` and the action falls back to `HEAD~1` of
+  # `origin/main` — a commit chosen for its position on a branch the run
+  # is not about. Whether it sits inside NX_HEAD's history is luck, and
+  # when it does, `nx affected` selects NOTHING: run 33451476550 resolved
+  # a base of main's own tip against a PR merge ref that already contained
+  # it, and reported success having run zero tests and zero builds. Run
+  # 33447786974 did the same on a push to `production` — measured against
+  # this graph, its base selected 0 projects where the previous production
+  # tip selects 53.
+  #
+  # A base that selects nothing is worse than a red. It is a green tick
+  # from a job that never looked, on the two events where looking is the
+  # whole point. The honest base is a property of the event:
+  #
+  #   pull_request  the tip of the branch being merged INTO. On a
+  #                 promotion PR that is `production`, so the range is the
+  #                 entire promotion delta — every commit the release
+  #                 carries, which is what the PR is asking for a verdict
+  #                 on. On any other PR it is the fork point, so the range
+  #                 is that PR's own work.
+  #   push          `github.event.before`, the commit `production` was
+  #                 deployed from before this push. The range is exactly
+  #                 what the deploy adds.
+  #
+  # Both go through `git merge-base` against HEAD, so a rewritten or
+  # force-pushed base widens the range rather than inverting it. When no
+  # candidate names a commit this checkout has, there is no honest base
+  # and the fallback is the ROOT commit, which marks every project
+  # affected: running everything is the right answer to "what changed is
+  # unknown", and running nothing is not.
+  base:
     runs-on: ubuntu-latest
-
-    # AGL-2378. This was the only verdict-producing workflow with no timeout,
-    # so a stuck run fell through to GitHub's 6-HOUR default and every later
-    # push sat behind it. That is not hypothetical: until 947100c2c a
-    # `console:test` spec looped through microtasks forever, which jest's
-    # `testTimeout` structurally cannot catch — it is a real timer and the loop
-    # never yields to the macrotask queue. On 2026-08-19, 25 runs reached
-    # `nx affected` and took a median of 54.4m and a maximum of 75.8m, with the
-    # `nx affected` step alone measured at 34.6m in one of them. That, not a
-    # missing concurrency group, is most of what put 23 NX CI runs in flight at
-    # once and made the workflow read as "constantly failing" when many of
-    # those runs simply never got to answer.
-    #
-    # 60, and the first number here was WRONG — recorded so nobody re-derives
-    # it from the same bad sample. It was set to 30 on the reasoning that 9.9m
-    # (947100c2c, the first run to complete after the hang fix) was the slowest
-    # completing run. That sample was one narrowly-affected commit. `nx affected`
-    # scope dominates the runtime, and the real spread measured over the
-    # following hour was 7.8m to 32.8m — `0585f3df1` and `96fe2d2a` both
-    # completed at 32.8m, and `d0512575d` ran past 32.7m. The 30m bound then did
-    # exactly what a too-tight bound does: it cancelled run 32266221225 at
-    # 15:18:30, thirty minutes to the second after its job started, on a run
-    # whose siblings finished honestly at 32.8m.
-    #
-    # That is worse than no bound at all. An unbounded stuck run is one obvious
-    # red; a bound below the real distribution turns every honest slow run into
-    # a cancellation, which is indistinguishable from the AGL-2378 eviction bug
-    # this file was just fixed for and reads as "NX CI is constantly failing".
-    #
-    # 60 is ~1.8x the slowest observed completion (32.8m), still 6x under
-    # GitHub's 6-hour default, and still bounds a genuine hang — the AGL-2374
-    # hang band ran 22-76m with a 54.4m median.
-    #
-    # The hang is fixed, so this is a backstop against the NEXT one rather than
-    # a live fire. If a legitimately wide commit — one touching tsconfig.base
-    # or the root package.json, where `nx affected` approaches all 40 projects
-    # — ever trips this, RAISE the number; measure the spread first rather than
-    # trusting a single fast run, which is the mistake above. Do not remove it:
-    # unbounded is how one stuck spec starves the branch for six hours.
-    timeout-minutes: 60
-
+    timeout-minutes: 10
+    outputs:
+      base: ${{ steps.resolve.outputs.base }}
+      head: ${{ steps.resolve.outputs.head }}
     steps:
       - uses: actions/checkout@v7
         with:
+          # `git merge-base` against the base branch, and the root-commit
+          # fallback's `git rev-list --max-parents=0`, both need full history.
           fetch-depth: 0
 
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 20
-          cache: 'npm'
-
-      - run: npm ci
-
-      # cloud/functions is a SEPARATE npm package, not a workspace of the root
-      # one — the root package.json has no `workspaces` key and its postinstall
-      # is only patch-package, so the `npm ci` above installs nothing for it.
-      # tools/scripts/typecheck.mjs nonetheless walks cloud/functions/tsconfig
-      # (`cloud/` is in neither its SKIP nor its PRUNE list), so without this
-      # the typecheck step below fails with three TS2307s on firebase-functions
-      # subpaths — a missing-install artifact, not a source defect (AGL-1776).
-      # It goes unnoticed locally because every dev checkout has a nested
-      # install left over from a past `firebase deploy`.
-      #
-      # Installing is deliberately preferred over adding `cloud/` to that
-      # script's SKIP list: the Cloud Functions are a production surface, and
-      # skipping would silently drop them from the workspace's ONLY type gate
-      # to make a red go away.
-      - run: npm ci --prefix cloud/functions
-
-      # apps/docs is the SECOND such package, and it breaks a different step:
-      # `docs` is an nx project whose build target shells `docusaurus build`,
-      # so the `nx affected -t lint test build` at the bottom of this file
-      # fails with `sh: docusaurus: command not found` on a root-only install
-      # (AGL-1781). Same invisibility as above — every dev checkout has
-      # apps/docs/node_modules from a past docs build.
-      #
-      # It stays standalone rather than becoming an npm workspace, and that is
-      # not inertia: apps/docs/package.json pins React 18 and says in its own
-      # description that its node_modules are self-contained so they never
-      # collide with the root's React 19. Hoisting it is the one change that
-      # would break it. cloud/functions is standalone for its own reason —
-      # `firebase deploy` packs and uploads that directory as a self-contained
-      # package. A `workspaces` key would move both problems, not solve them.
-      #
-      # So the policy is: standalone packages are enumerated here, and the
-      # guard two steps below fails when a THIRD one lands without a line of
-      # its own — which is the part that stops this recurring, since neither
-      # of the first two was visible until CI (or a hand-run gate) hit it.
-      - run: npm ci --prefix apps/docs
-
-      # THE AFFECTED BASE, PINNED TO THE EVENT.
-      #
-      # `nrwl/nx-set-shas` answers a different question than this workflow
-      # asks. It searches for the last SUCCESSFUL run of this workflow on
-      # `main-branch-name`, and pushes here only ever happen on `production`
-      # (see the trigger at the top of this file), so that search finds
-      # nothing on `main` and the action falls back to `HEAD~1` of
-      # `origin/main` — a commit chosen for its position on a branch the run
-      # is not about. Whether it sits inside NX_HEAD's history is luck, and
-      # when it does, `nx affected` selects NOTHING: run 33451476550 resolved
-      # a base of main's own tip against a PR merge ref that already contained
-      # it, and reported success having run zero tests and zero builds. Run
-      # 33447786974 did the same on a push to `production` — measured against
-      # this graph, its base selected 0 projects where the previous production
-      # tip selects 53.
-      #
-      # A base that selects nothing is worse than a red. It is a green tick
-      # from a job that never looked, on the two events where looking is the
-      # whole point. The honest base is a property of the event:
-      #
-      #   pull_request  the tip of the branch being merged INTO. On a
-      #                 promotion PR that is `production`, so the range is the
-      #                 entire promotion delta — every commit the release
-      #                 carries, which is what the PR is asking for a verdict
-      #                 on. On any other PR it is the fork point, so the range
-      #                 is that PR's own work.
-      #   push          `github.event.before`, the commit `production` was
-      #                 deployed from before this push. The range is exactly
-      #                 what the deploy adds.
-      #
-      # Both go through `git merge-base` against HEAD, so a rewritten or
-      # force-pushed base widens the range rather than inverting it. When no
-      # candidate names a commit this checkout has, there is no honest base
-      # and the fallback is the ROOT commit, which marks every project
-      # affected: running everything is the right answer to "what changed is
-      # unknown", and running nothing is not.
       - name: resolve affected base
+        id: resolve
         env:
           PUSH_BEFORE: ${{ github.event.before }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -196,19 +175,32 @@ jobs:
           # No candidate resolved: what changed is UNKNOWN, which is a
           # different answer from "nothing changed" and takes the wider
           # fallback. A base that resolved and happens to equal HEAD is kept
-          # as it is — the range really is empty, and the step below says so.
+          # as it is — the range really is empty, and the `checks` job says so.
           if [ -z "$base" ]; then
             base="$(git rev-list --max-parents=0 "$head" | tail -n 1)"
             echo "::warning::No usable affected base for ${GITHUB_EVENT_NAME}; using the root commit, so every project is affected."
           fi
 
           {
-            echo "NX_BASE=$base"
-            echo "NX_HEAD=$head"
-          } >> "$GITHUB_ENV"
+            echo "base=$base"
+            echo "head=$head"
+          } >> "$GITHUB_OUTPUT"
 
           echo "NX_BASE=$base"
           echo "NX_HEAD=$head"
+
+  # Typecheck plus every guard that is not affected-scoped (~5m40s). It also
+  # reports the affected range for the whole run, once.
+  checks:
+    needs: base
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: ./.github/actions/nx-ci-setup
+        with:
+          nx-base: ${{ needs.base.outputs.base }}
+          nx-head: ${{ needs.base.outputs.head }}
+          cache-scope: checks
 
       # What that base actually selected, named once and up front.
       #
@@ -219,7 +211,11 @@ jobs:
       # count in the run summary, and raises an annotation when the count is
       # zero. It does not fail on zero — a commit that touches only workflow
       # files legitimately affects no project — and it does not narrow what
-      # the steps below run.
+      # the lint, test and build jobs run.
+      #
+      # It lives in `checks` rather than in `base` because it needs
+      # `npx nx show projects`, and therefore an install; `base` deliberately
+      # costs a checkout and nothing more.
       - name: affected projects
         run: |
           set -euo pipefail
@@ -252,13 +248,11 @@ jobs:
           echo "$projects"
 
           if [ "$count" -eq 0 ]; then
-            echo "::warning::No project is affected by ${NX_BASE}..${NX_HEAD}; the lint, test and build steps below will run nothing."
+            echo "::warning::No project is affected by ${NX_BASE}..${NX_HEAD}; the lint, test and build jobs will run nothing."
           fi
-
       # Native TypeScript 7 compiler; whole-workspace check runs in seconds
       # and is the only type gate (builds transpile with swc, no type-check).
       - run: npm run typecheck
-
       # apps/docs is EXCLUDED from the sweep above by name
       # (tools/scripts/typecheck.mjs) because it is a standalone package with
       # its own TypeScript, and nothing ran its own target instead — so the
@@ -270,7 +264,6 @@ jobs:
       # generated-artifact gates below: the exclusion is by package, not by
       # what changed.
       - run: npx nx run docs:typecheck
-
       # Self-test the local ESLint guard rules (not part of the nx graph, so
       # run explicitly on every CI run — never affected-scoped).
       - run: npm run test:eslint-rules
@@ -352,7 +345,6 @@ jobs:
       # same reason as the step above — the input that invalidates these is
       # tsconfig.base.json, which is no app's source.
       - run: npm run sync:next-tsconfigs:check
-
       # Same shape: apps/console/constants/docs-help.generated.ts and the
       # besigner subset are generated from apps/docs frontmatter, and go
       # stale when a docs page gains a heading or changes its description.
@@ -362,7 +354,6 @@ jobs:
       # too: the input is apps/docs, the outputs are in console and a
       # besigner lib.
       - run: npm run generate:docs-help:check
-
       # Third of the same shape (AGL-1728), and the one that was completely
       # unguarded: the four apps/*/plugins.*.generated.ts manifests come from
       # plugins.config.json, and until now the generator had no --check, no
@@ -376,7 +367,6 @@ jobs:
       # reason as the two above: the input is a root-level plugins.config.json
       # that is no app's source, and the outputs land in two apps at once.
       - run: npm run generate:plugin-manifests:check
-
       # Revenue-truth guard (AGL-1070): org.plan is NOT revenue — a staff
       # override sets `plan` and writes no `subscription`, and three of four
       # production orgs are in that state, so summing PLAN_PRICING[org.plan]
@@ -387,7 +377,6 @@ jobs:
       # console affected, and the guard would sit out the one commit it exists
       # to catch.
       - run: npx jest --config apps/console/jest.config.ts --rootDir apps/console --testPathPatterns revenue-truth
-
       # App Router graph boundary (AGL-1350). Same shape again: the walk
       # covers every app's routes and every lib they reach, so its invalidating
       # input is the whole workspace rather than the console it is filed under
@@ -398,7 +387,6 @@ jobs:
       # Cheap enough (~1s) to run unconditionally, and it fails long before
       # the build step below would.
       - run: npm run check:app-router-graph
-
       # The shared-ui-jsx barrel allowlist (AGL-1895). Same class as the graph
       # check above: a cost that only a bundler can see, and that a green
       # typecheck and a green test suite both miss by construction. Unlike
@@ -406,12 +394,10 @@ jobs:
       # every published customer page heavier, forever, until someone measures.
       # ~1s.
       - run: npm run check:jsx-barrel
-
       # The @aglyn/aglyn barrel allowlist (AGL-2486). Same class, second
       # entry point: `catch-all-client.tsx` imports it statically, so a heavy
       # package reaching it lands on every published customer page. ~1s.
       - run: npm run check:aglyn-barrel
-
       # First-load WEIGHT of a published page (AGL-2486 follow-on). The two
       # allowlists above pin WHICH third-party packages the page can reach;
       # neither can see first-party code growing without adding a dependency,
@@ -419,7 +405,6 @@ jobs:
       # largest component of cost of goods sold at every plan tier. ~1s.
       - run: npm run test:tenant-page-weight
       - run: npm run check:tenant-page-weight
-
       # The PRICE that weight is charged at. `perPageView` is a cost per page
       # view billed at cost + 30%, and the budget above cannot see that the
       # rate was calibrated against a page the code no longer builds. This
@@ -427,6 +412,78 @@ jobs:
       # the module graph it was taken against.
       - run: npm run test:page-view-rate
       - run: npm run check:page-view-rate
+
+  # ~2m15s. Affected-scoped, so its cost tracks the range.
+  lint:
+    needs: base
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: ./.github/actions/nx-ci-setup
+        with:
+          nx-base: ${{ needs.base.outputs.base }}
+          nx-head: ${{ needs.base.outputs.head }}
+          cache-scope: lint
+
+      # `--parallel=3` and NOT `--maxWorkers`: eslint has no jest worker pool,
+      # so the flag that matters in the test job means nothing here. The
+      # reasoning behind that flag, and behind test and build being separate
+      # invocations at all, is recorded in the test job below.
+      - run: npx nx affected -t lint --parallel=3
+
+  # THE SUITE, SHARDED ACROSS FOUR RUNNERS (AGL-2505).
+  #
+  # `test` was 25m46s of a 44m run — 59% of the whole workflow — and nx named
+  # one task as the critical path inside it: `console:test`, 10m47s on run
+  # 33666851764. A critical path is not something `--parallel` can shorten,
+  # because it is already one task; only splitting the task itself can.
+  #
+  # jest's own `--shard` does the splitting, and it reaches jest THROUGH nx
+  # even though `shard` is not in the `@nx/jest:jest` executor's schema.
+  # That is not an accident of a permissive schema — `getExtraArgs` in
+  # jest.impl.js walks every option the schema does NOT declare and forwards
+  # it, both onto `process.argv` and into the config handed to `runCLI`. It is
+  # the documented path for third-party jest flags.
+  #
+  # Both halves were measured on this tree before being relied on, because a
+  # sharding flag that is silently dropped looks exactly like a working split
+  # while every shard runs everything:
+  #
+  #   nx run console:test --shard=1/4 --listTests   199 files
+  #   nx run console:test --shard=2/4 --listTests   199 files
+  #   nx run console:test            --listTests    747 files
+  #
+  # ⚑ AND THE CACHE DISTINGUISHES SHARDS, which is the part that would be
+  # dangerous if it did not. Measured the same way: shard 1 missed and
+  # populated, shard 2 then MISSED rather than replaying shard 1's result,
+  # and shard 1 re-run hit at 100%. A hash blind to the shard index would let
+  # three of four shards restore a green they never earned — the "green tick
+  # from a job that never looked" this file guards against everywhere else.
+  # Re-measure that if the nx or @nx/jest major version moves.
+  #
+  # `--maxWorkers=2` is unchanged and stays for the reason below. The
+  # parallelism added here is across RUNNERS: four machines running two jest
+  # workers each, not one machine running eight.
+  test:
+    needs: base
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      # A red shard must not cancel its siblings. One failing spec should
+      # still leave the other three reporting, or the first run tells you
+      # less than a rerun would.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: ./.github/actions/nx-ci-setup
+        with:
+          nx-base: ${{ needs.base.outputs.base }}
+          nx-head: ${{ needs.base.outputs.head }}
+          # Per shard: shard 2 must never restore shard 1's entry. nx's own
+          # hash already separates them (above); keeping the caches separate
+          # too means that guarantee does not rest on one mechanism.
+          cache-scope: test-${{ matrix.shard }}
 
       # The affected run, REDIRECTED to a file (AGL-1617). It used to be
       # `| tee`, and the tee was the reason the artifact was useless: a pipe
@@ -530,23 +587,30 @@ jobs:
       # `additionalProperties: false`, so the extra option is ignored rather
       # than fatal for them.
       #
-      # Splitting one invocation into three is safe because the base is an
-      # ENVIRONMENT variable, not an argument. `resolve affected base` above
-      # exports NX_BASE and NX_HEAD through $GITHUB_ENV; nx re-reads them from
-      # process.env on every invocation (nx/src/utils/command-line-utils.js),
-      # and all three steps here run after it in the same job — so all three
-      # resolve the identical affected set. Verified locally: two separate
-      # `nx show projects --affected` invocations under one exported
-      # NX_BASE/NX_HEAD return byte-identical project lists. A step that
-      # drifted ABOVE the resolve step would fall back to nx's own default
-      # base and quietly test something else; `test:ci-test-digest` asserts
-      # the ordering.
-      - run: npx nx affected -t lint --parallel=3
-
-      - name: test
+      # The three invocations are three JOBS now rather than three steps
+      # (AGL-2505). They still resolve one identical affected set, and that is
+      # now a property of the `base` job rather than of $GITHUB_ENV ordering
+      # within one job — see the note at the top of this file. Verified
+      # locally when this was still one job: two separate `nx show projects
+      # --affected` invocations under one exported NX_BASE/NX_HEAD return
+      # byte-identical project lists. Within THIS job the ordering still
+      # matters and `test:ci-test-digest` still asserts it: a step that ran
+      # before the setup action would fall back to nx's own default base and
+      # quietly test something else.
+      #
+      # The invocations are separate JOBS now rather than steps (AGL-2505).
+      # They still resolve one identical affected set, and that is a property
+      # of the `base` job rather than of $GITHUB_ENV ordering within one job —
+      # see the note at the top of this file. Verified locally when this was
+      # still one job: two separate `nx show projects --affected` invocations
+      # under one exported NX_BASE/NX_HEAD return byte-identical project
+      # lists. Within THIS job the ordering still matters and
+      # `test:ci-test-digest` still asserts it: a step running before the
+      # setup action would fall back to nx's own default base.
+      - name: test (shard ${{ matrix.shard }}/4)
         run: |
           status=0
-          npx nx affected -t test --parallel=3 --maxWorkers=2 \
+          npx nx affected -t test --parallel=3 --maxWorkers=2 --shard=${{ matrix.shard }}/4 \
             > "$RUNNER_TEMP/nx-test.log" 2>&1 || status=$?
           cat "$RUNNER_TEMP/nx-test.log"
           exit "$status"
@@ -557,18 +621,31 @@ jobs:
       - if: failure()
         run: node tools/scripts/lib/ci-test-digest.mjs "$RUNNER_TEMP/nx-test.log" --task-failed
 
-      # The raw bytes. Named per job — a different name from main-gate.yml's,
-      # so neither can ever collide with the other.
+      # The raw bytes, named per SHARD as well as per job:
+      # actions/upload-artifact@v4 rejects a duplicate name within a run, so
+      # one shared name would fail three of the four uploads on exactly the
+      # run where all four are worth reading.
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: nx-test-log-nx-ci-main
+          name: nx-test-log-nx-ci-shard-${{ matrix.shard }}
           path: ${{ runner.temp }}/nx-test.log
           retention-days: 7
           if-no-files-found: warn
 
-      # Builds LAST and on their own, so nothing competes with the jest fleet
-      # for the runner's 16 GB. A red test step skips this, which is the same
-      # coverage the single combined invocation gave: nx failed the whole
-      # thing at the first failing task anyway.
+  # ~13m, on its own runner. See "WHY `build` DOES NOT WAIT FOR `test`" at the
+  # top of this file: the 16 GB contention that made it a trailing step is
+  # gone once it has a runner to itself, and running it alongside test buys a
+  # second verdict on a red run for no extra wall clock on a green one.
+  build:
+    needs: base
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: ./.github/actions/nx-ci-setup
+        with:
+          nx-base: ${{ needs.base.outputs.base }}
+          nx-head: ${{ needs.base.outputs.head }}
+          cache-scope: build
+
       - run: npx nx affected -t build --parallel=3
