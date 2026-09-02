@@ -552,6 +552,11 @@ const RESOURCES: Record<string, {
       'jobTitle',
       'worksFor',
       'sameAs',
+      // The rendered profile rows (AGL-2516). Creation goes through this
+      // allowlist while updates are client-direct, so omitting it here would
+      // drop the links off a NEW author and keep them on every edit after —
+      // the kind of half-working that reads as a flaky save.
+      'links',
       'bio',
     ],
   },

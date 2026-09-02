@@ -266,7 +266,20 @@ export const IMPORTABLE_FIELDS: Record<string, readonly string[]> = {
   // structural and re-keyed by the import, and it is what `entries.authorId`
   // points at — so dropping this collection from the bundle would restore a
   // site whose every byline referenced a document the bundle did not carry.
-  authors: ['type', 'name', 'url', 'image', 'jobTitle', 'worksFor', 'sameAs', 'bio'],
+  authors: [
+    'type',
+    'name',
+    'url',
+    'image',
+    'jobTitle',
+    'worksFor',
+    'sameAs',
+    // The rendered profile rows (AGL-2516). Omitting them would export an
+    // author whose card comes back on the other side with nowhere to follow
+    // them — a silent loss, because every other field survives.
+    'links',
+    'bio',
+  ],
   services: [
     'name',
     'description',
