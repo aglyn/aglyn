@@ -17,6 +17,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { observable, runInAction } from 'mobx'
+import { localStore, parseMirrored, watchMirror } from './clipboard-mirror'
 
 /**
  * Besigner STYLE clipboard.
@@ -71,34 +72,42 @@ interface StyleClipboardState {
 
 const state = observable<StyleClipboardState>({ entry: null, hydrated: false })
 
-const storage = (): Storage | null => {
-  try {
-    // SSR and privacy-mode both make this throw rather than return null.
-    return typeof window === 'undefined' ? null : window.localStorage
-  } catch {
-    return null
-  }
-}
+const parseEntry = (raw: string | null): StyleClipboardEntry | null =>
+  parseMirrored<StyleClipboardEntry>(raw, STYLE_CLIPBOARD_FORMAT_VERSION)
 
 function hydrate(): void {
   if (state.hydrated) return
   runInAction(() => {
     state.hydrated = true
   })
-  const store = storage()
-  if (!store) return
+  let parsed: StyleClipboardEntry | null = null
   try {
-    const raw = store.getItem(STYLE_CLIPBOARD_STORAGE_KEY)
-    if (!raw) return
-    const parsed = JSON.parse(raw) as StyleClipboardEntry
-    if (parsed?.version !== STYLE_CLIPBOARD_FORMAT_VERSION) return
-    runInAction(() => {
-      state.entry = parsed
-    })
+    parsed = parseEntry(
+      localStore()?.getItem(STYLE_CLIPBOARD_STORAGE_KEY) ?? null,
+    )
   } catch {
     // A corrupt or foreign entry is no entry. Never throw on read.
   }
+  if (!parsed) return
+  runInAction(() => {
+    state.entry = parsed
+  })
 }
+
+/**
+ * A look copied in another besigner tab is this document's look too. Without
+ * this the mirror is read once and the document goes on pasting the first
+ * style it ever saw, however many times the tab next door copies a new one
+ * (AGL-2507).
+ */
+watchMirror(STYLE_CLIPBOARD_STORAGE_KEY, (raw) => {
+  const entry = parseEntry(raw)
+  runInAction(() => {
+    state.entry = entry
+    // The mirror has now been consulted, whatever it held.
+    state.hydrated = true
+  })
+})
 
 /** The copied look, or null. */
 export function getStyleEntry(): StyleClipboardEntry | null {
@@ -143,7 +152,7 @@ export function copyStyles(node: Aglyn.NodeSchema<any> | undefined): boolean {
     state.entry = entry
     state.hydrated = true
   })
-  const store = storage()
+  const store = localStore()
   try {
     store?.setItem(STYLE_CLIPBOARD_STORAGE_KEY, JSON.stringify(entry))
   } catch {
@@ -186,7 +195,7 @@ export function clearStyles(): void {
     state.hydrated = true
   })
   try {
-    storage()?.removeItem(STYLE_CLIPBOARD_STORAGE_KEY)
+    localStore()?.removeItem(STYLE_CLIPBOARD_STORAGE_KEY)
   } catch {
     // Ditto.
   }
