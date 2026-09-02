@@ -9,6 +9,16 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.52 — 2026-09-02
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.51...v1.0.0-beta.52)
+
+### Fixed
+
+- **collection:** a Show switch opens in the position its renderer uses ([AGL-2506](https://linear.app/aglyn/issue/AGL-2506))
+- **besigner:** a saved draft is not "unsaved changes recovered from this browser" ([AGL-2508](https://linear.app/aglyn/issue/AGL-2508))
+- **tenant:** a collection page runs the enrichers, so its nav opens on hover ([AGL-2509](https://linear.app/aglyn/issue/AGL-2509))
+
 ## v1.0.0-beta.51 — 2026-09-02
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.50...v1.0.0-beta.51)
