@@ -18,11 +18,17 @@
 import * as Aglyn from '@aglyn/aglyn/server'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
+import { filterEnabledPluginsByReleaseFlags } from '@aglyn/tenant-data-admin'
+import { composeSearchPage } from '@aglyn/tenant-runtime/compose-search-page'
 import searchContent, {
   filterSearchResults,
   SEARCH_FACET_ALL,
   searchResultFacets,
 } from '../../../utils/search-content'
+import getOrgBilling from '../../../utils/get-org-billing'
+import { serverPluginLoader } from '../../../utils/server-plugin-loader'
+import CatchAllClient from '../[[...slug]]/catch-all-client'
+import PageBodyBoundary from '../[[...slug]]/page-body-boundary'
 import { getHostCached } from '../host-data'
 import SearchResults from './search-results.component'
 
@@ -87,19 +93,74 @@ export default async function SearchPage({
     ? await searchContent({ host: hostRes.host, query })
     : []
   const facets = searchResultFacets(results)
+  const filtered = filterSearchResults(results, facetKey)
+  // A `?in=` the results cannot honour falls back to the tab that IS showing —
+  // `filterSearchResults` already showed everything, so highlighting the stale
+  // tab would caption the wrong list.
+  const activeFacet = facets.some((facet) => facet.key === facetKey)
+    ? facetKey
+    : SEARCH_FACET_ALL
+
+  /**
+   * The site's own chrome around the results (AGL-2513).
+   *
+   * This page used to render a bare `Container`: no header, no nav, no
+   * footer, on the one page a visitor reaches when they cannot find
+   * something. It composes through the shared layout now — the host chooses
+   * which one — which also puts search on the same render path as every
+   * other page, plugin runtimes and all.
+   *
+   * `composeSearchPage` answers `null` for every failure, and the built-in
+   * React body below is what renders then. A search page that 500s because a
+   * layout was deleted would be a worse outcome than the chrome-less one this
+   * replaces.
+   */
+  const hostId = hostRes.host.$id as string
+  await serverPluginLoader.ensureAll(['tenantApi'])
+  const [composed, orgRes] = await Promise.all([
+    composeSearchPage({
+      hostId,
+      host: hostRes.host,
+      results: {
+        query,
+        results: filtered,
+        facets,
+        activeFacet,
+        allFacetKey: SEARCH_FACET_ALL,
+      },
+    }),
+    getOrgBilling({ hostId }),
+  ])
+
+  if (!composed) {
+    return (
+      <SearchResults
+        query={query}
+        results={filtered}
+        facets={facets}
+        activeFacet={activeFacet}
+      />
+    )
+  }
+
+  const enabledPlugins = await filterEnabledPluginsByReleaseFlags(
+    Aglyn.resolveHostEnabledPlugins(
+      orgRes.org as never,
+      hostRes.host as never,
+    ),
+    { orgId: (orgRes.org as { $id?: string })?.$id ?? null },
+  )
   return (
-    <SearchResults
-      query={query}
-      results={filterSearchResults(results, facetKey)}
-      facets={facets}
-      activeFacet={
-        // A `?in=` the results cannot honour falls back to the tab that IS
-        // showing — `filterSearchResults` already showed everything, so
-        // highlighting the stale tab would caption the wrong list.
-        facets.some((facet) => facet.key === facetKey)
-          ? facetKey
-          : SEARCH_FACET_ALL
-      }
-    />
+    <PageBodyBoundary>
+      <CatchAllClient
+        data={{ host: hostRes.host as never }}
+        nodes={composed.nodes as never}
+        enabledPlugins={enabledPlugins}
+        showBranding={
+          !Aglyn.resolveOrgEntitlements(orgRes.org).features.removeBranding
+        }
+        branding={Aglyn.resolveBrandingProfile(orgRes.org) as never}
+      />
+    </PageBodyBoundary>
   )
 }
