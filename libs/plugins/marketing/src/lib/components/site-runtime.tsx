@@ -497,6 +497,52 @@ function AutomationsEngine(props: {
       }
     }
 
+    /**
+     * Elements that arrive AFTER this effect binds (AGL-2512).
+     *
+     * `elementVisible` and `scrollToElement` are the only two triggers that
+     * resolve their targets by querying the DOM — every other one listens on
+     * `document` and so needs no element to exist yet. A single query at bind
+     * time made them dead on the two pages where the tree lands late: a
+     * deferred lazy panel patched back in on interaction (AGL-1285), and a
+     * gated screen's tree swapped in once the visitor is past the gate
+     * (AGL-2510).
+     *
+     * One MutationObserver for all of them, not one each, and it stops the
+     * moment nothing is left watching — these triggers fire once per pageview
+     * by construction, so a page whose targets have all been seen pays
+     * nothing for the rest of the visit. A page with no such automation never
+     * starts one at all.
+     */
+    const pendingObservers: Array<() => void> = []
+    let domObserver: MutationObserver | null = null
+    const rescan = () => {
+      for (const attach of [...pendingObservers]) attach()
+      if (!pendingObservers.length) {
+        domObserver?.disconnect()
+        domObserver = null
+      }
+    }
+    const watchLateElements = (attach: () => void) => {
+      pendingObservers.push(attach)
+      if (domObserver || typeof MutationObserver === 'undefined') return
+      domObserver = new MutationObserver(rescan)
+      domObserver.observe(document.body, { childList: true, subtree: true })
+    }
+    const stopWatching = (attach: () => void) => {
+      const index = pendingObservers.indexOf(attach)
+      if (index >= 0) pendingObservers.splice(index, 1)
+      if (!pendingObservers.length) {
+        domObserver?.disconnect()
+        domObserver = null
+      }
+    }
+    cleanups.push(() => {
+      pendingObservers.length = 0
+      domObserver?.disconnect()
+      domObserver = null
+    })
+
     for (const automation of automations) {
       const { event, threshold } = automation
       // Composition namespaces a node's live `data-aglyn` id, but the
@@ -530,15 +576,25 @@ function AutomationsEngine(props: {
         cleanups.push(() => window.removeEventListener('scroll', onScroll))
       } else if (event === 'elementVisible' || event === 'scrollToElement') {
         if (!selector) continue
-        const targets = document.querySelectorAll(selector)
-        if (!targets.length) continue
+        let fired = false
         const observer = new IntersectionObserver((entries) => {
-          if (entries.some((entry) => entry.isIntersecting)) {
-            fire(automation)
-            observer.disconnect()
-          }
+          if (fired || !entries.some((entry) => entry.isIntersecting)) return
+          fired = true
+          fire(automation)
+          observer.disconnect()
+          stopWatching(attachTargets)
         })
-        targets.forEach((target) => observer.observe(target))
+        // Re-entrant: called again on every DOM change until the trigger
+        // fires, and observing an element twice is a no-op, so a rescan costs
+        // one `querySelectorAll` and nothing else.
+        const attachTargets = () => {
+          if (fired) return stopWatching(attachTargets)
+          document
+            .querySelectorAll(selector)
+            .forEach((target) => observer.observe(target))
+        }
+        attachTargets()
+        watchLateElements(attachTargets)
         cleanups.push(() => observer.disconnect())
       } else if (event === 'elementClick') {
         if (!selector) continue
