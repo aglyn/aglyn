@@ -49,6 +49,9 @@ import { generatePresetId } from '../utils/generate-preset-id'
 // One coercion for every authored count in this bundle (AGL-1457) — number
 // fields round-trip as strings, and a second parser here would drift.
 import { toCount } from './image-list'
+// The theme's own type steps (AGL-2486), shared with the Typography element
+// rather than a second list here — one rung list, one place to extend.
+import { typographyVariants } from './typography'
 
 // Persisted component ids (AGL-551/582); the compose pipeline references
 // them through @aglyn/aglyn constants. Never rename.
@@ -1105,6 +1108,41 @@ export interface CollectionRelatedProps extends StackProps {
   /** Columns in the `cards` grid (default 3, the frame's 3-up). */
   columns?: number | string
   /**
+   * Type step the section heading reads at (default `h5`). One of the
+   * theme's own rungs, shared with the Typography element — a heading sized
+   * by hand in the Styles panel is the pixel-typing the tokens exist to stop.
+   */
+  headingVariant?: string
+  /**
+   * Type step each card title reads at (default `subtitle1`, what the block
+   * has always emitted). The title is the block's own markup, so the Styles
+   * panel — which edits the node's root — cannot reach it; this is the only
+   * handle on it.
+   */
+  titleVariant?: string
+  /** Show each post's published date. On is the shipped behaviour. */
+  showDate?: boolean
+  /**
+   * How each card's published date reads (AGL-1459) — a COMPOSE-TIME prop
+   * like {@link limit}: it is answered in `expandCollectionRelated`, where
+   * the timestamp still exists, and never reaches the DOM. Blank, or
+   * `default`, is the locale date the block has always emitted.
+   *
+   * Read here too, but only to date the SAMPLE cards: an editing surface has
+   * no routed entry and therefore no server fill, so the picker would
+   * otherwise preview nothing.
+   */
+  dateFormat?: Aglyn.CollectionEntryDateFormat
+  /** Show each post's category. On is the shipped behaviour. */
+  showCategory?: boolean
+  /**
+   * Show each post's excerpt. OFF is the default and the shipped behaviour:
+   * the excerpt has been stamped onto every related item since AGL-582 and
+   * rendered by nothing, so turning it on by default would add a paragraph
+   * to every published entry nobody asked about.
+   */
+  showExcerpt?: boolean
+  /**
    * Server-stamped related posts (`expandCollectionRelated`); never set by
    * hand — the tenant computes it from the current entry's category/tags.
    */
@@ -1130,25 +1168,121 @@ const relatedChipSx = {
   color: 'text.secondary',
 }
 
+/** The heading step the block has always emitted. */
+const RELATED_DEFAULT_HEADING_VARIANT = 'h5'
+
+/** The card-title step the block has always emitted. */
+const RELATED_DEFAULT_TITLE_VARIANT = 'subtitle1'
+
+/**
+ * The instant the sample cards are dated. A FIXED one, never `Date.now()`:
+ * the canvas has to render the same bytes every time it opens, and this is
+ * the date the Date-format labels use as their worked example — so the
+ * dropdown and the cards it previews agree word for word.
+ */
+const RELATED_SAMPLE_PUBLISHED_AT = { seconds: Date.UTC(2026, 7, 9) / 1000 }
+
+/**
+ * Titles for the sample cards. Deliberately unmistakable as copy: the author
+ * is looking at a LAYOUT, and a plausible-looking headline here is one an
+ * author can mistake for a post that exists — or worse, design around.
+ */
+const RELATED_SAMPLE_TITLES = [
+  'Sample related post',
+  'A second sample post',
+  'A third sample post',
+]
+
+/** Category chip text for the sample cards; names the field, not a taxonomy. */
+const RELATED_SAMPLE_CATEGORY = 'Category'
+
+/** Excerpt text for the sample cards; one line, so the card keeps its shape. */
+const RELATED_SAMPLE_EXCERPT =
+  'Each post’s own excerpt reads here, trimmed to a line or two.'
+
+/**
+ * Stand-in posts for editing surfaces (AGL-2486).
+ *
+ * Related posts are resolved FROM the routed entry, and a besigner canvas has
+ * no routed entry — so the block used to draw a one-line dashed strip and the
+ * author styled a layout they could not see. The sample is the block's REAL
+ * markup, at the author's own settings, which is the only way the canvas can
+ * answer "what will this look like".
+ *
+ * It exists only where {@link ScreenLinkContext.suppressNavigation} is on —
+ * the besigner canvas and Preview. A published render reaches this function
+ * on no path at all, so no visitor can ever be shown a post that does not
+ * exist.
+ *
+ * The count follows the author's own `limit` so a 6-post rail at 3 columns
+ * previews as two rows, and is bounded by the same ceiling the server
+ * applies rather than a second one.
+ */
+const sampleRelatedEntries = (
+  limit: number | string | undefined,
+  dateFormat: Aglyn.CollectionEntryDateFormat,
+): Aglyn.CollectionRelatedItem[] => {
+  const count = Math.min(
+    // `|| default` also rejects 0, which `toCount` would otherwise accept and
+    // preview as an empty rail — the one thing the sample exists to avoid.
+    toCount(limit, Aglyn.COLLECTION_RELATED_DEFAULT_LIMIT) ||
+      Aglyn.COLLECTION_RELATED_DEFAULT_LIMIT,
+    Aglyn.COLLECTION_RELATED_MAX,
+  )
+  const date = Aglyn.formatCollectionEntryDate(
+    RELATED_SAMPLE_PUBLISHED_AT,
+    dateFormat,
+  )
+  return Array.from({ length: count }, (_, index) => ({
+    title: RELATED_SAMPLE_TITLES[index] ?? `Sample related post ${index + 1}`,
+    // Empty, not a plausible path: every surface that renders the sample
+    // suppresses navigation, so the title is text rather than an anchor and
+    // this is never read. A real-looking href would be a link to nowhere the
+    // moment that stopped being true.
+    url: '',
+    date,
+    category: RELATED_SAMPLE_CATEGORY,
+    excerpt: RELATED_SAMPLE_EXCERPT,
+  }))
+}
+
 /**
  * Lists other entries of the same collection sharing the current entry's
  * category or a tag (AGL-582). The tenant stamps `entries` at compose time
- * on entry renders; without them the besigner shows an affordance and the
- * published site renders nothing.
+ * on entry renders; without them the published site renders nothing and an
+ * editing surface renders sample cards (AGL-2486).
  *
  * Two layouts (AGL-1457). `list` is the plain-link list that has always
  * shipped and stays the default — the block is live on every blog entry, so
  * a new default would restyle published pages nobody asked about. `cards` is
  * the article frame's grid: cover, category chip, title, at an author-set
  * column count.
+ *
+ * The block owns its markup, so nothing inside a card is a node the Styles
+ * panel can select. Every part it renders therefore needs an attribute, or
+ * it is unauthorable by construction — which is what the type steps and the
+ * `show*` switches are (AGL-2486).
  */
 const CollectionRelated = forwardRef<HTMLDivElement, CollectionRelatedProps>(
   (props, ref) => {
-    // `limit` is compose-time: the tenant resolves it while stamping
-    // `entries`; strip it so it never hits the DOM. `showCover`/`layout`/
-    // `columns` are read here, so they must not reach it either.
-    const { heading, limit, entries, showCover, layout, columns, ...rest } =
-      props
+    // `limit` and `dateFormat` are compose-time: the tenant resolves them
+    // while stamping `entries`; strip them so they never hit the DOM. The
+    // rest are read here, so they must not reach it either.
+    const {
+      heading,
+      limit,
+      entries,
+      showCover,
+      layout,
+      columns,
+      headingVariant,
+      titleVariant,
+      showDate,
+      dateFormat,
+      showCategory,
+      showExcerpt,
+      ...rest
+    } = props
     // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
     const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
@@ -1157,54 +1291,95 @@ const CollectionRelated = forwardRef<HTMLDivElement, CollectionRelatedProps>(
     // reference keeps working across sites. Called before the early return —
     // it is a hook.
     const { hostId } = Aglyn.useSite()
-    if (!entries?.length) {
-      if (!suppressNavigation) return <Box ref={ref} {...rest} />
-      return (
-        <Box
-          ref={ref}
-          {...rest}
-          sx={[
-            {
-              p: 2,
-              border: '1px dashed',
-              borderColor: 'divider',
-              color: 'text.secondary',
-              fontSize: 12,
-              fontFamily: 'system-ui, sans-serif',
-            },
-            ...nodeSx,
-          ]}
-        >
-          {'Related posts — entries sharing this entry’s category or ' +
-            'tags render here'}
-        </Box>
-      )
-    }
+    // An editing surface has no routed entry, so nothing is stamped and the
+    // block used to be the one part of the page that was not WYSIWYG. The
+    // sample stands in for exactly that gap, and only there.
+    const sample = !entries?.length && Boolean(suppressNavigation)
+    const items = entries?.length
+      ? entries
+      : sample
+        ? sampleRelatedEntries(
+            limit,
+            Aglyn.normalizeCollectionEntryDateFormat(dateFormat),
+          )
+        : []
+    if (!items.length) return <Box ref={ref} {...rest} />
     const title = heading ?? 'Related articles'
     const headingNode = title ? (
-      <Typography variant="h5" component="h2">
+      <Typography
+        variant={(headingVariant || RELATED_DEFAULT_HEADING_VARIANT) as 'h5'}
+        component="h2"
+      >
         {title}
       </Typography>
     ) : null
-    const titleNode = (entry: Aglyn.CollectionRelatedItem) =>
-      suppressNavigation ? (
-        <Typography variant="subtitle1">{entry.title}</Typography>
-      ) : (
-        <AppLink href={entry.url} variant="subtitle1">
-          {entry.title}
-        </AppLink>
-      )
+    /**
+     * The card title, as a HEADING in the site theme.
+     *
+     * It used to be a bare `AppLink`, which is MUI's `Link` — `primary.main`
+     * and `underline="always"` — so the one thing a related card is FOR read
+     * as a default browser link on a themed page, at no heading level, and
+     * with no attribute able to touch it. The type step now comes from the
+     * theme's own rungs and the anchor inherits the colour, exactly as the
+     * Entry Author card's byline link does.
+     *
+     * `linked` is false wherever the whole card is already the anchor: an
+     * `<a>` inside an `<a>` is invalid markup that browsers silently unnest.
+     */
+    const titleNode = (entry: Aglyn.CollectionRelatedItem, linked: boolean) => (
+      <Typography
+        variant={(titleVariant || RELATED_DEFAULT_TITLE_VARIANT) as 'subtitle1'}
+        component="h3"
+      >
+        {linked && !suppressNavigation && entry.url ? (
+          <AppLink href={entry.url} sx={{ color: 'inherit' }} underline="hover">
+            {entry.title}
+          </AppLink>
+        ) : (
+          entry.title
+        )}
+      </Typography>
+    )
+    const dateNode = (entry: Aglyn.CollectionRelatedItem) =>
+      showDate !== false && entry.date ? (
+        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+          {entry.date}
+        </Typography>
+      ) : null
+    const excerptNode = (entry: Aglyn.CollectionRelatedItem) =>
+      showExcerpt && entry.excerpt ? (
+        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+          {entry.excerpt}
+        </Typography>
+      ) : null
     /**
      * The cover, when the author asked for one AND the entry has one. An
      * entry without a cover gets no box at all rather than a placeholder:
      * the related list is a real feed, and a row of grey rectangles is worse
      * than a row of titles.
+     *
+     * The sample cards are the exception, and for the opposite reason: they
+     * stand in for posts that do not exist yet, so the cover SLOT is what
+     * the author is looking at. A card grid previewing without its images is
+     * not the grid being styled.
      */
     const coverNode = (entry: Aglyn.CollectionRelatedItem) => {
       const src = showCover
         ? Aglyn.resolveMediaSrc(entry.coverImage, { hostId })
         : undefined
-      if (!src) return null
+      if (!src) {
+        if (!sample || !showCover) return null
+        return (
+          <Box
+            aria-hidden
+            sx={{
+              height: RELATED_COVER_HEIGHT,
+              borderRadius: 1,
+              backgroundColor: 'action.hover',
+            }}
+          />
+        )
+      }
       return (
         <Box
           component="img"
@@ -1232,11 +1407,56 @@ const CollectionRelated = forwardRef<HTMLDivElement, CollectionRelatedProps>(
       )
     }
 
+    /**
+     * The notice that says these cards are not posts (AGL-2486). Editing
+     * surfaces only, and outside the card markup rather than inside it, so
+     * the author is styling the same tree the site will render.
+     */
+    const sampleNotice = sample ? (
+      <Typography
+        variant="caption"
+        sx={{
+          display: 'block',
+          p: 1,
+          border: '1px dashed',
+          borderColor: 'divider',
+          borderRadius: 1,
+          color: 'text.secondary',
+          fontFamily: 'system-ui, sans-serif',
+        }}
+      >
+        {'Sample posts — entries sharing this entry’s category or tags ' +
+          'replace these on the published page'}
+      </Typography>
+    ) : null
+
     if (layout === 'cards') {
       // `toCount` rounds and rejects junk; `|| default` also rejects 0, which
       // it would otherwise accept as a column count and emit `repeat(0, …)`.
       const columnCount =
         toCount(columns, RELATED_DEFAULT_COLUMNS) || RELATED_DEFAULT_COLUMNS
+      /**
+       * One card's contents, always with a PLAIN title: the caller wraps the
+       * whole card in the anchor, because a reader aiming at a 180px cover
+       * should not have to hit the line of text under it — and a second
+       * anchor around the title inside that one is markup browsers unnest.
+       */
+      const card = (entry: Aglyn.CollectionRelatedItem) => (
+        <MuiStack spacing={1}>
+          {coverNode(entry)}
+          {showCategory !== false && entry.category ? (
+            <Chip
+              label={entry.category}
+              size="small"
+              variant="outlined"
+              sx={relatedChipSx}
+            />
+          ) : null}
+          {titleNode(entry, false)}
+          {excerptNode(entry)}
+          {dateNode(entry)}
+        </MuiStack>
+      )
       return (
         <Box
           ref={ref}
@@ -1259,45 +1479,52 @@ const CollectionRelated = forwardRef<HTMLDivElement, CollectionRelatedProps>(
           {headingNode ? (
             <Box sx={{ gridColumn: '1 / -1' }}>{headingNode}</Box>
           ) : null}
-          {entries.map((entry, index) => (
-            <MuiStack key={index} spacing={1}>
-              {coverNode(entry)}
-              {entry.category ? (
-                <Chip
-                  label={entry.category}
-                  size="small"
-                  variant="outlined"
-                  sx={relatedChipSx}
-                />
-              ) : null}
-              {titleNode(entry)}
-              {entry.date ? (
-                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                  {entry.date}
-                </Typography>
-              ) : null}
-            </MuiStack>
-          ))}
+          {sampleNotice ? (
+            <Box sx={{ gridColumn: '1 / -1' }}>{sampleNotice}</Box>
+          ) : null}
+          {items.map((entry, index) => {
+            const linked = !suppressNavigation && Boolean(entry.url)
+            return linked ? (
+              <AppLink
+                key={index}
+                href={entry.url}
+                underline="none"
+                // A grid ITEM, so it has to be a block; `color: inherit`
+                // keeps the cover, chip and date reading as themed content
+                // rather than as the inside of a link.
+                sx={{ color: 'inherit', display: 'block' }}
+              >
+                {card(entry)}
+              </AppLink>
+            ) : (
+              <Box key={index}>{card(entry)}</Box>
+            )
+          })}
         </Box>
       )
     }
     return (
       <MuiStack ref={ref} spacing={1.5} {...rest}>
         {headingNode}
-        {entries.map((entry, index) => (
-          <MuiStack key={index} spacing={0.25}>
-            {coverNode(entry)}
-            {titleNode(entry)}
-            {entry.date || entry.category ? (
-              <Typography
-                variant="caption"
-                sx={{ color: 'text.secondary' }}
-              >
-                {[entry.date, entry.category].filter(Boolean).join(' · ')}
-              </Typography>
-            ) : null}
-          </MuiStack>
-        ))}
+        {sampleNotice}
+        {items.map((entry, index) => {
+          const meta = [
+            showDate !== false ? entry.date : '',
+            showCategory !== false ? entry.category : '',
+          ].filter(Boolean)
+          return (
+            <MuiStack key={index} spacing={0.25}>
+              {coverNode(entry)}
+              {titleNode(entry, true)}
+              {excerptNode(entry)}
+              {meta.length ? (
+                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                  {meta.join(' · ')}
+                </Typography>
+              ) : null}
+            </MuiStack>
+          )
+        })}
       </MuiStack>
     )
   },
@@ -1358,6 +1585,65 @@ export const collectionRelatedSchema: Aglyn.ComponentSchema<CollectionRelatedPro
         description:
           'Show each post’s cover image. Posts without one show their ' +
           'title alone rather than an empty box.',
+        component: Aglyn.FieldComponentType.SWITCH,
+      },
+      {
+        name: 'headingVariant',
+        label: 'Heading style',
+        description:
+          'Which type step from the site theme the section heading above ' +
+          'the posts reads at. Default Heading 5.',
+        component: Aglyn.FieldComponentType.SELECT,
+        // The theme's own rungs, shared with the Typography element rather
+        // than a second list here: two lists is how a step added to the
+        // theme becomes reachable in one place and not the other.
+        options: [...typographyVariants],
+      },
+      {
+        name: 'titleVariant',
+        label: 'Title style',
+        description:
+          'Which type step from the site theme each post’s title reads at. ' +
+          'Default Subtitle 1; the title takes the surrounding text colour ' +
+          'rather than the link colour.',
+        component: Aglyn.FieldComponentType.SELECT,
+        options: [...typographyVariants],
+      },
+      {
+        name: 'showDate',
+        label: 'Show date',
+        description:
+          'Off drops each post’s published date. The posts stay in ' +
+          'newest-first order either way — this is about the card, not the ' +
+          'ordering.',
+        component: Aglyn.FieldComponentType.SWITCH,
+      },
+      {
+        name: 'dateFormat',
+        label: 'Date format',
+        description:
+          'How each post’s published date reads on its card. Site default ' +
+          'is the format this block has always used.',
+        component: Aglyn.FieldComponentType.SELECT,
+        // The formats the pure layer knows how to produce, so the list
+        // cannot offer a shape nothing renders. Every value is REAL,
+        // including the do-nothing one (AGL-1451/AGL-1453).
+        options: [...Aglyn.COLLECTION_ENTRY_DATE_FORMAT_OPTIONS],
+      },
+      {
+        name: 'showCategory',
+        label: 'Show category',
+        description:
+          'Off drops the category — the chip above each card title, or the ' +
+          'second half of the line under each link on the list layout.',
+        component: Aglyn.FieldComponentType.SWITCH,
+      },
+      {
+        name: 'showExcerpt',
+        label: 'Show excerpt',
+        description:
+          'Adds each post’s excerpt under its title. Posts with no excerpt ' +
+          'are unchanged rather than leaving a gap.',
         component: Aglyn.FieldComponentType.SWITCH,
       },
     ],
@@ -2406,11 +2692,19 @@ export const collectionPresets: Aglyn.PresetSchema[] = [
       $id: null,
       componentId: RELATED_ID,
       pluginId: BUNDLE_ID,
-      // `layout` is seeded rather than left to the runtime fallback so the
-      // dropdown opens on the value the block is actually rendering, and an
-      // author who tries Cards has a named route back (AGL-1457). `showCover`
-      // is deliberately absent: OFF is the shipped behaviour.
-      props: { heading: 'Related articles', limit: 3, layout: 'list' },
+      // `layout`, the two type steps and `dateFormat` are seeded rather than
+      // left to the runtime fallback so each dropdown opens on the value the
+      // block is actually rendering, and an author who tries another has a
+      // named route back (AGL-1457/AGL-1459). The `show*` switches are
+      // deliberately absent: their unset state IS the shipped behaviour.
+      props: {
+        heading: 'Related articles',
+        limit: 3,
+        layout: 'list',
+        headingVariant: 'h5',
+        titleVariant: 'subtitle1',
+        dateFormat: Aglyn.COLLECTION_ENTRY_DATE_FORMAT_DEFAULT,
+      },
     },
   },
   {

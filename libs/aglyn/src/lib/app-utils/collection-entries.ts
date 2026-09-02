@@ -1720,8 +1720,8 @@ export function selectRelatedEntries(
  * the current entry's related posts as a serializable `entries` prop the
  * component renders directly (no template cloning — the block owns its
  * markup). Runs only on entry renders; without an entry context the nodes
- * stay untouched, so the component's besigner placeholder / empty site
- * render applies. Inputs are never mutated.
+ * stay untouched, so the component's sample cards (editing surfaces) or its
+ * empty site render apply. Inputs are never mutated.
  */
 export function expandCollectionRelated<
   N extends AglynNodeSchema = AglynNodeSchema,
@@ -1739,6 +1739,11 @@ export function expandCollectionRelated<
   const next: Record<NodeId, N> = { ...nodes }
   for (const [containerId, container] of containers) {
     const limitRaw = Number((container.props as any)?.limit)
+    // Per node, exactly as the byline reads it (AGL-1459): the format is a
+    // prop, so two rails on one template can date their cards differently.
+    const dateFormat = normalizeCollectionEntryDateFormat(
+      (container.props as any)?.dateFormat,
+    )
     const related = selectRelatedEntries(
       source.entries ?? [],
       currentEntry,
@@ -1758,8 +1763,14 @@ export function expandCollectionRelated<
         // to be the ones `formatCollectionEntryDate` now pins; a related-post
         // card is the same published date as the byline above it and must not
         // be able to disagree with it.
+        //
+        // Answered HERE and not in the block (AGL-2486), for the reason the
+        // byline's format is: by the time a date reaches the component it is
+        // a formatted string, and re-parsing one is ambiguous by
+        // construction — `8/9/2026` is 9 August under `en-US` and 8 September
+        // under `en-GB`. The timestamp only exists on this side.
         ...(entry.publishedAt?.seconds
-          ? { date: formatCollectionEntryDate(entry.publishedAt) }
+          ? { date: formatCollectionEntryDate(entry.publishedAt, dateFormat) }
           : {}),
         ...(entry.excerpt ? { excerpt: entry.excerpt } : {}),
         // AGL-1457: the block owns its markup, so there is no template to

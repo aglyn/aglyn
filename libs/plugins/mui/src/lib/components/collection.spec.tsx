@@ -17,6 +17,10 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { fireEvent, render, screen } from '@testing-library/react'
+import type { ReactElement } from 'react'
+// The theme's rung list the type-step attributes offer, asserted against its
+// source rather than a copy of the values.
+import { typographyVariants } from './typography'
 import {
   CollectionCategories,
   CollectionEntries,
@@ -958,13 +962,429 @@ describe('Related posts block (AGL-582)', () => {
     expect(container.textContent).toBe('')
   })
 
-  it('shows an affordance inside editing surfaces', () => {
+  it('shows sample cards inside editing surfaces', () => {
     render(
       <Aglyn.ScreenLinkContext.Provider value={{ suppressNavigation: true }}>
         <CollectionRelated />
       </Aglyn.ScreenLinkContext.Provider>,
     )
-    expect(screen.getByText(/Related posts — entries sharing/)).toBeTruthy()
+    expect(screen.getByText(/Sample posts — entries sharing/)).toBeTruthy()
+    expect(screen.getByText('Sample related post')).toBeTruthy()
+  })
+})
+
+/**
+ * AGL-2486. The block is server-filled, and an editing surface has no routed
+ * entry — so the canvas drew a one-line dashed strip while every block around
+ * it rendered WYSIWYG, and an author was styling a layout they could not see.
+ *
+ * The sample is the block's REAL markup at the author's own settings, which
+ * is the only render that can answer "what will this look like". It is gated
+ * on `suppressNavigation` — the besigner canvas and Preview, never a
+ * published page — and says out loud that it is a sample, because a
+ * plausible-looking headline is one an author can design around.
+ */
+describe('Related posts sample cards on the canvas (AGL-2486)', () => {
+  const canvas = (element: ReactElement) =>
+    render(
+      <Aglyn.ScreenLinkContext.Provider value={{ suppressNavigation: true }}>
+        {element}
+      </Aglyn.ScreenLinkContext.Provider>,
+    )
+
+  it('renders the shipped 3-up when no limit is authored', () => {
+    canvas(<CollectionRelated />)
+    expect(screen.getByText('Sample related post')).toBeTruthy()
+    expect(screen.getByText('A second sample post')).toBeTruthy()
+    expect(screen.getByText('A third sample post')).toBeTruthy()
+  })
+
+  it('previews the author’s own limit, so the grid fills as it will', () => {
+    const { container } = canvas(
+      <CollectionRelated layout="cards" columns={3} limit={6} />,
+    )
+    // Heading, notice, six cards.
+    expect(container.firstElementChild?.children).toHaveLength(8)
+  })
+
+  it('bounds the preview by the same ceiling the server applies', () => {
+    const { container } = canvas(<CollectionRelated heading="" limit={999} />)
+    const root = container.firstElementChild as HTMLElement
+    // The notice plus the capped card count — never 999 cards.
+    expect(root.children).toHaveLength(Aglyn.COLLECTION_RELATED_MAX + 1)
+  })
+
+  it('never links a sample card anywhere', () => {
+    const { container } = canvas(<CollectionRelated layout="cards" />)
+    expect(container.querySelectorAll('a')).toHaveLength(0)
+  })
+
+  it('draws the cover slot so the card grid previews whole', () => {
+    // Sample posts have no cover to resolve, and the live rule — no box at
+    // all — would preview the grid without the thing being laid out.
+    const { container } = canvas(<CollectionRelated layout="cards" showCover />)
+    expect(
+      container.querySelectorAll('[aria-hidden="true"]').length,
+    ).toBeGreaterThan(0)
+    // A plate, never a fabricated image.
+    expect(container.querySelectorAll('img')).toHaveLength(0)
+  })
+
+  it('leaves the cover slot out when covers are off', () => {
+    const { container } = canvas(<CollectionRelated layout="cards" />)
+    expect(container.querySelectorAll('[aria-hidden="true"]')).toHaveLength(0)
+  })
+
+  it('previews the chosen date format, so the picker shows its work', () => {
+    canvas(<CollectionRelated dateFormat="longDate" />)
+    expect(screen.getAllByText(/August 9, 2026/).length).toBeGreaterThan(0)
+  })
+
+  it('dates every sample from a fixed instant, not the clock', () => {
+    canvas(<CollectionRelated dateFormat="iso" />)
+    expect(screen.getAllByText(/2026-08-09/)).toHaveLength(3)
+  })
+
+  it('honours the show switches on the sample too', () => {
+    canvas(
+      <CollectionRelated
+        layout="cards"
+        showDate={false}
+        showCategory={false}
+        showExcerpt
+      />,
+    )
+    expect(screen.queryByText(/8\/9\/2026/)).toBeNull()
+    expect(screen.queryByText('Category')).toBeNull()
+    expect(screen.getAllByText(/Each post’s own excerpt/)).toHaveLength(3)
+  })
+
+  it('renders nothing at all on a published page', () => {
+    // The one guarantee that matters: no visitor is ever shown a post that
+    // does not exist.
+    const { container } = render(<CollectionRelated layout="cards" showCover />)
+    expect(container.textContent).toBe('')
+    expect(container.querySelectorAll('img')).toHaveLength(0)
+  })
+
+  it('steps aside the moment the server stamps real entries', () => {
+    canvas(
+      <CollectionRelated entries={[{ title: 'Real', url: '/blog/real' }]} />,
+    )
+    expect(screen.getByText('Real')).toBeTruthy()
+    expect(screen.queryByText('Sample related post')).toBeNull()
+    expect(screen.queryByText(/Sample posts —/)).toBeNull()
+  })
+})
+
+/**
+ * AGL-2486. Everything inside a related card is the block's own markup, so
+ * none of it is a node the Styles panel can select — an author had no handle
+ * on the title, the date, the chip or the excerpt at all. The card title was
+ * the visible symptom: a bare `AppLink` is MUI's `Link`, so it rendered
+ * `primary.main` and permanently underlined on a themed page.
+ */
+describe('Related posts is designable (AGL-2486)', () => {
+  const entries = [
+    {
+      title: 'First',
+      url: '/blog/first',
+      date: '1/1/2026',
+      category: 'Guides',
+      excerpt: 'A first excerpt',
+    },
+  ]
+
+  describe('the card title reads as a heading in the theme', () => {
+    it('gives the title a heading element and the theme’s type step', () => {
+      const { container } = render(<CollectionRelated entries={entries} />)
+      const title = container.querySelector('h3')
+      expect(title?.className).toContain('MuiTypography-subtitle1')
+      expect(title?.textContent).toBe('First')
+    })
+
+    it('takes the surrounding text colour, not the link colour', () => {
+      const { container } = render(<CollectionRelated entries={entries} />)
+      const anchor = container.querySelector('a') as HTMLElement
+      expect(anchor.getAttribute('href')).toBe('/blog/first')
+      expect(window.getComputedStyle(anchor).color).toBe('inherit')
+    })
+
+    it('honours an authored type step', () => {
+      const { container } = render(
+        <CollectionRelated entries={entries} titleVariant="h4" />,
+      )
+      expect(container.querySelector('h3')?.className).toContain(
+        'MuiTypography-h4',
+      )
+    })
+
+    it('honours an authored heading step', () => {
+      const { container } = render(
+        <CollectionRelated entries={entries} headingVariant="h3" />,
+      )
+      const heading = container.querySelector('h2')
+      expect(heading?.className).toContain('MuiTypography-h3')
+      expect(heading?.textContent).toBe('Related articles')
+    })
+  })
+
+  describe('the whole card is the link on the grid', () => {
+    it('wraps cover, chip, title and date in one anchor', () => {
+      const { container } = render(
+        <CollectionRelated entries={entries} layout="cards" />,
+      )
+      const anchors = container.querySelectorAll('a')
+      expect(anchors).toHaveLength(1)
+      expect(anchors[0].getAttribute('href')).toBe('/blog/first')
+      expect(anchors[0].querySelector('.MuiChip-root')).toBeTruthy()
+      expect(anchors[0].querySelector('h3')?.textContent).toBe('First')
+    })
+
+    it('never nests an anchor inside the card anchor', () => {
+      const { container } = render(
+        <CollectionRelated entries={entries} layout="cards" />,
+      )
+      expect(container.querySelectorAll('a a')).toHaveLength(0)
+    })
+  })
+
+  describe('Show date and Date format', () => {
+    it('shows the stamped date by default, exactly as it always has', () => {
+      render(<CollectionRelated entries={entries} />)
+      expect(screen.getByText('1/1/2026 · Guides')).toBeTruthy()
+    })
+
+    it('drops the date from the list line when the switch is off', () => {
+      render(<CollectionRelated entries={entries} showDate={false} />)
+      expect(screen.getByText('Guides')).toBeTruthy()
+      expect(screen.queryByText(/1\/1\/2026/)).toBeNull()
+    })
+
+    it('drops the date caption from a card when the switch is off', () => {
+      render(
+        <CollectionRelated entries={entries} layout="cards" showDate={false} />,
+      )
+      expect(screen.queryByText('1/1/2026')).toBeNull()
+      expect(screen.getByText('First')).toBeTruthy()
+    })
+
+    it('offers the ONE shared format list, never a second one', () => {
+      const attribute = (collectionRelatedSchema.attributes ?? []).find(
+        (item) => item.name === 'dateFormat',
+      )
+      expect(attribute?.component).toBe(Aglyn.FieldComponentType.SELECT)
+      expect(attribute?.options).toEqual([
+        ...Aglyn.COLLECTION_ENTRY_DATE_FORMAT_OPTIONS,
+      ])
+    })
+
+    it('keeps the compose-time format off the DOM', () => {
+      const { container } = render(
+        <CollectionRelated entries={entries} dateFormat="longDate" />,
+      )
+      const root = container.firstElementChild as HTMLElement
+      expect(root.getAttribute('dateFormat')).toBeNull()
+    })
+  })
+
+  describe('Show category', () => {
+    it('drops the chip from a card when the switch is off', () => {
+      const { container } = render(
+        <CollectionRelated
+          entries={entries}
+          layout="cards"
+          showCategory={false}
+        />,
+      )
+      expect(container.querySelectorAll('.MuiChip-root')).toHaveLength(0)
+    })
+
+    it('drops the category from the list line when the switch is off', () => {
+      render(<CollectionRelated entries={entries} showCategory={false} />)
+      expect(screen.getByText('1/1/2026')).toBeTruthy()
+      expect(screen.queryByText(/Guides/)).toBeNull()
+    })
+
+    it('renders no caption at all with both halves off', () => {
+      const { container } = render(
+        <CollectionRelated
+          entries={entries}
+          showDate={false}
+          showCategory={false}
+        />,
+      )
+      expect(container.querySelectorAll('.MuiTypography-caption')).toHaveLength(
+        0,
+      )
+    })
+  })
+
+  describe('Show excerpt', () => {
+    it('renders nothing until it is asked for', () => {
+      // The excerpt has been stamped since AGL-582 and rendered by nothing;
+      // switching that on by default would add a paragraph to live entries.
+      render(<CollectionRelated entries={entries} />)
+      expect(screen.queryByText('A first excerpt')).toBeNull()
+    })
+
+    it('renders under the title on the list', () => {
+      render(<CollectionRelated entries={entries} showExcerpt />)
+      expect(screen.getByText('A first excerpt')).toBeTruthy()
+    })
+
+    it('renders inside the card on the grid', () => {
+      const { container } = render(
+        <CollectionRelated entries={entries} layout="cards" showExcerpt />,
+      )
+      expect(container.querySelector('a')?.textContent).toContain(
+        'A first excerpt',
+      )
+    })
+
+    it('leaves an entry with no excerpt alone rather than gapping', () => {
+      const { container } = render(
+        <CollectionRelated
+          entries={[{ title: 'Bare', url: '/blog/bare' }]}
+          showExcerpt
+        />,
+      )
+      expect(container.querySelectorAll('.MuiTypography-body2')).toHaveLength(0)
+    })
+  })
+
+  describe('every new control is authorable and explains itself', () => {
+    const attribute = (name: string) =>
+      (collectionRelatedSchema.attributes ?? []).find(
+        (item) => item.name === name,
+      )
+
+    it.each([
+      ['headingVariant', Aglyn.FieldComponentType.SELECT],
+      ['titleVariant', Aglyn.FieldComponentType.SELECT],
+      ['showDate', Aglyn.FieldComponentType.SWITCH],
+      ['dateFormat', Aglyn.FieldComponentType.SELECT],
+      ['showCategory', Aglyn.FieldComponentType.SWITCH],
+      ['showExcerpt', Aglyn.FieldComponentType.SWITCH],
+    ])('offers %s with its own tooltip', (name, component) => {
+      const field = attribute(name as string)
+      expect(field?.component).toBe(component)
+      expect(field?.label).toBeTruthy()
+      // The guard in apps/console/specs asserts uniqueness repo-wide; a
+      // field added here without help fails the build, not just this file.
+      expect(field?.description?.trim()).toBeTruthy()
+    })
+
+    it('offers the theme’s own type steps, not a list invented here', () => {
+      for (const name of ['headingVariant', 'titleVariant']) {
+        const values = (attribute(name)?.options ?? []).map(
+          (option: any) => option.value,
+        )
+        expect(values).toEqual(
+          typographyVariants.map((variant) => variant.value),
+        )
+        // `''` cannot survive a save (AGL-1451/AGL-1453).
+        for (const value of values) expect(value).toBeTruthy()
+      }
+    })
+
+    it('seeds the preset with the steps and format it actually renders', () => {
+      const preset = collectionPresets.find(
+        (item) =>
+          item.data.componentId === Aglyn.COLLECTION_RELATED_COMPONENT_ID,
+      )
+      const props = preset?.data.props as any
+      expect(props.headingVariant).toBe('h5')
+      expect(props.titleVariant).toBe('subtitle1')
+      expect(props.dateFormat).toBe(Aglyn.COLLECTION_ENTRY_DATE_FORMAT_DEFAULT)
+      // The switches stay unset: their absent state IS today's render.
+      for (const key of ['showDate', 'showCategory', 'showExcerpt'])
+        expect(props[key]).toBeUndefined()
+    })
+  })
+
+  /**
+   * The live blog entry template is a block with none of the new props set.
+   * Everything it emitted before must still be emitted, and the ONE
+   * deliberate difference — the title is themed text rather than a default
+   * browser link — is asserted above rather than left to chance.
+   */
+  describe('a block with no new props set is otherwise unchanged', () => {
+    const shipped = [
+      {
+        title: 'First',
+        url: '/blog/first',
+        date: '1/1/2026',
+        category: 'Guides',
+        excerpt: 'A first excerpt',
+        coverImage: 'https://cdn.example.com/first.png',
+      },
+      { title: 'Third', url: '/blog/third' },
+    ]
+
+    it('renders the list exactly as it did', () => {
+      const { container } = render(<CollectionRelated entries={shipped} />)
+      expect(screen.getByText('Related articles')).toBeTruthy()
+      expect(
+        Array.from(container.querySelectorAll('a')).map((a) =>
+          a.getAttribute('href'),
+        ),
+      ).toEqual(['/blog/first', '/blog/third'])
+      expect(screen.getByText('1/1/2026 · Guides')).toBeTruthy()
+      expect(container.querySelectorAll('img')).toHaveLength(0)
+      expect(container.querySelectorAll('.MuiChip-root')).toHaveLength(0)
+      expect(screen.queryByText('A first excerpt')).toBeNull()
+    })
+
+    it('renders the card grid’s covers, chips and dates as it did', () => {
+      const { container } = render(
+        <CollectionRelated entries={shipped} layout="cards" showCover />,
+      )
+      expect(container.querySelector('img')?.getAttribute('src')).toBe(
+        'https://cdn.example.com/first.png',
+      )
+      expect(
+        Array.from(container.querySelectorAll('.MuiChip-root')).map(
+          (chip) => chip.textContent,
+        ),
+      ).toEqual(['Guides'])
+      expect(screen.getByText('1/1/2026')).toBeTruthy()
+      // Still no plate for a real entry that simply has no cover.
+      expect(container.querySelectorAll('img')).toHaveLength(1)
+      expect(container.querySelectorAll('[aria-hidden="true"]')).toHaveLength(0)
+    })
+
+    it('keeps every read-here prop off the DOM', () => {
+      const { container } = render(
+        <CollectionRelated
+          entries={shipped}
+          limit={3}
+          layout="cards"
+          columns={3}
+          showCover
+          headingVariant="h5"
+          titleVariant="subtitle1"
+          showDate
+          dateFormat="iso"
+          showCategory
+          showExcerpt
+        />,
+      )
+      const root = container.firstElementChild as HTMLElement
+      for (const attribute of [
+        'limit',
+        'layout',
+        'columns',
+        'showCover',
+        'headingVariant',
+        'titleVariant',
+        'showDate',
+        'dateFormat',
+        'showCategory',
+        'showExcerpt',
+      ])
+        expect(root.getAttribute(attribute)).toBeNull()
+    })
   })
 })
 
