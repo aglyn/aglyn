@@ -70,10 +70,11 @@ import type { LoadResult, Props } from './types'
  * always did.
  *
  * A helper because the loader has several exits that render nodes, and each
- * has to answer this for itself. Collection and auth-screen pages pass no
- * enrichment at all, and that is correct rather than lazy: those branches
- * return before `runSitePageEnrichers`, so no plugin contributed anything to
- * them and only their nodes can require one.
+ * has to answer this for itself. An exit that runs the enrichers has to hand
+ * their result over — a plugin whose contribution is on the page but which is
+ * absent from `contributors` mounts late, after paint. Auth-screen pages pass
+ * no enrichment because they return before `runSitePageEnrichers` and so have
+ * none; only their nodes can require a plugin.
  */
 const blockingPluginsFor = (
   nodes: Record<string, any> | null | undefined,
@@ -720,6 +721,40 @@ const loadPageDataCached = cache(
             orgRes.org,
           ).features.removeBranding
 
+          /**
+           * Plugin enrichers for a collection route (AGL-2509).
+           *
+           * A collection page renders the site's shared layout, so it renders
+           * the site's NAV — and a nav menu built from primitives opens on
+           * hover through `clientAutomations`, which is an enricher's output.
+           * Without this call the chrome is byte-identical to a screen page's
+           * and inert: `/pricing` shipped the hover automations bound to the
+           * layout's menu leaves, `/blog/{entry}` and `/changelog` shipped
+           * none, and the mega menus were dead on every post. The same gap
+           * withheld a path-targeted announcement bar or popup from blog
+           * posts, and commerce's server-side grid seeds from any template
+           * that contains a product grid.
+           *
+           * `screenId`/`screen` are deliberately absent. The only enricher
+           * that reads them composes an experiment variant with
+           * `composeScreenNodes` and no collection context, so a variant of a
+           * template screen would render `{{entry.*}}` tokens raw against an
+           * empty entries block — a worse page than the one it is testing.
+           * Screen/section experiments on collection templates are their own
+           * piece of work; every other enricher keys off nodes and path.
+           */
+          const enrichCollectionPage = (
+            collectionNodes: Record<string, unknown>,
+          ) =>
+            Aglyn.runSitePageEnrichers({
+              hostId,
+              host: hostRes.host,
+              org: orgRes.org,
+              path,
+              slugSegments: [...(slug ?? [])],
+              nodes: collectionNodes,
+            })
+
           // Template screens (AGL-105/551): the collection's designated
           // list/entry screens render through the NORMAL published pipeline
           // — theme, shared layout, {{entry.*}}/{{collection.*}} tokens,
@@ -729,6 +764,9 @@ const loadPageDataCached = cache(
             content,
           })
           if (templated) {
+            const templatedEnriched = await enrichCollectionPage(
+              templated.nodes,
+            )
             return {
               props: JSON.parse(
                 JSON.stringify({
@@ -741,9 +779,11 @@ const loadPageDataCached = cache(
                   // the composed nodes because they are present).
                   content,
                   enabledPlugins: collectionEnabledPlugins,
+                  ...templatedEnriched.props,
                   ...blockingPluginsFor(
                     templated.nodes,
                     collectionEnabledPlugins,
+                    templatedEnriched,
                   ),
                   showBranding: collectionShowBranding,
                 }),
@@ -761,18 +801,26 @@ const loadPageDataCached = cache(
             host: hostRes.host,
             content,
           })
+          // The legacy plain article (`fallback` null) ships no nodes and no
+          // plugin switchboard, so no site runtime mounts to read an
+          // enricher's slice — enriching it would be bytes nothing consumes.
+          const fallbackEnriched = fallback
+            ? await enrichCollectionPage(fallback.nodes)
+            : null
           return {
             props: JSON.parse(
               JSON.stringify({
                 data: { host: hostRes.host },
                 nodes: fallback?.nodes ?? null,
                 content,
-                ...(fallback
+                ...(fallback && fallbackEnriched
                   ? {
                       enabledPlugins: collectionEnabledPlugins,
+                      ...fallbackEnriched.props,
                       ...blockingPluginsFor(
                         fallback.nodes,
                         collectionEnabledPlugins,
+                        fallbackEnriched,
                       ),
                       showBranding: collectionShowBranding,
                     }
