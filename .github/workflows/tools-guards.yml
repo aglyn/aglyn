@@ -258,6 +258,11 @@ jobs:
       #                             operator run, and a wrong account printed
       #                             230 lines of GaxiosError naming no variable.
       - run: npm run test:firebase-credential-message
+      # The typecheck shard map (AGL-2505). `npm run typecheck` is split
+      # across runners now, and a shard map that DROPS a config produces a
+      # green typecheck that never compiled it — indistinguishable from a real
+      # pass. The partition property is asserted here rather than trusted.
+      - run: npm run test:typecheck-shard
       - run: npm run test:ttl-policies
 
       - run: npm run test:erase-cli

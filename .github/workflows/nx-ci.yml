@@ -189,8 +189,45 @@ jobs:
           echo "NX_BASE=$base"
           echo "NX_HEAD=$head"
 
-  # Typecheck plus every guard that is not affected-scoped (~5m40s). It also
-  # reports the affected range for the whole run, once.
+  # THE TYPE GATE, SHARDED (AGL-2505).
+  #
+  # `npm run typecheck` compiles 145 tsconfigs and was 5m49s — the longest
+  # single thing left once the jest suite was split, and so the floor on how
+  # fast a promotion can be verified. It already parallelises internally, but
+  # the runner has 4 vCPU, so the only way further down is more machines.
+  #
+  # Builds do NOT type-check (swc and rollup strip types; jest transforms with
+  # babel/swc), so this is the workspace's only type gate. That is exactly why
+  # the split is a partition asserted by `test:typecheck-shard` rather than
+  # trusted: a shard map that drops a config yields a green typecheck that
+  # never compiled it, which reads identically to a real pass.
+  typecheck:
+    needs: base
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      # Before the local action, never after: `uses: ./…` is resolved from
+      # the runner's disk, so the repo must already be there. See the note at
+      # the top of the action.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/nx-ci-setup
+        with:
+          nx-base: ${{ needs.base.outputs.base }}
+          nx-head: ${{ needs.base.outputs.head }}
+          cache-scope: typecheck-${{ matrix.shard }}
+
+      - run: npm run typecheck -- --shard=${{ matrix.shard }}/3
+
+  # Everything that is neither affected-scoped nor the type gate: the
+  # generated-artifact checks, the tools/ self-tests, the weight and price
+  # budgets. Seconds each. It also reports the affected range for the run.
   checks:
     needs: base
     runs-on: ubuntu-latest
@@ -257,9 +294,6 @@ jobs:
           if [ "$count" -eq 0 ]; then
             echo "::warning::No project is affected by ${NX_BASE}..${NX_HEAD}; the lint, test and build jobs will run nothing."
           fi
-      # Native TypeScript 7 compiler; whole-workspace check runs in seconds
-      # and is the only type gate (builds transpile with swc, no type-check).
-      - run: npm run typecheck
       # apps/docs is EXCLUDED from the sweep above by name
       # (tools/scripts/typecheck.mjs) because it is a standalone package with
       # its own TypeScript, and nothing ran its own target instead — so the
@@ -488,7 +522,7 @@ jobs:
       # less than a rerun would.
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     steps:
       # Before the local action, never after: `uses: ./…` is resolved from
       # the runner's disk, so the repo must already be there. See the note at
@@ -628,10 +662,10 @@ jobs:
       # lists. Within THIS job the ordering still matters and
       # `test:ci-test-digest` still asserts it: a step running before the
       # setup action would fall back to nx's own default base.
-      - name: test (shard ${{ matrix.shard }}/4)
+      - name: test (shard ${{ matrix.shard }}/8)
         run: |
           status=0
-          npx nx affected -t test --parallel=3 --maxWorkers=2 --shard=${{ matrix.shard }}/4 \
+          npx nx affected -t test --parallel=3 --maxWorkers=2 --shard=${{ matrix.shard }}/8 \
             > "$RUNNER_TEMP/nx-test.log" 2>&1 || status=$?
           cat "$RUNNER_TEMP/nx-test.log"
           exit "$status"
@@ -654,10 +688,30 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
-  # ~13m, on its own runner. See "WHY `build` DOES NOT WAIT FOR `test`" at the
-  # top of this file: the 16 GB contention that made it a trailing step is
-  # gone once it has a runner to itself, and running it alongside test buys a
-  # second verdict on a red run for no extra wall clock on a green one.
+  # THE PRODUCTION BUILDS, IN ONE JOB (AGL-2505).
+  #
+  # 6m52s, and deliberately NOT split further. Two measurements say so.
+  #
+  # It is not the pole: the eight test shards run 7-9m, so a faster build job
+  # would not move the wall clock at all.
+  #
+  # And the obvious split does not work. `nx affected -t build
+  # --projects=<app>` was tried and failed on run 33678823983: `--projects` is
+  # not a flag `affected` consumes, so nx did what the note below the lint
+  # step already warns it does with unrecognised flags — appended it to the
+  # command STRING of every `nx:run-commands` target. `cloud-functions:build`
+  # shells out to tsc and died on
+  #
+  #   error TS5023: Unknown compiler option '--projects=console'.
+  #
+  # while the run still built all 51 projects in each of the three jobs,
+  # because the filter never applied. `--exclude` IS consumed by nx and works;
+  # `--projects` is not, on `affected`. Splitting this needs `--exclude` on
+  # both halves, and it is not worth it while test is the pole.
+  #
+  # ⚑ 51 projects carry a `build` target, not the three apps — every buildable
+  # lib does too. Any future split must keep the halves exact complements, or
+  # it stops building libraries and stays green.
   build:
     needs: base
     runs-on: ubuntu-latest
@@ -677,3 +731,38 @@ jobs:
           cache-scope: build
 
       - run: npx nx affected -t build --parallel=3
+
+  # ONE CHECK NAME FOR BRANCH PROTECTION TO REQUIRE (AGL-1777, AGL-2505).
+  #
+  # Required status checks are configured by NAME, and a matrix publishes one
+  # name per leg — `test (1)` … `test (8)`. Requiring those directly would
+  # mean re-configuring protection every time a shard count moves, and a
+  # required check that stops reporting leaves every PR pending FOREVER, which
+  # is the trap AGL-1777 names explicitly.
+  #
+  # So protection requires this job and nothing else in the workflow. Its name
+  # is stable while the shape underneath is free to change.
+  #
+  # ⛔ `needs` alone does NOT make it fail. A skipped dependency still counts
+  # as satisfied, so this asserts on the collected `result` values instead —
+  # otherwise the one job protection depends on would go green precisely when
+  # its dependencies never ran.
+  ci:
+    needs: [typecheck, checks, lint, test, build]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: every job succeeded
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          set -euo pipefail
+          echo "upstream results: $RESULTS"
+          for result in $RESULTS; do
+            if [ "$result" != "success" ]; then
+              echo "::error::NX CI is not green — an upstream job reported '$result'."
+              exit 1
+            fi
+          done
+          echo "All upstream jobs succeeded."

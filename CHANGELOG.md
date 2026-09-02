@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.50 — 2026-09-02
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.49...v1.0.0-beta.50)
+
+### Performance
+
+- **ci:** typecheck and the builds split too, behind one required check ([AGL-2505](https://linear.app/aglyn/issue/AGL-2505), [AGL-1777](https://linear.app/aglyn/issue/AGL-1777))
+
 ## v1.0.0-beta.49 — 2026-09-02
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.48...v1.0.0-beta.49)
