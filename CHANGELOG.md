@@ -16,6 +16,7 @@ content on the marketing site and is written separately.
 ### Fixed
 
 - **deps:** fast-uri and qs reach their patched versions in all three trees ([AGL-2504](https://linear.app/aglyn/issue/AGL-2504))
+- **collection:** a listing card's entry blocks fill from that card's own entry ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
 
 ## v1.0.0-beta.48 — 2026-09-02
 
