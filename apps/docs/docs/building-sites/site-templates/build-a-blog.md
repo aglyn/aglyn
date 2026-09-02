@@ -231,9 +231,19 @@ in the block library:
   *Site default* (`8/9/2026`), *Month and year* (`Aug 2026`), *Short date*, *Long date*
   or *ISO*. It applies to the date the block fills in for itself; a date you typed in by
   hand is left exactly as typed. **Avatar** takes any image from the media library
-  (usually your brand mark) and renders it 36px and round; blank shows no avatar. The
-  avatar is chosen on the block, not per author — entries carry an author *name*, not a
-  portrait.
+  (usually your brand mark) and renders it 36px and round; blank shows no avatar. When
+  the entry's author is a record with a portrait, that portrait is shown instead of the
+  mark you picked — the face follows the byline. It only appears where a byline does: a
+  block with **Show author** off (a tag row at the foot of an article, say) keeps
+  whatever avatar you chose for it, and gets none if you chose none.
+- **Entry Author** — the author card that closes an article: portrait, name and bio,
+  filled from the entry's author record. Drop it on the entry template and it works;
+  nothing needs typing. **Name**, **Bio**, **Portrait** and **Link** each override one
+  field (the `{{entry.author}}` / `{{entry.authorBio}}` / `{{entry.authorImage}}` /
+  `{{entry.authorUrl}}` bindings say the same thing, for a card you laid out yourself),
+  and **Show bio** / **Show portrait** hide a part you do not want. Each part collapses
+  when the record has nothing for it, and an entry with no author renders no card at
+  all. The name links to the author's own url, off-site links opening in a new tab.
 - **Related Posts** — other entries of the same collection that share the current
   entry's **category or a tag**, newest first. Attributes: **Heading** (default
   "Related articles"), **Limit** (default 3), **Layout**, **Columns** and **Show

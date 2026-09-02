@@ -103,6 +103,9 @@ export const MUI_BUNDLE: Array<{
     { component: Collection.CollectionRelated, schema: Collection.collectionRelatedSchema },
     { component: Collection.CollectionShare, schema: Collection.collectionShareSchema },
     { component: Collection.CollectionEntryMeta, schema: Collection.collectionEntryMetaSchema },
+    // The author card that closes an article (AGL-2486): the byline block
+    // prints a name, and the record behind it also has a portrait and a bio.
+    { component: Collection.CollectionEntryAuthor, schema: Collection.collectionEntryAuthorSchema },
     // Category pills (AGL-1321): real anchors to /{collection}/category/{slug}.
     { component: Collection.CollectionCategories, schema: Collection.collectionCategoriesSchema },
     // The toolbar search box (AGL-1516): the entries block's own field cannot

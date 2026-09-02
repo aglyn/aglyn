@@ -17,6 +17,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import {
+  mdiAccountCircleOutline,
   mdiContentCopy,
   mdiFacebook,
   mdiLinkedin,
@@ -60,6 +61,8 @@ export const RELATED_ID: Aglyn.ComponentId =
 export const SHARE_ID: Aglyn.ComponentId = Aglyn.COLLECTION_SHARE_COMPONENT_ID
 export const ENTRY_META_ID: Aglyn.ComponentId =
   Aglyn.COLLECTION_ENTRY_META_COMPONENT_ID
+export const ENTRY_AUTHOR_ID: Aglyn.ComponentId =
+  Aglyn.COLLECTION_ENTRY_AUTHOR_COMPONENT_ID
 export const CATEGORIES_ID: Aglyn.ComponentId =
   Aglyn.COLLECTION_CATEGORIES_COMPONENT_ID
 export const SEARCH_ID: Aglyn.ComponentId =
@@ -1770,6 +1773,229 @@ export const collectionEntryMetaSchema: Aglyn.ComponentSchema<CollectionEntryMet
     ],
   }
 
+/* ── Entry author card (AGL-2486) ───────────────────────────────────────── */
+
+export interface CollectionEntryAuthorProps extends StackProps {
+  /**
+   * The byline. Server-filled from the routed entry's author record on entry
+   * templates (`expandCollectionEntryAuthor`), exactly like Entry Meta's
+   * fields; set it — or bind `{{entry.author}}` — only to override.
+   */
+  name?: string
+  /**
+   * The author's blurb, from their record's `bio`; bind
+   * `{{entry.authorBio}}` to override.
+   */
+  bio?: string
+  /**
+   * Portrait or logo — a media reference (AGL-1215) or any URL. Server-filled
+   * from the author record, so the face changes with the byline instead of
+   * being picked once on the template the way Entry Meta's avatar is.
+   */
+  image?: string
+  /** The author's own page; blank renders the name as plain text. */
+  url?: string
+  showBio?: boolean
+  showAvatar?: boolean
+}
+
+/** The card's portrait, larger than the byline's 36px mark (Figma 170:190). */
+const AUTHOR_AVATAR_SIZE = 48
+
+/**
+ * What the byline may link to — an absolute `https:` page, or a route on this
+ * site. The Social Links block guards its hrefs the same way and for the same
+ * reason: the value comes from a stored record, so `javascript:` and friends
+ * have to be unreachable rather than merely unlikely.
+ */
+const SAFE_AUTHOR_HREF = /^(https:\/\/|\/(?!\/))/i
+
+/** An off-site author page opens in a new tab; a route on this site does not. */
+const EXTERNAL_AUTHOR_HREF = /^https:\/\//i
+
+/**
+ * The author card that closes an article (AGL-2486) — portrait, byline, bio.
+ *
+ * Entry Meta prints a NAME beside a date, which is all an entry carried when
+ * it was written: one free-typed string. Custom authors made the byline a
+ * record with a portrait, a bio and a url, and a template that wanted the
+ * card the article frame draws still had to type the name and the blurb in as
+ * literal text — text that keeps saying whatever it said under posts somebody
+ * else wrote, and that no edit to the author record can ever reach. This is
+ * that card, filled from the record.
+ *
+ * Every field is independently overridable and every one of them collapses
+ * when empty: an author with no portrait renders the text alone rather than a
+ * gap where a face would be, and an entry with no author at all renders
+ * nothing — never an empty bordered box.
+ */
+const CollectionEntryAuthor = forwardRef<
+  HTMLDivElement,
+  CollectionEntryAuthorProps
+>((props, ref) => {
+  // None of these are DOM attributes (`name` least of all), so they are
+  // destructured rather than spread — the stack.ts pattern.
+  const { name, bio, image, url, showBio, showAvatar, ...rest } = props
+  const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
+  const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
+  const { hostId } = Aglyn.useSite()
+  const nameValue = metaValue(name, suppressNavigation)
+  const bioValue = showBio !== false ? metaValue(bio, suppressNavigation) : ''
+  const urlRaw = metaValue(url, suppressNavigation)
+  const urlValue = SAFE_AUTHOR_HREF.test(urlRaw) ? urlRaw : ''
+  // An unresolved token empties on EVERY surface, as in the byline: a literal
+  // `{{…}}` in a src is a broken portrait in the canvas.
+  const imageRaw = (image ?? '').trim()
+  const imageSrc =
+    showAvatar !== false && imageRaw && !UNRESOLVED_TOKEN.test(imageRaw)
+      ? Aglyn.resolveMediaSrc(imageRaw, { hostId })
+      : ''
+  if (!nameValue && !bioValue && !imageSrc) {
+    if (!suppressNavigation) return <Box ref={ref} {...rest} />
+    return (
+      <Box
+        ref={ref}
+        {...rest}
+        sx={[
+          {
+            p: 1,
+            border: '1px dashed',
+            borderColor: 'divider',
+            color: 'text.secondary',
+            fontSize: 12,
+            fontFamily: 'system-ui, sans-serif',
+          },
+          ...nodeSx,
+        ]}
+      >
+        {'Entry author — portrait, byline and bio render here'}
+      </Box>
+    )
+  }
+  return (
+    <MuiStack
+      ref={ref}
+      direction="row"
+      spacing={2}
+      {...rest}
+      // MERGE, never replace (AGL-1450): `rest.sx` is the array leaf.tsx
+      // builds, and spreading it into an object drops every authored value.
+      sx={[
+        {
+          alignItems: 'flex-start',
+          p: 2.5,
+          border: '1px solid',
+          borderColor: 'divider',
+          borderRadius: 1,
+        },
+        ...nodeSx,
+      ]}
+    >
+      {imageSrc ? (
+        <Box
+          component="img"
+          src={imageSrc}
+          // Decorative: the card names the author in text right beside it.
+          alt=""
+          sx={{
+            display: 'block',
+            flexShrink: 0,
+            width: AUTHOR_AVATAR_SIZE,
+            height: AUTHOR_AVATAR_SIZE,
+            borderRadius: '50%',
+            objectFit: 'cover',
+          }}
+          {...Aglyn.DEFERRED_IMAGE_ATTRIBUTES}
+        />
+      ) : null}
+      <MuiStack spacing={0.5} sx={{ minWidth: 0 }}>
+        {nameValue ? (
+          <Typography component="p" variant="subtitle2">
+            {urlValue ? (
+              <AppLink
+                href={urlValue}
+                sx={{ color: 'inherit' }}
+                underline="hover"
+                {...(EXTERNAL_AUTHOR_HREF.test(urlValue)
+                  ? { target: '_blank', rel: 'noopener noreferrer' }
+                  : {})}
+              >
+                {nameValue}
+              </AppLink>
+            ) : (
+              nameValue
+            )}
+          </Typography>
+        ) : null}
+        {bioValue ? (
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            {bioValue}
+          </Typography>
+        ) : null}
+      </MuiStack>
+    </MuiStack>
+  )
+})
+CollectionEntryAuthor.displayName = 'AglynCollectionEntryAuthor'
+
+export const collectionEntryAuthorSchema: Aglyn.ComponentSchema<CollectionEntryAuthorProps> =
+  {
+    $id: ENTRY_AUTHOR_ID,
+    pluginId: BUNDLE_ID,
+    displayName: 'Entry Author',
+    description: 'The author card for an entry — portrait, byline and bio.',
+    category: Aglyn.ComponentCategory.TEXT,
+    icon: {
+      path: mdiAccountCircleOutline.path,
+      sx: { color: 'secondary.main' },
+    },
+    flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
+    attributes: [
+      {
+        name: 'name',
+        label: 'Name',
+        description:
+          'Blank shows the entry’s own author. Type here (or bind ' +
+          '{{entry.author}}) only to override it.',
+        component: Aglyn.FieldComponentType.TEXT_FIELD,
+      },
+      {
+        name: 'bio',
+        label: 'Bio',
+        description:
+          'Blank shows the bio from the author’s record. Type here (or bind ' +
+          '{{entry.authorBio}}) only to override it.',
+        component: Aglyn.FieldComponentType.TEXTAREA,
+      },
+      {
+        name: 'image',
+        label: 'Portrait',
+        description:
+          'Blank shows the portrait from the author’s record. Pick from your ' +
+          'media library with "Browse media" only to override it.',
+        component: Aglyn.FieldComponentType.TEXT_FIELD,
+      },
+      {
+        name: 'url',
+        label: 'Link',
+        description:
+          'Blank uses the author’s own url. The name links here; with no url ' +
+          'it renders as plain text.',
+        component: Aglyn.FieldComponentType.TEXT_FIELD,
+      },
+      {
+        name: 'showBio',
+        label: 'Show bio',
+        component: Aglyn.FieldComponentType.SWITCH,
+      },
+      {
+        name: 'showAvatar',
+        label: 'Show portrait',
+        component: Aglyn.FieldComponentType.SWITCH,
+      },
+    ],
+  }
+
 /* ── Category pills (AGL-1321) ──────────────────────────────────────────── */
 
 export interface CollectionCategoriesProps extends StackProps {
@@ -2250,11 +2476,34 @@ export const collectionPresets: Aglyn.PresetSchema[] = [
       },
     },
   },
+  {
+    $id: generatePresetId(ENTRY_AUTHOR_ID),
+    type: Aglyn.NodeType.PRESET,
+    displayName: 'Entry Author',
+    pluginId: BUNDLE_ID,
+    description: 'Portrait, byline and bio card for the entry’s author',
+    category: Aglyn.ComponentCategory.TEXT,
+    icon: {
+      path: mdiAccountCircleOutline.path,
+      sx: { color: 'secondary.main' },
+    },
+    data: {
+      $id: null,
+      componentId: ENTRY_AUTHOR_ID,
+      pluginId: BUNDLE_ID,
+      // Seeded EMPTY, unlike Entry Meta's preset. Those bindings predate the
+      // server fill and stay for compatibility; here the fill is the only
+      // mechanism, and a seeded `{{entry.authorImage}}` would render a broken
+      // portrait on every surface that is not an entry template.
+      props: {},
+    },
+  },
 ]
 
 export {
   CollectionCategories,
   CollectionEntries,
+  CollectionEntryAuthor,
   CollectionEntryBody,
   CollectionEntryMeta,
   CollectionRelated,

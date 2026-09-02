@@ -33,6 +33,7 @@ import {
   collectionCategorySlug,
   collectionSourceIsBounded,
   collectionSourceReachedBound,
+  collectionEntryAuthorValues,
   collectionEntryMetaValues,
   collectionEntryTokens,
   collectionListUrl,
@@ -42,6 +43,7 @@ import {
   entryMatchesFilter,
   expandCollectionCategories,
   expandCollectionEntries,
+  expandCollectionEntryAuthor,
   expandCollectionEntryMeta,
   expandCollectionRelated,
   expandCollectionSearch,
@@ -1992,6 +1994,31 @@ describe('expandCollectionEntryMeta (AGL-1385)', () => {
     )
   })
 
+  it('leaves the tag row faceless — the avatar follows the byline', () => {
+    // The live blogEntryTmpl ends on a second Entry Meta block used purely
+    // for chips: author, date and category switched off, "Tagged" typed as a
+    // label beside it. Filling the portrait in there put the author's face
+    // among the tags, halfway down the page from the byline it belongs to —
+    // and the image is `alt=""` precisely because a name is supposed to sit
+    // next to it.
+    const chipsOnly = metaNodes()
+    chipsOnly['meta'].props = {
+      showTags: true,
+      showAuthor: false,
+      showDate: false,
+      showCategory: false,
+    }
+
+    const nodes = expandCollectionEntryMeta(
+      chipsOnly,
+      { ...entry, author: { name: 'Zach Gover', image: 'media:x/portrait' } },
+      categories,
+    )
+
+    expect(nodes['meta'].props.avatarImage).toBeUndefined()
+    expect(nodes['meta'].props.tags).toBe('forms, datasets')
+  })
+
   it('leaves the avatar alone when the block hides it', () => {
     // `showAvatar: false` is the author saying "no face here"; a portrait
     // arriving later must not turn it back on.
@@ -2291,5 +2318,132 @@ describe('expandCollectionEntryMeta honours author and date format (AGL-1459)', 
       categories,
     )
     expect(bound['meta'].props.date).toBe('{{entry.date}}')
+  })
+})
+
+/**
+ * AGL-2486, the card half. Custom authors made the byline a RECORD with a
+ * portrait, a bio and a url, and the only block that could show one printed
+ * the name alone. The live blogEntryTmpl closed every article with a card
+ * whose name and blurb were typed in as literal text — text that said "The
+ * Aglyn Team" under posts written by somebody else and that no edit to the
+ * author record could ever reach.
+ */
+describe('the author card fills itself from the record (AGL-2486)', () => {
+  const author = {
+    name: 'Zach Gover',
+    bio: 'Building the open web platform.',
+    image: 'media:org:jWmGooWE3L/portrait',
+    url: 'https://example.com/zach',
+  }
+  const entry = {
+    $id: 'fHkaaFRRWF',
+    title: 'From a form to a dataset in five minutes',
+    slug: 'from-a-form-to-a-dataset-in-five-minutes',
+    authorName: 'Zach Gover',
+    author,
+    publishedAt: { seconds: 1_754_714_956 },
+  }
+  const cardNodes = (props: Record<string, unknown> = {}) =>
+    ({
+      root: { $id: 'root', componentId: 'div', nodes: ['card'] },
+      card: {
+        $id: 'card',
+        componentId: 'collectionEntryAuthor',
+        parentId: 'root',
+        props,
+      },
+    }) as any
+
+  it('reads every field off the record', () => {
+    expect(collectionEntryAuthorValues(entry)).toEqual({
+      name: 'Zach Gover',
+      bio: 'Building the open web platform.',
+      image: 'media:org:jWmGooWE3L/portrait',
+      url: 'https://example.com/zach',
+    })
+  })
+
+  it('falls back to the legacy byline string for an older entry', () => {
+    // An entry written before custom authors has one field, and a card with
+    // a name in it beats no card at all.
+    expect(
+      collectionEntryAuthorValues({ authorName: 'The Aglyn Team' }),
+    ).toEqual({ name: 'The Aglyn Team', bio: '', image: '', url: '' })
+  })
+
+  it('stamps the card, so nothing has to be typed as literal text', () => {
+    const nodes = expandCollectionEntryAuthor(cardNodes(), entry)
+
+    expect(nodes['card'].props).toEqual({
+      name: 'Zach Gover',
+      bio: 'Building the open web platform.',
+      image: 'media:org:jWmGooWE3L/portrait',
+      url: 'https://example.com/zach',
+    })
+  })
+
+  it('never overwrites an authored value or a token awaiting substitution', () => {
+    const nodes = expandCollectionEntryAuthor(
+      cardNodes({ name: 'Guest writer', bio: '{{entry.authorBio}}' }),
+      entry,
+    )
+
+    expect(nodes['card'].props.name).toBe('Guest writer')
+    // Substitution runs later and must win.
+    expect(nodes['card'].props.bio).toBe('{{entry.authorBio}}')
+    expect(nodes['card'].props.image).toBe('media:org:jWmGooWE3L/portrait')
+  })
+
+  it('leaves the card empty when the entry names no author', () => {
+    // Rendered as nothing, never as an empty bordered box.
+    const nodes = expandCollectionEntryAuthor(cardNodes(), {
+      title: 'Anonymous',
+    })
+
+    expect(nodes['card'].props).toEqual({})
+  })
+
+  it('skips the per-entry clones a listing block produced', () => {
+    const cloned = cardNodes()
+    cloned[`${COLLECTION_ENTRIES_NODE_ID_PREFIX}list__0__card`] = {
+      ...cloned['card'],
+      $id: `${COLLECTION_ENTRIES_NODE_ID_PREFIX}list__0__card`,
+    }
+
+    const nodes = expandCollectionEntryAuthor(cloned, entry)
+
+    expect(
+      nodes[`${COLLECTION_ENTRIES_NODE_ID_PREFIX}list__0__card`].props,
+    ).toEqual({})
+  })
+
+  it('is bindable by hand for a card the designer laid out themselves', () => {
+    const tokens = collectionEntryTokens(entry, 'blog')
+
+    expect(tokens['entry.author']).toBe('Zach Gover')
+    expect(tokens['entry.authorBio']).toBe('Building the open web platform.')
+    expect(tokens['entry.authorImage']).toBe('media:org:jWmGooWE3L/portrait')
+    expect(tokens['entry.authorUrl']).toBe('https://example.com/zach')
+  })
+
+  it('reads the same whether it was bound or server-filled', () => {
+    // The reason `collectionEntryAuthorValues` exists: one entry has to read
+    // one way on both paths.
+    const stamped = expandCollectionEntryAuthor(cardNodes(), entry)
+    const tokens = collectionEntryTokens(entry, 'blog')
+
+    expect(stamped['card'].props.bio).toBe(tokens['entry.authorBio'])
+    expect(stamped['card'].props.image).toBe(tokens['entry.authorImage'])
+    expect(stamped['card'].props.url).toBe(tokens['entry.authorUrl'])
+  })
+
+  it('shows the record’s name in the byline even undenormalized', () => {
+    // The tenant copies `author.name` onto `authorName` before render, so the
+    // two normally agree. Reading the record first is what keeps that a
+    // convenience rather than the only thing holding the byline up.
+    expect(
+      collectionEntryMetaValues({ author: { name: 'Zach Gover' } }).author,
+    ).toBe('Zach Gover')
   })
 })

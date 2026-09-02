@@ -516,8 +516,15 @@ export async function composeNodesWithChrome(options: {
     options.collection?.entry,
     options.collection?.categories,
   )
-  const bound = Aglyn.resolveNodesBindings(
+  // Entry Author cards (AGL-2486): the same fill, one block over. Its values
+  // come off the author RECORD the routed entry resolved to, which the
+  // collection read has already attached, so this costs nothing either.
+  const withEntryAuthor = Aglyn.expandCollectionEntryAuthor(
     withEntryMeta as any,
+    options.collection?.entry,
+  )
+  const bound = Aglyn.resolveNodesBindings(
+    withEntryAuthor as any,
     variables,
     functions,
   )
