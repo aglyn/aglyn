@@ -9,6 +9,28 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.45 — 2026-09-02
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/e50015ca0...v1.0.0-beta.45)
+
+### Added
+
+- **console:** the issue reporter has a URL, and the README points at it ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **a11y:** the page's `main` landmark moves onto the content region, and is authorable ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **collection:** an author card block, and the byline avatar stays with the byline ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+
+### Fixed
+
+- **layouts:** the Document layer's styling survives the graft into a layout slot ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+
+### Changed
+
+- **besigner:** the element picker on the root and the slot is `component` ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+
+### Documentation
+
+- **besigner:** every element attribute explains itself, in its own words ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+
 ## v1.0.0-beta.44 — 2026-09-02
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.43...v1.0.0-beta.44)
