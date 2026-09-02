@@ -265,6 +265,17 @@ in the block library:
   its real posts. It draws **sample cards** instead — the same markup, at your own
   settings, above a dashed note saying so — so you can style the layout and watch it
   change. The samples never reach a published page; the real posts replace them there.
+
+:::info The canvas previews all three entry blocks
+**Entry Meta**, **Entry Author** and **Related Posts** all read from the entry being
+rendered, and the canvas has none — so each previews itself with sample values
+(`Sample author`, a portrait slot, two example tags) rather than a placeholder strip.
+Your **Show** switches and your **Date format** apply to the preview, so what you are
+styling is the arrangement the page will actually ship. None of it can reach a
+published page: a real entry replaces it, and an entry with nothing to show renders
+nothing at all.
+:::
+
 - **Share Bar** — X, LinkedIn, Facebook, and copy-link buttons for the current page
   URL. Attribute: **Heading** (default "Share").
 - **Category Pills** — the collection's categories as a row of links: **All** plus one

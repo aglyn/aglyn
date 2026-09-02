@@ -2247,3 +2247,116 @@ describe('Entry Author card (AGL-2486)', () => {
     expect(image?.component).toBe(Aglyn.FieldComponentType.TEXT_FIELD)
   })
 })
+
+/**
+ * THE BYLINE AND THE AUTHOR CARD PREVIEW THEMSELVES (AGL-2486).
+ *
+ * Both resolve FROM the routed entry, and a besigner canvas has no routed
+ * entry, so both drew a one-line dashed strip: an author styling the byline
+ * or the author card was styling something they could not see, on a canvas
+ * where every block around them was WYSIWYG. Related Posts had the same gap
+ * and was answered the same way — the block's real markup, at the author's
+ * own settings, on editing surfaces only.
+ *
+ * The published guarantee is the half worth guarding: a visitor must never be
+ * shown `Sample author` under a real article.
+ */
+describe('Entry Meta previews itself on the canvas (AGL-2486)', () => {
+  const canvas = (node: React.ReactElement) =>
+    render(
+      <Aglyn.ScreenLinkContext.Provider value={{ suppressNavigation: true }}>
+        {node}
+      </Aglyn.ScreenLinkContext.Provider>,
+    )
+
+  it('renders a sample byline instead of a dashed strip', () => {
+    const { container } = canvas(<CollectionEntryMeta />)
+    expect(screen.getByText(/Sample author/)).toBeTruthy()
+    // The block's own markup, not a note about it: a caption and chips.
+    expect(container.querySelectorAll('.MuiChip-root').length).toBe(2)
+    expect(container.textContent).not.toMatch(/render here/)
+  })
+
+  it('draws the portrait SLOT, which is what the spacing is built around', () => {
+    // The entry's author supplies the portrait at compose time, so there is
+    // none to resolve here — but a byline with no disc previews at the wrong
+    // height, which is the measurement an author is actually taking.
+    const { container } = canvas(<CollectionEntryMeta />)
+    const plate = container.querySelector('[aria-hidden]')
+    expect(plate).toBeTruthy()
+    expect(container.querySelectorAll('img')).toHaveLength(0)
+  })
+
+  it('honours every Show switch in the sample', () => {
+    const { container } = canvas(
+      <CollectionEntryMeta
+        showAuthor={false}
+        showCategory={false}
+        showTags={false}
+        showAvatar={false}
+      />,
+    )
+    expect(screen.queryByText(/Sample author/)).toBeNull()
+    expect(screen.queryByText(/Category/)).toBeNull()
+    expect(container.querySelectorAll('.MuiChip-root')).toHaveLength(0)
+    expect(container.querySelector('[aria-hidden]')).toBeNull()
+  })
+
+  it('dates the sample in the format the block would use', () => {
+    canvas(<CollectionEntryMeta dateFormat="monthYear" />)
+    expect(screen.getByText(/Aug 2026/)).toBeTruthy()
+  })
+
+  it('renders NOTHING on a published page', () => {
+    // The guarantee: no visitor is ever shown a sample. A published entry
+    // with no meta values renders an empty box, exactly as it did before.
+    const { container } = render(<CollectionEntryMeta />)
+    expect(container.textContent).toBe('')
+    expect(container.querySelectorAll('img, .MuiChip-root')).toHaveLength(0)
+  })
+
+  it('a real value still wins over the sample', () => {
+    canvas(<CollectionEntryMeta author="Zach Gover" date="Aug 2026" />)
+    expect(screen.getByText('Zach Gover · Aug 2026')).toBeTruthy()
+    expect(screen.queryByText(/Sample author/)).toBeNull()
+  })
+})
+
+describe('Entry Author previews itself on the canvas (AGL-2486)', () => {
+  const canvas = (node: React.ReactElement) =>
+    render(
+      <Aglyn.ScreenLinkContext.Provider value={{ suppressNavigation: true }}>
+        {node}
+      </Aglyn.ScreenLinkContext.Provider>,
+    )
+
+  it('renders a sample card instead of a dashed strip', () => {
+    const { container } = canvas(<CollectionEntryAuthor />)
+    expect(screen.getByText('Sample author')).toBeTruthy()
+    expect(screen.getByText(/bio from this author’s record/)).toBeTruthy()
+    expect(container.querySelector('[aria-hidden]')).toBeTruthy()
+    expect(container.textContent).not.toMatch(/render here/)
+  })
+
+  it('honours Show bio and Show portrait in the sample', () => {
+    const { container } = canvas(
+      <CollectionEntryAuthor showBio={false} showAvatar={false} />,
+    )
+    expect(screen.getByText('Sample author')).toBeTruthy()
+    expect(screen.queryByText(/bio from this author’s record/)).toBeNull()
+    expect(container.querySelector('[aria-hidden]')).toBeNull()
+  })
+
+  it('renders NOTHING on a published page', () => {
+    const { container } = render(<CollectionEntryAuthor />)
+    expect(container.textContent).toBe('')
+    expect(container.querySelectorAll('img')).toHaveLength(0)
+  })
+
+  it('a real record still wins over the sample', () => {
+    canvas(<CollectionEntryAuthor name="Zach Gover" bio="Building Aglyn." />)
+    expect(screen.getByText('Zach Gover')).toBeTruthy()
+    expect(screen.getByText('Building Aglyn.')).toBeTruthy()
+    expect(screen.queryByText('Sample author')).toBeNull()
+  })
+})
