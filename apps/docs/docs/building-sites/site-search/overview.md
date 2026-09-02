@@ -42,11 +42,28 @@ test — so clear titles and descriptions make results more useful. The `/search
 results page is excluded from search engines, and `search` is a reserved screen
 slug.
 
+## The layout built-in pages use
+
+The results page is built for you, but the header, navigation and footer around
+it are yours. It renders inside one of your **layouts**, so a visitor who lands
+on `/search` gets the same site around them as on every other page.
+
+Which layout is a setting: **Setup → Built-in page layout**. Left unset it
+follows the layout your home page uses, which is what most sites want and why
+there is nothing to do here on a site with a single layout. Pick a different one
+when your home page has a layout of its own — a transparent header meant to sit
+over a hero image looks wrong above a list of results.
+
+The same setting covers the other page Aglyn builds for you: a blog entry on a
+collection with no [entry template](../site-templates/build-a-blog.md), so both
+built-in pages of a site cannot end up in different chrome.
+
 ## Configure it
 
-The Search Box exposes one setting — its **Placeholder** text. There are no
-scope, result-limit, or styling options; the box inherits your site
-[theme](../theme-builder/overview.md).
+The Search Box exposes two settings — its **Placeholder** text and **Starting
+text**, which prefills the field (the results page uses it to keep the query
+you searched for in the box). There are no scope, result-limit, or styling
+options; the box inherits your site [theme](../theme-builder/overview.md).
 
 :::tip How-tos
 - [Add search to your site](add-search.md)

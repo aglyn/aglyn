@@ -17,6 +17,7 @@
 'use client'
 
 import BusinessDetailsCard from '../../../../../../../../components/business-details-card.component'
+import BuiltInPageLayoutCard from '../../../../../../../../components/built-in-page-layout-card.component'
 import ErrorScreensCard from '../../../../../../../../components/error-screens-card.component'
 import LanguagesCard from '../../../../../../../../components/languages-card.component'
 import LogoCard from '../../../../../../../../components/logo-card.component'
@@ -56,6 +57,11 @@ export default function HostSetupDetailsSection() {
       </div>
       <div style={{ marginTop: 24 }}>
         <ErrorScreensCard hostId={hostId} />
+      </div>
+      {/* Next to the error pages on purpose (AGL-2513): both answer "what do
+          visitors see on a page I did not design?" */}
+      <div style={{ marginTop: 24 }}>
+        <BuiltInPageLayoutCard hostId={hostId} />
       </div>
       <div style={{ marginTop: 24 }}>
         <LanguagesCard hostId={hostId} />

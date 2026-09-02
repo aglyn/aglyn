@@ -70,10 +70,11 @@ import type { LoadResult, Props } from './types'
  * always did.
  *
  * A helper because the loader has several exits that render nodes, and each
- * has to answer this for itself. Collection and auth-screen pages pass no
- * enrichment at all, and that is correct rather than lazy: those branches
- * return before `runSitePageEnrichers`, so no plugin contributed anything to
- * them and only their nodes can require one.
+ * has to answer this for itself. An exit that runs the enrichers has to hand
+ * their result over — a plugin whose contribution is on the page but which is
+ * absent from `contributors` mounts late, after paint. Auth-screen pages pass
+ * no enrichment because they return before `runSitePageEnrichers` and so have
+ * none; only their nodes can require a plugin.
  */
 const blockingPluginsFor = (
   nodes: Record<string, any> | null | undefined,
@@ -87,6 +88,41 @@ const blockingPluginsFor = (
     enabledPlugins,
   })
   return blockingPlugins ? { blockingPlugins } : {}
+}
+
+/**
+ * `pageData` from an enricher merged under `pageData` from a page resolver
+ * (AGL-2510), two levels deep — plugin id, then that plugin's own keys.
+ *
+ * A shallow spread is wrong here and quietly so. Both sides are namespaced by
+ * plugin, and on a product page commerce writes BOTH: the resolver puts the
+ * routed product in `pageData.commerce.product`, and its enricher seeds any
+ * grid on the template — a "related products" row — into
+ * `pageData.commerce.grids`. Either one spread over the other takes the whole
+ * `commerce` object with it, so the page loses its product or its seeds.
+ *
+ * The resolver wins key-by-key, because its answer IS the page.
+ */
+const mergePageData = (
+  enriched: Record<string, unknown> | undefined,
+  resolved: Record<string, unknown> | undefined,
+): { pageData?: Record<string, unknown> } => {
+  const base = enriched?.['pageData'] as Record<string, unknown> | undefined
+  const over = resolved?.['pageData'] as Record<string, unknown> | undefined
+  if (!base) return over ? { pageData: over } : {}
+  if (!over) return { pageData: base }
+  const merged: Record<string, unknown> = { ...base }
+  for (const [pluginId, slice] of Object.entries(over)) {
+    const existing = merged[pluginId]
+    merged[pluginId] =
+      existing && slice && typeof existing === 'object' &&
+      typeof slice === 'object' &&
+      !Array.isArray(existing) &&
+      !Array.isArray(slice)
+        ? { ...(existing as object), ...(slice as object) }
+        : slice
+  }
+  return { pageData: merged }
 }
 
 const loadPageDataCached = cache(
@@ -423,6 +459,15 @@ const loadPageDataCached = cache(
     // Maintenance mode (AGL-131): every path renders the assigned 503
     // screen (noindex) or a built-in notice; short revalidate so flipping
     // the toggle recovers quickly.
+    //
+    // This branch and the two lockdown/bandwidth ones above render nodes and
+    // deliberately do NOT run the enrichers, unlike every other exit that
+    // ships a page (AGL-2510). A 503, a takedown notice and a bandwidth
+    // containment notice are the states in which the site is answering with
+    // less on purpose: an announcement bar, an experiment or a pageview
+    // automation on a page that exists to say "not right now" is behavior the
+    // owner did not ask for, and the containment notice would pay Firestore
+    // reads to produce it in exactly the month the reads are the problem.
     if ((hostRes.host as any)?.maintenance) {
       const unavailableId = (hostRes.host as any)?.errorScreens?.unavailable
       if (unavailableId) {
@@ -583,6 +628,24 @@ const loadPageDataCached = cache(
             screen: designated.screen,
           })
           if (designatedNodes) {
+            // A designed auth screen carries the site's own chrome, so it
+            // needs the enrichers for the same reason a collection page does
+            // (AGL-2509/AGL-2510): its nav is the shared layout's nav, and a
+            // menu built from primitives opens through `clientAutomations`.
+            //
+            // Unlike a collection route this one names its screen, because it
+            // IS one — a real published screen with no substituted tokens, so
+            // an experiment variant of it composes correctly.
+            const authEnriched = await Aglyn.runSitePageEnrichers({
+              hostId,
+              host: hostRes.host,
+              org: orgRes.org,
+              path,
+              slugSegments: [...(slug ?? [])],
+              screenId: designatedScreenId,
+              screen: designated.screen,
+              nodes: designatedNodes,
+            })
             // The member auth blocks live in the commerce plugin, so the
             // client needs the real enabled-plugin set (same gate as the
             // published-screen path below). Resolved once at the top of this
@@ -599,7 +662,12 @@ const loadPageDataCached = cache(
                   nodes: designatedNodes,
                   membershipPage: path,
                   enabledPlugins: authEnabledPlugins,
-                  ...blockingPluginsFor(designatedNodes, authEnabledPlugins),
+                  ...authEnriched.props,
+                  ...blockingPluginsFor(
+                    designatedNodes,
+                    authEnabledPlugins,
+                    authEnriched,
+                  ),
                   showBranding: !Aglyn.resolveOrgEntitlements(orgRes.org)
                     .features.removeBranding,
                 }),
@@ -662,7 +730,73 @@ const loadPageDataCached = cache(
         path,
         slugSegments: [...(slug ?? [])],
       })
-      if (resolved) return resolved as never
+      if (resolved) {
+        /**
+         * A resolver's answer IS the page (AGL-2510) — and a page composed
+         * from a plugin's template still renders the site's shared layout,
+         * so it was rendering the site's nav with none of its behavior, the
+         * same way collection routes did. Every store's product and catalog
+         * page had a dead mega menu.
+         *
+         * Three other page-level props were missing for the same reason, and
+         * one of them is not cosmetic: without `showBranding` a free plan's
+         * product pages dropped the "Made with" badge that every other page
+         * of the same site carries.
+         *
+         * The resolver still wins key by key — this fills in around it, and
+         * `mergePageData` keeps both sides of the one key they can both
+         * write. A resolver that answers with a redirect or a 404 carries no
+         * nodes and is passed straight through.
+         */
+        const resolvedProps = (resolved as { props?: Record<string, unknown> })
+          .props
+        const resolvedNodes = resolvedProps?.['nodes'] as
+          | Record<string, unknown>
+          | undefined
+        if (!resolvedProps || !resolvedNodes) return resolved as never
+
+        // No `screenId`/`screen`, for the reason the collection branch gives
+        // below: a PDP/PLP page is a TEMPLATE composed against a routed
+        // product, and an experiment variant of it would re-compose with no
+        // product to substitute.
+        const [resolverEnriched, resolverEnabledPlugins] = await Promise.all([
+          Aglyn.runSitePageEnrichers({
+            hostId,
+            host: hostRes.host,
+            org: orgRes.org,
+            path,
+            slugSegments: [...(slug ?? [])],
+            nodes: resolvedNodes,
+          }),
+          filterEnabledPluginsByReleaseFlags(
+            Aglyn.resolveHostEnabledPlugins(
+              orgRes.org as never,
+              hostRes.host as never,
+            ),
+            { orgId: (orgRes.org as { $id?: string })?.$id ?? null },
+          ),
+        ])
+        timer.mark('resolveSitePageEnrichers')
+        return {
+          ...(resolved as Record<string, unknown>),
+          props: JSON.parse(
+            JSON.stringify({
+              enabledPlugins: resolverEnabledPlugins,
+              showBranding: !Aglyn.resolveOrgEntitlements(orgRes.org).features
+                .removeBranding,
+              branding: Aglyn.resolveBrandingProfile(orgRes.org),
+              ...resolverEnriched.props,
+              ...resolvedProps,
+              ...mergePageData(resolverEnriched.props, resolvedProps),
+              ...blockingPluginsFor(
+                resolvedNodes,
+                resolverEnabledPlugins,
+                resolverEnriched,
+              ),
+            }),
+          ),
+        } as never
+      }
 
       // Content collections fallback (AGL-81): /{collection},
       // /{collection}/{entry}, the paginated list /{collection}/page/{n}
@@ -720,6 +854,40 @@ const loadPageDataCached = cache(
             orgRes.org,
           ).features.removeBranding
 
+          /**
+           * Plugin enrichers for a collection route (AGL-2509).
+           *
+           * A collection page renders the site's shared layout, so it renders
+           * the site's NAV — and a nav menu built from primitives opens on
+           * hover through `clientAutomations`, which is an enricher's output.
+           * Without this call the chrome is byte-identical to a screen page's
+           * and inert: `/pricing` shipped the hover automations bound to the
+           * layout's menu leaves, `/blog/{entry}` and `/changelog` shipped
+           * none, and the mega menus were dead on every post. The same gap
+           * withheld a path-targeted announcement bar or popup from blog
+           * posts, and commerce's server-side grid seeds from any template
+           * that contains a product grid.
+           *
+           * `screenId`/`screen` are deliberately absent. The only enricher
+           * that reads them composes an experiment variant with
+           * `composeScreenNodes` and no collection context, so a variant of a
+           * template screen would render `{{entry.*}}` tokens raw against an
+           * empty entries block — a worse page than the one it is testing.
+           * Screen/section experiments on collection templates are their own
+           * piece of work; every other enricher keys off nodes and path.
+           */
+          const enrichCollectionPage = (
+            collectionNodes: Record<string, unknown>,
+          ) =>
+            Aglyn.runSitePageEnrichers({
+              hostId,
+              host: hostRes.host,
+              org: orgRes.org,
+              path,
+              slugSegments: [...(slug ?? [])],
+              nodes: collectionNodes,
+            })
+
           // Template screens (AGL-105/551): the collection's designated
           // list/entry screens render through the NORMAL published pipeline
           // — theme, shared layout, {{entry.*}}/{{collection.*}} tokens,
@@ -729,6 +897,9 @@ const loadPageDataCached = cache(
             content,
           })
           if (templated) {
+            const templatedEnriched = await enrichCollectionPage(
+              templated.nodes,
+            )
             return {
               props: JSON.parse(
                 JSON.stringify({
@@ -741,9 +912,11 @@ const loadPageDataCached = cache(
                   // the composed nodes because they are present).
                   content,
                   enabledPlugins: collectionEnabledPlugins,
+                  ...templatedEnriched.props,
                   ...blockingPluginsFor(
                     templated.nodes,
                     collectionEnabledPlugins,
+                    templatedEnriched,
                   ),
                   showBranding: collectionShowBranding,
                 }),
@@ -761,18 +934,26 @@ const loadPageDataCached = cache(
             host: hostRes.host,
             content,
           })
+          // The legacy plain article (`fallback` null) ships no nodes and no
+          // plugin switchboard, so no site runtime mounts to read an
+          // enricher's slice — enriching it would be bytes nothing consumes.
+          const fallbackEnriched = fallback
+            ? await enrichCollectionPage(fallback.nodes)
+            : null
           return {
             props: JSON.parse(
               JSON.stringify({
                 data: { host: hostRes.host },
                 nodes: fallback?.nodes ?? null,
                 content,
-                ...(fallback
+                ...(fallback && fallbackEnriched
                   ? {
                       enabledPlugins: collectionEnabledPlugins,
+                      ...fallbackEnriched.props,
                       ...blockingPluginsFor(
                         fallback.nodes,
                         collectionEnabledPlugins,
+                        fallbackEnriched,
                       ),
                       showBranding: collectionShowBranding,
                     }
@@ -1161,12 +1342,14 @@ export async function loadNotFoundScreen(
      * Read-only locks render normally, matching the branch above — a
      * read-only lock is a write freeze and the site is still serving.
      */
+    // Read once and used twice: the lockdown verdict below and the
+    // entitlement gates every enricher applies (AGL-2511). `getOrgBilling`
+    // is cached per host, so this is one read either way.
+    const orgRes = await getOrgBilling({ hostId })
     const lockdownState = Aglyn.resolveLockdown(
       {
         platform: await getPlatformLockdown(),
-        org: Aglyn.normalizeOrgLockdown(
-          (await getOrgBilling({ hostId })).org as any,
-        ),
+        org: Aglyn.normalizeOrgLockdown(orgRes.org as any),
         host: Aglyn.normalizeHostLockdown(hostRes.host as any),
         domain: hostParam.startsWith(CNAME_HOST_PREFIX)
           ? await getDomainLockdown(hostParam.slice(CNAME_HOST_PREFIX.length))
@@ -1213,11 +1396,66 @@ export async function loadNotFoundScreen(
     // — a nav pointing at the blog must not send a visitor who already hit one
     // 404 to a second one. Paid for only on a 404, like the rest of this.
     const routing = await getTemplateScreenRouting({ hostId })
+
+    /**
+     * The designed 404 behaves like the page it stands in for (AGL-2511).
+     *
+     * It renders the site's own header, nav and footer, so without the
+     * enrichers it was the last surface left showing a nav that does not
+     * open — the AGL-2509/2510 defect, on the one page a visitor reaches by
+     * getting lost.
+     *
+     * `pathUnknown` is what makes it correct rather than convenient. This
+     * body is fetched by HOST and cached per host precisely so a scan of ten
+     * thousand dead URLs costs one compose a minute; the request path is not
+     * part of that key and must not become part of it. So the enrichers are
+     * told the path is not knowable and contribute only what does not depend
+     * on one — the node interactions the nav is built from, and overlays that
+     * target every page.
+     *
+     * `ensureAll` because this function is also reached from
+     * `/api/screen/not-found`, which is not the plugin dispatcher: with no
+     * plugin loaded the enricher registry is empty and answers `{}` without
+     * an error to notice.
+     */
+    await serverPluginLoader.ensureAll(['tenantApi'])
+    const [notFoundEnriched, notFoundEnabledPlugins] = await Promise.all([
+      Aglyn.runSitePageEnrichers({
+        hostId,
+        host: hostRes.host,
+        org: orgRes.org,
+        // Placeholder — `pathUnknown` is the field that carries meaning.
+        path: Aglyn.SCREEN_ROOT_PATH,
+        slugSegments: [],
+        pathUnknown: true,
+        // A designed 404 is a real published screen with no substituted
+        // tokens, so naming it is safe: an experiment variant of it composes
+        // into the same page.
+        screenId: screenId as string,
+        screen: screenRes.screen,
+        nodes,
+      }),
+      filterEnabledPluginsByReleaseFlags(
+        Aglyn.resolveHostEnabledPlugins(
+          orgRes.org as never,
+          hostRes.host as never,
+        ),
+        { orgId: (orgRes.org as { $id?: string })?.$id ?? null },
+      ),
+    ])
+
     return JSON.parse(
       JSON.stringify({
         data: { host: hostRes.host, screen: { data: screenRes.screen } },
         nodes,
         notFoundFallback: true,
+        enabledPlugins: notFoundEnabledPlugins,
+        ...notFoundEnriched.props,
+        ...blockingPluginsFor(
+          nodes,
+          notFoundEnabledPlugins,
+          notFoundEnriched,
+        ),
         screenRoutes: Aglyn.linkableScreenRoutes(
           (hostRes.host as { screens?: Record<string, string> }).screens,
           {

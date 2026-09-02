@@ -2393,3 +2393,62 @@ describe('Entry Author previews itself on the canvas (AGL-2486)', () => {
     expect(screen.queryByText('Sample author')).toBeNull()
   })
 })
+
+/**
+ * A SWITCH whose renderer treats UNSET as on has to be drawn on (AGL-2506).
+ *
+ * These three blocks render `props['showX'] !== false`, so an unset prop
+ * shows the field. The panel read the same prop as a plain boolean, and
+ * `undefined` is falsy — so five switches sat in the OFF position over a
+ * block that was visibly printing the author, the date, the category and the
+ * tags. Worse than the wrong picture: the first click writes the `true` that
+ * was already in effect and changes nothing on the canvas, so the control
+ * reads as dead, and only a second click reaches the `false` that does the
+ * work.
+ *
+ * Seeding the field with the renderer's own default fixes both halves at
+ * once — it draws in the right position AND the first click means something.
+ */
+describe('Show switches open in the position the renderer uses (AGL-2506)', () => {
+  const RENDERER_DEFAULTS_ON = [
+    'showDate',
+    'showCategory',
+    'showTags',
+    'showAuthor',
+    'showAvatar',
+    'showBio',
+  ]
+
+  const cases: [string, Aglyn.ComponentSchema][] = [
+    ['related posts', collectionRelatedSchema],
+    ['entry meta', collectionEntryMetaSchema],
+    ['entry author', collectionEntryAuthorSchema],
+  ]
+
+  it.each(cases)('seeds every such switch on %s', (_name, schema) => {
+    const switches = (schema.attributes ?? []).filter(
+      (attribute) =>
+        attribute.component === Aglyn.FieldComponentType.SWITCH &&
+        RENDERER_DEFAULTS_ON.includes(attribute.name),
+    )
+    // The guard is worthless if it asserts over an empty list.
+    expect(switches.length).toBeGreaterThan(0)
+    for (const attribute of switches) {
+      expect([attribute.name, attribute.initialValue]).toEqual([
+        attribute.name,
+        true,
+      ])
+    }
+  })
+
+  it('leaves a switch the renderer defaults OFF alone', () => {
+    // `showExcerpt` renders on a bare truthy check, so unset means hidden and
+    // an unchecked switch is already the truth. Seeding it would turn the
+    // excerpt on for every published entry.
+    const excerpt = (collectionRelatedSchema.attributes ?? []).find(
+      (attribute) => attribute.name === 'showExcerpt',
+    )
+    expect(excerpt?.component).toBe(Aglyn.FieldComponentType.SWITCH)
+    expect(excerpt?.initialValue).toBeUndefined()
+  })
+})

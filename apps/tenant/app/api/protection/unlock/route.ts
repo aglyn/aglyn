@@ -16,7 +16,9 @@
  */
 
 import composeScreenNodes from '@aglyn/tenant-runtime/compose-screen-nodes'
+import { enrichGatedScreenPage } from '@aglyn/tenant-runtime/enrich-gated-page'
 import getScreen from '@aglyn/tenant-runtime/get-screen'
+import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
 import {
   consumeRateLimit,
   visitorContentRefusal,
@@ -119,7 +121,25 @@ export async function POST(request: Request): Promise<Response> {
       screen: screenRes.screen,
     })
     if (!nodes) return json({ error: 'Compose failed' }, 500)
-    return json({ nodes })
+    // The page's behavior travels with its nodes (AGL-2510). The loader ships
+    // `nodes: null` for a protected screen, so its enricher slice — the
+    // interactions the shared layout's nav opens on, above all — has nowhere
+    // else to arrive from, and the unlocked page rendered the site's nav
+    // without any of it. Withheld until the password verifies for the same
+    // reason the nodes are: the slice describes the tree it was derived from.
+    //
+    // `ensureAll` is not decoration. Enrichers register when a plugin's
+    // server surface loads, and this route is not the plugin dispatcher — no
+    // plugin has loaded by this line, so without it `runSitePageEnrichers`
+    // finds an empty registry and answers `{}` with no error at all.
+    await serverPluginLoader.ensureAll(['tenantApi'])
+    const enriched = await enrichGatedScreenPage({
+      hostId,
+      screenId,
+      screen: screenRes.screen,
+      nodes,
+    })
+    return json({ nodes, ...enriched })
   } catch (error) {
     console.error(error)
     return json({ error: 'Unlock failed' }, 500)

@@ -63,9 +63,26 @@ export function describeDraftOffer(
   remoteChanged = false,
 ): string {
   const age = describeDraftAge(draft.takenAt, now)
+  /**
+   * The SHARED working draft is a different sentence from the crash net, and
+   * saying the crash net's one over it is the AGL-2508 defect: an author who
+   * pressed Save draft, was told "Draft saved", and came back to
+   * "Unsaved changes … were recovered from this browser" reads a save that
+   * failed and a browser that rescued them. Both halves are wrong — it saved,
+   * and it is on the server — and the reasonable conclusion is that the
+   * editor loses work, which sends people re-doing edits they already have.
+   *
+   * The canvas loads the stored document and the draft is OFFERED rather than
+   * applied, which is the right call and is not what changes here. What
+   * changes is that the offer now says which of the two it is.
+   */
   const found =
-    `Unsaved changes to this ${noun} from ${age} were recovered from ` +
-    'this browser. '
+    draft.origin === 'shared'
+      ? `This ${noun} has a saved draft from ${age} that has not been ` +
+        'published. It is stored with the site, so anyone who opens this ' +
+        `${noun} sees it offered. `
+      : `Unsaved changes to this ${noun} from ${age} were recovered from ` +
+        'this browser. '
   switch (draft.restoreBlockedBy) {
     case 'saved-since':
       // Whether saving is PAUSED is a different fact from whether the draft
@@ -100,8 +117,11 @@ export function describeDraftOffer(
           ? `Someone else has also saved this ${noun} since it loaded, so ` +
             'saving is paused until you reload. Restoring puts your changes ' +
             'back on the canvas without saving; you can undo it.'
-          : 'Restoring puts them back on the canvas without saving; you can ' +
-            'undo it.')
+          : draft.origin === 'shared'
+            ? 'Opening it puts it back on the canvas; publish when you are ' +
+              'ready, or discard it to go back to what is live.'
+            : 'Restoring puts them back on the canvas without saving; you ' +
+              'can undo it.')
       )
   }
 }
@@ -159,7 +179,8 @@ export function BesignerDraftAlertComponent(props: BesignerDraftAlertProps) {
           ) : null}
           {blocked ? null : (
             <Button color="inherit" size="small" onClick={draft.restore}>
-              {'Restore'}
+              {/* A saved draft is OPENED; only unsaved work is restored. */}
+              {draft.origin === 'shared' ? 'Open draft' : 'Restore'}
             </Button>
           )}
           <Button color="inherit" size="small" onClick={draft.discard}>
