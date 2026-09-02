@@ -419,7 +419,6 @@ describe('describeDraftOffer origin (AGL-2508)', () => {
   it('opens a saved draft and restores unsaved work', () => {
     render(<BesignerDraftAlertComponent draft={shared} noun="screen" />)
     expect(screen.getByRole('button', { name: 'Open draft' })).toBeTruthy()
-    screen.unmount?.()
   })
 
   it('offers Restore for the browser crash net', () => {
