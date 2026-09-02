@@ -9,6 +9,21 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.54 — 2026-09-02
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/bdd029a7b...v1.0.0-beta.54)
+
+### Added
+
+- **tenant:** the pages Aglyn builds render inside a layout the host chooses ([AGL-2513](https://linear.app/aglyn/issue/AGL-2513), [AGL-551](https://linear.app/aglyn/issue/AGL-551))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **tools:** the Linear id ceiling reaches AGL-2513 ([AGL-2513](https://linear.app/aglyn/issue/AGL-2513), [AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
+
+</details>
+
 ## v1.0.0-beta.53 — 2026-09-02
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/ea5217b32...v1.0.0-beta.53)
