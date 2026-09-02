@@ -762,7 +762,9 @@ export const collectionEntriesSchema: Aglyn.ComponentSchema<CollectionEntriesPro
         name: 'searchPlaceholder',
         label: 'Search placeholder',
         description:
-          'Hint text inside the search box (blank = "Search posts…").',
+          'Hint text inside this block’s own search box — the one that ' +
+          'filters the entries below it as a reader types. Blank shows ' +
+          '"Search posts…".',
         component: Aglyn.FieldComponentType.TEXT_FIELD,
         // Meaningless while there is no search box to hint in.
         condition: { when: 'search', is: true },
@@ -1748,26 +1750,41 @@ export const collectionEntryMetaSchema: Aglyn.ComponentSchema<CollectionEntryMet
       {
         name: 'showDate',
         label: 'Show date',
+        description:
+          'Off hides the published date from the line without clearing what ' +
+          'the Date field would have shown.',
         component: Aglyn.FieldComponentType.SWITCH,
       },
       {
         name: 'showCategory',
         label: 'Show category',
+        description:
+          'Off drops the category from the line. The entry keeps its ' +
+          'category — this is about the byline, not the taxonomy.',
         component: Aglyn.FieldComponentType.SWITCH,
       },
       {
         name: 'showTags',
         label: 'Show tags',
+        description:
+          'Off hides the tag chips below the line. Leave it on and the ' +
+          'other three off for a tags-only row.',
         component: Aglyn.FieldComponentType.SWITCH,
       },
       {
         name: 'showAuthor',
         label: 'Show author',
+        description:
+          'Off hides the byline. The avatar follows it: a block with no ' +
+          'author shown never fills in the author’s portrait.',
         component: Aglyn.FieldComponentType.SWITCH,
       },
       {
         name: 'showAvatar',
         label: 'Show avatar',
+        description:
+          'Off hides the round image in front of the byline, including an ' +
+          'author’s own portrait.',
         component: Aglyn.FieldComponentType.SWITCH,
       },
     ],
@@ -1955,8 +1972,9 @@ export const collectionEntryAuthorSchema: Aglyn.ComponentSchema<CollectionEntryA
         name: 'name',
         label: 'Name',
         description:
-          'Blank shows the entry’s own author. Type here (or bind ' +
-          '{{entry.author}}) only to override it.',
+          'Blank shows the name from the entry’s author record. Type here ' +
+          '(or bind {{entry.author}}) to sign this card differently from ' +
+          'the byline above the article.',
         component: Aglyn.FieldComponentType.TEXT_FIELD,
       },
       {
@@ -1986,11 +2004,16 @@ export const collectionEntryAuthorSchema: Aglyn.ComponentSchema<CollectionEntryA
       {
         name: 'showBio',
         label: 'Show bio',
+        description:
+          'Off leaves the card as a portrait and a name — for a masthead ' +
+          'where the blurb would repeat what the page already says.',
         component: Aglyn.FieldComponentType.SWITCH,
       },
       {
         name: 'showAvatar',
         label: 'Show portrait',
+        description:
+          'Off leaves the text alone, with no space held for a picture.',
         component: Aglyn.FieldComponentType.SWITCH,
       },
     ],
@@ -2282,7 +2305,8 @@ export const collectionSearchSchema: Aglyn.ComponentSchema<CollectionSearchProps
         name: 'searchPlaceholder',
         label: 'Search placeholder',
         description:
-          'Hint text inside the search box (blank = "Search posts…").',
+          'Hint text inside this box. Blank shows "Search posts…", which is ' +
+          'worth changing when the collection is not posts.',
         component: Aglyn.FieldComponentType.TEXT_FIELD,
       },
       // `searchIndex`, `searchTotal` and `searchCapped` are deliberately NOT

@@ -85,6 +85,13 @@ const basicSchema: FormSchema = {
       name: 'displayName',
       label: 'Display name',
       type: 'text',
+      help: docsHelp('gettingStarted', {
+        anchor: '#create-your-first-site',
+        excerpt:
+          'What this site is called inside the console — the site switcher, ' +
+          'breadcrumbs and notifications. Visitors never see it; the title ' +
+          'in their browser tab is the SEO title.',
+      }),
       FormFieldGridProps: {
         size: {
           xs: 12,
@@ -523,6 +530,13 @@ const seoSchema: FormSchema = {
           component: FieldComponentType.SELECT,
           name: 'seo.entity.type',
           label: 'Type',
+          help: docsHelp('seo', {
+            anchor: '#structured-data',
+            excerpt:
+              'Whether this site is published by a company or by a person. ' +
+              'The two carry different structured-data fields, so the ' +
+              'choice changes what is emitted, not just the label.',
+          }),
           options: [
             {
               value: `${Aglyn.HostEntityType.ORGANIZATION}`,
@@ -535,6 +549,13 @@ const seoSchema: FormSchema = {
           component: FieldComponentType.TEXT_FIELD,
           name: 'seo.entity.name',
           label: 'Name',
+          help: docsHelp('seo', {
+            anchor: '#structured-data',
+            excerpt:
+              'The publisher’s legal or trading name, as it should appear ' +
+              'in search results. Not the site title — that is the SEO ' +
+              'field above.',
+          }),
         },
         /*
           Same as the favicon above (AGL-2486). This was a URL box whose own

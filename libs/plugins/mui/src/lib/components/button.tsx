@@ -214,7 +214,10 @@ export const schema: Aglyn.ComponentSchema<LinkableButtonProps> = {
     FIELD_SIZE,
     {
       name: 'variant',
-      description: 'The variant to use.',
+      description:
+        'How much weight the button carries: Contained is a filled primary ' +
+        'action, Outlined a secondary one, Text the lightest. One contained ' +
+        'button per view is a good rule.',
       component: Aglyn.FieldComponentType.SELECT,
       label: 'Variant',
       // "Default" deleted (AGL-1453): it could not persist, and `text` — the
@@ -235,7 +238,11 @@ export const schema: Aglyn.ComponentSchema<LinkableButtonProps> = {
     },
     {
       name: 'href',
-      description: 'External URL used only when no screen is selected.',
+      description:
+        'Where the button goes when it points off this site. Ignored while ' +
+        'Link to screen names one — that field wins, so clear it to use a ' +
+        'URL. Absolute (https://…) for another site, or a path for one of ' +
+        'your own routes.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'External URL',
     },

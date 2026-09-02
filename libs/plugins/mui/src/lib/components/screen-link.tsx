@@ -253,7 +253,9 @@ export const schema: Aglyn.ComponentSchema<ScreenLinkProps> = {
     },
     {
       name: 'href',
-      description: 'External URL used only when no screen is selected above.',
+      description:
+        'Where this link goes when it points off this site. Ignored while ' +
+        'Screen names one — that field wins, so clear it to use a URL.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'External URL',
     },
@@ -296,7 +298,10 @@ export const schema: Aglyn.ComponentSchema<ScreenLinkProps> = {
     { ...FIELD_FULL_WIDTH, condition: BUTTON_STYLED },
     {
       name: 'variant',
-      description: 'The variant to use.',
+      description:
+        'How the link is drawn once its style is Button: Contained is a ' +
+        'filled call to action, Outlined a secondary one, Text the lightest. ' +
+        'Ignored while the link is styled as plain text.',
       component: Aglyn.FieldComponentType.SELECT,
       label: 'Variant',
       // "Default" deleted (AGL-1453): unpersistable, and a second name for

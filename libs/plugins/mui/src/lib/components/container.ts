@@ -73,7 +73,10 @@ export const schema: Aglyn.ComponentSchema<ContainerProps> = {
     },
     {
       name: 'disableGutters',
-      description: 'If true, the left and right padding is removed.',
+      description:
+        'Removes the container’s side padding, so its content runs to the ' +
+        'full width it is centered in. Use it for a full-bleed band; leave ' +
+        'it off for text, which needs the margin on a phone.',
       component: Aglyn.FieldComponentType.SWITCH,
       label: 'Disable Gutters?',
     },

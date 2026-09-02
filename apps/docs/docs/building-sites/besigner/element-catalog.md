@@ -151,7 +151,7 @@ The **FAQ** preset drops three complete panels at once.
 | Element | What it's for |
 | --- | --- |
 | **Screen Link** | A link that targets a screen by id, so it survives slug renames. Renders as a button or as a text link. |
-| **App bar** / **Toolbar** | The site header frame. |
+| **App bar** / **Toolbar Content** | The site header frame. The app bar is the band; **Toolbar Content** is the row inside it that holds the brand, the links and the actions, and it may only be dropped into an app bar. |
 | **Nav menu** / **Mega menu** | Dropdown and full-width navigation menus. |
 | **Drawer** / **Menu Button** | A panel that slides in from the **left, right, top or bottom**. Open it with a Menu Button or an interaction. **Width** applies to left/right drawers; top and bottom sheets span the viewport, and the control is hidden for them. The **Mobile Nav** preset wires a hamburger, a drawer and a desktop link row in one insert. |
 | **Tabs** / **Tab Panel** | A tab strip and its panels. See [Tabs](#tabs) below. |
@@ -268,6 +268,12 @@ member sign-in/sign-up elements. These are covered with the features they belong
 see [Forms](../../content-and-data/forms/overview.md),
 [Commerce](../../commerce-and-bookings/commerce/overview.md) and
 [Member accounts](../../guides/member-accounts.md).
+
+One element in this group belongs to neither:
+
+| Element | What it's for |
+| --- | --- |
+| **Function Widget** | Runs one of your no-code [functions](../../marketing-and-automation/workflows-and-actions/overview.md) on the live site and shows what it returns — a quote calculator, a shipping estimate, a score. **Function name** is the function from the site's Functions card; the widget draws an input per parameter, a run button you can relabel, and the result under a **Result label** prefix. The function runs server-side, so its logic is never in the page source. |
 
 ## Related
 

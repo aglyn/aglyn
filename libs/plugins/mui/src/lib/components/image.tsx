@@ -552,7 +552,10 @@ export const schema: Aglyn.ComponentSchema<ImageProps> = {
     },
     {
       name: 'href',
-      description: 'External URL used only when no screen is selected.',
+      description:
+        'Makes the image a link to somewhere off this site. Ignored while ' +
+        'Link to screen names one. Leave both blank and the image is not ' +
+        'clickable at all.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'External URL',
     },

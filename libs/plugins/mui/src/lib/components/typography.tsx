@@ -94,7 +94,11 @@ export const schema: Aglyn.ComponentSchema = {
     // FIELD_COLOR,
     {
       name: 'variant',
-      description: 'The variant to use.',
+      description:
+        'Which typography step from the site theme this text uses — h1–h6, ' +
+        'body, subtitle, caption, overline. It sets size, weight and line ' +
+        'height together; it does NOT change the HTML element, which is the ' +
+        'field below.',
       component: Aglyn.FieldComponentType.SELECT,
       label: 'Variant',
       // "Default" deleted (AGL-1453): unpersistable, and a second name for
