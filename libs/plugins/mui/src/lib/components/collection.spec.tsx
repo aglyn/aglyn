@@ -2452,3 +2452,98 @@ describe('Show switches open in the position the renderer uses (AGL-2506)', () =
     expect(excerpt?.initialValue).toBeUndefined()
   })
 })
+
+/**
+ * The author card draws the record's profile links (AGL-2516).
+ *
+ * The mark on a known platform is NOT the author's to choose — an X link
+ * drawn as a GitHub glyph is a broken link that still resolves — so the icon
+ * and the accessible name come from the registry. Anything else takes the
+ * label and icon the author picked.
+ */
+describe('Entry Author profile links (AGL-2516)', () => {
+  /**
+   * These render through `AppLink`'s icon-button variant, which is an `<a>`
+   * carrying `role="button"` — the same shape the Share bar and the Social
+   * Links block already produce. Asserted on the role the DOM actually has
+   * rather than the one an anchor would have by default, because a spec that
+   * quietly queried something else would pass while announcing wrongly.
+   */
+  const withLinks = (links: unknown, extra: Record<string, unknown> = {}) =>
+    render(
+      <CollectionEntryAuthor name="Zach Gover" links={links as never} {...extra} />,
+    )
+
+  it('names a known platform from the registry, not from stored text', () => {
+    withLinks([{ platform: 'x', url: 'https://x.com/aglyn' }])
+    const link = screen.getByRole('button', { name: 'X' })
+    expect(link.getAttribute('href')).toBe('https://x.com/aglyn')
+  })
+
+  it('names a custom link with the author’s label', () => {
+    withLinks([{ label: 'Newsletter', url: 'https://example.com/n' }])
+    expect(
+      screen.getByRole('button', { name: 'Newsletter' }).getAttribute('href'),
+    ).toBe('https://example.com/n')
+  })
+
+  it('opens a profile away from the article, and says so to the browser', () => {
+    // `me` alongside noopener: these ARE identity links, which is the one
+    // place rel="me" means something.
+    withLinks([{ platform: 'github', url: 'https://github.com/aglyn' }])
+    const link = screen.getByRole('button', { name: 'GitHub' })
+    expect(link.getAttribute('target')).toBe('_blank')
+    expect(link.getAttribute('rel')).toContain('noopener')
+    expect(link.getAttribute('rel')).toContain('me')
+  })
+
+  it('refuses an unsafe scheme that never passed the store', () => {
+    // These arrive as PROPS, so a document can hand the renderer a link the
+    // record normalizer never saw. Two guards, because only one of them sits
+    // on the path an attacker would use.
+    withLinks([
+      // eslint-disable-next-line no-script-url
+      { label: 'Bad', url: 'javascript:alert(1)' },
+      { platform: 'x', url: 'https://x.com/aglyn' },
+    ])
+    expect(screen.queryByRole('button', { name: 'Bad' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'X' })).toBeTruthy()
+  })
+
+  it('allows mailto, which is a way to reach an author', () => {
+    withLinks([{ platform: 'email', url: 'mailto:hi@example.com' }])
+    expect(
+      screen.getByRole('button', { name: 'Email' }).getAttribute('href'),
+    ).toBe('mailto:hi@example.com')
+  })
+
+  it('draws nothing extra when Show links is off', () => {
+    withLinks([{ platform: 'x', url: 'https://x.com/aglyn' }], {
+      showLinks: false,
+    })
+    expect(screen.queryByRole('button', { name: 'X' })).toBeNull()
+    // The card itself still stands — the switch hides a row, not the author.
+    expect(screen.getByText('Zach Gover')).toBeTruthy()
+  })
+
+  it('renders a card that is ONLY links', () => {
+    // An author with no bio and no portrait still has somewhere to be
+    // followed, and that is not an empty box.
+    const { container } = render(
+      <CollectionEntryAuthor
+        links={[{ platform: 'x', url: 'https://x.com/aglyn' }] as never}
+      />,
+    )
+    expect(screen.getByRole('button', { name: 'X' })).toBeTruthy()
+    expect(container.querySelectorAll('svg').length).toBeGreaterThan(0)
+  })
+
+  it('offers a switch that opens in the position the renderer uses', () => {
+    const attribute = (collectionEntryAuthorSchema.attributes ?? []).find(
+      (entry) => entry.name === 'showLinks',
+    )
+    expect(attribute?.component).toBe(Aglyn.FieldComponentType.SWITCH)
+    // AGL-2506: unset means shown, so the switch has to say so.
+    expect(attribute?.initialValue).toBe(true)
+  })
+})

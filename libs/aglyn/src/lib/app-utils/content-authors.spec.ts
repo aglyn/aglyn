@@ -26,7 +26,13 @@ import {
   normalizeContentAuthor,
   resolveEntryAuthor,
   resolveEntryAuthorName,
-  hostSeoEntityImageJsonLd,} from './content-authors'
+  hostSeoEntityImageJsonLd,
+  AUTHOR_LINKS_MAX,
+  AUTHOR_SOCIAL_PLATFORMS,
+  authorLinkLabel,
+  authorLinkPlatform,
+  normalizeContentAuthorLinks,
+} from './content-authors'
 
 const ORIGIN = 'https://example.com'
 
@@ -391,5 +397,188 @@ describe('hostSeoEntityImageJsonLd (AGL-2486)', () => {
     expect(
       hostSeoEntityImageJsonLd({ logo: '/api/media/cdn/h1/abc.png' }, {}),
     ).toEqual({})
+  })
+})
+
+/**
+ * The links an author profile PRINTS (AGL-2516).
+ *
+ * `sameAs` was already there and is the wrong shape to render: bare strings a
+ * card can only draw as a row of identical anonymous links. These carry what a
+ * reader needs BEFORE the click — which is a mark on a known platform, and a
+ * label the author writes on anything else.
+ */
+describe('Author display links (AGL-2516)', () => {
+  describe('what a link is called', () => {
+    it('takes a known platform’s name from the registry, not the author', () => {
+      // The mark and the accessible name are not the author's to choose: an X
+      // link drawn as GitHub is a broken link that still resolves.
+      expect(
+        authorLinkLabel({
+          platform: 'x',
+          label: 'my totally different label',
+          url: 'https://x.com/aglyn',
+        }),
+      ).toBe('X')
+    })
+
+    it('uses the author’s label on a custom link', () => {
+      expect(
+        authorLinkLabel({ label: 'Newsletter', url: 'https://example.com/n' }),
+      ).toBe('Newsletter')
+    })
+
+    it('falls back to the url rather than to something generic', () => {
+      // Four rows all named "Link" is not an accessible name; the URLs at
+      // least tell them apart.
+      expect(authorLinkLabel({ url: 'https://example.com/talk' })).toBe(
+        'https://example.com/talk',
+      )
+    })
+
+    it('resolves only ids the registry actually declares', () => {
+      expect(authorLinkPlatform('github')?.icon).toBe('github')
+      expect(authorLinkPlatform('myspace')).toBeUndefined()
+      expect(authorLinkPlatform('')).toBeUndefined()
+      expect(authorLinkPlatform(undefined)).toBeUndefined()
+    })
+
+    it('gives every registered platform a label and an icon', () => {
+      expect(AUTHOR_SOCIAL_PLATFORMS.length).toBeGreaterThan(0)
+      for (const platform of AUTHOR_SOCIAL_PLATFORMS) {
+        expect(Boolean(platform.id && platform.label && platform.icon)).toBe(true)
+      }
+      // Ids are what gets STORED, so a duplicate would make one unreachable.
+      const ids = AUTHOR_SOCIAL_PLATFORMS.map((entry) => entry.id)
+      expect(new Set(ids).size).toBe(ids.length)
+    })
+  })
+
+  describe('normalizing stored rows', () => {
+    it('keeps https and mailto, and drops everything else', () => {
+      const links = normalizeContentAuthorLinks([
+        { platform: 'x', url: 'https://x.com/aglyn' },
+        { label: 'Email', url: 'mailto:hi@example.com' },
+        // eslint-disable-next-line no-script-url
+        { label: 'Bad', url: 'javascript:alert(1)' },
+        { label: 'Insecure', url: 'http://example.com' },
+        { label: 'Nowhere', url: '' },
+      ])
+      expect(links.map((link) => link.url)).toEqual([
+        'https://x.com/aglyn',
+        'mailto:hi@example.com',
+      ])
+    })
+
+    it('drops a stored label and icon that sit beside a known platform', () => {
+      // The registry owns both, so a stored pair is stale data that must not
+      // win — otherwise renaming a platform leaves old rows saying the old
+      // thing forever.
+      const [link] = normalizeContentAuthorLinks([
+        {
+          platform: 'github',
+          label: 'stale',
+          icon: 'stale-icon',
+          url: 'https://github.com/aglyn',
+        },
+      ])
+      expect(link).toEqual({ platform: 'github', url: 'https://github.com/aglyn' })
+    })
+
+    it('drops a platform id nothing recognises, keeping the row custom', () => {
+      const [link] = normalizeContentAuthorLinks([
+        { platform: 'myspace', label: 'Profile', url: 'https://example.com/p' },
+      ])
+      expect(link?.platform).toBeUndefined()
+      expect(link?.label).toBe('Profile')
+    })
+
+    it('carries a custom icon’s PATH beside its id', () => {
+      // AGL-1212's split: the catalog is ~2.9MB and only picker surfaces load
+      // it, so a renderer given an id alone can only draw a fallback glyph.
+      const [link] = normalizeContentAuthorLinks([
+        { label: 'Talk', icon: 'presentation', iconPath: 'M1 1h2', url: 'https://e.com/t' },
+      ])
+      expect([link?.icon, link?.iconPath]).toEqual(['presentation', 'M1 1h2'])
+    })
+
+    it('caps the list and survives junk', () => {
+      const many = Array.from({ length: AUTHOR_LINKS_MAX + 5 }, (_, i) => ({
+        label: `L${i}`,
+        url: `https://example.com/${i}`,
+      }))
+      expect(normalizeContentAuthorLinks(many)).toHaveLength(AUTHOR_LINKS_MAX)
+      expect(normalizeContentAuthorLinks(undefined)).toEqual([])
+      expect(normalizeContentAuthorLinks('nope')).toEqual([])
+      expect(normalizeContentAuthorLinks([null, 7, 'x'])).toEqual([])
+    })
+  })
+
+  describe('structured data', () => {
+    it('folds printed links into sameAs so the author types a url once', () => {
+      const json = contentAuthorJsonLd({
+        type: HostEntityType.PERSON,
+        name: 'Zach Gover',
+        sameAs: ['https://example.com/declared'],
+        links: [
+          { platform: 'x', url: 'https://x.com/aglyn' },
+          { label: 'Email', url: 'mailto:hi@example.com' },
+        ],
+      } as ContentAuthorRecord)
+      expect(json?.['sameAs']).toEqual([
+        'https://example.com/declared',
+        'https://x.com/aglyn',
+      ])
+    })
+
+    it('never lets a mailto into sameAs', () => {
+      // `sameAs` is for pages that identify the same entity. An address is not
+      // a page, and Google reports one as an invalid sameAs.
+      const json = contentAuthorJsonLd({
+        name: 'Aglyn',
+        links: [{ platform: 'email', url: 'mailto:hi@example.com' }],
+      } as ContentAuthorRecord)
+      expect(json?.['sameAs']).toBeUndefined()
+    })
+
+    it('does not repeat a url that is already declared', () => {
+      const json = contentAuthorJsonLd({
+        name: 'Zach Gover',
+        sameAs: ['https://x.com/aglyn'],
+        links: [{ platform: 'x', url: 'https://x.com/aglyn' }],
+      } as ContentAuthorRecord)
+      expect(json?.['sameAs']).toEqual(['https://x.com/aglyn'])
+    })
+
+    it('still respects the sameAs ceiling once links join it', () => {
+      const json = contentAuthorJsonLd({
+        name: 'Zach Gover',
+        sameAs: Array.from(
+          { length: AUTHOR_SAME_AS_MAX },
+          (_, i) => `https://example.com/d${i}`,
+        ),
+        links: [{ platform: 'x', url: 'https://x.com/aglyn' }],
+      } as ContentAuthorRecord)
+      expect((json?.['sameAs'] as string[]).length).toBe(AUTHOR_SAME_AS_MAX)
+    })
+
+    it('escapes a link exactly as every other value does', () => {
+      const json = contentAuthorJsonLd({
+        name: 'Zach Gover',
+        links: [{ label: '</script>', url: 'https://example.com/</script>' }],
+      } as ContentAuthorRecord)
+      expect(safeJsonLd(json)).not.toContain('</script>')
+    })
+  })
+
+  it('normalizes links as part of the record', () => {
+    const author = normalizeContentAuthor({
+      name: 'Zach Gover',
+      links: [
+        { platform: 'x', url: 'https://x.com/aglyn' },
+        { label: 'Bad', url: 'ftp://example.com' },
+      ],
+    })
+    expect(author?.links).toEqual([{ platform: 'x', url: 'https://x.com/aglyn' }])
   })
 })

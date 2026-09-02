@@ -16,7 +16,11 @@
  */
 
 import type { AglynNodeSchema, NodeId } from '../foundation'
-import type { ContentAuthorRecord } from './content-authors'
+import {
+  type ContentAuthorLink,
+  type ContentAuthorRecord,
+  normalizeContentAuthorLinks,
+} from './content-authors'
 import { resolveNamedTokens } from './resolve-named-tokens'
 
 /**
@@ -552,9 +556,15 @@ export function collectionEntryAuthorValues(entry: CollectionEntryRecord): {
   bio: string
   image: string
   url: string
+  links: ContentAuthorLink[]
 } {
   const author = entry.author
   return {
+    // The rows the card PRINTS (AGL-2516). Normalized here rather than
+    // trusted, because this is the boundary a stored document crosses to
+    // become props: the renderer guards the href too, but only one of the two
+    // sits on the path a hand-written document would take.
+    links: normalizeContentAuthorLinks(author?.links),
     // The record wins, then the legacy free-typed byline (AGL-686), which is
     // the same precedence `resolveEntryAuthor` applies — an entry written
     // before custom authors still fills a card, with the one field it has.
@@ -1620,15 +1630,20 @@ export function expandCollectionEntryAuthor<
 function entryAuthorFill(
   container: { props?: unknown },
   entry: CollectionEntryRecord,
-): Record<string, string> {
+): Record<string, unknown> {
   const values = collectionEntryAuthorValues(entry)
   const props = (container.props ?? {}) as Record<string, unknown>
-  const filled: Record<string, string> = {}
+  const filled: Record<string, unknown> = {}
   for (const key of ['name', 'bio', 'image', 'url'] as const) {
     if (String(props[key] ?? '').trim()) continue
     if (!values[key]) continue
     filled[key] = values[key]
   }
+  // `links` is not authorable as text — a row carries a platform or a picked
+  // icon, and the console's author editor is where those are chosen — so
+  // there is no authored value to defer to. The record's rows are the only
+  // ones there are; `Show links` is the template's control over them.
+  if (values.links.length) filled['links'] = values.links
   return filled
 }
 

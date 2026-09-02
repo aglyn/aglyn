@@ -2437,6 +2437,7 @@ describe('the author card fills itself from the record (AGL-2486)', () => {
       bio: 'Building the open web platform.',
       image: 'media:org:jWmGooWE3L/portrait',
       url: 'https://example.com/zach',
+      links: [],
     })
   })
 
@@ -2445,7 +2446,13 @@ describe('the author card fills itself from the record (AGL-2486)', () => {
     // a name in it beats no card at all.
     expect(
       collectionEntryAuthorValues({ authorName: 'The Aglyn Team' }),
-    ).toEqual({ name: 'The Aglyn Team', bio: '', image: '', url: '' })
+    ).toEqual({
+      name: 'The Aglyn Team',
+      bio: '',
+      image: '',
+      url: '',
+      links: [],
+    })
   })
 
   it('stamps the card, so nothing has to be typed as literal text', () => {
@@ -2653,5 +2660,90 @@ describe('entry blocks inside a listing fill from their own card (AGL-2486)', ()
         .name
     expect(name(0)).toBe('Zach Gover')
     expect(name(1)).toBe('A Guest')
+  })
+})
+
+/**
+ * The author's profile links reach the card (AGL-2516).
+ *
+ * `sameAs` never did: it is a crawler field and nothing rendered it. These are
+ * the rows a reader clicks, so they travel the path the portrait and the bio
+ * already take — from the record, per entry, with the template retyping
+ * nothing.
+ */
+describe('the author card fills its links from the record (AGL-2516)', () => {
+  const authored = (links: unknown) =>
+    ({
+      $id: 'e1',
+      title: 'A post',
+      slug: 'a-post',
+      author: { name: 'Zach Gover', links },
+    }) as any
+
+  const cardOnly = () =>
+    ({
+      root: { $id: 'root', componentId: 'div', nodes: ['a'] },
+      a: {
+        $id: 'a',
+        componentId: 'collectionEntryAuthor',
+        parentId: 'root',
+        props: {},
+      },
+    }) as any
+
+  it('carries the record’s rows onto the card', () => {
+    expect(
+      collectionEntryAuthorValues(
+        authored([
+          { platform: 'x', url: 'https://x.com/aglyn' },
+          {
+            label: 'Newsletter',
+            icon: 'email-newsletter',
+            iconPath: 'M0 0',
+            url: 'https://e.com/n',
+          },
+        ]),
+      ).links,
+    ).toEqual([
+      { platform: 'x', url: 'https://x.com/aglyn' },
+      {
+        label: 'Newsletter',
+        icon: 'email-newsletter',
+        iconPath: 'M0 0',
+        url: 'https://e.com/n',
+      },
+    ])
+  })
+
+  it('normalizes at the boundary rather than trusting the store', () => {
+    // A hand-written document reaches props without ever passing the record
+    // normalizer, so an unsafe scheme has to die HERE too — not only where
+    // the console writes.
+    expect(
+      collectionEntryAuthorValues(
+        authored([
+          // eslint-disable-next-line no-script-url
+          { label: 'Bad', url: 'javascript:alert(1)' },
+          { platform: 'github', url: 'https://github.com/aglyn' },
+        ]),
+      ).links,
+    ).toEqual([{ platform: 'github', url: 'https://github.com/aglyn' }])
+  })
+
+  it('stamps them onto an Entry Author block', () => {
+    const out: any = expandCollectionEntryAuthor(
+      cardOnly(),
+      authored([{ platform: 'x', url: 'https://x.com/aglyn' }]),
+    )
+    expect(out['a'].props['links']).toEqual([
+      { platform: 'x', url: 'https://x.com/aglyn' },
+    ])
+  })
+
+  it('stamps nothing when the author has none', () => {
+    const out: any = expandCollectionEntryAuthor(cardOnly(), authored(undefined))
+    // Absent, not an empty array: the card's emptiness check and its
+    // `Show links` switch both read "no rows" from the same absence.
+    expect(out['a'].props['links']).toBeUndefined()
   })
 })
