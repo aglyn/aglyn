@@ -1646,6 +1646,12 @@ export const collectionRelatedSchema: Aglyn.ComponentSchema<CollectionRelatedPro
           'newest-first order either way — this is about the card, not the ' +
           'ordering.',
         component: Aglyn.FieldComponentType.SWITCH,
+        // Unset means SHOWN in the renderer above, so the switch has to
+        // OPEN in that position or it lies about the block in front of
+        // the author — and the first click, which writes the `true` that
+        // was already in effect, changes nothing and reads as a dead
+        // control (AGL-2506).
+        initialValue: true,
       },
       {
         name: 'dateFormat',
@@ -1666,6 +1672,12 @@ export const collectionRelatedSchema: Aglyn.ComponentSchema<CollectionRelatedPro
           'Off drops the category — the chip above each card title, or the ' +
           'second half of the line under each link on the list layout.',
         component: Aglyn.FieldComponentType.SWITCH,
+        // Unset means SHOWN in the renderer above, so the switch has to
+        // OPEN in that position or it lies about the block in front of
+        // the author — and the first click, which writes the `true` that
+        // was already in effect, changes nothing and reads as a dead
+        // control (AGL-2506).
+        initialValue: true,
       },
       {
         name: 'showExcerpt',
@@ -2132,6 +2144,12 @@ export const collectionEntryMetaSchema: Aglyn.ComponentSchema<CollectionEntryMet
           'Off hides the published date from the line without clearing what ' +
           'the Date field would have shown.',
         component: Aglyn.FieldComponentType.SWITCH,
+        // Unset means SHOWN in the renderer above, so the switch has to
+        // OPEN in that position or it lies about the block in front of
+        // the author — and the first click, which writes the `true` that
+        // was already in effect, changes nothing and reads as a dead
+        // control (AGL-2506).
+        initialValue: true,
       },
       {
         name: 'showCategory',
@@ -2140,6 +2158,12 @@ export const collectionEntryMetaSchema: Aglyn.ComponentSchema<CollectionEntryMet
           'Off drops the category from the line. The entry keeps its ' +
           'category — this is about the byline, not the taxonomy.',
         component: Aglyn.FieldComponentType.SWITCH,
+        // Unset means SHOWN in the renderer above, so the switch has to
+        // OPEN in that position or it lies about the block in front of
+        // the author — and the first click, which writes the `true` that
+        // was already in effect, changes nothing and reads as a dead
+        // control (AGL-2506).
+        initialValue: true,
       },
       {
         name: 'showTags',
@@ -2148,6 +2172,12 @@ export const collectionEntryMetaSchema: Aglyn.ComponentSchema<CollectionEntryMet
           'Off hides the tag chips below the line. Leave it on and the ' +
           'other three off for a tags-only row.',
         component: Aglyn.FieldComponentType.SWITCH,
+        // Unset means SHOWN in the renderer above, so the switch has to
+        // OPEN in that position or it lies about the block in front of
+        // the author — and the first click, which writes the `true` that
+        // was already in effect, changes nothing and reads as a dead
+        // control (AGL-2506).
+        initialValue: true,
       },
       {
         name: 'showAuthor',
@@ -2156,6 +2186,12 @@ export const collectionEntryMetaSchema: Aglyn.ComponentSchema<CollectionEntryMet
           'Off hides the byline. The avatar follows it: a block with no ' +
           'author shown never fills in the author’s portrait.',
         component: Aglyn.FieldComponentType.SWITCH,
+        // Unset means SHOWN in the renderer above, so the switch has to
+        // OPEN in that position or it lies about the block in front of
+        // the author — and the first click, which writes the `true` that
+        // was already in effect, changes nothing and reads as a dead
+        // control (AGL-2506).
+        initialValue: true,
       },
       {
         name: 'showAvatar',
@@ -2164,6 +2200,12 @@ export const collectionEntryMetaSchema: Aglyn.ComponentSchema<CollectionEntryMet
           'Off hides the round image in front of the byline, including an ' +
           'author’s own portrait.',
         component: Aglyn.FieldComponentType.SWITCH,
+        // Unset means SHOWN in the renderer above, so the switch has to
+        // OPEN in that position or it lies about the block in front of
+        // the author — and the first click, which writes the `true` that
+        // was already in effect, changes nothing and reads as a dead
+        // control (AGL-2506).
+        initialValue: true,
       },
     ],
   }
@@ -2380,6 +2422,12 @@ export const collectionEntryAuthorSchema: Aglyn.ComponentSchema<CollectionEntryA
           'Off leaves the card as a portrait and a name — for a masthead ' +
           'where the blurb would repeat what the page already says.',
         component: Aglyn.FieldComponentType.SWITCH,
+        // Unset means SHOWN in the renderer above, so the switch has to
+        // OPEN in that position or it lies about the block in front of
+        // the author — and the first click, which writes the `true` that
+        // was already in effect, changes nothing and reads as a dead
+        // control (AGL-2506).
+        initialValue: true,
       },
       {
         name: 'showAvatar',
@@ -2387,6 +2435,12 @@ export const collectionEntryAuthorSchema: Aglyn.ComponentSchema<CollectionEntryA
         description:
           'Off leaves the text alone, with no space held for a picture.',
         component: Aglyn.FieldComponentType.SWITCH,
+        // Unset means SHOWN in the renderer above, so the switch has to
+        // OPEN in that position or it lies about the block in front of
+        // the author — and the first click, which writes the `true` that
+        // was already in effect, changes nothing and reads as a dead
+        // control (AGL-2506).
+        initialValue: true,
       },
     ],
   }
