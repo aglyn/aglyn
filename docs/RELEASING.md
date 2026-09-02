@@ -98,13 +98,52 @@ its own beyond AGL-2089.
 
 ### 2 — Promote, as usual
 
-Gate the batch with [`tools/gate.sh`](#the-gate) (below), open the `main` →
-`production` PR, real merge commit, never squash, no intermediate branches.
-Then verify the deploy is live and serving that commit:
+Open the `main` → `production` PR, real merge commit, never squash, no
+intermediate branches. Then verify the deploy is live and serving that commit:
 
 ```bash
 node tools/deploy/verify-production-aliases.mjs
 ```
+
+**`production` is branch-protected (AGL-1777).** A direct push is rejected: the
+promotion is a PR or it does not happen, and these four checks must be green
+before it can merge.
+
+| required check | comes from |
+|---|---|
+| `ci` | `nx-ci.yml` — typecheck, lint, test, build, the affected-scoped guards |
+| `guards` | `tools-guards.yml` — the whole-repo guard sweep |
+| `*.emulator.spec.ts` | `emulator-guards.yml` |
+| `Firestore + RTDB rules matrix` | `emulator-guards.yml` |
+
+Force-push and deletion are blocked on `main` and `production` both. `main` is
+deliberately **not** PR-gated — many agents land on it continuously and
+requiring a PR there would stop the work rather than protect it.
+
+Three settings are deliberate and worth knowing before you tighten them:
+
+- **`ci` is the only nx-ci check required**, not the individual jobs. A matrix
+  publishes one check name per leg (`test (1)` … `test (8)`), so requiring
+  those directly would need re-configuring protection on every shard-count
+  change — and a required check that stops reporting leaves the PR pending
+  **forever**. `ci` is a stable name over a shape that is free to move.
+- **`selfhost-images` is NOT required**, because its `pull_request` trigger is
+  path-filtered. On a PR touching none of those paths it never reports, and a
+  required check that never reports is the same permanent-pending trap.
+- **`enforce_admins` is off and `required_approving_review_count` is 0.**
+  Requiring an approval would block a solo operator outright — GitHub will not
+  let you approve your own PR — and enforcing admins with no second admin makes
+  a lockout unrecoverable. The rule still stops every accidental and automated
+  direct push.
+
+#### Is `tools/gate.sh` still required?
+
+**No — CI now runs the same things**, and since AGL-2505 it does so in about
+nine minutes. The gate remains the right pre-flight when you want the verdict
+before pushing, or when you are offline, but the promotion no longer waits on
+it. The one difference is scope: the gate runs `--all`, CI runs
+`nx affected` — and on a promotion PR the affected base **is** `production`, so
+the range is the whole release delta either way.
 
 ### 3 — Tag the commit that is actually deployed
 
@@ -191,6 +230,12 @@ tools/gate.sh --phases build       # one phase, same isolation
 tools/gate.sh --keep               # keep the worktree for triage
 tools/gate.sh --no-install         # refuse on lockfile drift, never install
 ```
+
+Since AGL-2505 this is a **pre-flight, not a gate of record** — NX CI runs the
+same phases on the promotion PR in about nine minutes, and those are the checks
+`production` actually requires. Reach for the gate when you want a verdict
+before pushing, when you are offline, or when you need the isolation described
+below to reproduce something CI saw.
 
 It provisions a detached worktree at `/private/tmp/aglyn-gate/<stamp>/wt`, runs
 **typecheck → lint → guards → test → production build**, and prints one exit
