@@ -447,9 +447,15 @@ describe('the workflows actually USE the digest (AGL-1617)', () => {
   // rather than from inside either workflow, so deleting the step cannot
   // delete the check on the deletion.
   const repoRoot = join(here, '..', '..', '..')
+  // The artifact name is a PATTERN, not a literal: nx-ci.yml's test job is a
+  // four-way shard matrix since AGL-2505, and upload-artifact@v4 rejects a
+  // duplicate name within a run — so its name has to carry the shard index.
   const workflows = [
-    ['main-gate.yml', 'nx-test-log-main-gate-full'],
-    ['nx-ci.yml', 'nx-test-log-nx-ci-main'],
+    ['main-gate.yml', /name: nx-test-log-main-gate-full\b/],
+    [
+      'nx-ci.yml',
+      /name: nx-test-log-nx-ci-shard-\$\{\{ matrix\.shard \}\}/,
+    ],
   ]
 
   for (const [name, artifact] of workflows) {
@@ -468,9 +474,14 @@ describe('the workflows actually USE the digest (AGL-1617)', () => {
       // synchronous. nx prints FAILED tasks last, so the bytes lost were
       // always the failing task's, which is how `console:test` stayed red
       // for days with zero ` FAIL ` markers ever reaching this digest.
+      // One or more continuation lines: what matters is that nx's output
+      // reaches the file through `>` and that the step exits with nx's
+      // status, not how many lines the invocation is wrapped over. Pinning
+      // the line count made this fail on a longer command that was still
+      // doing the right thing.
       assert.match(
         yaml,
-        /status=0\n\s*npx nx [^\n]*\\\n\s*> "\$RUNNER_TEMP\/nx-test\.log" 2>&1 \|\| status=\$\?\n\s*cat "\$RUNNER_TEMP\/nx-test\.log"\n\s*exit "\$status"/,
+        /status=0\n\s*npx nx [^\n]*\\\n(?:\s*[^\n]*\\\n)*\s*> "\$RUNNER_TEMP\/nx-test\.log" 2>&1 \|\| status=\$\?\n\s*cat "\$RUNNER_TEMP\/nx-test\.log"\n\s*exit "\$status"/,
         `${name} must redirect nx into the log file and exit with nx's status`,
       )
       // The regression this replaced. Re-piping restores the byte loss even
@@ -490,13 +501,9 @@ describe('the workflows actually USE the digest (AGL-1617)', () => {
         /uses: actions\/upload-artifact@v4/,
         `${name} must upload the raw log`,
       )
-      // Unique per job, or two uploads in one run collide and the second is
-      // rejected.
-      assert.match(
-        yaml,
-        new RegExp(`name: ${artifact}\\b`),
-        `${name} artifact name`,
-      )
+      // Unique per job AND per shard, or two uploads in one run collide and
+      // the second is rejected.
+      assert.match(yaml, artifact, `${name} artifact name`)
     })
   }
 
@@ -666,19 +673,34 @@ describe('nx-ci.yml must not re-create the invocation that went red (AGL-1617)',
     )
   })
 
-  it('every nx affected step still runs AFTER the base is resolved', () => {
-    // Splitting one step into three is only safe because NX_BASE / NX_HEAD
-    // are environment variables the resolve step exports through $GITHUB_ENV,
-    // which every LATER step in the job inherits. A step that drifted above
-    // it would silently fall back to a different base and shrink what CI
-    // tests — a quieter and worse bug than any red.
-    const resolve = steps.indexOf('name: resolve affected base')
-    assert.ok(resolve > -1, 'nx-ci.yml must resolve the affected base itself')
-    for (const match of steps.matchAll(/npx nx affected -t \w+/g)) {
+  it('every nx affected step still runs AFTER its job has the base', () => {
+    // The three invocations are three JOBS since AGL-2505, so "later step in
+    // the same job" is no longer what carries NX_BASE / NX_HEAD between them.
+    // Each job gets them from the `nx-ci-setup` action, which publishes them
+    // into that job's $GITHUB_ENV. The ordering hazard is unchanged and now
+    // applies per job: an `nx affected` above the setup step falls back to a
+    // different base and silently shrinks what CI checks.
+    const jobs = steps
+      .split(/\n {2}(?=[a-z][a-z-]*:\n)/)
+      .filter((chunk) => /npx nx affected -t \w+/.test(chunk))
+
+    assert.ok(
+      jobs.length >= 3,
+      'lint, test and build must each be a job that runs `nx affected`',
+    )
+
+    for (const job of jobs) {
+      const setup = job.indexOf('uses: ./.github/actions/nx-ci-setup')
       assert.ok(
-        match.index > resolve,
-        `"${match[0]}" must come after the base is resolved, not before it`,
+        setup > -1,
+        `a job running \`nx affected\` must call nx-ci-setup: ${job.slice(0, 60)}`,
       )
+      for (const match of job.matchAll(/npx nx affected -t \w+/g)) {
+        assert.ok(
+          match.index > setup,
+          `"${match[0]}" must come after nx-ci-setup, not before it`,
+        )
+      }
     }
   })
 
@@ -703,10 +725,25 @@ describe('nx-ci.yml must not re-create the invocation that went red (AGL-1617)',
       /github\.event\.before/,
       'a push must be based on the commit the branch was on before it',
     )
+    // Resolved ONCE, in the `base` job, and handed to the others as job
+    // outputs. Resolving per job would let `origin/<base ref>` move between
+    // two jobs starting and give one run two different affected sets.
     assert.match(
       steps,
-      /echo "NX_BASE=\$base"\n\s*echo "NX_HEAD=\$head"\n\s*} >> "\$GITHUB_ENV"/,
-      'the resolved base must reach later steps through $GITHUB_ENV',
+      /echo "base=\$base"\n\s*echo "head=\$head"\n\s*} >> "\$GITHUB_OUTPUT"/,
+      'the resolved base must leave the base job through $GITHUB_OUTPUT',
+    )
+
+    // …and reach the other jobs' steps the way nx reads it: from the
+    // environment. That half now lives in the composite action.
+    const setupAction = readFileSync(
+      join(repoRoot2, '.github', 'actions', 'nx-ci-setup', 'action.yml'),
+      'utf8',
+    )
+    assert.match(
+      setupAction,
+      /echo "NX_BASE=\$NX_BASE_IN"\n\s*echo "NX_HEAD=\$NX_HEAD_IN"\n\s*} >> "\$GITHUB_ENV"/,
+      'nx-ci-setup must publish the base into each job through $GITHUB_ENV',
     )
   })
 

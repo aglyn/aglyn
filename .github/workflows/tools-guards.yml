@@ -145,6 +145,29 @@ on:
       - 'cloud/**'
       - 'docs/**'
       - '.claude/**'
+  # THE TRIGGER THIS FILE ALREADY CLAIMED TO HAVE (AGL-2505).
+  #
+  # The push comment above ends "the promotion PR still runs `pull_request`
+  # below", and the concurrency group below is written around
+  # `github.event_name == 'push'` precisely so that pull_request runs
+  # supersede one another. Both were describing a trigger that was not here.
+  #
+  # The consequence was measured, not guessed: 86 guards are derived from this
+  # file and nx-ci.yml, nx-ci.yml carries 21 of them, and the other **65 never
+  # saw a pull request**. They ran on push to `production` — after the merge,
+  # against the deployed tree — and on the daily schedule. That is an alarm,
+  # not a gate: it tells you the promotion was broken once the promotion is
+  # live. `check:linear-ids`, `check:manifest-versions`, `check:nul-bytes`,
+  # `check:personal-identifiers` and `check:no-tax-identifiers` were all in
+  # that set.
+  #
+  # Affordable for exactly the reason the paths comment above gives: the job
+  # is SECRETLESS (`permissions: contents: read`), so it is safe on a fork or
+  # dependabot PR where secrets are withheld, and the whole sweep is ~60s
+  # locally. No path filter here on purpose — several guards sweep every
+  # tracked file, so on a PR the honest scope is the whole tree.
+  pull_request:
+
   schedule:
     # Daily, 07:53 UTC — off the top of the hour, where GitHub's scheduler
     # congestion is worst, and after the two drift workflows (07:23, 07:41)

@@ -266,6 +266,14 @@ in the block library:
   settings, above a dashed note saying so — so you can style the layout and watch it
   change. The samples never reach a published page; the real posts replace them there.
 
+:::tip Entry blocks work inside a listing card too
+Drop **Entry Meta** (or **Entry Author**) inside a Collection Entries card and each card
+fills from its **own** entry — byline, date, category, tags. **Date format** applies per
+card, so a listing can read *Aug 2026* while another block on the same page reads the
+full date. Typing a value into the block still overrides what it would have shown, on
+every card at once.
+:::
+
 :::info The canvas previews all three entry blocks
 **Entry Meta**, **Entry Author** and **Related Posts** all read from the entry being
 rendered, and the canvas has none — so each previews itself with sample values

@@ -2523,3 +2523,135 @@ describe('the author card fills itself from the record (AGL-2486)', () => {
     ).toBe('Zach Gover')
   })
 })
+
+/**
+ * A CARD'S DATE FORMAT HAS TO MOVE THE CARD'S DATE (AGL-2486).
+ *
+ * The routed-entry passes skip clones on purpose — stamping the routed entry
+ * into a listing would date every card the same — so a cloned Entry Meta had
+ * only its `{{entry.date}}` binding, and a binding carries no format. The
+ * Date format picker sat on the card doing nothing, while the identical block
+ * on the article above it obeyed it. Measured on aglyn.com/blog: every card
+ * read `8/9/2026` where the article byline read `Aug 2026`.
+ */
+describe('entry blocks inside a listing fill from their own card (AGL-2486)', () => {
+  const entries = [
+    {
+      $id: 'a',
+      title: 'First',
+      slug: 'first',
+      authorName: 'Zach Gover',
+      categoryId: 'guides',
+      publishedAt: { seconds: 1_754_714_956 },
+    },
+    {
+      $id: 'b',
+      title: 'Second',
+      slug: 'second',
+      authorName: 'A Guest',
+      publishedAt: { seconds: 1_784_116_800 },
+    },
+  ]
+  const sources = {
+    blog: {
+      slug: 'blog',
+      entries,
+      categories: [{ id: 'guides', name: 'Guides' }],
+    },
+  } as any
+  const listNodes = (metaProps: Record<string, unknown>) =>
+    ({
+      root: { $id: 'root', componentId: 'div', nodes: ['list'] },
+      list: {
+        $id: 'list',
+        componentId: COLLECTION_ENTRIES_COMPONENT_ID,
+        parentId: 'root',
+        props: { collectionSlug: 'blog' },
+        nodes: ['card'],
+      },
+      card: {
+        $id: 'card',
+        componentId: 'muiStack',
+        parentId: 'list',
+        nodes: ['meta'],
+      },
+      meta: {
+        $id: 'meta',
+        componentId: 'collectionEntryMeta',
+        parentId: 'card',
+        props: metaProps,
+      },
+    }) as any
+  const cloneMeta = (nodes: any, index: number) =>
+    nodes[`${COLLECTION_ENTRIES_NODE_ID_PREFIX}list__${index}__meta`]?.props
+
+  it('applies the card’s Date format to each card’s own date', () => {
+    const nodes = expandCollectionEntries(
+      listNodes({ date: '{{entry.date}}', dateFormat: 'monthYear' }),
+      sources,
+    )
+    expect(cloneMeta(nodes, 0).date).toBe(
+      formatCollectionEntryDate(entries[0].publishedAt, 'monthYear'),
+    )
+    // The SECOND card dates itself, not the first — the whole reason the
+    // routed-entry pass skips clones.
+    expect(cloneMeta(nodes, 1).date).toBe(
+      formatCollectionEntryDate(entries[1].publishedAt, 'monthYear'),
+    )
+    expect(cloneMeta(nodes, 0).date).not.toBe(cloneMeta(nodes, 1).date)
+  })
+
+  it('CONTROL — the default format is the string it has always emitted', () => {
+    const nodes = expandCollectionEntries(
+      listNodes({ date: '{{entry.date}}' }),
+      sources,
+    )
+    expect(cloneMeta(nodes, 0).date).toBe(
+      formatCollectionEntryDate(entries[0].publishedAt),
+    )
+  })
+
+  it('fills a card block that binds nothing at all', () => {
+    // "Drop it on and it works" has to hold inside a card too.
+    const nodes = expandCollectionEntries(listNodes({}), sources)
+    expect(cloneMeta(nodes, 0).author).toBe('Zach Gover')
+    expect(cloneMeta(nodes, 1).author).toBe('A Guest')
+    expect(cloneMeta(nodes, 0).category).toBe('Guides')
+  })
+
+  it('never overwrites a value typed onto the card', () => {
+    const nodes = expandCollectionEntries(
+      listNodes({ author: 'The editors', dateFormat: 'monthYear' }),
+      sources,
+    )
+    expect(cloneMeta(nodes, 0).author).toBe('The editors')
+    expect(cloneMeta(nodes, 1).author).toBe('The editors')
+  })
+
+  it('fills an Entry Author card from the card’s own entry', () => {
+    const nodes = expandCollectionEntries(
+      {
+        root: { $id: 'root', componentId: 'div', nodes: ['list'] },
+        list: {
+          $id: 'list',
+          componentId: COLLECTION_ENTRIES_COMPONENT_ID,
+          parentId: 'root',
+          props: { collectionSlug: 'blog' },
+          nodes: ['author'],
+        },
+        author: {
+          $id: 'author',
+          componentId: 'collectionEntryAuthor',
+          parentId: 'list',
+          props: {},
+        },
+      } as any,
+      sources,
+    )
+    const name = (index: number) =>
+      nodes[`${COLLECTION_ENTRIES_NODE_ID_PREFIX}list__${index}__author`].props
+        .name
+    expect(name(0)).toBe('Zach Gover')
+    expect(name(1)).toBe('A Guest')
+  })
+})

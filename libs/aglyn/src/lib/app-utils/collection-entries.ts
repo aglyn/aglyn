@@ -1217,6 +1217,35 @@ export function expandCollectionEntries<
         cloneSubtree(templateId, containerId)
         childIds.push(prefixId(templateId))
       }
+      // Fill the entry blocks in THIS card from THIS card's entry (AGL-2486).
+      //
+      // The routed-entry passes (`expandCollectionEntryMeta`,
+      // `expandCollectionEntryAuthor`) skip clones deliberately: stamping the
+      // routed entry into a listing would date every card the same. That left
+      // a cloned block with only its `{{entry.*}}` bindings, and a binding
+      // carries no FORMAT — so an Entry Meta inside a card rendered the locale
+      // default whatever its Date format said, while the identical block on
+      // the article above it obeyed the picker. A field that cannot move the
+      // thing it names is worse than a missing one.
+      //
+      // The fill runs against each clone's own entry, so every card dates
+      // itself, and it runs BEFORE substitution so a filled value is already
+      // a literal by the time the tokens resolve. The precedence is the
+      // shared one: an authored value wins, except the `{{entry.date}}`
+      // binding under a chosen format, which is the case this exists for.
+      for (const [cloneId, cloneNode] of Object.entries(cloned)) {
+        const fill =
+          cloneNode?.componentId === COLLECTION_ENTRY_META_COMPONENT_ID
+            ? entryMetaFill(cloneNode, entry, source.categories)
+            : cloneNode?.componentId === COLLECTION_ENTRY_AUTHOR_COMPONENT_ID
+              ? entryAuthorFill(cloneNode, entry)
+              : undefined
+        if (!fill || !Object.keys(fill).length) continue
+        cloned[cloneId] = {
+          ...cloneNode,
+          props: { ...(cloneNode.props ?? {}), ...fill },
+        } as N
+      }
       Object.assign(
         next,
         resolveNamedTokens(
@@ -1466,6 +1495,34 @@ export function expandCollectionEntryMeta<
 
   const next: Record<NodeId, N> = { ...nodes }
   for (const [containerId, container] of containers) {
+    const filled = entryMetaFill(container, entry, categories)
+    if (!Object.keys(filled).length) continue
+    next[containerId] = {
+      ...container,
+      props: { ...(container.props ?? {}), ...filled } as any,
+    }
+  }
+  return next
+}
+
+/**
+ * The values ONE Entry Meta node takes from ONE entry (AGL-2486).
+ *
+ * Extracted so a node inside a listing's card can be filled from the entry
+ * that card is for, which is a different entry per clone and therefore
+ * cannot come from the routed-entry pass above. Both callers apply the same
+ * precedence, because the same block cannot mean two things depending on
+ * where an author dropped it.
+ *
+ * Returns only the keys that change; an empty object means "leave this node
+ * exactly as authored".
+ */
+function entryMetaFill(
+  container: { props?: unknown },
+  entry: CollectionEntryRecord,
+  categories?: readonly CollectionCategory[],
+): Record<string, string> {
+  {
     const props = (container.props ?? {}) as Record<string, unknown>
     // Per node: the format is a prop, so two blocks on one template can read
     // their dates differently.
@@ -1511,10 +1568,8 @@ export function expandCollectionEntryMeta<
     if (authorImage && bylineShown && props['showAvatar'] !== false) {
       filled['avatarImage'] = authorImage
     }
-    if (!Object.keys(filled).length) continue
-    next[containerId] = { ...container, props: { ...props, ...filled } as any }
+    return filled
   }
-  return next
 }
 
 /**
@@ -1545,20 +1600,36 @@ export function expandCollectionEntryAuthor<
   )
   if (!containers.length) return nodes
 
-  const values = collectionEntryAuthorValues(entry)
   const next: Record<NodeId, N> = { ...nodes }
   for (const [containerId, container] of containers) {
-    const props = (container.props ?? {}) as Record<string, unknown>
-    const filled: Record<string, string> = {}
-    for (const key of ['name', 'bio', 'image', 'url'] as const) {
-      if (String(props[key] ?? '').trim()) continue
-      if (!values[key]) continue
-      filled[key] = values[key]
-    }
+    const filled = entryAuthorFill(container, entry)
     if (!Object.keys(filled).length) continue
-    next[containerId] = { ...container, props: { ...props, ...filled } as any }
+    next[containerId] = {
+      ...container,
+      props: { ...(container.props ?? {}), ...filled } as any,
+    }
   }
   return next
+}
+
+/**
+ * The values ONE Entry Author node takes from ONE entry (AGL-2486) — the
+ * companion to {@link entryMetaFill}, extracted for the same reason: a card
+ * inside a listing is filled from the entry that card is for.
+ */
+function entryAuthorFill(
+  container: { props?: unknown },
+  entry: CollectionEntryRecord,
+): Record<string, string> {
+  const values = collectionEntryAuthorValues(entry)
+  const props = (container.props ?? {}) as Record<string, unknown>
+  const filled: Record<string, string> = {}
+  for (const key of ['name', 'bio', 'image', 'url'] as const) {
+    if (String(props[key] ?? '').trim()) continue
+    if (!values[key]) continue
+    filled[key] = values[key]
+  }
+  return filled
 }
 
 /** The one binding a chosen date format may replace (AGL-1459). */
