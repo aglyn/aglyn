@@ -26,7 +26,31 @@ import { generatePresetId } from '../utils/generate-preset-id'
 // Component ids are persisted in layout documents; never rename.
 export const ID: Aglyn.ComponentId = 'layoutSlot'
 
+/**
+ * Elements the slot may render as (AGL-2486).
+ *
+ * `main` is here, and is the DEFAULT composition assigns, because the slot is
+ * by construction the page content between the layout's chrome — which is the
+ * definition of the landmark. It is the one place on the platform that may
+ * choose it: `SECTION_ELEMENTS` and `ALLOWED_AUTHOR_HTML_ELEMENTS` both drop
+ * `main` so a document can never carry two, and `stampDocumentLandmark`
+ * decides which single node gets it.
+ */
+export const LAYOUT_SLOT_ELEMENTS = [
+  'main',
+  'div',
+  'section',
+  'article',
+] as const
+export type LayoutSlotElement = (typeof LAYOUT_SLOT_ELEMENTS)[number]
+
 export interface LayoutSlotProps extends BoxProps {
+  /**
+   * The DOM element the slot renders as. Left unset, composition fills in
+   * `main` — see {@link LAYOUT_SLOT_ELEMENTS}. Unknown values degrade to
+   * `div` rather than reaching the DOM as an invented tag.
+   */
+  element?: LayoutSlotElement | string
   /**
    * Editor-only caption under the slot marker. Layouts render different
    * kinds of content — a doc body, a narrow article measure, a full page —
@@ -55,12 +79,23 @@ export const DEFAULT_SLOT_CAPTION = 'Screen content renders here'
  */
 const LayoutSlot = forwardRef<HTMLDivElement, LayoutSlotProps>(
   (props, ref) => {
-    const { children, sx, caption, ...rest } = props
+    const { children, sx, caption, element, ...rest } = props
     const hasChildren = Children.count(children) > 0
+    const component = (LAYOUT_SLOT_ELEMENTS as readonly string[]).includes(
+      String(element ?? ''),
+    )
+      ? (element as LayoutSlotElement)
+      : 'div'
 
     if (hasChildren) {
       return (
-        <Box ref={ref} data-aglyn-layout-slot="" sx={sx} {...rest}>
+        <Box
+          ref={ref}
+          component={component}
+          data-aglyn-layout-slot=""
+          sx={sx}
+          {...rest}
+        >
           {children}
         </Box>
       )
@@ -135,6 +170,20 @@ export const schema: Aglyn.ComponentSchema<LayoutSlotProps> = {
         'here". Never shown on the published site.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       placeholder: DEFAULT_SLOT_CAPTION,
+    },
+    {
+      name: 'element',
+      label: 'HTML element',
+      description:
+        'The DOM element the screen content renders inside. Blank is ' +
+        '"main" — the page-content landmark assistive tech skips the ' +
+        'chrome with. Choose another only if this layout’s slot is not the ' +
+        'page’s main content.',
+      component: Aglyn.FieldComponentType.SELECT,
+      options: LAYOUT_SLOT_ELEMENTS.map((value) => ({
+        value,
+        label: value,
+      })),
     },
   ],
 }

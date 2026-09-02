@@ -546,7 +546,11 @@ export async function composeNodesWithChrome(options: {
   const nodes = Aglyn.attachPluginInstalls(withFunctions, pluginInstalls)
   // Entry-template tokens (AGL-105): {{entry.*}} from the rendered entry.
   const finalNodes = Aglyn.resolveNamedTokens(nodes as any, options.tokens)
-  return Aglyn.canvas.processNodesToDenormalized(finalNodes as any)
+  // The document's one `main` landmark (AGL-2486). LAST, so it reads the tree
+  // the page actually ships — a slot grafted from a layout chain, an element
+  // an author chose — rather than the screen as stored.
+  const withLandmark = Aglyn.stampDocumentLandmark(finalNodes as any)
+  return Aglyn.canvas.processNodesToDenormalized(withLandmark as any)
 }
 
 /**

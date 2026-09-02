@@ -277,6 +277,11 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'scheme-guard',
     why: 'This file IS the scheme rule: sanitizeAuthorCss, sanitizeAuthorSx and isRefusedAuthorImageSrc. The markers are its own recursion over nested sx slices.',
   },
+  'libs/aglyn/src/lib/app-utils/collection-entries.ts': {
+    markers: 1,
+    guard: 'projection',
+    why: "The {{entry.authorImage}} token (AGL-2486): the author record's portrait string, handed to whatever node an author bound it into. This file resolves nothing — the value is a stored reference until a renderer asks, and every renderer that can show it (the Entry Author card, the Image element) calls resolveMediaSrc. Binding it into a text field prints the reference and fetches nothing.",
+  },
   'libs/aglyn/src/lib/app-utils/content-authors.ts': {
     markers: 1,
     guard: 'raw',
@@ -363,9 +368,9 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     why: 'The listing card image on the same console surface, and the besigner standalone preview of it.',
   },
   'libs/plugins/mui/src/lib/components/collection.tsx': {
-    markers: 3,
+    markers: 4,
     guard: 'media-ref',
-    why: 'Markdown body image, entry cover and author avatar, all three through resolveMediaSrc. The body image is additionally scheme-checked at parse time by markdown-lite (AGL-1713); the cover and the avatar are not.',
+    why: 'Markdown body image, entry cover, byline avatar and the Entry Author card portrait, all four through resolveMediaSrc. The body image is additionally scheme-checked at parse time by markdown-lite (AGL-1713); the other three are not. The portrait differs from the rest only in where the string comes from — an author RECORD the customer wrote, not a node prop (AGL-2486).',
   },
   'libs/plugins/mui/src/lib/components/custom-html.tsx': {
     markers: 1,

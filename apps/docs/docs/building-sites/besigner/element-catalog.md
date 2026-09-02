@@ -71,11 +71,34 @@ for the site.
 | Element | What it's for |
 | --- | --- |
 | **Box** | The plain container. No styling of its own — you give it padding, background and borders from the Styles panel. Renders as `div`, `span`, `p`, `figure`, `figcaption`, `blockquote` or `pre`. For landmarks, use **Section** instead. |
-| **Section** | Grouping inside a semantic HTML element (`section`, `article`, `aside`, `nav`, `header`, `footer`, `main`) with an accessible label, so the page keeps a meaningful document outline. |
+| **Section** | Grouping inside a semantic HTML element (`section`, `article`, `aside`, `nav`, `header`, `footer`) with an accessible label, so the page keeps a meaningful document outline. `main` is not on the list — see [The page's `main` landmark](#the-pages-main-landmark). |
 | **Container** | Centers content and caps its maximum width. |
 | **Stack** | One-dimensional row or column with a gap. Also the element that carries **repeat over a dataset**. |
 | **Grid** | Responsive 12-column layout. See [Grid](#grid) below. |
-| **Layout slot** | Where a bound layout injects the screen's own content. |
+| **Layout slot** | Where a bound layout injects the screen's own content. Its **HTML element** is `main` unless you change it — see below. |
+
+### The page's `main` landmark
+
+Every published page carries exactly one `main` element: the landmark assistive tech uses
+to skip past the nav straight to the content, and the target a "skip to content" link
+needs. You don't have to place it, and you can't accidentally end up with two.
+
+It goes on the page's content region, which the platform works out for you:
+
+- On a screen framed by a **shared layout**, the layout's **Layout slot** — everything
+  between the chrome. The site nav and the site footer stay outside it, which is the
+  whole point of the landmark.
+- On a screen with **no layout**, the **Document** layer at the top of the hierarchy.
+
+Both of those have an **HTML element** attribute if you want to say otherwise. Set the
+Document layer to `main` and the slot steps aside; set the slot to `section` (for a layout
+whose slot genuinely isn't the page's main content) and the Document layer takes it
+instead. Choose something other than `main` in both places and the page ships without one
+— your call, deliberately made.
+
+Nothing else can claim it: neither **Section**'s element picker nor
+[custom HTML](interactions-and-custom-html.md) will emit a `main`, because a second one
+makes the landmark ambiguous, which is worse than having none.
 
 ### Grid
 

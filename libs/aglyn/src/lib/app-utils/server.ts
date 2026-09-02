@@ -65,6 +65,7 @@ export * from './dynamic-list-rule'
 // catalog. No Node builtin, so it stays out of the `/server`-only group.
 export * from './email-topics'
 export * from './compose-layout-nodes'
+export * from './document-landmark'
 export * from './functions'
 export * from './compose-reusable-components'
 export * from './compress'

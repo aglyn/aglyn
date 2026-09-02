@@ -58,28 +58,28 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en">
       <body>
         <AppRouterCacheProvider options={APP_EMOTION_CACHE_OPTIONS}>
-          {/* THE DOCUMENT'S ONE `main` LANDMARK (AGL-2486).
-              Published pages are composed from author nodes, so no screen can
-              be relied on to declare the landmark itself — a page built
-              entirely of Box and Section nodes has none, and every published
-              site was shipping a document whose only landmark was `body`.
-              Assistive tech has nothing to skip the chrome with, and it is the
-              precondition for a skip link.
+          {/* THE DOCUMENT'S ONE `main` LANDMARK LIVES ON THE PAGE, NOT HERE
+              (AGL-2486).
 
-              It lives HERE rather than in `[host]/layout` so the guarantee is
-              "every document, exactly one" rather than "every host route":
-              the root `not-found` and `error` screens render through this
-              layout and no other. `main` is `display: block`, the same as the
-              `div` the canvas root already renders, so wrapping changes no
-              layout — measured against production, where `body` is
-              `display: block` with block-level children.
+              It was this wrapper, which made the landmark exist and put the
+              site nav and the site footer inside it — the one thing `main` is
+              defined as excluding, and the reason a "skip to content" link
+              would land on the top of the chrome it was meant to skip.
 
-              ⚠️ EXACTLY ONE. A second `main` is its own a11y failure, worse
-              than none because it makes the landmark ambiguous. `main` is
-              therefore NOT an element an author can choose — see
-              `SECTION_ELEMENTS` and `ALLOWED_AUTHOR_HTML_ELEMENTS`, both of
-              which drop it and say why. */}
-          <main>{children}</main>
+              Composition places it now, on the region it names: the layout's
+              slot (the page content between the chrome), or the screen root
+              when a screen has no layout, or wherever an author's HTML-element
+              picker put it — `stampDocumentLandmark` picks exactly one. The
+              screens that compose no author nodes carry their own: the root
+              error and not-found boundaries render `StatusScreenPlain`, and
+              the branded site status screen names its own content region.
+
+              ⚠️ STILL EXACTLY ONE. `main` remains unofferable in the Section
+              element picker and in author HTML — see `SECTION_ELEMENTS` and
+              `ALLOWED_AUTHOR_HTML_ELEMENTS`, both of which drop it and say
+              why. The two nodes that may carry it are the ones composition
+              arbitrates between. */}
+          {children}
           {/* First-party error beacon (AGL-1538): uncaught browser errors
               → /api/errors → Cloud Error Reporting. Sits OUTSIDE the page's
               suspense boundaries so it reports even when a page component
