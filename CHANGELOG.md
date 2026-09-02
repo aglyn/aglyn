@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.47 — 2026-09-02
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.46...v1.0.0-beta.47)
+
+### Added
+
+- **collection:** the byline and the author card preview themselves on the canvas ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+
 ## v1.0.0-beta.46 — 2026-09-02
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.45...v1.0.0-beta.46)
