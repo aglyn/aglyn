@@ -1152,8 +1152,19 @@ export interface CollectionRelatedProps extends StackProps {
 /** The frame's 3-up (Figma 170:242) when nothing usable is authored. */
 const RELATED_DEFAULT_COLUMNS = 3
 
-/** Cover height in the card grid, from the frame. */
-const RELATED_COVER_HEIGHT = 180
+/**
+ * The cover's PROPORTION in the card grid, from the frame's 445 x 180 card
+ * (Figma 170:243).
+ *
+ * It was a fixed 180px height, which is the frame's number without the
+ * frame's shape. A card is 445 wide there; the grid's columns grow with the
+ * viewport and 180 does not, so every extra pixel of width flattened the box
+ * and `objectFit: cover` cropped further into the art to fill it. At a 2000px
+ * viewport the cover had reached 3.57:1 against the design's 2.47:1 — about a
+ * third of the image gone, and the cover art is a composed lockup, so what it
+ * loses is the title text on it. A ratio holds the shape at every width.
+ */
+const RELATED_COVER_ASPECT = '445 / 180'
 
 /**
  * The card's category chip (AGL-1457). ONE fixed token pair for every
@@ -1166,6 +1177,20 @@ const relatedChipSx = {
   alignSelf: 'flex-start',
   borderColor: 'divider',
   color: 'text.secondary',
+  '& .MuiChip-label': {
+    // 9px, the frame's own inset on a 69 x 24 chip.
+    px: 1.125,
+    // The frame sets this label in the same uppercase, letter-spaced step as
+    // the kicker above an article title, which is what `overline` IS in the
+    // site theme. Naming the step keeps the chip on the theme's scale instead
+    // of a hand-written size that drifts the moment the theme moves.
+    typography: 'overline',
+    // `size="small"` gives the chip the frame's 24px height, and `overline`
+    // carries a 2.66 line-height meant for a standalone kicker with room
+    // around it. Inside a fixed-height chip the box sets the height, so the
+    // line collapses to it and the label centres.
+    lineHeight: 1,
+  },
 }
 
 /** The heading step the block has always emitted. */
@@ -1373,7 +1398,8 @@ const CollectionRelated = forwardRef<HTMLDivElement, CollectionRelatedProps>(
           <Box
             aria-hidden
             sx={{
-              height: RELATED_COVER_HEIGHT,
+              width: '100%',
+              aspectRatio: RELATED_COVER_ASPECT,
               borderRadius: 1,
               backgroundColor: 'action.hover',
             }}
@@ -1393,7 +1419,7 @@ const CollectionRelated = forwardRef<HTMLDivElement, CollectionRelatedProps>(
           sx={{
             display: 'block',
             width: '100%',
-            height: RELATED_COVER_HEIGHT,
+            aspectRatio: RELATED_COVER_ASPECT,
             objectFit: 'cover',
             borderRadius: 1,
           }}
@@ -1442,7 +1468,10 @@ const CollectionRelated = forwardRef<HTMLDivElement, CollectionRelatedProps>(
        * anchor around the title inside that one is markup browsers unnest.
        */
       const card = (entry: Aglyn.CollectionRelatedItem) => (
-        <MuiStack spacing={1}>
+        // 12px between cover, chip and title — the frame's rhythm (170:243
+        // puts the chip at y=192 under a cover ending at 180, and the title
+        // at y=228 under a chip ending at 216).
+        <MuiStack spacing={1.5}>
           {coverNode(entry)}
           {showCategory !== false && entry.category ? (
             <Chip

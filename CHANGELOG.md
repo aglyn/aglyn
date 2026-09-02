@@ -9,6 +9,19 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.51 — 2026-09-02
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.50...v1.0.0-beta.51)
+
+### Fixed
+
+- **collection:** a related card keeps the frame's cover shape at every width ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486), [AGL-1307](https://linear.app/aglyn/issue/AGL-1307))
+- **besigner:** a document follows the clipboard mirror, not just its first read ([AGL-2507](https://linear.app/aglyn/issue/AGL-2507))
+
+### Documentation
+
+- **release:** the promotion process is what CI enforces, not what a laptop ran ([AGL-1777](https://linear.app/aglyn/issue/AGL-1777), [AGL-2506](https://linear.app/aglyn/issue/AGL-2506), [AGL-2507](https://linear.app/aglyn/issue/AGL-2507))
+
 ## v1.0.0-beta.50 — 2026-09-02
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.49...v1.0.0-beta.50)

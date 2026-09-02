@@ -1030,6 +1030,18 @@ describe('Related posts sample cards on the canvas (AGL-2486)', () => {
     expect(container.querySelectorAll('img')).toHaveLength(0)
   })
 
+  it('gives the sample slot the same proportion a real cover gets', () => {
+    // The slot exists to preview the layout, so it has to be the SHAPE the
+    // published card will be — a plate on a different ratio previews a grid
+    // that never ships.
+    const { container } = canvas(<CollectionRelated layout="cards" showCover />)
+    const style = window.getComputedStyle(
+      container.querySelector('[aria-hidden="true"]') as HTMLElement,
+    )
+    expect(style.aspectRatio.replace(/\s+/g, '')).toBe('445/180')
+    expect(style.height).toBe('')
+  })
+
   it('leaves the cover slot out when covers are off', () => {
     const { container } = canvas(<CollectionRelated layout="cards" />)
     expect(container.querySelectorAll('[aria-hidden="true"]')).toHaveLength(0)
@@ -1485,6 +1497,27 @@ describe('Related posts covers and card grid (AGL-1457)', () => {
       )
       expect(container.querySelectorAll('img')).toHaveLength(0)
       expect(screen.getByText('Third')).toBeTruthy()
+    })
+
+    /**
+     * The frame's card is 445 x 180, and the cover has to keep that SHAPE at
+     * every width, not that height. A fixed height is the regression this
+     * guards: the grid's columns widen with the viewport while the number
+     * does not, so the box flattens and `objectFit: cover` eats further into
+     * art whose whole content is a composed title lockup.
+     */
+    it('holds the frame’s cover proportion instead of a fixed height', () => {
+      const { container } = render(
+        <CollectionRelated entries={entries} showCover />,
+      )
+      const style = window.getComputedStyle(
+        container.querySelector('img') as HTMLElement,
+      )
+      // jsdom re-serialises the ratio without spaces, so compare the value
+      // rather than its formatting.
+      expect(style.aspectRatio.replace(/\s+/g, '')).toBe('445/180')
+      expect(style.height).toBe('')
+      expect(style.objectFit).toBe('cover')
     })
   })
 

@@ -135,4 +135,36 @@ describe('style clipboard', () => {
       expect(fresh.hasStyles()).toBe(false)
     })
   })
+
+  /**
+   * Two besigner tabs, neither of which reloads: hydrate-once would leave
+   * this document pasting the first look it ever read (AGL-2507).
+   */
+  it('follows a look copied in another tab, however many times', () => {
+    const copyInAnotherTab = (label: string) => {
+      const raw = JSON.stringify({
+        version: STYLE_CLIPBOARD_FORMAT_VERSION,
+        label,
+        sx: { color: label },
+      })
+      window.localStorage.setItem(STYLE_CLIPBOARD_STORAGE_KEY, raw)
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: STYLE_CLIPBOARD_STORAGE_KEY,
+          newValue: raw,
+          storageArea: window.localStorage,
+        }),
+      )
+    }
+
+    copyInAnotherTab('first')
+    expect(getStyleLabel()).toBe('first')
+
+    copyInAnotherTab('second')
+
+    expect(getStyleLabel()).toBe('second')
+    const target = node({ color: 'blue' }, 'Body')
+    expect(pasteStyles(target)).toBe(true)
+    expect((target as { sx: unknown }).sx).toEqual({ color: 'second' })
+  })
 })
