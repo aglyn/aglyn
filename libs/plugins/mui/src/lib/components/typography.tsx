@@ -35,7 +35,17 @@ import { generatePresetId } from '../utils/generate-preset-id'
 
 // Component ids are persisted in screen documents; keep the legacy ids.
 export const ID: Aglyn.ComponentId = 'muiTypography'
+// The brand's own rungs sit alongside MUI's. They were added to the theme
+// (AGL-1308 for the body scale, for the display rung) but never to
+// this list, so the only way to reach one was to hand-write its pixels into
+// the Styles panel — which is the very thing the tokens exist to stop.
+// Display first: the list reads largest to smallest.
 const typographyVariants = [
+  {
+    value: 'displayXl',
+    label: 'Display XL',
+    icon: { path: mdiFormatHeader1.path },
+  },
   { value: 'h1', label: 'Heading 1', icon: { path: mdiFormatHeader1.path } },
   { value: 'h2', label: 'Heading 2', icon: { path: mdiFormatHeader2.path } },
   { value: 'h3', label: 'Heading 3', icon: { path: mdiFormatHeader3.path } },
@@ -54,8 +64,15 @@ const typographyVariants = [
   },
   { value: 'body1', label: 'Body 1', icon: { path: mdiFormatText.path } },
   { value: 'body2', label: 'Body 2', icon: { path: mdiFormatText.path } },
+  { value: 'lede', label: 'Lede', icon: { path: mdiFormatText.path } },
   { value: 'overline', label: 'Overline', icon: { path: mdiFormatText.path } },
   { value: 'caption', label: 'Caption', icon: { path: mdiFormatText.path } },
+  {
+    value: 'bodyCompact',
+    label: 'Body compact',
+    icon: { path: mdiFormatText.path },
+  },
+  { value: 'micro', label: 'Micro', icon: { path: mdiFormatText.path } },
 ]
 
 export const schema: Aglyn.ComponentSchema = {

@@ -9,6 +9,24 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.43 — 2026-09-01
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.42...v1.0.0-beta.43)
+
+### Added
+
+- **besigner:** a radial gradient can sit off-centre
+- **theme:** a display rung above h1, and the brand's rungs in the picker ([AGL-1308](https://linear.app/aglyn/issue/AGL-1308))
+
+### Fixed
+
+- **besigner:** an author's font size beats the theme's responsive ramp
+
+### Documentation
+
+- **infra:** the eleventh monitor, and what the status payload can answer
+- **infra:** the second crons window, from a range query rather than a capped one
+
 ## v1.0.0-beta.42 — 2026-09-01
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.41...v1.0.0-beta.42)

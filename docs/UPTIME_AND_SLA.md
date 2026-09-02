@@ -198,7 +198,7 @@ carrying **zero** `data-status-target` nodes is the unconfigured failure above.
 
 ### The external monitors (UptimeRobot, free tier)
 
-**Ten** keyword monitors, keyword `"status":"ok"`, `ALERT_NOT_EXISTS`, 5-minute
+**Eleven** keyword monitors, keyword `"status":"ok"`, `ALERT_NOT_EXISTS`, 5-minute
 interval, email to the operator's mailbox. Read from the status page's own monitor-list
 API on 2026-08-24 rather than transcribed from memory — this list said *five*
 for most of that day, because five more were created after it was written:
@@ -215,6 +215,7 @@ for most of that day, because five more were created after it was written:
 | Signups | 09:31 |
 | Rate limiting | 09:32 |
 | Error beacon (console) | 09:33 |
+| Server errors | 2026-08-25 15:00 |
 
 ```bash
 # The count and the names, unauthenticated. `url` is null in this payload —
@@ -224,6 +225,13 @@ curl -s https://stats.uptimerobot.com/api/getMonitorList/7NGEl81zvD |
   node -e 'const j=JSON.parse(require("fs").readFileSync(0));
     console.log(j.psp.totalMonitors); for (const m of j.psp.monitors) console.log(m.name)'
 ```
+
+The same payload also carries `createdAt`, `statusClass` (`success` = up),
+`lastDowntime` (`{date, duration, reason}`) and 30/90-day ratios per monitor —
+which is the whole unauthenticated health check, and the only place a past
+window's START time can be read back. Cloud Logging cannot be trusted for that
+bound unless the query is a RANGE: a `--limit` truncates to the newest N and
+makes the oldest survivor look like the beginning of the incident.
 
 ✅ **`server-errors` now has a monitor.** Uptime check
 `server-errors-app-aglyn-com-api-health-server-errors-status-ok-u6GLENjkYKg`

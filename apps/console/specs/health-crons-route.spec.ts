@@ -352,10 +352,10 @@ describe('/api/health/crons', () => {
     // The body names the late job, but only to whoever is holding it, and
     // the uptime probe reads the status and discards the body. Production
     // spent 08:00:53-14:43:26 red on 2026-08-27 (169 x 503) and
-    // 02:01:07-05:00:58 red on 2026-09-01 (77 x 503), and afterwards nothing
-    // said which row had flipped. 337 of the 346 answered in under a second,
-    // so the endpoint had decided quickly and kept no record of what it
-    // decided.
+    // 2026-08-31 22:52:14 to 09-01 05:00:58 (168 x 503), and afterwards
+    // nothing said which row had flipped. 334 of the 337 answered in under a
+    // second, so the endpoint had decided quickly and kept no record of what
+    // it decided.
     const now = Date.now()
     mockStore = healthyStore(now)
     mockStore['report-usage'] = { jobId: 'report-usage', atMs: now - 3 * DAY }

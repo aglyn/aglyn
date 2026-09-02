@@ -119,13 +119,22 @@ async function readWatchStart(
  * window leaves nothing behind saying what was red. Two of those windows in
  * one week were unattributable afterwards for exactly that reason:
  *
- *   2026-08-27  08:00:53 → 14:43:26 UTC   169 × 503   median 83ms
- *   2026-09-01  02:01:07 → 05:00:58 UTC    77 × 503   median 158ms
+ *   2026-08-27  08:00:53 → 14:43:26 UTC       169 × 503   median  83ms
+ *   2026-08-31  22:52:14 → 09-01 05:00:58 UTC   168 × 503   median 126ms
  *
- * Both answered fast — 337 of the 346 in under a second — so these were
+ * The second is corroborated by the external monitor, which detected it at
+ * 22:53:08 and measured 22,252s — the two agree to within a minute. Quote
+ * bounds from a RANGE query: a `--limit` on a log read silently truncates to
+ * the newest N and makes the oldest survivor look like the start, which is
+ * how this window was once recorded as three hours beginning at 02:01.
+ *
+ * Both answered fast — 334 of the 337 in under a second — so these were
  * deliberate refusals, not a Firestore read timing out into a 503. Which
  * makes the absence the interesting part: the endpoint decided, quickly,
  * that a row was late, and kept no record of which one.
+ *
+ * The monitor also shows 2026-08-24 at 68.22%, which no log can explain: the
+ * drain did not exist until 08-25 16:37. Three windows, none attributable.
  *
  * Neither start time lands on any single job's schedule plus its grace, so
  * they cannot be attributed by arithmetic after the fact either. That is the
