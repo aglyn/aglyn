@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.48 — 2026-09-02
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/4b632e90e...v1.0.0-beta.48)
+
+### Fixed
+
+- **backups:** the identity blocking function's source bucket is classified ([AGL-2503](https://linear.app/aglyn/issue/AGL-2503))
+
 ## v1.0.0-beta.47 — 2026-09-02
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.46...v1.0.0-beta.47)
