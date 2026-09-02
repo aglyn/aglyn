@@ -41,16 +41,23 @@ inputs:
       large one that four jobs race to write.
     required: true
 
+# ⛔ THE CHECKOUT IS NOT IN HERE, AND CANNOT BE.
+#
+# A local `uses: ./.github/actions/...` is resolved from the runner's disk
+# BEFORE the action runs, so the repository has to be on disk already. An
+# action that checks out the repo it lives in cannot be found in order to do
+# it. The whole run failed this way once (33672856335, every job in seconds):
+#
+#   Can't find 'action.yml' … under '.github/actions/nx-ci-setup'.
+#   Did you forget to run actions/checkout before running your local action?
+#
+# So every calling job does its own `actions/checkout` with `fetch-depth: 0`
+# immediately before `uses: ./.github/actions/nx-ci-setup`, and the depth
+# matters: `nx affected` walks between NX_BASE and NX_HEAD, and the `checks`
+# job diffs them directly.
 runs:
   using: composite
   steps:
-    - uses: actions/checkout@v7
-      with:
-        # fetch-depth: 0 — `resolve affected base` runs `git merge-base`
-        # against the base branch, and the root-commit fallback runs
-        # `git rev-list --max-parents=0`. Neither works on a shallow clone.
-        fetch-depth: 0
-
     - uses: actions/setup-node@v7
       with:
         node-version: 20
