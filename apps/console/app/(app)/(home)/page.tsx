@@ -230,6 +230,10 @@ function OrgJump() {
         children: 'Workspaces',
         icon: { path: ICON_VARIANT_ORGANIZATION.path },
       }}
+      // The one page in the console with no help affordance (AGL-2486), and
+      // the first page a new member sees: it is where "what IS a workspace,
+      // and why am I picking one" is asked.
+      help={{ topic: 'consoleTour', anchor: '#workspace-settings--notifications' }}
       // The primary action belongs in the header, like every other list page
       // (sites, screens, layouts) — at the foot of the list it sat below the
       // fold once you had more than a couple of workspaces. The zero-org

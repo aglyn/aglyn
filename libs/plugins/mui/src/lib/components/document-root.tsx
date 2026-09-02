@@ -98,7 +98,7 @@ export const schema: Aglyn.ComponentSchema<DocumentRootProps> = {
   description:
     'The page itself — the outermost element every other element sits in.',
   category: Aglyn.ComponentCategory.LAYOUT,
-  icon: { path: mdiFileDocumentOutline.path, sx: { color: '#607d8b' } },
+  icon: { path: mdiFileDocumentOutline.path, sx: { color: 'text.secondary' } },
   attributes: [
     {
       name: 'component',
