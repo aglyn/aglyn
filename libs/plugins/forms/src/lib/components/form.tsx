@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { sendAnalyticsBeacon } from '@aglyn/aglyn/app-utils/analytics-beacon'
 import { trackEventBeforeNavigation } from '@aglyn/aglyn/app-utils/analytics-events'
 import { campaignTouchField } from '@aglyn/aglyn/app-utils/campaign-touch'
 import * as Aglyn from '@aglyn/aglyn'
@@ -183,15 +184,11 @@ export function sendFormBeacon(
   event: 'view' | 'start',
 ): void {
   if (!hostId || !formId) return
-  try {
-    navigator.sendBeacon(
-      '/api/analytics/collect',
-      JSON.stringify({ hostId, formId, form: event }),
-    )
-  } catch {
-    // Beacons are best-effort. A view that does not report is a view this
-    // form's completion rate is measured without, which the console says.
-  }
+  // Best-effort by construction: `sendAnalyticsBeacon` swallows everything and
+  // refuses outright from a non-production build or a browser marked ours. A
+  // view that does not report is a view this form's completion rate is
+  // measured without, which the console says.
+  sendAnalyticsBeacon({ hostId, formId, form: event })
 }
 
 /**

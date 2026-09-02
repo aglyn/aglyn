@@ -34,6 +34,10 @@ import {
   analyticsMayEmit,
 } from '@aglyn/aglyn/app-utils/analytics-environment'
 import {
+  analyticsBeaconMaySend,
+  sendAnalyticsBeacon,
+} from '@aglyn/aglyn/app-utils/analytics-beacon'
+import {
   advertisingGrantedByRecord,
   GA_CONSENT_DEFAULT_SNIPPET,
   GA_CONSENT_DEFAULT_WITH_ADS_SNIPPET,
@@ -60,10 +64,15 @@ import { primeVisitorConsent, useVisitorConsent } from './use-visitor-consent'
 import { claimDailyVisit } from './visit-claim'
 
 /**
- * Pageviews already counted this page load, keyed by host and path. Module
- * scope, so it survives the re-renders and remounts a page does on its own —
- * `/api/analytics/collect` is a metered-billing input and must be told about a
- * pageview once.
+ * Pageviews this page load has already DECIDED, keyed by host and path.
+ * Module scope, so it survives the re-renders and remounts a page does on its
+ * own — `/api/analytics/collect` is a metered-billing input and must be told
+ * about a pageview once.
+ *
+ * A pageview the beacon gate refused is recorded here too. The gate reads
+ * `localStorage` and the answer cannot change within one pageview, so
+ * re-deciding on every render would buy nothing and cost a storage read each
+ * time.
  */
 const beaconed = new Set<string>()
 
@@ -100,35 +109,36 @@ function sendPageviewBeacon(hostId: string | undefined, screenId?: string) {
   const key = `${hostId}\x00${window.location.pathname}`
   if (beaconed.has(key)) return
   beaconed.add(key)
+  // The environment and internal-traffic gate, AFTER the once-per-pageview
+  // guard so it is evaluated once, and BEFORE `claimDailyVisit` so an
+  // uncounted pageview does not spend the tab's visit claim for the day.
+  if (!analyticsBeaconMaySend()) return
   try {
     // Campaign attribution (AGL-1844): the three utm labels, straight off
     // the query string. Marketer-chosen labels on the URL the visitor is
     // already on — no cookie, no identifier; the collector clamps and caps
     // their cardinality server-side.
     const params = new URLSearchParams(window.location.search)
-    navigator.sendBeacon(
-      '/api/analytics/collect',
-      JSON.stringify({
-        hostId,
-        path: window.location.pathname,
-        // Per-screen attribution (AGL-151).
-        screenId: screenId || undefined,
-        // External referrer host only; same-site moves are dropped
-        // server-side (AGL-138).
-        referrer: document.referrer || undefined,
-        utmSource: params.get('utm_source') || undefined,
-        utmMedium: params.get('utm_medium') || undefined,
-        utmCampaign: params.get('utm_campaign') || undefined,
-        // Visitor approximation (AGL-1844): true on the first pageview
-        // this tab sends today. A day string in sessionStorage is the
-        // entire mechanism — see `visit-claim.ts` for the honesty
-        // contract. Claimed only when a beacon is actually sent (the
-        // `beaconed` guard above), so the claim and the pageview travel
-        // together.
-        newVisit: claimDailyVisit(new Date().toISOString().slice(0, 10)) ||
-          undefined,
-      }),
-    )
+    sendAnalyticsBeacon({
+      hostId,
+      path: window.location.pathname,
+      // Per-screen attribution (AGL-151).
+      screenId: screenId || undefined,
+      // External referrer host only; same-site moves are dropped
+      // server-side (AGL-138).
+      referrer: document.referrer || undefined,
+      utmSource: params.get('utm_source') || undefined,
+      utmMedium: params.get('utm_medium') || undefined,
+      utmCampaign: params.get('utm_campaign') || undefined,
+      // Visitor approximation (AGL-1844): true on the first pageview
+      // this tab sends today. A day string in sessionStorage is the
+      // entire mechanism — see `visit-claim.ts` for the honesty
+      // contract. Claimed only when a beacon is actually sent (the
+      // `beaconed` and gate guards above), so the claim and the pageview
+      // travel together.
+      newVisit:
+        claimDailyVisit(new Date().toISOString().slice(0, 10)) || undefined,
+    })
   } catch {
     // Analytics never breaks the page.
   }
@@ -174,25 +184,22 @@ function armDwellBeacon(hostId: string | undefined, screenId?: string) {
   const key = `${hostId}\x00${screenId}`
   if (dwelling.has(key)) return
   dwelling.add(key)
+  // Same gate as the pageview, and checked before the listener is installed
+  // rather than inside `report`: a dwell sample belongs to a pageview, so a
+  // pageview that was not counted must not leave a timer armed for one.
+  if (!analyticsBeaconMaySend()) return
   const startedAt = Date.now()
   let reported = false
   const report = () => {
     if (reported) return
     reported = true
-    try {
-      navigator.sendBeacon(
-        '/api/analytics/collect',
-        JSON.stringify({
-          hostId,
-          screenId,
-          // The collector clamps and floors this; the client's clock is
-          // the visitor's, so nothing here is trusted as measured.
-          dwellMs: Date.now() - startedAt,
-        }),
-      )
-    } catch {
-      // Analytics never breaks the page.
-    }
+    sendAnalyticsBeacon({
+      hostId,
+      screenId,
+      // The collector clamps and floors this; the client's clock is
+      // the visitor's, so nothing here is trusted as measured.
+      dwellMs: Date.now() - startedAt,
+    })
   }
   window.addEventListener('pagehide', report)
 }

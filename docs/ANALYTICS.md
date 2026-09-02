@@ -1514,6 +1514,50 @@ Remaining, and all of it is his click — nothing in this repo can do it:
 
 Click-list on AGL-1637.
 
+### 8e. The METERED beacon takes the same gate, and drops rather than stamps
+
+AGL-2067 was applied to the GA4 mount, the GTM mount, the advertising tags and
+Firebase Analytics — every tag that costs nothing — and not to
+`/api/analytics/collect`, which is the one that bills. That collector
+increments `hosts/{hostId}/analytics/{day}.total`, which rolls into
+`orgs/{orgId}/usage/{month}.pageViews` and from there into the Stripe meter,
+the free plan's bandwidth band and the abuse ceiling. Both Next apps name the
+**production** Firebase project in every environment, so a `next dev` browsing
+a tenant site, and every preview deployment of `apps/tenant`, wrote real page
+views into a live customer's invoice and against their cap.
+
+`libs/aglyn/src/lib/app-utils/analytics-beacon.ts` is the one door now. Four
+senders across three packages go through it: the pageview and dwell beacons in
+the tenant runtime, the form view/start beacons in the forms plugin, and the
+overlay impression/click/dismiss beacons in the marketing plugin.
+
+Two deliberate differences from the GA gate:
+
+| | GA4 tag | Metered beacon |
+| --- | --- | --- |
+| `NEXT_PUBLIC_ANALYTICS_ALLOW_NONPROD` | re-enables the tag | **ignored** — never counts |
+| A browser carrying the internal opt-in | hit is sent, stamped `traffic_type: 'internal'` | **no request at all** |
+
+The hatch is ignored because it is paired with
+`analyticsEnvironmentForcesInternal`: a build using it declares every hit ours,
+and a hit declared ours must not reach an invoice. It buys a GA session and
+never an increment.
+
+The opt-in DROPS rather than stamps because there is nothing to filter after
+the fact. GA4 discards a stamped hit at query time through a data filter; a
+counter is a running total, and a page view already added to a bill cannot be
+taken back out. The visit that carries `?aglyn_internal=1` is itself
+suppressed, for the same reason.
+
+`readInternalTrafficOverride` is per ORIGIN, so the opt-in has to be performed
+once on `aglyn.com` and once on each `localhost:PORT` — same property, same
+`?aglyn_internal=1`, documented in §8b.
+
+**A loopback self-host counts nothing**, by the same rule that already silences
+its GA tag: `{subdomain}.localhost:4500` from the compose file is a local
+trial, not a deployment. An operator serving from a real name is a production
+surface and counts normally.
+
 ### 9. Crashlytics cannot be integrated, and the equivalent already is
 
 Recorded because it is asked for repeatedly. **Firebase Crashlytics has no web

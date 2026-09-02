@@ -115,6 +115,25 @@ the same number expressed differently. On Free, 2 GB works out to roughly **3,50
 views** a month; on Starter, 50 GB is roughly **87,000**, and the same division gives every
 other band.
 
+### Which views are counted
+
+A view is counted when a published page reports one from a visitor's browser. Two kinds of
+traffic are deliberately not counted, so they neither bill nor consume your band:
+
+- **Views served by a preview or development build.** Only a real production deployment
+  reports. A local development server and a preview URL serve your pages without moving
+  your meter. (A self-hosted deployment at a real domain is a production deployment and
+  counts normally; one served over `localhost` does not.)
+- **Your own browser, once you tell the platform it is yours.** Visit any page of your site
+  with `?aglyn_internal=1` on the URL and that browser stops being counted on that site —
+  useful while you are checking your own pages. The visit carrying the parameter is not
+  counted either. The setting lives in that browser and lasts until you clear its storage or
+  visit with `?aglyn_internal=0`, and it is per site address, so set it once per domain you
+  want to exclude.
+
+Editing your site does not count either: the design canvas and the console's preview never
+report a view, so building a page is free however long you spend on it.
+
 That 600 KB is a **billing convention, not a measurement of your pages**, and the
 difference currently runs in your favor. A real page load measured against our own site
 comes in nearer **1 MB**, so the 3,500 views a Free plan converts to move closer to 3.5 GB
