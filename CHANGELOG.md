@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.46 — 2026-09-02
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.45...v1.0.0-beta.46)
+
+### Added
+
+- **collection:** related posts renders on the canvas and answers to the styles panel ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486), [AGL-582](https://linear.app/aglyn/issue/AGL-582), [AGL-2418](https://linear.app/aglyn/issue/AGL-2418))
+
 ## v1.0.0-beta.45 — 2026-09-02
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/e50015ca0...v1.0.0-beta.45)

@@ -40,7 +40,11 @@ export const ID: Aglyn.ComponentId = 'muiTypography'
 // this list, so the only way to reach one was to hand-write its pixels into
 // the Styles panel — which is the very thing the tokens exist to stop.
 // Display first: the list reads largest to smallest.
-const typographyVariants = [
+//
+// Exported because it is the theme's rung list, not this element's: any block
+// that offers a type step has to offer the SAME one, or a rung added to the
+// theme becomes reachable from the Typography element and nowhere else.
+export const typographyVariants = [
   {
     value: 'displayXl',
     label: 'Display XL',

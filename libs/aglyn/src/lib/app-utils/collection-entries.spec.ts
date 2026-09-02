@@ -1874,6 +1874,82 @@ describe('expandCollectionRelated (AGL-582)', () => {
       { title: 'Match', url: '/blog/match', category: 'Guides' },
     ])
   })
+
+  /**
+   * AGL-2486. The rail stamped `formatCollectionEntryDate(publishedAt)` with
+   * no format at all, so every related card was pinned to the raw locale date
+   * — `7/19/2026` under a byline the same template could set to "Jul 19,
+   * 2026". The format is answered here for the reason the byline's is: by the
+   * time a date reaches the block it is a formatted string, and re-parsing
+   * one is ambiguous by construction.
+   */
+  describe('the card date reads in the authored format (AGL-2486)', () => {
+    const formatNodes = (dateFormat?: string) =>
+      ({
+        root: { $id: 'root', componentId: 'div', nodes: ['related'] },
+        related: {
+          $id: 'related',
+          componentId: 'collectionRelated',
+          parentId: 'root',
+          props: dateFormat ? { dateFormat } : {},
+        },
+      }) as any
+
+    const dateOf = (dateFormat?: string) => {
+      const nodes = expandCollectionRelated(
+        formatNodes(dateFormat),
+        source,
+        source.entries[0],
+      )
+      return (nodes['related'].props.entries as any[])[0].date
+    }
+
+    it('uses the locale date when nothing is chosen, as it always has', () => {
+      expect(dateOf()).toBe(
+        formatCollectionEntryDate({ seconds: 1_700_000_000 }),
+      )
+    })
+
+    it('uses the locale date for the explicit do-nothing choice', () => {
+      expect(dateOf('default')).toBe(dateOf())
+    })
+
+    it('honours each named format', () => {
+      for (const format of ['monthYear', 'mediumDate', 'longDate', 'iso']) {
+        expect(dateOf(format)).toBe(
+          formatCollectionEntryDate({ seconds: 1_700_000_000 }, format as any),
+        )
+      }
+    })
+
+    it('falls back rather than stamping a format nothing renders', () => {
+      expect(dateOf('not-a-format')).toBe(dateOf())
+    })
+
+    it('is read PER NODE, so two rails can date differently', () => {
+      const nodes = expandCollectionRelated(
+        {
+          root: { $id: 'root', componentId: 'div', nodes: ['a', 'b'] },
+          a: {
+            $id: 'a',
+            componentId: 'collectionRelated',
+            parentId: 'root',
+            props: { dateFormat: 'iso' },
+          },
+          b: {
+            $id: 'b',
+            componentId: 'collectionRelated',
+            parentId: 'root',
+            props: { dateFormat: 'longDate' },
+          },
+        } as any,
+        source,
+        source.entries[0],
+      )
+      expect((nodes['a'].props.entries as any[])[0].date).toBe('2023-11-14')
+      expect((nodes['b'].props.entries as any[])[0].date).not.toBe('2023-11-14')
+    })
+  })
 })
 
 describe('expandCollectionEntryMeta (AGL-1385)', () => {

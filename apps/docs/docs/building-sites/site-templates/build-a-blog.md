@@ -246,13 +246,25 @@ in the block library:
   all. The name links to the author's own url, off-site links opening in a new tab.
 - **Related Posts** — other entries of the same collection that share the current
   entry's **category or a tag**, newest first. Attributes: **Heading** (default
-  "Related articles"), **Limit** (default 3), **Layout**, **Columns** and **Show
-  cover**. Layout **List** — the default — is a plain list of links with a
-  `date · category` line under each. Layout **Card grid** lays the posts out in
-  **Columns** cards per row (default 3), each with a category chip above its title.
-  **Show cover** adds each post's cover image; posts without one show their title
-  alone rather than an empty box. Renders nothing when the entry has no
-  category/tags or nothing matches.
+  "Related articles"), **Limit** (default 3), **Layout**, **Columns**, **Show
+  cover**, **Heading style**, **Title style**, **Show date**, **Date format**,
+  **Show category** and **Show excerpt**. Layout **List** — the default — is a plain
+  list of links with a `date · category` line under each. Layout **Card grid** lays
+  the posts out in **Columns** cards per row (default 3), each with a category chip
+  above its title, and makes the whole card the link. **Show cover** adds each post's
+  cover image; posts without one show their title alone rather than an empty box.
+  **Heading style** and **Title style** pick which type step from the site theme the
+  section heading and each post title read at — the same list the Typography element
+  offers, defaulting to *Heading 5* and *Subtitle 1*. **Show date**, **Show category**
+  and **Show excerpt** each add or drop one part of a card; the excerpt is off until
+  you ask for it. **Date format** picks how each card's published date reads — the
+  same five choices as Entry Meta's, so a card and the byline above it can be made to
+  agree. Renders nothing when the entry has no category/tags or nothing matches.
+
+  On the besigner canvas there is no entry being rendered, so the block cannot know
+  its real posts. It draws **sample cards** instead — the same markup, at your own
+  settings, above a dashed note saying so — so you can style the layout and watch it
+  change. The samples never reach a published page; the real posts replace them there.
 - **Share Bar** — X, LinkedIn, Facebook, and copy-link buttons for the current page
   URL. Attribute: **Heading** (default "Share").
 - **Category Pills** — the collection's categories as a row of links: **All** plus one
