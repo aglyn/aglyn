@@ -1342,12 +1342,14 @@ export async function loadNotFoundScreen(
      * Read-only locks render normally, matching the branch above — a
      * read-only lock is a write freeze and the site is still serving.
      */
+    // Read once and used twice: the lockdown verdict below and the
+    // entitlement gates every enricher applies (AGL-2511). `getOrgBilling`
+    // is cached per host, so this is one read either way.
+    const orgRes = await getOrgBilling({ hostId })
     const lockdownState = Aglyn.resolveLockdown(
       {
         platform: await getPlatformLockdown(),
-        org: Aglyn.normalizeOrgLockdown(
-          (await getOrgBilling({ hostId })).org as any,
-        ),
+        org: Aglyn.normalizeOrgLockdown(orgRes.org as any),
         host: Aglyn.normalizeHostLockdown(hostRes.host as any),
         domain: hostParam.startsWith(CNAME_HOST_PREFIX)
           ? await getDomainLockdown(hostParam.slice(CNAME_HOST_PREFIX.length))
@@ -1394,11 +1396,66 @@ export async function loadNotFoundScreen(
     // — a nav pointing at the blog must not send a visitor who already hit one
     // 404 to a second one. Paid for only on a 404, like the rest of this.
     const routing = await getTemplateScreenRouting({ hostId })
+
+    /**
+     * The designed 404 behaves like the page it stands in for (AGL-2511).
+     *
+     * It renders the site's own header, nav and footer, so without the
+     * enrichers it was the last surface left showing a nav that does not
+     * open — the AGL-2509/2510 defect, on the one page a visitor reaches by
+     * getting lost.
+     *
+     * `pathUnknown` is what makes it correct rather than convenient. This
+     * body is fetched by HOST and cached per host precisely so a scan of ten
+     * thousand dead URLs costs one compose a minute; the request path is not
+     * part of that key and must not become part of it. So the enrichers are
+     * told the path is not knowable and contribute only what does not depend
+     * on one — the node interactions the nav is built from, and overlays that
+     * target every page.
+     *
+     * `ensureAll` because this function is also reached from
+     * `/api/screen/not-found`, which is not the plugin dispatcher: with no
+     * plugin loaded the enricher registry is empty and answers `{}` without
+     * an error to notice.
+     */
+    await serverPluginLoader.ensureAll(['tenantApi'])
+    const [notFoundEnriched, notFoundEnabledPlugins] = await Promise.all([
+      Aglyn.runSitePageEnrichers({
+        hostId,
+        host: hostRes.host,
+        org: orgRes.org,
+        // Placeholder — `pathUnknown` is the field that carries meaning.
+        path: Aglyn.SCREEN_ROOT_PATH,
+        slugSegments: [],
+        pathUnknown: true,
+        // A designed 404 is a real published screen with no substituted
+        // tokens, so naming it is safe: an experiment variant of it composes
+        // into the same page.
+        screenId: screenId as string,
+        screen: screenRes.screen,
+        nodes,
+      }),
+      filterEnabledPluginsByReleaseFlags(
+        Aglyn.resolveHostEnabledPlugins(
+          orgRes.org as never,
+          hostRes.host as never,
+        ),
+        { orgId: (orgRes.org as { $id?: string })?.$id ?? null },
+      ),
+    ])
+
     return JSON.parse(
       JSON.stringify({
         data: { host: hostRes.host, screen: { data: screenRes.screen } },
         nodes,
         notFoundFallback: true,
+        enabledPlugins: notFoundEnabledPlugins,
+        ...notFoundEnriched.props,
+        ...blockingPluginsFor(
+          nodes,
+          notFoundEnabledPlugins,
+          notFoundEnriched,
+        ),
         screenRoutes: Aglyn.linkableScreenRoutes(
           (hostRes.host as { screens?: Record<string, string> }).screens,
           {

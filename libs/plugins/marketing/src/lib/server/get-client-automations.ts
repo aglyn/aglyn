@@ -78,6 +78,11 @@ export async function getClientAutomations(options: {
   actionsEntitled: boolean
   /** Business-tier gate for `runJs` steps (dropped when false). */
   allowJs: boolean
+  /**
+   * The page has no request path of its own (AGL-2511), so path-scoped
+   * automations are dropped rather than matched. See `dropPathScoped`.
+   */
+  dropPathScoped?: boolean
 }): Promise<ClientAutomation[]> {
   try {
     const actions = await withRenderCache({
@@ -107,6 +112,7 @@ export async function getClientAutomations(options: {
       path: options.path,
       actionsEntitled: options.actionsEntitled,
       allowJs: options.allowJs,
+      ...(options.dropPathScoped ? { dropPathScoped: true } : {}),
     })
   } catch (error) {
     console.error(error)

@@ -52,6 +52,20 @@ export interface CompileClientAutomationsOptions {
    * skips path filtering rather than resolve the composed path.
    */
   matchAllPaths?: boolean
+  /**
+   * Drop every automation that names a `pathPattern` (AGL-2511), for a
+   * surface whose own path is unknown — the designed 404 body, served from a
+   * per-host cache that no request path belongs to.
+   *
+   * The opposite of `matchAllPaths` and deliberately so: Preview knows the
+   * page and only lacks its composed address, so it keeps path-scoped
+   * automations; this caller cannot know the page at all, and running an
+   * automation scoped to `/pricing` on whatever URL 404'd would be a guess
+   * with a side effect. Interactions authored on nodes carry no pattern, so
+   * a nav's hover choreography — the reason this surface is enriched — is
+   * unaffected.
+   */
+  dropPathScoped?: boolean
 }
 
 /**
@@ -77,6 +91,7 @@ export function compileClientAutomations(
     const event = String(action.trigger?.event ?? '')
     if (!isSiteEventType(event)) continue
     const pathPattern = action.trigger?.pathPattern?.trim()
+    if (pathPattern && options.dropPathScoped) continue
     if (
       !options.matchAllPaths &&
       pathPattern &&
