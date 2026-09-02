@@ -1821,6 +1821,58 @@ export interface CollectionEntryMetaProps extends StackProps {
   showAvatar?: boolean
 }
 
+/**
+ * THE SAMPLE VALUES THE ENTRY BLOCKS PREVIEW WITH (AGL-2486).
+ *
+ * Entry Meta and Entry Author resolve FROM the routed entry, and a besigner
+ * canvas has no routed entry — so both drew a one-line dashed strip and an
+ * author styling a byline or an author card was styling something they could
+ * not see. Related Posts had the same gap and was answered the same way: the
+ * block's REAL markup, at the author's own settings, on editing surfaces
+ * only.
+ *
+ * These two need no "this is a sample" notice the way the related CARDS do.
+ * A card carries a title, a cover and a category, which is what a real post
+ * looks like; a byline reading `Sample author` says what it is in the words
+ * themselves, and a notice above a single line of caption text would be
+ * taller than the thing it labels.
+ *
+ * The date is a FIXED instant, never `Date.now()`: the canvas has to render
+ * the same bytes every time it opens, and it is the same instant the related
+ * sample uses, so two blocks on one template never disagree about what day
+ * their example is.
+ */
+const ENTRY_SAMPLE_PUBLISHED_AT = RELATED_SAMPLE_PUBLISHED_AT
+
+/** Byline name for the samples; names the field rather than a person. */
+const ENTRY_SAMPLE_AUTHOR = 'Sample author'
+
+/** Category text for the samples; names the field, not a taxonomy. */
+const ENTRY_SAMPLE_CATEGORY = RELATED_SAMPLE_CATEGORY
+
+/** Two chips, so the row previews its own wrapping and gap. */
+const ENTRY_SAMPLE_TAGS = 'first tag, second tag'
+
+/** Bio line for the author-card sample; one sentence, as a real one is. */
+const ENTRY_SAMPLE_BIO =
+  'The bio from this author’s record reads here, in a line or two.'
+
+/**
+ * The portrait STAND-IN, for a sample that has no image to resolve.
+ *
+ * A neutral plate rather than nothing, and for the reason the related sample
+ * draws its cover slot: on an entry template the portrait arrives from the
+ * author record at render, so the slot is exactly what the author is sizing
+ * and spacing. `aria-hidden` because it depicts nothing.
+ */
+const samplePortraitSx = (size: number) => ({
+  width: size,
+  height: size,
+  flexShrink: 0,
+  borderRadius: '50%',
+  backgroundColor: 'action.hover',
+})
+
 /** Byline avatar, from the article frame (Figma 170:190). */
 const ENTRY_AVATAR_SIZE = 36
 
@@ -1893,30 +1945,39 @@ const CollectionEntryMeta = forwardRef<
       : ''
   // Author leads, so the frame's "The Aglyn Team · Jul 2026" reads in that
   // order. With no author the join is character-for-character what it was.
-  const line = [authorValue, dateValue, categoryValue]
+  const filledLine = [authorValue, dateValue, categoryValue]
     .filter(Boolean)
     .join(' · ')
-  if (!line && !tagList.length && !avatarSrc) {
-    if (!suppressNavigation) return <Box ref={ref} {...rest} />
-    return (
-      <Box
-        ref={ref}
-        {...rest}
-        sx={[
-          {
-            p: 1,
-            border: '1px dashed',
-            borderColor: 'divider',
-            color: 'text.secondary',
-            fontSize: 12,
-            fontFamily: 'system-ui, sans-serif',
-          },
-          ...nodeSx,
-        ]}
-      >
-        {'Entry meta — date · category · tags render here'}
-      </Box>
-    )
+  // Nothing to show and nothing to route from: an editing surface previews
+  // the block's own markup at the author's own settings, and a published page
+  // renders nothing at all (AGL-2486). The switches are honoured here exactly
+  // as they are below, so a row with Show date off previews without one.
+  const sample = !filledLine && !tagList.length && !avatarSrc && suppressNavigation
+  const line = sample
+    ? [
+        showAuthor !== false ? ENTRY_SAMPLE_AUTHOR : '',
+        showDate !== false
+          ? Aglyn.formatCollectionEntryDate(
+              ENTRY_SAMPLE_PUBLISHED_AT,
+              Aglyn.normalizeCollectionEntryDateFormat(_dateFormat),
+            )
+          : '',
+        showCategory !== false ? ENTRY_SAMPLE_CATEGORY : '',
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : filledLine
+  const chips = sample
+    ? showTags !== false
+      ? ENTRY_SAMPLE_TAGS.split(',').map((tag) => tag.trim())
+      : []
+    : tagList
+  // The portrait an entry's own author record supplies arrives at compose
+  // time, so on the canvas there is none to resolve — the slot is drawn
+  // instead, which is what a byline's spacing is actually built around.
+  const samplePortrait = sample && showAvatar !== false
+  if (!line && !chips.length && !avatarSrc && !samplePortrait) {
+    return <Box ref={ref} {...rest} />
   }
   return (
     <MuiStack
@@ -1954,13 +2015,15 @@ const CollectionEntryMeta = forwardRef<
           // outranking anything.
           {...Aglyn.DEFERRED_IMAGE_ATTRIBUTES}
         />
+      ) : samplePortrait ? (
+        <Box aria-hidden sx={samplePortraitSx(ENTRY_AVATAR_SIZE)} />
       ) : null}
       {line ? (
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
           {line}
         </Typography>
       ) : null}
-      {tagList.map((tag) => (
+      {chips.map((tag) => (
         <Chip key={tag} label={tag} size="small" variant="outlined" />
       ))}
     </MuiStack>
@@ -2153,27 +2216,19 @@ const CollectionEntryAuthor = forwardRef<
     showAvatar !== false && imageRaw && !UNRESOLVED_TOKEN.test(imageRaw)
       ? Aglyn.resolveMediaSrc(imageRaw, { hostId })
       : ''
-  if (!nameValue && !bioValue && !imageSrc) {
-    if (!suppressNavigation) return <Box ref={ref} {...rest} />
-    return (
-      <Box
-        ref={ref}
-        {...rest}
-        sx={[
-          {
-            p: 1,
-            border: '1px dashed',
-            borderColor: 'divider',
-            color: 'text.secondary',
-            fontSize: 12,
-            fontFamily: 'system-ui, sans-serif',
-          },
-          ...nodeSx,
-        ]}
-      >
-        {'Entry author — portrait, byline and bio render here'}
-      </Box>
-    )
+  // Nothing to show and nothing to route from: an editing surface previews
+  // the card's own markup at the author's own settings, and a published page
+  // renders nothing at all (AGL-2486). Every part still answers its own
+  // switch, so a card with Show bio off previews as portrait and name.
+  const sample = !nameValue && !bioValue && !imageSrc && Boolean(suppressNavigation)
+  const displayName = sample ? ENTRY_SAMPLE_AUTHOR : nameValue
+  const displayBio = sample && showBio !== false ? ENTRY_SAMPLE_BIO : bioValue
+  // The record's portrait arrives at compose time, so there is none to
+  // resolve on the canvas — the card draws its slot, which is the thing its
+  // spacing is built around.
+  const samplePortrait = sample && showAvatar !== false
+  if (!displayName && !displayBio && !imageSrc && !samplePortrait) {
+    return <Box ref={ref} {...rest} />
   }
   return (
     <MuiStack
@@ -2210,9 +2265,11 @@ const CollectionEntryAuthor = forwardRef<
           }}
           {...Aglyn.DEFERRED_IMAGE_ATTRIBUTES}
         />
+      ) : samplePortrait ? (
+        <Box aria-hidden sx={samplePortraitSx(AUTHOR_AVATAR_SIZE)} />
       ) : null}
       <MuiStack spacing={0.5} sx={{ minWidth: 0 }}>
-        {nameValue ? (
+        {displayName ? (
           <Typography component="p" variant="subtitle2">
             {urlValue ? (
               <AppLink
@@ -2223,16 +2280,16 @@ const CollectionEntryAuthor = forwardRef<
                   ? { target: '_blank', rel: 'noopener noreferrer' }
                   : {})}
               >
-                {nameValue}
+                {displayName}
               </AppLink>
             ) : (
-              nameValue
+              displayName
             )}
           </Typography>
         ) : null}
-        {bioValue ? (
+        {displayBio ? (
           <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-            {bioValue}
+            {displayBio}
           </Typography>
         ) : null}
       </MuiStack>
