@@ -308,10 +308,23 @@ export async function getAuthorContent(options: {
       author: record,
       name,
       known: Boolean(record) || totalEntries > 0,
-      // Narrowed BEFORE the window, so the page count describes this
-      // author's work rather than the site's — the rule the category route
-      // states, one axis over.
-      entries: entries.slice((page - 1) * perPage, page * perPage),
+      /*
+        The WHOLE narrowed set, not this page's slice.
+
+        Narrowing happens before the count, so `totalPages` describes this
+        author's work rather than the site's — the category route's rule, one
+        axis over. The WINDOW, though, belongs to the Collection entries
+        block: it receives `page` and `perPage` and slices for itself
+        (`expandCollectionEntries`), exactly as it does on a routed collection
+        listing, where `getCollectionContent` also hands over the full
+        filtered set.
+
+        Slicing here as well double-windows and empties every page after the
+        first: the block would take `slice(10, 20)` of a ten-element array and
+        render nothing. A page-2 archive with a working pager and no cards on
+        it — which reads as "this author wrote exactly ten things".
+      */
+      entries,
       categories,
       page,
       perPage,

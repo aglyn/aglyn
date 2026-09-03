@@ -104,6 +104,8 @@ jest.mock('./get-collection-content', () => ({
   },
 }))
 
+import * as Aglyn from '@aglyn/aglyn/server'
+import buildAuthorPageNodes from './author-page-nodes'
 import { getAuthorContent, listAuthorPageSlugs } from './get-author-content'
 
 const HOST = 'host-1'
@@ -226,17 +228,74 @@ describe('narrowing before paging (AGL-2518)', () => {
     })
     expect(content.totalPages).toBe(2)
     expect(content.totalEntries).toBe(2)
-    expect(content.entries.map((item) => item.$id)).toEqual(['note-a'])
   })
 
-  it('serves the window the route asked for', async () => {
+  it('hands over the WHOLE narrowed set, not this page’s slice', async () => {
+    /*
+      The window belongs to the Collection entries block, which receives
+      `page`/`perPage` and slices for itself — exactly as it does on a routed
+      collection listing, where `getCollectionContent` also passes the full
+      filtered set.
+
+      Slicing here as well double-windows: the block takes
+      `slice(perPage, 2*perPage)` of an array that is already only `perPage`
+      long, and every page after the first renders zero cards under a working
+      pager. This assertion is the one that fails if that comes back.
+    */
+    for (const page of [1, 2]) {
+      const content = await getAuthorContent({
+        hostId: HOST,
+        authorSlug: 'zg',
+        page,
+        perPage: 1,
+      })
+      expect([page, content.entries.map((item) => item.$id)]).toEqual([
+        page,
+        ['note-a', 'post-a'],
+      ])
+    }
+  })
+
+  it('the block then windows it, and page 2 is not empty', async () => {
+    // The end-to-end of the case above, through the real expansion: a
+    // unit-level assertion on `entries` cannot show that the rendered page
+    // has cards on it.
     const content = await getAuthorContent({
       hostId: HOST,
       authorSlug: 'zg',
       page: 2,
       perPage: 1,
     })
-    expect(content.entries.map((item) => item.$id)).toEqual(['post-a'])
+    const nodes = buildAuthorPageNodes({
+      slug: content.slug,
+      name: content.name,
+      author: content.author,
+      hasEntries: content.entries.length > 0,
+      page: content.page,
+      perPage: content.perPage,
+      totalPages: content.totalPages,
+    })
+    const expanded = Aglyn.expandCollectionEntries(
+      nodes as never,
+      {
+        __author__: {
+          slug: '__author__',
+          entries: content.entries as never,
+          categories: content.categories,
+          page: content.page,
+        },
+      },
+      '__author__',
+    )
+    const rendered = Object.values(expanded as Record<string, any>).filter(
+      (node) => String(node?.$id ?? '').startsWith('centry__'),
+    )
+    expect(rendered.length).toBeGreaterThan(0)
+    // …and it is the SECOND entry, not a repeat of page 1's.
+    const titles = rendered
+      .map((node) => String(node?.props?.children ?? ''))
+      .filter((text) => text === 'post-a' || text === 'note-a')
+    expect(titles).toEqual(['post-a'])
   })
 })
 
