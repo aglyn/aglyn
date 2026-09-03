@@ -11,7 +11,7 @@ content on the marketing site and is written separately.
 
 ## v1.0.0-beta.63 — 2026-09-03
 
-[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.60...v1.0.0-beta.63)
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.62...v1.0.0-beta.63)
 
 ### Added
 
@@ -23,6 +23,7 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **besigner:** the raw JSON editor loads behind its warning, and says when it is loading ([AGL-2541](https://linear.app/aglyn/issue/AGL-2541))
 - **plugins-mui:** a menu trigger is a nav item, not a button ([AGL-2542](https://linear.app/aglyn/issue/AGL-2542), [AGL-1198](https://linear.app/aglyn/issue/AGL-1198))
 - **besigner:** an already-published version still drops the live cache ([AGL-2540](https://linear.app/aglyn/issue/AGL-2540))
 - **ci:** the notification test no longer impersonates an incident ([AGL-2533](https://linear.app/aglyn/issue/AGL-2533))
