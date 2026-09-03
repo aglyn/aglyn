@@ -78,6 +78,8 @@ export const CATEGORIES_ID: Aglyn.ComponentId =
   Aglyn.COLLECTION_CATEGORIES_COMPONENT_ID
 export const SEARCH_ID: Aglyn.ComponentId =
   Aglyn.COLLECTION_SEARCH_COMPONENT_ID
+export const AUTHOR_PROFILE_ID: Aglyn.ComponentId =
+  Aglyn.CONTENT_AUTHOR_PROFILE_COMPONENT_ID
 
 /* ── Collection entries (repeater) ──────────────────────────────────────── */
 
@@ -1865,6 +1867,19 @@ export interface CollectionEntryMetaProps extends StackProps {
   avatarImage?: string
   showDate?: boolean
   showAuthor?: boolean
+  /**
+   * Where the byline's NAME links — the author's page on this site
+   * (AGL-2519). Server-filled from the routed entry's author, like the
+   * avatar beside it; blank renders the name as plain text.
+   *
+   * Distinct from the author's own `url`, which the Entry Author card offers
+   * as a link row: this is "everything they wrote here", that is "their
+   * site", and a byline that conflated them would send a reader off-site from
+   * every article.
+   */
+  authorPageUrl?: string
+  /** Off leaves the byline as plain text even when the author has a page. */
+  linkAuthor?: boolean
   showCategory?: boolean
   showTags?: boolean
   showAvatar?: boolean
@@ -1957,6 +1972,8 @@ const CollectionEntryMeta = forwardRef<
     // the timestamp. Destructured so it never reaches the DOM.
     dateFormat: _dateFormat,
     author,
+    authorPageUrl,
+    linkAuthor,
     category,
     tags,
     avatarImage,
@@ -1997,6 +2014,22 @@ const CollectionEntryMeta = forwardRef<
   const filledLine = [authorValue, dateValue, categoryValue]
     .filter(Boolean)
     .join(' · ')
+  /*
+    The rest of the line, WITHOUT the author (AGL-2519).
+
+    The row is one string everywhere else, which is what a `·`-joined byline
+    wants — but a link is an element, so the author has to come out of the
+    join to be one. Split rather than reassembled from parts, so the
+    separator, the order and the empty-field collapsing all stay in the one
+    expression above: the linked row and the plain row cannot render a
+    different sentence.
+  */
+  const authorHrefRaw = metaValue(authorPageUrl, suppressNavigation)
+  const authorHref =
+    linkAuthor !== false && SAFE_AUTHOR_HREF.test(authorHrefRaw)
+      ? authorHrefRaw
+      : ''
+  const trailingLine = [dateValue, categoryValue].filter(Boolean).join(' · ')
   // Nothing to show and nothing to route from: an editing surface previews
   // the block's own markup at the author's own settings, and a published page
   // renders nothing at all (AGL-2486). The switches are honoured here exactly
@@ -2069,7 +2102,25 @@ const CollectionEntryMeta = forwardRef<
       ) : null}
       {line ? (
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-          {line}
+          {
+            // Linked only on the real byline, never on the canvas sample: a
+            // preview whose placeholder name navigates is a trap, and the
+            // sample author has no page to go to.
+            authorHref && authorValue && !sample ? (
+              <>
+                <AppLink
+                  href={authorHref}
+                  sx={{ color: 'inherit' }}
+                  underline="hover"
+                >
+                  {authorValue}
+                </AppLink>
+                {trailingLine ? ` · ${trailingLine}` : ''}
+              </>
+            ) : (
+              line
+            )
+          }
         </Typography>
       ) : null}
       {chips.map((tag) => (
@@ -2188,6 +2239,27 @@ export const collectionEntryMetaSchema: Aglyn.ComponentSchema<CollectionEntryMet
         initialValue: true,
       },
       {
+        name: 'authorPageUrl',
+        label: 'Author links to',
+        description:
+          'Blank sends the byline to the author’s page on this site. Type ' +
+          'here (or bind {{entry.authorPageUrl}}) only to override it.',
+        component: Aglyn.FieldComponentType.TEXT_FIELD,
+      },
+      {
+        name: 'linkAuthor',
+        label: 'Link author',
+        description:
+          'Off leaves the byline as plain text even when the author has a ' +
+          'page. On, the name links there and the date and category beside ' +
+          'it do not.',
+        component: Aglyn.FieldComponentType.SWITCH,
+        // Unset means LINKED in the renderer above, so the switch has to open
+        // in that position or it lies about the block in front of the author
+        // (AGL-2506).
+        initialValue: true,
+      },
+      {
         name: 'showAuthor',
         label: 'Show author',
         description:
@@ -2238,8 +2310,19 @@ export interface CollectionEntryAuthorProps extends StackProps {
    * being picked once on the template the way Entry Meta's avatar is.
    */
   image?: string
-  /** The author's own page; blank renders the name as plain text. */
+  /** The author's own site; offered as a link row beside the profile ones. */
   url?: string
+  /**
+   * The author's page on THIS site (AGL-2519), server-filled from the routed
+   * entry. The name links here.
+   *
+   * It wins over {@link url} for the NAME, and the ordering is the point: a
+   * reader who clicks a byline at the end of an article is asking "what else
+   * has this person written here", not "take me off this site". Their own
+   * url is still reachable — it is one of the link rows — so nothing is lost
+   * by giving the name the destination that answers the question asked.
+   */
+  pageUrl?: string
   /**
    * The author's profile links, server-filled from their record (AGL-2516).
    *
@@ -2321,6 +2404,69 @@ const SAFE_AUTHOR_HREF = /^(https:\/\/|\/(?!\/))/i
 const EXTERNAL_AUTHOR_HREF = /^https:\/\//i
 
 /**
+ * The author's profile links as a row of marks (AGL-2516).
+ *
+ * Shared by the article's Entry Author card and the Author Profile block on
+ * the author's own page (AGL-2518) — the one part of the two that would
+ * genuinely drift, since an icon row is where the accessible-name rule and
+ * the `rel` on an off-site profile live.
+ *
+ * Renders nothing for an empty list, so a caller can drop it in
+ * unconditionally rather than guarding at every call site.
+ */
+function AuthorLinkRows(props: {
+  links: readonly Aglyn.ContentAuthorLink[]
+  /** Glyph scale; the profile draws them a step larger than the card. */
+  size?: number
+}) {
+  if (!props.links.length) return null
+  return (
+    <MuiStack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', ml: -1 }}>
+      {props.links.map((link, index) => {
+        const label = Aglyn.authorLinkLabel(link)
+        return (
+          <AppLink
+            key={index}
+            componentVariant="icon-button"
+            href={(link.url ?? '').trim()}
+            // The name IS the icon here, so it has to be announced — a row of
+            // unlabelled icon buttons is a row a screen reader reads as
+            // "link, link, link".
+            aria-label={label}
+            title={label}
+            size="small"
+            sx={{ color: 'text.secondary' }}
+            // A profile lives off this site by definition, and `mailto:` must
+            // not replace the article either.
+            target="_blank"
+            rel="noopener noreferrer me"
+          >
+            <MdiIcon path={authorLinkIconPath(link)} size={props.size ?? 0.85} />
+          </AppLink>
+        )
+      })}
+    </MuiStack>
+  )
+}
+
+/**
+ * The rows a card will actually draw, guarded at the boundary.
+ *
+ * These arrive as PROPS, so a link can reach a renderer without ever passing
+ * through the store's normalizer — the reason the byline's own `url` is
+ * checked twice as well.
+ */
+function safeAuthorLinks(
+  links: readonly Aglyn.ContentAuthorLink[] | undefined,
+  show: boolean | undefined,
+): Aglyn.ContentAuthorLink[] {
+  if (show === false) return []
+  return (links ?? []).filter((link) =>
+    SAFE_AUTHOR_LINK_HREF.test((link?.url ?? '').trim()),
+  )
+}
+
+/**
  * The author card that closes an article (AGL-2486) — portrait, byline, bio.
  *
  * Entry Meta prints a NAME beside a date, which is all an entry carried when
@@ -2342,15 +2488,27 @@ const CollectionEntryAuthor = forwardRef<
 >((props, ref) => {
   // None of these are DOM attributes (`name` least of all), so they are
   // destructured rather than spread — the stack.ts pattern.
-  const { name, bio, image, url, links, showBio, showAvatar, showLinks, ...rest } =
-    props
+  const {
+    name,
+    bio,
+    image,
+    url,
+    pageUrl,
+    links,
+    showBio,
+    showAvatar,
+    showLinks,
+    ...rest
+  } = props
   const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
   const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
   const { hostId } = Aglyn.useSite()
   const nameValue = metaValue(name, suppressNavigation)
   const bioValue = showBio !== false ? metaValue(bio, suppressNavigation) : ''
-  const urlRaw = metaValue(url, suppressNavigation)
-  const urlValue = SAFE_AUTHOR_HREF.test(urlRaw) ? urlRaw : ''
+  // Their page here first, their own site second (AGL-2519) — see `pageUrl`.
+  const hrefRaw = metaValue(pageUrl, suppressNavigation) ||
+    metaValue(url, suppressNavigation)
+  const urlValue = SAFE_AUTHOR_HREF.test(hrefRaw) ? hrefRaw : ''
   // An unresolved token empties on EVERY surface, as in the byline: a literal
   // `{{…}}` in a src is a broken portrait in the canvas.
   const imageRaw = (image ?? '').trim()
@@ -2377,12 +2535,7 @@ const CollectionEntryAuthor = forwardRef<
    * and `javascript:` has to be unreachable rather than merely unlikely — the
    * same reason the byline's own `url` is checked twice.
    */
-  const linkRows =
-    showLinks !== false
-      ? (links ?? []).filter((link) =>
-          SAFE_AUTHOR_LINK_HREF.test((link?.url ?? '').trim()),
-        )
-      : []
+  const linkRows = safeAuthorLinks(links, showLinks)
   if (
     !displayName &&
     !displayBio &&
@@ -2454,37 +2607,7 @@ const CollectionEntryAuthor = forwardRef<
             {displayBio}
           </Typography>
         ) : null}
-        {linkRows.length ? (
-          <MuiStack
-            direction="row"
-            spacing={0.5}
-            sx={{ flexWrap: 'wrap', ml: -1 }}
-          >
-            {linkRows.map((link, index) => {
-              const label = Aglyn.authorLinkLabel(link)
-              return (
-                <AppLink
-                  key={index}
-                  componentVariant="icon-button"
-                  href={(link.url ?? '').trim()}
-                  // The name IS the icon here, so it has to be announced —
-                  // a row of unlabelled icon buttons is a row a screen reader
-                  // reads as "link, link, link".
-                  aria-label={label}
-                  title={label}
-                  size="small"
-                  sx={{ color: 'text.secondary' }}
-                  // A profile lives off this site by definition, and `mailto:`
-                  // must not replace the article either.
-                  target="_blank"
-                  rel="noopener noreferrer me"
-                >
-                  <MdiIcon path={authorLinkIconPath(link)} size={0.85} />
-                </AppLink>
-              )
-            })}
-          </MuiStack>
-        ) : null}
+        <AuthorLinkRows links={linkRows} />
       </MuiStack>
     </MuiStack>
   )
@@ -2530,11 +2653,20 @@ export const collectionEntryAuthorSchema: Aglyn.ComponentSchema<CollectionEntryA
         component: Aglyn.FieldComponentType.TEXT_FIELD,
       },
       {
-        name: 'url',
-        label: 'Link',
+        name: 'pageUrl',
+        label: 'Name links to',
         description:
-          'Blank uses the author’s own url. The name links here; with no url ' +
-          'it renders as plain text.',
+          'Blank sends the name to the author’s page on this site — ' +
+          'everything they wrote. Falls back to their own url when they have ' +
+          'no page; type here to override both.',
+        component: Aglyn.FieldComponentType.TEXT_FIELD,
+      },
+      {
+        name: 'url',
+        label: 'Their own site',
+        description:
+          'Blank uses the url on the author’s record. Used only when they ' +
+          'have no page on this site for the name to link to.',
         component: Aglyn.FieldComponentType.TEXT_FIELD,
       },
       {
@@ -2575,6 +2707,300 @@ export const collectionEntryAuthorSchema: Aglyn.ComponentSchema<CollectionEntryA
         // the author — and the first click, which writes the `true` that
         // was already in effect, changes nothing and reads as a dead
         // control (AGL-2506).
+        initialValue: true,
+      },
+    ],
+  }
+
+/* ── Author profile (AGL-2518) ──────────────────────────────────────────── */
+
+export interface ContentAuthorProfileProps extends StackProps {
+  /**
+   * The byline. Server-filled from the routed author on their own page
+   * (`expandContentAuthorProfile`); set it — or bind `{{author.name}}` —
+   * only to override.
+   */
+  name?: string
+  /** The blurb from their record; bind `{{author.bio}}` to override. */
+  bio?: string
+  /**
+   * Portrait or logo — a media reference (AGL-1215) or any URL, filled from
+   * the record so the face follows the person rather than the template.
+   */
+  image?: string
+  /** Person only — what they do; blank on an Organization. */
+  jobTitle?: string
+  /** Person only — who they write for. */
+  worksFor?: string
+  /**
+   * Their OWN site. The name links here; blank renders it as plain text.
+   * This block already IS the author's page, so it does not link to itself.
+   */
+  url?: string
+  /** Their profile links, server-filled from the record (AGL-2516). */
+  links?: Aglyn.ContentAuthorLink[]
+  showBio?: boolean
+  showAvatar?: boolean
+  showRole?: boolean
+  showLinks?: boolean
+}
+
+/** The page subject's portrait — a step up from the card's 48px. */
+const PROFILE_AVATAR_SIZE = 96
+
+/**
+ * Who an author page is about (AGL-2518) — portrait, name, role, bio, links.
+ *
+ * The Entry Author card renders the same person as a footnote under an
+ * article. This renders them as the SUBJECT of a page, which is why it has
+ * the two fields that card has no room for: `jobTitle` and `worksFor` are
+ * what tell a stranger who they are looking at, and they are already on the
+ * record because `schema.org/Person` defines them (AGL-2486).
+ *
+ * Every field is independently overridable and every one collapses when
+ * empty, exactly as the card's do — an author with no portrait renders the
+ * text alone rather than a gap where a face would be. On an editing surface
+ * the block previews its own shape with sample text, because a template is
+ * designed before any author is routed through it.
+ */
+const ContentAuthorProfile = forwardRef<
+  HTMLDivElement,
+  ContentAuthorProfileProps
+>((props, ref) => {
+  // None of these are DOM attributes (`name` least of all), so they are
+  // destructured rather than spread — the stack.ts pattern.
+  const {
+    name,
+    bio,
+    image,
+    jobTitle,
+    worksFor,
+    url,
+    links,
+    showBio,
+    showAvatar,
+    showRole,
+    showLinks,
+    ...rest
+  } = props
+  const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
+  const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
+  const { hostId } = Aglyn.useSite()
+  const nameValue = metaValue(name, suppressNavigation)
+  const bioValue = showBio !== false ? metaValue(bio, suppressNavigation) : ''
+  const jobValue = showRole !== false ? metaValue(jobTitle, suppressNavigation) : ''
+  const worksForValue =
+    showRole !== false ? metaValue(worksFor, suppressNavigation) : ''
+  const urlRaw = metaValue(url, suppressNavigation)
+  const urlValue = SAFE_AUTHOR_HREF.test(urlRaw) ? urlRaw : ''
+  // An unresolved token empties on EVERY surface, as in the byline: a literal
+  // `{{…}}` in a src is a broken portrait in the canvas.
+  const imageRaw = (image ?? '').trim()
+  const imageSrc =
+    showAvatar !== false && imageRaw && !UNRESOLVED_TOKEN.test(imageRaw)
+      ? Aglyn.resolveMediaSrc(imageRaw, { hostId })
+      : ''
+  const linkRows = safeAuthorLinks(links, showLinks)
+  // Nothing routed and nothing typed: an editing surface previews the block's
+  // own markup at its own settings, and a published page renders nothing at
+  // all. Every part still answers its own switch, so a block with Show bio
+  // off previews as portrait and name.
+  const sample =
+    !nameValue &&
+    !bioValue &&
+    !jobValue &&
+    !imageSrc &&
+    !linkRows.length &&
+    Boolean(suppressNavigation)
+  const displayName = sample ? ENTRY_SAMPLE_AUTHOR : nameValue
+  const displayBio = sample && showBio !== false ? ENTRY_SAMPLE_BIO : bioValue
+  const samplePortrait = sample && showAvatar !== false
+  /**
+   * "Founder at Aglyn" — one line, from two fields, and a middle dot would be
+   * wrong here: this is a phrase, not a list of facts like the byline's
+   * `name · date`. Either field alone still reads.
+   */
+  const roleLine = [jobValue, worksForValue].filter(Boolean).join(' at ')
+  if (
+    !displayName &&
+    !displayBio &&
+    !roleLine &&
+    !imageSrc &&
+    !samplePortrait &&
+    !linkRows.length
+  ) {
+    return <Box ref={ref} {...rest} />
+  }
+  return (
+    <MuiStack
+      ref={ref}
+      direction="row"
+      spacing={3}
+      {...rest}
+      // MERGE, never replace (AGL-1450): `rest.sx` is the array leaf.tsx
+      // builds, and spreading it into an object drops every authored value.
+      sx={[{ alignItems: 'flex-start' }, ...nodeSx]}
+    >
+      {imageSrc ? (
+        <Box
+          component="img"
+          src={imageSrc}
+          // Decorative: the block names the author in text right beside it.
+          alt=""
+          sx={{
+            display: 'block',
+            flexShrink: 0,
+            width: PROFILE_AVATAR_SIZE,
+            height: PROFILE_AVATAR_SIZE,
+            borderRadius: '50%',
+            objectFit: 'cover',
+          }}
+          {...Aglyn.DEFERRED_IMAGE_ATTRIBUTES}
+        />
+      ) : samplePortrait ? (
+        <Box aria-hidden sx={samplePortraitSx(PROFILE_AVATAR_SIZE)} />
+      ) : null}
+      <MuiStack spacing={1} sx={{ minWidth: 0 }}>
+        {displayName ? (
+          // `h1` because the author IS this page's subject — the one heading
+          // rule a built-in body has to get right, since the template around
+          // it cannot know what the block will be handed.
+          <Typography component="h1" variant="h4">
+            {urlValue ? (
+              <AppLink
+                href={urlValue}
+                sx={{ color: 'inherit' }}
+                underline="hover"
+                {...(EXTERNAL_AUTHOR_HREF.test(urlValue)
+                  ? { target: '_blank', rel: 'noopener noreferrer' }
+                  : {})}
+              >
+                {displayName}
+              </AppLink>
+            ) : (
+              displayName
+            )}
+          </Typography>
+        ) : null}
+        {roleLine ? (
+          <Typography variant="subtitle2" sx={{ color: 'text.secondary' }}>
+            {roleLine}
+          </Typography>
+        ) : null}
+        {displayBio ? (
+          <Typography variant="body1" sx={{ color: 'text.secondary' }}>
+            {displayBio}
+          </Typography>
+        ) : null}
+        <AuthorLinkRows links={linkRows} size={1} />
+      </MuiStack>
+    </MuiStack>
+  )
+})
+ContentAuthorProfile.displayName = 'AglynContentAuthorProfile'
+
+export { ContentAuthorProfile }
+
+export const contentAuthorProfileSchema: Aglyn.ComponentSchema<ContentAuthorProfileProps> =
+  {
+    $id: AUTHOR_PROFILE_ID,
+    pluginId: BUNDLE_ID,
+    displayName: 'Author Profile',
+    description:
+      'Who an author page is about — portrait, name, role, bio and links.',
+    category: Aglyn.ComponentCategory.TEXT,
+    icon: {
+      path: mdiAccountCircleOutline.path,
+      sx: { color: 'secondary.main' },
+    },
+    flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
+    attributes: [
+      {
+        name: 'name',
+        label: 'Name',
+        description:
+          'Blank shows the name of the author whose page this is. Type here ' +
+          '(or bind {{author.name}}) only to override it.',
+        component: Aglyn.FieldComponentType.TEXT_FIELD,
+      },
+      {
+        name: 'bio',
+        label: 'Bio',
+        description:
+          'Blank shows the bio from the author’s record. Type here (or bind ' +
+          '{{author.bio}}) only to override it.',
+        component: Aglyn.FieldComponentType.TEXTAREA,
+      },
+      {
+        name: 'image',
+        label: 'Portrait',
+        description:
+          'Blank shows the portrait of the author whose page this is, at the ' +
+          'larger size a profile takes. Pick from your media library only to ' +
+          'override it.',
+        component: Aglyn.FieldComponentType.TEXT_FIELD,
+      },
+      {
+        name: 'jobTitle',
+        label: 'Role',
+        description:
+          'Blank shows the job title from the author’s record. Only a person ' +
+          'has one — an author record set to Organization leaves it empty.',
+        component: Aglyn.FieldComponentType.TEXT_FIELD,
+      },
+      {
+        name: 'worksFor',
+        label: 'Organization',
+        description:
+          'Blank shows who the author writes for, from their record. Shown ' +
+          'after the role as "Role at Organization".',
+        component: Aglyn.FieldComponentType.TEXT_FIELD,
+      },
+      {
+        name: 'url',
+        label: 'Link',
+        description:
+          'Blank uses the author’s own url. The name links here; with no url ' +
+          'it renders as plain text. This block is already the author’s page ' +
+          'on this site, so it never links to itself.',
+        component: Aglyn.FieldComponentType.TEXT_FIELD,
+      },
+      {
+        name: 'showLinks',
+        label: 'Show links',
+        description:
+          'Off hides the row of profile links under the bio — the place a ' +
+          'reader follows this author elsewhere. Turning it off on a page ' +
+          'about them is rarely what you want.',
+        component: Aglyn.FieldComponentType.SWITCH,
+        // Unset means SHOWN in the renderer above, so the switch has to open
+        // in that position or it lies about the block in front of the author
+        // (AGL-2506).
+        initialValue: true,
+      },
+      {
+        name: 'showBio',
+        label: 'Show bio',
+        description:
+          'Off leaves the block as a portrait, a name and a role.',
+        component: Aglyn.FieldComponentType.SWITCH,
+        initialValue: true,
+      },
+      {
+        name: 'showRole',
+        label: 'Show role',
+        description:
+          'Off hides the "Role at Organization" line under the name.',
+        component: Aglyn.FieldComponentType.SWITCH,
+        initialValue: true,
+      },
+      {
+        name: 'showAvatar',
+        label: 'Show portrait',
+        description:
+          'Off drops the portrait and lets the name and bio run the full ' +
+          'width, with no space held for a picture.',
+        component: Aglyn.FieldComponentType.SWITCH,
         initialValue: true,
       },
     ],
@@ -3088,6 +3514,27 @@ export const collectionPresets: Aglyn.PresetSchema[] = [
       // server fill and stay for compatibility; here the fill is the only
       // mechanism, and a seeded `{{entry.authorImage}}` would render a broken
       // portrait on every surface that is not an entry template.
+      props: {},
+    },
+  },
+  {
+    $id: generatePresetId(AUTHOR_PROFILE_ID),
+    type: Aglyn.NodeType.PRESET,
+    displayName: 'Author Profile',
+    pluginId: BUNDLE_ID,
+    description: 'Portrait, name, role, bio and links for an author page',
+    category: Aglyn.ComponentCategory.TEXT,
+    icon: {
+      path: mdiAccountCircleOutline.path,
+      sx: { color: 'secondary.main' },
+    },
+    data: {
+      $id: null,
+      componentId: AUTHOR_PROFILE_ID,
+      pluginId: BUNDLE_ID,
+      // Seeded EMPTY, for the reason the card above it is: the server fill is
+      // the only mechanism here, and a seeded `{{author.image}}` would render
+      // a broken portrait on every surface that is not an author page.
       props: {},
     },
   },
