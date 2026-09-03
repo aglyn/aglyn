@@ -111,7 +111,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
 
       # Guard the guard, BEFORE the live read and BEFORE the credential gate.
       # Every case in --self-test is a state the live data does NOT contain:

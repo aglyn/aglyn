@@ -133,6 +133,14 @@ on:
       # deleting an install step must trigger the check that would catch it.
       - .github/workflows/nx-ci.yml
       - .github/workflows/tools-guards.yml
+      # check:node-version reads EVERY tracked workflow and composite action,
+      # so a pin reintroduced in any of them has to trigger the guard that
+      # would catch it — the lesson the retired-colour census records two
+      # comments up, applied to a different tree.
+      - '.github/workflows/**'
+      - '.github/actions/**'
+      # The runtime the guard compares everything against.
+      - .nvmrc
       # AGL-2021: check:no-tax-identifiers scans every TRACKED file, so its
       # trigger cannot be narrower than the trees a forbidden identifier could
       # land in. Without these, a commit touching only apps/console — exactly
@@ -223,7 +231,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
           cache: 'npm'
 
       # Root install only — see the no-nested-installs note above. The
@@ -243,6 +251,7 @@ jobs:
       - run: npm run test:plugin-loader
 
       - run: npm run test:disk-space
+      - run: npm run test:main-gate-verdicts
 
       - run: npm run test:deploy-guard
 
@@ -370,6 +379,15 @@ jobs:
       - run: npm run test:standalone-installs
 
       - run: npm run check:standalone-installs
+
+      # AGL-2531. One node major, declared in .nvmrc and nowhere else. The
+      # guard has to run HERE rather than only in nx-ci: this workflow is the
+      # one whose own `node-version-file` it is asserting, and a pin
+      # reintroduced in a scheduled workflow would otherwise be caught by
+      # nothing until a promotion inherited it.
+      - run: npm run test:node-version
+
+      - run: npm run check:node-version
 
       # AGL-2090. `tools/gate.sh` provisions the pinned gate worktree, and the
       # checks it makes before running anything are the difference between a

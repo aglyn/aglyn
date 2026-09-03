@@ -88,7 +88,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
           cache: 'npm'
 
       # The suite builds its fixture with @msgpack/msgpack (the second of the
@@ -109,7 +109,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
 
       # No install step, as with the uptime probe: the check uses only
       # built-in fetch, so it cannot be broken by a dependency, a lockfile or
