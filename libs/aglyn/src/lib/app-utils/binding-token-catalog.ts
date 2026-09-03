@@ -89,6 +89,13 @@ export const ENTRY_TOKEN_CATALOG: readonly BindingTokenCatalogEntry[] = [
     description: 'The author’s own page.',
   },
   {
+    token: '{{entry.authorPageUrl}}',
+    label: 'Author page',
+    description:
+      'This author’s archive in this collection — more from the person who ' +
+      'wrote it. Separate from Author link, which is their own site.',
+  },
+  {
     token: '{{entry.slug}}',
     label: 'Slug',
     description: 'URL-safe entry identifier.',

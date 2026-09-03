@@ -625,6 +625,21 @@ export function collectionEntryTokens(
     'entry.authorBio': author.bio,
     'entry.authorImage': author.image,
     'entry.authorUrl': author.url,
+    /**
+     * This author's archive on THIS collection (AGL-2517) — "more from the
+     * person who wrote this".
+     *
+     * A separate token from `entry.authorUrl`, which is the author's own site,
+     * because they are different destinations and a template should be able to
+     * offer either or both. Empty when there is nothing addressable, so a
+     * binding renders no link rather than one pointing at `/blog/author/`.
+     */
+    'entry.authorPageUrl': collectionAuthorUrl({
+      collectionSlug,
+      ...(entry.author ? { author: entry.author } : {}),
+      ...(entry.authorId ? { authorId: entry.authorId } : {}),
+      ...(entry.authorName ? { authorName: entry.authorName } : {}),
+    }),
     // Entry model v2 (AGL-582): taxonomy + SEO tokens. The SEO pair falls
     // back to title/excerpt so templates can bind them unconditionally.
     'entry.category': meta.category,

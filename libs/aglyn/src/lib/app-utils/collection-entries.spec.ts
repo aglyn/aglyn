@@ -2845,6 +2845,48 @@ describe('Author archive routes (AGL-2517)', () => {
     })
   })
 
+  describe('linking to it from an entry', () => {
+    it('offers the archive as its own token, beside the author’s own site', () => {
+      // Two different destinations: `authorUrl` is the person's site,
+      // `authorPageUrl` is more of what they wrote here. A template should be
+      // able to offer either or both.
+      const tokens = collectionEntryTokens(
+        {
+          $id: 'e1',
+          title: 'A post',
+          slug: 'a-post',
+          author: { $id: 'aB12', name: 'Zach Gover', url: 'https://zach.example' },
+        } as never,
+        'blog',
+      )
+      expect(tokens['entry.authorPageUrl']).toBe('/blog/author/ab12')
+      expect(tokens['entry.authorUrl']).toBe('https://zach.example')
+    })
+
+    it('empties the token when nothing is addressable', () => {
+      const tokens = collectionEntryTokens(
+        { $id: 'e1', title: 'A post', slug: 'a-post' } as never,
+        'blog',
+      )
+      // A binding then renders no link at all, rather than one pointing at
+      // `/blog/author/`.
+      expect(tokens['entry.authorPageUrl']).toBe('')
+    })
+
+    it('still resolves for a legacy byline with no record', () => {
+      const tokens = collectionEntryTokens(
+        {
+          $id: 'e1',
+          title: 'A post',
+          slug: 'a-post',
+          authorName: 'The Aglyn Team',
+        } as never,
+        'blog',
+      )
+      expect(tokens['entry.authorPageUrl']).toBe('/blog/author/the-aglyn-team')
+    })
+  })
+
   describe('linking to it', () => {
     it('prefers the id, so the link survives a rename', () => {
       expect(
