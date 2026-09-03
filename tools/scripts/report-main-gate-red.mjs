@@ -75,7 +75,16 @@ if (!shouldReport(results)) {
   say(`nothing to report (fast=${results.fast || 'n/a'} full=${results.full || 'n/a'})`)
   process.exit(0)
 }
-say(`RED on ${sha.slice(0, 9)} - ${failedJobs(results).join(', ')}`)
+/**
+ * The log line is read by a human scanning a run, so it carries the same
+ * distinction the Slack body does. A test that logs "RED on <sha>" sends
+ * whoever reads the run looking for a broken build that does not exist.
+ */
+say(
+  TEST
+    ? `[TEST] notification path check on ${sha.slice(0, 9)} - nothing is red`
+    : `RED on ${sha.slice(0, 9)} - ${failedJobs(results).join(', ')}`,
+)
 
 const key = (process.env['LINEAR_API_KEY'] ?? '').trim()
 const slackWebhook = (process.env['SLACK_WEBHOOK_URL'] ?? '').trim()
@@ -83,7 +92,11 @@ const slackWebhook = (process.env['SLACK_WEBHOOK_URL'] ?? '').trim()
 if (!key && !slackWebhook) {
   // Loud, because this is the notification path failing silently - the exact
   // shape AGL-2533 is about.
-  warn('neither LINEAR_API_KEY nor SLACK_WEBHOOK_URL is set, so this red reaches NOBODY.')
+  warn(
+    `neither LINEAR_API_KEY nor SLACK_WEBHOOK_URL is set, so ${
+      TEST ? 'a real red would reach' : 'this red reaches'
+    } NOBODY.`,
+  )
   process.exit(0)
 }
 
