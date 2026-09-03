@@ -110,6 +110,10 @@ const STEP_TYPES: Array<{ value: string; label: string }> = [
   { value: 'toggleClass', label: 'Toggle a class' },
   { value: 'addClass', label: 'Append a class' },
   { value: 'removeClass', label: 'Remove a class' },
+  // The semantics half of a hand-built disclosure (AGL-2546). Paired with
+  // a show/hide step, these are what let a menu announce itself.
+  { value: 'setAttribute', label: 'Set an ARIA or data attribute' },
+  { value: 'removeAttribute', label: 'Remove an ARIA or data attribute' },
   { value: 'siteAlert', label: 'Show a message' },
   { value: 'runWorkflow', label: 'Run a workflow' },
   { value: 'showOverlay', label: 'Open an overlay' },
@@ -1034,6 +1038,51 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
                   placeholder="is-open"
                 />
               ) : null}
+              {step.type === 'setAttribute' ||
+              step.type === 'removeAttribute' ? (
+                <>
+                  {/*
+                    Only `aria-*` and `data-*` (AGL-2546). The runtime
+                    enforces this too — this field is the explanation, not
+                    the guard. An unrestricted setter would reach `href`,
+                    `src`, `onclick` and `style`, which is a self-XSS vector
+                    authored through this very dialog, and worse on a site
+                    with collaborators.
+                  */}
+                  <TextField
+                    label="Attribute"
+                    value={step.name ?? ''}
+                    onChange={(inputEvent) =>
+                      updateStep(index, { name: inputEvent.target.value })
+                    }
+                    size="small"
+                    sx={{ width: 170 }}
+                    placeholder="aria-expanded"
+                    error={
+                      Boolean(step.name) &&
+                      !Aglyn.isInteractionAttributeAllowed(step.name)
+                    }
+                    helperText={
+                      Boolean(step.name) &&
+                      !Aglyn.isInteractionAttributeAllowed(step.name)
+                        ? 'Must start with aria- or data-'
+                        : undefined
+                    }
+                  />
+                  {step.type === 'setAttribute' ? (
+                    <TextField
+                      label="Value"
+                      value={step.value ?? ''}
+                      onChange={(inputEvent) =>
+                        updateStep(index, { value: inputEvent.target.value })
+                      }
+                      size="small"
+                      sx={{ width: 140 }}
+                      placeholder="true"
+                    />
+                  ) : null}
+                </>
+              ) : null}
               {step.type === 'siteAlert' ? (
                 <TextField
                   label="Message"
@@ -1185,6 +1234,12 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
               'toggleClass',
               'addClass',
               'removeClass',
+              // Same `selector` field as the rest, deliberately (AGL-2546):
+              // it is what `regraftStepSelectors` rewrites for a reusable
+              // component and what the runtime expands for a composed
+              // layout. A bespoke targeting field would inherit neither.
+              'setAttribute',
+              'removeAttribute',
             ].includes(step.type) ? (
               <TargetPicker
                 selector={String(step.selector ?? selector)}
