@@ -60,7 +60,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -uo pipefail
-          # NOT `set -e`: exit 2 is a verdict this step handles, not a crash.
+          # ⚑ GitHub runs `run:` under `bash -e`, and omitting `set -e` here
+          # does NOT disable it. A non-zero exit aborts the step before the
+          # verdict can be read, which is how the first version of this file
+          # hard-failed on exit 2 — the exact "no verdict" case it is supposed
+          # to report as a warning. `|| code=$?` is immune: a command in an OR
+          # list is not an `-e` abort, whatever the shell flags say.
           base="${{ github.event.pull_request.base.sha }}"
           head="${{ github.event.pull_request.head.sha }}"
           range="origin/production..HEAD"
@@ -68,9 +73,9 @@ jobs:
             range="$base..$head"
           fi
           echo "range=$range"
+          code=0
           node tools/scripts/check-main-gate-verdicts.mjs --range="$range" \
-            > "$RUNNER_TEMP/verdict.txt" 2>&1
-          code=$?
+            > "$RUNNER_TEMP/verdict.txt" 2>&1 || code=$?
           echo "code=$code" >> "$GITHUB_OUTPUT"
           cat "$RUNNER_TEMP/verdict.txt"
           {
