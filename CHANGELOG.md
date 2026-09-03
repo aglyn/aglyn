@@ -9,6 +9,18 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.57 — 2026-09-03
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.56...v1.0.0-beta.57)
+
+### Added
+
+- **besigner:** every container can be the semantic element, not just Section ([AGL-2525](https://linear.app/aglyn/issue/AGL-2525), [AGL-2521](https://linear.app/aglyn/issue/AGL-2521))
+
+### Fixed
+
+- **tenant:** a built-in page finds the layout its home page actually uses ([AGL-2526](https://linear.app/aglyn/issue/AGL-2526), [AGL-2513](https://linear.app/aglyn/issue/AGL-2513), [AGL-2518](https://linear.app/aglyn/issue/AGL-2518))
+
 ## v1.0.0-beta.56 — 2026-09-03
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.55...v1.0.0-beta.56)
