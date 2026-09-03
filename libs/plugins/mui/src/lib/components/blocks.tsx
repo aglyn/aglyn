@@ -374,6 +374,68 @@ const featureColumn = (title: string, body: string) => ({
   nodes: [text('h5', title), text('body1', body)],
 })
 
+/**
+ * A section block's outer band, with its content held to a readable width
+ * (AGL-2544).
+ *
+ * These presets used to be a bare `muiStack` dropped straight into
+ * `Document`, so every one of them rendered edge to edge: a Feature Grid ran
+ * the full viewport while the page's prose sat at 900px, and the FAQ — which
+ * had `maxWidth` but no auto margins — hugged the left edge. That is the
+ * result of the documented happy path on a fresh screen, with no misuse, and
+ * a subscriber has no reason to suspect the block needs wrapping.
+ *
+ * The band and the content are separated rather than the whole thing being
+ * wrapped, because a CTA or hero genuinely wants a full-bleed background with
+ * contained content — wrapping the outer node would take that away to fix the
+ * width. So `bandSx` (padding, background) stays outside and the Container
+ * goes within it.
+ *
+ * `layout` moves a row block's own direction onto an inner Stack: dropping a
+ * Container between a `direction: 'row'` Stack and its columns would leave
+ * the Container as the single flex child and collapse the row.
+ */
+const section = ({
+  bandSx,
+  layout,
+  layoutSx,
+  maxWidth = 'lg',
+  nodes,
+}: {
+  bandSx?: Record<string, unknown>
+  layout?: Record<string, unknown>
+  layoutSx?: Record<string, unknown>
+  maxWidth?: string
+  nodes: unknown[]
+}) => ({
+  $id: null,
+  componentId: 'muiStack',
+  pluginId: BUNDLE_ID,
+  props: {},
+  ...(bandSx ? { sx: bandSx } : {}),
+  nodes: [
+    {
+      $id: null,
+      componentId: 'muiContainer',
+      pluginId: BUNDLE_ID,
+      props: { maxWidth },
+      nodes:
+        layout || layoutSx
+          ? [
+              {
+                $id: null,
+                componentId: 'muiStack',
+                pluginId: BUNDLE_ID,
+                props: layout ?? {},
+                ...(layoutSx ? { sx: layoutSx } : {}),
+                nodes,
+              },
+            ]
+          : nodes,
+    },
+  ],
+})
+
 export const blockPresets: Aglyn.PresetSchema[] = [
   {
     $id: generatePresetId(VIDEO_EMBED_ID),
@@ -495,12 +557,13 @@ export const blockPresets: Aglyn.PresetSchema[] = [
     description: 'Question and answer list',
     category: Aglyn.ComponentCategory.BLOCKS,
     icon: { path: mdiHelpCircle.path, sx: { color: '#f57c00' } },
-    data: {
-      $id: null,
-      componentId: 'muiStack',
-      pluginId: BUNDLE_ID,
-      props: { spacing: 1 },
-      sx: { paddingTop: 4, paddingBottom: 4, maxWidth: 720 },
+    data: section({
+      bandSx: { paddingTop: 4, paddingBottom: 4 },
+      // `md`, not the old bare `maxWidth: 720`. The width was never the
+      // defect — the missing auto margins were, which is why this block
+      // rendered hard against the left viewport edge.
+      maxWidth: 'md',
+      layout: { spacing: 1 },
       nodes: [
         text('h4', 'Frequently asked questions', { gutterBottom: true }),
         ...faqItem(
@@ -516,7 +579,7 @@ export const blockPresets: Aglyn.PresetSchema[] = [
           'Tell visitors how and when they can reach you.',
         ),
       ],
-    },
+    }),
   },
   {
     $id: generatePresetId('muiStack', 'announcement'),
@@ -599,18 +662,15 @@ export const blockPresets: Aglyn.PresetSchema[] = [
     description: 'Centered headline, tagline, and call-to-action button',
     category: Aglyn.ComponentCategory.BLOCKS,
     icon: { path: mdiRocketLaunchOutline.path, sx: { color: '#f57c00' } },
-    data: {
-      $id: null,
-      componentId: 'muiStack',
-      pluginId: BUNDLE_ID,
-      props: { spacing: 2 },
-      sx: {
+    data: section({
+      bandSx: {
         paddingTop: 10,
         paddingBottom: 10,
         paddingLeft: 4,
         paddingRight: 4,
-        alignItems: 'center',
       },
+      layout: { spacing: 2 },
+      layoutSx: { alignItems: 'center' },
       nodes: [
         text('h2', 'A headline that sells your idea', { align: 'center' }),
         text('h6', 'One clear sentence about the value you deliver.', {
@@ -627,7 +687,7 @@ export const blockPresets: Aglyn.PresetSchema[] = [
           },
         },
       ],
-    },
+    }),
   },
   {
     $id: generatePresetId('muiStack', 'features'),
@@ -637,18 +697,15 @@ export const blockPresets: Aglyn.PresetSchema[] = [
     description: 'Three selling points in a wrapping row',
     category: Aglyn.ComponentCategory.BLOCKS,
     icon: { path: mdiViewGridOutline.path, sx: { color: '#2e7d32' } },
-    data: {
-      $id: null,
-      componentId: 'muiStack',
-      pluginId: BUNDLE_ID,
-      props: { direction: 'row', spacing: 2 },
-      sx: {
+    data: section({
+      bandSx: {
         paddingLeft: 4,
         paddingRight: 4,
         paddingTop: 6,
         paddingBottom: 6,
-        flexWrap: 'wrap',
       },
+      layout: { direction: 'row', spacing: 2 },
+      layoutSx: { flexWrap: 'wrap' },
       nodes: [
         featureColumn('Fast', 'Explain the first reason customers pick you.'),
         featureColumn(
@@ -660,7 +717,7 @@ export const blockPresets: Aglyn.PresetSchema[] = [
           'Explain the third reason customers pick you.',
         ),
       ],
-    },
+    }),
   },
   {
     $id: generatePresetId('muiStack', 'imagetext'),
@@ -731,20 +788,20 @@ export const blockPresets: Aglyn.PresetSchema[] = [
     description: 'Accent band with a heading and button',
     category: Aglyn.ComponentCategory.BLOCKS,
     icon: { path: mdiGestureTapButton.path, sx: { color: '#c2185b' } },
-    data: {
-      $id: null,
-      componentId: 'muiStack',
-      pluginId: BUNDLE_ID,
-      props: { spacing: 2 },
-      sx: {
+    data: section({
+      // The accent band stays full-bleed — that is the point of a CTA —
+      // while its content is held to the page's width inside it.
+      bandSx: {
         paddingTop: 8,
         paddingBottom: 8,
         paddingLeft: 4,
         paddingRight: 4,
-        alignItems: 'center',
         backgroundColor: 'primary.main',
         color: 'primary.contrastText',
       },
+      maxWidth: 'md',
+      layout: { spacing: 2 },
+      layoutSx: { alignItems: 'center' },
       nodes: [
         text('h4', 'Ready to get started?', { align: 'center' }),
         text('body1', 'Tell visitors the one thing to do next.', {
@@ -762,7 +819,7 @@ export const blockPresets: Aglyn.PresetSchema[] = [
           },
         },
       ],
-    },
+    }),
   },
   // Contact Section moved to @aglyn/plugins-forms (AGL-395): a preset that
   // places `form` nodes has to stamp them with the bundle that registers
