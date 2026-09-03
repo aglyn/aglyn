@@ -64,6 +64,48 @@ export function resolveSemanticElement(value: unknown): SemanticElement | undefi
 }
 
 /**
+ * The elements that BECOME a landmark, and so want a name (AGL-2525).
+ *
+ * `div` is the odd one out: it has no role, so an `aria-label` on it names
+ * nothing. Everything else is announced as a region, and a page with two of
+ * the same kind — a header nav and a footer nav, say — is a page where
+ * "navigation, navigation" is all a screen-reader user hears without one.
+ */
+export const LANDMARK_ELEMENTS = SEMANTIC_ELEMENTS.filter(
+  (element) => element !== 'div',
+)
+
+/**
+ * Consume the picker's props and return what the underlying MUI component
+ * should receive.
+ *
+ * Takes the whole props bag rather than one value because both keys have to
+ * be REMOVED as well as translated: `ariaLabel` spread onto a DOM element is
+ * an unknown React prop, warned about on the canvas and serialized onto the
+ * published page, which is the shape of the `propValues` leak in AGL-2486.
+ */
+export function applySemanticElement<P extends Record<string, unknown>>(
+  props: P,
+): Omit<P, 'component' | 'ariaLabel'> & {
+  component?: SemanticElement
+  'aria-label'?: string
+} {
+  const { component, ariaLabel, ...rest } = props as P & {
+    component?: unknown
+    ariaLabel?: unknown
+  }
+  const element = resolveSemanticElement(component)
+  const label = typeof ariaLabel === 'string' ? ariaLabel.trim() : ''
+  return {
+    ...(rest as Omit<P, 'component' | 'ariaLabel'>),
+    ...(element ? { component: element } : {}),
+    // Only on a landmark: a name on a role-less `div` is announced by
+    // nothing and is one more attribute in every visitor's markup.
+    ...(element && element !== 'div' && label ? { 'aria-label': label } : {}),
+  }
+}
+
+/**
  * Spreadable `component` prop: present only when the author chose one, so an
  * unset picker is indistinguishable from never having had one.
  */
@@ -95,5 +137,29 @@ export function semanticElementAttribute(
       'page’s content region carries that one.',
     component: Aglyn.FieldComponentType.SELECT,
     options: SEMANTIC_ELEMENTS.map((value) => ({ value, label: value })),
+  } as Aglyn.AglynAttributeSchema
+}
+
+/**
+ * The name for the landmark the picker just made, shown only once one exists.
+ *
+ * Gated on the element rather than always visible because on a `div` — the
+ * default, and what most of these elements stay — the field would do nothing
+ * at all, and a control that silently does nothing is worse than no control.
+ *
+ * This is the half Section already had and the picker did not. Naming stops
+ * being optional the moment a page has two landmarks of a kind: a site nav and
+ * a footer nav both announce as "navigation" until one of them says which.
+ */
+export function semanticElementLabelAttribute(): Aglyn.AglynAttributeSchema {
+  return {
+    name: 'ariaLabel',
+    label: 'Accessible label',
+    description:
+      'Names this region for screen readers. Required in practice once a ' +
+      'page has two landmarks of the same kind — a site nav and a footer ' +
+      'nav are both announced as "navigation" until one of them says which.',
+    component: Aglyn.FieldComponentType.TEXT_FIELD,
+    condition: { when: 'component', is: [...LANDMARK_ELEMENTS] },
   } as Aglyn.AglynAttributeSchema
 }

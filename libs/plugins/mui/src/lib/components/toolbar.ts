@@ -24,8 +24,9 @@ import { createElement, forwardRef } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { FIELD_DISABLE_GUTTERS } from '../constants/field-presets'
 import {
+  applySemanticElement,
   semanticElementAttribute,
-  semanticElementProp,
+  semanticElementLabelAttribute,
 } from '../utils/element-picker'
 import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
@@ -46,8 +47,7 @@ import { generatePresetId } from '../utils/generate-preset-id'
  */
 const Toolbar = forwardRef<HTMLDivElement, ToolbarProps>((props, ref) =>
   createElement(MuiToolbar, {
-    ...dropClearedProps(props),
-    ...semanticElementProp((props as { component?: unknown }).component),
+    ...applySemanticElement(dropClearedProps(props) as Record<string, unknown>),
     ref,
   }),
 )
@@ -72,6 +72,7 @@ export const schema: Aglyn.ComponentSchema<ToolbarProps> = {
   ],
   attributes: [
     semanticElementAttribute('this row'),
+    semanticElementLabelAttribute(),
     FIELD_DISABLE_GUTTERS,
     {
       name: 'variant',

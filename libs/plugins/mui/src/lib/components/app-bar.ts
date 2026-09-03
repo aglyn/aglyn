@@ -21,8 +21,9 @@ import MuiAppBar, { type AppBarProps } from '@mui/material/AppBar'
 import { createElement, forwardRef } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import {
+  applySemanticElement,
   semanticElementAttribute,
-  semanticElementProp,
+  semanticElementLabelAttribute,
 } from '../utils/element-picker'
 import { FIELD_COLOR_ALT1, FIELD_POSITION } from '../constants/field-presets'
 import { dropClearedProps } from '../utils/drop-cleared-props'
@@ -40,12 +41,11 @@ import { ID as toolbarId } from './toolbar'
  */
 const AppBar = forwardRef<HTMLElement, AppBarProps>((props, ref) =>
   createElement(MuiAppBar, {
-    ...dropClearedProps(props),
     // Unset leaves MUI's own default, which is `header` — the banner
     // landmark every site's chrome depends on (AGL-2525). A resolver that
     // answered `div` for "unset" would have stripped it the moment the
     // picker appeared.
-    ...semanticElementProp((props as { component?: unknown }).component),
+    ...applySemanticElement(dropClearedProps(props) as Record<string, unknown>),
     ref,
   }),
 )
@@ -67,6 +67,7 @@ export const schema: Aglyn.ComponentSchema<AppBarProps> = {
   },
   attributes: [
     semanticElementAttribute('this bar'),
+    semanticElementLabelAttribute(),
     FIELD_COLOR_ALT1,
     FIELD_POSITION,
   ],
