@@ -608,6 +608,10 @@ const SEEDS: Array<{
       // `HostEntityType.PERSON`; the same enum the site's SEO entity uses.
       type: 2,
       name: 'Ada Lovelace',
+      // The author's page address (AGL-2518) — deliberately NOT the name's
+      // own slug, so an import that dropped the field would move the page
+      // rather than land on the same URL by coincidence.
+      slug: 'ada',
       url: 'https://example.com/ada',
       image: 'media:host-1/media-1',
       jobTitle: 'Principal Engineer',

@@ -269,6 +269,10 @@ export const IMPORTABLE_FIELDS: Record<string, readonly string[]> = {
   authors: [
     'type',
     'name',
+    // The author's page address (AGL-2518). An import that dropped it would
+    // move every author page on the restored site to a name-derived URL,
+    // breaking links the original site had published.
+    'slug',
     'url',
     'image',
     'jobTitle',

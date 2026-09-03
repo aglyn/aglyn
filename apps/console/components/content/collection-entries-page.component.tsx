@@ -66,7 +66,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { deleteDoc, doc, updateDoc } from 'firebase/firestore'
+import { deleteDoc, deleteField, doc, updateDoc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
@@ -158,6 +158,7 @@ export function CollectionEntriesPage() {
     entriesPerPage,
     setEntriesPerPage,
     authors,
+    hostDoc,
     screenOptions,
     screensById,
     isSiteAdmin,
@@ -654,6 +655,42 @@ export function CollectionEntriesPage() {
   /* ── authors (AGL-2486) ────────────────────────────────────────────── */
 
   /**
+   * The screen every author page renders through (AGL-2518).
+   *
+   * A plain client write, unlike the collection template pointers above,
+   * because this one carries no billing consequence to defend. Those three
+   * fields DEMOTE a screen — it stops being billable, so the write had to move
+   * server-side (AGL-1390). An author template stays a page of the site in
+   * exactly the sense a collection's LIST template does (AGL-1387): the site
+   * designed it and keeps paying for it; it simply serves at `/author/{slug}`
+   * instead of at its own slug. A pointer with nothing to excuse is an
+   * ordinary host field (AGL-1400).
+   */
+  const handleAuthorScreenChange = useCallback(
+    async (value: string) => {
+      try {
+        await updateDoc(doc(firestore, 'hosts', hostId), {
+          authorScreenId: value || deleteField(),
+          updatedAt: Timestamp.now(),
+        })
+      } catch (error: any) {
+        return void enqueueSnackbar(
+          error?.message ?? 'Could not set the author page template',
+          { variant: 'error' },
+        )
+      }
+      enqueueSnackbar(
+        value
+          ? 'Author pages render through that screen — it no longer serves ' +
+              'at its own address'
+          : 'Author pages render through the built-in themed page',
+        { variant: 'success', persist: false },
+      )
+    },
+    [firestore, hostId, enqueueSnackbar],
+  )
+
+  /**
    * The author being edited, or null. `sameAs` stays a NEWLINE-SEPARATED
    * string while editing (one profile per line reads better than a comma soup
    * of URLs) and is saved as `string[]`.
@@ -662,6 +699,7 @@ export function CollectionEntriesPage() {
     id: string | null
     type: string
     name: string
+    slug: string
     url: string
     image: string
     jobTitle: string
@@ -672,6 +710,23 @@ export function CollectionEntriesPage() {
   } | null>(null)
   const [authorBusy, setAuthorBusy] = useState(false)
   const [authorPickerOpen, setAuthorPickerOpen] = useState(false)
+
+  /**
+   * The address this author's page will actually have (AGL-2518) — shown
+   * rather than described, because the field is slugified on save and a
+   * helper that only SAYS so leaves the author to discover what happened to
+   * their spaces and capitals after they publish.
+   *
+   * Falls back to the name, which is exactly what `contentAuthorSlug` does.
+   */
+  const authorSlugPreview = authorEditor
+    ? Aglyn.contentAuthorPageUrl({
+        author: {
+          slug: Aglyn.urlSlugSegment(authorEditor.slug),
+          name: authorEditor.name,
+        },
+      })
+    : ''
 
   const openAuthor = useCallback((author?: Aglyn.ContentAuthorRecord) => {
     setAuthorEditor({
@@ -686,6 +741,7 @@ export function CollectionEntriesPage() {
           : Aglyn.HostEntityType.ORGANIZATION,
       ),
       name: author?.name ?? '',
+      slug: author?.slug ?? '',
       url: author?.url ?? '',
       image: author?.image ?? '',
       jobTitle: author?.jobTitle ?? '',
@@ -726,6 +782,11 @@ export function CollectionEntriesPage() {
         ? Aglyn.HostEntityType.PERSON
         : Aglyn.HostEntityType.ORGANIZATION,
       name,
+      // Slugified on the way out, because it is a PATH SEGMENT: a stored
+      // `Chris Taylor` would build `/author/Chris Taylor` while every request
+      // arrived slugified and matched nothing (AGL-2518). Blank derives it
+      // from the name.
+      slug: Aglyn.urlSlugSegment(authorEditor.slug),
       url: authorEditor.url.trim(),
       image: authorEditor.image.trim(),
       jobTitle: isPerson ? authorEditor.jobTitle.trim() : '',
@@ -1733,6 +1794,40 @@ export function CollectionEntriesPage() {
                           {'New author'}
                         </Button>
                       </Stack>
+                      {/*
+                        The template for EVERY author page (AGL-2518), which
+                        is why it sits above the roster rather than inside a
+                        row: there is one author page shape per site, not one
+                        per person. Letting each record name its own screen
+                        would give a reader a masthead whose design changes as
+                        they click between colleagues.
+                      */}
+                      <TextField
+                        select
+                        size="small"
+                        label="Author page screen"
+                        value={hostDoc?.authorScreenId ?? ''}
+                        onChange={(event) =>
+                          void handleAuthorScreenChange(event.target.value)
+                        }
+                        helperText={
+                          'Renders every author’s page at /author/…. Design ' +
+                          'it with an Author Profile block and a Collection ' +
+                          'Entries block; {{author.name}}, {{author.bio}} and ' +
+                          '{{author.entryCountLabel}} resolve per author. The ' +
+                          'screen you pick stops serving at its own address.'
+                        }
+                        sx={{ maxWidth: 420 }}
+                      >
+                        <MenuItem value="">
+                          {'Built-in themed author page'}
+                        </MenuItem>
+                        {screenOptions.map((screen: any) => (
+                          <MenuItem key={screen.$id} value={screen.$id}>
+                            {screen.displayName ?? screen.$id}
+                          </MenuItem>
+                        ))}
+                      </TextField>
                       {authors.length === 0 ? (
                         <Typography variant="body2" color="text.secondary">
                           {'No authors yet. Entries fall back to a one-off ' +
@@ -1985,6 +2080,21 @@ export function CollectionEntriesPage() {
             helperText="The byline, exactly as it should read"
           />
           <TextField
+            label="Page address"
+            size="small"
+            value={authorEditor?.slug ?? ''}
+            onChange={(event) =>
+              setAuthorEditor((prev) =>
+                prev ? { ...prev, slug: event.target.value } : prev,
+              )
+            }
+            helperText={
+              authorSlugPreview
+                ? `Their page: ${authorSlugPreview}`
+                : 'Their page on this site. Blank uses the name.'
+            }
+          />
+          <TextField
             label="URL"
             size="small"
             value={authorEditor?.url ?? ''}
@@ -1993,7 +2103,7 @@ export function CollectionEntriesPage() {
                 prev ? { ...prev, url: event.target.value } : prev,
               )
             }
-            helperText="Author page or personal site"
+            helperText="Their OWN site, if they have one — not their page here"
           />
           <Stack direction="row" spacing={2} sx={{ alignItems: 'flex-start' }}>
             <TextField
