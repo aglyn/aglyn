@@ -9,6 +9,34 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.63 — 2026-09-03
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.60...v1.0.0-beta.63)
+
+### Added
+
+- **ci:** the notification path can be tested on demand ([AGL-2533](https://linear.app/aglyn/issue/AGL-2533))
+- **seo:** a collection says what kind of article it publishes ([AGL-2536](https://linear.app/aglyn/issue/AGL-2536))
+- **ci:** a red Main Gate also pings Slack, with Linear as the dedupe oracle ([AGL-2533](https://linear.app/aglyn/issue/AGL-2533))
+- **ci:** a red Main Gate posts into Linear instead of nowhere ([AGL-2533](https://linear.app/aglyn/issue/AGL-2533), [AGL-2537](https://linear.app/aglyn/issue/AGL-2537))
+- **seo:** content routes publish a breadcrumb, and an author page its publisher ([AGL-2535](https://linear.app/aglyn/issue/AGL-2535), [AGL-2518](https://linear.app/aglyn/issue/AGL-2518))
+
+### Fixed
+
+- **plugins-mui:** a menu trigger is a nav item, not a button ([AGL-2542](https://linear.app/aglyn/issue/AGL-2542), [AGL-1198](https://linear.app/aglyn/issue/AGL-1198))
+- **besigner:** an already-published version still drops the live cache ([AGL-2540](https://linear.app/aglyn/issue/AGL-2540))
+- **ci:** the notification test no longer impersonates an incident ([AGL-2533](https://linear.app/aglyn/issue/AGL-2533))
+- **aglyn:** a placement's own interactions survive the component merge ([AGL-2521](https://linear.app/aglyn/issue/AGL-2521))
+- **seo:** the entity logo stores a media reference, not a baked-in domain ([AGL-2538](https://linear.app/aglyn/issue/AGL-2538), [AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+
+<details>
+<summary>Also in this release: 2 test</summary>
+
+- **console:** the second barrel mock learns the schema-type rule too ([AGL-2536](https://linear.app/aglyn/issue/AGL-2536))
+- **tenant:** a declared entry field that the loader drops fails the gate ([AGL-2535](https://linear.app/aglyn/issue/AGL-2535), [AGL-686](https://linear.app/aglyn/issue/AGL-686), [AGL-2417](https://linear.app/aglyn/issue/AGL-2417))
+
+</details>
+
 ## v1.0.0-beta.62 — 2026-09-03
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/56119b9b0...v1.0.0-beta.62)
