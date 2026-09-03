@@ -104,7 +104,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
 
       # Guard the guard, BEFORE the live read, and BEFORE the credential gate.
       # A checker that has stopped checking reports "posture fine", which is
