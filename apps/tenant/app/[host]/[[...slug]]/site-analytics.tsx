@@ -39,6 +39,7 @@ import {
 } from '@aglyn/aglyn/app-utils/analytics-beacon'
 import {
   advertisingGrantedByRecord,
+  GA_CLICK_ID_PASSTHROUGH_SNIPPET,
   GA_CONSENT_DEFAULT_SNIPPET,
   GA_CONSENT_DEFAULT_WITH_ADS_SNIPPET,
   hostAsksAboutAdvertising,
@@ -486,6 +487,14 @@ export default function SiteAnalytics({
                 ? analyticsEnvironmentForcesInternal()
                   ? INTERNAL_TRAFFIC_FORCED_SNIPPET
                   : INTERNAL_TRAFFIC_GTAG_SNIPPET
+                : '') +
+              // Ad click ids cross to the console by URL, not cookie
+              // (AGL-2548): the default above denies `ad_storage`, so this is
+              // the only way the `gclid` an ad click lands with reaches the
+              // surface where the conversion fires. OUR property only, and a
+              // `set`, so it sits before `config` like the stamp above.
+              (gaMeasurementId === PLATFORM_GA_MEASUREMENT_ID
+                ? GA_CLICK_ID_PASSTHROUGH_SNIPPET
                 : '') +
               "gtag('js', new Date());" +
               // `content_group: 'marketing'` on OUR property only (AGL-1857):

@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.64 — 2026-09-03
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.63...v1.0.0-beta.64)
+
+### Fixed
+
+- **tenant:** the marketing site passes the ad click id to the console by URL ([AGL-2548](https://linear.app/aglyn/issue/AGL-2548))
+
 ## v1.0.0-beta.63 — 2026-09-03
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.62...v1.0.0-beta.63)
