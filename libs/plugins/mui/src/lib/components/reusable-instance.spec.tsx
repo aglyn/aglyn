@@ -17,7 +17,10 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { render } from '@testing-library/react'
-import ReusableInstance, { schema } from './reusable-instance'
+import ReusableInstance, {
+  REUSABLE_INSTANCE_ELEMENTS,
+  schema,
+} from './reusable-instance'
 
 describe('Reusable component instance (AGL-1247)', () => {
   const box = (container: HTMLElement) =>
@@ -71,5 +74,65 @@ describe('Reusable component instance (AGL-1247)', () => {
 
   it('is registered under the id the graft looks for', () => {
     expect(schema.$id).toBe(Aglyn.REUSABLE_INSTANCE_COMPONENT_ID)
+  })
+
+  describe('the element the placement renders as (AGL-2514)', () => {
+    it('is a div until the author says otherwise', () => {
+      // Every instance stored before this attribute existed has no
+      // `component`, and must keep rendering exactly the element it did.
+      const { container } = render(<ReusableInstance refId="hero-def" />)
+      expect(box(container).tagName).toBe('DIV')
+    })
+
+    it('renders each offered element', () => {
+      for (const element of REUSABLE_INSTANCE_ELEMENTS) {
+        const { container, unmount } = render(
+          <ReusableInstance refId="hero-def" component={element} />,
+        )
+        expect(box(container).tagName).toBe(element.toUpperCase())
+        unmount()
+      }
+    })
+
+    it('gives a site nav and a site footer their landmarks', () => {
+      // The reason the attribute exists: the wrapper is the outermost
+      // element of placed chrome, so a hardcoded div left a published page
+      // with no header and no footer region no matter how the definition
+      // was built.
+      const { container } = render(
+        <ReusableInstance refId="nav-def" name="Site nav" component="header" />,
+      )
+      expect(box(container).tagName).toBe('HEADER')
+    })
+
+    it('never offers main — the content region carries that one', () => {
+      // An instance may be placed any number of times per page, so an
+      // author-selected `main` here could only ever be the SECOND one.
+      // `stampDocumentLandmark` places the only one, on the Document layer
+      // or the Layout Slot.
+      expect(REUSABLE_INSTANCE_ELEMENTS).not.toContain('main')
+      const { container } = render(
+        <ReusableInstance refId="hero-def" component="main" />,
+      )
+      expect(box(container).tagName).toBe('DIV')
+    })
+
+    it('degrades an unlisted element rather than emitting it', () => {
+      // The value is persisted and rendered verbatim, so anything but an
+      // allow-list would put `script` into every visitor's page.
+      const { container } = render(
+        <ReusableInstance refId="hero-def" component="script" />,
+      )
+      expect(box(container).tagName).toBe('DIV')
+    })
+
+    it('offers exactly the elements the renderer accepts', () => {
+      const field = (schema.attributes ?? []).find((a) => a.name === 'component')
+      const options = (field as unknown as { options: { value: string }[] })
+        .options
+      expect(options.map((o) => o.value)).toEqual([
+        ...REUSABLE_INSTANCE_ELEMENTS,
+      ])
+    })
   })
 })

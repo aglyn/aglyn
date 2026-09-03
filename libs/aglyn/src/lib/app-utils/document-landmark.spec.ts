@@ -117,6 +117,18 @@ describe('stampDocumentLandmark (AGL-2486)', () => {
     ).toHaveLength(0)
   })
 
+  it('leaves a layout-less root that chose a landmark alone (AGL-2514)', () => {
+    // The Document layer offers the sectioning elements now, not just
+    // `div` and `main`. A document that IS one region — a layout that is
+    // nothing but chrome — must keep the element it was given rather than
+    // being overwritten with the landmark it declined.
+    const nodes = stampDocumentLandmark(withoutLayout({ component: 'header' }))
+    expect(elementOf(nodes[ROOT])).toBe('header')
+    expect(
+      Object.values(nodes).filter((node) => elementOf(node) === 'main'),
+    ).toHaveLength(0)
+  })
+
   it('does not mutate its input', () => {
     const nodes = withLayout()
     const before = JSON.stringify(nodes)

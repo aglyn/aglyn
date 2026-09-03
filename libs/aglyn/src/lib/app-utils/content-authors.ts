@@ -85,6 +85,156 @@ export const AUTHOR_NAME_MAX_LENGTH = 120
 /** Most `sameAs` profile links one author may carry. */
 export const AUTHOR_SAME_AS_MAX = 12
 
+/** Most display links one author may carry. */
+export const AUTHOR_LINKS_MAX = 12
+
+/**
+ * A link the author profile PRINTS, as opposed to one it only declares
+ * (AGL-2516).
+ *
+ * `sameAs` already held profile URLs, and it is exactly the wrong shape to
+ * render: a bare list of strings with no label and no icon, which a card can
+ * only draw as a row of identical anonymous links. It exists for crawlers,
+ * where a URL alone is the whole point.
+ *
+ * A link somebody CLICKS needs to say what it is before they click it, and
+ * the two ways of saying that pull in opposite directions:
+ *
+ *  * a KNOWN platform is recognised by its mark, and the mark is not the
+ *    author's to choose — an X link drawn with a GitHub glyph is a broken
+ *    link that still resolves, and letting anyone pick that is a footgun with
+ *    no upside. So {@link platform} fixes the icon AND the accessible name;
+ *  * anything else — a personal newsletter, a conference talk, an ORCID
+ *    record — has no mark anyone would recognise, so it takes a label and an
+ *    icon the author chooses.
+ *
+ * One field decides which of the two a row is, and the console shows the
+ * fields that apply to it. See {@link AUTHOR_SOCIAL_PLATFORMS}.
+ */
+export interface ContentAuthorLink {
+  /**
+   * A known platform id from {@link AUTHOR_SOCIAL_PLATFORMS}, whose icon and
+   * accessible name are FIXED. Empty (or unrecognised) makes this a custom
+   * link, which is where {@link label} and {@link icon} apply instead.
+   */
+  platform?: string
+  /** Custom links only — what this link is called. */
+  label?: string
+  /** Custom links only — the picked `mdi` icon id. */
+  icon?: string
+  /**
+   * Custom links only — the picked icon's PATH, resolved where the catalog
+   * is already loaded.
+   *
+   * The same split AGL-1212 made for besigner icons, for the same reason: the
+   * mdi catalog is ~2.9 MB and only picker surfaces load it, so a renderer
+   * given an id alone can only draw a fallback glyph. The id stays the source
+   * of truth; the path travels with the document so the tenant never pays for
+   * the catalog to draw one icon.
+   */
+  iconPath?: string
+  /** Where it goes. `https:` or `mailto:` only — see the normalizer. */
+  url?: string
+}
+
+/**
+ * The platforms whose mark is fixed (AGL-2516).
+ *
+ * `icon` is an `mdi` id, resolved to a path by whichever surface draws it —
+ * the renderer imports these few directly rather than through the catalog,
+ * because the set is closed and known at build time.
+ *
+ * Ordered as a masthead would list them rather than alphabetically: the
+ * places writers are actually followed first, then the ways to reach them.
+ */
+export const AUTHOR_SOCIAL_PLATFORMS: ReadonlyArray<{
+  id: string
+  label: string
+  icon: string
+}> = [
+  { id: 'x', label: 'X', icon: 'twitter' },
+  { id: 'linkedin', label: 'LinkedIn', icon: 'linkedin' },
+  { id: 'github', label: 'GitHub', icon: 'github' },
+  { id: 'mastodon', label: 'Mastodon', icon: 'mastodon' },
+  { id: 'youtube', label: 'YouTube', icon: 'youtube' },
+  { id: 'instagram', label: 'Instagram', icon: 'instagram' },
+  { id: 'facebook', label: 'Facebook', icon: 'facebook' },
+  { id: 'website', label: 'Website', icon: 'web' },
+  { id: 'email', label: 'Email', icon: 'email' },
+  { id: 'rss', label: 'RSS', icon: 'rss' },
+]
+
+/** The platform a link declares, or `undefined` when it is a custom one. */
+export function authorLinkPlatform(
+  platform: string | undefined | null,
+): (typeof AUTHOR_SOCIAL_PLATFORMS)[number] | undefined {
+  const id = typeof platform === 'string' ? platform.trim() : ''
+  if (!id) return undefined
+  return AUTHOR_SOCIAL_PLATFORMS.find((entry) => entry.id === id)
+}
+
+/**
+ * What a link is CALLED, which is never the author's choice on a known
+ * platform.
+ *
+ * A custom link with no label falls back to its own URL rather than to
+ * something generic: "Link" beside four other "Link"s is not an accessible
+ * name, and the URL at least distinguishes them.
+ */
+export function authorLinkLabel(link: ContentAuthorLink): string {
+  const known = authorLinkPlatform(link.platform)
+  if (known) return known.label
+  return text(link.label, 60) || text(link.url, 400)
+}
+
+/**
+ * Schemes an author link may use.
+ *
+ * `https:` and `mailto:` only, matching the share bar and the Entry Author
+ * card's own href guard. `http:` is excluded deliberately — a byline link is
+ * published on every post its author wrote, and a mixed-content warning
+ * across a whole archive is a poor trade for a scheme nobody should still be
+ * publishing. Everything else, `javascript:` first among them, is a script
+ * injection wearing a URL.
+ */
+const SAFE_AUTHOR_LINK_HREF = /^(https:\/\/|mailto:)/i
+
+/**
+ * Sanitize the stored link rows into the shape a renderer may assume.
+ *
+ * Drops any row without a usable, safely-schemed URL — a link that goes
+ * nowhere is worse than an absent one, because it still takes a click. A row
+ * naming a platform keeps ONLY the platform (its label and icon come from the
+ * registry, so a stored label or icon beside one is stale data that must not
+ * win); a custom row keeps its label and icon and drops any platform id that
+ * did not resolve.
+ */
+export function normalizeContentAuthorLinks(
+  value: unknown,
+): ContentAuthorLink[] {
+  if (!Array.isArray(value)) return []
+  const links: ContentAuthorLink[] = []
+  for (const row of value as unknown[]) {
+    if (!row || typeof row !== 'object') continue
+    const raw = row as Record<string, unknown>
+    const url = text(raw['url'], 400)
+    if (!url || !SAFE_AUTHOR_LINK_HREF.test(url)) continue
+    const known = authorLinkPlatform(raw['platform'] as never)
+    if (known) {
+      links.push({ platform: known.id, url })
+    } else {
+      links.push({
+        label: text(raw['label'], 60),
+        icon: text(raw['icon'], 120),
+        iconPath: text(raw['iconPath'], 4000),
+        url,
+      })
+    }
+    if (links.length >= AUTHOR_LINKS_MAX) break
+  }
+  return links
+}
+
 /**
  * One custom author, as stored at `hosts/{hostId}/authors/{authorId}`.
  *
@@ -123,8 +273,16 @@ export interface ContentAuthorRecord {
   jobTitle?: string
   /** Person only — the organization they write for (`worksFor.name`). */
   worksFor?: string
-  /** Profile URLs (social, ORCID, Crunchbase…) — `schema.org` `sameAs`. */
+  /**
+   * Profile URLs (social, ORCID, Crunchbase…) — `schema.org` `sameAs`.
+   *
+   * Declared, never drawn. {@link links} is the rendered list; every link
+   * there is folded into the emitted `sameAs` too, so an author who fills in
+   * the visible row does not also have to retype the URL for the crawler.
+   */
   sameAs?: string[]
+  /** The links the author profile PRINTS (AGL-2516). */
+  links?: ContentAuthorLink[]
   /**
    * Byline blurb for the page. NOT structured data: `description` on a Person
    * is a claim about the person, and a marketing sentence is not that.
@@ -187,6 +345,7 @@ export function normalizeContentAuthor(
     jobTitle: text(raw['jobTitle']),
     worksFor: text(raw['worksFor']),
     sameAs,
+    links: normalizeContentAuthorLinks(raw['links']),
     bio: text(raw['bio'], 600),
   }
 }
@@ -243,6 +402,14 @@ export function contentAuthorJsonLd(
     hostId: context?.hostId,
     origin: context?.origin,
   })
+  const sameAs = Array.from(
+    new Set([
+      ...(normalized.sameAs ?? []),
+      ...(normalized.links ?? [])
+        .map((link) => link.url ?? '')
+        .filter((url) => /^https:\/\//i.test(url)),
+    ]),
+  ).slice(0, AUTHOR_SAME_AS_MAX)
   return {
     '@type': schemaType,
     name: normalized.name,
@@ -261,7 +428,11 @@ export function contentAuthorJsonLd(
     ...(schemaType === 'Person' && normalized.worksFor
       ? { worksFor: { '@type': 'Organization', name: normalized.worksFor } }
       : {}),
-    ...(normalized.sameAs?.length ? { sameAs: normalized.sameAs } : {}),
+    // A link the profile PRINTS is also a profile the author claims, so the
+    // rendered rows join `sameAs` rather than being a second list to keep in
+    // step by hand (AGL-2516). `mailto:` is excluded: `sameAs` is for pages
+    // that identify the same entity, and an address is not one.
+    ...(sameAs.length ? { sameAs } : {}),
   }
 }
 

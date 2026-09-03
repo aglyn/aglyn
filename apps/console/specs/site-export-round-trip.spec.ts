@@ -613,6 +613,19 @@ const SEEDS: Array<{
       jobTitle: 'Principal Engineer',
       worksFor: 'Analytical Engines Ltd',
       sameAs: ['https://example.com/@ada'],
+      // One of each KIND (AGL-2516): a known platform, whose icon and label
+      // the registry owns, and a custom row carrying the picked icon's path
+      // beside its id. A seed with only one of the two would let the other
+      // fall off the import unnoticed.
+      links: [
+        { platform: 'mastodon', url: 'https://example.com/@ada' },
+        {
+          label: 'Notes on the Engine',
+          icon: 'notebook-outline',
+          iconPath: 'M4 4h16v16H4z',
+          url: 'https://example.com/ada/notes',
+        },
+      ],
       bio: 'Writes about compilers.',
     },
   },

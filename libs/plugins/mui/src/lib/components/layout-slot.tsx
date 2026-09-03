@@ -179,7 +179,7 @@ export const schema: Aglyn.ComponentSchema<LayoutSlotProps> = {
     },
     {
       name: 'component',
-      label: 'HTML element',
+      label: 'Component',
       description:
         'The DOM element the screen content renders inside. Blank is ' +
         '"main" — the page-content landmark assistive tech skips the ' +

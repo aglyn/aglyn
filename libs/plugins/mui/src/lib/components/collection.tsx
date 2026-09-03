@@ -19,16 +19,24 @@ import * as Aglyn from '@aglyn/aglyn'
 import {
   mdiAccountCircleOutline,
   mdiContentCopy,
+  mdiEmail,
   mdiFacebook,
+  mdiGithub,
+  mdiInstagram,
+  mdiLinkVariant,
   mdiLinkedin,
   mdiMagnify,
+  mdiMastodon,
   mdiNewspaperVariantOutline,
   mdiPostOutline,
+  mdiRss,
   mdiShareVariant,
   mdiTagMultipleOutline,
   mdiTagOutline,
   mdiTextLong,
   mdiTwitter,
+  mdiWeb,
+  mdiYoutube,
 } from '@aglyn/shared-data-mdi'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 // The icon picker's fuzzy matcher (use-mdi-icons-fuzzy), not a re-implementation
@@ -2232,12 +2240,74 @@ export interface CollectionEntryAuthorProps extends StackProps {
   image?: string
   /** The author's own page; blank renders the name as plain text. */
   url?: string
+  /**
+   * The author's profile links, server-filled from their record (AGL-2516).
+   *
+   * Not authorable as text: each row carries a platform or a picked icon, and
+   * the console's author editor is where those are chosen. `Show links` is
+   * the template's control over them.
+   */
+  links?: Aglyn.ContentAuthorLink[]
   showBio?: boolean
   showAvatar?: boolean
+  showLinks?: boolean
 }
 
 /** The card's portrait, larger than the byline's 36px mark (Figma 170:190). */
 const AUTHOR_AVATAR_SIZE = 48
+
+/**
+ * The mark for each platform the author model knows (AGL-2516).
+ *
+ * Imported rather than resolved through the icon catalog, because this set is
+ * CLOSED and known at build time — the catalog is ~2.9 MB and only picker
+ * surfaces load it, so a renderer that reached for it to draw ten glyphs
+ * would ship the whole thing to every visitor of every article.
+ *
+ * Keyed by the registry's `icon`, so adding a platform is one entry there and
+ * one import here, and a platform whose mark was never imported falls through
+ * to the generic link glyph rather than rendering nothing.
+ */
+const AUTHOR_LINK_ICON_PATHS: Record<string, string> = {
+  twitter: mdiTwitter.path,
+  linkedin: mdiLinkedin.path,
+  github: mdiGithub.path,
+  mastodon: mdiMastodon.path,
+  youtube: mdiYoutube.path,
+  instagram: mdiInstagram.path,
+  facebook: mdiFacebook.path,
+  web: mdiWeb.path,
+  email: mdiEmail.path,
+  rss: mdiRss.path,
+}
+
+/**
+ * What one link row draws.
+ *
+ * A known platform takes its mark from the table above. A CUSTOM link takes
+ * the path the console stored beside the picked id (AGL-1212) — and falls back
+ * to a generic link glyph rather than to nothing, because a row with a label
+ * and a url is still a working link whose icon simply failed to resolve.
+ */
+function authorLinkIconPath(link: Aglyn.ContentAuthorLink): string {
+  const platform = Aglyn.authorLinkPlatform(link.platform)
+  if (platform) {
+    return AUTHOR_LINK_ICON_PATHS[platform.icon] ?? mdiLinkVariant.path
+  }
+  return (link.iconPath ?? '').trim() || mdiLinkVariant.path
+}
+
+/**
+ * Schemes a rendered author link may use — the model's own guard, restated at
+ * the boundary that produces the `href`.
+ *
+ * `normalizeContentAuthorLinks` already drops everything else, and this is
+ * deliberately not trusting that: the props on this component are authorable,
+ * so a link can reach the renderer without ever passing through the store's
+ * normalizer. Two checks, because only one of them is on the path an attacker
+ * would use.
+ */
+const SAFE_AUTHOR_LINK_HREF = /^(https:\/\/|mailto:)/i
 
 /**
  * What the byline may link to — an absolute `https:` page, or a route on this
@@ -2272,7 +2342,8 @@ const CollectionEntryAuthor = forwardRef<
 >((props, ref) => {
   // None of these are DOM attributes (`name` least of all), so they are
   // destructured rather than spread — the stack.ts pattern.
-  const { name, bio, image, url, showBio, showAvatar, ...rest } = props
+  const { name, bio, image, url, links, showBio, showAvatar, showLinks, ...rest } =
+    props
   const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
   const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
   const { hostId } = Aglyn.useSite()
@@ -2298,7 +2369,27 @@ const CollectionEntryAuthor = forwardRef<
   // resolve on the canvas — the card draws its slot, which is the thing its
   // spacing is built around.
   const samplePortrait = sample && showAvatar !== false
-  if (!displayName && !displayBio && !imageSrc && !samplePortrait) {
+  /**
+   * The rows this card will actually draw (AGL-2516).
+   *
+   * Guarded here rather than trusted from the store: these arrive as PROPS,
+   * so a link can reach the renderer without passing the record normalizer,
+   * and `javascript:` has to be unreachable rather than merely unlikely — the
+   * same reason the byline's own `url` is checked twice.
+   */
+  const linkRows =
+    showLinks !== false
+      ? (links ?? []).filter((link) =>
+          SAFE_AUTHOR_LINK_HREF.test((link?.url ?? '').trim()),
+        )
+      : []
+  if (
+    !displayName &&
+    !displayBio &&
+    !imageSrc &&
+    !samplePortrait &&
+    !linkRows.length
+  ) {
     return <Box ref={ref} {...rest} />
   }
   return (
@@ -2363,6 +2454,37 @@ const CollectionEntryAuthor = forwardRef<
             {displayBio}
           </Typography>
         ) : null}
+        {linkRows.length ? (
+          <MuiStack
+            direction="row"
+            spacing={0.5}
+            sx={{ flexWrap: 'wrap', ml: -1 }}
+          >
+            {linkRows.map((link, index) => {
+              const label = Aglyn.authorLinkLabel(link)
+              return (
+                <AppLink
+                  key={index}
+                  componentVariant="icon-button"
+                  href={(link.url ?? '').trim()}
+                  // The name IS the icon here, so it has to be announced —
+                  // a row of unlabelled icon buttons is a row a screen reader
+                  // reads as "link, link, link".
+                  aria-label={label}
+                  title={label}
+                  size="small"
+                  sx={{ color: 'text.secondary' }}
+                  // A profile lives off this site by definition, and `mailto:`
+                  // must not replace the article either.
+                  target="_blank"
+                  rel="noopener noreferrer me"
+                >
+                  <MdiIcon path={authorLinkIconPath(link)} size={0.85} />
+                </AppLink>
+              )
+            })}
+          </MuiStack>
+        ) : null}
       </MuiStack>
     </MuiStack>
   )
@@ -2414,6 +2536,19 @@ export const collectionEntryAuthorSchema: Aglyn.ComponentSchema<CollectionEntryA
           'Blank uses the author’s own url. The name links here; with no url ' +
           'it renders as plain text.',
         component: Aglyn.FieldComponentType.TEXT_FIELD,
+      },
+      {
+        name: 'showLinks',
+        label: 'Show links',
+        description:
+          'Off hides the author’s profile links. They come from the author ' +
+          'record — a known platform brings its own mark, and a custom link ' +
+          'brings the icon and label chosen there.',
+        component: Aglyn.FieldComponentType.SWITCH,
+        // Unset means SHOWN in the renderer above, so the switch has to open
+        // in that position or it lies about the card in front of the author
+        // (AGL-2506).
+        initialValue: true,
       },
       {
         name: 'showBio',

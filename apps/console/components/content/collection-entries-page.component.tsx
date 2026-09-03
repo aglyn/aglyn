@@ -18,9 +18,11 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import {
+  getMdiIconPath,
   mdiCalendarClock,
   mdiCalendarEdit,
   mdiChevronDown,
+  mdiClose,
   mdiCogOutline,
   mdiDeleteOutline,
   mdiFileDocumentMultipleOutline,
@@ -29,6 +31,8 @@ import {
   mdiPublish,
   mdiPublishOff,
 } from '@aglyn/shared-data-mdi'
+import { IconSelectControl } from '@aglyn/shared-ui-jsx-forms'
+import { IconButton } from '@mui/material'
 import {
   CardDisplay,
   Container,
@@ -663,6 +667,7 @@ export function CollectionEntriesPage() {
     jobTitle: string
     worksFor: string
     sameAs: string
+    links: Aglyn.ContentAuthorLink[]
     bio: string
   } | null>(null)
   const [authorBusy, setAuthorBusy] = useState(false)
@@ -686,6 +691,9 @@ export function CollectionEntriesPage() {
       jobTitle: author?.jobTitle ?? '',
       worksFor: author?.worksFor ?? '',
       sameAs: (author?.sameAs ?? []).join('\n'),
+      // Rows, not text: each carries a platform or a picked icon, so there is
+      // no line-per-URL form of them to edit (AGL-2516).
+      links: Aglyn.normalizeContentAuthorLinks(author?.links),
       bio: author?.bio ?? '',
     })
   }, [])
@@ -723,6 +731,10 @@ export function CollectionEntriesPage() {
       jobTitle: isPerson ? authorEditor.jobTitle.trim() : '',
       worksFor: isPerson ? authorEditor.worksFor.trim() : '',
       sameAs,
+      // Normalized on the way out as well as the way in: the editor lets a row
+      // exist while it is being filled, and a half-typed row is not something
+      // to store (AGL-2516).
+      links: Aglyn.normalizeContentAuthorLinks(authorEditor.links),
       bio: authorEditor.bio.trim(),
     }
     setAuthorBusy(true)
@@ -2038,6 +2050,153 @@ export function CollectionEntriesPage() {
               />
             </>
           ) : null}
+          {/*
+            The links this author's card PRINTS (AGL-2516).
+
+            Separate from `Profile links` below, and the split is the point:
+            that field is `sameAs`, which exists for crawlers and renders
+            nowhere. These are the rows a reader clicks, so each one has to say
+            what it is before the click — which a known platform does with its
+            own mark, and anything else does with a label the author writes.
+          */}
+          <Box>
+            <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
+              {'Links'}
+            </Typography>
+            <Typography
+              variant="caption"
+              sx={{ color: 'text.secondary', display: 'block', mb: 1 }}
+            >
+              {'Shown on the author card. A known platform brings its own ' +
+                'icon; anything else takes a label and an icon you pick. ' +
+                `Up to ${Aglyn.AUTHOR_LINKS_MAX}.`}
+            </Typography>
+            <Stack spacing={1.5}>
+              {(authorEditor?.links ?? []).map((link, index) => {
+                const known = Aglyn.authorLinkPlatform(link.platform)
+                const patch = (next: Partial<Aglyn.ContentAuthorLink>) =>
+                  setAuthorEditor((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          links: prev.links.map((row, i) =>
+                            i === index ? { ...row, ...next } : row,
+                          ),
+                        }
+                      : prev,
+                  )
+                return (
+                  <Stack key={index} spacing={1}>
+                    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                      <TextField
+                        select
+                        size="small"
+                        label="Kind"
+                        sx={{ minWidth: 148 }}
+                        value={known?.id ?? ''}
+                        onChange={(event) =>
+                          // Switching to a platform DROPS the custom label and
+                          // icon rather than keeping them hidden: the registry
+                          // owns both for a known platform, and a value the
+                          // editor stops showing is one nobody can clear.
+                          patch(
+                            event.target.value
+                              ? {
+                                  platform: event.target.value,
+                                  label: '',
+                                  icon: '',
+                                  iconPath: '',
+                                }
+                              : { platform: '' },
+                          )
+                        }
+                      >
+                        <MenuItem value="">{'Custom link'}</MenuItem>
+                        {Aglyn.AUTHOR_SOCIAL_PLATFORMS.map((platform) => (
+                          <MenuItem key={platform.id} value={platform.id}>
+                            {platform.label}
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                      <TextField
+                        size="small"
+                        fullWidth
+                        label="URL"
+                        value={link.url ?? ''}
+                        onChange={(event) => patch({ url: event.target.value })}
+                        placeholder={
+                          known?.id === 'email'
+                            ? 'mailto:hello@example.com'
+                            : 'https://…'
+                        }
+                      />
+                      <IconButton
+                        aria-label={`Remove ${Aglyn.authorLinkLabel(link)}`}
+                        size="small"
+                        onClick={() =>
+                          setAuthorEditor((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  links: prev.links.filter(
+                                    (_, i) => i !== index,
+                                  ),
+                                }
+                              : prev,
+                          )
+                        }
+                      >
+                        <MdiIcon path={mdiClose.path} size={0.8} />
+                      </IconButton>
+                    </Stack>
+                    {known ? null : (
+                      <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
+                        <TextField
+                          size="small"
+                          fullWidth
+                          label="Label"
+                          value={link.label ?? ''}
+                          onChange={(event) =>
+                            patch({ label: event.target.value })
+                          }
+                          helperText="What this link is called, e.g. Newsletter"
+                        />
+                        <IconSelectControl
+                          value={link.icon ?? ''}
+                          label="Icon"
+                          // The id AND its path (AGL-1212): the catalog is
+                          // loaded HERE and nowhere the card renders, so a
+                          // renderer handed an id alone draws a help glyph.
+                          onChange={(iconId) =>
+                            patch({
+                              icon: iconId,
+                              iconPath: iconId ? getMdiIconPath(iconId) : '',
+                            })
+                          }
+                        />
+                      </Stack>
+                    )}
+                  </Stack>
+                )
+              })}
+            </Stack>
+            <Button
+              size="small"
+              sx={{ mt: 1 }}
+              disabled={
+                (authorEditor?.links?.length ?? 0) >= Aglyn.AUTHOR_LINKS_MAX
+              }
+              onClick={() =>
+                setAuthorEditor((prev) =>
+                  prev
+                    ? { ...prev, links: [...prev.links, { url: '' }] }
+                    : prev,
+                )
+              }
+            >
+              {'Add link'}
+            </Button>
+          </Box>
           <TextField
             label="Profile links"
             size="small"

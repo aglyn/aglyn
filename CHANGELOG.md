@@ -9,6 +9,26 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.55 — 2026-09-03
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.54...v1.0.0-beta.55)
+
+### Added
+
+- **content:** an entry can link to the archive of the person who wrote it ([AGL-2517](https://linear.app/aglyn/issue/AGL-2517))
+- **content:** an author archive says whose it is ([AGL-2517](https://linear.app/aglyn/issue/AGL-2517))
+- **content:** an author gets a page that collects what they wrote ([AGL-2517](https://linear.app/aglyn/issue/AGL-2517), [AGL-1321](https://linear.app/aglyn/issue/AGL-1321), [AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **console:** the author editor writes the links its card renders ([AGL-2516](https://linear.app/aglyn/issue/AGL-2516), [AGL-1212](https://linear.app/aglyn/issue/AGL-1212))
+- **content:** an author carries links a reader can click, not only ones a crawler reads ([AGL-2516](https://linear.app/aglyn/issue/AGL-2516), [AGL-1212](https://linear.app/aglyn/issue/AGL-1212))
+- **besigner:** a placed component can be the page's header or footer ([AGL-2514](https://linear.app/aglyn/issue/AGL-2514), [AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **tools:** the Linear id ceiling reaches AGL-2516 ([AGL-2516](https://linear.app/aglyn/issue/AGL-2516), [AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
+
+</details>
+
 ## v1.0.0-beta.54 — 2026-09-02
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/bdd029a7b...v1.0.0-beta.54)

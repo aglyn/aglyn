@@ -98,7 +98,7 @@ export const schema: Aglyn.ComponentSchema<SectionProps> = {
   attributes: [
     {
       name: 'element',
-      label: 'HTML element',
+      label: 'Component',
       description:
         'The DOM element this section renders as, per W3C semantics. ' +
         'Use section/article/aside/nav/header/footer for meaningful ' +

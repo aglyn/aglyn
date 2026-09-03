@@ -73,6 +73,12 @@ describe('binding token catalog (AGL-583)', () => {
         // The routed category (AGL-1321)…
         '{{collection.category}}',
         '{{collection.categorySlug}}',
+        // The author archive (AGL-2517) — the same five the composer emits.
+        '{{collection.author}}',
+        '{{collection.authorSlug}}',
+        '{{collection.authorBio}}',
+        '{{collection.authorImage}}',
+        '{{collection.authorUrl}}',
         // …and the pager (AGL-1386). Browsable, or the only way to build a
         // pager on a list template is to know the grammar by heart — and an
         // unlisted token renders as a warning-colored pill in the editor.

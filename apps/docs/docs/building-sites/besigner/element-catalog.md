@@ -75,7 +75,7 @@ for the site.
 | **Container** | Centers content and caps its maximum width. |
 | **Stack** | One-dimensional row or column with a gap. Also the element that carries **repeat over a dataset**. |
 | **Grid** | Responsive 12-column layout. See [Grid](#grid) below. |
-| **Layout slot** | Where a bound layout injects the screen's own content. Its **HTML element** is `main` unless you change it — see below. |
+| **Layout slot** | Where a bound layout injects the screen's own content. Its **Component** is `main` unless you change it — see below. |
 
 ### The page's `main` landmark
 
@@ -90,15 +90,34 @@ It goes on the page's content region, which the platform works out for you:
   whole point of the landmark.
 - On a screen with **no layout**, the **Document** layer at the top of the hierarchy.
 
-Both of those have an **HTML element** attribute if you want to say otherwise. Set the
+Both of those have a **Component** attribute if you want to say otherwise. Set the
 Document layer to `main` and the slot steps aside; set the slot to `section` (for a layout
 whose slot genuinely isn't the page's main content) and the Document layer takes it
 instead. Choose something other than `main` in both places and the page ships without one
 — your call, deliberately made.
 
-Nothing else can claim it: neither **Section**'s element picker nor
-[custom HTML](interactions-and-custom-html.md) will emit a `main`, because a second one
-makes the landmark ambiguous, which is worse than having none.
+Nothing else can claim it: neither **Section**'s element picker, nor a
+**Reusable component** placement, nor [custom HTML](interactions-and-custom-html.md) will
+emit a `main`, because a second one makes the landmark ambiguous, which is worse than
+having none.
+
+### `header` and `footer` for your site chrome
+
+`main` is only half the picture: assistive tech and search engines also look for the
+banner and contentinfo regions around it. Those are yours to place.
+
+- A **Reusable component** placement — how a site nav or a site footer normally reaches a
+  layout — has its own **Component** attribute. Set the nav's placement to `header` and
+  the footer's to `footer`, and the published page carries both landmarks around the
+  slot's `main`.
+- A **Section** anywhere inside a page can be `header` or `footer` too, and adds an
+  accessible label with it.
+- The **Document** layer takes the same list, for a document that _is_ one region — a
+  layout that is nothing but chrome, say. Picking a landmark other than `main` there
+  leaves the page without a `main`, as above.
+
+Set the element on one of them, not on several nested inside each other: a `footer`
+placement wrapping a `footer` Section is two contentinfo regions where you meant one.
 
 ### Grid
 

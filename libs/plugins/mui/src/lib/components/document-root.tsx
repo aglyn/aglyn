@@ -35,19 +35,35 @@ import { BUNDLE_ID } from '../constants/bundle-common'
 export const ID: Aglyn.ComponentId = 'div'
 
 /**
- * Elements the document root may render as (AGL-2486).
+ * Elements the document root may render as (AGL-2486, widened by AGL-2514).
  *
  * `main` is offered here and on the Layout Slot, and nowhere else: those two
  * are the only nodes that can BE the page's content region, and
- * `stampDocumentLandmark` guarantees exactly one of them carries it. Every
- * other landmark is a grouping choice the Section element already owns, so
- * this list stays deliberately short — a root that is `header` or `footer` is
- * a page with no body.
+ * `stampDocumentLandmark` guarantees exactly one of them carries it.
+ *
+ * The rest of the list is the sectioning set `SECTION_ELEMENTS` offers, for
+ * the same reason it offers them: the root is an element like any other, and
+ * a document whose whole body is one region — a layout that is nothing but
+ * chrome, a fragment composed into a larger page — had no way to say so. It
+ * stayed `div` and the region went unnamed. A root that is `header` or
+ * `footer` is a document with no `main`, which `stampDocumentLandmark`
+ * already treats as the author's choice rather than a state to repair: it
+ * hands the landmark to the slot when there is one, and otherwise ships the
+ * page without.
  *
  * An allow-list rather than free text: the value is persisted and rendered
  * verbatim, so a typed one would put `script` into every visitor's page.
  */
-export const DOCUMENT_ROOT_ELEMENTS = ['div', 'main'] as const
+export const DOCUMENT_ROOT_ELEMENTS = [
+  'div',
+  'main',
+  'header',
+  'footer',
+  'nav',
+  'aside',
+  'section',
+  'article',
+] as const
 export type DocumentRootElement = (typeof DOCUMENT_ROOT_ELEMENTS)[number]
 
 export interface DocumentRootProps {
@@ -102,11 +118,12 @@ export const schema: Aglyn.ComponentSchema<DocumentRootProps> = {
   attributes: [
     {
       name: 'component',
-      label: 'HTML element',
+      label: 'Component',
       description:
         'The DOM element the page renders as. On a screen framed by a ' +
         'shared layout the layout’s slot carries "main" instead, so this ' +
-        'stays a plain container unless you say otherwise.',
+        'stays a plain container unless you say otherwise. Choosing a ' +
+        'landmark other than "main" leaves the page without one.',
       component: Aglyn.FieldComponentType.SELECT,
       options: DOCUMENT_ROOT_ELEMENTS.map((value) => ({
         value,
