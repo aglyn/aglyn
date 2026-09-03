@@ -18,7 +18,10 @@
 import { CANVAS_ROOT_ELEMENT_ID as ROOT } from '../foundation/constants/canvas'
 import { clearCanvasNodes, repairCanvasNodes } from './repair-canvas-nodes'
 
-function doc(extra: Record<string, any> = {}, rootChildren: string[] = []) {
+function doc(
+  extra: Record<string, any> = {},
+  rootChildren: string[] = [],
+): Record<string, any> {
   return {
     [ROOT]: { $id: ROOT, componentId: 'div', parentId: null, nodes: rootChildren },
     ...extra,
