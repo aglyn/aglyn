@@ -42,6 +42,8 @@ import {
   type ComponentPropagationChange,
   type WorkspaceEditorComponentProps,
   clearServerDraft,
+  useClearCanvasCallback,
+  useRepairDocumentCallback,
 } from '@aglyn/besigner-ui'
 // Import '@aglyn/foundation-feature-singleton'
 import {
@@ -383,6 +385,12 @@ function BesignerPage(props) {
   // (AGL-746). What stays in this route is what is actually about a screen
   // belonging to a host — SEO, password protection, publishing, layout
   // chrome and the live URL.
+  // Document maintenance (AGL-2554 / AGL-2555). Both sit on Edit beside
+  // Raw JSON, which is the escape hatch they exist to make unnecessary:
+  // an unrenderable node cannot be selected, so neither Delete Element nor
+  // Add Element can reach one.
+  const clearCanvas = useClearCanvasCallback('page')
+  const repairDocument = useRepairDocumentCallback('page')
   const {
     saveAvailable,
     remoteChanged,
@@ -1543,6 +1551,21 @@ function BesignerPage(props) {
                             id: 'center-nav-edit-rawjson',
                             children: 'Raw JSON',
                             onClick: () => openJsonEditor(),
+                            ListItemTextProps: { inset: true },
+                          },
+                          {
+                            type: 'divider',
+                          },
+                          {
+                            id: 'center-nav-edit-repair',
+                            children: 'Repair page',
+                            onClick: () => repairDocument(),
+                            ListItemTextProps: { inset: true },
+                          },
+                          {
+                            id: 'center-nav-edit-clear',
+                            children: 'Clear canvas',
+                            onClick: () => clearCanvas(),
                             ListItemTextProps: { inset: true },
                           },
                         ],

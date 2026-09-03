@@ -34,6 +34,8 @@ import {
   type BesignerSaveBaseline,
   type WorkspaceEditorComponentProps,
   clearServerDraft,
+  useClearCanvasCallback,
+  useRepairDocumentCallback,
 } from '@aglyn/besigner-ui'
 import {
   ICON_VARIANT_MODIFY_ADD,
@@ -246,6 +248,12 @@ function LayoutBesignerPage(props) {
   // the size-guarded save (AGL-678) are identical in every besigner editor
   // and live in the shared hook (AGL-746). What stays here is what is
   // actually about a layout belonging to a host.
+  // Document maintenance (AGL-2554 / AGL-2555). Both sit on Edit beside
+  // Raw JSON, which is the escape hatch they exist to make unnecessary:
+  // an unrenderable node cannot be selected, so neither Delete Element nor
+  // Add Element can reach one.
+  const clearCanvas = useClearCanvasCallback('layout')
+  const repairDocument = useRepairDocumentCallback('layout')
   const {
     saveAvailable,
     remoteChanged,
@@ -637,6 +645,21 @@ function LayoutBesignerPage(props) {
                             id: 'center-nav-edit-rawjson',
                             children: 'Raw JSON',
                             onClick: () => openJsonEditor(),
+                            ListItemTextProps: { inset: true },
+                          },
+                          {
+                            type: 'divider',
+                          },
+                          {
+                            id: 'center-nav-edit-repair',
+                            children: 'Repair layout',
+                            onClick: () => repairDocument(),
+                            ListItemTextProps: { inset: true },
+                          },
+                          {
+                            id: 'center-nav-edit-clear',
+                            children: 'Clear canvas',
+                            onClick: () => clearCanvas(),
                             ListItemTextProps: { inset: true },
                           },
                         ],
