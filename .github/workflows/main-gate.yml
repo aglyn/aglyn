@@ -370,7 +370,11 @@ jobs:
   report:
     name: report
     runs-on: ubuntu-latest
-    needs: [fast, full]
+    # `sweep-due` is needed for its RESULT, not its output: `full` depends on
+    # it, so a failed `sweep-due` leaves `full` skipped — and a skipped `full`
+    # is not a red. Without this the sweep would stop running on every push
+    # while the reporter said "nothing to report" (AGL-2552).
+    needs: [fast, full, sweep-due]
     if: always() && github.event_name != 'pull_request'
     permissions:
       contents: read
@@ -421,6 +425,7 @@ jobs:
             --sha="${{ needs.fast.outputs.sha || github.sha }}" \
             --fast="${{ needs.fast.result }}" \
             --full="${{ needs.full.result }}" \
+            --sweep-due="${{ needs.sweep-due.result }}" \
             --run-url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             --subject="$(git log -1 --format=%s || true)"
 

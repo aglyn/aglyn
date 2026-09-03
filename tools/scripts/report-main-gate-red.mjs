@@ -55,7 +55,7 @@ const flag = (name, fallback = '') => {
  */
 const TEST = args.includes('--test')
 
-const results = { fast: flag('fast'), full: flag('full') }
+const results = { fast: flag('fast'), full: flag('full'), sweepDue: flag('sweep-due') }
 const sha = flag('sha')
 const runUrl = flag('run-url')
 const subject = flag('subject')
