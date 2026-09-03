@@ -148,7 +148,7 @@ Measured 2026-09-01.
 
 | Project | Serves | Posture |
 | --- | --- | --- |
-| `aglyn-tenant` | every customer site on `*.aglyn.app` + custom domains | ✅ protected — challenge, 7 scoped bypass rules |
+| `aglyn-tenant` | every customer site on `*.aglyn.app` + custom domains | ✅ protected — challenge, 8 scoped bypass rules |
 | `aglyn-docs` | `docs.aglyn.com` | ✅ protected — challenge, 3 scoped bypass rules |
 | `aglyn-console` | `app.aglyn.com` — sign-in, billing, staff surfaces | ✅ protected — challenge, 6 scoped bypass rules |
 | `aglyn-plugins` | `plugins.aglyn.com` — plugin loader origin | ⚠️ **no WAF config** — reviewed, deliberate |
@@ -364,6 +364,51 @@ anonymous            app.aglyn.com/       429
 
 The console 404 is the useful one: a bogus media id reaching the app and being
 refused *there* proves the challenge was bypassed and the routing was not.
+
+### A NEW public metadata path ships challenged (2026-09-03)
+
+The **Crawler metadata bypass** matches **exact paths**. So does its docs-project
+twin. That is the right default — it keeps the neighbouring `/api/*` namespace
+challenged — and it has a consequence nobody remembers at the time: **any new
+public SEO path is challenged from the moment it ships**, silently, with a 429
+that no log of ours records.
+
+AGL-2520 is the case that proved it. `/sitemap.xml` became a sitemap *index*
+naming child sitemaps at `/sitemaps/{section}/{page}.xml`, one per section of
+the site and one per content collection. `/sitemap.xml` itself was bypassed;
+every child it named was not. The index would have parsed perfectly and led
+every crawler to a wall.
+
+Fixed by adding a **sixth condition group** to the existing rule — a prefix, not
+an exact path, because the set is a function of the customer's own collections
+and cannot be enumerated:
+
+```json
+{ "conditions": [{ "type": "path", "op": "pre", "value": "/sitemaps/" }] }
+```
+
+`/sitemaps/*` is served by the sitemap route alone, is public, read-only and
+secrets-free, and answers an empty `<urlset>` for a section that does not exist,
+so the namespace is safe to open wholesale.
+
+Measured 2026-09-03, both directions, Googlebot User-Agent against `aglyn.com`:
+
+```text
+Googlebot  /sitemaps/pages/1.xml    404  no x-vercel-mitigated  (app answered)
+Googlebot  /sitemap.xml             200  no x-vercel-mitigated
+Googlebot  /a-random-path…          429  challenge              (protection intact)
+```
+
+The 404 is the useful one, for the same reason the console's is above: the route
+was not deployed yet, so the app itself refused it — which proves the challenge
+was bypassed and nothing else changed. The 429 on the third line is what proves
+the bypass is still scoped.
+
+**The check cannot catch this class.** `firewall-posture.mjs` declares the
+group as an allowed shape (`alsoAllowsGroups`), and a declared-but-absent
+alternate is not a finding — an allowance is not a requirement. So the repo can
+be green, the drift job green, and the feature dead to crawlers. **When you add
+a public metadata path, PATCH the live rule in the same change.**
 
 **The general lesson, restated:** the marketing site's own pages are not the
 only thing a challenge hides. Enumerate what fetches your **metadata** and your
