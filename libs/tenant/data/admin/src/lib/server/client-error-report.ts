@@ -218,8 +218,9 @@ export async function reportClientErrors(
    * "production error group" in the project was a dev-only artifact with
    * `http://localhost:4200` stack frames. Ranking is the whole point of Error
    * Reporting, so a majority-noise stream does not merely cost storage: it
-   * aims triage at the wrong thing, and the `Client error beacon` policy mails
-   * `zach@aglyn.com` for every uncaught error on any developer's machine.
+   * aims triage at the wrong thing, and the `Client error beacon` policy
+   * notifies its single human recipient for every uncaught error on any
+   * developer's machine.
    *
    * The credential is why localhost reaches production at all: `firebase-admin`
    * is configured from the root `.env`, which names the platform project.
