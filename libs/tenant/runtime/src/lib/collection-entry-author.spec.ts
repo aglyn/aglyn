@@ -148,6 +148,7 @@ const publishedEntry = (extra: Record<string, unknown>) => ({
   slug: 'shipping-the-export',
   status: 'published',
   publishedAt: { seconds: 1_700_000_000 },
+  updatedAt: { seconds: 1_800_000_000 },
   ...extra,
 })
 
@@ -284,5 +285,78 @@ describe('custom author records (AGL-2486)', () => {
       error.mockRestore()
       ;(firestore as { getAll: unknown }).getAll = getAll
     }
+  })
+})
+
+/**
+ * The loader has to MAP a field for anything downstream to read it
+ * (AGL-2534).
+ *
+ * This is the third field to be declared, written by the console, read by the
+ * renderer, asserted by a spec — and never mapped. `authorName` was the first
+ * (AGL-686, the subject of this file). `dateModified` was the second: the
+ * console has written `updatedAt` on every save, `page.tsx` publishes
+ * `Article.dateModified` from `entry.updatedAt.seconds`, and no published
+ * article has ever carried one, because `mapEntryFields` dropped it.
+ *
+ * `article-json-ld.spec.ts` asserts the conversion and passed throughout — it
+ * builds its entry object by hand, so it never crosses this boundary. That is
+ * the whole lesson: a spec that constructs the input cannot tell you the
+ * producer supplies it. These cases go through the LOADER.
+ */
+describe('the loader maps the dates the head publishes (AGL-2534)', () => {
+  it('carries updatedAt to the routed entry, for dateModified', async () => {
+    entryDocs = [publishedEntry({ authorName: 'Ada' })]
+
+    const content = await getCollectionContent({
+      hostId: HOST,
+      collectionSlug: 'blog',
+      entrySlug: 'shipping-the-export',
+    })
+
+    expect(content.entry?.updatedAt).toEqual({ seconds: 1_800_000_000 })
+  })
+
+  it('carries it on LIST entries too, not only the routed one', async () => {
+    // Two read paths spread `mapEntryFields`, and a field mapped for one and
+    // not the other is how `authorName` half-worked for months.
+    entryDocs = [publishedEntry({ $id: 'a', authorName: 'Ada' })]
+
+    const content = await getCollectionContent({
+      hostId: HOST,
+      collectionSlug: 'blog',
+    })
+
+    expect(content.entries[0]?.updatedAt).toEqual({ seconds: 1_800_000_000 })
+  })
+
+  it('keeps it INDEPENDENT of publishedAt, so backdating is not editing', async () => {
+    // The property the console's write depends on: re-dating a post touches
+    // `publishedAt` alone, and `dateModified` must not follow it.
+    entryDocs = [publishedEntry({ authorName: 'Ada' })]
+
+    const content = await getCollectionContent({
+      hostId: HOST,
+      collectionSlug: 'blog',
+      entrySlug: 'shipping-the-export',
+    })
+
+    expect(content.entry?.publishedAt).toEqual({ seconds: 1_700_000_000 })
+    expect(content.entry?.updatedAt).toEqual({ seconds: 1_800_000_000 })
+  })
+
+  it('is null, never the epoch, for an entry that has never been edited', async () => {
+    // `strictNullChecks` is off repo-wide, so an arithmetic fallback on a
+    // missing date compiles clean and publishes 1970 — a date Google reads as
+    // real. Absent has to stay absent.
+    entryDocs = [publishedEntry({ authorName: 'Ada', updatedAt: undefined })]
+
+    const content = await getCollectionContent({
+      hostId: HOST,
+      collectionSlug: 'blog',
+      entrySlug: 'shipping-the-export',
+    })
+
+    expect(content.entry?.updatedAt).toBeNull()
   })
 })
