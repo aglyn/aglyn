@@ -66,6 +66,21 @@ export interface ComposeCollectionContext {
    * category filter both in between — `entries.length` no longer tells them.
    */
   entriesReachedBound?: boolean
+  /**
+   * Whether {@link slug} is a cache KEY rather than an address (AGL-2524).
+   *
+   * The author page mixes collections, and the compose pipeline keys entry
+   * sources by collection slug — so it hands over a synthetic one
+   * (`AUTHOR_ENTRIES_SOURCE_SLUG`) with its entries already in hand. That is
+   * harmless for the entries block, whose every row carries its OWN
+   * `collectionSlug` and builds `entry.url` from it, and for the search box,
+   * whose index is built the same way.
+   *
+   * It is NOT harmless for anything that builds a URL from the source's slug
+   * itself. Set this and such a block resolves nothing rather than pointing
+   * readers at `/{synthetic}/…`.
+   */
+  routeless?: boolean
 }
 
 interface CollectionBlockScan {
@@ -241,7 +256,25 @@ async function expandCollectionEntryBlocks(
     ? Aglyn.expandCollectionCategories(
         expanded,
         sources,
-        collection?.slug,
+        /*
+          No DEFAULT collection for the pills on a routeless page (AGL-2524).
+
+          Category pills are the one block that builds its links from the
+          SOURCE's slug — `/{slug}/category/{x}` — because a category is a
+          filter on one collection's own listing. On the author page that slug
+          is synthetic, so an unbound pills block stamped links to a route that
+          does not exist.
+
+          Rendering nothing is the honest answer rather than a fallback. The
+          page spans every collection, and there is no
+          `/author/{slug}/category/{x}` for a pill to lead to; the only real
+          destination would be some collection's listing, which drops the
+          author the reader is looking at. A pills block that NAMES a
+          collection is unaffected and still resolves that collection's own
+          taxonomy — "browse the blog by category", which is a sensible thing
+          to put beside an archive.
+        */
+        collection?.routeless ? undefined : collection?.slug,
         collection?.categorySlug,
       )
     : expanded

@@ -106,6 +106,9 @@ function authorComposeContext(content: AuthorContent) {
     } as Record<string, string>,
     collection: {
       slug: AUTHOR_ENTRIES_SOURCE_SLUG,
+      // The slug above is a key, not an address (AGL-2524) — so a block that
+      // would build a URL out of it resolves nothing instead.
+      routeless: true,
       // Already narrowed to this author AND to this page's window by the
       // loader, for the reason the category route states: a page count
       // computed over the whole set advertises pages that render empty.
