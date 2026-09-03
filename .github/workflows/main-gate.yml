@@ -26,9 +26,18 @@ name: Main Gate
 #     committing. That is the entire noise problem, solved by arithmetic.
 #   - The window is small enough that a red still names a short list of
 #     suspects instead of a day of them. The summary prints that list.
-#   - It reports into ONE tracking issue that is opened on red and closed on
-#     green, so a break is a visible STATE on the repo rather than an email
-#     that scrolls away.
+#   - The verdict lands as a COMMIT STATUS on the gated sha (see `statuses:
+#     write` below for why it is not a tracking issue). A break is therefore a
+#     visible STATE rather than an email that scrolls away.
+#
+#     ⚠️ It is a state NOBODY IS NOTIFIED OF, and that is a real gap rather
+#     than a nuance (AGL-2533). A status sits on a sha the branch has already
+#     moved past, so a red is only ever found by someone who goes looking at
+#     that sha. Two reds went unread for hours on 2026-09-03 — a linear-id
+#     ceiling violation and a genuine 429-vs-200 assertion failure — and the
+#     second was misread as an already-explained flake because nothing
+#     surfaced it. Do not treat "Main Gate would have caught it" as meaning
+#     anyone would have SEEN it.
 #
 # ---------------------------------------------------------------------------
 # WHY TWO JOBS
