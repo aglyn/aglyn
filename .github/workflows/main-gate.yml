@@ -57,13 +57,36 @@ name: Main Gate
 # where running it is uneventful.
 
 on:
+  # THE PRIMARY TRIGGER. Measured 2026-09-03: the crons below asked for 120
+  # runs in 24 hours and GitHub delivered 13 — an 11% delivery rate, median
+  # gap 89 minutes, longest 227. The comment under `schedule` had always said
+  # runs "may be late or skipped entirely"; what nobody had measured is that
+  # skipping is the NORMAL case, so the job sized to catch a break within 15
+  # minutes was in practice catching it within an hour and a half. A session
+  # waiting on the gate as a signal waited two hours for a run that never came.
+  #
+  # A clock was always the wrong instrument for this. The event that can break
+  # `main` is a push to `main`, so that is what gates it now, and the crons
+  # stay as a backstop for the case a push-triggered run is lost.
+  #
+  # ⚑ This does NOT restore the noise that moved `nx-ci.yml`'s push trigger off
+  # `main` for the Sept-1 freeze. That workflow notifies on every red, which is
+  # why continuous agent pushes made it noise; this one notifies nobody
+  # (AGL-2533) and writes a commit status instead. The `full` sweep is
+  # deliberately NOT reachable from a push — see its `if:` — so a push costs
+  # the `fast` job's few minutes, never the 90-minute sweep.
+  push:
+    branches:
+      - main
   schedule:
     # Every 15 minutes, offset off :00 — GitHub's scheduler is most congested
     # on the hour and schedules are best-effort, so a run may be late or
-    # skipped entirely. This is a tightener, not a guarantee; `tools/gate.sh`
-    # at promotion time remains the guarantee.
+    # skipped entirely (measured: 11% delivered). A BACKSTOP now rather than
+    # the cadence; `tools/gate.sh` at promotion time remains the guarantee.
     - cron: '7,22,37,52 * * * *'
-    # Hourly for the full sweep, offset again.
+    # Hourly for the full sweep, offset again. This one is still the only
+    # scheduled path to `full`, so its delivery rate is the real cadence of the
+    # test-and-build sweep.
     - cron: '11 * * * *'
   workflow_dispatch:
     inputs:
@@ -110,8 +133,16 @@ jobs:
     # pending one. That is correct for a timer — a superseded scheduled run
     # covers a range the next run also covers — and wrong for a push, where
     # each commit needs its own verdict.
+    #
+    # So a push gets its OWN group, keyed by its commit, exactly as
+    # `nx-ci.yml` does for the same reason: a fixed group holds one running
+    # plus one pending, and a third arrival drops the pending one. With four
+    # sessions landing on `main` that would silently discard verdicts for the
+    # middle commits of every burst — the failure this trigger exists to end.
+    # Timer runs keep sharing one group, which is correct for them: a
+    # superseded scheduled run covers a range the next one also covers.
     concurrency:
-      group: main-gate-fast
+      group: main-gate-fast-${{ github.event_name == 'push' && github.sha || 'timer' }}
       cancel-in-progress: false
     outputs:
       # Whether this job actually ran its checks. A job that skipped every step
