@@ -18,6 +18,7 @@
 import {
   collectionCategorySlug,
   collectionListUrl,
+  contentAuthorPageUrl,
   contentSitemapSection,
   contentSitemapSectionSlug,
   hostCollectionKind,
@@ -30,6 +31,7 @@ import {
   sitemapPageCount,
   sitemapSectionPath,
   sitemapUrlsetXml,
+  SITEMAP_SECTION_AUTHORS,
   SITEMAP_SECTION_CATALOG,
   SITEMAP_SECTION_PAGES,
   SITEMAP_SECTION_PRODUCTS,
@@ -41,6 +43,7 @@ import {
   tenantDataTag,
   withRenderCache,
 } from '@aglyn/tenant-data-admin/render-cache'
+import { listAuthorPageSlugs } from '@aglyn/tenant-runtime/get-author-content'
 import getTemplateScreenIds from '@aglyn/tenant-runtime/template-screens'
 import getHost from '../../../utils/get-host'
 
@@ -322,6 +325,33 @@ async function buildSitemapIndex(
     degraded = true
   }
 
+  try {
+    /*
+      Author pages (AGL-2518), counted from the ROSTER rather than from a
+      `count()` aggregation on `hosts/{h}/authors`.
+
+      The two are not the same number. An author whose record has neither a
+      stored slug nor a display name addresses nothing, and
+      `listAuthorPageSlugs` drops them — so a document count would advertise a
+      child file holding more URLs than the sweep below can produce, and the
+      crawler would fetch a short file at the end of the section. The index
+      and the sweep have to agree about the SET, not merely about its size,
+      which is why both read the same cached roster.
+
+      A site with no author records contributes no section at all, which is
+      every site that has not adopted custom authors.
+    */
+    const authors = await listAuthorPageSlugs({ hostId: host.$id })
+    if (authors.length) {
+      sections.push({
+        section: SITEMAP_SECTION_AUTHORS,
+        pages: sitemapPageCount(authors.length),
+      })
+    }
+  } catch {
+    degraded = true
+  }
+
   const locs: string[] = []
   for (const { section, pages: pageCount } of sections) {
     for (let page = 1; page <= pageCount; page += 1) {
@@ -348,11 +378,56 @@ async function buildSectionUrls(
   if (section === SITEMAP_SECTION_CATALOG) {
     return buildCatalogUrls(host.$id, base, page)
   }
+  if (section === SITEMAP_SECTION_AUTHORS) {
+    return buildAuthorUrls(host.$id, base, page)
+  }
   const collectionSlug = contentSitemapSectionSlug(section)
   if (collectionSlug) {
     return buildContentUrls(host.$id, base, collectionSlug, page)
   }
   return { urls: [], degraded: false }
+}
+
+/**
+ * One page of author pages (AGL-2518).
+ *
+ * ONE url per author record — `/author/{slug}`, the first page of that
+ * person's archive — and deliberately none of their `/author/{slug}/page/{n}`.
+ * Those are reachable, and a crawler follows the pager to them; submitting
+ * them would put a set of URLs in the sitemap whose membership shifts every
+ * time the author publishes, which is churn with no discovery value. The
+ * content sections make the same trade for a listing's own `/page/{n}`.
+ *
+ * So the section's URL count IS the author count, and the `sitemapPageCount`
+ * in the index above describes exactly what this produces.
+ *
+ * Paged in memory: the roster is bounded by `AUTHORS_MAX_PER_HOST`, so there
+ * is nothing to page at the query.
+ */
+async function buildAuthorUrls(
+  hostId: string,
+  base: string,
+  page: number,
+): Promise<{ urls: string[]; degraded: boolean }> {
+  try {
+    const authors = await listAuthorPageSlugs({ hostId })
+    return {
+      urls: pageOf(
+        authors.map(
+          (author) =>
+            `${base}${contentAuthorPageUrl({
+              author: { slug: author.slug, name: author.name },
+            })}`,
+        ),
+        page,
+      ),
+      degraded: false,
+    }
+  } catch {
+    // Fail OPEN, matching every other sweep here: a read failure must not
+    // blank a working sitemap.
+    return { urls: [], degraded: true }
+  }
 }
 
 /** The slice of an in-memory list one child sitemap carries. */

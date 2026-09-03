@@ -60,6 +60,15 @@ export const SITEMAP_MAX_PAGES_PER_SECTION = 100
 export const SITEMAP_SECTION_PAGES = 'pages'
 export const SITEMAP_SECTION_PRODUCTS = 'products'
 export const SITEMAP_SECTION_CATALOG = 'catalog'
+/**
+ * Author pages (AGL-2518) — `/author/{slug}`, one per author record.
+ *
+ * A fixed section rather than a per-collection one, because there is one
+ * author page per PERSON and it spans every collection they wrote in. A
+ * `content-…` section per collection would submit the same author several
+ * times over, at addresses that no longer exist.
+ */
+export const SITEMAP_SECTION_AUTHORS = 'authors'
 
 /**
  * The prefix a content collection's section carries.
