@@ -138,3 +138,57 @@ test('the Slack payload degrades without a run url or subject', () => {
   const p = slackPayload({ sha: 'ddddddddd', results: { fast: 'failure' } })
   assert.equal(/undefined|null/.test(JSON.stringify(p)), false)
 })
+
+// --- the sweep-due blind spot (AGL-2552) -----------------------------------
+
+test('a failed sweep-due IS a red — otherwise the sweep stops silently', () => {
+  // The bug this covers: `full` needs `sweep-due`, so a failed `sweep-due`
+  // leaves `full` skipped. A skipped `full` is not a failure, so the reporter
+  // said "nothing to report" while the sweep quietly stopped running.
+  assert.equal(shouldReport({ fast: 'success', full: 'skipped', sweepDue: 'failure' }), true)
+  assert.deepEqual(failedJobs({ fast: 'success', full: 'skipped', sweepDue: 'failure' }), ['sweepDue'])
+})
+
+test('a green sweep-due with a skipped full is still silent', () => {
+  // The overwhelmingly common push: the sweep was asked, said "not due", and
+  // `full` was skipped on purpose. That must stay quiet.
+  assert.equal(shouldReport({ fast: 'success', full: 'skipped', sweepDue: 'success' }), false)
+})
+
+test('a skipped sweep-due is not a failure', () => {
+  assert.equal(shouldReport({ fast: 'success', full: 'skipped', sweepDue: 'skipped' }), false)
+})
+
+test('the alert names sweep-due by its job, not by a status context that does not exist', () => {
+  const body = redCommentBody({
+    sha: 'abc123def456',
+    results: { fast: 'success', full: 'skipped', sweepDue: 'failure' },
+  })
+  assert.match(body, /is the full sweep due/)
+  assert.doesNotMatch(body, /main-gate\/sweepDue/)
+  assert.match(body, /NOT running on pushes/)
+})
+
+test('fast and full are still named by their commit-status contexts', () => {
+  const body = redCommentBody({ sha: 'abc123def456', results: { fast: 'failure', full: 'failure' } })
+  assert.match(body, /`main-gate\/fast`/)
+  assert.match(body, /`main-gate\/full`/)
+})
+
+test('sweep-due failing alongside fast is one red naming both', () => {
+  assert.deepEqual(
+    failedJobs({ fast: 'failure', full: 'skipped', sweepDue: 'failure' }),
+    ['fast', 'sweepDue'],
+  )
+})
+
+test('a sweep-due red does not claim `main` is broken', () => {
+  const body = redCommentBody({ sha: 'abc123def456', results: { fast: 'success', full: 'skipped', sweepDue: 'failure' } })
+  assert.match(body, /not known to be broken/)
+  assert.doesNotMatch(body, /`main` is broken until/)
+})
+
+test('a real job red still says `main` is broken', () => {
+  const body = redCommentBody({ sha: 'abc123def456', results: { fast: 'failure', sweepDue: 'failure' } })
+  assert.match(body, /`main` is broken until/)
+})
