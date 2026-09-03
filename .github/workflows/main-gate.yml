@@ -251,7 +251,7 @@ jobs:
       # The raw bytes. Named per job so a second upload in the same run
       # cannot collide with this one.
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: nx-test-log-main-gate-full
           path: ${{ runner.temp }}/nx-test.log
