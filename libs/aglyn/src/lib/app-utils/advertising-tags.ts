@@ -221,6 +221,29 @@ export interface AdvertisingVendor {
   /** The vendor library URL. Constant — no interpolation reaches it. */
   readonly scriptSrc?: string
   /**
+   * The library URL for a vendor whose LOADER carries the account id.
+   *
+   * Most vendors take their id in the boot snippet and fetch a constant URL,
+   * which is what {@link scriptSrc} is. `gtag.js` is the exception: Google's
+   * documented install is `gtag/js?id=<account>`, and the id in the query is
+   * what tells the loader which container's configuration to fetch. Without
+   * it the library still returns 200 and still defines `gtag()`, so nothing
+   * anywhere reports an error — it simply registers no container, and every
+   * `config` for the account queues against a runtime that will never serve
+   * it. Measured on `app.aglyn.com` (AGL-2559): the bare loader left
+   * `google_tag_data.tidr.container` holding the GA4 id and an EMPTY string,
+   * with no request to `googleadservices` at all.
+   *
+   * Present, it wins over {@link scriptSrc}. `scriptSrc` stays the vendor's
+   * base URL, because it is what {@link sharesLibrary}, {@link scriptMatch}
+   * and the CSP origin list are all matched against, and none of those may
+   * vary per account.
+   *
+   * The id reaching a URL is the same load-bearing check as the id reaching an
+   * inline script: it is interpolated only after `accountIdPattern` passed.
+   */
+  readonly scriptSrcFor?: (accountId: string) => string
+  /**
    * A substring of a library URL this vendor SHARES with another loader.
    *
    * Set it and the tag mounts its boot snippet but skips its own `<script>`
@@ -375,6 +398,11 @@ export const GOOGLE_ADS_VENDOR: AdvertisingVendor = {
   // written by any Google tag, including ones we never marked.
   alwaysSweep: true,
   scriptSrc: 'https://www.googletagmanager.com/gtag/js',
+  // The loader carries the account, because gtag resolves the container from
+  // the query rather than from the `config` that follows. See `scriptSrcFor`;
+  // reached only when `sharesLibrary` did NOT find a loader to ride.
+  scriptSrcFor: (accountId: string) =>
+    `https://www.googletagmanager.com/gtag/js?id=${accountId}`,
   // The GA4 measurement id loads this exact library. See `sharesLibrary`.
   sharesLibrary: 'googletagmanager.com/gtag/js',
   scriptMatch: 'googletagmanager.com/gtag/js',
