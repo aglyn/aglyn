@@ -237,17 +237,118 @@ describe('writeBeaconHeartbeat (AGL-1923)', () => {
  * against a mocked credential and a mocked `fetch` — like the heartbeat
  * above, every branch that matters is a branch of the transport.
  */
-describe('reportServerError (AGL-1921)', () => {
+/**
+ * The client half's environment gate (AGL-1925).
+ *
+ * Driven against a mocked credential and `fetch` like the heartbeat above,
+ * because the whole assertion is about whether the transport is reached.
+ */
+describe('reportClientErrors (AGL-1925) — a laptop is not a deployment', () => {
   const realFetch = globalThis.fetch
+  const realVercel = process.env['VERCEL']
   let getAccessToken: jest.Mock
 
   beforeEach(() => {
     jest.resetModules()
     getAccessToken = jest.fn().mockResolvedValue({ access_token: 'tok' })
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined)
   })
 
   afterEach(() => {
     globalThis.fetch = realFetch
+    if (realVercel === undefined) delete process.env['VERCEL']
+    else process.env['VERCEL'] = realVercel
+    jest.restoreAllMocks()
+  })
+
+  const HEALTHY_APP = {
+    options: {
+      projectId: 'aglyn-main',
+      credential: { getAccessToken: () => getAccessToken() },
+    },
+  }
+
+  async function load() {
+    jest.doMock('firebase-admin/app', () => ({ getApp: () => HEALTHY_APP }))
+    jest.doMock('@aglyn/shared-util-fbserver', () => ({}))
+    return await import('./client-error-report')
+  }
+
+  const okFetch = () => {
+    const fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 200 })
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+    return fetchMock
+  }
+
+  const EVENT = { kind: 'error', message: 'boom', url: 'http://localhost:4200/' }
+
+  it('writes NOTHING from a developer machine', async () => {
+    // Measured 2026-08-18: the top-ranked "production error group" in the whole
+    // project was a dev artifact with localhost:4200 frames, and the log-match
+    // policy mails Zach for every one of them.
+    delete process.env['VERCEL']
+    const fetchMock = okFetch()
+    const mod = await load()
+    const written = await mod.reportClientErrors([EVENT], { service: 'console-web' })
+    expect(written).toBe(0)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('does not even MINT a token off a deployment', async () => {
+    // Above the credential fetch, not below it: a dev machine holding the
+    // production key should not be exercising it at all.
+    delete process.env['VERCEL']
+    okFetch()
+    const mod = await load()
+    await mod.reportClientErrors([EVENT], { service: 'console-web' })
+    expect(getAccessToken).not.toHaveBeenCalled()
+  })
+
+  it('still reports from a deployment — the visitors this exists for', async () => {
+    process.env['VERCEL'] = '1'
+    const fetchMock = okFetch()
+    const mod = await load()
+    const written = await mod.reportClientErrors([EVENT], { service: 'tenant-web' })
+    expect(written).toBe(1)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body.logName).toBe(`projects/aglyn-main/logs/${mod.CLIENT_ERROR_LOG_ID}`)
+  })
+
+  it('still reports from a self-hosted container, which sets no VERCEL', async () => {
+    delete process.env['VERCEL']
+    process.env['AGLYN_STANDALONE'] = '1'
+    try {
+      const fetchMock = okFetch()
+      const mod = await load()
+      expect(
+        await mod.reportClientErrors([EVENT], { service: 'tenant-web' }),
+      ).toBe(1)
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    } finally {
+      delete process.env['AGLYN_STANDALONE']
+    }
+  })
+})
+
+describe('reportServerError (AGL-1921)', () => {
+  const realFetch = globalThis.fetch
+  const realVercel = process.env['VERCEL']
+  let getAccessToken: jest.Mock
+
+  beforeEach(() => {
+    jest.resetModules()
+    getAccessToken = jest.fn().mockResolvedValue({ access_token: 'tok' })
+    // A test runner is a developer's machine, and the beacon now refuses to
+    // report from one. Every case below is about what a DEPLOYMENT does, so
+    // they all need to look like one; the refusal has its own describe.
+    process.env['VERCEL'] = '1'
+  })
+
+  afterEach(() => {
+    globalThis.fetch = realFetch
+    if (realVercel === undefined) delete process.env['VERCEL']
+    else process.env['VERCEL'] = realVercel
     jest.restoreAllMocks()
   })
 
@@ -327,20 +428,21 @@ describe('reportServerError (AGL-1921)', () => {
     expect(serialized).not.toContain('acme-industries')
   })
 
-  it('stamps the environment, so a laptop is separable from production', async () => {
+  it('stamps the environment, so a preview is separable from production', async () => {
     const realEnv = process.env['VERCEL_ENV']
     try {
-      // A local console serving against the platform project holds the same
-      // credential and writes to the same log. Without this field the only
-      // reader the log can have — a log-match alert policy — has nothing to
-      // exclude on, and a developer's throw pages whoever is on call.
-      delete process.env['VERCEL_ENV']
-      const devFetch = okFetch()
-      const devMod = await load(HEALTHY_APP)
-      await devMod.reportServerError({ message: 'boom' }, { service: 'console-web' })
+      // The only reader this log can have is a hand-made log-match policy, and
+      // without this field it has nothing to exclude on. The laptop half of
+      // that argument is now settled by refusing to write at all — see 'a
+      // laptop is not a deployment' — which leaves the preview as the case a
+      // stamp still has to carry, because a preview 5xx IS reported.
+      process.env['VERCEL_ENV'] = 'preview'
+      const previewFetch = okFetch()
+      const previewMod = await load(HEALTHY_APP)
+      await previewMod.reportServerError({ message: 'boom' }, { service: 'console-web' })
       expect(
-        JSON.parse(devFetch.mock.calls[0][1].body).entries[0].jsonPayload.environment,
-      ).toBe('development')
+        JSON.parse(previewFetch.mock.calls[0][1].body).entries[0].jsonPayload.environment,
+      ).toBe('preview')
 
       // Asserted in BOTH directions: a field hardcoded to either answer would
       // pass one of these and is exactly as useless as no field at all.
@@ -474,6 +576,74 @@ describe('reportServerError (AGL-1921)', () => {
    * that killed the transport. The ordering is the invariant; these are the
    * tests that hold it.
    *==========================================*/
+  describe('a laptop is not a deployment', () => {
+    /*======================================================================
+     * Measured 2026-08-31: three parse errors from an interrupted rebase, on
+     * a dev server, carrying local `file:///Users/...` stacks, landed in the
+     * production `server-errors` log and opened the `Server errors: uncaught
+     * 5xx` policy — which was still open two days later while all thirteen
+     * uptime checks read 100%. The credential comes from the root `.env`,
+     * which names the platform project, so nothing about running locally
+     * stopped the write.
+     *====================================================================*/
+
+    it('writes NOTHING from a developer machine', async () => {
+      delete process.env['VERCEL']
+      const fetchMock = okFetch()
+      const mod = await load(HEALTHY_APP)
+      const outcome = await mod.reportServerError(
+        { message: 'Merge conflict marker encountered.' },
+        { service: 'console-web' },
+      )
+      expect(outcome).toBe('dropped')
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it('does not COUNT it either — the health route reads that marker', async () => {
+      // Above the marker, unlike every other gate: `/api/health/server-errors`
+      // reads the count out of the platform project, so a counted-but-unwritten
+      // laptop error would still turn that endpoint red for everyone.
+      delete process.env['VERCEL']
+      const recordServerError = jest.fn()
+      jest.doMock('./rate-limit-store', () => ({ recordServerError }))
+      okFetch()
+      const mod = await load(HEALTHY_APP)
+      await mod.reportServerError({ message: 'boom' }, { service: 'console-web' })
+      expect(recordServerError).not.toHaveBeenCalled()
+    })
+
+    it('reports from a PREVIEW — a real deployment served that 5xx', async () => {
+      // `isDeployedRuntime`, not `isProductionDeployment`: the environment
+      // stamp already separates a preview for anyone who filters on it.
+      process.env['VERCEL'] = '1'
+      const fetchMock = okFetch()
+      const mod = await load(HEALTHY_APP)
+      const outcome = await mod.reportServerError(
+        { message: 'boom' },
+        { service: 'tenant-web' },
+      )
+      expect(outcome).toBe('written')
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('reports from a self-hosted container, which sets no VERCEL', async () => {
+      delete process.env['VERCEL']
+      process.env['AGLYN_STANDALONE'] = '1'
+      try {
+        const fetchMock = okFetch()
+        const mod = await load(HEALTHY_APP)
+        const outcome = await mod.reportServerError(
+          { message: 'boom' },
+          { service: 'tenant-web' },
+        )
+        expect(outcome).toBe('written')
+        expect(fetchMock).toHaveBeenCalledTimes(1)
+      } finally {
+        delete process.env['AGLYN_STANDALONE']
+      }
+    })
+  })
+
   describe('the marker is recorded above every gate', () => {
     /** Load with `recordServerError` spied, so the ORDERING is observable. */
     async function loadWithMarkerSpy(app: unknown) {

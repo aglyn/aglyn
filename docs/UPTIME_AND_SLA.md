@@ -1304,8 +1304,27 @@ same admin credential and the same Cloud Logging transport the AGL-1538 client
 beacon uses. Entries carry the `ReportedErrorEvent` `@type`, so Error Reporting
 groups them, *and* they are real log entries a log-match policy can page on.
 
-Three properties worth knowing before you tune anything:
+Four properties worth knowing before you tune anything:
 
+- **A deployment reports; a laptop does not** (2026-09-02). `firebase-admin` is
+  configured from the root `.env`, which names the platform project, so `nx dev`
+  held the same credential production does and wrote to the same log. Measured
+  2026-08-31: three parse errors from an interrupted rebase, carrying local
+  `file:///Users/.../aglyn/apps/...` stacks, landed in `server-errors` and opened
+  the `Server errors: uncaught 5xx` policy — still open two days later while all
+  thirteen uptime checks read 100%. `reportServerError` now returns `dropped`
+  unless `isDeployedRuntime()`. That is `isDeployedRuntime`, not
+  `isProductionDeployment`: a preview's 5xx is a real 5xx served by a real
+  deployment, and the `environment` stamp separates it for anyone who filters.
+
+  **The client half gates the same way** (AGL-1925). `reportClientErrors` was
+  the original case: measured 2026-08-18, 13 of 17 Error Reporting events over
+  a trailing week were not production, and the top-ranked group in the whole
+  project was a dev artifact with `http://localhost:4200` frames. That stream
+  carries no `environment` stamp at all — the only marker was an absent
+  `serviceContext.version` off Vercel, which stopped being a marker once
+  `deploymentCommitRef` learned to resolve a commit for self-hosted builds — so
+  refusing the write is the only fix that works there.
 - **A separate log id, on purpose.** `server-errors`, never `client-errors`. The
   existing `Client error beacon` policy keys on the latter; merging them would
   make it fire for both and force triage to start by asking which it was.
@@ -1347,7 +1366,11 @@ grades those counts in the same 200/503 contract as every sibling endpoint.
 Four things about it that are decisions rather than details:
 
 - **The count is written FIRST**, above the Logging budget gate, the credential
-  check and the fetch. A beacon whose transport is dead otherwise reports zero
+  check and the fetch — but BELOW the deployment gate above, which is the one
+  exception and the only gate that belongs there. Those gates are about a write
+  that failed and must still be counted; that one is about a process that should
+  not be reporting at all, and a counted laptop error would turn
+  `/api/health/server-errors` red for everyone. A beacon whose transport is dead otherwise reports zero
   errors, and it reports it during exactly the incident that killed the
   transport.
 - **Unknown is its own state.** A failed marker query is `errors-unavailable`
