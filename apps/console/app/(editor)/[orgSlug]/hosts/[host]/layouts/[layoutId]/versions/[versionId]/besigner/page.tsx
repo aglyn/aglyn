@@ -444,8 +444,28 @@ function LayoutBesignerPage(props) {
      */
     if (!savedLandedRef.current) {
       if (livePublished) {
+        /*
+          Nothing to promote, but that is not the same as nothing to do
+          (AGL-2540).
+
+          `livePublished` is a fact about the POINTER. "The live site matches"
+          is a claim about the CACHE, and this path used to make it without
+          checking. The two come apart whenever the version document's content
+          moved while the pointer stood still — a direct Firestore write, an
+          import, or an earlier publish whose revalidate the tenant refused.
+
+          A layout fans out across every screen bound to it, so the stale
+          window here is the widest of the four editors. Best effort like the
+          success path.
+        */
+        void revalidateLivePages({ user, hostId, layoutId }).then((result) => {
+          const shortfall = describeRevalidateShortfall(result)
+          if (shortfall) {
+            enqueueSnackbar(shortfall, { variant: 'warning', persist: false })
+          }
+        })
         return enqueueSnackbar(
-          'Already published — the live site matches this version.',
+          'Already published — refreshing the live pages to match.',
           { variant: 'info', persist: false },
         )
       }
