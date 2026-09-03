@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.58 — 2026-09-03
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/6d15a0639...v1.0.0-beta.58)
+
+### Added
+
+- **besigner:** a landmark can be named where it is made ([AGL-2525](https://linear.app/aglyn/issue/AGL-2525), [AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+
 ## v1.0.0-beta.57 — 2026-09-03
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.56...v1.0.0-beta.57)
