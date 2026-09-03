@@ -1577,6 +1577,18 @@ step 5 onward costs money and is a decision, not a task.
      our own thrown errors properly) and `proxy.statusCode === -1`, which is
      *background ISR revalidation* and would otherwise forward healthy traffic
      forever. On a healthy day this endpoint writes nothing at all.
+   - **It exempts the lockdown notice's deliberate 503** (2026-09-02).
+     `apps/tenant/app/api/locked/route.ts` answers a takedown or a
+     bandwidth-cap with a real 503 on purpose — answering 200 would tell
+     crawlers and uptime checks a suspended site is fine — and the middleware
+     rewrites *every* path of a locked host to it. Forwarded, one suspended
+     host being crawled emits a 5xx per request, forever, into an arm whose
+     only consumer is an alert policy: the policy fires on a working feature
+     and the next real incident arrives in a stream that is already red.
+     Measured 2026-09-02 on `acme.aglyn.app`. The exemption is narrow — path
+     matched exactly, and only a clean 503. A 500 the handler threw, a
+     `statusCode -1`, or a `fatal` line still forward, because those mean a
+     locked host is serving nothing at all.
    - **It writes to `vercel-runtime`, not `server-errors`.** The latter is the
      `onRequestError` hook's log and step 4's policy keys on it; merging would
      count one incident twice and make triage start by asking which arm saw

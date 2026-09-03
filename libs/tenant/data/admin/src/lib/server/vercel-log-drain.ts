@@ -136,6 +136,27 @@ export const DRAIN_SECRET_ENV = 'VERCEL_LOG_DRAIN_SECRET'
 export const RECEIVER_ROUTE_PATH = '/api/log-drain'
 
 /**
+ * The lockdown notice route — a route whose 503 is the FEATURE, not a fault.
+ *
+ * `apps/tenant/app/api/locked/route.ts` answers every request with a real 503
+ * carrying `Retry-After`, and the middleware rewrites every path of a locked
+ * or bandwidth-capped host to it. That status is deliberate: a takedown
+ * notice answering 200 would tell crawlers and uptime checks the site is
+ * fine, which is the whole reason the notice is a route handler rather than a
+ * page.
+ *
+ * Forwarded, it is indistinguishable from an outage. One suspended host being
+ * crawled emits a 5xx per request, forever, into the arm whose only consumer
+ * is an alert policy — so the policy fires on a working feature and the next
+ * real incident arrives in a stream that is already red.
+ *
+ * Matched EXACTLY, not as a prefix: the notice is one path, and a future
+ * `/api/locked/*` would be a different route with no such guarantee about its
+ * status.
+ */
+export const LOCKDOWN_NOTICE_ROUTE_PATH = '/api/locked'
+
+/**
  * Per-instance write budget, mirroring `reportServerError`'s (same file
  * neighbourhood, same rationale): the failure being watched is a SPIKE, and a
  * spike is when an unbounded forwarder turns one incident into a second one
@@ -251,6 +272,30 @@ export function isReceiverEntry(entry: VercelDrainEntry): boolean {
 }
 
 /**
+ * Is this the lockdown notice serving its deliberate 503? See
+ * {@link LOCKDOWN_NOTICE_ROUTE_PATH}.
+ *
+ * Narrow on purpose — the route being exempt must not make the route
+ * unwatchable. Only a clean 503 is excused: a 500 the handler threw, the
+ * `statusCode -1` of a crashed lambda, and a `fatal` line all still forward,
+ * because those say the notice itself is broken and a locked host is then
+ * serving nothing at all.
+ */
+export function isLockdownNoticeEntry(entry: VercelDrainEntry): boolean {
+  if (entry.level === 'fatal' || entry.type === 'fatal') return false
+  const statuses = [entry.statusCode, entry.proxy?.statusCode].filter(
+    (status): status is number => typeof status === 'number',
+  )
+  if (!statuses.length || statuses.some((status) => status !== 503)) return false
+  return [entry.path, entry.proxy?.path].some((path) => {
+    if (typeof path !== 'string') return false
+    // `proxy.path` carries the query string; compare the path part only.
+    const [pathname] = path.split('?')
+    return pathname === LOCKDOWN_NOTICE_ROUTE_PATH
+  })
+}
+
+/**
  * THE COST GATE (requirement 3). Everything false here is dropped unwritten.
  *
  * What counts as a server error:
@@ -293,7 +338,10 @@ export function selectForwardableEntries(
   entries: readonly VercelDrainEntry[],
 ): VercelDrainEntry[] {
   return entries.filter(
-    (entry) => !isReceiverEntry(entry) && isServerErrorEntry(entry),
+    (entry) =>
+      !isReceiverEntry(entry) &&
+      !isLockdownNoticeEntry(entry) &&
+      isServerErrorEntry(entry),
   )
 }
 
