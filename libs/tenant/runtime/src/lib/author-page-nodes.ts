@@ -172,8 +172,9 @@ export function buildAuthorPageNodes(
     pluginId: 'mui',
     props: { spacing: 0.5 },
     nodes: [
-      id('item-meta'),
+      id('item-collection'),
       id('item-title'),
+      id('item-date'),
       id('item-excerpt'),
       id('item-link'),
     ],
@@ -191,15 +192,36 @@ export function buildAuthorPageNodes(
       props,
     } as Aglyn.AglynNodeSchema
   }
-  item('item-meta', {
+  /*
+    The collection and the date are two NODES, not one string joined by a
+    middle dot.
+
+    A `·` written into the template is a literal, and a token beside it is
+    not: an entry that is live with no `publishedAt` — a legacy post, or one
+    flipped due without a timestamp — would render `Blog · ` with the
+    separator dangling off the end. The joined form is right where the values
+    are computed together and the empty ones can be dropped (Entry Meta does
+    exactly that); it is wrong in a template, which has no conditional and
+    substitutes each token independently.
+
+    Stacked rather than in a row for the same reason, and it puts the card on
+    the collection fallback's own shape (AGL-551) — one extra line above it,
+    nothing else different.
+  */
+  item('item-collection', {
     variant: 'overline',
-    children: '{{entry.collection}} · {{entry.date}}',
+    children: '{{entry.collection}}',
     sx: { color: 'text.secondary' },
   })
   item('item-title', {
     variant: 'h6',
     component: 'h3',
     children: '{{entry.title}}',
+  })
+  item('item-date', {
+    variant: 'caption',
+    children: '{{entry.date}}',
+    sx: { color: 'text.secondary' },
   })
   item('item-excerpt', { variant: 'body1', children: '{{entry.excerpt}}' })
   item(
