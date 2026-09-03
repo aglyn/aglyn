@@ -16,6 +16,7 @@
  */
 
 import { HostScreenVisibility } from '../foundation/definitions/platform.types'
+import { SITEMAP_INDEX_PATH } from './sitemap'
 
 /**
  * Search-indexing policy (AGL-1263): the single answer to "may a crawler
@@ -124,6 +125,8 @@ export function buildRobotsTxt(options: {
   }
   return (
     'User-agent: *\nAllow: /\n' +
-    (options.origin ? `Sitemap: ${options.origin}/sitemap.xml\n` : '')
+    (options.origin
+      ? `Sitemap: ${options.origin}${SITEMAP_INDEX_PATH}\n`
+      : '')
   )
 }

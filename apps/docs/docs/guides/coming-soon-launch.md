@@ -230,15 +230,20 @@ curl -s https://your-site/ | grep -i 'name="robots"'
 A hidden page returns `<meta name="robots" content="noindex, follow"/>`. A visible page
 returns nothing at all — no robots meta means "index me", which is the default.
 
-**The sitemap** — visit `https://your-site/sitemap.xml`, or:
+**The sitemap** — visit `https://your-site/sitemap.xml`. While the site-wide switch is
+on it is an empty `<urlset>`; once you launch it becomes a **sitemap index** naming one
+child sitemap per section of your site. To count the URLs you are actually submitting,
+follow the index into its children:
 
 ```bash
-curl -s https://your-site/sitemap.xml | grep -c '<loc>'
+curl -s https://your-site/sitemap.xml \
+  | grep -o 'https[^<]*' \
+  | xargs -I{} curl -s {} \
+  | grep -c '<loc>'
 ```
 
-That counts the URLs you're submitting to search engines. It should be `0` while the
-site-wide switch is on, and after launch it should match your public pages. Any page
-you expect to see and don't is a screen still set to Unlisted.
+It should be `0` while the site-wide switch is on, and after launch it should match your
+public pages. Any page you expect to see and don't is a screen still set to Unlisted.
 
 :::tip Give it a few minutes
 These three files are cached for about five minutes. If a change hasn't shown up, wait a

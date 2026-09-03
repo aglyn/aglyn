@@ -374,6 +374,23 @@ export const EXPECTED_POSTURE = Object.freeze([
             ]),
           }),
         ]),
+        // The child sitemaps `/sitemap.xml` names (AGL-2520). A prefix rather
+        // than an exact path because there is one per section and one per
+        // content collection, so the set is a function of the customer's own
+        // data and cannot be enumerated here.
+        //
+        // Its own group, not a sixth entry above, because the two conditions
+        // are different ops — `eq` on a fixed list and `pre` on a namespace —
+        // and the checker requires every declared condition of a group to hold
+        // for that group. This is the same "one hole, two mouths" shape the
+        // console's machine-traffic bypass has.
+        //
+        // The namespace is safe to open wholesale: `/sitemaps/*` is served by
+        // the sitemap route alone, is public, read-only and secrets-free, and
+        // answers an empty `<urlset>` for a section that does not exist.
+        alsoAllowsGroups: Object.freeze([
+          Object.freeze({ type: 'path', op: 'pre', value: '/sitemaps/' }),
+        ]),
       }),
       SOCIAL_CRAWLER_BYPASS_RULE,
     ]),
