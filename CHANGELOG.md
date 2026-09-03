@@ -9,6 +9,22 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.59 — 2026-09-03
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.58...v1.0.0-beta.59)
+
+### Fixed
+
+- **tools:** a suite whose worker segfaults is re-run instead of failing the gate ([AGL-2528](https://linear.app/aglyn/issue/AGL-2528))
+- **tenant:** category pills on an author page link nowhere rather than nowhere useful ([AGL-2524](https://linear.app/aglyn/issue/AGL-2524))
+
+<details>
+<summary>Also in this release: 1 test</summary>
+
+- **aglyn:** count in-flight enrichers instead of timing them ([AGL-2529](https://linear.app/aglyn/issue/AGL-2529))
+
+</details>
+
 ## v1.0.0-beta.58 — 2026-09-03
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/6d15a0639...v1.0.0-beta.58)
