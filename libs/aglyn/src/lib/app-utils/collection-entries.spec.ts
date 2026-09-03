@@ -33,9 +33,7 @@ import {
   collectionCategorySlug,
   collectionSourceIsBounded,
   collectionSourceReachedBound,
-  collectionAuthorUrl,
   collectionEntryAuthorValues,
-  entryMatchesAuthorRoute,
   collectionEntryMetaValues,
   collectionEntryTokens,
   collectionListUrl,
@@ -50,6 +48,7 @@ import {
   expandCollectionRelated,
   expandCollectionSearch,
   formatCollectionEntryDate,
+  buildCollectionSearchIndex,
   parseCollectionRoute,
   resolveCollectionAllLabel,
   resolveCollectionCategoryBySlug,
@@ -2439,6 +2438,8 @@ describe('the author card fills itself from the record (AGL-2486)', () => {
       bio: 'Building the open web platform.',
       image: 'media:org:jWmGooWE3L/portrait',
       url: 'https://example.com/zach',
+      // Their page HERE, which is not their own site above it (AGL-2519).
+      pageUrl: '/author/zach-gover',
       links: [],
     })
   })
@@ -2453,6 +2454,9 @@ describe('the author card fills itself from the record (AGL-2486)', () => {
       bio: '',
       image: '',
       url: '',
+      // A legacy byline still addresses a page, so a decade of posts by a
+      // name that was never a record still lead somewhere (AGL-2519).
+      pageUrl: '/author/the-aglyn-team',
       links: [],
     })
   })
@@ -2465,6 +2469,7 @@ describe('the author card fills itself from the record (AGL-2486)', () => {
       bio: 'Building the open web platform.',
       image: 'media:org:jWmGooWE3L/portrait',
       url: 'https://example.com/zach',
+      pageUrl: '/author/zach-gover',
     })
   })
 
@@ -2751,193 +2756,119 @@ describe('the author card fills its links from the record (AGL-2516)', () => {
 })
 
 /**
- * The author archive (AGL-2517) — `/{collection}/author/{slug}`.
- *
- * A sibling of the category archive rather than a new top-level route,
- * because it answers the same question on a different axis. One route table,
- * one pagination shape, and one ISR cache key per URL, since the tenant
- * catch-all caches by path.
+ * The two links a byline can offer, which are not the same link (AGL-2519).
  */
-describe('Author archive routes (AGL-2517)', () => {
-  describe('parsing', () => {
-    it('resolves the archive and its pages', () => {
-      expect(parseCollectionRoute(['blog', 'author', 'zach-gover'])).toEqual({
-        collectionSlug: 'blog',
-        authorSlug: 'zach-gover',
-        page: 1,
-      })
-      expect(
-        parseCollectionRoute(['blog', 'author', 'zach-gover', 'page', '3']),
-      ).toEqual({ collectionSlug: 'blog', authorSlug: 'zach-gover', page: 3 })
-    })
-
-    it('slugifies the segment, so one author has one URL', () => {
-      expect(parseCollectionRoute(['blog', 'author', 'Zach Gover'])).toEqual({
-        collectionSlug: 'blog',
-        authorSlug: 'zach-gover',
-        page: 1,
-      })
-    })
-
-    it('refuses a page number that is not one', () => {
-      expect(
-        parseCollectionRoute(['blog', 'author', 'zach', 'page', '0']),
-      ).toBeNull()
-      expect(
-        parseCollectionRoute(['blog', 'author', 'zach', 'page', 'two']),
-      ).toBeNull()
-    })
-
-    it('leaves the category and entry routes exactly as they were', () => {
-      // The new arm must not shadow the one-segment entry route: `/blog/author`
-      // is still an ENTRY whose slug is `author`, because only the two- and
-      // four-segment shapes are the archive.
-      expect(parseCollectionRoute(['blog', 'author'])).toEqual({
-        collectionSlug: 'blog',
-        entrySlug: 'author',
-        page: 1,
-      })
-      expect(parseCollectionRoute(['blog', 'category', 'guides'])).toEqual({
-        collectionSlug: 'blog',
-        categorySlug: 'guides',
-        page: 1,
-      })
-    })
+describe('linking to an author from an entry (AGL-2519)', () => {
+  it('offers their page here, beside their own site', () => {
+    const tokens = collectionEntryTokens(
+      {
+        $id: 'e1',
+        title: 'A post',
+        slug: 'a-post',
+        author: { $id: 'aB12', name: 'Zach Gover', url: 'https://zach.example' },
+      } as never,
+      'blog',
+    )
+    // Site-wide, and NAME-first rather than id-first: this is a public
+    // address on a marketing site, and `/author/ab12` is not one anybody can
+    // read. The id still resolves on the way back in.
+    expect(tokens['entry.authorPageUrl']).toBe('/author/zach-gover')
+    expect(tokens['entry.authorUrl']).toBe('https://zach.example')
   })
 
-  describe('which entries belong to it', () => {
-    const entry = (fields: Record<string, unknown>) => fields as never
-
-    it('answers to the record id, which survives a rename', () => {
-      expect(
-        entryMatchesAuthorRoute(entry({ authorId: 'aB12' }), 'ab12'),
-      ).toBe(true)
-    })
-
-    it('answers to the display name, which is what a human types', () => {
-      expect(
-        entryMatchesAuthorRoute(
-          entry({ author: { $id: 'aB12', name: 'Zach Gover' } }),
-          'zach-gover',
-        ),
-      ).toBe(true)
-    })
-
-    it('answers to the legacy byline, so old posts still appear', () => {
-      // Written before AGL-2486 made the byline a record. The person wrote
-      // them; an archive that hides them is wrong about its own subject.
-      expect(
-        entryMatchesAuthorRoute(
-          entry({ authorName: 'The Aglyn Team' }),
-          'the-aglyn-team',
-        ),
-      ).toBe(true)
-    })
-
-    it('does not match a different author, or an empty slug', () => {
-      expect(
-        entryMatchesAuthorRoute(entry({ authorName: 'Ada' }), 'zach-gover'),
-      ).toBe(false)
-      expect(entryMatchesAuthorRoute(entry({ authorName: 'Ada' }), '')).toBe(
-        false,
-      )
-      expect(entryMatchesAuthorRoute(entry({}), 'ada')).toBe(false)
-    })
+  it('prefers the author’s stored slug over their name', () => {
+    const tokens = collectionEntryTokens(
+      {
+        $id: 'e1',
+        title: 'A post',
+        slug: 'a-post',
+        author: { $id: 'aB12', name: 'Zach Gover', slug: 'zg' },
+      } as never,
+      'blog',
+    )
+    expect(tokens['entry.authorPageUrl']).toBe('/author/zg')
   })
 
-  describe('linking to it from an entry', () => {
-    it('offers the archive as its own token, beside the author’s own site', () => {
-      // Two different destinations: `authorUrl` is the person's site,
-      // `authorPageUrl` is more of what they wrote here. A template should be
-      // able to offer either or both.
-      const tokens = collectionEntryTokens(
-        {
-          $id: 'e1',
-          title: 'A post',
-          slug: 'a-post',
-          author: { $id: 'aB12', name: 'Zach Gover', url: 'https://zach.example' },
-        } as never,
-        'blog',
-      )
-      expect(tokens['entry.authorPageUrl']).toBe('/blog/author/ab12')
-      expect(tokens['entry.authorUrl']).toBe('https://zach.example')
-    })
-
-    it('empties the token when nothing is addressable', () => {
-      const tokens = collectionEntryTokens(
-        { $id: 'e1', title: 'A post', slug: 'a-post' } as never,
-        'blog',
-      )
-      // A binding then renders no link at all, rather than one pointing at
-      // `/blog/author/`.
-      expect(tokens['entry.authorPageUrl']).toBe('')
-    })
-
-    it('still resolves for a legacy byline with no record', () => {
-      const tokens = collectionEntryTokens(
-        {
-          $id: 'e1',
-          title: 'A post',
-          slug: 'a-post',
-          authorName: 'The Aglyn Team',
-        } as never,
-        'blog',
-      )
-      expect(tokens['entry.authorPageUrl']).toBe('/blog/author/the-aglyn-team')
-    })
+  it('empties the token when nothing is addressable', () => {
+    const tokens = collectionEntryTokens(
+      { $id: 'e1', title: 'A post', slug: 'a-post' } as never,
+      'blog',
+    )
+    // A binding then renders no link at all, rather than one pointing at
+    // `/author/`.
+    expect(tokens['entry.authorPageUrl']).toBe('')
   })
 
-  describe('linking to it', () => {
-    it('prefers the id, so the link survives a rename', () => {
-      expect(
-        collectionAuthorUrl({
-          collectionSlug: 'blog',
-          author: { $id: 'aB12', name: 'Zach Gover' },
-        }),
-      ).toBe('/blog/author/ab12')
-    })
+  it('still resolves for a legacy byline with no record', () => {
+    const tokens = collectionEntryTokens(
+      {
+        $id: 'e1',
+        title: 'A post',
+        slug: 'a-post',
+        authorName: 'The Aglyn Team',
+      } as never,
+      'blog',
+    )
+    expect(tokens['entry.authorPageUrl']).toBe('/author/the-aglyn-team')
+  })
 
-    it('falls back through the name to the legacy byline', () => {
-      expect(
-        collectionAuthorUrl({
-          collectionSlug: 'blog',
-          author: { name: 'Zach Gover' },
-        }),
-      ).toBe('/blog/author/zach-gover')
-      expect(
-        collectionAuthorUrl({
-          collectionSlug: 'blog',
-          authorName: 'The Aglyn Team',
-        }),
-      ).toBe('/blog/author/the-aglyn-team')
-    })
+  it('does not depend on which collection the entry came from', () => {
+    // The whole point of the reshape: one person, one page, whatever they
+    // wrote in. Two collections, one address.
+    const author = { $id: 'aB12', name: 'Zach Gover' }
+    const inBlog = collectionEntryTokens(
+      { $id: 'e1', title: 'A', slug: 'a', author } as never,
+      'blog',
+    )
+    const inChangelog = collectionEntryTokens(
+      { $id: 'e2', title: 'B', slug: 'b', author } as never,
+      'changelog',
+    )
+    expect(inBlog['entry.authorPageUrl']).toBe(
+      inChangelog['entry.authorPageUrl'],
+    )
+  })
+})
 
-    it('returns empty rather than a url that addresses nobody', () => {
-      // The caller then chooses between a link and plain text, instead of
-      // emitting `/blog/author/`.
-      expect(collectionAuthorUrl({ collectionSlug: 'blog' })).toBe('')
-      expect(
-        collectionAuthorUrl({ collectionSlug: '', authorName: 'Ada' }),
-      ).toBe('')
-    })
+/**
+ * A listing that MIXES collections has to say where each entry came from
+ * (AGL-2518) — the author page is the first one that does.
+ */
+describe('an entry that carries its own collection (AGL-2518)', () => {
+  const base = { $id: 'e1', title: 'A post', slug: 'a-post' }
 
-    it('round-trips: the url it builds is one the parser resolves', () => {
-      const url = collectionAuthorUrl({
-        collectionSlug: 'blog',
-        author: { name: 'Zach Gover' },
-      })
-      const route = parseCollectionRoute(url.replace(/^\//, '').split('/'))
-      expect(route).toEqual({
-        collectionSlug: 'blog',
-        authorSlug: 'zach-gover',
-        page: 1,
-      })
-      expect(
-        entryMatchesAuthorRoute(
-          { author: { name: 'Zach Gover' } } as never,
-          route!.authorSlug!,
-        ),
-      ).toBe(true)
-    })
+  it('builds the url from the entry’s own collection, not the routed one', () => {
+    const tokens = collectionEntryTokens(
+      { ...base, collectionSlug: 'changelog', collectionName: 'Changelog' } as never,
+      // The routed slug an author page would otherwise pass for every card.
+      '__author__',
+    )
+    expect(tokens['entry.url']).toBe('/changelog/a-post')
+    expect(tokens['entry.collection']).toBe('Changelog')
+    expect(tokens['entry.collectionSlug']).toBe('changelog')
+    expect(tokens['entry.collectionUrl']).toBe('/changelog')
+  })
+
+  it('changes nothing for a single-collection listing', () => {
+    // Every existing caller passes one slug and stamps nothing, so this is
+    // the case that must stay byte-identical.
+    const tokens = collectionEntryTokens(base as never, 'blog')
+    expect(tokens['entry.url']).toBe('/blog/a-post')
+    expect(tokens['entry.collection']).toBe('')
+    expect(tokens['entry.collectionSlug']).toBe('blog')
+  })
+
+  it('sends each search hit to its own collection', () => {
+    // The index is built from the same window the cards were, so a mixed
+    // listing whose search sent every hit to one collection would be a page
+    // of links to 404s.
+    const index = buildCollectionSearchIndex(
+      [
+        { ...base, collectionSlug: 'changelog' },
+        { $id: 'e2', title: 'B', slug: 'b' },
+      ] as never,
+      'blog',
+    )
+    expect(index.map((row) => row.url)).toEqual(['/changelog/a-post', '/blog/b'])
   })
 })

@@ -228,9 +228,9 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     why: 'The fallback renderer: entry cover, markdown body images and the white-label brand logo, each through resolveMediaSrc. Its <style> carries ELEMENT_HIDDEN_STYLE_TEXT, a build-time constant.',
   },
   'apps/tenant/app/[host]/[[...slug]]/page.tsx': {
-    markers: 9,
+    markers: 11,
     guard: 'raw',
-    why: 'og:image/twitter:image and Article.image go through resolveSocialImage → absoluteMediaSrc. The Product JSON-LD emits seededProduct.mediaUrls with no resolver at all, and a crawler fetches it with no browser and no CSP, so no img-src can ever cover it.',
+    why: 'og:image/twitter:image and Article.image go through resolveSocialImage → absoluteMediaSrc. The author page adds two more of the same (AGL-2518): the portrait behind og:image and the one inside ProfilePage.mainEntity, both through absoluteMediaSrc, from an author record the customer wrote. The Product JSON-LD emits seededProduct.mediaUrls with no resolver at all, and a crawler fetches it with no browser and no CSP, so no img-src can ever cover it.',
   },
   'apps/tenant/app/[host]/admin-bar/admin-bar.tsx': {
     markers: 2,
@@ -368,9 +368,9 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     why: 'The listing card image on the same console surface, and the besigner standalone preview of it.',
   },
   'libs/plugins/mui/src/lib/components/collection.tsx': {
-    markers: 4,
+    markers: 5,
     guard: 'media-ref',
-    why: 'Markdown body image, entry cover, byline avatar and the Entry Author card portrait, all four through resolveMediaSrc. The body image is additionally scheme-checked at parse time by markdown-lite (AGL-1713); the other three are not. The portrait differs from the rest only in where the string comes from — an author RECORD the customer wrote, not a node prop (AGL-2486).',
+    why: 'Markdown body image, entry cover, byline avatar, the Entry Author card portrait and the Author Profile portrait, all five through resolveMediaSrc. The body image is additionally scheme-checked at parse time by markdown-lite (AGL-1713); the other four are not. The two portraits differ from the rest only in where the string comes from — an author RECORD the customer wrote, not a node prop (AGL-2486/2518) — and they are the SAME record field rendered at two sizes, so neither is a new class of input.',
   },
   'libs/plugins/mui/src/lib/components/custom-html.tsx': {
     markers: 1,
@@ -416,6 +416,16 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     markers: 2,
     guard: 'projection',
     why: "Composes the entry's coverImage into the screen SEO that page.tsx then hands to resolveSocialImage. Nothing is fetched here.",
+  },
+  'libs/tenant/runtime/src/lib/author-page-nodes.ts': {
+    markers: 1,
+    guard: 'projection',
+    why: "Sets the routed author's stored `image` as a PROP on the built-in page's Author Profile node. The string is passed on untouched; ContentAuthorProfile in libs/plugins/mui/src/lib/components/collection.tsx resolves it with resolveMediaSrc at render, which is the same resolver and the same record field the Entry Author card already uses (AGL-2518). Nothing is fetched here.",
+  },
+  'libs/aglyn/src/lib/app-utils/content-author-profile.ts': {
+    markers: 2,
+    guard: 'projection',
+    why: "Two projections of the same record field (AGL-2518): the `{{author.image}}` token, RAW because a token map is a string map with no rendering host to resolve against, and the Author Profile fill, which sets it as a node prop. Both are resolved downstream by resolveMediaSrc inside ContentAuthorProfile. Nothing is fetched here, and nothing is escaped here either — safeJsonLd is what turns a value into markup.",
   },
 }
 

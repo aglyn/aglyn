@@ -153,12 +153,17 @@ function healthyTenantConfig() {
         valid: true,
         action: bypass(),
         conditionGroup: [
-          '/robots.txt',
-          '/sitemap.xml',
-          '/manifest.webmanifest',
-          '/api/manifest',
-          '/api/collections-rss',
-        ].map((value) => ({ conditions: [{ type: 'path', op: 'eq', value }] })),
+          ...[
+            '/robots.txt',
+            '/sitemap.xml',
+            '/manifest.webmanifest',
+            '/api/manifest',
+            '/api/collections-rss',
+          ].map((value) => ({ conditions: [{ type: 'path', op: 'eq', value }] })),
+          // The sixth mouth, added live 2026-09-03: `/sitemap.xml` is an index
+          // now, and the children it names live under this prefix (AGL-2520).
+          { conditions: [{ type: 'path', op: 'pre', value: '/sitemaps/' }] },
+        ],
       },
       {
         name: 'Social preview crawler bypass',
@@ -176,9 +181,15 @@ function healthyTenantConfig() {
 
 /**
  * The console as actually deployed: the probe rule; ONE machine-traffic rule
- * that is a single hole with twelve mouths (eleven exact paths and one
+ * that is a single hole with fifteen mouths (fourteen exact paths and one
  * `/api/health` prefix); and, since 2026-08-23, the plugin loader control
  * plane bypass — one exact path plus one prefix.
+ *
+ * The path list must stay complete, not merely plausible. Since AGL-2520 the
+ * checker asserts COVERAGE as well as scope, so a fixture missing a declared
+ * path now fails here — which is the point: this fixture is what "live and
+ * healthy" means, and it had drifted three paths behind the declaration
+ * without any test noticing.
  */
 function healthyConsoleConfig() {
   const paths = [
@@ -193,6 +204,9 @@ function healthyConsoleConfig() {
     '/api/admin/reap-plugin-artifacts',
     '/api/admin/reverify-plugin-versions',
     '/api/admin/run-erasures',
+    '/api/email/events',
+    '/api/campaigns/process-scheduled',
+    '/api/lists/materialize',
   ]
   return {
     firewallEnabled: true,
@@ -343,6 +357,106 @@ test('a rule stripped of all condition groups fails', () => {
   const config = healthyTenantConfig()
   ruleNamed(config, 'Plugin job runner bypass').conditionGroup = []
   assert.match(findingsFor(config), /NO condition groups — it would match every request/)
+})
+
+// ── Coverage decay: the one that got through (AGL-2520) ────────────────────
+// Scope asks whether every live group is narrow enough. It cannot ask whether
+// a group is THERE, and both multi-mouth mechanisms — `valueAnyOf` and
+// `alsoRequiresGroups` — are satisfied vacuously by a group that does not
+// exist. The checker reported a clean match against a tenant rule that was
+// missing the `/sitemaps/` group for as long as it took to notice by hand.
+
+test('a rule missing a declared alternate group fails', () => {
+  // The exact state AGL-2520 shipped the code into: `/sitemap.xml` names
+  // children under `/sitemaps/`, the table declares the prefix group they
+  // need, and the live rule does not have it yet. Every child sitemap answers
+  // a crawler 429 while nothing anywhere is red.
+  const config = healthyTenantConfig()
+  const rule = ruleNamed(config, 'Crawler metadata bypass')
+  rule.conditionGroup = rule.conditionGroup.filter(
+    (group) => group.conditions[0].value !== '/sitemaps/',
+  )
+  const findings = findingsFor(config)
+  assert.match(findings, /declares an alternate group path pre "\/sitemaps\/" but NO condition group carries it/)
+  assert.equal(evalTenant(config).ok, false)
+})
+
+test('a rule missing ONE of its declared paths fails, and names that path', () => {
+  // The same defect through the other mechanism. Five of the six mouths
+  // remain and every one of them still carries a path on the allowlist, so
+  // the scope assertion is perfectly satisfied — while `robots.txt` is
+  // challenged and a crawler cannot read the site's exclusions at all.
+  const config = healthyTenantConfig()
+  const rule = ruleNamed(config, 'Crawler metadata bypass')
+  rule.conditionGroup = rule.conditionGroup.filter(
+    (group) => group.conditions[0].value !== '/robots.txt',
+  )
+  const findings = findingsFor(config)
+  assert.match(findings, /declares path eq "\/robots\.txt" but NO condition group carries it/)
+  // ⚠️ The assertion that makes the one above mean something. A coverage
+  // finding must not be reachable by way of the scope check firing on the
+  // groups that remain — they are untouched and still correct, so a `NO
+  // LONGER REQUIRES` here would mean the two assertions are entangled and
+  // neither is measuring what its name says.
+  assert.doesNotMatch(findings, /NO LONGER REQUIRES/)
+})
+
+test('the console rule missing its /api/health prefix group fails', () => {
+  // Not a tenant-only property: the same mechanism guards the alternate that
+  // keeps `uptime-probe.yml` from reading a false outage.
+  const config = healthyConsoleConfig()
+  const rule = config.rules.find((r) => r.name === 'Machine traffic bypass')
+  rule.conditionGroup = rule.conditionGroup.filter(
+    (group) => group.conditions[0].op !== 'pre',
+  )
+  const findings = evalConsole(config).findings.join('\n')
+  assert.match(findings, /declares an alternate group path pre "\/api\/health" but NO condition group carries it/)
+  assert.equal(evalConsole(config).ok, false)
+})
+
+test('coverage does not fire while every declared mouth is present', () => {
+  // The discrimination case: a config damaged ONLY in scope must produce a
+  // scope finding and no coverage finding, or the two are the same detector
+  // wearing two names.
+  const config = healthyTenantConfig()
+  ruleNamed(config, 'Crawler metadata bypass').conditionGroup.push({
+    conditions: [{ type: 'path', op: 'eq', value: '/api/undeclared-hole' }],
+  })
+  const findings = findingsFor(config)
+  assert.match(findings, /NO LONGER REQUIRES/)
+  assert.doesNotMatch(findings, /NO condition group carries it/)
+})
+
+test('the mode guard rejects an empty valueAnyOf', () => {
+  // An empty allowlist rejects every live value, so the rule reports as fully
+  // decayed — a red that reads as a firewall problem and is a table typo.
+  const problems = validatePostureTable([
+    {
+      project: 'p',
+      expect: 'protected',
+      bypassRules: [
+        { name: 'r', conditions: [{ type: 'path', op: 'eq', valueAnyOf: [] }] },
+      ],
+    },
+  ])
+  assert.match(problems.join('\n'), /declares an empty `valueAnyOf`/)
+})
+
+test('the mode guard rejects an empty alsoRequiresGroups', () => {
+  const problems = validatePostureTable([
+    {
+      project: 'p',
+      expect: 'protected',
+      bypassRules: [
+        {
+          name: 'r',
+          conditions: [{ type: 'path', op: 'eq', value: '/x' }],
+          alsoRequiresGroups: [],
+        },
+      ],
+    },
+  ])
+  assert.match(problems.join('\n'), /declares an empty `alsoRequiresGroups`/)
 })
 
 test('an empty condition group fails', () => {
@@ -682,7 +796,7 @@ function docsConfig() {
   return config
 }
 
-test('the posture measured live on 2026-08-23, after the loader bypass went in, passes', () => {
+test('the posture matching the live configs today passes', () => {
   const result = evaluatePosture({ configs: configsMatchingLiveToday() })
   assert.equal(result.ok, true)
   assert.equal(result.failedCount, 0)

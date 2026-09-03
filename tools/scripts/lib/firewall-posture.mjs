@@ -108,6 +108,35 @@
 // looser group. That is why `evaluateRule` below requires EVERY group to carry
 // EVERY required condition, rather than looking for one group that matches.
 //
+// ## Scope has a twin, and it was missing until 2026-09-03: COVERAGE
+//
+// Scope answers "is this hole still narrow". It cannot answer "is this hole
+// still THERE", because both of the mechanisms that let one rule serve several
+// paths — `valueAnyOf` and `alsoRequiresGroups` — describe what a live group is
+// ALLOWED to be, and an allowance is satisfied vacuously by a group that does
+// not exist. Delete the `/robots.txt` group from the crawler rule and every
+// surviving group still carries a path on the allowlist: green, with crawlers
+// challenged.
+//
+// AGL-2520 is the case that found it. `/sitemap.xml` became an index naming
+// children at `/sitemaps/{section}/{page}.xml`, the table declared the prefix
+// group those children need, and the checker went on reporting a match against
+// a live rule that did not have it — because the declaration only ever said
+// "a group of this shape is acceptable". The feature would have shipped with
+// every child sitemap answering Googlebot a 429, with the repo green and the
+// daily drift job green.
+//
+// So `evaluateRule` asserts BOTH directions:
+//
+//   scope     every live group carries every required condition
+//             → a rule cannot be widened by appending a looser group
+//   coverage  every declared path and every declared alternate group shape has
+//             SOME live group carrying it
+//             → a rule cannot be narrowed, or shipped un-widened, in silence
+//
+// Anything the table declares must exist. That is the whole rule, and it is
+// why `alsoRequiresGroups` is not named `alsoAllows`.
+//
 // ## Secrets
 //
 // The probe rule matches on a shared-secret header VALUE, and that value is
@@ -374,6 +403,28 @@ export const EXPECTED_POSTURE = Object.freeze([
             ]),
           }),
         ]),
+        // The child sitemaps `/sitemap.xml` names (AGL-2520). A prefix rather
+        // than an exact path because there is one per section and one per
+        // content collection, so the set is a function of the customer's own
+        // data and cannot be enumerated here.
+        //
+        // Its own group, not a sixth entry above, because the two conditions
+        // are different ops — `eq` on a fixed list and `pre` on a namespace —
+        // and the checker requires every declared condition of a group to hold
+        // for that group. This is the same "one hole, two mouths" shape the
+        // console's machine-traffic bypass has.
+        //
+        // Declaring it here REQUIRES it live (AGL-2520). It was an allowance
+        // for the few hours between the code landing and the PATCH, and in
+        // exactly those hours the checker reported a match against a rule that
+        // did not have this group — which is the gap the header describes.
+        //
+        // The namespace is safe to open wholesale: `/sitemaps/*` is served by
+        // the sitemap route alone, is public, read-only and secrets-free, and
+        // answers an empty `<urlset>` for a section that does not exist.
+        alsoRequiresGroups: Object.freeze([
+          Object.freeze({ type: 'path', op: 'pre', value: '/sitemaps/' }),
+        ]),
       }),
       SOCIAL_CRAWLER_BYPASS_RULE,
     ]),
@@ -456,8 +507,11 @@ export const EXPECTED_POSTURE = Object.freeze([
         // The health routes ride the same rule as a `pre` group, which the
         // per-group loop below tolerates: a group carrying `path pre
         // /api/health` fails the `eq` expectation above. Declared separately
-        // so that stays honest rather than silently excused.
-        alsoAllowsGroups: Object.freeze([
+        // so that stays honest rather than silently excused — and, since
+        // AGL-2520, so its absence is a finding: without this group every
+        // health route is challenged and `uptime-probe.yml` reads a false
+        // outage.
+        alsoRequiresGroups: Object.freeze([
           Object.freeze({ type: 'path', op: 'pre', value: '/api/health' }),
         ]),
       }),
@@ -512,8 +566,10 @@ export const EXPECTED_POSTURE = Object.freeze([
         ]),
         // The host-origins lookup carries the id as a path segment, so it can
         // only be matched by prefix. Declared as an alternate group shape for
-        // the same reason `/api/health` is above.
-        alsoAllowsGroups: Object.freeze([
+        // the same reason `/api/health` is above — and required for the same
+        // reason: without it, a custom-domain site cannot frame a plugin at
+        // all, which is the outage this whole rule exists to prevent.
+        alsoRequiresGroups: Object.freeze([
           Object.freeze({ type: 'path', op: 'pre', value: '/api/plugin-host-origins' }),
         ]),
       }),
@@ -639,6 +695,26 @@ export function validatePostureTable(table) {
               'a hole through bot protection must have its scope asserted',
           )
         }
+        // Both multi-mouth mechanisms assert nothing when empty, and an empty
+        // one reads exactly like a populated one at a glance (AGL-2520). An
+        // empty `valueAnyOf` is worse than absent: `conditionSatisfies` would
+        // reject EVERY live value, so the rule would report as fully decayed.
+        for (const condition of rule?.conditions ?? []) {
+          if (!Object.prototype.hasOwnProperty.call(condition ?? {}, 'valueAnyOf')) continue
+          if (Array.isArray(condition.valueAnyOf) && condition.valueAnyOf.length > 0) continue
+          problems.push(
+            `"${name}": bypass rule "${rule?.name ?? '?'}" declares an empty \`valueAnyOf\` — ` +
+              'give it the paths the rule really carries, or drop the key and use `value`',
+          )
+        }
+        if (Object.prototype.hasOwnProperty.call(rule ?? {}, 'alsoRequiresGroups')) {
+          if (!Array.isArray(rule.alsoRequiresGroups) || rule.alsoRequiresGroups.length === 0) {
+            problems.push(
+              `"${name}": bypass rule "${rule?.name ?? '?'}" declares an empty ` +
+                '`alsoRequiresGroups` — remove the key rather than declaring no alternates',
+            )
+          }
+        }
       }
     }
     if (entry.expect === 'unprotected' && (typeof entry.gap !== 'string' || entry.gap.trim().length === 0)) {
@@ -694,9 +770,17 @@ export function ruleAction(rule) {
 /**
  * Assert one expected bypass rule against the live rule of the same name.
  *
- * The scope assertion is the point: EVERY `conditionGroup` must carry EVERY
- * required condition. Groups are OR'd, so checking "some group matches" would
- * pass a rule that had a second, wide-open group appended to it.
+ * TWO assertions, and neither implies the other (see the header):
+ *
+ *  - **Scope.** EVERY `conditionGroup` must carry EVERY required condition.
+ *    Groups are OR'd, so checking "some group matches" would pass a rule that
+ *    had a second, wide-open group appended to it.
+ *  - **Coverage.** Every declared `valueAnyOf` value and every declared
+ *    `alsoRequiresGroups` shape must be carried by SOME live group. Both of
+ *    those describe what a group is permitted to be, and a permission is
+ *    satisfied by a group that is not there — so without this a rule can lose
+ *    a mouth, or never grow the one the table says it has, and still report a
+ *    clean match.
  *
  * @returns {string[]} findings; empty means the rule is present and still scoped.
  */
@@ -733,9 +817,7 @@ export function evaluateRule(expectedRule, liveRule) {
     // one matches the `/api/health` prefix. Without this a legitimate shape
     // would read as decay; with it, a group still has to match SOME declared
     // shape, so an undeclared group is still caught.
-    const alternates = Array.isArray(expectedRule.alsoAllowsGroups)
-      ? expectedRule.alsoAllowsGroups
-      : []
+    const alternates = alternateGroupsOf(expectedRule)
     const matchesAlternate = alternates.some((alt) =>
       conditions.some((actual) => conditionSatisfies(alt, actual)),
     )
@@ -763,6 +845,75 @@ export function evaluateRule(expectedRule, liveRule) {
       )
     }
   })
+
+  findings.push(...uncoveredDeclarations(expectedRule, groups, label))
+
+  return findings
+}
+
+/** The alternate group shapes a rule declares, normalised to an array. */
+function alternateGroupsOf(expectedRule) {
+  return Array.isArray(expectedRule?.alsoRequiresGroups)
+    ? expectedRule.alsoRequiresGroups
+    : []
+}
+
+/**
+ * The COVERAGE half (AGL-2520): everything the table declares must be carried
+ * by some live group.
+ *
+ * The loop above walks live groups and asks whether each is permitted. This
+ * one walks the DECLARATION and asks whether each part of it is present. Only
+ * the two multi-mouth mechanisms need it, because a plain `conditions` entry
+ * is already required of every group and a rule with no groups is reported
+ * before this runs:
+ *
+ *  - `valueAnyOf` — an allowlist of the values the live groups may carry. Drop
+ *    the `/robots.txt` group from the crawler rule and the five that remain
+ *    all still carry a listed path, so the allowlist is satisfied while
+ *    `robots.txt` is challenged.
+ *  - `alsoRequiresGroups` — an alternate shape. Declared but absent is the
+ *    state a new public path is in between the code landing and the live
+ *    PATCH, and it is precisely then that a check is worth having.
+ *
+ * @param {object} expectedRule
+ * @param {object[]} groups  the live `conditionGroup` array
+ * @param {string} label     "bypass rule \"…\"", for the finding text
+ * @returns {string[]} findings; empty means every declaration is present.
+ */
+function uncoveredDeclarations(expectedRule, groups, label) {
+  const findings = []
+  const carriedBySomeGroup = (required) =>
+    groups.some((group) =>
+      (Array.isArray(group?.conditions) ? group.conditions : []).some((actual) =>
+        conditionSatisfies(required, actual),
+      ),
+    )
+
+  for (const required of expectedRule.conditions ?? []) {
+    if (!Array.isArray(required.valueAnyOf)) continue
+    for (const value of required.valueAnyOf) {
+      // Narrowed to the one value, so "some group carries a listed path" —
+      // which the allowlist alone asks — becomes "some group carries THIS
+      // path".
+      const one = { ...required, valueAnyOf: undefined, value }
+      if (carriedBySomeGroup(one)) continue
+      findings.push(
+        `${label} declares ${describeCondition(one)} but NO condition group carries it — ` +
+          'the rule has lost a mouth, or never grew one it is declared to have. ' +
+          'Everything reachable only through that path is challenged.',
+      )
+    }
+  }
+
+  for (const alternate of alternateGroupsOf(expectedRule)) {
+    if (carriedBySomeGroup(alternate)) continue
+    findings.push(
+      `${label} declares an alternate group ${describeCondition(alternate)} but NO condition ` +
+        'group carries it. A declared shape is REQUIRED, not merely permitted: add the group ' +
+        'to the live rule with `PATCH rules.update`, or delete the declaration if it was wrong.',
+    )
+  }
 
   return findings
 }

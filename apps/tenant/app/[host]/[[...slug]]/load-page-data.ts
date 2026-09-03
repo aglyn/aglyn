@@ -29,6 +29,11 @@ import {
   composeCollectionTemplatePage,
 } from '@aglyn/tenant-runtime/compose-collection-page'
 import getCollectionContent from '@aglyn/tenant-runtime/get-collection-content'
+import getAuthorContent from '@aglyn/tenant-runtime/get-author-content'
+import {
+  composeAuthorFallbackPage,
+  composeAuthorTemplatePage,
+} from '@aglyn/tenant-runtime/compose-author-page'
 import getTemplateScreenIds, {
   getTemplateScreenRouting,
 } from '@aglyn/tenant-runtime/template-screens'
@@ -829,10 +834,6 @@ const loadPageDataCached = cache(
                 ...(route.categorySlug
                   ? { categorySlug: route.categorySlug }
                   : {}),
-                // The author archive (AGL-2517), narrowed by the loader on the
-                // same terms as a category so its page count describes the
-                // archive rather than the whole collection.
-                ...(route.authorSlug ? { authorSlug: route.authorSlug } : {}),
               }
             : {}),
         })
@@ -965,6 +966,110 @@ const loadPageDataCached = cache(
               }),
             ),
             revalidate: 60,
+          }
+        }
+      }
+
+      /**
+       * The author page (AGL-2518): `/author/{slug}` and
+       * `/author/{slug}/page/{n}`.
+       *
+       * ONE page per person, site-wide, listing what they wrote across every
+       * content collection. AGL-2517 put this archive under each collection,
+       * which gave one author as many partial pages as the site has
+       * collections — none of them the address a byline should link to.
+       *
+       * Resolved AFTER the collection route on purpose. `/author/anything`
+       * also parses as `{collectionSlug: 'author', entrySlug: 'anything'}`,
+       * so a customer who already publishes a content collection slugged
+       * `author` keeps it: their collection resolves first and returns above,
+       * and this branch is only reached when it did not. The cost is one
+       * collection lookup on an author page, which is a small indexed query
+       * against a page that is ISR-cached per URL anyway — cheap next to
+       * silently taking an existing site's section away.
+       */
+      const authorRoute = Aglyn.parseContentAuthorRoute(segments)
+      if (authorRoute) {
+        const authorContent = await getAuthorContent({
+          hostId,
+          authorSlug: authorRoute.authorSlug,
+          page: authorRoute.page,
+          perPage: Aglyn.COLLECTION_LIST_PAGE_SIZE,
+        })
+        // A page beyond the last 404s; page 1 always renders, even for an
+        // author with nothing published — a person's page is about the
+        // person, and an empty archive is a true statement about them.
+        const authorPageInRange = authorRoute.page <= authorContent.totalPages
+        if (authorContent.known && authorPageInRange) {
+          const authorEnabledPlugins = await filterEnabledPluginsByReleaseFlags(
+            Aglyn.resolveHostEnabledPlugins(
+              orgRes.org as never,
+              hostRes.host as never,
+            ),
+            { orgId: (orgRes.org as { $id?: string })?.$id ?? null },
+          )
+          const composedAuthor =
+            (await composeAuthorTemplatePage({
+              hostId,
+              host: hostRes.host,
+              content: authorContent,
+            })) ??
+            (await composeAuthorFallbackPage({
+              hostId,
+              host: hostRes.host,
+              content: authorContent,
+            }))
+          if (composedAuthor) {
+            /*
+              The site's chrome has to be ENRICHED, not merely rendered
+              (AGL-2509). A nav built from primitives opens on hover through
+              `clientAutomations`, which is an enricher's output — so a page
+              that composes the layout and skips this ships markup that is
+              byte-identical to a working page's and completely inert. That is
+              the defect the collection routes shipped for months, and it is
+              re-derivable on every new route that composes a layout, which is
+              why it is called out here rather than assumed.
+            */
+            const authorEnriched = await Aglyn.runSitePageEnrichers({
+              hostId,
+              host: hostRes.host,
+              org: orgRes.org,
+              path,
+              slugSegments: [...(slug ?? [])],
+              nodes: composedAuthor.nodes,
+            })
+            return {
+              props: JSON.parse(
+                JSON.stringify({
+                  data: {
+                    host: hostRes.host,
+                    ...(composedAuthor.screen
+                      ? { screen: { data: composedAuthor.screen } }
+                      : {}),
+                  },
+                  nodes: composedAuthor.nodes,
+                  // The head and the JSON-LD read this.
+                  author: {
+                    slug: authorContent.slug,
+                    name: authorContent.name,
+                    record: authorContent.author,
+                    page: authorContent.page,
+                    totalPages: authorContent.totalPages,
+                    totalEntries: authorContent.totalEntries,
+                  },
+                  enabledPlugins: authorEnabledPlugins,
+                  ...authorEnriched.props,
+                  ...blockingPluginsFor(
+                    composedAuthor.nodes,
+                    authorEnabledPlugins,
+                    authorEnriched,
+                  ),
+                  showBranding: !Aglyn.resolveOrgEntitlements(orgRes.org)
+                    .features.removeBranding,
+                }),
+              ),
+              revalidate: 60,
+            }
           }
         }
       }

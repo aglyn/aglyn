@@ -120,15 +120,38 @@ only the fields that apply:
 | Field | Person | Organization |
 | --- | --- | --- |
 | **Name** | required | required |
-| **URL** | author page or personal site | site |
+| **Page address** | their page on your site | their page on your site |
+| **URL** | their own site, elsewhere | their own site, elsewhere |
 | **Portrait / Logo** | published as `image` | published as `logo` |
 | **Job title** | yes | — |
 | **Works for** | yes | — |
+| **Links** | the row of marks a reader clicks | same |
 | **Profile links** | `sameAs`, one URL per line | `sameAs`, one URL per line |
 | **Bio** | shown beside the byline; not structured data | same |
 
 The portrait is a **media-picker target** — choose from the site or organization
 library, or paste a URL if the avatar lives elsewhere.
+
+#### Links a reader can click
+
+**Profile links** and **Links** answer two different questions, which is why both
+exist. Profile links are `sameAs`: a bare list of URLs, published for crawlers so
+they can join this author to the same person elsewhere. Nothing draws them.
+
+**Links** are the ones your visitors see — a row of marks under the bio on the
+author card and the author page. Each row is one of two kinds:
+
+- pick a **platform** (X, LinkedIn, GitHub, Mastodon, YouTube, Instagram, Facebook,
+  Website, Email, RSS) and the mark and the label come with it. You cannot change
+  them, and that is deliberate: an X link drawn with a GitHub glyph is a broken link
+  that still resolves;
+- pick **Custom link** for anything else — a newsletter, a conference talk, an ORCID
+  record — and you choose the label and the icon yourself, because no mark for it
+  would mean anything to a reader.
+
+`https://` and `mailto:` only. Every link you add here is also published into
+`sameAs`, so you never have to type a profile URL twice — an email address is the
+one exception, since `sameAs` is for pages that identify the same entity.
 
 An author flows straight into the entry page's **structured data**: the `Article`'s
 `author` becomes that Person or Organization, with its url, image, job title and
@@ -145,6 +168,54 @@ existed keep their typed byline and are published as a `Person` with that name, 
 they always were.
 
 A site holds up to 200 authors.
+
+#### The author's page
+
+Every author gets **one page**, at `/author/{slug}`, collecting everything they wrote
+**across every collection** — blog posts, changelog notes and press releases in a
+single list, newest first. One person, one address, however many sections your site
+has. Deeper pages live at `/author/{slug}/page/2`.
+
+**Page address** is that slug. Leave it blank and it comes from the name
+(`Zach Gover` → `/author/zach-gover`); set it when you want an address that survives
+a rename, or when two people share a name. The old address keeps working either way
+— a page answers to the stored slug, the display name and the record id at once.
+
+The byline links there on its own. **Entry Meta** turns the author's name into a link
+to their page, and the **Entry Author** card does the same — their own site stays
+available as one of the link rows rather than competing for the name. Both have a
+switch if you want plain text instead.
+
+Author pages are also submitted in your sitemap, one URL per author.
+
+#### Designing the author page
+
+Left alone, an author page renders a built-in themed page inside your site's shared
+layout — portrait, name, role, bio, links, then their posts. To design your own, build
+a screen and pick it under **Author page screen** on the Authors tab. It applies to
+every author, because a masthead whose design changed as a reader clicked between
+colleagues would be a strange thing to build on purpose.
+
+On that screen:
+
+- the **Author Profile** block draws the person — portrait, name, role, bio and links —
+  filled from whichever author's page is being rendered;
+- a **Collection Entries** block lists their posts. Leave its collection blank: on an
+  author page it repeats their entries from every collection. Bind
+  `{{entry.collection}}` on the card to label which section each post came from;
+- `{{author.name}}`, `{{author.bio}}`, `{{author.jobTitle}}`, `{{author.worksFor}}`,
+  `{{author.image}}`, `{{author.url}}`, `{{author.pageUrl}}` and
+  `{{author.entryCountLabel}}` ("12 posts", pluralized for you) resolve per author;
+- `{{pagination.page}}`, `{{pagination.totalPages}}`, `{{pagination.prevUrl}}` and
+  `{{pagination.nextUrl}}` are the same four a collection list template uses, so a
+  pager you have already built works here unchanged.
+
+The screen you pick stops serving at its own address, exactly like a collection's
+entry template — it renders `/author/…` instead.
+
+The page publishes `ProfilePage` structured data with the author as its
+`mainEntity`, using the same Person or Organization shape every article of theirs
+already carries as its `author`.
 
 ### Categories
 

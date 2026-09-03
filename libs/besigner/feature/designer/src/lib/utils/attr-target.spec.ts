@@ -414,7 +414,8 @@ describe('an attribute override, written and then grafted (AGL-1899)', () => {
     const composed = Aglyn.composeReusableComponentNodes(nodes, {
       widget: v1(),
     } as any)
-    expect(composed['cmp__a__root']?.props).toEqual({ spacing: 4 })
+    // The root took the placement's id (AGL-2521).
+    expect(composed['a']?.props).toEqual({ spacing: 4 })
     expect(graftedCta(composed, 'a')).toEqual({
       variant: 'contained',
       size: 'medium',
@@ -434,6 +435,6 @@ describe('an attribute override, written and then grafted (AGL-1899)', () => {
       widget: trimmed,
     } as any)
     expect(composed['cmp__a__cta']).toBeUndefined()
-    expect(composed['cmp__a__root']).toBeDefined()
+    expect(composed['a']).toBeDefined()
   })
 })

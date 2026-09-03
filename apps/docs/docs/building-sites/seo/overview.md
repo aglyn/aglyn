@@ -140,6 +140,29 @@ real address (your custom domain when you have one), and includes:
 - your **content collections** — each collection's list URL and its **published**
   entries. A scheduled entry joins the sitemap once its publish time passes.
 
+### One index, one file per section
+
+`sitemap.xml` is a **sitemap index**: instead of listing your URLs directly, it names a
+child sitemap for each part of your site, and each child holds that part's URLs.
+
+```text
+https://your-site/sitemap.xml
+  ├─ /sitemaps/pages/1.xml          your screens
+  ├─ /sitemaps/products/1.xml       your products
+  ├─ /sitemaps/catalog/1.xml        your catalog collections
+  ├─ /sitemaps/content-blog/1.xml   the blog, and its published entries
+  └─ /sitemaps/content-news/1.xml   … one per content collection
+```
+
+Submit `sitemap.xml` and nothing else — every search engine follows an index to its
+children on its own. You never write these child URLs yourself, and the index adds and
+drops them as you add and remove collections.
+
+The split is what keeps a growing site correct. A single sitemap may hold at most
+**50,000 URLs**, and anything past that is not submitted at all — silently. A section
+that outgrows one file simply continues into a second (`/sitemaps/content-blog/2.xml`),
+and the index names both.
+
 The sitemap is cached for a few minutes, and every publish refreshes it immediately —
 so a freshly published page never waits on the cache.
 

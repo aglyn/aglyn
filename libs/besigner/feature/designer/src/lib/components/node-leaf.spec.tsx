@@ -456,7 +456,7 @@ describe('component instance preview (AGL-1251)', () => {
     // Layout chrome grafts before loading its canvas (AGL-1218), so its
     // instances arrive with children and NodeLeaf must stay out of the way.
     const { baseElement } = renderInstance(
-      instanceNode(undefined, ['cmp__inst1__root']),
+      instanceNode(undefined, ['cmp__inst1__brand']),
     )
     expect(
       baseElement.querySelector('[data-aglyn-component-preview]'),
@@ -504,7 +504,7 @@ describe('component instance preview (AGL-1251)', () => {
     } as any
     const { baseElement } = renderInstance(node, { hero: styledDefinition })
     const root = baseElement.querySelector(
-      '[data-aglyn="leaf:cmp__inst1__root"]',
+      '[data-aglyn-component-preview] [data-aglyn="leaf:inst1"]',
     ) as HTMLElement
     expect(root).toBeTruthy()
     const css = emotionCssFor(root)
@@ -683,7 +683,7 @@ describe('component instance preview (AGL-1251)', () => {
     // what keeps the nesting unambiguous rather than flattening.
     expect(
       baseElement.querySelector(
-        '[data-aglyn="leaf:cmp__cmp__inst1__inner__broot"]',
+        '[data-aglyn="leaf:cmp__inst1__inner"]',
       ),
     ).toBeTruthy()
   })

@@ -339,9 +339,14 @@ export const NodeLeaf = observer(
         // the subtree being grafted, never applied to some other node.
         definitions as any,
       )
-      const graftedRootId = (composed[node.$id]?.nodes as string[])?.[0]
-      return graftedRootId
-        ? denormalizeTree(composed, graftedRootId)
+      // The graft puts the definition's root IN the instance's place rather
+      // than under it (AGL-2521), so the component to draw is at the
+      // instance's own id. Reading `nodes[0]` here would render the root's
+      // FIRST CHILD and drop the component's outer element with its siblings.
+      const grafted = composed[node.$id]
+      return grafted &&
+        grafted.componentId !== Aglyn.REUSABLE_INSTANCE_COMPONENT_ID
+        ? denormalizeTree(composed, node.$id)
         : undefined
       // Observable props/overrides: the JSON strings key the memo, as above.
       // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -518,7 +518,7 @@ describe('panel leaf target → save → reload → render (AGL-1332)', () => {
     // The definition's `py` reads back as the two sides the panel owns
     // (AGL-2207) — `mergeNodeSx` canonicalizes before merging, so an
     // override REPLACES the alias instead of landing beside it.
-    expect(composed['cmp__inst__root'].sx).toEqual({
+    expect(composed['inst'].sx).toEqual({
       backgroundColor: '#fff',
       paddingTop: 8,
       paddingBottom: 8,
@@ -593,7 +593,7 @@ describe('panel → save → reload → render round trip (AGL-1306)', () => {
       reloaded.toJSON().nodes as any,
       { cta: definition },
     )
-    expect(composed['cmp__inst__root'].sx).toEqual({
+    expect(composed['inst'].sx).toEqual({
       backgroundColor: '#0b4a6f',
       paddingTop: 8,
       paddingBottom: 8,

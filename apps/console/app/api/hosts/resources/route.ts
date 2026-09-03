@@ -547,6 +547,10 @@ const RESOURCES: Record<string, {
     fields: [
       'type',
       'name',
+      // The author's page address (AGL-2518). Same reasoning as `links`
+      // below: dropped on creation and kept on every edit after is the kind
+      // of half-working that reads as a flaky save.
+      'slug',
       'url',
       'image',
       'jobTitle',

@@ -24,52 +24,7 @@ import { BUNDLE_ID } from '../constants/bundle-common'
 // Persisted in screen documents; never rename (see AGL-34 ADR).
 export const ID: Aglyn.ComponentId = Aglyn.REUSABLE_INSTANCE_COMPONENT_ID
 
-/**
- * Elements an instance may render as (AGL-2514).
- *
- * The wrapper is the outermost element of every placed component, so it is
- * where a site's chrome becomes a landmark: a Site nav instance set to
- * `header` and a Site footer instance set to `footer` give the page the two
- * regions `main` is defined against. Before this it was a hardcoded `div`,
- * and no attribute anywhere on the instance could change that — a definition
- * whose own root is an App Bar or a Section could emit a landmark inside the
- * wrapper, but a definition rooted in anything else could not emit one at
- * all.
- *
- * ⛔ `main` IS NOT ONE OF THEM. A published page carries exactly one, placed
- * by `stampDocumentLandmark` on the Document layer or the Layout Slot; an
- * instance may be placed any number of times per page, so an author-selected
- * `main` here could only ever produce a second one. Same exclusion, and the
- * same reason, as `SECTION_ELEMENTS`.
- *
- * An allow-list rather than free text: the value is persisted and rendered
- * verbatim, so a typed one would put `script` into every visitor's page.
- */
-export const REUSABLE_INSTANCE_ELEMENTS = [
-  'div',
-  'header',
-  'footer',
-  'nav',
-  'aside',
-  'section',
-  'article',
-] as const
-export type ReusableInstanceElement =
-  (typeof REUSABLE_INSTANCE_ELEMENTS)[number]
-
-export interface ReusableInstanceProps extends Omit<BoxProps, 'component'> {
-  /**
-   * The DOM element the instance renders as; defaults to `div`. Unknown
-   * values degrade to `div` rather than reaching the DOM as an invented tag.
-   *
-   * Named `component` like Box's, Typography's and the Layout Slot's, not
-   * `element` like Section's: the attribute means the same thing everywhere
-   * it appears. Narrower than the `ElementType` Box accepts — a canvas
-   * attribute is a persisted STRING, and an allow-list is what keeps
-   * `script` out of it — so `BoxProps`' own `component` is omitted rather
-   * than widened.
-   */
-  component?: ReusableInstanceElement | string
+export interface ReusableInstanceProps extends BoxProps {
   /** Definition id in `hosts/{hostId}/components`; grafted at render time. */
   refId?: string
   /**
@@ -115,20 +70,11 @@ const ReusableInstance = forwardRef<any, ReusableInstanceProps>(
       [Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY]: _propValues,
       children,
       sx,
-      component,
       ...rest
     } = props
-    // Unknown values degrade to `div` rather than reaching the DOM as an
-    // invented tag — the resolver pattern `Section` uses.
-    const element = (
-      REUSABLE_INSTANCE_ELEMENTS as readonly string[]
-    ).includes(String(component ?? ''))
-      ? (component as ReusableInstanceElement)
-      : 'div'
     return (
       <Box
         ref={ref}
-        component={element}
         // `content: attr()` rather than a child, so the box stays `:empty`
         // and the placeholder cannot be mistaken for grafted content.
         data-aglyn-component={name || 'Reusable component'}
@@ -180,22 +126,15 @@ export const schema: Aglyn.ComponentSchema<ReusableInstanceProps> = {
     // nothing may be dropped inside from the canvas.
     dropping: Aglyn.FEATURE_FLAG.DISABLED,
   },
-  attributes: [
-    {
-      name: 'component',
-      label: 'Component',
-      description:
-        'The DOM element this placement renders as. Use header for a site ' +
-        'nav and footer for a site footer, so the page keeps the landmarks ' +
-        'assistive tech navigates by. "main" is not offered — the page’s ' +
-        'content region carries that one.',
-      component: Aglyn.FieldComponentType.SELECT,
-      options: REUSABLE_INSTANCE_ELEMENTS.map((value) => ({
-        value,
-        label: value,
-      })),
-    },
-  ],
+  /*
+   * No attributes. An instance is a REFERENCE, not an element: the graft puts
+   * the definition's root in its place, so the only node that reaches a
+   * published page is the component's own (AGL-2521). An element picker here
+   * briefly existed (AGL-2514) and configured a wrapper that no longer
+   * exists — what it was reaching for is **Attribute overrides → Component
+   * root**, which sets the definition root's element for this placement.
+   */
+  attributes: [],
 }
 
 /**

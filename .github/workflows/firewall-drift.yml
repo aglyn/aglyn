@@ -31,6 +31,12 @@ name: Firewall posture drift
 #     the `x-plugin-jobs-secret` header. A rule that decayed to path-only would
 #     leave an unauthenticated endpoint open while still passing any check that
 #     merely counts rules by name.
+#   * every declared PATH and GROUP SHAPE is carried by some live condition
+#     group (added 2026-09-03, AGL-2520). Scope alone could not see a rule that
+#     had LOST a mouth: a `valueAnyOf` allowlist and a declared alternate shape
+#     both say what a group is allowed to be, and a group that does not exist
+#     satisfies that vacuously. Delete the `/robots.txt` group and the five
+#     that remain still carry listed paths — green, with robots.txt challenged.
 #   * no UNDECLARED bypass rule exists.
 #
 # ## Why there is no push / pull_request trigger

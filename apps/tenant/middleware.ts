@@ -132,6 +132,11 @@ export const config = {
     // matcher excludes anything shaped `name.ext`, so a feed path would never
     // reach a route at all.
     '/:collection/rss.xml',
+    // Child sitemaps (AGL-2520). The catch-all above already reaches these —
+    // its `name.ext` exclusion only looks at the FIRST segment — but they are
+    // listed for the same reason the feed is: a per-host SEO file whose route
+    // is a rewrite should be findable in the matcher, not only in the handler.
+    '/sitemaps/:section/:page.xml',
   ],
 }
 
@@ -675,14 +680,30 @@ export const middleware: NextMiddleware = async (req, event) => {
   // survives a domain change because the middleware resolves the host per
   // request.
   const rssMatch = /^\/([\w-]+)\/rss\.xml$/.exec(req.nextUrl.pathname)
+  // A child sitemap — `/sitemaps/{section}/{page}.xml` (AGL-2520). `/sitemap.xml`
+  // above is now the INDEX that names these, and each one answers for a single
+  // section of the site so no file can outgrow the protocol's 50,000-URL cap.
+  //
+  // Only the PREFIX is matched here, and the whole path is forwarded: the
+  // section grammar has one parser, in the route handler, and duplicating it in
+  // the edge bundle would be a second definition free to drift. The path is
+  // forwarded rather than left to be re-read because a rewrite target's query
+  // is not guaranteed to reach a route handler while the original request URL
+  // is (AGL-1501) — this carries the answer either way.
+  const childSitemap = req.nextUrl.pathname.startsWith('/sitemaps/')
   const seoPathname = rssMatch
     ? '/api/collections-rss'
-    : SEO_REWRITES[req.nextUrl.pathname]
+    : childSitemap
+      ? '/api/sitemap'
+      : SEO_REWRITES[req.nextUrl.pathname]
   if (seoPathname) {
     const seoUrl = req.nextUrl.clone()
     seoUrl.pathname = seoPathname
     seoUrl.searchParams.set('host', tenantHost)
     if (rssMatch) seoUrl.searchParams.set('collection', rssMatch[1])
+    if (childSitemap) {
+      seoUrl.searchParams.set('sitemapPath', req.nextUrl.pathname)
+    }
     // The query can be dropped across dev rewrites, so the resolved tenant
     // host also travels as a request header the api routes prefer.
     const seoHeaders = new Headers(req.headers)

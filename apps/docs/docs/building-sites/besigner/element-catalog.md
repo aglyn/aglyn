@@ -106,18 +106,19 @@ having none.
 `main` is only half the picture: assistive tech and search engines also look for the
 banner and contentinfo regions around it. Those are yours to place.
 
-- A **Reusable component** placement — how a site nav or a site footer normally reaches a
-  layout — has its own **Component** attribute. Set the nav's placement to `header` and
-  the footer's to `footer`, and the published page carries both landmarks around the
-  slot's `main`.
+- A **Reusable component** placement renders as the component's own root element — the
+  placement adds nothing of its own to the page. To make one placement a landmark, use
+  **Attribute overrides → Component root → Component** on it: set the nav's to `header`
+  and the footer's to `footer`, and the published page carries both landmarks around the
+  slot's `main`, without a wrapper between them.
 - A **Section** anywhere inside a page can be `header` or `footer` too, and adds an
   accessible label with it.
 - The **Document** layer takes the same list, for a document that _is_ one region — a
   layout that is nothing but chrome, say. Picking a landmark other than `main` there
   leaves the page without a `main`, as above.
 
-Set the element on one of them, not on several nested inside each other: a `footer`
-placement wrapping a `footer` Section is two contentinfo regions where you meant one.
+Set the element in one place, not on several nested inside each other: a `footer`
+Section inside a `footer` Section is two contentinfo regions where you meant one.
 
 ### Grid
 
