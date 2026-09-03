@@ -23,7 +23,6 @@ import {
   COLLECTION_SOURCE_MAX,
   collectionTotalPages,
   type ContentAuthorRecord,
-  entryMatchesAuthorRoute,
   entryMatchesCategoryRoute,
   hostCollectionKind,
   normalizeContentAuthor,
@@ -123,6 +122,15 @@ export interface CollectionEntrySummary {
   /** Free-form labels (AGL-582). */
   tags?: string[]
   publishedAt?: { seconds: number } | null
+  /**
+   * The collection this entry came out of (AGL-2518), stamped only by a
+   * reader that MIXES collections — the author page. Unset on every routed
+   * listing, where the route already answers the question. See
+   * `CollectionEntryRecord.collectionSlug`.
+   */
+  collectionSlug?: string
+  /** The display name of {@link collectionSlug}. */
+  collectionName?: string
 }
 
 /** Entry-doc fields shared by the list and single-entry mappers (AGL-582). */
@@ -435,31 +443,11 @@ export interface CollectionContent {
   /** List pagination (AGL-620); null for entry pages or unpaginated lists. */
   pagination?: CollectionPagination | null
   /**
-   * The author this listing is filtered to (AGL-2517); absent on every route
-   * that is not an author archive.
-   */
-  author?: CollectionRouteAuthor | null
-  /**
    * The category this listing is filtered to (AGL-1321); null on the
    * canonical unfiltered list and on entry pages.
    */
   category?: CollectionRouteCategory | null
   error: unknown
-}
-
-/** The author a `/{collection}/author/{slug}` route addresses (AGL-2517). */
-export interface CollectionRouteAuthor {
-  /** The URL segment, slugified. */
-  slug: string
-  /** The resolved record, when a published entry names one. */
-  record?: ContentAuthorRecord
-  /** Display name; falls back to the raw segment for an unknown author. */
-  name: string
-  /**
-   * Did the segment match a published entry? An unknown author still renders
-   * — an empty archive, not a crash — which is the category route's rule.
-   */
-  known: boolean
 }
 
 /** The category a `/{collection}/category/{slug}` route addresses (AGL-1321). */
@@ -745,41 +733,10 @@ function applyCategoryAndPagination(
     page?: number
     perPage?: number
     categorySlug?: string
-    authorSlug?: string
   },
 ): void {
   const { page = 1, perPage } = options
   const routedCategory = (options.categorySlug ?? '').trim()
-  /**
-   * The author archive narrows on the same terms and BEFORE pagination, for
-   * the reason the category comment gives: counting pages over the whole
-   * collection and filtering afterwards advertises pages that render empty
-   * (AGL-2517).
-   *
-   * The two are independent filters rather than alternatives — the route
-   * parser only ever sets one, but narrowing both here means neither can
-   * quietly win if that ever changes.
-   */
-  const routedAuthor = (options.authorSlug ?? '').trim()
-  if (routedAuthor) {
-    const match = data.entries.find((entry) =>
-      entryMatchesAuthorRoute(entry, routedAuthor),
-    )
-    data.author = {
-      slug: collectionCategorySlug(routedAuthor),
-      // The RESOLVED record, taken from a post the author actually wrote —
-      // there is no author collection read here, and adding one to render a
-      // heading would put a second Firestore read on a cached page. An
-      // archive with no posts therefore has no record to show, which is the
-      // same page as "this author has written nothing".
-      ...(match?.author ? { record: match.author } : {}),
-      name: match?.author?.name || match?.authorName || routedAuthor,
-      known: Boolean(match),
-    }
-    data.entries = data.entries.filter((entry) =>
-      entryMatchesAuthorRoute(entry, routedAuthor),
-    )
-  }
   if (routedCategory) {
     const match = resolveCollectionCategoryBySlug(
       data.collection?.categories,
@@ -831,12 +788,6 @@ export async function getCollectionContent(options: {
    * windows describe the FILTERED set rather than the whole collection.
    */
   categorySlug?: string
-  /**
-   * Author segment of `/{collection}/author/{slug}` (AGL-2517). Narrows the
-   * same way and at the same point as `categorySlug`, so an archive's page
-   * count describes the archive rather than the collection.
-   */
-  authorSlug?: string
 }): Promise<CollectionContent> {
   const { hostId, collectionSlug, entrySlug } = options
   const data: CollectionContent = {
