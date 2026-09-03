@@ -9,6 +9,24 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.62 — 2026-09-03
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/56119b9b0...v1.0.0-beta.62)
+
+### Fixed
+
+- **ci:** the verdict step reads its exit code instead of dying on it ([AGL-2533](https://linear.app/aglyn/issue/AGL-2533))
+- **deploy:** --fix promotes the right build, and a running build is not a missing one ([AGL-2515](https://linear.app/aglyn/issue/AGL-2515))
+- **tenant:** every article publishes a dateModified, which none ever has ([AGL-2535](https://linear.app/aglyn/issue/AGL-2535), [AGL-686](https://linear.app/aglyn/issue/AGL-686))
+
+<details>
+<summary>Also in this release: 1 test, 1 ci</summary>
+
+- **console:** the plugin-set hook is read after it settles, not on first render ([AGL-2530](https://linear.app/aglyn/issue/AGL-2530), [AGL-2382](https://linear.app/aglyn/issue/AGL-2382))
+- **promotion:** a promotion reads Main Gate's verdict for what it ships ([AGL-2533](https://linear.app/aglyn/issue/AGL-2533), [AGL-2534](https://linear.app/aglyn/issue/AGL-2534))
+
+</details>
+
 ## v1.0.0-beta.61 — 2026-09-03
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/8db009345...v1.0.0-beta.61)
