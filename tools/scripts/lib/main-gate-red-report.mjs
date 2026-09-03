@@ -75,6 +75,49 @@ export function redMarker({ sha, results }) {
   return `<!-- main-gate-red:${digest} -->`
 }
 
+/**
+ * Whether to ping Slack, given what happened on the Linear side.
+ *
+ * Linear is the DEDUPE ORACLE, because Slack has no equivalent of "does this
+ * message already exist" — a webhook post is unconditional. The gate can grade
+ * one red sha more than once (a push run plus an hourly cron run, or a re-run
+ * of a red run), so an unguarded webhook would ping repeatedly for one
+ * incident, which is how a channel gets muted in a week.
+ *
+ * FAIL-OPEN when Linear could not answer: a missed ping on the one channel
+ * that is immediate is worse than a duplicate. The duplicate is visible and
+ * annoying; the miss is silent, and silence is the whole subject of AGL-2533.
+ */
+export function shouldPingSlack(linearOutcome) {
+  return linearOutcome !== 'duplicate'
+}
+
+/**
+ * The Slack webhook body.
+ *
+ * `text` is set as well as `blocks` deliberately: it is what Slack shows in
+ * the notification itself and in any client that cannot render blocks, so a
+ * blocks-only payload pushes a useless "This content can't be displayed" into
+ * exactly the phone alert this exists to send.
+ */
+export function slackPayload({ sha, results, runUrl, subject }) {
+  const jobs = failedJobs(results)
+  const short = String(sha).slice(0, 9)
+  const summary = `Main Gate is RED on ${short} — ${jobs.map((j) => `main-gate/${j}`).join(', ')}`
+  const detail = [
+    `*<${runUrl || 'https://github.com/aglyn/aglyn/actions'}|Main Gate is RED on \`${short}\`>*`,
+    ...jobs.map((j) => `• \`main-gate/${j}\` failed — ${JOB_MEANING[j] ?? j}`),
+    subject ? `_${subject}_` : null,
+    '`main` is broken until this is repaired or shown to be a known flake.',
+  ]
+    .filter((l) => l !== null)
+    .join('\n')
+  return {
+    text: summary,
+    blocks: [{ type: 'section', text: { type: 'mrkdwn', text: detail } }],
+  }
+}
+
 const JOB_MEANING = {
   fast: 'typecheck + guards',
   full: 'tests + production builds',

@@ -366,6 +366,9 @@ jobs:
         if: always()
         env:
           LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          # Optional. Linear is the durable record; Slack is the immediate
+          # ping. Absent, the reporter says so and posts to Linear alone.
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
           set -uo pipefail
           node tools/scripts/report-main-gate-red.mjs \

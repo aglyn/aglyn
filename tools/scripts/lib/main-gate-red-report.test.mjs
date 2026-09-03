@@ -20,7 +20,9 @@ import {
   failedJobs,
   redCommentBody,
   redMarker,
+  shouldPingSlack,
   shouldReport,
+  slackPayload,
 } from './main-gate-red-report.mjs'
 
 const at = new Date('2026-09-03T04:18:00.000Z')
@@ -94,4 +96,45 @@ test('the marker in the body matches the standalone marker', () => {
 test('a missing run url or subject degrades rather than printing undefined', () => {
   const body = redCommentBody({ sha: 'ddddddddd', results: { fast: 'failure' }, when: at })
   assert.equal(/undefined|null/.test(body), false)
+})
+
+test('Slack is pinged for a new red and NOT for a duplicate', () => {
+  // Linear is the dedupe oracle: a webhook post is unconditional, and the gate
+  // can grade one red sha more than once (a push run plus an hourly cron run).
+  assert.equal(shouldPingSlack('posted'), true)
+  assert.equal(shouldPingSlack('duplicate'), false)
+})
+
+test('Slack is pinged FAIL-OPEN when Linear could not answer', () => {
+  // A duplicate is visible and annoying; a miss is silent, and silence is the
+  // whole subject of AGL-2533.
+  assert.equal(shouldPingSlack('unavailable'), true)
+})
+
+test('the Slack payload sets `text`, not blocks alone', () => {
+  // `text` is what Slack shows in the notification and in clients that cannot
+  // render blocks. A blocks-only payload pushes "This content can't be
+  // displayed" into exactly the phone alert this exists to send.
+  const p = slackPayload({
+    sha: 'be2165a60f00',
+    results: { fast: 'success', full: 'failure' },
+    runUrl: 'https://github.com/aglyn/aglyn/actions/runs/1',
+    subject: 'fix(x): a thing',
+  })
+  assert.equal(typeof p.text, 'string')
+  assert.ok(p.text.length > 0)
+  assert.match(p.text, /RED on be2165a60/)
+  assert.match(p.text, /main-gate\/full/)
+  assert.ok(Array.isArray(p.blocks) && p.blocks.length > 0)
+})
+
+test('the Slack payload names only the jobs that failed', () => {
+  const p = slackPayload({ sha: 'ccccccccc', results: { fast: 'success', full: 'failure' } })
+  assert.equal(/main-gate\/fast/.test(JSON.stringify(p)), false)
+  assert.match(JSON.stringify(p), /main-gate\/full/)
+})
+
+test('the Slack payload degrades without a run url or subject', () => {
+  const p = slackPayload({ sha: 'ddddddddd', results: { fast: 'failure' } })
+  assert.equal(/undefined|null/.test(JSON.stringify(p)), false)
 })

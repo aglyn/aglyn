@@ -29,7 +29,9 @@ import {
   failedJobs,
   redCommentBody,
   redMarker,
+  shouldPingSlack,
   shouldReport,
+  slackPayload,
 } from './lib/main-gate-red-report.mjs'
 
 const LINEAR_GRAPHQL_URL = 'https://api.linear.app/graphql'
@@ -67,10 +69,12 @@ if (!shouldReport(results)) {
 say(`RED on ${sha.slice(0, 9)} - ${failedJobs(results).join(', ')}`)
 
 const key = (process.env['LINEAR_API_KEY'] ?? '').trim()
-if (!key) {
+const slackWebhook = (process.env['SLACK_WEBHOOK_URL'] ?? '').trim()
+
+if (!key && !slackWebhook) {
   // Loud, because this is the notification path failing silently - the exact
   // shape AGL-2533 is about.
-  warn('LINEAR_API_KEY is not set, so this red reaches NOBODY. Set the secret.')
+  warn('neither LINEAR_API_KEY nor SLACK_WEBHOOK_URL is set, so this red reaches NOBODY.')
   process.exit(0)
 }
 
@@ -87,7 +91,14 @@ async function linear(query, variables) {
   return body.data
 }
 
+/**
+ * What happened on the Linear side, which is also the dedupe oracle for Slack.
+ * 'posted' | 'duplicate' | 'unavailable'
+ */
+let linearOutcome = 'unavailable'
+
 try {
+  if (!key) throw new Error('LINEAR_API_KEY is not set')
   const marker = redMarker({ sha, results })
   const found = await linear(
     `query Sink($id: String!) {
@@ -103,16 +114,49 @@ try {
   const already = (issue.comments?.nodes ?? []).some((c) => (c.body ?? '').includes(marker))
   if (already) {
     say(`${SINK_ISSUE_ID} already carries this exact red; not repeating it`)
-    process.exit(0)
+    linearOutcome = 'duplicate'
+  } else {
+    await linear(
+      `mutation Comment($issueId: String!, $body: String!) {
+         commentCreate(input: { issueId: $issueId, body: $body }) { success }
+       }`,
+      { issueId: issue.id, body: redCommentBody({ sha, results, runUrl, subject }) },
+    )
+    say(`posted to ${SINK_ISSUE_ID}`)
+    linearOutcome = 'posted'
   }
-  await linear(
-    `mutation Comment($issueId: String!, $body: String!) {
-       commentCreate(input: { issueId: $issueId, body: $body }) { success }
-     }`,
-    { issueId: issue.id, body: redCommentBody({ sha, results, runUrl, subject }) },
-  )
-  say(`posted to ${SINK_ISSUE_ID}`)
 } catch (error) {
-  warn(`could NOT post (${String(error).slice(0, 160)}) - this red reaches nobody`)
+  warn(`could NOT post to Linear (${String(error).slice(0, 160)})`)
+}
+
+/*==========================================
+ * SLACK - the immediate half.
+ *
+ * Linear is the durable record and the work item; Slack is "look now". They
+ * are not duplicates, and the dedupe is deliberately keyed off the Linear
+ * outcome because a webhook post is unconditional and the gate can grade one
+ * red sha more than once.
+ *========================================*/
+if (slackWebhook && shouldPingSlack(linearOutcome)) {
+  try {
+    const res = await fetch(slackWebhook, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(slackPayload({ sha, results, runUrl, subject })),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    })
+    if (!res.ok) throw new Error(`Slack returned ${res.status}`)
+    say('pinged Slack')
+  } catch (error) {
+    warn(`could NOT ping Slack (${String(error).slice(0, 160)})`)
+  }
+} else if (!slackWebhook) {
+  say('SLACK_WEBHOOK_URL is not set; skipping the immediate ping')
+} else {
+  say('Slack not pinged - Linear already carried this exact red')
+}
+
+if (linearOutcome === 'unavailable' && !slackWebhook) {
+  warn('this red reached NOBODY')
 }
 process.exit(0)
