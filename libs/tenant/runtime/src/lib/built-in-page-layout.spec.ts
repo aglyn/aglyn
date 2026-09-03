@@ -35,11 +35,17 @@ jest.mock('./get-screen', () => ({
   __esModule: true,
   default: jest.fn(),
 }))
+jest.mock('./get-screen-version', () => ({
+  __esModule: true,
+  default: jest.fn(),
+}))
 
 import getScreen from './get-screen'
+import getScreenVersion from './get-screen-version'
 import { resolveBuiltInPageLayoutId } from './built-in-page-layout'
 
 const mockGetScreen = getScreen as unknown as jest.Mock
+const mockGetScreenVersion = getScreenVersion as unknown as jest.Mock
 
 const HOST = { $id: 'host-1', screens: { home: '/', about: 'about' } }
 
@@ -49,6 +55,9 @@ beforeEach(() => {
     screen: { $id: 'home', layoutId: 'homeLayout' },
     error: null,
   })
+  // No version by default, so every case written before AGL-2518 keeps
+  // exercising the screen binding it was written against.
+  mockGetScreenVersion.mockResolvedValue({ version: undefined, error: null })
 })
 
 describe('resolveBuiltInPageLayoutId (AGL-2513)', () => {
@@ -110,5 +119,107 @@ describe('resolveBuiltInPageLayoutId (AGL-2513)', () => {
       await resolveBuiltInPageLayoutId({ hostId: 'host-1', host: HOST }),
     ).toBeUndefined()
     spy.mockRestore()
+  })
+})
+
+/**
+ * The binding lives on the VERSION more often than on the screen (AGL-2518).
+ *
+ * This fallback read `screen.layoutId` alone, and its own comment asserted
+ * that "screens carry their own `layoutId`". They frequently do not: choosing
+ * a layout while editing writes it to the version document, and
+ * `composeScreenNodes` has always resolved version-first for exactly that
+ * reason.
+ *
+ * The cost was total and silent. A host whose home page was bound that way
+ * resolved to `undefined`, so EVERY built-in page rendered with no header, no
+ * nav and no footer — the defect AGL-2513 was filed to fix, still in force
+ * after it shipped. `aglyn.com` was that shape: home page on "Marketing base"
+ * via its version, `builtInPageLayoutId` unset, `/search` chrome-less and
+ * unvisited. AGL-2518 pointed every byline on the site at a built-in page and
+ * turned an unnoticed defect into the most-linked page on the site being a
+ * dead end.
+ */
+describe('the home page’s layout lives on its version (AGL-2518)', () => {
+  it('takes the version’s binding over the screen’s', async () => {
+    mockGetScreen.mockResolvedValue({
+      // The real shape on aglyn.com: no `layoutId` on the screen at all.
+      screen: { $id: 'home', versionId: 'v1' },
+      error: null,
+    })
+    mockGetScreenVersion.mockResolvedValue({
+      version: { layoutId: 'marketingBase' },
+      error: null,
+    })
+    expect(
+      await resolveBuiltInPageLayoutId({ hostId: 'host-1', host: HOST }),
+    ).toBe('marketingBase')
+  })
+
+  it('lets the version override a screen that has its own', async () => {
+    // Key-present on the version wins, which is composition's rule — so the
+    // built-in page lands in the same layout as the home page it copies.
+    mockGetScreen.mockResolvedValue({
+      screen: { $id: 'home', versionId: 'v1', layoutId: 'staleLayout' },
+      error: null,
+    })
+    mockGetScreenVersion.mockResolvedValue({
+      version: { layoutId: 'marketingBase' },
+      error: null,
+    })
+    expect(
+      await resolveBuiltInPageLayoutId({ hostId: 'host-1', host: HOST }),
+    ).toBe('marketingBase')
+  })
+
+  it('honours an explicit null on the version as "no layout"', async () => {
+    // `null` is a deliberate choice, not an absent key, and composition
+    // treats it that way. Falling through to the screen here would give a
+    // built-in page chrome the home page itself has turned off.
+    mockGetScreen.mockResolvedValue({
+      screen: { $id: 'home', versionId: 'v1', layoutId: 'homeLayout' },
+      error: null,
+    })
+    mockGetScreenVersion.mockResolvedValue({
+      version: { layoutId: null },
+      error: null,
+    })
+    expect(
+      await resolveBuiltInPageLayoutId({ hostId: 'host-1', host: HOST }),
+    ).toBeUndefined()
+  })
+
+  it('falls back to the screen when the version carries no key', async () => {
+    mockGetScreen.mockResolvedValue({
+      screen: { $id: 'home', versionId: 'v1', layoutId: 'homeLayout' },
+      error: null,
+    })
+    mockGetScreenVersion.mockResolvedValue({ version: {}, error: null })
+    expect(
+      await resolveBuiltInPageLayoutId({ hostId: 'host-1', host: HOST }),
+    ).toBe('homeLayout')
+  })
+
+  it('falls back to the screen when the version read throws', async () => {
+    // Fail-open, as composition does: a version read that dies must not cost
+    // the page its chrome.
+    mockGetScreen.mockResolvedValue({
+      screen: { $id: 'home', versionId: 'v1', layoutId: 'homeLayout' },
+      error: null,
+    })
+    mockGetScreenVersion.mockRejectedValue(new Error('permission denied'))
+    expect(
+      await resolveBuiltInPageLayoutId({ hostId: 'host-1', host: HOST }),
+    ).toBe('homeLayout')
+  })
+
+  it('does not read a version when the host designated a layout', async () => {
+    // The designated id short-circuits before any read at all.
+    await resolveBuiltInPageLayoutId({
+      hostId: 'host-1',
+      host: { ...HOST, builtInPageLayoutId: 'searchLayout' },
+    })
+    expect(mockGetScreenVersion).not.toHaveBeenCalled()
+    expect(mockGetScreen).not.toHaveBeenCalled()
   })
 })
