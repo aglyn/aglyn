@@ -148,6 +148,69 @@ describe('composeReusableComponentNodes', () => {
   })
 })
 
+describe('interactions across the merge (AGL-2521)', () => {
+  const hover = (id: string) => ({
+    id,
+    name: id,
+    trigger: { event: 'elementHoverEnter', everyTime: true },
+    steps: [{ type: 'openMenu' }],
+  })
+
+  /** A root that opens itself on hover, the way the site nav's menus do. */
+  const definition = {
+    rootId: 'root',
+    nodes: {
+      root: {
+        $id: 'root',
+        componentId: 'muiMegaMenu',
+        nodes: ['label'],
+        interactions: [hover('from-component')],
+      },
+      label: { $id: 'label', componentId: 'muiTypography', parentId: 'root' },
+    },
+  } as any
+
+  it('keeps BOTH sides, the component root first', () => {
+    const composed = composeReusableComponentNodes(
+      {
+        _root_: { $id: '_root_', componentId: 'div', nodes: ['a'] },
+        a: { ...instance('a', 'menu'), interactions: [hover('from-page')] },
+      } as any,
+      { menu: definition },
+    )
+    expect(
+      (composed['a'] as any).interactions.map((entry: any) => entry.id),
+    ).toEqual(['from-component', 'from-page'])
+  })
+
+  it('carries the placement’s own interactions, which have nowhere else to go', () => {
+    // The instance keeps its id through the merge, so an interaction the PAGE
+    // authored is keyed to the node that survives — dropping it here is the
+    // one loss the composed map could never be asked about afterwards.
+    const bare = {
+      rootId: 'root',
+      nodes: { root: { $id: 'root', componentId: 'muiStack', nodes: [] } },
+    } as any
+    const composed = composeReusableComponentNodes(
+      { a: { ...instance('a', 'menu'), interactions: [hover('from-page')] } } as any,
+      { menu: bare },
+    )
+    expect((composed['a'] as any).interactions).toEqual([hover('from-page')])
+  })
+
+  it('leaves a node with no choreography on either side carrying no key', () => {
+    const bare = {
+      rootId: 'root',
+      nodes: { root: { $id: 'root', componentId: 'muiStack', nodes: [] } },
+    } as any
+    const composed = composeReusableComponentNodes(
+      { a: instance('a', 'menu') } as any,
+      { menu: bare },
+    )
+    expect('interactions' in (composed['a'] as any)).toBe(false)
+  })
+})
+
 describe('replaceSubtreeWithInstance', () => {
   /** `App Bar` → brand + a link, sitting in a layout beside a footer. */
   const layout = () =>
