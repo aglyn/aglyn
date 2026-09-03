@@ -9,6 +9,39 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.56 — 2026-09-03
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.55...v1.0.0-beta.56)
+
+### Added
+
+- **console:** an author owns their address, and the site picks their page ([AGL-2518](https://linear.app/aglyn/issue/AGL-2518), [AGL-1390](https://linear.app/aglyn/issue/AGL-1390), [AGL-1387](https://linear.app/aglyn/issue/AGL-1387))
+- **seo:** a site's sitemap submits its author pages ([AGL-2518](https://linear.app/aglyn/issue/AGL-2518))
+- **tenant:** an author gets one page, and it is designable ([AGL-2518](https://linear.app/aglyn/issue/AGL-2518), [AGL-686](https://linear.app/aglyn/issue/AGL-686), [AGL-2517](https://linear.app/aglyn/issue/AGL-2517), [AGL-2513](https://linear.app/aglyn/issue/AGL-2513), [AGL-1387](https://linear.app/aglyn/issue/AGL-1387), [AGL-1400](https://linear.app/aglyn/issue/AGL-1400), [AGL-1267](https://linear.app/aglyn/issue/AGL-1267), [AGL-2509](https://linear.app/aglyn/issue/AGL-2509))
+- **content:** a byline says who wrote it and goes where they are ([AGL-2519](https://linear.app/aglyn/issue/AGL-2519), [AGL-2516](https://linear.app/aglyn/issue/AGL-2516), [AGL-2506](https://linear.app/aglyn/issue/AGL-2506), [AGL-2518](https://linear.app/aglyn/issue/AGL-2518))
+- **content:** an author is addressed once, not once per collection ([AGL-2518](https://linear.app/aglyn/issue/AGL-2518), [AGL-2517](https://linear.app/aglyn/issue/AGL-2517), [AGL-686](https://linear.app/aglyn/issue/AGL-686))
+- **seo:** a site's sitemap splits into one file per section ([AGL-2520](https://linear.app/aglyn/issue/AGL-2520))
+
+### Fixed
+
+- **besigner:** a placed component is the component, not a wrapper around it ([AGL-2521](https://linear.app/aglyn/issue/AGL-2521), [AGL-2514](https://linear.app/aglyn/issue/AGL-2514))
+- **monitoring:** third-party browser noise stops paging on every visitor ([AGL-2523](https://linear.app/aglyn/issue/AGL-2523))
+- **ops:** the firewall check asserts coverage, not only scope ([AGL-2520](https://linear.app/aglyn/issue/AGL-2520))
+- **monitoring:** the drain stops forwarding the lockdown notice's 503 ([AGL-2522](https://linear.app/aglyn/issue/AGL-2522))
+- **monitoring:** a laptop no longer reports errors into production logs ([AGL-1925](https://linear.app/aglyn/issue/AGL-1925))
+
+### Documentation
+
+- **content:** an author has a page, and links a reader can click ([AGL-2518](https://linear.app/aglyn/issue/AGL-2518), [AGL-2516](https://linear.app/aglyn/issue/AGL-2516))
+- **ops:** the crawler bypass matches exact paths, so /sitemaps/* was challenged ([AGL-2520](https://linear.app/aglyn/issue/AGL-2520))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **tools:** the Linear id ceiling reaches AGL-2523 ([AGL-2523](https://linear.app/aglyn/issue/AGL-2523), [AGL-2089](https://linear.app/aglyn/issue/AGL-2089), [AGL-2521](https://linear.app/aglyn/issue/AGL-2521), [AGL-2522](https://linear.app/aglyn/issue/AGL-2522))
+
+</details>
+
 ## v1.0.0-beta.55 — 2026-09-03
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.54...v1.0.0-beta.55)
