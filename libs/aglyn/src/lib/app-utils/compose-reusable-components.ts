@@ -21,6 +21,16 @@ import type {
   ReusableComponentIcon,
   ReusableComponentProp,
 } from '../foundation'
+import {
+  NODE_ANIMATION_DELAY_PROP,
+  NODE_ANIMATION_DURATION_PROP,
+  NODE_ANIMATION_EASE_PROP,
+  NODE_ANIMATION_PROP,
+  NODE_ANIMATION_REPEAT_PROP,
+  NODE_ANIMATION_STAGGER_PROP,
+  NODE_ANIMATION_STAGGER_STEP_PROP,
+  NODE_ANIMATION_TRIGGER_PROP,
+} from './element-animation'
 import { mergeNodeSx } from './merge-node-sx'
 import { resolveNamedTokens } from './resolve-named-tokens'
 
@@ -50,6 +60,19 @@ export const REUSABLE_INSTANCE_PROP_VALUES_KEY = 'propValues'
  */
 export const STYLE_OVERRIDES_ROOT_KEY = 'root'
 
+/**
+ * Node-level fields that ride from the instance onto the definition's root
+ * when the two collapse into one element (AGL-2521).
+ *
+ * These sit beside `sx` on the node, not in `props`, so no renderer spreads
+ * them at an element and carrying them costs nothing in the DOM. They are
+ * document state the author set on THIS placement: dropping them would make a
+ * composed map that is saved back lose every per-instance override.
+ */
+export const INSTANCE_CARRIED_NODE_FIELDS: readonly string[] = [
+  'styleOverrides',
+  'attrOverrides',
+]
 const isStyleRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' &&
   value !== null &&
@@ -444,9 +467,28 @@ export function resolveInstanceLeafBinding(
     | null
     | undefined,
   contentProp = 'children',
+  rootId?: NodeId | null,
 ): InstanceLeafBinding | null {
   if (!graftedId || !instanceId) return null
   const prefix = instancePrefix(instanceId)
+  // The definition's ROOT carries the instance's own id, not a prefixed one
+  // — the two are one element (AGL-2521). Without this the root is the one
+  // leaf the double-click cannot reach, so a component whose root IS its text
+  // stops being inline-editable through its placements.
+  if (graftedId === instanceId) {
+    const rootInternalId =
+      rootId ??
+      Object.keys(definition?.nodes ?? {}).find(
+        (id) => !(definition?.nodes as Record<string, { parentId?: unknown }>)?.[id]?.parentId,
+      )
+    if (!rootInternalId) return null
+    return resolveInstanceLeafBinding(
+      `${prefix}${rootInternalId}`,
+      instanceId,
+      definition,
+      contentProp,
+    )
+  }
   if (!graftedId.startsWith(prefix)) return null
   const componentInternalId = graftedId.slice(prefix.length)
   if (!componentInternalId) return null
@@ -543,6 +585,34 @@ export const NODE_HIDE_IF_PROP = 'hideIf'
  * Persisted in component documents — never rename.
  */
 export const NODE_HIDE_UNLESS_PROP = 'hideUnless'
+
+/**
+ * Instance props that move onto the definition's root when the two collapse
+ * into one element (AGL-2521).
+ *
+ * The universal directives, and only those: they are authored against "this
+ * placement", which after the collapse IS the root. Everything else an
+ * instance carries — `refId`, `name`, {@link REUSABLE_INSTANCE_PROP_VALUES_KEY},
+ * the override slices — is bookkeeping the graft has already consumed, and
+ * spreading it onto a real element is how `propvalues="[object Object]"`
+ * reached a published page once before (AGL-2486).
+ *
+ * Listed rather than derived by exclusion: a new instance-only prop must not
+ * start leaking onto every component's root because nobody remembered to add
+ * it to a deny-list.
+ */
+export const INSTANCE_CARRIED_PROPS: readonly string[] = [
+  NODE_HIDE_IF_PROP,
+  NODE_HIDE_UNLESS_PROP,
+  NODE_ANIMATION_PROP,
+  NODE_ANIMATION_TRIGGER_PROP,
+  NODE_ANIMATION_DURATION_PROP,
+  NODE_ANIMATION_DELAY_PROP,
+  NODE_ANIMATION_REPEAT_PROP,
+  NODE_ANIMATION_EASE_PROP,
+  NODE_ANIMATION_STAGGER_PROP,
+  NODE_ANIMATION_STAGGER_STEP_PROP,
+]
 
 /**
  * Spellings of "no" a visibility directive accepts, beyond a real `false`.
@@ -1020,10 +1090,93 @@ export function composeReusableComponentNodes<
         }
         delete next[graftedRootId]
         next[instanceId] = { ...instanceNode, nodes: adopted }
+      } else if (graftedRoot) {
+        /*
+         * THE INSTANCE AND THE DEFINITION'S ROOT ARE ONE ELEMENT (AGL-2521).
+         *
+         * The graft used to keep both — the instance as a container with the
+         * definition's root inside it — so every placement published a `div`
+         * the author never drew. On `aglyn.com` that was four of them on the
+         * home page, one per placement, each sitting between a landmark and
+         * its parent and breaking any direct-child selector the layout wrote.
+         *
+         * So the root TAKES THE INSTANCE'S PLACE: same id, same parent, same
+         * slot in the parent's child list. Its own grafted id disappears and
+         * its children keep theirs, which is what leaves the `cmp__{instance}
+         * __{defId}` scheme — and everything reading it, from per-leaf
+         * overrides to {@link resolveInstanceLeafBinding} — untouched.
+         *
+         * Keeping the INSTANCE'S id rather than the root's is the half that
+         * matters: interactions, animations and analytics are all keyed to the
+         * node the page authored, and a swap to the prefixed id would silently
+         * drop every one of them.
+         *
+         * What the instance contributed as an element comes with it. Its `sx`
+         * merges OVER the root's, because a placement styling its component is
+         * the more specific of the two. Its universal directives — hide,
+         * animate — move across for the same reason: they were authored
+         * against "this placement", which is now this element. What stays
+         * behind is the bookkeeping that only ever addressed the wrapper:
+         * `refId`, `name`, the declared-prop values and the override slices,
+         * all of them already consumed by the graft above.
+         */
+        // `interactions` is declared on `NodeSchema`, one layer above the
+        // `AglynNodeSchema` this function is generic over, so it is read off
+        // the node rather than through the type.
+        const instanceInteractions = (
+          instanceNode as { interactions?: unknown }
+        ).interactions
+        const carried: Record<string, unknown> = {}
+        for (const key of INSTANCE_CARRIED_PROPS) {
+          const value = (instanceNode.props as Record<string, unknown>)?.[key]
+          if (value !== undefined) carried[key] = value
+        }
+        // The override slices and the reference are DOCUMENT state living on
+        // the node beside `sx`, not props — the renderer never spreads them at
+        // an element — so they ride along rather than being consumed and
+        // dropped. A composed map that is saved back must still carry what the
+        // author set on this placement (AGL-1306/AGL-1899), and a re-compose
+        // is a no-op because the merged node no longer answers to
+        // `reusableInstance`.
+        const documentState: Record<string, unknown> = {}
+        for (const key of INSTANCE_CARRIED_NODE_FIELDS) {
+          const value = (instanceNode as Record<string, unknown>)[key]
+          if (value !== undefined) documentState[key] = value
+        }
+        const mergedSx = mergeNodeSx(graftedRoot.sx, instanceNode.sx)
+        const merged = {
+          ...graftedRoot,
+          $id: instanceId,
+          parentId: instanceNode.parentId,
+          ...documentState,
+          ...(mergedSx === undefined ? {} : { sx: mergedSx as N['sx'] }),
+          // Only when there is something to say: materializing an empty
+          // `props` on a node that had none is a visible difference to
+          // everything that asks whether a node was authored with any.
+          ...(graftedRoot.props !== undefined || Object.keys(carried).length
+            ? { props: { ...(graftedRoot.props as object), ...carried } }
+            : {}),
+        } as N
+        for (const childId of Array.isArray(merged.nodes)
+          ? (merged.nodes as NodeId[])
+          : []) {
+          if (next[childId]) {
+            next[childId] = { ...next[childId], parentId: instanceId }
+          }
+        }
+        delete next[graftedRootId]
+        next[instanceId] = merged
       } else {
+        /*
+         * The root was pruned by its own visibility directive, so there is
+         * nothing to take the instance's place. The instance stays as an empty
+         * container rather than vanishing: its own hide directive has not been
+         * evaluated yet, and removing a node the later passes still expect to
+         * walk would strand its parent's child list.
+         */
         next[instanceId] = {
           ...instanceNode,
-          nodes: [graftedRootId],
+          nodes: [],
         }
       }
     }

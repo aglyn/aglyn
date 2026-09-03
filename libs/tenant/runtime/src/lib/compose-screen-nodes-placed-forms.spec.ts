@@ -140,7 +140,9 @@ describe('placed forms on the published page', () => {
   it("renders the entity's fields, dropping the page's own copy", async () => {
     const nodes = await compose(screenPlacingForm({ formId: 'contact' }))
 
-    expect(nodes['contact'].nodes).toEqual(['cmp__contact__f-root'])
+    // The entity's root takes the placement's place — no wrapper (AGL-2521).
+    expect(nodes['cmp__contact__f-root']).toBeUndefined()
+    expect(nodes['contact'].nodes).toEqual(['cmp__contact__f-email'])
     expect(nodes['cmp__contact__f-email']).toMatchObject({
       componentId: 'formField',
       props: { fieldName: 'email' },
@@ -222,7 +224,8 @@ describe('placed forms on the published page', () => {
 
     expect(mockGetForms).toHaveBeenCalledTimes(1)
     const formNodeId = 'cmp__inst__signup'
-    expect(nodes[formNodeId].nodes).toEqual([`cmp__${formNodeId}__f-root`])
+    expect(nodes[`cmp__${formNodeId}__f-root`]).toBeUndefined()
+    expect(nodes[formNodeId].nodes).toEqual([`cmp__${formNodeId}__f-email`])
     expect(nodes[`cmp__${formNodeId}__f-email`]).toMatchObject({
       props: { fieldName: 'email' },
     })
