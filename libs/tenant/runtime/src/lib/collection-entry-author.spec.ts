@@ -126,6 +126,7 @@ jest.mock('@aglyn/tenant-data-admin/render-cache', () => ({
 
 import { HostEntityType } from '@aglyn/aglyn/server'
 
+import { collectionTokens } from './compose-collection-page'
 import getCollectionContent from './get-collection-content'
 
 const HOST = 'host-1'
@@ -384,5 +385,63 @@ describe('the author archive (AGL-2517)', () => {
     })
     expect(content.entries).toHaveLength(2)
     expect(content.author).toBeUndefined()
+  })
+})
+
+/**
+ * One list template serves the collection, a category AND an author
+ * (AGL-2517).
+ *
+ * A template has no runtime conditional, so the tokens have to be the thing
+ * that varies: a heading bound to `{{collection.author}}` prints a name on an
+ * archive and nothing anywhere else, which is how the same screen can be all
+ * three pages without an author designing three.
+ */
+describe('author archive tokens (AGL-2517)', () => {
+  const collection = { displayName: 'Blog', slug: 'blog' }
+
+  it('names the author, and carries the record’s own fields', () => {
+    const tokens = collectionTokens(collection, null, null, {
+      slug: 'zach-gover',
+      name: 'Zach Gover',
+      known: true,
+      record: {
+        name: 'Zach Gover',
+        bio: 'Building the open web platform.',
+        image: 'media:host-1/portrait',
+        url: 'https://example.com/zach',
+      },
+    })
+    expect(tokens['collection.author']).toBe('Zach Gover')
+    expect(tokens['collection.authorSlug']).toBe('zach-gover')
+    expect(tokens['collection.authorBio']).toBe(
+      'Building the open web platform.',
+    )
+    expect(tokens['collection.authorImage']).toBe('media:host-1/portrait')
+    expect(tokens['collection.authorUrl']).toBe('https://example.com/zach')
+  })
+
+  it('empties every one of them off an archive', () => {
+    const tokens = collectionTokens(collection)
+    for (const key of [
+      'collection.author',
+      'collection.authorSlug',
+      'collection.authorBio',
+      'collection.authorImage',
+      'collection.authorUrl',
+    ]) {
+      expect([key, tokens[key]]).toEqual([key, ''])
+    }
+  })
+
+  it('names an unknown author from the segment, with no record behind it', () => {
+    const tokens = collectionTokens(collection, null, null, {
+      slug: 'nobody',
+      name: 'nobody',
+      known: false,
+    })
+    expect(tokens['collection.author']).toBe('nobody')
+    // Nothing to print rather than a stale value from another page.
+    expect(tokens['collection.authorBio']).toBe('')
   })
 })

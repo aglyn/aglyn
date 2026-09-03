@@ -213,6 +213,13 @@ describe('composeCollectionTemplatePage (AGL-551)', () => {
       // unconditionally (AGL-1321).
       'collection.category': '',
       'collection.categorySlug': '',
+      // Empty off an author archive (AGL-2517), which is what lets ONE list
+      // template serve the collection, a category and an author.
+      'collection.author': '',
+      'collection.authorSlug': '',
+      'collection.authorBio': '',
+      'collection.authorImage': '',
+      'collection.authorUrl': '',
       // An unpaginated listing is page 1 of 1 with nowhere to page to
       // (AGL-1386).
       'pagination.page': '1',

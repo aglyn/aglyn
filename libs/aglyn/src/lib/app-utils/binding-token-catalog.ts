@@ -153,6 +153,39 @@ export const COLLECTION_TOKEN_CATALOG: readonly BindingTokenCatalogEntry[] = [
     description: 'That category’s URL segment; empty when unfiltered.',
   },
   {
+    token: '{{collection.author}}',
+    label: 'Filtered author',
+    description:
+      'Author the URL filtered on, on /{collection}/author/{slug}; empty on ' +
+      'every other listing, so one template serves all of them.',
+  },
+  {
+    token: '{{collection.authorSlug}}',
+    label: 'Filtered author slug',
+    description: 'That author’s URL segment; empty when unfiltered.',
+  },
+  {
+    token: '{{collection.authorBio}}',
+    label: 'Filtered author bio',
+    description:
+      'The archived author’s blurb, from their record; empty when the ' +
+      'listing is not an author archive.',
+  },
+  {
+    token: '{{collection.authorImage}}',
+    label: 'Filtered author portrait',
+    description:
+      'The archived author’s portrait, from their record; empty when the ' +
+      'listing is not an author archive.',
+  },
+  {
+    token: '{{collection.authorUrl}}',
+    label: 'Filtered author link',
+    description:
+      'The archived author’s own url, from their record; empty when the ' +
+      'listing is not an author archive.',
+  },
+  {
     token: '{{pagination.page}}',
     label: 'Current page',
     description: 'Page number this URL is showing.',

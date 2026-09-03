@@ -71,6 +71,7 @@ export function collectionTokens(
   collection: Pick<CollectionDoc, 'displayName' | 'slug'>,
   category?: CollectionContent['category'],
   pagination?: CollectionContent['pagination'],
+  author?: CollectionContent['author'],
 ): Record<string, string> {
   // An unpaginated listing is page 1 of 1 — both URLs empty, which reads as
   // the honest "nowhere to page to" rather than a broken link.
@@ -85,6 +86,16 @@ export function collectionTokens(
     'collection.slug': collection.slug,
     'collection.category': category?.name ?? '',
     'collection.categorySlug': category?.slug ?? '',
+    // The author archive (AGL-2517). Empty on every other route, so ONE list
+    // template serves the collection, a category and an author — a heading
+    // bound to `{{collection.author}}` simply has nothing to print when the
+    // page is not an archive, which is what a template with no runtime
+    // conditional needs it to do.
+    'collection.author': author?.name ?? '',
+    'collection.authorSlug': author?.slug ?? '',
+    'collection.authorBio': author?.record?.bio ?? '',
+    'collection.authorImage': author?.record?.image ?? '',
+    'collection.authorUrl': author?.record?.url ?? '',
     'pagination.page': String(pager.page),
     'pagination.totalPages': String(pager.totalPages),
     'pagination.prevUrl': pager.prevUrl,
@@ -137,7 +148,12 @@ export async function composeCollectionTemplatePage(options: {
           collection.categories,
         ),
       }
-    : collectionTokens(collection, content.category, content.pagination)
+    : collectionTokens(
+        collection,
+        content.category,
+        content.pagination,
+        content.author,
+      )
   const nodes = await composeScreenNodes({
     hostId,
     screenId,
