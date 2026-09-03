@@ -65,6 +65,8 @@ import {
   setResidentAnalyticsTags,
   storeVisitorConsent,
 } from '@aglyn/aglyn'
+import { PLATFORM_GA_MEASUREMENT_ID } from '@aglyn/aglyn/app-utils/platform-marketing-host'
+import { GA_CLICK_ID_PASSTHROUGH_SNIPPET } from '@aglyn/aglyn/app-utils/visitor-consent'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import SiteAnalytics from '../app/[host]/[[...slug]]/site-analytics'
 
@@ -82,6 +84,12 @@ jest.mock('next/script', () => ({
 const HOST_ID = 'consent-default-host'
 const GA_ID = 'G-TEST1234'
 const GA_HOST = { $id: HOST_ID, analytics: { gaMeasurementId: GA_ID } }
+// The platform's own property: the one host whose ad click ids have to
+// survive the link into the console (AGL-2548).
+const PLATFORM_HOST = {
+  $id: 'consent-default-platform-host',
+  analytics: { gaMeasurementId: PLATFORM_GA_MEASUREMENT_ID },
+}
 
 function plantRegion(country: string | null) {
   ;(global as any).fetch = jest.fn(async (input: any) => {
@@ -244,6 +252,32 @@ describe('the consent-mode default (AGL-1622)', () => {
       const configuredAt = text.indexOf("gtag('config'")
       expect(declaredAt).toBeGreaterThanOrEqual(0)
       expect(configuredAt).toBeGreaterThan(declaredAt)
+    })
+
+    it('the platform tag passes the ad click id through by URL, before `config` (AGL-2548)', async () => {
+      plantRegion('US')
+      await renderPage(PLATFORM_HOST)
+      await waitFor(() => expect(gaInit()).toBeTruthy())
+      const text = gaInit()?.textContent ?? ''
+      // Denied `ad_storage` is the state the passthrough exists for, so the
+      // two travel together: same block, default first.
+      expect(declaredDefault()?.ad_storage).toBe('denied')
+      expect(text).toContain(GA_CLICK_ID_PASSTHROUGH_SNIPPET)
+      expect(text).toContain("gtag('set', 'url_passthrough', true)")
+      expect(text).toContain("gtag('set', 'ads_data_redaction', true)")
+      const passthroughAt = text.indexOf("'url_passthrough'")
+      const configuredAt = text.indexOf("gtag('config'")
+      expect(passthroughAt).toBeGreaterThanOrEqual(0)
+      expect(configuredAt).toBeGreaterThan(passthroughAt)
+    })
+
+    it("a customer's tag gets no passthrough — their click ids are their own", async () => {
+      plantRegion('US')
+      await renderPage(GA_HOST)
+      await waitFor(() => expect(gaInit()).toBeTruthy())
+      const text = gaInit()?.textContent ?? ''
+      expect(text).not.toContain('url_passthrough')
+      expect(text).not.toContain('ads_data_redaction')
     })
 
     it('the inline block precedes the library it configures', async () => {
