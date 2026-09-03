@@ -9,6 +9,18 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.61 — 2026-09-03
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/8db009345...v1.0.0-beta.61)
+
+<details>
+<summary>Also in this release: 1 test, 1 ci</summary>
+
+- **tenant:** the visitor-write limit is asserted against a frozen clock ([AGL-2532](https://linear.app/aglyn/issue/AGL-2532))
+- **gate:** main is gated by the push that changes it, not by a clock ([AGL-2534](https://linear.app/aglyn/issue/AGL-2534), [AGL-2378](https://linear.app/aglyn/issue/AGL-2378), [AGL-2533](https://linear.app/aglyn/issue/AGL-2533))
+
+</details>
+
 ## v1.0.0-beta.60 — 2026-09-03
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.59...v1.0.0-beta.60)
