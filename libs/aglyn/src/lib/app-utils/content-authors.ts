@@ -17,6 +17,7 @@
 
 import { HostEntityType } from '../foundation/definitions/platform.types'
 import { absoluteMediaSrc } from './media-ref'
+import { urlSlugSegment } from './url-slug'
 
 /**
  * Custom content authors (AGL-2486).
@@ -81,6 +82,28 @@ export const AUTHORS_MAX_PER_HOST = 200
 
 /** Longest stored author name; the byline is a name, not a paragraph. */
 export const AUTHOR_NAME_MAX_LENGTH = 120
+
+/** Longest stored author slug; it is one path segment, not a sentence. */
+export const AUTHOR_SLUG_MAX_LENGTH = 80
+
+/**
+ * The site-wide segment an author's page lives under (AGL-2518):
+ * `/author/{slug}`, and `/author/{slug}/page/{n}` after it.
+ *
+ * Singular, and site-wide rather than nested under a collection. AGL-2517
+ * put this archive at `/{collection}/author/{slug}`, which gives one person
+ * as many pages as the site has collections — three partial archives of the
+ * same author, none of them the address a byline should link to, all three
+ * competing for the same search result. A person is not a property of a
+ * collection.
+ *
+ * NOT added to `RESERVED_SCREEN_ROUTE_SEGMENTS`. The catch-all resolves
+ * published screens BEFORE it reaches this route, exactly as it does for a
+ * collection's own `/{slug}`, so a site that already publishes a page at
+ * `/author` keeps it and simply has no author pages — the same trade every
+ * other platform-built address on a tenant site makes.
+ */
+export const AUTHOR_ROUTE_SEGMENT = 'author'
 
 /** Most `sameAs` profile links one author may carry. */
 export const AUTHOR_SAME_AS_MAX = 12
@@ -258,6 +281,27 @@ export interface ContentAuthorRecord {
   type?: HostEntityType | string | number
   /** The byline. The only field an author cannot be published without. */
   name?: string
+  /**
+   * The segment that addresses this author's page — `/author/{slug}`
+   * (AGL-2518).
+   *
+   * Optional, and {@link contentAuthorSlug} falls back to the slugified name,
+   * so an author who never opens the field still has a working, readable
+   * address. It exists for the two cases a derived slug cannot serve:
+   *
+   *  * a RENAME. The name is the byline and it changes — a married name, a
+   *    pen name, a company rebrand — and a derived slug moves the page with
+   *    it, breaking every link anyone ever shared. A stored slug is the
+   *    author saying "this address is mine regardless of what you call me";
+   *  * a COLLISION. Two people named Chris Taylor derive one segment, and the
+   *    archive would then hold both their work under one page with no way to
+   *    separate it.
+   *
+   * Matching still accepts the record id and the slugified display name (see
+   * `entryMatchesAuthorRoute`), so setting this never breaks an address that
+   * already worked — it only adds one.
+   */
+  slug?: string
   /** Author page / personal site — `schema.org` `url`. */
   url?: string
   /**
@@ -340,6 +384,10 @@ export function normalizeContentAuthor(
       ? HostEntityType.PERSON
       : HostEntityType.ORGANIZATION,
     name,
+    // Through the URL slugifier rather than stored raw: this is a path
+    // segment, and a stored `Chris Taylor` would build `/author/Chris Taylor`
+    // while every incoming request arrived slugified and matched nothing.
+    slug: urlSlugSegment(text(raw['slug'], AUTHOR_SLUG_MAX_LENGTH)),
     url: text(raw['url'], 400),
     image: text(raw['image'], 1000),
     jobTitle: text(raw['jobTitle']),
@@ -348,6 +396,195 @@ export function normalizeContentAuthor(
     links: normalizeContentAuthorLinks(raw['links']),
     bio: text(raw['bio'], 600),
   }
+}
+
+/* ── The author's page (AGL-2518) ───────────────────────────────────────── */
+
+/** How a caller names the author whose page it wants addressed. */
+export interface ContentAuthorAddress {
+  /** The resolved record, when there is one. */
+  author?: ContentAuthorRecord | null
+  /** `entry.authorId` — a reference that may not have resolved. */
+  authorId?: string
+  /** The legacy free-typed byline (AGL-686). */
+  authorName?: string
+}
+
+/**
+ * The segment that addresses one author's page.
+ *
+ * Precedence is the author's stored {@link ContentAuthorRecord.slug} first
+ * and the slugified name second — the opposite of what AGL-2517 built, which
+ * put the record ID first "so the link survives a rename".
+ *
+ * A Firestore auto-id does survive a rename, and it is also unreadable. This
+ * is a PUBLIC address on a marketing site: it goes in a byline, a share
+ * sheet, a CV. `/author/hT3kQ9xLmZ2` is not an address anyone can read, and
+ * the rename it protects against is answered better by the stored slug, which
+ * is stable AND readable. The id is still ACCEPTED on the way in (see
+ * `entryMatchesAuthorRoute`), so a link built under the old precedence keeps
+ * resolving.
+ *
+ * Empty when there is nothing addressable, so a caller renders plain text
+ * rather than a link to `/author/`.
+ */
+export function contentAuthorSlug(options: ContentAuthorAddress): string {
+  return (
+    urlSlugSegment(options.author?.slug) ||
+    urlSlugSegment(options.author?.name) ||
+    urlSlugSegment(options.authorName) ||
+    urlSlugSegment(options.authorId) ||
+    urlSlugSegment(options.author?.$id)
+  )
+}
+
+/**
+ * Every segment that should resolve to this author.
+ *
+ * The archive answers to the stored slug, the display name, the legacy
+ * free-typed byline and the record id, because which of those a link happens
+ * to carry depends on when it was built and by what — and a byline that
+ * 404s is worse than one pointing at a page with an unexpected URL.
+ *
+ * Deduped, and empties dropped: a set containing `''` would match a request
+ * for `/author/` against every author on the site.
+ */
+export function contentAuthorSlugCandidates(
+  options: ContentAuthorAddress,
+): string[] {
+  return Array.from(
+    new Set(
+      [
+        options.author?.slug,
+        options.author?.name,
+        options.authorName,
+        options.authorId,
+        options.author?.$id,
+      ]
+        .map((value) => urlSlugSegment(value))
+        .filter(Boolean),
+    ),
+  )
+}
+
+/** Does `slug` address this author? */
+export function contentAuthorMatchesSlug(
+  options: ContentAuthorAddress,
+  slug: string | undefined | null,
+): boolean {
+  const wanted = urlSlugSegment(slug)
+  if (!wanted) return false
+  return contentAuthorSlugCandidates(options).includes(wanted)
+}
+
+/**
+ * The author's page on this site — `/author/{slug}` (AGL-2518).
+ *
+ * Empty when nothing addresses the author, which is what lets a template bind
+ * this unconditionally: a link whose href does not resolve renders as inert
+ * markup of the same element (AGL-1268/1357), so an entry with no byline
+ * shows no link rather than one pointing nowhere.
+ */
+export function contentAuthorPageUrl(options: ContentAuthorAddress): string {
+  const slug = contentAuthorSlug(options)
+  return slug ? `/${AUTHOR_ROUTE_SEGMENT}/${slug}` : ''
+}
+
+/**
+ * The paginated sub-path of an author page — `/author/{slug}/page/{n}`.
+ *
+ * The same word the collection listing pages with, deliberately: a reader who
+ * has learned one URL shape on the site has learned both, and a second
+ * spelling would buy nothing. Declared here rather than imported from
+ * `collection-entries`, which imports THIS module.
+ */
+const AUTHOR_PAGE_SEGMENT = 'page'
+
+/**
+ * The canonical URL of one page of an author's archive (AGL-2518).
+ *
+ * Page 1 is the bare `/author/{slug}` — there is no `/author/{slug}/page/1`,
+ * so the first page cannot become a second address for itself. The rule
+ * `collectionListUrl` states, one route over.
+ */
+export function contentAuthorPageAtUrl(
+  options: ContentAuthorAddress & { page?: number | null },
+): string {
+  const base = contentAuthorPageUrl(options)
+  if (!base) return ''
+  const page = Number(options.page)
+  return Number.isFinite(page) && page > 1
+    ? `${base}/${AUTHOR_PAGE_SEGMENT}/${Math.floor(page)}`
+    : base
+}
+
+/**
+ * Where an author archive's pager can go from here (AGL-2518).
+ *
+ * The `collectionPaginationLinks` contract, restated for this route: **the
+ * edges resolve to the empty string, never to a URL**, which is what lets a
+ * designed author template bind `{{pagination.prevUrl}}` unconditionally. A
+ * link whose href is `''` renders as an inert placeholder of the same element
+ * (AGL-1268/1357), which is the correct pager on page 1 of 1.
+ *
+ * ONE computation, because it has the same two consumers that must agree: the
+ * built-in fallback's pager nodes and the tokens a template binds.
+ */
+export function contentAuthorPaginationLinks(
+  options: ContentAuthorAddress & {
+    page?: number | null
+    totalPages?: number | null
+  },
+): { page: number; totalPages: number; prevUrl: string; nextUrl: string } {
+  const positive = (value: number | null | undefined): number => {
+    const parsed = Math.floor(Number(value))
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 1
+  }
+  const page = positive(options.page)
+  const totalPages = positive(options.totalPages)
+  const href = (n: number) => contentAuthorPageAtUrl({ ...options, page: n })
+  return {
+    page,
+    totalPages,
+    prevUrl: page > 1 ? href(page - 1) : '',
+    nextUrl: page < totalPages ? href(page + 1) : '',
+  }
+}
+
+/** A parsed `/author/{slug}` route (AGL-2518). */
+export interface ContentAuthorRoute {
+  /** The addressed segment, normalized. */
+  authorSlug: string
+  /** 1-based list page; 1 on the bare archive. */
+  page: number
+}
+
+/**
+ * Parse a path into an author route, or `null` when the path is not one.
+ *
+ * The two shapes are `/author/{slug}` and `/author/{slug}/page/{n}`, matching
+ * the collection listing's own pagination so a reader who has learned one URL
+ * shape on the site has learned both.
+ *
+ * A pure parser, deliberately, for the reason `parseCollectionRoute` is one:
+ * the tenant loader and its tests must not be able to disagree about what the
+ * route table says. Page `0`, a negative page and a non-numeric page all
+ * resolve to `null` rather than to page 1, so a nonsense URL 404s instead of
+ * silently serving the first page under a second address.
+ */
+export function parseContentAuthorRoute(
+  segments: readonly string[],
+): ContentAuthorRoute | null {
+  const parts = (segments ?? []).filter(Boolean)
+  if (parts[0] !== AUTHOR_ROUTE_SEGMENT) return null
+  const authorSlug = urlSlugSegment(parts[1])
+  if (!authorSlug) return null
+  if (parts.length === 2) return { authorSlug, page: 1 }
+  if (parts.length === 4 && parts[2] === AUTHOR_PAGE_SEGMENT) {
+    const page = Number(parts[3])
+    return Number.isInteger(page) && page >= 1 ? { authorSlug, page } : null
+  }
+  return null
 }
 
 /** How an author's `image` is turned into something a crawler can fetch. */

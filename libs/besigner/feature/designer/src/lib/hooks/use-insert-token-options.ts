@@ -184,6 +184,15 @@ export function useInsertTokenOptions(
         groupHint: 'Resolves on collection pages',
       })
     }
+    for (const entry of Aglyn.AUTHOR_TOKEN_CATALOG) {
+      assembled.push({
+        group: 'Author',
+        label: entry.label,
+        token: entry.token,
+        preview: entry.description,
+        groupHint: 'Resolves on author pages',
+      })
+    }
     for (const field of insertContext.datasetFields) {
       assembled.push({
         group: 'Dataset item',
