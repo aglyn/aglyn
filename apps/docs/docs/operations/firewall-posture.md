@@ -117,6 +117,7 @@ Per project:
 | `managedRules.bot_protection` is `{active: true, action: "challenge"}` | the setting the `PUT` deletes |
 | every declared bypass rule is present | a missing probe rule turns uptime-probe.yml into a false outage |
 | every declared bypass rule is **still scoped** | see below |
+| every declared **path and group shape** is present | see below — added 2026-09-03 |
 | no **undeclared** bypass rule exists | an undeclared hole is an unreviewed hole |
 
 ### Why scope, not just presence
@@ -134,6 +135,32 @@ while still passing any check that merely counts rules by name.
 touching the existing group at all, simply by appending a second, looser one.
 The checker therefore requires **every** group to carry **every** required
 condition.
+
+### And coverage, not just scope (added 2026-09-03)
+
+Scope answers *is this hole still narrow*. It cannot answer *is this hole still
+there* — and for years it did not.
+
+One rule often serves several paths, through one of two mechanisms: a
+`valueAnyOf` allowlist, or a declared alternate group shape. Both describe what
+a live group is **allowed** to be, and an allowance is satisfied vacuously by a
+group that does not exist. Delete the `/robots.txt` group from the crawler
+rule and the five that remain all still carry a listed path: green, with
+`robots.txt` challenged.
+
+AGL-2520 is the case that found it — see [A NEW public metadata path ships
+challenged](#a-new-public-metadata-path-ships-challenged-2026-09-03) below.
+
+So the checker asserts both directions, and the rule is simply **anything the
+table declares must exist**:
+
+| | asserts | catches |
+| --- | --- | --- |
+| scope | every live group carries every required condition | a rule widened by appending a looser group |
+| coverage | every declared path and group shape is carried by some live group | a rule that lost a mouth, or never grew one it is declared to have |
+
+The field that declares an alternate shape is named **`alsoRequiresGroups`**
+for this reason. It was `alsoAllowsGroups`, and the name was the bug.
 
 ### Secrets
 
@@ -404,11 +431,14 @@ was not deployed yet, so the app itself refused it — which proves the challeng
 was bypassed and nothing else changed. The 429 on the third line is what proves
 the bypass is still scoped.
 
-**The check cannot catch this class.** `firewall-posture.mjs` declares the
-group as an allowed shape (`alsoAllowsGroups`), and a declared-but-absent
-alternate is not a finding — an allowance is not a requirement. So the repo can
-be green, the drift job green, and the feature dead to crawlers. **When you add
-a public metadata path, PATCH the live rule in the same change.**
+**The check could not catch this class, and now can.** The declaration was
+originally `alsoAllowsGroups` — a *permitted* shape — so a declared-but-absent
+alternate was not a finding: the repo was green, the drift job was green, and
+the feature was dead to crawlers. Since 2026-09-03 the checker asserts
+**coverage** as well as scope (below), the field is named `alsoRequiresGroups`,
+and a group the table declares but the live rule lacks is a failure that names
+the missing path. **Still PATCH the live rule in the same change** — the check
+tells you that you forgot, it does not do it for you.
 
 **The general lesson, restated:** the marketing site's own pages are not the
 only thing a challenge hides. Enumerate what fetches your **metadata** and your
