@@ -132,7 +132,9 @@ try {
         {
         issueId: issue.id,
         body: TEST
-          ? `**TEST of the notification path — not a real failure. Safe to delete.**\n\n${redCommentBody({ sha, results, runUrl, subject })}`
+          ? '**[TEST] Notification path check - nothing is wrong.**\n\n' +
+            'No build has failed. This proves a real red would reach this issue. ' +
+            `Sent from ${runUrl || 'a manual dispatch'}. Safe to delete.`
           : redCommentBody({ sha, results, runUrl, subject }),
       },
     )
@@ -158,21 +160,28 @@ if (slackWebhook && shouldPingSlack(linearOutcome)) {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(
         TEST
-          ? (() => {
-              const p = slackPayload({ sha, results, runUrl, subject })
-              return {
-                text: `[TEST] ${p.text}`,
-                blocks: [
-                  {
-                    type: 'section',
-                    text: {
-                      type: 'mrkdwn',
-                      text: `:test_tube: *Notification path test — not a real failure.*\n\n${p.blocks[0].text.text}`,
-                    },
+          ? {
+              // NOT the real body with a banner bolted on. A test that leads
+              // with "Main Gate is RED" reads as an incident however it is
+              // captioned - it did, the first time this ran, and the person
+              // reading it went looking for a broken build. The test message
+              // states the true fact instead: nothing is wrong.
+              text: '[TEST] Notification path check - Main Gate is NOT red',
+              blocks: [
+                {
+                  type: 'section',
+                  text: {
+                    type: 'mrkdwn',
+                    text:
+                      ':white_check_mark: *[TEST] Notification path check - nothing is wrong.*\n' +
+                      'No build has failed. This message exists only to prove that a real ' +
+                      'failure would reach this channel.\n' +
+                      `Sent from <${runUrl || 'https://github.com/aglyn/aglyn/actions'}|this run>. ` +
+                      'A real alert looks different: it names the failing job and links the run.',
                   },
-                ],
-              }
-            })()
+                },
+              ],
+            }
           : slackPayload({ sha, results, runUrl, subject }),
       ),
       signal: AbortSignal.timeout(TIMEOUT_MS),
