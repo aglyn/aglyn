@@ -46,6 +46,15 @@ const flag = (name, fallback = '') => {
   return hit ? hit.slice(name.length + 3) : fallback
 }
 
+/**
+ * TEST MODE (AGL-2533). A notifier whose only test is "wait for a real
+ * failure" is the thing this whole issue is about — it cannot be shown to
+ * work until the day it matters. `--test` sends a clearly-labelled message
+ * down the real path with the real secrets, so the wiring is provable on
+ * demand rather than on incident.
+ */
+const TEST = args.includes('--test')
+
 const results = { fast: flag('fast'), full: flag('full') }
 const sha = flag('sha')
 const runUrl = flag('run-url')
@@ -120,7 +129,12 @@ try {
       `mutation Comment($issueId: String!, $body: String!) {
          commentCreate(input: { issueId: $issueId, body: $body }) { success }
        }`,
-      { issueId: issue.id, body: redCommentBody({ sha, results, runUrl, subject }) },
+        {
+        issueId: issue.id,
+        body: TEST
+          ? `**TEST of the notification path — not a real failure. Safe to delete.**\n\n${redCommentBody({ sha, results, runUrl, subject })}`
+          : redCommentBody({ sha, results, runUrl, subject }),
+      },
     )
     say(`posted to ${SINK_ISSUE_ID}`)
     linearOutcome = 'posted'
@@ -142,7 +156,25 @@ if (slackWebhook && shouldPingSlack(linearOutcome)) {
     const res = await fetch(slackWebhook, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(slackPayload({ sha, results, runUrl, subject })),
+      body: JSON.stringify(
+        TEST
+          ? (() => {
+              const p = slackPayload({ sha, results, runUrl, subject })
+              return {
+                text: `[TEST] ${p.text}`,
+                blocks: [
+                  {
+                    type: 'section',
+                    text: {
+                      type: 'mrkdwn',
+                      text: `:test_tube: *Notification path test — not a real failure.*\n\n${p.blocks[0].text.text}`,
+                    },
+                  },
+                ],
+              }
+            })()
+          : slackPayload({ sha, results, runUrl, subject }),
+      ),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     })
     if (!res.ok) throw new Error(`Slack returned ${res.status}`)

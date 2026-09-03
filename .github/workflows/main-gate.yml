@@ -94,6 +94,10 @@ on:
         description: 'Run the full sweep (tests + production builds)'
         type: boolean
         default: true
+      test_notification:
+        description: 'Send a TEST alert down the real notification path'
+        type: boolean
+        default: false
 
 
 env:
@@ -377,6 +381,25 @@ jobs:
             --full="${{ needs.full.result }}" \
             --run-url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             --subject="$(git log -1 --format=%s || true)"
+
+      # Proving the notifier without waiting for a failure (AGL-2533). A
+      # notification path whose only test is a real incident is unverifiable
+      # until the day it matters, which is the shape this issue is about. This
+      # sends a clearly-labelled message through the real secrets and the real
+      # code, on demand.
+      - name: TEST the notification path
+        if: github.event_name == 'workflow_dispatch' && inputs.test_notification
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          set -uo pipefail
+          node tools/scripts/report-main-gate-red.mjs --test \
+            --sha="${{ github.sha }}" \
+            --fast=failure \
+            --full=skipped \
+            --run-url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --subject='TEST of the notification path - not a real failure'
 
       # The suspect list. Its length is the whole argument for gating on a short
       # timer: a day of accumulated commits is not a suspect list, an hour of
