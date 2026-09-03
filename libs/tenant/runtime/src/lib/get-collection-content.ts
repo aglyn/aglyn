@@ -26,6 +26,7 @@ import {
   entryMatchesCategoryRoute,
   hostCollectionKind,
   normalizeContentAuthor,
+  normalizeContentSchemaType,
   resolveCollectionCategoryBySlug,
   resolveEntryAuthor,
 } from '@aglyn/aglyn/server'
@@ -240,6 +241,11 @@ function mapCollectionDoc(
     templateScreenId: collectionDoc.get('templateScreenId') ?? undefined,
     listScreenId: collectionDoc.get('listScreenId') ?? undefined,
     entryScreenId: collectionDoc.get('entryScreenId') ?? undefined,
+    // Normalized HERE rather than at the head (AGL-2536), so an unrecognised
+    // stored value can never reach the JSON-LD: an `@type` the vocabulary
+    // does not define makes a consumer discard the whole node, costing the
+    // page every property it publishes rather than just this one.
+    schemaType: normalizeContentSchemaType(collectionDoc.get('schemaType')),
     categories: mapCollectionCategories(collectionDoc.get('categories')),
   }
 }
@@ -457,6 +463,12 @@ export interface CollectionContent {
      * through it with `{{entry.*}}` tokens.
      */
     entryScreenId?: string
+    /**
+     * What KIND of article this collection publishes (AGL-2536) — the
+     * `schema.org` type its entries serialise as. Unset publishes `Article`,
+     * which is what every collection published before the setting existed.
+     */
+    schemaType?: string
     /**
      * Category taxonomy (AGL-582): entries reference these by stable
      * `id`; `name` is the renameable display label.

@@ -71,13 +71,19 @@ const jsonLdFor = async (options: {
   host?: Record<string, unknown>
   /** Extra fields merged onto the entry — dates, for AGL-2497 below. */
   entry?: Record<string, unknown>
+  /** Extra fields merged onto the collection — `schemaType`, for AGL-2536. */
+  collection?: Record<string, unknown>
 }) => {
   mockLoad.mockResolvedValue({
     props: {
       data: { host: options.host ?? hostWith() },
       nodes: null,
       content: {
-        collection: { slug: 'blog', displayName: 'Blog' },
+        collection: {
+          slug: 'blog',
+          displayName: 'Blog',
+          ...options.collection,
+        },
         entry: {
           $id: 'e1',
           title: 'Hello',
@@ -276,5 +282,133 @@ describe('Article.datePublished reflects the stored publish date (AGL-2497)', ()
     })
 
     expect(article.value.datePublished).toBeUndefined()
+  })
+})
+
+/**
+ * An entry page publishes its trail (AGL-2535).
+ *
+ * Nothing on a content route published a `BreadcrumbList` before this — the
+ * tenant emitted one for nested SCREEN paths only, so `/blog/hello` and every
+ * press release carried none, which are the deepest URLs on the site and the
+ * ones a breadcrumb actually helps in a result.
+ *
+ * These go through the ROUTE rather than the pure builder, because the builder
+ * already has its own spec and what is untested is the wiring: which names the
+ * page hands it, and that it lands beside the `Article` rather than replacing
+ * it. `articleFrom` finds its block by `@type`, so a breadcrumb emitted or not
+ * emitted is invisible to every case above.
+ */
+describe('BreadcrumbList on a content entry (AGL-2535)', () => {
+  const crumbsFrom = async (options: Parameters<typeof jsonLdFor>[0] = {}) => {
+    const blocks = await jsonLdFor(options)
+    return blocks.find((block) => block.value['@type'] === 'BreadcrumbList')
+  }
+
+  it('names the collection and the entry, absolute and in order', async () => {
+    const crumbs = await crumbsFrom({})
+    // `custom.example`, not the `acme.aglyn.app` subdomain: the fixture host
+    // carries a cname, and the crumbs resolve against the same
+    // `hostPublicOrigin` the canonical and the Article `url` use. A breadcrumb
+    // on a second origin would tell a crawler the trail belongs to a
+    // different site.
+    expect(crumbs?.value.itemListElement).toEqual([
+      {
+        '@type': 'ListItem',
+        position: 1,
+        name: 'Blog',
+        item: 'https://custom.example/blog',
+      },
+      {
+        '@type': 'ListItem',
+        position: 2,
+        name: 'Hello',
+        item: 'https://custom.example/blog/hello',
+      },
+    ])
+  })
+
+  it('names them from DISPLAY values, never the url segments', async () => {
+    // The whole reason this does not reuse the screen-path builder: that one
+    // splits the routing map, so it would publish the slug as the crumb name.
+    const crumbs = await crumbsFrom({
+      entry: { title: 'From a form to a dataset in five minutes', slug: 'hello' },
+    })
+    const names = crumbs?.value.itemListElement.map((i: any) => i.name)
+    expect(names).toEqual(['Blog', 'From a form to a dataset in five minutes'])
+    expect(crumbs?.raw).not.toContain('from-a-form')
+  })
+
+  it('is emitted BESIDE the Article, not instead of it', async () => {
+    const blocks = await jsonLdFor({})
+    const types = blocks.map((block) => block.value['@type'])
+    expect(types).toContain('BreadcrumbList')
+    expect(types).toContain('Article')
+  })
+
+  it('carries the @context, since each block is read on its own', async () => {
+    const crumbs = await crumbsFrom({})
+    expect(crumbs?.value['@context']).toBe('https://schema.org')
+  })
+})
+
+/**
+ * The collection says what KIND of article it publishes (AGL-2536).
+ *
+ * Every entry was a bare `Article` before this, whatever collection it came
+ * from — a press release, a blog post and a changelog note all serialising
+ * identically, none of them claiming the type `schema.org` defines for it.
+ */
+describe('the entry type follows its collection (AGL-2536)', () => {
+  const typeOf = async (collection?: Record<string, unknown>) => {
+    const blocks = await jsonLdFor(
+      collection ? { collection } : {},
+    )
+    // NOT `find(@type === 'Article')` like the helper above — that is the very
+    // thing under test here, and it would quietly skip a renamed node.
+    return blocks.find((block) => 'headline' in block.value)?.value['@type']
+  }
+
+  it('publishes the collection’s chosen type', async () => {
+    expect(await typeOf({ schemaType: 'NewsArticle' })).toBe('NewsArticle')
+    expect(await typeOf({ schemaType: 'BlogPosting' })).toBe('BlogPosting')
+    expect(await typeOf({ schemaType: 'TechArticle' })).toBe('TechArticle')
+  })
+
+  it('publishes Article when the collection has not chosen', async () => {
+    // The load-bearing default: adopting the setting moves no site's
+    // structured data until somebody picks something.
+    expect(await typeOf()).toBe('Article')
+    expect(await typeOf({ schemaType: '' })).toBe('Article')
+  })
+
+  it('falls back to Article for a type the vocabulary does not define', async () => {
+    /*
+      Worse than a general type: a consumer that cannot resolve `@type`
+      discards the WHOLE node, so a typo would cost the page every property it
+      publishes — headline, dates, author, publisher — not just this one.
+
+      Reachable from a restored backup, a REST write, or a newer console.
+    */
+    expect(await typeOf({ schemaType: 'Aricle' })).toBe('Article')
+    expect(await typeOf({ schemaType: 'ScholarlyArticle' })).toBe('Article')
+    expect(await typeOf({ schemaType: '<script>' })).toBe('Article')
+  })
+
+  it('keeps every other property while the type changes', async () => {
+    // The type is the only thing that moves: a `NewsArticle` still carries
+    // everything an `Article` did, publisher included.
+    const blocks = await jsonLdFor({
+      collection: { schemaType: 'NewsArticle' },
+      host: hostWith({ seo: { entity: { name: 'Acme', logo: 'https://x/l.png' } } }),
+    })
+    const article = blocks.find((block) => 'headline' in block.value)?.value
+    expect(article).toMatchObject({
+      '@type': 'NewsArticle',
+      headline: 'Hello',
+      description: 'An entry',
+      url: 'https://custom.example/blog/hello',
+      publisher: { '@type': 'Organization', name: 'Acme', logo: 'https://x/l.png' },
+    })
   })
 })

@@ -551,8 +551,23 @@ function FormBesignerPage() {
      */
     if (!savedLandedRef.current) {
       if (livePublished) {
+        /*
+          Nothing to promote, but that is not the same as nothing to do
+          (AGL-2540).
+
+          `livePublished` is a fact about the POINTER. "The live sites match"
+          is a claim about the CACHE, and this path used to make it without
+          checking. The two come apart whenever the version document's content
+          moved while the pointer stood still — a direct Firestore write, an
+          import, or an earlier publish whose revalidate the tenant refused.
+
+          A form is embedded on pages that are cached separately from it, which
+          is the fan-out this call already exists to walk. Best effort like the
+          success path.
+        */
+        void revalidateLivePages({ user, hostId, formId: formId as string })
         return enqueueSnackbar(
-          'Already published — the live sites match this version.',
+          'Already published — refreshing the live pages to match.',
           { variant: 'info', persist: false },
         )
       }
@@ -574,6 +589,7 @@ function FormBesignerPage() {
     remoteChanged,
     enqueueSnackbar,
     firestore,
+    user,
     hostId,
     formId,
     versionId,

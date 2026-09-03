@@ -24,11 +24,13 @@
  */
 export * from './binding-token-catalog'
 export * from './binding-tokens'
+export * from './breadcrumb-json-ld'
 export * from './collection-delete'
 export * from './collection-entries'
 export * from './collection-kind'
 export * from './collection-slug'
 export * from './content-authors'
+export * from './content-schema-type'
 export * from './content-author-profile'
 export * from './url-slug'
 export * from './child-contract'

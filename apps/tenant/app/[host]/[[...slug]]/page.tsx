@@ -557,7 +557,21 @@ function buildJsonLd(props: Props): string[] {
         url: authorUrl,
         name: author.name,
         mainEntity: person,
-        ...(publisher ? { publisher } : {}),
+        // The site entity WITH its mark, the same shape the Article branch
+        // publishes (AGL-2534). This spread was the bare `publisher` — so an
+        // author page named the publisher and an article by that author
+        // pictured it, from one `host.seo.entity`. `logo` for an
+        // Organization, `image` for a Person; the helper picks, because
+        // schema.org gives `logo` only to the first.
+        ...(publisher && {
+          publisher: {
+            ...publisher,
+            ...Aglyn.hostSeoEntityImageJsonLd(host?.seo?.entity, {
+              origin: canonicalBase,
+              hostId: host?.$id,
+            }),
+          },
+        }),
       }),
     ]
   }
@@ -585,7 +599,42 @@ function buildJsonLd(props: Props): string[] {
       // naming and addressing it as the whole collection would tell a crawler
       // that five different pages are all the same list.
       const listCategory = content.category
+      /*
+        A FILTERED listing gets a breadcrumb; the bare one does not
+        (AGL-2535).
+
+        `/blog/category/guides` has a real parent — the collection — so the
+        trail is two deep and worth publishing. `/blog` is one crumb, which
+        `breadcrumbListJsonLd` declines: a single-element list is the page
+        restating its own title, and Google treats it as ineligible.
+      */
+      const listCrumbs = listCategory
+        ? Aglyn.breadcrumbListJsonLd(
+            [
+              {
+                name: content.collection?.displayName ?? collectionSlug,
+                path: Aglyn.collectionListUrl({ collectionSlug }),
+              },
+              {
+                name: listCategory.name,
+                path: Aglyn.collectionListUrl({
+                  collectionSlug,
+                  categorySlug: listCategory.slug,
+                }),
+              },
+            ],
+            canonicalBase,
+          )
+        : undefined
       return [
+        ...(listCrumbs
+          ? [
+              Aglyn.safeJsonLd({
+                '@context': 'https://schema.org',
+                ...listCrumbs,
+              }),
+            ]
+          : []),
         Aglyn.safeJsonLd({
           '@context': 'https://schema.org',
           '@type': 'ItemList',
@@ -658,10 +707,60 @@ function buildJsonLd(props: Props): string[] {
       entry.author ?? Aglyn.resolveEntryAuthor(entry),
       { origin: canonicalBase, hostId: host?.$id },
     )
+    /*
+      The entry's own trail (AGL-2535): the collection, then this piece.
+
+      Two deep, with both names already resolved — `collection.displayName`
+      and the entry's `title`. Nothing on a content route published a
+      breadcrumb before this, which meant the deepest URLs on the site, and
+      the ones a breadcrumb actually helps in a result, were the only ones
+      without.
+
+      Named from the DISPLAY values rather than the path segments. The screen
+      builder further down splits the routing map and so publishes slugs; here
+      the headline is in hand, and `from-a-form-to-a-dataset-in-five-minutes`
+      is not a crumb name.
+    */
+    const entryCrumbs = collectionSlug
+      ? Aglyn.breadcrumbListJsonLd(
+          [
+            {
+              name: content.collection?.displayName ?? collectionSlug,
+              path: Aglyn.collectionListUrl({ collectionSlug }),
+            },
+            { name: entry.title, path: `/${collectionSlug}/${entry.slug}` },
+          ],
+          canonicalBase,
+        )
+      : undefined
     return [
+      ...(entryCrumbs
+        ? [
+            Aglyn.safeJsonLd({
+              '@context': 'https://schema.org',
+              ...entryCrumbs,
+            }),
+          ]
+        : []),
       Aglyn.safeJsonLd({
         '@context': 'https://schema.org',
-        '@type': 'Article',
+        /*
+          The collection says what KIND of article this is (AGL-2536).
+
+          Every entry published as a bare `Article` before this, whatever it
+          was — so a press release, a blog post and a changelog note
+          serialised identically and none claimed the more specific type
+          `schema.org` defines for it. Unset still publishes `Article`, so
+          nothing moved under any site that has not chosen.
+
+          The loader already normalizes, so this call is not what keeps an
+          unrecognised stored value out of the document — it is what narrows
+          the loader's `string` to a type this literal will accept, and what
+          answers for the collection being absent entirely.
+        */
+        '@type': Aglyn.normalizeContentSchemaType(
+          content.collection?.schemaType,
+        ),
         headline: entry.title,
         ...(entry.excerpt && { description: entry.excerpt }),
         // Absent, never `"image": [null]` — the resolver returns undefined for

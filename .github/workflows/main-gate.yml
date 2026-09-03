@@ -94,6 +94,10 @@ on:
         description: 'Run the full sweep (tests + production builds)'
         type: boolean
         default: true
+      test_notification:
+        description: 'Send a TEST alert down the real notification path'
+        type: boolean
+        default: false
 
 
 env:
@@ -349,6 +353,53 @@ jobs:
             --fast-verified "${{ needs.fast.outputs.verified }}" \
             --full "${{ needs.full.result }}" \
             --full-verified "${{ needs.full.result != 'skipped' }}"
+
+      # THE NOTIFICATION (AGL-2533). The commit status above is correct,
+      # precise, and attached to a sha the branch has already moved past —
+      # which is why two real reds went unread for hours on 2026-09-03 while
+      # four promotions went out. This posts the red into Linear, the channel
+      # this team actually reads, restoring the "ONE tracking issue" design the
+      # header used to claim: it was abandoned only because
+      # `gh api repos/aglyn/aglyn` returns has_issues:false.
+      #
+      # `if: always()` and the script's own exit-0 discipline are both
+      # deliberate — a gate that failed BECAUSE it could not report would be
+      # strictly worse than the silence it replaces. A green posts nothing; a
+      # repeat of the same red posts nothing.
+      - name: red -> Linear
+        if: always()
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          # Optional. Linear is the durable record; Slack is the immediate
+          # ping. Absent, the reporter says so and posts to Linear alone.
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          set -uo pipefail
+          node tools/scripts/report-main-gate-red.mjs \
+            --sha="${{ needs.fast.outputs.sha || github.sha }}" \
+            --fast="${{ needs.fast.result }}" \
+            --full="${{ needs.full.result }}" \
+            --run-url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --subject="$(git log -1 --format=%s || true)"
+
+      # Proving the notifier without waiting for a failure (AGL-2533). A
+      # notification path whose only test is a real incident is unverifiable
+      # until the day it matters, which is the shape this issue is about. This
+      # sends a clearly-labelled message through the real secrets and the real
+      # code, on demand.
+      - name: TEST the notification path
+        if: github.event_name == 'workflow_dispatch' && inputs.test_notification
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          set -uo pipefail
+          node tools/scripts/report-main-gate-red.mjs --test \
+            --sha="${{ github.sha }}" \
+            --fast=failure \
+            --full=skipped \
+            --run-url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --subject='TEST of the notification path - not a real failure'
 
       # The suspect list. Its length is the whole argument for gating on a short
       # timer: a day of accumulated commits is not a suspect list, an hour of

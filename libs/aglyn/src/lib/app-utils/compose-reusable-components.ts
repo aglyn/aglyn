@@ -1120,12 +1120,33 @@ export function composeReusableComponentNodes<
          * `refId`, `name`, the declared-prop values and the override slices,
          * all of them already consumed by the graft above.
          */
-        // `interactions` is declared on `NodeSchema`, one layer above the
-        // `AglynNodeSchema` this function is generic over, so it is read off
-        // the node rather than through the type.
-        const instanceInteractions = (
-          instanceNode as { interactions?: unknown }
-        ).interactions
+        /*
+         * Interactions come from BOTH nodes, root's first.
+         *
+         * They are keyed to the element by node id, and after the merge one
+         * element answers to two authors: the component, which wrote the
+         * choreography its internals rely on, and the placement, which wrote
+         * whatever this page wants on top. Keeping only one side silently
+         * drops the other's — and because the instance keeps its own id, the
+         * side that would go missing is the page's, on the very node whose id
+         * it is.
+         *
+         * Root's run first for the reason the host actions do in
+         * `getClientAutomations`: the more general enrolls before the more
+         * specific, which is the order a page is read in.
+         *
+         * `interactions` is declared on `NodeSchema`, one layer above the
+         * `AglynNodeSchema` this function is generic over, so both are read
+         * off the node rather than through the type.
+         */
+        const interactionsOf = (node: unknown): readonly unknown[] => {
+          const value = (node as { interactions?: unknown })?.interactions
+          return Array.isArray(value) ? value : []
+        }
+        const mergedInteractions = [
+          ...interactionsOf(graftedRoot),
+          ...interactionsOf(instanceNode),
+        ]
         const carried: Record<string, unknown> = {}
         for (const key of INSTANCE_CARRIED_PROPS) {
           const value = (instanceNode.props as Record<string, unknown>)?.[key]
@@ -1155,6 +1176,12 @@ export function composeReusableComponentNodes<
           // everything that asks whether a node was authored with any.
           ...(graftedRoot.props !== undefined || Object.keys(carried).length
             ? { props: { ...(graftedRoot.props as object), ...carried } }
+            : {}),
+          // Absent rather than empty, like `props` above: a node the author
+          // gave no choreography is one that carries no such key anywhere
+          // else in the pipeline.
+          ...(mergedInteractions.length
+            ? { interactions: mergedInteractions }
             : {}),
         } as N
         for (const childId of Array.isArray(merged.nodes)

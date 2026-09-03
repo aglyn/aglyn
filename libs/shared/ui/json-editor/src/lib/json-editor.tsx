@@ -40,13 +40,38 @@ import {
   useRef,
   useState,
 } from 'react'
-import { Else, If, Then, When } from 'react-if'
+import { When } from 'react-if'
 import type { CodeMirrorProps } from './components/code-mirror-editor'
 import type { MonacoEditorProps } from './components/monaco-editor'
 
-const Editor = dynamic<MonacoEditorProps>(() => import('./components/monaco-editor'), {
-  ssr: false,
-})
+const Editor = dynamic<MonacoEditorProps>(
+  () => import('./components/monaco-editor'),
+  {
+    ssr: false,
+    /*
+      A dynamic import with no `loading` renders `null` (AGL-2541).
+
+      That is indistinguishable from an editor that will never arrive: the
+      same empty box while the chunk is in flight, and the same empty box
+      forever if it fails. The report this fixes was exactly that — Raw JSON
+      opens on a blank pane with no console error — leaving nothing on screen
+      to say whether to wait, reload, or give up.
+    */
+    loading: () => (
+      <Box
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          display: 'grid',
+          placeItems: 'center',
+          color: 'text.secondary',
+        }}
+      >
+        {'Loading the editor…'}
+      </Box>
+    ),
+  },
+)
 
 type OnClose = {
   bivarianceHack(
@@ -238,17 +263,53 @@ const JsonEditorRaw = forwardRef<any, JsonEditorProps>(
             </Alert>
           ) : null}
           <When condition={open}>
-            <If condition={warnOpen}>
-              <Then>
+            {/*
+              The editor mounts UNDER the warning, not instead of it
+              (AGL-2541).
+
+              The gate used to be an `If`/`Else`, so while the warning stood
+              the `Editor` was not rendered at all — its chunk was never
+              requested and Monaco's loader never ran. An author who dismissed
+              the warning was then waiting on a download that had not started,
+              against a pane that renders nothing while it waits. That is the
+              "the editor never mounts, and no request for loader.js is ever
+              issued" report: both halves are true, and neither is Monaco's.
+
+              Rendering both, warning stacked above, puts the chunk in flight
+              while the warning is being read. The overlay was already written
+              to be an overlay — full-bleed, blurred, over a translucent wash
+              — it was only ever wired as a replacement.
+
+              `value` is the author's buffer VERBATIM, and nothing else
+              (AGL-2486 item 17). It used to be
+              `JSON.stringify(JSON.parse(data) ?? {})`, whose parse fell back
+              to `{}`. `@monaco-editor/react` treats `value` as authoritative
+              — on every change it runs `executeEdits(fullModelRange, value)`
+              — so the first keystroke that left the buffer transiently
+              unparseable replaced the whole document on screen with `{}`. A
+              comma does that, which is exactly how it was reported. Worse,
+              that overwrite is made with `onChange` suppressed, so `data`
+              kept text the editor no longer showed and there was nothing to
+              recover from. Feeding the buffer back unchanged means the prop
+              always equals `editor.getValue()`, so the effect's `value !==`
+              guard never fires from typing and no keystroke can rewrite the
+              document. It also stops the buffer being re-indented under the
+              cursor whenever the author's valid text was not already 2-space
+              pretty-printed.
+            */}
+            <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
+              <Editor
+                height="100%"
+                defaultValue={documentText}
+                value={data}
+                onChange={handleChange}
+              />
+              <When condition={warnOpen}>
                 <Box
                   sx={{
-                    flex: 1,
-                    minHeight: 0,
-                    position: 'relative',
-                    left: 0,
-                    right: 0,
-                    top: 0,
-                    bottom: 0,
+                    position: 'absolute',
+                    inset: 0,
+                    zIndex: 1,
                     bgcolor: 'action.disabled',
                     display: 'flex',
                     alignItems: 'center',
@@ -279,37 +340,8 @@ const JsonEditorRaw = forwardRef<any, JsonEditorProps>(
                     are <strong>destructive and irreversible</strong>.
                   </Alert>
                 </Box>
-              </Then>
-              <Else>
-                {/*
-                  `value` is the author's buffer VERBATIM, and nothing else
-                  (AGL-2486 item 17).
-
-                  It used to be `JSON.stringify(JSON.parse(data) ?? {})`, whose
-                  parse fell back to `{}`. `@monaco-editor/react` treats `value`
-                  as authoritative — on every change it runs
-                  `executeEdits(fullModelRange, value)` — so the first keystroke
-                  that left the buffer transiently unparseable replaced the
-                  whole document on screen with `{}`. A comma does that, which
-                  is exactly how it was reported. Worse, that overwrite is made
-                  with `onChange` suppressed, so `data` kept the text the editor
-                  no longer showed and there was nothing to recover from.
-
-                  Feeding the buffer back unchanged means the prop always equals
-                  `editor.getValue()`, so the effect's `value !==` guard never
-                  fires from typing and no keystroke can rewrite the document.
-                  It also stops the buffer being re-indented under the cursor
-                  whenever the author's valid text was not already 2-space
-                  pretty-printed.
-                */}
-                <Editor
-                  height="100%"
-                  defaultValue={documentText}
-                  value={data}
-                  onChange={handleChange}
-                />
-              </Else>
-            </If>
+              </When>
+            </Box>
           </When>
         </DialogContent>
         <DialogActions>
