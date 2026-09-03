@@ -253,6 +253,7 @@ jobs:
       - run: npm run test:disk-space
       - run: npm run test:main-gate-verdicts
       - run: npm run test:main-gate-red
+      - run: npm run test:main-gate-full-sweep
 
       - run: npm run test:deploy-guard
 
