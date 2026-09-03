@@ -278,3 +278,70 @@ describe('Article.datePublished reflects the stored publish date (AGL-2497)', ()
     expect(article.value.datePublished).toBeUndefined()
   })
 })
+
+/**
+ * An entry page publishes its trail (AGL-2535).
+ *
+ * Nothing on a content route published a `BreadcrumbList` before this — the
+ * tenant emitted one for nested SCREEN paths only, so `/blog/hello` and every
+ * press release carried none, which are the deepest URLs on the site and the
+ * ones a breadcrumb actually helps in a result.
+ *
+ * These go through the ROUTE rather than the pure builder, because the builder
+ * already has its own spec and what is untested is the wiring: which names the
+ * page hands it, and that it lands beside the `Article` rather than replacing
+ * it. `articleFrom` finds its block by `@type`, so a breadcrumb emitted or not
+ * emitted is invisible to every case above.
+ */
+describe('BreadcrumbList on a content entry (AGL-2535)', () => {
+  const crumbsFrom = async (options: Parameters<typeof jsonLdFor>[0] = {}) => {
+    const blocks = await jsonLdFor(options)
+    return blocks.find((block) => block.value['@type'] === 'BreadcrumbList')
+  }
+
+  it('names the collection and the entry, absolute and in order', async () => {
+    const crumbs = await crumbsFrom({})
+    // `custom.example`, not the `acme.aglyn.app` subdomain: the fixture host
+    // carries a cname, and the crumbs resolve against the same
+    // `hostPublicOrigin` the canonical and the Article `url` use. A breadcrumb
+    // on a second origin would tell a crawler the trail belongs to a
+    // different site.
+    expect(crumbs?.value.itemListElement).toEqual([
+      {
+        '@type': 'ListItem',
+        position: 1,
+        name: 'Blog',
+        item: 'https://custom.example/blog',
+      },
+      {
+        '@type': 'ListItem',
+        position: 2,
+        name: 'Hello',
+        item: 'https://custom.example/blog/hello',
+      },
+    ])
+  })
+
+  it('names them from DISPLAY values, never the url segments', async () => {
+    // The whole reason this does not reuse the screen-path builder: that one
+    // splits the routing map, so it would publish the slug as the crumb name.
+    const crumbs = await crumbsFrom({
+      entry: { title: 'From a form to a dataset in five minutes', slug: 'hello' },
+    })
+    const names = crumbs?.value.itemListElement.map((i: any) => i.name)
+    expect(names).toEqual(['Blog', 'From a form to a dataset in five minutes'])
+    expect(crumbs?.raw).not.toContain('from-a-form')
+  })
+
+  it('is emitted BESIDE the Article, not instead of it', async () => {
+    const blocks = await jsonLdFor({})
+    const types = blocks.map((block) => block.value['@type'])
+    expect(types).toContain('BreadcrumbList')
+    expect(types).toContain('Article')
+  })
+
+  it('carries the @context, since each block is read on its own', async () => {
+    const crumbs = await crumbsFrom({})
+    expect(crumbs?.value['@context']).toBe('https://schema.org')
+  })
+})
