@@ -23,6 +23,10 @@ import {
 import MuiContainer, { type ContainerProps } from '@mui/material/Container'
 import { createElement, forwardRef } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import {
+  semanticElementAttribute,
+  semanticElementProp,
+} from '../utils/element-picker'
 import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
 
@@ -46,7 +50,11 @@ import { generatePresetId } from '../utils/generate-preset-id'
  * theoretical. Dropping the key instead lets MUI's own `lg` apply.
  */
 const Container = forwardRef<HTMLDivElement, ContainerProps>((props, ref) =>
-  createElement(MuiContainer, { ...dropClearedProps(props), ref }),
+  createElement(MuiContainer, {
+    ...dropClearedProps(props),
+    ...semanticElementProp((props as { component?: unknown }).component),
+    ref,
+  }),
 )
 Container.displayName = 'AglynContainer'
 
@@ -64,6 +72,7 @@ export const schema: Aglyn.ComponentSchema<ContainerProps> = {
     sx: { color: '#2196f3' },
   },
   attributes: [
+    semanticElementAttribute('this container'),
     {
       name: 'fixed',
       description:
