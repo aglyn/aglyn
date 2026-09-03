@@ -95,6 +95,24 @@ export const COLLECTION_SEARCH_COMPONENT_ID = 'collectionSearch'
 export const COLLECTION_PAGE_ROUTE_SEGMENT = 'page'
 export const COLLECTION_CATEGORY_ROUTE_SEGMENT = 'category'
 
+/**
+ * The segment an author archive lives under (AGL-2517) —
+ * `/{collection}/author/{slug}`.
+ *
+ * A sibling of the category segment rather than a new top-level route,
+ * because it answers the same question about a different axis: which entries
+ * in THIS collection share this property. That keeps one route table, one
+ * pagination shape and — the reason it matters — one ISR cache key per URL,
+ * since the tenant catch-all caches by path.
+ *
+ * `author` is reserved as a collection-relative segment by this, so an entry
+ * whose slug is literally `author` is unreachable at
+ * `/{collection}/author`. That trade is the same one `category` and `page`
+ * already made, and it is the reason all three are single well-known words
+ * rather than anything an editor would title a post.
+ */
+export const COLLECTION_AUTHOR_ROUTE_SEGMENT = 'author'
+
 /** Namespaces cloned template ids per container/entry (cf. `rep__`). */
 export const COLLECTION_ENTRIES_NODE_ID_PREFIX = 'centry__'
 
@@ -778,6 +796,8 @@ export interface CollectionRoute {
   entrySlug?: string
   /** Set only for `/{collection}/category/{slug}[/page/{n}]`. */
   categorySlug?: string
+  /** Set only for `/{collection}/author/{slug}[/page/{n}]` (AGL-2517). */
+  authorSlug?: string
   /** 1-based list page; always 1 for entry routes. */
   page: number
 }
@@ -819,6 +839,10 @@ export function parseCollectionRoute(
     const categorySlug = collectionCategorySlug(rest[1])
     return categorySlug ? { collectionSlug, categorySlug, page: 1 } : null
   }
+  if (rest.length === 2 && rest[0] === COLLECTION_AUTHOR_ROUTE_SEGMENT) {
+    const authorSlug = collectionCategorySlug(rest[1])
+    return authorSlug ? { collectionSlug, authorSlug, page: 1 } : null
+  }
   if (
     rest.length === 4 &&
     rest[0] === COLLECTION_CATEGORY_ROUTE_SEGMENT &&
@@ -830,7 +854,69 @@ export function parseCollectionRoute(
       ? { collectionSlug, categorySlug, page: Number(rest[3]) }
       : null
   }
+  if (
+    rest.length === 4 &&
+    rest[0] === COLLECTION_AUTHOR_ROUTE_SEGMENT &&
+    rest[2] === COLLECTION_PAGE_ROUTE_SEGMENT &&
+    POSITIVE_INTEGER.test(rest[3])
+  ) {
+    const authorSlug = collectionCategorySlug(rest[1])
+    return authorSlug
+      ? { collectionSlug, authorSlug, page: Number(rest[3]) }
+      : null
+  }
   return null
+}
+
+/**
+ * Does this entry belong to the author a URL segment addresses (AGL-2517)?
+ *
+ * The category rule, one axis over, and for the same reason: an author's
+ * archive should answer to the id, to the display name, and to the legacy
+ * free-typed byline, because a link that works depends on none of those being
+ * the one the data happens to store.
+ *
+ *  * `authorId` — stable across a rename, which is why the record has one;
+ *  * the resolved record's `name` — what a human would type;
+ *  * `authorName` — the pre-AGL-2486 string, so posts written before custom
+ *    authors still appear under the person who wrote them.
+ *
+ * A slug matching nothing yields an empty archive rather than a crash, which
+ * is what the category route already does for an unknown segment.
+ */
+export function entryMatchesAuthorRoute(
+  entry: CollectionEntryRecord,
+  slug: string,
+): boolean {
+  const wanted = collectionCategorySlug(slug)
+  if (!wanted) return false
+  return [entry.authorId, entry.author?.$id, entry.author?.name, entry.authorName]
+    .map((value) => collectionCategorySlug(value))
+    .some((value) => value && value === wanted)
+}
+
+/**
+ * The archive URL for one author inside a collection (AGL-2517).
+ *
+ * Prefers the record id over the display name, so the link survives a rename
+ * — the same precedence `entryMatchesAuthorRoute` accepts on the way back in.
+ * Empty when there is nothing addressable, so a caller can decide between a
+ * link and plain text rather than emitting `/blog/author/`.
+ */
+export function collectionAuthorUrl(options: {
+  collectionSlug: string
+  author?: ContentAuthorRecord | null
+  authorId?: string
+  authorName?: string
+}): string {
+  const slug = collectionCategorySlug(
+    options.authorId ||
+      options.author?.$id ||
+      options.author?.name ||
+      options.authorName,
+  )
+  if (!slug || !options.collectionSlug) return ''
+  return `/${options.collectionSlug}/${COLLECTION_AUTHOR_ROUTE_SEGMENT}/${slug}`
 }
 
 /**

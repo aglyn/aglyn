@@ -33,7 +33,9 @@ import {
   collectionCategorySlug,
   collectionSourceIsBounded,
   collectionSourceReachedBound,
+  collectionAuthorUrl,
   collectionEntryAuthorValues,
+  entryMatchesAuthorRoute,
   collectionEntryMetaValues,
   collectionEntryTokens,
   collectionListUrl,
@@ -2745,5 +2747,155 @@ describe('the author card fills its links from the record (AGL-2516)', () => {
     // Absent, not an empty array: the card's emptiness check and its
     // `Show links` switch both read "no rows" from the same absence.
     expect(out['a'].props['links']).toBeUndefined()
+  })
+})
+
+/**
+ * The author archive (AGL-2517) — `/{collection}/author/{slug}`.
+ *
+ * A sibling of the category archive rather than a new top-level route,
+ * because it answers the same question on a different axis. One route table,
+ * one pagination shape, and one ISR cache key per URL, since the tenant
+ * catch-all caches by path.
+ */
+describe('Author archive routes (AGL-2517)', () => {
+  describe('parsing', () => {
+    it('resolves the archive and its pages', () => {
+      expect(parseCollectionRoute(['blog', 'author', 'zach-gover'])).toEqual({
+        collectionSlug: 'blog',
+        authorSlug: 'zach-gover',
+        page: 1,
+      })
+      expect(
+        parseCollectionRoute(['blog', 'author', 'zach-gover', 'page', '3']),
+      ).toEqual({ collectionSlug: 'blog', authorSlug: 'zach-gover', page: 3 })
+    })
+
+    it('slugifies the segment, so one author has one URL', () => {
+      expect(parseCollectionRoute(['blog', 'author', 'Zach Gover'])).toEqual({
+        collectionSlug: 'blog',
+        authorSlug: 'zach-gover',
+        page: 1,
+      })
+    })
+
+    it('refuses a page number that is not one', () => {
+      expect(
+        parseCollectionRoute(['blog', 'author', 'zach', 'page', '0']),
+      ).toBeNull()
+      expect(
+        parseCollectionRoute(['blog', 'author', 'zach', 'page', 'two']),
+      ).toBeNull()
+    })
+
+    it('leaves the category and entry routes exactly as they were', () => {
+      // The new arm must not shadow the one-segment entry route: `/blog/author`
+      // is still an ENTRY whose slug is `author`, because only the two- and
+      // four-segment shapes are the archive.
+      expect(parseCollectionRoute(['blog', 'author'])).toEqual({
+        collectionSlug: 'blog',
+        entrySlug: 'author',
+        page: 1,
+      })
+      expect(parseCollectionRoute(['blog', 'category', 'guides'])).toEqual({
+        collectionSlug: 'blog',
+        categorySlug: 'guides',
+        page: 1,
+      })
+    })
+  })
+
+  describe('which entries belong to it', () => {
+    const entry = (fields: Record<string, unknown>) => fields as never
+
+    it('answers to the record id, which survives a rename', () => {
+      expect(
+        entryMatchesAuthorRoute(entry({ authorId: 'aB12' }), 'ab12'),
+      ).toBe(true)
+    })
+
+    it('answers to the display name, which is what a human types', () => {
+      expect(
+        entryMatchesAuthorRoute(
+          entry({ author: { $id: 'aB12', name: 'Zach Gover' } }),
+          'zach-gover',
+        ),
+      ).toBe(true)
+    })
+
+    it('answers to the legacy byline, so old posts still appear', () => {
+      // Written before AGL-2486 made the byline a record. The person wrote
+      // them; an archive that hides them is wrong about its own subject.
+      expect(
+        entryMatchesAuthorRoute(
+          entry({ authorName: 'The Aglyn Team' }),
+          'the-aglyn-team',
+        ),
+      ).toBe(true)
+    })
+
+    it('does not match a different author, or an empty slug', () => {
+      expect(
+        entryMatchesAuthorRoute(entry({ authorName: 'Ada' }), 'zach-gover'),
+      ).toBe(false)
+      expect(entryMatchesAuthorRoute(entry({ authorName: 'Ada' }), '')).toBe(
+        false,
+      )
+      expect(entryMatchesAuthorRoute(entry({}), 'ada')).toBe(false)
+    })
+  })
+
+  describe('linking to it', () => {
+    it('prefers the id, so the link survives a rename', () => {
+      expect(
+        collectionAuthorUrl({
+          collectionSlug: 'blog',
+          author: { $id: 'aB12', name: 'Zach Gover' },
+        }),
+      ).toBe('/blog/author/ab12')
+    })
+
+    it('falls back through the name to the legacy byline', () => {
+      expect(
+        collectionAuthorUrl({
+          collectionSlug: 'blog',
+          author: { name: 'Zach Gover' },
+        }),
+      ).toBe('/blog/author/zach-gover')
+      expect(
+        collectionAuthorUrl({
+          collectionSlug: 'blog',
+          authorName: 'The Aglyn Team',
+        }),
+      ).toBe('/blog/author/the-aglyn-team')
+    })
+
+    it('returns empty rather than a url that addresses nobody', () => {
+      // The caller then chooses between a link and plain text, instead of
+      // emitting `/blog/author/`.
+      expect(collectionAuthorUrl({ collectionSlug: 'blog' })).toBe('')
+      expect(
+        collectionAuthorUrl({ collectionSlug: '', authorName: 'Ada' }),
+      ).toBe('')
+    })
+
+    it('round-trips: the url it builds is one the parser resolves', () => {
+      const url = collectionAuthorUrl({
+        collectionSlug: 'blog',
+        author: { name: 'Zach Gover' },
+      })
+      const route = parseCollectionRoute(url.replace(/^\//, '').split('/'))
+      expect(route).toEqual({
+        collectionSlug: 'blog',
+        authorSlug: 'zach-gover',
+        page: 1,
+      })
+      expect(
+        entryMatchesAuthorRoute(
+          { author: { name: 'Zach Gover' } } as never,
+          route!.authorSlug!,
+        ),
+      ).toBe(true)
+    })
   })
 })

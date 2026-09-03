@@ -829,6 +829,10 @@ const loadPageDataCached = cache(
                 ...(route.categorySlug
                   ? { categorySlug: route.categorySlug }
                   : {}),
+                // The author archive (AGL-2517), narrowed by the loader on the
+                // same terms as a category so its page count describes the
+                // archive rather than the whole collection.
+                ...(route.authorSlug ? { authorSlug: route.authorSlug } : {}),
               }
             : {}),
         })

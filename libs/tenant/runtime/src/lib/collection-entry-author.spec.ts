@@ -286,3 +286,103 @@ describe('custom author records (AGL-2486)', () => {
     }
   })
 })
+
+/**
+ * The author archive narrows the listing (AGL-2517).
+ *
+ * The rule the category route already holds: filter BEFORE counting pages, or
+ * the archive advertises pages that render empty and hides entries that
+ * exist.
+ */
+describe('the author archive (AGL-2517)', () => {
+  const byAda = () =>
+    publishedEntry({ $id: 'e-ada', slug: 'ada-post', authorName: 'Ada' })
+  const byZach = () => ({
+    ...publishedEntry({}),
+    $id: 'e-zach',
+    slug: 'zach-post',
+    authorName: 'Zach Gover',
+  })
+
+  it('keeps only the entries that author wrote', async () => {
+    entryDocs = [byAda(), byZach()]
+    const content = await getCollectionContent({
+      hostId: HOST,
+      collectionSlug: 'blog',
+      authorSlug: 'ada',
+    })
+    expect(content.entries.map((entry) => entry.slug)).toEqual(['ada-post'])
+  })
+
+  it('counts pages over the ARCHIVE, not the collection', async () => {
+    // Two entries, one author, one per page: the archive is ONE page. Counting
+    // first would advertise two and serve an empty second.
+    entryDocs = [byAda(), byZach()]
+    const content = await getCollectionContent({
+      hostId: HOST,
+      collectionSlug: 'blog',
+      authorSlug: 'ada',
+      page: 1,
+      perPage: 1,
+    })
+    expect(content.pagination?.totalEntries).toBe(1)
+    expect(content.pagination?.totalPages).toBe(1)
+  })
+
+  it('names the author from a post they actually wrote', async () => {
+    entryDocs = [byAda(), byZach()]
+    const content = await getCollectionContent({
+      hostId: HOST,
+      collectionSlug: 'blog',
+      authorSlug: 'zach-gover',
+    })
+    expect(content.author?.name).toBe('Zach Gover')
+    expect(content.author?.known).toBe(true)
+    expect(content.author?.slug).toBe('zach-gover')
+  })
+
+  it('carries the resolved RECORD when the entry references one', async () => {
+    authorsById['author-1'] = {
+      type: HostEntityType.PERSON,
+      name: 'Zach Gover',
+      bio: 'Building the open web platform.',
+      links: [{ platform: 'x', url: 'https://x.com/aglyn' }],
+    }
+    entryDocs = [{ ...publishedEntry({}), authorId: 'author-1' }]
+    const content = await getCollectionContent({
+      hostId: HOST,
+      collectionSlug: 'blog',
+      authorSlug: 'author-1',
+    })
+    // The heading, the bio and the links all come from here — and from a read
+    // the page was already paying for, not a second one.
+    expect(content.author?.record?.bio).toBe('Building the open web platform.')
+    expect(content.author?.record?.links).toEqual([
+      { platform: 'x', url: 'https://x.com/aglyn' },
+    ])
+  })
+
+  it('renders an EMPTY archive for an author nobody has published', async () => {
+    entryDocs = [byAda()]
+    const content = await getCollectionContent({
+      hostId: HOST,
+      collectionSlug: 'blog',
+      authorSlug: 'nobody',
+    })
+    // Empty, never a crash — the category route's rule for an unknown segment.
+    expect(content.entries).toEqual([])
+    expect(content.author?.known).toBe(false)
+    // The raw segment stands in for a name there is no record to supply.
+    expect(content.author?.name).toBe('nobody')
+  })
+
+  it('leaves an unfiltered listing untouched', async () => {
+    entryDocs = [byAda(), byZach()]
+    const content = await getCollectionContent({
+      hostId: HOST,
+      collectionSlug: 'blog',
+    })
+    expect(content.entries).toHaveLength(2)
+    expect(content.author).toBeUndefined()
+  })
+})
