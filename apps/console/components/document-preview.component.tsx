@@ -57,6 +57,7 @@ import {
   readPreviewState,
 } from '../constants/preview-state'
 import firestoreOneShotRetry from '../utils/firestore-one-shot-retry'
+import { useDeclareDocumentSubject } from './document-subject'
 
 const SUPPRESSED_SCREEN_LINKS = { suppressNavigation: true }
 
@@ -75,6 +76,24 @@ const KIND_LABEL: Record<PreviewKind, string> = {
   layout: 'layout',
   template: 'template',
   form: 'form',
+}
+
+/**
+ * The host-scoped collection each previewable kind's PARENT document lives in
+ * (AGL-2551), i.e. `hosts/{hostId}/{collection}/{docId}`.
+ *
+ * Spelled out rather than pluralized from the kind. The two are equal today
+ * and the map is one line longer for it, but a kind whose collection is not
+ * `kind + 's'` would otherwise read a path that does not exist and fail as a
+ * missing name — silently, since the name is optional decoration on this
+ * surface.
+ */
+const KIND_COLLECTION: Record<PreviewKind, string> = {
+  screen: 'screens',
+  component: 'components',
+  layout: 'layouts',
+  template: 'templates',
+  form: 'forms',
 }
 
 /**
@@ -202,10 +221,73 @@ export function DocumentPreview(props: DocumentPreviewProps) {
     advertising: boolean
   } | null>(null)
 
+  // The display name of the document being previewed, for the browser tab
+  // (AGL-2551). `undefined` while the read is outstanding, and it stays that
+  // way if the read finds nothing — see the declaration below.
+  const [subjectName, setSubjectName] = useState<string | undefined>(undefined)
+
   const hostId = ids?.hostId
   const kind = ids?.kind
   const docId = ids?.docId
   const versionId = ids?.versionId
+
+  /**
+   * The tab names WHICH document is open, not just its site (AGL-2486).
+   *
+   * The besigner routes get this for free: they already hold the document, so
+   * they hand its `displayName` to `useDeclareDocumentSubject` and the id the
+   * server put in the title is swapped for the name. Preview held nothing to
+   * hand over — the snapshot in `localStorage` carries `nodes` and `theme` and
+   * no name — so all five preview routes shipped titling themselves with the
+   * raw id (AGL-2551). That is not a fallback firing; it was the only title
+   * the route could produce.
+   *
+   * So the name is read here, once, from the PARENT document rather than the
+   * version: `displayName` is a property of the screen/component/layout/
+   * template/form, and `AglynScreenVersion` has no such field — unlike
+   * `layoutId`, which really is version-first and is resolved that way by the
+   * besigner and the tenant runtime alike. Reading the version for a name
+   * would find nothing on every document there is.
+   *
+   * One document read, on a surface that already reads the host, its
+   * component definitions and its form designs before it can paint. A failure
+   * is swallowed: an unnamed preview tab is the behavior that shipped, and
+   * the id title underneath it is still unique per document.
+   */
+  useEffect(() => {
+    if (!firestore || !hostId || !kind || !docId) return undefined
+    let cancelled = false
+    firestoreOneShotRetry(
+      () =>
+        getDoc(
+          firestoreDoc(
+            firestore,
+            'hosts',
+            hostId,
+            KIND_COLLECTION[kind],
+            docId,
+          ),
+        ),
+      'preview-subject',
+    )
+      .then((snapshot) => {
+        if (cancelled) return
+        setSubjectName(
+          (snapshot.data() as { displayName?: string } | undefined)
+            ?.displayName,
+        )
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [firestore, hostId, kind, docId])
+
+  // Unconditional, and tolerant of a name that has not arrived: until one
+  // does, the hook leaves the server's id title alone rather than blanking the
+  // subject. Clears on unmount so closing a preview cannot strand its name in
+  // a tab that has navigated elsewhere.
+  useDeclareDocumentSubject(docId, subjectName)
 
   // The host's consent config (GA id + mode), read lazily the first time the
   // simulator is switched on — the default 'off' costs nothing.
