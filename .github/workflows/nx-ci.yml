@@ -630,6 +630,16 @@ jobs:
       # Keep the split and `--maxWorkers=2` anyway: they are good hygiene and
       # cost nothing. Just do not read them as the fix for this.
       #
+      # ── A DIFFERENT RED WITH A DIFFERENT SIGNATURE (AGL-2528) ────────────
+      # A red carrying a NAMED failing suite, an `● Test suite failed to run`
+      # and a real `Tests:` summary with zero failed assertions is not this
+      # one and not a resource failure either: it is a jest worker dying from
+      # SIGSEGV inside V8's mark-compact collector, which strands whatever
+      # file that worker held. `tools/jest/worker-crash-retry.js` re-dispatches
+      # such a file, and prints a line naming the suite and the signal when it
+      # does. Reducing worker count further would only lower the odds of
+      # meeting it.
+      #
       # Do NOT quietly drop `--maxWorkers=2` to make CI faster. It is the one
       # difference between the invocation measured green on this tree and the
       # one measured red on it. The flag DOES reach jest rather than being
