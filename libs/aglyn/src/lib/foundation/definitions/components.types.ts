@@ -239,6 +239,17 @@ export enum FieldComponentType {
    * image list) fall back to free text rather than being clobbered.
    */
   CSS_GRADIENT = 'css-gradient',
+  /**
+   * Row-and-column grid editor for the Table element (AGL-2543).
+   *
+   * The persisted prop is still ONE string — pipe-delimited rows with the
+   * markdown divider carrying per-column alignment — so the renderer and
+   * existing documents stay untouched, and a comparison table already
+   * authored inside a Markdown element pastes straight in. This is the
+   * affordance that makes the element no-code: without it an author edits
+   * pipe syntax, which is the audience the besigner exists to spare.
+   */
+  DATA_TABLE = 'data-table',
   DATE_PICKER = 'date-picker',
   DUAL_LIST_SELECT = 'dual-list-select',
   FIELD_ARRAY = 'field-array',

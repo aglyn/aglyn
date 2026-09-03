@@ -45,6 +45,7 @@ import * as ListItemText from './components/list-item-text'
 import * as FunctionWidget from './components/function-widget'
 import * as Product from './components/product'
 import * as Blocks from './components/blocks'
+import * as DataTable from './components/data-table'
 import * as Collection from './components/collection'
 import * as Image from './components/image'
 import * as Icon from './components/icon'
@@ -97,6 +98,9 @@ export const MUI_BUNDLE: Array<{
     // form, formField moved to @aglyn/plugins-forms (AGL-395).
     { component: Blocks.VideoEmbed, schema: Blocks.videoEmbedSchema, presets: Blocks.blockPresets },
     { component: Blocks.SocialLinks, schema: Blocks.socialLinksSchema },
+    // A real data grid (AGL-2543): the feature matrix a comparison page is
+    // built around, which the palette had no element for at all.
+    { component: DataTable.default, schema: DataTable.dataTableSchema, presets: DataTable.dataTablePresets },
     // Content collections (AGL-551/582): entries repeater, markdown entry
     // body, related posts, share bar, entry meta.
     { component: Collection.CollectionEntries, schema: Collection.collectionEntriesSchema, presets: Collection.collectionPresets },

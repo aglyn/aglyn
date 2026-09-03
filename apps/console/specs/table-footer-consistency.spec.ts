@@ -903,6 +903,16 @@ function tablesWithoutFooters(): string[] {
  */
 const NOT_A_LIST: Array<[string, string]> = [
   [
+    'libs/plugins/mui/src/lib/components/data-table.tsx',
+    'The Table ELEMENT (AGL-2543), not a view of a collection. Its rows are ' +
+      'typed into the attributes panel by the author — a feature matrix or a ' +
+      'spec sheet — so there is no query behind it, nothing that grows while ' +
+      'the page is open, and no cursor a footer could advance. A pager here ' +
+      'would offer to page a constant the author can see in full while they ' +
+      'edit it. It maps rows into itself, which is why the detector sees it: ' +
+      'the map is over a parsed prop, not over documents.',
+  ],
+  [
     'apps/console/app/(app)/admin/margin-utilization/page.tsx',
     'Two tables, and neither wants a footer. The first is one row per BAND — ' +
       'a fixed vocabulary, the same rows on every load, so a pager would ' +
@@ -1405,7 +1415,14 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // not follow the size of the file it describes — which is the property
     // this list exists to record. Raised here deliberately rather than by a
     // walk that quietly stopped reaching a file.
-    expect(NOT_A_LIST).toHaveLength(37)
+    //
+    // 38 since the besigner gained a Table ELEMENT (AGL-2543). It is the
+    // first entry here that is not a console surface at all: its rows are
+    // typed by an author into the attributes panel, so the map the detector
+    // sees is over a parsed prop rather than over documents, and there is no
+    // query behind it for a footer to page. Bounded by what somebody typed
+    // is the strongest form of the property this list records.
+    expect(NOT_A_LIST).toHaveLength(38)
   })
 })
 
