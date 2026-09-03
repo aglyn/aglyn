@@ -70,7 +70,7 @@ for the site.
 
 | Element | What it's for |
 | --- | --- |
-| **Box** | The plain container. No styling of its own — you give it padding, background and borders from the Styles panel. Renders as `div`, `span`, `p`, `figure`, `figcaption`, `blockquote` or `pre`. For landmarks, use **Section** instead. |
+| **Box** | The plain container. No styling of its own — you give it padding, background and borders from the Styles panel. Renders as `div`, `span`, `p`, `figure`, `figcaption`, `blockquote` or `pre`. For a landmark that needs an accessible name, use **Section**. |
 | **Section** | Grouping inside a semantic HTML element (`section`, `article`, `aside`, `nav`, `header`, `footer`) with an accessible label, so the page keeps a meaningful document outline. `main` is not on the list — see [The page's `main` landmark](#the-pages-main-landmark). |
 | **Container** | Centers content and caps its maximum width. |
 | **Stack** | One-dimensional row or column with a gap. Also the element that carries **repeat over a dataset**. |
@@ -101,6 +101,20 @@ Nothing else can claim it: neither **Section**'s element picker, nor a
 emit a `main`, because a second one makes the landmark ambiguous, which is worse than
 having none.
 
+### Every container can be a semantic element
+
+**Stack**, **Container**, **Grid**, **Paper**, **Card**, **Toolbar Content** and
+**App Bar** each have a **Component** attribute offering `div`, `section`, `article`,
+`aside`, `nav`, `header` and `footer`. So the row that holds your nav links can *be* the
+`nav`, rather than being wrapped in one more element to say so.
+
+Leave it unset and the element keeps its own default — an App Bar stays a `header`, a
+Stack stays a `div`. Only **Section** also gives the region an accessible name, which a
+page with several landmarks of the same kind needs, so reach for Section when you have
+two navs or two asides and for the picker when you have one.
+
+`main` is on none of these lists; see below.
+
 ### `header` and `footer` for your site chrome
 
 `main` is only half the picture: assistive tech and search engines also look for the
@@ -112,7 +126,7 @@ banner and contentinfo regions around it. Those are yours to place.
   and the footer's to `footer`, and the published page carries both landmarks around the
   slot's `main`, without a wrapper between them.
 - A **Section** anywhere inside a page can be `header` or `footer` too, and adds an
-  accessible label with it.
+  accessible label with it. So can any of the containers listed above, without the label.
 - The **Document** layer takes the same list, for a document that _is_ one region — a
   layout that is nothing but chrome, say. Picking a landmark other than `main` there
   leaves the page without a `main`, as above.

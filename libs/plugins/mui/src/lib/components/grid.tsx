@@ -31,6 +31,10 @@ import {
 } from '@aglyn/shared-data-enums/breakpoint-span'
 import MuiGrid from '@mui/material/Grid'
 import { forwardRef, type ReactNode } from 'react'
+import {
+  semanticElementAttribute,
+  semanticElementProp,
+} from '../utils/element-picker'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
@@ -176,6 +180,7 @@ const GridElement = forwardRef<HTMLDivElement, GridElementProps>(
         // has to mean by the time it reaches MUI.
         {...dropClearedProps({ direction, wrap })}
         {...dropClearedProps(rest)}
+        {...semanticElementProp((rest as { component?: unknown }).component)}
       >
         {children}
       </MuiGrid>
@@ -205,6 +210,7 @@ export const schema: Aglyn.ComponentSchema<GridElementProps> = {
   category: Aglyn.ComponentCategory.LAYOUT,
   icon: { path: mdiViewGrid.path, sx: { color: '#2196f3' } },
   attributes: [
+    semanticElementAttribute('this grid'),
     {
       name: 'container',
       label: 'Container?',
