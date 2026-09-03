@@ -42,10 +42,16 @@ name: Main Gate
 # ---------------------------------------------------------------------------
 # WHY TWO JOBS
 # ---------------------------------------------------------------------------
-# `fast` is typecheck + docs:typecheck + every derived guard. It finishes in minutes,
-# so it runs every 15. `full` adds the test sweep and the PRODUCTION builds and
-# runs hourly, because it cannot finish in 15 minutes and pretending otherwise
-# just queues runs behind each other.
+# `fast` is typecheck + docs:typecheck + every derived guard. It finishes in
+# minutes, so it runs on every push. `full` adds the test sweep and the
+# PRODUCTION builds; it takes a measured 25-41 minutes, so it cannot run per
+# push and is DEBOUNCED to at most one run an hour (AGL-2552) — a push asks
+# whether the last sweep has aged out, and only a stale one runs.
+#
+# ⚑ Both cadences were once written as crons, and both were fiction. `full`
+# asked for 24 runs a day and got 6; median gap 246 minutes, for the job that
+# says a release is safe. Do not describe a cadence here without measuring the
+# delivered one — that is twice this file has claimed a rate it did not have.
 #
 # The split is not a guess about which half matters. ALL FOUR of the 2026-08-22
 # failures were in the `fast` half — one typecheck, three guards. That is what
@@ -84,9 +90,9 @@ on:
     # skipped entirely (measured: 11% delivered). A BACKSTOP now rather than
     # the cadence; `tools/gate.sh` at promotion time remains the guarantee.
     - cron: '7,22,37,52 * * * *'
-    # Hourly for the full sweep, offset again. This one is still the only
-    # scheduled path to `full`, so its delivery rate is the real cadence of the
-    # test-and-build sweep.
+    # Hourly, offset again. No longer the only path to `full` — a push now asks
+    # whether the sweep is stale (AGL-2552) — so this is a BACKSTOP for a quiet
+    # `main`, where nothing pushes and nothing therefore asks.
     - cron: '11 * * * *'
   workflow_dispatch:
     inputs:
@@ -221,6 +227,39 @@ jobs:
             echo "Gated \`$(git rev-parse --short HEAD)\`."
           } >> "$GITHUB_STEP_SUMMARY"
 
+  # IS THE FULL SWEEP DUE? (AGL-2552)
+  #
+  # AGL-2534 moved `fast` off the clock and onto the push event, because GitHub
+  # delivered 13 of 120 requested cron runs. It deliberately left `full` on the
+  # hourly cron, and measuring that half a day later gave the number the file
+  # never had: the sweep asked for 24 runs and got 6 — 25%, median gap 246
+  # minutes. The job that decides whether a release is safe was the one running
+  # least often, while the file said "hourly".
+  #
+  # A push cannot fire a 33-minute sweep directly; that is why AGL-2534 did not
+  # do it. So the push instead ASKS whether the sweep is stale, and only a stale
+  # one runs. The interval sets the cadence, not the push rate: a burst of six
+  # commits buys one sweep, and an hour with any activity reliably gets one.
+  #
+  # Cheap by construction — no checkout, no install, one API walk, seconds.
+  sweep-due:
+    name: is the full sweep due
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      due: ${{ steps.decide.outputs.due }}
+      reason: ${{ steps.decide.outputs.reason }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: tools/scripts
+          sparse-checkout-cone-mode: false
+      - id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAIN_GATE_SCHEDULE: ${{ github.event.schedule }}
+          MAIN_GATE_INPUTS_FULL: ${{ inputs.full }}
+        run: node tools/scripts/check-main-gate-full-sweep.mjs
   full:
     name: full (tests + production builds)
     runs-on: ubuntu-latest
@@ -235,14 +274,17 @@ jobs:
     # spread — a bound below the real distribution turns honest slow runs into
     # cancellations, which is the AGL-2378 mistake.
     timeout-minutes: 90
-    # `inputs.full` is READ here. It was declared and then ignored, so every
-    # manual dispatch ran the 90-minute sweep whatever the box said — including
-    # a dispatch whose only purpose was to check the fast path. A declared input
-    # that nothing reads is worse than no input: the UI offers a choice that
-    # silently does not exist.
-    if: >-
-      (github.event_name == 'workflow_dispatch' && inputs.full) ||
-      github.event.schedule == '11 * * * *'
+    # The three original paths — a dispatch that asked for the sweep, and the
+    # hourly cron — are unchanged and still decided here, inside
+    # `check-main-gate-full-sweep.mjs`. `sweep-due` only ever ADDS the push
+    # path, so nothing that used to run stops running.
+    #
+    # `inputs.full` is READ (via that script). It was once declared and then
+    # ignored, so every manual dispatch ran the long sweep whatever the box
+    # said. A declared input that nothing reads is worse than no input: the UI
+    # offers a choice that silently does not exist.
+    needs: sweep-due
+    if: needs.sweep-due.outputs.due == 'true'
     steps:
       - uses: actions/checkout@v7
         with:
