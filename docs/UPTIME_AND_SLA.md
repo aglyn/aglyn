@@ -675,7 +675,9 @@ Notes that keep these honest:
   the project. The exclusion is on the URL rather than on the absence of
   `serviceContext.version`, which separates the two just as cleanly today but
   fails the wrong way: a deployment that stopped stamping a commit ref would
-  go silently unwatched, whereas a dev report with no URL merely stays noisy. **A dead beacon is
+  go silently unwatched, whereas a dev report with no URL merely stays noisy.
+  That exclusion is now defence in depth rather than the fix — since AGL-1925
+  the beacon refuses to write at all off a deployed runtime. **A dead beacon is
   indistinguishable from zero errors**, and all three failure paths in
   `reportClientErrors` end in a `console.warn` to a log that retains an hour
   and drains nowhere. The endpoint writes one INFO entry to the separate
@@ -692,6 +694,32 @@ Notes that keep these honest:
   check period (15 min). The heartbeat log id is *not* `client-errors` on
   purpose — writing there at `severity >= ERROR` would trip the existing
   policy on every probe, building the alert fatigue this exists to prevent.
+- **Hydration mismatches are split off into a RATE policy (AGL-2523).** React
+  #418/#423/#425 are reported by `onRecoverableError` — the visitor has a
+  working page, React re-rendered — and a page translator or an in-app-browser
+  webview produces exactly what a genuine server/client divergence produces.
+  Measured 2026-09-01: eight #418s inside a nine-minute window, one build,
+  three different pages, and those pages loaded with a clean console the next
+  day. One visitor. So the beacon labels them `kind: "hydration"`, the
+  per-entry `Client error beacon` policy excludes that kind, and
+  `Client hydration mismatches spiking (AGL-2523)` watches the log-based metric
+  `client_hydration_errors` for **more than 15 in 30 minutes**. Nothing is
+  dropped — the entries are written at full severity and still group in Error
+  Reporting — and the threshold sits above one visitor because the beacon caps
+  a pageview at 10 events and dedupes identical ones. ⚑ `kind` reaches the
+  payload as a TOP-LEVEL field for exactly this reason; before AGL-2523 it was
+  folded into `message` on the stackless path only, so every stacked error
+  arrived unclassifiable and the policy could express nothing narrower than
+  "any entry at all".
+- **A stack with no frame of ours never arrives.** `isInjectedThirdPartyFrame`
+  drops an error whose every frame is the DOCUMENT rather than a script we
+  served — the signature of code a webview or extension evaluated inline. Found
+  on `sendDataToNative`, the Meta in-app browser's native bridge, reported as an
+  error of ours from aglyn.com/pricing. The comparison is against the document
+  and never against `/_next/static/`: an asset-path rule would delete every
+  error from a self-hosted deployment serving assets off a CDN. The honest cost
+  is that a throw from one of our own inline bootstrap scripts looks identical
+  and goes with it.
 - `scheduled-jobs` is the AGL-1955 half of the dead-man's switch, and it is
   the second condition here that watches for **silence**. The `Cloud
   Scheduler` row below it can only report the *presence* of a failed attempt:

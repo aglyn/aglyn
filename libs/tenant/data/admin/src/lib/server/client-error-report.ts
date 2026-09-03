@@ -124,6 +124,17 @@ function toReportedEvent(
       'type.googleapis.com/google.devtools.clouderrorreporting.v1beta1.ReportedErrorEvent',
     serviceContext: { service, version },
     message: hasStack ? event.stack : `${event.kind}: ${event.message}`,
+    // Outside `serviceContext` so Error Reporting ignores it while a log-match
+    // policy can still filter on it — the same placement, for the same reason,
+    // that the server half gives `route`/`method`/`digest`.
+    //
+    // Until AGL-2523 the kind reached the payload ONLY on the stackless path,
+    // folded into `message` and `reportLocation.functionName`. Every stacked
+    // error — which is nearly all of them — arrived unclassifiable, so the
+    // `Client error beacon` policy had no way to express anything narrower
+    // than "any entry at all". That is why it pages for one visitor whose
+    // webview rewrote the DOM.
+    kind: clampString(event.kind, 32) || 'error',
     context: {
       httpRequest: event.url ? { url: event.url } : undefined,
       ...(hasStack

@@ -88,6 +88,90 @@ function clamp(value: unknown, max: number): string {
   return String(value ?? '').slice(0, max)
 }
 
+/**
+ * Every URL a stack frame points at, whichever engine produced the stack.
+ *
+ * One pattern covers both formats because the frame's URL is always followed
+ * by `:line:col`: V8 writes `at fn (URL:1:2)` and `at URL:1:2`, WebKit and
+ * Firefox write `fn@URL:1:2` and `@URL:1:2`. Matching on the suffix rather
+ * than on the prefix means neither engine needs its own branch, and a format
+ * this code has never seen degrades to "no frames parsed" rather than to a
+ * wrong answer.
+ */
+function stackFrameUrls(stack: string): string[] {
+  const urls: string[] = []
+  const frame = /((?:https?|file|blob):\/\/[^\s()]+?):\d+:\d+/g
+  let match: RegExpExecArray | null
+  while ((match = frame.exec(stack)) !== null) urls.push(match[1])
+  return urls
+}
+
+/**
+ * Was this thrown by a script somebody ELSE evaluated into our page?
+ *
+ * Measured 2026-09-02 (AGL-2523) on aglyn.com/pricing, reported as an error
+ * of ours:
+ *
+ *     sendDataToNative@https://aglyn.com/pricing:1:1325
+ *     sendPageHideMessage@https://aglyn.com/pricing:1:4139
+ *     @https://aglyn.com/pricing:1:6257
+ *
+ * `sendDataToNative` is the Meta in-app browser's native bridge, injected by
+ * the Facebook/Instagram webview. The tell is not the function name — that
+ * would be a denylist needing a new entry per vendor — but the URLs: every
+ * frame is the DOCUMENT, so the code was evaluated inline in the page rather
+ * than loaded from a script we served. Nothing we ship can be fixed in
+ * response to it, which is the same test the opaque `Script error.` cut
+ * already applies.
+ *
+ * ⚑ Deliberately `every`, and deliberately compared against the document
+ * rather than against our asset path. A rule like "no frame under
+ * `/_next/static/`" would delete EVERY error from a self-hosted deployment
+ * that serves its assets from a CDN, because none of its frames would match.
+ * Comparing to the document cannot fail that way: a CDN frame is not the
+ * document either, so it keeps the report.
+ *
+ * The cost is honest and small: a throw from one of our own inline
+ * bootstrap scripts looks the same and is dropped with it. That trade buys a
+ * rule that needs no maintenance as new webviews and extensions appear.
+ */
+export function isInjectedThirdPartyFrame(
+  stack: string,
+  documentUrl: string,
+): boolean {
+  const urls = stackFrameUrls(stack)
+  // No frames parsed is not evidence of anything — keep the report.
+  if (!urls.length) return false
+  return urls.every((url) => scrubUrl(url) === documentUrl)
+}
+
+/**
+ * React's hydration-mismatch family, which a page TRANSLATOR causes and a
+ * real render divergence also causes.
+ *
+ * These are `onRecoverableError` reports, not crashes: React has already
+ * re-rendered on the client and the visitor has a working page. They arrive
+ * here as uncaught errors only because React re-throws them to `reportError`.
+ *
+ * They are marked rather than dropped, and the distinction is the whole
+ * design. Dropping would hide a real hydration regression, which is a genuine
+ * and expensive bug; the entries stay in `client-errors` at full severity and
+ * still group in Error Reporting. What the mark buys is that the log-match
+ * policy can stop paging for ONE visitor whose browser rewrote the DOM, while
+ * a rate-based policy on the same mark still catches a systemic one.
+ *
+ * Measured 2026-09-01: eight #418 reports inside a nine-minute window, one
+ * build, three different pages — one visitor, and the same pages loaded with
+ * a clean console the next day.
+ */
+const HYDRATION_MINIFIED = /Minified React error #(?:418|423|425)\b/
+const HYDRATION_TEXT =
+  /Hydration failed because|Text content does not match server-rendered HTML|There was an error while hydrating/
+
+export function isHydrationMismatch(message: string): boolean {
+  return HYDRATION_MINIFIED.test(message) || HYDRATION_TEXT.test(message)
+}
+
 let installed = false
 
 /**
@@ -199,14 +283,22 @@ export function installErrorBeacon(options?: ErrorBeaconOptions): void {
       // Cross-origin scripts yield an opaque "Script error." with nothing
       // actionable attached; reporting it would only create a noisy group.
       if (!message || message === 'Script error.') return
+      const pageUrl = scrubUrl(window.location.href)
+      const stack = error?.stack ? clamp(error.stack, MAX_STACK) : undefined
+      // A webview or extension that evaluated its own code into our page —
+      // see `isInjectedThirdPartyFrame`. Nothing we ship can be changed in
+      // response, so it is dropped on the same test as `Script error.`.
+      if (stack && isInjectedThirdPartyFrame(stack, pageUrl)) return
       enqueue({
-        kind: 'error',
+        // MARKED, not dropped: a translator causes these and so does a real
+        // render divergence, and only a rate tells them apart.
+        kind: isHydrationMismatch(message) ? 'hydration' : 'error',
         message,
-        stack: error?.stack ? clamp(error.stack, MAX_STACK) : undefined,
+        stack,
         source: scrubUrl(event.filename) || undefined,
         line: typeof event.lineno === 'number' ? event.lineno : undefined,
         col: typeof event.colno === 'number' ? event.colno : undefined,
-        url: scrubUrl(window.location.href),
+        url: pageUrl,
       })
     } catch {
       // Never rethrow from an error handler.

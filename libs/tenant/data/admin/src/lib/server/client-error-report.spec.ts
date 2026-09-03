@@ -315,6 +315,45 @@ describe('reportClientErrors (AGL-1925) — a laptop is not a deployment', () =>
     expect(body.logName).toBe(`projects/aglyn-main/logs/${mod.CLIENT_ERROR_LOG_ID}`)
   })
 
+  it('carries `kind` as a TOP-LEVEL field, so a policy can filter on it', async () => {
+    // AGL-2523: until this, the kind reached the payload only on the stackless
+    // path (folded into `message` and `reportLocation.functionName`), so every
+    // stacked error — nearly all of them — was unclassifiable and the
+    // `Client error beacon` policy could express nothing narrower than "any
+    // entry at all".
+    process.env['VERCEL'] = '1'
+    const fetchMock = okFetch()
+    const mod = await load()
+    await mod.reportClientErrors(
+      [
+        {
+          kind: 'hydration',
+          message: 'Minified React error #418',
+          stack: 'Error: x\n  at rJ (https://aglyn.com/_next/static/chunks/a.js:1:2)',
+        },
+      ],
+      { service: 'tenant-web' },
+    )
+    const payload = JSON.parse(fetchMock.mock.calls[0][1].body).entries[0].jsonPayload
+    expect(payload.kind).toBe('hydration')
+    // Outside serviceContext, or Error Reporting would treat it as identity.
+    expect(payload.serviceContext.kind).toBeUndefined()
+    // The stack still drives grouping.
+    expect(payload.message).toContain('at rJ')
+  })
+
+  it('defaults a missing kind rather than writing an unfilterable entry', async () => {
+    process.env['VERCEL'] = '1'
+    const fetchMock = okFetch()
+    const mod = await load()
+    await mod.reportClientErrors(
+      [{ kind: '', message: 'boom' } as never],
+      { service: 'tenant-web' },
+    )
+    const payload = JSON.parse(fetchMock.mock.calls[0][1].body).entries[0].jsonPayload
+    expect(payload.kind).toBe('error')
+  })
+
   it('still reports from a self-hosted container, which sets no VERCEL', async () => {
     delete process.env['VERCEL']
     process.env['AGLYN_STANDALONE'] = '1'
