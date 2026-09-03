@@ -9,6 +9,25 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.60 — 2026-09-03
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.59...v1.0.0-beta.60)
+
+### Fixed
+
+- **console:** the backfill idempotency guard asserts its own org, not the project ([AGL-2528](https://linear.app/aglyn/issue/AGL-2528))
+
+### Documentation
+
+- **ci:** the gate's header describes a reporting path it does not have ([AGL-2533](https://linear.app/aglyn/issue/AGL-2533))
+
+<details>
+<summary>Also in this release: 1 ci</summary>
+
+- **tools:** the repo runs one node major, and nothing may name a second ([AGL-2531](https://linear.app/aglyn/issue/AGL-2531), [AGL-2528](https://linear.app/aglyn/issue/AGL-2528))
+
+</details>
+
 ## v1.0.0-beta.59 — 2026-09-03
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.58...v1.0.0-beta.59)
