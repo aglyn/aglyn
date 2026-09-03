@@ -207,7 +207,9 @@
     "test:run-guards": "node tools/scripts/run-guards.mjs --self-test",
     "typecheck:changed": "node tools/scripts/typecheck.mjs --changed",
     "test:gate-report": "node tools/scripts/gate-report.mjs --self-test",
-    "check:feature-matrix": "SWC_NODE_PROJECT=tools/marketing/tsconfig.tables.json node --import @swc-node/register/esm-register tools/scripts/gen-feature-matrix.mts --check"
+    "check:feature-matrix": "SWC_NODE_PROJECT=tools/marketing/tsconfig.tables.json node --import @swc-node/register/esm-register tools/scripts/gen-feature-matrix.mts --check",
+    "check:main-gate-verdicts": "node tools/scripts/check-main-gate-verdicts.mjs",
+    "test:main-gate-verdicts": "node --test tools/scripts/lib/main-gate-verdicts.test.mjs"
   },
   "dependencies": {
     "@base-ui/react": "1.6.0",
