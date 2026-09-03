@@ -109,11 +109,33 @@ having none.
 `nav`, rather than being wrapped in one more element to say so.
 
 Leave it unset and the element keeps its own default — an App Bar stays a `header`, a
-Stack stays a `div`. Only **Section** also gives the region an accessible name, which a
-page with several landmarks of the same kind needs, so reach for Section when you have
-two navs or two asides and for the picker when you have one.
+Stack stays a `div`.
+
+Pick anything but `div` and an **Accessible label** field appears beside it. Fill it in
+whenever the page has two landmarks of the same kind: a site nav and a footer nav are
+both announced as "navigation" until one of them says which. One nav on a page can go
+unnamed; two cannot.
 
 `main` is on none of these lists; see below.
+
+### Which link groups want to be a `nav`
+
+`nav` marks a **major** block of navigation, not every group of links — the more you
+place, the less each one tells a visitor.
+
+- **Your site nav** — yes. One per page.
+- **Your footer's link columns** — yes, but **one** `nav` around the whole set, not one
+  per column. Six columns marked individually is six regions all called "navigation".
+- **A mega menu inside the site nav** — no. It is part of the nav it opens from, and a
+  `nav` inside a `nav` is a landmark that says nothing new. What those panels need is a
+  correct expand/collapse state on the trigger, which the **Nav menu** element handles.
+- **A mobile drawer** — yes, and name it, since it and the desktop nav are the same
+  links twice. (If the desktop nav is hidden with `display: none` at that width it
+  leaves the accessibility tree entirely, and only one is ever announced.)
+- **A legal or social row** — no. It is a utility row, not a navigation block; leaving
+  it unmarked keeps the landmarks that matter easy to find.
+- **Breadcrumbs** and **Pagination** are the two exceptions worth marking beyond the
+  above, each named for what it is.
 
 ### `header` and `footer` for your site chrome
 
@@ -125,8 +147,8 @@ banner and contentinfo regions around it. Those are yours to place.
   **Attribute overrides → Component root → Component** on it: set the nav's to `header`
   and the footer's to `footer`, and the published page carries both landmarks around the
   slot's `main`, without a wrapper between them.
-- A **Section** anywhere inside a page can be `header` or `footer` too, and adds an
-  accessible label with it. So can any of the containers listed above, without the label.
+- A **Section** anywhere inside a page can be `header` or `footer` too. So can any of the
+  containers listed above.
 - The **Document** layer takes the same list, for a document that _is_ one region — a
   layout that is nothing but chrome, say. Picking a landmark other than `main` there
   leaves the page without a `main`, as above.

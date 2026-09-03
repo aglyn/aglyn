@@ -24,8 +24,9 @@ import MuiContainer, { type ContainerProps } from '@mui/material/Container'
 import { createElement, forwardRef } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import {
+  applySemanticElement,
   semanticElementAttribute,
-  semanticElementProp,
+  semanticElementLabelAttribute,
 } from '../utils/element-picker'
 import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
@@ -51,8 +52,7 @@ import { generatePresetId } from '../utils/generate-preset-id'
  */
 const Container = forwardRef<HTMLDivElement, ContainerProps>((props, ref) =>
   createElement(MuiContainer, {
-    ...dropClearedProps(props),
-    ...semanticElementProp((props as { component?: unknown }).component),
+    ...applySemanticElement(dropClearedProps(props) as Record<string, unknown>),
     ref,
   }),
 )
@@ -73,6 +73,7 @@ export const schema: Aglyn.ComponentSchema<ContainerProps> = {
   },
   attributes: [
     semanticElementAttribute('this container'),
+    semanticElementLabelAttribute(),
     {
       name: 'fixed',
       description:

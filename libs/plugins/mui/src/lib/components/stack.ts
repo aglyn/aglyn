@@ -26,8 +26,9 @@ import type { CSSProperties, ReactElement } from 'react'
 import { createElement, forwardRef } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import {
+  applySemanticElement,
   semanticElementAttribute,
-  semanticElementProp,
+  semanticElementLabelAttribute,
 } from '../utils/element-picker'
 import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
@@ -106,11 +107,10 @@ const Stack = forwardRef<HTMLDivElement, StackWithFlexProps>(
       // A cleared `direction` persists as null, and MUI resolves it as a
       // responsive value — `null.xs` throws during SSR and 500s the page.
       // Same class as the AGL-1226 button colour, different sharp edge.
-      ...dropClearedProps(props),
       // Last, so an author's element wins over anything `props` carried
       // (AGL-2525). A stack IS the nav row on most sites; before this it
       // could only be wrapped in one.
-      ...semanticElementProp((props as { component?: unknown }).component),
+      ...applySemanticElement(dropClearedProps(props) as Record<string, unknown>),
     }),
 )
 
@@ -130,6 +130,7 @@ export const schema: Aglyn.ComponentSchema = {
   },
   attributes: [
     semanticElementAttribute('this stack'),
+    semanticElementLabelAttribute(),
     {
       name: 'direction',
       label: 'Direction',

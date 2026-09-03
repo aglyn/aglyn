@@ -23,7 +23,9 @@ import { schema as paper } from '../components/paper'
 import { schema as stack } from '../components/stack'
 import { schema as toolbar } from '../components/toolbar'
 import {
+  LANDMARK_ELEMENTS,
   SEMANTIC_ELEMENTS,
+  applySemanticElement,
   resolveSemanticElement,
   semanticElementAttribute,
   semanticElementProp,
@@ -80,6 +82,59 @@ describe('the shared element picker (AGL-2525)', () => {
     expect(field.options.map((o) => o.value)).toEqual([...SEMANTIC_ELEMENTS])
   })
 
+  describe('naming the landmark it just made', () => {
+    it('carries the author’s label onto a landmark', () => {
+      expect(applySemanticElement({ component: 'nav', ariaLabel: 'Footer' })).toEqual({
+        component: 'nav',
+        'aria-label': 'Footer',
+      })
+    })
+
+    it('drops a label on a `div`, which has no role to name', () => {
+      expect(applySemanticElement({ component: 'div', ariaLabel: 'Nope' })).toEqual({
+        component: 'div',
+      })
+      expect(applySemanticElement({ ariaLabel: 'Nope' })).toEqual({})
+    })
+
+    it('never leaks `ariaLabel` to the DOM as an unknown React prop', () => {
+      // Spread onto an element it is warned about on the canvas and
+      // serialized onto the published page — the `propValues` shape from
+      // AGL-2486.
+      for (const props of [
+        { component: 'nav', ariaLabel: 'Main' },
+        { component: 'div', ariaLabel: 'Main' },
+        { ariaLabel: 'Main' },
+      ]) {
+        expect('ariaLabel' in applySemanticElement(props)).toBe(false)
+      }
+    })
+
+    it('keeps every other prop untouched', () => {
+      expect(
+        applySemanticElement({ id: 'x', spacing: 2, component: 'aside' }),
+      ).toEqual({ id: 'x', spacing: 2, component: 'aside' })
+    })
+
+    it('treats a blank label as unset rather than an empty name', () => {
+      expect(applySemanticElement({ component: 'nav', ariaLabel: '   ' })).toEqual({
+        component: 'nav',
+      })
+    })
+
+    it('offers the label on every element that becomes a landmark', () => {
+      expect([...LANDMARK_ELEMENTS]).toEqual([
+        'section',
+        'article',
+        'aside',
+        'nav',
+        'header',
+        'footer',
+      ])
+      expect(LANDMARK_ELEMENTS).not.toContain('div')
+    })
+  })
+
   it('reaches every container an author groups things with', () => {
     // The point of the issue: one element could name a landmark and the rest
     // had to be wrapped to do it. Each of these is a thing authors put a nav
@@ -93,10 +148,11 @@ describe('the shared element picker (AGL-2525)', () => {
       ['Toolbar', toolbar],
       ['App Bar', appBar],
     ] as const) {
-      const has = (schema.attributes ?? []).some(
-        (attribute) => attribute.name === 'component',
-      )
-      expect([name, has]).toEqual([name, true])
+      const names = (schema.attributes ?? []).map((a) => a.name)
+      expect([name, names.includes('component')]).toEqual([name, true])
+      // The element and its name ship together: half a landmark control is
+      // what made "two navigations" the default outcome.
+      expect([name, names.includes('ariaLabel')]).toEqual([name, true])
     }
   })
 })
