@@ -43,7 +43,12 @@ import JsonEditor from './json-editor'
  * `const` here would have initialized, which is a TDZ ReferenceError that
  * fails the whole suite. A `var` is hoisted as `undefined` and assigned on
  * first use instead.
+ *
+ * `no-var` is disabled rather than obeyed: the rule exists to stop hoisting
+ * being relied on by accident, and here it is the whole point. Obeying it
+ * reintroduces the TDZ error the comment above describes.
  */
+// eslint-disable-next-line no-var
 var mockDynamicOptions: any[] | undefined
 
 jest.mock('next/dynamic', () => ({

@@ -31,8 +31,9 @@ content on the marketing site and is written separately.
 - **seo:** the entity logo stores a media reference, not a baked-in domain ([AGL-2538](https://linear.app/aglyn/issue/AGL-2538), [AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
 
 <details>
-<summary>Also in this release: 2 test</summary>
+<summary>Also in this release: 3 test</summary>
 
+- **json-editor:** the hoisting the dynamic mock depends on is declared, not smuggled ([AGL-2541](https://linear.app/aglyn/issue/AGL-2541))
 - **console:** the second barrel mock learns the schema-type rule too ([AGL-2536](https://linear.app/aglyn/issue/AGL-2536))
 - **tenant:** a declared entry field that the loader drops fails the gate ([AGL-2535](https://linear.app/aglyn/issue/AGL-2535), [AGL-686](https://linear.app/aglyn/issue/AGL-686), [AGL-2417](https://linear.app/aglyn/issue/AGL-2417))
 
