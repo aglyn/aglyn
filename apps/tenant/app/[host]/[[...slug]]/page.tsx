@@ -744,7 +744,23 @@ function buildJsonLd(props: Props): string[] {
         : []),
       Aglyn.safeJsonLd({
         '@context': 'https://schema.org',
-        '@type': 'Article',
+        /*
+          The collection says what KIND of article this is (AGL-2536).
+
+          Every entry published as a bare `Article` before this, whatever it
+          was — so a press release, a blog post and a changelog note
+          serialised identically and none claimed the more specific type
+          `schema.org` defines for it. Unset still publishes `Article`, so
+          nothing moved under any site that has not chosen.
+
+          The loader already normalizes, so this call is not what keeps an
+          unrecognised stored value out of the document — it is what narrows
+          the loader's `string` to a type this literal will accept, and what
+          answers for the collection being absent entirely.
+        */
+        '@type': Aglyn.normalizeContentSchemaType(
+          content.collection?.schemaType,
+        ),
         headline: entry.title,
         ...(entry.excerpt && { description: entry.excerpt }),
         // Absent, never `"image": [null]` — the resolver returns undefined for

@@ -71,13 +71,19 @@ const jsonLdFor = async (options: {
   host?: Record<string, unknown>
   /** Extra fields merged onto the entry — dates, for AGL-2497 below. */
   entry?: Record<string, unknown>
+  /** Extra fields merged onto the collection — `schemaType`, for AGL-2536. */
+  collection?: Record<string, unknown>
 }) => {
   mockLoad.mockResolvedValue({
     props: {
       data: { host: options.host ?? hostWith() },
       nodes: null,
       content: {
-        collection: { slug: 'blog', displayName: 'Blog' },
+        collection: {
+          slug: 'blog',
+          displayName: 'Blog',
+          ...options.collection,
+        },
         entry: {
           $id: 'e1',
           title: 'Hello',
@@ -343,5 +349,66 @@ describe('BreadcrumbList on a content entry (AGL-2535)', () => {
   it('carries the @context, since each block is read on its own', async () => {
     const crumbs = await crumbsFrom({})
     expect(crumbs?.value['@context']).toBe('https://schema.org')
+  })
+})
+
+/**
+ * The collection says what KIND of article it publishes (AGL-2536).
+ *
+ * Every entry was a bare `Article` before this, whatever collection it came
+ * from — a press release, a blog post and a changelog note all serialising
+ * identically, none of them claiming the type `schema.org` defines for it.
+ */
+describe('the entry type follows its collection (AGL-2536)', () => {
+  const typeOf = async (collection?: Record<string, unknown>) => {
+    const blocks = await jsonLdFor(
+      collection ? { collection } : {},
+    )
+    // NOT `find(@type === 'Article')` like the helper above — that is the very
+    // thing under test here, and it would quietly skip a renamed node.
+    return blocks.find((block) => 'headline' in block.value)?.value['@type']
+  }
+
+  it('publishes the collection’s chosen type', async () => {
+    expect(await typeOf({ schemaType: 'NewsArticle' })).toBe('NewsArticle')
+    expect(await typeOf({ schemaType: 'BlogPosting' })).toBe('BlogPosting')
+    expect(await typeOf({ schemaType: 'TechArticle' })).toBe('TechArticle')
+  })
+
+  it('publishes Article when the collection has not chosen', async () => {
+    // The load-bearing default: adopting the setting moves no site's
+    // structured data until somebody picks something.
+    expect(await typeOf()).toBe('Article')
+    expect(await typeOf({ schemaType: '' })).toBe('Article')
+  })
+
+  it('falls back to Article for a type the vocabulary does not define', async () => {
+    /*
+      Worse than a general type: a consumer that cannot resolve `@type`
+      discards the WHOLE node, so a typo would cost the page every property it
+      publishes — headline, dates, author, publisher — not just this one.
+
+      Reachable from a restored backup, a REST write, or a newer console.
+    */
+    expect(await typeOf({ schemaType: 'Aricle' })).toBe('Article')
+    expect(await typeOf({ schemaType: 'ScholarlyArticle' })).toBe('Article')
+    expect(await typeOf({ schemaType: '<script>' })).toBe('Article')
+  })
+
+  it('keeps every other property while the type changes', async () => {
+    // The type is the only thing that moves: a `NewsArticle` still carries
+    // everything an `Article` did, publisher included.
+    const blocks = await jsonLdFor({
+      collection: { schemaType: 'NewsArticle' },
+      host: hostWith({ seo: { entity: { name: 'Acme', logo: 'https://x/l.png' } } }),
+    })
+    const article = blocks.find((block) => 'headline' in block.value)?.value
+    expect(article).toMatchObject({
+      '@type': 'NewsArticle',
+      headline: 'Hello',
+      description: 'An entry',
+      url: 'https://custom.example/blog/hello',
+      publisher: { '@type': 'Organization', name: 'Acme', logo: 'https://x/l.png' },
+    })
   })
 })

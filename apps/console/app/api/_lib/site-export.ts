@@ -306,6 +306,10 @@ export const IMPORTABLE_FIELDS: Record<string, readonly string[]> = {
     'displayName',
     'listScreenId',
     'entryScreenId',
+    // What kind of article the collection publishes (AGL-2536). Losing it on
+    // an import would silently retype every entry in the collection back to a
+    // bare `Article` — invisible until a rich result stops appearing.
+    'schemaType',
     // Legacy AGL-105 pointer, still honoured when it is the only one set.
     'templateScreenId',
     // Entries reference the stable category id, so losing this orphans the
