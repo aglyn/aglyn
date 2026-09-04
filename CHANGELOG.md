@@ -9,6 +9,43 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.71 — 2026-09-04
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.70...v1.0.0-beta.71)
+
+### Added
+
+- **console:** the workspace is created on the first verified session ([AGL-2590](https://linear.app/aglyn/issue/AGL-2590), [AGL-1523](https://linear.app/aglyn/issue/AGL-1523))
+- **health:** signup goes red when visitors arrive and no account does ([AGL-2583](https://linear.app/aglyn/issue/AGL-2583), [AGL-2581](https://linear.app/aglyn/issue/AGL-2581))
+- **health:** the doors say whether a person can still get in ([AGL-2586](https://linear.app/aglyn/issue/AGL-2586))
+- **tools:** a red uptime run reaches Slack #ci instead of a log nobody opens ([AGL-2586](https://linear.app/aglyn/issue/AGL-2586))
+- **health:** the funnel and the publish path say whether a journey completes ([AGL-2586](https://linear.app/aglyn/issue/AGL-2586))
+- **orgs:** a signup holds its address, and a sweep erases what nobody claimed ([AGL-2585](https://linear.app/aglyn/issue/AGL-2585), [AGL-1115](https://linear.app/aglyn/issue/AGL-1115))
+- **tools:** a promotion that skips the functions deploy fails a gate, not a monitor ([AGL-2580](https://linear.app/aglyn/issue/AGL-2580))
+
+### Fixed
+
+- **console,tools:** two checks assert the property, not the shape around it ([AGL-2588](https://linear.app/aglyn/issue/AGL-2588))
+- **auth,rules,marketing:** a verified address gates tenant writes and sends ([AGL-2589](https://linear.app/aglyn/issue/AGL-2589), [AGL-2580](https://linear.app/aglyn/issue/AGL-2580))
+- **console:** the last two address writers ask the slug rules too ([AGL-2588](https://linear.app/aglyn/issue/AGL-2588), [AGL-2076](https://linear.app/aglyn/issue/AGL-2076))
+- **console,tools,docs:** a new workspace reports its own creation ([AGL-2587](https://linear.app/aglyn/issue/AGL-2587), [AGL-1580](https://linear.app/aglyn/issue/AGL-1580))
+- **orgs:** the reservation check takes a whole slug document ([AGL-2585](https://linear.app/aglyn/issue/AGL-2585))
+- **health:** the publish probe mints its token from the app, not the facade ([AGL-2586](https://linear.app/aglyn/issue/AGL-2586))
+- **auth:** an unreadable signups lock admits the account, a seen one still refuses ([AGL-2581](https://linear.app/aglyn/issue/AGL-2581))
+- **auth:** reopening /verify-email asks whether the mail arrived, not for another ([AGL-2584](https://linear.app/aglyn/issue/AGL-2584))
+- **auth:** a throttled verification resend reads as a throttle, not a failure ([AGL-2584](https://linear.app/aglyn/issue/AGL-2584))
+- **console:** the Use template dialog refuses a reserved address ([AGL-2579](https://linear.app/aglyn/issue/AGL-2579))
+- **auth:** a failed signup says the fault is ours and names who to contact ([AGL-2582](https://linear.app/aglyn/issue/AGL-2582), [AGL-2581](https://linear.app/aglyn/issue/AGL-2581))
+
+<details>
+<summary>Also in this release: 3 chore</summary>
+
+- **tools:** the brand-literals baseline counts the analytics declaration ([AGL-2586](https://linear.app/aglyn/issue/AGL-2586))
+- **console,tenant,docs:** the new probes declare what they reach and read ([AGL-2586](https://linear.app/aglyn/issue/AGL-2586))
+- **tools:** the brand-literals baseline counts the two hosts the inventory gained ([AGL-2580](https://linear.app/aglyn/issue/AGL-2580))
+
+</details>
+
 ## v1.0.0-beta.70 — 2026-09-04
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.69...v1.0.0-beta.70)
