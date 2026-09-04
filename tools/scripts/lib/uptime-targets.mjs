@@ -117,6 +117,10 @@ export const SUBSYSTEM_HEALTH = {
     // documents and produce a second alert for one event. The body's
     // `byService` is what tells the two apart.
     '/api/health/server-errors',
+    // Can a customer create and publish (AGL-2586)? Component health was
+    // green through the twelve minutes on 2026-09-04 when late-shipping
+    // Firestore rules refused every publish batch on the platform.
+    '/api/health/journeys',
   ],
   // The tenant app ships the beacon and both render canaries; the rest are
   // console-side.
@@ -124,6 +128,10 @@ export const SUBSYSTEM_HEALTH = {
     '/api/health/error-beacon',
     '/api/health/render/site',
     '/api/health/render/marketing',
+    // Can a prospect still reach us (AGL-2586)? The contact, sales enquiry
+    // and demo forms all post to the tenant runtime, and a form that answers
+    // 200 while filing the lead nowhere reads exactly like no demand.
+    '/api/health/funnel',
   ],
 }
 

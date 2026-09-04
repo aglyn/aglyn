@@ -35,8 +35,38 @@ GET  https://aglyn.com/api/health/render/marketing
                                                marketing home RENDERS (AGL-2486)
 GET  https://demo.aglyn.app/api/health/render/site
                                                a tenant site RENDERS (AGL-2486)
+GET  https://app.aglyn.com/api/health/journeys
+                                               create + publish stay AUTHORIZED,
+                                               and published cache drops land
+                                               (AGL-2586)
+GET  https://aglyn.com/api/health/funnel       contact / sales / demo forms still
+                                               ACCEPT and ROUTE a lead (AGL-2586)
 HEAD <any>                                     the SAME probe and status as GET
 ```
+
+The last two are JOURNEY checks rather than component checks, and the
+distinction is the whole of AGL-2586: every endpoint above them can be green
+while nobody can sign up, nobody can publish, and every lead the site collects
+is dropped on the floor. Neither writes anything — both assert reachability and
+authorization without committing, so no synthetic org, site, screen or lead is
+ever created in production. What each one asserts, and what it deliberately does
+not, is in the docblocks:
+`apps/console/app/api/health/journeys/journeys-probe.ts` and
+`apps/tenant/app/api/health/funnel/funnel-probe.ts`.
+
+**A red now reaches a person.** The `Uptime probe` workflow watched every
+endpoint above for weeks and told nobody — its own header says *"the run
+history IS the record"*, which is exactly how `/api/health/crons` answered 503
+for fifty-one hours unread. It now posts a failing run to Slack `#ci`
+(`tools/scripts/report-uptime-red.mjs`, AGL-2586), the same channel Main Gate's
+red goes to. A journey failure leads with the journey rather than the endpoint,
+because a degraded subsystem and "nobody can publish" must not read the same in
+the first line. It does NOT dedupe: this probe grades a moment rather than a
+sha, so two consecutive failing runs are two samples of an outage that is still
+happening. A subsystem 404 while its target's root is up is a pending promotion
+and is never reported. Prove the path without an outage by dispatching the
+workflow with `test_notification` — the message labels itself as a test in every
+stream a reader can land on.
 
 :::caution `HEAD` is not a liveness shortcut any more
 It used to return a hardcoded `200` and "touch nothing", which made every one

@@ -410,7 +410,7 @@ export const EGRESS_HOSTS: Record<string, EgressHost> = {
       'Primary application database, file storage, authentication, backups, and platform logging',
     publishedOn: '2026-08-05',
     reason:
-      'The security-rules control plane, reached only by the rules deploy and drift tooling.',
+      'The security-rules control plane, reached by the rules deploy and drift tooling and by the publish-journey health probe, which reads the live ruleset to confirm publishing is still authorized (AGL-2586).',
     dataReceived:
       'Rule source text. A control plane for the same store, carrying no customer data of its own — listed rather than exempted because the entity is the unit a reader cares about.',
   },
