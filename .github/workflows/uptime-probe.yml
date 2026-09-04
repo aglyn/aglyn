@@ -45,6 +45,11 @@ on:
     # value in pretending otherwise — see the caveat above.
     - cron: '*/15 * * * *'
   workflow_dispatch:
+    inputs:
+      test_notification:
+        description: 'Send a clearly-labeled TEST message to Slack #ci'
+        type: boolean
+        default: false
 
 concurrency:
   # A delayed run must not pile up behind a later one; the newest sample is
@@ -83,3 +88,46 @@ jobs:
           # aglyn-tenant and aglyn-docs. Without it Bot Protection challenges
           # the probe and every run reports a false outage.
           AGLYN_PROBE_TOKEN: ${{ secrets.AGLYN_PROBE_TOKEN }}
+          # Handed to the reporter below rather than re-probed, so the alert
+          # describes THIS run's samples and cannot disagree with them.
+          UPTIME_RESULTS_PATH: ${{ runner.temp }}/uptime-results.json
+
+      # THE NOTIFICATION (AGL-2586). This workflow has watched thirteen
+      # endpoints every fifteen minutes and told nobody: its own header says
+      # "the run history IS the record", and that is precisely how
+      # `/api/health/crons` answered 503 for fifty-one hours unread. Main Gate
+      # had the same shape and was repaired by sending its red to Slack `#ci`
+      # (AGL-2533); this is that repair for the other half of the board, and it
+      # matters more now that JOURNEY checks are on the list — a red here can
+      # mean nobody can publish or every lead is being dropped.
+      #
+      # `if: always()` and the script's own exit-0 discipline are both
+      # deliberate: a monitor that failed BECAUSE it could not report would be
+      # strictly worse than the silence it replaces. A green run posts nothing.
+      #
+      # NO DEDUPE, unlike Main Gate's reporter, and that is the correct call
+      # for a probe that grades a MOMENT rather than a sha — two consecutive
+      # failing runs are two samples of an outage that is still happening.
+      - name: red -> Slack
+        if: always()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          set -uo pipefail
+          node tools/scripts/report-uptime-red.mjs \
+            --results="${{ runner.temp }}/uptime-results.json" \
+            --run-url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      # Proving the notifier without waiting for an outage (AGL-2586). A path
+      # whose only test is a real incident is unverifiable until the day it
+      # matters, which is the shape this issue is about. The message labels
+      # itself as a test in every stream a reader can land on — a test alert
+      # that reads as an incident has false-alarmed.
+      - name: TEST the notification path
+        if: github.event_name == 'workflow_dispatch' && inputs.test_notification
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          set -uo pipefail
+          node tools/scripts/report-uptime-red.mjs --test \
+            --run-url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

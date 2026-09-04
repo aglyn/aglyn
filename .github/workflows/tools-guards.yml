@@ -833,6 +833,13 @@ jobs:
       # passing tests about destructive writes ran nowhere.
       - run: npm run test:backfill-core
 
+      # AGL-2586. The uptime probe's Slack notifier — who is told when a
+      # journey check goes red. It has to be provable without an outage, and
+      # both of a notifier's failure modes are here: sending nothing during a
+      # real red, and sending during a healthy day (a subsystem awaiting
+      # promotion, which the probe already treats as green).
+      - run: npm run test:uptime-red-report
+
       # AGL-2379. The pure-node self-test for the legal-drift comparator. The
       # comparator itself needs the live site AND Drive credentials, so it runs
       # on a schedule in legal-drift.yml rather than here — but its 40-test

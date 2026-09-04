@@ -163,6 +163,27 @@ for (const r of results) {
   console.log(`       ${r.url}`)
 }
 
+/*
+ * HAND THE RESULTS TO THE REPORTER (AGL-2586).
+ *
+ * Written only when `UPTIME_RESULTS_PATH` names a file, so a local run and a
+ * fork behave exactly as before. The alternative — a reporter that probes
+ * again — would double every request and could disagree with the run it is
+ * reporting on, which is the worst possible property for an alert.
+ *
+ * Best effort: a probe that failed because it could not write its own log
+ * would be worse than the silence the reporter exists to end.
+ */
+const resultsPath = process.env.UPTIME_RESULTS_PATH
+if (resultsPath) {
+  try {
+    const { writeFileSync } = await import('node:fs')
+    writeFileSync(resultsPath, JSON.stringify(results, null, 2))
+  } catch (error) {
+    console.error(`could not write ${resultsPath}: ${error?.message ?? error}`)
+  }
+}
+
 const down = results.filter((r) => !r.ok)
 const pending = results.filter((r) => r.pending)
 console.log(`\n${results.length - down.length - pending.length}/${results.length} up`)
