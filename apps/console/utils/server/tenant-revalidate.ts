@@ -54,6 +54,155 @@ import type { Firestore } from 'firebase-admin/firestore'
 /** A publish should feel instant; a slow tenant must not hold the caller. */
 const TIMEOUT_MS = 5000
 
+/**
+ * ONE attempt was the whole propagation guarantee, and that is what broke
+ * (AGL-2573).
+ *
+ * From 2026-08-21 to 2026-09-01 the tenant's bot protection answered this call
+ * with 429 before the route ran, so every publish on the platform waited out
+ * the document TTL — an hour — for eleven days. A firewall bypass rule closed
+ * that particular door, but the shape of the defect is not the firewall: it is
+ * that a single transient refusal ended the only mechanism that makes a
+ * publish visible. 429 and 5xx are the definition of "ask again in a moment",
+ * and this asked once.
+ *
+ * Retried under a TOTAL deadline rather than a per-attempt count, because the
+ * failure that matters is a tenant that is slow rather than one that answers
+ * quickly: three 5s timeouts back to back would hold the publish response for
+ * fifteen seconds, which trades one visible failure for a worse one. The
+ * budget bounds the whole exchange, both calls of a custom-domain drop
+ * included, and an attempt is simply not started once it has run out.
+ */
+const MAX_ATTEMPTS = 3
+
+/** Backoff before attempts 2 and 3. Short: a person is waiting on this. */
+const RETRY_BACKOFF_MS = [150, 400]
+
+/**
+ * The ceiling on everything `postTenantRevalidate` does. Chosen against the
+ * publish response it sits inside: long enough for two retries of a tenant
+ * that is briefly refusing, short enough that a tenant that is genuinely down
+ * costs the editor a noticeable pause rather than a hang.
+ */
+const TOTAL_BUDGET_MS = 8000
+
+/**
+ * Worth asking again, or not.
+ *
+ * Deliberately narrow. A 401 means the secret is wrong and a 400 means the
+ * payload is, and retrying either just spends the budget arriving at the same
+ * answer three times. 429 is the outage that motivated this; 5xx and the two
+ * timeout-shaped 4xx are the same "ask again" class.
+ */
+function isRetryableStatus(status: number): boolean {
+  return status === 408 || status === 425 || status === 429 || status >= 500
+}
+
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms))
+
+interface RevalidateAttempt {
+  ok: boolean
+  /** 0 when no response was received at all (network error or timeout). */
+  status: number
+  body: { revalidated?: unknown; truncated?: unknown } | null
+  /** How many requests were actually sent, for the telemetry line. */
+  attempts: number
+}
+
+/**
+ * POST one drop to the tenant, retrying a retryable refusal until the shared
+ * deadline. Never throws: a cache hint that could not be sent must not make a
+ * completed publish look failed.
+ */
+async function sendRevalidate(options: {
+  subdomain: string
+  secret: string
+  body: Record<string, unknown>
+  deadline: number
+}): Promise<RevalidateAttempt> {
+  const { subdomain, secret, body, deadline } = options
+  let last: RevalidateAttempt = { ok: false, status: 0, body: null, attempts: 0 }
+
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+    const remaining = deadline - Date.now()
+    // Out of budget: stop rather than send a request that cannot finish. The
+    // first attempt is exempt so a caller can never end up sending nothing.
+    if (attempt > 0 && remaining <= 0) break
+    try {
+      const response = await fetch(
+        `https://${subdomain}.${TENANT_APEX}/api/revalidate`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-revalidate-secret': secret,
+          },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(
+            attempt === 0 ? TIMEOUT_MS : Math.max(1, Math.min(TIMEOUT_MS, remaining)),
+          ),
+        },
+      )
+      const parsed = (await response.json().catch(() => null)) as
+        | RevalidateAttempt['body']
+        | null
+      last = {
+        ok: response.ok,
+        status: response.status,
+        body: parsed,
+        attempts: attempt + 1,
+      }
+      if (response.ok || !isRetryableStatus(response.status)) return last
+    } catch (error) {
+      // A network error and a timeout are both "no answer", which is exactly
+      // the class worth asking again about.
+      console.error('[tenant-revalidate] request failed', error)
+      last = { ok: false, status: 0, body: null, attempts: attempt + 1 }
+    }
+    const backoff = RETRY_BACKOFF_MS[attempt]
+    if (backoff === undefined) break
+    if (Date.now() + backoff >= deadline) break
+    await sleep(backoff)
+  }
+  return last
+}
+
+/**
+ * ONE line per announce, on SUCCESS as well as failure (AGL-2573).
+ *
+ * Every other record this module keeps is a `console.error` on a failure
+ * branch, which means a successful drop says nothing at all — and a log
+ * search that finds nothing cannot tell "every publish worked" apart from
+ * "the call never happened". That ambiguity is precisely how the eleven-day
+ * outage went unnoticed: the evidence of health and the evidence of absence
+ * were the same empty result.
+ *
+ * So the line is emitted unconditionally and carries `reason`, making the
+ * volume itself the signal — a publish rate with no matching lines is a
+ * broken hop, and a rising share of non-`ok` reasons is the outage starting.
+ * One line per publish is a rate nobody has to budget for.
+ */
+function announceTelemetry(fields: {
+  host: string
+  hostId: string
+  paths: number
+  reason: TenantRevalidateResult['reason']
+  attempts: number
+  startedAt: number
+  revalidated?: number
+  pathsDropped?: number
+}): void {
+  const { startedAt, ...rest } = fields
+  console.log(
+    JSON.stringify({
+      tag: 'AGL-2573:tenant-revalidate',
+      ...rest,
+      durationMs: Date.now() - startedAt,
+    }),
+  )
+}
+
 export interface TenantRevalidateResult {
   /** Cache keys the tenant reported dropping. */
   revalidated: string[]
@@ -121,77 +270,96 @@ export async function postTenantRevalidate(options: {
 }): Promise<TenantRevalidateResult> {
   const { subdomain, hostId, paths } = options
   const secret = process.env['REVALIDATE_SECRET']
-  if (!secret) return { revalidated: [], reason: 'not-configured', pathsDropped: 0 }
-
-  try {
-    const response = await fetch(`https://${subdomain}.${TENANT_APEX}/api/revalidate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-revalidate-secret': secret },
-      body: JSON.stringify({ host: subdomain, hostId, paths }),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+  const startedAt = Date.now()
+  if (!secret) {
+    announceTelemetry({
+      host: subdomain,
+      hostId,
+      paths: paths.length,
+      reason: 'not-configured',
+      attempts: 0,
+      startedAt,
     })
-    const result = (await response.json().catch(() => null)) as {
-      revalidated?: unknown
-      truncated?: unknown
-    } | null
-    if (!response.ok) {
-      console.error('[tenant-revalidate] tenant refused', response.status, result)
-      return {
-        revalidated: [],
-        reason: `tenant-${response.status}` as TenantRevalidateResult['reason'],
-        pathsDropped: 0,
-      }
-    }
-    // The same paths again under the custom domain's key. Sequential rather
-    // than parallel: the second call is only worth making if the first was
-    // accepted, and a site with no domain never makes it at all.
-    const cnameHost = cnameCacheHost(options.cname)
-    let cnameRevalidated: string[] = []
-    if (cnameHost) {
-      try {
-        const second = await fetch(
-          `https://${subdomain}.${TENANT_APEX}/api/revalidate`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-revalidate-secret': secret,
-            },
-            body: JSON.stringify({ host: cnameHost, hostId, paths }),
-            signal: AbortSignal.timeout(TIMEOUT_MS),
-          },
-        )
-        const body = (await second.json().catch(() => null)) as {
-          revalidated?: unknown
-        } | null
-        if (second.ok && Array.isArray(body?.revalidated)) {
-          cnameRevalidated = body.revalidated as string[]
-        } else if (!second.ok) {
-          // Reported, never silent: the subdomain drop succeeded, so the
-          // publish is not a failure — but the domain everybody actually
-          // visits is still serving the old page and somebody should know.
-          console.error(
-            '[tenant-revalidate] custom-domain drop refused',
-            second.status,
-            cnameHost,
-          )
-        }
-      } catch (error) {
-        console.error('[tenant-revalidate] custom-domain drop failed', error)
-      }
-    }
-    return {
-      revalidated: [
-        ...(Array.isArray(result?.revalidated) ? (result.revalidated as string[]) : []),
-        ...cnameRevalidated,
-      ],
-      reason: 'ok',
-      pathsDropped: Number(result?.truncated ?? 0) || 0,
-    }
-  } catch (error) {
-    console.error('[tenant-revalidate] request failed', error)
-    return { revalidated: [], reason: 'error', pathsDropped: 0 }
+    return { revalidated: [], reason: 'not-configured', pathsDropped: 0 }
   }
+
+  // ONE budget for the whole announce, shared by both calls of a
+  // custom-domain drop — see TOTAL_BUDGET_MS. Retrying each call against its
+  // own budget would let a site with a domain attached hold the publish for
+  // twice as long as one without.
+  const deadline = startedAt + TOTAL_BUDGET_MS
+  const primary = await sendRevalidate({
+    subdomain,
+    secret,
+    body: { host: subdomain, hostId, paths },
+    deadline,
+  })
+  if (!primary.ok) {
+    // `status: 0` is "no answer at all" — a network error or a timeout, which
+    // has no status to report and is therefore the generic failure.
+    const reason: TenantRevalidateResult['reason'] = primary.status
+      ? (`tenant-${primary.status}` as TenantRevalidateResult['reason'])
+      : 'error'
+    console.error(
+      '[tenant-revalidate] tenant refused',
+      primary.status,
+      primary.body,
+    )
+    announceTelemetry({
+      host: subdomain,
+      hostId,
+      paths: paths.length,
+      reason,
+      attempts: primary.attempts,
+      startedAt,
+    })
+    return { revalidated: [], reason, pathsDropped: 0 }
+  }
+  // The same paths again under the custom domain's key. Sequential rather
+  // than parallel: the second call is only worth making if the first was
+  // accepted, and a site with no domain never makes it at all.
+  const cnameHost = cnameCacheHost(options.cname)
+  let cnameRevalidated: string[] = []
+  let cnameAttempts = 0
+  if (cnameHost) {
+    const second = await sendRevalidate({
+      subdomain,
+      secret,
+      body: { host: cnameHost, hostId, paths },
+      deadline,
+    })
+    cnameAttempts = second.attempts
+    if (second.ok && Array.isArray(second.body?.revalidated)) {
+      cnameRevalidated = second.body.revalidated as string[]
+    } else if (!second.ok) {
+      // Reported, never silent: the subdomain drop succeeded, so the
+      // publish is not a failure — but the domain everybody actually
+      // visits is still serving the old page and somebody should know.
+      console.error(
+        '[tenant-revalidate] custom-domain drop refused',
+        second.status,
+        cnameHost,
+      )
+    }
+  }
+  const revalidated = [
+    ...(Array.isArray(primary.body?.revalidated)
+      ? (primary.body.revalidated as string[])
+      : []),
+    ...cnameRevalidated,
+  ]
+  const pathsDropped = Number(primary.body?.truncated ?? 0) || 0
+  announceTelemetry({
+    host: subdomain,
+    hostId,
+    paths: paths.length,
+    reason: 'ok',
+    attempts: primary.attempts + cnameAttempts,
+    startedAt,
+    revalidated: revalidated.length,
+    pathsDropped,
+  })
+  return { revalidated, reason: 'ok', pathsDropped }
 }
 
 export default postTenantRevalidate
