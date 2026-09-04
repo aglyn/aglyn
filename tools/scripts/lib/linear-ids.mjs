@@ -240,6 +240,44 @@ export function readCeiling(raw) {
   return { ok: true, ceiling: { team, highest, verifiedAt, verifiedMs, raw } }
 }
 
+/**
+ * Raise a cached ceiling with the number Linear actually reports (AGL-2563).
+ *
+ * ## Why this is not the `--write` laundering path
+ *
+ * `refresh` is deliberately a separate command because a guard that rewrites
+ * its own baseline ratifies whatever it just found. That objection is exactly
+ * right for `hardcoded-colours`, whose baseline is derived from THE CODE UNDER
+ * TEST — recording it launders the very thing being judged.
+ *
+ * This reads LINEAR, which is not the artifact under test. It is the authority
+ * the cached file is a stale copy OF. A fabricated `AGL-9999` still fails,
+ * because Linear still reports 2562. Nothing is laundered and nothing is
+ * written: the live number is used for THIS RUN only, and the file on disk is
+ * never touched by the check.
+ *
+ * ## Why `max` and not simply the live value
+ *
+ * Taking the higher of the two can only ever REMOVE a false red, never add
+ * one. A live value BELOW the cache would mean an issue was deleted after it
+ * was cited, and failing a commit for that would punish an author for someone
+ * else's cleanup. So the cache is a floor and Linear can only raise it.
+ *
+ * @returns {{ ceiling: object, source: string }}
+ */
+export function raiseCeiling(ceiling, liveHighest) {
+  if (!Number.isInteger(liveHighest) || liveHighest <= 0) {
+    return { ceiling, source: 'cached (Linear unreadable)' }
+  }
+  if (liveHighest <= ceiling.highest) {
+    return { ceiling, source: `cached AGL-${ceiling.highest} (Linear reports AGL-${liveHighest})` }
+  }
+  return {
+    ceiling: { ...ceiling, highest: liveHighest },
+    source: `LIVE AGL-${liveHighest} (cache said AGL-${ceiling.highest})`,
+  }
+}
+
 /** Whole days between the ceiling's verification date and now. */
 export function ceilingAgeDays(ceiling, nowMs) {
   return Math.floor((nowMs - ceiling.verifiedMs) / 86_400_000)

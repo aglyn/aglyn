@@ -1152,6 +1152,52 @@ describe('a shared library is fetched once, not once per product', () => {
     })
   })
 
+  it('the copy it brings NAMES THE ACCOUNT, so a container is registered', async () => {
+    /*
+     * AGL-2559. `gtag.js` resolves which container to configure from the
+     * loader's `?id=`, not from the `config` call that follows it. Fetched
+     * bare it still returns 200 and still defines `gtag()`, so the page looks
+     * correct in every way a test that only counted elements could see —
+     * while `config` for the account queues against a runtime holding no such
+     * container and nothing is ever reported.
+     *
+     * Measured on `app.aglyn.com` before the fix: one bare
+     * `googletagmanager.com/gtag/js` request, `google_tag_data.tidr.container`
+     * holding the GA4 id and an EMPTY string, and zero requests to
+     * `googleadservices`.
+     */
+    storeVisitorConsent(HOST_ID, {
+      status: 'accepted',
+      country: 'US',
+      advertising: true,
+    })
+    await renderGate(withAds)
+    const [library] = adsLibrary()
+    expect(library).toBeTruthy()
+    const src = String(library.getAttribute('src'))
+    expect(new URL(src).searchParams.get('id')).toBe(ADS_ID)
+  })
+
+  it('the account in the loader is the CONFIGURED one, not a constant', () => {
+    // A `scriptSrcFor` that ignored its argument would satisfy the case above
+    // for every account, including a self-hoster's.
+    const other = 'AW-99887766'
+    expect(GOOGLE_ADS_VENDOR.scriptSrcFor).toBeTruthy()
+    const built = String(GOOGLE_ADS_VENDOR.scriptSrcFor?.(other))
+    expect(new URL(built).searchParams.get('id')).toBe(other)
+    // And it stays the library the skip and the CSP origin are keyed on.
+    expect(built).toContain(GOOGLE_ADS_VENDOR.sharesLibrary as string)
+    expect(new URL(built).origin).toBe(
+      new URL(GOOGLE_ADS_VENDOR.scriptSrc as string).origin,
+    )
+  })
+
+  it('Meta takes its id in the boot, so it has no per-account loader', () => {
+    // The field is the exception, not the rule. A vendor that grew one by
+    // copy-paste would put an account id in a URL its library never reads.
+    expect(META_PIXEL_VENDOR.scriptSrcFor).toBeUndefined()
+  })
+
   it('skips its own copy when the GA loader is already in the document', async () => {
     storeVisitorConsent(HOST_ID, {
       status: 'accepted',

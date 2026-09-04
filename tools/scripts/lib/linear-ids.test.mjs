@@ -35,6 +35,7 @@ import {
   UNKNOWN,
   ceilingAgeDays,
   classifyCitation,
+  raiseCeiling,
   issueFromSubject,
   overallExitCode,
   parseCitations,
@@ -341,5 +342,50 @@ describe('the two exemptions, which are the only holes in this guard', () => {
     // May shrink; must never grow. Fourteen commits carried a fabricated id.
     assert.ok(commits.length <= 14, `forgiven list grew to ${commits.length}`)
     for (const sha of commits) assert.match(sha, /^[0-9a-f]{7,40}$/)
+  })
+})
+
+// --- the live ceiling (AGL-2563) -------------------------------------------
+//
+// The red this removes: a session files AGL-2562 and commits citing it before
+// anyone hand-bumps the cached file. Three of the last eight Main Gate reds
+// were exactly that, and none of them were a defect in the code.
+
+describe('raising the ceiling from Linear', () => {
+  const cached = { team: 'AGL', highest: 2559, verifiedAt: '2026-09-03', verifiedMs: 0, raw: {} }
+
+  it('raises when Linear is ahead of the cache — the false-red case', () => {
+    const { ceiling, source } = raiseCeiling(cached, 2562)
+    assert.equal(ceiling.highest, 2562)
+    assert.match(source, /LIVE AGL-2562/)
+  })
+
+  it('still refuses a fabricated id against the LIVE ceiling', () => {
+    // It must not become a rubber stamp: raising to the true max still rejects
+    // everything above it, which is the guard's entire purpose.
+    const { ceiling } = raiseCeiling(cached, 2562)
+    assert.equal(classifyCitation({ number: 9999 }, ceiling.highest), FABRICATED)
+    assert.equal(classifyCitation({ number: 2563 }, ceiling.highest), FABRICATED)
+    assert.equal(classifyCitation({ number: 2562 }, ceiling.highest), OK)
+  })
+
+  it('never lowers the ceiling, so a deleted issue cannot fail an author', () => {
+    const { ceiling, source } = raiseCeiling(cached, 2500)
+    assert.equal(ceiling.highest, 2559)
+    assert.match(source, /cached AGL-2559/)
+  })
+
+  it('falls back to the cache when Linear is unreadable', () => {
+    for (const bad of [null, undefined, 0, -1, Number.NaN, 'AGL-2562']) {
+      const { ceiling, source } = raiseCeiling(cached, bad)
+      assert.equal(ceiling.highest, 2559, `bad input ${String(bad)} must not change the ceiling`)
+      assert.match(source, /cached/)
+    }
+  })
+
+  it('does not mutate the cached ceiling', () => {
+    const before = { ...cached }
+    raiseCeiling(cached, 2562)
+    assert.deepEqual(cached, before)
   })
 })

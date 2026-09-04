@@ -27,6 +27,8 @@ export enum FieldComponentType {
   CSS_DIMENSION = 'css-dimension',
   /** Fill type + angle + colour stops; persists one CSS string (AGL-1331). */
   CSS_GRADIENT = 'css-gradient',
+  /** Row-and-column grid for the Table element (AGL-2543). */
+  DATA_TABLE = 'data-table',
   DATE_PICKER = 'date-picker',
   DUAL_LIST_SELECT = 'dual-list-select',
   FIELD_ARRAY = 'field-array',

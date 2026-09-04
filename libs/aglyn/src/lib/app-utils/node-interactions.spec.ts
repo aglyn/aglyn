@@ -298,6 +298,52 @@ describe('a composed page keeps the interactions authored on it', () => {
     })
   })
 
+  it('re-points an attribute step too, because it uses `selector` (AGL-2546)', () => {
+    /*
+      The reason `setAttribute` reuses `selector` rather than taking a
+      targeting field of its own.
+
+      The regraft is generic over `step.selector`, so a step that spells its
+      target that way is rewritten for free when the interaction is authored
+      inside a reusable component. The menu steps chose `menuNodeId`, get no
+      regraft, and compensate at run time instead — and that divergence is
+      invisible until a component is grafted into a real layout in
+      production.
+
+      Asserting it on the attribute step specifically, not just trusting the
+      generic map: a later refactor that switched on `step.type` here would
+      keep every existing case green and silently drop this one.
+    */
+    const withAttributeStep = {
+      $id: 'cmp__inst__trigger',
+      interactions: [
+        {
+          id: 'announce',
+          enabled: true,
+          trigger: { event: 'elementHoverEnter', everyTime: true },
+          steps: [
+            {
+              type: 'setAttribute',
+              selector: '[data-aglyn="leaf:panel"]',
+              name: 'aria-expanded',
+              value: 'true',
+            },
+          ],
+        },
+      ],
+    }
+    const collected = collectNodeInteractions([
+      withAttributeStep,
+      { $id: 'cmp__inst__panel' },
+    ] as never)
+    expect(collected[0].action.steps?.[0]).toMatchObject({
+      type: 'setAttribute',
+      selector: '[data-aglyn="leaf:cmp__inst__panel"]',
+      name: 'aria-expanded',
+      value: 'true',
+    })
+  })
+
   it('leaves a page-level target alone, and an unresolvable one untouched', () => {
     // A component may legitimately drive an element outside itself, and a
     // selector that resolves nowhere must not be pointed somewhere plausible.

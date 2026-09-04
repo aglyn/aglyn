@@ -117,6 +117,30 @@ export const ALLOWED_AUTHOR_HTML_ELEMENTS: ReadonlySet<string> = new Set([
 ])
 
 /**
+ * The subset of {@link ALLOWED_AUTHOR_HTML_ELEMENTS} that may appear inside a
+ * control — a `<button>` or an `<a>` (AGL-2557).
+ *
+ * Both have a content model of phrasing content with NO interactive
+ * descendant. Serving a `<ul>`, a `<div>` or a nested `<a>` inside one is not
+ * a styling problem: the parser closes the control early and promotes the
+ * rest to a sibling, so React hydrates against a tree it did not describe and
+ * reports the mismatch — the same shape `authorHtmlBreaksContainer` exists to
+ * head off for a `<p>`. A nested control is also unreachable by keyboard and
+ * announces as neither of the two things it is.
+ *
+ * Narrowing keeps LESS than the full allowlist, so the subset argument in
+ * this module's header still holds: everything emitted under it is something
+ * the full policy would also have kept. `img` is out with the rest of the
+ * embedded content — an author who wants an icon on a button has the icon
+ * fields for it, and nothing in the inline editor can produce one.
+ */
+export const INLINE_AUTHOR_HTML_ELEMENTS: ReadonlySet<string> = new Set([
+  'abbr', 'b', 'bdi', 'bdo', 'br', 'cite', 'code', 'data', 'del', 'dfn',
+  'em', 'i', 'ins', 'kbd', 'mark', 'q', 'rp', 'rt', 'ruby', 's', 'samp',
+  'small', 'span', 'strong', 'sub', 'sup', 'time', 'u', 'var', 'wbr',
+])
+
+/**
  * Void elements — emitted WITHOUT a closing tag and never pushed on the open
  * stack. A void element that carries children is not merely wrong markup
  * here: `<img>` with children is an SSR 500 in this codebase, so the
@@ -540,11 +564,27 @@ export interface AuthorHtmlRemoval {
  * every existing caller is byte-identical whether it passes one or not — so
  * the render path stays exactly as pure as it was and only the editor pays
  * for the bookkeeping.
+ *
+ * `options.allowedElements` narrows the element allowlist for one call
+ * (AGL-2557). The only value it is given in this repo is
+ * {@link INLINE_AUTHOR_HTML_ELEMENTS}, by the components that render their
+ * label inside a control. A caller may narrow but never widen: a set with a
+ * tag the module's own allowlist refuses would reopen the policy, so the two
+ * are intersected rather than substituted.
  */
 export function sanitizeAuthorHtml(
   html: string,
   removals?: AuthorHtmlRemoval[],
+  options?: { allowedElements?: ReadonlySet<string> },
 ): string {
+  const narrowed = options?.allowedElements
+  const allowedElements: ReadonlySet<string> = narrowed
+    ? new Set(
+        Array.from(narrowed).filter((tag) =>
+          ALLOWED_AUTHOR_HTML_ELEMENTS.has(tag),
+        ),
+      )
+    : ALLOWED_AUTHOR_HTML_ELEMENTS
   /** Records one removal, deduped so a repeated tag reads once. */
   const note = (kind: AuthorHtmlRemoval['kind'], message: string): void => {
     if (!removals) return
@@ -782,7 +822,7 @@ export function sanitizeAuthorHtml(
 
     index = end
 
-    if (!ALLOWED_AUTHOR_HTML_ELEMENTS.has(tag)) {
+    if (!allowedElements.has(tag)) {
       // Unwrapped, not dropped — matches DOMPurify's `KEEP_CONTENT` default,
       // so a `<form>` or an unknown tag loses the element and keeps the words
       // inside it.

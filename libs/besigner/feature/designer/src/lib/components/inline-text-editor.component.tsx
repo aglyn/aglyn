@@ -40,6 +40,7 @@ import {
   selectionOf,
 } from '../utils/in-place-edit-surface'
 import { inlineTextEdit } from '../utils/inline-text-edit.store'
+import { richTextCommandGroups } from '../utils/rich-text-commands'
 import {
   richTextToPlain,
   sanitizeRichText,
@@ -62,14 +63,52 @@ import {
   tokenPillContainerSx,
 } from './token-pill.component'
 
-const RICH_COMMANDS: Array<{ command: string; label: string; title: string }> =
-  [
-    { command: 'bold', label: 'B', title: 'Bold' },
-    { command: 'italic', label: 'I', title: 'Italic' },
-    { command: 'underline', label: 'U', title: 'Underline' },
-    { command: 'insertUnorderedList', label: '•', title: 'Bulleted list' },
-    { command: 'insertOrderedList', label: '1.', title: 'Numbered list' },
-  ]
+/**
+ * The formatting tools, each tagged with the group that has to be allowed
+ * for it to appear (AGL-2557).
+ *
+ * The toolbar used to render this list whole, which is why rich text could
+ * only ever be offered by a component that could hold all of it — a
+ * `<button>` cannot hold a list, so Accordion Summary and Button were left
+ * with no formatting at all rather than with the half that is safe in them.
+ */
+const RICH_COMMANDS: Array<{
+  command: string
+  label: string
+  title: string
+  group: Aglyn.RICH_TEXT_COMMANDS
+}> = [
+  {
+    command: 'bold',
+    label: 'B',
+    title: 'Bold',
+    group: Aglyn.RICH_TEXT_COMMANDS.EMPHASIS,
+  },
+  {
+    command: 'italic',
+    label: 'I',
+    title: 'Italic',
+    group: Aglyn.RICH_TEXT_COMMANDS.EMPHASIS,
+  },
+  {
+    command: 'underline',
+    label: 'U',
+    title: 'Underline',
+    group: Aglyn.RICH_TEXT_COMMANDS.EMPHASIS,
+  },
+  {
+    command: 'insertUnorderedList',
+    label: '•',
+    title: 'Bulleted list',
+    group: Aglyn.RICH_TEXT_COMMANDS.LIST,
+  },
+  {
+    command: 'insertOrderedList',
+    label: '1.',
+    title: 'Numbered list',
+    group: Aglyn.RICH_TEXT_COMMANDS.LIST,
+  },
+]
 
 /** Stands in while no edit is open, so the anchor hook can run every render. */
 const EMPTY_RECT = { left: 0, top: 0, width: 0, height: 0 }
@@ -218,6 +257,23 @@ export const InlineTextEditorComponent = observer(
         Aglyn.FEATURE_FLAG.DISABLED) &
         Aglyn.FEATURE_FLAG.ENABLED) !==
         0
+
+    // What THIS component's schema allows (AGL-2557); a schema that names
+    // nothing allows everything, which is what leaves Typography alone.
+    const commandGroups = richTextCommandGroups(node?.componentSchema)
+    /**
+     * The surface may hold phrasing content only.
+     *
+     * Derived from the allowance rather than declared beside it: a component
+     * that can take neither a list nor a link is one whose element admits no
+     * block and no nested control, and that single fact is what the commit
+     * sanitizer, the Enter key and the toolbar all need. Two ways to say it
+     * would eventually say two different things.
+     */
+    const phrasingOnly =
+      rich &&
+      !commandGroups.has(Aglyn.RICH_TEXT_COMMANDS.LIST) &&
+      !commandGroups.has(Aglyn.RICH_TEXT_COMMANDS.LINK)
 
     const activeEditable = useCallback(
       () =>
@@ -384,7 +440,11 @@ export const InlineTextEditorComponent = observer(
           // reach storage) — on a clone, the live DOM stays intact.
           const clone = surface.cloneNode(true) as HTMLElement
           replacePillsWithTokenText(clone)
-          const sanitized = sanitizeRichText(clone.innerHTML)
+          // The toolbar offers no block command on a phrasing-only surface,
+          // but a PASTE can still carry one in, and the renderer would strip
+          // it — so the commit strips it first and what is stored is what
+          // the page will draw.
+          const sanitized = sanitizeRichText(clone.innerHTML, { phrasingOnly })
           const plain = richTextToPlain(sanitized)
           const hasMarkup = /<[a-z]/i.test(sanitized)
           const nextProps: Record<string, unknown> = {
@@ -444,7 +504,7 @@ export const InlineTextEditorComponent = observer(
       inPlaceRef.current = undefined
       if (current && nextWrite) commitProps(current, nextWrite)
       inlineTextEdit.close()
-    }, [rich, commitProps, activeEditable])
+    }, [rich, phrasingOnly, commitProps, activeEditable])
 
     const cancel = useCallback(() => {
       committedRef.current = true
@@ -627,9 +687,18 @@ export const InlineTextEditorComponent = observer(
         } else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
           event.preventDefault()
           commit()
+        } else if (event.key === 'Enter' && phrasingOnly && !event.shiftKey) {
+          // A phrasing-only surface is a control's LABEL — a button, a link,
+          // an accordion header. Enter there means "done", the same as it
+          // does on the plain surface; a browser would otherwise fork the
+          // contentEditable into `<div>`s, which is exactly the markup this
+          // surface may not hold. Shift+Enter still breaks the line, and a
+          // `<br>` is phrasing content.
+          event.preventDefault()
+          commit()
         }
       },
-      [cancel, commit],
+      [cancel, commit, phrasingOnly],
     )
 
     // Keep the selection inside the editable surface while clicking tools.
@@ -868,7 +937,9 @@ export const InlineTextEditorComponent = observer(
           }}
         >
           {rich
-            ? RICH_COMMANDS.map(({ command, label, title }) => (
+            ? RICH_COMMANDS.filter(({ group }) =>
+                commandGroups.has(group),
+              ).map(({ command, label, title }) => (
                 <IconButton
                   key={command}
                   size="small"
@@ -890,7 +961,7 @@ export const InlineTextEditorComponent = observer(
                 </IconButton>
               ))
             : null}
-          {rich ? (
+          {rich && commandGroups.has(Aglyn.RICH_TEXT_COMMANDS.LINK) ? (
             <IconButton
               size="small"
               title="Insert link"

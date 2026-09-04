@@ -28,7 +28,7 @@ import type { SvgIconProps } from '@mui/material'
 import type { MuiStyledOptions } from '@mui/system/createStyled'
 import type { CANVAS_ROOT_ELEMENT_ID } from '../constants/canvas'
 import type { ComponentCategory } from '../constants/components'
-import type { FEATURE_FLAG } from '../constants/shared'
+import type { FEATURE_FLAG, RICH_TEXT_COMMANDS } from '../constants/shared'
 import type { AGLYN_OF, SYMBOL_TYPE } from '../constants/symbol'
 
 export enum LinealDirectiveFlag {
@@ -108,6 +108,17 @@ export interface AglynComponentSchema<P = any> {
    * New version
    */
   attributes?: AglynAttributeSchema[]
+
+  /**
+   * Which groups of formatting the inline rich-text toolbar offers for this
+   * component (AGL-2557). Read only where `flags.richTextEditable` is on.
+   *
+   * Omitted means every group, which is what leaves Typography exactly as it
+   * was. Naming a subset narrows the toolbar AND the commit: a surface that
+   * offers neither lists nor links is phrasing-only, and the sanitizer holds
+   * it to that whatever an author pastes in.
+   */
+  richTextCommands?: RICH_TEXT_COMMANDS[]
 
   /**
    * Feature flags
@@ -239,6 +250,17 @@ export enum FieldComponentType {
    * image list) fall back to free text rather than being clobbered.
    */
   CSS_GRADIENT = 'css-gradient',
+  /**
+   * Row-and-column grid editor for the Table element (AGL-2543).
+   *
+   * The persisted prop is still ONE string — pipe-delimited rows with the
+   * markdown divider carrying per-column alignment — so the renderer and
+   * existing documents stay untouched, and a comparison table already
+   * authored inside a Markdown element pastes straight in. This is the
+   * affordance that makes the element no-code: without it an author edits
+   * pipe syntax, which is the audience the besigner exists to spare.
+   */
+  DATA_TABLE = 'data-table',
   DATE_PICKER = 'date-picker',
   DUAL_LIST_SELECT = 'dual-list-select',
   FIELD_ARRAY = 'field-array',

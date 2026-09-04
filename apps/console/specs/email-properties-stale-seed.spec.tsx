@@ -155,6 +155,13 @@ jest.mock('@aglyn/besigner-ui', () => ({
     <div>{children}</div>
   ),
   useAddElementDrawerCallback: () => () => undefined,
+  // Both take the editor's noun and hand back an async callback the toolbar
+  // calls. This spec never clicks either one; they are here because the page
+  // calls the hooks at render, and a wholesale mock that omits an export the
+  // barrel gained renders nothing at all — the failure lands as a missing
+  // label, nowhere near the cause (AGL-2554, AGL-2555).
+  useClearCanvasCallback: () => async () => undefined,
+  useRepairDocumentCallback: () => async () => undefined,
   useBesignerDocument: () => ({
     saveAvailable: false,
     remoteChanged: false,

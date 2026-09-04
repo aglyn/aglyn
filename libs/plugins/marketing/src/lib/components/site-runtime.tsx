@@ -289,6 +289,41 @@ function AutomationsEngine(props: {
                 element.classList.toggle(step.className)
               }
             })
+          } else if (
+            step.type === 'setAttribute' ||
+            step.type === 'removeAttribute'
+          ) {
+            /*
+              The semantics half of a hand-built disclosure (AGL-2546).
+
+              Deliberately in THIS loop rather than behind a guard of its own:
+              it then inherits exactly the gating the visibility steps have,
+              including which surfaces mount the runtime at all. A separate
+              path reaching `document.querySelector` directly is how this
+              would come to run somewhere `showElement` does not.
+
+              The name is re-checked here and not only in the editor. The
+              editor is a convenience; a step can reach this runtime from a
+              document written before the allowlist existed, or by any route
+              that does not pass through the console UI.
+
+              A rejected name is a NO-OP, not a throw — the `catch` around
+              this loop would otherwise let one bad attribute name silently
+              drop every step after it in the same automation.
+            */
+            if (Aglyn.isInteractionAttributeAllowed(step.name)) {
+              const name = step.name.trim().toLowerCase()
+              const targets = document.querySelectorAll(
+                Aglyn.expandLeafSelector(step.selector),
+              )
+              targets.forEach((element) => {
+                if (step.type === 'setAttribute') {
+                  element.setAttribute(name, step.value ?? '')
+                } else {
+                  element.removeAttribute(name)
+                }
+              })
+            }
           } else if (step.type === 'stickyNav') {
             const target = document.querySelector(
               Aglyn.expandLeafSelector(step.selector?.trim() || 'header, nav'),

@@ -32,6 +32,8 @@ import {
   type BesignerSaveBaseline,
   type WorkspaceEditorComponentProps,
   clearServerDraft,
+  useClearCanvasCallback,
+  useRepairDocumentCallback,
 } from '@aglyn/besigner-ui'
 import {
   ICON_VARIANT_MODIFY_ADD,
@@ -301,6 +303,12 @@ function ComponentBesignerPage(props) {
   // Canvas lifecycle, first load, concurrent-write detection (AGL-674) and
   // the size-guarded save (AGL-678) are shared by every besigner editor
   // (AGL-746). What stays here is what is actually about a component.
+  // Document maintenance (AGL-2554 / AGL-2555). Both sit on Edit beside
+  // Raw JSON, which is the escape hatch they exist to make unnecessary:
+  // an unrenderable node cannot be selected, so neither Delete Element nor
+  // Add Element can reach one.
+  const clearCanvas = useClearCanvasCallback('component')
+  const repairDocument = useRepairDocumentCallback('component')
   const {
     saveAvailable,
     remoteChanged,
@@ -882,6 +890,21 @@ function ComponentBesignerPage(props) {
                             id: 'center-nav-edit-rawjson',
                             children: 'Raw JSON',
                             onClick: () => openJsonEditor(),
+                            ListItemTextProps: { inset: true },
+                          },
+                          {
+                            type: 'divider',
+                          },
+                          {
+                            id: 'center-nav-edit-repair',
+                            children: 'Repair component',
+                            onClick: () => repairDocument(),
+                            ListItemTextProps: { inset: true },
+                          },
+                          {
+                            id: 'center-nav-edit-clear',
+                            children: 'Clear canvas',
+                            onClick: () => clearCanvas(),
                             ListItemTextProps: { inset: true },
                           },
                         ],

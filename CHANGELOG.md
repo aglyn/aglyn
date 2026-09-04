@@ -9,6 +9,46 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.66 — 2026-09-04
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/f331e6e12...v1.0.0-beta.66)
+
+### Added
+
+- **besigner:** bold reaches the button family, by asking what each element can hold ([AGL-2557](https://linear.app/aglyn/issue/AGL-2557), [AGL-54](https://linear.app/aglyn/issue/AGL-54), [AGL-1232](https://linear.app/aglyn/issue/AGL-1232), [AGL-497](https://linear.app/aglyn/issue/AGL-497), [AGL-2556](https://linear.app/aglyn/issue/AGL-2556))
+
+## v1.0.0-beta.65 — 2026-09-04
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.64...v1.0.0-beta.65)
+
+### Added
+
+- **besigner:** clear and repair a document Delete cannot reach ([AGL-2554](https://linear.app/aglyn/issue/AGL-2554), [AGL-2555](https://linear.app/aglyn/issue/AGL-2555), [AGL-1363](https://linear.app/aglyn/issue/AGL-1363))
+- **blocks:** a Table element, with a grid editor rather than pipe syntax ([AGL-2543](https://linear.app/aglyn/issue/AGL-2543))
+- **interactions:** a hand-built disclosure can announce itself ([AGL-2546](https://linear.app/aglyn/issue/AGL-2546))
+
+### Fixed
+
+- **tools:** the gate stops reddening on bookkeeping (AGL-2563, AGL-2560, AGL-2562) (#969) ([AGL-2563](https://linear.app/aglyn/issue/AGL-2563), [AGL-2560](https://linear.app/aglyn/issue/AGL-2560), [AGL-2562](https://linear.app/aglyn/issue/AGL-2562))
+- **console:** the besigner mocks know the repair hooks ([AGL-2554](https://linear.app/aglyn/issue/AGL-2554), [AGL-2555](https://linear.app/aglyn/issue/AGL-2555))
+- **aglyn:** the repair spec's doc helper declares its own type ([AGL-2555](https://linear.app/aglyn/issue/AGL-2555))
+- **aglyn:** the Google Ads loader carries its account, so gtag registers a container ([AGL-2559](https://linear.app/aglyn/issue/AGL-2559), [AGL-2558](https://linear.app/aglyn/issue/AGL-2558))
+- **console:** a preview tab names the document, not its id ([AGL-2551](https://linear.app/aglyn/issue/AGL-2551), [AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **ci:** the Table element's picker icon colours are baselined ([AGL-2543](https://linear.app/aglyn/issue/AGL-2543))
+- **besigner:** an in-place edit anchors on the text, not the whole element ([AGL-2556](https://linear.app/aglyn/issue/AGL-2556))
+- **ci:** a failed staleness check is a red, not silence (AGL-2552) (#967) ([AGL-2552](https://linear.app/aglyn/issue/AGL-2552))
+- **tools:** a notification-path test no longer logs itself as a red (AGL-2550) (#964) ([AGL-2550](https://linear.app/aglyn/issue/AGL-2550))
+- **besigner:** deleting an element selects a sibling instead of nothing ([AGL-2553](https://linear.app/aglyn/issue/AGL-2553))
+- **blocks:** a section block brings its own container ([AGL-2544](https://linear.app/aglyn/issue/AGL-2544))
+- **ci:** a push asks whether the full sweep is stale, so it runs hourly in fact (AGL-2552) (#966) ([AGL-2552](https://linear.app/aglyn/issue/AGL-2552), [AGL-2534](https://linear.app/aglyn/issue/AGL-2534))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **tools:** the Linear ceiling reads AGL-2559, the workspace head ([AGL-2559](https://linear.app/aglyn/issue/AGL-2559), [AGL-2554](https://linear.app/aglyn/issue/AGL-2554), [AGL-2558](https://linear.app/aglyn/issue/AGL-2558))
+
+</details>
+
 ## v1.0.0-beta.64 — 2026-09-03
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.63...v1.0.0-beta.64)

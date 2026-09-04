@@ -44,8 +44,17 @@ import { createHash } from 'node:crypto'
 /** The Linear issue the gate comments on. Read its description before changing. */
 export const SINK_ISSUE_ID = 'AGL-2537'
 
-/** Jobs whose failure is worth waking somebody for. */
-export const REPORTABLE_JOBS = ['fast', 'full']
+/**
+ * Jobs whose failure is worth waking somebody for.
+ *
+ * `sweepDue` is here because `full` DEPENDS on it (AGL-2552). A failed
+ * `sweep-due` leaves `full` skipped, and a skipped `full` is not a failure —
+ * so without this entry the full sweep would stop running on every push and
+ * the reporter would say "nothing to report", which is precisely the silent
+ * detector this whole gate exists to prevent. The job that decides whether to
+ * gate has to be gated too.
+ */
+export const REPORTABLE_JOBS = ['fast', 'full', 'sweepDue']
 
 /**
  * Which jobs actually failed, in a stable order.
@@ -121,6 +130,19 @@ export function slackPayload({ sha, results, runUrl, subject }) {
 const JOB_MEANING = {
   fast: 'typecheck + guards',
   full: 'tests + production builds',
+  sweepDue: 'the full sweep is NOT running on pushes',
+}
+
+/**
+ * How each job is NAMED in the alert. `fast` and `full` write commit statuses
+ * and are named by their context; `sweep-due` writes none, so naming it
+ * `main-gate/sweepDue` would send the reader looking for a status that does
+ * not exist.
+ */
+const JOB_LABEL = {
+  fast: '`main-gate/fast`',
+  full: '`main-gate/full`',
+  sweepDue: 'the `is the full sweep due` job',
 }
 
 /** The comment body. Terse on purpose: it is read on a phone, at night. */
@@ -131,15 +153,27 @@ export function redCommentBody({ sha, results, runUrl, subject, when = new Date(
     '',
     `**Main Gate is RED on \`${String(sha).slice(0, 9)}\`.**`,
     '',
-    ...jobs.map((j) => `- \`main-gate/${j}\` FAILED - ${JOB_MEANING[j] ?? j}`),
+    ...jobs.map((j) => `- ${JOB_LABEL[j] ?? j} FAILED - ${JOB_MEANING[j] ?? j}`),
     '',
     subject ? `Commit: ${subject}` : null,
     runUrl ? `Run: ${runUrl}` : null,
     `Graded: ${when.toISOString()}`,
     '',
-    '`main` is broken until this is repaired or shown to be a known flake.',
-    'A promotion opened while this stands will be told so by the',
-    '`Promotion verdict` check, which refuses a RED TIP (AGL-2533).',
+    // A `sweep-due` failure does NOT mean `main` is broken — it means the
+    // sweep stopped watching. Saying "main is broken" there would send the
+    // reader hunting for a break that does not exist, which is the same
+    // overstatement the TEST message made twice (AGL-2550).
+    ...(jobs.every((j) => j === 'sweepDue')
+      ? [
+          '`main` is not known to be broken. What failed is the check that decides',
+          'whether the full sweep runs, so the sweep has stopped covering pushes',
+          'until this is repaired — the gate is now as blind as the cron made it.',
+        ]
+      : [
+          '`main` is broken until this is repaired or shown to be a known flake.',
+          'A promotion opened while this stands will be told so by the',
+          '`Promotion verdict` check, which refuses a RED TIP (AGL-2533).',
+        ]),
   ]
     .filter((l) => l !== null)
     .join('\n')

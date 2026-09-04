@@ -308,6 +308,23 @@ export type HostActionStep = (
   // Drawer commands (AGL-562): delivered to muiDrawer instances over the
   // window event bus keyed by node id; an empty target addresses the
   // page's first drawer.
+  // Attribute steps (AGL-2546): the semantics half of a hand-built
+  // disclosure. `showElement` opens the panel; these are what let it say so.
+  //
+  // `selector`, deliberately, and NOT a new targeting field. Two mechanisms
+  // key off that exact name: `regraftStepSelectors` rewrites it to the
+  // grafted `cmp__{instance}__{id}` when an interaction is authored inside a
+  // reusable component, and the runtime wraps it in `expandLeafSelector`.
+  // The menu steps took `menuNodeId` instead, get neither, and compensate at
+  // run time — one concept should not have three targeting models.
+  //
+  // Two verbs rather than one with an empty value: `""` does not mean
+  // "absent" uniformly. `hidden=""` is true, `aria-expanded=""` is invalid
+  // and discarded, `data-x=""` is a real value an attribute selector still
+  // matches. Overloading it would make the step's meaning depend on which
+  // attribute the author picked.
+  | { type: 'setAttribute'; selector: string; name: string; value: string }
+  | { type: 'removeAttribute'; selector: string; name: string }
   | { type: 'openDrawer'; drawerNodeId?: string }
   | { type: 'closeDrawer'; drawerNodeId?: string }
   | { type: 'toggleDrawer'; drawerNodeId?: string }
@@ -400,6 +417,8 @@ export const CLIENT_ACTION_STEP_TYPES: ReadonlySet<HostActionStepType> =
     'openMenu',
     'closeMenu',
     'toggleMenu',
+    'setAttribute',
+    'removeAttribute',
     'showHtml',
     'runJs',
     'redirect',
@@ -475,6 +494,8 @@ export const BASIC_CLIENT_ACTION_STEP_TYPES: ReadonlySet<HostActionStepType> =
     'openMenu',
     'closeMenu',
     'toggleMenu',
+    'setAttribute',
+    'removeAttribute',
     'redirect',
     'siteAlert',
   ] as const)
@@ -566,6 +587,35 @@ export const CUSTOM_EVENT_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]{1,39}$/
 export const FLOW_WAIT_MIN_MINUTES = 1
 export const FLOW_WAIT_MAX_MINUTES = 90 * 24 * 60
 
+/**
+ * The attribute names an interaction may write (AGL-2546).
+ *
+ * An unrestricted attribute setter is a self-XSS vector authored through the
+ * interactions UI: it reaches `href`, `src`, `onclick`, `formaction` and
+ * `style`, and on a site with collaborators the author and the victim need
+ * not be the same person. `aria-*` and `data-*` carry the entire
+ * accessibility use case and none of that exposure.
+ *
+ * Deliberately NOT solved by an entitlement gate. `runJs` is Business-gated
+ * because it is dangerous at any tier; this has to work on every plan,
+ * because a screen-reader user's access to a menu is not a paid feature.
+ */
+export const INTERACTION_ATTRIBUTE_NAME_PATTERN = /^(?:aria|data)-[a-z][a-z0-9-]*$/
+
+/**
+ * Whether an interaction is allowed to write this attribute name.
+ *
+ * Case-insensitive because HTML attribute names are, and a rejected name is
+ * a no-op rather than an error: a step that cannot run must not break the
+ * steps after it in the same automation.
+ */
+export function isInteractionAttributeAllowed(name: unknown): boolean {
+  return (
+    typeof name === 'string' &&
+    INTERACTION_ATTRIBUTE_NAME_PATTERN.test(name.trim().toLowerCase())
+  )
+}
+
 export const HOST_ACTION_STEP_LABELS: Record<HostActionStepType, string> = {
   runWorkflow: 'Run a workflow',
   siteAlert: 'Show a site alert',
@@ -586,6 +636,8 @@ export const HOST_ACTION_STEP_LABELS: Record<HostActionStepType, string> = {
   openMenu: 'Open a menu',
   closeMenu: 'Close a menu',
   toggleMenu: 'Open/close a menu',
+  setAttribute: 'Set an ARIA or data attribute',
+  removeAttribute: 'Remove an ARIA or data attribute',
   showHtml: 'Show custom HTML',
   runJs: 'Run custom JS (Business)',
   redirect: 'Redirect the visitor',

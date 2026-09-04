@@ -55,6 +55,7 @@ import {
   OK,
   UNKNOWN,
   ceilingAgeDays,
+  raiseCeiling,
   classifyCitation,
   formatReport,
   issueFromSubject,
@@ -132,6 +133,50 @@ function loadCeiling() {
     process.exit(2)
   }
   return result.ceiling
+}
+
+/**
+ * The highest issue Linear actually has, or null (AGL-2563).
+ *
+ * The cached ceiling exists because, when this guard was written,
+ * `LINEAR_API_KEY` was "set nowhere in this repo". That is no longer true — it
+ * is a repo secret, used by Main Gate's notifier. So in CI the guard can ask
+ * the authority instead of trusting a copy someone has to remember to bump,
+ * which is what made THREE of the last eight Main Gate reds fire on issues
+ * that existed perfectly well.
+ *
+ * Distinct from `--refresh`: nothing is written. The number is used for this
+ * run only, so the file is still only ever edited by a human who looked.
+ *
+ * Fails SOFT in every direction — no key, a timeout, an HTTP error, a shape
+ * that is not a positive integer all return null and leave the cache in
+ * charge. A guard that went red because Linear was slow would be worse than
+ * the staleness it is fixing.
+ */
+async function liveHighest() {
+  const apiKey = (process.env['LINEAR_API_KEY'] ?? '').trim()
+  if (!apiKey) return null
+  const query = `
+    query HighestIssue {
+      issues(first: 1, filter: { team: { key: { eq: "AGL" } } }, orderBy: createdAt) {
+        nodes { number }
+      }
+    }`
+  try {
+    const response = await fetch(LINEAR_GRAPHQL_URL, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: apiKey },
+      body: JSON.stringify({ query }),
+      signal: AbortSignal.timeout(10_000),
+    })
+    if (!response.ok) return null
+    const body = await response.json()
+    if (body.errors) return null
+    const number = body?.data?.issues?.nodes?.[0]?.number
+    return Number.isInteger(number) && number > 0 ? number : null
+  } catch {
+    return null
+  }
 }
 
 // ── THE SWEEPS ────────────────────────────────────────────────────────────
@@ -301,9 +346,19 @@ function selfTest(ceiling) {
     { id: 'AGL-96', want: OK, why: 'exists — Commerce v2 coupons' },
     { id: `AGL-${ceiling.highest}`, want: OK, why: 'exists — the ceiling itself' },
     { id: `AGL-${ceiling.highest + 1}`, want: FABRICATED, why: 'one past the ceiling' },
-    { id: 'AGL-2508', want: FABRICATED, why: 'fabricated — cited by 363d03156' },
-    { id: 'AGL-2521', want: FABRICATED, why: 'fabricated — cited by b14b3c3b3' },
+    { id: `AGL-${ceiling.highest + 41}`, want: FABRICATED, why: 'well past the ceiling' },
     { id: 'AGL-9999', want: FABRICATED, why: 'fabricated — far past the ceiling' },
+    // AGL-2508 and AGL-2521 used to sit here as the two ids a session actually
+    // hallucinated. They were correct fixtures on the day they were written and
+    // WRONG by the time the workspace reached AGL-2522: a number that was
+    // fabricated in August is a real issue in September, so the case asserted
+    // FABRICATED against an id that now exists and the proof failed on `main`
+    // for reasons no commit caused (AGL-2563).
+    //
+    // Anything pinned BELOW a rising ceiling expires. Every fabricated fixture
+    // is therefore derived from the ceiling, which cannot go stale, and the
+    // historical pair is covered by `FABRICATED_IDS` in the unit suite where
+    // the ceiling is a fixed 2500 and they stay fabricated forever.
   ]
 
   console.log(`Discrimination proof against ceiling AGL-${ceiling.highest}:\n`)
@@ -403,10 +458,17 @@ async function refresh(ceiling) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2))
-  const ceiling = loadCeiling()
+  const cached = loadCeiling()
 
-  if (options.selfTest) process.exit(selfTest(ceiling))
-  if (options.refresh) process.exit(await refresh(ceiling))
+  if (options.selfTest) process.exit(selfTest(cached))
+  if (options.refresh) process.exit(await refresh(cached))
+
+  // Linear can only ever RAISE the cached number, so this can remove a false
+  // red and never create one (AGL-2563).
+  const { ceiling, source } = raiseCeiling(cached, await liveHighest())
+  if (ceiling.highest !== cached.highest) {
+    console.log(`Ceiling read from Linear: ${source}`)
+  }
 
   const sweeps = []
 

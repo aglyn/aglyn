@@ -1,7 +1,7 @@
 {
   "name": "aglyn",
   "description": "",
-  "version": "1.0.0-beta.64",
+  "version": "1.0.0-beta.66",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": "github:aglyn/aglyn",
@@ -211,7 +211,9 @@
     "check:main-gate-verdicts": "node tools/scripts/check-main-gate-verdicts.mjs",
     "test:main-gate-verdicts": "node --test tools/scripts/lib/main-gate-verdicts.test.mjs",
     "report:main-gate-red": "node tools/scripts/report-main-gate-red.mjs",
-    "test:main-gate-red": "node --test tools/scripts/lib/main-gate-red-report.test.mjs"
+    "test:main-gate-red": "node --test tools/scripts/lib/main-gate-red-report.test.mjs",
+    "check:main-gate-full-sweep": "node tools/scripts/check-main-gate-full-sweep.mjs",
+    "test:main-gate-full-sweep": "node --test tools/scripts/lib/main-gate-full-sweep.test.mjs"
   },
   "dependencies": {
     "@base-ui/react": "1.6.0",

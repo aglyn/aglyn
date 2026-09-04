@@ -35,7 +35,8 @@
 
 import { strict as assert } from 'node:assert'
 import { execFileSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
@@ -427,57 +428,33 @@ test('the CLI exits NON-ZERO when a real file gains a colour', () => {
   const [file, count] = Object.entries(baseline)[0]
   const tightened = { ...baseline, [file]: count - 1 }
 
-  const scratch = join(REPO_ROOT, 'tools', 'scripts', '.tmp-baseline-red.json')
+  // The scratch copy is pointed AT, never swapped IN. This test used to
+  // overwrite the real baseline for the duration of the run and restore it
+  // after: correct alone, and a race under `run-guards`, where a concurrent
+  // `check:hardcoded-colours` could read the tightened copy and red on a clean
+  // tree (AGL-2560). It lives in the OS temp dir so a crashed run cannot leave
+  // a stray file inside the repo either.
+  const scratch = join(tmpdir(), `aglyn-baseline-red-${process.pid}.json`)
   let exitCode = 0
   let output
   try {
-    execFileSync(
-      process.execPath,
-      [
-        '-e',
-        `const fs=require('fs');fs.writeFileSync(${JSON.stringify(scratch)},JSON.stringify(${JSON.stringify(tightened)}))`,
-      ],
-      { cwd: REPO_ROOT },
-    )
-    // Point the CLI at the tightened copy by swapping it in for the duration.
-    const real = readFileSync(BASELINE, 'utf8')
+    writeFileSync(scratch, JSON.stringify(tightened))
     try {
-      execFileSync(
-        process.execPath,
-        [
-          '-e',
-          `const fs=require('fs');fs.copyFileSync(${JSON.stringify(scratch)},${JSON.stringify(BASELINE)})`,
-        ],
-        { cwd: REPO_ROOT },
-      )
-      try {
-        output = execFileSync(process.execPath, [CLI], {
-          cwd: REPO_ROOT,
-          encoding: 'utf8',
-        })
-      } catch (error) {
-        exitCode = error.status
-        output = String(error.stdout ?? '')
-      }
-    } finally {
-      execFileSync(
-        process.execPath,
-        [
-          '-e',
-          `const fs=require('fs');fs.writeFileSync(${JSON.stringify(BASELINE)},${JSON.stringify(real)})`,
-        ],
-        { cwd: REPO_ROOT },
-      )
+      output = execFileSync(process.execPath, [CLI], {
+        cwd: REPO_ROOT,
+        encoding: 'utf8',
+        env: { ...process.env, HARDCODED_COLOURS_BASELINE: scratch },
+      })
+    } catch (error) {
+      exitCode = error.status
+      output = String(error.stdout ?? '')
     }
   } finally {
-    execFileSync(
-      process.execPath,
-      [
-        '-e',
-        `const fs=require('fs');try{fs.unlinkSync(${JSON.stringify(scratch)})}catch{}`,
-      ],
-      { cwd: REPO_ROOT },
-    )
+    try {
+      rmSync(scratch, { force: true })
+    } catch {
+      // A leftover temp file is not worth failing a passing suite over.
+    }
   }
 
   assert.equal(exitCode, 1, 'the CLI did not fail on a gained colour')
