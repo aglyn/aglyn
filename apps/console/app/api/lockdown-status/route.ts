@@ -38,6 +38,7 @@ import {
 import {
   getFeatureLockdown,
   getPlatformLockdown,
+  recordSignupServed,
 } from '@aglyn/tenant-data-admin'
 
 // lockdown-423: exempt — THE notice surface — what a locked-out client calls to learn WHY.
@@ -58,6 +59,20 @@ export async function GET(request: Request): Promise<Response> {
   const feature: LockdownFeatureKey | null = isLockdownFeatureKey(featureParam)
     ? featureParam
     : null
+  // THE SIGNUP DROUGHT DENOMINATOR (AGL-2583).
+  //
+  // `?feature=signups` is asked by exactly one thing: the signup page, once
+  // per render, to decide whether to show the paused notice. That makes this
+  // line the cheapest honest count of "the signup page is being served",
+  // which is the traffic figure `/api/health/signup-volume` needs before
+  // "zero accounts created this hour" can mean anything at all. Only the
+  // signups feature is counted — the bare `/api/lockdown-status` the console
+  // shell polls on every load is a different question and would drown this
+  // one in noise.
+  //
+  // Not awaited, and it cannot throw: the page's own latency is not spent on
+  // a monitoring breadcrumb.
+  if (feature === 'signups') recordSignupServed()
   const nowMs = Date.now()
   const platform = await getPlatformLockdown()
   // Expiry filter on BOTH carriers: once `untilMs` passes, the lock is

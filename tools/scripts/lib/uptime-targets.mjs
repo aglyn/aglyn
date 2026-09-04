@@ -108,6 +108,12 @@ export const SUBSYSTEM_HEALTH = {
     '/api/health/crons',
     '/api/health/backups',
     '/api/health/billing',
+    // Signup volume, refusals and the DROUGHT (AGL-1536, AGL-1907,
+    // AGL-2583). `/api/health/signups` is the old path for the same handler,
+    // kept working when the check was renamed to what it measures — and
+    // probed here rather than merely tolerated, because a compatibility path
+    // nothing exercises is a compatibility path that quietly stops working.
+    '/api/health/signup-volume',
     '/api/health/signups',
     '/api/health/rate-limits',
     '/api/health/error-beacon',

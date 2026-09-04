@@ -57,8 +57,11 @@ import {
   emailVerificationDoorHealth,
   googleOauthDoorHealth,
   passkeyDoorHealth,
+  PASSWORD_SIGN_IN_EXPECTED_REFUSALS,
   passwordResetDoorHealth,
+  passwordSignInDoorHealth,
   ssoDoorHealth,
+  type PasswordSignInAnswer,
   type RedemptionAnswer,
 } from '../app/api/health/auth-doors/auth-doors-verdict'
 import { healthHttpStatus, healthStatus } from '@aglyn/aglyn/server'
@@ -139,6 +142,11 @@ function healthyReplies(): Record<string, { status: number; body: unknown }> {
           'https://accounts.google.com/o/oauth2/auth?response_type=id_token&client_id=probe.apps.googleusercontent.com',
       },
     },
+    // The password door: the refusal IS the green (AGL-2583).
+    'accounts:signInWithPassword': {
+      status: 400,
+      body: { error: { message: 'EMAIL_NOT_FOUND' } },
+    },
     'accounts:resetPassword': {
       status: 400,
       body: { error: { message: 'INVALID_OOB_CODE' } },
@@ -199,6 +207,7 @@ describe('every door open', () => {
       'googleOauth',
       'passkey',
       'passwordReset',
+      'passwordSignIn',
       'sso',
     ])
     expect((body as { service: string }).service).toBe('console-auth-doors')
@@ -213,6 +222,8 @@ describe('every door open', () => {
       'accounts:update',
       // The reset link's redemption endpoint.
       'accounts:resetPassword',
+      // The password door itself (AGL-2583).
+      'accounts:signInWithPassword',
     ].sort())
   })
 
@@ -300,6 +311,119 @@ describe('google-oauth goes red', () => {
       ok: false,
       code: 'appcheck-rejected',
     })
+  })
+})
+
+describe('password-sign-in goes red (AGL-2583)', () => {
+  // The failure that locks out every customer who uses an email and a
+  // password, and the one no endpoint on the platform could report until this
+  // door existed. `/api/health/signups` was green through three days of it.
+  it('when the password provider is switched off', async () => {
+    mockToolkitReplies['accounts:signInWithPassword'] = {
+      status: 400,
+      body: {
+        error: {
+          message:
+            'OPERATION_NOT_ALLOWED : Password sign-in is disabled for this project.',
+        },
+      },
+    }
+    const { status, body } = await invoke()
+    expect(status).toBe(503)
+    expect(doorOf(body, 'passwordSignIn')).toMatchObject({
+      ok: false,
+      code: 'provider-not-configured',
+    })
+  })
+
+  it('when the public API key is rejected', async () => {
+    mockToolkitReplies['accounts:signInWithPassword'] = {
+      status: 400,
+      body: { error: { message: 'API key not valid. Please pass a valid API key.' } },
+    }
+    const { status, body } = await invoke()
+    expect(status).toBe(503)
+    expect(doorOf(body, 'passwordSignIn')).toMatchObject({
+      ok: false,
+      code: 'api-key-rejected',
+    })
+  })
+
+  // An address in a reserved TLD signing in means whatever answered is not an
+  // identity provider behaving correctly. Reading a 200 as healthy is exactly
+  // the mistake this issue is about.
+  it('when the absent account is ADMITTED', async () => {
+    mockToolkitReplies['accounts:signInWithPassword'] = {
+      status: 200,
+      body: { idToken: 'this-should-be-impossible' },
+    }
+    const { status, body } = await invoke()
+    expect(status).toBe(503)
+    expect(doorOf(body, 'passwordSignIn')).toMatchObject({
+      ok: false,
+      code: 'admitted-absent-account',
+    })
+    expect(JSON.stringify(body)).not.toContain('this-should-be-impossible')
+  })
+
+  // The enumeration-protected refusal is the DEFAULT for projects created
+  // since 2023. Reading it as a failure would hold this permanently red on a
+  // healthy project — the false alarm that gets a check muted.
+  it('but stays green on the enumeration-protected refusal', async () => {
+    mockToolkitReplies['accounts:signInWithPassword'] = {
+      status: 400,
+      body: { error: { message: 'INVALID_LOGIN_CREDENTIALS' } },
+    }
+    const { status, body } = await invoke()
+    expect(status).toBe(200)
+    expect(doorOf(body, 'passwordSignIn').ok).toBe(true)
+  })
+
+  // The optional credentialed half: with a disposable identity configured the
+  // door is opened for real, which also exercises the account pool and any
+  // blocking function. The credential never reaches the body.
+  it('when the configured probe identity cannot sign in', async () => {
+    process.env['AGLYN_SIGNIN_PROBE_EMAIL'] = 'probe@example.test'
+    process.env['AGLYN_SIGNIN_PROBE_PASSWORD'] = 'not-a-real-password'
+    const replies = { ...mockToolkitReplies }
+    let seen = 0
+    ;(global as unknown as { fetch: unknown }).fetch = jest.fn(
+      async (url: string, init: { body: string }) => {
+        const method = String(url).split('/v1/')[1]?.split('?')[0] ?? ''
+        mockRequestedMethods.push(method)
+        if (method === 'accounts:signInWithPassword') {
+          seen += 1
+          // The second call is the credentialed one; it is refused.
+          return {
+            ok: false,
+            status: 400,
+            json: async () => ({
+              error: {
+                message: seen === 1 ? 'EMAIL_NOT_FOUND' : 'USER_DISABLED',
+              },
+            }),
+          }
+        }
+        const reply = replies[method]
+        if (!reply) throw new Error(`unexpected call to ${method}`)
+        return {
+          ok: reply.status >= 200 && reply.status < 300,
+          status: reply.status,
+          json: async () => reply.body,
+        }
+      },
+    )
+    const { status, body } = await invoke()
+    delete process.env['AGLYN_SIGNIN_PROBE_EMAIL']
+    delete process.env['AGLYN_SIGNIN_PROBE_PASSWORD']
+    expect(status).toBe(503)
+    expect(doorOf(body, 'passwordSignIn')).toMatchObject({
+      ok: false,
+      code: 'probe-signin-failed',
+    })
+    const serialized = JSON.stringify(body)
+    expect(serialized).not.toContain('probe@example.test')
+    expect(serialized).not.toContain('not-a-real-password')
   })
 })
 
@@ -802,5 +926,174 @@ describe('the doors report through the shared health contract', () => {
       expect(check.code).toMatch(/^[a-z0-9-]+$/)
       expect(JSON.stringify(check)).not.toMatch(/aglyn-main|firebase-adminsdk|@/)
     }
+  })
+})
+
+
+/**
+ * AGL-2583 — the password door, which nothing asserted until this issue.
+ *
+ * The five doors above were built as "the ways in that are NOT email and
+ * password", on the reading that the password door was already watched. It
+ * was not: the check named "signups" measures creation VOLUME, and its
+ * healthiest reading is zero. Every case below is a way password sign-in
+ * breaks for EVERY customer at once, and each one must be a red — a monitor
+ * that cannot fail is worth nothing.
+ */
+describe('password-sign-in door (AGL-2583)', () => {
+  const signedInAnswer = (
+    over: Partial<PasswordSignInAnswer> = {},
+  ): PasswordSignInAnswer => ({
+    answer: { answered: true, verdict: 'accepted' },
+    refusedTheAbsentAccount: true,
+    unexpectedAcceptance: false,
+    probe: null,
+    ...over,
+  })
+
+  it('a refusal of an account that cannot exist is the HEALTHY answer', () => {
+    const check = passwordSignInDoorHealth(signedInAnswer(), 12)
+    expect(check.ok).toBe(true)
+    expect(check.code).toBeUndefined()
+    expect(check.door).toBe('password-sign-in')
+    expect(check.asserts).toContain('cannot exist')
+  })
+
+  it('names the three refusals a healthy project can answer with', () => {
+    // `INVALID_LOGIN_CREDENTIALS` is what a project with email-enumeration
+    // protection returns — the default since 2023. Reading it as a failure
+    // would hold this permanently red on a perfectly healthy project, which
+    // is how a check gets muted before it ever catches anything.
+    expect(PASSWORD_SIGN_IN_EXPECTED_REFUSALS).toEqual(
+      expect.arrayContaining([
+        'EMAIL_NOT_FOUND',
+        'INVALID_LOGIN_CREDENTIALS',
+        'INVALID_PASSWORD',
+      ]),
+    )
+  })
+
+  it('REDS when the password provider is switched off', () => {
+    // Every customer with an email and a password is locked out, and until
+    // this door existed nothing on the platform would have said so.
+    const check = passwordSignInDoorHealth(
+      signedInAnswer({
+        answer: { answered: true, verdict: 'provider-not-configured' },
+        refusedTheAbsentAccount: false,
+      }),
+      12,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('provider-not-configured')
+  })
+
+  it('REDS when the public key or App Check is rejected', () => {
+    for (const verdict of ['api-key-rejected', 'appcheck-rejected'] as const) {
+      const check = passwordSignInDoorHealth(
+        signedInAnswer({
+          answer: { answered: true, verdict },
+          refusedTheAbsentAccount: false,
+        }),
+        12,
+      )
+      expect(check.ok).toBe(false)
+      expect(check.code).toBe(verdict)
+    }
+  })
+
+  it('REDS when nothing answered', () => {
+    const check = passwordSignInDoorHealth(
+      signedInAnswer({
+        answer: { answered: false, verdict: 'refused' },
+        refusedTheAbsentAccount: false,
+      }),
+      5_000,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('provider-unreachable')
+  })
+
+  it('REDS when an account that cannot exist is ADMITTED', () => {
+    // Grading a 200 as healthy because 200 usually means healthy is the exact
+    // shape of mistake this issue exists to stop repeating.
+    const check = passwordSignInDoorHealth(
+      signedInAnswer({ unexpectedAcceptance: true, refusedTheAbsentAccount: false }),
+      12,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('admitted-absent-account')
+  })
+
+  it('REDS on an answer it has no rule for, rather than assuming it is fine', () => {
+    const check = passwordSignInDoorHealth(
+      signedInAnswer({ refusedTheAbsentAccount: false }),
+      12,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('unexpected-answer')
+  })
+
+  it('REDS when the configured probe identity cannot sign in', () => {
+    // The half the anonymous probe is blind to: a blocking function, a
+    // disabled account, a pool that refuses real credentials.
+    const check = passwordSignInDoorHealth(
+      signedInAnswer({ probe: { signedIn: false } }),
+      12,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('probe-signin-failed')
+    expect(check.asserts).toContain('end to end')
+  })
+
+  it('is green when the configured probe identity signs in', () => {
+    const check = passwordSignInDoorHealth(
+      signedInAnswer({ probe: { signedIn: true } }),
+      12,
+    )
+    expect(check.ok).toBe(true)
+  })
+
+  it('an unconfigured probe cannot mute a real red', () => {
+    // A deployment with no probe identity must still be graded by the
+    // anonymous half. Absence of the optional probe is not a pass.
+    const check = passwordSignInDoorHealth(
+      signedInAnswer({
+        answer: { answered: true, verdict: 'provider-not-configured' },
+        refusedTheAbsentAccount: false,
+        probe: null,
+      }),
+      12,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.asserts).toContain('no account used')
+  })
+
+  it('carries no address, no token and no message', () => {
+    const check = passwordSignInDoorHealth(
+      signedInAnswer({ probe: { signedIn: true } }),
+      12,
+    )
+    expect(Object.keys(check).sort()).toEqual(['asserts', 'door', 'ms', 'ok'])
+    // The prose names the door, so `password` is expected in it; an address,
+    // a token or a credential is not.
+    expect(JSON.stringify(check)).not.toMatch(/@|idToken|not-a-credential/i)
+  })
+
+  it('shuts the whole endpoint when it is red — the 503 contract', () => {
+    const checks = {
+      passwordSignIn: passwordSignInDoorHealth(
+        signedInAnswer({
+          answer: { answered: true, verdict: 'provider-not-configured' },
+          refusedTheAbsentAccount: false,
+        }),
+        12,
+      ),
+      passkey: passkeyDoorHealth(
+        { rpContextResolved: true, challengeIssued: true },
+        1,
+      ),
+    }
+    expect(healthStatus(checks)).toBe('degraded')
+    expect(healthHttpStatus(healthStatus(checks))).toBe(503)
   })
 })

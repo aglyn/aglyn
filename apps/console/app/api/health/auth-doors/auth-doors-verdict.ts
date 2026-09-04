@@ -53,6 +53,7 @@ import type { HealthCheck } from '@aglyn/aglyn/server'
  * "google is shut" rather than "check 3 failed".
  */
 export type AuthDoor =
+  | 'password-sign-in'
   | 'password-reset'
   | 'email-verification'
   | 'google-oauth'
@@ -430,6 +431,101 @@ export function passkeyDoorHealth(
   }
   return { ...base, ok: true }
 }
+
+/**
+ * PASSWORD SIGN-IN — the door itself (AGL-2583).
+ *
+ * The five doors beside this one are the ways in that are NOT an email and a
+ * password, and they were built first because they are the ones with a
+ * console toggle behind them. This is the one every other customer uses, and
+ * until now nothing on the platform asserted it: the health endpoints covered
+ * backups, billing, crons, the error beacon, rate limits, server errors and
+ * signup VOLUME, and account creation was refused for every visitor for three
+ * days (AGL-2581) with all of them green.
+ *
+ * A refusal is the SUCCESS, the same trick the redemption probes use. Asking
+ * Identity Platform to sign in an address that cannot exist proves the
+ * endpoint is reachable, the public key is accepted, the App Check
+ * precondition is satisfied and — the failure that locks every password
+ * customer out at once — that the password provider is still ENABLED. It
+ * needs no account, creates nothing and stores no credential.
+ *
+ * `unexpectedAcceptance` is not decoration. An address in a reserved TLD
+ * signing in means whatever answered is not an identity provider behaving
+ * correctly, and grading a 200 as healthy because 200 usually means healthy
+ * is the exact shape of mistake AGL-2583 exists to stop repeating.
+ *
+ * `probe` is the OPTIONAL credentialed half: with a disposable identity
+ * configured, the same door is opened for real, which also exercises the
+ * account pool and any blocking function. Absent, it is null and cannot
+ * change the verdict — a deployment that has not configured one must be
+ * graded by the anonymous half rather than reported as an outage.
+ *
+ * NOT asserted: the console's own session mint, which turns the provider's
+ * token into a cookie. That is a known gap, stated here rather than left for
+ * a reader to assume away.
+ */
+export interface PasswordSignInAnswer {
+  /** How Identity Platform answered the sign-in that must be refused. */
+  answer: ProviderAnswer
+  /** True when the refusal was the expected "no such account" one. */
+  refusedTheAbsentAccount: boolean
+  /** True when the absent account was ADMITTED, which is worse than a refusal. */
+  unexpectedAcceptance: boolean
+  /** The credentialed probe's outcome, or null when none is configured. */
+  probe: { signedIn: boolean } | null
+}
+
+export function passwordSignInDoorHealth(
+  facts: PasswordSignInAnswer,
+  ms: number,
+): AuthDoorCheck {
+  const base = {
+    door: 'password-sign-in' as const,
+    ms,
+    asserts: facts.probe
+      ? 'Identity Platform refuses an account that cannot exist AND admits ' +
+        'the configured probe identity — password sign-in works end to end'
+      : 'Identity Platform refuses an account that cannot exist — the ' +
+        'password provider is enabled and reachable, with no account used',
+  }
+  if (!facts.answer.answered) {
+    return { ...base, ok: false, code: 'provider-unreachable' }
+  }
+  if (facts.unexpectedAcceptance) {
+    return { ...base, ok: false, code: 'admitted-absent-account' }
+  }
+  if (facts.answer.verdict !== 'accepted') {
+    return { ...base, ok: false, code: facts.answer.verdict }
+  }
+  if (!facts.refusedTheAbsentAccount) {
+    // It answered, and not with the refusal this door is defined by. An
+    // unrecognised answer from the sign-in surface is exactly the state
+    // somebody should look at, so it is reported rather than assumed benign.
+    return { ...base, ok: false, code: 'unexpected-answer' }
+  }
+  if (facts.probe && !facts.probe.signedIn) {
+    // The half the anonymous probe is blind to: a blocking function, a
+    // disabled account, a pool that refuses real credentials.
+    return { ...base, ok: false, code: 'probe-signin-failed' }
+  }
+  return { ...base, ok: true }
+}
+
+/**
+ * The refusals that PROVE password sign-in works.
+ *
+ * `EMAIL_NOT_FOUND` is the classic answer. `INVALID_LOGIN_CREDENTIALS` is
+ * what a project with email-enumeration protection returns instead — the
+ * default for projects created since 2023 — and `INVALID_PASSWORD` is the
+ * older sibling of that. All three mean the same thing here: the request was
+ * understood, the provider is on, and the account simply is not there.
+ */
+export const PASSWORD_SIGN_IN_EXPECTED_REFUSALS = [
+  'EMAIL_NOT_FOUND',
+  'INVALID_LOGIN_CREDENTIALS',
+  'INVALID_PASSWORD',
+]
 
 /**
  * The address every mint probe asks about.

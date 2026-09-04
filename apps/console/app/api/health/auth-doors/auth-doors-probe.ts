@@ -63,7 +63,9 @@ import {
   emailVerificationDoorHealth,
   googleOauthDoorHealth,
   passkeyDoorHealth,
+  PASSWORD_SIGN_IN_EXPECTED_REFUSALS,
   passwordResetDoorHealth,
+  passwordSignInDoorHealth,
   ssoDoorHealth,
   type AuthDoorCheck,
   type ProviderAnswer,
@@ -472,8 +474,97 @@ export const passkeyProbe = memoizeWithTtl<AuthDoorCheck>(PROBE_TTL_MS, async ()
 })
 
 
-/** The five checks the route reports, gathered in one place. */
+/**
+ * A password sent for an account that does not exist (AGL-2583).
+ *
+ * It is not a secret and guards nothing — the address is refused long before
+ * a password is compared — but it has to be long enough that the request is
+ * rejected for its subject rather than for its shape.
+ */
+const ABSENT_ACCOUNT_PASSWORD = 'probe-not-a-credential-0000'
+
+/**
+ * The disposable probe identity, or null when this deployment has none.
+ *
+ * Both halves must be present. One without the other is a half-configured
+ * probe, and a half-configured probe that reported red would make every
+ * deployment with a typo look like a sign-in outage. The credential lives in
+ * the deployment's own secret store, never in this repository — the rule
+ * `AGLYN_PROBE_TOKEN` already follows; `docs/UPTIME_AND_SLA.md` carries the
+ * setup, including that the identity must own nothing.
+ */
+function signInProbeIdentity(): { email: string; password: string } | null {
+  const email = process.env['AGLYN_SIGNIN_PROBE_EMAIL']?.trim()
+  const password = process.env['AGLYN_SIGNIN_PROBE_PASSWORD']
+  if (!email || !password) return null
+  return { email, password }
+}
+
+export const passwordSignInProbe = memoizeWithTtl<AuthDoorCheck>(
+  PROBE_TTL_MS,
+  async () => {
+    const startedAt = Date.now()
+    // The same endpoint, the same public key and the same App Check
+    // precondition a real sign-in goes through, asked about an address in a
+    // reserved TLD. The refusal is the success.
+    const reply = await callIdentityToolkit('accounts:signInWithPassword', {
+      email: AUTH_DOOR_PROBE_ADDRESS,
+      password: ABSENT_ACCOUNT_PASSWORD,
+      returnSecureToken: true,
+    })
+    const message = reply.message.toUpperCase()
+    const refusedTheAbsentAccount = PASSWORD_SIGN_IN_EXPECTED_REFUSALS.some(
+      (expected) => message.includes(expected),
+    )
+    const answer: ProviderAnswer = reply.answered
+      ? {
+          answered: true,
+          verdict:
+            reply.ok || refusedTheAbsentAccount
+              ? 'accepted'
+              : classifyIdentityToolkitFailure(reply.status, reply.message),
+        }
+      : { answered: false, verdict: 'refused' }
+
+    // Sequential, not parallel: two sign-ins arriving together from one
+    // address — one of them failing — is the shape Identity Platform
+    // throttles, and a monitor that trips the defense it is watching reports
+    // its own noise.
+    const identity = signInProbeIdentity()
+    let probe: { signedIn: boolean } | null = null
+    if (identity) {
+      const credentialed = await callIdentityToolkit(
+        'accounts:signInWithPassword',
+        {
+          email: identity.email,
+          password: identity.password,
+          returnSecureToken: true,
+        },
+      )
+      // A token is the only proof the sign-in happened. It is read for its
+      // presence and never stored, logged or returned.
+      probe = {
+        signedIn:
+          credentialed.ok &&
+          typeof credentialed.json?.['idToken'] === 'string',
+      }
+    }
+
+    return passwordSignInDoorHealth(
+      {
+        answer,
+        refusedTheAbsentAccount,
+        unexpectedAcceptance: reply.answered && reply.ok,
+        probe,
+      },
+      Date.now() - startedAt,
+    )
+  },
+)
+
+/** The six checks the route reports, gathered in one place. */
 export interface AuthDoorsProbeResult {
+  passwordSignIn: AuthDoorCheck
   passwordReset: AuthDoorCheck
   emailVerification: AuthDoorCheck
   googleOauth: AuthDoorCheck
@@ -485,16 +576,24 @@ export interface AuthDoorsProbeResult {
  * One sweep of every door, in parallel.
  *
  * Each probe memoises independently, so a warm one costs nothing and the
- * endpoint's worst case is one round of calls rather than five in series.
+ * endpoint's worst case is one round of calls rather than six in series.
  */
 export async function probeAuthDoors(): Promise<AuthDoorsProbeResult> {
-  const [passwordReset, emailVerification, googleOauth, sso, passkey] =
+  const [passwordSignIn, passwordReset, emailVerification, googleOauth, sso, passkey] =
     await Promise.all([
+      passwordSignInProbe(),
       passwordResetProbe(),
       emailVerificationProbe(),
       googleOauthProbe(),
       ssoProbe(),
       passkeyProbe(),
     ])
-  return { passwordReset, emailVerification, googleOauth, sso, passkey }
+  return {
+    passwordSignIn,
+    passwordReset,
+    emailVerification,
+    googleOauth,
+    sso,
+    passkey,
+  }
 }

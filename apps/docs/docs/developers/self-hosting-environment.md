@@ -359,6 +359,8 @@ server-only, and none of them may ever be prefixed `NEXT_PUBLIC_`.
 | `PLUGIN_JOBS_SECRET` | Feature | Runtime | Authorizes the tenant's `/api/plugins/run-jobs` endpoint, which the every-minute beat POSTs. Unset, that route answers `501` and **no scheduled plugin job ever runs** — no scheduled publishing, no booking-hold expiry. On the cloud-functions side it is a Secret Manager secret, not a plain variable. |
 | `VERCEL_LOG_DRAIN_SECRET` | Aglyn-only | Runtime | Signature secret for the Vercel log-drain receiver. Fails closed if unset, which is the correct state off Vercel. |
 | `AGLYN_PROBE_TOKEN` | Optional | Runtime | Sent as `x-aglyn-probe` by the scheduled jobs and the uptime scripts so a bot-protection layer in front of your console lets them through. Only needed if you have such a layer; unset, the header is simply not sent. Never send it to a third-party host. |
+| `AGLYN_SIGNIN_PROBE_EMAIL` | Optional | Runtime | Address of a disposable account the `passwordSignIn` door of `/api/health/auth-doors` signs in as, so the check exercises a real sign-in rather than only the identity provider's reachability. Give the account **no organization, no entitlement and no staff claim** — a monitor that owns something is a blast radius. Unset, the door is still graded by its anonymous half; it does not report an outage. |
+| `AGLYN_SIGNIN_PROBE_PASSWORD` | Optional | Runtime | That account's password. Store it the way you store any credential — it never belongs in the repository or in an image. Needed together with the address above: one without the other is treated as no probe at all, because a typo must not look like a sign-in outage. |
 
 ### Requiring SSO for a domain you own {#sso}
 
@@ -577,7 +579,8 @@ forced-failure lever for proving the alert path works.
 | `RATE_LIMIT_ALARM_MAX_CALLS` | `0` | Rate-limiter fallback calls tolerated in the window before `/api/health/rate-limits` reports degraded. |
 | `SERVER_ERROR_ALARM_MAX_ERRORS` | `5` | Uncaught server errors tolerated in a 30-minute window. |
 | `SIGNUP_ALARM_MAX_PER_HOUR` | `10` | Organization creations per hour before the signup-wave alarm. Sized for single-digit-org production — a real launch will trip it. |
-| `SIGNUP_REFUSAL_ALARM_MAX_PER_HOUR` | `50` | Refused (429'd) organization creations per hour. |
+| `SIGNUP_REFUSAL_ALARM_MAX_PER_HOUR` | `50` | Refused (429'd) organization creations per hour. A refusal marked `unreadable` is graded separately at zero tolerance and this number does not mute it. |
+| `SIGNUP_DROUGHT_MIN_TRAFFIC` | `5` | Signup pages served in the trailing hour below which zero accounts created is treated as a quiet hour rather than an outage. This one's forced-failure lever is `0`, not `-1`: at zero, any hour with no accounts created reports a drought. |
 | `USAGE_ALERT_APPROACH_PCT` | `80` | How close to a plan quota a workspace gets before it is warned. Strictly between 0 and 100; you cannot disable the warning with it. The at-cap alert is fixed at 100. |
 
 ---
