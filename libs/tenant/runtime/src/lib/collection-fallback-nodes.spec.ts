@@ -216,8 +216,6 @@ describe('the entry article fallback shell is the PROSE width (AGL-1298)', () =>
 describe('the built-in listing has a vertical rhythm (AGL-2567)', () => {
   const CONTAINER_ID = 'cfb__container'
   const PAGER_ID = 'cfb__pager'
-  const ENTRIES_ID = 'cfb__entries'
-  const EMPTY_ID = 'cfb__empty'
 
   const theme = createTheme()
 
@@ -255,11 +253,27 @@ describe('the built-in listing has a vertical rhythm (AGL-2567)', () => {
     })
   })
 
-  it('leaves 48px under the pager, which is what the footer meets', () => {
-    // The reported symptom: the pagination row sitting on the dark footer.
-    const pager = list({ pagination: paged })[PAGER_ID]
-    expect(pager).toBeDefined()
-    expect(css(pager.props.sx).paddingBottom).toBe('48px')
+  it('keeps 48px of container padding below the last section', () => {
+    // What the footer actually meets. The container's own `py` is the whole
+    // bottom gap — the authored newsroom listing measures 56px there, from
+    // the section around it, and its container contributes nothing — so a
+    // second padding on the trailing section would overshoot the pages this
+    // one exists to match. Pinned because it is load-bearing rather than
+    // incidental: the pager sitting on the dark footer is the reported
+    // symptom, and this padding is the only thing holding it off.
+    const container = list({ pagination: paged })[CONTAINER_ID]
+    expect(css(container.props.sx)).toMatchObject({
+      paddingTop: '48px',
+      paddingBottom: '48px',
+    })
+  })
+
+  it('does NOT stack a second bottom padding on the trailing section', () => {
+    // The container already owns the gap; a trailing section that padded
+    // itself too would leave a hole under the pager that no authored page has.
+    const nodes = list({ pagination: paged })
+    expect(nodes[PAGER_ID].props.sx.paddingBottom).toBeUndefined()
+    expect(nodes['cfb__entries'].props.sx).toBeUndefined()
   })
 
   it('does NOT let the pager offset itself on top of the gap', () => {
@@ -271,21 +285,14 @@ describe('the built-in listing has a vertical rhythm (AGL-2567)', () => {
     expect(css(pager.props.sx).paddingTop).toBeUndefined()
   })
 
-  it('pads the entries block instead when the listing has no pager', () => {
-    // A single-page listing ends on the entries, so that is the section the
-    // footer meets — naming the pager alone would leave this case flush.
-    const nodes = list()
-    expect(nodes[PAGER_ID]).toBeUndefined()
-    expect(css(nodes[ENTRIES_ID].props.sx).paddingBottom).toBe('48px')
-  })
-
-  it('pads the empty-state line on a listing with nothing published', () => {
+  it('gives an empty listing the same shell as a populated one', () => {
+    // A listing with nothing published still renders the heading and, on a
+    // filtered page, the pills — so it wants the same rhythm and the same
+    // bottom gap rather than a shape of its own.
     const nodes = list({ entries: 0 })
-    expect(nodes[EMPTY_ID]).toBeDefined()
-    expect(css(nodes[EMPTY_ID].props.sx).paddingBottom).toBe('48px')
-    // The empty state keeps the color it already had; the padding merges into
-    // the existing `sx` rather than replacing it.
-    expect(nodes[EMPTY_ID].props.sx.color).toBe('text.secondary')
+    expect(nodes['cfb__empty']).toBeDefined()
+    expect(css(nodes[STACK_ID].props.sx).gap).toBe('48px')
+    expect(css(nodes[CONTAINER_ID].props.sx).paddingBottom).toBe('48px')
   })
 
   it('renders at the section width, not the entry article reading column', () => {
@@ -301,7 +308,7 @@ describe('the built-in listing has a vertical rhythm (AGL-2567)', () => {
     // is a valid-looking value the browser drops.
     const nodes = list({ pagination: paged })
     expect(typeof nodes[STACK_ID].props.sx.gap).toBe('number')
-    expect(typeof nodes[PAGER_ID].props.sx.paddingBottom).toBe('number')
+    expect(typeof nodes[CONTAINER_ID].props.sx.paddingBottom).toBe('number')
     expect(JSON.stringify(nodes)).not.toMatch(/\d+(px|rem|em|vw|vh|lvw)/)
   })
 

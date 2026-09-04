@@ -140,14 +140,6 @@ const LIST_MAX_WIDTH = 'xl'
  */
 const LIST_SECTION_GAP = 6
 
-/**
- * Bottom padding under the listing's last section, in theme spacing units.
- *
- * The site footer is a full-bleed dark slab, so the last section — the pager
- * on a paginated listing — otherwise ends flush against it (AGL-2567).
- */
-const LIST_TRAILING_PADDING = 6
-
 /** The page shell's width and the rhythm of the stack that holds sections. */
 interface ShellLayout {
   /** Stock Container breakpoint (AGL-1298); never a bespoke pixel cap. */
@@ -208,27 +200,6 @@ function shell(childIds: string[], layout: ShellLayout): NodesMap {
       parentId: id('container'),
       props: layout.stackProps,
       nodes: childIds,
-    },
-  }
-}
-
-/**
- * The same nodes, with the last section carrying the listing's bottom
- * padding. Which node that is depends on what the page ended up with — the
- * pager, the entries block, or the "nothing published yet" line — so it is
- * read off the stack's children rather than named.
- */
-function padTrailingSection(nodes: NodesMap, childIds: string[]): NodesMap {
-  const lastId = childIds[childIds.length - 1]
-  const last = lastId ? nodes[lastId] : undefined
-  if (!lastId || !last) return nodes
-  const props = (last.props ?? {}) as Record<string, unknown>
-  const sx = (props.sx ?? {}) as Record<string, unknown>
-  return {
-    ...nodes,
-    [lastId]: {
-      ...last,
-      props: { ...props, sx: { ...sx, paddingBottom: LIST_TRAILING_PADDING } },
     },
   }
 }
@@ -510,16 +481,12 @@ export function buildCollectionListFallbackNodes(
         : 'Nothing published yet.',
       sx: { color: 'text.secondary' },
     })
-    const emptyChildren = [...lead, emptyId]
-    return padTrailingSection(
-      {
-        ...shell(emptyChildren, listShell()),
-        [titleId]: title,
-        ...(pills ? { [id('pills')]: pills } : {}),
-        [emptyId]: empty,
-      },
-      emptyChildren,
-    )
+    return {
+      ...shell([...lead, emptyId], listShell()),
+      [titleId]: title,
+      ...(pills ? { [id('pills')]: pills } : {}),
+      [emptyId]: empty,
+    }
   }
   const item = (suffix: string, props: Record<string, unknown>) => ({
     $id: id(suffix),
@@ -532,70 +499,69 @@ export function buildCollectionListFallbackNodes(
     pagination && pagination.totalPages > 1
       ? paginationNodes(collection, pagination, category)
       : null
-  const children = pager
-    ? [...lead, id('entries'), pager.childId]
-    : [...lead, id('entries')]
-  return padTrailingSection(
-    {
-      ...shell(children, listShell()),
-      [titleId]: title,
-      ...(pills ? { [id('pills')]: pills } : {}),
-      [id('entries')]: {
-        $id: id('entries'),
-        componentId: Aglyn.COLLECTION_ENTRIES_COMPONENT_ID,
-        pluginId: 'mui',
-        parentId: id('stack'),
-        props: {
-          spacing: 4,
-          ...(pagination
-            ? { perPage: pagination.perPage, page: pagination.page }
-            : {}),
-        },
-        nodes: [id('item')],
+  return {
+    ...shell(
+      pager
+        ? [...lead, id('entries'), pager.childId]
+        : [...lead, id('entries')],
+      listShell(),
+    ),
+    [titleId]: title,
+    ...(pills ? { [id('pills')]: pills } : {}),
+    [id('entries')]: {
+      $id: id('entries'),
+      componentId: Aglyn.COLLECTION_ENTRIES_COMPONENT_ID,
+      pluginId: 'mui',
+      parentId: id('stack'),
+      props: {
+        spacing: 4,
+        ...(pagination
+          ? { perPage: pagination.perPage, page: pagination.page }
+          : {}),
       },
-      ...(pager ? pager.nodes : {}),
-      [id('item')]: {
-        $id: id('item'),
-        componentId: 'muiStack',
-        pluginId: 'mui',
-        parentId: id('entries'),
-        props: { spacing: 0.5 },
-        nodes: [
-          id('item-title'),
-          id('item-date'),
-          id('item-excerpt'),
-          id('item-link'),
-        ],
-      },
-      [id('item-title')]: item('item-title', {
-        variant: 'h5',
-        component: 'h2',
-        children: '{{entry.title}}',
-      }),
-      [id('item-date')]: item('item-date', {
-        variant: 'caption',
-        children: '{{entry.date}}',
-        sx: { color: 'text.secondary' },
-      }),
-      [id('item-excerpt')]: item('item-excerpt', {
-        variant: 'body1',
-        children: '{{entry.excerpt}}',
-      }),
-      [id('item-link')]: {
-        $id: id('item-link'),
-        componentId: 'muiScreenLink',
-        pluginId: 'mui',
-        parentId: id('item'),
-        props: {
-          href: '{{entry.url}}',
-          children: 'Read more',
-          size: 'small',
-          sx: { alignSelf: 'flex-start' },
-        },
+      nodes: [id('item')],
+    },
+    ...(pager ? pager.nodes : {}),
+    [id('item')]: {
+      $id: id('item'),
+      componentId: 'muiStack',
+      pluginId: 'mui',
+      parentId: id('entries'),
+      props: { spacing: 0.5 },
+      nodes: [
+        id('item-title'),
+        id('item-date'),
+        id('item-excerpt'),
+        id('item-link'),
+      ],
+    },
+    [id('item-title')]: item('item-title', {
+      variant: 'h5',
+      component: 'h2',
+      children: '{{entry.title}}',
+    }),
+    [id('item-date')]: item('item-date', {
+      variant: 'caption',
+      children: '{{entry.date}}',
+      sx: { color: 'text.secondary' },
+    }),
+    [id('item-excerpt')]: item('item-excerpt', {
+      variant: 'body1',
+      children: '{{entry.excerpt}}',
+    }),
+    [id('item-link')]: {
+      $id: id('item-link'),
+      componentId: 'muiScreenLink',
+      pluginId: 'mui',
+      parentId: id('item'),
+      props: {
+        href: '{{entry.url}}',
+        children: 'Read more',
+        size: 'small',
+        sx: { alignSelf: 'flex-start' },
       },
     },
-    children,
-  )
+  }
 }
 
 /** Entry vs list fallback selection for the routed content (AGL-551). */
