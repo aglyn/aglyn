@@ -63,6 +63,10 @@ Thumbs.db
 
 .nx/cache
 .nx/workspace-data
+# Isolated nx caches. A worktree does not isolate the nx cache, so parallel
+# runs are given their own via NX_CACHE_DIRECTORY — and those land at the repo
+# root, untracked and unignored, where they get staged by accident.
+.nx-cache*/
 
 vite.config.*.timestamp*
 .claude/worktrees

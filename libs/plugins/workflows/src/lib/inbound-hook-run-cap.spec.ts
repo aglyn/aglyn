@@ -157,9 +157,31 @@ jest.mock('@aglyn/aglyn/server', () => ({
     '../../../../aglyn/src/lib/app-utils/plan-entitlements',
   ),
   ...jest.requireActual('../../../../aglyn/src/lib/app-utils/workflows'),
-  registerPluginApiRoute: (_path: string, handler: (req: any, res: any) => unknown) => {
+  registerPluginApiRoute: (
+    _path: string,
+    handler: (req: any, res: any) => unknown,
+  ) => {
     mockRegistered.push(handler)
   },
+  // `server.ts` registers the flow-resume beat at module scope, so importing
+  // it for the inbound hook below runs that registration too. The registry
+  // itself is exercised by its own suite; here it only has to exist.
+  registerPluginJob: () => undefined,
+}))
+
+// The beat's handler, reached through the registration above. Mocked rather
+// than loaded because the real module reaches Firestore through the Admin SDK,
+// which this suite neither configures nor is about.
+jest.mock('@aglyn/tenant-runtime', () => ({
+  __esModule: true,
+  runDueFlowEnrollments: async () => ({
+    scanned: 0,
+    resumed: 0,
+    skippedLocked: 0,
+    skippedClaimed: 0,
+    complete: true,
+    cursor: null,
+  }),
 }))
 
 import { PLAN_ENTITLEMENTS } from '@aglyn/aglyn/app-utils/plan-entitlements'

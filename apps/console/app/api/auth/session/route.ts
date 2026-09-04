@@ -26,6 +26,7 @@ import {
 import {
   consoleSessionEpochRefuses,
   emailUnverifiedResponse,
+  findUserByUidAcrossPools,
   firebaseAdmin,
   getFeatureLockdown,
   getLockdownVerdict,
@@ -35,6 +36,10 @@ import {
   seedUserProfile,
   ssoDomainRefusal,
 } from '@aglyn/tenant-data-admin'
+// From the LEAF: the barrel reaches the admin SDK and route specs mock it
+// wholesale, and a mocked-away registration is a silent no-op that looks
+// exactly like the collision guard working.
+import { registerProviderAddresses } from '@aglyn/tenant-data-admin/server/account-emails'
 import { after } from 'next/server'
 import {
   parseSignedOut,
@@ -496,6 +501,33 @@ async function handler(request: Request): Promise<Response> {
             await seedUserProfile(uid, seed)
           } catch (error) {
             console.error('[auth/session] profile seed failed', error)
+          }
+          /*
+           * THE ADDRESSES THE PROVIDER ASSERTS, into the uniqueness index.
+           *
+           * A federated provider's `providerData[].email` can differ from the
+           * primary, and nothing registered it — so it held no index entry
+           * and sat outside the guard that stops two accounts holding one
+           * address, while still being a working sign-in identifier. That is
+           * how one address came to be one account's primary and another's
+           * Google address with nothing recording the clash.
+           *
+           * Here for the same reason the profile seed is here: the one place
+           * every interactive sign-in passes through with a verified token,
+           * whichever provider it came from, and the thing that backfills
+           * existing accounts on their next sign-in without a migration.
+           *
+           * ⚠️ Inside `after()` and inside its own `catch` DELIBERATELY. This
+           * is bookkeeping, and it must not be able to fail a sign-in — a
+           * person locked out because an index write failed is worse than the
+           * collision it was preventing. It never merges or reassigns
+           * anything; a conflict is recorded for staff and left alone.
+           */
+          try {
+            const record = await findUserByUidAcrossPools(uid)
+            if (record) await registerProviderAddresses(uid, record.record)
+          } catch (error) {
+            console.error('[auth/session] provider address registration failed', error)
           }
         })
       } catch {

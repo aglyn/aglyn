@@ -26,7 +26,19 @@ import {
   normalizeContentAuthor,
   resolveEntryAuthor,
   resolveEntryAuthorName,
-  hostSeoEntityImageJsonLd,} from './content-authors'
+  hostSeoEntityImageJsonLd,
+  AUTHOR_LINKS_MAX,
+  AUTHOR_SOCIAL_PLATFORMS,
+  authorLinkLabel,
+  authorLinkPlatform,
+  normalizeContentAuthorLinks,
+  contentAuthorMatchesSlug,
+  contentAuthorPageAtUrl,
+  contentAuthorPageUrl,
+  contentAuthorPaginationLinks,
+  contentAuthorSlug,
+  parseContentAuthorRoute,
+} from './content-authors'
 
 const ORIGIN = 'https://example.com'
 
@@ -391,5 +403,369 @@ describe('hostSeoEntityImageJsonLd (AGL-2486)', () => {
     expect(
       hostSeoEntityImageJsonLd({ logo: '/api/media/cdn/h1/abc.png' }, {}),
     ).toEqual({})
+  })
+})
+
+/**
+ * The links an author profile PRINTS (AGL-2516).
+ *
+ * `sameAs` was already there and is the wrong shape to render: bare strings a
+ * card can only draw as a row of identical anonymous links. These carry what a
+ * reader needs BEFORE the click — which is a mark on a known platform, and a
+ * label the author writes on anything else.
+ */
+describe('Author display links (AGL-2516)', () => {
+  describe('what a link is called', () => {
+    it('takes a known platform’s name from the registry, not the author', () => {
+      // The mark and the accessible name are not the author's to choose: an X
+      // link drawn as GitHub is a broken link that still resolves.
+      expect(
+        authorLinkLabel({
+          platform: 'x',
+          label: 'my totally different label',
+          url: 'https://x.com/aglyn',
+        }),
+      ).toBe('X')
+    })
+
+    it('uses the author’s label on a custom link', () => {
+      expect(
+        authorLinkLabel({ label: 'Newsletter', url: 'https://example.com/n' }),
+      ).toBe('Newsletter')
+    })
+
+    it('falls back to the url rather than to something generic', () => {
+      // Four rows all named "Link" is not an accessible name; the URLs at
+      // least tell them apart.
+      expect(authorLinkLabel({ url: 'https://example.com/talk' })).toBe(
+        'https://example.com/talk',
+      )
+    })
+
+    it('resolves only ids the registry actually declares', () => {
+      expect(authorLinkPlatform('github')?.icon).toBe('github')
+      expect(authorLinkPlatform('myspace')).toBeUndefined()
+      expect(authorLinkPlatform('')).toBeUndefined()
+      expect(authorLinkPlatform(undefined)).toBeUndefined()
+    })
+
+    it('gives every registered platform a label and an icon', () => {
+      expect(AUTHOR_SOCIAL_PLATFORMS.length).toBeGreaterThan(0)
+      for (const platform of AUTHOR_SOCIAL_PLATFORMS) {
+        expect(Boolean(platform.id && platform.label && platform.icon)).toBe(true)
+      }
+      // Ids are what gets STORED, so a duplicate would make one unreachable.
+      const ids = AUTHOR_SOCIAL_PLATFORMS.map((entry) => entry.id)
+      expect(new Set(ids).size).toBe(ids.length)
+    })
+  })
+
+  describe('normalizing stored rows', () => {
+    it('keeps https and mailto, and drops everything else', () => {
+      const links = normalizeContentAuthorLinks([
+        { platform: 'x', url: 'https://x.com/aglyn' },
+        { label: 'Email', url: 'mailto:hi@example.com' },
+        // eslint-disable-next-line no-script-url
+        { label: 'Bad', url: 'javascript:alert(1)' },
+        { label: 'Insecure', url: 'http://example.com' },
+        { label: 'Nowhere', url: '' },
+      ])
+      expect(links.map((link) => link.url)).toEqual([
+        'https://x.com/aglyn',
+        'mailto:hi@example.com',
+      ])
+    })
+
+    it('drops a stored label and icon that sit beside a known platform', () => {
+      // The registry owns both, so a stored pair is stale data that must not
+      // win — otherwise renaming a platform leaves old rows saying the old
+      // thing forever.
+      const [link] = normalizeContentAuthorLinks([
+        {
+          platform: 'github',
+          label: 'stale',
+          icon: 'stale-icon',
+          url: 'https://github.com/aglyn',
+        },
+      ])
+      expect(link).toEqual({ platform: 'github', url: 'https://github.com/aglyn' })
+    })
+
+    it('drops a platform id nothing recognises, keeping the row custom', () => {
+      const [link] = normalizeContentAuthorLinks([
+        { platform: 'myspace', label: 'Profile', url: 'https://example.com/p' },
+      ])
+      expect(link?.platform).toBeUndefined()
+      expect(link?.label).toBe('Profile')
+    })
+
+    it('carries a custom icon’s PATH beside its id', () => {
+      // AGL-1212's split: the catalog is ~2.9MB and only picker surfaces load
+      // it, so a renderer given an id alone can only draw a fallback glyph.
+      const [link] = normalizeContentAuthorLinks([
+        { label: 'Talk', icon: 'presentation', iconPath: 'M1 1h2', url: 'https://e.com/t' },
+      ])
+      expect([link?.icon, link?.iconPath]).toEqual(['presentation', 'M1 1h2'])
+    })
+
+    it('caps the list and survives junk', () => {
+      const many = Array.from({ length: AUTHOR_LINKS_MAX + 5 }, (_, i) => ({
+        label: `L${i}`,
+        url: `https://example.com/${i}`,
+      }))
+      expect(normalizeContentAuthorLinks(many)).toHaveLength(AUTHOR_LINKS_MAX)
+      expect(normalizeContentAuthorLinks(undefined)).toEqual([])
+      expect(normalizeContentAuthorLinks('nope')).toEqual([])
+      expect(normalizeContentAuthorLinks([null, 7, 'x'])).toEqual([])
+    })
+  })
+
+  describe('structured data', () => {
+    it('folds printed links into sameAs so the author types a url once', () => {
+      const json = contentAuthorJsonLd({
+        type: HostEntityType.PERSON,
+        name: 'Zach Gover',
+        sameAs: ['https://example.com/declared'],
+        links: [
+          { platform: 'x', url: 'https://x.com/aglyn' },
+          { label: 'Email', url: 'mailto:hi@example.com' },
+        ],
+      } as ContentAuthorRecord)
+      expect(json?.['sameAs']).toEqual([
+        'https://example.com/declared',
+        'https://x.com/aglyn',
+      ])
+    })
+
+    it('never lets a mailto into sameAs', () => {
+      // `sameAs` is for pages that identify the same entity. An address is not
+      // a page, and Google reports one as an invalid sameAs.
+      const json = contentAuthorJsonLd({
+        name: 'Aglyn',
+        links: [{ platform: 'email', url: 'mailto:hi@example.com' }],
+      } as ContentAuthorRecord)
+      expect(json?.['sameAs']).toBeUndefined()
+    })
+
+    it('does not repeat a url that is already declared', () => {
+      const json = contentAuthorJsonLd({
+        name: 'Zach Gover',
+        sameAs: ['https://x.com/aglyn'],
+        links: [{ platform: 'x', url: 'https://x.com/aglyn' }],
+      } as ContentAuthorRecord)
+      expect(json?.['sameAs']).toEqual(['https://x.com/aglyn'])
+    })
+
+    it('still respects the sameAs ceiling once links join it', () => {
+      const json = contentAuthorJsonLd({
+        name: 'Zach Gover',
+        sameAs: Array.from(
+          { length: AUTHOR_SAME_AS_MAX },
+          (_, i) => `https://example.com/d${i}`,
+        ),
+        links: [{ platform: 'x', url: 'https://x.com/aglyn' }],
+      } as ContentAuthorRecord)
+      expect((json?.['sameAs'] as string[]).length).toBe(AUTHOR_SAME_AS_MAX)
+    })
+
+    it('escapes a link exactly as every other value does', () => {
+      const json = contentAuthorJsonLd({
+        name: 'Zach Gover',
+        links: [{ label: '</script>', url: 'https://example.com/</script>' }],
+      } as ContentAuthorRecord)
+      expect(safeJsonLd(json)).not.toContain('</script>')
+    })
+  })
+
+  it('normalizes links as part of the record', () => {
+    const author = normalizeContentAuthor({
+      name: 'Zach Gover',
+      links: [
+        { platform: 'x', url: 'https://x.com/aglyn' },
+        { label: 'Bad', url: 'ftp://example.com' },
+      ],
+    })
+    expect(author?.links).toEqual([{ platform: 'x', url: 'https://x.com/aglyn' }])
+  })
+})
+
+/**
+ * The author's PAGE (AGL-2518) — `/author/{slug}`, site-wide.
+ *
+ * AGL-2517 put an archive under each collection, so one person had as many
+ * partial pages as the site has collections, none of them the address a
+ * byline should link to. These cases pin the reshape: one address per person,
+ * readable, stable across a rename, and still answering to every older
+ * spelling of them so no published link breaks.
+ */
+describe('the author page (AGL-2518)', () => {
+  describe('which segment addresses an author', () => {
+    it('prefers the stored slug — the one thing a rename cannot move', () => {
+      expect(
+        contentAuthorSlug({ author: { slug: 'zg', name: 'Zach Gover' } }),
+      ).toBe('zg')
+    })
+
+    it('falls back to the name, so nobody has to set one', () => {
+      expect(contentAuthorSlug({ author: { name: 'Zach Gover' } })).toBe(
+        'zach-gover',
+      )
+    })
+
+    it('puts the record id LAST, not first', () => {
+      /*
+        The reversal of AGL-2517, and the reason is that this is a public
+        address on a marketing site rather than an internal reference.
+        `/author/hT3kQ9xLmZ2` survives a rename and is unreadable; the stored
+        slug survives a rename AND reads. The id is still accepted on the way
+        in — see the matcher below — so links built under the old precedence
+        keep resolving.
+      */
+      expect(
+        contentAuthorSlug({ author: { $id: 'hT3kQ9xLmZ2', name: 'Zach Gover' } }),
+      ).toBe('zach-gover')
+      // With nothing else to go on it is still better than no address.
+      expect(contentAuthorSlug({ authorId: 'hT3kQ9xLmZ2' })).toBe('ht3kq9xlmz2')
+    })
+
+    it('is empty when nothing addresses the author', () => {
+      // The caller then renders plain text instead of a link to `/author/`.
+      expect(contentAuthorSlug({})).toBe('')
+      expect(contentAuthorPageUrl({})).toBe('')
+    })
+  })
+
+  describe('which segments resolve BACK to them', () => {
+    const author = {
+      $id: 'hT3kQ9xLmZ2',
+      slug: 'zg',
+      name: 'Zach Gover',
+    }
+
+    it('accepts the slug, the name and the id', () => {
+      for (const segment of ['zg', 'zach-gover', 'ht3kq9xlmz2']) {
+        expect([segment, contentAuthorMatchesSlug({ author }, segment)]).toEqual(
+          [segment, true],
+        )
+      }
+    })
+
+    it('accepts the legacy free-typed byline', () => {
+      expect(
+        contentAuthorMatchesSlug(
+          { authorName: 'The Aglyn Team' },
+          'the-aglyn-team',
+        ),
+      ).toBe(true)
+    })
+
+    it('refuses a segment that addresses nobody, and the empty one', () => {
+      expect(contentAuthorMatchesSlug({ author }, 'someone-else')).toBe(false)
+      // An empty segment must not match every author on the site.
+      expect(contentAuthorMatchesSlug({ author }, '')).toBe(false)
+      expect(contentAuthorMatchesSlug({}, 'zg')).toBe(false)
+    })
+  })
+
+  describe('parsing the route', () => {
+    it('resolves the page and its pagination', () => {
+      expect(parseContentAuthorRoute(['author', 'zach-gover'])).toEqual({
+        authorSlug: 'zach-gover',
+        page: 1,
+      })
+      expect(
+        parseContentAuthorRoute(['author', 'zach-gover', 'page', '3']),
+      ).toEqual({ authorSlug: 'zach-gover', page: 3 })
+    })
+
+    it('slugifies the segment, so one author has one URL', () => {
+      expect(parseContentAuthorRoute(['author', 'Zach Gover'])).toEqual({
+        authorSlug: 'zach-gover',
+        page: 1,
+      })
+    })
+
+    it('refuses a page number that is not one', () => {
+      // A nonsense page 404s rather than silently serving page 1 at a second
+      // address, which would be duplicate content at infinitely many URLs.
+      expect(parseContentAuthorRoute(['author', 'z', 'page', '0'])).toBeNull()
+      expect(parseContentAuthorRoute(['author', 'z', 'page', 'two'])).toBeNull()
+      expect(parseContentAuthorRoute(['author', 'z', 'page', '-1'])).toBeNull()
+    })
+
+    it('is not a route at all for anything else', () => {
+      expect(parseContentAuthorRoute(['author'])).toBeNull()
+      expect(parseContentAuthorRoute(['blog', 'author', 'zach'])).toBeNull()
+      expect(parseContentAuthorRoute([])).toBeNull()
+      expect(parseContentAuthorRoute(['authors', 'zach'])).toBeNull()
+    })
+  })
+
+  describe('paginating it', () => {
+    const author = { slug: 'zg', name: 'Zach Gover' }
+
+    it('leaves page 1 at the bare address', () => {
+      // No `/author/zg/page/1`, so the first page cannot become a second
+      // address for itself.
+      expect(contentAuthorPageAtUrl({ author, page: 1 })).toBe('/author/zg')
+      expect(contentAuthorPageAtUrl({ author, page: 2 })).toBe(
+        '/author/zg/page/2',
+      )
+    })
+
+    it('resolves the EDGES to the empty string, never to a URL', () => {
+      // What lets a designed template bind `{{pagination.prevUrl}}`
+      // unconditionally: an href of `''` renders as an inert placeholder of
+      // the same element (AGL-1268/1357), which is the correct pager on page
+      // 1 of 1.
+      const alone = contentAuthorPaginationLinks({
+        author,
+        page: 1,
+        totalPages: 1,
+      })
+      expect([alone.prevUrl, alone.nextUrl]).toEqual(['', ''])
+      const middle = contentAuthorPaginationLinks({
+        author,
+        page: 2,
+        totalPages: 3,
+      })
+      expect([middle.prevUrl, middle.nextUrl]).toEqual([
+        '/author/zg',
+        '/author/zg/page/3',
+      ])
+    })
+
+    it('reads an unusable page or total as a single page', () => {
+      const links = contentAuthorPaginationLinks({
+        author,
+        page: 0,
+        totalPages: NaN,
+      })
+      expect(links).toEqual({
+        page: 1,
+        totalPages: 1,
+        prevUrl: '',
+        nextUrl: '',
+      })
+    })
+  })
+
+  it('round-trips: the url it builds is one the parser resolves', () => {
+    const author = { $id: 'hT3kQ9xLmZ2', name: 'Zach Gover' }
+    const url = contentAuthorPageAtUrl({ author, page: 2 })
+    const route = parseContentAuthorRoute(url.replace(/^\//, '').split('/'))
+    expect(route).toEqual({ authorSlug: 'zach-gover', page: 2 })
+    // …and the segment the parser produced addresses the author it came from.
+    expect(contentAuthorMatchesSlug({ author }, route!.authorSlug)).toBe(true)
+  })
+
+  it('stores the slug as a path segment, not as whatever was typed', () => {
+    // A stored `Chris Taylor` would build `/author/Chris Taylor` while every
+    // incoming request arrived slugified and matched nothing.
+    const author = normalizeContentAuthor({
+      name: 'Chris Taylor',
+      slug: '  Chris Taylor  ',
+    })
+    expect(author?.slug).toBe('chris-taylor')
   })
 })

@@ -105,7 +105,7 @@ export function ScreensAnalyticsTable(props: { hostId: string }) {
   const [range, setRange] = useState(14)
   const [loaded, setLoaded] = useState<LoadedState | null>(null)
   /*
-   * The table PAGES (AGL-693). It rendered `rows.slice(0, MAX_ROWS)` — fifty
+   * The table PAGES (AGL-2501). It rendered `rows.slice(0, MAX_ROWS)` — fifty
    * screens, no footer and nothing saying so, on a card whose whole purpose
    * is comparing screens against each other. A site with sixty screens was
    * shown the leading fifty as if that were the comparison.

@@ -63,11 +63,43 @@ export function describeDraftOffer(
   remoteChanged = false,
 ): string {
   const age = describeDraftAge(draft.takenAt, now)
+  /**
+   * The SHARED working draft is a different sentence from the crash net, and
+   * saying the crash net's one over it is the AGL-2508 defect: an author who
+   * pressed Save draft, was told "Draft saved", and came back to
+   * "Unsaved changes … were recovered from this browser" reads a save that
+   * failed and a browser that rescued them. Both halves are wrong — it saved,
+   * and it is on the server — and the reasonable conclusion is that the
+   * editor loses work, which sends people re-doing edits they already have.
+   *
+   * The canvas loads the stored document and the draft is OFFERED rather than
+   * applied, which is the right call and is not what changes here. What
+   * changes is that the offer now says which of the two it is.
+   */
   const found =
-    `Unsaved changes to this ${noun} from ${age} were recovered from ` +
-    'this browser. '
+    draft.origin === 'shared'
+      ? `This ${noun} has a saved draft from ${age} that has not been ` +
+        'published. It is stored with the site, so anyone who opens this ' +
+        `${noun} sees it offered. `
+      : `Unsaved changes to this ${noun} from ${age} were recovered from ` +
+        'this browser. '
   switch (draft.restoreBlockedBy) {
     case 'saved-since':
+      // Whether saving is PAUSED is a different fact from whether the draft
+      // may be put back, and only `remoteChanged` can answer it. A draft
+      // stranded by a save that landed before this editor even opened blocks
+      // nothing: the canvas holds the stored document, Save works, and there
+      // is no conflict to reload out of. Claiming otherwise sent authors
+      // reloading a document nobody had touched in days, looking for a
+      // colleague who was not there.
+      if (!remoteChanged) {
+        return (
+          `This ${noun} has been saved since the unsaved changes from ${age} ` +
+          'in this browser were taken, so putting them back would undo that ' +
+          'save — they are not offered. Nothing else is affected: this ' +
+          'canvas holds the saved document and saving works as usual.'
+        )
+      }
       // One banner for one event. The conflict half comes first because it
       // is the thing that already happened; the draft half is what the
       // author is being told they cannot do about it.
@@ -85,8 +117,11 @@ export function describeDraftOffer(
           ? `Someone else has also saved this ${noun} since it loaded, so ` +
             'saving is paused until you reload. Restoring puts your changes ' +
             'back on the canvas without saving; you can undo it.'
-          : 'Restoring puts them back on the canvas without saving; you can ' +
-            'undo it.')
+          : draft.origin === 'shared'
+            ? 'Opening it puts it back on the canvas; publish when you are ' +
+              'ready, or discard it to go back to what is live.'
+            : 'Restoring puts them back on the canvas without saving; you ' +
+              'can undo it.')
       )
   }
 }
@@ -100,12 +135,12 @@ export function describeDraftOffer(
  * the author is the only one who knows whether the version they are looking
  * at is the one they meant to be in.
  *
- * When the room is SHARED this banner does not render at all — `draft
- * Discard is in fact local — it deletes this browser's snapshot and touches
- * neither the canvas nor anyone else, which is why it looked to him like it
- * did nothing — but a prompt whose only remaining button is a delete, over a
- * document several people are mid-edit in, is a question that should not be
- * asked. See `roomIsShared` in `use-besigner-draft`.
+ * When the room is SHARED this banner does not render at all. Discard never
+ * touches the canvas, so nothing anybody is looking at changes when it is
+ * pressed — but it does delete the draft, in both stores, and a prompt whose
+ * only remaining button is a delete, over a document several people are
+ * mid-edit in, is a question that should not be asked. See `roomIsShared` in
+ * `use-besigner-draft`.
  *
  * What is left here is the case where this editor is alone and something
  * still stands in the way of a restore: a colleague SAVED while the draft
@@ -120,9 +155,12 @@ export function BesignerDraftAlertComponent(props: BesignerDraftAlertProps) {
   const { draft, noun, remoteChanged = false } = props
   if (!draft.available) return null
   const blocked = draft.restoreBlockedBy !== null
-  // The reload is the way out of a conflict, so this banner offers it while
-  // it is standing in for the conflict banner.
-  const offerReload = draft.restoreBlockedBy === 'saved-since' || remoteChanged
+  // The reload is the way out of a CONFLICT, so it is offered exactly while
+  // this banner is standing in for the conflict one. A stranded draft with no
+  // conflict behind it has nothing to reload for — the canvas already holds
+  // the stored document — and a Reload button there reads as an instruction
+  // to fix something that is not broken.
+  const offerReload = remoteChanged
 
   return (
     <Alert
@@ -141,7 +179,8 @@ export function BesignerDraftAlertComponent(props: BesignerDraftAlertProps) {
           ) : null}
           {blocked ? null : (
             <Button color="inherit" size="small" onClick={draft.restore}>
-              {'Restore'}
+              {/* A saved draft is OPENED; only unsaved work is restored. */}
+              {draft.origin === 'shared' ? 'Open draft' : 'Restore'}
             </Button>
           )}
           <Button color="inherit" size="small" onClick={draft.discard}>

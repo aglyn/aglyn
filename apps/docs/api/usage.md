@@ -34,7 +34,8 @@ to contacts still needs to see the request quota that would refuse it.
   "apiRequests":   { "used": 18422, "included": 100000, "remaining": 81578, "metered": true },
   "contacts":      { "used": 3120,  "included": 100000, "remaining": 96880, "metered": true },
   "datasets":      { "used": 4,     "included": 25,     "remaining": 21,    "metered": false },
-  "dataStorageMb": { "used": 412,   "included": 10240,  "remaining": 9828,  "metered": true }
+  "dataStorageMb": { "used": 412,   "included": 10240,  "remaining": 9828,  "metered": true },
+  "campaignEmails": { "used": 1240,  "included": 50000,  "remaining": 48760, "metered": false }
 }
 ```
 
@@ -46,6 +47,7 @@ to contacts still needs to see the request quota that would refuse it.
 | `contacts` | band | [Contacts](resources/contacts.md) in the organization — the audience band. Not monthly: it's the current size of the list. |
 | `datasets` | band | [Datasets](resources/datasets.md) in the organization. Also not monthly. |
 | `dataStorageMb` | band | Stored dataset bytes, in MB. |
+| `campaignEmails` | band | Marketing campaign emails sent this month. **Campaign mail only** — transactional messages (receipts, booking reminders, password resets) are never counted against this band and are never refused. |
 
 Every band has the same four fields:
 
@@ -73,6 +75,13 @@ and the two answers are completely different:
 usage that bills. Its `included` is the **effective** limit — the plan's allowance plus
 any add-on slots purchased — because that is the number a create is actually compared
 against.
+
+`campaignEmails` is also always `metered: false`, and it is the only band here that
+refuses rather than bills on a paid plan. Two limits sit under it and only the monthly
+one appears in this band: a workspace also has an hourly share of the platform's
+sending capacity, and a campaign that exceeds it is **deferred** — answered `429` with
+the hourly ceiling, what you have already sent this hour and when the window rolls —
+rather than failed. A deferred campaign is unchanged and sends on the next run.
 
 ### Unlimited bands {#unlimited}
 

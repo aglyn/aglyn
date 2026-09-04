@@ -175,6 +175,8 @@ describe('stacked background layers (AGL-1336)', () => {
     expect(seedGradientDraft(STACKED)).toEqual({
       fill: 'linear',
       angle: '',
+      positionX: '',
+      positionY: '',
       stops: [],
       raw: STACKED,
     })
@@ -275,14 +277,57 @@ describe('gradient draft round trip (AGL-1331)', () => {
     expect(serializeGradientDraft(seedGradientDraft(value))).toBe(value)
   })
 
+  it('round-trips a radial centre instead of stranding it in raw', () => {
+    // A glow is almost never centred; before this, `at 50% 18%` was a
+    // prefix the control had no editor for, so the whole gradient fell into
+    // the raw box and the stop editor disappeared.
+    const glow =
+      'radial-gradient(at 50% 18%, rgba(0, 176, 255, 0.45) 0%, ' +
+      'rgba(224, 64, 251, 0) 100%)'
+    const parsed = parseCssGradient(glow)
+    expect(parsed?.position).toEqual({ x: 50, y: 18 })
+    expect(parsed?.raw).toBeUndefined()
+    expect(buildCssGradient(parsed)).toBe(glow)
+    const draft = seedGradientDraft(glow)
+    expect(draft.positionX).toBe('50')
+    expect(draft.positionY).toBe('18')
+    expect(serializeGradientDraft(draft)).toBe(glow)
+  })
+
+  it('omits the centre entirely when either box is empty', () => {
+    // `at 50%` alone is a DIFFERENT value (Y defaults to centre), so a
+    // half-filled pair must not be written.
+    const draft = seedGradientDraft(
+      'radial-gradient(#000 0%, #fff 100%)',
+    )
+    expect(serializeGradientDraft({ ...draft, positionX: '50' })).toBe(
+      'radial-gradient(#000 0%, #fff 100%)',
+    )
+  })
+
+  it('never writes a centre onto a linear gradient', () => {
+    const draft = seedGradientDraft('linear-gradient(90deg, #000 0%, #fff 100%)')
+    expect(
+      serializeGradientDraft({ ...draft, positionX: '50', positionY: '18' }),
+    ).toBe('linear-gradient(90deg, #000 0%, #fff 100%)')
+  })
+
   it('opens an empty value UNSET, not on Solid (AGL-1338)', () => {
     // Two different answers: unset writes nothing, Solid writes `none`.
     // Seeding an empty value on Solid is what made the control read as
     // already-solid on an instance, so choosing Solid was a no-op.
-    expect(seedGradientDraft('')).toEqual({ fill: '', angle: '', stops: [] })
+    expect(seedGradientDraft('')).toEqual({
+      fill: '',
+      angle: '',
+      positionX: '',
+      positionY: '',
+      stops: [],
+    })
     expect(seedGradientDraft(undefined)).toEqual({
       fill: '',
       angle: '',
+      positionX: '',
+      positionY: '',
       stops: [],
     })
   })
@@ -293,11 +338,15 @@ describe('gradient draft round trip (AGL-1331)', () => {
     expect(seedGradientDraft('none')).toEqual({
       fill: 'solid',
       angle: '',
+      positionX: '',
+      positionY: '',
       stops: [],
     })
     expect(seedGradientDraft('NONE')).toEqual({
       fill: 'solid',
       angle: '',
+      positionX: '',
+      positionY: '',
       stops: [],
     })
   })
@@ -307,6 +356,8 @@ describe('gradient draft round trip (AGL-1331)', () => {
     expect(seedGradientDraft('url(/hero.png)')).toEqual({
       fill: 'linear',
       angle: '',
+      positionX: '',
+      positionY: '',
       stops: [],
       raw: 'url(/hero.png)',
     })

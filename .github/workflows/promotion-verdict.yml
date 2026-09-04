@@ -1,0 +1,106 @@
+# Reads Main Gate's verdict for the commits a promotion would ship (AGL-2533).
+#
+# ---------------------------------------------------------------------------
+# WHY THIS WORKFLOW EXISTS
+# ---------------------------------------------------------------------------
+# Main Gate works, and until now its verdict reached no one. It cannot open a
+# tracking issue (`has_issues: false` on this repo), so it writes a COMMIT
+# STATUS - correct, precise, and attached to a sha the branch has already moved
+# past. On 2026-09-03 two red cycles went unread for hours by two different
+# sessions while four promotions went out.
+#
+# A promotion is the moment that verdict is finally worth something. This runs
+# there, and only there.
+#
+# ---------------------------------------------------------------------------
+# WHY EXIT 2 DOES NOT FAIL THE JOB
+# ---------------------------------------------------------------------------
+# Exit 2 means "the tip carries no Main Gate verdict", which is a race with a
+# very recent push rather than evidence of anything. Failing on it would make
+# every promotion wait on a scheduler that AGL-2534 measured delivering 11% of
+# its runs, and a gate that blocks for reasons unrelated to the code is a gate
+# people learn to override.
+#
+# It is surfaced as a loud WARNING instead, because "cannot check" must never
+# print as "clean" - the rule `external-facts.mjs` applies for the same reason.
+# Only exit 1, a tip that Main Gate has actually graded RED, fails the job.
+name: Promotion verdict
+
+on:
+  pull_request:
+    branches:
+      - production
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  statuses: read
+
+concurrency:
+  group: promotion-verdict-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verdict:
+    name: Main Gate verdict for this range
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The whole range is read, so a shallow clone cannot answer.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - id: verdict
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          # ⚑ GitHub runs `run:` under `bash -e`, and omitting `set -e` here
+          # does NOT disable it. A non-zero exit aborts the step before the
+          # verdict can be read, which is how the first version of this file
+          # hard-failed on exit 2 — the exact "no verdict" case it is supposed
+          # to report as a warning. `|| code=$?` is immune: a command in an OR
+          # list is not an `-e` abort, whatever the shell flags say.
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.event.pull_request.head.sha }}"
+          range="origin/production..HEAD"
+          if [ -n "$base" ] && [ -n "$head" ]; then
+            range="$base..$head"
+          fi
+          echo "range=$range"
+          code=0
+          node tools/scripts/check-main-gate-verdicts.mjs --range="$range" \
+            > "$RUNNER_TEMP/verdict.txt" 2>&1 || code=$?
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          cat "$RUNNER_TEMP/verdict.txt"
+          {
+            echo "### Main Gate verdict"
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/verdict.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+
+      - name: Refuse a red tip, warn on no verdict
+        run: |
+          set -euo pipefail
+          case "${{ steps.verdict.outputs.code }}" in
+            0) echo "Main Gate graded the tip green." ;;
+            1)
+              echo "::error::Main Gate graded the tip of this promotion RED. See the job summary."
+              exit 1
+              ;;
+            2)
+              echo "::warning::Main Gate has no verdict for the tip of this promotion. Not blocking - see the job summary and re-run once the gate has graded it."
+              ;;
+            *)
+              echo "::error::the verdict script exited unexpectedly (${{ steps.verdict.outputs.code }})."
+              exit 1
+              ;;
+          esac

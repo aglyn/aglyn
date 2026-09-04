@@ -24,10 +24,55 @@ import {
   resolveOrgEntitlements,
   runWorkflow,
 } from '@aglyn/aglyn/server'
-import { registerPluginApiRoute, type PluginApiHandler } from '@aglyn/aglyn/server'
+import {
+  registerPluginApiRoute,
+  registerPluginJob,
+  type PluginApiHandler,
+} from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
+import { runDueFlowEnrollments } from '@aglyn/tenant-runtime'
 import { timingSafeEqual } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
+import { BUNDLE_ID as WORKFLOWS_BUNDLE_ID } from './constants/bundle-common'
+
+/*==========================================
+ * THE BEAT THAT MAKES A WAIT STEP REAL.
+ *
+ * A `wait` step suspends a run into a `flowEnrollments` row and returns; this
+ * is the only thing that ever comes back for it. Without a registration here
+ * the wait step would be a delay that never ends — the exact failure
+ * `process-abandoned.ts` documents next door, where a Pro entitlement sat
+ * behind an HTTP door nothing ever POSTed to.
+ *
+ * Module scope, like the commerce and bookings registrations: the runner
+ * route reaches plugin jobs through `ensureAll(['tenantApi'])`, so a
+ * registration inside `registerWorkflowsApi()` would depend on which entry
+ * point happened to be loaded.
+ *
+ * ## Every minute, and why that is cheap
+ *
+ * `FLOW_WAIT_MIN_MINUTES` is one, so the beat has to be one — a fifteen-minute
+ * sweep would make the shortest wait anybody can author wrong by up to
+ * fourteen minutes. It costs one collection-group query per minute, which
+ * returns nothing at all on a platform with no flow due, because the query
+ * asks for `resumeAtMs <= now` rather than for the enrolled population.
+ *
+ * Bounded and idempotent, the two properties the runner requires: the scan
+ * budget bounds one pass, and a transactional claim means an overlapping or
+ * repeated beat cannot run the same person's step twice.
+ *=========================================*/
+registerPluginJob({
+  pluginId: WORKFLOWS_BUNDLE_ID,
+  name: 'resume-flow-waits',
+  intervalMinutes: 1,
+  description:
+    'Continue automations whose wait step has ended, and time out those ' +
+    'waiting for an event that never arrived.',
+  lockdown: { scope: 'per-host' },
+  handler: async (gate) => {
+    await runDueFlowEnrollments(gate)
+  },
+})
 
 // Best-effort per-instance rate limit (mirrors forms/submit).
 const recentByHook = new Map<string, number[]>()
@@ -132,9 +177,7 @@ const inboundHookHandler: PluginApiHandler = async (req, res) => {
     const monthKey = new Date().toISOString().slice(0, 7)
     const runCounterRef = hostRef.collection('counters').doc('workflowRuns')
     const runLimit = resolveOrgEntitlements(org as any).workflowRunsPerMonth
-    const runsUsed = Number(
-      (await runCounterRef.get()).get(monthKey) ?? 0,
-    )
+    const runsUsed = Number((await runCounterRef.get()).get(monthKey) ?? 0)
     if (!(runsUsed + 1 <= runLimit)) {
       return res.status(402).json({
         error: `This site has used its ${runLimit} workflow runs for the month`,

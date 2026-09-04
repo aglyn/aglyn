@@ -36,8 +36,8 @@ fully yours, **design them in the besigner** like any other screen:
 1. Create a screen and drop in the matching block from the **Members** group of the
    element picker — **Member sign-in**, **Member sign-up**, or **Password recovery**.
    Add anything else you like around it: your logo, imagery, copy.
-2. Open **Setup → Basic details → Sign-in & sign-up pages** and assign the screen to
-   its route.
+2. Open **Admin → Plugins → User Accounts** and assign the screen to its route on the
+   **Sign-in & sign-up pages** card.
 
 Assigned screens render through the normal pipeline — your theme, shared layout, and
 all — and are kept out of search results. Clearing a slot falls back to the built-in

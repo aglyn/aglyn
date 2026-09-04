@@ -73,8 +73,24 @@ export interface SellerLedgerTotals {
   paidCount: number
   /** Refunded or charged back. */
   refundedCount: number
-  /** What reached the publisher's Stripe account, net of any pull-back. */
-  netPaidCents: number
+  /**
+   * What Stripe was ASKED to move to the publisher's Connect account, net of
+   * any pull-back — not what reached their bank.
+   *
+   * Named for the question it can actually answer. It is summed from
+   * `transferCents`, which is the instruction given at charge time; a payout
+   * that later fails on the way from the Connect balance to the bank leaves
+   * every figure here untouched. Calling it "net paid" made this number assert
+   * an arrival it has no knowledge of, and a publisher reading it during a
+   * failed payout was told their money had landed.
+   *
+   * Whether it LANDED is a separate fact, carried by
+   * `connectPayoutFailures` and mirrored onto the publisher profile, and the
+   * panel states it beside this figure rather than folding it in — an
+   * account-level payout failure cannot be attributed to any one sale, so
+   * netting it into a per-sale sum would invent a split that does not exist.
+   */
+  sentToStripeCents: number
   /** Tax-inclusive gross on the sales still standing. */
   buyersPaidCents: number
   /** Tax on those sales — Aglyn's remittance liability, never the seller's. */
@@ -123,7 +139,7 @@ export function summarizeSellerLedger(
     // partial refund takes the seller's proportional share back WITHOUT
     // revoking, so the sale is still standing and still counts as paid. Left
     // out, the panel would overstate the payout by exactly what came back.
-    netPaidCents: sum(
+    sentToStripeCents: sum(
       paid,
       (sale) =>
         transferOf(sale) -

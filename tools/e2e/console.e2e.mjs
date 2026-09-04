@@ -159,10 +159,10 @@ const specs = [
     ],
   },
   {
-    // Workflows page: the automation + workflow rows with their Runs
+    // Automation page: the action + workflow rows with their Runs
     // logs (AGL-266 / wave v6).
-    name: 'workflows',
-    path: `/${HOST_ID}/workflows`,
+    name: 'automation',
+    path: `/${HOST_ID}/automation`,
     expects: ['DozenQuote', 'Form thank-you', 'Runs'],
   },
   {
@@ -276,7 +276,7 @@ for (const spec of specs) {
     })
     for (const text of spec.expects) {
       // `state: 'attached'` (not the default 'visible'): the HubTabs pages
-      // (marketing, workflows) keep every tab panel mounted for its data
+      // (marketing, automation) keep every tab panel mounted for its data
       // subscriptions, so MUI marks inactive panels `hidden`. Asserting the
       // text is in the DOM still proves the app rendered it — a crashed page
       // renders an error boundary, not this content.

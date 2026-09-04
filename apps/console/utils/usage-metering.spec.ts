@@ -18,8 +18,10 @@
 import {
   ORG_COGS_UNIT_RATES_USD,
   METERED_MARKUP as MARKUP_FROM_LIB,
+  resolveOrgEntitlements,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
+  billsEmailSendOverage,
   billsOrgLibraryStorage,
   ESTIMATED_PAGE_TRANSFER_BYTES,
   estimateMonthlyUsageCost,
@@ -41,20 +43,36 @@ const free = { plan: 'free' } as any
 
 describe('meteredIncludedAllowance', () => {
   it('expands per-site bands org-wide and converts bandwidth to page views', () => {
+    /*
+     * The bands come from the entitlement rather than being retyped here.
+     * What this case is about is the EXPANSION and the CONVERSION — per-site
+     * figures multiplied by the site limit, bandwidth left org-wide and
+     * turned into page views. A band retyped as a literal pins the wrong
+     * thing: it strands the moment a band is resized, and it says nothing
+     * about the arithmetic. The band values themselves are pinned in
+     * `plan-entitlements.spec.ts`, which is where a resize should be noticed.
+     */
+    const starterBands = resolveOrgEntitlements(starter)
+    const proBands = resolveOrgEntitlements(pro)
     const included = meteredIncludedAllowance(starter)
     expect(included.metered).toBe(true)
-    expect(included.storageGb).toBeCloseTo(2048 / 1024)
+    expect(included.storageGb).toBeCloseTo(starterBands.storagePerHostMb / 1024)
     expect(included.pageViews).toBeCloseTo(
-      (50 * GB) / ESTIMATED_PAGE_TRANSFER_BYTES,
+      (starterBands.bandwidthGb * GB) / ESTIMATED_PAGE_TRANSFER_BYTES,
     )
-    expect(included.formSubmissions).toBe(200)
+    expect(included.formSubmissions).toBe(starterBands.formSubmissionsPerMonth)
     // Pro allows 3 sites, so its org-wide bands are three times the per-site
     // figures — bandwidth excepted, which is already an org-level number.
     const multi = meteredIncludedAllowance(pro)
-    expect(multi.storageGb).toBeCloseTo((3 * 10240) / 1024)
-    expect(multi.formSubmissions).toBe(3 * 1000)
+    expect(proBands.hostLimit).toBe(3)
+    expect(multi.storageGb).toBeCloseTo(
+      (proBands.hostLimit * proBands.storagePerHostMb) / 1024,
+    )
+    expect(multi.formSubmissions).toBe(
+      proBands.hostLimit * proBands.formSubmissionsPerMonth,
+    )
     expect(multi.pageViews).toBeCloseTo(
-      (250 * GB) / ESTIMATED_PAGE_TRANSFER_BYTES,
+      (proBands.bandwidthGb * GB) / ESTIMATED_PAGE_TRANSFER_BYTES,
     )
   })
 
@@ -128,6 +146,58 @@ describe('billsOrgLibraryStorage', () => {
 
   it('tolerates surrounding whitespace, which env vars collect', () => {
     expect(billsOrgLibraryStorage('2026-09', ' 2026-09 ')).toBe(true)
+  })
+})
+
+/**
+ * The same instrument, one meter over.
+ *
+ * Email sending has been counted for a long time and charged for none of it,
+ * and the included bands came DOWN in the same change that gave it a rate —
+ * so a boolean would price a month whose mail was sent under a larger
+ * allowance. Most of the excess is transactional, which no cap was allowed to
+ * refuse, so the customer could not have avoided it either.
+ *
+ * The two gates are ONE implementation, so this block is checking that the
+ * email switch really is wired to it rather than to a second, drifting copy —
+ * which is why it exercises the same edges rather than trusting the shared
+ * body. `email-overage-reaches-the-invoice.spec.ts` is the other half: the
+ * switch reaching `billedCents` through the real route.
+ */
+describe('billsEmailSendOverage', () => {
+  it('bills nothing until a start month is configured', () => {
+    expect(billsEmailSendOverage('2026-08', undefined)).toBe(false)
+    expect(billsEmailSendOverage('2026-08', '')).toBe(false)
+    expect(billsEmailSendOverage('2026-08', null)).toBe(false)
+  })
+
+  it('bills the start month itself and every month after it', () => {
+    expect(billsEmailSendOverage('2026-09', '2026-09')).toBe(true)
+    expect(billsEmailSendOverage('2026-10', '2026-09')).toBe(true)
+    expect(billsEmailSendOverage('2027-01', '2026-09')).toBe(true)
+  })
+
+  it('NEVER bills a month that closed before the start month', () => {
+    expect(billsEmailSendOverage('2026-08', '2026-09')).toBe(false)
+    expect(billsEmailSendOverage('2025-12', '2026-09')).toBe(false)
+  })
+
+  it('bills nothing when the configured value is not a month', () => {
+    for (const bad of ['true', 'yes', '2026', '2026-9', 'now', '0']) {
+      expect(`${bad}: ${billsEmailSendOverage('2026-12', bad)}`).toBe(
+        `${bad}: false`,
+      )
+    }
+  })
+
+  it('is a SEPARATE switch from the org-library one', () => {
+    // Shared body, independent decisions. Setting one must not turn on the
+    // other — they are two different charges starting on two different
+    // months, and conflating them is a charge nobody agreed to.
+    expect(billsOrgLibraryStorage('2026-09', '2026-09')).toBe(true)
+    expect(billsEmailSendOverage('2026-09', undefined)).toBe(false)
+    expect(billsEmailSendOverage('2026-09', '2026-09')).toBe(true)
+    expect(billsOrgLibraryStorage('2026-09', undefined)).toBe(false)
   })
 })
 

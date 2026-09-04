@@ -142,7 +142,7 @@ export const previewImageHandler: PluginApiHandler = async (req, res) => {
 
     const contentType = normalizeImageContentType(req.body?.contentType)
     const data = String(req.body?.data ?? '')
-    // An ALLOWLIST rather than the `image/` prefix (AGL-1476), for the same
+    // An ALLOWLIST rather than the `image/` prefix, for the same
     // reason as the DAM routes: the prefix tested a caller-supplied string,
     // so an unrecognised `image/…` label reached storage AND skipped the
     // signature check below, which can only compare bytes against a type it
@@ -185,7 +185,7 @@ export const previewImageHandler: PluginApiHandler = async (req, res) => {
     }
 
     /**
-     * SVG sanitization (AGL-1476). Structural inspection cannot do this: an
+     * SVG sanitization. Structural inspection cannot do this: an
      * SVG is text, it has no magic number, and a `<script>` in one is a
      * perfectly well-formed document.
      *

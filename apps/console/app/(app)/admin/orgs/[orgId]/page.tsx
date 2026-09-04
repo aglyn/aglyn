@@ -65,6 +65,7 @@ import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { SITE_LOGO_HINT } from '../../../../../constants/media-size-hints'
 import { useAuth, useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
 import CardColumns from '../../../../../components/card-columns.component'
 import StaffOnly from '../../../../../components/staff-only.component'
@@ -91,6 +92,7 @@ import {
   staffBillingCustomerChipLabel,
   staffBillingHistoryEmptyState,
 } from '../../../../../utils/stripe-mode-notice'
+import { useDeclareDocumentSubject } from '../../../../../components/document-subject'
 import { useIsStaff } from '../../../../../hooks/use-is-staff'
 import useFirestoreCollection from '../../../../../hooks/use-firestore-collection'
 
@@ -169,11 +171,9 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     setOrgError(false)
     void (async () => {
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        if (!idToken) throw new Error('no token')
-        const response = await fetch(
+        const response = await authorizedFetch(
+          user,
           `/api/admin/org-detail?orgId=${encodeURIComponent(orgId)}`,
-          { headers: { Authorization: `Bearer ${idToken}` } },
         )
         if (!active) return
         if (response.status === 404) {
@@ -210,6 +210,16 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     () => (orgDoc ? { ...orgDoc, ...(orgBilling ?? {}) } : orgDoc),
     [orgDoc, orgBilling],
   )
+  /*
+   * The tab, upgraded from the id to the org's name (AGL-2486).
+   *
+   * `generateMetadata` runs on the server, where the only thing known about
+   * the org is the id in the URL, so it titles the tab `{orgId} · Staff
+   * organization` — right for the first paint and useless once four of them
+   * are open. The swap happens here because this is where the document
+   * arrives, and it costs no read the page was not already making.
+   */
+  useDeclareDocumentSubject(orgId, org?.name ?? undefined)
   // Off the client (AGL-929). This was a LIST over `hosts`, whose rule is
   // evaluated PER DOCUMENT (`isStaff() || memberRoles[uid] != null`). When a
   // document drops out of a query target — a rule re-evaluating, or an App
@@ -233,8 +243,6 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     if (!isStaff || !orgId) return undefined
     let active = true
     void (async () => {
-      const idToken = await (user as any)?.getIdToken?.()
-      if (!idToken) return
       // The route serves 200 per page and returns `nextCursor`; this read
       // took the first page and stopped (AGL-2083). `hostLimit` is
       // UNLIMITED on the top tier, so an org past 200 sites showed a
@@ -242,7 +250,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
       const result = await fetchAllPages<any>({
         path: `/api/admin/hosts?orgId=${encodeURIComponent(orgId)}`,
         key: 'hosts',
-        headers: { Authorization: `Bearer ${idToken}` },
+        user,
         active: () => active,
       })
       if (!active) return
@@ -307,15 +315,61 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
   // figures is exactly the readout an operator would use to decide whether
   // to refund again.
   const [billingNonce, setBillingNonce] = useState(0)
+  const [portalBusy, setPortalBusy] = useState(false)
+  /**
+   * Open this organization's Stripe Billing Portal, for support.
+   *
+   * The portal is not a customer surface: the console owns payment methods,
+   * invoices and the plan switch in its own design, and sending a customer
+   * out to a second product to do what this app already does is the wart it
+   * exists here to avoid. What the portal still holds is Stripe's own view of
+   * a customer — the raw payment-method state, the dunning attempts, the tax
+   * ids as Stripe recorded them — which is exactly what someone diagnosing a
+   * billing complaint needs and cannot reconstruct from our mirrors.
+   *
+   * So it lives HERE, on the staff org page, behind `StaffOnly`. The route's
+   * `portal` action already admits staff on any org without an org membership
+   * (`isStaff` short-circuits the `billing.manage` check), so this needs no
+   * new authority — only somewhere to press.
+   *
+   * A new tab, not `location.assign`: this page is the operator's place in an
+   * investigation, and navigating it away to Stripe loses the org they were
+   * reading.
+   */
+  const handleOpenStripePortal = useCallback(async () => {
+    if (portalBusy) return
+    setPortalBusy(true)
+    try {
+      const response = await authorizedFetch(
+        user,
+        '/api/billing/subscription',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orgId, action: 'portal' }),
+        },
+      )
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !payload?.url) {
+        enqueueSnackbar(
+          payload?.error ?? 'Could not open the Stripe billing portal.',
+          { variant: 'warning', persist: false },
+        )
+        return
+      }
+      window.open(String(payload.url), '_blank', 'noopener,noreferrer')
+    } finally {
+      setPortalBusy(false)
+    }
+  }, [orgId, user, portalBusy, enqueueSnackbar])
   useEffect(() => {
     if (!isStaff || !orgId || !user) return
     let active = true
     void (async () => {
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch(
+        const response = await authorizedFetch(
+          user,
           `/api/admin/org-billing?orgId=${encodeURIComponent(orgId)}`,
-          { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
         )
         const payload = await response.json()
         if (!active) return
@@ -370,10 +424,9 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     setUsageReady(false)
     void (async () => {
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch(
+        const response = await authorizedFetch(
+          user,
           `/api/admin/org-usage?orgId=${encodeURIComponent(orgId)}`,
-          { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
         )
         if (!response.ok) throw new Error(String(response.status))
         const payload = await response.json()
@@ -427,10 +480,9 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
   const [managerBusy, setManagerBusy] = useState(false)
   const [managerError, setManagerError] = useState<string | null>(null)
   const loadManager = useCallback(async () => {
-    const idToken = await (user as any)?.getIdToken?.()
-    const response = await fetch(
+    const response = await authorizedFetch(
+      user,
       `/api/admin/org-success-manager?orgId=${encodeURIComponent(orgId)}`,
-      { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
     )
     if (!response.ok) return
     const payload = await response.json().catch(() => ({}))
@@ -449,19 +501,19 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     setManagerBusy(true)
     setManagerError(null)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/admin/org-success-manager', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      const response = await authorizedFetch(
+        user,
+        '/api/admin/org-success-manager',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orgId,
+            name: managerDraft.name.trim(),
+            email: managerDraft.email.trim(),
+          }),
         },
-        body: JSON.stringify({
-          orgId,
-          name: managerDraft.name.trim(),
-          email: managerDraft.email.trim(),
-        }),
-      })
+      )
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
         setManagerError(payload?.error ?? 'Could not save')
@@ -488,10 +540,9 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
   const [noteDraft, setNoteDraft] = useState('')
   const [noteBusy, setNoteBusy] = useState(false)
   const loadNotes = useCallback(async () => {
-    const idToken = await (user as any)?.getIdToken?.()
-    const response = await fetch(
+    const response = await authorizedFetch(
+      user,
       `/api/admin/org-notes?orgId=${encodeURIComponent(orgId)}`,
-      { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
     )
     if (!response.ok) return
     const payload = await response.json().catch(() => ({}))
@@ -504,13 +555,9 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     if (!noteDraft.trim() || noteBusy) return
     setNoteBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/admin/org-notes', {
+      const response = await authorizedFetch(user, '/api/admin/org-notes', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orgId, text: noteDraft.trim() }),
       })
       if (response.ok) {
@@ -560,49 +607,54 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     contactEmail: '',
     contactPhone: '',
     contactWebsite: '',
-    // Structured (AGL-1133). Kept in step with the customer-facing Settings
-    // page deliberately: both post the same `update-profile` action, so a
-    // staff edit that still sent a free-text string would overwrite a
-    // structured address with a blob.
-    contactAddressLine1: '',
-    contactAddressLine2: '',
-    contactAddressCity: '',
-    contactAddressState: '',
-    contactAddressPostalCode: '',
-    contactAddressCountry: '',
   })
   const [orgEditBusy, setOrgEditBusy] = useState(false)
   useEffect(() => {
     if (!org) return
-    const address = (org.contact?.address ?? {}) as Record<
-      string,
-      string | undefined
-    >
     setOrgEdit({
       name: String(org.name ?? ''),
       logoUrl: String(org.logoUrl ?? ''),
       contactEmail: String(org.contact?.email ?? ''),
       contactPhone: String(org.contact?.phone ?? ''),
       contactWebsite: String(org.contact?.website ?? ''),
-      contactAddressLine1: String(address.line1 ?? ''),
-      contactAddressLine2: String(address.line2 ?? ''),
-      contactAddressCity: String(address.city ?? ''),
-      contactAddressState: String(address.state ?? ''),
-      contactAddressPostalCode: String(address.postalCode ?? ''),
-      contactAddressCountry: String(address.country ?? ''),
     })
   }, [org])
+  /**
+   * The platform billing address, shown to staff and not editable here.
+   *
+   * It is the input `automatic_tax` computes from, and its single editor is
+   * the customer's own Billing → Settings, which writes Stripe first and
+   * refuses the save when Stripe rejects the address. `update-profile` — the
+   * action this panel posts — no longer carries an address at all, so leaving
+   * the fields would have been worse than removing them: staff would type a
+   * correction, be told the organization was saved, and change nothing.
+   *
+   * Staff keep the READ, because "what address are we billing them at" is a
+   * support question asked constantly.
+   */
+  const billingAddressLines = (() => {
+    const address = (org?.contact?.address ?? {}) as Record<
+      string,
+      string | undefined
+    >
+    return [
+      address.line1,
+      address.line2,
+      [address.city, address.state, address.postalCode]
+        .filter(Boolean)
+        .join(' '),
+      address.country,
+    ]
+      .map((line) => String(line ?? '').trim())
+      .filter(Boolean)
+  })()
   const handleOrgEditSave = async () => {
     if (orgEditBusy) return
     setOrgEditBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const headers = {
-        'Content-Type': 'application/json',
-        ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-      }
+      const headers = { 'Content-Type': 'application/json' }
       if (orgEdit.name.trim() && orgEdit.name.trim() !== org?.name) {
-        const renamed = await fetch('/api/orgs/settings', {
+        const renamed = await authorizedFetch(user, '/api/orgs/settings', {
           method: 'POST',
           headers,
           body: JSON.stringify({
@@ -613,7 +665,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
         })
         if (!renamed.ok) throw new Error('Rename failed')
       }
-      const response = await fetch('/api/orgs/settings', {
+      const response = await authorizedFetch(user, '/api/orgs/settings', {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -623,12 +675,6 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
           contactEmail: orgEdit.contactEmail,
           contactPhone: orgEdit.contactPhone,
           contactWebsite: orgEdit.contactWebsite,
-          contactAddressLine1: orgEdit.contactAddressLine1,
-          contactAddressLine2: orgEdit.contactAddressLine2,
-          contactAddressCity: orgEdit.contactAddressCity,
-          contactAddressState: orgEdit.contactAddressState,
-          contactAddressPostalCode: orgEdit.contactAddressPostalCode,
-          contactAddressCountry: orgEdit.contactAddressCountry,
         }),
       })
       if (!response.ok) {
@@ -653,13 +699,9 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     if (!transferTarget || orgEditBusy) return
     setOrgEditBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/orgs/settings', {
+      const response = await authorizedFetch(user, '/api/orgs/settings', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           orgId,
           action: 'transfer-ownership',
@@ -706,10 +748,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     let active = true
     void (async () => {
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/admin/coupons', {
-          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
-        })
+        const response = await authorizedFetch(user, '/api/admin/coupons')
         if (!response.ok) return
         const payload = await response.json().catch(() => ({}))
         if (active) setCoupons(payload.coupons ?? [])
@@ -756,13 +795,9 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     if (!selectedCoupon || discountBusy) return
     setDiscountBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/admin/org-discount', {
+      const response = await authorizedFetch(user, '/api/admin/org-discount', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           orgId,
           action: 'apply',
@@ -793,13 +828,9 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     if (discountBusy) return
     setDiscountBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/admin/org-discount', {
+      const response = await authorizedFetch(user, '/api/admin/org-discount', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orgId, action: 'remove' }),
       })
       const payload = await response.json().catch(() => ({}))
@@ -927,22 +958,24 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
         `${Date.now()}-${Math.random().toString(36).slice(2)}`
     }
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/admin/enterprise-billing', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Idempotency-Key': entAttemptKey.current,
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      const response = await authorizedFetch(
+        user,
+        '/api/admin/enterprise-billing',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Idempotency-Key': entAttemptKey.current,
+          },
+          body: JSON.stringify({
+            orgId,
+            amountMonthlyUsd: amount,
+            interval: entInterval,
+            plan: entPlan,
+            mode: entMode,
+          }),
         },
-        body: JSON.stringify({
-          orgId,
-          amountMonthlyUsd: amount,
-          interval: entInterval,
-          plan: entPlan,
-          mode: entMode,
-        }),
-      })
+      )
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
         return void enqueueSnackbar(payload?.error ?? 'Provisioning failed', {
@@ -978,8 +1011,13 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
         { children: 'Organizations', href: buildRoute(Route.ADMIN_ORGS) },
         { children: org?.name ?? orgId },
       ]}
+      // The ORG, the way every other detail page in the console names its
+      // record. `Organization Detail` is the page's category, which the
+      // breadcrumb above already says, and it reads the same on every org an
+      // operator has open — which is the one thing a heading has to
+      // distinguish. The id stands in until the document lands.
       header={{
-        children: 'Organization Detail',
+        children: org?.name ?? orgId,
         icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
       }}
       help={{ topic: 'staffConsole', anchor: '#entitlement-editor' }}
@@ -1130,62 +1168,35 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                             }))
                           }
                         />
-                        <TextField
-                          size="small"
-                          label="Billing address"
-                          value={orgEdit.contactAddressLine1}
-                          onChange={(event) =>
-                            setOrgEdit((prev) => ({
-                              ...prev,
-                              contactAddressLine1: event.target.value,
-                            }))
-                          }
-                        />
-                        <TextField
-                          size="small"
-                          label="City"
-                          value={orgEdit.contactAddressCity}
-                          onChange={(event) =>
-                            setOrgEdit((prev) => ({
-                              ...prev,
-                              contactAddressCity: event.target.value,
-                            }))
-                          }
-                        />
-                        <TextField
-                          size="small"
-                          label="State / Province"
-                          value={orgEdit.contactAddressState}
-                          onChange={(event) =>
-                            setOrgEdit((prev) => ({
-                              ...prev,
-                              contactAddressState: event.target.value,
-                            }))
-                          }
-                        />
-                        <TextField
-                          size="small"
-                          label="Postal code"
-                          value={orgEdit.contactAddressPostalCode}
-                          onChange={(event) =>
-                            setOrgEdit((prev) => ({
-                              ...prev,
-                              contactAddressPostalCode: event.target.value,
-                            }))
-                          }
-                        />
-                        <TextField
-                          size="small"
-                          label="Country"
-                          helperText="Two-letter code, e.g. US"
-                          value={orgEdit.contactAddressCountry}
-                          onChange={(event) =>
-                            setOrgEdit((prev) => ({
-                              ...prev,
-                              contactAddressCountry: event.target.value,
-                            }))
-                          }
-                        />
+                        {/* Read-only: the customer's Billing → Settings is
+                            the single writer of this address, because it is
+                            a tax input and two writers meant the last save
+                            won. Named as the PLATFORM billing address so it
+                            is not read as the seller payout identity (Stripe
+                            Connect) or a storefront's tax origin. */}
+                        <Stack spacing={0.5}>
+                          <Typography variant="overline" color="text.secondary">
+                            {'Platform billing address'}
+                          </Typography>
+                          {billingAddressLines.length ? (
+                            billingAddressLines.map((line) => (
+                              <Typography key={line} variant="body2">
+                                {line}
+                              </Typography>
+                            ))
+                          ) : (
+                            <Typography variant="body2" color="text.secondary">
+                              {'None on file.'}
+                            </Typography>
+                          )}
+                          <Typography variant="caption" color="text.secondary">
+                            {'What Aglyn invoices this organization at, and ' +
+                              'the tax input on their subscription. Edited ' +
+                              'by the customer in Billing → Settings; not ' +
+                              'their payout identity and not a storefront ' +
+                              'tax origin.'}
+                          </Typography>
+                        </Stack>
                         <Button
                           size="small"
                           variant="outlined"
@@ -1602,6 +1613,23 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                           )}
                         </Stack>
                       )}
+                      {/*
+                        Outside the load conditional on purpose. The states
+                        that hide the table — Stripe unreachable, the customer
+                        invisible to this deployment's key — are the states an
+                        operator most needs Stripe's own view to explain, so a
+                        button that disappears exactly then is a button that is
+                        missing when it counts.
+                      */}
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        disabled={portalBusy}
+                        sx={{ mt: 1.5 }}
+                        onClick={() => void handleOpenStripePortal()}
+                      >
+                        {'Open Stripe billing portal'}
+                      </Button>
                     </CardDisplay>
                   ),
                 },
@@ -2241,7 +2269,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                 {
                   children: (
                     /*
-                     * The organization's own activity log (AGL-1488).
+                     * The organization's own activity log.
                      *
                      * Staff had the audit of what STAFF did to this org and
                      * no view of what the org itself did — the invites, the
@@ -2253,7 +2281,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                     <OrgActivityCard
                       orgId={orgId}
                       header={'Organization activity'}
-                      // The org's SITES too (AGL-1490). Without it a
+                      // The org's SITES too. Without it a
                       // brand-new organization reads as having done nothing
                       // on the day it published three pages, because the org
                       // collection holds only invites, roles and billing.

@@ -27,7 +27,7 @@ import useAccountSignInMethods from '../../hooks/use-account-sign-in-methods'
  * Take your data with you, then close the account (AGL-1140, AGL-1974).
  *
  * The Close account section of Manage Account, its own component since the
- * sections became routes (AGL-693).
+ * sections became routes (AGL-2501).
  *
  * The export sits directly ABOVE the irreversible control. The Close account
  * card has always told people to export first and there was nothing to export

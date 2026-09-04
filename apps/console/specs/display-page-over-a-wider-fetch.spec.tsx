@@ -16,7 +16,7 @@
  */
 
 /**
- * A PAGE THE READER CHOOSES, OVER A FETCH THEY DO NOT (AGL-693).
+ * A PAGE THE READER CHOOSES, OVER A FETCH THEY DO NOT (AGL-2501).
  *
  * The staff Users list walks Firebase Auth two hundred accounts at a time,
  * because `listUsersAcrossPools` appends tenant-pool users only once the
@@ -126,7 +126,7 @@ const countLine = () =>
 
 const sizeMenu = () => screen.getByRole('combobox')
 
-describe('a display page over a wider fetch (AGL-693)', () => {
+describe('a display page over a wider fetch (AGL-2501)', () => {
   const rows = Array.from({ length: FETCHED }, (_, index) => account(index))
 
   it('THE CONTROL: the fixture spans more than one display page', () => {
@@ -216,7 +216,7 @@ describe('a display page over a wider fetch (AGL-693)', () => {
  * The half a re-slice would fake: advancing past what was fetched has to
  * FETCH.
  */
-describe('paging past the buffer asks for more (AGL-693)', () => {
+describe('paging past the buffer asks for more (AGL-2501)', () => {
   it('fetches when the next page is not fully buffered', () => {
     // Exactly one display page in hand, and a walk that has more behind it.
     const rows = Array.from({ length: TABLE_PAGE_SIZE_DEFAULT }, (_, index) =>

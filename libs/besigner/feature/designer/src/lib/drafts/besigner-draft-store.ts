@@ -75,7 +75,7 @@ export interface BesignerDraftIds {
    * that have no host.
    */
   scope: string
-  kind: 'screen' | 'layout' | 'component' | 'template' | 'email'
+  kind: 'screen' | 'layout' | 'component' | 'template' | 'email' | 'form'
   docId: string
   /**
    * Which version of the document is open. Keeping this in the key is what

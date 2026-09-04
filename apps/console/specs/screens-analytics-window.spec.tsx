@@ -17,7 +17,7 @@
 
 /**
  * The per-screen traffic table reads the RECENT end of its window, and shows
- * all of what it read (AGL-693).
+ * all of what it read (AGL-2501).
  *
  * Two failures, both invisible from the outside, both about a cap with nothing
  * saying which end it bites:
@@ -220,7 +220,7 @@ afterEach(() => {
   jest.restoreAllMocks()
 })
 
-describe('the traffic table reads the RECENT end of its window (AGL-693)', () => {
+describe('the traffic table reads the RECENT end of its window (AGL-2501)', () => {
   it('seeds more day documents than the ceiling', () => {
     // The premise. Without it every assertion below is about a window that
     // never truncates, and the suite proves nothing.
@@ -275,7 +275,7 @@ describe('the traffic table reads the RECENT end of its window (AGL-693)', () =>
   })
 })
 
-describe('THE CONTROL: the query model bites (AGL-693)', () => {
+describe('THE CONTROL: the query model bites (AGL-2501)', () => {
   it('the OLD query could not reach the most recent day', () => {
     // Rebuilt rather than remembered: the inequality with no explicit order,
     // which is what this card shipped.

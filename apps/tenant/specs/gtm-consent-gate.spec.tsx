@@ -13,6 +13,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * @jest-environment jsdom
+ * @jest-environment-options {"url": "https://aglyn.com/"}
  */
 
 /**
@@ -92,6 +95,16 @@ const savedEnv = {
   nodeEnv: process.env.NODE_ENV,
   deployEnv: process.env.NEXT_PUBLIC_DEPLOY_ENV,
 }
+/**
+ * A production deployment is also a real HOSTNAME, which is why this file's
+ * first docblock names a document URL (AGL-2067). jsdom serves every spec from
+ * `localhost`, and `analyticsMayEmit` reads a loopback host as a machine
+ * talking to itself — it stays silent however the variables below are set, so
+ * the two halves only describe a deployment together.
+ *
+ * The pragma counts only in the FIRST docblock of the file. jest reads no
+ * other one, and ignores a later one without saying so.
+ */
 beforeAll(() => {
   mutableEnv.NODE_ENV = 'production'
   process.env.NEXT_PUBLIC_DEPLOY_ENV = 'production'

@@ -35,7 +35,17 @@ import {
   REUSABLE_INSTANCE_COMPONENT_ID,
   STYLE_OVERRIDES_ROOT_KEY,
 } from './compose-reusable-components'
+import { placedFormPlacement } from './forms'
 import { mergeNodeSx } from './merge-node-sx'
+
+/**
+ * Where a definition node lands in the composed map (AGL-2521).
+ *
+ * The root takes the INSTANCE'S id — the two are one element — and every
+ * other node keeps the `cmp__{instance}__{defId}` namespace.
+ */
+const composedId = (instanceId: string, defId: string, rootId: string) =>
+  defId === rootId ? instanceId : `cmp__${instanceId}__${defId}`
 
 const instance = (id: string, refId: string) => ({
   $id: id,
@@ -58,25 +68,31 @@ describe('composeReusableComponentNodes', () => {
     },
   } as any
 
-  it('grafts the definition under the instance with namespaced ids', () => {
+  it('puts the definition root IN the instance\u2019s place, with namespaced children (AGL-2521)', () => {
     const nodes = {
       _root_: { $id: '_root_', componentId: 'div', nodes: ['a'] },
       a: instance('a', 'card'),
     } as any
     const composed = composeReusableComponentNodes(nodes, { card: definition })
 
-    expect(composed['a'].nodes).toEqual(['cmp__a__root'])
-    expect(composed['cmp__a__root']).toMatchObject({
+    // The instance and the definition's root are ONE element: the root takes
+    // the instance's id and slot, so a placement costs no wrapper.
+    expect(composed['a']).toMatchObject({
       componentId: 'muiStack',
-      parentId: 'a',
       nodes: ['cmp__a__label'],
     })
+    expect(composed['cmp__a__root']).toBeUndefined()
+    // Children keep the `cmp__{instance}__{defId}` scheme everything else
+    // resolves against, re-parented onto the id that replaced the wrapper.
     expect(composed['cmp__a__label']).toMatchObject({
       componentId: 'muiTypography',
-      parentId: 'cmp__a__root',
+      parentId: 'a',
     })
+    // The parent's child list is unchanged — same id in the same slot.
+    expect(composed['_root_'].nodes).toEqual(['a'])
     // input untouched
     expect(nodes['a'].nodes).toEqual([])
+    expect(nodes['a'].componentId).toBe(REUSABLE_INSTANCE_COMPONENT_ID)
   })
 
   it('expands multiple instances of the same definition without collisions', () => {
@@ -107,20 +123,91 @@ describe('composeReusableComponentNodes', () => {
       { a: instance('a', 'nesting') } as any,
       { nesting, card: definition },
     )
-    expect(composed['cmp__a__inner'].nodes).toEqual([
-      'cmp__cmp__a__inner__root',
-    ])
+    // The inner instance collapsed into the card's root, which now carries
+    // the inner instance's id and the card's own children beneath it.
+    expect(composed['cmp__a__inner']).toMatchObject({
+      componentId: 'muiStack',
+      nodes: ['cmp__cmp__a__inner__label'],
+    })
 
     const selfRef = {
       rootId: 'r',
       nodes: { r: instance('r', 'selfRef') },
     } as any
-    // Must terminate.
+    // Must terminate — and leave the placement the page authored rather than
+    // a dangling reference to a root that was never expanded.
     const bounded = composeReusableComponentNodes(
       { a: instance('a', 'selfRef') } as any,
       { selfRef },
     )
-    expect(Object.keys(bounded).length).toBeGreaterThan(1)
+    expect(Object.keys(bounded)).toEqual(['a'])
+    expect(bounded['a']).toMatchObject({
+      componentId: REUSABLE_INSTANCE_COMPONENT_ID,
+      nodes: [],
+    })
+  })
+})
+
+describe('interactions across the merge (AGL-2521)', () => {
+  const hover = (id: string) => ({
+    id,
+    name: id,
+    trigger: { event: 'elementHoverEnter', everyTime: true },
+    steps: [{ type: 'openMenu' }],
+  })
+
+  /** A root that opens itself on hover, the way the site nav's menus do. */
+  const definition = {
+    rootId: 'root',
+    nodes: {
+      root: {
+        $id: 'root',
+        componentId: 'muiMegaMenu',
+        nodes: ['label'],
+        interactions: [hover('from-component')],
+      },
+      label: { $id: 'label', componentId: 'muiTypography', parentId: 'root' },
+    },
+  } as any
+
+  it('keeps BOTH sides, the component root first', () => {
+    const composed = composeReusableComponentNodes(
+      {
+        _root_: { $id: '_root_', componentId: 'div', nodes: ['a'] },
+        a: { ...instance('a', 'menu'), interactions: [hover('from-page')] },
+      } as any,
+      { menu: definition },
+    )
+    expect(
+      (composed['a'] as any).interactions.map((entry: any) => entry.id),
+    ).toEqual(['from-component', 'from-page'])
+  })
+
+  it('carries the placement’s own interactions, which have nowhere else to go', () => {
+    // The instance keeps its id through the merge, so an interaction the PAGE
+    // authored is keyed to the node that survives — dropping it here is the
+    // one loss the composed map could never be asked about afterwards.
+    const bare = {
+      rootId: 'root',
+      nodes: { root: { $id: 'root', componentId: 'muiStack', nodes: [] } },
+    } as any
+    const composed = composeReusableComponentNodes(
+      { a: { ...instance('a', 'menu'), interactions: [hover('from-page')] } } as any,
+      { menu: bare },
+    )
+    expect((composed['a'] as any).interactions).toEqual([hover('from-page')])
+  })
+
+  it('leaves a node with no choreography on either side carrying no key', () => {
+    const bare = {
+      rootId: 'root',
+      nodes: { root: { $id: 'root', componentId: 'muiStack', nodes: [] } },
+    } as any
+    const composed = composeReusableComponentNodes(
+      { a: instance('a', 'menu') } as any,
+      { menu: bare },
+    )
+    expect('interactions' in (composed['a'] as any)).toBe(false)
   })
 })
 
@@ -187,7 +274,12 @@ describe('replaceSubtreeWithInstance', () => {
     } as any
     const swapped = replaceSubtreeWithInstance(before, 'nav', 'cmp1')
     const composed = composeReusableComponentNodes(swapped, { cmp1: definition })
-    expect(composed['nav'].nodes).toEqual(['cmp__nav__nav'])
+    // The definition root took the instance's place (AGL-2521), so the id
+    // the page authored now renders the component's own outer element.
+    expect(composed['nav']).toMatchObject({
+      componentId: 'muiAppBar',
+      nodes: ['cmp__nav__brand'],
+    })
     expect(composed['cmp__nav__brand']).toMatchObject({
       props: { children: 'Aglyn' },
     })
@@ -246,7 +338,7 @@ describe('nodesReferenceComponent', () => {
     // If the scan says referenced, the composer must actually expand it.
     expect(nodesReferenceComponent(nodes, 'card')).toBe(true)
     const composed = composeReusableComponentNodes(nodes, { card: definition })
-    expect(composed['a'].nodes).toEqual(['cmp__a__root'])
+    expect(composed['a']).toMatchObject({ componentId: 'div' })
   })
 
   it('is safe on empty, missing and id-less input', () => {
@@ -376,7 +468,8 @@ describe('collectReferencedComponentIds (AGL-1898)', () => {
       } as any,
     }
     const composed = composeReusableComponentNodes(nodes as any, definitions)
-    expect(composed['cmp__a__i0'].nodes).toEqual(['cmp__cmp__a__i0__broot'])
+    // The nested instance collapsed into the button definition's root.
+    expect(composed['cmp__a__i0']).toMatchObject({ componentId: 'muiButton' })
     expect(collectReferencedComponentIds(nodes, definitions).has('button')).toBe(
       true,
     )
@@ -513,14 +606,14 @@ describe('declared props (AGL-1247)', () => {
 
     expect(
       composeReusableComponentNodes(instance() as any, { cta })[
-        'cmp__a__root'
+        'a'
       ].props.href,
     ).toBe('screen:contact')
     expect(
       composeReusableComponentNodes(
         instance({ secondaryLink: 'screen:pricing' }) as any,
         { cta },
-      )['cmp__a__root'].props.href,
+      )['a'].props.href,
     ).toBe('screen:pricing')
     // Backwards compatibility: the nine live CTAs hold a raw path, which
     // must keep arriving verbatim as a literal href.
@@ -528,7 +621,7 @@ describe('declared props (AGL-1247)', () => {
       composeReusableComponentNodes(
         instance({ secondaryLink: '/pricing' }) as any,
         { cta },
-      )['cmp__a__root'].props.href,
+      )['a'].props.href,
     ).toBe('/pricing')
   })
 
@@ -569,10 +662,10 @@ describe('declared props (AGL-1247)', () => {
       { x: withFlags },
     )
     // Cleared field → the component's own copy, never an empty section.
-    expect(composed['cmp__a__root'].props.a).toBe('Default copy')
+    expect(composed['a'].props.a).toBe('Default copy')
     // Real values, not "unset".
-    expect(composed['cmp__a__root'].props.b).toBe('0')
-    expect(composed['cmp__a__root'].props.c).toBe('false')
+    expect(composed['a'].props.b).toBe('0')
+    expect(composed['a'].props.c).toBe('false')
   })
 
   it('leaves other token namespaces for the resolvers downstream', () => {
@@ -593,7 +686,7 @@ describe('declared props (AGL-1247)', () => {
     )
     // Only `prop.*` is consumed here; compose runs graft → repeatables →
     // resolveNodesBindings, so these must still be intact.
-    expect(composed['cmp__a__root'].props.children).toBe(
+    expect(composed['a'].props.children).toBe(
       'Hi — {{var:abc}} {{host.name}}',
     )
   })
@@ -617,7 +710,7 @@ describe('declared props (AGL-1247)', () => {
     )
     // Untouched: substitution is driven by the DECLARATION, not by whatever
     // an instance happens to carry.
-    expect(composed['cmp__a__root'].props.children).toBe('{{prop.headline}}')
+    expect(composed['a'].props.children).toBe('{{prop.headline}}')
   })
 })
 
@@ -658,7 +751,7 @@ describe('root style overrides (AGL-1306)', () => {
     )
     // The named leaf is replaced; the root's other properties and the
     // subtree's own styles are untouched.
-    expect(composed['cmp__a__root'].sx).toEqual({
+    expect(composed['a'].sx).toEqual({
       backgroundColor: '#0b4a6f',
       paddingTop: 8,
     })
@@ -686,11 +779,11 @@ describe('root style overrides (AGL-1306)', () => {
     )
     // Read through `toHaveProperty`: `sx` is the full MUI union (array,
     // callback, pseudo-selector map), so no dotted key is reachable on it.
-    expect(composed['cmp__a__root'].sx).toHaveProperty(
+    expect(composed['a'].sx).toHaveProperty(
       'backgroundColor',
       '#0b4a6f',
     )
-    expect(composed['cmp__b__root'].sx).toHaveProperty(
+    expect(composed['b'].sx).toHaveProperty(
       'backgroundColor',
       '#101828',
     )
@@ -715,7 +808,7 @@ describe('root style overrides (AGL-1306)', () => {
       { a: overriddenInstance('a', { backgroundColor: '#0b4a6f' }) } as any,
       { cta: republished },
     )
-    expect(composed['cmp__a__root'].sx).toEqual({
+    expect(composed['a'].sx).toEqual({
       backgroundColor: '#0b4a6f',
       paddingLeft: 4,
     })
@@ -747,8 +840,8 @@ describe('root style overrides (AGL-1306)', () => {
       } as any,
       { cta: definition },
     )
-    expect(composed['cmp__a__root'].sx).toEqual(definition.nodes.root.sx)
-    expect(composed['cmp__b__root'].sx).toEqual(definition.nodes.root.sx)
+    expect(composed['a'].sx).toEqual(definition.nodes.root.sx)
+    expect(composed['b'].sx).toEqual(definition.nodes.root.sx)
   })
 
   it('getInstanceRootStyleOverride answers only for instances with a real record', () => {
@@ -825,7 +918,7 @@ describe('per-leaf style overrides (AGL-1332)', () => {
       } as any,
       { cta },
     )
-    expect(composed['cmp__a__root'].sx).toEqual({
+    expect(composed['a'].sx).toEqual({
       backgroundColor: '#fff',
       paddingTop: 8,
     })
@@ -944,7 +1037,7 @@ describe('per-leaf style overrides (AGL-1332)', () => {
       { cta },
     )
     expect(Object.keys(composed).sort()).toEqual(
-      ['a', 'cmp__a__headline', 'cmp__a__lede', 'cmp__a__root'].sort(),
+      ['a', 'cmp__a__headline', 'cmp__a__lede'].sort(),
     )
     expect(composed['cmp__a__headline'].sx).toHaveProperty('color', '#0B1220')
     // Kept on the instance, not silently dropped: re-adding the leaf to the
@@ -977,7 +1070,7 @@ describe('per-leaf style overrides (AGL-1332)', () => {
       } as any,
       { cta: oddly },
     )
-    expect(composed['cmp__a__shell'].sx).toEqual({ backgroundColor: '#fff' })
+    expect(composed['a'].sx).toEqual({ backgroundColor: '#fff' })
     expect(composed['cmp__a__root'].sx).toEqual({ color: 'common.white' })
   })
 
@@ -1005,7 +1098,7 @@ describe('per-leaf style overrides (AGL-1332)', () => {
         } as any,
       },
     )
-    expect('sx' in (bare['cmp__b__root'] as any)).toBe(false)
+    expect('sx' in (bare['b'] as any)).toBe(false)
     expect(composed['cmp__a__lede'].sx).toBe(cta.nodes.lede.sx)
   })
 
@@ -1083,7 +1176,9 @@ describe('per-leaf style overrides (AGL-1332)', () => {
       { cta },
     )
     for (const entry of listInstanceStyleTargets(cta)) {
-      expect(composed[`cmp__a__${entry.componentInternalId}`].sx).toHaveProperty(
+      expect(
+        composed[composedId('a', entry.componentInternalId, cta.rootId)].sx,
+      ).toHaveProperty(
         'outlineColor',
         entry.key,
       )
@@ -1109,9 +1204,11 @@ describe('per-leaf style overrides (AGL-1332)', () => {
   })
 
   it('survives save → reload → re-graft, and stays per instance', () => {
-    // The storage hop the field has to clear: a composed map is what a
-    // canvas saves, and the overrides ride the INSTANCE node, not the
-    // graft — so re-composing the reloaded map must rebuild the same look.
+    // The storage hop the field has to clear: the overrides ride the AUTHORED
+    // instance node, so re-composing a reloaded document rebuilds the same
+    // look. It is the authored map that round-trips, never a composed one —
+    // every graft call site (tenant SSR, Preview, the canvas's chrome and
+    // instance previews) renders from it and none of them persists it.
     const nodes = {
       a: instanceWith('a', {
         [STYLE_OVERRIDES_ROOT_KEY]: { backgroundColor: '#fff' },
@@ -1120,20 +1217,31 @@ describe('per-leaf style overrides (AGL-1332)', () => {
       b: instanceWith('b', { headline: { color: '#B7BEC8' } }),
     } as any
     const first = composeReusableComponentNodes(nodes, { cta })
-    const saved = JSON.parse(JSON.stringify(first))
-    // A save keeps only the document's own nodes; the graft is regenerated.
-    for (const id of Object.keys(saved)) {
-      if (id.startsWith('cmp__')) delete saved[id]
-    }
-    for (const id of ['a', 'b']) saved[id].nodes = []
+    const saved = JSON.parse(JSON.stringify(nodes))
 
     const again = composeReusableComponentNodes(saved, { cta })
-    expect(again['cmp__a__headline'].sx).toEqual(
-      first['cmp__a__headline'].sx,
-    )
-    expect(again['cmp__a__root'].sx).toEqual(first['cmp__a__root'].sx)
+    expect(again['cmp__a__headline'].sx).toEqual(first['cmp__a__headline'].sx)
+    expect(again['a'].sx).toEqual(first['a'].sx)
     expect(again['cmp__b__headline'].sx).toHaveProperty('color', '#B7BEC8')
-    expect(again['cmp__b__root'].sx).toEqual(cta.nodes.root.sx)
+    expect(again['b'].sx).toEqual(cta.nodes.root.sx)
+  })
+
+  it('carries the override slices onto the node that replaced the instance (AGL-2521)', () => {
+    // They are document state, not render output. The instance element is
+    // gone, so if the slices did not ride across with it, a composed map that
+    // reached a writer would lose every per-placement override — and
+    // composing twice must still be a no-op rather than a second graft.
+    const nodes = {
+      a: instanceWith('a', {
+        [STYLE_OVERRIDES_ROOT_KEY]: { backgroundColor: '#fff' },
+      }),
+    } as any
+    const composed = composeReusableComponentNodes(nodes, { cta })
+    expect((composed['a'] as any).styleOverrides).toEqual({
+      [STYLE_OVERRIDES_ROOT_KEY]: { backgroundColor: '#fff' },
+    })
+    expect(composed['a'].componentId).not.toBe(REUSABLE_INSTANCE_COMPONENT_ID)
+    expect(composeReusableComponentNodes(composed, { cta })).toEqual(composed)
   })
 })
 
@@ -1201,7 +1309,7 @@ describe('background fill overrides (AGL-1338)', () => {
     )
     // The whole point: not "a colour under a gradient" but no image at
     // all, so the colour is what paints.
-    expect(composed['cmp__a__root'].sx).toEqual({
+    expect(composed['a'].sx).toEqual({
       backgroundColor: '#161C21',
       backgroundImage: 'none',
       paddingTop: 8,
@@ -1219,7 +1327,7 @@ describe('background fill overrides (AGL-1338)', () => {
       } as any,
       { cta },
     )
-    expect(composed['cmp__a__root'].sx).toHaveProperty(
+    expect(composed['a'].sx).toHaveProperty(
       'backgroundImage',
       TERMINAL,
     )
@@ -1230,7 +1338,7 @@ describe('background fill overrides (AGL-1338)', () => {
       { a: instanceWith('a') } as any,
       { cta },
     )
-    expect(composed['cmp__a__root'].sx).toEqual(cta.nodes.root.sx)
+    expect(composed['a'].sx).toEqual(cta.nodes.root.sx)
   })
 
   it('keeps two placements of one component disjoint', () => {
@@ -1244,12 +1352,12 @@ describe('background fill overrides (AGL-1338)', () => {
       } as any,
       { cta },
     )
-    expect(composed['cmp__a__root'].sx).toHaveProperty('backgroundImage', 'none')
-    expect(composed['cmp__b__root'].sx).toHaveProperty(
+    expect(composed['a'].sx).toHaveProperty('backgroundImage', 'none')
+    expect(composed['b'].sx).toHaveProperty(
       'backgroundImage',
       GRADIENT,
     )
-    expect(composed['cmp__a__root'].sx).not.toEqual(composed['cmp__b__root'].sx)
+    expect(composed['a'].sx).not.toEqual(composed['b'].sx)
     expect(cta.nodes.root.sx.backgroundImage).toBe(GRADIENT)
   })
 
@@ -1286,13 +1394,13 @@ describe('background fill overrides (AGL-1338)', () => {
       { cta: scoped },
     )
     // Dark goes flat; light keeps the gradient and the slice's siblings.
-    expect(composed['cmp__a__root'].sx).toEqual({
+    expect(composed['a'].sx).toEqual({
       backgroundImage: GRADIENT,
       paddingTop: 8,
       '@scheme dark': { backgroundImage: 'none', color: '#fff' },
     })
     // A partial breakpoint override keeps the narrower widths.
-    expect(composed['cmp__b__root'].sx).toHaveProperty('backgroundImage', {
+    expect(composed['b'].sx).toHaveProperty('backgroundImage', {
       xs: GRADIENT,
       md: 'none',
     })
@@ -1308,7 +1416,7 @@ describe('background fill overrides (AGL-1338)', () => {
     const composed = composeReusableComponentNodes(nodes, { cta })
     let n = 0
     const detached = detachInstanceSubtree(nodes, 'a', cta, () => `new${++n}`)
-    expect(detached['a'].sx).toEqual((composed['cmp__a__root'] as any).sx)
+    expect(detached['a'].sx).toEqual((composed['a'] as any).sx)
     expect(detached['a'].sx).toEqual({
       backgroundColor: '#161C21',
       backgroundImage: 'none',
@@ -1325,7 +1433,7 @@ describe('background fill overrides (AGL-1338)', () => {
       { a: instanceWith('a', { [STYLE_OVERRIDES_ROOT_KEY]: {} }) } as any,
       { cta },
     )
-    expect(composed['cmp__a__root'].sx).toEqual(cta.nodes.root.sx)
+    expect(composed['a'].sx).toEqual(cta.nodes.root.sx)
   })
 })
 
@@ -1605,7 +1713,7 @@ describe('detachInstanceSubtree (AGL-1314)', () => {
 
     // Same definition leaves, different ids — compare by what they render.
     for (const defId of ['eyebrow', 'h', 'img']) {
-      const grafted = composed[`cmp__a__${defId}`] as any
+      const grafted = composed[composedId('a', defId, hero.rootId)] as any
       const copy = Object.values<any>(detached).find(
         (node) =>
           node?.componentId === (hero.nodes as any)[defId].componentId &&
@@ -1656,7 +1764,7 @@ describe('detachInstanceSubtree (AGL-1314)', () => {
     // The copy forks the look the page was showing, leaf-wise merged —
     // and it is the SAME sx the graft was rendering.
     expect(detached['a'].sx).toEqual({ backgroundColor: '#0b4a6f', paddingTop: 8 })
-    expect(detached['a'].sx).toEqual((composed['cmp__a__root'] as any).sx)
+    expect(detached['a'].sx).toEqual((composed['a'] as any).sx)
     // The instance's own instance-ness is gone with it.
     expect(detached['a'].componentId).toBe('muiStack')
     expect((detached['a'] as any).styleOverrides).toBeUndefined()
@@ -1698,7 +1806,7 @@ describe('detachInstanceSubtree (AGL-1314)', () => {
     }
     for (const [defId, copyId] of Object.entries(byGraftId)) {
       expect(detached[copyId].sx).toEqual(
-        (composed[`cmp__a__${defId}`] as any).sx,
+        (composed[composedId('a', defId, hero.rootId)] as any).sx,
       )
     }
     expect(detached['new2'].sx).toEqual({ color: '#0B1220', fontSize: 32 })
@@ -1755,7 +1863,7 @@ describe('detachInstanceSubtree (AGL-1314)', () => {
     nodes['cmp__a__h'] = {
       $id: 'cmp__a__h',
       componentId: 'muiTypography',
-      parentId: 'cmp__a__root',
+      parentId: 'a',
       props: { children: 'Ship faster' },
     }
     const detached = detachInstanceSubtree(nodes, 'a', hero, ids())
@@ -1816,7 +1924,7 @@ describe('detachInstanceSubtree (AGL-1314)', () => {
     // Detach bakes what the page SHOWS; an undeclared token substitutes
     // nowhere, and `{{var:*}}` belongs to the resolver downstream.
     expect(detached['a'].props.children).toBe(
-      (composed['cmp__a__root'] as any).props.children,
+      (composed['a'] as any).props.children,
     )
     expect(detached['a'].props.children).toBe('{{prop.ghost}} {{var:abc}}')
   })
@@ -1932,7 +2040,7 @@ describe('optional CTAs and media (AGL-1314)', () => {
 
     expect(composed['cmp__a__media']).toBeTruthy()
     expect(composed['cmp__a__mockup'].props.src).toBe('/mockup.png')
-    expect(composed['cmp__a__root'].nodes).toEqual([
+    expect(composed['a'].nodes).toEqual([
       'cmp__a__copy',
       'cmp__a__media',
     ])
@@ -1957,7 +2065,7 @@ describe('optional CTAs and media (AGL-1314)', () => {
     // an orphaned image would still fetch its bytes.
     expect(hidden['cmp__a__mockup']).toBeUndefined()
     // ...and the parent no longer references it, so no dangling child id.
-    expect(hidden['cmp__a__root'].nodes).toEqual(['cmp__a__copy'])
+    expect(hidden['a'].nodes).toEqual(['cmp__a__copy'])
     // The copy column is untouched: hiding is scoped to the subtree.
     expect(hidden['cmp__a__h'].props.children).toBe('Headline')
   })
@@ -2049,8 +2157,10 @@ describe('optional CTAs and media (AGL-1314)', () => {
       hero: selfHiding as any,
     })
 
-    expect(composed['a'].nodes).toEqual(['cmp__a__root'])
-    expect(composed['cmp__a__root']).toBeTruthy()
+    // `pruneHiddenNodes` never drops the id it was handed, so the root is
+    // still there to take the instance's place — and the page keeps the
+    // element it authored rather than a hole where a component used to be.
+    expect(composed['a']).toMatchObject({ nodes: ['cmp__a__copy', 'cmp__a__media'] })
   })
 
   it('bakes the page\'s choices into a detached copy', () => {
@@ -2214,7 +2324,7 @@ describe('instance attribute overrides (AGL-1899)', () => {
       } as any,
       { widget },
     )
-    expect((composed['cmp__a__root'] as any).props.spacing).toBe(8)
+    expect((composed['a'] as any).props.spacing).toBe(8)
     // The root slice must not leak onto the leaves.
     expect((composed['cmp__a__cta'] as any).props.spacing).toBeUndefined()
   })
@@ -2318,7 +2428,7 @@ describe('instance attribute overrides (AGL-1899)', () => {
         } as any,
       },
     )
-    expect('props' in (bare['cmp__b__root'] as any)).toBe(false)
+    expect('props' in (bare['b'] as any)).toBe(false)
   })
 
   it('getInstanceAttrOverrides answers only for instances, dropping junk', () => {
@@ -2362,5 +2472,224 @@ describe('instance attribute overrides (AGL-1899)', () => {
     // The fork has to look identical to what the page was showing.
     expect(cta.props.variant).toBe('outlined')
     expect(cta.props.size).toBe('medium')
+  })
+})
+
+describe('placed forms render their entity (docs/specs/reusable-forms.md)', () => {
+  const design = {
+    rootId: 'f-root',
+    nodes: {
+      'f-root': { $id: 'f-root', componentId: 'muiStack', nodes: ['f-email'] },
+      'f-email': {
+        $id: 'f-email',
+        componentId: 'formField',
+        parentId: 'f-root',
+        props: { fieldName: 'email', label: 'Work email' },
+      },
+    },
+  } as any
+
+  /** A form node holding the fields a page drew before entities existed. */
+  const pageWithInlineForm = (props: Record<string, unknown>) =>
+    ({
+      _root_: { $id: '_root_', componentId: 'div', nodes: ['form-node'] },
+      'form-node': {
+        $id: 'form-node',
+        componentId: 'form',
+        parentId: '_root_',
+        props,
+        nodes: ['inline-name'],
+      },
+      'inline-name': {
+        $id: 'inline-name',
+        componentId: 'formField',
+        parentId: 'form-node',
+        props: { fieldName: 'name', label: 'Your name' },
+      },
+    }) as any
+
+  const compose = (nodes: any, forms: any) =>
+    composeReusableComponentNodes(nodes, undefined, [
+      placedFormPlacement(forms),
+    ])
+
+  it("renders the entity's fields in place of the page's own copy", () => {
+    const composed = compose(pageWithInlineForm({ formId: 'contact' }), {
+      contact: design,
+    })
+
+    expect(composed['cmp__form-node__f-root']).toBeUndefined()
+    expect(composed['cmp__form-node__f-email']).toMatchObject({
+      componentId: 'formField',
+      parentId: 'form-node',
+      props: { fieldName: 'email' },
+    })
+    // Dropped, not merely unlinked: left in the map the page's copy would
+    // still ship in the payload and still answer a `formField` scan.
+    expect(composed['inline-name']).toBeUndefined()
+  })
+
+  it('leaves an UNBOUND form exactly as authored', () => {
+    const composed = compose(pageWithInlineForm({ formName: 'Contact' }), {
+      contact: design,
+    })
+
+    expect(composed['form-node'].nodes).toEqual(['inline-name'])
+    expect(composed['inline-name']).toBeDefined()
+  })
+
+  it('leaves a form bound to an entity with no published design alone', () => {
+    for (const forms of [
+      {},
+      { contact: undefined },
+      // Published-but-rootless: a root its own nodes do not hold is no design.
+      { contact: { rootId: 'gone', nodes: design.nodes } },
+      { contact: { rootId: 'f-root', nodes: {} } },
+    ]) {
+      const composed = compose(
+        pageWithInlineForm({ formId: 'contact' }),
+        forms as any,
+      )
+      expect(composed['form-node'].nodes).toEqual(['inline-name'])
+      expect(composed['inline-name']).toBeDefined()
+    }
+  })
+
+  it('gives two placements of one form disjoint ids', () => {
+    const nodes = {
+      _root_: { $id: '_root_', componentId: 'div', nodes: ['one', 'two'] },
+      one: {
+        $id: 'one',
+        componentId: 'form',
+        parentId: '_root_',
+        props: { formId: 'contact' },
+        nodes: [],
+      },
+      two: {
+        $id: 'two',
+        componentId: 'form',
+        parentId: '_root_',
+        props: { formId: 'contact' },
+        nodes: [],
+      },
+    } as any
+    const composed = compose(nodes, { contact: design })
+
+    expect(composed['cmp__one__f-root']).toBeUndefined()
+    expect(composed['cmp__two__f-root']).toBeUndefined()
+    expect(composed['cmp__one__f-email'].parentId).toBe('one')
+    expect(composed['cmp__two__f-email'].parentId).toBe('two')
+  })
+
+  it('never mutates the page or the entity', () => {
+    const nodes = pageWithInlineForm({ formId: 'contact' })
+    compose(nodes, { contact: design })
+
+    expect(nodes['form-node'].nodes).toEqual(['inline-name'])
+    expect(nodes['inline-name']).toBeDefined()
+    expect(Object.keys(design.nodes)).toEqual(['f-root', 'f-email'])
+  })
+
+  it('is idempotent — a second compose regrafts nothing', () => {
+    const once = compose(pageWithInlineForm({ formId: 'contact' }), {
+      contact: design,
+    })
+
+    expect(compose(once, { contact: design })).toEqual(once)
+  })
+
+  it('expands a reusable component nested INSIDE a form design', () => {
+    const withInstance = {
+      rootId: 'f-root',
+      nodes: {
+        'f-root': { $id: 'f-root', componentId: 'muiStack', nodes: ['cta'] },
+        cta: {
+          $id: 'cta',
+          parentId: 'f-root',
+          componentId: REUSABLE_INSTANCE_COMPONENT_ID,
+          props: { refId: 'card' },
+          nodes: [],
+        },
+      },
+    } as any
+    const definition = {
+      rootId: 'd-root',
+      nodes: {
+        'd-root': { $id: 'd-root', componentId: 'muiButton', nodes: [] },
+      },
+    } as any
+
+    const composed = composeReusableComponentNodes(
+      pageWithInlineForm({ formId: 'contact' }),
+      { card: definition },
+      [placedFormPlacement({ contact: withInstance })],
+    )
+
+    const instanceId = 'cmp__form-node__cta'
+    expect(composed[instanceId]).toMatchObject({
+      componentId: 'muiButton',
+      nodes: [],
+    })
+    expect(composed[`cmp__${instanceId}__d-root`]).toBeUndefined()
+  })
+
+  it('expands a form placed INSIDE a reusable component', () => {
+    const definition = {
+      rootId: 'd-root',
+      nodes: {
+        'd-root': { $id: 'd-root', componentId: 'muiStack', nodes: ['signup'] },
+        signup: {
+          $id: 'signup',
+          parentId: 'd-root',
+          componentId: 'form',
+          props: { formId: 'contact' },
+          nodes: [],
+        },
+      },
+    } as any
+    const nodes = {
+      _root_: { $id: '_root_', componentId: 'div', nodes: ['a'] },
+      a: instance('a', 'card'),
+    } as any
+
+    const composed = composeReusableComponentNodes(
+      nodes,
+      { card: definition },
+      [placedFormPlacement({ contact: design })],
+    )
+
+    const formNodeId = 'cmp__a__signup'
+    expect(composed[`cmp__${formNodeId}__f-root`]).toBeUndefined()
+    expect(composed[`cmp__${formNodeId}__f-email`]).toMatchObject({
+      props: { fieldName: 'email' },
+    })
+  })
+
+  it('leaves no orphan behind when an inline field was an instance', () => {
+    const definition = {
+      rootId: 'd-root',
+      nodes: {
+        'd-root': { $id: 'd-root', componentId: 'muiButton', nodes: [] },
+      },
+    } as any
+    const nodes = pageWithInlineForm({ formId: 'contact' })
+    nodes['form-node'].nodes = ['inline-name', 'inline-instance']
+    nodes['inline-instance'] = {
+      ...instance('inline-instance', 'card'),
+      parentId: 'form-node',
+    }
+
+    const composed = composeReusableComponentNodes(
+      nodes,
+      { card: definition },
+      [placedFormPlacement({ contact: design })],
+    )
+
+    expect(composed['inline-instance']).toBeUndefined()
+    // The discarded instance must not leave its graft behind either: an
+    // unreachable subtree still costs payload on every render of the page.
+    expect(
+      Object.keys(composed).filter((id) => id.startsWith('cmp__inline-')),
+    ).toEqual([])
   })
 })

@@ -61,3 +61,20 @@ export {
   type UpdateState,
   type UpdateStatus,
 } from '@aglyn/aglyn/app-utils/marketplace-update-state'
+/**
+ * The email-starter policy, re-exported for the same reason the provenance and
+ * visibility policies are: it lives in core because `scope:app` may not depend
+ * on this lib, and publishing and install code should keep one import site.
+ */
+export {
+  emailStarterAssuranceLabel,
+  emailStarterRefusal,
+  emailStarterSendBlock,
+  inspectEmailStarter,
+  resolveEmailStarterAssurance,
+  type EmailStarterAssurance,
+  type EmailStarterInspection,
+  type EmailStarterSendBlock,
+  type EmailStarterViolation,
+  type EmailStarterViolationCode,
+} from '@aglyn/aglyn/app-utils/email-starter-policy'

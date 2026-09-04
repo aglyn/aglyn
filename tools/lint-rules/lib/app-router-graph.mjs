@@ -203,13 +203,19 @@ function isAllInlineTypes(clause) {
  * line it sits on. Type-only imports are omitted: they are erased, so they
  * are not graph edges — which is why the AGL-1349 fix could keep
  * `import type { AglynOrgBilling }` and still be correct.
+ *
+ * Each entry also carries `kind`: `'dynamic'` for an `import()` expression,
+ * `'static'` for everything else. The distinction is what separates code a
+ * page downloads BEFORE it can hydrate from code it fetches only when some
+ * branch asks for it, so a first-load weight measurement has to see it. Every
+ * caller that only reads `specifier` is unaffected.
  */
 export function readImports(source) {
   const stripped = stripComments(source)
   const found = []
-  const push = (specifier, index) => {
+  const push = (specifier, index, kind) => {
     if (!specifier || specifier.startsWith('data:')) return
-    found.push({ specifier, index })
+    found.push({ specifier, index, kind })
   }
 
   let match
@@ -219,11 +225,17 @@ export function readImports(source) {
     // `import type { … } from` / `export type { … } from` — erased.
     if (/^\s*type\b/.test(clause)) continue
     if (isAllInlineTypes(clause)) continue
-    push(match[4], match.index)
+    push(match[4], match.index, 'static')
   }
-  for (const pattern of [SIDE_EFFECT, DYNAMIC, REQUIRE]) {
+  for (const [pattern, kind] of [
+    [SIDE_EFFECT, 'static'],
+    [DYNAMIC, 'dynamic'],
+    [REQUIRE, 'static'],
+  ]) {
     pattern.lastIndex = 0
-    while ((match = pattern.exec(stripped)) !== null) push(match[2], match.index)
+    while ((match = pattern.exec(stripped)) !== null) {
+      push(match[2], match.index, kind)
+    }
   }
 
   found.sort((a, b) => a.index - b.index)

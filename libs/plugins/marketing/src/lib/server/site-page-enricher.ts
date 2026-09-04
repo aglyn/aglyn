@@ -39,8 +39,12 @@ export const marketingSitePageEnricher: SitePageEnricher = async ({
   screenId,
   screen,
   // Composed nodes (AGL-659), also read here for the interactions authored
-  // on the elements themselves (AGL-1478) — see `getClientAutomations`.
+  // on the elements themselves — see `getClientAutomations`.
   nodes,
+  // No request path belongs to this surface (AGL-2511) — see the context
+  // field. Everything below that reads `path` narrows to what is
+  // path-independent instead of guessing an address.
+  pathUnknown,
 }) => {
   // Marketing overlays (AGL-195/196/247): marketingOverlays-gated on the
   // effective plan (plan-less = free = no overlays); binding tokens
@@ -57,7 +61,19 @@ export const marketingSitePageEnricher: SitePageEnricher = async ({
   // Marketing hub overlays (AGL-251): scheduled/targeted overlay docs
   // win over the legacy single announcementBar/popup host fields.
   const overlayPath = `/${path.replace(/^\/+/, '')}`.replace(/\/{2,}/g, '/')
-  const overlayDocs = overlaysEntitled ? await getOverlays({ hostId }) : []
+  const allOverlayDocs = overlaysEntitled ? await getOverlays({ hostId }) : []
+  // A path-targeted overlay cannot be resolved without a path, so on such a
+  // surface only the ones that target every page remain — which is what an
+  // overlay with no patterns already means. Filtered rather than skipped
+  // wholesale: a site-wide announcement bar belongs on a designed 404 as much
+  // as on any other page the site serves.
+  const overlayDocs = pathUnknown
+    ? allOverlayDocs.filter(
+        (overlay) =>
+          !overlay.pathPatterns?.some((pattern) => pattern.trim()) &&
+          !overlay.excludePathPatterns?.some((pattern) => pattern.trim()),
+      )
+    : allOverlayDocs
   const activeOverlays = MarketingModel.resolveActiveOverlays(overlayDocs, {
     path: overlayPath,
   })
@@ -149,8 +165,9 @@ export const marketingSitePageEnricher: SitePageEnricher = async ({
     allowJs: !!orgFeatures.webhooks,
     // The COMPOSED tree, so a layout's chrome and a reusable component's
     // internals contribute their own interactions under the graft ids the
-    // renderer actually stamps (AGL-1478).
+    // renderer actually stamps.
     nodes: Aglyn.walkInteractionNodes(nodes),
+    ...(pathUnknown ? { dropPathScoped: true } : {}),
   })
   // Screen/section experiments (AGL-253): Business-gated; composing a
   // tree per divergent variant is bounded (≤4) and ISR-cached.
@@ -166,7 +183,7 @@ export const marketingSitePageEnricher: SitePageEnricher = async ({
   for (const automation of clientAutomations) {
     for (const step of automation.steps) {
       if (step.type === 'showOverlay' && step.overlayId) {
-        const overlay = overlayDocs.find(
+        const overlay = allOverlayDocs.find(
           (candidate) => candidate.$id === step.overlayId,
         )
         if (overlay) {

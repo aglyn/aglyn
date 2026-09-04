@@ -34,6 +34,7 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../components/staff-only.component'
 import { buildRoute, Route } from '../../../../constants/route-links'
@@ -87,17 +88,15 @@ const AdminContactSuppressions: NextPageWithLayout<Record<string, never>> = () =
       body?: Record<string, unknown>,
     ): Promise<any | null> => {
       try {
-        const idToken = await (
-          user as { getIdToken?: () => Promise<string> }
-        )?.getIdToken?.()
-        const response = await fetch('/api/admin/contact-suppressions', {
-          method,
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        const response = await authorizedFetch(
+          user,
+          '/api/admin/contact-suppressions',
+          {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            ...(body ? { body: JSON.stringify(body) } : {}),
           },
-          ...(body ? { body: JSON.stringify(body) } : {}),
-        })
+        )
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
           enqueueSnackbar(payload?.error ?? 'Request failed', {

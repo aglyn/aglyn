@@ -181,7 +181,7 @@ describe('useStaffListPagination', () => {
   })
 
   /*==========================================
-   * THE SIZE HAS TO REACH THE QUERY (AGL-693).
+   * THE SIZE HAS TO REACH THE QUERY (AGL-2501).
    *
    * A size control that only re-slices an already-fetched window looks
    * perfectly correct on a small collection and silently caps at whatever the

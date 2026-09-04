@@ -62,7 +62,7 @@ const SERVER_SEATS = 60
 /**
  * What one page of the listener can ever hand back.
  *
- * The console's shared default (AGL-693), `mock`-prefixed so the barrel
+ * The console's shared default (AGL-2501), `mock`-prefixed so the barrel
  * double below may close over it — jest allows only that prefix out of scope.
  */
 const mockDefaultPageSize = 10
@@ -220,7 +220,7 @@ describe('the member-seat count is a server aggregate (AGL-1716)', () => {
     // Before the fix this read the PAGE WINDOW over the limit — one page of
     // rows presented as the site's seat usage. Written against the page size
     // rather than a literal, so the case keeps testing the same thing when
-    // the shared default moves (AGL-693).
+    // the shared default moves (AGL-2501).
     await waitFor(() => expect(seatCaption()).toContain('60/50'))
     expect(seatCaption()).not.toContain(`${PAGE_ROWS}/50`)
     // Over the included band on a plan that sells seats, so the purchase
@@ -234,7 +234,7 @@ describe('the member-seat count is a server aggregate (AGL-1716)', () => {
 
     // The console-wide page plus AGL-1124's over-fetched "there are more"
     // probe. Written against the constant, not the number: the rule is that
-    // the window is ONE page, whatever that page becomes (AGL-693).
+    // the window is ONE page, whatever that page becomes (AGL-2501).
     expect(mockLimits).toContain(mockDefaultPageSize + 1)
     // Flush the aggregate's resolution so its state write lands inside this
     // test rather than as unacted-on noise in the next one. Not an assertion

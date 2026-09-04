@@ -17,7 +17,7 @@
 
 /**
  * The artifact row's trailing cluster: what is a LINK, and what is in both
- * surfaces (AGL-693).
+ * surfaces (AGL-2501).
  *
  * Two properties, and neither is visible in a screenshot:
  *
@@ -41,7 +41,7 @@ const openMenu = () => {
   fireEvent.click(screen.getByRole('button', { name: /More actions/ }))
 }
 
-describe('artifact row actions are real links (AGL-693)', () => {
+describe('artifact row actions are real links (AGL-2501)', () => {
   it('renders a menu item with an href as an anchor', () => {
     render(
       <ListRowActions

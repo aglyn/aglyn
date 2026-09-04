@@ -122,7 +122,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   // AGL-2324's archive card reads the staff id token off the user. A
   // wholesale module mock is a CLOSED WORLD — an export the tree reaches and
-  // the mock omits is a TypeError, not a missing feature. AGL-693 added a
+  // the mock omits is a TypeError, not a missing feature. AGL-2501 added a
   // second export the page reaches, and omitting it renders the whole page
   // as "Element type is invalid" against this file's assertions.
   useUser: () => ({ data: { getIdToken: async () => 'staff-token' } }),
@@ -146,7 +146,7 @@ jest.mock('firebase/firestore', () => ({
   // The date-range constraints AGL-2324 added. Same closed-world rule: the
   // page calls both, so both must exist here or the render throws.
   where: () => ({}),
-  // The compliance export reads the range for itself (AGL-693) instead of
+  // The compliance export reads the range for itself (AGL-2501) instead of
   // serializing the page, so the closed world needs a one-shot get too.
   getDocs: async () => ({
     size: mockRows.length,
@@ -240,7 +240,7 @@ describe('the staff audit log surfaces scope and actorEmail', () => {
     if (select) {
       fireEvent.change(select, { target: { value: 'host' } })
     } else {
-      // BY LABEL, not by role alone. The shared footer (AGL-693) puts a
+      // BY LABEL, not by role alone. The shared footer (AGL-2501) puts a
       // second combobox on the card — the rows-per-page menu — and a bare
       // `getByRole('combobox')` stops being a question with one answer.
       fireEvent.mouseDown(screen.getByLabelText('Scope'))

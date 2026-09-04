@@ -111,7 +111,12 @@ export function StatusScreenPlain({
   action?: ReactNode
 }) {
   return (
-    <div
+    // The document's `main` landmark (AGL-2486). These screens ARE the whole
+    // document — they render in a root error/not-found boundary, never inside
+    // a composed page — so the landmark the tenant now places on the page's
+    // content region has to come from somewhere here, or the boundary screens
+    // would be the only documents on the platform with none.
+    <main
       className={ROOT_CLASS}
       style={{
         colorScheme: 'light dark',
@@ -182,7 +187,7 @@ export function StatusScreenPlain({
           {'Go to the homepage'}
         </a>
       </div>
-    </div>
+    </main>
   )
 }
 StatusScreenPlain.displayName = 'StatusScreenPlain'

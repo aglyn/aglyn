@@ -128,6 +128,13 @@ export function adminNavTabItems() {
       label: 'Revenue',
       href: buildRoute(Route.ADMIN_REVENUE),
     },
+    // Immediately after Revenue: the two are halves of one question, and the
+    // margin figure is only readable next to the revenue it is a fraction of.
+    {
+      id: 'nav-tab-admin-margin-utilization',
+      label: 'Margin',
+      href: buildRoute(Route.ADMIN_MARGIN_UTILIZATION),
+    },
     {
       id: 'nav-tab-admin-tax-return',
       label: 'Sales tax',

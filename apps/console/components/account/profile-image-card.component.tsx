@@ -25,6 +25,7 @@ import {
   useUser,
   useUserPhoto,
 } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { Alert, Button, Stack, Typography } from '@mui/material'
 import { updateProfile } from 'firebase/auth'
 import { deleteField, doc, serverTimestamp, setDoc } from 'firebase/firestore'
@@ -42,7 +43,7 @@ import { useOrgScope } from '../../hooks/use-org-scope'
  * The personal avatar the console shows for this account (AGL-365).
  *
  * The Profile image section of Manage Account, its own component since the
- * sections became routes (AGL-693). Mirrors to the auth `photoURL` (app bar,
+ * sections became routes (AGL-2501). Mirrors to the auth `photoURL` (app bar,
  * comments) and to the users doc (team lists, activity), then fans out to the
  * org roster through a route, because no colleague can read another person's
  * auth record.
@@ -104,13 +105,9 @@ export function ProfileImageCard() {
       // roster fan-out that failed is a stale colleague view, which the next
       // save repairs. Rolling back a committed avatar to report it would be
       // worse than saying so.
-      const idToken = await user.getIdToken()
-      const response = await fetch('/api/account/photo', {
+      const response = await authorizedFetch(user, '/api/account/photo', {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${idToken}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ photoUrl: cleaned }),
       })
       if (!response.ok) {

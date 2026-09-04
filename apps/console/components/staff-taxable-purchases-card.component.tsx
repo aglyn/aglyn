@@ -20,6 +20,7 @@
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Alert,
   AlertTitle,
@@ -113,11 +114,9 @@ export default function StaffTaxablePurchasesCard({
   const load = useCallback(async () => {
     if (!period) return
     try {
-      const idToken = await (userRef.current as any)?.getIdToken?.()
-      if (!idToken) return
-      const response = await fetch(
+      const response = await authorizedFetch(
+        userRef.current,
         `/api/admin/tax-purchases?period=${encodeURIComponent(period)}`,
-        { headers: { Authorization: `Bearer ${idToken}` } },
       )
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
@@ -180,19 +179,19 @@ export default function StaffTaxablePurchasesCard({
     if (busy || !data) return
     setBusy(true)
     try {
-      const idToken = await (userRef.current as any)?.getIdToken?.()
-      const response = await fetch('/api/admin/tax-purchases', {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      const response = await authorizedFetch(
+        userRef.current,
+        '/api/admin/tax-purchases',
+        {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            period,
+            ...(method === 'PUT' ? { amount: amount.trim() } : {}),
+            note: note.trim(),
+          }),
         },
-        body: JSON.stringify({
-          period,
-          ...(method === 'PUT' ? { amount: amount.trim() } : {}),
-          note: note.trim(),
-        }),
-      })
+      )
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
         enqueueSnackbar(payload?.error ?? 'Could not save the entry', {

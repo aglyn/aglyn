@@ -33,6 +33,7 @@ import {
 import { useCallback, useEffect, useState } from 'react'
 import useBranding from '../../hooks/use-branding'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
 /**
  * Human labels for `org.seatAddons` kinds — shared with the current-plan
@@ -165,13 +166,9 @@ export default function BillingAddonsCardComponent({
       // is off repo-wide, and narrowing a union by a boolean discriminant
       // does not survive that (TS2339 on the false leg).
     }> => {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/billing/addons', {
+      const response = await authorizedFetch(user, '/api/billing/addons', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orgId, ...body }),
       })
       const payload = await response.json().catch(() => ({}))
@@ -258,14 +255,38 @@ export default function BillingAddonsCardComponent({
         )
         const currency = String(preview.currency ?? 'usd').toUpperCase()
         const prorationUsd = (Math.abs(prorationCents) / 100).toFixed(2)
+        // What actually leaves the account today, tax included — not the
+        // pre-tax proration. Added capacity is invoiced immediately, so this
+        // confirm is the last thing before a card is charged and the figure on
+        // it has to be the figure taken. A REMOVAL still raises no charge:
+        // there is nothing to collect, and the unused time returns as credit.
+        const chargedNowCents = Number(preview.chargedNowCents ?? 0)
+        const chargedNowUsd = (Math.abs(chargedNowCents) / 100).toFixed(2)
+        const taxIncluded = Number(preview.taxCents ?? 0) > 0
+        const taxCaveat =
+          preview.taxComplete === false
+            ? ', plus sales tax — Stripe could not finish calculating tax for ' +
+              'your billing address, so your invoice may be higher'
+            : taxIncluded
+              ? ' including tax'
+              : ''
+        // A reduction is stated as what it is: nothing today, and the capacity
+        // keeps working until the period the customer already paid for ends.
+        // Saying "credits back" here would promise a refund that is not coming
+        // — the change costs nothing in either direction.
+        const effectiveOn = preview.effectiveAt
+          ? new Date(String(preview.effectiveAt)).toLocaleDateString()
+          : null
         const accepted = await confirm({
           title: `${row.label}: ${quantity}?`,
           description:
-            (prorationCents >= 0
-              ? `Prorated for the rest of this period: $${prorationUsd} ` +
-                `${currency}, billed on your next invoice. Ongoing: `
-              : `Unused time credits $${prorationUsd} ${currency} back ` +
-                'on your next invoice. Ongoing: ') +
+            (preview.defersToPeriodEnd
+              ? `Nothing is charged and nothing is refunded. You keep this ` +
+                `capacity for the rest of the period you have paid for` +
+                (effectiveOn ? `, and it ends on ${effectiveOn}` : '') +
+                '. From then: '
+              : `$${chargedNowUsd} ${currency}${taxCaveat} will be charged to ` +
+                `your card now, prorated for the rest of this period. Ongoing: `) +
             (quantity === 0
               ? 'nothing — this add-on is removed.'
               : `$${monthlyUsd}/mo` +

@@ -21,6 +21,16 @@ import type {
   ReusableComponentIcon,
   ReusableComponentProp,
 } from '../foundation'
+import {
+  NODE_ANIMATION_DELAY_PROP,
+  NODE_ANIMATION_DURATION_PROP,
+  NODE_ANIMATION_EASE_PROP,
+  NODE_ANIMATION_PROP,
+  NODE_ANIMATION_REPEAT_PROP,
+  NODE_ANIMATION_STAGGER_PROP,
+  NODE_ANIMATION_STAGGER_STEP_PROP,
+  NODE_ANIMATION_TRIGGER_PROP,
+} from './element-animation'
 import { mergeNodeSx } from './merge-node-sx'
 import { resolveNamedTokens } from './resolve-named-tokens'
 
@@ -50,6 +60,19 @@ export const REUSABLE_INSTANCE_PROP_VALUES_KEY = 'propValues'
  */
 export const STYLE_OVERRIDES_ROOT_KEY = 'root'
 
+/**
+ * Node-level fields that ride from the instance onto the definition's root
+ * when the two collapse into one element (AGL-2521).
+ *
+ * These sit beside `sx` on the node, not in `props`, so no renderer spreads
+ * them at an element and carrying them costs nothing in the DOM. They are
+ * document state the author set on THIS placement: dropping them would make a
+ * composed map that is saved back lose every per-instance override.
+ */
+export const INSTANCE_CARRIED_NODE_FIELDS: readonly string[] = [
+  'styleOverrides',
+  'attrOverrides',
+]
 const isStyleRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' &&
   value !== null &&
@@ -338,6 +361,55 @@ function instancePrefix(instanceId: NodeId) {
 }
 
 /**
+ * One kind of node that STANDS FOR a tree stored on another document, and
+ * where that tree comes from.
+ *
+ * A reusable-component instance was the first such node; a placed form is the
+ * second (`componentId: 'form'`, `props.formId` → `hosts/{hostId}/forms/{id}`,
+ * whose published `rootId`/`nodes` are the fields the page renders). They are
+ * one mechanism described twice, so they run through one expansion rather than
+ * two passes that would have to agree about id namespacing, depth bounding and
+ * cycle safety — and, more sharply, could not see each other: a form placed
+ * inside a shared component only exists after the component graft, and a
+ * reusable instance inside a form design only exists after the form graft.
+ * Passing both kinds to {@link composeReusableComponentNodes} expands each
+ * against the other, in either nesting order, within the same depth bound.
+ */
+export interface PlacementKind<N extends AglynNodeSchema = AglynNodeSchema> {
+  /** The `componentId` a node must carry to be expanded by this kind. */
+  componentId: string
+  /** The prop naming the document whose tree is grafted. */
+  refProp: string
+  /** Resolvable trees, keyed by the id `refProp` holds. */
+  definitionsById:
+    | Record<string, ReusableComponentTree<N> | undefined>
+    | undefined
+  /**
+   * Whether a resolved graft DISCARDS what the placement node already held.
+   *
+   * Off for reusable instances, which never hold anything: the editor refuses
+   * a drop into them (`flags.dropping: DISABLED`), so replacing the child list
+   * with the grafted root is the whole of what the graft has to do.
+   *
+   * On for placed forms, which do — a form node accepts fields, and every form
+   * on the site was built that way before the form entity existed. Those
+   * inline fields are the node's OWN content, so they cannot merely be
+   * unlinked: left in the map they would still be walked by every later
+   * compose stage, still ship in the page payload, and still answer to any
+   * scan that reads `formField` nodes out of a flat map. The subtree is
+   * dropped with the child list, exactly as `detachInstanceSubtree` drops what
+   * it replaces.
+   *
+   * ⚠️ This is the one thing here that can take content off a page that
+   * renders today, so it is deliberately gated on the graft RESOLVING: a
+   * placement whose document is missing, unpublished, or holds no design is
+   * left untouched, inline children and all. See
+   * {@link composeReusableComponentNodes}.
+   */
+  replacesAuthoredChildren?: boolean
+}
+
+/**
  * The declared-prop name a stored value references when it is EXACTLY one
  * `{{prop.<name>}}` token (whitespace inside the braces tolerated, matching
  * `resolveNamedTokens`' grammar), else `null`.
@@ -395,9 +467,28 @@ export function resolveInstanceLeafBinding(
     | null
     | undefined,
   contentProp = 'children',
+  rootId?: NodeId | null,
 ): InstanceLeafBinding | null {
   if (!graftedId || !instanceId) return null
   const prefix = instancePrefix(instanceId)
+  // The definition's ROOT carries the instance's own id, not a prefixed one
+  // — the two are one element (AGL-2521). Without this the root is the one
+  // leaf the double-click cannot reach, so a component whose root IS its text
+  // stops being inline-editable through its placements.
+  if (graftedId === instanceId) {
+    const rootInternalId =
+      rootId ??
+      Object.keys(definition?.nodes ?? {}).find(
+        (id) => !(definition?.nodes as Record<string, { parentId?: unknown }>)?.[id]?.parentId,
+      )
+    if (!rootInternalId) return null
+    return resolveInstanceLeafBinding(
+      `${prefix}${rootInternalId}`,
+      instanceId,
+      definition,
+      contentProp,
+    )
+  }
   if (!graftedId.startsWith(prefix)) return null
   const componentInternalId = graftedId.slice(prefix.length)
   if (!componentInternalId) return null
@@ -494,6 +585,34 @@ export const NODE_HIDE_IF_PROP = 'hideIf'
  * Persisted in component documents — never rename.
  */
 export const NODE_HIDE_UNLESS_PROP = 'hideUnless'
+
+/**
+ * Instance props that move onto the definition's root when the two collapse
+ * into one element (AGL-2521).
+ *
+ * The universal directives, and only those: they are authored against "this
+ * placement", which after the collapse IS the root. Everything else an
+ * instance carries — `refId`, `name`, {@link REUSABLE_INSTANCE_PROP_VALUES_KEY},
+ * the override slices — is bookkeeping the graft has already consumed, and
+ * spreading it onto a real element is how `propvalues="[object Object]"`
+ * reached a published page once before (AGL-2486).
+ *
+ * Listed rather than derived by exclusion: a new instance-only prop must not
+ * start leaking onto every component's root because nobody remembered to add
+ * it to a deny-list.
+ */
+export const INSTANCE_CARRIED_PROPS: readonly string[] = [
+  NODE_HIDE_IF_PROP,
+  NODE_HIDE_UNLESS_PROP,
+  NODE_ANIMATION_PROP,
+  NODE_ANIMATION_TRIGGER_PROP,
+  NODE_ANIMATION_DURATION_PROP,
+  NODE_ANIMATION_DELAY_PROP,
+  NODE_ANIMATION_REPEAT_PROP,
+  NODE_ANIMATION_EASE_PROP,
+  NODE_ANIMATION_STAGGER_PROP,
+  NODE_ANIMATION_STAGGER_STEP_PROP,
+]
 
 /**
  * Spellings of "no" a visibility directive accepts, beyond a real `false`.
@@ -655,6 +774,18 @@ export function pruneHiddenNodes<N extends AglynNodeSchema = AglynNodeSchema>(
  *   which is how one hero renders with a mockup on `/product` and without
  *   one on `/press`.
  * - Inputs are never mutated.
+ *
+ * `morePlacements` adds further node kinds that stand for a stored tree — a
+ * placed form is the second one ({@link PlacementKind}) — expanded in the same
+ * passes as instances, so the two nest inside each other in either order.
+ *
+ * ⛔ **A placement is expanded only when its tree RESOLVES**, meaning the
+ * document is in the map AND carries a `rootId` its `nodes` actually hold. An
+ * unresolvable one is left exactly as authored. That is what makes the
+ * child-replacing kind safe to introduce on a live site: a form bound to an
+ * entity that has never been published still renders the fields drawn on the
+ * page, and the graft can only ever swap a page's copy of a form for the
+ * entity's own.
  */
 export function composeReusableComponentNodes<
   N extends AglynNodeSchema = AglynNodeSchema,
@@ -663,30 +794,183 @@ export function composeReusableComponentNodes<
   definitionsById:
     | Record<string, ReusableComponentTree<N> | undefined>
     | undefined,
+  morePlacements?: readonly PlacementKind<N>[],
 ): NormalizedNodes<N> {
-  if (!definitionsById) return nodes
+  const placements: PlacementKind<N>[] = [
+    {
+      componentId: REUSABLE_INSTANCE_COMPONENT_ID,
+      refProp: 'refId',
+      definitionsById,
+    },
+    ...(morePlacements ?? []),
+  ].filter((placement) => placement.definitionsById)
+  if (!placements.length) return nodes
+
+  /**
+   * The kind and tree this node stands for, or `undefined` when it stands for
+   * nothing resolvable.
+   *
+   * The `nodes[rootId]` check is the resolution rule stated once: a document
+   * whose root is not among its own nodes has no design to graft, and wiring
+   * the placement's only child to an id nothing holds would blank it on the
+   * page while reading, downstream, as already expanded.
+   */
+  const resolvePlacement = (node: N | undefined) => {
+    for (const placement of placements) {
+      if (node?.componentId !== placement.componentId) continue
+      const refId = (node.props as any)?.[placement.refProp]
+      if (typeof refId !== 'string' || !refId) continue
+      const definition = placement.definitionsById?.[refId]
+      if (!definition?.rootId || !definition.nodes?.[definition.rootId]) continue
+      return { placement, definition }
+    }
+    return undefined
+  }
+
+  /** Expanded by an earlier pass — its children already carry its prefix. */
+  const alreadyGrafted = (id: NodeId, node: N) => {
+    const childIds = Array.isArray(node.nodes) ? (node.nodes as NodeId[]) : []
+    return childIds.some(
+      (childId) =>
+        typeof childId === 'string' && childId.startsWith(instancePrefix(id)),
+    )
+  }
 
   let composed: NormalizedNodes<N> = nodes
+
+  /*
+   * WHAT A RESOLVED FORM REPLACES, DROPPED BEFORE ANYTHING IS GRAFTED.
+   *
+   * Ahead of the passes rather than inside them so the drop is decided against
+   * the authored tree alone. Inside a pass it would race the expansions
+   * running beside it: an inline field that was itself a component instance
+   * could be grafted in the same pass that discards it, and its grafted
+   * subtree — keyed off ids this walk never sees — would survive its own
+   * parent as unreachable nodes on a published page.
+   */
+  const doomed = new Set<NodeId>()
+  const emptied: NodeId[] = []
+  for (const [id, node] of Object.entries(nodes)) {
+    if (!node || !resolvePlacement(node)?.placement.replacesAuthoredChildren) {
+      continue
+    }
+    if (alreadyGrafted(id, node)) continue
+    const descendants = collectDescendantIds(nodes, id)
+    if (!descendants.size) continue
+    for (const descendantId of descendants) doomed.add(descendantId)
+    emptied.push(id)
+  }
+  if (doomed.size) {
+    const pruned: NormalizedNodes<N> = {}
+    for (const [id, node] of Object.entries(nodes)) {
+      if (!doomed.has(id)) pruned[id] = node as N
+    }
+    for (const id of emptied) {
+      // A replaced form nested in another replaced form's authored children is
+      // gone with it, so there is nothing left here to empty.
+      if (pruned[id]) pruned[id] = { ...pruned[id], nodes: [] }
+    }
+    composed = pruned
+  }
+
+  /**
+   * Which definition each graft brought in, keyed by the id prefix its nodes
+   * carry — the ancestry a node cannot expand into again.
+   *
+   * `alreadyGrafted` bounds an instance against ITSELF: once a node's children
+   * carry its prefix, that node is done. It cannot see the other shape, where
+   * a definition's own subtree contains a FRESH instance naming the same
+   * definition. Each pass mints a new instance id, so that node looks new to
+   * every check there was, and the graft ran again on its own output until
+   * {@link MAX_COMPONENT_DEPTH} stopped it.
+   *
+   * A depth cap is the right backstop for a reusable component, where
+   * self-reference is an authoring mistake. It is the wrong bound for a FORM:
+   * `checkFormContract` REQUIRES a form design's tree to contain a `form` node
+   * naming that same form, so a placed form does not merely risk grafting into
+   * itself — it always does, to the cap, every render. Six nested `<form>`
+   * elements is invalid HTML, so the server parser drops the inner ones and
+   * the client tree then disagrees with the server tree, which is a hydration
+   * failure on a public page.
+   *
+   * Keyed by prefix because the prefix chain IS the ancestry: a node grafted
+   * inside instance X has an id beginning with X's prefix, and one nested two
+   * deep begins with both. Testing `startsWith` against a definition already
+   * open above therefore asks exactly the right question — "is this the same
+   * definition, inside its own expansion?" — while leaving a genuinely
+   * different form placed inside a form free to expand.
+   */
+  const graftedAncestry: Array<{ prefix: string; refId: string }> = []
+
+  /**
+   * The definition id a node points at, and the placement that claims it.
+   *
+   * Scoped to placements that REPLACE authored children. That is what a form
+   * does and what a reusable-component instance does not, and the difference
+   * is the whole reason this guard is narrow: for a component, a definition
+   * naming itself is an authoring mistake whose documented behaviour is a
+   * depth-bounded expansion, and collapsing it here would change a semantic
+   * this fix has no business touching. For a placement that replaces children,
+   * the instance and the definition's root denote the same thing.
+   */
+  const replacingRefOf = (
+    node: N | undefined,
+  ): { refId: string; placement: PlacementKind<N> } | null => {
+    for (const placement of placements) {
+      if (!placement.replacesAuthoredChildren) continue
+      // `componentId` sits on the NODE and the ref on its props, matching
+      // `resolvePlacement` exactly — a predicate that drifted from that one
+      // would not fail loudly, it would simply never match and leave the guard
+      // switched off.
+      if (node?.componentId !== placement.componentId) continue
+      const refId = (node.props as any)?.[placement.refProp]
+      if (typeof refId === 'string' && refId) return { refId, placement }
+    }
+    return null
+  }
+
+  /** Just the id, for the two call sites that do not need the placement. */
+  const refIdOf = (node: N | undefined): string | null =>
+    replacingRefOf(node)?.refId ?? null
+
+  /**
+   * Is this node an instance of a definition already open above it?
+   *
+   * Left completely untouched when so — not pruned, not emptied. An unexpanded
+   * form node renders its own authored children, which is the same thing an
+   * unresolvable ref does, and matches the rule that a missing definition must
+   * never take a published page down.
+   */
+  const withinOwnExpansion = (id: NodeId, node: N): boolean => {
+    const refId = refIdOf(node)
+    if (!refId) return false
+    return graftedAncestry.some(
+      (entry) => entry.refId === refId && id.startsWith(entry.prefix),
+    )
+  }
+
   for (let depth = 0; depth < MAX_COMPONENT_DEPTH; depth++) {
-    const pending = Object.entries(composed).filter(([id, node]) => {
-      if (node?.componentId !== REUSABLE_INSTANCE_COMPONENT_ID) return false
-      const refId = (node.props as any)?.refId as string | undefined
-      if (!refId || !definitionsById[refId]) return false
-      // Already expanded in a previous pass?
-      const childIds = Array.isArray(node.nodes) ? (node.nodes as NodeId[]) : []
-      return !childIds.some(
-        (childId) =>
-          typeof childId === 'string' &&
-          childId.startsWith(instancePrefix(id)),
-      )
-    })
+    const pending = Object.entries(composed).filter(
+      ([id, node]) =>
+        Boolean(resolvePlacement(node)) &&
+        !alreadyGrafted(id, node) &&
+        !withinOwnExpansion(id, node),
+    )
     if (!pending.length) break
 
     const next: NormalizedNodes<N> = { ...composed }
     for (const [instanceId, instanceNode] of pending) {
-      const refId = (instanceNode.props as any).refId as string
-      const definition = definitionsById[refId] as ReusableComponentTree<N>
+      const definition = (
+        resolvePlacement(instanceNode) as {
+          definition: ReusableComponentTree<N>
+        }
+      ).definition
       const prefix = instancePrefix(instanceId)
+      // Recorded BEFORE the subtree is written, so the nodes this graft is
+      // about to produce are already inside its ancestry when the next pass
+      // considers them.
+      const grafting = refIdOf(instanceNode)
+      if (grafting) graftedAncestry.push({ prefix, refId: grafting })
       const prefixId = (id: NodeId) => `${prefix}${id}`
       // Style overrides (AGL-1306 root, AGL-1332 per leaf): merged over
       // each definition node's own sx as this instance's copy is grafted —
@@ -769,9 +1053,158 @@ export function composeReusableComponentNodes<
           prefixId(definition.rootId),
         ),
       )
-      next[instanceId] = {
-        ...instanceNode,
-        nodes: [prefixId(definition.rootId)],
+      /*
+       * A definition whose ROOT names the definition itself is grafted
+       * UNWRAPPED — its root's children attach to the instance, and the
+       * duplicate root is dropped.
+       *
+       * Bounding the recursion above stops the runaway, but one graft of a
+       * self-naming design still produces two of the same element nested: the
+       * placed node, and the design's root inside it. For a form that is a
+       * `<form>` inside a `<form>`, which is invalid HTML — the server parser
+       * drops the inner one, the client keeps it, and the two trees disagree.
+       * Six of them or two, the page still fails to hydrate.
+       *
+       * Unwrapping is not a special case bolted on for forms: the instance and
+       * the definition's root denote THE SAME THING here, and rendering both
+       * was always the duplicate. `checkFormContract` is what makes a form
+       * design always take this shape, so for forms this branch is the normal
+       * path rather than the exception.
+       *
+       * The instance keeps its own props: it is the node the page authored,
+       * carrying the id everything else resolves against.
+       */
+      const graftedRootId = prefixId(definition.rootId)
+      const definitionRoot = definition.nodes[definition.rootId] as N | undefined
+      const rootNamesItself =
+        Boolean(grafting) && refIdOf(definitionRoot) === grafting
+      const graftedRoot = next[graftedRootId]
+      if (rootNamesItself && graftedRoot) {
+        const adopted = Array.isArray(graftedRoot.nodes)
+          ? (graftedRoot.nodes as NodeId[])
+          : []
+        for (const childId of adopted) {
+          if (next[childId]) {
+            next[childId] = { ...next[childId], parentId: instanceId }
+          }
+        }
+        delete next[graftedRootId]
+        next[instanceId] = { ...instanceNode, nodes: adopted }
+      } else if (graftedRoot) {
+        /*
+         * THE INSTANCE AND THE DEFINITION'S ROOT ARE ONE ELEMENT (AGL-2521).
+         *
+         * The graft used to keep both — the instance as a container with the
+         * definition's root inside it — so every placement published a `div`
+         * the author never drew. On `aglyn.com` that was four of them on the
+         * home page, one per placement, each sitting between a landmark and
+         * its parent and breaking any direct-child selector the layout wrote.
+         *
+         * So the root TAKES THE INSTANCE'S PLACE: same id, same parent, same
+         * slot in the parent's child list. Its own grafted id disappears and
+         * its children keep theirs, which is what leaves the `cmp__{instance}
+         * __{defId}` scheme — and everything reading it, from per-leaf
+         * overrides to {@link resolveInstanceLeafBinding} — untouched.
+         *
+         * Keeping the INSTANCE'S id rather than the root's is the half that
+         * matters: interactions, animations and analytics are all keyed to the
+         * node the page authored, and a swap to the prefixed id would silently
+         * drop every one of them.
+         *
+         * What the instance contributed as an element comes with it. Its `sx`
+         * merges OVER the root's, because a placement styling its component is
+         * the more specific of the two. Its universal directives — hide,
+         * animate — move across for the same reason: they were authored
+         * against "this placement", which is now this element. What stays
+         * behind is the bookkeeping that only ever addressed the wrapper:
+         * `refId`, `name`, the declared-prop values and the override slices,
+         * all of them already consumed by the graft above.
+         */
+        /*
+         * Interactions come from BOTH nodes, root's first.
+         *
+         * They are keyed to the element by node id, and after the merge one
+         * element answers to two authors: the component, which wrote the
+         * choreography its internals rely on, and the placement, which wrote
+         * whatever this page wants on top. Keeping only one side silently
+         * drops the other's — and because the instance keeps its own id, the
+         * side that would go missing is the page's, on the very node whose id
+         * it is.
+         *
+         * Root's run first for the reason the host actions do in
+         * `getClientAutomations`: the more general enrolls before the more
+         * specific, which is the order a page is read in.
+         *
+         * `interactions` is declared on `NodeSchema`, one layer above the
+         * `AglynNodeSchema` this function is generic over, so both are read
+         * off the node rather than through the type.
+         */
+        const interactionsOf = (node: unknown): readonly unknown[] => {
+          const value = (node as { interactions?: unknown })?.interactions
+          return Array.isArray(value) ? value : []
+        }
+        const mergedInteractions = [
+          ...interactionsOf(graftedRoot),
+          ...interactionsOf(instanceNode),
+        ]
+        const carried: Record<string, unknown> = {}
+        for (const key of INSTANCE_CARRIED_PROPS) {
+          const value = (instanceNode.props as Record<string, unknown>)?.[key]
+          if (value !== undefined) carried[key] = value
+        }
+        // The override slices and the reference are DOCUMENT state living on
+        // the node beside `sx`, not props — the renderer never spreads them at
+        // an element — so they ride along rather than being consumed and
+        // dropped. A composed map that is saved back must still carry what the
+        // author set on this placement (AGL-1306/AGL-1899), and a re-compose
+        // is a no-op because the merged node no longer answers to
+        // `reusableInstance`.
+        const documentState: Record<string, unknown> = {}
+        for (const key of INSTANCE_CARRIED_NODE_FIELDS) {
+          const value = (instanceNode as Record<string, unknown>)[key]
+          if (value !== undefined) documentState[key] = value
+        }
+        const mergedSx = mergeNodeSx(graftedRoot.sx, instanceNode.sx)
+        const merged = {
+          ...graftedRoot,
+          $id: instanceId,
+          parentId: instanceNode.parentId,
+          ...documentState,
+          ...(mergedSx === undefined ? {} : { sx: mergedSx as N['sx'] }),
+          // Only when there is something to say: materializing an empty
+          // `props` on a node that had none is a visible difference to
+          // everything that asks whether a node was authored with any.
+          ...(graftedRoot.props !== undefined || Object.keys(carried).length
+            ? { props: { ...(graftedRoot.props as object), ...carried } }
+            : {}),
+          // Absent rather than empty, like `props` above: a node the author
+          // gave no choreography is one that carries no such key anywhere
+          // else in the pipeline.
+          ...(mergedInteractions.length
+            ? { interactions: mergedInteractions }
+            : {}),
+        } as N
+        for (const childId of Array.isArray(merged.nodes)
+          ? (merged.nodes as NodeId[])
+          : []) {
+          if (next[childId]) {
+            next[childId] = { ...next[childId], parentId: instanceId }
+          }
+        }
+        delete next[graftedRootId]
+        next[instanceId] = merged
+      } else {
+        /*
+         * The root was pruned by its own visibility directive, so there is
+         * nothing to take the instance's place. The instance stays as an empty
+         * container rather than vanishing: its own hide directive has not been
+         * evaluated yet, and removing a node the later passes still expect to
+         * walk would strand its parent's child list.
+         */
+        next[instanceId] = {
+          ...instanceNode,
+          nodes: [],
+        }
       }
     }
     composed = next

@@ -32,9 +32,9 @@
  * 2. **Error isolation.** A broken plugin drops its slice and the page
  *    survives. That is what the plugin docs promise, and under `Promise.all`
  *    one rejection would have taken the whole enrichment down.
- * 3. **Actual concurrency**, asserted against the wall clock — a regression to
- *    sequential awaits would still pass 1 and 2 while quietly restoring the
- *    cost this change removed.
+ * 3. **Actual concurrency**, asserted by counting enrichers in flight — a
+ *    regression to sequential awaits would still pass 1 and 2 while quietly
+ *    restoring the cost this change removed.
  *
  * `enrichers` is module-private with no reset seam, so each case registers its
  * own and asserts on ITS OWN keys. Registrations from earlier cases stay in the
@@ -88,22 +88,34 @@ describe('runSitePageEnrichers (AGL-1152 — concurrent)', () => {
   })
 
   it('THE REGRESSION GUARD: enrichers overlap rather than queue', async () => {
-    // Three 60ms enrichers. Sequential is >=180ms; concurrent is ~60ms. The
-    // 150ms ceiling is comfortably between the two and well clear of CI jitter
-    // in both directions.
+    // Overlap is counted, not timed. Each enricher marks itself in flight,
+    // sleeps just long enough to yield the microtask queue, and marks itself
+    // out again; `peak` is therefore how many ran at once. Sequential
+    // execution awaits each enricher to completion before starting the next,
+    // so it can never exceed 1 — on any machine, at any speed, under any load.
+    //
+    // A wall-clock ceiling cannot state this. `sleep` is a floor rather than a
+    // bound, so a busy machine reds a correct implementation; and a partial
+    // regression (two concurrent, one queued) finishes well inside any ceiling
+    // wide enough to survive that load, so it stays green forever. `peak`
+    // reports 2 for exactly that case.
+    let inFlight = 0
+    let peak = 0
     for (let i = 0; i < 3; i += 1) {
       registerSitePageEnricher(async () => {
-        await sleep(60)
+        inFlight += 1
+        peak = Math.max(peak, inFlight)
+        await sleep(1)
+        inFlight -= 1
         return { [`overlap${i}`]: true }
       })
     }
 
-    const startedAt = Date.now()
     const { props } = await runSitePageEnrichers(context)
-    const elapsed = Date.now() - startedAt
 
     expect(props['overlap0']).toBe(true)
     expect(props['overlap2']).toBe(true)
-    expect(elapsed).toBeLessThan(150)
+    expect(peak).toBe(3)
+    expect(inFlight).toBe(0)
   })
 })

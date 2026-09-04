@@ -141,3 +141,48 @@ export function beginInPlaceEdit(
     },
   }
 }
+
+/**
+ * The `<aglyn-text>` holding THIS node's authored text, when it renders one.
+ *
+ * `beginInPlaceEdit` empties whatever element it is handed, so the choice of
+ * element decides how much of a component survives being edited. Handing it
+ * the node's ROOT is only harmless when the root is itself the text host —
+ * `Typography` renders `<p><aglyn-text>…</aglyn-text></p>` and losing the
+ * `<aglyn-text>` for the duration costs nothing.
+ *
+ * It is not harmless for a COMPOSITE. `Accordion Summary` renders a MUI
+ * `<button>` whose children are `.MuiAccordionSummary-content` and the
+ * chevron wrapper, and MUI puts `textAlign: 'start'` on that content div for
+ * one reason: the UA stylesheet centres text in a `<button>`, and the div is
+ * what cancels it. Wipe the button's children and the authored text lands
+ * directly in a `text-align: center` button — the label centres itself and
+ * the chevron disappears, both for as long as the edit is open (AGL-2556).
+ * `Button` and `Screen Link` have the same shape, one icon slot along.
+ *
+ * The `<aglyn-text>` is the authored text by construction — `Leaf` renders
+ * `<Component>{children}<AglynText>{textContent}</AglynText></Component>` —
+ * so editing it leaves every sibling the component built untouched, and the
+ * text stays in the box whose styling it was authored against.
+ *
+ * Scoped by the leaf stamp `Leaf` puts on every node root: a candidate whose
+ * nearest stamped ancestor is not `root` belongs to a CHILD node rendered
+ * into this one's slot, and editing that would write this node's commit onto
+ * someone else's text. An unstamped root (a test, a bare render) has no such
+ * ancestor and its first candidate stands.
+ *
+ * Returns undefined when there is none, and the caller falls back to the
+ * root — a component that renders its text without the leaf wrapper keeps
+ * exactly the behaviour it had.
+ */
+export function findLeafTextElement(
+  root: Element | null | undefined,
+): HTMLElement | undefined {
+  if (!root || typeof root.querySelectorAll !== 'function') return undefined
+  for (const candidate of Array.from(root.querySelectorAll('aglyn-text'))) {
+    const owner = candidate.parentElement?.closest('[data-aglyn^="leaf:"]')
+    if (owner && owner !== root) continue
+    return candidate as HTMLElement
+  }
+  return undefined
+}

@@ -35,7 +35,7 @@ import {
 } from '../const/table-pagination'
 
 /**
- * ONE row grammar for every artifact list (AGL-693).
+ * ONE row grammar for every artifact list (AGL-2501).
  *
  *
  * They did. Three of the four are `DataTableComponent`, but each declared its
@@ -151,7 +151,7 @@ export function ListRowActions(props: ListRowActionsProps) {
       direction="row"
       spacing={0.5}
       /*
-        `height: '100%'` is what actually centres these (AGL-693). A DataGrid
+        `height: '100%'` is what actually centres these (AGL-2501). A DataGrid
         cell is a flex box, but `renderCell` content is auto-height inside it —
         so at the taller `TABLE_ROW_HEIGHT` these icons ride at the top of the
         row while the text beside them is centred. `alignItems` alone cannot
@@ -342,6 +342,27 @@ export function ListTable(props: ListTableProps) {
       sx={[
         { height: 'auto' },
         { '& .MuiDataGrid-row': { cursor: onOpen ? 'pointer' : 'default' } },
+        /*
+          A cell whose content is taller than one line sets the row's height,
+          and every OTHER cell then draws its content at the top of it — so a
+          two-line date column leaves the counts beside it riding high while
+          `ListRowActions`, which claims `height: '100%'` for itself, sits
+          centred. One row, three vertical positions.
+
+          Centring the cell itself fixes every column at once, including the
+          ones a caller renders with a bare `<Typography>`; `alignItems`
+          alone cannot, because an auto-height child has no spare height to
+          distribute until something claims the row. `justifyContent` is
+          deliberately not set here — a column's own `align` is what decides
+          its horizontal placement, and overriding it would silently undo
+          every right-aligned figure.
+         */
+        {
+          '& .MuiDataGrid-cell': {
+            display: 'flex',
+            alignItems: 'center',
+          },
+        },
         ...(Array.isArray(sx) ? sx : sx ? [sx] : []),
       ]}
       /*
@@ -360,7 +381,7 @@ export function ListTable(props: ListTableProps) {
        */
       showToolbar
       pagination
-      // The console's ONE footer (AGL-693): same options, same default, same
+      // The console's ONE footer (AGL-2501): same options, same default, same
       // label.
       pageSizeOptions={TABLE_PAGE_SIZE_OPTIONS}
       /*

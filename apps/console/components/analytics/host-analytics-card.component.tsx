@@ -28,7 +28,7 @@ import {
   Typography,
 } from '@mui/material'
 import { doc, getDoc } from 'firebase/firestore'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import {
   readAnalyticsDays,
@@ -54,6 +54,72 @@ interface DayStat {
   devices: Record<string, number>
   /** Campaign labels (AGL-1844): `source`/`medium`/`campaign` → value → n. */
   utm: Record<string, Record<string, number>>
+}
+
+/**
+ * One measurement: the figure, an optional badge beside it, and the label
+ * that says what was measured.
+ *
+ * A component rather than six copies of the same three elements, because the
+ * copies had already drifted — two of them carried a hand-written 220px
+ * ceiling to keep a URL from pushing the row, which is a grid track's job
+ * and not a tile's.
+ */
+function StatTile(props: {
+  value: ReactNode
+  label: ReactNode
+  /** Shown on hover — the honesty note, or the untruncated value. */
+  tooltip?: string
+  /** Rendered on the figure's baseline, e.g. the growth badge. */
+  children?: ReactNode
+}) {
+  const { value, label, tooltip, children } = props
+  const tile = (
+    <Stack sx={{ minWidth: 0 }}>
+      <Stack direction="row" spacing={0.75} sx={{ alignItems: 'baseline' }}>
+        <Typography variant="h4" noWrap sx={{ minWidth: 0 }}>
+          {value}
+        </Typography>
+        {children}
+      </Stack>
+      <Typography variant="caption" color="text.secondary" noWrap>
+        {label}
+      </Typography>
+    </Stack>
+  )
+  return tooltip ? <Tooltip title={tooltip}>{tile}</Tooltip> : tile
+}
+
+/**
+ * A ranked breakdown — the top five of something, each with its count.
+ *
+ * Renders nothing when there is nothing ranked: an empty `Top campaigns`
+ * heading reads as a campaign list that failed to load rather than as a site
+ * nobody has run a campaign for.
+ */
+function TopList(props: { title: string; rows: Array<[string, number]> }) {
+  const { title, rows } = props
+  if (!rows.length) return null
+  return (
+    <Stack spacing={0.5} sx={{ minWidth: 0 }}>
+      <Typography variant="subtitle2">{title}</Typography>
+      {rows.map(([label, count]) => (
+        <Stack
+          key={label}
+          direction="row"
+          spacing={1}
+          sx={{ justifyContent: 'space-between' }}
+        >
+          <Typography variant="body2" noWrap sx={{ minWidth: 0 }}>
+            {label}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {count.toLocaleString()}
+          </Typography>
+        </Stack>
+      ))}
+    </Stack>
+  )
 }
 
 /**
@@ -179,10 +245,6 @@ export function HostAnalyticsCard(props: {
       .slice(0, 5)
   const topUtmSources = topUtm('source')
   const topUtmCampaigns = topUtm('campaign')
-  const deviceSum = Object.values(deviceTotals).reduce(
-    (sum, count) => sum + count,
-    0,
-  )
   // Top insights (AGL-386): per-day average, week-over-week trend, and
   // the leading device — computed from the same day-counter docs.
   const dayCount = windowDays.length || 1
@@ -240,110 +302,104 @@ export function HostAnalyticsCard(props: {
             'your published site.'}
         </Typography>
       ) : (
-        <Stack spacing={2}>
-          <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
-            <Stack>
-              <Stack direction="row" spacing={0.75} sx={{ alignItems: 'baseline' }}>
-                <Typography variant="h4">{total.toLocaleString()}</Typography>
-                {/*
-                  The delta belongs ON the figure it describes and follows
-                  the RANGE SELECTOR (AGL-2160). It used to be a separate
-                  `Week over week` tile pinned to 7-vs-7, so choosing 90
-                  days still showed last week's movement — a number that
-                  was true of a window nobody had asked to see. Silent when
-                  the prior window recorded nothing: a site's first week has
-                  no growth rate.
-                 */}
-                {deltaPct === null ? null : (
-                  <Tooltip title={`vs the previous ${range} days`}>
-                    <Typography
-                      variant="subtitle2"
-                      sx={{
-                        fontWeight: 600,
-                        color:
-                          deltaPct > 0
-                            ? 'success.main'
-                            : deltaPct < 0
-                              ? 'error.main'
-                              : 'text.secondary',
-                      }}
-                    >
-                      {`${deltaPct > 0 ? '+' : ''}${deltaPct}% vs prior`}
-                    </Typography>
-                  </Tooltip>
-                )}
-              </Stack>
-              <Typography variant="caption" color="text.secondary">
-                {'Page views'}
-              </Typography>
-            </Stack>
+        <Stack spacing={3}>
+          {/*
+            The figures, in a grid rather than a wrapping row. At the card's
+            full width a `flexWrap` row leaves the tiles at whatever
+            positions their own text lengths produce — `Top page` is a URL
+            and `Mobile / Desktop` is two numbers, so nothing lines up and
+            the last row of a wrap ends ragged. Grid tracks are the same
+            width whatever is in them, which is what makes six figures
+            readable as one row of measurements.
+           */}
+          <Box
+            sx={{
+              display: 'grid',
+              gap: 3,
+              gridTemplateColumns: {
+                xs: 'repeat(2, minmax(0, 1fr))',
+                sm: 'repeat(3, minmax(0, 1fr))',
+                lg: 'repeat(6, minmax(0, 1fr))',
+              },
+            }}
+          >
+            <StatTile value={total.toLocaleString()} label={'Page views'}>
+              {/*
+                The delta belongs ON the figure it describes and follows the
+                RANGE SELECTOR (AGL-2160). It used to be a separate `Week
+                over week` tile pinned to 7-vs-7, so choosing 90 days still
+                showed last week's movement — a number that was true of a
+                window nobody had asked to see. Silent when the prior window
+                recorded nothing: a site's first week has no growth rate.
+               */}
+              {deltaPct === null ? null : (
+                <Tooltip title={`vs the previous ${range} days`}>
+                  <Typography
+                    variant="subtitle2"
+                    sx={{
+                      fontWeight: 'bold',
+                      color:
+                        deltaPct > 0
+                          ? 'success.main'
+                          : deltaPct < 0
+                            ? 'error.main'
+                            : 'text.secondary',
+                    }}
+                  >
+                    {`${deltaPct > 0 ? '+' : ''}${deltaPct}% vs prior`}
+                  </Typography>
+                </Tooltip>
+              )}
+            </StatTile>
             {visitors > 0 ? (
               // Cookieless approximation (AGL-1844): one count per browser
               // tab per day, so it under- and over-counts in known ways.
               // The tooltip is the honesty contract — do not shorten it.
-              <Tooltip
-                title={
+              <StatTile
+                value={visitors.toLocaleString()}
+                label={'Visitors (approx.)'}
+                tooltip={
                   'Approximate: counts each browser tab once per day, ' +
                   'without cookies or visitor IDs. A visitor using two ' +
                   'tabs, or returning on another day, counts again.'
                 }
-              >
-                <Stack>
-                  <Typography variant="h4">
-                    {visitors.toLocaleString()}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {'Visitors (approx.)'}
-                  </Typography>
-                </Stack>
-              </Tooltip>
+              />
             ) : null}
-            <Stack>
-              <Typography variant="h4">
-                {avgPerDay.toLocaleString()}
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                {'Avg / day'}
-              </Typography>
-            </Stack>
+            <StatTile value={avgPerDay.toLocaleString()} label={'Avg / day'} />
             {devices.length ? (
               // `Mobile / Desktop` over `61% / 39%`, as the mockup shows
               // it. The one-word `Top device` tile it replaces answered a
               // question nobody asks — a split is the whole point.
-              <Stack>
-                <Typography variant="h4">
-                  {deviceSplitValue(devices)}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {deviceSplitLabel(devices)}
-                </Typography>
-              </Stack>
+              <StatTile
+                value={deviceSplitValue(devices)}
+                label={deviceSplitLabel(devices)}
+              />
             ) : null}
             {topPage ? (
-              <Stack sx={{ minWidth: 0 }}>
-                <Typography variant="h4" noWrap sx={{ maxWidth: 220 }}>
-                  {topPage[0]}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {`Top page · ${topPage[1].toLocaleString()} views`}
-                </Typography>
-              </Stack>
+              <StatTile
+                value={topPage[0]}
+                label={`Top page · ${topPage[1].toLocaleString()} views`}
+                tooltip={topPage[0]}
+              />
             ) : null}
             {topReferrer ? (
-              <Stack sx={{ minWidth: 0 }}>
-                <Typography variant="h4" noWrap sx={{ maxWidth: 220 }}>
-                  {topReferrer[0]}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {`Top referrer · ${topReferrer[1].toLocaleString()} views`}
-                </Typography>
-              </Stack>
+              <StatTile
+                value={topReferrer[0]}
+                label={`Top referrer · ${topReferrer[1].toLocaleString()} views`}
+                tooltip={topReferrer[0]}
+              />
             ) : null}
-          </Stack>
+          </Box>
           <Stack
             direction="row"
             spacing={0.5}
-            sx={{ alignItems: 'flex-end', height: 64 }}
+            sx={{
+              alignItems: 'flex-end',
+              // Taller across the full width: at half the page the chart was
+              // as tall as it was per-bar-wide, and a 90-day range drew
+              // ninety bars into 64px of height.
+              height: (theme) => theme.spacing(15),
+            }}
           >
             {windowDays.map((day) => (
               <Tooltip key={day.day} title={`${day.day}: ${day.total}`}>
@@ -359,95 +415,38 @@ export function HostAnalyticsCard(props: {
             ))}
           </Stack>
           {/*
-            The lowercase `desktop 62% · mobile 31%` caption that used to
-            sit here is now the device tile above, which is where the
-            mockup puts it. Kept as one statement rather than two so the
-            same numbers cannot be rendered twice in two formats.
+            The four breakdowns, side by side rather than stacked. Each is
+            five rows, and stacking them made the card a column of lists a
+            reader had to scroll to compare — `Top pages` sat below three
+            other lists and a caption, furthest from the tile that names the
+            top page. Two columns at `sm`, which is where the card is wide
+            enough for a URL and its count to share a line.
            */}
-          {topReferrers.length ? (
-            <Stack spacing={0.5}>
-              <Typography variant="subtitle2">{'Top referrers'}</Typography>
-              {topReferrers.map(([host, count]) => (
-                <Stack
-                  key={host}
-                  direction="row"
-                  sx={{ justifyContent: 'space-between' }}
-                >
-                  <Typography variant="body2" noWrap sx={{ maxWidth: '80%' }}>
-                    {host}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {count.toLocaleString()}
-                  </Typography>
-                </Stack>
-              ))}
-            </Stack>
-          ) : null}
-          {topUtmSources.length ? (
-            <Stack spacing={0.5}>
-              <Typography variant="subtitle2">
-                {'Top campaign sources (UTM)'}
-              </Typography>
-              {topUtmSources.map(([value, count]) => (
-                <Stack
-                  key={value}
-                  direction="row"
-                  sx={{ justifyContent: 'space-between' }}
-                >
-                  <Typography variant="body2" noWrap sx={{ maxWidth: '80%' }}>
-                    {value}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {count.toLocaleString()}
-                  </Typography>
-                </Stack>
-              ))}
-            </Stack>
-          ) : null}
-          {topUtmCampaigns.length ? (
-            <Stack spacing={0.5}>
-              <Typography variant="subtitle2">{'Top campaigns (UTM)'}</Typography>
-              {topUtmCampaigns.map(([value, count]) => (
-                <Stack
-                  key={value}
-                  direction="row"
-                  sx={{ justifyContent: 'space-between' }}
-                >
-                  <Typography variant="body2" noWrap sx={{ maxWidth: '80%' }}>
-                    {value}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {count.toLocaleString()}
-                  </Typography>
-                </Stack>
-              ))}
-            </Stack>
-          ) : null}
+          <Box
+            sx={{
+              display: 'grid',
+              gap: 3,
+              alignItems: 'start',
+              gridTemplateColumns: {
+                xs: '1fr',
+                sm: 'repeat(2, minmax(0, 1fr))',
+              },
+            }}
+          >
+            <TopList title={'Top pages'} rows={topPaths} />
+            <TopList title={'Top referrers'} rows={topReferrers} />
+            <TopList
+              title={'Top campaign sources (UTM)'}
+              rows={topUtmSources}
+            />
+            <TopList title={'Top campaigns (UTM)'} rows={topUtmCampaigns} />
+          </Box>
           {/* Per-screen teaser (AGL-153, table AGL-1844). */}
           <Typography variant="caption" color="text.secondary">
             {'Per-screen breakdowns live in the Screens table on the ' +
               'analytics page and on each screen\u2019s view page (Pro ' +
               'plans).'}
           </Typography>
-          {topPaths.length ? (
-            <Stack spacing={0.5}>
-              <Typography variant="subtitle2">{'Top pages'}</Typography>
-              {topPaths.map(([path, count]) => (
-                <Stack
-                  key={path}
-                  direction="row"
-                  sx={{ justifyContent: 'space-between' }}
-                >
-                  <Typography variant="body2" noWrap sx={{ maxWidth: '80%' }}>
-                    {path}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {count.toLocaleString()}
-                  </Typography>
-                </Stack>
-              ))}
-            </Stack>
-          ) : null}
         </Stack>
       )}
     </CardDisplay>

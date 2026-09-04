@@ -40,6 +40,11 @@ import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
 // plugin manifest to load them, so the runner route is where they enter the
 // registry — `ensureAll` below only reaches plugin `/server` entries.
 import '../../../../utils/publish-schedule-job'
+// The second core job, imported for the same reason and subject to the same
+// hazard: nothing else references this module, so dropping the import is a
+// silent way to stop re-checking whether a verified sending domain still
+// publishes its records.
+import '../../../../utils/sending-domain-recheck-job'
 // Imported for its registration side effect too (AGL-2495): it is what tells
 // core's job gate how to resolve a host's lockdown. Core cannot import the
 // admin lib (that edge is a cycle), so if this import goes, every job on the

@@ -29,7 +29,7 @@ import { readListFilter } from '../../../../utils/server/list-filter'
 // what someone did. A lockdown is often the reason staff are reading it.
 
 /**
- * Everything one account has done, across every organization (AGL-1488).
+ * Everything one account has done, across every organization.
  *
  * The staff user page could see who someone is, what they accepted and where
  * they have signed in from, and nothing at all about what they DID — the

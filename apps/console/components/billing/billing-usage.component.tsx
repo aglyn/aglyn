@@ -18,9 +18,12 @@
 
 import {
   type AglynOrgBilling,
+  checkApiRequestQuota,
   checkContactQuota,
   checkDatasetQuota,
   checkSeatQuota,
+  emailSendsOverage,
+  priceEmailSendOverage,
   resolveHostCollaboratorCap,
   resolveOrgEntitlements,
   UNLIMITED,
@@ -35,8 +38,18 @@ import {
 } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import {
+  authorizedFetch,
+  type MaybeTokenSource,
+} from '@aglyn/shared-util-http/authorized-token'
 import { useReleaseFlag } from '../../hooks/use-release-flags'
 import fetchSeatCounts from '../../utils/fetch-seat-counts'
+import {
+  monthlyAllowanceResetsAt,
+  parseOrgEmailSendCeiling,
+  planExceedsDeliverableMonthly,
+  type OrgEmailSendCeiling,
+} from '../../utils/email-send-ceiling'
 import { orgBandwidthGb } from '../../utils/usage-metering'
 import { docsHelp } from '../../constants/docs-links'
 
@@ -52,12 +65,12 @@ export interface BillingUsageProps {
  */
 async function fetchBillableScreens(
   hostId: string,
-  idToken: string | undefined,
+  user: MaybeTokenSource,
 ): Promise<number | null> {
   try {
-    const response = await fetch(
+    const response = await authorizedFetch(
+      user,
       `/api/hosts/usage?hostId=${encodeURIComponent(hostId)}`,
-      idToken ? { headers: { Authorization: `Bearer ${idToken}` } } : undefined,
     )
     if (!response.ok) return null
     const result = await response.json()
@@ -154,18 +167,18 @@ function HostUsageMeters(props: {
     variables: number | null
     functions: number | null
     members: number | null
+    forms: number | null
     storageMb: number | null
     workflowRuns: number | null
-    campaignEmails: number | null
   }>({
     screens: null,
     layouts: null,
     variables: null,
     functions: null,
     members: null,
+    forms: null,
     storageMb: null,
     workflowRuns: null,
-    campaignEmails: null,
   })
   const entitlements = resolveOrgEntitlements(org)
 
@@ -179,10 +192,7 @@ function HostUsageMeters(props: {
       // SDK cannot express that — live screens have no `deletedAt` field at
       // all, and Firestore cannot query for an absent field. Asking the API
       // keeps this meter and the quota gate on one implementation.
-      (user as any)
-        ?.getIdToken?.()
-        .then((token: string) => fetchBillableScreens(host.$id, token))
-        .catch(() => null) ?? Promise.resolve(null),
+      fetchBillableScreens(host.$id, user).catch(() => null),
       getCountFromServer(
         collection(firestore, 'hosts', host.$id, 'layouts'),
       ).catch(() => null),
@@ -196,6 +206,13 @@ function HostUsageMeters(props: {
       getCountFromServer(
         collection(firestore, 'hosts', host.$id, 'members'),
       ).catch(() => null),
+      // The saved-form CATALOG, which is what `formsPerHost` bounds. An
+      // aggregation, so it stays one billed read however large the catalog
+      // is — and it counts definitions, never submissions, which are metered
+      // on their own axis against an org-wide band.
+      getCountFromServer(
+        collection(firestore, 'hosts', host.$id, 'forms'),
+      ).catch(() => null),
       // Media bytes counter maintained by the media library (AGL-72).
       getDoc(doc(firestore, 'hosts', host.$id, 'counters', 'media')).catch(
         () => null,
@@ -204,21 +221,7 @@ function HostUsageMeters(props: {
       getDoc(
         doc(firestore, 'hosts', host.$id, 'counters', 'workflowRuns'),
       ).catch(() => null),
-      /*
-       * Campaign email sends this month.
-       *
-       * `campaignEmailSends`, NOT the `emailSends` counter beside it. Since
-       * AGL-1438 those are two different meters on purpose: `emailSends` is
-       * the COST meter and counts every receipt, booking reminder and
-       * password reset the site sent, while `emailSendsPerMonth` is checked
-       * against `campaignEmailSends` and nothing else. Metering the cap
-       * against the cost counter would show a busy store most of its
-       * campaign allowance spent on order confirmations.
-       */
-      getDoc(
-        doc(firestore, 'hosts', host.$id, 'counters', 'campaignEmailSends'),
-      ).catch(() => null),
-    ]).then(([screens, layouts, variables, functions, members, media, runs, campaigns]) => {
+    ]).then(([screens, layouts, variables, functions, members, forms, media, runs]) => {
       if (!active) return
       const bytes = media?.exists() ? (media.data()?.bytes ?? 0) : 0
       const monthKey = new Date().toISOString().slice(0, 7)
@@ -228,15 +231,10 @@ function HostUsageMeters(props: {
         variables: variables?.data().count ?? null,
         functions: functions?.data().count ?? null,
         members: members?.data().count ?? null,
+        forms: forms?.data().count ?? null,
         storageMb: Math.round((bytes / (1024 * 1024)) * 10) / 10,
         workflowRuns: runs?.exists()
           ? Number(runs.data()?.[monthKey] ?? 0)
-          : 0,
-        // A site that has never sent a campaign has no counter document;
-        // that is a settled zero, the same zero the server resolves it to,
-        // not an unmetered "—".
-        campaignEmails: campaigns?.exists()
-          ? Number(campaigns.data()?.[monthKey] ?? 0)
           : 0,
       })
     })
@@ -277,6 +275,14 @@ function HostUsageMeters(props: {
         used={counts.members}
         limit={memberSeatLimit}
       />
+      {/* The form CATALOG. Submissions are not metered here: their band is
+          org-wide and monthly, so a per-site meter would show each site its
+          own slice against the whole org's allowance. */}
+      <UsageMeter
+        label="Saved forms"
+        used={counts.forms}
+        limit={entitlements.formsPerHost}
+      />
       <UsageMeter
         label="Variables"
         used={counts.variables}
@@ -298,23 +304,11 @@ function HostUsageMeters(props: {
         used={counts.workflowRuns}
         limit={entitlements.workflowRunsPerMonth}
       />
-      {/* Campaign emails, the one operating quota that reached the customer
-          only as a refusal. The label says CAMPAIGN because that is what the
-          cap governs: transactional mail — receipts, booking reminders,
-          password resets — is counted for cost and never refused at any tier
-          (AGL-1438), so a meter labelled "Emails" would promise a limit the
-          product does not enforce and alarm a merchant whose receipts are
-          fine. Per site because `campaign-send.ts` enforces per site. */}
-      <UsageMeter
-        label="Campaign emails (this month)"
-        used={counts.campaignEmails}
-        limit={entitlements.emailSendsPerMonth}
-        /* The section that says what this cap does and does NOT govern —
-           not the topic root, and not `#recipient-count`, which is about the
-           audience size of one send. A meter whose help lands on the wrong
-           heading is the presence-not-correctness failure. */
-        help={docsHelp('emailCampaigns', { anchor: '#monthly-send-cap' })}
-      />
+      {/* Campaign emails are NOT a per-site meter either — the entitlement is
+          org-wide and the claim is taken against the org's counter, so the
+          meter renders once in `BillingUsageComponent`. Rendering it per site
+          showed each site its own slice against the whole org's cap, which
+          disagreed with the gate on every multi-site org. */}
       {/* Bandwidth is NOT a per-site meter — its limit (`bandwidthGb`) is
           org-wide, so it renders once in `BillingUsageComponent` against an
           org-wide numerator (AGL-1371). Site size moved there too and was then
@@ -356,10 +350,76 @@ export function BillingUsageComponent(props: BillingUsageProps) {
   const [apiRequests, setApiRequests] = useState<number | null>(null)
   // Contacts audience band (AGL-890/891): org-scoped aggregate count.
   const [contactsCount, setContactsCount] = useState<number | null>(null)
+  /*
+   * Aglyn Assist credits drawn this month, ORG-WIDE.
+   *
+   * From the server, not from Firestore like its neighbours:
+   * `orgs/{orgId}/assistUsage` is absent from the rules file and therefore
+   * default-deny for every client, so a browser read would fail silently and
+   * leave this meter reading "not yet metered" forever.
+   *
+   * Credits, never dollars. The stored figure is our provider bill at the
+   * serving model's list rates; `/api/billing/assist-credits` is where the
+   * one conversion happens and no dollar figure crosses it.
+   */
+  const [assistCredits, setAssistCredits] = useState<{
+    used: number
+    limit: number | null
+    remaining: number | null
+  } | null>(null)
   // Month bandwidth (AGL-1106/1371): org-wide, summed across the org's sites
   // below — `entitlements.bandwidthGb` is an org-wide band, and the invoice
   // and the cron both compare it against the org-wide total.
   const [bandwidthGb, setBandwidthGb] = useState<number | null>(null)
+  /*
+   * Campaign email sends this month, ORG-WIDE.
+   *
+   * `emailSendsPerMonth` is an org entitlement and `reserveCampaignEmailSends`
+   * claims against `orgs/{orgId}/counters/campaignEmailSends`, so this is the
+   * counter the gate actually decides on. It used to render per site off
+   * `hosts/{hostId}/counters/campaignEmailSends`, which disagreed with the
+   * gate on every multi-site org: three sites at 100 each showed `100/5,000`
+   * three times while the org stood at 300 and the next campaign was refused.
+   *
+   * `campaignEmailSends`, NOT the `emailSends` counter beside it. Those are
+   * two meters on purpose — `emailSends` is the COST meter and counts every
+   * receipt, booking reminder and password reset, while the cap is checked
+   * against campaign volume alone. Metering the cap against the cost counter
+   * would show a busy store most of its allowance spent on order
+   * confirmations.
+   */
+  const [campaignEmails, setCampaignEmails] = useState<number | null>(null)
+  /*
+   * TOTAL email sends this month, org-wide — the COST meter beside the one
+   * above, and the one the invoice is computed from.
+   *
+   * The two meters answer different questions and this surface needs both.
+   * The cap refuses campaigns, so campaign volume can never pass the band;
+   * transactional mail cannot be refused at any tier, so the band is passed by
+   * receipts, invites, booking reminders and password resets, and that excess
+   * is what bills. Priced off `campaignEmails` the overage would read as
+   * permanently zero, which is the wrong answer stated confidently.
+   *
+   * `null` until read: an unread counter has no honest overage to quote.
+   */
+  const [totalEmails, setTotalEmails] = useState<number | null>(null)
+  /*
+   * The HOURLY campaign ceiling, and how much of this hour is already spent.
+   *
+   * A second, independent limit on the same unit. `claimOrgEmailSendBudget`
+   * refuses a campaign that would take the org past its share of the platform
+   * hour, and until now that number appeared in exactly one place: the
+   * deferral notice a merchant reads after pressing Send. A customer throttled
+   * at 500 an hour had no surface anywhere that said 500, or said hour.
+   *
+   * Its counter lives in `rateLimits`, which is deny-all to every client, so
+   * it arrives from `/api/billing/email-ceiling` rather than from Firestore.
+   * `null` is the unmetered state — never a zero-filled default, which would
+   * invent a denominator for a meter that has not been read.
+   */
+  const [sendCeiling, setSendCeiling] = useState<OrgEmailSendCeiling | null>(
+    null,
+  )
   useEffect(() => {
     if (!orgId) return
     let active = true
@@ -393,6 +453,20 @@ export function BillingUsageComponent(props: BillingUsageProps) {
       .catch(() => {
         // Meter keeps its "not yet metered" state on failure.
       })
+    void (async () => {
+      try {
+        const response = await authorizedFetch(
+          user,
+          `/api/billing/assist-credits?orgId=${encodeURIComponent(orgId)}`,
+        )
+        if (!response.ok) return
+        const result = await response.json()
+        if (active && result?.credits) setAssistCredits(result.credits)
+      } catch {
+        // Meter keeps its "not yet metered" state on failure — deliberately
+        // not 0, which reads as "you have used none of your credits".
+      }
+    })()
     void getDoc(
       doc(
         firestore,
@@ -411,6 +485,38 @@ export function BillingUsageComponent(props: BillingUsageProps) {
       })
       .catch(() => {
         // Meter keeps its "not yet metered" state on failure.
+      })
+    void getDoc(
+      doc(firestore, 'orgs', orgId, 'counters', 'campaignEmailSends'),
+    )
+      .then((snapshot) => {
+        if (active) {
+          // An org that has never sent a campaign has no counter document;
+          // that is a settled zero — the same zero the server resolves it to
+          // — not an unmetered "—".
+          const monthKey = new Date().toISOString().slice(0, 7)
+          setCampaignEmails(
+            snapshot.exists() ? Number(snapshot.data()?.[monthKey] ?? 0) : 0,
+          )
+        }
+      })
+      .catch(() => {
+        // Meter keeps its "not yet metered" state on failure.
+      })
+    // The sibling counter in the same subcollection: one more single-document
+    // read, on a path this component already reads.
+    void getDoc(doc(firestore, 'orgs', orgId, 'counters', 'emailSends'))
+      .then((snapshot) => {
+        if (active) {
+          const monthKey = new Date().toISOString().slice(0, 7)
+          setTotalEmails(
+            snapshot.exists() ? Number(snapshot.data()?.[monthKey] ?? 0) : 0,
+          )
+        }
+      })
+      .catch(() => {
+        // The overage caption stays hidden rather than quoting a charge off a
+        // reading that never arrived.
       })
     // Dataset storage comes from the monthly rollup (report-usage); the
     // current month may not exist yet, so fall back to the previous one. The
@@ -446,6 +552,43 @@ export function BillingUsageComponent(props: BillingUsageProps) {
     }
   }, [firestore, orgId, user])
 
+  /*
+   * The hourly ceiling, from the server.
+   *
+   * ONE request for the whole org, not one per site: the ceiling is a share of
+   * the platform hour granted to the ORGANIZATION, and the counter it is read
+   * against (`rateLimits/sendRateOrg_{window}_{orgId}`) is keyed by org id.
+   * Fanning this out per host would be the AGL-2113 shape a second time — a
+   * per-site reading against an org-wide denominator — at N times the cost.
+   *
+   * Costs at most two document reads server-side, neither of them a scan: the
+   * platform ramp (cached 15s in-process, because it already sits on every
+   * outbound message's path) and the org's own hourly window.
+   */
+  useEffect(() => {
+    if (!orgId) return
+    let active = true
+    void (async () => {
+      try {
+        const response = await authorizedFetch(
+          user,
+          `/api/billing/email-ceiling?orgId=${encodeURIComponent(orgId)}`,
+        )
+        if (!response.ok) return
+        const reading = parseOrgEmailSendCeiling(await response.json())
+        // A partial or unparseable answer holds the unmetered state. The
+        // parse is what enforces that every ceiling is a finite number, so a
+        // serialized sentinel cannot land here as a cap of zero.
+        if (active && reading) setSendCeiling(reading)
+      } catch {
+        // The row keeps its "not yet metered" state on failure.
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [orgId, user])
+
   // Month bandwidth, summed ACROSS THE ORG'S SITES (AGL-1371). The band is
   // org-wide and so is the figure the invoice is computed from — the meter
   // used to render one site's reading against it, understating by up to
@@ -458,14 +601,12 @@ export function BillingUsageComponent(props: BillingUsageProps) {
     let active = true
     void (async () => {
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        if (!idToken) return
         const readings = await Promise.all(
           hostIds.map(async (hostId) => {
             try {
-              const response = await fetch(
+              const response = await authorizedFetch(
+                user,
                 `/api/billing/host-usage?hostId=${encodeURIComponent(hostId)}`,
-                { headers: { Authorization: `Bearer ${idToken}` } },
               )
               if (!response.ok) return null
               const payload = await response.json()
@@ -494,6 +635,42 @@ export function BillingUsageComponent(props: BillingUsageProps) {
   // Contacts meter past the band on a paid plan is billing, not blocking
   // (AGL-890) — the caption under the meter says so with the estimate.
   const contactQuota = checkContactQuota(org, contactsCount ?? 0)
+  /*
+   * API requests past the plan's included band, priced.
+   *
+   * The same shape as the audience band beside it, and the same reason for
+   * existing: `apiQuota.overageMonthlyUsd` is one of the five terms
+   * `report-usage` adds into `billedCents`, so a customer past the band is
+   * already being invoiced for it while the meter above said only how many
+   * requests they had made. `checkApiRequestQuota` is the ONE place that
+   * arithmetic lives — the caption reads its answer rather than multiplying a
+   * rate by a count a second time.
+   *
+   * `overageRateUsd` is null on every plan that sells no API overage (Free and
+   * the two lower tiers include no requests at all; Enterprise is negotiated),
+   * and the caption is suppressed there rather than quoting a rate that plan
+   * cannot be charged.
+   */
+  const apiQuota = checkApiRequestQuota(org, apiRequests ?? 0)
+  /*
+   * Email past the plan's included band, and what it costs.
+   *
+   * Two calls rather than one because the two answer different questions and
+   * the SERVER splits them the same way: `emailSendsOverage` is the count
+   * `report-usage` records, and `priceEmailSendOverage` is the money it adds
+   * into `billedCents`. Both are the shared implementations — a caption that
+   * subtracted and multiplied for itself would be a second billing model on
+   * the page whose whole job is to agree with the invoice.
+   *
+   * `totalEmails` is `null` until the counter is read, and `?? 0` then yields
+   * an overage of 0, which suppresses the caption. That is the right default:
+   * an unread meter must not print a charge.
+   */
+  const emailOverage = emailSendsOverage(
+    totalEmails ?? 0,
+    entitlements.emailSendsPerMonth,
+  )
+  const emailOveragePrice = priceEmailSendOverage(org, emailOverage)
   // ...unless the invoice is withholding it (AGL-1658). AGL-1604 stopped the
   // usage cron putting `contactsOverageUsd` into `billedCents` while
   // `release_contacts` is off for the org, and this caption kept quoting the
@@ -591,6 +768,48 @@ export function BillingUsageComponent(props: BillingUsageProps) {
           limit={entitlements.apiRequestsPerMonth}
         />
       ) : null}
+      {/*
+        Credits, because assist actions differ in cost by up to two orders of
+        magnitude — a question against generating a screen — and a message
+        count would price them the same. The band is refused at the cap, so
+        this readout is the only thing standing between a customer and
+        learning their limit by being turned down mid-build.
+
+        Rendered only where a band is sold. Free and Starter carry
+        `assistCreditsPerMonth: 0` and no `aiAssist`, and a "0 of 0" meter is
+        not a readout of anything.
+      */}
+      {entitlements.assistCreditsPerMonth > 0 ? (
+        <UsageMeter
+          label="Aglyn Assist credits (this month)"
+          used={assistCredits ? assistCredits.used : null}
+          limit={entitlements.assistCreditsPerMonth}
+        />
+      ) : null}
+      {/* No caption while the counter is still loading, and no separate guard
+          for it: the quota is computed from `apiRequests ?? 0`, and zero is
+          never over a positive band — so the loading default cannot produce a
+          dollar figure that the settled read then contradicts. That property
+          is what makes the fallback safe, and it is the fallback that has to
+          stay 0 for it to hold.
+          `overageRateUsd` non-null is what confines this to a plan that can
+          actually be charged for the excess. */}
+      {apiQuota.overageRequests > 0 && apiQuota.overageRateUsd != null ? (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ display: 'block', mt: -1.5, mb: 2 }}
+        >
+          {/* `toFixed(2)` on the rate as well as the total: Business bills
+              $0.5/1,000 and Advanced $0.2/1,000, and a bare interpolation
+              prints those as "$0.5" and "$0.2" — a price missing its cents
+              column reads as a typo on the one line that is about money. */}
+          {`API overage: ${apiQuota.overageRequests.toLocaleString()} requests ` +
+            `over the included band at $${apiQuota.overageRateUsd.toFixed(2)}` +
+            `/1,000 — ≈$${apiQuota.overageMonthlyUsd.toFixed(2)} on this ` +
+            "month's invoice."}
+        </Typography>
+      ) : null}
       {/* Org-wide by definition (AGL-1371): `bandwidthGb` is an org limit, not
           a per-site one, and the invoice and the usage-alerts cron both
           measure the org-wide total against it. Rendered here, once, rather
@@ -608,6 +827,147 @@ export function BillingUsageComponent(props: BillingUsageProps) {
         unit="GB"
         help={docsHelp('bandwidth', { anchor: '#where-to-see-it' })}
       />
+      {/* Campaign emails, the one operating quota that reached the customer
+          only as a refusal. The label says CAMPAIGN because that is what the
+          cap governs: transactional mail — receipts, booking reminders,
+          password resets — is counted for cost and never refused at any tier
+          (AGL-1438), so a meter labelled "Emails" would promise a limit the
+          product does not enforce and alarm a merchant whose receipts are
+          fine. Org-wide, matching the entitlement and the counter the claim
+          is taken against. */}
+      <UsageMeter
+        label="Campaign emails (this month, organization)"
+        used={campaignEmails}
+        limit={entitlements.emailSendsPerMonth}
+        /* The section that says what this cap does and does NOT govern —
+           not the topic root, and not `#recipient-count`, which is about the
+           audience size of one send. A meter whose help lands on the wrong
+           heading is the presence-not-correctness failure. */
+        help={docsHelp('emailCampaigns', { anchor: '#monthly-send-cap' })}
+      />
+      {/* WHEN the meter above goes back to zero. The counter is keyed
+          `YYYY-MM` in UTC, so the allowance returns at midnight UTC on the
+          1st — not at midnight wherever the reader is, which is a different
+          instant for most of the planet and the one a merchant plans a send
+          around. Stated for a FINITE allowance only: an unlimited plan has
+          nothing to wait for. */}
+      {entitlements.emailSendsPerMonth !== UNLIMITED ? (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ display: 'block', mt: -1.5, mb: 2 }}
+        >
+          {`Resets ${monthlyAllowanceResetsAt().toLocaleDateString(undefined, {
+            day: 'numeric',
+            month: 'short',
+            timeZone: 'UTC',
+          })} at 00:00 UTC. Unused allowance does not roll over.`}
+        </Typography>
+      ) : null}
+      {/* WHAT PASSING THE BAND COSTS, and why passing it is possible at all
+          on a quota that refuses.
+
+          Measured on the TOTAL email meter, not the campaign one above. The
+          cap refuses campaigns at the band, so campaign volume cannot pass
+          it; transactional mail cannot be refused at any tier, so receipts,
+          invites, booking reminders and password resets are what carry an org
+          over — and a merchant reading a charge needs the sentence that says
+          so, or the meter above looks like it is lying.
+
+          Rendered only once the counter has been read and only when there is
+          both an overage and a rate to price it at, which is the same pair
+          the API overage caption below the meters requires. */}
+      {emailOverage > 0 && emailOveragePrice.overageRateUsd != null ? (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ display: 'block', mt: -1.5, mb: 2 }}
+        >
+          {/* `toFixed(2)` on the rate for the reason the API caption records:
+              a rate of 2.5 interpolates as "$2.5", a price missing its cents
+              column on the one line that is about money. */}
+          {`${emailOverage.toLocaleString()} emails over your included ` +
+            `${entitlements.emailSendsPerMonth.toLocaleString()} this month ` +
+            `at $${emailOveragePrice.overageRateUsd.toFixed(2)}/1,000 — ` +
+            `≈$${emailOveragePrice.overageMonthlyUsd.toFixed(2)} on this ` +
+            "month's invoice. Transactional mail — receipts, invites, " +
+            'password resets — is never refused at the cap, so it is what ' +
+            'takes an organization past the band.'}
+        </Typography>
+      ) : null}
+      {/*
+        THE SECOND CEILING, and the one a throttled customer actually hits.
+
+        Rendered only once the reading is KNOWN. Every other meter here can
+        fall back to "not yet metered · limit N" because the limit comes from
+        the plan and is always in hand; this limit is a share of a live
+        platform ramp that only the server can see, so an unread row has no
+        honest denominator to show and is omitted rather than guessed at.
+
+        A separate row from the monthly one, never a combined fraction. The
+        two count the same unit over windows three orders of magnitude apart,
+        and dividing one into the other would manufacture a rate neither
+        counter measures — the shape this surface exists to stop.
+      */}
+      {sendCeiling ? (
+        <>
+          <UsageMeter
+            label="Campaign emails (this hour, organization)"
+            used={sendCeiling.hourUsed}
+            limit={sendCeiling.hourLimit}
+            help={docsHelp('emailCampaigns', { anchor: '#monthly-send-cap' })}
+          />
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ display: 'block', mt: -1.5, mb: 2 }}
+          >
+            {`Resets ${new Date(sendCeiling.hourResetMs).toLocaleTimeString(
+              undefined,
+              { hour: 'numeric', minute: '2-digit' },
+            )}. This paces how fast campaigns leave; the allowance above is ` +
+              `how many you get for the month. One send reaches at most ` +
+              `${sendCeiling.perSend.toLocaleString()} addresses. ` +
+              // Transactional mail is never refused at any tier (AGL-1438),
+              // and a merchant reading a throttle needs to know their receipts
+              // are not in it — the same clause the monthly cap's label earns
+              // by saying CAMPAIGN.
+              'Transactional mail is not paced by this.'}
+            {sendCeiling.paced ? null : (
+              // The operator kill switch is off, so nothing is enforcing the
+              // number above. Saying so beats drawing a ceiling a customer
+              // would plan around for no reason.
+              <>
+                {' '}
+                {'Hourly pacing is switched off platform-wide right now, so ' +
+                  'this ceiling is not being enforced.'}
+              </>
+            )}
+          </Typography>
+          {/* The plan sells more than the pace can deliver. Reported rather
+              than repaired: the hourly ceiling DEFERS a campaign, it does not
+              refuse it, so the allowance is real — it just cannot all be spent
+              in one month at this pace. A customer on an unlimited plan is
+              entitled to know that before they plan around it. */}
+          {planExceedsDeliverableMonthly(
+            entitlements.emailSendsPerMonth,
+            sendCeiling.deliverableMonthly,
+          ) ? (
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ display: 'block', mt: -1.5, mb: 2 }}
+            >
+              {`Your plan includes more campaign email a month than this pace ` +
+                `can deliver — at most ` +
+                `${sendCeiling.deliverableMonthly.toLocaleString()} can ` +
+                'actually leave this organization in a month. Campaigns past ' +
+                'the hourly ceiling are deferred to the next hour, not ' +
+                'refused.'}
+            </Typography>
+          ) : null}
+        </>
+      ) : null}
       {hosts.map((host) => (
         <HostUsageMeters
           key={host.$id}

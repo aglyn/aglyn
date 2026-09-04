@@ -60,7 +60,7 @@ const securitySchema: FormSchema = {
  * Password, passkeys and recent sign-ins (AGL-662, AGL-2318).
  *
  * The Security section of Manage Account, its own component since the sections
- * became routes (AGL-693). The password form appears only when there is a
+ * became routes (AGL-2501). The password form appears only when there is a
  * password to change — `updatePassword` throws on an account that signs in
  * some other way — while passkeys and the sign-in history apply to every
  * project-pool account. Which accounts reach this at all is

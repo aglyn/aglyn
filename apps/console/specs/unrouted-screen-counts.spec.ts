@@ -147,6 +147,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     }),
   },
   getOrgForHost: async () => ({ org: state.org }),
+  // The route writes the site's own audit entry for a create (AGL-118). The
+  // real one swallows its own failures and resolves with nothing, and the
+  // route does not branch on it, so a no-op IS the contract rather than a
+  // convenience. Named explicitly because this factory is a closed world: an
+  // absent export is `undefined`, the route throws on the success path, and
+  // the resulting 500 reads exactly like the cap under test regressing.
+  logHostActivity: async () => undefined,
   isImpersonationSession: () => false,
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),
@@ -161,6 +168,11 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // this suite pass against a route enforcing nothing, which is precisely the
   // outcome it exists to refuse.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),
+  // The REAL node codec (AGL-1151). The route under test compresses any
+  // `nodes` it writes, and this factory is a CLOSED WORLD — an absent export
+  // throws inside the route and its own catch answers 500, which reads
+  // exactly like the behaviour under test regressing.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/stored-nodes'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/screen-route'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/actions'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/organizations'),

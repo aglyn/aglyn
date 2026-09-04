@@ -87,6 +87,26 @@ jest.mock('@aglyn/aglyn', () => {
 })
 
 /**
+ * The SHARED working draft's document, stood in for so the payload can be
+ * read back. Both directions are needed: what a save writes, and what the
+ * next load is handed — the defect this covers lives in the disagreement
+ * between the two.
+ */
+const mockWriteServerDraft = jest.fn(
+  async (..._args: unknown[]) => 'written' as const,
+)
+const mockReadServerDraft = jest.fn(
+  async (..._args: unknown[]) => null as unknown,
+)
+const mockClearServerDraft = jest.fn(async (..._args: unknown[]) => undefined)
+
+jest.mock('../drafts/besigner-server-draft', () => ({
+  writeServerDraft: (...args: unknown[]) => mockWriteServerDraft(...args),
+  readServerDraft: (...args: unknown[]) => mockReadServerDraft(...args),
+  clearServerDraft: (...args: unknown[]) => mockClearServerDraft(...args),
+}))
+
+/**
  * These cover the two behaviours that were copy-pasted into all four console
  * besigner routes and never had a test anywhere: refusing to overwrite a
  * concurrent editor (AGL-674) and refusing to save an oversized node map
@@ -1119,6 +1139,85 @@ describe('useBesignerDocument', () => {
     it('reports no offer when there is no draft on disk', () => {
       const { result } = setup({ draft: DRAFT })
       expect(result.current.draft.available).toBe(false)
+    })
+
+    /**
+     * The SHARED working draft — `Save draft` — and the one field it cannot
+     * be trusted to an editor with.
+     *
+     * A recovered draft is measured against `storedStamp`, which is the
+     * `updatedAt` this hook is given: the VERSION document. Every console
+     * editor stamped the draft it wrote from its PARENT document instead
+     * (`components/{id}` rather than `components/{id}/versions/{v}`), and
+     * two documents' `updatedAt` fields agree only by coincidence. So every
+     * working draft came back reading "someone else saved this while you
+     * were editing" on a document nobody had touched in days — Restore was
+     * never offered, saving was announced as paused when it was not, and the
+     * draft could not be recovered by anyone.
+     */
+    describe('the shared working draft', () => {
+      const firestore = {} as never
+
+      beforeEach(() => {
+        mockWriteServerDraft.mockClear()
+        mockReadServerDraft.mockClear()
+        mockReadServerDraft.mockResolvedValue(null)
+        mockCanvas.didSetInitial = true
+      })
+
+      it('stamps it against the document the restore check compares to', async () => {
+        const { result } = setup({
+          draft: DRAFT,
+          firestore,
+          updatedAt: stamp(7),
+        })
+
+        await act(async () => {
+          await result.current.saveWorkingDraft({
+            uid: 'user-1',
+            email: 'author@example.com',
+          })
+        })
+
+        expect(mockWriteServerDraft).toHaveBeenCalledWith(
+          firestore,
+          DRAFT,
+          expect.objectContaining({
+            // `versionStamp(stamp(7))`, i.e. the document THIS hook guards.
+            baseStamp: 'ms:7',
+            updatedByUid: 'user-1',
+            updatedByEmail: 'author@example.com',
+          }),
+        )
+      })
+
+      it('offers back the draft it saved, on a document nobody has touched since', async () => {
+        const first = setup({ draft: DRAFT, firestore, updatedAt: stamp(7) })
+        await act(async () => {
+          await first.result.current.saveWorkingDraft()
+        })
+        const written = mockWriteServerDraft.mock.calls[0]?.[2] as {
+          nodes: unknown
+          baseStamp: string | null
+        }
+        first.unmount()
+
+        // A later session opening the same, unchanged document — which is
+        // the only way a working draft is ever of use to anybody.
+        mockReadServerDraft.mockResolvedValue({
+          nodes: written.nodes,
+          baseStamp: written.baseStamp,
+          updatedByUid: null,
+          updatedByEmail: null,
+        })
+        const second = setup({ draft: DRAFT, firestore, updatedAt: stamp(7) })
+        await act(async () => {
+          await Promise.resolve()
+        })
+
+        expect(second.result.current.draft.available).toBe(true)
+        expect(second.result.current.draft.restoreBlockedBy).toBeNull()
+      })
     })
   })
 })

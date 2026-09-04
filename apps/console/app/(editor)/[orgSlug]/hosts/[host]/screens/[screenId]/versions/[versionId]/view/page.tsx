@@ -17,11 +17,15 @@
 'use client'
 
 import {
+  CAMPAIGN_MEMBERSHIP_FIELD,
+  campaignMembershipUnchanged,
+  campaignMembershipValue,
   composeScreenRoutePath,
   findScreenIdByRoutePath,
   HostScreenVisibility,
   nameSearchKey,
   normalizeScreenSlug,
+  readCampaignIds,
   reservedScreenRouteMessage,
   reservedScreenRouteSegment,
   screenRoutePathToUrl,
@@ -85,9 +89,11 @@ import { useParams, useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   useFirestore,
+  useHostCampaigns,
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import CampaignPicker from '@aglyn/shared-ui-email-campaigns/components/campaign-picker.component'
 import ScreenAnalyticsCard from '../../../../../../../../../../components/analytics/screen-analytics-card.component'
 import AuthenticatedLayout from '../../../../../../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../../../../../../components/layouts/dashboard.layout'
@@ -455,7 +461,7 @@ function ScreenDetails() {
    * Declared HERE, above the first callback that names it: a `useCallback`
    * dependency array is evaluated during render, so a `const` further down
    * the component is read in its temporal dead zone and throws on the way in
-   * — the same trap AGL-693 hit with `screenQuota` on the screens list.
+   * — the same trap AGL-2501 hit with `screenQuota` on the screens list.
    */
   const { data: user } = useUser()
 
@@ -471,7 +477,7 @@ function ScreenDetails() {
         hostId,
         kind: 'screen',
         id: screenId,
-        idToken: await (user as any)?.getIdToken?.(),
+        user,
       }))()
     const confirmed = await confirm({
       title: 'Delete this screen?',
@@ -796,6 +802,78 @@ function ScreenDetails() {
     },
     [screen, screenRef, enqueueSnackbar, displayName, logActivity, screenId],
   )
+  /*==========================================
+   * WHICH CAMPAIGNS THIS SCREEN IS PART OF.
+   *
+   * A landing page belongs to the push it was built for, and often to the
+   * next one as well — the same page is re-run for the follow-up rather than
+   * copied — so the field is an array and the picker is a multi-select.
+   *
+   * It is an ASSIGNMENT and not a claim about traffic. What a campaign sent
+   * people to is observed from the click reports of its own emails, and that
+   * section goes on saying what it says whatever is picked here; nothing in
+   * this control credits a visit, a conversion or a sale to a campaign.
+   *
+   * The write is guarded by the seed for the reason the rename beside it is:
+   * the value starts from the stored array, so a cached read could hand back
+   * a list that another tab has already added to and the save would drop the
+   * addition. A single scalar the author typed does not have that problem; an
+   * array they edited does.
+   *=========================================*/
+  const siteCampaigns = useHostCampaigns(hostId, { enabled: Boolean(screen) })
+  const storedCampaignIds = useMemo(
+    () => readCampaignIds(screen as Record<string, unknown>),
+    [screen],
+  )
+  const [savingCampaigns, setSavingCampaigns] = useState(false)
+  const handleCampaignsChange = useCallback(
+    async (next: string[]) => {
+      if (campaignMembershipUnchanged(storedCampaignIds, next)) return
+      setSavingCampaigns(true)
+      const verdict = await writeGuardedBySeed(
+        {
+          subject: 'campaigns',
+          unreadable: status === 'error',
+          fromCache: screenFromCache,
+        },
+        async () => {
+          await updateDoc(screenRef, {
+            [CAMPAIGN_MEMBERSHIP_FIELD]: campaignMembershipValue(next),
+            updatedAt: Timestamp.now(),
+          })
+          enqueueSnackbar(
+            next.length
+              ? 'Campaigns updated'
+              : 'This screen is no longer in any campaign',
+            { variant: 'success', persist: false },
+          )
+          logActivity('Changed screen campaigns', {
+            type: 'screen',
+            id: screenId,
+            name: displayName,
+          })
+        },
+      ).catch(() => {
+        enqueueSnackbar('An error has occurred', { variant: 'error' })
+        return { ok: true as const, message: '' }
+      })
+      setSavingCampaigns(false)
+      if (!verdict.ok) {
+        enqueueSnackbar(verdict.message, { variant: 'warning', persist: false })
+      }
+    },
+    [
+      storedCampaignIds,
+      screenRef,
+      status,
+      screenFromCache,
+      enqueueSnackbar,
+      logActivity,
+      screenId,
+      displayName,
+    ],
+  )
+
   const [password, setPassword] = useState('')
   const handlePasswordSave = useCallback(async () => {
     const value = password.trim()
@@ -1407,6 +1485,48 @@ function ScreenDetails() {
                     id={screenId}
                     noun="screen"
                   />
+                ),
+              },
+              {
+                size: CARD_NARROW,
+                children: (
+                  <CardDisplay
+                    header={'Campaigns'}
+                    help={docsHelp('emailCampaigns', {
+                      anchor: '#what-belongs-to-a-campaign',
+                      excerpt:
+                        'A campaign groups the landing pages, forms and ' +
+                        'contacts a push runs across, as well as its emails.',
+                    })}
+                    contentGutterX
+                    contentGutterY
+                    contentBordered="all"
+                  >
+                    <Stack spacing={1.5}>
+                      <CampaignPicker
+                        options={siteCampaigns.options}
+                        value={storedCampaignIds}
+                        onChange={(next) => void handleCampaignsChange(next)}
+                        disabled={savingCampaigns}
+                        helperText="The campaigns this page is part of. It does not change how visits are credited."
+                        empty={
+                          siteCampaigns.ready && !siteCampaigns.options.length
+                        }
+                      />
+                      {/*
+                        Said here because the picker is the place somebody
+                        would expect it to be otherwise. Filing a page under a
+                        campaign groups it; what a campaign is CREDITED with
+                        is read from the links its own emails carried, and
+                        nothing on this card changes that reading.
+                      */}
+                      <Typography variant="caption" color="text.secondary">
+                        {'Assignment only. A campaign’s traffic and revenue ' +
+                          'are credited from the links its emails carried, ' +
+                          'not from this list.'}
+                      </Typography>
+                    </Stack>
+                  </CardDisplay>
                 ),
               },
               {

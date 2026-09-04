@@ -20,6 +20,7 @@ import buildCollectionFallbackNodes from './collection-fallback-nodes'
 import composeScreenNodes, {
   composeNodesWithChrome,
 } from './compose-screen-nodes'
+import { resolveBuiltInPageLayoutId } from './built-in-page-layout'
 import type { CollectionContent } from './get-collection-content'
 import getScreen from './get-screen'
 
@@ -231,17 +232,12 @@ export async function composeCollectionFallbackPage(options: {
   const collection = content.collection
   if (!collection) return null
   try {
-    // Host default layout: screens carry their own layoutId, so the home
-    // screen's shared layout is the closest thing to a site-wide default.
-    const screensMap = (host.screens ?? {}) as Record<string, string>
-    const homeEntry = Object.entries(screensMap).find(
-      ([, path]) => path === Aglyn.SCREEN_ROOT_PATH,
-    )
-    let layoutId: string | undefined
-    if (homeEntry) {
-      const homeRes = await getScreen({ hostId, screenId: homeEntry[0] })
-      layoutId = (homeRes.screen as any)?.layoutId ?? undefined
-    }
+    // The layout for a page the platform composed rather than the author
+    // (AGL-2513). Still the home screen's layout by default — the rule this
+    // branch has always followed — but the host can now name a different one,
+    // and site search reads the same setting so the two built-in pages of a
+    // site cannot end up in different chrome.
+    const layoutId = await resolveBuiltInPageLayoutId({ hostId, host })
     const screenNodes = buildCollectionFallbackNodes({
       collection,
       entries: content.entries,

@@ -34,7 +34,7 @@ import { useOrgScope, useOrgSlug } from '../../../../../hooks/use-org-scope'
 import useOrgPermissions from '../../../../../hooks/use-org-permissions'
 
 /**
- * Organization settings, section by section (AGL-693).
+ * Organization settings, section by section (AGL-2501).
  *
  * The eight sections were `HubTabs` panels on one route, and `HubTabs` mounts
  * every panel it is given — `keepMounted`, with `lazy` off by default and

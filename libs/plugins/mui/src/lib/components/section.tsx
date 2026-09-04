@@ -28,9 +28,12 @@ export const ID: Aglyn.ComponentId = 'section'
 /**
  * W3C sectioning/grouping elements the component may render as (AGL-336).
  *
- * ⛔ `main` IS NOT ONE OF THEM (AGL-2486). The tenant root layout renders the
- * document's single `main` landmark, so an author-selectable `main` here could
- * only ever produce a SECOND one — and two `main` elements is a worse
+ * ⛔ `main` IS NOT ONE OF THEM (AGL-2486). A published page carries exactly
+ * one `main` landmark, placed by composition on the page's content region —
+ * the layout's slot, or the screen root when there is no layout, each of which
+ * offers its own element picker. An author-selectable `main` on a grouping
+ * container that may appear any number of times per page could only ever
+ * produce a SECOND one — and two `main` elements is a worse
  * accessibility outcome than none, because the landmark stops naming anything
  * in particular. It was offered in this select, with field help recommending
  * it, which made the duplicate the documented choice rather than a mistake.
@@ -95,7 +98,7 @@ export const schema: Aglyn.ComponentSchema<SectionProps> = {
   attributes: [
     {
       name: 'element',
-      label: 'HTML element',
+      label: 'Component',
       description:
         'The DOM element this section renders as, per W3C semantics. ' +
         'Use section/article/aside/nav/header/footer for meaningful ' +

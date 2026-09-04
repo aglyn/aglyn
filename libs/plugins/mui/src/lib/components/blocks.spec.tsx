@@ -24,7 +24,6 @@ import {
 } from './blocks'
 import { schema as button } from './button'
 import { schema as container } from './container'
-import { formFieldSchema, formSchema } from './form'
 import { schema as icon } from './icon'
 import { schema as image } from './image'
 import { schema as screenLink } from './screen-link'
@@ -39,8 +38,6 @@ const REGISTERED_COMPONENT_IDS = new Set(
     appBar,
     button,
     container,
-    formSchema,
-    formFieldSchema,
     icon,
     image,
     screenLink,
@@ -83,7 +80,6 @@ describe('mui block presets', () => {
       'Feature Grid',
       'Image + Text',
       'Call to Action',
-      'Contact Section',
       'Footer',
     ]) {
       expect(names).toContain(expected)
@@ -130,28 +126,12 @@ describe('mui block presets', () => {
   it('honors parent placement constraints inside every subtree', () => {
     for (const preset of blockPresets) {
       walk(preset.data as PresetNode, (node, parent) => {
-        // muiToolbar is LIMIT_TO muiAppBar; formField belongs to form.
+        // muiToolbar is LIMIT_TO muiAppBar.
         if (node.componentId === toolbar.$id) {
           expect(parent?.componentId).toBe(appBar.$id)
         }
-        if (node.componentId === formFieldSchema.$id) {
-          expect(parent?.componentId).toBe(formSchema.$id)
-        }
       })
     }
-  })
-
-  it('gives the contact section the starter-template field set', () => {
-    const contact = blockPresets.find(
-      (preset) => preset.displayName === 'Contact Section',
-    )
-    const fieldNames: string[] = []
-    walk(contact?.data as PresetNode, (node) => {
-      if (node.componentId === formFieldSchema.$id) {
-        fieldNames.push((node as any).props?.fieldName)
-      }
-    })
-    expect(fieldNames).toEqual(['name', 'email', 'message'])
   })
 
   /**
@@ -185,19 +165,59 @@ describe('mui block presets', () => {
     // Spelled as the longhands the Styles panel's Padding control is named
     // for (AGL-2207): with `py`/`px` the hero's band padding rendered and
     // the control read empty, and clearing it did nothing.
+    // The BAND keeps the page padding; alignment and spacing moved inside
+    // the Container with the content they arrange (AGL-2544).
     const heroSx = {
       paddingTop: 10,
       paddingBottom: 10,
       paddingLeft: 4,
       paddingRight: 4,
-      alignItems: 'center',
     }
     expect(inserted.sx).toEqual(heroSx)
-    expect(inserted.props).toEqual({ spacing: 2 })
     // …and it survives the save boundary, which omits an empty sx.
     const saved = (canvas.toJSON().nodes as Record<string, any>)[inserted.$id]
     expect(saved.sx).toEqual(heroSx)
     expect(saved.props?.sx).toBeUndefined()
+  })
+
+  it('holds every section block to a container, not the viewport (AGL-2544)', () => {
+    /*
+      The defect these presets shipped with: `ADD ELEMENT` dropped a bare
+      Stack straight into `Document`, so a Feature Grid ran the full 1568px
+      while the page's prose sat at 900px, and the FAQ — which had a
+      `maxWidth` but no auto margins — rendered hard against the left edge.
+      That was the documented happy path on a fresh screen, with no misuse.
+
+      Asserting the CONTAINER rather than a measured width, because the
+      width is the container's business and will change; what must not
+      regress is that a section block brings one at all.
+    */
+    for (const name of ['Hero', 'Feature Grid', 'FAQ', 'Call to Action']) {
+      const preset = blockPresets.find((p) => p.displayName === name)
+      expect(preset).toBeTruthy()
+      const band = preset!.data as PresetNode
+      const container = (band.nodes ?? [])[0] as PresetNode
+      expect(container?.componentId).toBe('muiContainer')
+      expect((container as any)?.props?.maxWidth).toBeTruthy()
+      // The band itself must NOT be the constrained thing: a CTA's accent
+      // band and a hero's background are full-bleed on purpose, and
+      // wrapping the outer node would have bought the width by losing that.
+      expect((band as any).sx?.maxWidth).toBeUndefined()
+    }
+  })
+
+  it('keeps a row block a row after the container is inserted (AGL-2544)', () => {
+    // Dropping a Container between a `direction: row` Stack and its columns
+    // would leave the Container as the single flex child, and three side-by-
+    // side features would stack vertically. The direction has to travel
+    // inward with them.
+    const grid = blockPresets.find((p) => p.displayName === 'Feature Grid')
+    const container = ((grid!.data as PresetNode).nodes ?? [])[0] as PresetNode
+    const row = (container.nodes ?? [])[0] as PresetNode
+    expect((row as any).props?.direction).toBe('row')
+    expect((row as any).sx?.flexWrap).toBe('wrap')
+    expect((row.nodes ?? []).length).toBe(3)
+    expect((grid!.data as any).props?.direction).toBeUndefined()
   })
 
   it('never authors a props.sx anywhere in a subtree (AGL-1346)', () => {

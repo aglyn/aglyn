@@ -104,8 +104,9 @@ export const ALLOWED_AUTHOR_HTML_ELEMENTS: ReadonlySet<string> = new Set([
   'dd', 'del', 'details', 'dfn', 'div', 'dl', 'dt', 'em', 'figcaption',
   'figure', 'footer', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'header', 'hgroup',
   // `main` is a deliberate subtraction from the DOMPurify profile (AGL-2486):
-  // the tenant root layout renders the document's one `main` landmark, so
-  // author markup carrying another can only make the landmark ambiguous. It is
+  // a published page carries exactly one `main` landmark, placed by
+  // composition on the page's content region, so author markup carrying
+  // another can only make the landmark ambiguous. It is
   // UNWRAPPED like any other unlisted tag, not dropped, so the author's content
   // survives verbatim and only the competing landmark goes.
   'hr', 'i', 'img', 'ins', 'kbd', 'li', 'mark', 'nav', 'ol', 'p',

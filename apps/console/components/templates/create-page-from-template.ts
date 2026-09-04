@@ -169,7 +169,25 @@ export async function createPageFromTemplate(
     versionLabel = 'Initial version',
   } = input
 
-  const resolved = resolveNamedTokens(nodes as any, placeholderValues ?? null)
+  /*
+   * BOTH STORED FORMS (AGL-1151).
+   *
+   * Decoded HERE rather than at each caller, because the callers are the
+   * problem: two of them hand this the `nodes` off a template document read
+   * through a collection query, which has no converter, so the value arrives
+   * exactly as stored — msgpack for anything written since templates were
+   * compressed, a plain map for everything older. A third passes a tree it
+   * built in memory, and `decodeStoredNodes` returns that unchanged too.
+   *
+   * The failure it prevents is silent: `resolveNamedTokens` over a `Bytes`
+   * matches no tokens and hands it straight back, so the page is created,
+   * the route is published, and the author is looking at a blank screen with
+   * no indication that anything went wrong.
+   */
+  const resolved = resolveNamedTokens(
+    (Aglyn.decodeStoredNodes<Record<string, unknown>>(nodes) ?? {}) as any,
+    placeholderValues ?? null,
+  )
   const { slug, requestedSlug } = resolveTemplateSlug({
     slug: input.slug,
     displayName,
@@ -206,6 +224,11 @@ export async function createPageFromTemplate(
     },
   })
   await publishScreenRoute(firestore, { hostId, screenId }, slug)
+  // No activity append here. `createHostResource` above is
+  // /api/hosts/resources, which records the create server-side from a
+  // verified uid (AGL-118) — so this path logs whether or not its caller
+  // remembers to, which is the property that was missing when three template
+  // surfaces created pages and wrote nothing.
 
   return { screenId, slug, requestedSlug }
 }

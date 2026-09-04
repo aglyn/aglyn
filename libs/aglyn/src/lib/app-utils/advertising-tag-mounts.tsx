@@ -181,7 +181,14 @@ export default function AdvertisingTagMounts({
               id={`ad-tag-${vendor.id}-src`}
               strategy="afterInteractive"
               {...{ [ADVERTISING_TAG_ATTRIBUTE]: vendor.id }}
-              src={vendor.scriptSrc}
+              // `scriptSrcFor` where the vendor has one: gtag reads the
+              // container out of the loader's query, so the copy we bring
+              // ourselves has to name the account. See `scriptSrcFor`.
+              src={
+                vendor.scriptSrcFor
+                  ? vendor.scriptSrcFor(accountId)
+                  : vendor.scriptSrc
+              }
             />
           )}
         </Fragment>

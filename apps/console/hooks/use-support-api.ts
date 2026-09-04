@@ -86,7 +86,7 @@ export function useSupportApi(): SupportApi {
     (path: string, method: string, body?: Record<string, unknown>) =>
       supportRequest(
         {
-          getIdToken: () => (user as any)?.getIdToken?.(),
+          user,
           orgId,
           onError: (message) =>
             enqueueSnackbar(message, { variant: 'warning', persist: false }),

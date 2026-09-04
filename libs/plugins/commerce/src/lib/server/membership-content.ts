@@ -17,6 +17,7 @@
 
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import composeScreenNodes from '@aglyn/tenant-runtime/compose-screen-nodes'
+import { enrichGatedScreenPage } from '@aglyn/tenant-runtime/enrich-gated-page'
 import getScreen from '@aglyn/tenant-runtime/get-screen'
 import { hostHasContentGating } from './gate'
 import { requireActiveMember } from './membership'
@@ -57,7 +58,17 @@ export const membershipContentHandler: PluginApiHandler = async (req, res) => {
       screen: screenRes.screen,
     })
     if (!nodes) return res.status(404).json({ error: 'No published version' })
-    return res.status(200).json({ nodes })
+    // The page's behavior travels with its nodes (AGL-2510). The loader ships
+    // `nodes: null` for a members-only screen, so its enricher slice — the
+    // interactions the shared layout's nav opens on, above all — has nowhere
+    // else to arrive from, and the member saw a nav that did not open.
+    const enriched = await enrichGatedScreenPage({
+      hostId,
+      screenId,
+      screen: screenRes.screen,
+      nodes,
+    })
+    return res.status(200).json({ nodes, ...enriched })
   } catch (error) {
     console.error(error)
     return res.status(500).json({ error: 'Content fetch failed' })

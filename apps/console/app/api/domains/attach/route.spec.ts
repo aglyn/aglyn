@@ -185,6 +185,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),
   getOrgForHost: async () => ({ org: { plan: 'starter' } }),
+  // The route writes the site's audit entry at its single terminal success
+  // (AGL-118). The real one swallows its own failures and resolves with
+  // nothing, and the route does not branch on it, so a no-op IS the contract.
+  // Named explicitly because this factory is a closed world: an absent export
+  // is `undefined`, the route throws past every assertion below, and its own
+  // catch answers 500 — which reads exactly like the attach regressing.
+  logHostActivity: async () => undefined,
   lockdownRefusal: async () => null,
   projectDomainStatus: (...args: unknown[]) => mockProjectDomainStatus(...args),
 }))

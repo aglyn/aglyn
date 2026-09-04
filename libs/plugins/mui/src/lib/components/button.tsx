@@ -27,10 +27,16 @@ import {
   FIELD_COLOR,
   FIELD_DISABLED,
   FIELD_FULL_WIDTH,
+  FIELD_LINK_TARGET,
+  FIELD_LINK_TARGET_NAME,
   FIELD_SIZE,
   FIELD_TEXT_CONTENT,
 } from '../constants/field-presets'
 import { generatePresetId } from '../utils/generate-preset-id'
+import {
+  type LinkTargetChoice,
+  linkTargetProps,
+} from '../utils/link-target-props'
 
 // Component ids are persisted in screen documents; keep the legacy ids.
 export const ID: Aglyn.ComponentId = 'muiButton'
@@ -61,6 +67,15 @@ export interface LinkableButtonProps extends ButtonProps {
    * job, and this component's whole purpose is the button styling.
    */
   renderAs?: 'button' | 'linkButton'
+  /**
+   * Where LINK MODE opens. Persisted in screen documents; never rename a
+   * value, and `undefined` must keep meaning `'_self'`. Inert on a button
+   * with nothing to point at — that is a real `<button>`, which has no
+   * browsing context to choose.
+   */
+  target?: LinkTargetChoice
+  /** Window name used only when `target` is `'custom'`. */
+  targetName?: string
 }
 
 /**
@@ -118,6 +133,8 @@ const LinkableButton = forwardRef<any, LinkableButtonProps>((props, ref) => {
     startIconPath,
     endIconPath,
     renderAs,
+    target,
+    targetName,
     ...spread
   } = props
   // A CLEARED attribute persists as null, and null is not "use the default"
@@ -128,10 +145,15 @@ const LinkableButton = forwardRef<any, LinkableButtonProps>((props, ref) => {
     startIcon: iconFromId(startIconId, startIconPath),
     endIcon: iconFromId(endIconId, endIconPath),
   }
-  const { href, suppressNavigation } = Aglyn.useLinkTarget(
+  const { href, suppressNavigation, leavesSite } = Aglyn.useLinkTarget(
     screenId,
     externalHref,
   )
+  // Resolved rather than spread: `'custom'` is an authoring sentinel, and an
+  // anchor carrying `target="custom"` would open a window literally named
+  // that. The pair is destructured OUT of `spread` above, so the plain-button
+  // and suppressed branches below never stamp it on a `<button>`.
+  const targetAttrs = linkTargetProps(target, targetName, leavesSite)
   // Semantics and appearance are independent choices now (AGL-1426): a
   // styled link takes the button's styling props and none of its role.
   const asStyledLink = renderAs === 'linkButton'
@@ -155,6 +177,7 @@ const LinkableButton = forwardRef<any, LinkableButtonProps>((props, ref) => {
       ref={ref}
       componentVariant="button"
       href={href}
+      {...targetAttrs}
       // The whole defect in one attribute. `ButtonBase` adds `role="button"`
       // to every non-`<button>` root, so the button LOOK used to drag the
       // button ROLE onto a navigating anchor. It spreads the caller's props
@@ -191,7 +214,10 @@ export const schema: Aglyn.ComponentSchema<LinkableButtonProps> = {
     FIELD_SIZE,
     {
       name: 'variant',
-      description: 'The variant to use.',
+      description:
+        'How much weight the button carries: Contained is a filled primary ' +
+        'action, Outlined a secondary one, Text the lightest. One contained ' +
+        'button per view is a good rule.',
       component: Aglyn.FieldComponentType.SELECT,
       label: 'Variant',
       // "Default" deleted (AGL-1453): it could not persist, and `text` — the
@@ -212,10 +238,16 @@ export const schema: Aglyn.ComponentSchema<LinkableButtonProps> = {
     },
     {
       name: 'href',
-      description: 'External URL used only when no screen is selected.',
+      description:
+        'Where the button goes when it points off this site. Ignored while ' +
+        'Link to screen names one — that field wins, so clear it to use a ' +
+        'URL. Absolute (https://…) for another site, or a path for one of ' +
+        'your own routes.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'External URL',
     },
+    FIELD_LINK_TARGET,
+    FIELD_LINK_TARGET_NAME,
     {
       name: 'renderAs',
       description:

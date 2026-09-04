@@ -53,6 +53,7 @@ import {
   usePagedCollection,
   useUser,
 } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 import { checkHostCollaboratorSeatQuota } from '../constants/entitlements'
 import { buildRoute, Route } from '../constants/route-links'
@@ -61,7 +62,6 @@ import { useOrgSlug } from '../hooks/use-org-scope'
 import useCurrentOrg from '../hooks/use-current-org'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
-import useHostActivityLogger from '../hooks/use-host-activity-logger'
 import useOrgPermissions from '../hooks/use-org-permissions'
 
 /**
@@ -109,7 +109,6 @@ export function HostMembersCard(props: HostMembersCardProps) {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const { org, ready: orgReady } = useCurrentOrg()
-  const logActivity = useHostActivityLogger(hostId)
   const { permissions } = useOrgPermissions()
   const canManage = permissions.manageMembers
   const [email, setEmail] = useState('')
@@ -122,7 +121,7 @@ export function HostMembersCard(props: HostMembersCardProps) {
     { idField: '$id' },
   )
   /*
-   * Paging (AGL-1124), now the console's shared one (AGL-693). This used to
+   * Paging (AGL-1124), now the console's shared one (AGL-2501). This used to
    * be a bare `limit(100)` with nothing saying so, which is the worst of
    * both: a site with 120 collaborators showed 100 and looked complete. Then
    * it grew a page at a time behind a "Load more", which is a third control
@@ -317,13 +316,9 @@ export function HostMembersCard(props: HostMembersCardProps) {
     async (method: string, body: Record<string, unknown>) => {
       setBusy(true)
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/hosts/members', {
+        const response = await authorizedFetch(user, '/api/hosts/members', {
           method,
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ hostId, ...body }),
         })
         const payload = await response.json().catch(() => ({}))
@@ -363,9 +358,8 @@ export function HostMembersCard(props: HostMembersCardProps) {
         : `Added ${value}`,
       { variant: 'success', persist: false },
     )
-    logActivity('Added member', { type: 'member', name: value })
     setEmail('')
-  }, [email, role, request, enqueueSnackbar, logActivity])
+  }, [email, role, request, enqueueSnackbar])
 
   const handleRoleChange = useCallback(
     (member: any) => async (event: { target: { value: string } }) => {
@@ -378,12 +372,8 @@ export function HostMembersCard(props: HostMembersCardProps) {
         variant: 'success',
         persist: false,
       })
-      logActivity('Changed member site access', {
-        type: 'member',
-        name: member.email,
-      })
     },
-    [request, enqueueSnackbar, logActivity],
+    [request, enqueueSnackbar],
   )
 
   const handleRemove = useCallback(
@@ -400,9 +390,8 @@ export function HostMembersCard(props: HostMembersCardProps) {
       const payload = await request('DELETE', { memberId: member.$id })
       if (!payload) return
       enqueueSnackbar('Member removed', { variant: 'success', persist: false })
-      logActivity('Removed member', { type: 'member', name: member.email })
     },
-    [confirm, request, enqueueSnackbar, logActivity],
+    [confirm, request, enqueueSnackbar],
   )
 
   return (

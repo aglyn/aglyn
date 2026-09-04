@@ -81,6 +81,18 @@ export interface StaffUserEraseBlocker {
   otherMembers: number
 }
 
+/**
+ * An address a second account also holds, as the route hands it back.
+ *
+ * No address and no other uid, by design on the server — see
+ * `SharedAddressBlocker`. The operator identifies which address it is from
+ * the Email delivery card on this same page, which marks the shared ones.
+ */
+export interface StaffUserSharedAddress {
+  key: string
+  sources: string[]
+}
+
 export interface StaffUserEraseCardProps {
   /** The account being erased. */
   uid: string
@@ -109,6 +121,9 @@ export function StaffUserEraseCard({
   const [confirm, setConfirm] = useState('')
   const [busy, setBusy] = useState(false)
   const [blockers, setBlockers] = useState<StaffUserEraseBlocker[] | null>(null)
+  const [sharedAddresses, setSharedAddresses] = useState<
+    StaffUserSharedAddress[] | null
+  >(null)
   const [erased, setErased] = useState(false)
 
   const reset = useCallback(() => {
@@ -116,11 +131,13 @@ export function StaffUserEraseCard({
     setReason('')
     setConfirm('')
     setBlockers(null)
+    setSharedAddresses(null)
   }, [])
 
   const erase = useCallback(async () => {
     setBusy(true)
     setBlockers(null)
+    setSharedAddresses(null)
     try {
       await onErase(reason.trim())
       setErased(true)
@@ -138,9 +155,18 @@ export function StaffUserEraseCard({
         message?: string
         skippedReason?: string
         blockers?: StaffUserEraseBlocker[]
+        sharedAddresses?: StaffUserSharedAddress[]
       }
       if (detail?.skippedReason === 'owns-orgs') {
         setBlockers(detail.blockers ?? [])
+        return
+      }
+      // Same shape, different question. `shared-address` is the one refusal
+      // an operator cannot clear by deleting something: it asks whether two
+      // account records are one person, which is a judgement about customers
+      // and the reason the server refuses to guess.
+      if (detail?.skippedReason === 'shared-address') {
+        setSharedAddresses(detail.sharedAddresses ?? [])
         return
       }
       enqueueSnackbar(detail?.message ?? 'Erasing the account failed', {
@@ -288,6 +314,44 @@ export function StaffUserEraseCard({
                     </ListItem>
                   ))}
                 </List>
+              </Alert>
+            )}
+
+            {sharedAddresses !== null && (
+              <Alert severity="warning">
+                <AlertTitle>
+                  {sharedAddresses.length === 1
+                    ? 'Another account holds one of their addresses'
+                    : `Another account holds ${sharedAddresses.length} of their addresses`}
+                </AlertTitle>
+                <Typography variant="body2">
+                  {'Nothing was erased. Their delivery log is filed under the ' +
+                    'address, so erasing it would delete the other account’s ' +
+                    'mail history for an address they also hold. Whether the ' +
+                    'two accounts are one person or a shared mailbox is not ' +
+                    'something we can read from the data.'}
+                </Typography>
+                <List dense disablePadding>
+                  {sharedAddresses.map((entry) => (
+                    <ListItem key={entry.key} disableGutters>
+                      <ListItemText
+                        primary={
+                          entry.sources.includes('primary')
+                            ? 'Their sign-in address'
+                            : entry.sources.includes('provider')
+                              ? 'An address from a linked sign-in provider'
+                              : 'A saved or former address'
+                        }
+                        secondary="Marked Shared on the Email delivery card above."
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+                <Typography variant="body2" sx={{ mt: 1 }}>
+                  {'Decide whether the accounts are the same person, then ' +
+                    'either merge them or remove the address from this one, ' +
+                    'and run this again.'}
+                </Typography>
               </Alert>
             )}
 

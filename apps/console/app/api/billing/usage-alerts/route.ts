@@ -754,8 +754,14 @@ async function handler(request: Request): Promise<Response> {
       // Frozen once per org, and used by BOTH channels. Billing is org-scoped
       // now (AGL-621/644); links are frozen at write time, so emit canonical
       // and let the reader repair the legacy ones.
+      //
+      // The USAGE section, not the billing landing (AGL-2501). This alert is
+      // about consumption crossing a threshold, and the meters, the history,
+      // the storage cap and the budget that produced it all live there. The
+      // landing shows plans, which is not what the reader clicked through to
+      // check.
       const billingLink = (org.get('slug') as string | undefined)
-        ? buildRoute(Route.MANAGE_BILLING, {
+        ? buildRoute(Route.MANAGE_BILLING_USAGE, {
             orgSlug: org.get('slug') as string,
           })
         : '/org/billing'

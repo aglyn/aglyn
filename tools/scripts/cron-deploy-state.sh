@@ -62,8 +62,14 @@ set -euo pipefail
 # console's `/api/[...pluginApi]` catch-all — and it returns 200 in production
 # today. Resolving it by convention would report a working cron as not yet
 # deployed and quietly stop calling it: the same silent-inertness bug that
-# AGL-2134 fixed, reintroduced by its own guard. Every entry here is asserted
-# to exist by apps/console/specs/scheduled-crons-wiring.spec.ts.
+# AGL-2134 fixed, reintroduced by its own guard.
+#
+# So every PLUGIN-SERVED cron route needs an arm of its own. A missing arm is
+# not a loud failure: convention resolves it to an `apps/console/app/…` path
+# that exists on no ref, the script answers `unknown`, and the one question it
+# was built to settle silently stops being answerable for that route. Every
+# entry here — and the completeness of this list against BOTH runners — is
+# asserted by apps/console/specs/scheduled-crons-wiring.spec.ts.
 # ---------------------------------------------------------------------------
 route_impl() {
   # A route may carry a query string (`?month=current`, AGL-2219); the file on
@@ -72,6 +78,9 @@ route_impl() {
   case "$bare" in
     /api/campaigns/process-scheduled)
       printf '%s' 'libs/plugins/marketing/src/lib/server/campaign-process-scheduled.ts'
+      ;;
+    /api/lists/materialize)
+      printf '%s' 'libs/plugins/marketing/src/lib/server/lists-materialize.ts'
       ;;
     /api/*)
       printf 'apps/console/app%s/route.ts' "$bare"

@@ -919,6 +919,42 @@ export const GA_CONSENT_DEFAULT_WITH_ADS_SNIPPET = `gtag('consent', 'default', $
 )});`
 
 /**
+ * Consent-mode URL passthrough for the platform's own tag (AGL-2548).
+ *
+ * The advertising signals in {@link GA_CONSENT_DEFAULT_SNIPPET} are denied, so
+ * on `aglyn.com` gtag writes no `_gcl_aw` cookie and the `gclid` an ad click
+ * arrives with lives only in that first URL. The conversions it should be
+ * credited for fire one hop later, on the console, where the posture grants
+ * advertising storage outside the prior-consent regions — and without this
+ * declaration the click id never makes that hop. The console reports a
+ * conversion with no click behind it, and Google Ads counts nothing.
+ *
+ * `url_passthrough` is Google's mechanism for exactly this state: while
+ * `ad_storage` is denied, gtag appends the click identifiers to links into the
+ * cross-domain-linked hosts as URL parameters instead of setting a cookie. The
+ * receiving tag reads them under its own consent state. Nothing is stored on
+ * the denying surface, so the marketing site's opt-in advertising posture is
+ * unchanged; the click id simply survives the link it was always meant to
+ * survive.
+ *
+ * `ads_data_redaction` is the companion Google documents alongside it: with
+ * `ad_storage` denied, the ad click identifiers are stripped from the hits this
+ * tag sends and its network requests go to a cookieless endpoint. Declared
+ * together so a denied visitor is measured with less, not merely differently.
+ *
+ * Both are `set` calls, so they must precede `gtag('config', …)` in the same
+ * inline block — a `set` applies to hits processed after it, and the session's
+ * first pageview is the one carrying the click.
+ *
+ * PLATFORM ID ONLY. A customer's tag is configured with their id and their
+ * consent posture; how their ad click ids travel is theirs to decide, and a
+ * passthrough declared on their behalf would rewrite links on their site.
+ */
+export const GA_CLICK_ID_PASSTHROUGH_SNIPPET =
+  "gtag('set', 'url_passthrough', true);" +
+  "gtag('set', 'ads_data_redaction', true);"
+
+/**
  * The measurement ids whose tag is actually RESIDENT in this page.
  *
  * Discovered from the page rather than taken from the host document on

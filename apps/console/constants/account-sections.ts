@@ -25,7 +25,7 @@ export interface AccountSection {
 }
 
 /**
- * Manage Account's sections, in rail order (AGL-693).
+ * Manage Account's sections, in rail order (AGL-2501).
  *
  * One list, read by the callers that must agree: the sections layout draws
  * the rail from it, and the spec that guards the security-alert link checks

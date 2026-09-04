@@ -335,7 +335,7 @@ const panelTabs: Partial<Record<BesignerPanelKey, any>> = {
         },
       },
       /*
-       * Interactions, between Styles and where Info used to be (AGL-1486).
+       * Interactions, between Styles and where Info used to be.
        *
        * They lived at the bottom of Attributes, under every field the
        * component declares — below the fold on anything with more than a

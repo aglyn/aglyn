@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { checkEntitlement, createResourceUid } from '@aglyn/aglyn/server'
+import {
+  checkEntitlement,
+  createResourceUid,
+  decodeStoredNodes,
+} from '@aglyn/aglyn/server'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
@@ -102,7 +106,7 @@ export const publishEmailTemplateHandler: PluginApiHandler = async (
     }
     const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
     if (memberRole !== 'admin' && memberRole !== 'editor') {
-      return res.status(403).json({ error: 'Not a site admin' })
+      return res.status(403).json({ error: 'Not a site admin or editor' })
     }
 
     const orgForHost = await getOrgForHost(hostId)
@@ -138,12 +142,16 @@ export const publishEmailTemplateHandler: PluginApiHandler = async (
       .collection('versions')
       .doc(String(activeVersionId))
       .get()
-    // Raw on purpose, unlike the screen and layout publish paths (AGL-1395):
-    // the email besigner saves through `saveNodesGuarded` on a converter-less
-    // `doc()` ref, so email template versions are plain maps in both the staff
-    // and host collections — the same conclusion AGL-1223 reached for the two
-    // email RENDER sites. Nothing to decode here.
-    const nodes = versionSnapshot.get('nodes') as Record<string, any> | undefined
+    // Decoded, like the screen and layout publish paths (AGL-1395): the email
+    // besigner now compresses through a converter as those do, and versions
+    // written before it did are still plain maps, which come back unchanged.
+    //
+    // `sanitizeMarketplaceDefinition` below would refuse an undecoded tree
+    // rather than publish garbage, so this is the difference between the
+    // feature working and a publish that always says the design is invalid.
+    const nodes = decodeStoredNodes<Record<string, any>>(
+      versionSnapshot.get('nodes'),
+    )
     if (!nodes || !Object.keys(nodes).length) {
       return res.status(404).json({ error: 'This email design is empty' })
     }

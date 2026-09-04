@@ -30,7 +30,7 @@ import {
 import { useTabParam } from '../hooks/use-tab-param'
 
 /**
- * The rail's own shape, shared by BOTH modes below (AGL-693).
+ * The rail's own shape, shared by BOTH modes below (AGL-2501).
  *
  * `HubTabs` and `HubSections` are two ways of choosing a section and one way
  * of DRAWING that choice. Duplicating the card, the orientation switch and the
@@ -203,7 +203,7 @@ export interface HubSectionsProps {
 }
 
 /**
- * The same rail, choosing a section by ROUTE rather than by panel (AGL-693).
+ * The same rail, choosing a section by ROUTE rather than by panel (AGL-2501).
  *
  * ## Why this exists beside `HubTabs`
  *

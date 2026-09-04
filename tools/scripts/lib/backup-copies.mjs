@@ -149,6 +149,13 @@ export const PRODUCTION_DATA_STORES = [
     why: 'Function source, reproducible from git (cloud/functions). Losing it costs a redeploy, not data.',
   },
   {
+    bucket: 'gcf-v2-sources-{projectNumber}-us-east1',
+    holds:
+      'Cloud Functions v2 source archives for the identity blocking function (one object, beforeSignupCreate/function-source.zip)',
+    copiedBy: 'nothing-to-copy',
+    why: "Function source, reproducible from git (cloud/functions) — losing it costs a redeploy, not data, the same standing as the us-central1 source bucket above. It appeared on 2026-09-01 with no commit naming the region because no commit does: `beforeSignupCreate` is a `beforeUserCreated` blocking function, and the platform places blocking functions in us-east1 rather than the deploy's default region. So the region list here does not follow from anything greppable in this repo, and a second region is exactly the shape of bucket this check exists to catch — the label `goog-managed-by: cloudfunctions` and a lone `<function>/function-source.zip` object are what identify one.",
+  },
+  {
     bucket:
       'gcf-v2-uploads-{projectNumber}.us-central1.cloudfunctions.appspot.com',
     holds: 'Cloud Functions v2 upload staging',

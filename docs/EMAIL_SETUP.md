@@ -549,8 +549,77 @@ What matters more than a ramp, and is tracked separately:
   confirmation page, so a Safe Links / Proofpoint prescanner following
   the link no longer unsubscribes the recipient. Still open: no
   `mailto:` fallback in the header, because it needs a monitored
-  inbox (see "Later hardening" below), and nothing outside campaigns
-  carries an unsubscribe at all.
+  inbox (see "Later hardening" below).
+- **Click and open tracking are on for every sending domain.** A provider
+  measures a click by rewriting each `<a href>` in the HTML part to a tracking
+  host on the sending domain; both flags default OFF and tracking engages only
+  once that host is verified, so a domain without one reports a click rate of
+  exactly 0% for ever. `aglyn.com` was turned on by hand; the four shared pool
+  members (`shared{1..4}.mail.aglyn.app`) were left off and carried every
+  tenant campaign, which is where the 0% actually lived. All five now run
+  `click_tracking` and `open_tracking` with a verified `links.` host, and
+  `POST /domains` asks for both at creation so a dedicated subdomain or a
+  customer's own domain cannot be issued without them. `aglyn.app` publishes
+  one root CAA entry for `amazon.com` alongside the three it already had —
+  additive, so Vercel's certificates for tenant sites are untouched — which
+  covers every name in the zone. See `docs/design/email-sending-domains.md`
+  for the record table and why the tracking records never block verification.
+  Two hazards are handled rather than documented-and-hoped: the CAA record is
+  shown ONLY to a domain whose live zone already publishes CAA that would
+  refuse the tracking certificate (`readTrackingCaaNeed`), because handing one
+  to a domain with none would start restricting it; and a tracked domain is
+  held for `AGLYN_SENDING_TRACKING_RETENTION_DAYS` (default 30) before its
+  provider object is released, because deleting it takes the tracking host
+  down and retroactively breaks links in mail already delivered. An erasure
+  bypasses the hold. `/api/admin/email-health?probe=1` reports a pool member
+  whose tracking is off as a `notices` entry rather than a blocker — it
+  delivers fine, it just cannot count.
+- **Topics and a preference center are shipped.** A campaign belongs to a
+  topic (`orgs/{orgId}/emailTopics`, org-shared like `lists`, with four
+  built-in defaults that need no migration), and the topic is signed into the
+  link as `tid`. Two URLs come off that one signature, and which one goes
+  where is the whole compliance story:
+  - `List-Unsubscribe` names `/api/email/unsubscribe`, whose POST writes the
+    whole-site suppression immediately. A mailbox provider POSTs it with no
+    human present, so it must not be a page anybody has to submit — and it
+    stays a FULL unsubscribe, because that is what the button promises.
+  - the footer link names `/api/email/preferences`, the preference center: a
+    checkbox per topic, an "Unsubscribe from everything" button, and a result
+    page with an undo. All three routes keep the safe-GET / mutating-POST
+    split.
+
+  **Every marketing path makes that split, not only campaigns.** The
+  abandoned-cart sweep, the restock notice, the newsletter welcome and each
+  workflow email go out through `sendEmail`'s marketing seam, and
+  `marketingSendVerdict` mints the pair there — `unsubscribeUrl` on the
+  preference page for the footer, `oneClickUrl` on the write-on-POST route
+  for the header — with the sender's topic signed into both. A footer that
+  named the one-click route gave the recipient of one of those exactly one
+  choice: stop hearing from the site entirely.
+
+  The visible footer is on **both parts**. `sendEmail` appends it to the text
+  and the HTML of any gated message that does not already carry the link, and
+  `renderCampaignEmail` does the same for a campaign, which mints its own
+  pair and passes no marketing context. A designed template carries an
+  opt-out only where its author placed a `{{unsubscribeUrl}}`, so before that
+  a design whose footer block said only the copyright line mailed an HTML
+  part with no way out of the list — the half almost every recipient reads.
+  The idempotency check looks for the escaped URL as well, because a renderer
+  putting the link in an `href` writes `&amp;` between its parameters.
+
+  Per-topic opt-outs are recorded at `hosts/{hostId}/topicOptOuts/{emailKey}`
+  — per site, beside the suppression list, keyed on the same derivation — and
+  the send path consults them through `filterTopicSendable` after both
+  suppression lists. An opt-out that is later lifted keeps its record and
+  gains a `resubscribedAt`, the same evidence rule the suppression lists
+  follow. A resubscribe from any of these routes still refuses to clear a
+  bounce or a complaint.
+- D5 of `docs/specs/email-competitive-gaps.md` — the two suppression key
+  derivations — is **closed on the link routes**: they now key through
+  `personKey`, which normalizes and refuses a value that is not an address.
+  `campaign-send.ts`'s `suppressionId` and `email-suppression.ts`'s
+  `emailSuppressionKey` still exist and still agree; the third variant that
+  hashed the raw string is gone.
 - There is no send-rate governor anywhere, so if volume ever does need a ramp
   there is nothing to turn — AGL-2409.
 

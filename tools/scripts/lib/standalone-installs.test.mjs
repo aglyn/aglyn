@@ -163,13 +163,26 @@ describe('the guard is wired, and reads the real tree', () => {
     )
   })
 
-  it('nx-ci.yml installs BOTH standalone packages, and this guard runs there', () => {
+  it('NX CI installs BOTH standalone packages, and this guard runs there', () => {
+    // Two files since AGL-2505: nx-ci.yml became four parallel jobs and the
+    // installs moved into the composite action every job calls. Read both,
+    // for the same reason the guard itself does — the assertion is about what
+    // CI installs, not about which file the step happens to live in today.
     const workflow = readFileSync(
       join(repoRoot, '.github', 'workflows', 'nx-ci.yml'),
       'utf8',
     )
-    assert.equal(hasInstallStep(workflow, 'cloud/functions'), true)
-    assert.equal(hasInstallStep(workflow, 'apps/docs'), true)
+    const setup = readFileSync(
+      join(repoRoot, '.github', 'actions', 'nx-ci-setup', 'action.yml'),
+      'utf8',
+    )
+    const surface = `${workflow}\n${setup}`
+
+    assert.equal(hasInstallStep(surface, 'cloud/functions'), true)
+    assert.equal(hasInstallStep(surface, 'apps/docs'), true)
+
+    // The guard's own two steps stay in the WORKFLOW — they are ordinary
+    // checks in the `checks` job, not part of the shared setup.
     assert.match(workflow, /npm run check:standalone-installs/)
     assert.match(workflow, /npm run test:standalone-installs/)
   })

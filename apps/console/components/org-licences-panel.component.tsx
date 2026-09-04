@@ -33,9 +33,18 @@ import {
   TableHead,
   TableRow,
 } from '@mui/material'
-import { collection, limit, query, where } from 'firebase/firestore'
-import { useMemo } from 'react'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import {
+  collection,
+  documentId,
+  limit,
+  orderBy,
+  query,
+  where,
+} from 'firebase/firestore'
+import { useMemo, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
+import { TABLE_PAGE_SIZE_DEFAULT } from '../constants/shared'
 import { buildRoute, Route } from '../constants/route-links'
 import { useOrgScope } from '../hooks/use-org-scope'
 import EmptyState from './empty-state.component'
@@ -138,7 +147,27 @@ export function OrgLicencesPanel({
    * between renders as licences arrive.
    */
   const { data: listings } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'marketplaceListings'), limit(200)),
+    /*
+     * ORDERED, so the window is a reachable 200 rather than a sample.
+     *
+     * A capped read with no `orderBy` is answered in document-id order
+     * anyway, so naming it changes no row — what it changes is that the
+     * ordering is a decision rather than an accident, and that the obvious
+     * next edit is caught: `orderBy('displayName')` would drop every listing
+     * saved without one out of the map, and a licence whose listing is
+     * missing from the map is a row that names itself by raw id.
+     *
+     * Ordering on the document NAME, which is what a listing id already is
+     * here, keeps the map's keys and the walk in the same space. Past 200
+     * listings a licence still renders — the fallback below prints the
+     * listing id — so the cap degrades the label and never the row.
+     */
+    () =>
+      query(
+        collection(firestore, 'marketplaceListings'),
+        orderBy(documentId()),
+        limit(200),
+      ),
     [firestore],
     { idField: '$id' },
   )
@@ -170,6 +199,36 @@ export function OrgLicencesPanel({
 
   const held = live(orgLicencesRead.data)
   const mine = live(myPurchasesRead.data)
+
+  /*==========================================
+   * BOTH PAGES ARE SLICES, and the counts are TOTALS.
+   *
+   * Neither query is capped: each reads one workspace's purchases or one
+   * person's, whole. So the card holds the entire list it is describing, the
+   * refund filter above has already run over all of it, and `count` is the
+   * collection's real size rather than a window's length — the one case where
+   * a client slice can state a total without qualifying it.
+   *
+   * Server-paging either one would break that. `refundedAt` is filtered after
+   * reading, so a ten-document page arrives holding anywhere from zero to ten
+   * licences, and an agency deciding whether to buy a component again is
+   * exactly the reader who must not be shown a short page as a complete
+   * answer.
+   *=========================================*/
+  const [heldPage, setHeldPage] = useState(0)
+  const [heldPageSize, setHeldPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  const visibleHeld = useMemo(
+    () =>
+      held.slice(heldPage * heldPageSize, heldPage * heldPageSize + heldPageSize),
+    [held, heldPage, heldPageSize],
+  )
+  const [minePage, setMinePage] = useState(0)
+  const [minePageSize, setMinePageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  const visibleMine = useMemo(
+    () =>
+      mine.slice(minePage * minePageSize, minePage * minePageSize + minePageSize),
+    [mine, minePage, minePageSize],
+  )
 
   /**
    * "You own nothing here" is a claim about this workspace's purchases, and a
@@ -234,7 +293,7 @@ export function OrgLicencesPanel({
               </TableRow>
             </TableHead>
             <TableBody>
-              {held.map((row) => (
+              {visibleHeld.map((row) => (
                 <TableRow key={row.$id}>
                   <TableCell>
                     <AppLink
@@ -257,6 +316,17 @@ export function OrgLicencesPanel({
               ))}
             </TableBody>
           </Table>
+          <ListPagination
+            page={heldPage}
+            pageSize={heldPageSize}
+            rowCount={visibleHeld.length}
+            // The workspace's licences, in full: the query is uncapped and
+            // the refund filter has already run, so this is a total rather
+            // than the length of a window.
+            count={held.length}
+            onPageChange={setHeldPage}
+            onPageSizeChange={setHeldPageSize}
+          />
         </CardDisplay>
       )}
 
@@ -294,7 +364,7 @@ export function OrgLicencesPanel({
               </TableRow>
             </TableHead>
             <TableBody>
-              {mine.map((row) => {
+              {visibleMine.map((row) => {
                 const licensedOrg = String(row.buyerOrgId ?? '')
                 return (
                   <TableRow key={row.$id}>
@@ -326,6 +396,16 @@ export function OrgLicencesPanel({
               })}
             </TableBody>
           </Table>
+          <ListPagination
+            page={minePage}
+            pageSize={minePageSize}
+            rowCount={visibleMine.length}
+            // Every purchase this person has made, across every workspace —
+            // the same uncapped read, so the same exact total.
+            count={mine.length}
+            onPageChange={setMinePage}
+            onPageSizeChange={setMinePageSize}
+          />
         </CardDisplay>
       )}
     </Stack>

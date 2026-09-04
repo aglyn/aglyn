@@ -98,13 +98,12 @@ const SWEPT_ROOTS = [
 ]
 
 /**
- * The checkout panel sits outside `components/billing`, so the directory
- * sweep would miss it — and it is the other surface that renders a payment
- * form. Named explicitly rather than by widening the sweep to all of
- * `components/`, which would drag in every unrelated dialog in the console.
+ * The shared Stripe loader sits outside `components/billing`, so the directory
+ * sweep would miss it. Named explicitly rather than by widening the sweep to
+ * all of `utils/`, which would drag in most of the console.
  */
 const SWEPT_FILES_EXTRA = [
-  join(CONSOLE_ROOT, 'components', 'embedded-checkout-panel.component.tsx'),
+  join(CONSOLE_ROOT, 'utils', 'browser-stripe.ts'),
 ]
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -233,32 +232,46 @@ describe('the billing surface does not collect card data', () => {
     )
     expect(card).toContain('BillingCardFormComponent')
 
-    // The plan PURCHASE keeps Stripe's own checkout — it carries automatic
-    // tax, tax id collection, promotion codes, wallets and 3DS, which are
-    // load-bearing for a tax position rather than for a layout. It no longer
-    // opens over the page, but it is still Stripe rendering the payment step.
-    const panel = readFileSync(
-      join(CONSOLE_ROOT, 'components', 'embedded-checkout-panel.component.tsx'),
-      'utf8',
-    )
-    expect(panel).toContain('@stripe/react-stripe-js')
-    expect(panel).toContain('EmbeddedCheckout')
   })
 
-  it('opens nothing over the page — neither surface is a modal', () => {
-    // The owner's actual objection was presentation: an unfamiliar interface
-    // that appears and then asks for payment details. Both payment surfaces
-    // now render in the flow of the billing page, so a `Dialog` reappearing
-    // in either is the regression worth naming.
-    for (const file of [
-      join(CONSOLE_ROOT, 'components', 'embedded-checkout-panel.component.tsx'),
-      join(CONSOLE_ROOT, 'components', 'billing', 'billing-card-form.component.tsx'),
-    ]) {
+  it('has no checkout surface left anywhere in the console', () => {
+    // The invariant that replaced "the panel is not a modal".
+    //
+    // Embedded Checkout put Link and Amazon Pay buttons, a TEST MODE badge and
+    // Stripe's typography in front of a customer mid-upgrade. Moving it inline
+    // did not help — the objection was arriving somewhere else, not the box it
+    // arrived in — so the surface is gone entirely and subscribing is a
+    // server-side call against a stored payment method.
+    //
+    // Asserted as an ABSENCE across the whole app rather than on one file,
+    // because the way this comes back is a new component, or an old one
+    // resurrected behind a flag "in case".
+    const offenders: string[] = []
+    for (const file of walk(join(CONSOLE_ROOT, 'components')).concat(
+      walk(join(CONSOLE_ROOT, 'app')),
+    )) {
       const source = stripTypeScriptComments(readFileSync(file, 'utf8'))
-      expect(`${relative(REPO_ROOT, file)}: ${/<Dialog[\s>]/.test(source) ? 'MODAL' : 'in place'}`).toBe(
-        `${relative(REPO_ROOT, file)}: in place`,
-      )
+      if (/\bEmbeddedCheckout\b/.test(source)) {
+        offenders.push(relative(REPO_ROOT, file))
+      }
     }
+    expect(offenders).toEqual([])
+  })
+
+  it('opens nothing over the page — the card form is not a modal', () => {
+    // What is left of the presentation objection: the one payment surface
+    // renders in the flow of the Billing page. A `Dialog` reappearing here is
+    // the regression worth naming.
+    const file = join(
+      CONSOLE_ROOT,
+      'components',
+      'billing',
+      'billing-card-form.component.tsx',
+    )
+    const source = stripTypeScriptComments(readFileSync(file, 'utf8'))
+    expect(
+      `card form: ${/<Dialog[\s>]/.test(source) ? 'MODAL' : 'in place'}`,
+    ).toBe('card form: in place')
   })
 
   it('reads Stripe’s description of a saved card without re-deriving it', () => {
@@ -282,7 +295,12 @@ describe('the billing surface does not collect card data', () => {
 describe('create-setup-intent', () => {
   const mockVerifyIdToken = jest.fn()
   const mockReadOrgBilling = jest.fn()
-  let calls: Array<{ url: string; method: string; body: URLSearchParams | null }> = []
+  let calls: Array<{
+    url: string
+    method: string
+    body: URLSearchParams | null
+    idempotencyKey?: string
+  }> = []
 
   const CLEAN_ENV = (() => {
     const clean = { ...process.env }
@@ -304,7 +322,14 @@ describe('create-setup-intent', () => {
           auth: () => ({
             verifyIdToken: (...args: unknown[]) => mockVerifyIdToken(...args),
           }),
-          firestore: () => ({ collection: () => ({ doc: () => ({ set: async () => undefined }) }) }),
+          firestore: () => ({
+            collection: () => ({
+              doc: () => ({
+                set: async () => undefined,
+                get: async () => ({ get: (field: string) => (field === 'name' ? 'Acme' : undefined) }),
+              }),
+            }),
+          }),
         }),
         firestore: { FieldValue: { serverTimestamp: () => 'ts' } },
       },
@@ -313,6 +338,7 @@ describe('create-setup-intent', () => {
         Response.json({ error: 'Verify your email' }, { status: 403 }),
       memberHasOrgPermission: async () => true,
       readOrgBilling: (...args: unknown[]) => mockReadOrgBilling(...args),
+      writeOrgBilling: async () => undefined,
       resolveOrgMembership: async () => ({ orgId: 'org-1', member: { id: 'm-1' } }),
       readOrgBillingCustomerModes: async () => ({ live: false, test: false }),
       logOrgActivity: async () => undefined,
@@ -344,15 +370,27 @@ describe('create-setup-intent', () => {
       STRIPE_SECRET_KEY: 'sk_test_fake',
     } as NodeJS.ProcessEnv
     global.fetch = jest.fn(async (url: unknown, init: any) => {
+      const href = String(url)
       calls.push({
-        url: String(url),
+        url: href,
         method: String(init?.method ?? 'GET'),
         body: init?.body ? new URLSearchParams(String(init.body)) : null,
+        idempotencyKey: init?.headers?.['Idempotency-Key'],
       })
+      if (/\/customers$/.test(href)) {
+        return { ok: true, status: 200, json: async () => ({ id: 'cus_new_1' }) }
+      }
+      if (/\/customers\//.test(href)) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ invoice_settings: {}, data: [] }),
+        }
+      }
       return {
         ok: true,
         status: 200,
-        json: async () => ({ client_secret: 'cs_test_secret_123' }),
+        json: async () => ({ client_secret: 'cs_test_secret_123', data: [] }),
       }
     }) as never
   })
@@ -397,9 +435,12 @@ describe('create-setup-intent', () => {
     expect(payload).toEqual({ clientSecret: 'cs_test_secret_123' })
   })
 
-  it('refuses when the org has no Stripe customer to attach a card to', async () => {
-    // An org that has never checked out has no customer. The empty state says
-    // so rather than offering a button that could only fail.
+  it('CREATES the customer when the org has none, rather than refusing', async () => {
+    // A card attaches to a Stripe CUSTOMER, not to a subscription. The
+    // customer used to be minted only by Checkout, which is the only reason
+    // this ever required a plan first — an implementation detail wearing the
+    // clothes of a rule. Someone putting a card on file before upgrading is a
+    // customer trying to pay us.
     mockReadOrgBilling.mockResolvedValue({})
     const handler = require('../app/api/billing/profile/route').POST
     const response = await handler(
@@ -412,10 +453,65 @@ describe('create-setup-intent', () => {
         body: JSON.stringify({ orgId: 'org-1', action: 'create-setup-intent' }),
       }),
     )
-    const payload = await response.json()
-    expect(payload.customer).toBeNull()
-    expect(payload.clientSecret).toBeUndefined()
-    expect(calls.some((call) => call.url.includes('setup_intents'))).toBe(false)
+    expect(response.status).toBe(200)
+    const create = calls.find(
+      (call) => call.method === 'POST' && /\/customers$/.test(call.url),
+    )
+    expect(create).toBeTruthy()
+    // Then the intent is opened against the customer that was just created.
+    expect(calls.some((call) => call.url.includes('setup_intents'))).toBe(true)
+  })
+
+  it('does NOT create a customer on a page load', async () => {
+    // `get` runs on every visit to the Billing page. Creating a customer here
+    // would leave an empty one behind for every org that has ever looked at
+    // its own billing, and would make "has a customer" stop meaning anything.
+    mockReadOrgBilling.mockResolvedValue({})
+    const handler = require('../app/api/billing/profile/route').POST
+    const response = await handler(
+      new Request('https://app.aglyn.com/api/billing/profile', {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer tok',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ orgId: 'org-1', action: 'get' }),
+      }),
+    )
+    expect(response.status).toBe(200)
+    expect((await response.json()).customer).toBeNull()
+    expect(
+      calls.some((call) => call.method === 'POST' && /\/customers$/.test(call.url)),
+    ).toBe(false)
+  })
+
+  it('mints ONE customer when two saves race', async () => {
+    // A double-click, or the email and address cards saving together, would
+    // otherwise create two customers and only one would win the Firestore
+    // write — the other becomes an orphan later invoices could scatter onto.
+    // A stable idempotency key makes Stripe return the same customer.
+    mockReadOrgBilling.mockResolvedValue({})
+    const handler = require('../app/api/billing/profile/route').POST
+    const send = () =>
+      handler(
+        new Request('https://app.aglyn.com/api/billing/profile', {
+          method: 'POST',
+          headers: {
+            authorization: 'Bearer tok',
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({ orgId: 'org-1', action: 'create-setup-intent' }),
+        }),
+      )
+    await Promise.all([send(), send()])
+    const creates = calls.filter(
+      (call) => call.method === 'POST' && /\/customers$/.test(call.url),
+    )
+    const keys = new Set(creates.map((call) => call.idempotencyKey))
+    expect(creates.length).toBeGreaterThan(0)
+    // Same key on every attempt — that is what makes them one customer.
+    expect(keys.size).toBe(1)
+    expect([...keys][0]).toContain('org-1')
   })
 })
 
@@ -475,7 +571,12 @@ describe('finalize-card-setup verifies the intent server-side', () => {
             verifyIdToken: (...args: unknown[]) => mockVerifyIdToken(...args),
           }),
           firestore: () => ({
-            collection: () => ({ doc: () => ({ set: async () => undefined }) }),
+            collection: () => ({
+              doc: () => ({
+                set: async () => undefined,
+                get: async () => ({ get: (field: string) => (field === 'name' ? 'Acme' : undefined) }),
+              }),
+            }),
           }),
         }),
         firestore: { FieldValue: { serverTimestamp: () => 'ts' } },
@@ -485,6 +586,7 @@ describe('finalize-card-setup verifies the intent server-side', () => {
         Response.json({ error: 'Verify your email' }, { status: 403 }),
       memberHasOrgPermission: async () => true,
       readOrgBilling: (...args: unknown[]) => mockReadOrgBilling(...args),
+      writeOrgBilling: async () => undefined,
       resolveOrgMembership: async () => ({ orgId: 'org-1', member: { id: 'm-1' } }),
       readOrgBillingCustomerModes: async () => ({ live: false, test: false }),
       logOrgActivity: async () => undefined,

@@ -133,7 +133,7 @@ export const installPluginHandler: PluginApiHandler = async (req, res) => {
     }
     const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
     if (!['admin', 'editor'].includes(memberRole)) {
-      return res.status(403).json({ error: 'Not a site admin' })
+      return res.status(403).json({ error: 'Not a site admin or editor' })
     }
 
     // Uninstalls (AGL-237/424). Org pins are API-managed (rules deny

@@ -246,6 +246,10 @@ describe('GUARD: no write happens without an explicit confirm', () => {
     armChat('Open Screens and pick the page.', PROPOSAL)
     render(<AssistPanelComponent />)
     await ask()
+    // The question's own POST has to be on the record before the count is
+    // taken, or "sends nothing" is measured against a request still in
+    // flight and passes for the wrong reason.
+    await waitFor(() => expect(posts).toHaveLength(1))
     const before = posts.length
     fireEvent.click(await screen.findByText('No thanks'))
     await waitFor(() => expect(screen.queryByText('Take me there')).toBeNull())
@@ -269,7 +273,13 @@ describe('GUARD: no write happens without an explicit confirm', () => {
       join(__dirname, 'assist-panel.component.tsx'),
       'utf8',
     )
-    const urls = [...source.matchAll(/fetch\(\s*'([^']+)'/g)].map((m) => m[1])
+    // Both spellings. An authorized call takes the account first —
+    // `authorizedFetch(user, '/api/…')` — and a pattern that only knew the
+    // bare form would read this panel as reaching NO endpoint at all, which
+    // is a guard that passes by finding nothing.
+    const urls = [
+      ...source.matchAll(/(?:authorizedF|f)etch\(\s*(?:[\w$.]+,\s*)?'([^']+)'/g),
+    ].map((m) => m[1])
     expect([...new Set(urls)].sort()).toEqual([
       '/api/assist/chat',
       '/api/assist/feedback',

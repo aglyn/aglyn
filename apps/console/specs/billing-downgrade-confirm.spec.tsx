@@ -37,9 +37,16 @@
  *    deleted in one edit — drop the `await confirm(...)` — and the suite
  *    stayed green. The `feedback_verify_control_is_wired` shape exactly.
  *
- * So this file mounts the real page, expands the real lower-tier disclosure,
- * clicks the real Downgrade button, and answers the real
- * `/api/billing/subscription` fetches — asserting on what was POSTED.
+ * So this file mounts the real page, opens the real comparison grid, expands
+ * the real lower-tier disclosure, clicks the real Downgrade button, and
+ * answers the real `/api/billing/subscription` fetches — asserting on what was
+ * POSTED.
+ *
+ * ⚠️ THE FRICTION THAT MATTERS IS THE CONFIRM, NOT THE TWO CLICKS. The clicks
+ * are real friction and are asserted, but a page that dropped them and kept
+ * the confirm would still be honest, where one that kept them and dropped the
+ * confirm would post a plan change nobody agreed to. That is why every case
+ * below drives the confirm rather than counting clicks.
  *
  * ⚠️ THE NEGATIVE CONTROL THIS FILE EXISTS TO CARRY: a test that asserts only
  * "the confirm appears" ALSO passes when the downgrade is impossible — when
@@ -230,13 +237,12 @@ jest.mock(
   '../components/billing/billing-register-allocations-card.component',
   () => nullCard,
 )
-jest.mock('../components/embedded-checkout-panel.component', () => nullCard)
 jest.mock('../components/billing/retention-funnel.dialog', () => ({
   __esModule: true,
   RetentionFunnelDialog: () => null,
 }))
 
-import BillingPage from '../app/(app)/[orgSlug]/billing/page'
+import BillingPage from '../app/(app)/[orgSlug]/billing/(sections)/page'
 
 /** Every `/api/billing/subscription` body, in order. */
 let subscriptionCalls: Array<Record<string, any>>
@@ -254,6 +260,29 @@ beforeEach(() => {
   postsAtConfirmTime = -1
   global.fetch = jest.fn(async (input: any, init?: any) => {
     const url = String(input)
+    // The billing profile the plan grid gates on (AGL-2501 follow-up): a paid
+    // upgrade needs a stored card AND a billing address, because subscribing
+    // charges the one against the other. Without this the grid correctly
+    // DISABLES every Upgrade button and no confirm can ever open — which is
+    // the gate working, not the page failing.
+    if (url.startsWith('/api/billing/profile')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          configured: true,
+          customer: {
+            email: 'owner@example.com',
+            name: 'Acme',
+            address: { line1: '1 Example St', line2: '', city: 'Austin', state: 'TX', postalCode: '78701', country: 'US' },
+          },
+          taxIds: [],
+          paymentMethods: [
+            { id: 'pm_1', type: 'card', brand: 'visa', last4: '4242', expMonth: 12, expYear: 2030, email: null, isDefault: true },
+          ],
+        }),
+      }
+    }
     if (url.startsWith('/api/billing/subscription')) {
       const body = JSON.parse(String(init?.body ?? '{}'))
       subscriptionCalls.push(body)
@@ -266,7 +295,12 @@ beforeEach(() => {
           status: 200,
           json: async () => ({
             downgrade,
-            amountDueCents: downgrade ? 0 : 4200,
+            // BOTH fields, as the route really answers since AGL-535.
+            // `prorationCents` is the cost of the change; `amountDueCents` is
+            // the whole upcoming invoice, and quoting THAT was the bug the
+            // confirm carried for a release after the preview was fixed.
+            prorationCents: downgrade ? 0 : 4200,
+            amountDueCents: downgrade ? 0 : 12900,
             currency: 'usd',
             periodEnd: PERIOD_END_ISO,
           }),
@@ -309,28 +343,71 @@ const previews = () => subscriptionCalls.filter((c) => c.action === 'preview')
 /**
  * Reveal the collapsed lower tiers and press the target's control.
  *
- * The disclosure click is part of the friction, not test scaffolding: lower
- * tiers are collapsed for a subscriber (AGL-1864), so reaching a downgrade
- * costs a deliberate act before the button even exists. Asserted below.
+ * TWO deliberate acts, and neither is scaffolding: the page opens on the
+ * current plan and the step up (AGL-1859 §1), so the grid has to be asked for
+ * before the disclosure holding the lower tiers even exists, and the
+ * disclosure has to be opened before any control that moves a customer DOWN
+ * does. Both are asserted below.
  */
 async function press(label: 'Downgrade' | 'Upgrade') {
   render(<BillingPage />)
   if (label === 'Downgrade') {
-    const disclosure = await screen.findByRole('button', {
-      name: /Show \d+ lower plans?/,
-    })
-    fireEvent.click(disclosure)
+    fireEvent.click(await screen.findByRole('button', { name: /Compare all/ }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: /Show \d+ lower plans?/ }),
+    )
   }
-  const buttons = await screen.findAllByRole('button', { name: label })
+  const buttons = await screen.findAllByRole('button', {
+    // The focused view names its destination ("Upgrade to Pro"); the grid
+    // says just "Upgrade". Anchored so `Downgrade` can never satisfy a
+    // search for `Upgrade`.
+    name: label === 'Downgrade' ? /^Downgrade/ : /^Upgrade/,
+  })
   fireEvent.click(buttons[0])
 }
 
 describe('a downgrade is never one-click from the billing card (AGL-1859 §2)', () => {
   it('the lower tiers are not even ON SCREEN until the customer asks', async () => {
     render(<BillingPage />)
-    // The disclosure exists, and the Downgrade button behind it does not.
+    // Not the disclosure, and not the tiers behind it: the page opens on the
+    // current plan and the step up, so a downgrade is two asks away.
+    await screen.findByRole('button', { name: /Compare all/ })
+    expect(
+      screen.queryByRole('button', { name: /Show \d+ lower plans?/ }),
+    ).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Downgrade/ })).toBeNull()
+  })
+
+  it('and the collapse is still there once the grid is asked for', async () => {
+    render(<BillingPage />)
+    fireEvent.click(await screen.findByRole('button', { name: /Compare all/ }))
+    // The AGL-1864 collapse is the grid's arrival state: the lower tiers are
+    // folded, never removed, so the downsell stays reachable and named.
     await screen.findByRole('button', { name: /Show \d+ lower plans?/ })
-    expect(screen.queryByRole('button', { name: 'Downgrade' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Downgrade/ })).toBeNull()
+  })
+
+  /**
+   * ⚠️ REACHABLE IS NOT THE SAME AS LOUD.
+   *
+   * Two clicks in, the control exists — and it is still the quiet one. A
+   * grid that answered "there is no way down" by promoting the downgrade to
+   * a contained button beside the upgrade would be the dark pattern pointed
+   * the other way.
+   */
+  it('a revealed Downgrade is still a quiet control, never the loud one', async () => {
+    render(<BillingPage />)
+    fireEvent.click(await screen.findByRole('button', { name: /Compare all/ }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: /Show \d+ lower plans?/ }),
+    )
+    const downgrade = (
+      await screen.findAllByRole('button', { name: /^Downgrade/ })
+    )[0]
+    expect(downgrade.className).toMatch(/MuiButton-text/)
+    expect(downgrade.className).not.toMatch(/MuiButton-contained/)
+    const upgrade = screen.getAllByRole('button', { name: /^Upgrade/ })[0]
+    expect(upgrade.className).toMatch(/MuiButton-contained/)
   })
 
   it('the click PRICES the move and changes nothing — the confirm comes first', async () => {
@@ -424,19 +501,25 @@ describe('a downgrade is never one-click from the billing card (AGL-1859 §2)', 
 describe('an upgrade is the frictionless direction (AGL-1859 §2)', () => {
   it('is reachable WITHOUT a disclosure — it is on screen already', async () => {
     render(<BillingPage />)
-    const upgrades = await screen.findAllByRole('button', { name: 'Upgrade' })
+    const upgrades = await screen.findAllByRole('button', { name: /^Upgrade/ })
     expect(upgrades.length).toBeGreaterThan(0)
   })
 
-  it('quotes the prorated charge and applies immediately — not end-of-cycle', async () => {
+  it('quotes the PRORATION on the next invoice, and applies immediately', async () => {
     confirmAnswers = [true]
     await press('Upgrade')
     await waitFor(() => expect(switches()).toHaveLength(1))
 
     const said = `${confirmCalls[0].title} ${confirmCalls[0].description}`
     // The asymmetry, stated in the two confirms' own words: an upgrade quotes
-    // money today; a downgrade quotes a date.
-    expect(said).toMatch(/Prorated charge today: \$42\.00 USD/)
+    // money, a downgrade quotes a date. What changed in AGL-535 part two is
+    // WHICH money and WHEN — the proration, on the next invoice, because
+    // `create_prorations` takes nothing at the switch.
+    expect(said).toMatch(/\$42\.00 USD/)
+    expect(said).toMatch(/next invoice/)
+    // The upcoming-invoice total must not appear: that was the overstatement.
+    expect(said).not.toMatch(/129\.00/)
+    expect(said).not.toMatch(/charge today/)
     expect(said).not.toMatch(/[Nn]othing is charged today/)
     expect(String(confirmCalls[0].confirmationText)).toBe('Switch plan')
 
@@ -528,5 +611,124 @@ describe('a plan change from the grid is reported to GA4 (AGL-2235)', () => {
     await waitFor(() => expect(mockEnqueueSnackbar).toHaveBeenCalled())
     expect(eventNamed('plan_downgrade_scheduled')).toBeUndefined()
     expect(eventNamed('plan_upgraded')).toBeUndefined()
+  })
+})
+
+/**
+ * A paid upgrade ANNOUNCES what it will ask for. It does not refuse.
+ *
+ * Subscribing is a server-side call against a stored payment method and a
+ * stored billing address, and `/api/billing/checkout` refuses without either.
+ * That refusal is the enforcement and it is untouched — what changed is what
+ * the grid does with the same facts. It used to disable Upgrade and name two
+ * cards on another screen; now the button stays live and opens a flow that
+ * collects the missing pieces, so this caption is a heads-up about the next
+ * screen rather than homework.
+ *
+ * These assertions are on RENDERED TEXT because the caption is the whole
+ * feature here. The behaviour that matters — that the click subscribes, that
+ * the collected card is stored, that the server still refuses — is asserted
+ * against calls and state in `billing-upgrade-collects-in-flow.spec.tsx`.
+ */
+describe('the plan grid announces what an upgrade will collect', () => {
+  /** Re-mount with a billing profile that is missing something. */
+  function renderWithProfile(profile: Record<string, unknown>) {
+    const real = global.fetch as any
+    global.fetch = jest.fn(async (input: any, init?: any) => {
+      if (String(input).startsWith('/api/billing/profile')) {
+        return { ok: true, status: 200, json: async () => profile }
+      }
+      return real(input, init)
+    }) as any
+    render(<BillingPage />)
+  }
+
+  const CARD = {
+    id: 'pm_1',
+    type: 'card',
+    brand: 'visa',
+    last4: '4242',
+    expMonth: 12,
+    expYear: 2030,
+    email: null,
+    isDefault: true,
+  }
+  const ADDRESS = {
+    line1: '1 Example St',
+    line2: '',
+    city: 'Austin',
+    state: 'TX',
+    postalCode: '78701',
+    country: 'US',
+  }
+
+  it('names BOTH when neither is on file', async () => {
+    renderWithProfile({
+      configured: true,
+      customer: { email: 'a@b.c', name: 'Acme', address: null },
+      taxIds: [],
+      paymentMethods: [],
+    })
+    // On every upgradeable tier, which is the point: the sentence belongs
+    // beside each button it disables, not once at the top where a reader
+    // scrolling the grid never meets it.
+    expect(
+      (await screen.findAllByText(/a payment method and a billing address/i))
+        .length,
+    ).toBeGreaterThan(0)
+  })
+
+  it('names the CARD when only the address is on file', async () => {
+    renderWithProfile({
+      configured: true,
+      customer: { email: 'a@b.c', name: 'Acme', address: ADDRESS },
+      taxIds: [],
+      paymentMethods: [],
+    })
+    const said = (await screen.findAllByText(/ask for a payment method as you go/i))[0]
+    expect(said).toBeTruthy()
+    expect(said.textContent).not.toMatch(/billing address/i)
+  })
+
+  it('names the ADDRESS when only the card is on file, and says why', async () => {
+    // The address is a TAX input, and saying so is what stops it reading as
+    // bureaucracy.
+    renderWithProfile({
+      configured: true,
+      customer: { email: 'a@b.c', name: 'Acme', address: null },
+      taxIds: [],
+      paymentMethods: [CARD],
+    })
+    const said = (await screen.findAllByText(/ask for a billing address as you go/i))[0]
+    expect(said.textContent).toMatch(/sales tax is calculated from it/i)
+  })
+
+  it('leaves the paid button LIVE with nothing on file', async () => {
+    // The reversal, stated as a test. The old assertion here was that the
+    // button was disabled; a customer who wants to buy is now taken through
+    // the missing pieces instead of being turned away at the button.
+    renderWithProfile({
+      configured: true,
+      customer: { email: 'a@b.c', name: 'Acme', address: null },
+      taxIds: [],
+      paymentMethods: [],
+    })
+    await screen.findAllByText(/a payment method and a billing address/i)
+    const upgrades = await screen.findAllByRole('button', { name: /^Upgrade/ })
+    expect(upgrades[0].hasAttribute('disabled')).toBe(false)
+  })
+
+  it('CONTROL — a workspace with both is told nothing at all', async () => {
+    // Without this, a grid that printed the caption unconditionally would
+    // satisfy every assertion above.
+    renderWithProfile({
+      configured: true,
+      customer: { email: 'a@b.c', name: 'Acme', address: ADDRESS },
+      taxIds: [],
+      paymentMethods: [CARD],
+    })
+    const upgrades = await screen.findAllByRole('button', { name: /^Upgrade/ })
+    expect(upgrades[0].hasAttribute('disabled')).toBe(false)
+    expect(screen.queryByText(/as you go/i)).toBeNull()
   })
 })

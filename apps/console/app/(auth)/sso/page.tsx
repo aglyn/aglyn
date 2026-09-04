@@ -35,6 +35,7 @@ import {
 import { useCallback, useEffect, useState } from 'react'
 import { useAuth, useSigninCheck } from '@aglyn/tenant-feature-instance'
 import { AuthAppErrorCodes } from '@aglyn/shared-data-enums'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import AuthErrorAlertComponent from '../../../components/auth-error-alert.component'
 import AuthFormTemplateComponent from '../../../components/auth-form-template.component'
 import AuthFormComponent from '../../../components/auth-form.component'
@@ -143,10 +144,8 @@ function SsoSignIn() {
           window.sessionStorage.removeItem(SSO_PENDING_KEY)
           return
         }
-        const idToken = await result.user.getIdToken()
-        const jit = await fetch('/api/auth/sso-jit', {
+        const jit = await authorizedFetch(result.user, '/api/auth/sso-jit', {
           method: 'POST',
-          headers: { Authorization: `Bearer ${idToken}` },
         })
         if (!jit.ok) {
           if (!cancelled) {
@@ -239,10 +238,8 @@ function SsoSignIn() {
           return
         }
         const result = await signInWithPopup(firebaseAuth, provider)
-        const idToken = await result.user.getIdToken()
-        const jit = await fetch('/api/auth/sso-jit', {
+        const jit = await authorizedFetch(result.user, '/api/auth/sso-jit', {
           method: 'POST',
-          headers: { Authorization: `Bearer ${idToken}` },
         })
         if (!jit.ok) {
           const jitPayload = await jit.json().catch(() => ({}))

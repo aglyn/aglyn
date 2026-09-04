@@ -18,9 +18,6 @@
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   checkEntitlement,
-  checkSeatQuota,
-  countManagerSeats,
-  isOrgWideMember,
   resolveIdpAddress,
   resolveIdpDisplayName,
   resolveIdpPhone,
@@ -32,6 +29,7 @@ import {
   firebaseAdmin,
   lockdownRefusal,
   logOrgActivity,
+  managerSeatRefusalResponse,
   resolveOrgMembership,
   seedUserProfile,
   upsertOrgMember,
@@ -228,25 +226,13 @@ async function handler(request: Request): Promise<Response> {
      * discovering it on the invoice. The message names the ceiling so an
      * admin can act on it.
      */
-    if (isOrgWideMember({ role, allHosts, hostAccess })) {
-      const members = await orgDoc.ref.collection('members').get()
-      const seats = checkSeatQuota(
-        orgData as any,
-        'managers',
-        countManagerSeats(members.docs.map((doc) => doc.data() as never)),
-      )
-      if (!seats.allowed) {
-        return Response.json(
-          {
-            error:
-              `This workspace has used all ${seats.limit} of its team seats. ` +
-              'An administrator can add seats or upgrade the plan in Billing.',
-          },
-          { status: 403 },
-        )
-      }
-    }
-
+    // The seat is charged INSIDE `upsertOrgMember`'s transaction (AGL-2068 on
+    // the manager key). What stood here read the roster, decided, and then
+    // provisioned through a separate call — and an IdP that asserts N users
+    // into a workspace at once is the most concurrent of the four doors, so
+    // every one of them measured the same roster and every one passed. It
+    // also counted members only, never the pending invites already holding
+    // seats. The refusal now arrives through the catch below.
     await upsertOrgMember({
       orgId,
       uid: decoded.uid,
@@ -286,6 +272,12 @@ async function handler(request: Request): Promise<Response> {
     })
     return Response.json({ ok: true, orgId, orgSlug: orgData?.slug ?? null, role }, { status: 200 })
   } catch (error) {
+    // A refused sign-in is the right answer and not a harsh one: the
+    // alternative is provisioning a member the org is over its cap for and
+    // discovering it on the invoice. The message names the ceiling so an
+    // admin can act on it.
+    const managerRefusal = managerSeatRefusalResponse(error)
+    if (managerRefusal) return managerRefusal
     console.error('[auth/sso-jit] failed', error)
     return Response.json({ error: 'SSO sign-in mapping failed' }, { status: 500 })
   }

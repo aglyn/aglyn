@@ -32,12 +32,17 @@ export const PREVIEW_STATE_KEY_PREFIX = 'aglyn:preview:'
  * sibling collections, so two documents can legitimately share an id. Without
  * the kind, previewing a layout could read a screen's snapshot.
  */
-export type PreviewKind = 'screen' | 'component' | 'layout' | 'template'
+export type PreviewKind =
+  | 'screen'
+  | 'component'
+  | 'layout'
+  | 'template'
+  | 'form'
 
 export interface PreviewStateIds {
   hostId: string
   kind: PreviewKind
-  /** Screen / component / layout / template id. */
+  /** Screen / component / layout / template / form id. */
   docId: string
   /** Templates version but never publish, so they have no versionId. */
   versionId?: string

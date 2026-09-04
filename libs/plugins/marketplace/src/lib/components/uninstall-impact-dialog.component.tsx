@@ -17,6 +17,7 @@
 'use client'
 
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Alert,
   Box,
@@ -128,19 +129,19 @@ export function UninstallImpactDialog(props: UninstallImpactDialogProps) {
     setFailed(false)
     void (async () => {
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/hosts/plugin-impact', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        const response = await authorizedFetch(
+          user,
+          '/api/hosts/plugin-impact',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              pluginId,
+              hostIds: targets.map((target) => target.hostId),
+              stillCoveredHostIds: covered.map((target) => target.hostId),
+            }),
           },
-          body: JSON.stringify({
-            pluginId,
-            hostIds: targets.map((target) => target.hostId),
-            stillCoveredHostIds: covered.map((target) => target.hostId),
-          }),
-        })
+        )
         const payload = await response.json().catch(() => null)
         if (!active) return
         if (!response.ok || !payload) return void setFailed(true)

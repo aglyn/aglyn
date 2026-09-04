@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+
 export interface WhereUsedDependent {
   type: 'screen' | 'layout' | 'workflow' | 'variable'
   id: string
@@ -65,13 +67,9 @@ export async function fetchWhereUsed(
   },
 ): Promise<WhereUsedResult> {
   try {
-    const idToken = await user?.getIdToken?.()
-    const response = await fetch('/api/hosts/where-used', {
+    const response = await authorizedFetch(user, '/api/hosts/where-used', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
     if (!response.ok) throw new Error(`Scan failed (${response.status})`)

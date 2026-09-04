@@ -17,6 +17,10 @@
 
 jest.mock('./catalog', () => ({
   queryPublicCatalog: jest.fn(),
+  // Real enough to be shared and identified: the enricher must build ONE
+  // scope per render and hand that same object to every grid, and a `jest.fn`
+  // returning undefined would let a per-grid scope pass unnoticed.
+  createCatalogReadScope: jest.fn(() => ({})),
 }))
 
 import { commerceSitePageEnricher } from './site-page-enricher'
@@ -200,5 +204,59 @@ describe('commerceSitePageEnricher (AGL-659)', () => {
     jest.spyOn(console, 'error').mockImplementation(() => undefined)
     mockQuery.mockRejectedValue(new Error('firestore down'))
     expect(await run(page(grid('g')))).toBeUndefined()
+  })
+})
+
+/**
+ * The seed's read cost lives in how many grids share one catalog read. The
+ * dedupe itself is asserted in `catalog.spec.ts`, which counts the Firestore
+ * reads; what can only be checked HERE is the wiring — that the enricher
+ * builds one scope per render and hands that same object to every grid.
+ *
+ * Asserted on identity, not on presence. A scope built per grid is still a
+ * scope on every call, so `expect.objectContaining({ reads: {} })` would pass
+ * on four separate scopes sharing nothing.
+ */
+describe('catalog read scope wiring', () => {
+  beforeEach(() => {
+    mockQuery.mockReset()
+    mockQuery.mockResolvedValue({ items: [] })
+  })
+
+  /**
+   * Forced red by moving `createCatalogReadScope()` inside the `grids.map`
+   * callback: each call then carries its own scope, the `Set` holds 3, and
+   * the page silently pays three catalog reads again.
+   */
+  it('hands every grid on the page the same scope object', async () => {
+    await run(
+      page(grid('grid-1'), grid('grid-2', { source: 'all' }), grid('grid-3')),
+    )
+
+    expect(mockQuery).toHaveBeenCalledTimes(3)
+    const scopes = new Set(
+      mockQuery.mock.calls.map(([params]) => (params as { reads?: unknown }).reads),
+    )
+    expect(scopes.size).toBe(1)
+    expect([...scopes][0]).toBeDefined()
+  })
+
+  /**
+   * Two renders must not share a scope: it holds a promise for one host's
+   * catalog, so carrying it across requests would serve a stale snapshot and,
+   * on a different host, the wrong products entirely.
+   *
+   * Forced red by hoisting the scope to module scope in the enricher: both
+   * renders then report the same object.
+   */
+  it('builds a fresh scope for each render', async () => {
+    await run(page(grid('grid-1')))
+    const first = (mockQuery.mock.calls[0][0] as { reads?: unknown }).reads
+    mockQuery.mockClear()
+
+    await run(page(grid('grid-1')))
+    const second = (mockQuery.mock.calls[0][0] as { reads?: unknown }).reads
+
+    expect(first).not.toBe(second)
   })
 })

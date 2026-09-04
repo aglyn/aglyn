@@ -40,6 +40,7 @@ import { useParams } from 'next/navigation'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../../components/layouts/main.layout'
@@ -101,10 +102,9 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
     if (!currentOrg?.$id || !uid) return
     setLoadingMember(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch(
+      const response = await authorizedFetch(
+        user,
         `/api/orgs/members?orgId=${encodeURIComponent(currentOrg.$id)}`,
-        { headers: { Authorization: `Bearer ${idToken}` } },
       )
       const payload = await response.json().catch(() => ({}))
       const found = (payload.members ?? []).find(
@@ -129,13 +129,9 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
 
   const request = useCallback(
     async (body: Record<string, unknown>) => {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/orgs/members', {
+      const response = await authorizedFetch(user, '/api/orgs/members', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orgId: currentOrg?.$id, ...body }),
       })
       const payload = await response.json().catch(() => ({}))
@@ -221,12 +217,11 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
     let active = true
     void (async () => {
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch(
+        const response = await authorizedFetch(
+          user,
           `/api/orgs/members/password?orgId=${encodeURIComponent(
             currentOrg.$id,
           )}&uid=${encodeURIComponent(uid)}`,
-          { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
         )
         if (!response.ok) return
         const payload = await response.json()
@@ -242,15 +237,15 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
 
   const passwordRequest = useCallback(
     async (payload: Record<string, unknown>) => {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/orgs/members/password', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      const response = await authorizedFetch(
+        user,
+        '/api/orgs/members/password',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orgId: currentOrg?.$id, uid, ...payload }),
         },
-        body: JSON.stringify({ orgId: currentOrg?.$id, uid, ...payload }),
-      })
+      )
       const result = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(result?.error ?? 'Request failed')
       return result
@@ -525,7 +520,7 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
           {currentOrg?.$id ? (
             /*
              * Everything this member has done in THIS organization
-             * (AGL-1488) — its own sites included, not just the org-level
+             * — its own sites included, not just the org-level
              * events.
              *
              * `OrgActivityCard` filtered the org's own feed client-side, so

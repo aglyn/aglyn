@@ -69,6 +69,13 @@ module.exports = {
   // all under `libs/plugins/*/src/lib/server/*.spec.ts`), and all of those
   // suites PASSED.
   testTimeout: 30_000,
+  // Jest's own runner plus a re-dispatch for a test file whose WORKER died
+  // from a memory-safety signal (AGL-2528). A SIGSEGV inside V8's garbage
+  // collector takes down the file that worker was carrying, and jest reports
+  // it as `Test suite failed to run` with no assertion behind it — a red run
+  // in which every test that executed passed. See the file for the crash
+  // stack, and for why only SIGSEGV, SIGBUS and SIGILL are absorbed.
+  runner: require.resolve('./tools/jest/worker-crash-retry.js'),
   // Static asset imports (e.g. `import img from './foo.png'`) are normally
   // transformed by Next.js's webpack loader into a StaticImageData object.
   // Jest has no such loader, so map them to a stub with the same shape.

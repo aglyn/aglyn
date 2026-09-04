@@ -20,7 +20,10 @@ import {
   createResourceUid,
   suggestSubdomains,
 } from '@aglyn/aglyn/server'
-import { firebaseAdmin, registerOrgHost } from '@aglyn/tenant-data-admin'
+import {
+  firebaseAdmin,
+  registerOrgHost,
+} from '@aglyn/tenant-data-admin'
 
 /**
  * The two steps that actually provision a site, shared by the console's
@@ -221,5 +224,23 @@ export async function claimHostForOrg(
   }
   // Org directory + hostIndex mirror + memberRoles projection (AGL-233).
   await registerOrgHost(orgId, hostId, subdomain)
+
+  /*
+   * NO SENDING DOMAIN IS CLAIMED HERE, AND THE SITE CAN SEND ANYWAY.
+   *
+   * A new site's transactional mail leaves on the shared pool from its first
+   * request — that is the floor `resolveSendingIdentity` guarantees, and it
+   * needs no provisioning, no DNS and no vendor call. So creation has nothing
+   * to wait for and nothing to claim.
+   *
+   * A DEDICATED subdomain used to be claimed right here, which made the
+   * platform's domain count grow with signups filtered by plan rather than
+   * with anybody's decision: a slot in the provider's account-wide allowance,
+   * three records in our own zone and a permanent place in the re-verification
+   * sweep, spent on every paying site whether or not it wanted an
+   * Aglyn-branded sending name. It is now requested from the sending domains
+   * card, by somebody who chose it.
+   */
+
   return { allowed: true, hostId }
 }

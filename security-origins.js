@@ -1046,20 +1046,72 @@ const MEASUREMENT_IMAGE_ORIGINS = [
   'https://*.analytics.google.com',
   // Google Signals.
   'https://stats.g.doubleclick.net',
+  /*
+   * GA4 → Google Ads AUDIENCE BUILDING, and a separate host from the Signals
+   * beacon above rather than a duplicate of it.
+   *
+   * With ads personalization on, gtag follows its collect hit with an image to
+   * `td.doubleclick.net/td/ga/rul?tid=<measurement id>` — the redirect that
+   * joins the GA4 session to the Ads cookie so a property's audiences can
+   * export. `stats.g.doubleclick.net` does NOT cover it: they are different
+   * hosts, and CSP matches hosts.
+   *
+   * Measured blocked on aglyn.com: a live probe raised
+   * `securitypolicyviolation { effectiveDirective: 'img-src', blockedURI:
+   * 'https://td.doubleclick.net/td/ga/rul' }` while every other Google
+   * endpoint on this list passed. It is the failure shape the block comment
+   * above warns about — the tag loads, the site looks fine, and the thing that
+   * goes quiet is remarketing, which reports nothing anywhere.
+   */
+  'https://td.doubleclick.net',
   // Google Ads conversion tracking.
   'https://googleads.g.doubleclick.net',
   'https://www.googleadservices.com',
+  /*
+   * Google's CROSS-CLIENT MEASUREMENT collector, and a fourth doubleclick host
+   * rather than a duplicate of the three above.
+   *
+   * With a Google Ads conversion tag alongside GA4, gtag posts a `fetch` to
+   * `ad.doubleclick.net/ccm/s/collect` — the hit that reconciles a conversion
+   * across the ad and analytics identities. No wildcard reaches it from the
+   * `*.g.doubleclick.net` hosts already listed, because `ad.` is a sibling
+   * label, and CSP matches hosts.
+   *
+   * Measured as a `connect-src` refusal on a live load of
+   * `https://aglyn.com/pricing`, raised twice — once by the CSP itself and
+   * once by the Fetch API failing the request — while `td.`, `stats.g.` and
+   * `googleads.g.` all passed.
+   */
+  'https://ad.doubleclick.net',
   // Meta pixel: the beacon and the loader that installs it.
   'https://www.facebook.com',
   'https://connect.facebook.net',
   /*
-   * LinkedIn Insight Tag (AGL-1152): the library host and the beacon it
-   * posts to. `px.ads.linkedin.com` is where the tracking pixel lands and
-   * `www.linkedin.com` is where the tag redirects it for logged-in members,
-   * so allowing only the first leaves that population reporting.
+   * LinkedIn Insight Tag: the library host and the beacon it posts to.
+   * `www.linkedin.com` is where the tag redirects the beacon for logged-in
+   * members, so allowing only the pixel host leaves that population reporting.
+   *
+   * The pixel host is WILDCARDED because it is a SHARD, the same shape as
+   * `*.firebaseio.com` above: the tag picks a numbered prefix per page view,
+   * and pinning the bare `px.` host reaches none of them. Measured with img
+   * and connect probes from a live `https://aglyn.com/` document under the
+   * enforcing policy:
+   *
+   * | host                       | verdict                      |
+   * | -------------------------- | ---------------------------- |
+   * | `px.ads.linkedin.com`      | allowed                      |
+   * | `px1.ads.linkedin.com`     | **REFUSED**, img + connect   |
+   * | `px2.ads.linkedin.com`     | **REFUSED**, img + connect   |
+   * | `px3.ads.linkedin.com`     | **REFUSED**, img + connect   |
+   * | `px4.ads.linkedin.com`     | **REFUSED**, img + connect   |
+   *
+   * The tag served `px4` on every load of the marketing site, so the pinned
+   * host was the one prefix that never arrived — the failure shape this list
+   * exists to prevent, where the tag loads, the page looks right, and the
+   * conversions are simply absent.
    */
   'https://snap.licdn.com',
-  'https://px.ads.linkedin.com',
+  'https://*.ads.linkedin.com',
   'https://www.linkedin.com',
   // Every Google country domain, for the remarketing pixel. `www.google.com`
   // is the first entry of that list, so it is not repeated here.

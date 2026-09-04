@@ -19,7 +19,7 @@ import { Container } from '@aglyn/shared-ui-jsx'
 import { BackgroundImageComponent, type BackgroundImageComponentProps } from '@aglyn/shared-ui-jsx/components/background-image.component'
 import { MdiIcon, type MdiIconProps } from '@aglyn/shared-ui-jsx'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
-import { Grid, Stack, Typography, type TypographyProps } from '@mui/material'
+import { Box, Grid, Stack, Typography, type TypographyProps } from '@mui/material'
 import { useMemo } from 'react'
 import { isElement } from 'react-is'
 import BreadcrumbsComponent, {
@@ -39,6 +39,20 @@ export interface DashboardHeaderProps
   disableBreadcrumbs?: true
   header?: TypographyProps<any, any> & {
     icon?: MdiIconProps | JSX.Children
+    /**
+     * The subpage the reader is standing on, shown after the surface name.
+     *
+     * A surface with a vertical section rail keeps ONE title across every
+     * section it holds, so the heading of `/marketing/campaigns` and of
+     * `/marketing/overlays` read the same. This names the section without
+     * replacing the surface: the reader still learns which surface they are
+     * on, and the heading now says which part of it.
+     *
+     * Rendered inside the same `h1` rather than as a second heading — it is
+     * one page with one title, and a second `h1` would say otherwise to a
+     * screen reader walking the document outline.
+     */
+    secondary?: JSX.Children
   }
   headerRight?: JSX.Children
   /**
@@ -67,6 +81,7 @@ export function DashboardHeaderComponent(props: DashboardHeaderProps) {
     children: headerChildren,
     sx: headerSx,
     icon: headerIcon,
+    secondary: headerSecondary,
     ...headerProps
   } = header || {}
 
@@ -138,6 +153,18 @@ export function DashboardHeaderComponent(props: DashboardHeaderProps) {
                   />
                 )}
                 {headerChildren}
+                {headerSecondary ? (
+                  <Box component="span" sx={{ color: 'text.secondary' }}>
+                    <Box
+                      component="span"
+                      aria-hidden
+                      sx={{ mx: 1.5, color: 'text.disabled' }}
+                    >
+                      {'/'}
+                    </Box>
+                    {headerSecondary}
+                  </Box>
+                ) : null}
                 {help && (
                   <DocsHelpTip
                     {...(typeof help === 'string' ? { topic: help } : help)}

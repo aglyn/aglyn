@@ -16,7 +16,7 @@
  */
 
 /**
- * The records table walks the collection instead of sampling it (AGL-693).
+ * The records table walks the collection instead of sampling it (AGL-2501).
  *
  * The listener was `limit(500)` with no `orderBy`, every row rendered at once
  * and no footer anywhere. Firestore answers an unordered limit in DOCUMENT-ID
@@ -223,7 +223,7 @@ const renderedRows = () =>
     (row) => row.querySelector('td')?.textContent?.trim() ?? '',
   )
 
-describe('the records table walks the collection (AGL-693)', () => {
+describe('the records table walks the collection (AGL-2501)', () => {
   it('THE CONTROL: the fixture makes the two behaviours disagree', () => {
     // Without this, every assertion below could pass on a fixture where
     // document-id order and `order` happen to coincide — which is the one

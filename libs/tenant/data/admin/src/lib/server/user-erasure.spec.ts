@@ -16,9 +16,11 @@
  */
 
 import {
+  sharedAddressBlockers,
   userErasureBlockers,
   type UserErasureCandidateOrg,
 } from './erase'
+import type { AccountAddress } from './account-addresses'
 
 const org = (
   over: Partial<UserErasureCandidateOrg> = {},
@@ -99,5 +101,84 @@ describe('userErasureBlockers', () => {
 
   it('handles no memberships at all', () => {
     expect(userErasureBlockers('me', [])).toEqual([])
+  })
+})
+
+/*==========================================
+ * THE SHARED-ADDRESS REFUSAL.
+ *
+ * Pure policy, tested without Firestore for the same reason the org blockers
+ * are: what to DO about an address two accounts hold is the arguable part.
+ * Whether the delete loop deletes is mechanical, and covered where it lives.
+ *=========================================*/
+
+const address = (over: Partial<AccountAddress> = {}): AccountAddress => ({
+  address: 'someone@example.test',
+  sources: ['primary'],
+  key: 'k1',
+  shared: false,
+  indexConflict: false,
+  ...over,
+})
+
+describe('sharedAddressBlockers', () => {
+  it('does not block the ordinary account, whose addresses are its own', () => {
+    // The common case must not need a human. A refusal that fired on every
+    // erasure would be trained around within a week.
+    expect(
+      sharedAddressBlockers({
+        addresses: [address(), address({ key: 'k2', sources: ['stored'] })],
+      }),
+    ).toEqual([])
+  })
+
+  it('blocks on an address a second account also holds', () => {
+    const blockers = sharedAddressBlockers({
+      addresses: [address(), address({ key: 'k2', shared: true })],
+    })
+    expect(blockers).toHaveLength(1)
+    expect(blockers[0].key).toBe('k2')
+  })
+
+  it('blocks on a shared PRIMARY, not only a shared alias', () => {
+    // The live shape is an account whose federated provider address is
+    // another account's primary, so the shared one is often the address the
+    // person signs in with.
+    const blockers = sharedAddressBlockers({
+      addresses: [address({ shared: true, sources: ['primary'] })],
+    })
+    expect(blockers).toHaveLength(1)
+    expect(blockers[0].sources).toEqual(['primary'])
+  })
+
+  it('never hands back the address itself', () => {
+    // `emailDeliveries` is hashed precisely so we keep no readable list of
+    // who we mail, and this refusal is ABOUT a second customer. A blocker
+    // carrying their address in the clear would disclose the person the
+    // refusal exists to protect.
+    const blockers = sharedAddressBlockers({
+      addresses: [
+        address({ address: 'shared-mailbox@example.test', shared: true }),
+      ],
+    })
+    expect(JSON.stringify(blockers)).not.toContain('shared-mailbox')
+    expect(JSON.stringify(blockers)).not.toContain('@')
+  })
+
+  it('reports every shared address, not just the first', () => {
+    // The operator has to resolve all of them; a list that stopped at one
+    // would send them round the loop once per address.
+    const blockers = sharedAddressBlockers({
+      addresses: [
+        address({ key: 'k1', shared: true }),
+        address({ key: 'k2' }),
+        address({ key: 'k3', shared: true }),
+      ],
+    })
+    expect(blockers.map((entry) => entry.key)).toEqual(['k1', 'k3'])
+  })
+
+  it('does not block an account with no addresses at all', () => {
+    expect(sharedAddressBlockers({ addresses: [] })).toEqual([])
   })
 })

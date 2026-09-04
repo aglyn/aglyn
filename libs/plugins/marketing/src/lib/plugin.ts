@@ -20,6 +20,7 @@ import { registerSiteRuntime } from '@aglyn/aglyn'
 import { MarketingSiteRuntime } from './components/site-runtime'
 import { mdiBullhornOutline } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
+import { MARKETING_CONSOLE_SECTIONS } from './components/marketing-console-sections'
 import { BUNDLE_ID } from './constants/bundle-common'
 
 /**
@@ -47,6 +48,11 @@ const MarketingConsolePage = lazy(
   () => import('./components/marketing-console-page'),
 )
 
+/** Dashboard glance card, loaded only where the shell renders the slot. */
+const CampaignGlanceCard = lazy(
+  () => import('./components/campaign-glance-card.component'),
+)
+
 /**
  * Marketing feature plugin (AGL-395). Console-only — overlays and popups
  * render on published sites through the tenant runtime, not a canvas
@@ -60,10 +66,31 @@ export function registerMarketingConsole(): void {
   Aglyn.registerConsoleExtension({
     pluginId: BUNDLE_ID,
     displayName: 'Marketing',
+    /*
+     * The host dashboard's `Last campaign` card (AGL-433). A widget rather
+     * than a direct import by the dashboard page, so it appears only on
+     * workspaces that have the plugin that owns the campaign history — a card
+     * about campaigns on a console with no campaigns page could only ever be
+     * blank, and its header links straight into `/marketing/campaigns`.
+     */
+    widgets: [
+      {
+        slot: Aglyn.CONSOLE_WIDGET_SLOTS.hostDashboard,
+        // The id a reader's dashboard preferences already name — it is what
+        // `isDashboardWidgetHidden` and the customize order are keyed on, so
+        // it is persisted and does not follow the plugin.
+        widgetId: 'email-campaign-glance',
+        title: 'Last campaign',
+        Component: CampaignGlanceCard,
+      },
+    ],
     navItems: [
       {
         label: 'Marketing',
         href: '/marketing',
+        // Sections as ROUTES (AGL-2501): each is a real URL the shell
+        // resolves and gates, so the page mounts the one being read.
+        sections: MARKETING_CONSOLE_SECTIONS,
         navTabId: 'nav-tab-marketing',
         icon: { path: mdiBullhornOutline.path },
         header: {

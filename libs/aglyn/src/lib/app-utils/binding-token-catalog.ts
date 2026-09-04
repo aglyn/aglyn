@@ -74,9 +74,58 @@ export const ENTRY_TOKEN_CATALOG: readonly BindingTokenCatalogEntry[] = [
     description: 'The byline set on the entry.',
   },
   {
+    token: '{{entry.authorBio}}',
+    label: 'Author bio',
+    description: 'Blurb from the author’s record.',
+  },
+  {
+    token: '{{entry.authorImage}}',
+    label: 'Author portrait',
+    description: 'Portrait or logo from the author’s record.',
+  },
+  {
+    token: '{{entry.authorUrl}}',
+    label: 'Author link',
+    description: 'The author’s own page.',
+  },
+  {
+    token: '{{entry.authorPageUrl}}',
+    label: 'Author page',
+    description:
+      'This author’s page on this site — everything they wrote, across every ' +
+      'collection. Separate from Author link, which is their own site.',
+  },
+  {
     token: '{{entry.slug}}',
     label: 'Slug',
     description: 'URL-safe entry identifier.',
+  },
+  /*
+    Named "Its collection…" rather than "Collection…", which is what these
+    describe and also exactly what the `{{collection.*}}` entries below are
+    called. The picker groups options by heading, so the two sets sit apart —
+    but a designer scanning it reads the LABEL, and two options reading
+    "Collection name" three lines apart is a choice made by guessing. The
+    pronoun is doing real work: on the one page where both resolve, they mean
+    different collections.
+  */
+  {
+    token: '{{entry.collection}}',
+    label: 'Its collection',
+    description:
+      'Which section this entry belongs to. Worth binding on a listing that ' +
+      'MIXES collections — an author page — where a card otherwise cannot ' +
+      'tell a release note from an essay.',
+  },
+  {
+    token: '{{entry.collectionSlug}}',
+    label: 'Its collection slug',
+    description: 'That collection’s URL segment.',
+  },
+  {
+    token: '{{entry.collectionUrl}}',
+    label: 'Its collection link',
+    description: 'The listing this entry belongs to.',
   },
   {
     token: '{{entry.coverImage}}',
@@ -156,6 +205,71 @@ export const COLLECTION_TOKEN_CATALOG: readonly BindingTokenCatalogEntry[] = [
     token: '{{pagination.nextUrl}}',
     label: 'Next page link',
     description: 'Keeps the category; empty on the last page.',
+  },
+]
+
+/**
+ * `{{author.*}}` tokens (AGL-2518) — resolve on an author's own page,
+ * `/author/{slug}`.
+ *
+ * Empty everywhere else, like the category tokens above and for the same
+ * reason: a template has no runtime conditional, so the tokens have to be the
+ * thing that varies. A heading bound to `{{author.name}}` prints a name on an
+ * author page and nothing anywhere else.
+ *
+ * The `{{pagination.*}}` tokens resolve HERE TOO, over this author's own
+ * archive — deliberately the same four names a collection listing uses, so a
+ * pager built once works on both.
+ */
+export const AUTHOR_TOKEN_CATALOG: readonly BindingTokenCatalogEntry[] = [
+  {
+    token: '{{author.name}}',
+    label: 'Name',
+    description: 'The byline this page collects.',
+  },
+  {
+    token: '{{author.bio}}',
+    label: 'Bio',
+    description: 'Their blurb, from the author record.',
+  },
+  {
+    token: '{{author.image}}',
+    label: 'Portrait',
+    description: 'Their portrait or logo, from the author record.',
+  },
+  {
+    token: '{{author.jobTitle}}',
+    label: 'Role',
+    description: 'Their job title; empty for an Organization author.',
+  },
+  {
+    token: '{{author.worksFor}}',
+    label: 'Organization',
+    description: 'Who they write for; empty for an Organization author.',
+  },
+  {
+    token: '{{author.url}}',
+    label: 'Their own site',
+    description:
+      'The url on their record — a personal site, not this page. Empty when ' +
+      'they have none.',
+  },
+  {
+    token: '{{author.pageUrl}}',
+    label: 'This page',
+    description: 'The canonical address of the page you are designing.',
+  },
+  {
+    token: '{{author.entryCount}}',
+    label: 'Post count',
+    description: 'How many entries they have published, across every collection.',
+  },
+  {
+    token: '{{author.entryCountLabel}}',
+    label: 'Post count, worded',
+    description:
+      '"1 post" or "12 posts" — pluralized for you, because a template has no ' +
+      'conditional to do it with.',
   },
 ]
 

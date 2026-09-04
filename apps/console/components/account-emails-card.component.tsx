@@ -33,6 +33,7 @@ import {
 import { useCallback, useEffect, useState } from 'react'
 import { useSnackbar } from 'notistack'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 
 interface EmailRow {
@@ -77,11 +78,9 @@ export function AccountEmailsCard() {
   const call = useCallback(
     async (method: string, payload?: Record<string, unknown>) => {
       if (!user) throw new Error('Not signed in')
-      const idToken = await user.getIdToken()
-      const response = await fetch('/api/account/emails', {
+      const response = await authorizedFetch(user, '/api/account/emails', {
         method,
         headers: {
-          authorization: `Bearer ${idToken}`,
           ...(payload ? { 'content-type': 'application/json' } : {}),
         },
         ...(payload ? { body: JSON.stringify(payload) } : {}),

@@ -27,7 +27,10 @@ import { marketingSitePageEnricher } from './server/site-page-enricher'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { campaignProcessScheduledHandler } from './server/campaign-process-scheduled'
+import { listsMaterializeHandler } from './server/lists-materialize'
+import { campaignManageHandler } from './server/campaign-manage'
 import { campaignSendHandler } from './server/campaign-send'
+import { campaignRecipientsHandler } from './server/campaign-recipients'
 
 /**
  * Experiment beacon (AGL-252): counts an exposure or conversion on
@@ -126,6 +129,15 @@ export function registerMarketingApi(): void {
 /** Registers the marketing plugin's console-side API routes (AGL-396). */
 export function registerMarketingConsoleApi(): void {
   registerPluginApiRoute('campaigns/send', campaignSendHandler)
+  // Taking a campaign or an abandoned draft away, which is the one class of
+  // change the send route may not carry: both write to the SEND collection,
+  // which no client may touch, and neither of them mails anything.
+  registerPluginApiRoute('campaigns/manage', campaignManageHandler)
+  // The other direction through the per-recipient delivery log: not "what did
+  // we send this person" but "who did this design reach, and which of them
+  // opened it". Server-side because the log is a platform-level collection no
+  // security rule can scope to one site's campaigns.
+  registerPluginApiRoute('campaigns/recipients', campaignRecipientsHandler)
   // Relocated console route (AGL-418): the Resend/Svix webhook keeps its
   // /api/email/events URL via the dispatcher; ownership is recorded at
   // registration so the org gate attributes it to marketing, not email.
@@ -134,4 +146,7 @@ export function registerMarketingConsoleApi(): void {
     'campaigns/process-scheduled',
     campaignProcessScheduledHandler,
   )
+  // The dynamic-list sweep rides the same `*/15` fast-cron as the campaign
+  // processor rather than provisioning a scheduler job of its own.
+  registerPluginApiRoute('lists/materialize', listsMaterializeHandler)
 }

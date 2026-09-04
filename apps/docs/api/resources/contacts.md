@@ -32,6 +32,7 @@ way to work with the contacts your sites have already captured.
   "tags": ["b2b"],
   "notes": "Renews in March.",
   "marketingConsent": true,
+  "consentSites": ["site_a1b2c3"],
   "sources": ["form", "order"],
   "created": "2026-07-20T18:23:23.941Z",
   "updated": "2026-07-20T18:23:23.941Z"
@@ -46,7 +47,8 @@ way to work with the contacts your sites have already captured.
 | `name` | string \| null | Display name, when known. Writable. |
 | `tags` | string[] | Tags, the same ones the console's tag editor writes. Writable. |
 | `notes` | string \| null | Free-text notes, the same field the console's profile drawer writes. Writable. |
-| `marketingConsent` | boolean | Whether this person has opted in to marketing. Writable. |
+| `marketingConsent` | boolean | Whether **any** site may market to this person. `false` means a recorded refusal, which stands against every site. Writable — see `consentSiteId`. |
+| `consentSites` | string[] | The sites this person has opted in to. Consent runs to a brand, not to your organization, so a person who signed up on one of your sites is not reachable from another unless they opted in there too. **Read-only** — write through `consentSiteId`. |
 | `sources` | string[] | Where this person came from — `form`, `member`, `order`, `booking`, `newsletter`, or `api` for one added through this API. Multiple entries mean one person did several things. **Read-only.** |
 | `created` / `updated` | string \| null | ISO 8601. |
 
@@ -142,7 +144,8 @@ Returns a contact object, or `404 not_found` (`"No such contact"`).
 | `name` | string | no | Trimmed, truncated to 120 characters. An explicitly empty string is a `400` rather than a way to clear it. |
 | `tags` | string[] | no | Blanks dropped; each tag truncated to 60 characters, at most 50 kept. |
 | `notes` | string | no | Truncated to 2,000 characters. |
-| `marketingConsent` | boolean | no | `true` also stamps the consent timestamp. |
+| `marketingConsent` | boolean | no | `true` also stamps the consent timestamp, and requires `consentSiteId`. |
+| `consentSiteId` | string | with `marketingConsent: true` | The site the person opted in to. Required for an opt-in and rejected alongside `marketingConsent: false`. A site your organization does not own is a `400`. |
 
 ```bash
 curl -X POST "https://app.aglyn.com/api/v1/contacts" \
@@ -232,9 +235,17 @@ curl -X PATCH "https://app.aglyn.com/api/v1/contacts/k7d2b9f104" \
 - **`tags` is replaced wholesale**, not merged — send the full list. An explicitly
   empty `tags: []` **does** clear them; this is the one field where empty means empty,
   because an integration has to be able to undo its own tagging.
+- **An opt-in has to name the site it was given to.** `marketingConsent: true`
+  requires `consentSiteId`, because an API key belongs to your *organization* and
+  an organization is not a brand: an agency's key reaches every client it runs. The
+  grant is recorded against that site (and, if you have declared a consent group,
+  against every site in it) and against no other. There is no default — picking your
+  only site would work until you had two.
 - Setting `marketingConsent: true` stamps the consent timestamp. Setting it back to
   `false` withdraws consent but **leaves the original timestamp in place** — it is the
-  evidence of when the person opted in, and an audit needs it.
+  evidence of when the person opted in, and an audit needs it. A withdrawal takes no
+  `consentSiteId`: it applies to every site, because withholding mail is recoverable
+  and sending it is not.
 - Editing is never refused by the audience band. An edit doesn't grow the audience,
   and a downgraded organization still has to be able to correct its own data.
 - `404 not_found` (`"No such contact"`) if it isn't there.
@@ -243,6 +254,11 @@ curl -X PATCH "https://app.aglyn.com/api/v1/contacts/k7d2b9f104" \
 
 `DELETE /v1/contacts/{contactId}` — scope `contacts:write`. Accepts an
 [`Idempotency-Key`](../conventions.md#deletes).
+
+A contact is shared by every site that has captured the person — one human is one
+record — so a delete removes **your organization's** relationship with them: the
+tags, notes, timeline and consent your sites hold. The record itself is destroyed
+once nothing is holding it.
 
 ```json
 { "id": "k7d2b9f104", "object": "contact", "deleted": true }
@@ -262,7 +278,9 @@ those are separate records with their own endpoints.
 
 | Status | `type` | When |
 | --- | --- | --- |
-| `400` | `bad_request` | `code: "validation_failed"` — on a write, a missing or unusable `email`, a non-boolean `marketingConsent`, or an attempt to write `email`/`sources`. On the list, an `?email=` that isn't a usable address. `fields` names each offending key. |
+| `400` | `bad_request` | `code: "validation_failed"` — on a write, a missing or unusable `email`, a non-boolean `marketingConsent`, a `marketingConsent: true` with no
+`consentSiteId` (or one naming a site the organization does not own), or an attempt
+to write `email`/`sources`. On the list, an `?email=` that isn't a usable address. `fields` names each offending key. |
 | `403` | `plan_required` | `code: "contact_quota"` — the audience band is full on a plan that doesn't meter the overage. |
 | `403` | `insufficient_scope` | Key lacks `contacts:read` / `contacts:write`. Checked before the method, so a write attempt with a read-only key returns `403`, not `405`. |
 | `404` | `not_found` | `"No such contact"`. |

@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { reportHandledError } from '@aglyn/aglyn/app-utils/error-beacon'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import { addDoc, collection } from 'firebase/firestore'
 import { useCallback } from 'react'
@@ -48,11 +49,45 @@ export interface HostActivityTarget {
   versionId?: string
 }
 
+/** One console line per session, however many appends fail. */
+let announced = false
+
+/**
+ * What a dropped audit append does instead of nothing.
+ *
+ * The append stays fire-and-forget: an audit miss must never break the edit
+ * that triggered it, and a snackbar about the LOG would be a worse answer to
+ * "your page saved" than silence. But a rejection with nowhere to go is a
+ * feature that can break for months without a single signal, so the failure
+ * leaves by two doors that cost the person nothing.
+ *
+ * The beacon is the durable one — it reaches Cloud Error Reporting, dedupes a
+ * failure that repeats on every edit into one report, and caps itself, so a
+ * permission denial shows up as a graph instead of a support ticket. The
+ * console line is for whoever has devtools open, and fires once: the second
+ * failure carries no information the first did not, and a message per edit
+ * buries the diagnostics that do.
+ */
+function reportDroppedEntry(error: unknown): void {
+  reportHandledError(error, { kind: 'host-activity-write' })
+  if (announced) return
+  announced = true
+  console.error(
+    'Activity logging failed; entries from this session are being dropped.',
+    error,
+  )
+}
+
 /**
  * User activity log (AGL-118): fire-and-forget appends to
  * `hosts/{hostId}/activity` from console mutation points. Never throws —
  * an audit miss must not break the edit that triggered it. Covered by the
  * host-admin wildcard rule, so no rules change is needed.
+ *
+ * `activity` is deliberately absent from the host catch-all's create
+ * exclusion list, so a member holding a content role writes here directly.
+ * `cloud/rules-tests/firestore-rules.test.mjs` pins that on both sides —
+ * the roles that may append and the roles that may not.
  */
 export function useHostActivityLogger(hostId: string | undefined) {
   const firestore = useFirestore()
@@ -71,7 +106,7 @@ export function useHostActivityLogger(hostId: string | undefined) {
           ...(target.versionId ? { versionId: target.versionId } : {}),
         },
         createdAt: Timestamp.now(),
-      }).catch(console.error)
+      }).catch(reportDroppedEntry)
     },
     [firestore, hostId, user],
   )

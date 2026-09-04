@@ -23,7 +23,7 @@ import { useMemo, useState, type SyntheticEvent } from 'react'
 import AccordionListComponent from './accordion-list.component'
 
 /**
- * What this element IS, at the bottom of Attributes (AGL-1486).
+ * What this element IS, at the bottom of Attributes.
  *
  * Two collapsed accordions: the component's own description, and the
  * element / parent / component / plugin ids. Reference detail — worth having

@@ -169,7 +169,7 @@ describe('a result row', () => {
     open()
     const hrefs = resultAnchors().map((a) => a.getAttribute('href'))
     expect(hrefs).toContain('/acme/hosts/demo/layouts/l1')
-    expect(hrefs).toContain('/acme/hosts/demo/workflows')
+    expect(hrefs).toContain('/acme/hosts/demo/automation')
   })
 })
 

@@ -17,7 +17,11 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { BUNDLE_ID } from './constants/bundle-common'
-import { COMMERCE_BUNDLE, registerCommercePlugin } from './plugin'
+import {
+  COMMERCE_BUNDLE,
+  registerCommerceConsole,
+  registerCommercePlugin,
+} from './plugin'
 
 describe('commerce plugin', () => {
   it('registers once as a mui-dependent bundle', () => {
@@ -73,5 +77,61 @@ describe('commerce plugin', () => {
       }
     }
     expect(offenders).toEqual([])
+  })
+})
+
+/**
+ * The register declares who may open it; the catalog beside it does not.
+ *
+ * These assert the DECLARATION. What the shell does with it is proved at the
+ * route in `apps/console/specs/plugin-surface-permission-keys.spec.tsx` —
+ * a declaration nothing reads is the state this whole arrangement exists to
+ * stop, so neither half is evidence on its own.
+ */
+describe('the commerce console surfaces declare their own authorization', () => {
+  const consoleExtension = () =>
+    Aglyn.listConsoleExtensions().find((entry) => entry.pluginId === BUNDLE_ID)
+  const navItem = (href: string) =>
+    consoleExtension()?.navItems?.find((entry) => entry.href === href)
+
+  beforeEach(() => {
+    registerCommerceConsole()
+  })
+
+  it('requires `managePos` to open the POS register', () => {
+    expect(navItem('/pos')?.permission).toBe('managePos')
+  })
+
+  it('leaves PRODUCTS open — the narrowing must not reach the sibling', () => {
+    /*
+     * The reason the key sits on the nav item rather than the extension.
+     * `ConsoleExtension.permission` applies to every surface the extension
+     * registers, so declaring `managePos` there would have put the catalog,
+     * orders and promotions behind a point-of-sale permission — refusing a
+     * merchandiser who has no business at the till and every business in the
+     * catalog.
+     */
+    expect(navItem('/products')?.permission).toBeUndefined()
+    expect(consoleExtension()?.permission).toBeUndefined()
+  })
+
+  it('names a key the plugin permission registry actually carries', () => {
+    // A key in neither vocabulary is REFUSED by the shell, so a typo here
+    // takes the register offline for everybody rather than failing loudly.
+    // `managePos` is camelCase and lives in the plugin registry, never in
+    // the dotted catalog — looking it up in the wrong space finds nothing.
+    const key = navItem('/pos')?.permission as string
+    expect(Aglyn.listPluginPermissionKeys()).toContain(key)
+    expect(Aglyn.ORG_PERMISSION_KEYS).not.toContain(key)
+  })
+
+  it('admits the tiers the sale route accepts, and not the viewer', () => {
+    // `server/pos-order.ts` refuses a sale unless the resolved map holds
+    // this key, so the console must offer the register to exactly the
+    // population that route will take money from.
+    const key = navItem('/pos')?.permission as string
+    expect(Aglyn.resolveRolePermissions('admin')[key]).toBe(true)
+    expect(Aglyn.resolveRolePermissions('editor')[key]).toBe(true)
+    expect(Aglyn.resolveRolePermissions('viewer')[key]).toBe(false)
   })
 })
