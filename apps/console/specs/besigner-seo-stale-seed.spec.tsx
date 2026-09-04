@@ -175,6 +175,16 @@ jest.mock('@aglyn/aglyn', () => ({
   collectReferencedComponentIds: jest.requireActual(
     '../../../libs/aglyn/src/lib/app-utils/compose-reusable-components',
   ).collectReferencedComponentIds,
+  // Real too (AGL-2572): the slug field refuses a typed `/` through this
+  // pair, and both are pure functions over a string. Listed because this mock
+  // is a closed world — an export the page gained arrives as `undefined is
+  // not a function`, from inside render, nowhere near the cause.
+  screenSlugHasPathSeparator: jest.requireActual(
+    '@aglyn/aglyn/app-utils/screen-route',
+  ).screenSlugHasPathSeparator,
+  SCREEN_SLUG_PATH_SEPARATOR_MESSAGE: jest.requireActual(
+    '@aglyn/aglyn/app-utils/screen-route',
+  ).SCREEN_SLUG_PATH_SEPARATOR_MESSAGE,
   reservedScreenRouteMessage: jest.requireActual(
     '@aglyn/aglyn/app-utils/screen-route',
   ).reservedScreenRouteMessage,

@@ -179,6 +179,9 @@ jest.mock('@aglyn/aglyn', () => ({
   reservedScreenRouteMessage: mockRealScreenRoute.reservedScreenRouteMessage,
   reservedScreenRouteSegment: mockRealScreenRoute.reservedScreenRouteSegment,
   screenRoutePathToUrl: mockRealScreenRoute.screenRoutePathToUrl,
+  screenSlugHasPathSeparator: mockRealScreenRoute.screenSlugHasPathSeparator,
+  SCREEN_SLUG_PATH_SEPARATOR_MESSAGE:
+    mockRealScreenRoute.SCREEN_SLUG_PATH_SEPARATOR_MESSAGE,
   SCREEN_KIND_TEMPLATE: mockRealScreenRoute.SCREEN_KIND_TEMPLATE,
   wouldCreateScreenCycle: mockRealScreenRoute.wouldCreateScreenCycle,
 }))
@@ -592,5 +595,89 @@ describe('Screen Properties ▸ Slug · the seed (AGL-2572)', () => {
       // page, so the seam drops both the old one and the new one.
       expect.objectContaining({ user: expect.anything() }),
     )
+  })
+})
+
+/**
+ * A `/` a person TYPES (AGL-2572).
+ *
+ * The seed above is one way the field met a path; the other is somebody
+ * writing `alternatives/webflow` into it, which reads as a perfectly ordinary
+ * address. `normalizeScreenSlug` deletes the separator to reach the single
+ * segment it promises, so the value was accepted, glued and stored — nothing
+ * on screen said otherwise. The field refuses it now, and says what the
+ * hierarchy is for.
+ */
+describe('Screen Properties ▸ Slug · a typed path (AGL-2572)', () => {
+  it('refuses the edit instead of gluing it', async () => {
+    render(<ScreenBesigner />)
+
+    typeSlug('alternatives/webflow')
+    clickDone()
+
+    await waitFor(() => expect(mockEnqueueSnackbar).toHaveBeenCalled())
+    expect(mockEnqueueSnackbar).toHaveBeenCalledWith(
+      expect.stringContaining('one path segment'),
+      expect.objectContaining({ variant: 'warning' }),
+    )
+    // The glue itself: neither the pasted-together word nor anything else
+    // reached the document, and the canvas save that used to answer
+    // "Already saved" for a refused slug never ran.
+    expect(stored.slug).toBe('old')
+    expect(mockSyncScreenRouteEntries).not.toHaveBeenCalled()
+    expect(mockHandleSave).not.toHaveBeenCalled()
+  })
+
+  it('says so on the field, before anything is pressed', () => {
+    render(<ScreenBesigner />)
+
+    typeSlug('alternatives/webflow')
+
+    expect(screen.getByText(/one path segment/)).toBeTruthy()
+    // The refusal has to be visible BEFORE the click, for the reason the
+    // reserved-address one is: this dialog publishes from a canvas the author
+    // is already looking at.
+    expect(
+      (screen.getByRole('button', { name: 'Publish' }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true)
+  })
+
+  it('does not publish a typed path either', async () => {
+    render(<ScreenBesigner />)
+
+    typeSlug('alternatives/webflow')
+    fireEvent.click(screen.getByRole('button', { name: 'Publish' }))
+
+    await waitFor(() => expect(screen.getByText(/one path segment/)).toBeTruthy())
+    expect(stored.slug).toBe('old')
+    expect(mockSyncScreenRouteEntries).not.toHaveBeenCalled()
+  })
+
+  /** `/` alone is the home page, and it still means that. */
+  it('still takes the home page', async () => {
+    mockRoutingMap = {}
+    stored.parentId = undefined
+    mockScreenDoc.data = stored
+    render(<ScreenBesigner />)
+
+    typeSlug('/')
+    clickDone()
+
+    await waitFor(() => expect(stored.slug).toBe('/'))
+    expect(mockEnqueueSnackbar).not.toHaveBeenCalledWith(
+      expect.stringContaining('one path segment'),
+      expect.anything(),
+    )
+  })
+
+  /** An ordinary slug is untouched, including the slashes around one. */
+  it('leaves an ordinary slug alone', async () => {
+    render(<ScreenBesigner />)
+
+    typeSlug('/webflow/')
+    clickDone()
+
+    await waitFor(() => expect(stored.slug).toBe('webflow'))
   })
 })

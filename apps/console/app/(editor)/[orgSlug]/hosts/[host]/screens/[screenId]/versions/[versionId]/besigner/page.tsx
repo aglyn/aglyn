@@ -738,6 +738,12 @@ function BesignerPage(props) {
     screenResult?.data?.slug ??
     Aglyn.ownScreenSlugFromRoutePath(publishedPath) ??
     ''
+  // A `/` the author typed INSIDE the value (AGL-2572). The field holds one
+  // segment and `normalizeScreenSlug` reaches one by deleting the separator,
+  // so `alternatives/webflow` would be stored as `alternativeswebflow`. Read
+  // off the RAW value, before normalizing, because after it there is nothing
+  // left to notice.
+  const slugPathSeparator = Aglyn.screenSlugHasPathSeparator(slugValue)
   const normalizedSlug = Aglyn.normalizeScreenSlug(slugValue)
   // Candidate map with the pending slug applied, so the composed path and
   // conflict check reflect what Publish would write.
@@ -1020,7 +1026,17 @@ function BesignerPage(props) {
   ])
 
   const handlePublish = useCallback(async () => {
-    if (slugConflict || unpublishedAncestor || reservedSegment) return
+    if (
+      slugConflict ||
+      unpublishedAncestor ||
+      reservedSegment ||
+      slugPathSeparator
+    ) {
+      // The button beside the field is disabled in all four states, so this is
+      // a belt-and-braces bail rather than the refusal an author reads — the
+      // wording lives on the field's own helper line.
+      return
+    }
     // Captured BEFORE the writes below (AGL-1588). `routingMap` is a live
     // subscription with latency compensation, so by the time the write chain
     // resolves the snapshot has already grown the entry being added — reading
@@ -1101,6 +1117,7 @@ function BesignerPage(props) {
     slugConflict,
     unpublishedAncestor,
     reservedSegment,
+    slugPathSeparator,
     normalizedSlug,
     composedPath,
     candidateById,
@@ -1157,13 +1174,20 @@ function BesignerPage(props) {
         })
         return
       }
-      if (slugConflict || unpublishedAncestor || reservedSegment) {
+      if (
+        slugConflict ||
+        unpublishedAncestor ||
+        reservedSegment ||
+        slugPathSeparator
+      ) {
         enqueueSnackbar(
           slugConflict
             ? 'Another screen is already published at this path'
             : reservedSegment
               ? Aglyn.reservedScreenRouteMessage(reservedSegment)
-              : 'Publish the parent screen first',
+              : slugPathSeparator
+                ? Aglyn.SCREEN_SLUG_PATH_SEPARATOR_MESSAGE
+                : 'Publish the parent screen first',
           { variant: 'warning', persist: false },
         )
         return
@@ -1212,6 +1236,7 @@ function BesignerPage(props) {
     slugConflict,
     unpublishedAncestor,
     reservedSegment,
+    slugPathSeparator,
     composedPath,
     candidateById,
     screensById,
@@ -1263,13 +1288,20 @@ function BesignerPage(props) {
       setSlugInput(null)
       return true
     }
-    if (slugConflict || unpublishedAncestor || reservedSegment) {
+    if (
+      slugConflict ||
+      unpublishedAncestor ||
+      reservedSegment ||
+      slugPathSeparator
+    ) {
       enqueueSnackbar(
         slugConflict
           ? 'Another screen is already published at this path'
           : reservedSegment
             ? Aglyn.reservedScreenRouteMessage(reservedSegment)
-            : 'Publish the parent screen first',
+            : slugPathSeparator
+              ? Aglyn.SCREEN_SLUG_PATH_SEPARATOR_MESSAGE
+              : 'Publish the parent screen first',
         { variant: 'warning', persist: false },
       )
       return false
@@ -1315,6 +1347,7 @@ function BesignerPage(props) {
     slugConflict,
     unpublishedAncestor,
     reservedSegment,
+    slugPathSeparator,
     normalizedSlug,
     composedPath,
     publishedPath,
@@ -1911,10 +1944,13 @@ function BesignerPage(props) {
                           error={Boolean(
                             slugConflict ||
                             unpublishedAncestor ||
-                            reservedSegment,
+                            reservedSegment ||
+                            slugPathSeparator,
                           )}
                           helperText={
-                            slugConflict
+                            slugPathSeparator
+                              ? Aglyn.SCREEN_SLUG_PATH_SEPARATOR_MESSAGE
+                              : slugConflict
                               ? 'Another screen already uses this path'
                               : reservedSegment
                                 ? Aglyn.reservedScreenRouteMessage(
@@ -1954,6 +1990,7 @@ function BesignerPage(props) {
                             slugConflict ||
                             unpublishedAncestor ||
                             reservedSegment ||
+                            slugPathSeparator ||
                             (!normalizedSlug && !publishedPath),
                           )}
                           sx={{ mt: 0.5, flexShrink: 0 }}

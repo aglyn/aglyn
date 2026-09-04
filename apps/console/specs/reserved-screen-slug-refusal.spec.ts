@@ -85,8 +85,50 @@ describe('a reserved slug is refused everywhere a slug can be set', () => {
   it('disables the besigner Publish button on a reserved slug', () => {
     const source = read(PUBLISH_SURFACES['the besigner slug field'])
     const disabled =
-      /disabled=\{Boolean\(\s*slugConflict \|\|[\s\S]{0,200}?\)\}/.exec(source)
+      /disabled=\{Boolean\(\s*slugConflict \|\|[\s\S]{0,260}?\)\}/.exec(source)
     expect(disabled).not.toBeNull()
     expect(disabled?.[0]).toContain('reservedSegment')
+  })
+})
+
+/**
+ * A `/` INSIDE a slug is refused everywhere a slug can be set (AGL-2572).
+ *
+ * The same coverage argument as the reserved list above, over a different
+ * rule. `normalizeScreenSlug` promises one lowercase url-safe segment and
+ * reaches it by deleting the disallowed characters, so an interior `/` is not
+ * rejected — it is erased, and `alternatives/webflow` becomes
+ * `alternativeswebflow`. Two screens on `aglyn-marketing` carry a slug of that
+ * shape. A field that enforces this while another still glues would leave the
+ * author publishing from whichever surface stays quiet.
+ *
+ * The Screens page create form is here for the refusal only. What a `/` should
+ * MEAN there is still open: that form uses the normalized value as both the
+ * stored slug and the whole routing-map path, so reading it as a hierarchy
+ * would create the screen at a different address than the besigner would.
+ * Refusing decides nothing and destroys nothing.
+ */
+describe('a path-shaped slug is refused everywhere a slug can be set', () => {
+  it.each(Object.entries(PUBLISH_SURFACES))(
+    '%s consults screenSlugHasPathSeparator',
+    (_label, relative) => {
+      expect(read(relative)).toContain('screenSlugHasPathSeparator')
+    },
+  )
+
+  it.each(Object.entries(PUBLISH_SURFACES))(
+    '%s tells the author WHY, in the shared wording',
+    (_label, relative) => {
+      expect(read(relative)).toContain('SCREEN_SLUG_PATH_SEPARATOR_MESSAGE')
+    },
+  )
+
+  /** Visible before the click, for the reason given above. */
+  it('disables the besigner Publish button on a path-shaped slug', () => {
+    const source = read(PUBLISH_SURFACES['the besigner slug field'])
+    const disabled =
+      /disabled=\{Boolean\(\s*slugConflict \|\|[\s\S]{0,260}?\)\}/.exec(source)
+    expect(disabled).not.toBeNull()
+    expect(disabled?.[0]).toContain('slugPathSeparator')
   })
 })

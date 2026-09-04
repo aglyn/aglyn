@@ -24,8 +24,10 @@ import {
   normalizeScreenSlug,
   ownScreenSlugFromRoutePath,
   SCREEN_ROOT_PATH,
+  SCREEN_SLUG_PATH_SEPARATOR_MESSAGE,
   screenClaimsToBeAPage,
   screenRoutePathToUrl,
+  screenSlugHasPathSeparator,
   wouldCreateScreenCycle,
 } from './screen-route'
 
@@ -50,6 +52,72 @@ describe('normalizeScreenSlug', () => {
     expect(normalizeScreenSlug('a--b---c')).toBe('a-b-c')
     expect(normalizeScreenSlug('-edge-')).toBe('edge')
     expect(normalizeScreenSlug('snake_case')).toBe('snake_case')
+  })
+})
+
+/**
+ * A `/` a person types into a SLUG field (AGL-2572).
+ *
+ * The field holds one segment, and `normalizeScreenSlug` reaches one by
+ * deleting every disallowed character — so the separator vanished and
+ * `alternatives/webflow` was stored as `alternativeswebflow`. The normalizer's
+ * contract is right; what was missing is anybody asking the question before
+ * the value reached it.
+ */
+describe('screenSlugHasPathSeparator', () => {
+  it('sees the separator the normalizer would delete', () => {
+    expect(screenSlugHasPathSeparator('alternatives/webflow')).toBe(true)
+    expect(screenSlugHasPathSeparator('press/aglyn-opens-early-access')).toBe(
+      true,
+    )
+    expect(screenSlugHasPathSeparator('/company/about/')).toBe(true)
+  })
+
+  it('leaves the home page alone', () => {
+    expect(screenSlugHasPathSeparator(SCREEN_ROOT_PATH)).toBe(false)
+    expect(screenSlugHasPathSeparator(' / ')).toBe(false)
+    // `normalizeScreenSlug` already answers `undefined` for these; a bare run
+    // of slashes describes no hierarchy to refuse over.
+    expect(screenSlugHasPathSeparator('//')).toBe(false)
+  })
+
+  it('accepts what the normalizer has always handled', () => {
+    expect(screenSlugHasPathSeparator('webflow')).toBe(false)
+    expect(screenSlugHasPathSeparator('About Us')).toBe(false)
+    // Leading and trailing slashes are stripped deliberately, not deleted from
+    // the middle of a word, so they are not a separator.
+    expect(screenSlugHasPathSeparator('/layout-test/')).toBe(false)
+  })
+
+  it('answers false for nothing', () => {
+    expect(screenSlugHasPathSeparator('')).toBe(false)
+    expect(screenSlugHasPathSeparator('   ')).toBe(false)
+    expect(screenSlugHasPathSeparator(null)).toBe(false)
+    expect(screenSlugHasPathSeparator(undefined)).toBe(false)
+  })
+
+  /**
+   * The refusal names the alternative. A field that only said "invalid" would
+   * leave the author retyping the same path.
+   */
+  it('is refused with wording that says what to do instead', () => {
+    expect(SCREEN_SLUG_PATH_SEPARATOR_MESSAGE).toContain('one path segment')
+    expect(SCREEN_SLUG_PATH_SEPARATOR_MESSAGE).toContain('parent screen')
+  })
+
+  /**
+   * The pairing that matters: the values this predicate refuses are exactly
+   * the ones the normalizer would have glued, and the ones it passes come back
+   * from the normalizer whole.
+   */
+  it('refuses precisely what the normalizer would glue', () => {
+    expect(normalizeScreenSlug('alternatives/webflow')).toBe(
+      'alternativeswebflow',
+    )
+    expect(screenSlugHasPathSeparator('alternatives/webflow')).toBe(true)
+
+    expect(normalizeScreenSlug('/layout-test/')).toBe('layout-test')
+    expect(normalizeScreenSlug(SCREEN_ROOT_PATH)).toBe(SCREEN_ROOT_PATH)
   })
 })
 
