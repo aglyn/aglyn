@@ -22,6 +22,7 @@ import {
   findScreenIdByRoutePath,
   linkableScreenRoutes,
   normalizeScreenSlug,
+  ownScreenSlugFromRoutePath,
   SCREEN_ROOT_PATH,
   screenClaimsToBeAPage,
   screenRoutePathToUrl,
@@ -160,6 +161,91 @@ describe('buildScreenRouteEntries', () => {
 
   it('omits unresolvable screens that were never published', () => {
     expect(buildScreenRouteEntries('draft', screens, {})).toEqual({})
+  })
+
+  /**
+   * A MOVE IS NOT A PUBLISH (AGL-2571).
+   *
+   * An entry in the host's `screens` map is the whole of what makes a path
+   * reachable, so minting one publishes the screen. Assigning a parent to an
+   * unpublished screen that merely carried a slug did exactly that, and the
+   * besigner toolbar — which reads this map — then offered `Unpublish` and an
+   * enabled `Live` link for a page that 404s.
+   */
+  describe('publish: false', () => {
+    it('never registers a screen that has no entry today', () => {
+      expect(
+        buildScreenRouteEntries('about', screens, {}, { publish: false }),
+      ).toEqual({})
+    })
+
+    it('rewrites the entries that already exist', () => {
+      const routingMap = { about: 'about' }
+      expect(
+        buildScreenRouteEntries('about', screens, routingMap, {
+          publish: false,
+        }),
+      ).toEqual({ about: 'company/about' })
+    })
+
+    it('leaves an unpublished descendant out while moving a live one', () => {
+      // `team` is live under `about`; `about` itself is live; `draft` is not.
+      const routingMap = { about: 'about', team: 'about/team' }
+      expect(
+        buildScreenRouteEntries('company', screens, routingMap, {
+          publish: false,
+        }),
+      ).toEqual({ about: 'company/about', team: 'company/about/team' })
+    })
+
+    it('still removes an entry whose chain no longer resolves', () => {
+      const unslugged = { ...screens, about: { parentId: 'company' } }
+      const routingMap = { about: 'company/about', team: 'company/about/team' }
+      expect(
+        buildScreenRouteEntries('about', unslugged, routingMap, {
+          publish: false,
+        }),
+      ).toEqual({ about: null, team: null })
+    })
+  })
+})
+
+/**
+ * The slug field holds ONE segment; the routing map holds the composed path
+ * (AGL-2572). Seeding that field from the map has to take the screen's own
+ * segment — the besigner seeded the whole path, `normalizeScreenSlug` deleted
+ * the interior `/`, and the glued result was stored as the screen's slug.
+ */
+describe('ownScreenSlugFromRoutePath', () => {
+  it('returns the last segment of a composed path', () => {
+    expect(ownScreenSlugFromRoutePath('alternatives/webflow')).toBe('webflow')
+    expect(ownScreenSlugFromRoutePath('company/about/team')).toBe('team')
+    expect(ownScreenSlugFromRoutePath('about')).toBe('about')
+  })
+
+  it('keeps the home page as the root path', () => {
+    expect(ownScreenSlugFromRoutePath(SCREEN_ROOT_PATH)).toBe(SCREEN_ROOT_PATH)
+  })
+
+  it('answers undefined for nothing', () => {
+    expect(ownScreenSlugFromRoutePath(undefined)).toBeUndefined()
+    expect(ownScreenSlugFromRoutePath(null)).toBeUndefined()
+    expect(ownScreenSlugFromRoutePath('')).toBeUndefined()
+  })
+
+  /**
+   * The whole point: what comes back must survive `normalizeScreenSlug`
+   * unchanged. The composed path does not — that is the defect.
+   */
+  it('survives the normalizer that glues a raw path', () => {
+    expect(normalizeScreenSlug('alternatives/webflow')).toBe(
+      'alternativeswebflow',
+    )
+    expect(
+      normalizeScreenSlug(
+        ownScreenSlugFromRoutePath('alternatives/webflow') as string,
+      ),
+    ).toBe('webflow')
   })
 })
 

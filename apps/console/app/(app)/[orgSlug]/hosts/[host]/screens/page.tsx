@@ -549,11 +549,21 @@ function Screens(props) {
           await syncScreenRouteEntries(
             firestore,
             hostId,
-            buildScreenRouteEntries(screenId, nextById, routingMap),
+            // Dragging a screen to a new parent MOVES it; it does not put it
+            // on the site (AGL-2571). Live paths follow the new parent, and a
+            // screen nobody published stays out of the routing map — the map
+            // is the only thing that makes a path reachable, so writing an
+            // entry here would publish by drag-and-drop.
+            buildScreenRouteEntries(screenId, nextById, routingMap, {
+              publish: false,
+            }),
           )
         }
         enqueueSnackbar(
-          parentChanged && nextSelfPath
+          // "Now served at" only for a screen that IS served (AGL-2571) —
+          // an unpublished screen is moved, not routed, and saying otherwise
+          // is the same false report the toolbar was making.
+          parentChanged && nextSelfPath && routingMap?.[screenId] !== undefined
             ? `Screen moved — now served at ${screenRoutePathToUrl(nextSelfPath)}`
             : 'Screen moved',
           { variant: 'success', persist: false },
