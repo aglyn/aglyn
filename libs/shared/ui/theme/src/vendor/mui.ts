@@ -59,6 +59,7 @@ declare module '@mui/material/Typography' {
     lede: true
     bodyCompact: true
     micro: true
+    displayXl: true
   }
 }
 declare module '@mui/material/ToggleButtonGroup' {
@@ -222,7 +223,13 @@ declare module '@mui/material/styles' {
    * Optional on the options side, required on the resolved side: an override
    * may omit it (MUI merges the default in), a reader may not have to check.
    *
-   * ## And three SCALE variants
+   * ## And the SCALE variants
+   *
+   * `displayXl` is the rung ABOVE `h1`. The brand's display ramp tops out at
+   * h1's 56px, so a marketing hero drawn at 72px had no token to ask for and
+   * hand-wrote the pixels — which then lost to the variant's own responsive
+   * ramp. One rung, not two: h1 already IS the 56px display size, and a
+   * second name for it would leave two tokens to keep in step.
    *
    * `lede`, `bodyCompact` and `micro` — 17px, 13px and 11px with their line
    * heights — exist because the built pages kept reaching for those sizes and,
@@ -245,6 +252,7 @@ declare module '@mui/material/styles' {
     lede?: CSSProperties
     bodyCompact?: CSSProperties
     micro?: CSSProperties
+    displayXl?: CSSProperties
   }
 
   interface TypographyVariants {
@@ -254,6 +262,7 @@ declare module '@mui/material/styles' {
     lede: CSSProperties
     bodyCompact: CSSProperties
     micro: CSSProperties
+    displayXl: CSSProperties
   }
 
   interface ZIndex {

@@ -233,8 +233,23 @@ node tools/scripts/deploy-firestore-indexes.mjs --dry-run   # show the plan
 node tools/scripts/deploy-firestore-indexes.mjs
 ```
 
-The service account needs the **Cloud Datastore Owner** role (or
-`datastore.indexes.create` + `datastore.indexes.update`).
+The service account needs permission to **write** index configuration. Reading
+it needs less, so a run that lists your existing indexes and then fails `403`
+on the first create is a missing role, not a bad index file:
+
+```bash
+gcloud projects add-iam-policy-binding <PROJECT_ID> \
+  --member="serviceAccount:<FIREBASE_CLIENT_EMAIL>" \
+  --role="roles/datastore.indexAdmin"
+```
+
+`roles/datastore.indexAdmin` ("Cloud Datastore Index Admin") is the minimal
+role; `roles/datastore.owner` also works and grants a great deal more.
+
+> Do not go looking for a role that lists `datastore.indexes.create`. Those
+> permission names are aliases the Firestore API surfaces, and the predefined
+> roles grant them under the Datastore-mode name `datastore.schemas.*` — no
+> role lists them, including `roles/owner`.
 
 **This script only ever adds.** If your project has an index the file does not
 list, it is reported and left alone. That is the deliberate difference from

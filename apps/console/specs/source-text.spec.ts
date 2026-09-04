@@ -134,7 +134,7 @@ describe('the two openers that are not comments (AGL-1479)', () => {
       starts at the file input's MIME type and ends at whatever comment
       terminator happens to come next, so its exact length is a property of
       where the next comment in the library file ends — and adding one
-      anywhere inside the span shortens it. It did: AGL-693 added a comment to
+      anywhere inside the span shortens it. It did: AGL-2501 added a comment to
       the empty state below the file input and the figure moved from just over
       10,000 to 9,960, reddening a test about a parser bug because of an edit
       that had nothing to do with parsing.

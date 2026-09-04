@@ -26,7 +26,7 @@ describe('workflows plugin', () => {
       (entry) => entry.pluginId === BUNDLE_ID,
     )
     expect(extension?.featureFlag).toBe('workflows')
-    expect(extension?.navItems?.[0]?.href).toBe('/workflows')
+    expect(extension?.navItems?.[0]?.href).toBe('/automation')
     expect(extension?.navItems?.[0]?.Component).toBeDefined()
     // Console-only: it contributes no besigner/canvas bundle.
     expect(Aglyn.plugins.getDependency(BUNDLE_ID)).toBeUndefined()

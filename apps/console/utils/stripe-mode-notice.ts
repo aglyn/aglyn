@@ -30,6 +30,16 @@
  * observation ("you have no invoices") when it was a limitation ("this
  * deployment cannot look them up").
  *
+ * ## Why it does not promise the history is intact
+ *
+ * It used to say "The billing history is intact". That was safe while this
+ * only fired for a MISSING customer — the other mode was then the only place
+ * anything could have been billed. It fires now whenever the other mode holds
+ * a customer, including when both modes have one and neither has invoices, and
+ * in that case "intact" is a claim about records nothing here has read. This
+ * deployment cannot query the other mode's key, so the honest form names where
+ * to look rather than asserting what is there.
+ *
  * ## Written for a developer on localhost
  *
  * In practice only a `sk_test` deployment can show this, and the only such
@@ -46,12 +56,12 @@ export function stripeOtherModeInvoiceNotice(
   const here = deploymentMode === 'live' ? 'live' : 'test'
   const there = deploymentMode === 'live' ? 'test' : 'live'
   return (
-    `This workspace's Stripe customer exists in ${there} mode, and this ` +
-    `deployment is running against Stripe ${here} mode — so no invoices can ` +
-    `be listed here. The billing history is intact; it is visible from a ` +
-    `${there}-mode deployment${
+    `This workspace has a Stripe customer in ${there} mode, and this ` +
+    `deployment is running against Stripe ${here} mode — so anything billed ` +
+    `there cannot be listed here. If you are expecting invoices, they are on ` +
+    `the ${there}-mode side${
       there === 'live' ? ' (production)' : ''
-    }. This is not "no invoices".`
+    }. This is not necessarily "no invoices".`
   )
 }
 

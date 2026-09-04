@@ -15,13 +15,20 @@
  * limitations under the License.
  */
 
-import { createResourceUid } from '@aglyn/aglyn'
+import { createResourceUid, encodeStoredNodes } from '@aglyn/aglyn'
 import {
   TENANT_EMAIL_COLLECTION,
   buildDefaultEmailNodeMap,
   type TenantEmailEntry,
 } from '@aglyn/shared-util-email'
-import { doc, getDoc, setDoc, Timestamp, type Firestore } from 'firebase/firestore'
+import {
+  Bytes,
+  doc,
+  getDoc,
+  setDoc,
+  Timestamp,
+  type Firestore,
+} from 'firebase/firestore'
 
 /**
  * Resolves the version a site owner should open for one of their site's
@@ -60,7 +67,13 @@ export async function openHostEmailVersion(
     updatedAt: timestamp,
     // Same builder the send-time default render uses, so the version a site
     // owner opens is exactly what a send produces before they change anything.
-    nodes: buildDefaultEmailNodeMap(entry),
+    // Compressed at rest like every other besigner document (AGL-1151); the
+    // editor's converter writes the same form from here on, so the seed and
+    // the first save agree rather than the document changing encoding under
+    // its first edit.
+    nodes: Bytes.fromUint8Array(
+      encodeStoredNodes(buildDefaultEmailNodeMap(entry))!,
+    ),
   })
   await setDoc(
     templateRef,

@@ -63,6 +63,10 @@ export enum Route {
   // from 2026-09-01, so the return needs a URL a person can bookmark.
   ADMIN_ASSIST_SIGNALS = '/admin/assist-signals',
   ADMIN_REVENUE = '/admin/revenue',
+  // Realised band utilization and the margin that follows from it. Beside
+  // Revenue because the two are the halves of one question: that page reports
+  // what came in, this one what serving it cost.
+  ADMIN_MARGIN_UTILIZATION = '/admin/margin-utilization',
   ADMIN_TAX_RETURN = '/admin/tax-return',
   ADMIN_AUDIT = '/admin/audit',
   ADMIN_USERS = '/admin/users',
@@ -94,6 +98,23 @@ export enum Route {
   ORG_HOME = '/[orgSlug]',
   ORG_MEDIA = '/[orgSlug]/media',
   ORG_DATA = '/[orgSlug]/data',
+  /*
+   * The organization's address book.
+   *
+   * Org-scoped rather than a section of a site, because it answers the one
+   * question a site page cannot: which of the organization's sites know a
+   * given person. A contact document is shared by every site in the org — one
+   * human who touched two of them is one row — and until this route there was
+   * no surface anywhere that showed the deduped person, so the dedupe the
+   * shared address book exists for was invisible and the billing unit
+   * (unique people per org) had nothing standing behind it.
+   *
+   * It shows identity, which sites hold the person, and consent per site. The
+   * per-site CRM — notes, tags, timeline, order history — stays on the site's
+   * own Contacts surface, because those are the holder's business records and
+   * this is the one route designed to cross between holders.
+   */
+  ORG_CONTACTS = '/[orgSlug]/contacts',
   ORG_PLUGINS = '/[orgSlug]/plugins',
   // One plugin, as installed in this workspace (AGL-1007): scope, settings
   // and permissions in one place. The segment takes EITHER identifier
@@ -107,6 +128,31 @@ export enum Route {
   // forum, and a redirect stub sitting on `/marketplace` would have taken the
   // one path that feature wants.
   ORG_MARKETPLACE = '/[orgSlug]/marketplace',
+  /*
+   * Marketplace SECTIONS are routes (AGL-2501), for the reason the settings
+   * and account sections are: a panel that is not open should cost nothing,
+   * and the seller half of this hub reads the organization's REVENUE.
+   *
+   * The four seller sections are the reason the layout gates rather than the
+   * rail. As tabs they were simply not rendered for a member without
+   * `publishToMarketplace`; as routes each one is reachable by typing its URL,
+   * so the refusal has to sit above them all rather than in the list that
+   * draws them.
+   *
+   * Every segment here is shorter than the ten characters `createResourceUid`
+   * emits, so none of them can ever shadow a real `[listingId]` sitting at the
+   * same level. `upload` rather than `publish` because `publish/plugin` is
+   * already a route beneath this one, and two directories contributing the
+   * same segment is a tree Next cannot resolve a layout for.
+   */
+  ORG_MARKETPLACE_BROWSE = '/[orgSlug]/marketplace/browse',
+  ORG_MARKETPLACE_INSTALLED = '/[orgSlug]/marketplace/installed',
+  ORG_MARKETPLACE_LICENCES = '/[orgSlug]/marketplace/licences',
+  ORG_MARKETPLACE_UPLOAD = '/[orgSlug]/marketplace/upload',
+  ORG_MARKETPLACE_SELLER_PROFILE = '/[orgSlug]/marketplace/profile',
+  ORG_MARKETPLACE_SELLER_LISTINGS = '/[orgSlug]/marketplace/listings',
+  ORG_MARKETPLACE_SELLER_PAYOUTS = '/[orgSlug]/marketplace/payouts',
+  ORG_MARKETPLACE_SELLER_SALES = '/[orgSlug]/marketplace/sales',
   ORG_MARKETPLACE_LISTING = '/[orgSlug]/marketplace/[listingId]',
   ORG_MARKETPLACE_PUBLISHER = '/[orgSlug]/marketplace/publisher/[handle]',
   // Publishing a plugin is a page, not a modal (AGL-1078): the most
@@ -115,7 +161,7 @@ export enum Route {
   ORG_MARKETPLACE_PUBLISH_PLUGIN = '/[orgSlug]/marketplace/publish/plugin',
   ORG_SETTINGS = '/[orgSlug]/settings',
   /*
-   * Settings SECTIONS are routes (AGL-693). `HubTabs` mounted every panel —
+   * Settings SECTIONS are routes (AGL-2501). `HubTabs` mounted every panel —
    * `keepMounted`, with `lazy` off by default and passed by nobody — so
    * opening General also mounted the API-keys, SSO and data-export cards and
    * ran every read in them. Routes mount one page and code-split per route.
@@ -129,7 +175,20 @@ export enum Route {
   ORG_SETTINGS_SSO = '/[orgSlug]/settings/sso',
   ORG_SETTINGS_OWNERSHIP = '/[orgSlug]/settings/ownership',
   ORG_SETTINGS_DELETE = '/[orgSlug]/settings/delete',
+  /**
+   * Billing, section by section (AGL-2501).
+   *
+   * `MANAGE_BILLING` is unchanged and is the PLAN section — it resolves to a
+   * page inside a route group, which adds no path segment. That is what makes
+   * this split free: every link in the console, every hash anchor
+   * (`#addons`, `#collaborator-seats`) and Stripe's own dunning mail all point
+   * here already and none of them moves. No redirect, and no `?tab=` shim to
+   * carry forever.
+   */
   MANAGE_BILLING = '/[orgSlug]/billing',
+  MANAGE_BILLING_USAGE = '/[orgSlug]/billing/usage',
+  MANAGE_BILLING_INVOICES = '/[orgSlug]/billing/invoices',
+  MANAGE_BILLING_SETTINGS = '/[orgSlug]/billing/settings',
   // The ONE billing URL that carries no org (AGL-2430).
   //
   // Everything else on this table is org-scoped, which is correct for a
@@ -149,7 +208,7 @@ export enum Route {
   BILLING_ENTRY = '/billing',
   MANAGE_USER_SETTINGS = '/manage/user',
   /*
-   * Account SECTIONS are routes (AGL-693). `HubTabs` mounted every panel —
+   * Account SECTIONS are routes (AGL-2501). `HubTabs` mounted every panel —
    * `keepMounted`, with `lazy` off by default and passed by nobody — so
    * opening Account also mounted the email-addresses, passkeys, recent
    * sign-ins, data-export and close-account cards and ran every read in them.
@@ -168,6 +227,15 @@ export enum Route {
   MANAGE_USER_SECURITY = '/manage/user/security',
   MANAGE_USER_CLOSE = '/manage/user/close',
   MANAGE_NOTIFICATIONS = '/manage/notifications',
+  /*
+   * A URL for the defect channel (AGL-2486). "Report an issue" was reachable
+   * only by opening the account menu, so nothing outside the console could
+   * send anyone to it — the repo's README pointed at GitHub issues, which we
+   * do not use, and every other "tell us about it" surface had the same
+   * problem. User-level rather than org-scoped because the dialog is: it
+   * needs no workspace, no role and no paid plan.
+   */
+  MANAGE_REPORT_ISSUE = '/manage/report-issue',
   AUTH_SIGN_IN = '/signin',
   AUTH_SIGN_OUT = '/signout',
   AUTH_SIGN_UP = '/signup',
@@ -214,7 +282,7 @@ export enum Route {
   CONTENT_ENTRY_DETAILS = '/[orgSlug]/hosts/[host]/content/[collectionSlug]/entries/[entryId]',
   MANAGE_TEAM = '/[orgSlug]/team',
   /*
-   * Team SECTIONS are routes, not tabs (AGL-693). A section's bundle then
+   * Team SECTIONS are routes, not tabs (AGL-2501). A section's bundle then
    * arrives when a reader opens it and never before, the section is linkable,
    * and the active state is a fact about the URL rather than state that has to
    * be kept in sync with it. `MANAGE_TEAM` itself redirects to members.
@@ -246,15 +314,33 @@ export enum Route {
   HOST_CONTACTS = '/[orgSlug]/hosts/[host]/contacts',
   HOST_MEDIA = '/[orgSlug]/hosts/[host]/media',
   HOST_SETUP = '/[orgSlug]/hosts/[host]/setup',
+  /*
+   * Setup SECTIONS are routes (AGL-2501), so an unopened one costs neither a
+   * read nor a byte. `HOST_SETUP` stays the nav tab's href and redirects to
+   * Basic details, honouring the `?tab=` ids these sections were deep-linked
+   * by — unlike the settings and marketplace hubs, links holding those ids are
+   * demonstrably in the wild and two are built in this repo.
+   */
+  HOST_SETUP_DETAILS = '/[orgSlug]/hosts/[host]/setup/details',
+  HOST_SETUP_SEO = '/[orgSlug]/hosts/[host]/setup/seo',
+  HOST_SETUP_TRACKING = '/[orgSlug]/hosts/[host]/setup/tracking',
+  HOST_SETUP_THEME = '/[orgSlug]/hosts/[host]/setup/theme',
+  HOST_SETUP_EMAILS = '/[orgSlug]/hosts/[host]/setup/emails',
   // Host Admin area (AGL-1014): owner/admin-only controls — per-site plugin
   // enablement and the Danger zone — out of the Setup page collaborators
   // legitimately visit.
   HOST_ADMIN = '/[orgSlug]/hosts/[host]/admin',
   /*
-   * Site-admin SECTIONS are routes (AGL-693), so an unopened one costs neither
+   * Site-admin SECTIONS are routes (AGL-2501), so an unopened one costs neither
    * a read nor a byte. `HOST_ADMIN` redirects to Plugins and still honours the
    * `?tab=` ids these sections were deep-linked by.
    */
+  /*
+   * The site as an OBJECT: its name in the console and the subdomain it
+   * answers to. First in the rail because an address and a name are what
+   * identify the thing every other section governs.
+   */
+  HOST_ADMIN_GENERAL = '/[orgSlug]/hosts/[host]/admin/general',
   HOST_ADMIN_PLUGINS = '/[orgSlug]/hosts/[host]/admin/plugins',
   /*
    * One plugin, as installed on ONE site (AGL-428, AGL-1014) — the
@@ -270,8 +356,34 @@ export enum Route {
   HOST_ADMIN_DOMAIN = '/[orgSlug]/hosts/[host]/admin/domain',
   HOST_ADMIN_SECURITY = '/[orgSlug]/hosts/[host]/admin/security',
   HOST_ADMIN_ACTIVITY = '/[orgSlug]/hosts/[host]/admin/activity',
+  /*
+   * Backup, restore and publishing the site as a template — moving the whole
+   * site somewhere else, or bringing it back. Its own section rather than the
+   * Danger zone: restore overwrites, but export and publishing a template do
+   * not, and filing all three under a destructive heading mislabels two of
+   * them.
+   */
+  HOST_ADMIN_BACKUP = '/[orgSlug]/hosts/[host]/admin/backup',
   HOST_ADMIN_DANGER = '/[orgSlug]/hosts/[host]/admin/danger',
   HOST_THEME = '/[orgSlug]/hosts/[host]/theme',
+  /*
+   * The automation section: Workflows, Actions and Webhooks under one parent.
+   * The parent is named for what the three have in common, so no tab shares a
+   * name with the section that contains it.
+   */
+  HOST_AUTOMATION = '/[orgSlug]/hosts/[host]/automation',
+  /**
+   * The address the automation section answered to before it had a name of
+   * its own. Nothing links here — `HOST_AUTOMATION` is what the nav, the
+   * search results and the activity feed build — but the console redirects it
+   * permanently, so a held bookmark still lands on the section (and keeps its
+   * `?tab=`, which never changed).
+   *
+   * Kept on the table rather than as a bare literal in `next.config.js`
+   * because the redirect and the address it serves are one fact:
+   * `automation-section.spec.ts` reads this entry and fails if the rule for
+   * it goes missing.
+   */
   HOST_WORKFLOWS = '/[orgSlug]/hosts/[host]/workflows',
   HOST_DATA = '/[orgSlug]/hosts/[host]/data',
   HOST_LOGIC = '/[orgSlug]/hosts/[host]/logic',
@@ -281,6 +393,13 @@ export enum Route {
   // reached from here — matching SCREEN_DETAILS rather than jumping a row
   // straight into the editor.
   COMPONENT_DETAILS = '/[orgSlug]/hosts/[host]/components/[componentId]',
+  HOST_FORMS = '/[orgSlug]/hosts/[host]/forms',
+  // A form is a designable document, so its surface is the component one:
+  // a list, a detail page that owns the versions, and the besigner reached
+  // from there. Deliberately NOT a row that jumps into the editor — a form's
+  // routing and consent field are edited on the detail page, and those decide
+  // what the design is then checked against.
+  FORM_DETAILS = '/[orgSlug]/hosts/[host]/forms/[formId]',
   HOST_TEMPLATES = '/[orgSlug]/hosts/[host]/templates',
   // Template detail (AGL-694), the counterpart to COMPONENT_DETAILS. Note
   // TEMPLATE_BESIGNER carries no versionId — templates version but never
@@ -294,6 +413,7 @@ export enum Route {
   HOST_USERS = '/[orgSlug]/hosts/[host]/users',
   HOST_ANALYTICS = '/[orgSlug]/hosts/[host]/analytics',
   COMPONENT_BESIGNER = '/[orgSlug]/hosts/[host]/components/[componentId]/versions/[versionId]/besigner',
+  FORM_BESIGNER = '/[orgSlug]/hosts/[host]/forms/[formId]/versions/[versionId]/besigner',
   TEMPLATE_BESIGNER = '/[orgSlug]/hosts/[host]/templates/[templateId]/besigner',
   LAYOUT_BESIGNER = '/[orgSlug]/hosts/[host]/layouts/[layoutId]/versions/[versionId]/besigner',
   // Draft preview for every besigner document kind (AGL-1203). Screens had
@@ -303,6 +423,7 @@ export enum Route {
   // deployment. TEMPLATE_PREVIEW carries no versionId, matching
   // TEMPLATE_BESIGNER.
   COMPONENT_PREVIEW = '/[orgSlug]/hosts/[host]/components/[componentId]/versions/[versionId]/preview',
+  FORM_PREVIEW = '/[orgSlug]/hosts/[host]/forms/[formId]/versions/[versionId]/preview',
   TEMPLATE_PREVIEW = '/[orgSlug]/hosts/[host]/templates/[templateId]/preview',
   LAYOUT_PREVIEW = '/[orgSlug]/hosts/[host]/layouts/[layoutId]/versions/[versionId]/preview',
   // The list sits at the bare path, like HOST_COMPONENTS. It used to be
@@ -367,6 +488,7 @@ export interface RoutePayload {
   [Route.ADMIN_MAINTENANCE]: undefined
   [Route.ADMIN_ASSIST_SIGNALS]: undefined
   [Route.ADMIN_REVENUE]: undefined
+  [Route.ADMIN_MARGIN_UTILIZATION]: undefined
   [Route.ADMIN_TAX_RETURN]: undefined
   [Route.ADMIN_AUDIT]: undefined
   [Route.ADMIN_USERS]: undefined
@@ -387,9 +509,18 @@ export interface RoutePayload {
   }
   [Route.ORG_MEDIA]: { orgSlug: string }
   [Route.ORG_DATA]: { orgSlug: string }
+  [Route.ORG_CONTACTS]: { orgSlug: string }
   [Route.ORG_PLUGINS]: { orgSlug: string }
   [Route.ORG_PLUGIN_INSTALLATION]: { orgSlug: string; pluginRef: string }
   [Route.ORG_MARKETPLACE]: { orgSlug: string }
+  [Route.ORG_MARKETPLACE_BROWSE]: { orgSlug: string }
+  [Route.ORG_MARKETPLACE_INSTALLED]: { orgSlug: string }
+  [Route.ORG_MARKETPLACE_LICENCES]: { orgSlug: string }
+  [Route.ORG_MARKETPLACE_UPLOAD]: { orgSlug: string }
+  [Route.ORG_MARKETPLACE_SELLER_PROFILE]: { orgSlug: string }
+  [Route.ORG_MARKETPLACE_SELLER_LISTINGS]: { orgSlug: string }
+  [Route.ORG_MARKETPLACE_SELLER_PAYOUTS]: { orgSlug: string }
+  [Route.ORG_MARKETPLACE_SELLER_SALES]: { orgSlug: string }
   [Route.ORG_MARKETPLACE_LISTING]: { orgSlug: string; listingId: string }
   [Route.ORG_MARKETPLACE_PUBLISHER]: { orgSlug: string; handle: string }
   [Route.ORG_MARKETPLACE_PUBLISH_PLUGIN]: { orgSlug: string }
@@ -401,6 +532,7 @@ export interface RoutePayload {
   [Route.MANAGE_USER_SECURITY]: undefined
   [Route.MANAGE_USER_CLOSE]: undefined
   [Route.MANAGE_NOTIFICATIONS]: undefined
+  [Route.MANAGE_REPORT_ISSUE]: undefined
   [Route.ORG_SETTINGS]: { orgSlug: string }
   [Route.ORG_SETTINGS_GENERAL]: { orgSlug: string }
   [Route.ORG_SETTINGS_PROFILE]: { orgSlug: string }
@@ -443,20 +575,31 @@ export interface RoutePayload {
   [Route.MANAGE_SUPPORT_TICKETS]: { orgSlug: string }
   [Route.MANAGE_SUPPORT_FORUM]: { orgSlug: string }
   [Route.MANAGE_BILLING]: { orgSlug: string }
+  [Route.MANAGE_BILLING_USAGE]: { orgSlug: string }
+  [Route.MANAGE_BILLING_INVOICES]: { orgSlug: string }
+  [Route.MANAGE_BILLING_SETTINGS]: { orgSlug: string }
   [Route.BILLING_ENTRY]: undefined
   [Route.HOST_INBOX]: { orgSlug: string; host: string }
   [Route.HOST_CONTACTS]: { orgSlug: string; host: string }
   [Route.HOST_SETUP]: { orgSlug: string; host: string }
+  [Route.HOST_SETUP_DETAILS]: { orgSlug: string; host: string }
+  [Route.HOST_SETUP_SEO]: { orgSlug: string; host: string }
+  [Route.HOST_SETUP_TRACKING]: { orgSlug: string; host: string }
+  [Route.HOST_SETUP_THEME]: { orgSlug: string; host: string }
+  [Route.HOST_SETUP_EMAILS]: { orgSlug: string; host: string }
   [Route.HOST_ADMIN]: { orgSlug: string; host: string }
+  [Route.HOST_ADMIN_GENERAL]: { orgSlug: string; host: string }
   [Route.HOST_ADMIN_PLUGINS]: { orgSlug: string; host: string }
   [Route.HOST_ADMIN_PLUGIN]: { orgSlug: string; host: string; pluginRef: string }
   [Route.HOST_ADMIN_DOMAIN]: { orgSlug: string; host: string }
   [Route.HOST_ADMIN_SECURITY]: { orgSlug: string; host: string }
   [Route.HOST_ADMIN_ACTIVITY]: { orgSlug: string; host: string }
+  [Route.HOST_ADMIN_BACKUP]: { orgSlug: string; host: string }
   [Route.HOST_ADMIN_DANGER]: { orgSlug: string; host: string }
   [Route.HOST_PLUGIN]: { orgSlug: string; host: string; pluginSlug: string }
   [Route.HOST_MEDIA]: { orgSlug: string; host: string }
   [Route.HOST_THEME]: { orgSlug: string; host: string }
+  [Route.HOST_AUTOMATION]: { orgSlug: string; host: string }
   [Route.HOST_WORKFLOWS]: { orgSlug: string; host: string }
   [Route.HOST_DATA]: { orgSlug: string; host: string }
   [Route.HOST_LOGIC]: { orgSlug: string; host: string }
@@ -466,6 +609,12 @@ export interface RoutePayload {
     orgSlug: string
     host: string
     componentId: string
+  }
+  [Route.HOST_FORMS]: { orgSlug: string; host: string }
+  [Route.FORM_DETAILS]: {
+    orgSlug: string
+    host: string
+    formId: string
   }
   [Route.HOST_TEMPLATES]: { orgSlug: string; host: string }
   [Route.TEMPLATE_DETAILS]: {
@@ -484,6 +633,12 @@ export interface RoutePayload {
     componentId: string
     versionId: string
   }
+  [Route.FORM_BESIGNER]: {
+    orgSlug: string
+    host: string
+    formId: string
+    versionId: string
+  }
   [Route.TEMPLATE_BESIGNER]: {
     orgSlug: string
     host: string
@@ -499,6 +654,12 @@ export interface RoutePayload {
     orgSlug: string
     host: string
     componentId: string
+    versionId: string
+  }
+  [Route.FORM_PREVIEW]: {
+    orgSlug: string
+    host: string
+    formId: string
     versionId: string
   }
   [Route.TEMPLATE_PREVIEW]: {

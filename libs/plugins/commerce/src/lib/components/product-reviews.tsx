@@ -267,7 +267,10 @@ export const schema: Aglyn.ComponentSchema<ProductReviewsProps> = {
     {
       name: 'productId',
       label: 'Product id',
-      description: 'Blank follows the product page URL.',
+      description:
+        'Whose reviews these are. Blank reads the product from the URL, ' +
+        'which is what you want on a product template; naming one pins the ' +
+        'block to that product wherever it is placed.',
       component: Aglyn.FieldComponentType.PRODUCT_SELECT,
     },
     {

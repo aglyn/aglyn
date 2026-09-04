@@ -17,7 +17,7 @@
 
 /**
  * Where a suppressed credit badge or abuse-report control is reported
- * (AGL-1477).
+ *.
  *
  * The guard on the page repairs the suppression; this is the half that makes
  * it MEAN something. Enforcement is a policy decision a person makes, and a

@@ -70,14 +70,21 @@ export async function readUsageCandidates(
       // Components keep their tree on the document; screens and layouts keep
       // it on the published version.
       //
-      // Only the VERSION read is decoded (AGL-1223). A component document's
-      // `nodes` is stored plainly on purpose, so the tenant runtime can read
-      // it without decoding — `decodeStoredNodes` would pass it through
-      // unchanged, but saying so here is cheaper than the next reader
-      // re-deriving it.
+      // BOTH reads are decoded (AGL-1223). A component document is msgpack
+      // for anything promoted since components were compressed and a plain
+      // map for everything older, and `decodeStoredNodes` returns a map
+      // unchanged — so the branch below cannot be simplified back into a raw
+      // read on either side.
+      //
+      // What rides on this: every consumer walks the value with
+      // `Object.values`, which over a `Buffer` yields byte NUMBERS and
+      // matches nothing. The answer that produces is "used nowhere" — for
+      // `/api/hosts/where-used` an invitation to delete something a live page
+      // renders, and for `/api/screens/revalidate` a publish that drops no
+      // cache and leaves the old page served.
       const nodes =
         collectionName === 'components'
-          ? docSnapshot.get('nodes')
+          ? decodeStoredNodes(docSnapshot.get('nodes'))
           : withNodes && versionId
             ? await docSnapshot.ref
                 .collection('versions')

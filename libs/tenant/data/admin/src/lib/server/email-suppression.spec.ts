@@ -17,11 +17,18 @@
 
 import { createHash } from 'crypto'
 import {
+  UNSUBSCRIBE_SUPPRESSION_REASON,
   emailSuppressionKey,
+  filterSendableForHost,
   filterSuppressedEmails,
+  filterTopicSendable,
   isEmailSuppressed,
+  listEmailSuppressions,
   releaseEmail,
+  releaseEmailForConfirmedOptIn,
   suppressEmail,
+  suppressionCursorFrom,
+  suppressionCursorTimestamp,
 } from './email-suppression'
 import { fakeFirestore } from './test-firestore'
 
@@ -136,7 +143,7 @@ describe('isEmailSuppressed', () => {
     await expect(releaseEmail({ email: ADDRESS, firestore })).resolves.toBe(true)
     await expect(isEmailSuppressed(ADDRESS, firestore)).resolves.toBe(false)
     // The record is KEPT, not deleted: it is the evidence the suppression was
-    // honoured while it stood.
+    // honored while it stood.
     expect(firestore.docs('emailSuppressions')[KEY]).toBeDefined()
   })
 
@@ -194,5 +201,656 @@ describe('filterSuppressedEmails', () => {
         firestore,
       ),
     ).resolves.toEqual(['ok@example.com'])
+  })
+})
+
+/**
+ * D6 of `docs/specs/email-overhaul.md` — a campaign consulted the site's own
+ * list and nothing else.
+ *
+ * The address that matters is the one suppressed PLATFORM-wide and not on this
+ * site's list at all: a hard bounce learned on another site in the org, or on
+ * transactional mail carrying no site tag, which is where most of the platform
+ * list comes from. Mailing that person is not one merchant's deliverability
+ * problem — every tenant's campaigns leave by one sending domain under
+ * `p=reject`.
+ */
+describe('listEmailSuppressions', () => {
+  /**
+   * A query double that RECORDS what it was built with.
+   *
+   * `fakeFirestore` answers `orderBy`/`limit` by returning itself and knows
+   * nothing about `startAfter`, so a walk that dropped its cursor would read
+   * page one forever and every assertion over the returned rows would still
+   * pass. What has to be observed is the QUERY, not the answer.
+   */
+  const recordingFirestore = () => {
+    const built: Record<string, unknown> = {}
+    const query: any = {
+      orderBy: (field: string, direction: string) => {
+        built.orderBy = `${field} ${direction}`
+        return query
+      },
+      startAfter: (value: unknown) => {
+        built.startAfter = value
+        return query
+      },
+      limit: (value: number) => {
+        built.limit = value
+        return query
+      },
+      get: async () => ({ docs: [] }),
+    }
+    return { built, firestore: { collection: () => query } as any }
+  }
+
+  it('starts the page AFTER the cursor it was given', async () => {
+    const { built, firestore } = recordingFirestore()
+    await listEmailSuppressions({
+      limit: 10,
+      startAfter: '1700000000.123456789',
+      firestore,
+    })
+
+    expect(built.orderBy).toBe('suppressedAt desc')
+    expect(built.limit).toBe(10)
+    const cursor = built.startAfter as { seconds: number; nanoseconds: number }
+    expect(cursor?.seconds).toBe(1_700_000_000)
+    expect(cursor?.nanoseconds).toBe(123_456_789)
+  })
+
+  it('reads from the top when there is no cursor', async () => {
+    // The other direction: a walk that always started after something would
+    // hide the newest entries, which is the half of the list this screen
+    // exists for.
+    const { built, firestore } = recordingFirestore()
+    await listEmailSuppressions({ limit: 10, firestore })
+    expect(built.startAfter).toBeUndefined()
+  })
+
+  it('does not start after a cursor it cannot parse', async () => {
+    const { built, firestore } = recordingFirestore()
+    await listEmailSuppressions({ startAfter: 'nonsense', firestore })
+    expect(built.startAfter).toBeUndefined()
+  })
+})
+
+describe('the suppression cursor', () => {
+  it('round-trips a timestamp exactly, nanoseconds included', () => {
+    // MILLISECONDS WOULD NOT. `startAfter` skips exactly the value it is
+    // given, so a truncated cursor sits BEFORE the record it names and that
+    // record arrives again at the top of the following page.
+    const cursor = suppressionCursorFrom({
+      suppressedAt: { seconds: 1_700_000_000, nanoseconds: 123_456_789 },
+    })
+    expect(cursor).toBe('1700000000.123456789')
+    const restored = suppressionCursorTimestamp(cursor)
+    expect(restored?.seconds).toBe(1_700_000_000)
+    expect(restored?.nanoseconds).toBe(123_456_789)
+  })
+
+  it('reads the Admin SDK’s underscored shape too', () => {
+    // A `Timestamp` off the wire exposes `_seconds`/`_nanoseconds`; a plain
+    // object seeded in a test exposes the bare names. A cursor that only knew
+    // one of them would answer null in production and pass here.
+    expect(
+      suppressionCursorFrom({
+        suppressedAt: { _seconds: 42, _nanoseconds: 7 },
+      }),
+    ).toBe('42.7')
+  })
+
+  it('answers null rather than guessing a position', () => {
+    // A cursor invented from nothing would silently start the next page in
+    // the wrong place, which on this list drops entries nobody can find.
+    expect(suppressionCursorFrom({})).toBeNull()
+    expect(suppressionCursorFrom(null)).toBeNull()
+    expect(suppressionCursorFrom({ suppressedAt: 'yesterday' })).toBeNull()
+    expect(suppressionCursorTimestamp('')).toBeNull()
+    expect(suppressionCursorTimestamp('nonsense')).toBeNull()
+    expect(suppressionCursorTimestamp(null)).toBeNull()
+  })
+})
+
+describe('filterSendableForHost', () => {
+  const HOST = 'host-1'
+  const hostList = `hosts/${HOST}/suppressions`
+
+  it('drops an address the PLATFORM suppressed but this site never did', async () => {
+    const firestore = fakeFirestore()
+    await suppressEmail({ email: ADDRESS, reason: 'bounce', firestore })
+    // Nothing under this site — the whole point of the case.
+    expect(firestore.docs(hostList)[KEY]).toBeUndefined()
+
+    await expect(
+      filterSendableForHost(HOST, [ADDRESS, 'ok@example.com'], firestore),
+    ).resolves.toEqual(['ok@example.com'])
+  })
+
+  it('drops an address that unsubscribed from THIS site', async () => {
+    const firestore = fakeFirestore({
+      [hostList]: { [KEY]: { email: ADDRESS, reason: 'unsubscribe' } },
+    })
+    await expect(
+      filterSendableForHost(HOST, [ADDRESS, 'ok@example.com'], firestore),
+    ).resolves.toEqual(['ok@example.com'])
+  })
+
+  it('does not apply another site’s unsubscribes to this one', async () => {
+    // An unsubscribe is from ONE site's campaigns. Reading it as platform-wide
+    // would silently shrink every other site in the org.
+    const firestore = fakeFirestore({
+      'hosts/host-2/suppressions': {
+        [KEY]: { email: ADDRESS, reason: 'unsubscribe' },
+      },
+    })
+    await expect(
+      filterSendableForHost(HOST, [ADDRESS], firestore),
+    ).resolves.toEqual([ADDRESS])
+  })
+
+  it('mails a RELEASED platform record — a release is a real release', async () => {
+    const firestore = fakeFirestore()
+    await suppressEmail({ email: ADDRESS, reason: 'bounce', firestore })
+    await releaseEmail({ email: ADDRESS, firestore })
+    await expect(
+      filterSendableForHost(HOST, [ADDRESS], firestore),
+    ).resolves.toEqual([ADDRESS])
+  })
+
+  it('normalizes and deduplicates, so casing cannot walk past either list', async () => {
+    const firestore = fakeFirestore({
+      [hostList]: { [KEY]: { email: ADDRESS, reason: 'unsubscribe' } },
+    })
+    await expect(
+      filterSendableForHost(
+        HOST,
+        ['  DANA@Example.com ', ADDRESS, ' OK@example.com ', 'ok@example.com'],
+        firestore,
+      ),
+    ).resolves.toEqual(['ok@example.com'])
+  })
+
+  it('FAILS CLOSED when the per-site lookup throws', async () => {
+    // Matching the platform half. A list we could not read is not a list that
+    // said this address is safe to mail.
+    const consoleError = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined)
+    const exploding: any = {
+      collection: () => ({
+        doc: () => ({
+          get: async () => ({ exists: false }),
+          collection: () => ({ doc: (id: string) => ({ id }) }),
+        }),
+      }),
+      getAll: async () => {
+        throw new Error('firestore down')
+      },
+    }
+    await expect(
+      filterSendableForHost(HOST, [ADDRESS], exploding),
+    ).resolves.toEqual([])
+    consoleError.mockRestore()
+  })
+
+  it('asks the per-site list for nobody when the platform list took everyone', async () => {
+    // `getAll` rejects an empty reference list, so the early return is load
+    // bearing rather than an optimisation.
+    const firestore = fakeFirestore()
+    await suppressEmail({ email: ADDRESS, reason: 'complaint', firestore })
+    await expect(
+      filterSendableForHost(HOST, [ADDRESS], firestore),
+    ).resolves.toEqual([])
+  })
+})
+
+/**
+ * The THIRD filter a campaign passes, and the narrowest.
+ *
+ * The two suppression lists answer "may we mail this person at all"; this one
+ * answers "may we mail them about THIS". Somebody who unticked one stream on
+ * the preference page is not suppressed — they still get the others — so the
+ * fact cannot live on either list without meaning something it does not mean.
+ */
+describe('filterTopicSendable', () => {
+  const HOST = 'host-1'
+  const optOuts = `hosts/${HOST}/topicOptOuts`
+  const OTHER = 'ok@example.com'
+
+  it('drops an address that left this stream', async () => {
+    const firestore = fakeFirestore({
+      [optOuts]: {
+        [KEY]: {
+          email: ADDRESS,
+          topics: { newsletter: { optedOutAt: 1, resubscribedAt: null } },
+        },
+      },
+    })
+    await expect(
+      filterTopicSendable(HOST, 'newsletter', [ADDRESS, OTHER], firestore),
+    ).resolves.toEqual([OTHER])
+  })
+
+  it('keeps them for a stream they did NOT leave', async () => {
+    // The whole point of topics. Leaving one is not leaving all of them.
+    const firestore = fakeFirestore({
+      [optOuts]: {
+        [KEY]: {
+          email: ADDRESS,
+          topics: { newsletter: { optedOutAt: 1, resubscribedAt: null } },
+        },
+      },
+    })
+    await expect(
+      filterTopicSendable(HOST, 'marketing', [ADDRESS, OTHER], firestore),
+    ).resolves.toEqual([ADDRESS, OTHER])
+  })
+
+  it('mails an opt-out that was later lifted, and keeps the evidence', async () => {
+    // A `resubscribedAt` marks a lifted opt-out. The entry stays as the proof
+    // the request was honored while it stood, so PRESENCE alone is not the
+    // test — reading it that way would leave a rejoined recipient unmailable
+    // forever with no record on screen explaining why.
+    const firestore = fakeFirestore({
+      [optOuts]: {
+        [KEY]: {
+          email: ADDRESS,
+          topics: { newsletter: { optedOutAt: 1, resubscribedAt: 2 } },
+        },
+      },
+    })
+    await expect(
+      filterTopicSendable(HOST, 'newsletter', [ADDRESS], firestore),
+    ).resolves.toEqual([ADDRESS])
+  })
+
+  /**
+   * DOUBLE OPT-IN, at the point where it is either a real quarantine or a
+   * stored fact nothing reads
+   * (`docs/specs/email-competitive-gaps.md` P8). ActiveCampaign's is worth
+   * copying because an unconfirmed subscriber genuinely cannot be mailed;
+   * Customer.io's recipe warns in its own documentation that it "doesn't
+   * automatically check this attribute before sending messages".
+   */
+  it('drops an address that has been asked to confirm and has not', async () => {
+    const firestore = fakeFirestore({
+      [optOuts]: {
+        [KEY]: {
+          email: ADDRESS,
+          topics: { newsletter: { pendingAt: 1, confirmedAt: null } },
+        },
+      },
+    })
+    await expect(
+      filterTopicSendable(HOST, 'newsletter', [ADDRESS, OTHER], firestore),
+    ).resolves.toEqual([OTHER])
+  })
+
+  it('mails them once they confirm', async () => {
+    const firestore = fakeFirestore({
+      [optOuts]: {
+        [KEY]: {
+          email: ADDRESS,
+          topics: { newsletter: { pendingAt: 1, confirmedAt: 2 } },
+        },
+      },
+    })
+    await expect(
+      filterTopicSendable(HOST, 'newsletter', [ADDRESS], firestore),
+    ).resolves.toEqual([ADDRESS])
+  })
+
+  it('holds them for the stream they were asked about and no other', async () => {
+    const firestore = fakeFirestore({
+      [optOuts]: {
+        [KEY]: {
+          email: ADDRESS,
+          topics: { newsletter: { pendingAt: 1, confirmedAt: null } },
+        },
+      },
+    })
+    await expect(
+      filterTopicSendable(HOST, 'marketing', [ADDRESS], firestore),
+    ).resolves.toEqual([ADDRESS])
+  })
+
+  it('does not apply another site’s opt-outs to this one', async () => {
+    const firestore = fakeFirestore({
+      'hosts/host-2/topicOptOuts': {
+        [KEY]: {
+          email: ADDRESS,
+          topics: { newsletter: { optedOutAt: 1, resubscribedAt: null } },
+        },
+      },
+    })
+    await expect(
+      filterTopicSendable(HOST, 'newsletter', [ADDRESS], firestore),
+    ).resolves.toEqual([ADDRESS])
+  })
+
+  it('filters nobody, and READS nothing, for a campaign with no topic', async () => {
+    // Every campaign sent before topics existed. There is no stream to have
+    // left, so there is nothing to drop — and nothing to ask Firestore, which
+    // is the half worth asserting: a lookup keyed on an absent topic costs one
+    // `getAll` per send to answer a question with no question in it.
+    const firestore = fakeFirestore({
+      [optOuts]: {
+        [KEY]: {
+          email: ADDRESS,
+          topics: { newsletter: { optedOutAt: 1, resubscribedAt: null } },
+        },
+      },
+    })
+    const getAll = jest.spyOn(firestore, 'getAll')
+    await expect(
+      filterTopicSendable(HOST, '', [ADDRESS], firestore),
+    ).resolves.toEqual([ADDRESS])
+    expect(getAll).not.toHaveBeenCalled()
+  })
+
+  it('fails OPEN, unlike every other filter in this module', async () => {
+    /*
+     * The opposite posture from its neighbours, on purpose. They answer
+     * "suppressed" on a read that throws, because the cost of guessing wrong
+     * is mailing somebody who told us to stop. Here the campaign has ALREADY
+     * passed both suppression lists, so nobody who asked us to stop entirely
+     * can reach this line — and the cost of failing closed would be refusing
+     * a newsletter somebody asked for, over a read that failed for an
+     * unrelated reason.
+     */
+    const firestore = fakeFirestore()
+    firestore.getAll = async () => {
+      throw new Error('firestore down')
+    }
+    const consoleError = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined)
+    await expect(
+      filterTopicSendable(HOST, 'newsletter', [ADDRESS, OTHER], firestore),
+    ).resolves.toEqual([ADDRESS, OTHER])
+    consoleError.mockRestore()
+  })
+
+  it('keeps an address it cannot key rather than refusing it twice', async () => {
+    // An unkeyable value cannot carry an opt-out record. The suppression
+    // filters above have already refused it on their own stricter rule, so
+    // this one has no business refusing it a second time.
+    const firestore = fakeFirestore()
+    await expect(
+      filterTopicSendable(HOST, 'newsletter', ['not-an-address'], firestore),
+    ).resolves.toEqual(['not-an-address'])
+  })
+})
+
+/**
+ * THE SPLIT BETWEEN A FACT AND A PREFERENCE.
+ *
+ * A permanent bounce and a spam complaint are facts about a MAILBOX and about
+ * the sending domain every tenant's mail leaves by — they apply everywhere,
+ * immediately. An UNSUBSCRIBE is a preference given to one brand, and an
+ * agency running twelve unrelated clients out of one account would, on a
+ * platform-wide entry, stop mailing that person on behalf of eleven brands
+ * they never heard from.
+ */
+describe('only address-level facts may be filed platform-wide', () => {
+  const firestore = () => {
+    const store = new Map<string, Record<string, unknown>>()
+    return {
+      store,
+      collection: () => ({
+        doc: (id: string) => ({
+          get: async () => ({
+            exists: store.has(id),
+            get: (field: string) => store.get(id)?.[field],
+          }),
+          set: async (data: Record<string, unknown>) => {
+            store.set(id, { ...(store.get(id) ?? {}), ...data })
+          },
+        }),
+      }),
+    }
+  }
+
+  it('refuses a per-site preference rather than over-applying it', async () => {
+    const db = firestore()
+    await expect(
+      suppressEmail({
+        email: 'left@example.test',
+        reason: UNSUBSCRIBE_SUPPRESSION_REASON as never,
+        firestore: db,
+      }),
+    ).rejects.toThrow(/per-site preference/)
+    // Nothing was written, so the refusal is not a throw after the fact.
+    expect(db.store.size).toBe(0)
+  })
+
+  /**
+   * ANTI-VACUITY. The assertion above passes against a `suppressEmail` that
+   * refuses everything, which would leave a dead mailbox on every list in the
+   * product. These are the two reasons that MUST reach the platform list.
+   */
+  it('still files a bounce and a complaint, which are facts about the address', async () => {
+    for (const reason of ['bounce', 'complaint', 'staff'] as const) {
+      const db = firestore()
+      await expect(
+        suppressEmail({ email: 'dead@example.test', reason, firestore: db }),
+      ).resolves.toMatchObject({ created: true })
+      expect(db.store.size).toBe(1)
+    }
+  })
+})
+
+/**
+ * A COMPLETED ROUND TRIP LIFTS A MEASUREMENT, NEVER AN INTENTION.
+ *
+ * `newsletter.ts` sends its double opt-in confirmation without reading either
+ * suppression list, because a confirmation is the one message that must reach
+ * somebody whose state is uncertain — refusing it at submission time settles
+ * the question on the very record being doubted, and an address recorded as
+ * permanently bounced could then never re-subscribe by any route.
+ *
+ * That only works if the confirmation, once CLICKED, is allowed to lift the
+ * record it disproved. This is the guard on that, and the assertion that
+ * matters most is the negative one: a spam complaint must survive a completed
+ * double opt-in, or a public signup form becomes a way to launder a complaint
+ * back onto the shared sending domain.
+ */
+describe('a confirmed double opt-in release', () => {
+  const HOST = 'host-1'
+  const TOPIC = 'newsletter'
+
+  const seeded = (record: Record<string, unknown>) =>
+    fakeFirestore({ emailSuppressions: { [KEY]: record } })
+
+  const record = (store: ReturnType<typeof fakeFirestore>) =>
+    store.docs('emailSuppressions')[KEY]
+
+  it('lifts a hard bounce — the round trip disproved it', async () => {
+    const store = seeded({ email: ADDRESS, reason: 'bounce', releasedAt: null })
+
+    await expect(
+      releaseEmailForConfirmedOptIn({
+        email: ADDRESS,
+        hostId: HOST,
+        topicId: TOPIC,
+        firestore: store,
+      }),
+    ).resolves.toBe('released')
+
+    // Mailable again, read through the SHIPPED gate rather than by inspecting
+    // the field — a release the send path does not honor is not a release.
+    await expect(isEmailSuppressed(ADDRESS, store)).resolves.toBe(false)
+  })
+
+  it('records what lifted it, so the release is auditable', async () => {
+    const store = seeded({ email: ADDRESS, reason: 'bounce', releasedAt: null })
+    await releaseEmailForConfirmedOptIn({
+      email: ADDRESS,
+      hostId: HOST,
+      topicId: TOPIC,
+      firestore: store,
+    })
+
+    // The record is kept and marked, never deleted: a deleted row cannot show
+    // that the suppression was honored while it stood, nor who ended it.
+    expect(record(store)).toMatchObject({
+      reason: 'bounce',
+      releasedVia: 'double-opt-in',
+      releasedHostId: HOST,
+      releasedTopicId: TOPIC,
+      // No human decided this, and the field says so rather than naming
+      // whoever last touched the row.
+      releasedByUid: null,
+    })
+    expect(record(store).releasedAt).toBeTruthy()
+  })
+
+  /**
+   * THE CONTROL THAT MATTERS. A complaint is a stated intention and a round
+   * trip is evidence about a mailbox, which is not the thing in dispute.
+   */
+  it('REFUSES a spam complaint, so a signup form cannot launder one', async () => {
+    const store = seeded({
+      email: ADDRESS,
+      reason: 'complaint',
+      releasedAt: null,
+    })
+
+    await expect(
+      releaseEmailForConfirmedOptIn({
+        email: ADDRESS,
+        hostId: HOST,
+        topicId: TOPIC,
+        firestore: store,
+      }),
+    ).resolves.toBe('refused')
+
+    // Still suppressed, and untouched — not merely "not released".
+    await expect(isEmailSuppressed(ADDRESS, store)).resolves.toBe(true)
+    expect(record(store).releasedAt).toBeNull()
+    expect(record(store).releasedVia).toBeUndefined()
+  })
+
+  it('REFUSES a staff record, which is a request or an instruction', async () => {
+    const store = seeded({ email: ADDRESS, reason: 'staff', releasedAt: null })
+
+    await expect(
+      releaseEmailForConfirmedOptIn({
+        email: ADDRESS,
+        hostId: HOST,
+        topicId: TOPIC,
+        firestore: store,
+      }),
+    ).resolves.toBe('refused')
+    await expect(isEmailSuppressed(ADDRESS, store)).resolves.toBe(true)
+  })
+
+  /**
+   * The runtime set is the guard, not the type. Reasons arrive from webhook
+   * payloads across an untyped boundary, so a value nobody enumerated must
+   * land on refuse rather than on the permissive branch.
+   */
+  it('refuses a reason it has never heard of', async () => {
+    const store = seeded({
+      email: ADDRESS,
+      reason: 'court-order',
+      releasedAt: null,
+    })
+    await expect(
+      releaseEmailForConfirmedOptIn({
+        email: ADDRESS,
+        hostId: HOST,
+        topicId: TOPIC,
+        firestore: store,
+      }),
+    ).resolves.toBe('refused')
+    await expect(isEmailSuppressed(ADDRESS, store)).resolves.toBe(true)
+  })
+
+  it('says there was nothing to lift for an address nobody suppressed', async () => {
+    const store = fakeFirestore()
+    await expect(
+      releaseEmailForConfirmedOptIn({
+        email: ADDRESS,
+        hostId: HOST,
+        topicId: TOPIC,
+        firestore: store,
+      }),
+    ).resolves.toBe('nothing-to-release')
+  })
+
+  it('does not restamp a record somebody already released', async () => {
+    const store = seeded({
+      email: ADDRESS,
+      reason: 'bounce',
+      releasedAt: { seconds: 1 },
+      releasedVia: 'staff',
+    })
+    await expect(
+      releaseEmailForConfirmedOptIn({
+        email: ADDRESS,
+        hostId: HOST,
+        topicId: TOPIC,
+        firestore: store,
+      }),
+    ).resolves.toBe('nothing-to-release')
+    // The staff release keeps the credit, and the date it happened.
+    expect(record(store).releasedVia).toBe('staff')
+    expect(record(store).releasedAt).toEqual({ seconds: 1 })
+  })
+
+  /**
+   * It runs inside a recipient's confirmation click, so a Firestore failure
+   * degrades to a suppression that stays in force rather than to a person
+   * told their confirmation failed.
+   */
+  it('leaves the record standing when the read throws', async () => {
+    const broken = fakeFirestore()
+    broken.collection = () => {
+      throw new Error('unavailable')
+    }
+    const consoleError = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined)
+    await expect(
+      releaseEmailForConfirmedOptIn({
+        email: ADDRESS,
+        hostId: HOST,
+        topicId: TOPIC,
+        firestore: broken,
+      }),
+    ).resolves.toBe('failed')
+    consoleError.mockRestore()
+  })
+})
+
+/**
+ * The staff path is the OTHER rule, and the difference is the whole design: a
+ * person with the staff role has read the record and is accountable for the
+ * row, so they may lift a complaint filed against the wrong message. Nothing
+ * automatic gets that latitude, which is why the two releases are two
+ * functions rather than one with a flag.
+ */
+describe('a staff release', () => {
+  it('may lift a complaint, and says it was staff who did', async () => {
+    const store = fakeFirestore({
+      emailSuppressions: {
+        [KEY]: { email: ADDRESS, reason: 'complaint', releasedAt: null },
+      },
+    })
+    await expect(
+      releaseEmail({
+        email: ADDRESS,
+        releasedByUid: 'staff-1',
+        note: 'Filed against the wrong message.',
+        firestore: store,
+      }),
+    ).resolves.toBe(true)
+    expect(store.docs('emailSuppressions')[KEY]).toMatchObject({
+      releasedVia: 'staff',
+      releasedByUid: 'staff-1',
+    })
+    await expect(isEmailSuppressed(ADDRESS, store)).resolves.toBe(false)
   })
 })

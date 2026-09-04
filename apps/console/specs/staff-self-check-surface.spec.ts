@@ -39,7 +39,7 @@ const CARD = join(
   'apps/console/components/account-identities-card.component.tsx',
 )
 // Manage Account → Account, a component since the sections became routes
-// (AGL-693).
+// (AGL-2501).
 const PAGE = join(
   REPO_ROOT,
   'apps/console/components/account/account-sign-in-card.component.tsx',
@@ -117,11 +117,10 @@ describe('AGL-2119 · staff self-check has a console surface', () => {
   })
 
   it('forces a token refresh, because a stale claim is the thing being diagnosed', () => {
-    // `getIdToken()` without `true` answers from the cached token, which is
-    // exactly the state a person is investigating when a claim granted
-    // minutes ago has not appeared. It would report the very absence it was
-    // opened to explain.
-    expect(readFileSync(CARD, 'utf8')).toContain('getIdToken(true)')
+    // A token minted from the cache is exactly the state a person is
+    // investigating when a claim granted minutes ago has not appeared. It
+    // would report the very absence it was opened to explain.
+    expect(readFileSync(CARD, 'utf8')).toContain('forceRefresh: true')
   })
 
   it('reads the user through the named-app hook, never a bare getAuth', () => {

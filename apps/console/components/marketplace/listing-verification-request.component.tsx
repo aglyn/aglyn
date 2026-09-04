@@ -27,6 +27,7 @@ import {
   type VerifiableListing,
 } from '@aglyn/aglyn/app-utils/marketplace-verification'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../../constants/docs-links'
 
 export interface ListingVerificationRequestProps {
@@ -93,21 +94,15 @@ export function ListingVerificationRequest(
     setBusy(true)
     setError(null)
     try {
-      const idToken = await (
-        user as { getIdToken?: () => Promise<string> }
-      )?.getIdToken?.()
-      if (!idToken) {
-        setError('Please sign in again.')
-        return
-      }
-      const response = await fetch('/api/marketplace/verification-request', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${idToken}`,
+      const response = await authorizedFetch(
+        user,
+        '/api/marketplace/verification-request',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ listingId, action }),
         },
-        body: JSON.stringify({ listingId, action }),
-      })
+      )
       const data = (await response.json().catch(() => ({}))) as {
         error?: string
       }

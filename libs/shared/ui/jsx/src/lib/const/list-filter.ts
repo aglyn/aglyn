@@ -24,7 +24,7 @@ import {
 } from '@mui/x-data-grid'
 
 /**
- * ONE declaration of what a paged list can be filtered by (AGL-693).
+ * ONE declaration of what a paged list can be filtered by (AGL-2501).
  *
  * A paged list filters on the SERVER or it does not filter: `filterMode="server"`
  * stops the grid narrowing anything itself, so the panel shows the rows already

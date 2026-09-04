@@ -37,7 +37,7 @@ export interface AccountSignInMethods {
 }
 
 /**
- * How this account signs in, answered once (AGL-693).
+ * How this account signs in, answered once (AGL-2501).
  *
  * Three surfaces ask the same question and must not disagree: the account
  * sections rail decides whether to OFFER Security, the Security route decides

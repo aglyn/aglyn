@@ -75,6 +75,56 @@ export interface OrgFeatureFlags {
   versioning?: boolean
   reusableComponents?: boolean
   customDomain?: boolean
+  /**
+   * Send mail as a domain the CUSTOMER owns — `hello@acme.com` — by publishing
+   * our SPF, DKIM and return-path records in their own zone.
+   *
+   * Distinct from `customDomain`, which is the site's public web address and
+   * authorizes nothing about mail; and distinct from `whiteLabel`, which
+   * replaces the Aglyn brand — product name, logo, colors, support URL,
+   * console chrome, favicon — across every branded surface. Sending as your
+   * own name is one narrow consequence of white-labeling rather than the
+   * whole of it, so the two cannot share a flag without the wider capability
+   * following the narrower one wherever it goes.
+   *
+   * It is also the CHEAP half of the sending model, which is why it sits low
+   * on the ladder. A customer-owned domain costs the platform one provider
+   * domain object and NOTHING in our own DNS zone, because the customer
+   * publishes the records; the platform subdomain a site is issued costs a
+   * provider slot, three records in our zone and a permanent place in the
+   * re-verification sweep. Holding the free-to-us option behind the highest
+   * paywall makes the expensive one the default at every tier that can send.
+   *
+   * Read through `checkEntitlement` at the two routes that write a sending
+   * identity: the org's domain list, and the per-site selection.
+   */
+  customSendingDomain?: boolean
+  /**
+   * Hold a sending subdomain of the PLATFORM's own —
+   * `hello@{label}.mail.aglyn.app` — provisioned for one site inside Aglyn's
+   * mail apex.
+   *
+   * The EXPENSIVE half of the sending model, and the reason it is a separate
+   * flag from `customSendingDomain`. A domain the customer owns costs one
+   * provider domain object and nothing in our zone, because they publish the
+   * records. One of these costs a provider slot, THREE records in our own
+   * zone, and a permanent place in the re-verification sweep — per site,
+   * forever. The two capabilities are decided against different resources, so
+   * a shared flag would move a bounded one whenever the unbounded one is
+   * re-cut.
+   *
+   * The flag is the SECOND of two conditions and never the only one. Nothing
+   * provisions on entitlement alone: a merchant asks from the sending-identity
+   * route, this says whether the org carries what they asked for, and the
+   * provider ceiling still refuses beyond the account's allowance. A site
+   * refused at any of the three sends on the shared pool rather than not at
+   * all.
+   *
+   * Read through `checkEntitlement` at
+   * `libs/aglyn/src/lib/app-utils/dedicated-sending-domain.ts`, which is the
+   * only reader — the claim path in `host-sending-domain.ts` goes through it.
+   */
+  dedicatedSendingDomain?: boolean
   removeBranding?: boolean
   /** Schedule a version to publish at a date/time (tier above versioning). */
   scheduledPublishing?: boolean
@@ -349,6 +399,23 @@ export interface OrgEntitlements {
   bandwidthGb?: number
   /** Form submissions accepted per calendar month (Forms & Lead Capture). */
   formSubmissionsPerMonth?: number
+  /**
+   * Saved form DEFINITIONS per host — documents under
+   * `hosts/{hostId}/forms`, the entity a submission's `formId` points at.
+   *
+   * Not the same dimension as `formSubmissionsPerMonth`, and the two are
+   * routinely confused: this is how many distinct intake forms an author may
+   * build, that is how many replies the site may accept. Only the second is
+   * tiered. This one resolves to the same `FORMS_PER_HOST_CEILING` on every
+   * plan that has the form entity at all — it bounds a collection rather than
+   * selling a tier — and exists as an entitlement so that `checkQuota` can
+   * refuse a create, and so a contract can override one org's number.
+   *
+   * Counts the CATALOG, never the traffic. A `Form` node drawn on a page and
+   * left unbound submits without a definition and spends nothing here, which
+   * is why a plan resolving to 0 still accepts submissions.
+   */
+  formsPerHost?: number
   /** Component-builder caps (AGL-99): host variables. */
   variablesPerHost?: number
   /** Component-builder caps (AGL-99): host functions. */
@@ -379,6 +446,42 @@ export interface OrgEntitlements {
    * that shows this number says "campaign".
    */
   emailSendsPerMonth?: number
+  /**
+   * Aglyn Assist credits per calendar month — the band assist spends against.
+   *
+   * A CREDIT IS A UNIT OF MODEL COST, not a message. One assist action can
+   * cost two orders of magnitude more than another: a question is a few
+   * thousand tokens, while generating a screen carries the node tree, the
+   * component catalog and the theme tokens in, structured markup out, and
+   * iterates. A message allowance would price those the same, so one
+   * workspace's ten screen builds would outspend another's thousand questions
+   * and both would read as "within allowance".
+   *
+   * The unit is defined by `ASSIST_CREDIT_COST_USD` and the conversion lives
+   * in `assist-credits.ts`. Only that module turns credits into dollars;
+   * everything a customer sees counts credits, because the dollar figure
+   * behind them is our provider bill and not a price.
+   *
+   * ## HOW THE BAND IS SIZED, and why it is not a share of the price
+   *
+   * A credit is a dollar of provider spend at `ASSIST_CREDIT_COST_USD`, so
+   * the band IS a liability figure: the plan's whole assist give is
+   * `assistCreditsPerMonth / 1000` dollars, and `reserveAssistMessage`
+   * refuses past it, so nothing can exceed it. Sizing it as a share of the
+   * subscription price says nothing about whether the tier can afford it,
+   * because the price is also carrying storage, bandwidth, form submissions,
+   * dataset storage, API requests, contacts and email.
+   *
+   * So each band is sized against what those SEVEN other terms leave. Every
+   * paid band takes between a quarter and a third of that remainder, which
+   * keeps the tier's worst case positive and keeps the ladder's shape: the
+   * margin each tier holds at 100% of every band stays in proportion to what
+   * it held before assist was sold at all. `tier-margin-floor.spec.ts` is the
+   * model, and it pins both the rule and the resulting figures.
+   *
+   * 0 on Free and Starter, which carry no `aiAssist` and no band.
+   */
+  assistCreditsPerMonth?: number
   /** Action runs per calendar month (AGL-148). */
   actionRunsPerMonth?: number
   /** Included customer REST API requests per calendar month (AGL-634);

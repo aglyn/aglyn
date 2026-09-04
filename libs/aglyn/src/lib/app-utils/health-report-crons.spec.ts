@@ -273,6 +273,58 @@ describe('cronJobsHealth', () => {
     expect(checks['usage-email'].code).toBe('job-silent')
   })
 
+  it('reads a daily job between fires as green, however old the mark looks', () => {
+    /*
+     * THE ROW THAT GETS MISREAD, pinned so the answer is executable.
+     *
+     * `lastBeatAgeMinutes` and `graceMinutes` sit next to each other in the
+     * body and are not comparable: a daily job spends most of its life with
+     * an age far past its grace and nothing wrong with it. The comparison
+     * the verdict actually makes is against `dueAt` — the last fire that is
+     * ALREADY past its grace — and between yesterday's run and today's there
+     * is no such fire newer than the mark.
+     *
+     * Read the other way, "silent for 23 hours against a 90-minute grace,
+     * reported ok" is a health endpoint with a hole in it, and somebody
+     * widens the grace or rewrites the comparison to close it. It is not a
+     * hole. The pair below is what says so: the identical mark reds ninety
+     * minutes after the fire it did miss.
+     */
+    const job = SCHEDULED_JOBS.find((entry) => entry.id === 'run-erasures')
+    expect(job).toBeDefined()
+    expect(job.cron).toBe('0 4 * * *')
+
+    const yesterdaysRun = Date.parse('2026-08-18T04:00:00.000Z')
+    const beat = [{ jobId: 'run-erasures', atMs: yesterdaysRun }]
+
+    // 03:20, forty minutes before today's 04:00. The mark is 1,400 minutes
+    // old — more than fifteen times the grace — and the job is fine.
+    const betweenFires = cronJobsHealth(
+      beat,
+      WATCHING_SINCE,
+      3,
+      Date.parse('2026-08-19T03:20:00.000Z'),
+    )['run-erasures']
+    expect(betweenFires.ok).toBe(true)
+    expect(betweenFires.code).toBeUndefined()
+    expect(betweenFires.lastBeatAgeMinutes).toBe(1400)
+    expect(betweenFires.lastBeatAgeMinutes).toBeGreaterThan(job.graceMinutes)
+    expect(betweenFires.dueAt).toBe('2026-08-18T04:00:00.000Z')
+
+    // 05:31, ninety-one minutes after a fire this mark cannot account for.
+    // Erasures are a deletion with a legal clock on them; a day of silence
+    // must not need a second day to be noticed.
+    const missedTodaysFire = cronJobsHealth(
+      beat,
+      WATCHING_SINCE,
+      3,
+      Date.parse('2026-08-19T05:31:00.000Z'),
+    )['run-erasures']
+    expect(missedTodaysFire.ok).toBe(false)
+    expect(missedTodaysFire.code).toBe('job-silent')
+    expect(missedTodaysFire.dueAt).toBe('2026-08-19T04:00:00.000Z')
+  })
+
   it('tolerates ordinary lateness up to the job grace', () => {
     /*
      * A row that reds on a few minutes' drift is one people learn to ignore.

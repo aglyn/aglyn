@@ -174,10 +174,23 @@ function mockMakeDoc(path: string): any {
   }
 }
 
+let mockAutoId = 0
+
 function mockMakeCollection(prefix: string): any {
   return {
     ...mockMakeQuery(prefix, []),
     doc: (id: string) => mockMakeDoc(`${prefix}/${id}`),
+    /**
+     * `add()` — how the activity log appends (AGL-118). Both producers of an
+     * owner now write one, and this factory is a closed world: without it the
+     * call is `undefined` and every assertion below reads the resulting throw
+     * as the seat logic regressing.
+     */
+    add: async (data: Doc) => {
+      const path = `${prefix}/auto-${(mockAutoId += 1)}`
+      store.set(path, data)
+      return mockMakeDoc(path)
+    },
   }
 }
 
@@ -438,5 +451,86 @@ describe('the two legitimate producers of an owner still work (AGL-1888)', () =>
     expect(store.get(`orgs/${ORG}`)?.['ownerUid']).toBe(MEMBER)
     // AGL-2265: the transfer must never launder the free-workspace count.
     expect(store.get(`orgs/${ORG}`)?.['createdByUid']).toBe(OWNER)
+  })
+})
+
+/**
+ * AGL-118 — the acts that BRING A WORKSPACE INTO EXISTENCE, or move who
+ * controls it, leave a record.
+ *
+ * The activity log was assembled by adding calls at mutation points in the
+ * console UI, so it covers saves and deletes well and covered creation
+ * almost not at all. Provisioning happens out here, in code no UI mutation
+ * point reaches, and the visible symptom was a customer whose staff page read
+ * as though they had never used the product — their whole session had been
+ * creation.
+ */
+describe('workspace lifecycle events are recorded (AGL-118)', () => {
+  /** Every activity row the in-memory store holds, under any org. */
+  const activityRows = () =>
+    [...store.entries()]
+      .filter(([path]) => path.includes('/activity/'))
+      .map(([, data]) => data as Record<string, unknown>)
+
+  it('creating a workspace writes an entry naming the creator', async () => {
+    await createOrganization({
+      name: 'Acme',
+      slug: 'acme',
+      ownerUid: OWNER,
+      ownerEmail: 'owner@example.com',
+    })
+    const rows = activityRows()
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      actorId: OWNER,
+      actorEmail: 'owner@example.com',
+      action: 'Created the workspace',
+    })
+  })
+
+  it('a transfer names BOTH principals', async () => {
+    // Half a record is the half already implied by `ownerUid`: knowing who
+    // holds the workspace now tells you nothing about who handed it over.
+    seedOrg()
+    store.set(`orgs/${ORG}/members/${MEMBER}`, {
+      role: 'admin',
+      allHosts: true,
+      email: 'member@example.com',
+    })
+    await transferOrgOwnership(ORG, OWNER, MEMBER)
+    const transfer = activityRows().find(
+      (row) => row['action'] === 'Transferred workspace ownership',
+    )
+    expect(transfer).toBeDefined()
+    // The outgoing owner is the actor — the only party allowed to do this.
+    expect(transfer).toMatchObject({
+      actorId: OWNER,
+      actorEmail: 'owner@example.com',
+    })
+    // The incoming one is the target, so one row identifies both.
+    expect(transfer?.['target']).toMatchObject({
+      type: 'member',
+      id: MEMBER,
+      name: 'member@example.com',
+    })
+  })
+
+  it('a create and a save are distinguishable', async () => {
+    // The whole reason creation had to be added rather than folded into the
+    // existing entries: `Saved the screen` was written on every save and
+    // nothing ever wrote `Created …`, so a brand-new object and an edit to an
+    // old one were the same row. A reader cannot reconstruct a history in
+    // which nothing is ever born.
+    await createOrganization({
+      name: 'Acme',
+      slug: 'acme',
+      ownerUid: OWNER,
+      ownerEmail: 'owner@example.com',
+    })
+    const actions = activityRows().map((row) => row['action'])
+    expect(actions).toContain('Created the workspace')
+    expect(actions.every((action) => !String(action).startsWith('Saved'))).toBe(
+      true,
+    )
   })
 })

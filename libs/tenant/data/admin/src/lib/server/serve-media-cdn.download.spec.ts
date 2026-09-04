@@ -175,7 +175,7 @@ describe('media CDN content-disposition (AGL-1411)', () => {
 
 /**
  * `?download=1` is the REQUESTER's flag, so it cannot be what decides whether
- * a type reaches a renderer on the customer's own domain (AGL-1476). Types
+ * a type reaches a renderer on the customer's own domain. Types
  * with no inline use here are attachments whatever the query says.
  */
 describe('a type with no inline use downloads whatever the query says', () => {

@@ -28,8 +28,13 @@ export function useDeleteElementCallback(): (
   return useCallback(
     (node: Aglyn.NodeSchema) => {
       function handleDelete() {
-        Besigner.focus.clearFocusStatus()
+        // Resolved BEFORE the delete and applied after: sibling indices shift
+        // once it runs, and the successor has to be a node that survived it
+        // (AGL-2553). Hover still goes — the pointer was over what just left.
+        const candidates = Besigner.focus.resolveSelectionAfterDeletion([node])
+        Besigner.focus.clearHover()
         Aglyn.canvas.deleteNode(node)
+        Besigner.focus.selectFirstSurviving(candidates)
       }
 
       return confirm({
@@ -65,11 +70,19 @@ export function useDeleteElementsCallback(): (
       if (!deletable.length) return Promise.resolve()
 
       function handleDelete() {
-        Besigner.focus.clearFocusStatus()
+        // Same two-phase resolve as the single delete (AGL-2553). The whole
+        // doomed set is handed over so the anchor is the first node that has
+        // a parent; candidates that were themselves deleted — or hung off
+        // something that was — are gone from the map by the time the
+        // selection is applied, and the next one wins.
+        const candidates =
+          Besigner.focus.resolveSelectionAfterDeletion(deletable)
+        Besigner.focus.clearHover()
         for (const node of deletable) {
           // A node may have been removed already as part of an ancestor.
           if (Aglyn.canvas.getNode(node.$id)) Aglyn.canvas.deleteNode(node)
         }
+        Besigner.focus.selectFirstSurviving(candidates)
       }
 
       return confirm({

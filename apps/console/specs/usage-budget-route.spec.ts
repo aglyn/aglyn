@@ -55,6 +55,8 @@ let usageDocs: Record<string, Record<string, unknown>>
 let assistDocs: Record<string, Record<string, unknown>>
 let mockDecodedToken: Record<string, unknown>
 let mockPermission: boolean
+/** The roster entry `resolveOrgMembership` returns — org-wide unless a test says otherwise. */
+let mockMember: Record<string, unknown>
 
 class NotFoundError extends Error {
   code = 5
@@ -147,7 +149,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     Response.json({ error: 'verify your email' }, { status: 403 }),
   isImpersonationSession: () => false,
   memberHasOrgPermission: async () => mockPermission,
-  resolveOrgMembership: async () => ({ member: { role: 'owner' } }),
+  resolveOrgMembership: async () => ({ member: mockMember }),
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({
@@ -159,6 +161,12 @@ jest.mock('@aglyn/aglyn/server', () => ({
   planMetersInfraOverage: jest.requireActual(
     '../../../libs/aglyn/src/lib/app-utils/plan-entitlements',
   ).planMetersInfraOverage,
+  // THE REAL SCOPE PREDICATE, for the same reason and a sharper one: stubbing
+  // it `true` would delete the collaborator guard from this suite while every
+  // assertion below stayed green.
+  isOrgWideMember: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/organizations',
+  ).isOrgWideMember,
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,
     query: {},
@@ -193,6 +201,7 @@ beforeEach(() => {
   usageDocs = {}
   assistDocs = {}
   mockPermission = true
+  mockMember = { role: 'owner' }
   mockDecodedToken = { uid: 'u1', email: 'owner@acme.test', email_verified: true }
 })
 
@@ -313,9 +322,126 @@ describe('get', () => {
     usageDocs[MONTH] = { month: MONTH, billedCents: 100 }
     assistDocs[MONTH] = { estCostUsd: 30 }
     const { payload } = await call({ action: 'get' })
-    expect(payload.spend.assistUsd).toBe(30)
     expect(payload.spend.assistBilled).toBe(false)
     expect(payload.spend.totalUsd).toBeCloseTo(1, 5)
+  })
+
+  /*=========================================================================
+   * OUR COST DOES NOT CROSS THIS BOUNDARY.
+   *
+   * `assistUsage/{month}.estCostUsd` is the provider's bill to US at the
+   * serving model's list rates. It was served here in dollars, unconditionally
+   * — the payload carried it whether or not the customer was charged a cent —
+   * so any org billing admin who opened devtools on Billing → Usage read our
+   * per-token cost, and with it our model choice and our margin.
+   *
+   * The assist routes already hold this boundary with `publicAssistCredits`
+   * and `publicAssistQuota`. This is the same boundary one route over.
+   *
+   * Asserted on the SERIALIZED payload rather than on a named field: a leak is
+   * the number being reachable, not the key it arrived under, and a future
+   * field carrying the same figure under another name has to fail here.
+   *========================================================================*/
+  describe('the Assist cost boundary', () => {
+    beforeEach(() => {
+      org.data.usageBudget = { amountUsd: 50 }
+      usageDocs[MONTH] = { month: MONTH, billedCents: 100 }
+      assistDocs[MONTH] = { estCostUsd: 30 }
+    })
+
+    it('serves Assist consumption in CREDITS, never in dollars', async () => {
+      const { status, payload } = await call({ action: 'get' })
+      expect(status).toBe(200)
+      // $30 of provider spend at $0.001 a credit.
+      expect(payload.spend.assistCredits).toBe(30_000)
+      expect(payload.spend.assistUsd).toBeUndefined()
+    })
+
+    it('the cost figure appears NOWHERE in the response body', async () => {
+      // Deliberately a value no other field can hold: `billedCents` is 100 and
+      // the budget is 50, so a bare `30` in the body came from `estCostUsd`.
+      const { payload } = await call({ action: 'get' })
+      const flat = JSON.stringify(payload)
+      expect(flat).not.toMatch(/"assistUsd"/)
+      expect(flat).not.toMatch(/:\s*30(\.0*)?[,}]/)
+    })
+
+    it('CONTROL: the probe above really does catch the leak', async () => {
+      // Anti-vacuity. The regex is only evidence if it fires on a payload that
+      // DOES carry the figure — otherwise a typo in the pattern reads as a
+      // clean boundary forever.
+      const leaked = JSON.stringify({ spend: { assistUsd: 30 } })
+      expect(leaked).toMatch(/"assistUsd"/)
+      expect(leaked).toMatch(/:\s*30(\.0*)?[,}]/)
+    })
+
+    it('reports zero credits, not a missing field, when Assist was unused', async () => {
+      delete assistDocs[MONTH]
+      const { payload } = await call({ action: 'get' })
+      expect(payload.spend.assistCredits).toBe(0)
+    })
+  })
+
+  /*=========================================================================
+   * A PERMISSION ANSWERS WHAT KIND OF ACTION, NEVER WHICH RESOURCES.
+   *
+   * A site collaborator is an `orgs/{id}/members` document like any other, and
+   * `resolveOrgPermissions` layers a custom role and per-member overrides over
+   * the role default — so `billing.manage` can sit on a host-scoped document
+   * and a bare permission check admits it. A budget governs the ORGANIZATION's
+   * invoice, and the payload behind this gate carries the org's own spend.
+   *
+   * Every case below grants the permission outright, so the ONLY thing that can
+   * refuse the request is the org-wide check.
+   *========================================================================*/
+  describe('the org-wide scope guard', () => {
+    it('POSITIVE CONTROL: an org-wide admin is still served', async () => {
+      // Without this the describe is satisfied by a route that refuses
+      // everyone, which would pass every refusal below and delete the feature.
+      mockMember = { role: 'admin', allHosts: true }
+      mockPermission = true
+      expect((await call({ action: 'get' })).status).toBe(200)
+    })
+
+    it('REFUSES a site collaborator holding billing.manage', async () => {
+      // The shape `grantHostAccess` writes: a viewer scoped to one site, with
+      // the billing permission granted on top by a custom role.
+      mockMember = { role: 'viewer', allHosts: false, hostAccess: { 'site-1': true } }
+      mockPermission = true
+      expect((await call({ action: 'get' })).status).toBe(403)
+    })
+
+    it('REFUSES that collaborator on a WRITE as well as a read', async () => {
+      mockMember = { role: 'viewer', allHosts: false, hostAccess: { 'site-1': true } }
+      mockPermission = true
+      const { status } = await call({ action: 'setBudget', amountUsd: 500 })
+      expect(status).toBe(403)
+      // And nothing was written on their behalf.
+      expect(updates).toHaveLength(0)
+    })
+
+    it('admits the SAME member once the scoping is removed', async () => {
+      // Both directions on one axis: the refusal above is about the scope, not
+      // about the role or the permission, and the guard can say yes.
+      mockMember = { role: 'viewer', allHosts: true }
+      mockPermission = true
+      expect((await call({ action: 'get' })).status).toBe(200)
+    })
+
+    it('still refuses an org-wide member WITHOUT the permission', async () => {
+      // The scope check is an ADDITION to the permission, not a replacement:
+      // being org-wide must not admit anyone the permission refuses.
+      mockMember = { role: 'owner' }
+      mockPermission = false
+      expect((await call({ action: 'get' })).status).toBe(403)
+    })
+
+    it('admits STAFF regardless of membership', async () => {
+      mockDecodedToken = { uid: 's1', email_verified: true, staff: true }
+      mockMember = { role: 'viewer', allHosts: false, hostAccess: { 'site-1': true } }
+      mockPermission = false
+      expect((await call({ action: 'get' })).status).toBe(200)
+    })
   })
 })
 

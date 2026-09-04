@@ -20,6 +20,11 @@ import { mdiPageLayoutHeader } from '@aglyn/shared-data-mdi'
 import MuiAppBar, { type AppBarProps } from '@mui/material/AppBar'
 import { createElement, forwardRef } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import {
+  applySemanticElement,
+  semanticElementAttribute,
+  semanticElementLabelAttribute,
+} from '../utils/element-picker'
 import { FIELD_COLOR_ALT1, FIELD_POSITION } from '../constants/field-presets'
 import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
@@ -35,7 +40,14 @@ import { ID as toolbarId } from './toolbar'
  * MUI directly. `createElement` rather than JSX keeps this a `.ts` file.
  */
 const AppBar = forwardRef<HTMLElement, AppBarProps>((props, ref) =>
-  createElement(MuiAppBar, { ...dropClearedProps(props), ref }),
+  createElement(MuiAppBar, {
+    // Unset leaves MUI's own default, which is `header` — the banner
+    // landmark every site's chrome depends on (AGL-2525). A resolver that
+    // answered `div` for "unset" would have stripped it the moment the
+    // picker appeared.
+    ...applySemanticElement(dropClearedProps(props) as Record<string, unknown>),
+    ref,
+  }),
 )
 AppBar.displayName = 'AglynAppBar'
 
@@ -53,7 +65,12 @@ export const schema: Aglyn.ComponentSchema<AppBarProps> = {
     path: mdiPageLayoutHeader.path,
     sx: { color: '#2196f3' },
   },
-  attributes: [FIELD_COLOR_ALT1, FIELD_POSITION],
+  attributes: [
+    semanticElementAttribute('this bar'),
+    semanticElementLabelAttribute(),
+    FIELD_COLOR_ALT1,
+    FIELD_POSITION,
+  ],
 }
 
 export const presets: Aglyn.PresetSchema[] = [

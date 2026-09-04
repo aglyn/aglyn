@@ -68,7 +68,7 @@ import { MUI_BUNDLE } from './plugin'
 
 /** A prop no component reads, but every one of them spreads to the DOM. */
 /**
- * A plain unknown attribute, NOT a `data-` one (AGL-1476).
+ * A plain unknown attribute, NOT a `data-` one.
  *
  * `dropClearedProps` exempts `data-*` and `aria-*`, because those are not
  * authored attributes — the renderer stamps them, and it writes its flags

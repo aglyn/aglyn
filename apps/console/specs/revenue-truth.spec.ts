@@ -228,6 +228,8 @@ const USES_HELPERS = /isBillingSubscription|orgMonthlyRevenueUsd/
  * revenue figure from `plan`.
  */
 const EXCEPTIONS: Record<string, string> = {
+  'apps/console/app/(app)/admin/margin-utilization/page.tsx':
+    'Renders figures straight from /api/admin/margin-utilization. Every revenue number on it is produced by `orgMarginRow` in utils/margin-utilization.ts, which reads them out of orgListPriceMonthlyUsd/orgMonthlyRevenueUsd/orgNetMonthlyRevenueUsd — and reports NO margin at all for an org with no net revenue, which is the comped-org case this guard protects. Its `plan` references are a column label and a per-row chip; the page performs no revenue arithmetic.',
   'apps/console/app/(app)/admin/overview/page.tsx':
     'Renders metrics.mrrUsd straight from /api/admin/overview; its `plan` references are the broadcast-audience selector and a per-org label, not a computation.',
   'apps/console/app/(app)/admin/revenue/page.tsx':

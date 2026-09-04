@@ -78,6 +78,19 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
    * file into a seat-limit refusal and quietly assert the wrong thing.
    */
   collaboratorSeatRefusalResponse: () => null,
+  /*
+   * The manager-seat gate moved into `upsertOrgMember`'s transaction, and
+   * the create door kept a pre-flight (AGL-2068 on the manager key). Both
+   * helpers are added here for the reason the collaborator pair above is:
+   * a closed-world mock that omits one dies on "is not a function" before
+   * asserting anything.
+   *
+   * `null` is the REAL semantics and the load-bearing part — the refusal
+   * arrives only for a `ManagerSeatLimitError`. A mock returning a Response
+   * would turn every error in this file into a seat refusal.
+   */
+  managerSeatRefusal: async () => null,
+  managerSeatRefusalResponse: () => null,
   firebaseAdmin: {
     app: () => ({
       auth: () => ({

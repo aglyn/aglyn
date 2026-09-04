@@ -59,6 +59,13 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     const name = build() as string
     return { data: collections[name] ?? [] }
   },
+  // Carries the collection name through, the same as `query` below, so a
+  // ceilinged read still routes to its fixture.
+  collectionCeiling: (name: string) => name,
+  ceilingedWindow: (read: unknown[] | undefined, ceiling: number) => ({
+    rows: (read ?? []).slice(0, ceiling),
+    truncated: (read ?? []).length > ceiling,
+  }),
 }))
 
 jest.mock('firebase/firestore', () => ({
@@ -66,6 +73,8 @@ jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, _a: string, _b: string, name: string) => name,
   query: (name: string) => name,
   limit: () => undefined,
+  orderBy: () => undefined,
+  where: () => undefined,
 }))
 
 jest.mock('@aglyn/shared-ui-jsx', () => ({

@@ -37,9 +37,31 @@ import { FieldValue } from 'firebase-admin/firestore'
 const DELETE = FieldValue.delete()
 
 export interface FakeFirestore {
-  /** Every document in a collection, keyed by id. */
+  /**
+   * Every document in a collection, keyed by id.
+   *
+   * A SUBcollection is addressed by its full path — `hosts/host-1/suppressions`
+   * — which is also how it is seeded.
+   */
   docs: (collection: string) => Record<string, any>
   collection: (name: string) => any
+  /**
+   * Several documents in one round trip, the shape the real `getAll` has:
+   * the results come back POSITIONALLY, one per reference, so a caller that
+   * zips them back against its own input list gets what it asked for.
+   */
+  getAll: (...refs: any[]) => Promise<any[]>
+  /**
+   * A transaction, real enough for a read-then-write body.
+   *
+   * Reads pass straight through and writes are held until the body resolves,
+   * which is the property the code under test depends on: a writer that
+   * decides what to store FROM what it read must not observe its own
+   * half-finished write. It does not model contention or retries — nothing in
+   * this repo's transaction bodies branches on a retry, and a fake that
+   * pretended to would be asserting the fake.
+   */
+  runTransaction: <T>(body: (transaction: any) => Promise<T>) => Promise<T>
 }
 
 export function fakeFirestore(
@@ -59,13 +81,41 @@ export function fakeFirestore(
     }
   }
 
-  return {
+  const fake: FakeFirestore = {
     docs: (collection: string) => store[collection] ?? {},
+    getAll: async (...refs: any[]) =>
+      refs.map((ref) => snapshotFor(ref.collectionPath, ref.id)),
+    async runTransaction<T>(body: (transaction: any) => Promise<T>): Promise<T> {
+      const pending: Array<() => Promise<void>> = []
+      const transaction = {
+        get: (ref: any) => ref.get(),
+        set: (ref: any, data: Record<string, any>, options?: { merge?: boolean }) => {
+          pending.push(() => ref.set(data, options))
+          return transaction
+        },
+      }
+      const result = await body(transaction)
+      for (const write of pending) await write()
+      return result
+    },
     collection(name: string) {
       store[name] = store[name] ?? {}
       const api: any = {
         doc: (id: string) => ({
           id,
+          /**
+           * Which collection this reference came from, so `getAll` can resolve
+           * a bare reference the way the real client does.
+           */
+          collectionPath: name,
+          /**
+           * A subcollection is a collection at the joined path, so the fake
+           * stays one flat map. Nesting matters here because a per-site list
+           * lives under the site — a fake that returned the same documents for
+           * `hosts/a/suppressions` and `hosts/b/suppressions` would certify a
+           * sender that leaks one site's unsubscribes into another's.
+           */
+          collection: (sub: string) => fake.collection(`${name}/${id}/${sub}`),
           get: async () => snapshotFor(name, id),
           set: async (data: Record<string, any>, options?: { merge?: boolean }) => {
             const base = options?.merge ? (store[name][id] ?? {}) : {}
@@ -102,6 +152,7 @@ export function fakeFirestore(
       return api
     },
   }
+  return fake
 }
 
 export default fakeFirestore

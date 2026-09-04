@@ -20,6 +20,7 @@ import { PLAN_LABELS, type OrgPlan } from '@aglyn/aglyn'
 import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Alert,
   Button,
@@ -182,13 +183,9 @@ export function RetentionFunnelDialog({
 
   const retentionRequest = useCallback(
     async (body: Record<string, unknown>) => {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/billing/retention', {
+      const response = await authorizedFetch(user, '/api/billing/retention', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orgId, ...body }),
       })
       const payload = await response.json().catch(() => ({}))

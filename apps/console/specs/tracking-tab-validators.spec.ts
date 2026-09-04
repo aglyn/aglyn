@@ -49,8 +49,10 @@ const SOURCE = readFileSync(
     '[orgSlug]',
     'hosts',
     '[host]',
-    'setup',
-    'page.tsx',
+    // The scope both settings hubs mount, which is where the form schemas
+    // live. The Setup and Admin sections layouts each provide it; neither
+    // declares a schema of its own.
+    'host-settings-scope.tsx',
   ),
   'utf8',
 )

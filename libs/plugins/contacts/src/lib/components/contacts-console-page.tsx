@@ -16,9 +16,11 @@
  */
 'use client'
 
+import * as Aglyn from '@aglyn/aglyn'
 import {
   checkContactQuota,
   contactMatchesSegment,
+  CONTACT_SOURCE_LABELS,
   type ContactSegment,
   type ContactSource,
   type HostContact,
@@ -35,6 +37,13 @@ import {
   type ListFilterRequest,
 } from '@aglyn/shared-ui-jsx/const/list-filter'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+/*
+ * The component path and NOT the marketing barrel: that barrel is the entry
+ * point the tenant's loader imports to activate the plugin's SITE half, so a
+ * console card named there ships to every published page. The Inbox reaches
+ * the same module the same way.
+ */
+import { default as ConversionAttribution } from '@aglyn/plugins-marketing/components/conversion-attribution.component'
 import type { GridColDef } from '@mui/x-data-grid'
 import {
   CONTACT_LIST_FILTER_FIELDS,
@@ -47,9 +56,11 @@ import {
   useFirestore,
   useFirestoreCollection,
   useFirestoreDoc,
+  useHostCampaigns,
   useOrgDataScope,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import CampaignPicker from '@aglyn/shared-ui-email-campaigns/components/campaign-picker.component'
 import {
   Alert,
   Button,
@@ -62,34 +73,34 @@ import {
 } from '@mui/material'
 import {
   addDoc,
+  arrayRemove,
   collection,
   deleteDoc,
+  deleteField,
   doc,
   getCountFromServer,
   limit,
   orderBy,
   query,
   updateDoc,
+  where,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
-const SOURCE_LABELS: Record<ContactSource, string> = {
-  form: 'Form',
-  member: 'Member',
-  order: 'Customer',
-  booking: 'Booking',
-  newsletter: 'Newsletter',
-  // AGL-2276: added by an integration through `POST /v1/contacts`, rather
-  // than captured on a site. The map is typed `Record<ContactSource, string>`
-  // precisely so a new source cannot be added to the union without landing a
-  // label here.
-  api: 'API',
-}
+/**
+ * The shared labels, under the name this file has always called them.
+ *
+ * The map lives beside the `ContactSource` union so the dynamic-list rule
+ * editor and this filter cannot disagree about what `order` is called.
+ */
+const SOURCE_LABELS = CONTACT_SOURCE_LABELS
 
 type ContactDoc = HostContact & {
   $id: string
   createdAt?: any
   updatedAt?: any
+  /** The campaigns THIS holder has filed the person under. */
+  campaignIds?: string[]
 }
 
 /**
@@ -158,6 +169,25 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
   // path this used to fall back to is gone (AGL-1050), so the CRM lists
   // nothing rather than listing somewhere else.
   const { scope: dataScope } = useOrgDataScope({ hostId })
+  /*==========================================
+   * THE CONTROLLER THIS PAGE IS SHOWING.
+   *
+   * A contact document is shared by every site in the org — one human who
+   * touched two sites is one row, which is the dedupe the shared address book
+   * exists for and the reason the org is billed once for them. Almost nothing
+   * ON that row is shared: the notes, tags, timeline and lifetime value are
+   * the holder's own business records, and while they lived at the top of the
+   * document every site in an agency's account could read every client's.
+   *
+   * So the page resolves the group it is being viewed as — the sites declared
+   * to be one sender, or this site alone — and reads that group's facet.
+   * Pure, from the org document the shell already passed, so it costs no
+   * read.
+   *=========================================*/
+  const consentGroup = useMemo(
+    () => Aglyn.consentGroupForHost(org as Record<string, unknown>, hostId),
+    [org, hostId],
+  )
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
@@ -167,6 +197,21 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
    * is rebuilt from it, so it cannot be state introduced further down.
    */
   const [filter, setFilter] = useState<ListFilterRequest | null>(null)
+  /**
+   * The scope tokens this viewer may read, capped at what
+   * `array-contains-any` accepts.
+   *
+   * `'org'` is included because an org-wide contact is visible to every site
+   * — an org that widened its default deliberately still sees its own rows.
+   */
+  const visibleToTokens = useMemo(
+    () =>
+      [
+        Aglyn.ORG_SCOPE_TOKEN,
+        ...consentGroup.hostIds.map((id) => Aglyn.hostScopeToken(id)),
+      ].slice(0, Aglyn.MAX_SCOPE_HOSTS),
+    [consentGroup],
+  )
   const {
     data: contactDocs,
     status: contactsStatus,
@@ -185,7 +230,7 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
     () => {
       if (!dataScope) return null
       /*
-       * ORDERED, and filtered by the QUERY (AGL-693, AGL-2292).
+       * ORDERED, and filtered by the QUERY (AGL-2501, AGL-2292).
        *
        * Two bugs shared this one line. `limit(1000)` with no `orderBy` returns
        * documents in ID order — contacts are created with `.add()` and
@@ -207,18 +252,64 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
         CONTACT_LIST_FILTER_FIELDS,
         filter,
       )
+      /*
+       * SCOPED, and this is the leak it closes.
+       *
+       * The listener had no `where()` at all: `hostId` reached it only to
+       * resolve which ORG owns the data, so every site in the account listed
+       * every contact in the account. An agency's client opened Contacts and
+       * read the other clients' customers.
+       *
+       * `array-contains-any` over the group's tokens is the same predicate
+       * the rules evaluate with `hasAny`, so a filtered query is provable
+       * per-document and an UNFILTERED one is now permission-denied rather
+       * than quietly returning everything.
+       */
       return query(
         collection(firestore, dataScope[0], dataScope[1], 'contacts'),
+        where('visibleTo', 'array-contains-any', visibleToTokens),
         ...(constraints ?? [orderBy('updatedAt', 'desc')]),
         limit(1000),
       )
     },
-    [firestore, dataScope, filter],
+    [firestore, dataScope, filter, visibleToTokens],
     { idField: '$id' },
   )
+  /**
+   * Every row, flattened through THIS group's facet.
+   *
+   * One projection rather than a facet read at each of the nine places that
+   * touch `tags`, `notes`, `name` or `interactions`: a surface that reads one
+   * of them off the top of the document is a surface showing another
+   * holder's records, and nine chances to forget is nine leaks.
+   *
+   * The canonical `name` is the fallback and the shared identity; a holder's
+   * own override wins, so one business renaming a person cannot change what
+   * an unrelated business sees.
+   */
   const contacts: ContactDoc[] = useMemo(
-    () => [...(contactDocs ?? [])],
-    [contactDocs],
+    () =>
+      (contactDocs ?? []).map((row) => {
+        const facet = Aglyn.readContactFacet(row, consentGroup.groupId)
+        return {
+          ...row,
+          name: Aglyn.contactDisplayName(row, consentGroup.groupId),
+          sources: facet.sources,
+          tags: facet.tags ?? [],
+          notes: facet.notes ?? '',
+          interactions: Aglyn.interactionsForGroup(
+            facet.interactions,
+            consentGroup.hostIds,
+          ),
+          ltvCents: facet.ltvCents ?? 0,
+          ordersCount: facet.ordersCount ?? 0,
+          // Through the facet like every field beside it: campaign membership
+          // is this holder's own filing, and a read off the top of the
+          // document would be somebody else's.
+          campaignIds: Aglyn.readContactCampaignIds(row, consentGroup.groupId),
+        }
+      }),
+    [contactDocs, consentGroup],
   )
   /**
    * The HEAD-COUNT, read as a server-side aggregate (AGL-1706).
@@ -364,7 +455,7 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
     [contacts, filterSegment],
   )
 
-  /* One row grammar, the console's (AGL-693) — the same table everywhere. */
+  /* One row grammar, the console's (AGL-2501) — the same table everywhere. */
   const contactColumns: GridColDef[] = useMemo(
     () => [
       {
@@ -516,11 +607,30 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
   const selected = contacts.find((contact) => contact.$id === selectedId)
   const [tagsDraft, setTagsDraft] = useState('')
   const [notesDraft, setNotesDraft] = useState('')
+  /**
+   * The campaigns picked in the drawer.
+   *
+   * Seeded on open like the tags and the notes beside it, and edited as a
+   * plain array rather than as text: a campaign is chosen from a list of the
+   * site's own, so there is no free-typed value to normalize.
+   */
+  const [campaignsDraft, setCampaignsDraft] = useState<string[]>([])
   const openContact = useCallback((contact: ContactDoc) => {
     setSelectedId(contact.$id)
     setTagsDraft((contact.tags ?? []).join(', '))
     setNotesDraft(contact.notes ?? '')
+    setCampaignsDraft(contact.campaignIds ?? [])
   }, [])
+  /*
+   * The site's campaigns, read only while a contact is OPEN.
+   *
+   * One picker in one drawer, drawn nowhere in the table — so a merchant who
+   * came to look at their address book must not pay for the campaign list.
+   * The same bargain the topic catalog gets on the campaigns card.
+   */
+  const siteCampaigns = useHostCampaigns(hostId, {
+    enabled: Boolean(selectedId),
+  })
   // Right-to-erasure (AGL-209): hard-deletes the contact doc. Source
   // records (inbox, orders, bookings, members) live in their own managers.
   const handleDeleteContact = useCallback(async () => {
@@ -529,10 +639,12 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
     const confirmed = await confirm({
       title: 'Delete this contact?',
       description:
-        `"${contact?.email ?? selectedId}" is permanently removed from ` +
-        'Contacts. Their form submissions, orders, bookings, and ' +
-        'membership records are separate — delete those from their own ' +
-        'pages if the request covers them.',
+        `"${contact?.email ?? selectedId}" is removed from this site's ` +
+        'Contacts, along with its notes, tags and timeline. Other sites ' +
+        'that captured the same person keep their own records. Their form ' +
+        'submissions, orders, bookings, and membership records are ' +
+        'separate — delete those from their own pages if the request ' +
+        'covers them.',
       confirmationText: 'Delete contact',
       confirmationButtonProps: { color: 'error' },
     })
@@ -540,14 +652,55 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
       .catch(() => false)
     if (!confirmed) return
     try {
-      await deleteDoc(
-        doc(firestore, dataScope[0], dataScope[1], 'contacts', selectedId),
+      /*==========================================
+       * DELETE IS A DETACH.
+       *
+       * The row is shared by every site that has captured this person. One
+       * holder removing them from their own CRM must not destroy another
+       * holder's relationship: their notes, their order history and their
+       * consent are theirs, and this holder never had a claim on any of it.
+       *
+       * So this drops THIS group's facet, its consent entries, its capture
+       * attribution and its scope tokens, and deletes the document only when
+       * nobody else is left holding it. `planContactDetach` does the counting
+       * off `visibleTo`, which is what both enforcement layers evaluate.
+       *
+       * The rules refuse a delete by a caller who is not the sole holder, so
+       * a stale row here cannot destroy somebody else's records — it is
+       * refused and reported instead.
+       *
+       * ⛔ NOT the erasure path. A privacy erasure removes the person
+       * regardless of who else holds them and never consults this counting;
+       * see `planContactDetach`.
+       *=========================================*/
+      const ref = doc(
+        firestore,
+        dataScope[0],
+        dataScope[1],
+        'contacts',
+        selectedId,
       )
+      const plan = Aglyn.planContactDetach(
+        contactDocs?.find((row) => row['$id'] === selectedId) ?? null,
+        consentGroup,
+      )
+      if (plan.action === 'delete') {
+        await deleteDoc(ref)
+      } else {
+        await updateDoc(ref, {
+          ...Object.fromEntries(plan.remove.map((path) => [path, deleteField()])),
+          visibleTo: arrayRemove(...plan.removeTokens),
+          capturedByHostIds: arrayRemove(...plan.removeHostIds),
+          updatedAt: new Date(),
+        })
+      }
       setSelectedId(null)
-      enqueueSnackbar('Contact deleted', {
-        variant: 'success',
-        persist: false,
-      })
+      enqueueSnackbar(
+        plan.action === 'delete'
+          ? 'Contact deleted'
+          : 'Contact removed from this site',
+        { variant: 'success', persist: false },
+      )
     } catch (error) {
       console.error(error)
       enqueueSnackbar('An error has occurred', {
@@ -555,7 +708,16 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
         allowDuplicate: true,
       })
     }
-  }, [selectedId, contacts, confirm, firestore, dataScope, enqueueSnackbar])
+  }, [
+    selectedId,
+    contacts,
+    contactDocs,
+    consentGroup,
+    confirm,
+    firestore,
+    dataScope,
+    enqueueSnackbar,
+  ])
 
   const handleProfileSave = useCallback(async () => {
     if (!selectedId || !dataScope) return
@@ -590,8 +752,18 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
           await updateDoc(
             doc(firestore, dataScope[0], dataScope[1], 'contacts', selectedId),
             {
-              tags,
-              notes: notesDraft.slice(0, 2000),
+              // DOTTED paths into this holder's facet. A nested object would
+              // REPLACE the whole map and take every other holder's notes,
+              // tags and order history with it.
+              [Aglyn.contactFacetPath(consentGroup.groupId, 'tags')]: tags,
+              [Aglyn.contactFacetPath(consentGroup.groupId, 'notes')]:
+                notesDraft.slice(0, 2000),
+              // An empty selection is written as an empty array rather than
+              // removed, so "filed under no campaign" has one shape here and
+              // in the pass that detaches a deleted campaign.
+              [Aglyn.contactCampaignFieldPath(consentGroup.groupId)]:
+                Aglyn.campaignMembershipValue(campaignsDraft),
+              updatedAt: new Date(),
             },
           )
         },
@@ -617,6 +789,8 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
     selectedId,
     tagsDraft,
     notesDraft,
+    campaignsDraft,
+    consentGroup,
     firestore,
     dataScope,
     enqueueSnackbar,
@@ -894,6 +1068,25 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
                 />
               ))}
             </Stack>
+            {/*
+              WHERE THIS CONTACT CAME FROM.
+
+              `sources` above says which mechanism created them — a form, a
+              checkout, an import — and this says which campaign led to it,
+              which is a different question and the one the marketing side is
+              asking. One keyed read: the attribution is `contact:{id}` under
+              the HOST, even though the contact itself is org-scoped, because
+              a campaign belongs to one site while a contact is shared across
+              the org.
+
+              Paid on opening a contact rather than per row, and a contact
+              credited to nobody says so rather than showing an empty campaign.
+             */}
+            <ConversionAttribution
+              hostId={hostId}
+              kind="contact"
+              refId={String(selected.$id)}
+            />
             <TextField
               size="small"
               label="Tags"
@@ -908,6 +1101,32 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
               onChange={(event) => setNotesDraft(event.target.value)}
               multiline
               minRows={3}
+            />
+            {/*
+              WHICH CAMPAIGNS THIS PERSON IS FILED UNDER — and it is not the
+              question the attribution above answers.
+
+              The attribution says which campaign the person ARRIVED from,
+              recorded from the link they followed and never editable. This
+              says which campaigns the merchant has PUT them in, which is a
+              working set they keep by hand. Both are true at once and they
+              disagree often — somebody who came in from the spring push can
+              be filed under the summer one — so they sit apart with their own
+              words rather than as one "campaign" line.
+
+              It adds nobody to a send. A campaign's audience is its lists and
+              each email's own picker; nothing on the send path reads this
+              field, and the helper says so where somebody would otherwise
+              assume the opposite.
+             */}
+            <CampaignPicker
+              options={siteCampaigns.options}
+              value={campaignsDraft}
+              onChange={setCampaignsDraft}
+              label="Filed under campaigns"
+              helperText="Your own filing. It never adds anyone to a send — a campaign mails its lists."
+              empty={siteCampaigns.ready && !siteCampaigns.options.length}
+              emptyText="This site has no campaigns yet."
             />
             <Stack direction="row" spacing={1}>
               <Button
@@ -930,8 +1149,20 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
                       SOURCE_LABELS[interaction.type] ??
                       interaction.type}
                   </Typography>
+                  {/*
+                    The entry point, beside the timestamp rather than in the
+                    summary above it. The summary is the sentence the door
+                    wrote; the page is a fact the door recorded, and appending
+                    it to the sentence would put the two on one line where a
+                    long path pushes out the thing the row is about.
+
+                    Only the PAGE. The form is already named in the summary
+                    the capture wrote, and the id it stores is not a caption.
+                   */}
                   <Typography variant="caption" color="text.secondary">
-                    {new Date(interaction.atMs).toLocaleString()}
+                    {interaction.path
+                      ? `${new Date(interaction.atMs).toLocaleString()} · ${interaction.path}`
+                      : new Date(interaction.atMs).toLocaleString()}
                   </Typography>
                 </Stack>
               ))}

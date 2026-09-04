@@ -29,6 +29,7 @@ import {
   getLockdownVerdict,
   isImpersonationSession,
   lockdownJsonResponse,
+  logHostActivity,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { COLLECTION_TEMPLATE_SCREEN_FIELDS } from '../../../../constants/collection-templates'
@@ -131,8 +132,12 @@ async function writeTemplatePointers(options: {
   hostRef: FirebaseFirestore.DocumentReference
   collectionId: string
   write: PointerWrite
+  // Carried in rather than resolved here (AGL-118). This function commits a
+  // write that changes what the site serves, so it owes the log an entry —
+  // and the only uid worth writing is the one the handler VERIFIED.
+  actor: { uid: string; email?: string | null }
 }): Promise<Response> {
-  const { firestore, hostRef, collectionId, write } = options
+  const { firestore, hostRef, collectionId, write, actor } = options
   const collectionRef = hostRef.collection('collections').doc(collectionId)
   const [screensSnapshot, target] = await Promise.all([
     hostRef.collection('screens').select('kind', 'deletedAt', 'displayName').get(),
@@ -179,6 +184,37 @@ async function writeTemplatePointers(options: {
     })
   }
   await batch.commit()
+  /*==========================================
+   * AFTER THE COMMIT (AGL-118), and this action logs at all because the
+   * pointer edit is not the cosmetic one it looks like.
+   *
+   * Designating an entry template DEMOTES a screen: it stops being a page of
+   * the site, stops being served at its own route, and stops being billable.
+   * A visitor who had that URL now gets a 404, and nothing said so anywhere —
+   * the two earlier returns are refusals (an unknown collection, a pointer at
+   * a screen this site does not have) where nothing was demoted at all.
+   *
+   * The demoted ids go in the entry rather than only in the response, because
+   * the response is read once by the browser that asked and the log is what
+   * anyone reads afterwards.
+   *=========================================*/
+  await logHostActivity(
+    hostRef.id,
+    actor,
+    demote.size
+      ? `Assigned collection template screens (${demote.size} converted)`
+      : 'Changed collection template screens',
+    {
+      type: 'content',
+      id: collectionId,
+      ...(typeof target.get('displayName') === 'string' &&
+      target.get('displayName')
+        ? { name: String(target.get('displayName')) }
+        : typeof target.get('name') === 'string' && target.get('name')
+          ? { name: String(target.get('name')) }
+          : {}),
+    },
+  )
   return Response.json({
     ok: true,
     id: collectionId,
@@ -305,6 +341,10 @@ async function handler(request: Request): Promise<Response> {
         hostRef,
         collectionId,
         write: pointerWrite,
+        actor: {
+          uid: decoded.uid,
+          email: decoded.email ? String(decoded.email) : null,
+        },
       })
     }
 
@@ -399,6 +439,40 @@ async function handler(request: Request): Promise<Response> {
         error: 'That collection belongs to a different part of the console',
       }, { status: 409 })
     }
+    /*==========================================
+     * MOVED OFF THE BROWSER (AGL-118).
+     *
+     * The console used to append `Created collection` / `Updated collection`
+     * from the card that calls this route, which made the audit trail a thing
+     * the caller opted into: a second surface reaching this endpoint — the
+     * template dialog's bulk create already does — logged nothing, and a
+     * dropped client write was indistinguishable from no collection having
+     * been made. The client calls are gone in the same change, so there is
+     * exactly one writer and no de-duplication to do.
+     *
+     * The terminal branch is HERE and not inside the transaction. The
+     * transaction can return four verdicts, three of which are refusals a
+     * client cannot tell apart from success without reading the body — a slug
+     * another collection holds, the per-site collection ceiling, a missing
+     * document, and a rename that would change what the document is. It also
+     * RETRIES: Firestore re-runs the callback on contention, so a log call
+     * inside it writes one entry per attempt and a busy site quietly gets
+     * duplicates. Past every verdict, the write has committed exactly once.
+     *=========================================*/
+    await logHostActivity(
+      hostId,
+      { uid: decoded.uid, email: decoded.email ? String(decoded.email) : null },
+      action === 'create' ? 'Created collection' : 'Updated collection',
+      {
+        type: 'content',
+        id,
+        ...(typeof fields['displayName'] === 'string' && fields['displayName']
+          ? { name: fields['displayName'] as string }
+          : typeof fields['name'] === 'string' && fields['name']
+            ? { name: fields['name'] as string }
+            : {}),
+      },
+    )
     return Response.json({ ok: true, id }, { status: 200 })
   } catch (error) {
     console.error(error)

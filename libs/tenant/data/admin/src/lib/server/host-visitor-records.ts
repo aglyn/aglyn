@@ -26,13 +26,22 @@
  */
 
 import {
+  CAPTURED_BY_HOST_FIELD,
   checkVisitorRecordCeiling,
   LEADS_MAX_PER_HOST,
+  marketingConsentFieldsForGroup,
+  personKey,
+  readMarketingBasis,
+  soloConsentGroup,
   submissionMonthKey,
   visitorRecordRefusedCounterId,
   type VisitorRecordKind,
 } from '@aglyn/aglyn/server'
 import { FieldValue } from 'firebase-admin/firestore'
+import {
+  attributeCampaignConversion,
+  type ResolvedCampaignTouch,
+} from './campaign-conversion-attribution'
 import { notifyHostManagers } from './notifications'
 
 /**
@@ -111,7 +120,7 @@ export interface HostLeadInput {
   email: string
   /** The name the person typed, when they typed one (AGL-2303). */
   name?: string
-  /** `signup`, `booking`, … — the surface that produced it. */
+  /** `signup`, `booking`, `form:{formId}` — the surface that produced it. */
   source: string
   /**
    * Explicit marketing opt-in, with a consent timestamp — the same shape
@@ -125,8 +134,27 @@ export interface HostLeadInput {
 }
 
 /**
- * Append one lead to `hosts/{hostId}/leads`, bounded by
+ * Record one lead at `hosts/{hostId}/leads/{personKey}`, bounded by
  * `LEADS_MAX_PER_HOST` (AGL-1529).
+ *
+ * ## One person is one document
+ *
+ * `docs/specs/reusable-forms.md` §4b. This used to be `tx.create(ref.doc())`
+ * — an auto-id per capture event — so one returning customer who signed up
+ * and booked twice was three "leads". The Members & leads tab presented a
+ * list of events as a list of people, and the only thing holding two rows for
+ * one person together was string equality on the address at render time.
+ *
+ * The events are not lost, they are just no longer the record: `sources`
+ * carries every surface that produced a capture, `submissionCount` counts
+ * them, and `firstSeenAtMs`/`lastSeenAtMs` bracket them. The submissions, the
+ * bookings and the member document are still there and still one row each.
+ *
+ * The id is {@link personKey} — `sha256(normalizeContactEmail(email))`, the
+ * SAME derivation a list membership's `memberKey` uses, imported rather than
+ * restated. Two specs named this function and the rule both stated is that
+ * whichever ships second imports the first's helper: a second copy is how
+ * `emailSuppressionKey` and `suppressionId` came to disagree.
  *
  * ## Why every lead writer goes through here
  *
@@ -169,27 +197,127 @@ export async function addHostLead(options: {
    * it cannot be absorbed by a fallback branch.
    */
   ceiling?: number
+  /**
+   * The campaign this person came from, already resolved by the door.
+   *
+   * Resolved rather than raw, and passed rather than looked up, because one
+   * visitor action reaches several writers: a form submission that creates a
+   * submission, a contact AND a lead must pay for the touch lookup once. A
+   * door that hands none — every order path, every import — attributes
+   * nothing, which is how a lead that no campaign caused stays uncredited.
+   */
+  touch?: ResolvedCampaignTouch | null
 }): Promise<boolean> {
   const { hostRef, hostId, lead } = options
   const maxPerHost = options.ceiling ?? LEADS_MAX_PER_HOST
   try {
     const leadsRef = hostRef.collection('leads')
     const firestore = hostRef.firestore
-    const document = {
-      email: lead.email,
+    /*
+     * `null` for anything that is not a usable address — a lead captured
+     * against a malformed one keeps an auto-id and stays its own row. Keying
+     * several unusable addresses under one guessed id would merge two
+     * different people, which is worse than two rows for one.
+     */
+    const key = personKey(lead.email)
+    const leadRef = key ? leadsRef.doc(key) : leadsRef.doc()
+    const now = Date.now()
+    const seen = {
+      // `arrayUnion`, so a person who books twice has `['booking']` and one
+      // who signed up and then submitted a form has both. Bounded by the
+      // number of surfaces, not by the number of captures.
+      sources: FieldValue.arrayUnion(lead.source),
+      lastSeenAtMs: now,
+      submissionCount: FieldValue.increment(1),
       ...(lead.name ? { name: lead.name } : {}),
-      source: lead.source,
-      ...(lead.marketingConsent
-        ? { marketingConsent: true, marketingConsentAtMs: Date.now() }
-        : {}),
-      createdAt: FieldValue.serverTimestamp(),
     }
+    let created = false
     const refused = await firestore.runTransaction(async (tx) => {
-      // ALL READS BEFORE THE WRITE, which Firestore requires — and which is
-      // why the document is assembled above rather than in here.
-      const used = (await tx.get(leadsRef.count())).data().count
-      if (checkVisitorRecordCeiling(used, maxPerHost).exceeded) return true
-      tx.create(leadsRef.doc(), document)
+      // Reset per attempt: a contended transaction re-runs its body, and a
+      // flag left standing from an aborted attempt would credit a campaign
+      // with a person who turned out to exist already.
+      created = false
+      // ALL READS BEFORE THE WRITE, which Firestore requires.
+      const existing = await tx.get(leadRef)
+      /*
+       * ⛔ THE CEILING GATES A NEW PERSON, NEVER AN EXISTING ONE.
+       *
+       * A returning visitor's capture is an UPDATE — it does not grow the
+       * collection, so refusing it buys no capacity and costs the customer
+       * the source and the timestamp they would have learned. That is the
+       * enforcement-at-use shape the capacity rule exists to forbid: a limit
+       * must refuse the addition, never a person already recorded or the
+       * data attached to them.
+       *
+       * It also means the count is only paid on a genuinely new person,
+       * which is the case that can move it.
+       */
+      if (!existing.exists) {
+        const used = (await tx.get(leadsRef.count())).data().count
+        if (checkVisitorRecordCeiling(used, maxPerHost).exceeded) return true
+      }
+      /*
+       * Consent is carried forward and never cleared.
+       *
+       * A basis is written only when this capture carried an explicit
+       * opt-in, so a later booking by someone who did not tick the box
+       * leaves an earlier grant standing — absent-or-granted, the shape
+       * every other writer uses. The TIMESTAMP is carried over rather than
+       * restamped, for the reason given at the read below.
+       */
+      /*
+       * The EARLIEST grant is the one that happened, so a later capture
+       * carrying the same checkbox keeps the original date rather than
+       * restamping when this person opted in. Read back through the shared
+       * reader so "already consented" means the same thing here as it does
+       * at send time.
+       */
+      /*
+       * THE GROUP OF ONE, and deliberately so on this silo.
+       *
+       * `hosts/{hostId}/leads` is private by path — no sibling site can sweep
+       * it, declared group or not — so pooling a lead's basis would record a
+       * disclosure that reaches nothing. The contact written by the same
+       * capture door IS org-shared and IS pooled, which is where a declared
+       * group's disclosure is honored.
+       */
+      const group = soloConsentGroup(hostId)
+      const prior = readMarketingBasis(existing.data() ?? null, group)
+      const consentAtMs =
+        prior.basis === 'granted' && prior.basisAtMs !== null
+          ? prior.basisAtMs
+          : now
+      created = !existing.exists
+      tx.set(
+        leadRef,
+        {
+          email: lead.email,
+          ...seen,
+          ...(existing.exists
+            ? {}
+            : {
+                firstSeenAtMs: now,
+                createdAt: FieldValue.serverTimestamp(),
+                [CAPTURED_BY_HOST_FIELD]: [hostId],
+              }),
+          /*
+           * Recorded under THIS host even though the collection already sits
+           * under it.
+           *
+           * A lead cannot be swept by another site — `hosts/{hostId}/leads`
+           * is private by path — so the host key adds no enforcement here.
+           * It is written anyway because {@link readMarketingBasis} is one
+           * function over four silos, and a silo whose basis lived somewhere
+           * else would need the reader to know which collection it was
+           * handed. A reader that has to be told the shape is a reader that
+           * can be told the wrong one.
+           */
+          ...(lead.marketingConsent
+            ? marketingConsentFieldsForGroup(group, consentAtMs)
+            : {}),
+        },
+        { merge: true },
+      )
       return false
     })
     if (refused) {
@@ -200,6 +328,29 @@ export async function addHostLead(options: {
         ceiling: maxPerHost,
       })
       return false
+    }
+    /*
+     * ATTRIBUTED ON CREATION ONLY.
+     *
+     * A returning visitor's capture is an update — the campaign did not
+     * produce a lead, it produced another visit by a person the site already
+     * held — and crediting it would let whichever campaign ran most recently
+     * re-earn every lead on the list. `created` is set inside the transaction
+     * that decides it, so the attribution and the write agree about whether
+     * this person is new.
+     *
+     * Awaited rather than fired off: `addHostLead` already returns only after
+     * its own write, and a caller that `void`s it (every one of them) is
+     * unaffected. Never throws, so a failure here cannot cost the lead.
+     */
+    if (created && options.touch) {
+      await attributeCampaignConversion({
+        hostId,
+        kind: 'lead',
+        refId: leadRef.id,
+        touch: options.touch,
+        convertedAtMs: now,
+      })
     }
     return true
   } catch (error) {

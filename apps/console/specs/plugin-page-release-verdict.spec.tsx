@@ -118,12 +118,16 @@ jest.mock('firebase/remote-config', () => ({
 }))
 
 jest.mock('next/navigation', () => ({
-  useParams: () => ({ pluginSlug: 'contacts' }),
+  useParams: () => ({ pluginSlug: ['contacts'] }),
   useSearchParams: () => new URLSearchParams(),
+  // The shell redirects a bare hub URL to its landing section (AGL-2501).
+  // Neither surface here declares sections, so it never fires — but the
+  // hook is called unconditionally, as hooks must be.
+  useRouter: () => ({ replace: () => undefined, push: () => undefined }),
 }))
 
 jest.mock('../hooks/use-org-scope', () => ({ useOrgSlug: () => 'acme' }))
-// This page lives at `/[orgSlug]/hosts/[host]/[pluginSlug]`, so the URL names
+// This page lives at `/[orgSlug]/hosts/[host]/[...pluginSlug]`, so the URL names
 // a workspace and the flags provider resolves against it (AGL-1935). Mocked
 // rather than driven through `usePathname` because the router mock above is
 // deliberately partial.
@@ -137,6 +141,17 @@ jest.mock('../hooks/use-current-org', () => ({
     ready: true,
   }),
 }))
+/*
+ * The site role the shell resolves and hands down (AGL-2334). It reads the
+ * viewer's org member document, which these specs stub nothing for — and what
+ * they are about is the gate in front of a surface, not who may publish on it.
+ */
+jest.mock('../hooks/use-host-role', () => ({
+  __esModule: true,
+  default: () => ({ hostRole: 'admin', canPublish: true, loaded: true }),
+  useHostRole: () => ({ hostRole: 'admin', canPublish: true, loaded: true }),
+}))
+
 jest.mock('../hooks/use-org-permissions', () => ({
   __esModule: true,
   default: () => ({ permissions: {}, can: () => true, loaded: true }),
@@ -165,7 +180,7 @@ jest.mock('../components/host-display-name.component', () => ({
   default: () => null,
 }))
 
-import HostPluginPage from '../app/(app)/[orgSlug]/hosts/[host]/[pluginSlug]/page'
+import HostPluginPage from '../app/(app)/[orgSlug]/hosts/[host]/[...pluginSlug]/page'
 import { ReleaseFlagsProvider } from '../hooks/use-release-flags'
 
 beforeEach(() => {

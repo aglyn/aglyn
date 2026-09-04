@@ -23,9 +23,9 @@ import {
   useElements,
   useStripe,
 } from '@stripe/react-stripe-js'
-import { loadStripe, type Stripe } from '@stripe/stripe-js'
 import { Alert, Box, Button, Stack, useTheme } from '@mui/material'
 import { useMemo, useState } from 'react'
+import { getBrowserStripe } from '../../utils/browser-stripe'
 import { stripeAppearanceFromTheme } from '../../utils/stripe-elements-appearance'
 
 /**
@@ -60,19 +60,6 @@ import { stripeAppearanceFromTheme } from '../../utils/stripe-elements-appearanc
  * set server-side in `finalize-card-setup`, which re-reads the intent from
  * Stripe rather than trusting this component's word that it succeeded.
  */
-
-/**
- * Module-level on purpose — `loadStripe` injects a script tag, so calling it
- * per render would add one per open. Null when unconfigured, which the card
- * above also checks before ever rendering this.
- */
-const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
-let stripePromise: Promise<Stripe | null> | null = null
-function getStripe() {
-  if (!publishableKey) return null
-  if (!stripePromise) stripePromise = loadStripe(publishableKey)
-  return stripePromise
-}
 
 export interface BillingCardFormProps {
   /** SetupIntent client secret from `create-setup-intent`. */
@@ -158,7 +145,7 @@ export default function BillingCardFormComponent({
   onCancel,
 }: BillingCardFormProps) {
   const theme = useTheme()
-  const stripe = useMemo(() => getStripe(), [])
+  const stripe = useMemo(() => getBrowserStripe(), [])
   // Rebuilt when the scheme flips, so a customer who switches to dark mode
   // mid-form does not keep a light card form.
   const appearance = useMemo(

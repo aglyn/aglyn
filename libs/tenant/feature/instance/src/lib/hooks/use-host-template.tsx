@@ -16,9 +16,10 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { decodeStoredNodes, encodeStoredNodes } from '@aglyn/aglyn'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import { DocumentReference } from '@firebase/firestore'
-import { doc } from 'firebase/firestore'
+import { Bytes, doc } from 'firebase/firestore'
 import {
   useFirestore,
   type FirestoreDocOptions,
@@ -30,9 +31,13 @@ import useDoc from './helpers/use-doc'
  *
  * Unlike screens and layouts there is no version subcollection: a template
  * is inert — nothing renders from it until it is used to create something
- * — so there is no published-versus-draft distinction to keep. Nodes are
- * stored as plain JSON rather than compressed, matching how the
- * save-as-template and install paths write them.
+ * — so there is no published-versus-draft distinction to keep.
+ *
+ * Compressed at rest like every other besigner document (AGL-1151). A
+ * template is the one kind whose whole content arrives by COPY — "save as
+ * template" duplicates a screen's entire tree into a single document with no
+ * version to spread it across — so it reaches the 1 MiB ceiling at exactly
+ * the size the source page does, and about 1.4x sooner stored as a map.
  */
 export const useHostTemplateRef = ({
   hostId,
@@ -51,11 +56,30 @@ export const useHostTemplateRef = ({
         $id?: string
         source?: unknown
       }
-      return { ...rest, updatedAt: Timestamp.now() }
+      // Only emit `nodes` when the write actually carries them (AGL-1250).
+      // The besigner's save writes `placeholders` and `editedAt` alongside
+      // the tree through a merging `setDoc`, and the template detail page
+      // writes a name on its own — encoding unconditionally would ship an
+      // empty map on the second of those and merge it over the design.
+      if (rest?.nodes === undefined) return { ...rest, updatedAt: Timestamp.now() }
+      const nodes = encodeStoredNodes(rest.nodes)
+      return {
+        ...rest,
+        ...(nodes ? { nodes: Bytes.fromUint8Array(nodes) } : {}),
+        updatedAt: Timestamp.now(),
+      }
     },
     fromFirestore(snapshot, options) {
       if (!snapshot.exists()) return undefined
-      return snapshot.data(options) as Aglyn.AglynTemplate
+      const data = snapshot.data(options)
+      if (data?.['nodes'] === undefined) return data as Aglyn.AglynTemplate
+      // BOTH stored forms, permanently. Every template written before this
+      // converter compressed is a plain map and nothing migrates them;
+      // `decodeStoredNodes` returns one unchanged.
+      return {
+        ...data,
+        nodes: decodeStoredNodes(data['nodes']),
+      } as Aglyn.AglynTemplate
     },
   }) as DocumentReference<Aglyn.AglynTemplate>
 }

@@ -16,7 +16,12 @@
  */
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
-import { checkEmailCredentials, describeEmailConfig } from '@aglyn/shared-util-email'
+import {
+  checkEmailCredentials,
+  checkSharedSendingPool,
+  describeEmailConfig,
+  sharedSendingPool,
+} from '@aglyn/shared-util-email'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -115,12 +120,77 @@ async function handler(request: Request): Promise<Response> {
       blockers.push('Resend rejected RESEND_API_KEY — rotate or re-scope it.')
     }
 
+    /*
+     * The shared pool, which this check could not see until now.
+     *
+     * `USAGE_EMAIL_FROM` describes ONE sender: the platform's own operational
+     * mail. Every tenant site without a domain of its own sends from a pool
+     * member instead, and nothing above looks at those. That gap is not
+     * hypothetical — the sending key was scoped to a single domain while the
+     * pool carried the transactional floor for every other site, and this
+     * endpoint reported healthy throughout.
+     *
+     * Only probed on request, for the same reason the credential probe is: an
+     * unauthenticated caller must not be able to make this deployment talk to
+     * the provider.
+     */
+    const pool =
+      String(query?.['probe'] ?? '') === '1'
+        ? await checkSharedSendingPool({
+            pool: sharedSendingPool(),
+            readApiKey: process.env['RESEND_READ_API_KEY'],
+          })
+        : null
+
+    /*
+     * A measurement fault, reported APART from the blockers.
+     *
+     * `blockers` means delivery is stopped, and this is not that: mail on an
+     * untracked domain arrives exactly as it should and only the click rate
+     * is a lie. Folding it in would either page somebody about healthy
+     * delivery or teach them that a blocker can be ignored, and the second is
+     * how the real one gets missed.
+     *
+     * It is reported at all because the symptom is invisible: a click rate of
+     * 0% reads as an audience that does not click rather than as a domain
+     * that cannot count, and the last time this was wrong nobody found it in
+     * the numbers.
+     */
+    const notices: string[] = []
+    if (pool?.untracked?.length) {
+      notices.push(
+        `Click tracking is off for ${pool.untracked.join(', ')}. Mail from ` +
+          'these domains delivers normally and reports a click rate of ' +
+          'exactly 0% — a provider rewrites links only on a domain with a ' +
+          'verified tracking subdomain.',
+      )
+    }
+
+    if (pool?.status === 'degraded') {
+      blockers.push(
+        `The shared sending pool cannot carry mail on ${pool.unusable.join(', ')}. ` +
+          'Every site without a sending domain of its own sends its receipts ' +
+          'and password resets from a pool member, so this is those sites ' +
+          'already failing rather than a warning about later.',
+      )
+    }
+
     return Response.json({
       ...config,
       expectedFromDomain: EXPECTED_FROM_DOMAIN,
       credentials,
+      pool,
       blockers,
-      /** True only when nothing known is standing in the way of delivery. */
+      notices,
+      /*
+       * True only when nothing known is standing in the way of delivery.
+       *
+       * An UNREADABLE pool is deliberately not a blocker: without a read key
+       * this deployment cannot look, and refusing to call itself healthy for
+       * something it cannot observe would make the self-host shape
+       * permanently red. It is reported instead, so the difference between
+       * "looked and it was fine" and "could not look" stays visible.
+       */
       healthy: config.configured && !blockers.length,
     }, { status: 200 })
   } catch (error) {

@@ -63,52 +63,15 @@ import {
   publisherAgreementState,
 } from '@aglyn/aglyn/app-utils/publisher-agreement'
 import { FieldValue } from 'firebase-admin/firestore'
-import {
-  listOrgMembers,
-  meterPlatformEmail,
-  notifyOrgAdmins,
-} from '@aglyn/tenant-data-admin'
-import { sendEmail } from '@aglyn/shared-util-email'
-import { revalidateHostsWithPlugin } from '../../../../utils/server/tenant-revalidate'
-
-/**
- * Emails a publisher's owners and admins about a review outcome (AGL-972).
- *
- * In-app notifications alone assume the publisher is sitting in the console
- * — but review is asynchronous by nature: a submission can wait days, and
- * the publisher has no reason to keep checking. Best effort, and never
- * allowed to fail the verdict that triggered it.
+import { notifyOrgAdmins } from '@aglyn/tenant-data-admin'
+/*
+ * The publisher fan-out lives beside the usage-alert one in `_lib` rather
+ * than here. Both are multi-recipient platform sends that have to read the
+ * platform suppression list before addressing anybody, and that list has to
+ * be reachable by a spec that does not drag the admin SDK in behind a route.
  */
-async function emailPublisher(
-  orgId: string,
-  subject: string,
-  text: string,
-): Promise<void> {
-  try {
-    const members = await listOrgMembers(orgId)
-    const uids = members
-      .filter((member) => member.role === 'owner' || member.role === 'admin')
-      .map((member) => member.$id)
-    if (!uids.length) return
-    const users = await firebaseAdmin
-      .app()
-      .auth()
-      .getUsers(uids.map((uid) => ({ uid })))
-    const recipients = users.users
-      .map((user) => user.email)
-      .filter((email): email is string => Boolean(email))
-    const results = await Promise.all(
-      recipients.map((to) =>
-        sendEmail({ to, subject, text, context: 'plugin review update' }),
-      ),
-    )
-    // Cost meter (AGL-1438). Platform-scoped: marketplace review is Aglyn's
-    // own workflow talking to a publisher, not mail the publisher's org sent.
-    await meterPlatformEmail(results.filter((result) => result.sent).length)
-  } catch (error) {
-    console.error('publisher review email failed', error)
-  }
-}
+import { emailPublisher } from '../../_lib/publisher-review-email'
+import { revalidateHostsWithPlugin } from '../../../../utils/server/tenant-revalidate'
 
 /**
  * Marketplace review queue (AGL-432) — Strapi Market's two-phase review
@@ -744,7 +707,25 @@ async function handler(request: Request): Promise<Response> {
         !reviewUid &&
         (targetSnapshot.get('artifactType') === 'plugin' ||
           targetSnapshot.get('type') === 'plugin')
-      if (isPlugin) {
+      /**
+       * An email starter earns the same treatment for the same reason.
+       *
+       * It is copied on install, so `hiddenAt` alone reaches only the
+       * storefront: every tenant who already installed it goes on MAILING it,
+       * from the sending domain every other tenant shares. The revocation is
+       * what `emailStarterSendBlock` reads at the send, which is the only
+       * chokepoint that can still refuse.
+       *
+       * The five other copied types are deliberately not here. Their content
+       * is rendered on the tenant's own site, where `hiddenAt` blocking the
+       * next install is the whole of what a takedown can honestly promise —
+       * stopping a page from rendering is a different decision, and one nobody
+       * has made.
+       */
+      const killsInstalledCopies =
+        isPlugin ||
+        (!reviewUid && targetSnapshot.get('artifactType') === 'emailStarter')
+      if (killsInstalledCopies) {
         const revocationRef = firestore.collection('revocations').doc(listingId)
         const current = (await revocationRef.get()).data() as
           | PluginRevocation
@@ -778,7 +759,11 @@ async function handler(request: Request): Promise<Response> {
         // time, so without this the bundle we just killed keeps executing on
         // every cached page until it happens to re-render. Best effort: the
         // tenant refuses a revoked plugin at render time regardless.
-        await revalidateHostsWithPlugin(firestore, listingId)
+        //
+        // Plugin-only: it walks the plugin INSTALL PINS, which an email
+        // starter has none of, and an email is never part of a cached page —
+        // its kill is felt at the send, where nothing is cached.
+        if (isPlugin) await revalidateHostsWithPlugin(firestore, listingId)
         // The offer follows the kill switch here too (AGL-2368). AGL-2306
         // taught the per-version revoke and the reject path to repair the
         // mirror and left this one out, so a takedown flattened `versions` to
@@ -794,10 +779,17 @@ async function handler(request: Request): Promise<Response> {
         // true when `reviewUid` is empty, so they are the same document — but
         // that is a fact two conditions apart, and a repair pointed at a
         // review subdocument would write a `latestApprovedVersion` onto it.
-        await repairLatestApprovedVersion(
-          firestore.collection('marketplaceListings').doc(listingId),
-          next,
-        )
+        //
+        // Plugin-only, unlike the revocation write above: the mirror is
+        // recomputed from `pluginVersions`, a collection no other artifact
+        // type has, so running it for an email starter would derive "nothing
+        // approved" from an empty read and write that over the listing.
+        if (isPlugin) {
+          await repairLatestApprovedVersion(
+            firestore.collection('marketplaceListings').doc(listingId),
+            next,
+          )
+        }
       }
 
       await firestore.collection('adminAudit').add({
@@ -806,10 +798,17 @@ async function handler(request: Request): Promise<Response> {
         target: reviewUid
           ? `marketplaceListings/${listingId}/reviews/${reviewUid}`
           : `marketplaceListings/${listingId}`,
+        /*
+         * A review document is keyed by its AUTHOR's uid, so hiding one is a
+         * staff act against a named person. The target names the review, as
+         * it must — but on its own that put the takedown nowhere near the
+         * page of the person whose words were removed.
+         */
+        ...(reviewUid ? { subjectUid: reviewUid } : {}),
         after: {
           hidden: action === 'hide',
           ...(hideReason ? { reason: hideReason } : {}),
-          ...(isPlugin ? { revoked: action === 'hide' } : {}),
+          ...(killsInstalledCopies ? { revoked: action === 'hide' } : {}),
           // Recorded because it is a side effect of the takedown rather than
           // something the reviewer asked for, and because getting it back is a
           // re-review rather than an undo.
@@ -822,7 +821,7 @@ async function handler(request: Request): Promise<Response> {
         {
           ok: true,
           hidden: action === 'hide',
-          revoked: isPlugin && action === 'hide',
+          revoked: killsInstalledCopies && action === 'hide',
           // The caller shows this — a badge silently disappearing would be
           // worse than one that never existed.
           unverified: stripVerified,

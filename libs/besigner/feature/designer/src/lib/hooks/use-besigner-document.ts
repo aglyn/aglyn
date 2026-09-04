@@ -25,6 +25,10 @@ import {
   clearBesignerDraft,
 } from '../drafts/besigner-draft-store'
 import {
+  type ServerDraftWrite,
+  writeServerDraft,
+} from '../drafts/besigner-server-draft'
+import {
   type BesignerDraftState,
   useBesignerDraft,
 } from './use-besigner-draft'
@@ -201,12 +205,38 @@ export interface UseBesignerDocumentOptions<TData = unknown>
   ) => { nodes: Record<string, unknown> } | { error: string }
 }
 
+/** Who a shared working draft records as its last writer. */
+export interface BesignerDraftAuthor {
+  uid?: string | null
+  email?: string | null
+}
+
 export interface UseBesignerDocumentResult {
   /** True when the canvas differs from the last agreed state. */
   saveAvailable: boolean
   /** True when someone else wrote this document since we loaded it. */
   remoteChanged: boolean
   handleSave: () => Promise<void> | void
+  /**
+   * Writes the SHARED working draft — what `Save draft` stores and
+   * `Save & publish` clears.
+   *
+   * Here rather than in each editor because of the one field an editor
+   * cannot get right on its own: `baseStamp`. A recovered draft is measured
+   * against `storedStamp`, which is this document's `updatedAt` — the
+   * VERSION document — and every console editor was stamping its draft from
+   * the PARENT document instead (`screens/{id}`, `components/{id}`, …). Two
+   * documents, two `updatedAt` fields, so the two values could only agree by
+   * coincidence: every working draft read back as "someone else saved this
+   * while you were editing", Restore was never offered, and the draft could
+   * never be recovered by anyone. Taking the stamp where the comparison is
+   * made is what stops the two drifting apart again.
+   *
+   * Resolves `'failed'` when this document cannot hold a shared draft — no
+   * `firestore`, or no draft ids — which is the same answer a rejected write
+   * gives, and the caller's handling of both is identical.
+   */
+  saveWorkingDraft: (author?: BesignerDraftAuthor) => Promise<ServerDraftWrite>
   /**
    * Announce a write this editor is about to make to the SAME document
    * outside `handleSave` — component properties are the first (AGL-1247).
@@ -673,6 +703,22 @@ export function useBesignerDocument<TData = unknown>(
     draftIds,
   ])
 
+  // See `UseBesignerDocumentResult.saveWorkingDraft` for why the stamp is
+  // taken here and not by the editor that owns the button.
+  const saveWorkingDraft = useCallback(
+    async (author?: BesignerDraftAuthor): Promise<ServerDraftWrite> => {
+      const firestore = options.firestore
+      if (!firestore || !draftIds) return 'failed'
+      return writeServerDraft(firestore, draftIds, {
+        nodes: Aglyn.canvas.toJSON().nodes as Aglyn.ProcessableNodes,
+        baseStamp: Aglyn.versionStamp(updatedAt),
+        updatedByUid: author?.uid ?? null,
+        updatedByEmail: author?.email ?? null,
+      }).catch(() => 'failed' as const)
+    },
+    [options.firestore, draftIds, updatedAt],
+  )
+
   // Same expectation `handleSave` records, for writes that do not go through
   // it. Those write OTHER fields — component properties are the first
   // (AGL-1247) — so the echo they produce moves the stamp and leaves `nodes`
@@ -695,6 +741,7 @@ export function useBesignerDocument<TData = unknown>(
     saveAvailable,
     remoteChanged,
     handleSave,
+    saveWorkingDraft,
     markOwnWrite,
     draft,
     jsonOpen,

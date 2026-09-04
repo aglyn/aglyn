@@ -37,7 +37,7 @@ import { join } from 'node:path'
 
 describe('Manage Account is wired to the guard (AGL-1356)', () => {
   // The Basic info section, which is where the guarded profile write lives
-  // since Manage Account's panels became routes (AGL-693).
+  // since Manage Account's panels became routes (AGL-2501).
   const source = readFileSync(
     join(
       __dirname,

@@ -21,7 +21,7 @@ import {
 } from '@aglyn/aglyn/app-utils/name-search'
 
 /**
- * The search fields that travel with a site member's display name (AGL-693).
+ * The search fields that travel with a site member's display name (AGL-2501).
  *
  * The console's Site users card is paged, so a name search that compares the
  * rows already fetched answers "no such member" for everyone past the first

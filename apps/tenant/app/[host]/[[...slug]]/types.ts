@@ -88,6 +88,19 @@ export interface Props {
   screenRoutes?: Record<string, string>
   /** Collection list/entry payload when the path is content, not a screen. */
   content?: CollectionContent
+  /**
+   * The person a `/author/{slug}` page collects (AGL-2518) — read by the head
+   * and the structured data, which need the RECORD and not just the composed
+   * nodes.
+   */
+  author?: {
+    slug: string
+    name: string
+    record?: Aglyn.ContentAuthorRecord | null
+    page: number
+    totalPages: number
+    totalEntries: number
+  }
   /** Password-protected screen: nodes withheld until unlock (AGL-87). */
   protectedScreen?: boolean
   /** Members-only screen (AGL-109): nodes arrive via /api/membership. */

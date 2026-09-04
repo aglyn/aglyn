@@ -220,6 +220,13 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     meterHostEmail: async () => undefined,
     notifyHostManagers: async () => undefined,
     upsertHostContact: () => undefined,
+    // The attribution seam the handler resolves once per booking. Recorded
+    // as nothing — `campaign-conversion-attribution.spec.ts` owns the write —
+    // and defined here at all because a mocked module answers `undefined` for
+    // a name it does not list, which would make the handler throw rather than
+    // fail an assertion.
+    resolveCampaignTouch: async () => null,
+    attributeCampaignConversion: async () => null,
     getPluginConfig: async () => ({}),
     renderHostEmailWithTokens: (value: string) => value,
     // Both booking paths now write their lead through the ONE bounded writer

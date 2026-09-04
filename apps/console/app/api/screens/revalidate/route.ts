@@ -37,6 +37,12 @@
  */
 
 import {
+  COLLECTION_CATEGORIES_MAX,
+  COLLECTION_LIST_PAGE_SIZE,
+  COLLECTION_SOURCE_MAX,
+  collectionCategorySlug,
+  collectionListUrl,
+  hostCollectionKind,
   hostRoleCanPublish,
   pluginRequestFromWeb,
   screenRoutePathToUrl,
@@ -50,7 +56,9 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import {
+  screenIdsUsingCollectionDeep,
   screenIdsUsingComponentDeep,
+  screenIdsUsingFormDeep,
   screenIdsUsingLayoutDeep,
 } from '../../../../utils/server/scan-artifact-usage'
 import { readUsageCandidates } from '../../../../utils/server/read-usage-candidates'
@@ -180,9 +188,45 @@ async function screenIdsUsingLayout(
     layoutId: doc.get('layoutId'),
     versionId: doc.get('versionId'),
   })
+  /**
+   * The binding is per-VERSION with a screen fallback (key-present on the
+   * live version wins, `null` there means no layout) — the same resolution
+   * `composeScreenNodes` runs. Matching only the screen docs would leave a
+   * version-bound screen serving stale chrome for the whole revalidate
+   * window, so each live version doc is read and its binding, when present,
+   * replaces the screen's before the walk.
+   */
+  const screenCandidates = screenDocs.docs.map(toCandidate)
+  const versionRefs = screenCandidates
+    .filter((candidate) => candidate.versionId)
+    .map((candidate) =>
+      hostRef
+        .collection('screens')
+        .doc(candidate.id)
+        .collection('versions')
+        .doc(String(candidate.versionId)),
+    )
+  if (versionRefs.length) {
+    const versionSnapshots = await firestore.getAll(...versionRefs)
+    const byPath = new Map(
+      versionSnapshots.map((snapshot) => [snapshot.ref.path, snapshot]),
+    )
+    for (const candidate of screenCandidates) {
+      if (!candidate.versionId) continue
+      const snapshot = byPath.get(
+        hostRef
+          .collection('screens')
+          .doc(candidate.id)
+          .collection('versions')
+          .doc(String(candidate.versionId)).path,
+      )
+      const data = snapshot?.exists ? snapshot.data() : undefined
+      if (data && 'layoutId' in data) candidate.layoutId = data.layoutId
+    }
+  }
   return screenIdsUsingLayoutDeep(
     layoutId,
-    screenDocs.docs.map(toCandidate),
+    screenCandidates,
     layoutDocs.docs.map(toCandidate),
   )
 }
@@ -205,9 +249,27 @@ async function screenIdsUsingComponent(
   hostId: string,
   componentId: string,
 ): Promise<{ screenIds: string[]; truncated: boolean }> {
+  const sources = await readPlacementSources(firestore, hostId)
+  return {
+    screenIds: screenIdsUsingComponentDeep(componentId, sources.candidates),
+    truncated: sources.truncated,
+  }
+}
+
+/**
+ * Every screen, layout and component of a site, with their node trees — what
+ * both tree-searching scans walk.
+ *
+ * Each collection ONCE, in memory: a query per level would multiply round
+ * trips by the nesting depth of the graph. Shared by the component and form
+ * scans so the two read the same corpus under the same bound, and a change to
+ * one cannot quietly narrow the other.
+ */
+async function readPlacementSources(
+  firestore: FirebaseFirestore.Firestore,
+  hostId: string,
+) {
   const hostRef = firestore.collection('hosts').doc(hostId)
-  // Each collection ONCE, walked in memory — a query per level would multiply
-  // round trips by the nesting depth of the component graph.
   const [screens, layouts, components] = await Promise.all([
     readUsageCandidates(hostRef, 'screens', { withNodes: true, limit: SCAN_LIMIT }),
     readUsageCandidates(hostRef, 'layouts', { withNodes: true, limit: SCAN_LIMIT }),
@@ -217,12 +279,138 @@ async function screenIdsUsingComponent(
     }),
   ])
   return {
-    screenIds: screenIdsUsingComponentDeep(componentId, {
+    candidates: {
       screens: screens.candidates,
       layouts: layouts.candidates,
       components: components.candidates,
-    }),
+    },
     truncated: screens.truncated || layouts.truncated || components.truncated,
+  }
+}
+
+/**
+ * Every live screen whose output places the form `formId`.
+ *
+ * The same read the component scan makes, because it answers the same shape of
+ * question: a placement is found by searching node trees, so the published
+ * body of every screen and layout has to be in hand. Sharing the read means a
+ * form publish and a component publish cannot disagree about which pages
+ * exist.
+ */
+async function screenIdsUsingForm(
+  firestore: FirebaseFirestore.Firestore,
+  hostId: string,
+  formId: string,
+): Promise<{ screenIds: string[]; truncated: boolean }> {
+  const sources = await readPlacementSources(firestore, hostId)
+  return {
+    screenIds: screenIdsUsingFormDeep(formId, sources.candidates),
+    truncated: sources.truncated,
+  }
+}
+
+/**
+ * What an entry change makes stale, for one content collection.
+ *
+ * A content entry is not published through a version pointer, so nothing here
+ * looks like the publish paths above: the write is a client Firestore write,
+ * and the page that renders it is reached by ADDRESS rather than by a screen
+ * document. `/blog`, `/blog/page/2`, `/blog/category/guides` and
+ * `/blog/my-post` are served by the catch-all's collection fallback, which may
+ * have no screen of its own at all, so a routing-map lookup finds nothing to
+ * drop and the site keeps serving the old post.
+ *
+ * Two halves, therefore, and both are needed:
+ *
+ * - the collection's own ADDRESSES, derived here from its slug;
+ * - the SCREENS that render the collection somewhere else — a rail on the
+ *   home page, category pills in a layout — which are found by searching node
+ *   trees, exactly as a form's placements are.
+ *
+ * Refuses anything that is not a CONTENT collection. Commerce shares
+ * `hosts/{hostId}/collections`, and a product collection's pages are routed by
+ * the store's templates rather than by these shapes, so building content
+ * addresses from one would drop paths that belong to nothing.
+ */
+async function collectionRevalidation(
+  firestore: FirebaseFirestore.Firestore,
+  hostId: string,
+  collectionId: string,
+  entrySlugs: string[],
+): Promise<{ paths: string[]; screenIds: string[]; truncated: boolean }> {
+  const empty = { paths: [], screenIds: [], truncated: false }
+  const collectionSnapshot = await firestore
+    .collection('hosts')
+    .doc(hostId)
+    .collection('collections')
+    .doc(collectionId)
+    .get()
+  if (!collectionSnapshot.exists) return empty
+  const data = collectionSnapshot.data() ?? {}
+  if (hostCollectionKind(data) !== 'content') return empty
+  if (data['deletedAt']) return empty
+  const collectionSlug = String(data['slug'] ?? '').trim()
+  if (!collectionSlug || collectionSlug.includes('/')) return empty
+
+  /**
+   * Ordered by how much each address matters, because the tenant's path cap
+   * takes the FIRST `MAX_PATHS` it is handed. A site whose collection is
+   * rendered on more pages than the cap admits therefore loses its deepest
+   * category listings rather than the post that was just edited.
+   */
+  const paths: string[] = []
+  const add = (path: string) => {
+    if (path && !paths.includes(path)) paths.push(path)
+  }
+
+  // The entry's own address first — the one page whose author is watching.
+  // Both slugs when a save renamed it: the new address has never been
+  // rendered, and the OLD one is a cached page that now belongs to nothing.
+  for (const entrySlug of entrySlugs) add(`/${collectionSlug}/${entrySlug}`)
+  add(collectionListUrl({ collectionSlug }))
+
+  /**
+   * Every page of the unfiltered listing.
+   *
+   * The whole range rather than a count-derived one. `listLiveEntries` bounds
+   * the live set at `COLLECTION_SOURCE_MAX`, and the routed listing pages it
+   * at `COLLECTION_LIST_PAGE_SIZE`, so the range is a constant the runtime
+   * already enforces — and dropping a page that does not exist is a cache-key
+   * delete against a key nothing holds, which costs nothing. Asking Firestore
+   * for the exact page count would trade that for a read on every save and
+   * still be wrong the moment publishing an entry adds a page.
+   */
+  const listPages = Math.ceil(COLLECTION_SOURCE_MAX / COLLECTION_LIST_PAGE_SIZE)
+  for (let page = 2; page <= listPages; page += 1) {
+    add(collectionListUrl({ collectionSlug, page }))
+  }
+
+  /**
+   * Page one of every category listing.
+   *
+   * Every category rather than the changed entry's, because an entry can move
+   * between two in one save and a delete leaves no entry to ask — so the set
+   * that is certainly right is the collection's own, and it is bounded by
+   * `COLLECTION_CATEGORIES_MAX`. Page one only: the same range applied to each
+   * category is `COLLECTION_CATEGORIES_MAX` times as many paths as the
+   * unfiltered listing, which would push the cap over on the categories alone
+   * and take the dependent screens with it. Deeper category pages catch up on
+   * their own ISR window.
+   */
+  const categories = Array.isArray(data['categories']) ? data['categories'] : []
+  for (const category of categories.slice(0, COLLECTION_CATEGORIES_MAX)) {
+    const name = String((category as { name?: unknown })?.name ?? '').trim()
+    if (!name) continue
+    const categorySlug = collectionCategorySlug(name)
+    if (!categorySlug) continue
+    add(collectionListUrl({ collectionSlug, categorySlug }))
+  }
+
+  const sources = await readPlacementSources(firestore, hostId)
+  return {
+    paths,
+    screenIds: screenIdsUsingCollectionDeep(collectionSlug, sources.candidates),
+    truncated: sources.truncated,
   }
 }
 
@@ -277,12 +465,67 @@ export async function POST(request: Request): Promise<Response> {
     const componentId = String(
       (payload as { componentId?: unknown })?.componentId ?? '',
     )
-    if (!hostId || (!screenId && !layoutId && !componentId)) {
+    // A REDIRECT RULE changed. Rule edits are client Firestore writes with no
+    // publish step, and the rules list sits behind the hour-long
+    // `tenant-data:{hostId}` backstop — so without this announcement a new
+    // rule waits out the TTL while the manager UI promises ~30 seconds. The
+    // caller names the rule's source path; this drops that path's cached HTML
+    // and busts the host tag so the next render reads fresh rules. For a
+    // prefix or regex rule the literal source is only the best single path —
+    // other matching pages catch up on their own ISR window.
+    const redirectPath = String(
+      (payload as { redirectPath?: unknown })?.redirectPath ?? '',
+    )
+    // Publishing a FORM changes every page that PLACES it, because a placed
+    // form renders the entity's published design rather than the fields the
+    // page holds. Before that graft existed a form publish changed nothing a
+    // visitor could see, so nothing announced it; now it changes the form on
+    // every page at once, and the only alternative to this is waiting out the
+    // hour-long `tenant-data:{hostId}` backstop while the besigner says the
+    // live sites already serve the new design.
+    const formId = String((payload as { formId?: unknown })?.formId ?? '')
+    // A content ENTRY changed. Entries have no version pointer and no publish
+    // step — saving one is a client Firestore write — and the pages that
+    // render them are addressed by slug rather than served by a screen
+    // document, so neither of the two things every other branch here relies on
+    // exists. The caller names the COLLECTION, because that is what decides
+    // which addresses and which screens are affected; `entrySlugs` names the
+    // one entry's own address, and carries the previous slug too when a save
+    // renamed it, since the page cached at the old address now belongs to
+    // nothing.
+    const collectionId = String(
+      (payload as { collectionId?: unknown })?.collectionId ?? '',
+    )
+    const entrySlugs = Array.isArray(
+      (payload as { entrySlugs?: unknown })?.entrySlugs,
+    )
+      ? ((payload as { entrySlugs: unknown[] }).entrySlugs
+          .map((slug) => String(slug ?? '').trim())
+          // A slug is ONE path segment. Anything carrying a separator would
+          // name a different page than the entry it claims to be.
+          .filter((slug) => slug && !slug.includes('/') && !slug.includes('..'))
+          .slice(0, 2) as string[])
+      : []
+    if (
+      !hostId ||
+      (!screenId &&
+        !layoutId &&
+        !componentId &&
+        !formId &&
+        !collectionId &&
+        !redirectPath)
+    ) {
       return Response.json(
         {
           error:
-            'Missing hostId, and one of screenId, layoutId or componentId',
+            'Missing hostId, and one of screenId, layoutId, componentId, formId, collectionId or redirectPath',
         },
+        { status: 400 },
+      )
+    }
+    if (redirectPath && !redirectPath.startsWith('/')) {
+      return Response.json(
+        { error: 'redirectPath must be a site path like /old-page' },
         { status: 400 },
       )
     }
@@ -329,8 +572,37 @@ export async function POST(request: Request): Promise<Response> {
 
     let scanTruncated = false
     let affectedScreenIds: string[]
-    if (componentId) {
+    /**
+     * Addresses to drop that no screen document names.
+     *
+     * A redirect rule's source and a content collection's listings are both
+     * URLs the routing map has never heard of — the first because a rule is
+     * not a screen, the second because the catch-all's collection fallback
+     * serves `/blog/my-post` whether or not a template screen exists. They are
+     * carried beside the screen fan-out rather than instead of it: a
+     * collection has both.
+     */
+    let extraPaths: string[] = []
+    if (redirectPath) {
+      // The rule's source is already a URL path; no screen graph to walk.
+      affectedScreenIds = []
+      extraPaths = [redirectPath]
+    } else if (collectionId) {
+      const scan = await collectionRevalidation(
+        firestore,
+        hostId,
+        collectionId,
+        entrySlugs,
+      )
+      affectedScreenIds = scan.screenIds
+      extraPaths = scan.paths
+      scanTruncated = scan.truncated
+    } else if (componentId) {
       const scan = await screenIdsUsingComponent(firestore, hostId, componentId)
+      affectedScreenIds = scan.screenIds
+      scanTruncated = scan.truncated
+    } else if (formId) {
+      const scan = await screenIdsUsingForm(firestore, hostId, formId)
       affectedScreenIds = scan.screenIds
       scanTruncated = scan.truncated
     } else if (layoutId) {
@@ -339,9 +611,17 @@ export async function POST(request: Request): Promise<Response> {
       affectedScreenIds = [screenId]
     }
 
-    const routePaths = affectedScreenIds
-      .map((id) => screens[id])
-      .filter((path): path is string => Boolean(path))
+    // Already URL-shaped where they were derived from a slug or a rule;
+    // routing-map values need the leading-slash conversion. The derived ones
+    // lead, because the tenant's cap takes the first paths it is handed and
+    // they are the addresses the change is about.
+    const routePaths = [
+      ...extraPaths,
+      ...affectedScreenIds
+        .map((id) => screens[id])
+        .filter((path): path is string => Boolean(path))
+        .map((path) => screenRoutePathToUrl(path)),
+    ].filter((path, index, all) => all.indexOf(path) === index)
 
     if (scanTruncated) {
       // Say it, in the log and in the response. A publish that scanned a
@@ -353,15 +633,18 @@ export async function POST(request: Request): Promise<Response> {
         JSON.stringify({
           tag: 'AGL-1161:component-scan-truncated',
           hostId,
-          componentId,
+          ...(componentId ? { componentId } : {}),
+          ...(formId ? { formId } : {}),
+          ...(collectionId ? { collectionId } : {}),
           limit: SCAN_LIMIT,
         }),
       )
     }
 
     if (!routePaths.length) {
-      // A layout no live screen renders inside, an unused component, or an
-      // unrouted screen. Nothing to invalidate is a success, not an error.
+      // A layout no live screen renders inside, an unused component, an
+      // unrouted screen, or a collection that is gone or is the store's.
+      // Nothing to invalidate is a success, not an error.
       return Response.json(
         { revalidated: [], reason: 'not-routed', truncated: scanTruncated },
         { status: 200 },
@@ -377,7 +660,7 @@ export async function POST(request: Request): Promise<Response> {
     const result = await postTenantRevalidate({
       subdomain,
       hostId,
-      paths: routePaths.map((path) => screenRoutePathToUrl(path)),
+      paths: routePaths,
       // A site with a domain attached caches its pages under a SECOND key
       // (`cname--acme.com`), and that is the one visitors read — see
       // `postTenantRevalidate`. Without this a publish dropped only the

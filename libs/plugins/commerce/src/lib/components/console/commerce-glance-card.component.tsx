@@ -16,13 +16,20 @@
  */
 'use client'
 
-import { formatOrderNumber, isLowStock, liftLegacyProduct } from '../../model'
+import {
+  formatOrderNumber,
+  isLowStock,
+  liftLegacyProduct,
+  orderIsTestMode,
+} from '../../model'
 import { checkEntitlement, pluginDocsHelp } from '@aglyn/aglyn'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Alert, Button, Chip, Divider, Stack, Typography } from '@mui/material'
-import { collection, limit, query } from 'firebase/firestore'
+import { collection, limit, orderBy, query, where } from 'firebase/firestore'
 import { useMemo } from 'react'
 import {
+  ceilingedWindow,
+  collectionCeiling,
   useConsoleHostRoute,
   useFirestore,
   useOrgPlan,
@@ -30,6 +37,23 @@ import {
 import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
+
+/**
+ * How many orders the 30-day figures may be computed from, and how many
+ * products the low-stock count may scan.
+ *
+ * Both tiles are aggregates, so neither can be paged: a sum over page one is
+ * not a sum. What bounds them instead is the window itself — the orders query
+ * asks for thirty days rather than for a count, so a store reads what it sold
+ * rather than a fixed slab, and only a store selling more than this in a month
+ * meets the ceiling at all.
+ *
+ * A ceiling that bites makes every figure under it an UNDERSTATEMENT, which is
+ * why `truncated` is rendered rather than logged. Revenue quietly short is the
+ * one failure a reader cannot detect from the number itself.
+ */
+const GLANCE_ORDER_CEILING = 250
+const GLANCE_PRODUCT_CEILING = 250
 
 /**
  * Commerce at a glance (AGL-353): 30-day revenue, orders, AOV, low-stock
@@ -52,38 +76,96 @@ export function CommerceGlanceCard(props: { hostId: string }) {
   const { org, ready: orgReady } = useOrgPlan(hostId)
   const entitled = checkEntitlement(org as never, 'commerceAnalytics')
   const firestore = useFirestore()
+  /*
+   * Anchored once per mount so the query identity is stable. Recomputing it
+   * per render would rebuild the listener on every pass, which re-reads the
+   * whole window each time.
+   */
+  const since = useMemo(() => Date.now() - THIRTY_DAYS_MS, [])
+  /**
+   * The thirty days the tiles claim, asked for as thirty days.
+   *
+   * `createdAtMs` is the field every order writer in the plugin stamps — cart,
+   * buy-now, draft, POS cash, POS card and subscription cycle — and the one
+   * `reconcile-stock` already walks the collection by. `createdAt` is not
+   * interchangeable: the orders collection group is indexed on `createdAtMs`
+   * alone, and a range on a field a document lacks drops that document rather
+   * than mis-placing it.
+   *
+   * The range and the order are the same field, so this needs no composite
+   * index beyond the `createdAtMs` override already declared.
+   */
   const { data: orderDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'orders'), limit(200)),
-    [firestore, hostId],
+    () =>
+      query(
+        collection(firestore, 'hosts', hostId, 'orders'),
+        where('createdAtMs', '>=', since),
+        orderBy('createdAtMs', 'desc'),
+        limit(GLANCE_ORDER_CEILING + 1),
+      ),
+    [firestore, hostId, since],
     { idField: '$id' },
   )
   const { data: productDocs } = useFirestoreCollection<any>(
     () =>
-      query(collection(firestore, 'hosts', hostId, 'products'), limit(200)),
+      collectionCeiling(
+        collection(firestore, 'hosts', hostId, 'products'),
+        GLANCE_PRODUCT_CEILING,
+      ),
     [firestore, hostId],
     { idField: '$id' },
   )
+  const orderWindow = useMemo(
+    () => ceilingedWindow<any>(orderDocs ?? undefined, GLANCE_ORDER_CEILING),
+    [orderDocs],
+  )
+  const productWindow = useMemo(
+    () =>
+      ceilingedWindow<any>(productDocs ?? undefined, GLANCE_PRODUCT_CEILING),
+    [productDocs],
+  )
 
   const summary = useMemo(() => {
-    const since = Date.now() - THIRTY_DAYS_MS
-    const orders = [...(orderDocs ?? [])].sort(
-      (a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0),
-    )
+    // The query returns the window already ordered newest-first; re-sorting a
+    // ceilinged read would only restate the order it arrived in.
+    const orders = orderWindow.rows
+    // ONE DEFINITION OF 30-DAY REVENUE, NOT TWO.
+    //
+    // This card and `commerce-analytics-card` read the same orders collection
+    // over the same window and disagreed three ways, so one dashboard showed a
+    // store two different revenues:
+    //
+    //   - `pending` orders, which have taken no money, were counted here as
+    //     revenue and excluded there.
+    //   - `cancelled` was tested with the American spelling, which never
+    //     matches the persisted `OrderStatus`, so every cancelled order was
+    //     booked. The value is a PERSISTED enum and is not the place to apply
+    //     the American-spelling rule; the comparison follows the data.
+    //   - A refund was all-or-nothing: a fully-refunded order was dropped
+    //     whole while a 99%-refunded one counted in full.
+    //
+    // The filter and the per-order figure now match that card line for line,
+    // so the two cannot drift again without someone editing both.
     const recentWindow = orders.filter(
       (order) =>
-        (order.createdAtMs ?? 0) >= since &&
-        order.status !== 'canceled' &&
-        order.status !== 'refunded',
+        order.status !== 'pending' &&
+        order.status !== 'cancelled' &&
+        // A rehearsal is not revenue — the same exclusion the
+        // analytics card applies, from the same helper.
+        !orderIsTestMode(order),
     )
-    // The legacy flat `amountCents` as the fallback, matching every other
-    // money reader (AGL-1747). This card had the modern read but not the
-    // fallback, so a Commerce Starter order (AGL-90) rendered as $0.00.
+    // Net of what went back, rather than dropping the order. The legacy flat
+    // `amountCents` is the fallback, matching every other money reader
+    // (AGL-1747): this card had the modern read but not the fallback, so a
+    // Commerce Starter order (AGL-90) rendered as $0.00.
+    const orderNetCents = (order: any) =>
+      Number(order.totals?.totalCents ?? order.amountCents ?? 0) -
+      Number(order.refundedCents ?? 0)
     const revenueCents = recentWindow.reduce(
-      (sum, order) =>
-        sum + Number(order.totals?.totalCents ?? order.amountCents ?? 0),
+      (sum, order) => sum + orderNetCents(order),
       0,
     )
-    const lowStock = (productDocs ?? []).filter((product: any) => {
+    const lowStock = productWindow.rows.filter((product: any) => {
       try {
         return isLowStock(liftLegacyProduct(product))
       } catch {
@@ -99,10 +181,11 @@ export function CommerceGlanceCard(props: { hostId: string }) {
         : 0,
       lowStock,
     }
-  }, [orderDocs, productDocs])
+  }, [orderWindow, productWindow])
 
-  // No catalog and no orders — this host doesn't sell; stay invisible.
-  if (!(productDocs?.length || orderDocs?.length)) return null
+  // No catalog and nothing sold in the window — this host doesn't sell; stay
+  // invisible.
+  if (!(productWindow.rows.length || orderWindow.rows.length)) return null
 
   const money = (cents: number) => `$${(cents / 100).toFixed(2)}`
 
@@ -209,6 +292,13 @@ export function CommerceGlanceCard(props: { hostId: string }) {
             </Stack>
           ) : null}
         </Stack>
+        {orderWindow.truncated || productWindow.truncated ? (
+          <Typography variant="caption" color="text.secondary">
+            {orderWindow.truncated
+              ? `Counted from the ${GLANCE_ORDER_CEILING} most recent orders of the last 30 days. Open the store for the full figures.`
+              : `Low stock counted across ${GLANCE_PRODUCT_CEILING} products. Open the store for the full catalog.`}
+          </Typography>
+        ) : null}
         {summary.latest.length ? (
           <>
             <Divider />

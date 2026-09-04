@@ -17,7 +17,7 @@
 
 import { formatStaffTimestamp } from './staff-timestamps'
 
-describe('formatStaffTimestamp (AGL-1482)', () => {
+describe('formatStaffTimestamp', () => {
   const moment = '2026-08-26T04:48:13.000Z'
 
   it('carries the TIME, which a date alone throws away', () => {

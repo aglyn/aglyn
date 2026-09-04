@@ -27,7 +27,7 @@
 export {}
 
 /**
- * A paged list cannot be searched in the browser (AGL-693).
+ * A paged list cannot be searched in the browser (AGL-2501).
  *
  * The staff account list read 200 accounts at a time and narrowed the rows it
  * had — both the search box and the grid's filter panel — so it answered "no

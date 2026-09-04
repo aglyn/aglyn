@@ -227,7 +227,7 @@ export function StaffUserDeviceSessionsCard({
                   disableGutters
                   /**
                    * A flex row, not an absolutely-positioned action
-                   * (AGL-1482). `ListItemSecondaryAction` takes the button
+                   *. `ListItemSecondaryAction` takes the button
                    * out of flow and pins it to the right edge, and the text
                    * beside it reserves nothing — so a device line long
                    * enough to wrap ran straight under "SIGN OUT", with the

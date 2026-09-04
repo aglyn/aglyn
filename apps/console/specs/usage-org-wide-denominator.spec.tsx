@@ -32,10 +32,10 @@
  * | the warning email (`usage-alerts`) | org-wide sum |
  * | the console meter (`billing-usage.component`) | **ONE host** |
  *
- * The invoice is the authority, so the meter was the bug. On a 3-site Pro org
- * the meter read 45.8% of the bandwidth band while the cron emailed at 91.6%
- * and the invoice priced from 91.6% — the surface that sets expectations
- * understating, the surface that charges not.
+ * The invoice is the authority, so the meter was the bug. On the 3-site Pro
+ * org below the meter reads 50.9% of the bandwidth band while the cron and the
+ * invoice both read 101.7% — the surface that sets expectations understating,
+ * the surface that charges not.
  *
  * The fixture is deliberately MULTI-SITE with UNEQUAL sites, because a
  * single-site org cannot tell the two readings apart — which is exactly how
@@ -58,7 +58,7 @@ import {
 import { resolveOrgEntitlements } from '@aglyn/aglyn'
 
 /**
- * Pro: `hostLimit: 3`, `bandwidthGb: 250`, `totalSiteSizeMb: 5120`.
+ * Pro: `hostLimit: 3`, `bandwidthGb: 225`, `totalSiteSizeMb: 5120`.
  * Three sites, unequal, and none of them is the total.
  */
 const ORG = { $id: 'org-1', plan: 'pro' } as any
@@ -167,14 +167,14 @@ describe('the console meter measures the org, like the invoice does', () => {
     expect(screen.queryAllByText(/^Bandwidth/)).toHaveLength(1)
 
     const row = meterRow(label)
-    expect(row.textContent).toContain(`${EXPECTED_ORG_GB} / 250 GB`)
+    expect(row.textContent).toContain(`${EXPECTED_ORG_GB} / 225 GB`)
     // The old reading, explicitly excluded: the largest single site's share.
     expect(row.textContent).not.toContain(LARGEST_HOST_GB)
 
-    // 228.88 / 250 = 91.6% — past the 80% mark, so the meter warns and offers
-    // the upgrade. At the per-host reading it was 45.8% and said nothing,
-    // while the cron emailed the 80% warning off the org-wide figure. The
-    // customer got the email and saw a meter at under half.
+    // 228.88 / 225 = 101.7% — past the 80% mark, so the meter warns and offers
+    // the upgrade. At the per-host reading it is 50.9% and says nothing, while
+    // the cron emails the 80% warning off the org-wide figure. The customer
+    // gets the email and sees a meter at just over half.
     expect(row.textContent).toContain('Upgrade')
   })
 
@@ -227,10 +227,10 @@ describe('the meter, the cron and the invoice compute one figure', () => {
     // `meteredIncludedAllowance` that is NOT multiplied by `hostLimit`. That
     // asymmetry is the whole bug: storage and form submissions expand per
     // site, bandwidth does not, and the meter treated it as if it did.
-    expect(entitlements.bandwidthGb).toBe(250)
-    expect(estimate.included.pageViews).toBe(pageViewsFromBandwidthGb(250))
+    expect(entitlements.bandwidthGb).toBe(225)
+    expect(estimate.included.pageViews).toBe(pageViewsFromBandwidthGb(225))
     expect(estimate.included.pageViews).not.toBe(
-      pageViewsFromBandwidthGb(250 * entitlements.hostLimit),
+      pageViewsFromBandwidthGb(225 * entitlements.hostLimit),
     )
   })
 
@@ -240,7 +240,7 @@ describe('the meter, the cron and the invoice compute one figure', () => {
     const invoiceFraction = estimate.pageViews / estimate.included.pageViews
     expect(meterFraction).toBeCloseTo(cronFraction, 12)
     expect(meterFraction).toBeCloseTo(invoiceFraction, 12)
-    expect(meterFraction).toBeCloseTo(0.9155, 4)
+    expect(meterFraction).toBeCloseTo(1.0173, 4)
 
     // Non-vacuous: the per-host reading the meter used to show is a
     // different number, and lands on the other side of the 80% threshold the

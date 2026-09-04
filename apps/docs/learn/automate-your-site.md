@@ -9,7 +9,7 @@ description: Turn site events into actions and multi-step workflows, and connect
 Make your site do things on its own — send an email on a form submission, sync
 an order to another system, or run a multi-step pipeline.
 
-1. **[Workflows, actions & webhooks](/marketing-and-automation/workflows-and-actions/overview)** —
+1. **[Automation: workflows, actions & webhooks](/marketing-and-automation/workflows-and-actions/overview)** —
    the automation model: triggers, actions, and workflows.
 2. **[Actions builder](/marketing-and-automation/workflows-and-actions/actions-builder)** —
    map a single event to a single action.

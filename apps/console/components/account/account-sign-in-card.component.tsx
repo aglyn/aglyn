@@ -83,7 +83,7 @@ function GoogleGlyph({ size = 18 }: { size?: number }) {
  * (AGL-852/860/873).
  *
  * The Account section of Manage Account, its own component since the sections
- * became routes (AGL-693).
+ * became routes (AGL-2501).
  */
 export function AccountSignInCard() {
   const { data: user } = useUser()

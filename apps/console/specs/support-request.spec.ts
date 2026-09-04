@@ -34,6 +34,7 @@
  * accepts anything.
  */
 
+import { ID_TOKEN_TIMEOUT_MS } from '@aglyn/shared-util-http/authorized-token'
 import { supportRequest, scopeToOrg } from '../utils/support-request'
 
 const ok = (payload: unknown = { items: [] }) =>
@@ -54,7 +55,7 @@ const strictFetch = jest.fn(async (_url: unknown, init?: RequestInit) => {
 }) as unknown as typeof fetch
 
 const deps = (over: Partial<Parameters<typeof supportRequest>[0]> = {}) => ({
-  getIdToken: async () => 'tok',
+  user: { getIdToken: async () => 'tok' },
   orgId: 'org-1',
   onError: jest.fn(),
   ...over,
@@ -135,15 +136,59 @@ describe('supportRequest (AGL-1158)', () => {
     expect(d.onError).toHaveBeenCalledWith('Request failed')
   })
 
-  it('omits Authorization when there is no token', async () => {
+  it('carries the token the account minted, on every call', async () => {
+    // The positive control for the two below: a helper that assembled no
+    // header at all would satisfy "never unauthenticated" by sending
+    // nothing, and every Support page would be blank.
     const fetchImpl = ok()
-    await supportRequest(
-      deps({ fetchImpl, getIdToken: async () => undefined }),
-      '/api/support/forum',
-      'GET',
-    )
+    await supportRequest(deps({ fetchImpl }), '/api/support/forum', 'GET')
     const init = (fetchImpl as unknown as jest.Mock).mock.calls[0][1]
-    expect(init.headers.Authorization).toBeUndefined()
+    expect(init.headers.Authorization).toBe('Bearer tok')
+  })
+
+  it('issues NOTHING when the caller cannot be authorized', async () => {
+    /*
+     * A Support call with no credentials is refused by the route on its own
+     * terms, so a header assembled as `...(idToken ? { Authorization } : {})`
+     * tells somebody who is signed out that their ticket list failed — and
+     * sends a write that had no business leaving the browser.
+     */
+    const fetchImpl = ok()
+    const d = deps({ fetchImpl, user: null })
+    await expect(
+      supportRequest(d, '/api/support/forum', 'GET'),
+    ).resolves.toBeNull()
+    expect(fetchImpl).not.toHaveBeenCalled()
+    expect(d.onError).toHaveBeenCalledWith(
+      expect.stringMatching(/signed out/i),
+    )
+  })
+
+  it('gives up on a token that never settles, not hanging', async () => {
+    /*
+     * `getIdToken()` refreshes against Google's token endpoint with no
+     * deadline of its own. Awaited in front of the request, a refresh that
+     * is never answered means this helper never reaches `fetch` — no
+     * request, no response, and a Support page that reads "Loading…" for
+     * the life of the tab.
+     */
+    jest.useFakeTimers()
+    try {
+      const fetchImpl = ok()
+      const d = deps({
+        fetchImpl,
+        user: { getIdToken: () => new Promise<string>(() => undefined) },
+      })
+      const call = supportRequest(d, '/api/support/forum', 'GET')
+      await jest.advanceTimersByTimeAsync(ID_TOKEN_TIMEOUT_MS + 100)
+      await expect(call).resolves.toBeNull()
+      expect(fetchImpl).not.toHaveBeenCalled()
+      expect(d.onError).toHaveBeenCalledWith(
+        expect.stringMatching(/could not be confirmed in time/i),
+      )
+    } finally {
+      jest.useRealTimers()
+    }
   })
 
   describe('scopeToOrg', () => {

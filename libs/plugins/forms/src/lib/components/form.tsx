@@ -1,0 +1,1093 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import { sendAnalyticsBeacon } from '@aglyn/aglyn/app-utils/analytics-beacon'
+import { trackEventBeforeNavigation } from '@aglyn/aglyn/app-utils/analytics-events'
+import { campaignTouchField } from '@aglyn/aglyn/app-utils/campaign-touch'
+import * as Aglyn from '@aglyn/aglyn'
+import {
+  mdiEmailFastOutline,
+  mdiEmailOutline,
+  mdiFormTextbox,
+} from '@aglyn/shared-data-mdi'
+import { isSameOriginPath } from '@aglyn/shared-util-http/safe-redirect'
+import Alert from '@mui/material/Alert'
+import Button from '@mui/material/Button'
+import Checkbox from '@mui/material/Checkbox'
+import FormControl from '@mui/material/FormControl'
+import FormControlLabel from '@mui/material/FormControlLabel'
+import FormGroup from '@mui/material/FormGroup'
+import FormLabel from '@mui/material/FormLabel'
+import Link from '@mui/material/Link'
+import MenuItem from '@mui/material/MenuItem'
+import Radio from '@mui/material/Radio'
+import RadioGroup from '@mui/material/RadioGroup'
+import Rating from '@mui/material/Rating'
+import Stack from '@mui/material/Stack'
+import TextField from '@mui/material/TextField'
+import {
+  type FormEvent,
+  forwardRef,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
+import { BUNDLE_ID } from '../constants/bundle-common'
+/*
+ * The heading and the stack this block's form sits inside are mui elements,
+ * so the nodes that carry them say so. A node's `pluginId` names the bundle
+ * that REGISTERS its component, not the bundle whose preset placed it.
+ */
+import { BUNDLE_ID as MUI_BUNDLE_ID } from '@aglyn/plugins-mui/constants/bundle-common'
+import { generatePresetId } from '../utils/generate-preset-id'
+
+// Component ids are persisted in screen documents; never rename.
+export const FORM_ID: Aglyn.ComponentId = 'form'
+export const FORM_FIELD_ID: Aglyn.ComponentId = 'formField'
+
+/** After-submit outcomes (AGL-557); message is the historical default. */
+export type FormAfterSubmit = 'message' | 'redirect' | 'reveal'
+
+export interface FormProps {
+  /**
+   * The form entity this node submits as (`docs/specs/reusable-forms.md` §2c).
+   *
+   * THE identity. `formName` below is a caption and always was: it is copied
+   * onto each submission at write time and reconciled with nothing, so
+   * renaming a form split its history in two and two pages sharing a label
+   * were one list. An id survives both.
+   *
+   * This is the whole binding. Reuse across pages needs nothing further —
+   * promote the bound subtree once and the id travels inside the definition,
+   * so every instance writes the same form's submissions without the author
+   * retyping a label. Two instances of one definition are ONE form, which is
+   * the point; an author who wants two forms makes two forms.
+   */
+  formId?: string
+  /** Identifies the form in the submissions inbox. */
+  formName?: string
+  /**
+   * Dataset (by id) submissions also append into (AGL-556); the inbox
+   * copy is always written. Renaming the dataset never breaks the binding.
+   */
+  datasetId?: string
+  /**
+   * Legacy dataset-by-name binding (AGL-141), honored when no `datasetId`
+   * is set; kept so persisted nodes keep working.
+   */
+  datasetName?: string
+  submitLabel?: string
+  successMessage?: string
+  /**
+   * What a successful submit does (AGL-557): show the success message
+   * (default), redirect the visitor, or reveal a hidden element.
+   */
+  afterSubmit?: FormAfterSubmit
+  /** Redirect target screen — rename-safe id, resolved like ScreenLink. */
+  redirectScreenId?: string
+  /**
+   * Manual redirect target used when no screen is picked: a same-site
+   * `/path` or an absolute https URL (everything else is dropped).
+   */
+  redirectUrl?: string
+  /** Node revealed on submit; hidden until then (afterSubmit=reveal). */
+  revealNodeId?: string
+  children?: React.ReactNode
+}
+
+/**
+ * Hidden-input prefix a FormField uses to publish its field → dataset
+ * schema-field mapping to the enclosing Form (AGL-556). Rides the DOM so
+ * arbitrary nesting between Form and field needs no React context; the
+ * `__` prefix keeps it out of the submitted fields.
+ */
+export const FIELD_MAP_INPUT_PREFIX = '__map__'
+
+/**
+ * Redirect targets are restricted to same-origin paths (`/thanks`) and
+ * absolute https URLs (AGL-557): stored props reach every visitor's
+ * browser, so `javascript:`/`data:` URLs — and protocol-relative
+ * `//host` forms, which keep the scheme but swap the host — never pass.
+ *
+ * The relative branch asks {@link isSameOriginPath} rather than reading the
+ * string's first two characters (AGL-1881). This site never got the AGL-2486
+ * backslash fix, and the character list would not have been enough anyway:
+ * the URL parser deletes tab/LF/CR before parsing, so `/<TAB>/evil.com`
+ * carries neither `//` nor `\` and `window.location.assign` — which
+ * `formNavigation` below calls — still lands the visitor on `evil.com`. The
+ * absolute branch is unchanged: an explicit `https://` target is a documented
+ * feature, and for absolute input the parser's verdict was never in doubt.
+ */
+export const sanitizeRedirectUrl = (url?: string): string | undefined => {
+  const trimmed = (url ?? '').trim()
+  if (!trimmed) return undefined
+  if (/^https:\/\//i.test(trimmed)) return trimmed
+  if (isSameOriginPath(trimmed)) return trimmed
+  return undefined
+}
+
+/**
+ * Where a redirect outcome sends the visitor: the picked screen's
+ * resolved href wins; the manual URL is the fallback, sanitized above.
+ * Undefined (deleted screen, bad URL) degrades to the message outcome.
+ */
+export const resolveRedirectTarget = (
+  screenHref: string | undefined,
+  redirectUrl: string | undefined,
+): string | undefined => screenHref ?? sanitizeRedirectUrl(redirectUrl)
+
+// Reveal ids are interpolated into a CSS selector — restrict to the id
+// alphabet so a stored prop can't smuggle selector syntax (AGL-557).
+const REVEAL_NODE_ID_PATTERN = /^[A-Za-z0-9_-]+$/
+
+/**
+ * Navigation seam for the redirect outcome: jsdom's `window.location`
+ * is not patchable, so tests stub this indirection instead.
+ */
+export const formNavigation = {
+  assign: (url: string) => window.location.assign(url),
+}
+
+/** DOM event dispatched on every successful submit (AGL-557). */
+export const FORM_SUBMITTED_EVENT = 'aglyn:form-submitted'
+
+/**
+ * Report that a bound form was seen, or typed into.
+ *
+ * Fire-and-forget, and deliberately the same instrument the overlay counters
+ * use: `sendBeacon` hands the request to the browser, which delivers it
+ * outside the page's lifetime, so nothing here can delay a render or survive
+ * long enough to fail visibly.
+ *
+ * Requires a bound `formId`. An unbound form has no document to count on, and
+ * an id is never invented: the collector's `update` would find nothing, which
+ * is the right outcome but a pointless request.
+ */
+export function sendFormBeacon(
+  hostId: string | undefined,
+  formId: string | undefined,
+  event: 'view' | 'start',
+): void {
+  if (!hostId || !formId) return
+  // Best-effort by construction: `sendAnalyticsBeacon` swallows everything and
+  // refuses outright from a non-production build or a browser marked ours. A
+  // view that does not report is a view this form's completion rate is
+  // measured without, which the console says.
+  sendAnalyticsBeacon({ hostId, formId, form: event })
+}
+
+/**
+ * Lead-capture form (AGL-76): collects its field children's values and
+ * posts them to the tenant's `/api/forms/submit` with the site's host id
+ * from SiteContext. Without a site context (besigner canvas, preview) the
+ * submit is inert, so editing never creates submissions. Includes a
+ * honeypot input for naive bots.
+ */
+const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
+  const {
+    formId,
+    formName,
+    datasetId,
+    datasetName,
+    submitLabel,
+    successMessage,
+    afterSubmit,
+    redirectScreenId,
+    redirectUrl,
+    revealNodeId,
+    children,
+    ...rest
+  } = props
+  const { hostId } = Aglyn.useSite()
+  const siteFetch = Aglyn.useSiteFetch()
+  // Resolves the redirect screen like ScreenLink does (rename-safe) and
+  // flags editing surfaces, where outcomes must never fire (AGL-557).
+  const { href: redirectScreenHref, suppressNavigation } = Aglyn.useScreenLink(
+    afterSubmit === 'redirect' ? redirectScreenId : undefined,
+  )
+  // Reveal target (AGL-557): hidden through a form-owned <style> tag so
+  // SSR paints it hidden from the first frame; the style unmounts with
+  // the form after a successful submit — which IS the reveal. Editing
+  // surfaces keep the target visible so it stays editable.
+  const revealSelector =
+    afterSubmit === 'reveal' &&
+    revealNodeId &&
+    REVEAL_NODE_ID_PATTERN.test(revealNodeId) &&
+    !suppressNavigation
+      ? `[data-aglyn="leaf:${revealNodeId}"]`
+      : undefined
+  const [status, setStatus] = useState<
+    'idle' | 'sending' | 'sent' | 'error' | 'preview' | 'paused' | 'unavailable'
+  >(
+    'idle',
+  )
+  /*
+   * THE VIEW AND THE START — the two facts a completion rate is taken over.
+   *
+   * Both are reported ONCE per mounted form, from a ref rather than from
+   * state: a counter driven by a re-render would be a Firestore write per
+   * keystroke, which is the per-render write this must not become. The ref
+   * also survives the re-renders `status` causes, so a visitor who edits a
+   * field, submits, and is shown an error is one view and one start.
+   *
+   * Gated on `!suppressNavigation`, the editing-surface flag: the besigner
+   * canvas and the console's preview render this component for its author,
+   * and counting an author looking at their own draft as a visitor view would
+   * put the merchant into their own denominator.
+   */
+  const reported = useRef({ view: false, start: false })
+  useEffect(() => {
+    if (suppressNavigation || reported.current.view) return
+    reported.current.view = true
+    sendFormBeacon(hostId, formId, 'view')
+  }, [hostId, formId, suppressNavigation])
+
+  /**
+   * A START is the first edit anyone makes to this form.
+   *
+   * On the form's own `input`, which bubbles from every field — no listener
+   * registration, no per-field wiring, and nothing to keep in sync when a
+   * field type is added. Focus would be the looser reading and the wrong one:
+   * a form that is tabbed through and abandoned was never started, and
+   * counting it would inflate the denominator abandonment is measured over.
+   */
+  const handleFirstInput = useCallback(() => {
+    if (suppressNavigation || reported.current.start) return
+    reported.current.start = true
+    sendFormBeacon(hostId, formId, 'start')
+  }, [hostId, formId, suppressNavigation])
+  /** The read-only lockdown's own words (AGL-1511); never a hardcoded line. */
+  const [pausedMessage, setPausedMessage] = useState('')
+  /** The abuse ceiling's visitor notice (AGL-1666); see `unavailable` below. */
+  const [unavailable, setUnavailable] =
+    useState<Aglyn.FormUnavailableNotice | null>(null)
+  const [alerts, setAlerts] = useState<
+    Array<{ message: string; severity?: string }>
+  >([])
+
+  const handleSubmit = useCallback(
+    async (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault()
+      if (!hostId || status === 'sending') return
+      const data = new FormData(event.currentTarget)
+      const fields: Record<string, string> = {}
+      const fieldMap: Record<string, string> = {}
+      let website = ''
+      for (const [key, value] of data.entries()) {
+        if (typeof value !== 'string') continue
+        if (key === 'website') {
+          website = value
+          continue
+        }
+        // Field → dataset schema-field mappings (AGL-556), published by
+        // each FormField as a hidden input.
+        if (key.startsWith(FIELD_MAP_INPUT_PREFIX)) {
+          const submittedKey = key.slice(FIELD_MAP_INPUT_PREFIX.length)
+          if (submittedKey && value) fieldMap[submittedKey] = value
+          continue
+        }
+        // `__`-prefixed inputs are internal controls (e.g. the rating
+        // field's star radios) and never submit (AGL-544).
+        if (key.startsWith('__')) continue
+        // Checkbox groups emit one entry per ticked box; join them under
+        // the field name instead of letting the last one win (AGL-544).
+        fields[key] = (
+          key in fields ? `${fields[key]}, ${value}` : value
+        ).slice(0, 2000)
+      }
+      setStatus('sending')
+      try {
+        const response = await siteFetch('/api/forms/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            hostId,
+            // The bound form entity, when there is one. Sent ALONGSIDE the
+            // caption rather than instead of it: the caption keeps the
+            // pre-entity `?form=` filter working for every form that has not
+            // been adopted yet, and no phase of the migration removes it.
+            ...(formId ? { formId } : {}),
+            formName: formName || 'Form',
+            // Id-first dataset binding (AGL-556); the name rides along for
+            // the server's legacy fallback.
+            ...(datasetId ? { datasetId } : {}),
+            ...(datasetName ? { dataset: datasetName } : {}),
+            ...(Object.keys(fieldMap).length ? { fieldMap } : {}),
+            path: window.location.pathname,
+            fields,
+            website,
+            // The campaign this visitor came from, when they came from one.
+            // Absent entirely for direct traffic — never a placeholder, so
+            // the server can tell "arrived from nowhere" from "this door does
+            // not report".
+            ...campaignTouchField(),
+          }),
+        })
+        if (response.ok) {
+          // Site alerts from the actions builder (AGL-148).
+          const payload = await response.json().catch(() => ({}))
+          if (Array.isArray(payload?.alerts)) setAlerts(payload.alerts)
+          // Announced for reveal-style listeners/analytics (AGL-557).
+          window.dispatchEvent(
+            new CustomEvent(FORM_SUBMITTED_EVENT, {
+              detail: { formName: formName || 'Form' },
+            }),
+          )
+          // GA4 lead conversion (AGL-1561). Inside `response.ok`, so it
+          // measures a SUBMISSION, not a click and not a validation failure —
+          // the distinction that makes a conversion rate mean anything.
+          //
+          // AWAITED, because the branch below navigates. Ordering the call
+          // ahead of the `assign` is not on its own enough, and the obvious
+          // reasoning about beacons is the wrong one: once a hit REACHES gtag
+          // a navigation cannot destroy it, so `transport_type: 'beacon'`
+          // fixes nothing. What is lost is a hit that never reaches gtag,
+          // which is what happens when the surface's transport is async and
+          // its initialization promise is still pending — the continuation is
+          // scheduled behind the navigation task and never runs. The tenant
+          // runtime registers no transport, so this resolves immediately and
+          // costs the redirect nothing; it is written this way because the
+          // property that makes a bare call safe is invisible from here.
+          //
+          // `formName` is author-written site content, never a field VALUE:
+          // no submitted field ever reaches GA from here.
+          //
+          // This runs on every tenant site, not only aglyn.com, and that is
+          // deliberate — gtag is loaded with whatever measurement id the HOST
+          // configured, so a customer's form reports into the customer's own
+          // property and aglyn.com's reports into ours. It is consent-gated
+          // either way: without a grant the script never loaded (AGL-1498)
+          // and the delivery path finds no `window.gtag` to call.
+          await trackEventBeforeNavigation('generate_lead', {
+            form_name: formName || 'Form',
+            form_location: window.location.pathname,
+          })
+          if (afterSubmit === 'redirect' && !suppressNavigation) {
+            const target = resolveRedirectTarget(
+              redirectScreenHref,
+              redirectUrl,
+            )
+            // No valid target (deleted screen, rejected URL) degrades to
+            // the success message below.
+            if (target) formNavigation.assign(target)
+          }
+        }
+        // A refusal is not a failure (AGL-1249). Preview declines writes on
+        // purpose, and "something went wrong — please try again" invites the
+        // author to retry something that is working exactly as intended.
+        //
+        // Since AGL-1511 there are TWO deliberate 423s a submit can meet, so
+        // the status alone no longer identifies one: Preview's client-side
+        // refusal, and a read-only lockdown refusing a real visitor's write
+        // on a live site. Preview's carries `preview: true` and is settled
+        // first; anything else 423 is the lockdown pause, whose own copy is
+        // rendered rather than the Preview sentence — telling a customer's
+        // visitor "this works on your published site" would be nonsense on
+        // the published site they are standing on.
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}))
+          if (Aglyn.isPreviewRefusal(response, body)) {
+            setStatus('preview')
+            return
+          }
+          const paused = Aglyn.parseLockdownRefusal(response.status, body)
+          if (paused) {
+            setPausedMessage(Aglyn.lockdownRefusalText(paused))
+            setStatus('paused')
+            return
+          }
+          // The site's form-submission abuse ceiling (AGL-1655/1666). This
+          // is a THIRD deliberate refusal, and the only one whose status is
+          // already spoken for: the Free plan's monthly wall answers 429
+          // too. So it is matched on the body's `code` and never on the
+          // status — `parseFormUnavailableRefusal` takes no status for
+          // exactly that reason. A plan-wall 429 keeps falling through to
+          // the generic branch below, which is right: it is the owner's
+          // billing problem, and nothing about waiting fixes it.
+          const notice = Aglyn.parseFormUnavailableRefusal(body)
+          if (notice) {
+            setUnavailable(notice)
+            setStatus('unavailable')
+            return
+          }
+        }
+        setStatus(response.ok ? 'sent' : 'error')
+      } catch {
+        setStatus('error')
+      }
+    },
+    [
+      hostId,
+      status,
+      formId,
+      formName,
+      datasetId,
+      datasetName,
+      afterSubmit,
+      redirectScreenHref,
+      redirectUrl,
+      suppressNavigation,
+      siteFetch,
+    ],
+  )
+
+  if (status === 'sent') {
+    // Reveal outcome: the form (with its hide-style below) unmounts and
+    // the revealed element is the confirmation. Redirect keeps the
+    // message visible as a fallback while the browser navigates.
+    if (revealSelector) return null
+    return (
+      <Alert severity="success">
+        {successMessage || 'Thanks — your message has been sent.'}
+      </Alert>
+    )
+  }
+
+  return (
+    <Stack
+      ref={ref}
+      component="form"
+      spacing={2}
+      onSubmit={handleSubmit}
+      onInput={handleFirstInput}
+      {...rest}
+    >
+      {/* Hides the reveal target until submit (AGL-557); rendered by the
+          form so SSR ships it hidden — no flash, no target-side props.
+          MUI Stack spacing already skips <style> children. */}
+      {revealSelector ? (
+        <style>{`${revealSelector}{display:none !important}`}</style>
+      ) : null}
+      {children}
+      {/* Honeypot: humans never see or fill this. */}
+      <input
+        type="text"
+        name="website"
+        tabIndex={-1}
+        autoComplete="off"
+        aria-hidden="true"
+        style={{ position: 'absolute', left: '-5000px', height: 0, width: 0 }}
+      />
+      {status === 'error' ? (
+        <Alert severity="error">
+          {'Something went wrong — please try again.'}
+        </Alert>
+      ) : null}
+      {status === 'paused' ? (
+        // `info`, like the Preview notice and for the same reason: this is a
+        // deliberate, temporary pause on a site that is otherwise working,
+        // and nothing the visitor typed was lost.
+        <Alert severity="info">{pausedMessage}</Alert>
+      ) : null}
+      {status === 'unavailable' && unavailable ? (
+        // `warning`, not `info` and not `error` (AGL-1666). The two `info`
+        // notices above are both cases where nothing was lost — Preview
+        // never intended to send, and a lockdown pause is minutes long with
+        // the visitor's text still in the fields. This one lost a real
+        // message on a live site, so it must not read as reassurance. It is
+        // not `error` either: nothing is broken and "please try again" would
+        // walk the visitor into the same refusal.
+        <Alert severity="warning">
+          {unavailable.message}
+          {unavailable.contact ? (
+            <>
+              {' In the meantime you can reach us at '}
+              <Link href={`mailto:${unavailable.contact}`}>
+                {unavailable.contact}
+              </Link>
+              {'.'}
+            </>
+          ) : null}
+        </Alert>
+      ) : null}
+      {status === 'preview' ? (
+        // Deliberately `info`, not `error`, and it does not say "try again":
+        // nothing failed, and the same submit works on the published site.
+        <Alert severity="info">
+          {'Preview does not send form submissions. This form works on your ' +
+            'published site.'}
+        </Alert>
+      ) : null}
+      {alerts.map((alert, index) => (
+        <Alert key={index} severity={(alert.severity as any) || 'info'}>
+          {alert.message}
+        </Alert>
+      ))}
+      <Button
+        type="submit"
+        variant="contained"
+        disabled={status === 'sending'}
+        sx={{ alignSelf: 'flex-start' }}
+      >
+        {status === 'sending' ? 'Sending…' : submitLabel || 'Send'}
+      </Button>
+    </Stack>
+  )
+})
+Form.displayName = 'AglynForm'
+
+export interface FormFieldProps {
+  /** Submission key; also the input's name attribute. */
+  fieldName?: string
+  /**
+   * Stable model fieldId of the parent form's dataset this value is
+   * stored under (AGL-556). When unset, values match dataset fields by
+   * name — the legacy behavior.
+   */
+  datasetFieldId?: string
+  label?: string
+  /**
+   * Grey hint shown inside the empty input (AGL-1330) — the frames pair a
+   * label above the control with a placeholder inside it. A placeholder is
+   * NOT a label: it disappears the moment the visitor types, so the label
+   * stays the field's accessible name and is never replaced by this.
+   * Ignored by radio, checkbox, and rating fields, which have no text input
+   * to hint inside of.
+   */
+  placeholder?: string
+  fieldType?:
+    | 'text'
+    | 'email'
+    | 'textarea'
+    | 'select'
+    | 'radio'
+    | 'checkbox'
+    | 'rating'
+  /**
+   * Choice list for select/radio/checkbox fields (AGL-544): newline- or
+   * comma-separated. Ignored by the other types.
+   */
+  options?: string
+  required?: boolean
+}
+
+/**
+ * Splits a newline- or comma-separated choice list into trimmed,
+ * non-empty entries (AGL-544).
+ */
+export const parseFieldOptions = (options?: string): string[] =>
+  (options || '')
+    .split(/[\n,]/)
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+
+/**
+ * Single input inside a Form (AGL-76). Survey field types — select,
+ * radio, checkbox group, and star rating — are AGL-544.
+ */
+const FormField = forwardRef<HTMLDivElement, FormFieldProps>((props, ref) => {
+  const {
+    fieldName,
+    datasetFieldId,
+    label,
+    placeholder,
+    fieldType,
+    options,
+    required,
+    ...rest
+  } = props
+  const name = fieldName || 'field'
+  const fieldLabel = label || fieldName || 'Field'
+  const choices = parseFieldOptions(options)
+  // A CLEARED placeholder must render as no placeholder (AGL-1330). The
+  // attributes form persists a cleared text field by dropping the key
+  // (ddf maps an emptied field to its clearedValue and final-form's parse
+  // turns `''` into `undefined`), and `updateNodeProps` REPLACES the props
+  // object — so cleared reaches us as absent. Older documents can still
+  // carry `''`/`null`, and a blank string would otherwise reach the DOM as
+  // an empty `placeholder` attribute, so blank is normalized to absent too.
+  const hint = typeof placeholder === 'string' && placeholder.trim()
+    ? placeholder
+    : undefined
+  // MUI hides a placeholder for as long as the label still sits inside the
+  // box, so the hint is only visible once the label is shrunk — and an
+  // outlined input with a shrunk label must notch its outline or the label
+  // crosses the border. Both are applied ONLY when there is a placeholder,
+  // so fields without one keep the historical floating-label behavior.
+  const hintSlotProps = hint
+    ? { inputLabel: { shrink: true }, input: { notched: true } }
+    : undefined
+  // Checkbox groups count ticked boxes so "required" can mean "at least
+  // one": native `required` is only asserted while none are ticked.
+  const [checkedCount, setCheckedCount] = useState(0)
+  // Rating is controlled so a hidden input can serialize the number.
+  const [rating, setRating] = useState<number | null>(null)
+  // Publishes this field's dataset schema-field mapping to the enclosing
+  // Form via the DOM (AGL-556); `__`-prefixed, so never a submitted field.
+  const mapInput = datasetFieldId ? (
+    <input
+      type="hidden"
+      name={`${FIELD_MAP_INPUT_PREFIX}${name}`}
+      value={datasetFieldId}
+      readOnly
+    />
+  ) : null
+
+  if (fieldType === 'select') {
+    return (
+      <>
+        <TextField
+          ref={ref}
+          select
+          name={name}
+          label={fieldLabel}
+          required={Boolean(required)}
+          defaultValue=""
+          fullWidth
+          size="small"
+          // A Select has no native placeholder: the hint is what the closed
+          // control displays while nothing is chosen, which needs
+          // `displayEmpty` (MUI renders nothing for `''` without it).
+          slotProps={
+            hint
+              ? {
+                  ...hintSlotProps,
+                  select: {
+                    displayEmpty: true,
+                    renderValue: (value: unknown) =>
+                      value ? (
+                        String(value)
+                      ) : (
+                        <span style={{ opacity: 0.6 }}>{hint}</span>
+                      ),
+                  },
+                }
+              : undefined
+          }
+          {...rest}
+        >
+          {choices.map((choice, index) => (
+            <MenuItem key={index} value={choice}>
+              {choice}
+            </MenuItem>
+          ))}
+        </TextField>
+        {mapInput}
+      </>
+    )
+  }
+
+  if (fieldType === 'radio') {
+    return (
+      <FormControl ref={ref} required={Boolean(required)} {...rest}>
+        <FormLabel>{fieldLabel}</FormLabel>
+        <RadioGroup name={name}>
+          {choices.map((choice, index) => (
+            <FormControlLabel
+              key={index}
+              value={choice}
+              label={choice}
+              control={<Radio size="small" required={Boolean(required)} />}
+            />
+          ))}
+        </RadioGroup>
+        {mapInput}
+      </FormControl>
+    )
+  }
+
+  if (fieldType === 'checkbox') {
+    return (
+      <FormControl ref={ref} required={Boolean(required)} {...rest}>
+        <FormLabel>{fieldLabel}</FormLabel>
+        <FormGroup>
+          {choices.map((choice, index) => (
+            <FormControlLabel
+              key={index}
+              label={choice}
+              control={
+                <Checkbox
+                  name={name}
+                  value={choice}
+                  size="small"
+                  required={Boolean(required) && checkedCount === 0}
+                  onChange={(event) =>
+                    setCheckedCount(
+                      (count) => count + (event.target.checked ? 1 : -1),
+                    )
+                  }
+                />
+              }
+            />
+          ))}
+        </FormGroup>
+        {mapInput}
+      </FormControl>
+    )
+  }
+
+  if (fieldType === 'rating') {
+    return (
+      <FormControl ref={ref} required={Boolean(required)} {...rest}>
+        <FormLabel>{fieldLabel}</FormLabel>
+        <Rating
+          // `__`-prefixed so the star radios themselves are skipped by
+          // Form.handleSubmit; the hidden input carries the value.
+          name={`__${name}`}
+          value={rating}
+          onChange={(_event, value) => setRating(value)}
+        />
+        <input type="hidden" name={name} value={rating ?? ''} />
+        {mapInput}
+      </FormControl>
+    )
+  }
+
+  return (
+    <>
+      <TextField
+        ref={ref}
+        name={name}
+        label={fieldLabel}
+        placeholder={hint}
+        type={fieldType === 'email' ? 'email' : 'text'}
+        required={Boolean(required)}
+        multiline={fieldType === 'textarea'}
+        minRows={fieldType === 'textarea' ? 3 : undefined}
+        fullWidth
+        size="small"
+        slotProps={hintSlotProps}
+        {...rest}
+      />
+      {mapInput}
+    </>
+  )
+})
+FormField.displayName = 'AglynFormField'
+
+export const formSchema: Aglyn.ComponentSchema<FormProps> = {
+  $id: FORM_ID,
+  pluginId: BUNDLE_ID,
+  displayName: 'Form',
+  description:
+    'Collects its Form Fields and sends the answers to you, or into a dataset.',
+  category: Aglyn.ComponentCategory.FORMS,
+  icon: { path: mdiEmailFastOutline.path, sx: { color: 'info.main' } },
+  attributes: [
+    {
+      name: 'formId',
+      description:
+        'The form this collects for, from the Forms page. Stored by id, so ' +
+        'renaming the form never splits its submission history and two ' +
+        'pages placing the same form share one list. Leave unset to keep ' +
+        'filing submissions under the name below.',
+      component: Aglyn.FieldComponentType.FORM_SELECT,
+      label: 'Form',
+    },
+    {
+      name: 'formName',
+      description:
+        'Caption shown in the submissions inbox, used when no form above ' +
+        'is picked. A name is not an identity: renaming it splits the ' +
+        'history of everything already submitted under the old one.',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      label: 'Form name',
+    },
+    {
+      name: 'datasetId',
+      description:
+        'Optional dataset (from the Data page) submissions are appended ' +
+        'to. Stored by id, so renaming the dataset never breaks the ' +
+        'binding (AGL-556). The inbox always gets a copy.',
+      component: Aglyn.FieldComponentType.DATASET_SELECT,
+      label: 'Write to dataset',
+    },
+    {
+      name: 'datasetName',
+      description:
+        'Legacy name-based dataset binding — matched against the ' +
+        "dataset's display name at submit time. Pick the dataset above " +
+        'and clear this; it only shows while a name is still set.',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      label: 'Write to dataset (legacy name)',
+      condition: { when: 'datasetName', isNotEmpty: true },
+    },
+    {
+      name: 'submitLabel',
+      description: 'Label of the submit button.',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      label: 'Submit label',
+    },
+    {
+      name: 'successMessage',
+      description: 'Shown after a successful submission.',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      label: 'Success message',
+    },
+    // After-submit outcomes (AGL-557).
+    {
+      name: 'afterSubmit',
+      description:
+        'What a successful submit does: show the success message, send ' +
+        'the visitor to another page, or reveal a hidden element.',
+      component: Aglyn.FieldComponentType.SELECT,
+      label: 'After submit',
+      // `message` is the first member of the declared `FormAfterSubmit`
+      // union, so the sentinel already existed in the type and only the
+      // option list was spelling it `''` (AGL-1451) — a value the
+      // attributes form strips on change (AGL-1191), which meant a form
+      // switched to Redirect could not be switched back to its message.
+      options: [
+        { value: 'message', label: 'Show the success message' },
+        { value: 'redirect', label: 'Redirect the visitor' },
+        { value: 'reveal', label: 'Reveal a hidden element' },
+      ],
+    },
+    {
+      name: 'redirectScreenId',
+      description:
+        'Screen the visitor lands on after submitting. The address is ' +
+        "resolved at render time, so renaming the screen's slug never " +
+        'breaks the redirect.',
+      component: Aglyn.FieldComponentType.SCREEN_SELECT,
+      label: 'Redirect to screen',
+      condition: { when: 'afterSubmit', is: 'redirect' },
+    },
+    {
+      name: 'redirectUrl',
+      description:
+        'Used only when no screen is selected above: a same-site path ' +
+        '(/thanks) or an https URL. Anything else is ignored.',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      label: 'Redirect URL',
+      condition: { when: 'afterSubmit', is: 'redirect' },
+    },
+    {
+      name: 'revealNodeId',
+      description:
+        'Element shown after a successful submit — it stays hidden on ' +
+        'the published page until then.',
+      component: Aglyn.FieldComponentType.NODE_SELECT,
+      label: 'Element to reveal',
+      condition: { when: 'afterSubmit', is: 'reveal' },
+    },
+  ],
+}
+
+export const formFieldSchema: Aglyn.ComponentSchema<FormFieldProps> = {
+  $id: FORM_FIELD_ID,
+  pluginId: BUNDLE_ID,
+  displayName: 'Form Field',
+  description:
+    'One input inside a form — text, select, radio, checkbox or rating.',
+  category: Aglyn.ComponentCategory.FORMS,
+  icon: { path: mdiFormTextbox.path, sx: { color: 'info.main' } },
+  flags: {
+    selfClosing: Aglyn.FEATURE_FLAG.ENABLED,
+  },
+  attributes: [
+    {
+      name: 'fieldName',
+      description: 'Key this value is stored under in submissions.',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      label: 'Field name',
+    },
+    {
+      name: 'datasetFieldId',
+      description:
+        "Schema field of the form's dataset this value is stored under. " +
+        'Stored by id, so renaming the field never breaks the mapping ' +
+        '(AGL-556). When unset, values match dataset fields by name.',
+      component: Aglyn.FieldComponentType.DATASET_FIELD_SELECT,
+      label: 'Maps to schema field',
+    },
+    {
+      name: 'label',
+      description: 'Visible input label.',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      label: 'Label',
+    },
+    {
+      name: 'placeholder',
+      description:
+        'Grey hint inside the empty input — "you@company.com" (AGL-1330). ' +
+        'It is not a label: it disappears as soon as the visitor types, so ' +
+        'always keep Label set. Ignored by radio, checkbox, and rating ' +
+        'fields. Clearing it removes the hint.',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      label: 'Placeholder',
+    },
+    {
+      name: 'fieldType',
+      description: 'Input type.',
+      component: Aglyn.FieldComponentType.SELECT,
+      label: 'Type',
+      // `text` is the first member of this prop's own union, and the value
+      // the render falls back to. As `''` it was the one field type an
+      // author could not choose and keep (AGL-1191/AGL-1451): a field
+      // switched to Email or Multiline could never be made plain text
+      // again without deleting it.
+      options: [
+        { value: 'text', label: 'Text' },
+        { value: 'email', label: 'Email' },
+        { value: 'textarea', label: 'Multiline' },
+        { value: 'select', label: 'Dropdown' },
+        { value: 'radio', label: 'Radio choice' },
+        { value: 'checkbox', label: 'Checkboxes' },
+        { value: 'rating', label: 'Star rating' },
+      ],
+    },
+    {
+      name: 'options',
+      description:
+        'Choices for dropdown, radio, and checkbox fields — one per line ' +
+        '(or comma-separated). Ignored by the other types.',
+      component: Aglyn.FieldComponentType.TEXTAREA,
+      label: 'Options',
+    },
+    {
+      name: 'required',
+      description: 'Whether the field must be filled.',
+      component: Aglyn.FieldComponentType.SWITCH,
+      label: 'Required?',
+    },
+  ],
+}
+
+export const formPresets: Aglyn.PresetSchema[] = [
+  {
+    $id: generatePresetId(FORM_ID, 'contact'),
+    type: Aglyn.NodeType.PRESET,
+    displayName: 'Contact Form',
+    pluginId: BUNDLE_ID,
+    description: 'Name, email, and message with a send button',
+    category: Aglyn.ComponentCategory.FORMS,
+    icon: { path: mdiEmailFastOutline.path, sx: { color: 'info.main' } },
+    data: {
+      $id: null,
+      componentId: FORM_ID,
+      pluginId: BUNDLE_ID,
+      props: { formName: 'Contact' },
+      nodes: [
+        {
+          $id: null,
+          componentId: FORM_FIELD_ID,
+          pluginId: BUNDLE_ID,
+          props: { fieldName: 'name', label: 'Name', required: true },
+        },
+        {
+          $id: null,
+          componentId: FORM_FIELD_ID,
+          pluginId: BUNDLE_ID,
+          props: {
+            fieldName: 'email',
+            label: 'Email',
+            fieldType: 'email',
+            required: true,
+          },
+        },
+        {
+          $id: null,
+          componentId: FORM_FIELD_ID,
+          pluginId: BUNDLE_ID,
+          props: {
+            fieldName: 'message',
+            label: 'Message',
+            fieldType: 'textarea',
+            required: true,
+          },
+        },
+      ],
+    },
+  },
+  {
+    $id: generatePresetId(FORM_FIELD_ID),
+    type: Aglyn.NodeType.PRESET,
+    displayName: 'Form Field',
+    pluginId: BUNDLE_ID,
+    description: 'Single input inside a form',
+    category: Aglyn.ComponentCategory.FORMS,
+    icon: { path: mdiFormTextbox.path, sx: { color: 'info.main' } },
+    data: {
+      $id: null,
+      componentId: FORM_FIELD_ID,
+      pluginId: BUNDLE_ID,
+      props: { fieldName: 'field', label: 'Field' },
+    },
+  },
+]
+
+/**
+ * The composed section a form usually arrives inside.
+ *
+ * It lives here rather than with the generic block library because it PLACES
+ * form nodes, and a preset's `data` carries the `pluginId` those nodes are
+ * saved with — so authoring it anywhere else stamps every contact form on
+ * every new site with the wrong bundle. The heading and the stack around it
+ * name `mui`, which is correct: they ARE mui elements, and a page holding this
+ * section needs both bundles registered before it paints.
+ */
+export const formBlockPresets: Aglyn.PresetSchema[] = [
+  {
+    $id: generatePresetId(FORM_ID, 'contact-section'),
+    type: Aglyn.NodeType.PRESET,
+    displayName: 'Contact Section',
+    pluginId: BUNDLE_ID,
+    description: 'Heading with a name/email/message form',
+    category: Aglyn.ComponentCategory.BLOCKS,
+    icon: { path: mdiEmailOutline.path, sx: { color: 'info.main' } },
+    data: {
+      $id: null,
+      componentId: 'muiStack',
+      pluginId: MUI_BUNDLE_ID,
+      props: { spacing: 2 },
+      sx: {
+        paddingLeft: 4,
+        paddingRight: 4,
+        paddingTop: 6,
+        paddingBottom: 6,
+        maxWidth: 560,
+      },
+      nodes: [
+        {
+          $id: null,
+          componentId: 'muiTypography',
+          pluginId: MUI_BUNDLE_ID,
+          props: { variant: 'h4', children: 'Get in touch' },
+        },
+        {
+          $id: null,
+          componentId: FORM_ID,
+          pluginId: BUNDLE_ID,
+          props: {
+            formName: 'Contact',
+            submitLabel: 'Send message',
+            successMessage: 'Thanks — we will get back to you soon.',
+          },
+          nodes: [
+            contactField('name', 'Name'),
+            contactField('email', 'Email', { fieldType: 'email' }),
+            contactField('message', 'Message', { fieldType: 'textarea' }),
+          ],
+        },
+      ],
+    },
+  },
+]
+
+function contactField(fieldName: string, label: string, extra?: object) {
+  return {
+    $id: null,
+    componentId: FORM_FIELD_ID,
+    pluginId: BUNDLE_ID,
+    props: { fieldName, label, required: true, ...extra },
+  }
+}
+
+export { Form, FormField }
+export default Form

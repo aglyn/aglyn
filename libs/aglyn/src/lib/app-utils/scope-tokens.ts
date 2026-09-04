@@ -97,16 +97,35 @@ export function scopeTokensForHost(hostId: string): ScopeToken[] {
 /**
  * Whether a host may see a resource.
  *
- * A **missing** `visibleTo` reads as org-wide: docs predate the AGL-1040
- * backfill and must stay visible until it runs. An **empty array** does not
- * — that is a written value, only reachable by a bug, and hiding a resource
- * is recoverable where leaking one is not.
+ * ## A missing `visibleTo` is visible to NOBODY
+ *
+ * It once read as org-wide, so that documents predating the scope backfill
+ * stayed visible until it reached them. That default is the shape of failure
+ * this codebase keeps paying for: **a read that cannot see a value answered
+ * the same as a value that is absent.** "This document was never scoped" and
+ * "this document is shared with every site" are different facts, and one
+ * unscoped document under an agency account was one client's data on every
+ * other client's site — silently, because the permissive answer is the one
+ * nothing complains about.
+ *
+ * Both enforcement layers below this function already fail CLOSED on the
+ * missing field: `array-contains-any` matches nothing on a document that
+ * lacks the array, and the rules' `hasAny` is false for the same reason. So
+ * the permissive default was never a policy either of them agreed with — it
+ * was one TypeScript helper disagreeing with the database, which is what made
+ * AGL-1466 invisible for three weeks.
+ *
+ * The migration is `tools/scripts/backfill-consent-host.mjs`, which stamps
+ * `['org']` on the documents that should carry it. Until a document is
+ * stamped it is hidden, and hiding is the recoverable direction.
+ *
+ * An **empty array** answers the same and always did.
  */
 export function visibleToHost(
   visibleTo: readonly string[] | undefined | null,
   hostId: string
 ): boolean {
-  if (visibleTo == null) return true
+  if (visibleTo == null) return false
   if (visibleTo.includes(ORG_SCOPE_TOKEN)) return true
   return visibleTo.includes(hostScopeToken(hostId))
 }
@@ -115,12 +134,17 @@ export function visibleToHost(
  * Whether a caller holding `scopeTokens` (AGL-1038) may see a resource.
  * The TypeScript twin of the rules' `visibleTo.hasAny(scopeTokens)`, for
  * the Admin-SDK paths that never evaluate rules at all.
+ *
+ * A missing `visibleTo` is visible to nobody, for the reason
+ * {@link visibleToHost} gives — and here the twinning is the argument on its
+ * own: `hasAny` over a missing field is false in the rules, so a helper that
+ * answered `true` was not a twin of anything.
  */
 export function visibleToTokens(
   visibleTo: readonly string[] | undefined | null,
   scopeTokens: readonly string[] | undefined | null
 ): boolean {
-  if (visibleTo == null) return true
+  if (visibleTo == null) return false
   if (!scopeTokens?.length) return false
   return visibleTo.some((token) => scopeTokens.includes(token))
 }
@@ -129,23 +153,23 @@ export function visibleToTokens(
  * The scope a document ACTUALLY carries — `null` when it carries none
  * (AGL-1466/AGL-1480).
  *
- * Every helper above this line answers "may this be seen", and for that
- * question a missing `visibleTo` reads as org-wide: the AGL-1040 docs
- * predate the backfill and must stay visible until it reaches them.
+ * Every helper above this line answers "may this be seen", and answers it
+ * the way both enforcement layers do: a missing `visibleTo` is seen by
+ * nobody.
  *
  * An **editor** asks a different question — "what did somebody choose" —
- * and the first question's answer is wrong for it. Four call sites across
- * two files each wrote their own
+ * and it still needs its own answer, because "nobody chose" and "somebody
+ * chose nobody" are the same to an editor and different on the document.
+ * Four call sites across two files each wrote their own
  *
  * ```ts
  * Array.isArray(doc.visibleTo) ? doc.visibleTo : [ORG_SCOPE_TOKEN]
  * ```
  *
  * and every one of them rendered "All sites" over a document no site could
- * see, because both enforcement layers fail CLOSED on the missing field.
- * That inversion is why AGL-1466 went three weeks unnoticed with the folder
- * tree missing from every host, and AGL-1480 is the third and fourth copies
- * of it turning up at the surface people use most.
+ * see. That inversion is why AGL-1466 went three weeks unnoticed with the
+ * folder tree missing from every host, and AGL-1480 is the third and fourth
+ * copies of it turning up at the surface people use most.
  *
  * So: one function, the same lesson `newMediaFolderDoc` drew on the write
  * side. A caller that wants a display default may still `?? []` or
@@ -193,11 +217,18 @@ export function scopeForHosts(
   return normalizeVisibleTo(hostIds.map(hostScopeToken))
 }
 
-/** Whether a scope is the org-wide one (including the legacy absent case). */
+/**
+ * Whether a scope is the org-wide one.
+ *
+ * An absent scope is NOT org-wide — see {@link visibleToHost}. That is the
+ * whole correction: this predicate is what `describeScope` renders and what
+ * `scopeCovers` and `narrowsScope` reason from, and while it answered `true`
+ * for a document nothing could see, the console said "All sites" over it.
+ */
 export function isOrgWideScope(
   visibleTo: readonly string[] | undefined | null
 ): boolean {
-  return visibleTo == null || visibleTo.includes(ORG_SCOPE_TOKEN)
+  return visibleTo != null && visibleTo.includes(ORG_SCOPE_TOKEN)
 }
 
 /**
@@ -294,8 +325,8 @@ export function newResourceScopeFields(
  * with a blank where the linked value should be, and nothing says why. So
  * B's scope must COVER A's.
  *
- * Org-wide covers everything. A missing scope reads as org-wide, matching
- * the rest of this module.
+ * Org-wide covers everything. A missing scope is seen by nobody and
+ * therefore covers nothing, matching the rest of this module.
  */
 export function scopeCovers(
   target: readonly string[] | undefined | null,

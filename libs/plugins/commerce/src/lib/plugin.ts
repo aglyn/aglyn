@@ -22,6 +22,9 @@ const PosConsolePage = lazy(() => import('./components/console/pos-page.componen
 const CommerceGlanceCard = lazy(
   () => import('./components/console/commerce-glance-card.component'),
 )
+const NewestSiteUsersCard = lazy(
+  () => import('./components/console/newest-site-users-card.component'),
+)
 import * as Account from './components/account'
 import * as Cart from './components/cart'
 import * as Gate from './components/gate'
@@ -37,6 +40,7 @@ import * as ProductGrid from './components/product-grid'
 import * as ProductReviews from './components/product-reviews'
 import * as RelatedProducts from './components/related-products'
 import * as Wishlist from './components/wishlist'
+import { COMMERCE_CONSOLE_SECTIONS } from './components/commerce-console-sections'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { COMMERCE_PERMISSIONS } from './model/plugin-permissions'
 import { COMMERCE_CONFIG_SCHEMA } from './plugin-config'
@@ -156,6 +160,7 @@ export function registerCommerceConsole(): void {
       {
         slot: 'commerceGlance',
         widgetId: 'commerce-glance',
+        title: 'Commerce',
         Component: CommerceGlanceCard,
       },
     ],
@@ -164,6 +169,10 @@ export function registerCommerceConsole(): void {
         label: 'Products',
         href: '/products',
         icon: { path: mdiStorefrontOutline.path },
+        // Sections as ROUTES (AGL-2501): `/products/orders` and friends are
+        // real URLs the shell resolves and gates, so the page mounts the one
+        // being read instead of subscribing all six.
+        sections: COMMERCE_CONSOLE_SECTIONS,
         header: {
           title: 'Products',
           icon: { path: mdiStorefrontOutline.path },
@@ -178,9 +187,61 @@ export function registerCommerceConsole(): void {
         // the generic [pluginSlug] shell now serves it at the same URL.
         label: 'POS',
         href: '/pos',
+        /*
+         * WHO may open the register, declared on THIS nav item rather than on
+         * the extension.
+         *
+         * A key here narrows one surface; a key on the extension would gate
+         * every surface it registers, and Products is the sibling — a catalog
+         * anyone who works on the site may open. The register is the one that
+         * takes money and lists checked-in guests by name, so the two
+         * genuinely have different answers and only this one is narrowed.
+         *
+         * `managePos` rather than a dotted catalog key because it is the key
+         * the sale itself is refused by: `server/pos-order.ts` resolves the
+         * member's permission map and returns 403 unless `managePos` holds.
+         * The shell answers this declaration out of that same resolved map, so
+         * the console offers a register exactly to the people the route will
+         * accept a sale from — the gate and its server twin cannot disagree,
+         * because they are reading one value.
+         *
+         * `pos-order.ts` stays the enforcement point regardless. This decides
+         * whether the surface is built at all, which is the part a check
+         * inside the page cannot do: by the time the page can refuse itself it
+         * has mounted and its product, register, location and reservation
+         * listeners are already open.
+         */
+        permission: 'managePos',
         icon: { path: mdiStorefrontOutline.path },
         header: { title: 'Point of Sale', docsTopic: 'pos' },
         Component: PosConsolePage,
+      },
+    ],
+  })
+  /*
+   * The USER ACCOUNTS half, registered under its own id.
+   *
+   * `accounts` is a switch rather than a bundle: the member blocks and every
+   * `membership/*` handler ship inside this package, which is why the id
+   * carries no loader manifest entry of its own. A second extension is how a
+   * card about visitor accounts is gated on the switch that decides whether
+   * the site serves them — `listConsoleWidgets` filters by the workspace's
+   * effective plugin ids, and `accounts` is default-OFF per site.
+   *
+   * A separate call rather than more widgets on the commerce extension: the
+   * registry is keyed by `pluginId` and that key IS the gate, so folding this
+   * card in above would have kept the dashboard defect it fixes — `Newest
+   * site users` on a site whose /signin returns 404.
+   */
+  Aglyn.registerConsoleExtension({
+    pluginId: Aglyn.ACCOUNTS_PLUGIN_ID,
+    displayName: 'User Accounts',
+    widgets: [
+      {
+        slot: Aglyn.CONSOLE_WIDGET_SLOTS.hostDashboard,
+        widgetId: 'accounts-newest-site-users',
+        title: 'Newest site users',
+        Component: NewestSiteUsersCard,
       },
     ],
   })

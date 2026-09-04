@@ -69,6 +69,10 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 jest.mock('firebase/firestore', () => ({
   __esModule: true,
   collection: jest.fn(),
+  // The tab-name read (AGL-2551) hangs alongside the definitions read, since
+  // the property under test is that a PENDING read never holds the paint.
+  doc: jest.fn(),
+  getDoc: jest.fn(() => new Promise(() => undefined)),
   getDocs: jest.fn(() => new Promise(() => undefined)),
   limit: jest.fn(),
   query: jest.fn(),

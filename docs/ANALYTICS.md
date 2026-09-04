@@ -1305,6 +1305,32 @@ Being per-origin is a feature as much as a cost: it is what makes it
 impossible for an opt-in on our console to leak a stamp into a CUSTOMER's
 property while we click through their published site.
 
+⚠️ **The flag now does two jobs, because the GA4 filter only does one.** A GA4
+data filter is **property-scoped**. It drops `traffic_type: internal` hits from
+property `302497406` and has no reach whatsoever into an `AW-` / Meta /
+LinkedIn destination — those are separate products reached by separate
+requests, and no setting in GA4 governs them.
+
+Measured on `aglyn.com` 2026-09-01: a flagged browser's pageview was correctly
+absent from GA4, while the **same** pageview still sent
+`www.google.com/ccm/collect?tid=AW-18401436785`,
+`pagead/1p-user-list/18401436785` (`is_vtc=1`) and `viewthroughconversion` —
+none of which carry the `tt` parameter at all. Staff were excluded from the
+reports and still joined the remarketing audiences those requests build, which
+is the worse half: it is the half no report can show.
+
+So `readInternalTrafficOverride()` is the **sixth condition** on
+`resolveAdvertisingTags` (`libs/aglyn/src/lib/app-utils/advertising-tags.ts`),
+alongside the five in that module's comment. A flagged browser mounts no
+advertising tag at all — structural, like every other clause there, because a
+resident tag fires on its own. One visit to `?aglyn_internal=1` therefore
+covers both products, and the two cannot drift into a browser that is internal
+for GA4 and external for Ads.
+
+⚑ **The tell to remember:** GA4 promotes `traffic_type` out of `ep.` into a
+top-level **`tt`** field on `/g/collect`. Grepping a collect URL for
+`ep.traffic_type` finds nothing and reads as a missing stamp. Look for `tt=`.
+
 **Three implementations, one definition.** `INTERNAL_TRAFFIC_PARAM` /
 `INTERNAL_TRAFFIC_VALUE` and both readers live in
 `libs/aglyn/src/lib/app-utils/internal-traffic.ts`:
@@ -1488,6 +1514,50 @@ Remaining, and all of it is his click — nothing in this repo can do it:
 
 Click-list on AGL-1637.
 
+### 8e. The METERED beacon takes the same gate, and drops rather than stamps
+
+AGL-2067 was applied to the GA4 mount, the GTM mount, the advertising tags and
+Firebase Analytics — every tag that costs nothing — and not to
+`/api/analytics/collect`, which is the one that bills. That collector
+increments `hosts/{hostId}/analytics/{day}.total`, which rolls into
+`orgs/{orgId}/usage/{month}.pageViews` and from there into the Stripe meter,
+the free plan's bandwidth band and the abuse ceiling. Both Next apps name the
+**production** Firebase project in every environment, so a `next dev` browsing
+a tenant site, and every preview deployment of `apps/tenant`, wrote real page
+views into a live customer's invoice and against their cap.
+
+`libs/aglyn/src/lib/app-utils/analytics-beacon.ts` is the one door now. Four
+senders across three packages go through it: the pageview and dwell beacons in
+the tenant runtime, the form view/start beacons in the forms plugin, and the
+overlay impression/click/dismiss beacons in the marketing plugin.
+
+Two deliberate differences from the GA gate:
+
+| | GA4 tag | Metered beacon |
+| --- | --- | --- |
+| `NEXT_PUBLIC_ANALYTICS_ALLOW_NONPROD` | re-enables the tag | **ignored** — never counts |
+| A browser carrying the internal opt-in | hit is sent, stamped `traffic_type: 'internal'` | **no request at all** |
+
+The hatch is ignored because it is paired with
+`analyticsEnvironmentForcesInternal`: a build using it declares every hit ours,
+and a hit declared ours must not reach an invoice. It buys a GA session and
+never an increment.
+
+The opt-in DROPS rather than stamps because there is nothing to filter after
+the fact. GA4 discards a stamped hit at query time through a data filter; a
+counter is a running total, and a page view already added to a bill cannot be
+taken back out. The visit that carries `?aglyn_internal=1` is itself
+suppressed, for the same reason.
+
+`readInternalTrafficOverride` is per ORIGIN, so the opt-in has to be performed
+once on `aglyn.com` and once on each `localhost:PORT` — same property, same
+`?aglyn_internal=1`, documented in §8b.
+
+**A loopback self-host counts nothing**, by the same rule that already silences
+its GA tag: `{subdomain}.localhost:4500` from the compose file is a local
+trial, not a deployment. An operator serving from a real name is a production
+surface and counts normally.
+
 ### 9. Crashlytics cannot be integrated, and the equivalent already is
 
 Recorded because it is asked for repeatedly. **Firebase Crashlytics has no web
@@ -1618,7 +1688,7 @@ never the problem; what rode alongside them was the ambient `page_title`, closed
 by AGL-2087 in §11.
 
 `manage/user/page.tsx` had the second one. Its sections are routes now
-(AGL-693), so each one reports through the shared `page_view` effect in
+(AGL-2501), so each one reports through the shared `page_view` effect in
 `firebase-app.layout.tsx` — which fires on every pathname change — rather than
 through a hand-written event a tab click had to remember to send.
 

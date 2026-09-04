@@ -24,15 +24,46 @@ import type {
   OrgPlan,
   OrgSeatAddons,
 } from '../foundation'
+import type { ResolvedBrandingProfile } from './platform-brand'
 import {
   PLATFORM_BRAND_NAME,
-  PLATFORM_HOME_URL,
-  PLATFORM_MARK_URL,
-  PLATFORM_SUPPORT_URL,
+  PLATFORM_BRANDING_PROFILE,
 } from './platform-brand'
 
 /** Sentinel for quotas a plan does not cap; `checkQuota` always allows. */
 export const UNLIMITED = Number.POSITIVE_INFINITY
+
+/**
+ * How many saved form definitions one site may hold, on every plan that can
+ * build them at all.
+ *
+ * ⛔ **Not a tier lever, and must not become one.** The website-building field
+ * does not meter form COUNT: Squarespace, HubSpot and Mailchimp publish no cap
+ * whatsoever, Webflow abandoned the lever above its free tier, and of the two
+ * that do meter it one is Wix (4/10/25/75) and the other is Jotform
+ * (5/25/50/100), a form-first product where a form IS the billable unit. What
+ * this platform meters on the forms axis is `formSubmissionsPerMonth`, which
+ * is tiered, metered and part of a charged price.
+ *
+ * So this is an abuse ceiling wearing an entitlement's clothes. It rides
+ * `formsPerHost` because that is where `checkQuota` can refuse a create inside
+ * the counting transaction, not because the number is sold — and it resolves
+ * to the same value on Starter through Enterprise. Only Free differs, and only
+ * because the form entity rides `reusableComponents`, which Free lacks.
+ *
+ * The value clears every published competitor number by 5x and the largest
+ * real catalog by far, and it stays STRICTLY below `FORMS_MAX_PER_HOST` — the
+ * page size two listing reads use. The gap is deliberate: a catalog can sit
+ * above this ceiling when a per-org override is withdrawn, and the two
+ * numbers must stay tellable apart so a surface reading the window where it
+ * means the ceiling is never accidentally right. `forms.spec.ts` pins both
+ * halves.
+ *
+ * A per-org `entitlements.formsPerHost` override still resolves ahead of this,
+ * so a contract can raise or lower it for one org without moving the ceiling
+ * everyone else is measured against.
+ */
+export const FORMS_PER_HOST_CEILING = 500
 
 /**
  * Is this quota value "no cap"? (AGL-2482; AGL-2223 is the same class.)
@@ -113,6 +144,48 @@ export function restoreQuotaLimit(
 }
 
 /**
+ * Campaign emails an Enterprise agreement includes per month, before the
+ * contract says otherwise.
+ *
+ * ## Why the one Enterprise quota that is a number
+ *
+ * Every other Enterprise band is `UNLIMITED` because the thing behind it is
+ * infrastructure we already meter and price into the deal — storage, page
+ * views, seats. Email is not that. It is a per-message charge from a third
+ * party, so an unbounded allowance is an unbounded liability with no meter
+ * underneath it and no ceiling a negotiation ever had to name.
+ *
+ * `UNLIMITED` was also unrepresentable off-process. It is
+ * `Number.POSITIVE_INFINITY`, `JSON.stringify(Infinity)` is `null`, and
+ * `Number(null)` is `0` — so the most expensive plan on the price list
+ * serialised to a cap of ZERO through any route that did not also send the
+ * explicit flag `restoreQuotaLimit` rebuilds from. A finite number crosses
+ * the wire as itself.
+ *
+ * ## Why this number
+ *
+ * It is what the sending platform can actually deliver to one workspace with
+ * room to spare. At the shipped constants a workspace's share is 500 messages
+ * an hour and a projected month is 720 hours, so 360,000 is the ceiling
+ * nothing can exceed however it is sold. 250,000 spends 500 of those 720
+ * hours, leaving the rest for bursts, retries and domain warm-up —
+ * `email-ceiling-dimensioning.spec.ts` holds that relation, and holds the
+ * platform rate still so the gap cannot be closed by quietly raising it.
+ *
+ * Selling more than that would be selling mail that cannot leave the
+ * building: the hourly ceiling DEFERS rather than refuses, so the excess does
+ * not bounce, it simply never sends.
+ *
+ * ## It is a DEFAULT, and a contract raises it
+ *
+ * `resolveOrgEntitlements` applies a per-org `entitlements.emailSendsPerMonth`
+ * override ahead of this, so a deal that buys more email buys it on that org
+ * without moving the figure every other agreement is measured against — the
+ * same mechanism `formsPerHost` uses for the same reason.
+ */
+export const ENTERPRISE_EMAIL_SENDS_PER_MONTH = 250_000
+
+/**
  * Plan → default entitlements. Versioned with the app so pricing changes are
  * code-reviewed; per-org overrides live on `org.entitlements` and win
  * key-by-key. Tier table aligned to the Tenant Billing & SaaS Plans proposal
@@ -145,6 +218,45 @@ export type ResolvedOrgEntitlements = Required<
   features: Required<OrgFeatureFlags>
 }
 
+/**
+ * Aglyn Assist credits an Enterprise agreement includes per month, before the
+ * contract says otherwise.
+ *
+ * ## Never `UNLIMITED`, and the reason is not stylistic
+ *
+ * `UNLIMITED` is `Number.POSITIVE_INFINITY`, `JSON.stringify(Infinity)` is
+ * `null`, and `Number(null)` is `0`. An unbounded assist band therefore
+ * serialises to a band of ZERO through every route that does not also send
+ * the explicit flag `restoreQuotaLimit` rebuilds from — which would hand the
+ * only customers with a signed contract the one budget that refuses
+ * everything. A finite number crosses the wire as itself.
+ *
+ * The band is also a real liability rather than a capacity we already own.
+ * Storage and page views are infrastructure metered into the deal; assist is
+ * a per-token charge from a third party, and generative building spends it in
+ * units two orders of magnitude apart.
+ *
+ * ## Why this number
+ *
+ * Enterprise carries no list price, so the band cannot be sized the way every
+ * self-serve tier's is — against what that tier's other cost terms leave out
+ * of a known price. It is anchored to the top of the ladder instead: 87,000
+ * credits is 1.5x Agency's band, which is the direction the ladder has to run
+ * and the step it already takes between Advanced and Agency. In cost that is
+ * $87 of provider spend a month, or under 7% of any deal priced at or above
+ * the self-serve top — the same share of price the self-serve assist bands
+ * take. A deal below that is sold as Agency, not written as an Enterprise
+ * agreement.
+ *
+ * ## It is a DEFAULT, and a contract raises it
+ *
+ * `resolveOrgEntitlements` applies a per-org `entitlements.assistCreditsPerMonth`
+ * override ahead of this, so a deal that buys more assist buys it on that org
+ * without moving the figure every other agreement is measured against — the
+ * same mechanism the other contracted bands use.
+ */
+export const ENTERPRISE_ASSIST_CREDITS_PER_MONTH = 87_000
+
 export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
   free: {
     hostLimit: 1,
@@ -156,8 +268,21 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     managersPerOrg: 1,
     maxManagersPerOrg: 1,
     maxMembersPerHost: 1,
-    bandwidthGb: 5,
+    bandwidthGb: 2,
     formSubmissionsPerMonth: 20,
+    // No saved-form CATALOG on Free: the form entity rides
+    // `reusableComponents`, which is Starter-and-above, so
+    // `/api/hosts/resources` refuses the create on the entitlement before it
+    // ever reaches this number. Zero is what a Free site actually gets.
+    //
+    // It does NOT mean a Free site has no forms. A `Form` node placed on a
+    // page needs no definition to collect, and the 20 submissions above are
+    // the band those replies spend.
+    //
+    // Every other plan carries `FORMS_PER_HOST_CEILING`. This is the one
+    // number on the axis that differs, and it differs because the entitlement
+    // gate above it says so, not because the catalog is sold by the tier.
+    formsPerHost: 0,
     variablesPerHost: 3,
     functionsPerHost: 1,
     workflowsPerHost: 0,
@@ -167,6 +292,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     contactsPerHost: 100,
     emailSendsPerMonth: 0,
     actionRunsPerMonth: 0,
+    assistCreditsPerMonth: 0,
     apiRequestsPerMonth: 0,
     datasetsPerOrg: 0,
     maxDatasetsPerOrg: 0,
@@ -187,6 +313,16 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       versioning: false,
       reusableComponents: false,
       customDomain: false,
+      // Sending as a domain the customer owns starts at Pro, with campaign
+      // email. Free sends no marketing at all — `emailSendsPerMonth` is 0 —
+      // and its transactional mail leaves on the shared pool, which needs no
+      // DNS from anybody.
+      customSendingDomain: false,
+      // The expensive shape, and the one Free must never reach by default: a
+      // provider slot, three records in the platform's own zone and a place
+      // in the re-verification sweep, spent per site on a tier that pays
+      // nothing. The pool carries this tier's mail at no per-site cost.
+      dedicatedSendingDomain: false,
       removeBranding: false,
       scheduledPublishing: false,
       marketplaceSelling: false,
@@ -244,6 +380,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     maxMembersPerHost: 10,
     bandwidthGb: 50,
     formSubmissionsPerMonth: 200,
+    formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 25,
     functionsPerHost: 10,
     workflowsPerHost: 3,
@@ -251,8 +388,28 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     servicesPerHost: 1,
     redirectsPerHost: 25,
     contactsPerHost: 1000,
-    emailSendsPerMonth: 500,
+    // Campaign email starts at Pro. A site that may send campaigns needs its
+    // own verified provider sending domain, and provisioning one is a real
+    // per-site operational cost that a campaign allowance commits the platform
+    // to the moment the tier includes it. Holding the allowance at 0 here
+    // keeps that cost attached to the tiers that carry it.
+    //
+    // Zero is a REFUSAL, not a formality: `reserveCampaignEmailSends` compares
+    // `used + count > limit` inside its transaction, so any campaign of one or
+    // more recipients is refused before a message leaves.
+    //
+    // It does NOT stop transactional mail. Receipts, invites, booking
+    // reminders, workflow notifications and password resets are refused by no
+    // quota at any tier (see `emailSendsPerMonth` on `OrgEntitlements`), so a
+    // Starter store still confirms its orders. Those sends still count on the
+    // `emailSends` cost meter; they are simply not billable here, because
+    // `emailSendsOverage` yields 0 against a non-positive band.
+    //
+    // The contacts band above is untouched: holding an audience is not sending
+    // to it, and the CRM is what a Starter site builds before it upgrades.
+    emailSendsPerMonth: 0,
     actionRunsPerMonth: 0,
+    assistCreditsPerMonth: 0,
     apiRequestsPerMonth: 0,
     datasetsPerOrg: 3,
     maxDatasetsPerOrg: 10,
@@ -273,6 +430,16 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       versioning: false,
       reusableComponents: true,
       customDomain: true,
+      // Starter's allowance is 0 campaign sends, so a verified domain of the
+      // customer's own would carry receipts and nothing else — the one class
+      // of mail the shared pool already delivers with no DNS work at all. The
+      // capability arrives with the sends that need it.
+      customSendingDomain: false,
+      // Same tier as the customer-owned shape and for the stronger reason:
+      // this one draws on a provider allowance that cannot be bought past a
+      // certain size, so it is rationed above the tier that carries no
+      // campaign sends at all.
+      dedicatedSendingDomain: false,
       removeBranding: true,
       scheduledPublishing: false,
       marketplaceSelling: false,
@@ -315,8 +482,18 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     managersPerOrg: 5,
     maxManagersPerOrg: 20,
     maxMembersPerHost: 25,
-    bandwidthGb: 250,
+    // Page views are 78% of this tier's modeled COGS — one GB is 1,748 views
+    // at `ESTIMATED_PAGE_TRANSFER_BYTES`, or $0.175 of measured cost — so the
+    // bandwidth band is what decides whether the tier survives a customer
+    // spending the whole allowance it was sold. At 225 GB the $56
+    // subscription holds a 10.0% gross margin with every band at 100%;
+    // `tier-margin-floor.spec.ts` carries the model and pins the figure.
+    //
+    // `meteredInfraPassThrough` is true here, so traffic past the band BILLS
+    // at the page-view pass-through rather than being refused or absorbed.
+    bandwidthGb: 225,
     formSubmissionsPerMonth: 1000,
+    formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 100,
     functionsPerHost: 50,
     workflowsPerHost: 25,
@@ -326,6 +503,10 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     contactsPerHost: 10000,
     emailSendsPerMonth: 5000,
     actionRunsPerMonth: 5000,
+    // $2.75 of provider spend, against the $8.35 the tier's other seven cost
+    // terms leave out of $56. See `OrgEntitlements.assistCreditsPerMonth` for
+    // why the remainder and not the price is what sizes this.
+    assistCreditsPerMonth: 2_750,
     apiRequestsPerMonth: 0,
     datasetsPerOrg: 15,
     maxDatasetsPerOrg: 50,
@@ -344,6 +525,29 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       versioning: true,
       reusableComponents: true,
       customDomain: true,
+      // The tier campaign email starts at, and therefore the tier a domain
+      // whose reputation belongs to the merchant starts at: marketing may not
+      // leave on the shared pool, because one merchant's complaint rate would
+      // be charged against every other site's password resets.
+      //
+      // It costs the platform nothing in our own zone — the customer
+      // publishes the records — which is what keeps the platform's domain
+      // count flat as the customer base grows. The platform subdomain a site
+      // is issued is the expensive half and stays an optimization on top of
+      // the pool.
+      customSendingDomain: true,
+      // The floor for the platform subdomain too, and the tier this one is
+      // sized against: a merchant who may send campaigns is a merchant whose
+      // mail needs a name of its own, and Pro is where the revenue starts
+      // covering a provider slot and three zone records.
+      //
+      // A flag rather than a tier comparison, so a single org can be granted
+      // one through `entitlements.features` without being moved up a plan —
+      // the support case this capability meets most often, answered without
+      // repricing an account. What the grant does not do is provision: it
+      // admits a REQUEST, and the provider ceiling still decides whether the
+      // request is filled.
+      dedicatedSendingDomain: true,
       removeBranding: true,
       scheduledPublishing: false,
       marketplaceSelling: true,
@@ -381,22 +585,25 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     screensPerHost: UNLIMITED,
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
-    storagePerHostMb: 51200,
+    storagePerHostMb: 20480,
     membersPerHost: 50,
     managersPerOrg: 15,
     maxManagersPerOrg: 100,
     maxMembersPerHost: 100,
-    bandwidthGb: 1000,
-    formSubmissionsPerMonth: 10000,
+    bandwidthGb: 400,
+    formSubmissionsPerMonth: 8000,
+    formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 1000,
     functionsPerHost: 250,
     workflowsPerHost: 100,
     workflowRunsPerMonth: 50000,
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
-    contactsPerHost: 100000,
-    emailSendsPerMonth: 50000,
+    contactsPerHost: 50000,
+    emailSendsPerMonth: 25000,
     actionRunsPerMonth: 50000,
+    // $7.50, against the $22.69 the other seven terms leave out of $139.
+    assistCreditsPerMonth: 7_500,
     apiRequestsPerMonth: 100_000,
     datasetsPerOrg: 100,
     maxDatasetsPerOrg: 250,
@@ -413,6 +620,8 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       versioning: true,
       reusableComponents: true,
       customDomain: true,
+      customSendingDomain: true,
+      dedicatedSendingDomain: true,
       removeBranding: true,
       scheduledPublishing: true,
       marketplaceSelling: true,
@@ -453,22 +662,25 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     screensPerHost: UNLIMITED,
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
-    storagePerHostMb: 76800,
+    storagePerHostMb: 30720,
     membersPerHost: 75,
     managersPerOrg: 25,
     maxManagersPerOrg: 150,
     maxMembersPerHost: 150,
-    bandwidthGb: 2500,
-    formSubmissionsPerMonth: 50000,
+    bandwidthGb: 700,
+    formSubmissionsPerMonth: 25000,
+    formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 5000,
     functionsPerHost: 500,
     workflowsPerHost: 250,
     workflowRunsPerMonth: 150000,
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
-    contactsPerHost: 500000,
-    emailSendsPerMonth: 100000,
+    contactsPerHost: 100000,
+    emailSendsPerMonth: 40000,
     actionRunsPerMonth: 100000,
+    // $10.00, against the $30.62 the other seven terms leave out of $249.
+    assistCreditsPerMonth: 10_000,
     apiRequestsPerMonth: 300000,
     datasetsPerOrg: 250,
     maxDatasetsPerOrg: 500,
@@ -485,6 +697,8 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       versioning: true,
       reusableComponents: true,
       customDomain: true,
+      customSendingDomain: true,
+      dedicatedSendingDomain: true,
       removeBranding: true,
       scheduledPublishing: true,
       marketplaceSelling: true,
@@ -522,22 +736,27 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     screensPerHost: UNLIMITED,
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
-    storagePerHostMb: 102400,
+    storagePerHostMb: 40960,
     membersPerHost: 100,
     managersPerOrg: 50,
     maxManagersPerOrg: 250,
     maxMembersPerHost: 250,
-    bandwidthGb: 5000,
-    formSubmissionsPerMonth: 100000,
+    bandwidthGb: 1000,
+    formSubmissionsPerMonth: 40000,
+    formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: UNLIMITED,
     functionsPerHost: 1000,
     workflowsPerHost: 500,
     workflowRunsPerMonth: 500000,
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
-    contactsPerHost: 1000000,
-    emailSendsPerMonth: 250000,
+    contactsPerHost: 150000,
+    emailSendsPerMonth: 65000,
     actionRunsPerMonth: 250000,
+    // $13.00, against the $39.74 the other seven terms leave out of $399 —
+    // the thinnest remainder on the ladder, and the tier that binds the
+    // whole assist ladder's share of it.
+    assistCreditsPerMonth: 13_000,
     apiRequestsPerMonth: 1_000_000,
     datasetsPerOrg: 500,
     maxDatasetsPerOrg: 1000,
@@ -554,6 +773,8 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       versioning: true,
       reusableComponents: true,
       customDomain: true,
+      customSendingDomain: true,
+      dedicatedSendingDomain: true,
       removeBranding: true,
       scheduledPublishing: true,
       marketplaceSelling: true,
@@ -595,22 +816,37 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     screensPerHost: UNLIMITED,
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
-    storagePerHostMb: 204800,
+    storagePerHostMb: 61440,
     membersPerHost: 250,
     managersPerOrg: 100,
     maxManagersPerOrg: 500,
     maxMembersPerHost: 1000,
-    bandwidthGb: 20000,
-    formSubmissionsPerMonth: UNLIMITED,
+    bandwidthGb: 3000,
+    // FINITE, where every other capacity row on this tier is unbounded.
+    // `formSubmissionsPerMonth` is multiplied by `hostLimit` to get the
+    // org-wide band, so at 100 hosts an unbounded figure was not merely
+    // large — it made this tier's cost model unbounded, and an unbounded
+    // term reads as ZERO in any analysis that scores an absent band as
+    // nothing. That is how it stayed invisible: the biggest line item on the
+    // most expensive self-serve plan, contributing 0 to every total.
+    //
+    // Metering makes it safe to bound. `meteredInfraPassThrough` is true
+    // here, so submissions past the band BILL at the pass-through rate
+    // rather than being refused — a merchant's lead form does not stop
+    // working at 25,000.
+    formSubmissionsPerMonth: 25000,
+    formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: UNLIMITED,
     functionsPerHost: UNLIMITED,
     workflowsPerHost: UNLIMITED,
     workflowRunsPerMonth: 2000000,
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
-    contactsPerHost: UNLIMITED,
-    emailSendsPerMonth: 1000000,
+    contactsPerHost: 500000,
+    emailSendsPerMonth: 130000,
     actionRunsPerMonth: 1000000,
+    // $58.00, against the $176.71 the other seven terms leave out of $1,299.
+    assistCreditsPerMonth: 58_000,
     apiRequestsPerMonth: 5000000,
     datasetsPerOrg: 2000,
     maxDatasetsPerOrg: 5000,
@@ -627,6 +863,8 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       versioning: true,
       reusableComponents: true,
       customDomain: true,
+      customSendingDomain: true,
+      dedicatedSendingDomain: true,
       removeBranding: true,
       scheduledPublishing: true,
       marketplaceSelling: true,
@@ -655,7 +893,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       abandonedCart: true,
       dropshipRouting: true,
       commerceAnalytics: true,
-      // White-Label Phase 1: the Agency-tier ($799) differentiator. Only
+      // White-Label Phase 1: the Agency-tier ($1,299) differentiator. Only
       // this tier and Enterprise ship white-label by default.
       whiteLabel: true,
       ssoEnabled: false,
@@ -664,13 +902,16 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
   // Enterprise (AGL-1118): the top of the ladder and the ONLY custom-priced
   // tier — staff-provisioned per deal (AGL-1110), never sold self-serve, so it
   // is excluded from `SELF_SERVE_PLANS` and carries no list price in
-  // `PLAN_PRICING`. Capacity is Agency's, uncapped: EVERY quota is UNLIMITED,
-  // byte-size ones included — infra cost is metered and priced into the deal,
-  // so a hard wall would only break a customer already paying for the usage.
-  // This is the one tier where the AGL-67 "media storage exceeds the
-  // published-site cap" invariant is vacuous: both are unbounded.
+  // `PLAN_PRICING`. Capacity is Agency's, uncapped: every quota that costs
+  // infrastructure is UNLIMITED, byte-size ones included — infra cost is
+  // metered and priced into the deal, so a hard wall would only break a
+  // customer already paying for the usage. This is the one tier where the
+  // AGL-67 "media storage exceeds the published-site cap" invariant is
+  // vacuous: both are unbounded.
   // White-label AND SSO ship on the plan itself rather than through the
   // per-org `entitlements` override that Enterprise-as-a-label needed.
+  //
+  // `emailSendsPerMonth` is the ONE exception, and see the constant for why.
   enterprise: {
     hostLimit: UNLIMITED,
     screensPerHost: UNLIMITED,
@@ -683,6 +924,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     maxMembersPerHost: UNLIMITED,
     bandwidthGb: UNLIMITED,
     formSubmissionsPerMonth: UNLIMITED,
+    formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: UNLIMITED,
     functionsPerHost: UNLIMITED,
     workflowsPerHost: UNLIMITED,
@@ -690,8 +932,9 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
     contactsPerHost: UNLIMITED,
-    emailSendsPerMonth: UNLIMITED,
+    emailSendsPerMonth: ENTERPRISE_EMAIL_SENDS_PER_MONTH,
     actionRunsPerMonth: UNLIMITED,
+    assistCreditsPerMonth: ENTERPRISE_ASSIST_CREDITS_PER_MONTH,
     apiRequestsPerMonth: UNLIMITED,
     datasetsPerOrg: UNLIMITED,
     maxDatasetsPerOrg: UNLIMITED,
@@ -708,6 +951,8 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       versioning: true,
       reusableComponents: true,
       customDomain: true,
+      customSendingDomain: true,
+      dedicatedSendingDomain: true,
       removeBranding: true,
       scheduledPublishing: true,
       marketplaceSelling: true,
@@ -846,6 +1091,26 @@ export interface PlanPricing {
   /**
    * Monthly price per host beyond `hostLimit` (AGL-68); null when the plan
    * cannot buy extra hosts.
+   *
+   * ## It is not a discount ladder, because what it GRANTS is not constant
+   *
+   * `storagePerHostMb` and `formSubmissionsPerMonth` are per-HOST
+   * entitlements, and `meteredIncludedAllowance` expands both by `hostLimit`
+   * — so an extra host does not add a slot, it adds that tier's per-host
+   * bands to the org's included allowance. A tier that includes more per host
+   * therefore hands over more capacity for the same purchase.
+   *
+   * A ladder that stepped down with the tier inverted that: the tiers
+   * granting the most charged the least, and the two largest ran at 24% and
+   * 6% margin on a line sold as an add-on. The shape now is $10 on Starter,
+   * $8 everywhere above it — flat rather than descending, because above
+   * Starter the capacity an extra host grants is what varies and the price
+   * cannot chase it downward.
+   *
+   * Business sits at $5 and is the exception: it genuinely grants the
+   * smallest bands of the tiers above Pro. It is left where it is rather than
+   * raised to match, because raising a shipped price is a decision with an
+   * invoice behind it and nothing about this line needed one.
    */
   extraHostMonthlyUsd: number | null
   /**
@@ -868,10 +1133,21 @@ export interface PlanPricing {
    */
   extraDatasetMonthlyUsd: number | null
   /**
-   * Metered overage per GB-month of dataset storage beyond
-   * `dataStorageMbPerOrg` (AGL-240). Priced from Firestore storage cost
-   * (~$0.18/GiB-mo) at roughly the platform's cost-plus posture; null
-   * when the plan hard-blocks at the included size instead of metering.
+   * Retail overage per GB-month of dataset storage beyond
+   * `dataStorageMbPerOrg` (AGL-240); null when the plan hard-blocks at the
+   * included size instead of metering.
+   *
+   * ⛔ **NOT the metered storage pass-through.** `/pricing` publishes two
+   * per-GB-month figures and they are different products: the pass-through
+   * is `METERED_BILLED_RATES_USD.storagePerGbMonth` at $0.0338, media bytes
+   * on GCS at cost + 30%; this is Firestore-backed DATASET bytes, an order
+   * of magnitude pricier to store, sold as a retail line. Confusing the two
+   * is the easiest way to corrupt a correct price, in either direction.
+   *
+   * Priced against `ORG_COGS_UNIT_RATES_USD.dataStoragePerGbMonth` ($0.18)
+   * at the 50% retail floor. It sat at $0.25 — a 28% line margin, close
+   * enough to the pass-through's 23% that the two looked like the same kind
+   * of number while being sold as opposites.
    */
   extraDataGbMonthlyUsd: number | null
   /**
@@ -881,11 +1157,97 @@ export interface PlanPricing {
    */
   extraApiRequestsUsdPer1k: number | null
   /**
+   * Retail overage per 1,000 Aglyn Assist credits beyond
+   * `assistCreditsPerMonth`.
+   *
+   * ## The rate is a multiplier on our own cost, and reads as one
+   *
+   * A credit is defined as a fixed quantity of provider spend
+   * (`ASSIST_CREDIT_COST_USD`), so 1,000 credits cost us exactly $1.00 and
+   * this figure IS the multiplier: $3.00 per 1,000 is cost x3, $2.00 is
+   * cost x2. That is the property worth having, because the alternative —
+   * a rate per message — prices a question and a generated screen the same
+   * when they differ by two orders of magnitude.
+   *
+   * ## The floor, and why the ladder stops descending
+   *
+   * Every retail line carries at least a 50% margin
+   * (`ASSIST_CREDIT_MIN_MARGIN_PCT`), which at $1.00 of cost per 1,000 is a
+   * floor of $2.00 per 1,000 — cost x2. The ladder steps down with the tier
+   * the way contacts and API requests do, $3.00 -> $2.75 -> $2.50 -> $2.25,
+   * and stops at the floor on Agency rather than running past it.
+   *
+   * ## Where it is null, and why that is not "free overage"
+   *
+   * Null on Free and Starter because neither carries `aiAssist` and both
+   * band at 0 credits: there is no generative building to overspend, so
+   * there is no overage to price. Null on Enterprise, where every rate is
+   * the "not for sale" sentinel and the terms are contractual.
+   *
+   * Unlike email, a null here strands nothing. Assist is refused at the
+   * band on every tier, so a plan with no rate simply stops — there is no
+   * unrefusable traffic to absorb.
+   */
+  extraAssistCreditsUsdPer1k: number | null
+  /**
    * Metered overage per 1,000 contacts beyond `contactsPerHost` (AGL-890):
    * audience bands, Ghost-style. Paid plans meter (a growing audience is
    * never dropped); free is null and hard-bands at the included count.
    */
   extraContactsUsdPer1k: number | null
+  /**
+   * Retail overage per 1,000 emails beyond `emailSendsPerMonth`.
+   *
+   * ## What it prices, which is not what the cap refuses
+   *
+   * The cap is enforced against CAMPAIGN sends alone and refuses them at the
+   * band — a campaign is discretionary, so the plan is allowed to say no.
+   * Transactional mail is never refused at any tier, so an org finishes the
+   * month above its band whenever receipts, invites, booking reminders and
+   * workflow notifications carry it there. That excess is real provider spend
+   * that no gate could have stopped, and this is the rate it bills at.
+   *
+   * ## Retail, NOT the infrastructure pass-through
+   *
+   * `meteredInfraPassThrough` covers exactly three meters — storage, page
+   * views, form submissions — and the published term for those is "at cost +
+   * 30%", which makes the figure in `METERED_BILLED_RATES_USD` the claim
+   * itself. Email is not in that set and this rate is not derived from
+   * `METERED_MARKUP`: it is a price, set beside `extraContactsUsdPer1k` and
+   * `extraApiRequestsUsdPer1k`, and it descends with the tier the way both of
+   * those do. Describing it as "at cost" anywhere would make the pass-through
+   * sentence false about three meters that really are.
+   *
+   * Our own per-email cost is `ORG_COGS_UNIT_RATES_USD.perEmailSend`, and it
+   * is a cost-model input rather than anything a customer is quoted.
+   *
+   * ## The floor, and why the ladder stops descending
+   *
+   * Every retail line must carry at least a 50% margin, and at a cost of
+   * $0.90 per 1,000 that floor is $1.80. The ladder still steps down with
+   * volume the way contacts and API requests do — a larger plan pays less per
+   * message — it simply stops at the floor instead of running past it, which
+   * is what the contacts ladder did when it reached $0.25 against a $0.20
+   * cost.
+   *
+   * Null wherever the plan has no email band to be over, and null on
+   * enterprise, where every rate is the "not for sale" sentinel and the terms
+   * are contractual. Free and Starter are the two banded at 0: campaign email
+   * begins at Pro, and `emailSendsOverage` yields 0 against a non-positive
+   * band, so a rate on either would advertise a fee that can never be
+   * computed — the same defect as a rate beside an UNLIMITED band.
+   *
+   * Every tier whose band is POSITIVE carries one, Pro upward. A finite band
+   * with no rate is silently free past the band, and since transactional mail
+   * cannot be refused at any tier that would be unbounded absorbed spend
+   * rather than "no overage".
+   *
+   * The Starter null therefore leaves that tier's transactional mail — the
+   * only mail it can send — unbilled at any volume. Bounded in practice by
+   * `hostLimit: 1` and a 1,000-contact CRM, and the alternative prices a
+   * password reset, but it is the one place this axis absorbs cost by design.
+   */
+  extraEmailSendsUsdPer1k: number | null
   /**
    * Whether the plan carries the metered infrastructure pass-through
    * (AGL-41, turned on in AGL-1280): media storage, bandwidth (page views)
@@ -920,7 +1282,9 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDatasetMonthlyUsd: null,
     extraDataGbMonthlyUsd: null,
     extraApiRequestsUsdPer1k: null,
+    extraAssistCreditsUsdPer1k: null,
     extraContactsUsdPer1k: null,
+    extraEmailSendsUsdPer1k: null,
     meteredInfraPassThrough: false,
   },
   starter: {
@@ -930,9 +1294,15 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraSeatMonthlyUsd: 5,
     extraCollaboratorMonthlyUsd: 3,
     extraDatasetMonthlyUsd: 2,
-    extraDataGbMonthlyUsd: 0.25,
+    extraDataGbMonthlyUsd: 0.36,
     extraApiRequestsUsdPer1k: null,
+    extraAssistCreditsUsdPer1k: null,
     extraContactsUsdPer1k: 1,
+    // No email band to be "over" — see `emailSendsPerMonth` on the Starter
+    // entitlements. `emailSendsOverage` returns 0 for any non-positive band,
+    // so a rate here would price volume that can never be computed, which is
+    // the same defect as a rate beside an UNLIMITED band.
+    extraEmailSendsUsdPer1k: null,
     meteredInfraPassThrough: true,
   },
   pro: {
@@ -942,9 +1312,11 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraSeatMonthlyUsd: 4,
     extraCollaboratorMonthlyUsd: 2,
     extraDatasetMonthlyUsd: 2,
-    extraDataGbMonthlyUsd: 0.25,
+    extraDataGbMonthlyUsd: 0.36,
     extraApiRequestsUsdPer1k: null,
+    extraAssistCreditsUsdPer1k: 3,
     extraContactsUsdPer1k: 0.75,
+    extraEmailSendsUsdPer1k: 2.25,
     meteredInfraPassThrough: true,
   },
   business: {
@@ -954,51 +1326,91 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraSeatMonthlyUsd: 3,
     extraCollaboratorMonthlyUsd: 1,
     extraDatasetMonthlyUsd: 1,
-    extraDataGbMonthlyUsd: 0.25,
+    extraDataGbMonthlyUsd: 0.36,
     extraApiRequestsUsdPer1k: 0.5,
+    extraAssistCreditsUsdPer1k: 2.75,
     extraContactsUsdPer1k: 0.5,
+    extraEmailSendsUsdPer1k: 2,
     meteredInfraPassThrough: true,
   },
   scale: {
     basePriceMonthlyUsd: 249,
     basePriceAnnualMonthlyUsd: 179,
-    extraHostMonthlyUsd: 5,
+    extraHostMonthlyUsd: 8,
     extraSeatMonthlyUsd: 2,
     extraCollaboratorMonthlyUsd: 1,
     extraDatasetMonthlyUsd: 1,
-    extraDataGbMonthlyUsd: 0.25,
+    extraDataGbMonthlyUsd: 0.36,
     extraApiRequestsUsdPer1k: 0.35,
+    extraAssistCreditsUsdPer1k: 2.5,
     extraContactsUsdPer1k: 0.4,
+    extraEmailSendsUsdPer1k: 1.9,
     meteredInfraPassThrough: true,
   },
   advanced: {
     basePriceMonthlyUsd: 399,
     basePriceAnnualMonthlyUsd: 299,
-    extraHostMonthlyUsd: 4,
+    extraHostMonthlyUsd: 8,
     extraSeatMonthlyUsd: 2,
     extraCollaboratorMonthlyUsd: 1,
     extraDatasetMonthlyUsd: 1,
-    extraDataGbMonthlyUsd: 0.25,
+    extraDataGbMonthlyUsd: 0.36,
     extraApiRequestsUsdPer1k: 0.2,
-    extraContactsUsdPer1k: 0.25,
+    extraAssistCreditsUsdPer1k: 2.25,
+    // FLOORED at the 50% retail margin, not stepped down again. The ladder
+    // above it descends $1.00 → $0.75 → $0.50 → $0.40, and one more step
+    // would have reached $0.25 against a `perContactMonth` cost of $0.20 per
+    // 1,000 — a 20% line margin on a retail price, thinner than the 23% the
+    // infrastructure pass-through earns while being sold as cost recovery.
+    extraContactsUsdPer1k: 0.4,
+    extraEmailSendsUsdPer1k: 1.85,
     meteredInfraPassThrough: true,
   },
+  // Agency is the one tier whose PRICE moved. It included 100 hosts, 20 TB of
+  // bandwidth and an unbounded form-submission band against $799, which made
+  // it both the worst margin on the ladder and the most underpriced against
+  // the field: Duda charges ~$1,396-1,493/mo for 100 sites, BigCommerce
+  // Enterprise starts at $1,499 and Shopify Plus at $2,300. $1,299 still
+  // undercuts all three for the buyer this architecture is built for.
   agency: {
-    basePriceMonthlyUsd: 799,
-    basePriceAnnualMonthlyUsd: 649,
-    extraHostMonthlyUsd: 3,
+    basePriceMonthlyUsd: 1299,
+    // $1,049/mo is $12,588 a year, which is what the live Stripe yearly price
+    // charges. Stripe prices are immutable, so the constant every surface
+    // quotes has to match the one a customer is actually billed by — a
+    // ratio-derived figure that no price object backs would quote one number
+    // and charge another. It lands within a dollar of holding the previous
+    // 18.8% annual discount across the rise, which is what stops the annual
+    // interval becoming the cheap way past a repricing.
+    basePriceAnnualMonthlyUsd: 1049,
+    extraHostMonthlyUsd: 8,
     extraSeatMonthlyUsd: 2,
     extraCollaboratorMonthlyUsd: 1,
     extraDatasetMonthlyUsd: 1,
-    extraDataGbMonthlyUsd: 0.25,
+    extraDataGbMonthlyUsd: 0.36,
     extraApiRequestsUsdPer1k: 0.15,
-    // NULL, not 0.2, because Agency's `contactsPerHost` is UNLIMITED and an
-    // uncapped band has no "over" (AGL-2439). The rate was unreachable
-    // — `checkContactQuota` computes `Math.max(0, used - Infinity)`, which is
-    // 0 at every usage level — so no charge changes; what changes is that we
-    // stop advertising a fee we could never collect. The plan card and
-    // `/pricing` both already suppress the suffix when this is null.
-    extraContactsUsdPer1k: null,
+    extraAssistCreditsUsdPer1k: 2,
+    // $0.40, because the band it meters is now FINITE.
+    //
+    // This row has been wrong in both directions. It shipped $0.20 against an
+    // UNLIMITED band, advertising a fee that could not be charged —
+    // `checkContactQuota` computes `Math.max(0, used - Infinity)`, which is 0
+    // at every usage level (AGL-2439) — and was corrected to `null` to stop
+    // publishing a claim the code could not honour. Bounding the band inverts
+    // the problem: a finite band with no rate is usage past a bound that is
+    // silently free, and the bound achieves nothing.
+    //
+    // $0.40 rather than a further step down the ladder because that is the
+    // 50% retail floor against a `perContactMonth` cost of $0.20 per 1,000 —
+    // the same figure Scale and Advanced carry, and the same floor that moved
+    // Advanced off $0.25.
+    //
+    // It METERS rather than walls: a rate is what makes `checkContactQuota`
+    // return `allowed: true` past the band, so a growing audience is billed
+    // and never dropped. That is what makes bounding this band safe here and
+    // NOT safe on enterprise, whose every rate is the "not for sale"
+    // sentinel.
+    extraContactsUsdPer1k: 0.4,
+    extraEmailSendsUsdPer1k: 1.8,
     meteredInfraPassThrough: true,
   },
   // Enterprise (AGL-1118) has NO list price — every figure here is the
@@ -1018,7 +1430,9 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDatasetMonthlyUsd: null,
     extraDataGbMonthlyUsd: null,
     extraApiRequestsUsdPer1k: null,
+    extraAssistCreditsUsdPer1k: null,
     extraContactsUsdPer1k: null,
+    extraEmailSendsUsdPer1k: null,
     meteredInfraPassThrough: false,
   },
 }
@@ -1026,8 +1440,34 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
 /**
  * Subscription states that stop paying for the plan (AGL-247). `past_due`
  * keeps working as a dunning grace period; these do not.
+ *
+ * `incomplete_expired` is the state a signup reaches when its first payment
+ * never completes — an abandoned SCA challenge, a card that never
+ * authenticated — and Stripe stamps it about a day later. It has charged
+ * nothing and never will, so it belongs here beside `incomplete`, which is the
+ * same subscription an hour earlier. `LIVE_SUBSCRIPTION_STATUSES` in
+ * `org-billing-doc.ts` already excludes it and `DEAD_STATUSES` in
+ * `utils/subscription-period-notice.ts` already names it; this set is the one
+ * that decides both what a workspace GETS and whether we count it as revenue,
+ * so it is the one place the omission cost money in both directions at once.
+ *
+ * THE DENYLIST FORM IS THE HAZARD, and it is why the omission was silent: an
+ * allowlist of live statuses cannot rot when Stripe adds a status, whereas a
+ * denylist of dead ones silently grants the plan — and books the MRR — for
+ * every status nobody has enumerated yet. The three readers below keep the
+ * denylist anyway, because the direction they fail in is not the same as the
+ * live-side question's: an unrecognized status here must not revoke a paying
+ * workspace's features, while `isLiveSubscriptionStatus` refusing to call an
+ * unrecognized status live only ever declines to sell a second subscription.
+ * A new Stripe status therefore has to be added HERE by hand, which is a
+ * standing obligation rather than a property of the code.
  */
-const DEAD_SUBSCRIPTION_STATUSES = new Set(['canceled', 'unpaid', 'incomplete'])
+const DEAD_SUBSCRIPTION_STATUSES = new Set([
+  'canceled',
+  'unpaid',
+  'incomplete',
+  'incomplete_expired',
+])
 
 /**
  * The subscription status entitlement resolution runs on (AGL-1028).
@@ -1364,15 +1804,33 @@ export const METERED_MARKUP = 1.3
  * The three added here are operator-tuned estimates of the same quality as
  * the existing three — Firestore-backed dataset storage is priced well above
  * object storage because it is, and API requests and contacts are priced off
- * the reads behind them. Treat all six as provisional until validated against
- * a real Firebase + Vercel invoice month; AGL-1134 says so out loud rather
- * than implying the numbers are derived.
+ * the reads behind them. Treat every operator-tuned figure here as
+ * provisional until validated against a real Firebase + Vercel invoice month;
+ * AGL-1134 says so out loud rather than implying the numbers are derived.
+ * `perEmailSend` is the exception and carries its own basis below.
+ *
+ * ## Three of these are shared with the billed table. The rest are NOT.
+ *
+ * `storagePerGbMonth`, `perPageView` and `perFormSubmission` are the metered
+ * infrastructure pass-through, and the customer is charged those figures
+ * times `METERED_MARKUP`. They therefore appear in `METERED_UNIT_RATES_USD`
+ * as well, with identical values, and must be changed in both places at once.
+ *
+ * Everything else here is a cost-model input ONLY. `dataStoragePerGbMonth`,
+ * `perApiRequest`, `perContactMonth` and `perEmailSend` price what an org
+ * costs us; what an org is CHARGED on those axes is a retail rate on
+ * `PLAN_PRICING` that descends with the tier and is not derived from cost.
+ * Adding one of them to `METERED_UNIT_RATES_USD` would put it inside the
+ * "at cost + 30%" claim, which is true of exactly three meters.
  *
  * The first three were corrected 2026-08-09 (AGL-1280) — storage $0.03 →
  * $0.026 and form submissions $0.0005 → $0.00005 — and MUST be changed here
  * and in `METERED_UNIT_RATES_USD` together. See that table for each figure's
  * basis; it is the one a customer is billed against, so it is the one that
- * carries the working. Lowering the two here lowers measured COGS, which
+ * carries the working — including the open one, which is that `perPageView`
+ * is calibrated against a 627 KB page and the real one now measures 1054.3 KB.
+ * `npm run check:page-view-rate` holds that gap at the size it was last
+ * reviewed at. Lowering the two here lowers measured COGS, which
  * changes no guardrail verdict: `INFRA_COGS_PER_SITE_USD × sites` is the
  * floor, and it already outran measured cost by five orders of magnitude.
  */
@@ -1384,6 +1842,21 @@ export const ORG_COGS_UNIT_RATES_USD = {
   dataStoragePerGbMonth: 0.18,
   perApiRequest: 0.000002,
   perContactMonth: 0.0002,
+  /**
+   * One delivered email, whatever produced it — $0.90 per 1,000.
+   *
+   * Unlike its five neighbours this is not an operator-tuned estimate. It is
+   * the provider's own blended rate at the tier above the account's current
+   * one ($90 / 100,000) and also the marginal overage rate on both that tier
+   * and the current one, so it does not fall as volume grows and is the
+   * conservative figure at any usage the platform can reach.
+   *
+   * It prices EVERY send on the cost meter — campaigns, receipts, invites,
+   * password resets — because every one of them is a message the provider
+   * charges for. The band on the plan and the retail overage rate beside it
+   * both concern a smaller quantity; this is the whole bill.
+   */
+  perEmailSend: 0.0009,
 }
 
 /** The rollup fields `orgMonthlyCogsUsd` prices. All optional and all absent-safe. */
@@ -1395,6 +1868,16 @@ export interface OrgUsageRollupInput {
   dataStorageMb?: number | null
   apiRequests?: number | null
   contactsCount?: number | null
+  /**
+   * Every email the org sent this month, campaigns and transactional alike —
+   * the `emailSends` cost meter, not `campaignEmailSends`.
+   *
+   * The cost meter is the right input precisely because the campaign meter is
+   * the one with a cap on it. What this org cost us is every message the
+   * provider charged for, and most of them are messages no quota could have
+   * refused.
+   */
+  emailSends?: number | null
   /**
    * Aglyn Assist provider spend for the month, ALREADY IN DOLLARS (AGL-2280).
    *
@@ -1463,6 +1946,11 @@ export function orgMonthlyCogsUsd(
     dataStorage: (num(rollup?.dataStorageMb) / 1024) * rates.dataStoragePerGbMonth,
     apiRequests: num(rollup?.apiRequests) * rates.perApiRequest,
     contacts: num(rollup?.contactsCount) * rates.perContactMonth,
+    // Every send, not the overage — the provider bills the first message of
+    // the month as much as the last, so a cost model that started counting at
+    // the plan's included band would report an org that stayed inside its
+    // allowance as free.
+    emailSends: num(rollup?.emailSends) * rates.perEmailSend,
     /*==========================================
      * AGLYN ASSIST PROVIDER SPEND (AGL-2280).
      *
@@ -1508,7 +1996,7 @@ export function orgMonthlyCogsUsd(
  * UNITS, because the field names do not all say: `storageGb` and
  * `dataStorageMb` are gigabytes and MEGABYTES respectively (the conversion
  * lives in `orgMonthlyCogsUsd`, with its own test); `pageViews`,
- * `formSubmissions` and `apiRequests` are counts FOR THE MONTH;
+ * `formSubmissions`, `apiRequests` and `emailSends` are counts FOR THE MONTH;
  * `contactsCount` is a point-in-time headcount, not a monthly flow.
  */
 export function orgCogsInputFrom(
@@ -1526,6 +2014,7 @@ export function orgCogsInputFrom(
     dataStorageMb: read('dataStorageMb'),
     apiRequests: read('apiRequests'),
     contactsCount: read('contactsCount'),
+    emailSends: read('emailSends'),
     // AGL-2280. Dollars, not a meter — the projection still has to forward it
     // or the model prices Assist at nothing, which is the direction that
     // approves a discount.
@@ -2720,74 +3209,17 @@ export function checkEntitlement(
 }
 
 /**
- * A branding profile with every field present — what a branded surface
- * renders. Image/color/domain fields are nullable (Aglyn's own surfaces
- * bake those in rather than carry a URL); the remaining text fields always
- * have a value so callers never string-concatenate `undefined`.
+ * The branding profile shape and the platform's own fallback, re-exported
+ * for every caller that reads them alongside the entitlement gate.
  *
- * `supportUrl` is nullable too, and it is the one field where null carries a
- * decision rather than an absence — see {@link resolveBrandingProfile}. A
- * caller must render NOTHING for it, never a placeholder and never a
- * substitute.
+ * They are DEFINED in `platform-brand.ts`, beside the environment-driven
+ * literals they are assembled from. A published tenant page renders the
+ * attribution badge from `PLATFORM_BRANDING_PROFILE` and needs nothing else
+ * in this module; importing it from here would put the whole plan, quota and
+ * entitlement table into every anonymous visitor's first load.
  */
-export interface ResolvedBrandingProfile {
-  productName: string
-  logoUrl: string | null
-  faviconUrl: string | null
-  primaryColor: string | null
-  supportUrl: string | null
-  /**
-   * The brand's own FRONT DOOR — where "Made with <product>" sends a visitor
-   * who wants to know what built the site they are looking at.
-   *
-   * Deliberately separate from {@link ResolvedBrandingProfile.supportUrl},
-   * which the badge used to borrow: a help-desk address is the wrong answer to
-   * "what is this", and on this deployment it resolves to a `mailto:`, so the
-   * badge opened a blank email instead of a web page.
-   *
-   * Nullable for the same reason `supportUrl` is — a brand with nowhere to
-   * send that visitor gets a plain label, never a substitute destination.
-   */
-  homeUrl: string | null
-  fromName: string
-  emailLogoUrl: string | null
-  customConsoleDomain: string | null
-}
-
-/**
- * The PLATFORM (non-white-label) brand — the fallback every surface gets when
- * an org lacks the `whiteLabel` entitlement, and the gap-filler for a partial
- * agency profile. Kept here beside the entitlement so brand and gate stay
- * reviewed together.
- *
- * Renamed from `AGLYN_BRANDING_PROFILE` (AGL-2153), and the rename is the
- * substance rather than tidying: the old name asserted *whose* brand this is,
- * and on a self-host install that assertion is exactly what stopped being
- * true. It is the platform's own brand, and which platform that is, is now
- * configuration.
- *
- * This one change reaches further than it looks. `resolveBrandingProfile` is
- * the single resolver EVERY branded surface routes through — console chrome,
- * published-site badge and title, transactional email — and this is its
- * fallback. Making the fallback read `platform-brand.ts` gives all of them a
- * self-host brand without extending the white-label machinery at all; only its
- * default needed to stop being a constant.
- */
-export const PLATFORM_BRANDING_PROFILE: ResolvedBrandingProfile = {
-  productName: PLATFORM_BRAND_NAME,
-  // The platform's own surfaces still bake their logo in — this is here for
-  // the surfaces that CANNOT, which is every surface rendered on somebody
-  // else's site. The free-tier attribution badge is the one that exists
-  // today, and it carried no mark at all while this was null.
-  logoUrl: PLATFORM_MARK_URL,
-  faviconUrl: null,
-  primaryColor: null,
-  supportUrl: PLATFORM_SUPPORT_URL,
-  homeUrl: PLATFORM_HOME_URL,
-  fromName: PLATFORM_BRAND_NAME,
-  emailLogoUrl: null,
-  customConsoleDomain: null,
-}
+export type { ResolvedBrandingProfile } from './platform-brand'
+export { PLATFORM_BRANDING_PROFILE } from './platform-brand'
 
 /** A non-empty trimmed string, else undefined — blanks never override a default. */
 function cleanBrandString(value: string | undefined): string | undefined {
@@ -3284,6 +3716,81 @@ export function checkContactQuota(
       overageRateUsd === null
         ? 0
         : Math.round((overageContacts / 1000) * overageRateUsd * 100) / 100,
+    overageRateUsd,
+  }
+}
+
+/**
+ * Volume above the plan's included band, in emails.
+ *
+ * Transactional mail is never refused, so an org CAN and will finish a month
+ * over its included allowance. That is not an error and not a failed send —
+ * it is the overage the cap chose not to enforce, and recording it is what
+ * keeps it from being a surprise at invoicing. `UNLIMITED` (and any
+ * non-positive limit, which is how "no included allowance" is expressed)
+ * yields 0 rather than the whole month's volume.
+ *
+ * DEFINED HERE and re-exported from `email-metering.ts` (AGL-2155's move):
+ * the billing page renders this figure before anything is invoiced, and it
+ * is a client component that cannot pull in the Admin SDK. One subtraction,
+ * so the readout and the invoice cannot disagree.
+ */
+export function emailSendsOverage(total: number, limit: number): number {
+  const sends = Number(total)
+  const included = Number(limit)
+  if (!Number.isFinite(sends) || sends <= 0) return 0
+  if (!Number.isFinite(included) || included <= 0) return 0
+  return Math.max(0, sends - included)
+}
+
+export interface EmailSendOveragePrice {
+  /** Emails past the plan's included band, as handed in. */
+  overageSends: number
+  /** Estimated charge this month at the plan's per-1,000 rate. */
+  overageMonthlyUsd: number
+  /** Per-1,000 rate; null when the plan carries no email overage price. */
+  overageRateUsd: number | null
+}
+
+/**
+ * Prices email volume past a plan's included band.
+ *
+ * ## No `allowed`, deliberately
+ *
+ * Every other meter's helper here answers "may this proceed" alongside "what
+ * does it cost", because on those axes one gate decides both. Email has two
+ * gates that are not the same gate: `reserveCampaignEmailSends` refuses a
+ * CAMPAIGN at the band inside a transaction, and nothing at all refuses
+ * transactional mail at any tier. A field named `allowed` on this result
+ * would be a plausible-looking thing for a sender to consult, and a
+ * transactional sender consulting it is how a password reset stops going out.
+ * So the result carries money and nothing else.
+ *
+ * ## Takes the overage, does not recompute it
+ *
+ * `emailSendsOverage` already derives the excess from the cost meter and the
+ * resolved band, on the path that records it. Re-deriving it here from a raw
+ * total would be a second overage model to drift from the first — which is
+ * the shape AGL-1402 documented, where two figures that should have been one
+ * disagreed by 20-45% for years.
+ *
+ * A null rate yields zero, structurally rather than by a check, which is what
+ * keeps free at zero on this axis for the same reason it is zero on the other
+ * three.
+ */
+export function priceEmailSendOverage(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  overageSends: number,
+): EmailSendOveragePrice {
+  const overageRateUsd = PLAN_PRICING[resolvePlan(org)].extraEmailSendsUsdPer1k
+  const sends = Number(overageSends)
+  const over = Number.isFinite(sends) && sends > 0 ? sends : 0
+  return {
+    overageSends: over,
+    overageMonthlyUsd:
+      overageRateUsd === null
+        ? 0
+        : Math.round((over / 1000) * overageRateUsd * 100) / 100,
     overageRateUsd,
   }
 }

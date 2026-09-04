@@ -25,7 +25,7 @@ export interface SiteSecurityCardsProps {
 
 /**
  * The six lists an owner can widen the site's Content-Security-Policy with
- * (AGL-1485).
+ *.
  *
  * Lifted out of the Setup page so it can live on ADMIN, where the permission
  * already was: every one of these fields is `hostMemberRole(hostId) ==

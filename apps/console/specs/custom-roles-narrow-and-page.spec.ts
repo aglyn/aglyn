@@ -56,6 +56,16 @@ import {
 
 const mockVerifyIdToken = jest.fn()
 const mockLogOrgActivity = jest.fn(async () => undefined)
+/**
+ * The projection re-run this route owes the rules.
+ *
+ * A role's permission map is an INPUT to every carrier's denormalized
+ * `resolvedPermissions`, which is what `canWriteOrgDatasets()` reads. Editing
+ * or deleting a role touches no membership, so it reaches none of the six
+ * mutations that already call this writer — and without it a narrowing is
+ * enforced by every server route while the rules go on granting.
+ */
+const mockSyncOrgAuthProjections = jest.fn(async () => undefined)
 let mockHasPermission = true
 
 /** Collection path → docId → data. */
@@ -153,6 +163,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   lockdownRefusal: async () => null,
   logOrgActivity: (...args: unknown[]) => mockLogOrgActivity(...(args as [])),
   memberHasOrgPermission: async () => mockHasPermission,
+  syncOrgAuthProjections: (...args: unknown[]) =>
+    mockSyncOrgAuthProjections(...(args as [])),
   resolveOrgMembership: async (uid: string) => ({
     orgId: 'org-1',
     member: { $id: uid, role: 'admin' },
@@ -414,6 +426,33 @@ describe('deleting a role clears every carrier (AGL-2334)', () => {
     })
     expect(response.status).toBe(200)
     expect(batchSizes).toEqual([3])
+  })
+
+  it('re-projects the roster, so the RULES see the carriers fall back', async () => {
+    /*
+     * Clearing `roleId` changes what every carrier may do, and the rules
+     * decide dataset writes from the denormalized `resolvedPermissions` —
+     * which still holds the deleted role's verdict until this runs.
+     */
+    seedCarriers(3)
+    await call(rolesPost, {
+      method: 'POST',
+      body: { orgId: 'org-1', action: 'delete', roleId: 'role-doomed' },
+    })
+    expect(mockSyncOrgAuthProjections).toHaveBeenCalledWith('org-1')
+  })
+
+  it('CONTROL: a REFUSED delete re-projects nothing', async () => {
+    // Without this the assertion above passes against a route that syncs
+    // unconditionally, which would be a roster-wide write any member could
+    // trigger by asking to delete a role they may not touch.
+    mockHasPermission = false
+    seedCarriers(1)
+    await call(rolesPost, {
+      method: 'POST',
+      body: { orgId: 'org-1', action: 'delete', roleId: 'role-doomed' },
+    })
+    expect(mockSyncOrgAuthProjections).not.toHaveBeenCalled()
   })
 
   it('still requires members.manage', async () => {

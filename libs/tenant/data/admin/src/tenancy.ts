@@ -24,9 +24,15 @@ export * from './lib/server/account-emails'
 export * from './lib/server/auth-pools'
 export * from './lib/server/client-error-report'
 export * from './lib/server/connect-account-status'
+export * from './lib/server/connect-payout-failure'
 export * from './lib/server/stripe-account-mode'
 export * from './lib/server/auth-handoff'
 export * from './lib/server/console-domains'
+export * from './lib/server/dns-probe'
+export * from './lib/server/sending-domains'
+export * from './lib/server/host-sending-domain'
+export * from './lib/server/sending-domain-debt'
+export * from './lib/server/sending-domain-recheck'
 // The hosting seam itself, so a door can ask whether this deployment is able
 // to register a name at all before it promises the caller one.
 // `workspace-domains` re-exports the pieces its own callers share with it; the
@@ -42,7 +48,19 @@ export * from './lib/server/consume-once'
 export * from './lib/server/csp-aggregate'
 export * from './lib/server/data-storage-gate'
 export * from './lib/server/contact-suppression'
+export * from './lib/server/email-campaign-reach'
 export * from './lib/server/email-suppression'
+// The double opt-in quarantine, after the module whose keying it shares and
+// whose `filterTopicSendable` is the reader that makes it a quarantine rather
+// than a stored fact.
+export * from './lib/server/email-topic-confirmation'
+export * from './lib/server/email-unsubscribe-link'
+export * from './lib/server/email-flow-gate'
+// Side-effecting on purpose, for the reason `email-send-rate` below is:
+// evaluating this module INSTALLS the marketing gate on `sendEmail`, so the
+// unsubscribe header, the suppression check and the frequency ceiling reach
+// every bulk sender without a call at each server entrypoint.
+export * from './lib/server/email-marketing-gate'
 export * from './lib/server/sms-keywords'
 export * from './lib/server/document-id'
 export * from './lib/server/edit-access-authz'
@@ -52,13 +70,17 @@ export * from './lib/server/email-metering'
 // Side-effecting on purpose (AGL-2409): evaluating this module INSTALLS the
 // platform send-rate governor on `sendEmail`. Every server surface already
 // imports this barrel, so nothing has to remember to call an installer.
+export * from './lib/server/campaign-conversion-attribution'
 export * from './lib/server/email-send-rate'
+export * from './lib/server/email-sender-reputation'
 export * from './lib/server/erase'
+export * from './lib/server/dynamic-list-materialize'
 export * from './lib/server/firebase-admin'
 export * from './lib/server/free-workspace-cap'
 export * from './lib/server/ga4-measurement-protocol'
 export * from './lib/server/host-memberships'
 export * from './lib/server/host-visitor-records'
+export * from './lib/server/list-members'
 export * from './lib/server/lockdown'
 export * from './lib/server/token-revocation'
 export * from './lib/server/tenant-write-lockdown'
@@ -73,6 +95,7 @@ export * from './lib/server/rate-limit-store'
 export * from './lib/server/vercel-drain-signature'
 export * from './lib/server/vercel-log-drain'
 export * from './lib/server/visitor-write-rate-limit'
+export * from './lib/server/console-api-rate-limit'
 export * from './lib/server/realm-plugins'
 export * from './lib/server/release-flags'
 export * from './lib/server/resolve-people'

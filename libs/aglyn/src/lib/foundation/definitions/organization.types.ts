@@ -188,6 +188,26 @@ export interface AglynOrgMember extends AglynDocument {
    * by `syncOrgAuthProjections`; never edit it by hand.
    */
   scopeTokens?: ScopeToken[]
+  /**
+   * Denormalized THREE-LAYER permission verdict, so rules can honor a custom
+   * role they cannot resolve.
+   *
+   * `roleId` points at another document and `permissions` is only the top
+   * layer, so a rule reading either alone answers a different question from
+   * the server — and reproducing the precedence in CEL needs a second
+   * cross-document get() plus correct handling of a dangling id. This is
+   * `resolveOrgPermissions(member, customRole)`, already applied.
+   *
+   * ⚠️ ABSENT IS NOT EMPTY, and the rules must never treat it as either
+   * "everything allowed" or "nothing allowed". Documents predating this
+   * field, and any written by a path that bypasses
+   * `syncOrgAuthProjections`, carry no map at all; the rules fall back to
+   * the layers they CAN read — the role and the per-member overrides — which
+   * is exactly the verdict they gave before this field existed. Written only
+   * by `syncOrgAuthProjections` and by `createOrganization`'s inline stamp;
+   * never edit it by hand.
+   */
+  resolvedPermissions?: Record<string, boolean>
   /** Denormalized for member lists without N user lookups. */
   displayName?: string
   email?: string

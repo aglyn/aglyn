@@ -22,6 +22,7 @@ import {
   storefrontProcessingCostCents,
 } from '@aglyn/aglyn/server'
 import {
+  classifyOrgRevenueState,
   commerceSettledSummary,
   commerceHostAttribution,
   contractedSummary,
@@ -639,5 +640,122 @@ describe('attribution by source', () => {
     const shown = capped.rows.reduce((s, r) => s + r.gainCents, 0)
     expect(capped.omittedRows).toBe(2)
     expect(shown + capped.omittedGainCents).toBe(total.commissionNetCents)
+  })
+})
+
+describe('a signup that never paid is neither revenue nor a comp', () => {
+  // `incomplete_expired` is what Stripe leaves behind when a first payment is
+  // never authenticated. It has collected nothing, so it cannot appear in the
+  // contracted book; and nobody chose to give it away, so it cannot appear in
+  // the comped count either — a comp is the ABSENCE of a subscription.
+  const expired = {
+    name: 'Abandoned Signup',
+    plan: 'business',
+    billingStatus: 'incomplete_expired',
+    subscription: { status: 'incomplete_expired', interval: 'month' },
+  }
+
+  it('is classified as contributing nothing', () => {
+    expect(classifyOrgRevenueState(expired)).toBe('inactive')
+  })
+
+  it('adds nothing to the contracted book and nothing to the comped count', () => {
+    const summary = contractedSummary([
+      { orgId: 'paying', billing: payingOrg() },
+      { orgId: 'expired', billing: expired },
+    ])
+    expect(summary.total.orgs).toBe(1)
+    expect(summary.compedOrgs).toBe(0)
+    expect(summary.pastDue.orgs).toBe(0)
+    // Derived from the table, so this cannot pass against a hardcoded figure:
+    // the business plan price would be visible in the total if it had leaked.
+    expect(summary.total.mrrUsd).toBe(PLAN_PRICING.starter.basePriceMonthlyUsd)
+  })
+
+  it('is not named as a comp in the attribution table', () => {
+    const orgs = [{ orgId: 'expired', billing: expired }]
+    const attribution = orgAttribution(orgs, [])
+    expect(attribution.rows.some((row) => row.state === 'comped')).toBe(false)
+  })
+
+  it('a cancelled paid plan is churn, not a comp, for the same reason', () => {
+    // The same conflation reached through the commonest status of all: a `plan`
+    // field left standing after the subscription ended.
+    const churned = {
+      name: 'Churned Co',
+      plan: 'business',
+      billingStatus: 'canceled',
+      subscription: { status: 'canceled', interval: 'month' },
+    }
+    expect(classifyOrgRevenueState(churned)).toBe('inactive')
+    expect(contractedSummary([{ orgId: 'churned', billing: churned }]).compedOrgs).toBe(0)
+  })
+
+  it('leaves a real comp and a real dunning org alone — the controls', () => {
+    // A staff override writes `plan` and NO subscription: still a comp.
+    expect(classifyOrgRevenueState({ plan: 'agency' })).toBe('comped')
+    // Dunning is contracted money Stripe is still retrying: still counted.
+    const dunning = {
+      plan: 'starter',
+      billingStatus: 'past_due',
+      subscription: { status: 'past_due', interval: 'month' },
+    }
+    expect(classifyOrgRevenueState(dunning)).toBe('pastDue')
+    const summary = contractedSummary([{ orgId: 'dunning', billing: dunning }])
+    expect(summary.total.orgs).toBe(1)
+    expect(summary.pastDue.orgs).toBe(1)
+    expect(summary.pastDue.mrrUsd).toBe(PLAN_PRICING.starter.basePriceMonthlyUsd)
+    // And a healthy one, so the controls cannot pass on a stub that answers
+    // the same bucket for everything.
+    expect(classifyOrgRevenueState(payingOrg())).toBe('collecting')
+  })
+})
+
+/**
+ * A REHEARSAL IS NOT REVENUE, ON THE STAFF PAGE TOO.
+ *
+ * The only order in production is a `cs_test_…` smoke-test checkout Stripe
+ * never moved money for, and this summary counted it as a settled storefront
+ * sale Aglyn had taken commission on. Every case carries a LIVE order beside
+ * the test one: with only a test row in the fixture, a filter that dropped
+ * everything would be indistinguishable from one that worked.
+ */
+describe('test-mode orders are not settled revenue', () => {
+  const live = { id: 'cs_live_real', amountCents: 10000, feeCents: 300 }
+  const test = { id: 'cs_test_smoke', amountCents: 1800, feeCents: 36 }
+
+  it('leaves the rehearsal out and keeps the real sale', () => {
+    const out = commerceSettledSummary([live, test])
+
+    expect(out.grossCents).toBe(10000)
+    // Skipped entirely, not counted at zero: `transactionCount` is read as
+    // "how many sales", and a rehearsal is not one.
+    expect(out.transactionCount).toBe(1)
+    expect(out.applicationFeeCents).toBe(300)
+  })
+
+  it('CONTROL: the same order counts once its id is a live session', () => {
+    const out = commerceSettledSummary([live, { ...test, id: 'cs_live_two' }])
+
+    expect(out.grossCents).toBe(11800)
+    expect(out.transactionCount).toBe(2)
+  })
+
+  it('CONTROL: a recorded livemode beats a test-shaped id', () => {
+    const out = commerceSettledSummary([live, { ...test, livemode: true }])
+
+    expect(out.grossCents).toBe(11800)
+    expect(out.transactionCount).toBe(2)
+  })
+
+  it('CONTROL: an order with no Stripe id at all is real money', () => {
+    // A POS cash sale. Answering "test" for anything unidentifiable would
+    // erase genuine revenue from the staff figures.
+    const out = commerceSettledSummary([
+      { id: 'aBcD1234auto', amountCents: 5000, feeCents: 150 },
+    ])
+
+    expect(out.grossCents).toBe(5000)
+    expect(out.transactionCount).toBe(1)
   })
 })

@@ -22,6 +22,11 @@ import MuiCardActions from '@mui/material/CardActions'
 import MuiCardContent from '@mui/material/CardContent'
 import MuiCardHeader from '@mui/material/CardHeader'
 import { forwardRef, type ReactNode } from 'react'
+import {
+  applySemanticElement,
+  semanticElementAttribute,
+  semanticElementLabelAttribute,
+} from '../utils/element-picker'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
@@ -72,7 +77,7 @@ const CardElement = forwardRef<HTMLDivElement, CardElementProps>(
         // Same trap as Paper: a string elevation indexes MUI's shadow
         // array and yields a completely flat card.
         elevation={outlined ? undefined : toElevation(elevation)}
-        {...rest}
+        {...applySemanticElement(rest as Record<string, unknown>)}
       >
         {children}
       </MuiCard>
@@ -131,6 +136,8 @@ export const cardSchema: Aglyn.ComponentSchema<CardElementProps> = {
   category: Aglyn.ComponentCategory.SURFACE,
   icon: { path: mdiCardOutline.path, sx: { color: '#2196f3' } },
   attributes: [
+    semanticElementAttribute('this card'),
+    semanticElementLabelAttribute(),
     {
       name: 'variant',
       label: 'Variant',

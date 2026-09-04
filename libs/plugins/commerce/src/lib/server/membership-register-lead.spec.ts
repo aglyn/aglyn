@@ -86,6 +86,12 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       firestore: { FieldValue: { serverTimestamp: () => 'NOW' } },
     },
     upsertHostContact: () => undefined,
+    // The attribution seam the handler resolves once per sign-up. Recorded as
+    // nothing — `campaign-conversion-attribution.spec.ts` owns the write — and
+    // defined here at all because a mocked module answers `undefined` for a
+    // name it does not list, which would make the handler throw rather than
+    // fail an assertion.
+    resolveCampaignTouch: async () => null,
     recordVisitorRecordCeilingTrip: async () => undefined,
     // Recorded, not discarded. A double whose writer returns success and
     // forgets the payload cannot fail on a wrong payload — which is how a
@@ -107,6 +113,10 @@ jest.mock('./membership', () => ({
   setMemberCookie: () => undefined,
 }))
 
+import {
+  readMarketingBasis,
+  soloConsentGroup,
+} from '@aglyn/aglyn/server'
 import { membershipRegisterHandler } from './membership-register'
 
 function makeRes(): any {
@@ -180,5 +190,50 @@ describe('the lead a sign-up leaves behind (AGL-2303)', () => {
     // …and the member document is written the same way, which is the field
     // the members audience now reads.
     expect('displayName' in mockState.members[0]).toBe(false)
+  })
+})
+
+/**
+ * The consent field `siteMembers` never had.
+ *
+ * The sign-up checkbox reached the lead and the contact and was dropped for
+ * the member document, so `hosts/{hostId}/siteMembers` carried no consent
+ * signal of any kind and `audience: 'members'` had nothing for the send-time
+ * join to read — the audience could not be filtered even in principle
+ * (`docs/specs/email-overhaul.md` §1d).
+ *
+ * The other two documents are not a substitute for it: a member is deduped in
+ * this transaction while leads append every time, and contacts are org-scoped
+ * where a member belongs to one site.
+ */
+describe('the consent a member signs up with', () => {
+  it('persists a ticked checkbox on the member document', async () => {
+    await register({ displayName: 'Dana Reed', marketingConsent: true })
+    expect(mockState.members).toHaveLength(1)
+    // Recorded against THIS SITE, through the shipped reader, so a basis
+    // this file calls stored is one the send path would also find.
+    expect(
+      readMarketingBasis(mockState.members[0], soloConsentGroup('host-1')).basis,
+    ).toBe('granted')
+    expect(
+      typeof readMarketingBasis(mockState.members[0], soloConsentGroup('host-1'))
+        .basisAtMs,
+    ).toBe('number')
+    // And nothing at the top of the document, where every brand in the
+    // account would read it as its own.
+    expect(mockState.members[0]).not.toHaveProperty('marketingConsent')
+  })
+
+  /**
+   * THE CONTROL. Signing up is not opting in — that is why the checkbox
+   * exists and why it defaults unchecked. An absent field reads back as an
+   * UNRECORDED basis, which is a third state and not a quiet refusal, so
+   * writing `false` here would be a different claim than the one the person
+   * made.
+   */
+  it('writes nothing at all when the box was not ticked', async () => {
+    await register({ displayName: 'Dana Reed' })
+    expect('marketingConsent' in mockState.members[0]).toBe(false)
+    expect('marketingConsentAtMs' in mockState.members[0]).toBe(false)
   })
 })

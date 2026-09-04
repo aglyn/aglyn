@@ -46,6 +46,7 @@ import '@aglyn/shared-util-fbserver'
 import {
   deploymentCommitRef,
   deploymentEnvironmentLabel,
+  isDeployedRuntime,
 } from '@aglyn/aglyn/server'
 
 import { recordServerError } from './rate-limit-store'
@@ -123,6 +124,17 @@ function toReportedEvent(
       'type.googleapis.com/google.devtools.clouderrorreporting.v1beta1.ReportedErrorEvent',
     serviceContext: { service, version },
     message: hasStack ? event.stack : `${event.kind}: ${event.message}`,
+    // Outside `serviceContext` so Error Reporting ignores it while a log-match
+    // policy can still filter on it — the same placement, for the same reason,
+    // that the server half gives `route`/`method`/`digest`.
+    //
+    // Until AGL-2523 the kind reached the payload ONLY on the stackless path,
+    // folded into `message` and `reportLocation.functionName`. Every stacked
+    // error — which is nearly all of them — arrived unclassifiable, so the
+    // `Client error beacon` policy had no way to express anything narrower
+    // than "any entry at all". That is why it pages for one visitor whose
+    // webview rewrote the DOM.
+    kind: clampString(event.kind, 32) || 'error',
     context: {
       httpRequest: event.url ? { url: event.url } : undefined,
       ...(hasStack
@@ -197,6 +209,34 @@ export async function reportClientErrors(
   options: { service: string },
 ): Promise<number> {
   if (!events.length) return 0
+
+  /*==========================================
+   * A LAPTOP IS NOT A DEPLOYMENT (AGL-1925, option 1).
+   *
+   * Measured 2026-08-18 over a trailing week of Error Reporting `groupStats`:
+   * 13 of 17 events — 76% — were not production, and the single highest-ranked
+   * "production error group" in the project was a dev-only artifact with
+   * `http://localhost:4200` stack frames. Ranking is the whole point of Error
+   * Reporting, so a majority-noise stream does not merely cost storage: it
+   * aims triage at the wrong thing, and the `Client error beacon` policy
+   * notifies its single human recipient for every uncaught error on any
+   * developer's machine.
+   *
+   * The credential is why localhost reaches production at all: `firebase-admin`
+   * is configured from the root `.env`, which names the platform project.
+   *
+   * Unlike the server half this stream carries NO `environment` stamp — the
+   * only marker was `serviceContext.version` being absent off Vercel, which
+   * did that job by accident and stopped doing it once `deploymentCommitRef`
+   * started resolving a commit for self-hosted builds. So refusing the write
+   * is not one of two options here; it is the only one that works at all.
+   *
+   * `isDeployedRuntime`, matching `reportServerError`: an operator's own
+   * container reports its visitors' errors, and a developer's console already
+   * shows them the error it would have sent.
+   *==========================================*/
+  if (!isDeployedRuntime()) return 0
+
   const target = await beaconLoggingTarget()
   const token = target?.token
   const projectId = target?.projectId
@@ -344,6 +384,35 @@ export async function reportServerError(
   if (!message) return 'dropped'
 
   /*==========================================
+   * A LAPTOP IS NOT A DEPLOYMENT, AND THIS IS THE ONLY GATE THAT CAN SAY SO.
+   *
+   * ABOVE the marker below, unlike every other gate here, and the difference
+   * is what is being refused. Those gates are about a write that FAILED and
+   * must still be counted. This one is about a process that should not be
+   * reporting at all: the count is as wrong as the log entry, because
+   * `/api/health/server-errors` reads that marker out of the platform project
+   * and would answer for a developer's terminal.
+   *
+   * The credential makes this reachable. `firebase-admin` is configured from
+   * the root `.env`, which names the platform project, so `nx dev` writes to
+   * production Cloud Logging under the same key production uses. Measured
+   * 2026-08-31: three parse errors from an interrupted rebase — carrying
+   * `file:///Users/.../aglyn/apps/...` stacks — landed in `server-errors` and
+   * opened the `Server errors: uncaught 5xx` policy, which was still open two
+   * days later while all thirteen uptime checks read 100%.
+   *
+   * `environment` was stamped for this (see the field below), but a stamp only
+   * helps a reader who filters on it, and the one reader this log can have is
+   * a hand-made alert policy that did not. Refusing the write is the half that
+   * does not depend on somebody else's configuration.
+   *
+   * `isDeployedRuntime` and not `isProductionDeployment`, deliberately: a
+   * preview's 5xx is a real 5xx served by a real deployment, and the stamp
+   * already separates it for anyone who wants to.
+   *==========================================*/
+  if (!isDeployedRuntime()) return 'dropped'
+
+  /*==========================================
    * COUNT IT WHERE SOMETHING CAN READ THE COUNT (AGL-1921, second pass).
    *
    * FIRST, above every gate below, and that ordering is the whole point.
@@ -436,6 +505,14 @@ export async function reportServerError(
               route: clampString(event.route, MAX_URL) || undefined,
               method: clampString(event.method, 16) || undefined,
               digest: clampString(event.digest, 64) || undefined,
+              // WHICH DEPLOYMENT THREW, and the log-match policy has no other
+              // way to ask. The credential comes from the environment, so a
+              // developer serving the console locally against the platform
+              // project writes here under the same key as production and
+              // lands in the same log — a throw on a laptop is then
+              // indistinguishable from a 500 served to a customer. The
+              // heartbeat beside this already stamps it for that reason.
+              environment: deploymentEnvironmentLabel(),
             },
           },
         ],

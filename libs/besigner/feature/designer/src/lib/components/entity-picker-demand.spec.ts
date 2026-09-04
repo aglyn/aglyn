@@ -85,6 +85,7 @@ describe('entity picker demand (AGL-703)', () => {
       Aglyn.FieldComponentType.CATEGORY_SELECT,
       Aglyn.FieldComponentType.DATASET_SELECT,
       Aglyn.FieldComponentType.DATASET_FIELD_SELECT,
+      Aglyn.FieldComponentType.FORM_SELECT,
     ]
     for (const component of ENTITY_PICKERS) {
       expect(entityKindsForAttributes([field(component)])).toHaveLength(1)
@@ -94,7 +95,7 @@ describe('entity picker demand (AGL-703)', () => {
     const declared = Object.values(Aglyn.FieldComponentType).filter(
       (value) =>
         typeof value === 'string' &&
-        /^(product|collection|category|dataset)/.test(value) &&
+        /^(product|collection|category|dataset|form)/.test(value) &&
         value.endsWith('-select'),
     )
     expect(declared.sort()).toEqual([...ENTITY_PICKERS].sort())

@@ -136,6 +136,46 @@ export interface ConsolePluginPageProps {
   /** True when the org holds the extension's `featureFlag` entitlement. */
   entitled: boolean
   /**
+   * The absolute console path this surface is mounted at — the nav item's
+   * `href` under the active org and site, e.g. `/acme/hosts/shop/products`
+   * (AGL-2501).
+   *
+   * A plugin page is handed a host DOC ID and nothing else, so building a
+   * link to itself meant resolving the org slug and subdomain from Firestore
+   * — two `getDoc`s that answer `null` on first paint, which for a section
+   * rail means drawing it without hrefs. The shell already knows this string
+   * synchronously; the alternative is paying for it again, later, per page.
+   */
+  basePath?: string
+  /**
+   * The nav item's declared {@link ConsoleNavItem.sections}, resolved: an
+   * absolute `href` per section, and the release-flag verdict already applied
+   * to `visible` (AGL-2501).
+   *
+   * The plugin DECLARES sections; the shell RESOLVES them. Release flags live
+   * in `scope:app` and a `scope:lib` plugin may not import the hooks that read
+   * them, so a page that filtered its own rail could only do it by guessing —
+   * and a rail offering a link into the shell's own "coming soon" notice is
+   * the guess going wrong. Feed this straight to `HubSections`.
+   */
+  sections?: readonly ResolvedConsoleNavSection[]
+  /**
+   * The id of the section the URL names, or undefined on the nav item's own
+   * href (AGL-2501).
+   *
+   * Always one of the declared `sections` — the shell 404s an id it does not
+   * recognize rather than passing it down, so a page may switch on this
+   * without a fallback branch for a section it does not have.
+   */
+  section?: string
+  /**
+   * Path segments beneath `basePath`, `[]` on the nav item's own href
+   * (AGL-2501). `segments[0]` is `section`; anything after it is the section's
+   * own, so a section can own deeper routes (`…/orders/ord_123`) without a
+   * further registry change.
+   */
+  segments?: readonly string[]
+  /**
    * The ORG billing doc (`orgs/{orgId}`) the shell already loaded to
    * compute `entitled` (prop renamed from `tenant` in AGL-444). Passed
    * through so a plugin page can run its own `checkEntitlement`/
@@ -182,9 +222,67 @@ export interface ConsolePluginPageProps {
      */
     ready: boolean
   }
+  /**
+   * What the viewer's role on THIS SITE lets them do, for a surface that
+   * publishes.
+   *
+   * The `author` host role edits content and may not make it live; that is
+   * enforced in the Firestore rules and by the promotion routes, and the
+   * console's job is to say no with a reason rather than let a click come
+   * back as a bare `permission-denied`. Resolving it needs the org member
+   * document and the host-access predicate over it, which the shell already
+   * reaches for — a plugin cannot, for the same reason it cannot read a
+   * release flag.
+   *
+   * `loaded` separates "no" from "not yet", so a surface disables with a
+   * reason rather than hiding a control that is about to be allowed. Read it
+   * the safe way round: `canPublish` is false until the read lands.
+   */
+  hostRole?: {
+    canPublish: boolean
+    loaded: boolean
+  }
 }
 
 export type ConsolePluginPage = ComponentType<ConsolePluginPageProps>
+
+/**
+ * One routed section of a plugin console page (AGL-2501).
+ *
+ * A section is a real URL beneath the nav item's `href`, not a panel: it is
+ * linkable, the back button walks sections, and the page mounts the one being
+ * read. That last part is the reason this exists — a six-panel hub subscribes
+ * every panel's queries on load, and the reader is looking at one.
+ */
+export interface ConsoleNavSection {
+  /**
+   * URL segment beneath the nav item's `href`, and the id the shell hands the
+   * page as `section`. Appears in links people keep — treat it as persisted.
+   */
+  id: string
+  label: string
+  /**
+   * Release-flag nav-tab id gating THIS section, when it ships on a different
+   * schedule than the surface around it. Omit to inherit the nav item's gate,
+   * which is the common case.
+   *
+   * Declaring one NARROWS, never widens: the nav item's own gate is applied
+   * outside this one, so a section of a flagged-off surface stays unreachable
+   * whatever it declares. A section gated by its own flag is refused on a deep
+   * link exactly as it is hidden from the rail — one verdict, both places.
+   */
+  navTabId?: string
+}
+
+/** A {@link ConsoleNavSection} with the shell's answers filled in. */
+export interface ResolvedConsoleNavSection {
+  id: string
+  label: string
+  /** Absolute console path — `${basePath}/${id}`. */
+  href: string
+  /** False when this section's release flag hides it from this viewer. */
+  visible: boolean
+}
 
 export interface ConsoleNavItem {
   label: string
@@ -201,10 +299,58 @@ export interface ConsoleNavItem {
    */
   navTabId?: string
   /**
+   * The permission THIS surface requires, when it is narrower than the
+   * extension's own {@link ConsoleExtension.permission}.
+   *
+   * Declaring one NARROWS, never widens: the extension's requirement is
+   * applied alongside this one and both must be held, so a surface cannot
+   * escape its extension's gate by naming a key its reader happens to have.
+   * The composition is the release-flag one a nav item and its section
+   * already have, for the same reason.
+   *
+   * The granularity exists because one extension can register surfaces with
+   * genuinely different answers — a catalog anyone who edits the site may
+   * open, beside a register that takes money.
+   */
+  permission?: string
+  /**
    * Page body rendered by the shell's generic host route. When present,
    * the plugin owns the whole surface — no core page file needed.
    */
   Component?: ConsolePluginPage
+  /**
+   * Routed sections of this page (AGL-2501). Each becomes a URL at
+   * `${href}/${section.id}`, and the shell tells the page which one it is on.
+   *
+   * Optional, and omitting it is not a lesser option — it means the surface is
+   * ONE page, which is what every plugin surface was before this existed and
+   * what most should stay. A nav item without sections resolves exactly as it
+   * always has: its own href and nothing beneath it, so a path under it is a
+   * 404 rather than this page rendered again.
+   */
+  sections?: readonly ConsoleNavSection[]
+  /**
+   * Whether this nav item claims every path beneath its own href, with no
+   * declared section naming them.
+   *
+   * The case is a surface whose deeper URLs are ENTITIES rather than
+   * sections: `/forms` is a list, `/forms/{formId}` is one of its rows, and
+   * the set of ids is a property of the workspace's data, so no static
+   * `sections` list could enumerate them. Without this a nav item matches its
+   * own href and nothing else, and every row's page is a 404.
+   *
+   * The trade is deliberate and is why it must be asked for. A surface that
+   * owns its subtree can no longer distinguish a typo'd path from an entity
+   * id — `/forms/bogus` reaches the page rather than the shell's 404 — so it
+   * takes on the duty of saying "no such thing" itself, which a list-detail
+   * surface has to be able to do anyway for an id that was deleted while a
+   * link to it was still in someone's inbox.
+   *
+   * Sections win where both are declared: an id the `sections` list names is
+   * resolved as a section, and this only widens what happens when none
+   * matches.
+   */
+  ownsSubtree?: boolean
   /**
    * Dashboard header for the plugin page (title + icon), and the docs topic
    * its help `?` explains.
@@ -245,6 +391,18 @@ export interface ConsoleSettingsSection {
 export const CONSOLE_WIDGET_SLOTS = {
   /** Host dashboard + screen view activity column. Props: hostId. */
   hostActivity: 'hostActivity',
+  /**
+   * The host dashboard's glance row — one card per capability the site
+   * actually has. Props: hostId.
+   *
+   * The dashboard's own cards used to be imported by the page, which made
+   * enablement a decision nobody was making: `New site users` rendered on a
+   * site that has never turned member accounts on, and `Last campaign` on a
+   * workspace with the email plugin switched off. A card that answers a
+   * question about a capability belongs to the capability, so it registers
+   * here and the shell's entitlement + enablement gate decides.
+   */
+  hostDashboard: 'hostDashboard',
   /** Host dashboard commerce summary. Props: hostId, org. */
   commerceGlance: 'commerceGlance',
   /** Org Data page body. Props: orgId, org. */
@@ -281,8 +439,44 @@ export type ConsoleWidgetSlot =
  */
 export interface ConsoleWidget {
   slot: string
+  /**
+   * Stable identity for this widget, unique within the plugin.
+   *
+   * A PERSISTED IDENTIFIER wherever the shell lets someone arrange the
+   * surface it lands on — the console stores dashboard cards a reader has
+   * switched off by this string, and reads it back sessions later. Giving a
+   * retired id to a different card therefore shows that reader an
+   * arrangement they never chose. Retire an id by leaving it reserved and
+   * minting a new one, never by reusing it.
+   */
   widgetId: string
+  /**
+   * What to call this widget where it is LISTED rather than rendered — the
+   * console's dashboard customize dialog is the one such place today.
+   *
+   * Match the card's own heading: the two names sit a click apart, and a
+   * switch labeled differently from the card it controls reads as a switch
+   * for something else. Omitting it falls back to the extension's
+   * `displayName`, which is right for a plugin contributing one card and
+   * ambiguous for one contributing several.
+   */
   title?: string
+  /**
+   * The permission a reader must hold for this card, when it is narrower
+   * than its extension's own {@link ConsoleExtension.permission}.
+   *
+   * Composes by AND with the extension's, like a nav item's does: a widget
+   * cannot escape its extension's gate by naming a key its reader happens to
+   * hold, and declaring nothing here inherits the extension's requirement
+   * rather than clearing it.
+   *
+   * A card is a surface the reader never asked for — the shell drops it onto
+   * a page they opened for something else — so there is nowhere in it to put
+   * an upsell or a refusal, and a widget its reader may not have is simply
+   * absent. That is the same treatment the entitlement gate gives a widget,
+   * and for the same reason.
+   */
+  permission?: string
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   Component: ComponentType<any>
 }
@@ -305,12 +499,87 @@ export interface ConsoleWidget {
  * Hiding the tab would hide the only route most workspaces have to the page
  * that sells the feature, and a nav entry leading to the shell's own upgrade
  * notice bypasses nothing.
+ *
+ * TWO QUESTIONS, BOTH ANSWERED BY THE SHELL. `featureFlag` is about the
+ * organization's plan; `permission` is about the person reading, and it is
+ * enforced in the same place and the same way — resolved from the member's
+ * own permission map, never from anything the extension supplies, and read
+ * before the surface is constructed. An extension declares what it requires
+ * and the shell decides whether the requirement is met, so the sentence
+ * above holds for authorization as well as for entitlements.
  */
+/**
+ * What a blocked org is told about a feature it does not hold, in the
+ * extension's own words.
+ *
+ * PRESENTATION ONLY. The shell decides entitlement from the org billing doc
+ * and this extension's `featureFlag`, and reads this object solely to render
+ * a refusal it has ALREADY decided on. Nothing here is an input to that
+ * decision, and an extension supplying it gains no access — the surface it
+ * describes stays unmounted either way.
+ *
+ * It exists because the shell's own copy can only speak in generalities. An
+ * entitlement that no plan grants — one sold as a per-organization add-on —
+ * is described exactly wrong by "not included in your current plan", which
+ * sends the reader to compare plan tiers that would not have helped.
+ */
+export interface ConsoleUpgradeNotice {
+  /**
+   * The sentence a blocked org reads. Plain text: the shell renders it as a
+   * string, never as markup, and a third-party extension writes this.
+   */
+  message: string
+  /**
+   * Which card on the billing page sells it, as a bare fragment id
+   * ('addons'). The console validates it against the anchors that page
+   * actually has and drops it otherwise — the `docsTopic` treatment, for the
+   * same reason: an extension can name any string, and an unrecognized one
+   * must degrade to the plain Billing link rather than build a dead URL.
+   *
+   * Deliberately not an href. A full URL from an extension would be an
+   * open redirect rendered by the console's own chrome; the shell keeps
+   * ownership of the route and accepts only which part of it to scroll to.
+   */
+  billingAnchor?: string
+}
+
 export interface ConsoleExtension {
   pluginId: PluginId
   displayName: string
   /** Entitlement flag gating every surface this extension registers. */
   featureFlag?: keyof OrgFeatureFlags
+  /**
+   * The permission a reader must hold for every surface this extension
+   * registers — the AUTHORIZATION half of the sentence above `featureFlag`.
+   *
+   * `featureFlag` answers what the ORGANIZATION bought; this answers what
+   * the PERSON reading may open, and the two are independent: an org can
+   * hold a feature that most of its members have no business using.
+   *
+   * A key in the console's permission vocabulary, which is two spaces and
+   * they are not interchangeable. Either a dotted {@link OrgPermission} from
+   * the built-in catalog ('data.manage'), which the shell answers from the
+   * member's resolved granular map; or a key some plugin declared through
+   * `registerPluginPermissions` ('managePos'), which the shell answers from
+   * the resolved permission map that carries those keys. A key belonging to
+   * NEITHER space refuses the surface rather than passing it — a requirement
+   * nothing can answer is not a requirement that has been met.
+   *
+   * Declared here rather than checked inside the page for the reason the
+   * entitlement gate moved out of the pages: a check the extension performs
+   * on itself is enforcement only for as long as every extension remembers
+   * to perform it, and the surface has already mounted and opened its
+   * listeners by the time it runs.
+   *
+   * Omit for a surface every member of the workspace may open.
+   */
+  permission?: string
+  /**
+   * Refusal copy for an org that does not hold `featureFlag`, rendered by
+   * the shell in place of the surface. Omit to get the shell's generic
+   * plan-tier sentence.
+   */
+  upgradeNotice?: ConsoleUpgradeNotice
   navItems?: ConsoleNavItem[]
   dashboardCards?: ConsoleDashboardCard[]
   settingsSections?: ConsoleSettingsSection[]
@@ -378,23 +647,121 @@ export function listConsoleNavItems(
   )
 }
 
+/** What {@link resolveConsolePluginPage} answers for a matched href. */
+export interface ResolvedConsolePluginPage {
+  extension: ConsoleExtension
+  navItem: ConsoleNavItem
+  /**
+   * The section the href names, when the nav item declares sections and the
+   * href reaches past its own. Undefined on the nav item's own href.
+   */
+  section?: ConsoleNavSection
+  /** Path segments beneath `navItem.href`; `[]` on the nav item's own href. */
+  segments: readonly string[]
+}
+
 /**
- * Resolves a host-relative href (e.g. '/events') to the extension + nav
- * item that owns a renderable page for it. The shell's generic host route
- * uses this to render plugin pages without a per-plugin page file.
+ * One nav item against one href: exact, a declared section beneath it, or —
+ * for a nav item that asks — anything beneath it.
+ *
+ * A nav item that declares neither `sections` nor `ownsSubtree` matches its
+ * own href and nothing else. That is what keeps every plugin written before
+ * AGL-2501 behaving as it did: without it, prefix matching would quietly hand
+ * `/products/anything` to the Products page, which is the "it opened the wrong
+ * page" report rather than a 404.
+ */
+function matchNavItem(
+  navItem: ConsoleNavItem,
+  href: string,
+): { section?: ConsoleNavSection; segments: readonly string[] } | undefined {
+  if (navItem.href === href) return { segments: [] }
+  if (!navItem.sections?.length && !navItem.ownsSubtree) return undefined
+  // On a separator boundary, so `/products` cannot claim `/products-archive`.
+  if (!href.startsWith(`${navItem.href}/`)) return undefined
+  const segments = href.slice(navItem.href.length + 1).split('/').filter(Boolean)
+  const section = navItem.sections?.find((item) => item.id === segments[0])
+  if (section) return { section, segments }
+  // An id the nav item never declared is NOT this page — unless the surface
+  // claimed the subtree, in which case the deeper segments are its own
+  // entity ids and it answers for them. Returning the nav item otherwise
+  // would render the surface's default section under a URL naming a
+  // different one, which reads to the person who typed it as the wrong page
+  // opening rather than as a typo.
+  return navItem.ownsSubtree ? { segments } : undefined
+}
+
+/**
+ * Resolves a host-relative href (e.g. '/events', '/products/orders') to the
+ * extension + nav item that owns a renderable page for it, and the section
+ * within it. The shell's generic host route uses this to render plugin pages
+ * without a per-plugin page file.
+ *
+ * ## Which registration wins (AGL-2501)
+ *
+ * LONGEST declared `href` wins, and an exact match therefore always beats a
+ * section match — an exact `href` spans the whole path, so nothing matching a
+ * prefix of it can be longer. `/products/orders` goes to a plugin that
+ * declares that path over one that declares `/products` with an `orders`
+ * section, and a prefix only matches on a SEGMENT boundary, so `/products`
+ * never claims `/products-archive`.
+ *
+ * A TIE REFUSES. Two enabled plugins matching the same path at the same length
+ * resolve to nothing, and the console 404s. Registry insertion order is an
+ * accident of which chunk loaded first, so picking from it means one
+ * workspace serves plugin A's page at a URL where another serves plugin B's —
+ * silently, and differently per session. Nobody can debug that from the
+ * symptom, so it is refused and logged instead. Two nav items of the SAME
+ * extension are not a tie: that order is authored, and the first wins as it
+ * always has.
+ *
+ * This is a rule rather than an accident because the registry is a
+ * session-wide UNION across plugins from different authors (AGL-758) — one
+ * plugin registering `/products` and another `/products/orders` is two
+ * workspaces' code meeting in one module-global, not one author's tidiness
+ * problem. Scoping is unchanged and load-bearing: every candidate still comes
+ * from `listConsoleExtensions(enabledPluginIds)`, so a plugin the current org
+ * has not enabled cannot win a path — or collide with one.
  */
 export function resolveConsolePluginPage(
   href: string,
   enabledPluginIds?: readonly PluginId[],
-): { extension: ConsoleExtension; navItem: ConsoleNavItem } | undefined {
+): ResolvedConsolePluginPage | undefined {
+  let best: ResolvedConsolePluginPage | undefined
+  /** Extensions matching at `best`'s length — more than one is the tie. */
+  let contenders: PluginId[] = []
   for (const extension of listConsoleExtensions(enabledPluginIds)) {
     for (const navItem of extension.navItems ?? []) {
-      if (navItem.Component && navItem.href === href) {
-        return { extension, navItem }
+      if (!navItem.Component) continue
+      const match = matchNavItem(navItem, href)
+      if (!match) continue
+      const bestLength = best?.navItem.href.length ?? -1
+      if (navItem.href.length > bestLength) {
+        best = { extension, navItem, ...match }
+        contenders = [extension.pluginId]
+        continue
+      }
+      // Same length, different plugin: ambiguous. Same plugin: authored order,
+      // and the first nav item keeps the path.
+      if (
+        navItem.href.length === bestLength &&
+        !contenders.includes(extension.pluginId)
+      ) {
+        contenders.push(extension.pluginId)
       }
     }
   }
-  return undefined
+  if (contenders.length > 1) {
+    // Loud, because the symptom — a 404 on a page that is plainly installed —
+    // names neither plugin. This line is the only place the collision is
+    // visible, so it carries both ids and the path they are fighting over.
+    console.error(
+      `[aglyn] console page path "${href}" is claimed by more than one ` +
+        `enabled plugin (${contenders.join(', ')}); refusing to guess which ` +
+        'one owns it. Change one plugin\'s nav item href.',
+    )
+    return undefined
+  }
+  return best
 }
 
 /** Widgets registered for a slot, across every extension (AGL-419). */

@@ -37,6 +37,7 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 import useBranding from '../hooks/use-branding'
 import useCurrentOrg from '../hooks/use-current-org'
@@ -125,17 +126,14 @@ export function OrgApiKeysCard() {
     async (method: string, body?: Record<string, unknown>) => {
       if (!orgId) return null
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch(
+      const response = await authorizedFetch(
+        user,
         method === 'GET'
           ? `/api/orgs/api-keys?orgId=${orgId}`
           : '/api/orgs/api-keys',
         {
           method,
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
+          headers: { 'Content-Type': 'application/json' },
           ...(body ? { body: JSON.stringify({ ...body, orgId }) } : {}),
         },
       )

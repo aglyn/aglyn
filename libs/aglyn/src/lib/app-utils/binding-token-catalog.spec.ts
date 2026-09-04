@@ -16,12 +16,14 @@
  */
 
 import {
+  AUTHOR_TOKEN_CATALOG,
   COLLECTION_TOKEN_CATALOG,
   datasetItemToken,
   datasetItemTokens,
   ENTRY_TOKEN_CATALOG,
 } from './binding-token-catalog'
 import { collectionEntryTokens } from './collection-entries'
+import { contentAuthorTokens } from './content-author-profile'
 import type { DatasetModel } from './dataset-models'
 
 /** `{{entry.title}}` → `entry.title` (the resolver map key). */
@@ -96,6 +98,63 @@ describe('binding token catalog (AGL-583)', () => {
       )
       expect(byToken['{{pagination.prevUrl}}']).toContain('first page')
       expect(byToken['{{pagination.nextUrl}}']).toContain('last page')
+    })
+  })
+
+  /**
+   * The author page's own tokens (AGL-2518).
+   *
+   * A THIRD catalog rather than more `{{collection.*}}` entries, because the
+   * page is not a collection listing: it is one person, and what it lists
+   * spans every collection on the site. AGL-2517 modelled it as a filtered
+   * listing and that is exactly the mistake this replaces.
+   */
+  describe('AUTHOR_TOKEN_CATALOG', () => {
+    it('covers the author page tokens', () => {
+      expect(AUTHOR_TOKEN_CATALOG.map((entry) => entry.token)).toEqual([
+        '{{author.name}}',
+        '{{author.bio}}',
+        '{{author.image}}',
+        '{{author.jobTitle}}',
+        '{{author.worksFor}}',
+        '{{author.url}}',
+        '{{author.pageUrl}}',
+        '{{author.entryCount}}',
+        '{{author.entryCountLabel}}',
+      ])
+      for (const entry of AUTHOR_TOKEN_CATALOG) {
+        expect(entry.label.length).toBeGreaterThan(0)
+        expect(entry.description?.length).toBeGreaterThan(0)
+      }
+    })
+
+    it('mirrors what the token resolver actually emits', () => {
+      // The no-drift guard the entry catalog carries, one subject over: a
+      // token listed in the picker that the resolver never emits renders as a
+      // literal `{{…}}` on a published page.
+      const emitted = Object.keys(
+        contentAuthorTokens(
+          { name: 'Ada', bio: 'b', image: 'i', jobTitle: 'j', worksFor: 'w', url: 'u' },
+          { entryCount: 2 },
+        ),
+      ).sort()
+      const listed = AUTHOR_TOKEN_CATALOG.map((entry) =>
+        entry.token.replace(/^\{\{|\}\}$/g, ''),
+      ).sort()
+      expect(listed).toEqual(emitted)
+    })
+
+    it('keeps the author’s own site distinct from their page here', () => {
+      const byToken = Object.fromEntries(
+        AUTHOR_TOKEN_CATALOG.map((entry) => [
+          entry.token,
+          entry.description ?? '',
+        ]),
+      )
+      // Two links, two destinations. A description that blurred them is how a
+      // byline ends up pointing at a personal blog instead of the archive.
+      expect(byToken['{{author.url}}']).toContain('not this page')
+      expect(byToken['{{author.pageUrl}}']).toContain('canonical')
     })
   })
 

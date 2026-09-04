@@ -2,12 +2,32 @@
  * What we actually know about Stripe's dunning schedule — and, more to the
  * point, which MODE we know it in (AGL-2430).
  *
- * Stripe's retry schedule, the Smart Retries flag, the after-the-final-retry
- * behaviour and the subscription-email toggles are **Dashboard settings held
- * independently per mode**. Test mode and live mode do not share them, and
- * this account has already been shown to diverge between modes on a
- * neighbouring setting (product tax codes were live-only until AGL-1877
- * reconciled them).
+ * ## Which settings are per mode, and which are not
+ *
+ * Stripe's **retry schedule**, the **Smart Retries** flag and the
+ * **after-the-final-retry** behaviour are Dashboard settings held
+ * independently per mode. Test mode and live mode do not share them, and this
+ * account has already been shown to diverge between modes on a neighbouring
+ * setting (product tax codes were live-only until AGL-1877 reconciled them).
+ * That is what makes an unlabelled test-mode number dangerous, and it is why
+ * this module exists.
+ *
+ * The **customer-email settings are NOT per mode** — they are account-wide.
+ * This module used to list them alongside the retry settings, which was
+ * wrong. Read in the live Dashboard on 2026-08-28 under *Settings → Billing →
+ * Subscriptions and emails*; the same block does not render in test mode at
+ * all, which replaces it with:
+ *
+ *   > Settings are hidden. Settings that affect your live integration are
+ *   > hidden in test mode.
+ *
+ * So a reader who goes looking for a per-mode difference in the email
+ * settings finds the hidden-settings notice, not a divergence — and must not
+ * read that absence as one. `email_customers_on_failed_payment` and the
+ * payment-method update link are single account-wide values.
+ *
+ * NOTE THE NARROWING, not a retirement: the retry numbers below are still
+ * per-mode measurements and still must not be quoted without their mode.
  *
  * Before this module the measured TEST-mode numbers were restated in six
  * places — the customer docs, the staff docs, the webhook comments, the
@@ -281,3 +301,63 @@ export const LIVE_STRIPE_SUBSCRIPTION_EMAIL_SETTINGS = {
  * subdomain would name an org the mail cannot know.
  */
 export const BILLING_ENTRY_URL = 'https://app.aglyn.com/billing'
+
+/**
+ * WHERE Stripe's own dunning emails send a customer.
+ *
+ * ## Why this constant exists rather than a check
+ *
+ * Stripe's failed-payment emails carry a link configured by pasting a URL into
+ * the Dashboard — Settings → Billing → Subscriptions and emails. That value is
+ * held PER MODE, exactly like the retry schedule beside it, and it is the same
+ * test/live split this module was written to stop people getting wrong.
+ *
+ * It is also **not readable through the Stripe API**. Measured against
+ * test-mode Stripe: `GET /v1/account` exposes `settings.branding`,
+ * `card_payments`, `dashboard`, `invoices`, `payments` and `payouts`, and none
+ * of them carries the customer-email link; `billing_portal/configurations`
+ * carries only the portal's own `default_return_url`. So nothing in the
+ * repository, and nothing in the health check, can read where a customer in
+ * dunning is actually being sent right now.
+ *
+ * What CAN be done is to write down where it should point, so that the value
+ * to paste is reviewed, versioned, and the same in both modes. That is this
+ * constant. `/api/health/billing` reports it so an operator comparing the two
+ * has our expectation in front of them rather than in someone's memory.
+ *
+ * The destination is the ORG-AGNOSTIC billing entry, deliberately: the link
+ * arrives by email, so the recipient is routinely signed out or signed in to
+ * the wrong workspace, and a slug-scoped URL would 404 or land them somewhere
+ * that is not theirs. That route resolves the workspace after sign-in.
+ *
+ * ## Confirmed against the live Dashboard, 2026-08-28
+ *
+ * *Settings → Billing → Subscriptions and emails → Payment method updates*
+ * holds `custom` (not `hosted`) with
+ * `redirect_update_payment_method_url = https://app.aglyn.com/billing` —
+ * this exact value. Nothing needed changing and nothing was changed; the
+ * constant pins what production already does.
+ *
+ * ⚠️ It is ACCOUNT-WIDE, not per mode (see the module header). There is one
+ * value, and it cannot be inspected from test mode.
+ *
+ * ⚠️ It is also the ONLY door. `enable_cancellation` — Stripe's "include a
+ * link for customers to manage their subscriptions" — is OFF, so a dunning
+ * email carries no self-manage link at all. Whatever this URL points at is
+ * the entire way out of that email, which is why it points at a route that
+ * works for a signed-out recipient rather than at a workspace-scoped one.
+ */
+export const DUNNING_EMAIL_RETURN_PATH = '/billing'
+
+/**
+ * The absolute URL to paste into the Stripe Dashboard, per deployment.
+ *
+ * `origin` is REQUIRED. It defaulted to Aglyn's own console, which is the
+ * wrong answer for every self-host and a silent one: an operator calling this
+ * with no argument got a URL pointing at somebody else's deployment, and the
+ * dunning email is the only door out of a failed payment. A caller that does
+ * not know its own origin should not be guessing it here.
+ */
+export function dunningEmailReturnUrl(origin: string): string {
+  return `${origin.replace(/\/+$/, '')}${DUNNING_EMAIL_RETURN_PATH}`
+}

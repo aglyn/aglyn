@@ -29,7 +29,7 @@
   <a href="https://app.aglyn.com">Console</a> &nbsp;·&nbsp;
   <a href="https://docs.aglyn.com">Docs</a> &nbsp;·&nbsp;
   <a href="CONTRIBUTING.md">Contributing</a> &nbsp;·&nbsp;
-  <a href="https://github.com/aglyn/aglyn/issues">Report a bug</a>
+  <a href="https://app.aglyn.com/manage/report-issue">Report a bug</a>
 </p>
 
 <p align="center">

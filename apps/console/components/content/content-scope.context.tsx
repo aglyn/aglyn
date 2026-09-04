@@ -38,6 +38,7 @@ import {
   limit,
   query,
   updateDoc,
+  where,
 } from 'firebase/firestore'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import {
@@ -50,10 +51,19 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import {
+  collectionPage,
+  useFirestore,
+  usePagedCollection,
+  useUser,
+} from '@aglyn/tenant-feature-instance'
+import revalidateLivePages, {
+  describeRevalidateShortfall,
+} from '../../utils/revalidate-live-pages'
 import { useHostId, useHostSubdomain } from '../host-id-provider'
 import { buildRoute, Route } from '../../constants/route-links'
 import { hasEntitlement } from '../../constants/entitlements'
+import { TABLE_PAGE_SIZE_DEFAULT } from '../../constants/shared'
 import { useOrgSlug } from '../../hooks/use-org-scope'
 import useCurrentOrg from '../../hooks/use-current-org'
 import useFirestoreCollection from '../../hooks/use-firestore-collection'
@@ -189,9 +199,17 @@ export interface ContentScope {
   selected: any
   /** The raw segment from the URL — a slug, or a legacy document id. */
   routeCollectionKey: string | null
+  /** ONE PAGE of the selected collection's entries, in the order read. */
   entries: any[]
   entriesStatus: string
   entriesFromCache: boolean
+  /** A further page exists — a FACT from the probe row, not a guess. */
+  entriesHasMore: boolean
+  /** Zero-based, to match MUI's footer. */
+  entryPage: number
+  setEntryPage: (page: number) => void
+  entriesPerPage: number
+  setEntriesPerPage: (pageSize: number) => void
   categories: Array<{ id: string; name: string }>
   authors: Aglyn.ContentAuthorRecord[]
   screenOptions: any[]
@@ -207,6 +225,12 @@ export interface ContentScope {
   claimNavigation: (key: string) => void
 
   /* ── shared entry actions ──────────────────────────────────────────── */
+  /**
+   * Drop the live site's caches for this collection after an entry changed —
+   * best effort, never awaited. `entrySlugs` names the entry's own address,
+   * and its previous one too when a save renamed it.
+   */
+  announceEntryChange: (entrySlugs?: string[]) => void
   togglePublish: (entry: any) => Promise<void>
   deleteEntry: (entry: any) => Promise<boolean>
   openScheduler: (entry: any) => void
@@ -223,6 +247,80 @@ export function useContentScope(): ContentScope {
     throw new Error('useContentScope must be used inside ContentScopeProvider')
   }
   return scope
+}
+
+/**
+ * The entry already publishing at `slug` in this collection.
+ *
+ * At most two documents: the entry being edited, which may already own the
+ * address it is being re-saved with, plus whichever other entry holds it.
+ * Nothing else has to be read to answer "is this address taken".
+ */
+const SLUG_OWNER_PROBE = 2
+
+/** {@link useEntrySlugOwner}'s answer: who holds the address, and its name. */
+export interface EntrySlugOwner {
+  /** The colliding entry's id, `''` for one with no id, or `null` for none. */
+  ownerId: string | null
+  /** That entry's title, when the probe carried one. */
+  ownerTitle: string | undefined
+}
+
+/**
+ * Is another entry in this collection already at `slug`?
+ *
+ * ## Why this is a KEYED read and not a scan
+ *
+ * The tenant resolves an entry with `where('slug','==',…)` and takes the
+ * first match, so two entries at one address means one of them is simply
+ * unreachable — with nothing anywhere saying so. Answering that from the
+ * list the console happens to be holding makes the check a function of the
+ * WINDOW rather than of the collection: over a page of ten it would miss
+ * every collision outside those ten and report a free address that is taken.
+ *
+ * So it asks the question it means. One equality on `slug`, capped at
+ * {@link SLUG_OWNER_PROBE}, answered against the whole collection and
+ * independent of which page is on screen. `slug` is a single field, so
+ * Firestore's automatic per-field index serves it and no composite index is
+ * owed.
+ *
+ * `exceptId` is the entry being edited: re-saving a post without touching its
+ * address must not collide with itself.
+ */
+export function useEntrySlugOwner(
+  slug: string,
+  exceptId?: string | null,
+): EntrySlugOwner {
+  const { hostId, selected } = useContentScope()
+  const firestore = useFirestore()
+  const { data: matches } = useFirestoreCollection<any>(
+    () =>
+      slug && selected?.$id
+        ? query(
+            collection(
+              firestore,
+              'hosts',
+              hostId,
+              'collections',
+              selected.$id,
+              'entries',
+            ),
+            where('slug', '==', slug),
+            limit(SLUG_OWNER_PROBE),
+          )
+        : null,
+    [firestore, hostId, selected?.$id, slug],
+    { idField: '$id' },
+  )
+  return useMemo(() => {
+    const ownerId = Aglyn.findEntrySlugOwner(slug, matches, exceptId)
+    return {
+      ownerId,
+      ownerTitle: (matches ?? []).find(
+        (item: any) => String(item.$id) === ownerId,
+      )?.title,
+    }
+  }, [slug, matches, exceptId])
 }
 
 export function ContentScopeProvider({ children }: { children: ReactNode }) {
@@ -480,18 +578,52 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
 
   /* ── the entries of the selected collection ────────────────────────── */
 
+  /**
+   * ONE PAGE of the collection's entries — the window IS the query.
+   *
+   * `usePagedCollection` widens the listener to cover page 0..n plus a single
+   * probe row, so the list bills what it draws and the rows past the first
+   * page are reachable by asking for them. A capped read the browser then
+   * sliced is the other shape, and it is wrong twice over: every mount pays
+   * for documents nobody renders, and the entries past the cap are not merely
+   * unrendered but UNREACHABLE, because nothing draws them and nothing asks
+   * for more.
+   *
+   * ## The order is the document NAME, and cannot be a field
+   *
+   * `collectionPage` carries `orderBy(documentId())`. Ordering on `createdAt`
+   * — the field this list reads by — would not mis-sort it, it would HIDE
+   * rows from it: `orderBy` matches only documents that HAVE the field, and
+   * `/api/hosts/import` writes entries through `cleanDoc`, whose
+   * `IMPORTABLE_FIELDS.entries` allow-list carries no `createdAt` and which
+   * stamps `updatedAt` alone. A restored archive would vanish from its own
+   * collection. A document's name cannot be absent, so id order drops nothing
+   * and the walk is TOTAL.
+   *
+   * ## The page is handed on in the order it was read
+   *
+   * Re-sorting a slice of an id-ordered walk tells the same lie an unordered
+   * cap does: rows would run in one order within a page and another across
+   * pages, and the first page would still not be the first page of anything.
+   * See `collectionPage` for the whole of that reasoning.
+   */
   const {
-    data: entryDocs,
+    rows: entries,
+    hasMore: entriesHasMore,
+    page: entryPage,
+    setPage: setEntryPage,
+    pageSize: entriesPerPage,
+    setPageSize: setEntriesPerPage,
     /**
-     * The seed the entry editor is populated from (AGL-1449). Both are fed to
-     * `writeGuardedBySeed` on save — read and dropped is how a guard becomes
-     * decoration.
+     * The health of the window itself. The entry editor guards its save
+     * against the ENTRY's own read rather than this one — a page of ten says
+     * nothing about a document that is not on it.
      */
     status: entriesStatus,
     fromCache: entriesFromCache,
-  } = useFirestoreCollection<any>(
-    () =>
-      query(
+  } = usePagedCollection<any>(
+    (pageLimit) =>
+      collectionPage(
         collection(
           firestore,
           'hosts',
@@ -500,17 +632,10 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
           selected?.$id ?? '-none-',
           'entries',
         ),
-        limit(200),
+        pageLimit,
       ),
     [firestore, hostId, selected?.$id],
-    { idField: '$id' },
-  )
-  const entries = useMemo(
-    () =>
-      [...(entryDocs ?? [])].sort(
-        (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0),
-      ),
-    [entryDocs],
+    { idField: '$id', pageSize: TABLE_PAGE_SIZE_DEFAULT },
   )
 
   // Category taxonomy (AGL-582): `{ id, name }` pairs on the COLLECTION doc.
@@ -553,6 +678,55 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
     [firestore, hostId, selected?.$id],
   )
 
+  /**
+   * Tell the live site that an entry changed.
+   *
+   * The content half of the publish drop every besigner surface performs
+   * (AGL-1150 and after). It was missing here, and the omission is invisible
+   * in exactly the way the arc's other omissions were: the write lands, the
+   * console shows it immediately from its own listener, and the site keeps
+   * serving the old post for the rest of the window while nothing anywhere
+   * says so.
+   *
+   * The window is the LONGER of the two, not the page's. A routed entry page
+   * regenerates on the catch-all's ten-minute ISR window, but a Collection
+   * entries rail elsewhere on the site reads the compose-time collection
+   * source, which is cached for an hour under `tenant-data:{hostId}` — so a
+   * new post could sit on `/blog/my-post` for fifty minutes while the home
+   * page's "Latest" strip still led with the one before it. Only the tenant
+   * route can bust that tag, and the console route is what reaches it.
+   *
+   * ONE definition, because both surfaces change entries: the list's row menu
+   * publishes, unpublishes, re-dates and deletes, and the detail page saves.
+   * Per-caller copies of this call are the shape AGL-1150 spent three issues
+   * removing.
+   *
+   * Live entries only, at the caller's discretion — a draft is not on the
+   * site, so there is no cached page of it to drop and no shortfall worth
+   * reporting about one.
+   *
+   * BEST EFFORT, never awaited. The write has already landed, so a cache hint
+   * that fails must not make a successful save look failed; the caches expire
+   * underneath it either way.
+   */
+  const announceEntryChange = useCallback(
+    (entrySlugs: string[] = []) => {
+      if (!selected) return
+      void revalidateLivePages({
+        user,
+        hostId,
+        collectionId: selected.$id,
+        entrySlugs: entrySlugs.filter(Boolean),
+      }).then((result) => {
+        // "Saved", not "Published": most of what reaches here is an edit to a
+        // post that was already live, and the two are different acts.
+        const shortfall = describeRevalidateShortfall(result, 'Saved.')
+        if (shortfall) enqueueSnackbar(shortfall, { variant: 'info' })
+      })
+    },
+    [user, hostId, selected, enqueueSnackbar],
+  )
+
   const togglePublish = useCallback(
     async (entry: any) => {
       if (!selected) return
@@ -591,8 +765,12 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
         id: entry.$id,
         name: entry.title,
       })
+      // Unconditional: both directions change what the site serves — one adds
+      // the post to every listing that shows it, the other takes it away and
+      // leaves its own address cached as a page that no longer exists.
+      announceEntryChange([entry.slug])
     },
-    [selected, entryRef, enqueueSnackbar, logActivity],
+    [selected, entryRef, enqueueSnackbar, logActivity, announceEntryChange],
   )
 
   /**
@@ -624,9 +802,20 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
         id: entry.$id,
         name: entry.title,
       })
+      // A deleted DRAFT was never on the site; a deleted live entry leaves its
+      // own address cached as a page whose document is gone, and its listings
+      // still advertising it.
+      if (entry.status !== 'draft') announceEntryChange([entry.slug])
       return true
     },
-    [selected, confirm, entryRef, enqueueSnackbar, logActivity],
+    [
+      selected,
+      confirm,
+      entryRef,
+      enqueueSnackbar,
+      logActivity,
+      announceEntryChange,
+    ],
   )
 
   /* ── the two date dialogs, owned here ──────────────────────────────── */
@@ -715,6 +904,9 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
       id: scheduler.entry.$id,
       name: scheduler.entry.title,
     })
+    // A future `publishAt` takes a published entry back OFF the live set until
+    // the date arrives, so scheduling one is a change the site has to see.
+    announceEntryChange([scheduler.entry.slug])
     setScheduler(null)
   }, [
     scheduler,
@@ -724,6 +916,7 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
     orgReady,
     enqueueSnackbar,
     logActivity,
+    announceEntryChange,
   ])
 
   /**
@@ -774,8 +967,20 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
       id: publishDate.entry.$id,
       name: publishDate.entry.title,
     })
+    // `publishedAt` is both `Article.datePublished` and the key every listing
+    // sorts on, so re-dating a live post moves it in every list that shows it.
+    if (publishDate.entry.status !== 'draft') {
+      announceEntryChange([publishDate.entry.slug])
+    }
     setPublishDate(null)
-  }, [publishDate, selected, entryRef, enqueueSnackbar, logActivity])
+  }, [
+    publishDate,
+    selected,
+    entryRef,
+    enqueueSnackbar,
+    logActivity,
+    announceEntryChange,
+  ])
 
   /* ── the category manager, opened from both surfaces ───────────────── */
 
@@ -793,8 +998,13 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
         doc(firestore, 'hosts', hostId, 'collections', selected.$id),
         { categories: next },
       )
+      // A category's NAME is its listing address — `/blog/category/{slug}` is
+      // built from it — and it is the label every pill strip and entry meta
+      // block prints. Renaming or removing one therefore changes live pages
+      // exactly as an entry does, and needs the same announcement.
+      announceEntryChange()
     },
-    [selected, firestore, hostId],
+    [selected, firestore, hostId, announceEntryChange],
   )
   const handleAddCategory = useCallback(async () => {
     const name = newCategoryName.trim()
@@ -866,6 +1076,11 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
       entries,
       entriesStatus,
       entriesFromCache,
+      entriesHasMore,
+      entryPage,
+      setEntryPage,
+      entriesPerPage,
+      setEntriesPerPage,
       categories,
       authors,
       screenOptions,
@@ -876,6 +1091,7 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
       entryHref,
       claimNavigation,
       togglePublish,
+      announceEntryChange,
       deleteEntry,
       openScheduler,
       openPublishDate,
@@ -894,6 +1110,11 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
       entries,
       entriesStatus,
       entriesFromCache,
+      entriesHasMore,
+      entryPage,
+      setEntryPage,
+      entriesPerPage,
+      setEntriesPerPage,
       categories,
       authors,
       screenOptions,
@@ -904,6 +1125,7 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
       entryHref,
       claimNavigation,
       togglePublish,
+      announceEntryChange,
       deleteEntry,
       openScheduler,
       openPublishDate,

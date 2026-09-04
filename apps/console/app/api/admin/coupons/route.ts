@@ -30,11 +30,22 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
  *
  *   GET  — lists existing Stripe coupons (with any promotion codes) so the
  *          staff Coupons page and the per-org apply picker can show them.
- *   POST — creates a Stripe coupon (percent OR fixed amount; once/repeating/
- *          forever; optional max redemptions and expiry) and, when a code is
- *          given, a promotion code customers can type at checkout. A
- *          ≥`DISCOUNT_APPROVAL_THRESHOLD_PCT`% coupon needs an explicit
- *          `confirmHighDiscount` flag. Audited to `adminAudit`.
+ *   POST — dispatches on `action`, defaulting to `create`:
+ *
+ *          `create` builds a Stripe coupon (percent OR fixed amount; once/
+ *          repeating/forever; optional max redemptions and expiry) and, when
+ *          a code is given, a promotion code customers can type at checkout.
+ *          A ≥`DISCOUNT_APPROVAL_THRESHOLD_PCT`% coupon needs an explicit
+ *          `confirmHighDiscount` flag.
+ *
+ *          `activate` / `deactivate` flip `active` on an existing promotion
+ *          code named by `promotionCodeId`. Checkout resolves a typed code
+ *          with `active=true`, so an inactive code is reported to the
+ *          customer as unrecognized — the flip back is a customer-facing
+ *          repair, and it belongs here rather than in a Stripe Dashboard
+ *          session no audit trail can see.
+ *
+ *          Both actions are audited to `adminAudit`.
  *
  * StaffGuard-gated (staff claim); 501 without Stripe env. Uses Stripe's REST
  * API directly, matching the rest of the billing routes (no SDK).
@@ -54,6 +65,25 @@ async function stripe(
   })
   const body = await response.json().catch(() => ({}))
   return { ok: response.ok, status: response.status, body }
+}
+
+/**
+ * The documented shape of a Stripe promotion code id. The id is interpolated
+ * into the Stripe request path, so it is matched rather than passed through —
+ * an unconstrained string would let a caller address a different Stripe
+ * resource entirely.
+ */
+const PROMOTION_CODE_ID = /^promo_[A-Za-z0-9]+$/
+
+/** Shape one Stripe promotion code for the console. */
+function serializePromotionCode(code: any) {
+  return {
+    id: code.id as string,
+    code: code.code as string,
+    active: code.active === true,
+    timesRedeemed: code.times_redeemed ?? 0,
+    maxRedemptions: code.max_redemptions ?? null,
+  }
 }
 
 /** Shape one Stripe coupon (+ any promotion codes) for the console. */
@@ -78,13 +108,7 @@ function serializeCoupon(coupon: any, promotionCodes: any[] = []) {
       : null,
     codes: promotionCodes
       .filter((code) => code?.coupon?.id === coupon.id || code?.coupon === coupon.id)
-      .map((code) => ({
-        id: code.id as string,
-        code: code.code as string,
-        active: code.active === true,
-        timesRedeemed: code.times_redeemed ?? 0,
-        maxRedemptions: code.max_redemptions ?? null,
-      })),
+      .map(serializePromotionCode),
   }
 }
 
@@ -133,6 +157,101 @@ async function handler(request: Request): Promise<Response> {
 
     if (method !== 'POST') {
       return Response.json({ error: 'Method not allowed' }, { status: 405 })
+    }
+
+    const action = String(body?.action ?? 'create')
+
+    // ---- Flip an existing promotion code's redeemability ----
+    if (action === 'activate' || action === 'deactivate') {
+      const promotionCodeId = String(body?.promotionCodeId ?? '').trim()
+      if (!PROMOTION_CODE_ID.test(promotionCodeId)) {
+        return Response.json({ error: 'Bad promotionCodeId' }, { status: 400 })
+      }
+      const active = action === 'activate'
+
+      // Read before writing: the audit row's `before` has to be the state
+      // Stripe actually held, not the state the caller assumed, and an
+      // unknown id has to fail before anything is written.
+      const current = await stripe(
+        secretKey,
+        `promotion_codes/${promotionCodeId}`,
+      )
+      if (!current.ok) {
+        return Response.json(
+          {
+            error:
+              current.body?.error?.message ?? 'Promotion code lookup failed',
+          },
+          { status: current.status === 404 ? 404 : 502 },
+        )
+      }
+      const wasActive = current.body?.active === true
+
+      // The same sign-off creation asks for: making a ≥threshold discount
+      // redeemable again is the same revenue commitment as minting it.
+      // Deactivating carries no gate — it can only shrink what is redeemable,
+      // and a gate on the safe direction would slow the repair down.
+      const percentOff = current.body?.coupon?.percent_off
+      if (
+        active &&
+        typeof percentOff === 'number' &&
+        percentOff >= DISCOUNT_APPROVAL_THRESHOLD_PCT &&
+        body?.confirmHighDiscount !== true
+      ) {
+        return Response.json(
+          {
+            error:
+              `Activating a ${percentOff}% code needs sign-off (≥` +
+              `${DISCOUNT_APPROVAL_THRESHOLD_PCT}%). Re-submit with ` +
+              `confirmHighDiscount to proceed.`,
+            requiresConfirmation: true,
+          },
+          { status: 400 },
+        )
+      }
+
+      const updated = await stripe(
+        secretKey,
+        `promotion_codes/${promotionCodeId}`,
+        { active: String(active) },
+      )
+      if (!updated.ok) {
+        return Response.json(
+          {
+            error:
+              updated.body?.error?.message ?? 'Promotion code update failed',
+          },
+          { status: 502 },
+        )
+      }
+
+      await firebaseAdmin
+        .app()
+        .firestore()
+        .collection('adminAudit')
+        .add({
+          actorUid: decoded.uid,
+          action: 'coupon.promotion_code.update',
+          target: `stripe/promotion_codes/${promotionCodeId}`,
+          before: { active: wasActive },
+          after: {
+            active: updated.body?.active === true,
+            code: updated.body?.code ?? null,
+            couponId: updated.body?.coupon?.id ?? null,
+          },
+          at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+        })
+
+      // Answer with a fresh read of what was written, so the console renders
+      // Stripe's state rather than the state it asked for.
+      return Response.json(
+        { code: serializePromotionCode(updated.body) },
+        { status: 200 },
+      )
+    }
+
+    if (action !== 'create') {
+      return Response.json({ error: 'Unknown action' }, { status: 400 })
     }
 
     // ---- Validate the requested coupon shape ----

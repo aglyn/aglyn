@@ -156,6 +156,12 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     sendGa4Purchase: async () => undefined,
     sendGa4Refund: async () => undefined,
     sendGa4SubscriptionCancelled: async () => undefined,
+    // The subscription lifecycle entry (AGL-118). A no-op IS the contract: the
+    // real one swallows its own failures and the route does not branch on it.
+    // Named explicitly because this factory is a closed world — an absent
+    // export is `undefined`, the route throws into its half-applied catch, and
+    // the delivery reads as broken for a reason nothing here is testing.
+    logOrgActivity: async () => undefined,
     writeOrgBilling: async (...args: unknown[]) => mockWriteOrgBilling(...args),
     updateExisting: (...args: unknown[]) => mockUpdateExisting(...args),
   }

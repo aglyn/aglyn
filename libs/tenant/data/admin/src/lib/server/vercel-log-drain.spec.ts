@@ -227,6 +227,79 @@ describe('the drain receiver ingest path (AGL-1921)', () => {
   })
 
   /*========================================================================
+   * THE DELIBERATE 503. `/api/locked` answers a takedown with a real 503 on
+   * purpose; forwarded, a suspended host being crawled reads as an outage.
+   *======================================================================*/
+
+  it('DROPS the lockdown notice 503 — that status is the feature', async () => {
+    const fetchMock = mockFetch()
+    const mod = await load()
+    // The shape the middleware produces: every path of a locked host is
+    // rewritten here, so `path` is the route and the visitor's URL is gone.
+    const notice = {
+      id: '3',
+      source: 'lambda',
+      host: 'acme.aglyn.app',
+      level: 'error',
+      statusCode: 503,
+      path: mod.LOCKDOWN_NOTICE_ROUTE_PATH,
+      proxy: { method: 'GET', statusCode: 503, path: mod.LOCKDOWN_NOTICE_ROUTE_PATH },
+    }
+    const result = await mod.ingestDrainDelivery([notice])
+    expect(result).toMatchObject({ received: 1, matched: 0, forwarded: 0 })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('drops it on proxy.path alone, query and all', async () => {
+    const mod = await load()
+    expect(
+      mod.isLockdownNoticeEntry({
+        proxy: {
+          statusCode: 503,
+          path: `${mod.LOCKDOWN_NOTICE_ROUTE_PATH}?host=acme.aglyn.app`,
+        },
+      }),
+    ).toBe(true)
+  })
+
+  it('still forwards a lockdown notice that is itself BROKEN', async () => {
+    // The exemption must not make the route unwatchable: if the notice throws
+    // or its lambda dies, a locked host serves nothing at all and that is a
+    // real incident.
+    const fetchMock = mockFetch()
+    const mod = await load()
+    const base = {
+      id: '4',
+      source: 'lambda',
+      host: 'acme.aglyn.app',
+      path: mod.LOCKDOWN_NOTICE_ROUTE_PATH,
+    }
+    expect(mod.isLockdownNoticeEntry({ ...base, statusCode: 500 })).toBe(false)
+    expect(mod.isLockdownNoticeEntry({ ...base, statusCode: -1 })).toBe(false)
+    expect(
+      mod.isLockdownNoticeEntry({ ...base, statusCode: 503, level: 'fatal' }),
+    ).toBe(false)
+
+    const result = await mod.ingestDrainDelivery([{ ...base, statusCode: 500 }])
+    expect(result).toMatchObject({ matched: 1, forwarded: 1 })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('exempts ONLY that path — a 503 anywhere else is still an outage', async () => {
+    const mod = await load()
+    expect(
+      mod.isLockdownNoticeEntry({ statusCode: 503, path: '/api/health' }),
+    ).toBe(false)
+    // Matched exactly, not as a prefix: a future child route carries no such
+    // guarantee about its status.
+    expect(
+      mod.isLockdownNoticeEntry({ statusCode: 503, path: '/api/locked/debug' }),
+    ).toBe(false)
+    // A 503 the platform served with no route attached stays forwardable.
+    expect(mod.isLockdownNoticeEntry({ statusCode: 503 })).toBe(false)
+  })
+
+  /*========================================================================
    * THE FEEDBACK LOOP. The receiver runs on the console, whose logs this
    * same drain collects.
    *======================================================================*/

@@ -31,6 +31,7 @@ import {
   PUBLISHER_ATTESTATION,
   requiredAttestationIds,
 } from '@aglyn/aglyn/app-utils/publisher-attestation'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../../constants/docs-links'
 
 export interface PublisherVersion {
@@ -156,15 +157,11 @@ export function ListingReviewStatus(props: ListingReviewStatusProps) {
     if (!listingId || !isPlugin) return undefined
     void (async () => {
       try {
-        const idToken = await (
-          user as { getIdToken?: () => Promise<string> }
-        )?.getIdToken?.()
-        if (!idToken) return
-        const response = await fetch(
+        const response = await authorizedFetch(
+          user,
           `/api/marketplace/listing-versions?scope=publisher&listingId=${encodeURIComponent(
             listingId,
           )}`,
-          { headers: { Authorization: `Bearer ${idToken}` } },
         )
         if (!response.ok) {
           if (!cancelled) setFailed(true)

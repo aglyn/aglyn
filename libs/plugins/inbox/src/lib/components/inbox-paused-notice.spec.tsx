@@ -38,6 +38,7 @@
 import { render } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { InboxConsolePage } from './inbox-console-page'
+import { INBOX_CONSOLE_SECTIONS } from './inbox-console-sections'
 
 /** The month key the submit route writes, derived exactly as it derives it. */
 const MONTH = new Date().toISOString().slice(0, 7)
@@ -56,6 +57,19 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useFirestoreCollection: () => ({
     data: [],
+    status: 'success',
+    fromCache: false,
+  }),
+  // The submissions table pages its own query (AGL-2501). A double that stubs
+  // only the collection hook leaves the page calling `undefined`, which fails
+  // as a crash rather than as the notice being wrong.
+  usePagedCollection: () => ({
+    rows: [],
+    hasMore: false,
+    page: 0,
+    setPage: jest.fn(),
+    pageSize: 10,
+    setPageSize: jest.fn(),
     status: 'success',
     fromCache: false,
   }),
@@ -87,25 +101,45 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
     confirm: jest.fn().mockResolvedValue(undefined),
   }),
 }))
-// Only the ACTIVE tab's panel renders, which is why the notice under test
-// sits outside the tabs; this stub keeps that honest by rendering the first
-// tab's content only, exactly as the real component would on arrival.
+// Only the section the URL names renders (AGL-2501), which is why the notice
+// under test sits outside the rail. The stub draws the rail's own chrome away
+// and passes the section body through, so what the assertions read is the page
+// minus the navigation.
 jest.mock('@aglyn/shared-ui-next', () => ({
-  HubTabs: ({ tabs }: { tabs: Array<{ content: ReactNode }> }) => (
-    <div>{tabs[0]?.content}</div>
-  ),
+  HubSections: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }))
-jest.mock('@aglyn/plugins-email/components/campaigns-card', () => ({
+jest.mock('@aglyn/plugins-marketing/components/campaigns-card', () => ({
   __esModule: true,
   default: () => null,
 }))
-jest.mock(
-  '@aglyn/plugins-commerce/components/console/host-orders-card.component',
-  () => ({ __esModule: true, default: () => null }),
-)
 
-const renderPage = () =>
-  render(<InboxConsolePage hostId="host-1" entitled />)
+const BASE_PATH = '/acme/hosts/shop/inbox'
+
+/** The section list the shell resolves from the plugin's own declaration. */
+const shellSections = () =>
+  INBOX_CONSOLE_SECTIONS.map((section) => ({
+    id: section.id,
+    label: section.label,
+    href: `${BASE_PATH}/${section.id}`,
+    visible: true,
+  }))
+
+/**
+ * The page as the shell mounts it: a section named by the URL, the resolved
+ * rail, and the surface's own path. Defaults to the landing section, which is
+ * where the notification linking to `/inbox` puts an owner.
+ */
+const renderPage = (section = 'submissions') =>
+  render(
+    <InboxConsolePage
+      hostId="host-1"
+      entitled
+      basePath={BASE_PATH}
+      sections={shellSections()}
+      section={section}
+      segments={[section]}
+    />,
+  )
 
 beforeEach(() => {
   counters = {}
@@ -129,15 +163,26 @@ describe('AGL-1666 · the inbox says when a form is paused', () => {
     expect(text).toContain('Submissions start being accepted again on')
   })
 
-  it('renders it as a warning, above the tabs, where arriving lands', () => {
+  it('renders it as a warning, above the rail, where arriving lands', () => {
     counters.formSubmissionsRefused = { [MONTH]: 412, ceiling: 5000 }
     const { container } = renderPage()
     const alert = container.querySelector('[role="alert"]')
     expect(alert).not.toBeNull()
     expect(alert?.className).toContain('Warning')
-    // Outside every tab panel: the notification that brings an owner here
-    // links to the page, and the last tab they used may not be Submissions.
     expect(alert?.textContent).toContain('Form submissions are paused')
+  })
+
+  it('shows it on every section, not only the one the forms are on', () => {
+    /*
+     * Sections are ROUTES (AGL-2501), so a link can land an owner anywhere
+     * in the surface. A notice moved inside the Submissions body would go
+     * quiet for exactly the reader who followed a campaign link — and "why
+     * did my inbox stop filling" is the question this notice exists to
+     * answer wherever it is asked.
+     */
+    counters.formSubmissionsRefused = { [MONTH]: 412, ceiling: 5000 }
+    const { container } = renderPage('campaigns')
+    expect(container.textContent).toContain('Form submissions are paused')
   })
 
   it('shows nothing when the site has never been refused', () => {

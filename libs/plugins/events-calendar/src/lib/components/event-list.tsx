@@ -271,6 +271,7 @@ export const schema: Aglyn.ComponentSchema<EventListProps> = {
       description: 'Maximum events shown (default 10).',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'Max items',
+      type: 'number',
     },
   ],
 }

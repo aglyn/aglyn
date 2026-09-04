@@ -172,6 +172,68 @@ function buildMetadata(props: Props): Metadata {
     }
   }
 
+  /**
+   * The author page (AGL-2518): the PERSON drives the head.
+   *
+   * Their name is what the page is CALLED rather than an authored title, so
+   * it keeps the site title after it through the shared resolver — the
+   * AGL-1341 rule, same as a collection listing's name.
+   *
+   * A page past the last one, or a slug naming nobody, never reaches here:
+   * the loader 404s both. What DOES reach here is a real author with nothing
+   * published, and that page is indexable — a masthead entry for someone who
+   * has not written yet is a true page about a real person.
+   */
+  if (props.author) {
+    const author = props.author
+    const record = author.record
+    const authorBase = Aglyn.hostPublicOrigin(host)
+    const authorCanonical = authorBase
+      ? authorBase +
+        Aglyn.contentAuthorPageAtUrl({
+          ...(record ? { author: record } : { authorName: author.slug }),
+          page: author.page,
+        })
+      : undefined
+    const authorTitle = titleFor({ name: author.name })
+    // The bio, which is the one sentence on the record written to describe
+    // this person to a stranger — exactly what a search snippet wants.
+    const authorDescription = record?.bio?.trim() || undefined
+    const authorImage = Aglyn.absoluteMediaSrc(record?.image, {
+      hostId: host?.$id,
+      origin: authorBase,
+    })
+    return {
+      title: authorTitle,
+      ...(authorDescription ? { description: authorDescription } : {}),
+      // Paged archives stay indexable, like the collection listing's — they
+      // are distinct sets of posts, not duplicates of page 1.
+      ...(searchDiscouraged
+        ? { robots: { index: false, follow: true } }
+        : {}),
+      ...(authorCanonical
+        ? { alternates: { canonical: authorCanonical } }
+        : {}),
+      openGraph: {
+        title: authorTitle,
+        ...(authorDescription ? { description: authorDescription } : {}),
+        // `profile`, not `website`: the subject of the page is a person.
+        type: 'profile',
+        ...(authorCanonical ? { url: authorCanonical } : {}),
+        ...(authorImage ? { images: [authorImage] } : {}),
+        ...(siteTitle ? { siteName: siteTitle } : {}),
+      },
+      twitter: {
+        // `summary`, never `summary_large_image`: the image here is a
+        // PORTRAIT, and the wide card crops a square face to a letterbox.
+        card: 'summary',
+        title: authorTitle,
+        ...(authorDescription ? { description: authorDescription } : {}),
+        ...(authorImage ? { images: [authorImage] } : {}),
+      },
+    }
+  }
+
   // Content collections (AGL-81/117): entry metadata drives the head.
   // Entry model v2 (AGL-582): per-entry SEO overrides with title/excerpt
   // fallbacks, and the cover image as the social card.
@@ -458,6 +520,62 @@ function buildJsonLd(props: Props): string[] {
   // and a number is always false; nothing here could ever have said Person.
   const publisher = Aglyn.hostSeoEntityJsonLd(host?.seo?.entity)
 
+  /**
+   * The author page → `ProfilePage` wrapping the `Person` (AGL-2518).
+   *
+   * `ProfilePage` is the type schema.org defines for "a page about one
+   * person or organization", and its `mainEntity` is the entity itself — so
+   * the author record serializes through the SAME builder that writes
+   * `Article.author` on every post they wrote (`contentAuthorJsonLd`). One
+   * `Person` shape, two places, which is what lets a crawler join the byline
+   * on an article to the page that collects them.
+   *
+   * No `ItemList` of their posts beside it. A collection listing emits one
+   * because the list IS what that page is; here the page is the PERSON, and
+   * every post already names them as its `Article.author` from its own page —
+   * which is the edge a crawler follows, and the one that stays true when
+   * this archive paginates.
+   */
+  if (props.author) {
+    const author = props.author
+    const record = author.record
+    const person = Aglyn.contentAuthorJsonLd(record, {
+      origin: canonicalBase,
+      hostId: host?.$id,
+    })
+    if (!canonicalBase || !person) return []
+    const authorUrl =
+      canonicalBase +
+      Aglyn.contentAuthorPageAtUrl({
+        ...(record ? { author: record } : { authorName: author.slug }),
+        page: author.page,
+      })
+    return [
+      Aglyn.safeJsonLd({
+        '@context': 'https://schema.org',
+        '@type': 'ProfilePage',
+        url: authorUrl,
+        name: author.name,
+        mainEntity: person,
+        // The site entity WITH its mark, the same shape the Article branch
+        // publishes (AGL-2534). This spread was the bare `publisher` — so an
+        // author page named the publisher and an article by that author
+        // pictured it, from one `host.seo.entity`. `logo` for an
+        // Organization, `image` for a Person; the helper picks, because
+        // schema.org gives `logo` only to the first.
+        ...(publisher && {
+          publisher: {
+            ...publisher,
+            ...Aglyn.hostSeoEntityImageJsonLd(host?.seo?.entity, {
+              origin: canonicalBase,
+              hostId: host?.$id,
+            }),
+          },
+        }),
+      }),
+    ]
+  }
+
   // Content entry → Article; collection list → ItemList (AGL-660).
   if (props.content) {
     const content = props.content as any
@@ -481,7 +599,42 @@ function buildJsonLd(props: Props): string[] {
       // naming and addressing it as the whole collection would tell a crawler
       // that five different pages are all the same list.
       const listCategory = content.category
+      /*
+        A FILTERED listing gets a breadcrumb; the bare one does not
+        (AGL-2535).
+
+        `/blog/category/guides` has a real parent — the collection — so the
+        trail is two deep and worth publishing. `/blog` is one crumb, which
+        `breadcrumbListJsonLd` declines: a single-element list is the page
+        restating its own title, and Google treats it as ineligible.
+      */
+      const listCrumbs = listCategory
+        ? Aglyn.breadcrumbListJsonLd(
+            [
+              {
+                name: content.collection?.displayName ?? collectionSlug,
+                path: Aglyn.collectionListUrl({ collectionSlug }),
+              },
+              {
+                name: listCategory.name,
+                path: Aglyn.collectionListUrl({
+                  collectionSlug,
+                  categorySlug: listCategory.slug,
+                }),
+              },
+            ],
+            canonicalBase,
+          )
+        : undefined
       return [
+        ...(listCrumbs
+          ? [
+              Aglyn.safeJsonLd({
+                '@context': 'https://schema.org',
+                ...listCrumbs,
+              }),
+            ]
+          : []),
         Aglyn.safeJsonLd({
           '@context': 'https://schema.org',
           '@type': 'ItemList',
@@ -554,10 +707,60 @@ function buildJsonLd(props: Props): string[] {
       entry.author ?? Aglyn.resolveEntryAuthor(entry),
       { origin: canonicalBase, hostId: host?.$id },
     )
+    /*
+      The entry's own trail (AGL-2535): the collection, then this piece.
+
+      Two deep, with both names already resolved — `collection.displayName`
+      and the entry's `title`. Nothing on a content route published a
+      breadcrumb before this, which meant the deepest URLs on the site, and
+      the ones a breadcrumb actually helps in a result, were the only ones
+      without.
+
+      Named from the DISPLAY values rather than the path segments. The screen
+      builder further down splits the routing map and so publishes slugs; here
+      the headline is in hand, and `from-a-form-to-a-dataset-in-five-minutes`
+      is not a crumb name.
+    */
+    const entryCrumbs = collectionSlug
+      ? Aglyn.breadcrumbListJsonLd(
+          [
+            {
+              name: content.collection?.displayName ?? collectionSlug,
+              path: Aglyn.collectionListUrl({ collectionSlug }),
+            },
+            { name: entry.title, path: `/${collectionSlug}/${entry.slug}` },
+          ],
+          canonicalBase,
+        )
+      : undefined
     return [
+      ...(entryCrumbs
+        ? [
+            Aglyn.safeJsonLd({
+              '@context': 'https://schema.org',
+              ...entryCrumbs,
+            }),
+          ]
+        : []),
       Aglyn.safeJsonLd({
         '@context': 'https://schema.org',
-        '@type': 'Article',
+        /*
+          The collection says what KIND of article this is (AGL-2536).
+
+          Every entry published as a bare `Article` before this, whatever it
+          was — so a press release, a blog post and a changelog note
+          serialised identically and none claimed the more specific type
+          `schema.org` defines for it. Unset still publishes `Article`, so
+          nothing moved under any site that has not chosen.
+
+          The loader already normalizes, so this call is not what keeps an
+          unrecognised stored value out of the document — it is what narrows
+          the loader's `string` to a type this literal will accept, and what
+          answers for the collection being absent entirely.
+        */
+        '@type': Aglyn.normalizeContentSchemaType(
+          content.collection?.schemaType,
+        ),
         headline: entry.title,
         ...(entry.excerpt && { description: entry.excerpt }),
         // Absent, never `"image": [null]` — the resolver returns undefined for

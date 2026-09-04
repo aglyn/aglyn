@@ -328,7 +328,11 @@ Work this list, not the tree.
   still list them on an **access** request: an erasure reaching them says
   nothing about a tree walk finding them.
 - `marketplacePurchases`, `marketplaceListings/{id}/reviews/{authorUid}`,
-  `marketplaceReports`
+  `marketplaceReports`. A purchase row carries `customerAddress` — the buyer's
+  **country and state only** (AGL-2137), the jurisdiction Aglyn collected the
+  sales tax under as a marketplace facilitator. Deliberately not the street
+  address Stripe holds: a return groups by state and nothing here reads
+  finer. Erasing the document clears it; there is no separate field to sweep.
 - `contactSuppressions` — a hashed do-not-contact record, if any
 - `adminAudit` — actions by and on them. `/admin/audit` → **Export CSV**
 

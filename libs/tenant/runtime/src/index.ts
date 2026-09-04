@@ -17,5 +17,6 @@
 
 export * from './lib/emit-host-event'
 export * from './lib/resolve-dataset'
+export * from './lib/flow-enrollments'
 export * from './lib/run-event-actions'
 export * from './lib/run-event-workflows'

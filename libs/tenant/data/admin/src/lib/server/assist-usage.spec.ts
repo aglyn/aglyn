@@ -178,8 +178,11 @@ const {
   assistEntitledMonthlyLimit,
   assistExchangeExpiry,
   assistFreeDailyLimit,
+  assistMonthlyCeilingUsd,
   ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD,
   assistOrgMonthlyCostLimitUsd,
+  publicAssistQuota,
+  recordAssistCost,
   assistUsageDay,
   assistUsageMonth,
   assistRatesForModel,
@@ -971,5 +974,321 @@ describe('assist retention — the period has to be able to go BOTH ways', () =>
     const a = assistExchangeExpiry(new Date('2026-01-01T00:00:00Z'))
     const b = assistExchangeExpiry(new Date('2026-01-02T00:00:00Z'))
     expect(b.getTime() - a.getTime()).toBe(24 * 60 * 60 * 1000)
+  })
+})
+
+/**
+ * The two assist shapes the band has to tell apart, in TOKENS.
+ *
+ * These are the fixtures the whole cost-metered design stands on. A question
+ * is a short grounded answer; a build carries the node tree, the component
+ * catalog and the theme tokens in as cached context, writes a large cache
+ * entry, and emits structured markup. Everything below prices them through
+ * the meter's own estimator rather than asserting dollars picked by hand.
+ */
+const A_QUESTION = {
+  inputTokens: 1_800,
+  outputTokens: 480,
+  cacheReadTokens: 900,
+  cacheWriteTokens: 0,
+}
+const A_SCREEN_BUILD = {
+  inputTokens: 6_000,
+  outputTokens: 8_000,
+  cacheReadTokens: 54_000,
+  cacheWriteTokens: 20_000,
+}
+
+const signal = (usage: typeof A_QUESTION) => ({
+  route: '/org/acme/hosts',
+  hostId: null,
+  model: 'claude-sonnet-5',
+  tier: 'entitled' as const,
+  usage,
+  docsPaths: [],
+  stopReason: 'end_turn',
+})
+
+describe('a CHEAP action and an EXPENSIVE one draw the band differently', () => {
+  const monthPath = `orgs/${ORG}/assistUsage/2026-08`
+
+  it('prices them an order of magnitude apart through the real meter', () => {
+    const question = estimateAssistCostUsd(A_QUESTION, 'claude-sonnet-5')
+    const build = estimateAssistCostUsd(A_SCREEN_BUILD, 'claude-sonnet-5')
+    // PINNED to `assist-credits.spec.ts`, which carries these same two
+    // figures as dollars because it cannot import this estimator. A rate
+    // change has to break both files, not leave one asserting a stale ratio.
+    expect(question).toBe(0.01287)
+    expect(build).toBe(0.2292)
+    expect(build).toBeGreaterThan(question * 10)
+  })
+
+  it('MOVES THE METER by cost, not by message count', () => {
+    // The single assertion a message-counting design would fail. Both calls
+    // record exactly one turn; the money they draw is not close.
+    return (async () => {
+      const store = firestore()
+      await recordAssistCost(store, ORG, signal(A_QUESTION), NOW)
+      const afterQuestion = Number(mockDocs.get(monthPath)?.estCostUsd)
+      await recordAssistCost(store, ORG, signal(A_SCREEN_BUILD), NOW)
+      const afterBuild = Number(mockDocs.get(monthPath)?.estCostUsd)
+      const drawnByBuild = afterBuild - afterQuestion
+      expect(drawnByBuild).toBeGreaterThan(afterQuestion * 10)
+    })()
+  })
+
+  it('EXHAUSTS a Pro band with builds where the same count of questions does not', async () => {
+    const store = firestore()
+    const org = { plan: 'pro' as const }
+    // Forty builds spend $9.17 against a $7.50 Pro band; forty questions
+    // spend $0.51 of it. Same forty turns either way — under a message
+    // allowance these two workspaces are indistinguishable.
+    for (let i = 0; i < 40; i += 1) {
+      await recordAssistCost(store, ORG, signal(A_SCREEN_BUILD), NOW)
+    }
+    const afterBuilds = await reserveAssistMessage(store, ORG, true, NOW, org)
+    expect(afterBuilds).toMatchObject({ allowed: false, refusedBy: 'budget' })
+
+    mockDocs = new Map()
+    const store2 = firestore()
+    for (let i = 0; i < 40; i += 1) {
+      await recordAssistCost(store2, ORG, signal(A_QUESTION), NOW)
+    }
+    const afterQuestions = await reserveAssistMessage(store2, ORG, true, NOW, org)
+    expect(afterQuestions).toMatchObject({ allowed: true, refusedBy: null })
+  })
+
+  it('a DEFLECTED turn spends nothing, so the band never moves for it', async () => {
+    // The docs-only path is metered under a zero-rate sentinel. A workspace
+    // at its band keeps getting every answer the docs index can give it —
+    // and this is why: those turns cost nothing to serve and draw nothing.
+    const store = firestore()
+    for (let i = 0; i < 500; i += 1) {
+      await recordAssistCost(
+        store,
+        ORG,
+        { ...signal({ ...A_QUESTION, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 }), model: 'docs-retrieval', deflected: true },
+        NOW,
+      )
+    }
+    expect(Number(mockDocs.get(monthPath)?.estCostUsd)).toBe(0)
+    expect(Number(mockDocs.get(monthPath)?.deflected)).toBe(500)
+    const reservation = await reserveAssistMessage(store, ORG, true, NOW, {
+      plan: 'pro',
+    })
+    expect(reservation).toMatchObject({ allowed: true, refusedBy: null })
+  })
+})
+
+describe("the PLAN's band binds, and the operator default may not undercut it", () => {
+  const monthPath = `orgs/${ORG}/assistUsage/2026-08`
+
+  it('REFUSES a Business org at its band, well under the $40 default', async () => {
+    // $8 of spend against a $7.50 band. The repo default is $40, so a build
+    // that ignored the plan band would let this through — which is precisely
+    // the fail-open under test.
+    mockDocs.set(monthPath, { messages: 12, estCostUsd: 8 })
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, {
+      plan: 'business',
+    })
+    expect(reservation).toMatchObject({
+      allowed: false,
+      refusedBy: 'budget',
+      costLimitUsd: 7.5,
+      budgetUsd: 7.5,
+    })
+    // Refused, and nothing moved.
+    expect(mockDocs.get(monthPath)).toMatchObject({ messages: 12 })
+  })
+
+  it('THE NEGATIVE CONTROL: the same spend under the band reserves', async () => {
+    // Without this the test above passes for a build that refuses every
+    // Business org, or every org carrying any cost at all.
+    mockDocs.set(monthPath, { messages: 12, estCostUsd: 7 })
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, {
+      plan: 'business',
+    })
+    expect(reservation).toMatchObject({ allowed: true, refusedBy: null })
+    expect(mockDocs.get(monthPath)).toMatchObject({ messages: 13 })
+  })
+
+  it('ADMITS an Agency org above $40, which the default alone would refuse', async () => {
+    // The other direction, and the one that costs a customer rather than us.
+    // $50 of spend is over the $40 repo default and under Agency's $58 band.
+    // A build that took the lower of the two would cut a paying workspace off
+    // well before the capacity it bought.
+    expect(process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD).toBeUndefined()
+    mockDocs.set(monthPath, { messages: 12, estCostUsd: 50 })
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, {
+      plan: 'agency',
+    })
+    expect(reservation).toMatchObject({
+      allowed: true,
+      refusedBy: null,
+      costLimitUsd: 58,
+      budgetUsd: 58,
+    })
+    expect(mockDocs.get(monthPath)).toMatchObject({ messages: 13 })
+  })
+
+  it('and still refuses that Agency org at ITS band', async () => {
+    mockDocs.set(monthPath, { messages: 12, estCostUsd: 59 })
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, {
+      plan: 'agency',
+    })
+    expect(reservation).toMatchObject({ allowed: false, refusedBy: 'budget' })
+  })
+
+  it('takes a CONTRACTED Enterprise band over the plan fallback', async () => {
+    mockDocs.set(monthPath, { messages: 12, estCostUsd: 100 })
+    // The fallback is 87,000 credits — $87 — so this org is over it.
+    const onFallback = await reserveAssistMessage(firestore(), ORG, true, NOW, {
+      plan: 'enterprise',
+    })
+    expect(onFallback).toMatchObject({
+      allowed: false,
+      refusedBy: 'budget',
+      costLimitUsd: 87,
+    })
+    // The same spend against a contract that bought more.
+    const contracted = await reserveAssistMessage(firestore(), ORG, true, NOW, {
+      plan: 'enterprise',
+      entitlements: { assistCreditsPerMonth: 1_000_000 },
+    })
+    expect(contracted).toMatchObject({
+      allowed: true,
+      refusedBy: null,
+      costLimitUsd: 1000,
+    })
+  })
+
+  it('an org with NO band is unchanged — the default still binds it', async () => {
+    // Free and Starter sell no assist band. Their assistant is bounded by the
+    // daily message cap and by the operator backstop, exactly as before.
+    expect(assistMonthlyCeilingUsd(null)).toBe(
+      ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD,
+    )
+    mockDocs.set(monthPath, { messages: 400, estCostUsd: 45 })
+    const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW, {
+      plan: 'free',
+    })
+    expect(reservation).toMatchObject({
+      allowed: false,
+      refusedBy: 'budget',
+      costLimitUsd: 40,
+      budgetUsd: null,
+    })
+  })
+})
+
+describe('the operator ceiling composes with a band without erasing it', () => {
+  const monthPath = `orgs/${ORG}/assistUsage/2026-08`
+
+  it('an EXPLICIT figure wins when it is lower — that is what setting it means', () => {
+    process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = '25'
+    expect(assistMonthlyCeilingUsd(58)).toBe(25)
+    // ...and does not RAISE a band it sits above.
+    expect(assistMonthlyCeilingUsd(7.5)).toBe(7.5)
+  })
+
+  it('`off` removes the BACKSTOP and leaves the band standing', () => {
+    // The word turns off a backstop. A band is not one — it is what the
+    // customer was sold, and an environment variable does not un-sell it.
+    process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = 'off'
+    expect(assistMonthlyCeilingUsd(null)).toBeNull()
+    expect(assistMonthlyCeilingUsd(58)).toBe(58)
+  })
+
+  it('refuses an Agency org at its band even with the backstop OFF', async () => {
+    process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = 'off'
+    mockDocs.set(monthPath, { messages: 12, estCostUsd: 200 })
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, {
+      plan: 'agency',
+    })
+    expect(reservation).toMatchObject({ allowed: false, refusedBy: 'budget' })
+  })
+
+  it('a MISTYPED figure falls back to the band, never to no ceiling', () => {
+    for (const junk of ['forty', '  ', '-5', '0']) {
+      process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = junk
+      expect(assistMonthlyCeilingUsd(7.5)).toBe(7.5)
+      // And an org with no band still lands on the repo default, unchanged.
+      expect(assistMonthlyCeilingUsd(null)).toBe(
+        ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD,
+      )
+    }
+  })
+})
+
+describe('ANTI-VACUITY: a stubbed entitlements module must not refuse everyone', () => {
+  const monthPath = `orgs/${ORG}/assistUsage/2026-08`
+
+  it('a band of ZERO reads as NO BAND, so the clamp cannot go green empty', async () => {
+    // A test double that answers 0 for every quota is the shape that makes a
+    // clamp pass having refused every request. Zero here means "this plan
+    // sells no assist band", so the org falls through to the operator
+    // backstop and its assistant still runs.
+    mockDocs.set(monthPath, { messages: 12, estCostUsd: 1 })
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, {
+      plan: 'business',
+      entitlements: { assistCreditsPerMonth: 0 },
+    })
+    expect(reservation).toMatchObject({
+      allowed: true,
+      refusedBy: null,
+      budgetUsd: null,
+      costLimitUsd: ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD,
+    })
+  })
+
+  it('THE OTHER WAY: a real band is still enforced on the same fixture shape', async () => {
+    // Without this, the test above is satisfied by a build that ignores every
+    // band and enforces nothing — the defect this work exists to close.
+    mockDocs.set(monthPath, { messages: 12, estCostUsd: 1 })
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, {
+      plan: 'business',
+      entitlements: { assistCreditsPerMonth: 500 },
+    })
+    expect(reservation).toMatchObject({
+      allowed: false,
+      refusedBy: 'budget',
+      budgetUsd: 0.5,
+    })
+  })
+})
+
+describe('what leaves the server is credits, never our provider bill', () => {
+  const monthPath = `orgs/${ORG}/assistUsage/2026-08`
+
+  it('strips every dollar figure and reports the credit standing', async () => {
+    mockDocs.set(monthPath, { messages: 12, estCostUsd: 4.5 })
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, {
+      plan: 'business',
+    })
+    const view = publicAssistQuota(reservation)
+    expect(view.credits).toEqual({
+      used: 4_500,
+      limit: 7_500,
+      remaining: 3_000,
+    })
+    const wire = JSON.stringify(view)
+    for (const leak of ['costUsd', 'costLimitUsd', 'budgetUsd', '4.5']) {
+      expect(wire).not.toContain(leak)
+    }
+    // The message standing survives: the free tier's daily cap is a real,
+    // separately-worded limit the panel renders, and credits cannot say it.
+    expect(view).toMatchObject({ period: 'month', allowed: true })
+    expect(typeof view.limit).toBe('number')
+  })
+
+  it('reports NO credit standing for an org with no band', async () => {
+    // A Free workspace refused at the operator backstop has no credit balance.
+    // Converting $40 into "40,000 credits" would name a band it never bought.
+    mockDocs.set(monthPath, { messages: 400, estCostUsd: 45 })
+    const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW, {
+      plan: 'free',
+    })
+    expect(reservation.allowed).toBe(false)
+    expect(publicAssistQuota(reservation).credits).toBeNull()
   })
 })

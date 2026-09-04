@@ -73,9 +73,29 @@ describe('scopeTokensForHost', () => {
 })
 
 describe('visibleToHost', () => {
-  it('treats a missing scope as org-wide, for the pre-backfill window', () => {
-    expect(visibleToHost(undefined, 'h1')).toBe(true)
-    expect(visibleToHost(null, 'h1')).toBe(true)
+  /**
+   * The fail-open, closed.
+   *
+   * A missing `visibleTo` used to answer "every site", which is the shape
+   * this codebase keeps paying for: a read that cannot see a value answering
+   * the same as a value that is absent. Both enforcement layers underneath
+   * — `array-contains-any` and the rules' `hasAny` — have always answered
+   * false for a document with no array, so the permissive default was one
+   * helper disagreeing with the database.
+   */
+  it('treats a missing scope as visible to NOBODY, matching both enforcement layers', () => {
+    expect(visibleToHost(undefined, 'h1')).toBe(false)
+    expect(visibleToHost(null, 'h1')).toBe(false)
+  })
+
+  /**
+   * ANTI-VACUITY. The line above passes against a `visibleToHost` that
+   * refuses everything, which would hide every resource in the product. This
+   * is the control that says the door still opens.
+   */
+  it('still admits a stamped resource, so the close is not a blanket refusal', () => {
+    expect(visibleToHost([ORG_SCOPE_TOKEN], 'h1')).toBe(true)
+    expect(visibleToHost(['host:h1'], 'h1')).toBe(true)
   })
 
   it('fails closed on an empty array, which only a bug can write', () => {
@@ -107,8 +127,12 @@ describe('visibleToTokens', () => {
     expect(visibleToTokens(['host:h1'], undefined)).toBe(false)
   })
 
-  it('still lets a legacy unscoped resource through', () => {
-    expect(visibleToTokens(undefined, [])).toBe(true)
+  it('refuses an unscoped resource, the twin of the rules’ hasAny', () => {
+    expect(visibleToTokens(undefined, [])).toBe(false)
+    expect(visibleToTokens(undefined, [ORG_SCOPE_TOKEN])).toBe(false)
+    // The control: a stamped resource still reaches a caller holding the org
+    // token, so this is the missing field being refused and not everything.
+    expect(visibleToTokens([ORG_SCOPE_TOKEN], [ORG_SCOPE_TOKEN])).toBe(true)
   })
 })
 
@@ -156,8 +180,13 @@ describe('scopeForHosts / hostIdsFromScope', () => {
 })
 
 describe('isOrgWideScope', () => {
-  it('counts the legacy absent scope as org-wide', () => {
-    expect(isOrgWideScope(undefined)).toBe(true)
+  /**
+   * An absent scope is NOT org-wide. While it answered `true`, the console
+   * rendered "All sites" over a document that no site could see — the
+   * inversion `storedScope` exists to keep out of the editors.
+   */
+  it('counts only a stamped org token as org-wide', () => {
+    expect(isOrgWideScope(undefined)).toBe(false)
     expect(isOrgWideScope([ORG_SCOPE_TOKEN])).toBe(true)
     expect(isOrgWideScope(['host:h1'])).toBe(false)
     expect(isOrgWideScope([])).toBe(false)
@@ -167,7 +196,17 @@ describe('isOrgWideScope', () => {
 describe('narrowsScope', () => {
   it('flags org-wide going to selected sites', () => {
     expect(narrowsScope([ORG_SCOPE_TOKEN], ['host:h1'])).toBe(true)
-    expect(narrowsScope(undefined, ['host:h1'])).toBe(true)
+  })
+
+  /**
+   * Stamping a scope onto a document that had none is a WIDENING, not a
+   * narrowing: nothing could see it before. Confirming it as a narrowing
+   * would put a "sites will lose access" warning in front of the one save
+   * that gives access back.
+   */
+  it('does not flag a stamp onto an unscoped document', () => {
+    expect(narrowsScope(undefined, ['host:h1'])).toBe(false)
+    expect(narrowsScope(undefined, [ORG_SCOPE_TOKEN])).toBe(false)
   })
 
   it('does not flag widening', () => {
@@ -189,8 +228,12 @@ describe('describeScope', () => {
   const names = { h1: 'Northwind Coffee', h2: 'Contoso' }
 
   it('describes the org-wide cases', () => {
-    expect(describeScope(undefined, names)).toBe('All sites')
     expect(describeScope([ORG_SCOPE_TOKEN], names)).toBe('All sites')
+  })
+
+  /** And an unscoped document is described as what it is. */
+  it('does not describe an unscoped document as shared with everyone', () => {
+    expect(describeScope(undefined, names)).toBe('No sites')
   })
 
   it('names a single site when it can', () => {
@@ -212,7 +255,18 @@ describe('hostQualifiedCdnPath (AGL-1043/1045)', () => {
 
   it('leaves an org-wide asset alone', () => {
     expect(hostQualifiedCdnPath(PATH, ['org'], 'site-a')).toBe(PATH)
-    expect(hostQualifiedCdnPath(PATH, undefined, 'site-a')).toBe(PATH)
+  })
+
+  /**
+   * An UNSCOPED asset is qualified with the site, because it is no longer
+   * org-wide. The org CDN path serves org-wide assets only, so leaving it
+   * bare would ask the unauthenticated CDN for a scope the asset does not
+   * have — and the CDN's own check is the one that refuses.
+   */
+  it('names the site for an unscoped asset rather than assuming org-wide', () => {
+    expect(hostQualifiedCdnPath(PATH, undefined, 'site-a')).toBe(
+      '/api/media/cdn/org:acme:site-a/med123',
+    )
   })
 
   it('names the site for a restricted asset', () => {
@@ -250,14 +304,19 @@ describe('scopeCovers (AGL-1044)', () => {
   it('org-wide covers everything', () => {
     expect(scopeCovers(['org'], ['host:a'])).toBe(true)
     expect(scopeCovers(['org'], ['org'])).toBe(true)
-    expect(scopeCovers(undefined, ['host:a'])).toBe(true)
+  })
+
+  /** An unscoped target reaches no site, so it covers nothing. */
+  it('does not let an unscoped target cover a source', () => {
+    expect(scopeCovers(undefined, ['host:a'])).toBe(false)
   })
 
   it('a restricted target cannot cover an org-wide source', () => {
     // A page on ANY site can bind the source; most cannot resolve the
     // target, so the reference renders blank with no explanation.
     expect(scopeCovers(['host:a'], ['org'])).toBe(false)
-    expect(scopeCovers(['host:a'], undefined)).toBe(false)
+    // An unscoped SOURCE reaches nowhere, so any target covers it.
+    expect(scopeCovers(['host:a'], undefined)).toBe(true)
   })
 
   it('covers when the target reaches every site the source does', () => {
@@ -325,11 +384,11 @@ describe('newResourceScopeFields (AGL-1478)', () => {
  * the same question this module keeps being asked wrongly (AGL-1466/1480).
  *
  * Every helper above answers "may this be seen", where a missing field reads
- * as org-wide because the AGL-1040 docs predate the backfill. An EDITOR asks
- * a different question — "what is stored" — and four call sites in two files
- * each wrote their own `Array.isArray(x) ? x : ['org']` for it, which is the
- * first question's answer given to the second one. That is how a folder no
- * site could see reported "All sites" for three weeks.
+ * as visible to nobody. An EDITOR asks a different question — "what is
+ * stored" — and four call sites in two files each wrote their own
+ * `Array.isArray(x) ? x : ['org']` for it, which is the first question's
+ * answer given to the second one. That is how a folder no site could see
+ * reported "All sites" for three weeks.
  */
 describe('storedScope (AGL-1480)', () => {
   it('answers null when nothing is stored', () => {
@@ -366,8 +425,9 @@ describe('storedScope (AGL-1480)', () => {
   it('never substitutes the org token, which is the whole point', () => {
     expect(storedScope(undefined)).not.toEqual([ORG_SCOPE_TOKEN])
     // The reading the rest of this module takes, for contrast: absent is
-    // visible-to-all when ASKING PERMISSION, and stored-nothing when asking
-    // what a person chose. Both are correct; conflating them is the bug.
-    expect(visibleToHost(undefined, 'h1')).toBe(true)
+    // visible to NOBODY when asking permission, and stored-nothing when
+    // asking what a person chose. The two answers differ, and an editor that
+    // took the permission answer would offer no choice at all.
+    expect(visibleToHost(undefined, 'h1')).toBe(false)
   })
 })

@@ -38,9 +38,12 @@ import {
   validateHostAction,
 } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
+  Alert,
   Button,
   Dialog,
   DialogActions,
@@ -56,7 +59,9 @@ import {
 import {
   collection,
   doc,
+  documentId,
   limit,
+  orderBy,
   query,
   setDoc,
   updateDoc,
@@ -64,6 +69,8 @@ import {
 } from 'firebase/firestore'
 import { useCallback, useState, useMemo } from 'react'
 import {
+  ceilingedWindow,
+  collectionCeiling,
   useFirestore,
   useFirestoreCollection,
   useHostResourceApi,
@@ -73,6 +80,29 @@ import {
 import HostRunHistoryCard from './host-run-history-card.component'
 
 const CUSTOM_EVENT_VALUE = '__custom__'
+
+/**
+ * How many action documents the card reads.
+ *
+ * A CEILING, not a page size — see the query, which explains why this one
+ * collection cannot be sliced by the server without making the count beneath
+ * the list a per-page number.
+ *
+ * `ACTIONS_MAX_PER_HOST` is 500, so the ceiling really can bite and the probe
+ * beside it is what says when it has.
+ */
+const ACTION_CEILING = 100
+
+/**
+ * How many rows each of the step editor's six pickers offers.
+ *
+ * One number for all six because they are read together, by the same click,
+ * and a reader comparing two of them should not have to know which one was cut
+ * at fifty. Paid for only while the editor is open, which is what makes a
+ * ceiling this size affordable: one author mid-edit rather than every visitor
+ * to the page.
+ */
+const EDITOR_OPTION_CEILING = 100
 
 /** One editable condition row (AGL-565); a lone row with an empty op
  * means "always run" and clears the stored conditions. */
@@ -94,6 +124,30 @@ interface ActionDraft extends HostAction {
   conditionRows: ConditionRowDraft[]
   conditionCombinator: TriggerCombinator
 }
+
+/**
+ * The durations a wait may be set to, from the picker.
+ *
+ * A select rather than a number field, because minutes are the wrong unit for
+ * the thing being chosen: a welcome series is authored in days and nobody
+ * wants to compute that three days is 4,320. Every value is inside the
+ * validated band, so the picker cannot produce a step the validator refuses —
+ * which is the property a free-text duration field would not have.
+ */
+const FLOW_WAIT_PRESETS: ReadonlyArray<{ minutes: number; label: string }> = [
+  { minutes: 5, label: '5 minutes' },
+  { minutes: 30, label: '30 minutes' },
+  { minutes: 60, label: '1 hour' },
+  { minutes: 60 * 4, label: '4 hours' },
+  { minutes: 60 * 24, label: '1 day' },
+  { minutes: 60 * 24 * 2, label: '2 days' },
+  { minutes: 60 * 24 * 3, label: '3 days' },
+  { minutes: 60 * 24 * 7, label: '1 week' },
+  { minutes: 60 * 24 * 14, label: '2 weeks' },
+  { minutes: 60 * 24 * 30, label: '30 days' },
+  { minutes: 60 * 24 * 60, label: '60 days' },
+  { minutes: 60 * 24 * 90, label: '90 days' },
+]
 
 function defaultStep(type: HostActionStepType): HostActionStep {
   switch (type) {
@@ -144,6 +198,16 @@ function defaultStep(type: HostActionStepType): HostActionStep {
       return { type, datasetId: '' }
     case 'assignCampaign':
       return { type, campaignId: '' }
+    // A day, because a new wait is almost always part of a series measured in
+    // days and a default of one minute reads as a placeholder rather than a
+    // choice. Both are inside the validated band, so neither can be saved
+    // wrong; this is only which one the author starts from.
+    case 'wait':
+      return { type, delayMinutes: 60 * 24 }
+    case 'waitForEvent':
+      return { type, eventName: '', timeoutMinutes: 60 * 24 * 3 }
+    case 'exitFlow':
+      return { type }
     default:
       return { type: 'datasetAppend', datasetName: '' }
   }
@@ -190,16 +254,81 @@ export function HostActionsCard(props: {
      */
     fromCache: actionsFromCache,
   } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'actions'), limit(100)),
-    [firestore, hostId],
-    { idField: '$id' },
-  )
-  const { data: workflowDocs } = useFirestoreCollection<any>(
+    /*
+     * ORDERED AND CEILINGED, deliberately not paged by the query (AGL-2501) —
+     * the same decision as the workflows card beside it.
+     *
+     * `limit(100)` alone is answered in DOCUMENT-ID order, so the window was a
+     * pseudo-random hundred that the `localeCompare` below arranged
+     * alphabetically, and nothing said the list was bounded.
+     *
+     * `collectionCeiling` does not change WHICH hundred — document-id order is
+     * what the bare cap already returned. What it changes is that the order is
+     * NAMED, so the obvious next edit is caught: ordering on `name` would HIDE
+     * every action written without one rather than mis-sorting the list, and
+     * `/api/hosts/resources` validates no field for presence while
+     * `IMPORTABLE_FIELDS.actions` copies one only if the export carried it.
+     *
+     * The QUERY is not paged because this collection holds TWO audiences. A
+     * row whose trigger names a leaf selector is an element interaction, which
+     * belongs to its document and is reported below as a count rather than
+     * listed; the rest are the site's actions. Both partitions are derived
+     * from the rows in hand, so a server page would make "3 interactions are
+     * set up on their own elements" mean "3 on this page" — a count that is a
+     * window length, which is the defect this sweep keeps finding rather than
+     * a shape it should add.
+     */
     () =>
-      query(collection(firestore, 'hosts', hostId, 'workflows'), limit(100)),
+      collectionCeiling(
+        collection(firestore, 'hosts', hostId, 'actions'),
+        ACTION_CEILING,
+      ),
     [firestore, hostId],
     { idField: '$id' },
   )
+  const { rows: readActions, truncated: actionsTruncated } =
+    ceilingedWindow<any>(actionDocs, ACTION_CEILING)
+  const [draft, setDraft] = useState<ActionDraft | null>(null)
+  /**
+   * The editor has been opened at least once in this session.
+   *
+   * A LATCH rather than `draft` itself, because the pickers below key their
+   * listeners on it. Tracking the dialog would tear those subscriptions down
+   * on Cancel and pay for them again on the next Edit, so a merchant working
+   * through ten actions would buy the same six windows ten times — worse than
+   * the mount-time read this replaces. Latched, a reader who never edits pays
+   * nothing and a reader who edits pays once.
+   */
+  const [editorOpened, setEditorOpened] = useState(false)
+  if (draft && !editorOpened) setEditorOpened(true)
+  /*
+   * THE STEP EDITOR'S OPTION LISTS, read when the editor opens.
+   *
+   * Six collections, and nothing outside the dialog below reads any of them:
+   * the table renders a step's stored name, never one looked up here. Mounting
+   * them unconditionally charges every visitor to this page six windows to
+   * populate selects most of them never open — the largest read on the
+   * automation surface, paid whether or not anybody edits anything.
+   *
+   * Each is ceilinged and ordered for the reason the actions query above
+   * gives: a bare `limit` is answered in document-id order, so the
+   * `localeCompare` on every option list would arrange a pseudo-random sample
+   * into a convincing alphabet, and a workflow or dataset past the window
+   * could not be picked with nothing saying why.
+   */
+  const { data: workflowRead } = useFirestoreCollection<any>(
+    () =>
+      editorOpened
+        ? collectionCeiling(
+            collection(firestore, 'hosts', hostId, 'workflows'),
+            EDITOR_OPTION_CEILING,
+          )
+        : null,
+    [firestore, hostId, editorOpened],
+    { idField: '$id' },
+  )
+  const { rows: workflowDocs, truncated: workflowsTruncated } =
+    ceilingedWindow<any>(workflowRead, EDITOR_OPTION_CEILING)
   // Scoped (AGL-1044): the AGL-1041 rules reject a scoped member's
   // UNFILTERED list outright, so without this the picker errors rather than
   // offering fewer datasets.
@@ -214,50 +343,86 @@ export function HostActionsCard(props: {
   // Unconditional now: the only scope this hook yields is an org one, and
   // every org dataset carries `visibleTo` (AGL-1041). The filter used to be
   // conditional for the host fallback's sake, whose rows had no scope.
-  const { data: datasetDocs } = useFirestoreCollection<any>(
+  /*
+   * `documentId()` rather than a field, for the reason the audience sweep in
+   * `campaign-send.ts` gives: Firestore's automatic single-field index for an
+   * array member is keyed on the value and the document name, so
+   * `array-contains-any` plus `orderBy(__name__)` is served by it. Ordering on
+   * anything else here would need a composite index that does not exist.
+   */
+  const { data: datasetRead } = useFirestoreCollection<any>(
     () =>
-      dataScope
+      editorOpened && dataScope
         ? query(
             collection(firestore, dataScope[0], dataScope[1], 'datasets'),
             where('visibleTo', 'array-contains-any', scopeTokens),
-            limit(100),
+            orderBy(documentId()),
+            limit(EDITOR_OPTION_CEILING + 1),
           )
         : null,
-    [firestore, dataScope, scopeTokens],
+    [firestore, dataScope, scopeTokens, editorOpened],
     { idField: '$id' },
   )
-  const { data: overlayDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'overlays'), limit(50)),
-    [firestore, hostId],
-    { idField: '$id' },
-  )
-  // Lists live on the org (AGL-254); campaigns on the host.
-  const { data: listDocs } = useFirestoreCollection<any>(
+  const { rows: datasetDocs, truncated: datasetsTruncated } =
+    ceilingedWindow<any>(datasetRead, EDITOR_OPTION_CEILING)
+  const { data: overlayRead } = useFirestoreCollection<any>(
     () =>
-      dataScope
-        ? query(
-            collection(firestore, dataScope[0], dataScope[1], 'lists'),
-            limit(50),
+      editorOpened
+        ? collectionCeiling(
+            collection(firestore, 'hosts', hostId, 'overlays'),
+            EDITOR_OPTION_CEILING,
           )
         : null,
-    [firestore, dataScope],
+    [firestore, hostId, editorOpened],
     { idField: '$id' },
   )
-  const { data: campaignDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'campaigns'), limit(50)),
-    [firestore, hostId],
+  const { rows: overlayDocs, truncated: overlaysTruncated } =
+    ceilingedWindow<any>(overlayRead, EDITOR_OPTION_CEILING)
+  // Lists live on the org (AGL-254); campaigns on the host.
+  const { data: listRead } = useFirestoreCollection<any>(
+    () =>
+      editorOpened && dataScope
+        ? collectionCeiling(
+            collection(firestore, dataScope[0], dataScope[1], 'lists'),
+            EDITOR_OPTION_CEILING,
+          )
+        : null,
+    [firestore, dataScope, editorOpened],
     { idField: '$id' },
   )
-  const { data: webhookDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'webhooks'), limit(20)),
-    [firestore, hostId],
+  const { rows: listDocs, truncated: listsTruncated } = ceilingedWindow<any>(
+    listRead,
+    EDITOR_OPTION_CEILING,
+  )
+  const { data: campaignRead } = useFirestoreCollection<any>(
+    () =>
+      editorOpened
+        ? collectionCeiling(
+            collection(firestore, 'hosts', hostId, 'campaigns'),
+            EDITOR_OPTION_CEILING,
+          )
+        : null,
+    [firestore, hostId, editorOpened],
     { idField: '$id' },
   )
-  const liveActions = [...(actionDocs ?? [])].filter(
-    (action: any) => !action.deletedAt,
+  const { rows: campaignDocs, truncated: campaignsTruncated } =
+    ceilingedWindow<any>(campaignRead, EDITOR_OPTION_CEILING)
+  const { data: webhookRead } = useFirestoreCollection<any>(
+    () =>
+      editorOpened
+        ? collectionCeiling(
+            collection(firestore, 'hosts', hostId, 'webhooks'),
+            EDITOR_OPTION_CEILING,
+          )
+        : null,
+    [firestore, hostId, editorOpened],
+    { idField: '$id' },
   )
+  const { rows: webhookDocs, truncated: webhooksTruncated } =
+    ceilingedWindow<any>(webhookRead, EDITOR_OPTION_CEILING)
+  const liveActions = readActions.filter((action: any) => !action.deletedAt)
   /**
-   * Element interactions are not listed here (AGL-1478).
+   * Element interactions are not listed here.
    *
    * An ACTION is something the SITE does — an order was placed, a form was
    * submitted. An INTERACTION is something an ELEMENT does, and it belongs to
@@ -275,11 +440,36 @@ export function HostActionsCard(props: {
   const elementScoped = liveActions.filter((action: any) =>
     LEAF_SELECTOR.test(String(action?.trigger?.selector ?? '')),
   )
+  // Sorting is safe here in a way it is not on a paged list: these rows are
+  // the whole collection below the ceiling, not a slice of one.
   const actions = liveActions
     .filter((action: any) => !elementScoped.includes(action))
     .sort((a: any, b: any) =>
       String(a.name ?? '').localeCompare(String(b.name ?? '')),
     )
+  // The page is a SLICE: the rows are already in hand, and both the element
+  // interaction count and the alphabetical order need all of them.
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  const visibleActions = useMemo(
+    () => actions.slice(page * pageSize, page * pageSize + pageSize),
+    [actions, page, pageSize],
+  )
+  /**
+   * Which of the six pickers the ceiling actually bit, named.
+   *
+   * One notice rather than six, because they are one read and an author who
+   * has just been told the workflow list is short does not learn anything from
+   * being told again about datasets.
+   */
+  const truncatedPickers = [
+    workflowsTruncated ? 'workflows' : null,
+    webhooksTruncated ? 'webhooks' : null,
+    datasetsTruncated ? 'datasets' : null,
+    overlaysTruncated ? 'overlays' : null,
+    listsTruncated ? 'audiences' : null,
+    campaignsTruncated ? 'campaigns' : null,
+  ].filter((name): name is string => name !== null)
   // Options carry ids (AGL-261): selects store the doc id, keep the name
   // as the display hint, and legacy name-only steps map back to their id.
   const workflowOptions = (workflowDocs ?? [])
@@ -331,7 +521,6 @@ export function HostActionsCard(props: {
     }))
     .sort((a, b) => a.name.localeCompare(b.name))
 
-  const [draft, setDraft] = useState<ActionDraft | null>(null)
   const patch = useCallback(
     (updater: (previous: ActionDraft) => ActionDraft) =>
       setDraft((previous) => (previous ? updater(previous) : previous)),
@@ -603,7 +792,7 @@ export function HostActionsCard(props: {
             'workflow, show the visitor an alert, chain a custom event, or ' +
             'write to a dataset. Pro plans and up.'}
         </Typography>
-        {actions.map((action: any) => (
+        {visibleActions.map((action: any) => (
           <Stack
             key={action.$id}
             direction="row"
@@ -700,6 +889,27 @@ export function HostActionsCard(props: {
             </Button>
           </Stack>
         ))}
+        {actions.length === 0 ? null : (
+          <ListPagination
+            page={page}
+            pageSize={pageSize}
+            rowCount={visibleActions.length}
+            // The actions the card HOLDS, which is what the reader is paging
+            // through — not the collection, whose other half is the element
+            // interactions counted below.
+            count={actions.length}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+        )}
+        {actionsTruncated ? (
+          <Alert severity="info">
+            {`Showing the first ${ACTION_CEILING} rows of this site’s ` +
+              'automations, ordered by id. There are more — both the list ' +
+              'above and the interaction count below describe only what was ' +
+              'read.'}
+          </Alert>
+        ) : null}
         <Button
           size="small"
           color="primary"
@@ -708,7 +918,7 @@ export function HostActionsCard(props: {
         >
           {'Add action'}
         </Button>
-        {/* Says where they went (AGL-1478). A list that silently drops rows
+        {/* Says where they went. A list that silently drops rows
             a reader saw last week is a list they stop trusting; this is the
             one sentence that makes the absence deliberate. */}
         {elementScoped.length ? (
@@ -733,6 +943,18 @@ export function HostActionsCard(props: {
         <DialogContent
           sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}
         >
+          {/*
+            A short picker is worse than an empty one, because it looks
+            complete: the target an author cannot find reads as deleted, and
+            the step gets pointed somewhere else.
+           */}
+          {truncatedPickers.length > 0 ? (
+            <Alert severity="info" sx={{ mt: 1 }}>
+              {`Offering the first ${EDITOR_OPTION_CEILING} rows, ordered by ` +
+                `id, for: ${truncatedPickers.join(', ')}. This site has ` +
+                'more, so a step target may not be listed below.'}
+            </Alert>
+          ) : null}
           <TextField
             label="Name"
             value={draft?.name ?? ''}
@@ -1087,88 +1309,128 @@ export function HostActionsCard(props: {
             {'Steps (run in order)'}
           </Typography>
           {(draft?.steps ?? []).map((step, index) => (
-            <Stack
-              key={index}
-              direction="row"
-              spacing={1}
-              sx={{ alignItems: 'center' }}
-            >
-              <Typography variant="caption" color="text.secondary">
-                {`${index + 1}`}
-              </Typography>
-              <TextField
-                select
-                label="Do"
-                value={step.type}
-                onChange={(event) =>
-                  patch((previous) => ({
-                    ...previous,
-                    steps: previous.steps.map((s, index2) =>
-                      index2 === index
-                        ? defaultStep(event.target.value as HostActionStepType)
-                        : s,
-                    ),
-                  }))
-                }
-                size="small"
-                sx={{ minWidth: 170 }}
-              >
-                {Object.entries(HOST_ACTION_STEP_LABELS).map(
-                  ([value, label]) => (
-                    <MenuItem key={value} value={value}>
-                      {label}
-                    </MenuItem>
-                  ),
-                )}
-              </TextField>
-              {step.type === 'runWorkflow' ? (
+            <Stack key={index} spacing={0.5}>
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                <Typography variant="caption" color="text.secondary">
+                  {`${index + 1}`}
+                </Typography>
                 <TextField
                   select
-                  label="Workflow"
-                  value={
-                    (step as any).workflowId ??
-                    workflowOptions.find(
-                      (option) => option.name === step.workflowName,
-                    )?.id ??
-                    ''
-                  }
+                  label="Do"
+                  value={step.type}
                   onChange={(event) =>
                     patch((previous) => ({
                       ...previous,
                       steps: previous.steps.map((s, index2) =>
                         index2 === index
-                          ? {
-                              ...s,
-                              workflowId: event.target.value,
-                              workflowName:
-                                workflowOptions.find(
-                                  (option) => option.id === event.target.value,
-                                )?.name ?? (s as any).workflowName,
-                            }
+                          ? defaultStep(
+                              event.target.value as HostActionStepType,
+                            )
                           : s,
                       ),
                     }))
                   }
                   size="small"
-                  sx={{ flex: 1 }}
+                  sx={{ minWidth: 170 }}
                 >
-                  {workflowOptions.map((option) => (
-                    <MenuItem key={option.id} value={option.id}>
-                      {option.name}
-                    </MenuItem>
-                  ))}
+                  {Object.entries(HOST_ACTION_STEP_LABELS).map(
+                    ([value, label]) => (
+                      <MenuItem key={value} value={value}>
+                        {label}
+                      </MenuItem>
+                    ),
+                  )}
                 </TextField>
-              ) : step.type === 'siteAlert' ? (
-                <>
+                {step.type === 'runWorkflow' ? (
                   <TextField
-                    label="Message"
-                    value={step.message}
+                    select
+                    label="Workflow"
+                    value={
+                      (step as any).workflowId ??
+                      workflowOptions.find(
+                        (option) => option.name === step.workflowName,
+                      )?.id ??
+                      ''
+                    }
                     onChange={(event) =>
                       patch((previous) => ({
                         ...previous,
                         steps: previous.steps.map((s, index2) =>
                           index2 === index
-                            ? { ...s, message: event.target.value }
+                            ? {
+                                ...s,
+                                workflowId: event.target.value,
+                                workflowName:
+                                  workflowOptions.find(
+                                    (option) =>
+                                      option.id === event.target.value,
+                                  )?.name ?? (s as any).workflowName,
+                              }
+                            : s,
+                        ),
+                      }))
+                    }
+                    size="small"
+                    sx={{ flex: 1 }}
+                  >
+                    {workflowOptions.map((option) => (
+                      <MenuItem key={option.id} value={option.id}>
+                        {option.name}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                ) : step.type === 'siteAlert' ? (
+                  <>
+                    <TextField
+                      label="Message"
+                      value={step.message}
+                      onChange={(event) =>
+                        patch((previous) => ({
+                          ...previous,
+                          steps: previous.steps.map((s, index2) =>
+                            index2 === index
+                              ? { ...s, message: event.target.value }
+                              : s,
+                          ),
+                        }))
+                      }
+                      size="small"
+                      sx={{ flex: 1 }}
+                    />
+                    <TextField
+                      select
+                      label="Style"
+                      value={step.severity ?? 'info'}
+                      onChange={(event) =>
+                        patch((previous) => ({
+                          ...previous,
+                          steps: previous.steps.map((s, index2) =>
+                            index2 === index
+                              ? { ...s, severity: event.target.value as any }
+                              : s,
+                          ),
+                        }))
+                      }
+                      size="small"
+                      sx={{ width: 110 }}
+                    >
+                      {['info', 'success', 'warning', 'error'].map((value) => (
+                        <MenuItem key={value} value={value}>
+                          {value}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  </>
+                ) : step.type === 'customEvent' ? (
+                  <TextField
+                    label="Event name"
+                    value={step.eventName}
+                    onChange={(event) =>
+                      patch((previous) => ({
+                        ...previous,
+                        steps: previous.steps.map((s, index2) =>
+                          index2 === index
+                            ? { ...s, eventName: event.target.value }
                             : s,
                         ),
                       }))
@@ -1176,174 +1438,118 @@ export function HostActionsCard(props: {
                     size="small"
                     sx={{ flex: 1 }}
                   />
+                ) : step.type === 'webhookPost' ? (
                   <TextField
                     select
-                    label="Style"
-                    value={step.severity ?? 'info'}
+                    label="Webhook"
+                    value={
+                      (step as any).webhookId ??
+                      webhookOptions.find(
+                        (option) => option.name === step.webhookName,
+                      )?.id ??
+                      ''
+                    }
                     onChange={(event) =>
                       patch((previous) => ({
                         ...previous,
                         steps: previous.steps.map((s, index2) =>
                           index2 === index
-                            ? { ...s, severity: event.target.value as any }
+                            ? {
+                                ...s,
+                                webhookId: event.target.value,
+                                webhookName:
+                                  webhookOptions.find(
+                                    (option) =>
+                                      option.id === event.target.value,
+                                  )?.name ?? (s as any).webhookName,
+                              }
                             : s,
                         ),
                       }))
                     }
                     size="small"
-                    sx={{ width: 110 }}
+                    sx={{ flex: 1 }}
                   >
-                    {['info', 'success', 'warning', 'error'].map((value) => (
-                      <MenuItem key={value} value={value}>
-                        {value}
+                    {webhookOptions.map((option) => (
+                      <MenuItem key={option.id} value={option.id}>
+                        {option.name}
                       </MenuItem>
                     ))}
                   </TextField>
-                </>
-              ) : step.type === 'customEvent' ? (
-                <TextField
-                  label="Event name"
-                  value={step.eventName}
-                  onChange={(event) =>
-                    patch((previous) => ({
-                      ...previous,
-                      steps: previous.steps.map((s, index2) =>
-                        index2 === index
-                          ? { ...s, eventName: event.target.value }
-                          : s,
-                      ),
-                    }))
-                  }
-                  size="small"
-                  sx={{ flex: 1 }}
-                />
-              ) : step.type === 'webhookPost' ? (
-                <TextField
-                  select
-                  label="Webhook"
-                  value={
-                    (step as any).webhookId ??
-                    webhookOptions.find(
-                      (option) => option.name === step.webhookName,
-                    )?.id ??
-                    ''
-                  }
-                  onChange={(event) =>
-                    patch((previous) => ({
-                      ...previous,
-                      steps: previous.steps.map((s, index2) =>
-                        index2 === index
-                          ? {
-                              ...s,
-                              webhookId: event.target.value,
-                              webhookName:
-                                webhookOptions.find(
-                                  (option) => option.id === event.target.value,
-                                )?.name ?? (s as any).webhookName,
-                            }
-                          : s,
-                      ),
-                    }))
-                  }
-                  size="small"
-                  sx={{ flex: 1 }}
-                >
-                  {webhookOptions.map((option) => (
-                    <MenuItem key={option.id} value={option.id}>
-                      {option.name}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              ) : step.type === 'datasetAppend' ||
-                step.type === 'updateDataset' ? (
-                <TextField
-                  select
-                  label="Dataset"
-                  value={
-                    (step as any).datasetId ??
-                    datasetOptions.find(
-                      (option) => option.name === step.datasetName,
-                    )?.id ??
-                    ''
-                  }
-                  onChange={(event) =>
-                    patch((previous) => ({
-                      ...previous,
-                      steps: previous.steps.map((s, index2) =>
-                        index2 === index
-                          ? {
-                              ...s,
-                              datasetId: event.target.value,
-                              datasetName:
-                                datasetOptions.find(
-                                  (option) => option.id === event.target.value,
-                                )?.name ?? (s as any).datasetName,
-                            }
-                          : s,
-                      ),
-                    }))
-                  }
-                  size="small"
-                  sx={{ flex: 1 }}
-                >
-                  {datasetOptions.map((option) => (
-                    <MenuItem key={option.id} value={option.id}>
-                      {option.name}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              ) : step.type === 'showOverlay' ? (
-                <TextField
-                  select
-                  label="Overlay"
-                  value={(step as any).overlayId ?? ''}
-                  onChange={(event) =>
-                    patch((previous) => ({
-                      ...previous,
-                      steps: previous.steps.map((s, index2) =>
-                        index2 === index
-                          ? {
-                              ...s,
-                              overlayId: event.target.value,
-                              overlayName:
-                                overlayOptions.find(
-                                  (option) => option.id === event.target.value,
-                                )?.name ?? '',
-                            }
-                          : s,
-                      ),
-                    }))
-                  }
-                  size="small"
-                  sx={{ flex: 1 }}
-                >
-                  {overlayOptions.map((option) => (
-                    <MenuItem key={option.id} value={option.id}>
-                      {option.name}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              ) : step.type === 'stickyNav' ? (
-                <TextField
-                  label="Selector (default: header/nav)"
-                  value={(step as any).selector ?? ''}
-                  onChange={(event) =>
-                    patch((previous) => ({
-                      ...previous,
-                      steps: previous.steps.map((s, index2) =>
-                        index2 === index
-                          ? { ...s, selector: event.target.value }
-                          : s,
-                      ),
-                    }))
-                  }
-                  size="small"
-                  sx={{ flex: 1 }}
-                />
-              ) : step.type === 'addClass' || step.type === 'removeClass' ? (
-                <>
+                ) : step.type === 'datasetAppend' ||
+                  step.type === 'updateDataset' ? (
                   <TextField
-                    label="CSS selector"
+                    select
+                    label="Dataset"
+                    value={
+                      (step as any).datasetId ??
+                      datasetOptions.find(
+                        (option) => option.name === step.datasetName,
+                      )?.id ??
+                      ''
+                    }
+                    onChange={(event) =>
+                      patch((previous) => ({
+                        ...previous,
+                        steps: previous.steps.map((s, index2) =>
+                          index2 === index
+                            ? {
+                                ...s,
+                                datasetId: event.target.value,
+                                datasetName:
+                                  datasetOptions.find(
+                                    (option) =>
+                                      option.id === event.target.value,
+                                  )?.name ?? (s as any).datasetName,
+                              }
+                            : s,
+                        ),
+                      }))
+                    }
+                    size="small"
+                    sx={{ flex: 1 }}
+                  >
+                    {datasetOptions.map((option) => (
+                      <MenuItem key={option.id} value={option.id}>
+                        {option.name}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                ) : step.type === 'showOverlay' ? (
+                  <TextField
+                    select
+                    label="Overlay"
+                    value={(step as any).overlayId ?? ''}
+                    onChange={(event) =>
+                      patch((previous) => ({
+                        ...previous,
+                        steps: previous.steps.map((s, index2) =>
+                          index2 === index
+                            ? {
+                                ...s,
+                                overlayId: event.target.value,
+                                overlayName:
+                                  overlayOptions.find(
+                                    (option) =>
+                                      option.id === event.target.value,
+                                  )?.name ?? '',
+                              }
+                            : s,
+                        ),
+                      }))
+                    }
+                    size="small"
+                    sx={{ flex: 1 }}
+                  >
+                    {overlayOptions.map((option) => (
+                      <MenuItem key={option.id} value={option.id}>
+                        {option.name}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                ) : step.type === 'stickyNav' ? (
+                  <TextField
+                    label="Selector (default: header/nav)"
                     value={(step as any).selector ?? ''}
                     onChange={(event) =>
                       patch((previous) => ({
@@ -1358,295 +1564,508 @@ export function HostActionsCard(props: {
                     size="small"
                     sx={{ flex: 1 }}
                   />
+                ) : step.type === 'addClass' || step.type === 'removeClass' ? (
+                  <>
+                    <TextField
+                      label="CSS selector"
+                      value={(step as any).selector ?? ''}
+                      onChange={(event) =>
+                        patch((previous) => ({
+                          ...previous,
+                          steps: previous.steps.map((s, index2) =>
+                            index2 === index
+                              ? { ...s, selector: event.target.value }
+                              : s,
+                          ),
+                        }))
+                      }
+                      size="small"
+                      sx={{ flex: 1 }}
+                    />
+                    <TextField
+                      label="Class name"
+                      value={(step as any).className ?? ''}
+                      onChange={(event) =>
+                        patch((previous) => ({
+                          ...previous,
+                          steps: previous.steps.map((s, index2) =>
+                            index2 === index
+                              ? { ...s, className: event.target.value }
+                              : s,
+                          ),
+                        }))
+                      }
+                      size="small"
+                      sx={{ width: 150 }}
+                    />
+                  </>
+                ) : step.type === 'showElement' ||
+                  step.type === 'hideElement' ||
+                  step.type === 'toggleElement' ? (
+                  // Element choreography (AGL-562). The besigner's builder
+                  // offers an element picker; here the CSS selector is the
+                  // escape hatch (node targets use [data-aglyn="leaf:…"]).
                   <TextField
-                    label="Class name"
-                    value={(step as any).className ?? ''}
+                    label="CSS selector"
+                    placeholder='[data-aglyn="leaf:…"] or .my-class'
+                    value={(step as any).selector ?? ''}
                     onChange={(event) =>
                       patch((previous) => ({
                         ...previous,
                         steps: previous.steps.map((s, index2) =>
                           index2 === index
-                            ? { ...s, className: event.target.value }
+                            ? { ...s, selector: event.target.value }
                             : s,
                         ),
                       }))
                     }
                     size="small"
-                    sx={{ width: 150 }}
+                    sx={{ flex: 1 }}
                   />
-                </>
-              ) : step.type === 'showElement' ||
-                step.type === 'hideElement' ||
-                step.type === 'toggleElement' ? (
-                // Element choreography (AGL-562). The besigner's builder
-                // offers an element picker; here the CSS selector is the
-                // escape hatch (node targets use [data-aglyn="leaf:…"]).
-                <TextField
-                  label="CSS selector"
-                  placeholder='[data-aglyn="leaf:…"] or .my-class'
-                  value={(step as any).selector ?? ''}
-                  onChange={(event) =>
-                    patch((previous) => ({
-                      ...previous,
-                      steps: previous.steps.map((s, index2) =>
-                        index2 === index
-                          ? { ...s, selector: event.target.value }
-                          : s,
-                      ),
-                    }))
-                  }
-                  size="small"
-                  sx={{ flex: 1 }}
-                />
-              ) : step.type === 'openDrawer' ||
-                step.type === 'closeDrawer' ||
-                step.type === 'toggleDrawer' ? (
-                <TextField
-                  label="Drawer node id (optional)"
-                  placeholder="Empty = the page's first drawer"
-                  value={(step as any).drawerNodeId ?? ''}
-                  onChange={(event) =>
-                    patch((previous) => ({
-                      ...previous,
-                      steps: previous.steps.map((s, index2) =>
-                        index2 === index
-                          ? {
-                              ...s,
-                              drawerNodeId: event.target.value || undefined,
-                            }
-                          : s,
-                      ),
-                    }))
-                  }
-                  size="small"
-                  sx={{ flex: 1 }}
-                />
-              ) : step.type === 'openMenu' ||
-                step.type === 'closeMenu' ||
-                step.type === 'toggleMenu' ? (
-                // Menu commands (AGL-568). The besigner's builder offers
-                // a menu picker; here the raw node id is the escape
-                // hatch, like the drawer field above.
-                <TextField
-                  label="Menu node id (optional)"
-                  placeholder="Empty = the page's first menu"
-                  value={(step as any).menuNodeId ?? ''}
-                  onChange={(event) =>
-                    patch((previous) => ({
-                      ...previous,
-                      steps: previous.steps.map((s, index2) =>
-                        index2 === index
-                          ? {
-                              ...s,
-                              menuNodeId: event.target.value || undefined,
-                            }
-                          : s,
-                      ),
-                    }))
-                  }
-                  size="small"
-                  sx={{ flex: 1 }}
-                />
-              ) : step.type === 'showHtml' || step.type === 'runJs' ? (
-                <TextField
-                  label={step.type === 'showHtml' ? 'HTML' : 'JavaScript'}
-                  value={
-                    step.type === 'showHtml'
-                      ? ((step as any).html ?? '')
-                      : ((step as any).code ?? '')
-                  }
-                  onChange={(event) =>
-                    patch((previous) => ({
-                      ...previous,
-                      steps: previous.steps.map((s, index2) =>
-                        index2 === index
-                          ? step.type === 'showHtml'
-                            ? { ...s, html: event.target.value }
-                            : { ...s, code: event.target.value }
-                          : s,
-                      ),
-                    }))
-                  }
-                  size="small"
-                  multiline
-                  maxRows={4}
-                  sx={{ flex: 1 }}
-                />
-              ) : step.type === 'redirect' ? (
-                <TextField
-                  label="Destination URL"
-                  value={(step as any).url ?? ''}
-                  onChange={(event) =>
-                    patch((previous) => ({
-                      ...previous,
-                      steps: previous.steps.map((s, index2) =>
-                        index2 === index
-                          ? { ...s, url: event.target.value }
-                          : s,
-                      ),
-                    }))
-                  }
-                  size="small"
-                  sx={{ flex: 1 }}
-                />
-              ) : step.type === 'trackGaEvent' ? (
-                <TextField
-                  label="Analytics event name"
-                  value={(step as any).eventName ?? ''}
-                  onChange={(event) =>
-                    patch((previous) => ({
-                      ...previous,
-                      steps: previous.steps.map((s, index2) =>
-                        index2 === index
-                          ? { ...s, eventName: event.target.value }
-                          : s,
-                      ),
-                    }))
-                  }
-                  size="small"
-                  sx={{ flex: 1 }}
-                />
-              ) : step.type === 'sendEmail' ? (
-                <>
+                ) : step.type === 'openDrawer' ||
+                  step.type === 'closeDrawer' ||
+                  step.type === 'toggleDrawer' ? (
                   <TextField
-                    label="Subject"
-                    value={(step as any).subject ?? ''}
+                    label="Drawer node id (optional)"
+                    placeholder="Empty = the page's first drawer"
+                    value={(step as any).drawerNodeId ?? ''}
                     onChange={(event) =>
                       patch((previous) => ({
                         ...previous,
                         steps: previous.steps.map((s, index2) =>
                           index2 === index
-                            ? { ...s, subject: event.target.value }
+                            ? {
+                                ...s,
+                                drawerNodeId: event.target.value || undefined,
+                              }
                             : s,
                         ),
                       }))
                     }
                     size="small"
-                    sx={{ width: 180 }}
+                    sx={{ flex: 1 }}
                   />
+                ) : step.type === 'openMenu' ||
+                  step.type === 'closeMenu' ||
+                  step.type === 'toggleMenu' ? (
+                  // Menu commands (AGL-568). The besigner's builder offers
+                  // a menu picker; here the raw node id is the escape
+                  // hatch, like the drawer field above.
                   <TextField
-                    label="Body"
-                    value={(step as any).body ?? ''}
+                    label="Menu node id (optional)"
+                    placeholder="Empty = the page's first menu"
+                    value={(step as any).menuNodeId ?? ''}
                     onChange={(event) =>
                       patch((previous) => ({
                         ...previous,
                         steps: previous.steps.map((s, index2) =>
                           index2 === index
-                            ? { ...s, body: event.target.value }
+                            ? {
+                                ...s,
+                                menuNodeId: event.target.value || undefined,
+                              }
+                            : s,
+                        ),
+                      }))
+                    }
+                    size="small"
+                    sx={{ flex: 1 }}
+                  />
+                ) : step.type === 'showHtml' || step.type === 'runJs' ? (
+                  <TextField
+                    label={step.type === 'showHtml' ? 'HTML' : 'JavaScript'}
+                    value={
+                      step.type === 'showHtml'
+                        ? ((step as any).html ?? '')
+                        : ((step as any).code ?? '')
+                    }
+                    onChange={(event) =>
+                      patch((previous) => ({
+                        ...previous,
+                        steps: previous.steps.map((s, index2) =>
+                          index2 === index
+                            ? step.type === 'showHtml'
+                              ? { ...s, html: event.target.value }
+                              : { ...s, code: event.target.value }
                             : s,
                         ),
                       }))
                     }
                     size="small"
                     multiline
-                    maxRows={3}
+                    maxRows={4}
                     sx={{ flex: 1 }}
                   />
-                </>
-              ) : step.type === 'notifyAdmins' ? (
-                <TextField
-                  label="Notification title"
-                  value={(step as any).title ?? ''}
-                  onChange={(event) =>
+                ) : step.type === 'redirect' ? (
+                  <TextField
+                    label="Destination URL"
+                    value={(step as any).url ?? ''}
+                    onChange={(event) =>
+                      patch((previous) => ({
+                        ...previous,
+                        steps: previous.steps.map((s, index2) =>
+                          index2 === index
+                            ? { ...s, url: event.target.value }
+                            : s,
+                        ),
+                      }))
+                    }
+                    size="small"
+                    sx={{ flex: 1 }}
+                  />
+                ) : step.type === 'trackGaEvent' ? (
+                  <TextField
+                    label="Analytics event name"
+                    value={(step as any).eventName ?? ''}
+                    onChange={(event) =>
+                      patch((previous) => ({
+                        ...previous,
+                        steps: previous.steps.map((s, index2) =>
+                          index2 === index
+                            ? { ...s, eventName: event.target.value }
+                            : s,
+                        ),
+                      }))
+                    }
+                    size="small"
+                    sx={{ flex: 1 }}
+                  />
+                ) : step.type === 'sendEmail' ? (
+                  <>
+                    <TextField
+                      label="Subject"
+                      value={(step as any).subject ?? ''}
+                      onChange={(event) =>
+                        patch((previous) => ({
+                          ...previous,
+                          steps: previous.steps.map((s, index2) =>
+                            index2 === index
+                              ? { ...s, subject: event.target.value }
+                              : s,
+                          ),
+                        }))
+                      }
+                      size="small"
+                      sx={{ width: 180 }}
+                    />
+                    <TextField
+                      label="Body"
+                      value={(step as any).body ?? ''}
+                      onChange={(event) =>
+                        patch((previous) => ({
+                          ...previous,
+                          steps: previous.steps.map((s, index2) =>
+                            index2 === index
+                              ? { ...s, body: event.target.value }
+                              : s,
+                          ),
+                        }))
+                      }
+                      size="small"
+                      multiline
+                      maxRows={3}
+                      sx={{ flex: 1 }}
+                    />
+                  </>
+                ) : step.type === 'notifyAdmins' ? (
+                  <TextField
+                    label="Notification title"
+                    value={(step as any).title ?? ''}
+                    onChange={(event) =>
+                      patch((previous) => ({
+                        ...previous,
+                        steps: previous.steps.map((s, index2) =>
+                          index2 === index
+                            ? { ...s, title: event.target.value }
+                            : s,
+                        ),
+                      }))
+                    }
+                    size="small"
+                    sx={{ flex: 1 }}
+                  />
+                ) : step.type === 'enrollList' ? (
+                  <TextField
+                    select
+                    label="List"
+                    value={(step as any).listId ?? ''}
+                    onChange={(event) =>
+                      patch((previous) => ({
+                        ...previous,
+                        steps: previous.steps.map((s, index2) =>
+                          index2 === index
+                            ? {
+                                ...s,
+                                listId: event.target.value,
+                                listName:
+                                  listOptions.find(
+                                    (option) =>
+                                      option.id === event.target.value,
+                                  )?.name ?? '',
+                              }
+                            : s,
+                        ),
+                      }))
+                    }
+                    size="small"
+                    sx={{ flex: 1 }}
+                  >
+                    {listOptions.length === 0 ? (
+                      <MenuItem value="" disabled>
+                        {'No lists yet — create one under Campaigns'}
+                      </MenuItem>
+                    ) : null}
+                    {listOptions.map((option) => (
+                      <MenuItem key={option.id} value={option.id}>
+                        {option.name}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                ) : step.type === 'assignCampaign' ? (
+                  <TextField
+                    select
+                    label="Campaign"
+                    value={(step as any).campaignId ?? ''}
+                    onChange={(event) =>
+                      patch((previous) => ({
+                        ...previous,
+                        steps: previous.steps.map((s, index2) =>
+                          index2 === index
+                            ? {
+                                ...s,
+                                campaignId: event.target.value,
+                                campaignName:
+                                  campaignOptions.find(
+                                    (option) =>
+                                      option.id === event.target.value,
+                                  )?.name ?? '',
+                              }
+                            : s,
+                        ),
+                      }))
+                    }
+                    size="small"
+                    sx={{ flex: 1 }}
+                  >
+                    {campaignOptions.length === 0 ? (
+                      <MenuItem value="" disabled>
+                        {'No campaigns yet'}
+                      </MenuItem>
+                    ) : null}
+                    {campaignOptions.map((option) => (
+                      <MenuItem key={option.id} value={option.id}>
+                        {option.name}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                ) : step.type === 'wait' || step.type === 'waitForEvent' ? (
+                  <>
+                    {step.type === 'waitForEvent' ? (
+                      <TextField
+                        select
+                        label="Until"
+                        value={(step as any).eventName ?? ''}
+                        onChange={(event) =>
+                          patch((previous) => ({
+                            ...previous,
+                            steps: previous.steps.map((s, index2) =>
+                              index2 === index
+                                ? { ...s, eventName: event.target.value }
+                                : s,
+                            ),
+                          }))
+                        }
+                        size="small"
+                        sx={{ minWidth: 170 }}
+                      >
+                        {HOST_EVENT_TYPES.map((option) => (
+                          <MenuItem key={option} value={option}>
+                            {option}
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                    ) : null}
+                    <TextField
+                      select
+                      label={
+                        step.type === 'waitForEvent'
+                          ? 'Give up after'
+                          : 'Wait for'
+                      }
+                      value={String(
+                        step.type === 'waitForEvent'
+                          ? ((step as any).timeoutMinutes ?? '')
+                          : ((step as any).delayMinutes ?? ''),
+                      )}
+                      onChange={(event) =>
+                        patch((previous) => ({
+                          ...previous,
+                          steps: previous.steps.map((s, index2) =>
+                            index2 === index
+                              ? s.type === 'waitForEvent'
+                                ? {
+                                    ...s,
+                                    timeoutMinutes: Number(event.target.value),
+                                  }
+                                : {
+                                    ...s,
+                                    delayMinutes: Number(event.target.value),
+                                  }
+                              : s,
+                          ),
+                        }))
+                      }
+                      size="small"
+                      sx={{ minWidth: 150 }}
+                    >
+                      {FLOW_WAIT_PRESETS.map((option) => (
+                        <MenuItem key={option.minutes} value={option.minutes}>
+                          {option.label}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                    <Typography variant="caption" color="text.secondary">
+                      {step.type === 'waitForEvent'
+                        ? 'Continues as soon as this happens, or when the time is up.'
+                        : 'The rest of this automation runs later, on its own.'}
+                    </Typography>
+                  </>
+                ) : step.type === 'exitFlow' ? (
+                  <Typography variant="caption" color="text.secondary">
+                    {
+                      'Nothing after this step runs. Add a condition to make it a branch.'
+                    }
+                  </Typography>
+                ) : null}
+                <IconButton
+                  size="small"
+                  aria-label="remove step"
+                  onClick={() =>
                     patch((previous) => ({
                       ...previous,
-                      steps: previous.steps.map((s, index2) =>
-                        index2 === index
-                          ? { ...s, title: event.target.value }
-                          : s,
+                      steps: previous.steps.filter(
+                        (_, index2) => index2 !== index,
                       ),
                     }))
                   }
-                  size="small"
-                  sx={{ flex: 1 }}
-                />
-              ) : step.type === 'enrollList' ? (
-                <TextField
-                  select
-                  label="List"
-                  value={(step as any).listId ?? ''}
-                  onChange={(event) =>
-                    patch((previous) => ({
-                      ...previous,
-                      steps: previous.steps.map((s, index2) =>
-                        index2 === index
-                          ? {
-                              ...s,
-                              listId: event.target.value,
-                              listName:
-                                listOptions.find(
-                                  (option) => option.id === event.target.value,
-                                )?.name ?? '',
-                            }
-                          : s,
-                      ),
-                    }))
-                  }
-                  size="small"
-                  sx={{ flex: 1 }}
                 >
-                  {listOptions.length === 0 ? (
-                    <MenuItem value="" disabled>
-                      {'No lists yet — create one under Campaigns'}
-                    </MenuItem>
-                  ) : null}
-                  {listOptions.map((option) => (
-                    <MenuItem key={option.id} value={option.id}>
-                      {option.name}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              ) : step.type === 'assignCampaign' ? (
-                <TextField
-                  select
-                  label="Campaign"
-                  value={(step as any).campaignId ?? ''}
-                  onChange={(event) =>
-                    patch((previous) => ({
-                      ...previous,
-                      steps: previous.steps.map((s, index2) =>
-                        index2 === index
-                          ? {
-                              ...s,
-                              campaignId: event.target.value,
-                              campaignName:
-                                campaignOptions.find(
-                                  (option) => option.id === event.target.value,
-                                )?.name ?? '',
-                            }
-                          : s,
-                      ),
-                    }))
-                  }
-                  size="small"
-                  sx={{ flex: 1 }}
-                >
-                  {campaignOptions.length === 0 ? (
-                    <MenuItem value="" disabled>
-                      {'No campaigns yet'}
-                    </MenuItem>
-                  ) : null}
-                  {campaignOptions.map((option) => (
-                    <MenuItem key={option.id} value={option.id}>
-                      {option.name}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              ) : null}
-              <IconButton
-                size="small"
-                aria-label="remove step"
-                onClick={() =>
-                  patch((previous) => ({
-                    ...previous,
-                    steps: previous.steps.filter(
-                      (_, index2) => index2 !== index,
-                    ),
-                  }))
-                }
+                  {'×'}
+                </IconButton>
+              </Stack>
+              {/*
+               * BRANCHING, as a second row under the step it belongs to.
+               *
+               * One clause rather than the trigger's chain of five. The
+               * trigger decides whether a run happens at all and earns a
+               * condition builder; a step's guard answers "does THIS one run",
+               * which in every sequence anybody writes is a single fact — did
+               * they order, did they open, is the field still empty. A second
+               * five-row builder per step would make a ten-step flow a page of
+               * condition editors, and the model already accepts more if the
+               * evidence ever says otherwise.
+               */}
+              <Stack
+                direction="row"
+                spacing={1}
+                sx={{ alignItems: 'center', pl: 3 }}
               >
-                {'×'}
-              </IconButton>
+                <TextField
+                  select
+                  label="Only if"
+                  value={(step.when?.conditions?.[0]?.op as string) ?? ''}
+                  onChange={(event) =>
+                    patch((previous) => ({
+                      ...previous,
+                      steps: previous.steps.map((s, index2) =>
+                        index2 === index
+                          ? {
+                              ...s,
+                              when: event.target.value
+                                ? {
+                                    conditions: [
+                                      {
+                                        op: event.target
+                                          .value as TriggerConditionOp,
+                                        field:
+                                          s.when?.conditions?.[0]?.field ?? '',
+                                        value:
+                                          s.when?.conditions?.[0]?.value ?? '',
+                                      },
+                                    ],
+                                  }
+                                : null,
+                            }
+                          : s,
+                      ),
+                    }))
+                  }
+                  size="small"
+                  sx={{ minWidth: 170 }}
+                >
+                  <MenuItem value="">{'Always run'}</MenuItem>
+                  <MenuItem value="notEmpty">{'Field is not empty'}</MenuItem>
+                  <MenuItem value="equals">{'Field equals'}</MenuItem>
+                  <MenuItem value="contains">{'Field contains'}</MenuItem>
+                </TextField>
+                {step.when?.conditions?.[0]?.op ? (
+                  <TextField
+                    label="Field"
+                    placeholder="orderId"
+                    value={step.when.conditions[0].field ?? ''}
+                    onChange={(event) =>
+                      patch((previous) => ({
+                        ...previous,
+                        steps: previous.steps.map((s, index2) =>
+                          index2 === index && s.when?.conditions?.[0]
+                            ? {
+                                ...s,
+                                when: {
+                                  conditions: [
+                                    {
+                                      ...s.when.conditions[0],
+                                      field: event.target.value,
+                                    },
+                                  ],
+                                },
+                              }
+                            : s,
+                        ),
+                      }))
+                    }
+                    size="small"
+                    sx={{ flex: 1 }}
+                  />
+                ) : null}
+                {step.when?.conditions?.[0]?.op === 'equals' ||
+                step.when?.conditions?.[0]?.op === 'contains' ? (
+                  <TextField
+                    label="Value"
+                    value={step.when.conditions[0].value ?? ''}
+                    onChange={(event) =>
+                      patch((previous) => ({
+                        ...previous,
+                        steps: previous.steps.map((s, index2) =>
+                          index2 === index && s.when?.conditions?.[0]
+                            ? {
+                                ...s,
+                                when: {
+                                  conditions: [
+                                    {
+                                      ...s.when.conditions[0],
+                                      value: event.target.value,
+                                    },
+                                  ],
+                                },
+                              }
+                            : s,
+                        ),
+                      }))
+                    }
+                    size="small"
+                    sx={{ flex: 1 }}
+                  />
+                ) : null}
+              </Stack>
             </Stack>
           ))}
           <Button
@@ -1688,7 +2107,6 @@ export function HostActionsCard(props: {
               hostId={hostId}
               targetId={runsFor.$id}
               header="Recent runs"
-              max={25}
             />
           ) : null}
         </DialogContent>

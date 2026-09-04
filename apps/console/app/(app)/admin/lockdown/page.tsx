@@ -37,6 +37,7 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../components/staff-only.component'
 import {
@@ -323,12 +324,8 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
   const platformRecord = records.find((record) => record.id === 'platform')
 
   const refresh = useCallback(async () => {
-    const idToken = await (user as any)?.getIdToken?.()
-    if (!idToken) return
     try {
-      const response = await fetch('/api/admin/lockdown', {
-        headers: { Authorization: `Bearer ${idToken}` },
-      })
+      const response = await authorizedFetch(user, '/api/admin/lockdown')
       if (!response.ok) throw new Error(`Load failed (${response.status})`)
       const payload = await response.json()
       setRecords(payload.records ?? [])
@@ -345,13 +342,12 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
    * is the only reason the missed lift was ever noticed, made a button.
    */
   const checkScoped = useCallback(async () => {
-    const idToken = await (user as any)?.getIdToken?.()
-    if (!idToken || !targetId.trim()) return
+    if (!targetId.trim()) return
     setBusy(true)
     try {
-      const response = await fetch(
+      const response = await authorizedFetch(
+        user,
         `/api/admin/lockdown?scope=${encodeURIComponent(scope)}&targetId=${encodeURIComponent(targetId.trim())}`,
-        { headers: { Authorization: `Bearer ${idToken}` } },
       )
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
@@ -379,17 +375,16 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
    * this page is to have the server evaluate it for them.
    */
   const evaluateVerdict = useCallback(async () => {
-    const idToken = await (user as any)?.getIdToken?.()
-    if (!idToken) return
     const params = new URLSearchParams({ verdict: '1' })
     if (verdictUid.trim()) params.set('uid', verdictUid.trim())
     if (verdictOrgId.trim()) params.set('orgId', verdictOrgId.trim())
     if (verdictHostId.trim()) params.set('hostId', verdictHostId.trim())
     setBusy(true)
     try {
-      const response = await fetch(`/api/admin/lockdown?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${idToken}` },
-      })
+      const response = await authorizedFetch(
+        user,
+        `/api/admin/lockdown?${params.toString()}`,
+      )
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
         throw new Error(payload.error ?? `Failed (${response.status})`)
@@ -418,16 +413,11 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
       body: Record<string, unknown>,
       done: (payload: Record<string, any>) => void,
     ) => {
-      const idToken = await (user as any)?.getIdToken?.()
-      if (!idToken) return
       setBusy(true)
       try {
-        const response = await fetch('/api/admin/lockdown', {
+        const response = await authorizedFetch(user, '/api/admin/lockdown', {
           method: 'POST',
-          headers: {
-            Authorization: `Bearer ${idToken}`,
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         })
         const payload = await response.json().catch(() => ({}))

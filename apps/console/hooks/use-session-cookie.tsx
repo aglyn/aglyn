@@ -18,6 +18,7 @@
 
 import { FIREBASE_AUTH_EMULATOR_ENABLED } from '@aglyn/shared-data-enums'
 import { useAuth, useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { signOut } from 'firebase/auth'
 import { useEffect, useRef } from 'react'
 import { tombstoneEndsSession } from '../app/api/auth/session/session-tombstone'
@@ -67,10 +68,8 @@ export async function mintSession(
   mintedForUid: { current: string | null },
 ): Promise<boolean> {
   try {
-    const idToken = await user.getIdToken()
-    const response = await fetch('/api/auth/session', {
+    const response = await authorizedFetch(user, '/api/auth/session', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${idToken}` },
     })
     if (!response.ok) {
       mintedForUid.current = null

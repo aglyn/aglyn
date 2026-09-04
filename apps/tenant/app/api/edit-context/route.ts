@@ -302,8 +302,11 @@ export async function POST(request: Request): Promise<Response> {
 
     // Quick links (AGL-1829), server-built via buildRoute like everything
     // above — the bar never hand-assembles console paths. Each renders only
-    // when the host's effective plugin set justifies it; Orders deep-links
-    // the commerce console's Orders tab (HubTabs mirrors `?tab=`).
+    // when the host's effective plugin set justifies it; Orders deep-links the
+    // commerce console's Orders SECTION, which is a path segment beneath the
+    // surface rather than a `?tab=` on it (AGL-2501). The query form still
+    // resolves — it names no section, so the shell redirects it to the
+    // surface's landing section, which is Catalog and not Orders.
     const screensUrl = canLink
       ? `${CONSOLE_ORIGIN}${buildRoute(Route.HOST_SCREENS, {
           orgSlug: orgSlug as string,
@@ -322,7 +325,7 @@ export async function POST(request: Request): Promise<Response> {
         ? `${CONSOLE_ORIGIN}${buildRoute(Route.HOST_PRODUCTS, {
             orgSlug: orgSlug as string,
             host: hostDoc.subdomain as string,
-          })}?tab=orders`
+          })}/orders`
         : null
 
     // Analytics on the bar (AGL-1829 follow-on — "make analytics appear").

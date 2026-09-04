@@ -66,10 +66,27 @@ function resolveFieldValues(
 ): Record<string, any> {
   const resolved: Record<string, any> = {}
   for (const [key, field] of Object.entries(value)) {
-    resolved[key] =
-      field && typeof field === 'object' && '__increment' in field
-        ? Number(existing?.[key] ?? 0) + Number(field.__increment)
-        : field
+    if (field && typeof field === 'object' && '__increment' in field) {
+      resolved[key] = Number(existing?.[key] ?? 0) + Number(field.__increment)
+    } else if (field && typeof field === 'object' && '__arrayUnion' in field) {
+      // ACCUMULATES, like the real thing. Every line-scoped path in
+      // `refund.ts` writes through `arrayUnion` — the order timeline and the
+      // per-line refund record — so a fake without it threw
+      // `arrayUnion is not a function`, the handler answered its generic 500,
+      // and the spy below swallowed the diagnostic. The suite could not
+      // exercise a single line refund and said nothing about why.
+      //
+      // A fake that REPLACED the array would be worse than none: two admins
+      // refunding different lines must not erase each other, and a replacing
+      // double reports exactly that loss as green.
+      const before = Array.isArray(existing?.[key]) ? existing[key] : []
+      const added = (field.__arrayUnion as unknown[]).filter(
+        (item) => !before.includes(item),
+      )
+      resolved[key] = [...before, ...added]
+    } else {
+      resolved[key] = field
+    }
   }
   return resolved
 }
@@ -248,6 +265,19 @@ jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
 }))
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  /*
+   * The real resolution's shape: an org that declared no pooling resolves
+   * every site to a group of ONE. Faked rather than imported because this
+   * file mocks the whole module — but faked to the NARROW answer, which is
+   * the direction a wrong group may fail in.
+   */
+  consentGroupForSite: async (hostId: string) => ({
+    hostId,
+    groupId: hostId,
+    name: null,
+    hostIds: [hostId],
+    declared: false,
+  }),
   firebaseAdmin: {
     app: () => ({
       auth: () => ({
@@ -259,6 +289,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       FieldValue: {
         serverTimestamp: () => '<server-timestamp>',
         increment: (by: number) => ({ __increment: by }),
+        arrayUnion: (...items: unknown[]) => ({ __arrayUnion: items }),
       },
     },
   },
@@ -278,6 +309,25 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 // entry point precisely so this barrel mock cannot stand in for it — a
 // permissive stub would report "the contact was updated" for a document that
 // never existed, which is the one case the tests below turn on.
+
+/*
+ * The campaign revenue reversal IS mocked, and the distinction from
+ * `updateExisting` above is what it is being asked to prove. Whether a
+ * reversal lands correctly on the rollup is settled against a real double in
+ * `email-revenue-attribution.spec.ts`; what this file is the only place to
+ * prove is that a refund REACHES it, with the amount this attempt moved
+ * rather than the order total. Left unmocked it would reach the real
+ * firebase-admin, which this suite has no app for.
+ */
+const reverseAttributedRevenue = jest.fn(async () => true)
+jest.mock(
+  '@aglyn/tenant-data-admin/server/email-revenue-attribution',
+  () => ({
+    __esModule: true,
+    reverseEmailAttributedRevenue: (...args: unknown[]) =>
+      (reverseAttributedRevenue as any)(...args),
+  }),
+)
 
 // ---------------------------------------------------------------------------
 // Stripe boundary — counted, never reached
@@ -433,6 +483,46 @@ function expectNothingSwallowed() {
 let consoleError: jest.SpyInstance
 let consoleWarn: jest.SpyInstance
 
+/**
+ * A SUITE THAT SILENCES ITS OWN DIAGNOSTICS.
+ *
+ * `console.error` is spied to a no-op so a deliberate Stripe refusal does not
+ * spray a stack over the run. The cost of that was invisible until it bit:
+ * `refund.ts` writes its line-scoped paths through `FieldValue.arrayUnion`,
+ * the fake had none, the handler threw, answered its generic
+ * `{ error: 'Refund failed' }` 500 — and the one line naming the cause went
+ * into the spy and nowhere else. Every line-scoped test failed on a status
+ * comparison with no hint of why.
+ *
+ * So silencing stays, and going UNNOTICED does not. Any `console.error` the
+ * handler emits fails the test unless the test said it was expecting one, and
+ * the failure quotes the message the spy ate.
+ */
+let allowedErrors: RegExp[] = []
+
+/**
+ * Declares that this test expects the handler to log an error, optionally
+ * matching `pattern`. Call once per expected error.
+ *
+ * Deliberately opt-IN per test rather than a suite-wide allowlist: an error a
+ * test did not ask for is the signal, and a shared list would quietly absorb
+ * new ones.
+ */
+function expectServerError(pattern = /[\s\S]*/): void {
+  allowedErrors.push(pattern)
+}
+
+/** How the spy recorded one call, for a legible failure. */
+function describeErrorCall(call: unknown[]): string {
+  return call
+    .map((part) =>
+      part instanceof Error
+        ? `${part.message}\n${part.stack ?? ''}`
+        : String(part),
+    )
+    .join(' ')
+}
+
 beforeAll(() => {
   ;(global as any).fetch = fetchMock
   process.env.STRIPE_SECRET_KEY = 'sk_test_not_a_real_key'
@@ -445,6 +535,28 @@ beforeAll(() => {
 afterAll(() => {
   consoleError.mockRestore()
   consoleWarn.mockRestore()
+})
+
+// See `allowedErrors`. An unexpected server error is a finding, not noise: the
+// handler answers one opaque 500 for every internal failure, so this is the
+// only place the cause can still be read.
+afterEach(() => {
+  const unexpected = consoleError.mock.calls
+    .map(describeErrorCall)
+    .filter((message) => {
+      const index = allowedErrors.findIndex((pattern) => pattern.test(message))
+      if (index === -1) return true
+      // Consumed, so two expected errors need two declarations.
+      allowedErrors.splice(index, 1)
+      return false
+    })
+  if (unexpected.length) {
+    throw new Error(
+      `The handler logged ${unexpected.length} error(s) this test did not ` +
+        `expect. Call expectServerError() if that is the point of the test, ` +
+        `or fix the cause:\n\n${unexpected.join('\n---\n')}`,
+    )
+  }
 })
 
 beforeEach(() => {
@@ -470,6 +582,7 @@ beforeEach(() => {
   } as any)
   consoleError.mockClear()
   consoleWarn.mockClear()
+  allowedErrors = []
 
   docs.set('hosts/host-1', { memberRoles: { 'admin-1': 'admin' } })
   // The buyer, already a contact from an earlier sale. Every figure is
@@ -678,6 +791,9 @@ describe('refund idempotency and cap (AGL-1696)', () => {
    * locks the order out of ever being refunded.
    */
   it('rolls back and releases when Stripe rejects the refund', async () => {
+    // The handler logs the refusal it is about to answer 500/409 for; this is
+    // the point of the test, so the unexpected-error guard is told to expect it.
+    expectServerError()
     nextRefundOutcome = 'rejected'
     const failed = await post({}, { 'idempotency-key': 'attempt-a' })
     expect(failed.status).toBe(502)
@@ -697,6 +813,9 @@ describe('refund idempotency and cap (AGL-1696)', () => {
    * So refunds fail CLOSED — the retry is refused rather than re-sent.
    */
   it('fails closed when the refund call throws', async () => {
+    // The handler logs the refusal it is about to answer 500/409 for; this is
+    // the point of the test, so the unexpected-error guard is told to expect it.
+    expectServerError()
     nextRefundOutcome = 'throws'
     const thrown = await post({}, { 'idempotency-key': 'attempt-a' })
     expect(thrown.status).toBe(500)
@@ -943,6 +1062,9 @@ describe('refund and lifetime value (AGL-1754)', () => {
    * — must leave the customer's figures alone.
    */
   it('leaves the contact alone when Stripe rejects the refund', async () => {
+    // The handler logs the refusal it is about to answer 500/409 for; this is
+    // the point of the test, so the unexpected-error guard is told to expect it.
+    expectServerError()
     nextRefundOutcome = 'rejected'
 
     const result = await post({}, { 'idempotency-key': 'attempt-a' })
@@ -1050,6 +1172,9 @@ describe('refund and the shelf (AGL-1797)', () => {
   })
 
   it('flags nothing when Stripe rejected the refund', async () => {
+    // The handler logs the refusal it is about to answer 500/409 for; this is
+    // the point of the test, so the unexpected-error guard is told to expect it.
+    expectServerError()
     nextRefundOutcome = 'rejected'
 
     const result = await post({}, { 'idempotency-key': 'attempt-a' })
@@ -1422,6 +1547,9 @@ describe('refund and an open dispute (AGL-1809)', () => {
    * is not burned.
    */
   it('reports Stripe refusing a disputed charge as the dispute, accurately', async () => {
+    // The handler logs the refusal it is about to answer 500/409 for; this is
+    // the point of the test, so the unexpected-error guard is told to expect it.
+    expectServerError()
     nextRefundOutcome = 'disputed'
 
     const result = await post({}, { 'idempotency-key': 'attempt-a' })
@@ -1564,5 +1692,98 @@ describe('who may refund (AGL-2372)', () => {
     expect(result.status).toBe(200)
     expect(refundCalls).toHaveLength(1)
     expect(storedOrder().refundedCents).toBe(5000)
+  })
+})
+
+/**
+ * WHAT THIS HARNESS CAN NOW REACH.
+ *
+ * Every line-scoped path in `refund.ts` writes through `FieldValue.arrayUnion`
+ * — the order timeline and the per-line refund record — and the fake had none,
+ * so the handler threw, answered its generic 500, and the spy ate the one line
+ * naming the cause. No test in this file could exercise a line refund, and
+ * nothing said so.
+ *
+ * These are the smoke tests for the widened double: they assert the RECORDED
+ * STATE the accumulating writes produce, which is the part a replacing fake
+ * would have reported green while losing one admin's work.
+ */
+describe('line-scoped refunds are reachable from this suite', () => {
+  function seedTwoLineOrder() {
+    docs.set('hosts/host-1/orders/order-1', {
+      status: 'paid',
+      channel: 'online',
+      customerEmail: 'buyer@example.com',
+      paymentIntentId: 'pi_live_1',
+      lineItems: [
+        { productId: 'product-1', name: 'Chair', quantity: 1, unitAmountCents: 5000 },
+        { productId: 'product-1', name: 'Stool', quantity: 1, unitAmountCents: 3000 },
+      ],
+      totals: {
+        itemsCents: 8000,
+        shippingCents: 0,
+        taxCents: 0,
+        discountCents: 0,
+        feeCents: 0,
+        totalCents: 8000,
+      },
+    })
+  }
+
+  it('refunds a named line and records which goods came back', async () => {
+    seedTwoLineOrder()
+
+    const result = await post({ lineItemIds: [1] })
+
+    expect(result.status).toBe(200)
+    expect(refundCalls[0].amount).toBe('3000')
+    // The per-line record the arrayUnion write produces — the field that makes
+    // a partial refund say WHICH goods came back.
+    expect(storedOrder()['refundedLineItemIds']).toEqual([1])
+  })
+
+  it('takes the campaign’s credit back off it, for the amount THIS attempt moved', async () => {
+    seedTwoLineOrder()
+    reverseAttributedRevenue.mockClear()
+
+    await post({ lineItemIds: [1] })
+
+    // $30 of an $80 order: the reversal follows the attempt, not the order
+    // total, and the order is not closed by it.
+    expect(reverseAttributedRevenue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hostId: 'host-1',
+        orderId: 'order-1',
+        amountCents: 3000,
+        closedTheOrder: false,
+      }),
+    )
+  })
+
+  it('tells the reversal when a refund closed the order', async () => {
+    seedTwoLineOrder()
+    reverseAttributedRevenue.mockClear()
+
+    await post({ lineItemIds: [0, 1] })
+
+    // The whole order came back, so the campaign loses a whole order too —
+    // the flag `refundedOrders` is counted off.
+    expect(reverseAttributedRevenue).toHaveBeenCalledWith(
+      expect.objectContaining({ amountCents: 8000, closedTheOrder: true }),
+    )
+  })
+
+  it('ACCUMULATES two line refunds instead of replacing the first', async () => {
+    // The property a replacing fake would report green while erasing it: two
+    // admins refunding different lines must not overwrite each other.
+    seedTwoLineOrder()
+
+    await post({ lineItemIds: [1] }, { 'idempotency-key': 'attempt-a' })
+    await post({ lineItemIds: [0] }, { 'idempotency-key': 'attempt-b' })
+
+    expect(refundCalls.map((call) => call.amount)).toEqual(['3000', '5000'])
+    // BOTH ids, not just the last: the accumulation is the property under test.
+    expect(storedOrder()['refundedLineItemIds']).toEqual([1, 0])
+    expect(storedOrder()['refundedCents']).toBe(8000)
   })
 })

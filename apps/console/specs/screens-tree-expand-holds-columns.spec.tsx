@@ -16,7 +16,7 @@
  */
 
 /**
- * Opening a parent must not move the columns (AGL-693).
+ * Opening a parent must not move the columns (AGL-2501).
  *
  * Under the browser's default `table-layout: auto` a column is as wide as the
  * widest cell in it, counted over the rows that are MOUNTED — so revealing a
@@ -70,7 +70,7 @@ const columnWidths = (table: Element) =>
     (col) => (col as HTMLElement).style.width,
   )
 
-describe('expanding a screen holds the columns still (AGL-693)', () => {
+describe('expanding a screen holds the columns still (AGL-2501)', () => {
   it('declares the same widths before and after an expand', () => {
     const { container } = renderTable()
     const root = container.querySelector('table') as Element

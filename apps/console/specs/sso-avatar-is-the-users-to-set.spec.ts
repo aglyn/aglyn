@@ -46,7 +46,7 @@ import { join } from 'node:path'
 import { code } from './source-text'
 
 // The Profile image section, a component of its own since Manage Account's
-// panels became routes (AGL-693).
+// panels became routes (AGL-2501).
 const CARD_PATH = join(
   __dirname,
   '..',
@@ -63,7 +63,7 @@ const PAGE = code(
  * Where `ssoGoverned` is decided, for the last case below.
  *
  * It is one answer shared by the rail, the Security route and this card
- * (AGL-693), so the predicate moved out of the card that used to compute it.
+ * (AGL-2501), so the predicate moved out of the card that used to compute it.
  */
 const SIGN_IN_METHODS = code(
   readFileSync(

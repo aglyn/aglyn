@@ -239,6 +239,17 @@ export enum FieldComponentType {
    * image list) fall back to free text rather than being clobbered.
    */
   CSS_GRADIENT = 'css-gradient',
+  /**
+   * Row-and-column grid editor for the Table element (AGL-2543).
+   *
+   * The persisted prop is still ONE string — pipe-delimited rows with the
+   * markdown divider carrying per-column alignment — so the renderer and
+   * existing documents stay untouched, and a comparison table already
+   * authored inside a Markdown element pastes straight in. This is the
+   * affordance that makes the element no-code: without it an author edits
+   * pipe syntax, which is the audience the besigner exists to spare.
+   */
+  DATA_TABLE = 'data-table',
   DATE_PICKER = 'date-picker',
   DUAL_LIST_SELECT = 'dual-list-select',
   FIELD_ARRAY = 'field-array',
@@ -307,6 +318,15 @@ export enum FieldComponentType {
    * model fieldId — field renames never break the mapping.
    */
   DATASET_FIELD_SELECT = 'dataset-field-select',
+  /**
+   * Select listing the host's form entities (`docs/specs/reusable-forms.md`
+   * §2c): the editor resolves options from EntityPickerContext.forms and
+   * persists the form id. The same id-first reasoning as every picker in this
+   * family, and here it is load-bearing rather than convenient — the string
+   * it replaces was the form's whole identity, so a rename split the
+   * submission history it named.
+   */
+  FORM_SELECT = 'form-select',
   SELECT = 'select',
   SLIDER = 'slider',
   SUB_FORM = 'sub-form',

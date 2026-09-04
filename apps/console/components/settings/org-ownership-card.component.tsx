@@ -30,7 +30,7 @@ import useOrgSettingsRequest from '../../hooks/use-org-settings-request'
 /**
  * Ownership transfer — owner-only, and irreversible by the person doing it.
  *
- * Extracted from the settings page when its sections became routes (AGL-693).
+ * Extracted from the settings page when its sections became routes (AGL-2501).
  */
 export function OrgOwnershipCard() {
   const { currentOrg } = useOrgScope()

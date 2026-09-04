@@ -20,9 +20,10 @@ import * as CommerceModel from '../../model'
 import { checkEntitlement, pluginDocsHelp } from '@aglyn/aglyn'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Alert, Box, Stack, Typography } from '@mui/material'
-import { collection, limit, query } from 'firebase/firestore'
+import { collection, limit, orderBy, query, where } from 'firebase/firestore'
 import { useMemo } from 'react'
 import {
+  ceilingedWindow,
   useConsoleHostRoute,
   useFirestore,
   useOrgPlan,
@@ -34,6 +35,25 @@ export interface CommerceAnalyticsCardProps {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000
+
+/**
+ * The widest span any figure on this card is computed over. The trend is
+ * fourteen days and the totals are thirty, so thirty is what the query asks
+ * for — the card reads the period it reports rather than a fixed slab of
+ * all-time orders that may or may not overlap it.
+ */
+const ANALYTICS_WINDOW_MS = 30 * DAY_MS
+
+/**
+ * The safety bound on that window, for a store selling more in a month than
+ * any of these figures can usefully be read from.
+ *
+ * Every tile here is an aggregate, so a truncated read understates rather than
+ * shortens — a sum over part of a period is not a smaller list, it is a wrong
+ * number. That is why the probe drives a rendered disclosure instead of a
+ * silent slice.
+ */
+const ANALYTICS_ORDER_CEILING = 500
 const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`
 
 /**
@@ -63,23 +83,53 @@ export function CommerceAnalyticsCard(props: CommerceAnalyticsCardProps) {
   const { org, ready: orgReady } = useOrgPlan(hostId)
   const entitled = checkEntitlement(org as never, 'commerceAnalytics')
   const firestore = useFirestore()
+  /*
+   * Anchored once per mount so the query identity is stable; recomputing it
+   * per render would rebuild the listener and re-read the window each pass.
+   */
+  const since = useMemo(() => Date.now() - ANALYTICS_WINDOW_MS, [])
+  /**
+   * `createdAtMs` is the field every order writer in the plugin stamps, and
+   * the one `reconcile-stock` already walks the collection by. `createdAt` is
+   * not interchangeable: the orders collection group is indexed on
+   * `createdAtMs` alone, and a range on a field a document lacks drops that
+   * document rather than mis-placing it.
+   *
+   * Range and order are the same field, so no composite index is needed beyond
+   * the `createdAtMs` override already declared.
+   */
   const { data: orderDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'orders'), limit(500)),
-    [firestore, hostId],
+    () =>
+      query(
+        collection(firestore, 'hosts', hostId, 'orders'),
+        where('createdAtMs', '>=', since),
+        orderBy('createdAtMs', 'desc'),
+        limit(ANALYTICS_ORDER_CEILING + 1),
+      ),
+    [firestore, hostId, since],
     { idField: '$id' },
+  )
+  const orderWindow = useMemo(
+    () => ceilingedWindow<any>(orderDocs ?? undefined, ANALYTICS_ORDER_CEILING),
+    [orderDocs],
   )
 
   const stats = useMemo(() => {
     const now = Date.now()
-    const orders = (orderDocs ?? [])
+    // The range predicate admits only documents that carry `createdAtMs`, so
+    // the figures below read it directly.
+    const orders = orderWindow.rows
       .map((order: any) => ({
         ...CommerceModel.liftLegacyOrder(order),
-        createdAtMs:
-          order.createdAtMs ?? (order.createdAt?.seconds ?? 0) * 1000,
+        createdAtMs: order.createdAtMs,
       }))
       .filter(
         (order: any) =>
-          !['pending', 'cancelled'].includes(order.status),
+          !['pending', 'cancelled'].includes(order.status) &&
+          // A rehearsal is not revenue. A smoke-test checkout writes
+          // a real order document that Stripe never moved money for, and every
+          // surface summing paid orders counted it.
+          !CommerceModel.orderIsTestMode(order),
       )
     const paidCents = (order: any) =>
       (order.totals?.totalCents ?? order.amountCents ?? 0) -
@@ -129,7 +179,7 @@ export function CommerceAnalyticsCard(props: CommerceAnalyticsCardProps) {
       channels,
       topProducts,
     }
-  }, [orderDocs])
+  }, [orderWindow])
 
   const maxDay = Math.max(1, ...stats.days)
 
@@ -224,6 +274,11 @@ export function CommerceAnalyticsCard(props: CommerceAnalyticsCardProps) {
             </Box>
           ))}
         </Stack>
+        {orderWindow.truncated ? (
+          <Alert severity="info">
+            {`This store took more than ${ANALYTICS_ORDER_CEILING} orders in the last 30 days. Every figure here is computed from the ${ANALYTICS_ORDER_CEILING} most recent of them, so each one reads low.`}
+          </Alert>
+        ) : null}
         <Box>
           <Typography variant="caption" color="text.secondary">
             {'Last 14 days'}

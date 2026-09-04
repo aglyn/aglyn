@@ -29,6 +29,7 @@ import {
 } from '@mui/material'
 import { useCallback, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
 /** Mirrors `MAX_REASON_LENGTH` in `server/report.ts`. */
 const MAX_REASON_LENGTH = 1000
@@ -80,13 +81,9 @@ export function ReportTarget(props: ReportTargetProps) {
     if (!trimmed) return
     setBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/marketplace/report', {
+      const response = await authorizedFetch(user, '/api/marketplace/report', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           listingId,
           ...(reviewUid ? { reviewUid } : {}),

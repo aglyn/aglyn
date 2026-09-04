@@ -23,14 +23,16 @@
 /**
  * The entity-logo picker (AGL-2486).
  *
- * Two things are worth pinning, and one of them is the whole reason this
- * card is not a copy of `FaviconCard`:
+ * Two things are worth pinning:
  *
- * 1. It writes an ABSOLUTE url. `seo.entity.logo` is copied verbatim into
- *    the tenant's JSON-LD with no resolver in front of it, so the `media:`
- *    reference every other picker writes would reach Google as a logo URL
- *    of `media:org:…/…`, and the site-relative CDN path would reach it with
- *    no origin. Neither fetches.
+ * 1. It writes a `media:` REFERENCE, like every other picker (AGL-2538). It
+ *    used to write an absolute url, on the sound-at-the-time grounds that
+ *    `seo.entity.logo` was copied verbatim into the tenant's JSON-LD with no
+ *    resolver in front of it. AGL-2486's `hostSeoEntityImageJsonLd` put a
+ *    resolver there, and an absolute url then became actively worse: it bakes
+ *    in an origin, so connecting or changing a custom domain strands the
+ *    publisher mark on the old host — in structured data, where nothing
+ *    surfaces the breakage until a rich result stops appearing.
  * 2. Clearing writes `''` to Firestore rather than dropping the key — the
  *    AGL-1191 shape that makes "Remove" in a form silently keep the old
  *    value.
@@ -79,9 +81,11 @@ describe('EntityLogoCard writes a URL a crawler can fetch', () => {
     mockPicked = null
   })
 
-  it('absolutizes a CDN asset against the site’s own public origin', () => {
+  it('writes a media REFERENCE for a CDN asset, with no origin in it', () => {
     // A `mediaCdn`-entitled org: `cdnPath` is present, so `mediaNodeSrc`
-    // would mint `media:org:org1/m1` — the form the tenant cannot resolve.
+    // mints the reference. Storing it is what keeps the value portable —
+    // the scope is resolved for the site doing the rendering, rather than
+    // frozen at pick time.
     mockPicked = {
       $id: 'm1',
       url: 'https://firebasestorage.googleapis.com/raw.png',
@@ -91,28 +95,42 @@ describe('EntityLogoCard writes a URL a crawler can fetch', () => {
     openPickerAndChoose()
 
     const written = mockSetDoc.mock.calls[0][0].seo.entity.logo
-    // Host-QUALIFIED scope (`org:org1:h1`), which is what makes a
-    // restricted org asset resolvable for the site actually serving it.
-    expect(written).toBe('https://acme.aglyn.app/api/media/cdn/org:org1:h1/m1')
-    // The two forms that would ship a broken logo to search engines.
-    expect(written.startsWith('media:')).toBe(false)
-    expect(written.startsWith('/')).toBe(false)
+    expect(written).toBe('media:org:org1/m1')
+    // The property Zach spotted, and the whole point of AGL-2538: no origin
+    // is baked into the stored value, so a domain change cannot strand it.
+    expect(written).not.toContain('aglyn.app')
+    expect(written).not.toContain('https://')
   })
 
-  it('prefers a custom domain, because that is where the site serves', () => {
+  it('stores the same value whatever domain the site is on today', () => {
+    // The regression this replaces asserted the opposite — that the written
+    // value CHANGED with the host's current domain. That is exactly the
+    // coupling that strands a publisher mark on a rename.
+    const pick = () => {
+      mockSetDoc.mockClear()
+      mockPicked = {
+        $id: 'm1',
+        url: 'https://x/raw.png',
+        cdnPath: '/api/media/cdn/org:org1/m1',
+      }
+      const view = render(<EntityLogoCard hostId="h1" />)
+      openPickerAndChoose()
+      view.unmount()
+      return mockSetDoc.mock.calls[0][0].seo.entity.logo
+    }
+
+    mockHostDoc.data = { $id: 'h1', subdomain: 'acme', seo: { entity: {} } }
+    const onSubdomain = pick()
+
     mockHostDoc.data = {
       $id: 'h1',
       subdomain: 'acme',
       cname: 'www.acme.com',
       seo: { entity: {} },
     }
-    mockPicked = { $id: 'm1', url: 'https://x/raw.png', cdnPath: '/api/media/cdn/org:org1/m1' }
-    render(<EntityLogoCard hostId="h1" />)
-    openPickerAndChoose()
+    const onCustomDomain = pick()
 
-    expect(mockSetDoc.mock.calls[0][0].seo.entity.logo).toBe(
-      'https://www.acme.com/api/media/cdn/org:org1:h1/m1',
-    )
+    expect(onSubdomain).toBe(onCustomDomain)
   })
 
   it('falls back to the raw storage URL for a free-tier asset', () => {
@@ -127,10 +145,12 @@ describe('EntityLogoCard writes a URL a crawler can fetch', () => {
     )
   })
 
-  it('never writes a relative URL when the host has no public origin', () => {
-    // Neither a subdomain nor a domain: `absoluteMediaSrc` returns undefined
-    // rather than an origin-less path, and the raw URL takes over. Never
-    // emit a URL that is well-formed but wrong (AGL-1160).
+  it('writes the reference even for a host with no public origin yet', () => {
+    // Neither a subdomain nor a domain. The old absolute writer had to fall
+    // back to the raw storage url here, because there was no origin to
+    // absolutize against (AGL-1160). A reference has no such dependency —
+    // which is the point: the value is written once and resolved wherever
+    // and whenever the site is eventually served.
     mockHostDoc.data = { $id: 'h1', seo: { entity: {} } }
     mockPicked = {
       $id: 'm1',
@@ -140,9 +160,7 @@ describe('EntityLogoCard writes a URL a crawler can fetch', () => {
     render(<EntityLogoCard hostId="h1" />)
     openPickerAndChoose()
 
-    expect(mockSetDoc.mock.calls[0][0].seo.entity.logo).toBe(
-      'https://firebasestorage.googleapis.com/raw.png',
-    )
+    expect(mockSetDoc.mock.calls[0][0].seo.entity.logo).toBe('media:org:org1/m1')
   })
 
   it('writes an EMPTY STRING on remove, not a dropped key', () => {

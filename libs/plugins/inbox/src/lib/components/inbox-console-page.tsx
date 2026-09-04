@@ -20,86 +20,74 @@ import {
   type ConsolePluginPageProps,
   formSpamCaughtNotice,
   formSubmissionsPausedNotice,
-  pluginDocsHelp,
   submissionMonthKey,
   visitorRecordRefusedCounterId,
   visitorRecordsPausedNotice,
 } from '@aglyn/aglyn'
-// Deep imports, NOT the plugin barrels (AGL-1151): those barrels are the entry
-// point the tenant's loader dynamically imports to activate each plugin's SITE
-// half, so a console card named there ships to every published page. The
-// component path reaches the same module without crossing that entry point.
-import { default as HostCampaignsCard } from '@aglyn/plugins-email/components/campaigns-card'
-import { default as HostOrdersCard } from '@aglyn/plugins-commerce/components/console/host-orders-card.component'
-import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
-import { HubTabs } from '@aglyn/shared-ui-next'
-import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import {
-  useFirestore,
-  useFirestoreCollection,
-  useFirestoreDoc,
-} from '@aglyn/tenant-feature-instance'
-import {
-  Alert,
-  AlertTitle,
-  Avatar,
-  Box,
-  Button,
-  Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Divider,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Tooltip,
-  Typography,
-} from '@mui/material'
-import {
-  collection,
-  deleteDoc,
-  doc,
-  limit,
-  query,
-  updateDoc,
-} from 'firebase/firestore'
-import {
-  relativeTime,
-  routingChips,
-  senderHue,
-  submissionSender,
-} from '../model/submission-presenter'
-import { useCallback, useState } from 'react'
+// A deep import, NOT the plugin barrel (AGL-1151): the barrel is the entry
+// point the tenant's loader dynamically imports to activate the marketing
+// plugin's SITE half, so a console card named there ships to every published
+// page. The component path reaches the same module without crossing it.
+import { default as HostCampaignsCard } from '@aglyn/plugins-marketing/components/campaigns-card'
+import { HubSections } from '@aglyn/shared-ui-next'
+import { useFirestore, useFirestoreDoc } from '@aglyn/tenant-feature-instance'
+import { Alert, AlertTitle, Typography } from '@mui/material'
+import { doc } from 'firebase/firestore'
+import type { ReactNode } from 'react'
+import ContactsCard from './contacts-card.component'
+import type { InboxConsoleSectionId } from './inbox-console-sections'
+import SubmissionsCard from './submissions-card.component'
+
+/**
+ * The body of one inbox section, built only when that section is the one being
+ * read (AGL-2501).
+ *
+ * A function rather than a map of nodes on purpose: a `Record<id, ReactNode>`
+ * would CONSTRUCT all three every render, and each card opens its Firestore
+ * listens on mount — which is the entire cost this page exists to stop paying.
+ * Only the returned branch is ever built.
+ */
+function sectionBody(
+  section: InboxConsoleSectionId,
+  hostId: string,
+): ReactNode {
+  switch (section) {
+    case 'submissions':
+      return <SubmissionsCard hostId={hostId} />
+    case 'contacts':
+      return <ContactsCard hostId={hostId} />
+    case 'campaigns':
+      return <HostCampaignsCard hostId={hostId} />
+    default:
+      return null
+  }
+}
 
 /**
  * Inbox (AGL-77/104/109 → AGL-395): form submissions reader, site members +
- * leads, orders, and campaigns — owned by the inbox plugin and rendered by
- * the shell's generic plugin route. Depends on the commerce + email plugins
- * for the borrowed Orders and Campaigns tabs.
+ * leads, and campaigns — owned by the inbox plugin and rendered by the shell's
+ * generic plugin route. Depends on the marketing plugin for the borrowed
+ * Campaigns section.
+ *
+ * Orders are NOT here. A sale is not something that arrived in an inbox, and
+ * the card was nested inside the members section rather than carrying a tab of
+ * its own — so the rail listed three sections while the page drew a fourth
+ * subject. Commerce already owns it: `commerce-console-sections.ts` declares
+ * an `orders` section that renders the same card.
+ *
+ * Sections are ROUTES (AGL-2501), following the hubs that migrated before it.
+ * Here it IS a read saving as well as an addressing one: this page carried
+ * `HubTabs lazy`, which mounts one panel but keeps every panel it has visited,
+ * so a reader who looked at Members & leads and went back to Submissions held
+ * both sections' listens open for the rest of the visit. A URL per section
+ * makes the saving structural — the page builds one section's body and the
+ * others do not exist to subscribe. What routing adds besides is that the URL
+ * names the section: it is linkable, the back button walks sections, and the
+ * breadcrumb says where you are.
  */
 export function InboxConsolePage(props: ConsolePluginPageProps) {
-  const { hostId } = props
+  const { hostId, section, sections, basePath } = props
   const firestore = useFirestore()
-  const { enqueueSnackbar } = useSnackbar()
-  const { confirm } = useConfirmationContext()
-
-  const { data: submissionDocs } = useFirestoreCollection<any>(
-    () =>
-      query(
-        collection(firestore, 'hosts', hostId, 'formSubmissions'),
-        limit(200),
-      ),
-    [firestore, hostId],
-    { idField: '$id' },
-  )
-  const submissions = [...(submissionDocs ?? [])].sort(
-    (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0),
-  )
 
   // Submissions this site's abuse ceiling refused (AGL-1655 → AGL-1666).
   //
@@ -186,96 +174,26 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
     ceiling: Number(leadsRefusedCounter?.['ceiling']) || undefined,
   })
 
-  // Site members + leads (AGL-109).
-  const { data: memberDocs } = useFirestoreCollection<any>(
-    () =>
-      query(collection(firestore, 'hosts', hostId, 'siteMembers'), limit(200)),
-    [firestore, hostId],
-    { idField: '$id' },
-  )
-  const siteMembers = [...(memberDocs ?? [])].sort(
-    (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0),
-  )
-  const { data: leadDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'leads'), limit(200)),
-    [firestore, hostId],
-    { idField: '$id' },
-  )
-  const leads = [...(leadDocs ?? [])].sort(
-    (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0),
-  )
-  const handleDeleteMember = useCallback(
-    (member: any) => async () => {
-      const confirmed = await confirm({
-        title: 'Remove this member?',
-        description: `"${member.email}" can no longer sign in to your site.`,
-        confirmationText: 'Remove',
-        confirmationButtonProps: { color: 'error' },
-      })
-        .then(() => true)
-        .catch(() => false)
-      if (!confirmed) return
-      await deleteDoc(doc(firestore, 'hosts', hostId, 'siteMembers', member.$id))
-      enqueueSnackbar('Member removed', { variant: 'success', persist: false })
-    },
-    [confirm, firestore, hostId, enqueueSnackbar],
-  )
-
-  // Mail reader (AGL-104): opening a submission shows the full message and
-  // marks it read.
-  const [reader, setReader] = useState<any | null>(null)
-  const handleOpenReader = useCallback(
-    (submission: any) => () => {
-      setReader(submission)
-      if (!submission.read) {
-        void updateDoc(
-          doc(firestore, 'hosts', hostId, 'formSubmissions', submission.$id),
-          { read: true },
-        )
-      }
-    },
-    [firestore, hostId],
-  )
-
-  const handleToggleRead = useCallback(
-    (submission: any) => () => {
-      void updateDoc(
-        doc(firestore, 'hosts', hostId, 'formSubmissions', submission.$id),
-        { read: !submission.read },
-      )
-    },
-    [firestore, hostId],
-  )
-
-  const handleDelete = useCallback(
-    (submission: any) => async () => {
-      const confirmed = await confirm({
-        title: 'Delete this submission?',
-        description: 'The submission is removed permanently.',
-        confirmationText: 'Delete',
-        confirmationButtonProps: { color: 'error' },
-      })
-        .then(() => true)
-        .catch(() => false)
-      if (!confirmed) return
-      await deleteDoc(
-        doc(firestore, 'hosts', hostId, 'formSubmissions', submission.$id),
-      )
-      enqueueSnackbar('Submission deleted', {
-        variant: 'success',
-        persist: false,
-      })
-    },
-    [confirm, firestore, hostId, enqueueSnackbar],
-  )
+  /*
+   * Nothing until the URL names a section. The shell redirects a bare hub URL
+   * to the landing section and holds a spinner while it does, so this state is
+   * transient — and rendering a default section here instead would pay for its
+   * listens on a URL that is already being replaced.
+   *
+   * The four counter reads above run either way, and that is deliberate: they
+   * are four single-document listens, and hoisting them behind this guard
+   * would make a ceiling notice appear a frame late on the section a reader
+   * lands on.
+   */
+  if (!section || !sections?.length || !basePath) return null
 
   return (
     <>
-      {/* Above the tabs on purpose (AGL-1666). A paused form is not a fact
-          about the Submissions tab — it is why the whole inbox stopped
+      {/* Above the RAIL on purpose (AGL-1666). A paused form is not a fact
+          about the Submissions section — it is why the whole inbox stopped
           filling — and the notification that brings an owner here links to
-          the page, not to a tab. Inside a tab panel it would be invisible to
-          anyone who last left the page on Orders. */}
+          the surface, not to a section. Inside one section's body it would be
+          invisible to anyone who followed a link into another. */}
       {pausedNotice ? (
         <Alert severity="warning" sx={{ mb: 2 }}>
           <AlertTitle>{pausedNotice.title}</AlertTitle>
@@ -302,11 +220,11 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
           {spamNotice}
         </Alert>
       ) : null}
-      {/* Above the tabs for the same reason the form notice is (AGL-1529):
-          the Members and Leads lists are on the Contacts tab, and an owner
-          who last left this page on Orders would never see a notice hidden
-          inside one. Two notices rather than one because the two ceilings are
-          independent — a site can be refusing leads while sign-ups still
+      {/* Above the rail for the same reason the form notice is (AGL-1529):
+          the Members and Leads lists are one section of several, and an owner
+          who followed a link into another would never see a notice hidden
+          inside that one. Two notices rather than one because the two ceilings
+          are independent — a site can be refusing leads while sign-ups still
           land — and a merged sentence could only be true of both. Neither
           carries an `until` line: unlike the monthly form ceiling, these
           count LIVE DOCUMENTS and no date lifts them. */}
@@ -320,384 +238,9 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
           </Alert>
         ) : null,
       )}
-      <HubTabs
-            tabs={[
-              {
-                id: 'submissions',
-                label: 'Submissions',
-                content: (
-                  <CardDisplay
-                    header={'Form Submissions'}
-                    help={pluginDocsHelp('forms', {
-                      anchor: '#the-inbox',
-                      excerpt:
-                        'Messages your forms collected, newest first, showing who sent ' +
-                        'each one and where it was routed.',
-                    })}
-                    contentGutterX
-                    contentGutterY
-                    contentBordered="all"
-                  >
-          {submissions.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              {'No form submissions yet. Add a Contact Form element to a ' +
-                'screen — visitor messages arrive here.'}
-            </Typography>
-          ) : (
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>{'From'}</TableCell>
-                  <TableCell>{'Message'}</TableCell>
-                  <TableCell>{'Received'}</TableCell>
-                  <TableCell align="right">{'Actions'}</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {submissions.map((submission) => (
-                  <TableRow
-                    key={submission.$id}
-                    hover
-                    onClick={handleOpenReader(submission)}
-                    sx={{
-                      cursor: 'pointer',
-                      '& td': {
-                        fontWeight: submission.read ? undefined : 600,
-                      },
-                    }}
-                  >
-                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                      {/*
-                        The mockup's list is people, not forms (AGL-2168):
-                        an initials avatar, the sender, and the form name
-                        beneath it. The unread DOT replaces the `New` chip
-                        — the row is already bold, and a chip that says
-                        "New" beside bold text is the same fact twice.
-                       */}
-                      {(() => {
-                        const sender = submissionSender(submission.fields)
-                        const hue = senderHue(sender.label)
-                        return (
-                          <Stack
-                            direction="row"
-                            spacing={1}
-                            sx={{ alignItems: 'center' }}
-                          >
-                            {!submission.read ? (
-                              <Box
-                                aria-label="Unread"
-                                sx={{
-                                  width: 8,
-                                  height: 8,
-                                  borderRadius: '50%',
-                                  bgcolor: 'primary.main',
-                                  flexShrink: 0,
-                                }}
-                              />
-                            ) : (
-                              <Box sx={{ width: 8, flexShrink: 0 }} />
-                            )}
-                            <Avatar
-                              sx={{
-                                width: 28,
-                                height: 28,
-                                fontSize: 13,
-                                bgcolor: `hsl(${hue} 55% 45%)`,
-                              }}
-                            >
-                              {sender.initials}
-                            </Avatar>
-                            <Stack sx={{ minWidth: 0 }}>
-                              <Typography variant="body2" noWrap>
-                                {sender.label}
-                              </Typography>
-                              <Typography
-                                variant="caption"
-                                color="text.secondary"
-                                noWrap
-                              >
-                                {submission.formName ?? 'Form'}
-                              </Typography>
-                            </Stack>
-                          </Stack>
-                        )
-                      })()}
-                    </TableCell>
-                    <TableCell>
-                      <Typography
-                        variant="body2"
-                        component="div"
-                        sx={{
-                          maxWidth: 480,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {Object.entries(submission.fields ?? {})
-                          .map(([key, value]) => `${key}: ${value}`)
-                          .join(' · ')}
-                      </Typography>
-                    </TableCell>
-                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                      {/*
-                        Relative, as the mockup shows it — an inbox is
-                        scanned for recency and a locale timestamp makes
-                        the reader do the subtraction. The absolute time
-                        stays on the detail dialog, where it is the fact
-                        you actually want.
-                       */}
-                      <Tooltip
-                        title={
-                          submission.createdAt?.toDate?.().toLocaleString() ??
-                          ''
-                        }
-                      >
-                        <span>
-                          {relativeTime(
-                            submission.createdAt?.toDate?.().getTime(),
-                          )}
-                        </span>
-                      </Tooltip>
-                    </TableCell>
-                    <TableCell
-                      align="right"
-                      sx={{ whiteSpace: 'nowrap' }}
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      <Button size="small" onClick={handleToggleRead(submission)}>
-                        {submission.read ? 'Mark unread' : 'Mark read'}
-                      </Button>
-                      <Button
-                        size="small"
-                        color="error"
-                        onClick={handleDelete(submission)}
-                      >
-                        {'Delete'}
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-                  </CardDisplay>
-                ),
-              },
-              {
-                id: 'contacts',
-                label: 'Members & leads',
-                content: (
-                  <Stack spacing={3}>
-                    <CardDisplay
-                      header={'Site Members & Leads'}
-                      help={pluginDocsHelp('membersOnly', {
-                        anchor: '#manage-your-members',
-                      })}
-                      contentGutterX
-                      contentGutterY
-                      contentBordered="all"
-                    >
-              {siteMembers.length === 0 && leads.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  {'No members yet — visitors can join at /signup on your ' +
-                    'site; sign-ups also appear here as leads.'}
-                </Typography>
-              ) : (
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>{'Email'}</TableCell>
-                      <TableCell>{'Type'}</TableCell>
-                      <TableCell>{'Joined'}</TableCell>
-                      <TableCell align="right">{'Actions'}</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {siteMembers.map((member) => (
-                      <TableRow key={member.$id} hover>
-                        <TableCell>
-                          {member.email}
-                          {member.displayName ? (
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                              sx={{ ml: 1 }}
-                              component="span"
-                            >
-                              {member.displayName}
-                            </Typography>
-                          ) : null}
-                        </TableCell>
-                        <TableCell>
-                          <Chip label="Member" color="primary" size="small" />
-                        </TableCell>
-                        <TableCell>
-                          {member.createdAt?.toDate?.().toLocaleString() ??
-                            '--'}
-                        </TableCell>
-                        <TableCell align="right">
-                          <Button
-                            size="small"
-                            color="error"
-                            onClick={handleDeleteMember(member)}
-                          >
-                            {'Remove'}
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {leads
-                      .filter(
-                        (lead) =>
-                          !siteMembers.some(
-                            (member) => member.email === lead.email,
-                          ),
-                      )
-                      .map((lead) => (
-                        <TableRow key={lead.$id} hover>
-                          <TableCell>
-                            {lead.email}
-                            {/*
-                              The name the lead writer now stores (AGL-2303),
-                              same treatment as a member's `displayName` above
-                              — a list of bare addresses is a list nobody
-                              recognises anyone in.
-                            */}
-                            {lead.name ? (
-                              <Typography
-                                variant="caption"
-                                color="text.secondary"
-                                sx={{ ml: 1 }}
-                                component="span"
-                              >
-                                {lead.name}
-                              </Typography>
-                            ) : null}
-                          </TableCell>
-                          <TableCell>
-                            {/*
-                              WHERE THE LEAD CAME FROM (AGL-2338).
-                              `source` has been written by both lead writers —
-                              `'signup'` and `'booking'` — since AGL-109, and
-                              nothing read it: every row rendered the same flat
-                              "Lead" chip, so a site owner could not tell a
-                              membership sign-up from a booking, and the
-                              campaign audience selector treated them alike.
-                              Attribution collected and invisible.
-
-                              Falls back to the bare label rather than printing
-                              an empty suffix for a row written before the
-                              field, or by a future writer that omits it.
-                            */}
-                            <Chip
-                              label={
-                                lead.source ? `Lead · ${lead.source}` : 'Lead'
-                              }
-                              size="small"
-                              variant="outlined"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            {lead.createdAt?.toDate?.().toLocaleString() ??
-                              '--'}
-                          </TableCell>
-                          <TableCell align="right">{'--'}</TableCell>
-                        </TableRow>
-                      ))}
-                  </TableBody>
-                </Table>
-              )}
-                    </CardDisplay>
-                    <HostOrdersCard hostId={hostId} />
-                  </Stack>
-                ),
-              },
-              {
-                id: 'campaigns',
-                label: 'Campaigns',
-                content: <HostCampaignsCard hostId={hostId} />,
-              },
-            ]}
-          />
-      <Dialog
-        open={Boolean(reader)}
-        onClose={() => setReader(null)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>{reader?.formName ?? 'Form submission'}</DialogTitle>
-        <DialogContent>
-          <Typography variant="caption" color="text.secondary">
-            {`Received ${reader?.createdAt?.toDate?.().toLocaleString() ?? ''}` +
-              (reader?.screenId ? ` · screen ${reader.screenId}` : '')}
-          </Typography>
-          <Divider sx={{ my: 1.5 }} />
-          <Stack spacing={1.5}>
-            {Object.entries(reader?.fields ?? {}).map(([key, value]) => (
-              <Stack key={key} spacing={0.25}>
-                <Typography variant="caption" color="text.secondary">
-                  {key}
-                </Typography>
-                <Typography
-                  variant="body2"
-                  sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
-                >
-                  {String(value)}
-                </Typography>
-              </Stack>
-            ))}
-          </Stack>
-          {/*
-            What happened to this submission (AGL-2168). The mockup puts
-            these under the fields: `Saved to Inbox` and `Added to "Leads"
-            dataset`. The second is stamped by the submit route only when a
-            record was really appended — a form bound to a deleted dataset,
-            or one whose record quota is full, shows no chip rather than a
-            chip for a row that does not exist. Both are failures the route
-            already swallows silently, and a chip that lied about them
-            would be worse than the silence.
-           */}
-          <Stack
-            direction="row"
-            spacing={1}
-            sx={{ mt: 2, flexWrap: 'wrap', rowGap: 1 }}
-          >
-            {routingChips(reader?.routing).map((chip) => (
-              <Chip
-                key={chip.label}
-                size="small"
-                label={chip.label}
-                color={chip.color}
-                variant="outlined"
-              />
-            ))}
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button
-            color="error"
-            onClick={async () => {
-              const target = reader
-              setReader(null)
-              if (target) await handleDelete(target)()
-            }}
-          >
-            {'Delete'}
-          </Button>
-          <Button
-            onClick={() => {
-              if (reader) void handleToggleRead({ ...reader, read: true })()
-              setReader(null)
-            }}
-          >
-            {'Mark unread'}
-          </Button>
-          <Button variant="contained" onClick={() => setReader(null)}>
-            {'Close'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <HubSections sections={sections}>
+        {sectionBody(section as InboxConsoleSectionId, hostId)}
+      </HubSections>
     </>
   )
 }

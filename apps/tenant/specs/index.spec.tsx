@@ -18,6 +18,16 @@
 import { render } from '@testing-library/react'
 import Page from '../app/[host]/[[...slug]]/catch-all-client'
 
+/**
+ * The plugin gate loads nothing. This is a smoke test for the module and its
+ * first render, and it never settles the gate — so with the real manifest the
+ * bundles' dynamic imports are still in flight when the assertion runs, and a
+ * test that reads one truthy value pays for all of them anyway. See the stub.
+ */
+jest.mock('../utils/site-plugin-loader', () =>
+  require('./site-plugin-loader-empty-manifest'),
+)
+
 describe('Index', () => {
   it('should render successfully', () => {
     const { baseElement } = render(<Page data={{}} nodes={{}} />)

@@ -77,6 +77,71 @@ describe('composeLayoutAndScreenNodes', () => {
     expect(Object.values(composed).filter((n) => n.$id === ROOT)).toHaveLength(1)
   })
 
+  /**
+   * AGL-2486. The screen root is dropped by the graft, so anything styled on
+   * the `Document` layer was styled on a node that never reaches the page: a
+   * background painted there showed in the besigner — which renders the screen
+   * alone, root included — and nothing at all on the live site. The slot is
+   * where the screen root's children now live, so it is where its styling has
+   * to land.
+   */
+  describe('the screen root’s styling survives the graft (AGL-2486)', () => {
+    const slotId = `${LAYOUT_NODE_ID_PREFIX}slot`
+    const styledScreen = (sx: unknown, className?: string) => ({
+      ...screenNodes,
+      [ROOT]: { ...screenNodes[ROOT], sx, ...(className ? { className } : {}) },
+    })
+
+    it('carries a Document background onto the slot', () => {
+      const composed = composeLayoutAndScreenNodes(
+        layoutNodes,
+        styledScreen({ backgroundColor: 'background.paper' }) as any,
+      )
+      expect(composed[slotId].sx).toEqual({
+        backgroundColor: 'background.paper',
+      })
+    })
+
+    it('merges over the slot’s own styling rather than replacing it', () => {
+      // The screen wins the properties it names; the layout keeps the rest —
+      // the direction of intent everywhere else composition merges.
+      const withStyledSlot = {
+        ...layoutNodes,
+        slot: { ...layoutNodes['slot'], sx: { px: 4, backgroundColor: 'red' } },
+      }
+      const composed = composeLayoutAndScreenNodes(
+        withStyledSlot,
+        styledScreen({ backgroundColor: 'background.paper' }) as any,
+      )
+      // `px` canonicalizes to its longhand pair on the way through the
+      // merge (AGL-2209), so an override can actually replace an aliased
+      // value instead of landing beside it.
+      expect(composed[slotId].sx).toEqual({
+        paddingLeft: 4,
+        paddingRight: 4,
+        backgroundColor: 'background.paper',
+      })
+    })
+
+    it('keeps both class lists', () => {
+      const withClassedSlot = {
+        ...layoutNodes,
+        slot: { ...layoutNodes['slot'], className: 'slot-region' },
+      }
+      const composed = composeLayoutAndScreenNodes(
+        withClassedSlot as any,
+        styledScreen(undefined, 'entry-page') as any,
+      )
+      expect((composed[slotId] as any).className).toBe('slot-region entry-page')
+    })
+
+    it('leaves the slot untouched when the screen root is bare', () => {
+      const composed = composeLayoutAndScreenNodes(layoutNodes, screenNodes)
+      expect(composed[slotId].sx).toBeUndefined()
+      expect((composed[slotId] as any).className).toBeUndefined()
+    })
+  })
+
   it('does not mutate its inputs', () => {
     const layoutCopy = JSON.parse(JSON.stringify(layoutNodes))
     const screenCopy = JSON.parse(JSON.stringify(screenNodes))

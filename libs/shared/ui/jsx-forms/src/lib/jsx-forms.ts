@@ -25,6 +25,11 @@ export * from './components/switch.component'
 export * from './components/text-field.component'
 export * from './components/textarea.component'
 export * from './components/grid-form-template.component'
+// The shared create drawer (AGL-700). Exported from the library rather than
+// living in `apps/console` so that the console pages a PLUGIN ships can create
+// a record the same way the app's own list pages do — a plugin card cannot
+// import from the app that renders it.
+export * from './components/create-artifact-drawer.component'
 export * from './components/toggle-button.component'
 
 export * from './mapper'

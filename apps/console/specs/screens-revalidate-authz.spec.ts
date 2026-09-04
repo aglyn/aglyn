@@ -300,4 +300,50 @@ describe('/api/screens/revalidate authorization (AGL-1326)', () => {
     expect(mockFetch).toHaveBeenCalledTimes(1)
     expect(mockResolveOrgPermissions).not.toHaveBeenCalled()
   })
+
+  /**
+   * A redirect-rule edit announces itself here (the AGL-155 manager promises
+   * "live within ~30 seconds", but the rules list sits behind the hour-long
+   * `tenant-data:{hostId}` backstop and a rule save publishes nothing). The
+   * load-bearing case is a source path that ALSO names a published screen:
+   * the rule must still drop that path's cached HTML and bust the host tag,
+   * because that cached 200 page is exactly what shadowed a new rule for the
+   * full TTL in production.
+   */
+  describe('redirect-rule announcements', () => {
+    it('drops the rule source path and busts the host tag — even for a routed path', async () => {
+      // '/preview' is a PUBLISHED page on this site: present in the routing
+      // map, so the old page sits in the ISR cache until something drops it.
+      state.hosts['host-1']['screens'] = {
+        'screen-1': '/pricing',
+        'screen-2': 'preview',
+      }
+      const response = await post({ screenId: '', redirectPath: '/preview' })
+      expect(response.status).toBe(200)
+      expect(await response.json()).toMatchObject({ reason: 'ok' })
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+      const [url, init] = mockFetch.mock.calls[0]
+      expect(String(url)).toContain('/api/revalidate')
+      const body = JSON.parse((init as RequestInit).body as string)
+      // `hostId` is what busts `tenant-data:{hostId}` — the fresh rules read.
+      expect(body.hostId).toBe('host-1')
+      // The literal source path, NOT run through the routing-map conversion.
+      expect(body.paths).toEqual(['/preview'])
+    })
+
+    it('400s a source that is not a site path', async () => {
+      const response = await post({ screenId: '', redirectPath: 'preview' })
+      expect(response.status).toBe(400)
+      expect(mockFetch).not.toHaveBeenCalled()
+    })
+
+    it('is still an authorized surface — a stranger gets the same 404', async () => {
+      state.hosts['host-1']['memberRoles'] = {}
+      signedInAs('stranger')
+      mockResolveOrgPermissions.mockResolvedValue({ hostRole: null })
+      const response = await post({ screenId: '', redirectPath: '/preview' })
+      expect(response.status).toBe(404)
+      expect(mockFetch).not.toHaveBeenCalled()
+    })
+  })
 })

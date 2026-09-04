@@ -21,6 +21,7 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Button, Stack, Typography } from '@mui/material'
 import { type ChangeEvent, useCallback, useRef, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 import { hasEntitlement } from '../constants/entitlements'
 import useCurrentOrg from '../hooks/use-current-org'
@@ -64,10 +65,9 @@ export function SiteBackupCard(props: { hostId: string }) {
     if (!gate() || busy) return
     setBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch(
+      const response = await authorizedFetch(
+        user,
         `/api/hosts/export?hostId=${encodeURIComponent(hostId)}`,
-        { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
       )
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}))
@@ -120,13 +120,9 @@ export function SiteBackupCard(props: { hostId: string }) {
       setBusy(true)
       try {
         const bundle = JSON.parse(await file.text())
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/hosts/import', {
+        const response = await authorizedFetch(user, '/api/hosts/import', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ hostId, bundle }),
         })
         const payload = await response.json().catch(() => ({}))

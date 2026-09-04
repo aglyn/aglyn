@@ -37,6 +37,7 @@ import {
 } from '@mui/material'
 import { useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import StaffOnly from '../../../../components/staff-only.component'
 import StaffChurnReportCard from '../../../../components/staff-churn-report-card.component'
@@ -94,13 +95,9 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
     if (!accepted) return
     setBroadcastBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/admin/broadcast', {
+      const response = await authorizedFetch(user, '/api/admin/broadcast', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: broadcast.title.trim(),
           ...(broadcast.body.trim() ? { body: broadcast.body.trim() } : {}),
@@ -135,10 +132,7 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
     let active = true
     void (async () => {
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/admin/overview', {
-          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
-        })
+        const response = await authorizedFetch(user, '/api/admin/overview')
         const payload = await response.json()
         if (!active) return
         if (!response.ok) setError(payload?.error ?? 'Overview failed')
@@ -178,7 +172,7 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
               {(data.anomalies as any[])
                 .map(
                   (anomaly) =>
-                    `${anomaly.orgId} (${anomaly.spikes.join('; ')})`,
+                    `${anomaly.orgLabel ?? anomaly.orgId} (${anomaly.spikes.join('; ')})`,
                 )
                 .join(' · ')}
             </Alert>
@@ -400,7 +394,7 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
                               noWrap
                               sx={{ maxWidth: '50%' }}
                             >
-                              {usage.orgId}
+                              {usage.orgLabel ?? usage.orgId}
                             </Typography>
                             <Typography
                               variant="caption"

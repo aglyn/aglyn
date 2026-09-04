@@ -14,14 +14,16 @@ reversible within a hold window.
 ## When each change takes effect {#when-changes-take-effect}
 
 Plan changes are deliberately **asymmetric**, and knowing which direction you're
-going tells you what you'll be charged today:
+going tells you what you'll be charged — and when. Nothing is taken from your card
+at the moment you change a plan or an add-on: the adjustment is written onto your
+next invoice, so a mid-cycle upgrade appears there rather than as a charge today.
 
-| You're doing | When it takes effect | Charged today |
+| You're doing | When it takes effect | What you are charged, and when |
 | --- | --- | --- |
-| **Upgrading** to a higher plan | **Immediately** | A prorated amount for the rest of the current period |
+| **Upgrading** to a higher plan | **Immediately** | **Nothing today.** A prorated amount for the rest of the current period is added to your **next invoice** |
 | **Downgrading** to a lower paid plan | **At the end of your current billing period** | **Nothing** |
 | **Canceling** | At the end of your current billing period | Nothing |
-| Adding or removing an [add-on](./add-ons.md) | Immediately | Prorated |
+| Adding or removing an [add-on](./add-ons.md) | Immediately | **Nothing today.** Prorated onto your **next invoice** — removing one credits you back the same way |
 
 The reason downgrades wait is simple: you already paid for the current period,
 so you keep everything you paid for until it runs out. There is no proration

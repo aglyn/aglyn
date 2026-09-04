@@ -38,6 +38,7 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 import { useOrgScope } from '../hooks/use-org-scope'
 
@@ -66,15 +67,12 @@ export function OrgRolesCard() {
   const request = useCallback(
     async (method: string, body?: Record<string, unknown>) => {
       if (!orgId) return null
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch(
+      const response = await authorizedFetch(
+        user,
         method === 'GET' ? `/api/orgs/roles?orgId=${orgId}` : '/api/orgs/roles',
         {
           method,
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
+          headers: { 'Content-Type': 'application/json' },
           ...(body ? { body: JSON.stringify({ ...body, orgId }) } : {}),
         },
       )

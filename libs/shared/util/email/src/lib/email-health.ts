@@ -165,3 +165,203 @@ export async function checkEmailCredentials(): Promise<EmailCredentialReport> {
     }
   }
 }
+
+/** One pool member, as the provider reports it. */
+export interface SharedPoolDomainReport {
+  domain: string
+  /** `verified` when the provider will accept mail on it. */
+  status: string
+  /** False when the provider has never heard of it. */
+  present: boolean
+  /**
+   * Whether the provider will rewrite links on this domain to measure clicks.
+   *
+   * Reported because the symptom of it being off is INVISIBLE. A provider
+   * counts a click by rewriting every `<a href>` to a tracking host, so a
+   * domain without one produces a click rate of exactly 0% — which reads on a
+   * dashboard as an audience that does not click, not as a domain that cannot
+   * count. The last time this was wrong nobody found it by looking at the
+   * numbers; it was found by reading a delivered message's source.
+   *
+   * `null` when the provider's listing does not say, so "it did not tell us"
+   * is never reported as "it is off".
+   */
+  clickTracking: boolean | null
+  /** The same, for the open pixel. */
+  openTracking: boolean | null
+}
+
+export type SharedPoolStatus =
+  /** No platform pool applies to this deployment. */
+  | 'not-applicable'
+  /** No read credential, so the pool cannot be inspected. */
+  | 'unreadable'
+  | 'ok'
+  | 'degraded'
+
+export interface SharedPoolReport {
+  status: SharedPoolStatus
+  domains: SharedPoolDomainReport[]
+  /** Members the provider will not accept mail on right now. */
+  unusable: string[]
+  /**
+   * Members that will carry mail but cannot measure a click on it.
+   *
+   * Reported APART from {@link unusable} because the two are different
+   * severities and conflating them would be wrong in both directions: a
+   * member here is delivering perfectly, and a member in `unusable` is not
+   * delivering at all. This one does not degrade the pool — see
+   * {@link SharedPoolReport.status} — it is a measurement fault, and stopping
+   * mail over it would be the control causing the outage.
+   */
+  untracked: string[]
+  detail?: string
+}
+
+/**
+ * Whether the shared platform pool can actually carry mail.
+ *
+ * The pool is the delivery floor: a site with no domain of its own sends its
+ * receipts, password resets and booking confirmations from a member of it. So
+ * a degraded pool is not a warning about a future problem, it is every such
+ * site's transactional mail already failing — which is why the caller treats
+ * this as a blocker rather than a note.
+ *
+ * Read with `RESEND_READ_API_KEY`, deliberately, and never with the sending
+ * key. A sending-scoped key has no read permission, so asking it about domains
+ * yields an authorization error that says nothing about the domains — which is
+ * exactly how a pool the key could not send from reported healthy. Without a
+ * read key this answers `unreadable`, which is the honest answer and not a
+ * pass: the caller must not treat "I could not look" as "I looked and it was
+ * fine".
+ *
+ * `not-applicable` covers the self-host shape. The pool is a property of the
+ * Aglyn platform; an operator running their own deployment sends from their
+ * own domain and has no pool to be degraded.
+ */
+export async function checkSharedSendingPool(options: {
+  pool: string[]
+  readApiKey?: string
+  endpoint?: string
+}): Promise<SharedPoolReport> {
+  const pool = options.pool.filter(Boolean)
+  if (!pool.length) {
+    return {
+      status: 'not-applicable',
+      domains: [],
+      unusable: [],
+      untracked: [],
+    }
+  }
+
+  const key = String(options.readApiKey ?? '').trim()
+  if (!key) {
+    return {
+      status: 'unreadable',
+      domains: [],
+      unusable: [],
+      untracked: [],
+      detail:
+        'RESEND_READ_API_KEY is not set, so the shared pool cannot be ' +
+        'inspected. The sending key has no read permission and would report ' +
+        'an authorization error rather than the state of the domains.',
+    }
+  }
+
+  try {
+    const response = await fetch(options.endpoint ?? RESEND_DOMAINS_ENDPOINT, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${key}` },
+    })
+    if (response.status < 200 || response.status >= 300) {
+      return {
+        status: 'unreadable',
+        domains: [],
+        unusable: [],
+        untracked: [],
+        detail: `The provider answered ${response.status} to the domain read.`,
+      }
+    }
+    const payload = (await response.json().catch(() => null)) as
+      | {
+          data?: Array<{
+            name?: unknown
+            status?: unknown
+            click_tracking?: unknown
+            open_tracking?: unknown
+          }>
+        }
+      | null
+    /**
+     * A tri-state, and the third state matters: a listing that does not carry
+     * the field must not be reported as the field being false. Off is a fault
+     * somebody should fix; unknown is a question this probe could not ask.
+     */
+    const flag = (value: unknown): boolean | null =>
+      typeof value === 'boolean' ? value : null
+    const byName = new Map<
+      string,
+      { status: string; click: boolean | null; open: boolean | null }
+    >()
+    for (const row of payload?.data ?? []) {
+      const name = String(row?.name ?? '').toLowerCase()
+      if (!name) continue
+      byName.set(name, {
+        status: String(row?.status ?? 'unknown'),
+        click: flag(row?.click_tracking),
+        open: flag(row?.open_tracking),
+      })
+    }
+    const domains = pool.map((domain) => {
+      const row = byName.get(domain.toLowerCase())
+      return {
+        domain,
+        status: row?.status ?? 'absent',
+        present: row !== undefined,
+        clickTracking: row?.click ?? null,
+        openTracking: row?.open ?? null,
+      }
+    })
+    const unusable = domains
+      .filter((entry) => entry.status !== 'verified')
+      .map((entry) => entry.domain)
+    /*
+     * Only a definite `false` counts. A member the provider did not describe
+     * is already reported by `present`, and listing it here as well would
+     * send an operator to fix a setting they cannot see.
+     */
+    const untracked = domains
+      .filter((entry) => entry.clickTracking === false)
+      .map((entry) => entry.domain)
+    return {
+      /*
+       * `untracked` deliberately does NOT degrade the pool. `degraded` is
+       * read as "transactional mail is failing right now" and is treated as a
+       * blocker; a domain that delivers but does not count clicks is neither.
+       * Folding the two together would either raise a false alarm about
+       * delivery or teach an operator to ignore the real one.
+       */
+      status: unusable.length ? 'degraded' : 'ok',
+      domains,
+      unusable,
+      untracked,
+      ...(untracked.length
+        ? {
+            detail:
+              `Click tracking is off for ${untracked.join(', ')}. Mail from ` +
+              'these domains delivers normally and reports a click rate of ' +
+              'exactly 0%, because the provider rewrites links only on a ' +
+              'domain that has a verified tracking subdomain.',
+          }
+        : {}),
+    }
+  } catch (error) {
+    return {
+      status: 'unreadable',
+      domains: [],
+      unusable: [],
+      untracked: [],
+      detail: String((error as Error)?.message ?? error).slice(0, 300),
+    }
+  }
+}

@@ -266,7 +266,24 @@ export const IMPORTABLE_FIELDS: Record<string, readonly string[]> = {
   // structural and re-keyed by the import, and it is what `entries.authorId`
   // points at — so dropping this collection from the bundle would restore a
   // site whose every byline referenced a document the bundle did not carry.
-  authors: ['type', 'name', 'url', 'image', 'jobTitle', 'worksFor', 'sameAs', 'bio'],
+  authors: [
+    'type',
+    'name',
+    // The author's page address (AGL-2518). An import that dropped it would
+    // move every author page on the restored site to a name-derived URL,
+    // breaking links the original site had published.
+    'slug',
+    'url',
+    'image',
+    'jobTitle',
+    'worksFor',
+    'sameAs',
+    // The rendered profile rows (AGL-2516). Omitting them would export an
+    // author whose card comes back on the other side with nowhere to follow
+    // them — a silent loss, because every other field survives.
+    'links',
+    'bio',
+  ],
   services: [
     'name',
     'description',
@@ -289,6 +306,10 @@ export const IMPORTABLE_FIELDS: Record<string, readonly string[]> = {
     'displayName',
     'listScreenId',
     'entryScreenId',
+    // What kind of article the collection publishes (AGL-2536). Losing it on
+    // an import would silently retype every entry in the collection back to a
+    // bare `Article` — invisible until a rich result stops appearing.
+    'schemaType',
     // Legacy AGL-105 pointer, still honoured when it is the only one set.
     'templateScreenId',
     // Entries reference the stable category id, so losing this orphans the

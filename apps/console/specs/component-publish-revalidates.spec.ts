@@ -65,12 +65,37 @@ const PUBLISH_WRITE = "'hosts', hostId, 'components', componentId)"
 describe('a component publish drops caches; a component save does not (AGL-2486)', () => {
   const source = readFileSync(COMPONENT_BESIGNER, 'utf8')
 
-  it('revalidates from exactly one place', () => {
-    // Two would mean the save path grew its own copy back alongside the
-    // publish path — which is the pre-fix state plus the fix, and reads as
-    // "belt and braces" rather than as the wasted full-site scan it is.
-    const occurrences = source.split(REVALIDATE_CALL).length - 1
-    expect(occurrences).toBe(1)
+  it('revalidates only from a PUBLISH handler, never from the save path', () => {
+    // Counting the call was the original assertion, and it was a proxy: the
+    // thing that must never come back is a cache drop hanging off the SAVE,
+    // which cannot change live bytes and so pays for a full-site scan for
+    // nothing. Counting stopped being able to say that when AGL-2540 added a
+    // second legitimate call — on the branch where the pointer already names
+    // this version, so there is no promotion to carry one.
+    //
+    // So assert the rule itself: name the handler each call sits in.
+    const owners: string[] = []
+    let at = source.indexOf(REVALIDATE_CALL)
+    while (at !== -1) {
+      const declared = source.lastIndexOf('= useCallback', at)
+      const nameAt = source.lastIndexOf('const ', declared)
+      owners.push(source.slice(nameAt + 'const '.length, declared).trim())
+      at = source.indexOf(REVALIDATE_CALL, at + 1)
+    }
+    expect(owners).toEqual(['promoteToSites', 'handleSaveAndPublish'])
+  })
+
+  it('drops the cache even when there is nothing to promote (AGL-2540)', () => {
+    // `livePublished` says the POINTER already names this version. It says
+    // nothing about the CACHE, and the toast claims the live sites match — so
+    // a version document edited outside the canvas used to leave the tenant
+    // serving old HTML for the rest of its window under a success message.
+    // The early return is the regression to guard.
+    const branchAt = source.indexOf('if (livePublished) {')
+    expect(branchAt).toBeGreaterThan(-1)
+    const branch = source.slice(branchAt, source.indexOf('}', source.indexOf('persist: false', branchAt)))
+    expect(branch).toContain(REVALIDATE_CALL)
+    expect(branch).not.toMatch(/the live sites match this version/)
   })
 
   it('puts that call AFTER the write to the published component doc', () => {

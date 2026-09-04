@@ -387,3 +387,88 @@ describe('QuotaWarningsBanner off an org-scoped route (AGL-1916)', () => {
     )
   })
 })
+
+/**
+ * An abandoned bank confirmation used to be invisible (the SCA gap).
+ *
+ * Subscribing opens the first invoice with `payment_behavior:
+ * default_incomplete`, so an issuer that demands authentication leaves the
+ * subscription `incomplete` until the customer completes it. If they close the
+ * tab, or the bank refuses, the subscription STAYS there.
+ *
+ * Entitlements were already right — `incomplete` is in
+ * `DEAD_SUBSCRIPTION_STATUSES`, so the workspace resolves to Free. That was
+ * exactly the defect: correct entitlements and nothing on screen saying why,
+ * for a customer who believes they subscribed.
+ *
+ * These cases assert the STATE is surfaced and that it does not borrow either
+ * neighbouring sentence, both of which are false here.
+ */
+describe('a subscription whose first payment never completed', () => {
+  it('says so, rather than showing nothing', async () => {
+    scope.loaded = true
+    scope.orgWide = true
+    currentOrg.org = { plan: 'business', billingStatus: 'incomplete' }
+    render(<QuotaWarningsBanner />)
+    await screen.findByText(/never completed/i)
+    // And gives them the way back.
+    expect(billingLinks()[0].textContent).toBe('Finish payment')
+  })
+
+  it('tells a site collaborator to find an admin, and offers no button', async () => {
+    // The same asymmetry the other dunning states keep: an action a scoped
+    // viewer cannot take must not be offered to them.
+    scope.loaded = true
+    scope.orgWide = false
+    currentOrg.org = { plan: 'business', billingStatus: 'incomplete' }
+    render(<QuotaWarningsBanner />)
+    await screen.findByText(/A workspace admin needs to finish it/)
+    expect(billingLinks()).toEqual([])
+  })
+
+  it('does NOT borrow the past_due sentence', async () => {
+    // `past_due` promises access continues while Stripe retries. Nothing is
+    // retrying an incomplete first payment, and there is no access to
+    // continue — the plan never started.
+    scope.loaded = true
+    currentOrg.org = { plan: 'business', billingStatus: 'incomplete' }
+    render(<QuotaWarningsBanner />)
+    await screen.findByText(/never completed/i)
+    const said = screen.getByRole('alert').textContent ?? ''
+    expect(said).not.toMatch(/while Stripe retries/i)
+    expect(said).not.toMatch(/last payment failed/i)
+  })
+
+  it('does NOT borrow the unpaid sentence', async () => {
+    // `unpaid` says the plan "has stopped". It never began.
+    scope.loaded = true
+    currentOrg.org = { plan: 'business', billingStatus: 'incomplete' }
+    render(<QuotaWarningsBanner />)
+    await screen.findByText(/never completed/i)
+    expect(screen.getByRole('alert').textContent ?? '').not.toMatch(
+      /has stopped/i,
+    )
+  })
+
+  it('stays quiet once Stripe has expired it', async () => {
+    // Nothing left to complete: the subscription is gone and the plan grid is
+    // the honest next step, not a banner nagging about something
+    // unrecoverable.
+    scope.loaded = true
+    currentOrg.org = { plan: 'free', billingStatus: 'incomplete_expired' }
+    render(<QuotaWarningsBanner />)
+    expect(screen.queryByText(/never completed/i)).toBeNull()
+  })
+
+  it('CONTROL — past_due still gets its own, different sentence', async () => {
+    // Without this, a banner that showed the incomplete copy for everything
+    // would pass every assertion above.
+    scope.loaded = true
+    currentOrg.org = { plan: 'business', billingStatus: 'past_due' }
+    render(<QuotaWarningsBanner />)
+    await screen.findByText(/while Stripe retries/i)
+    const said = screen.getByRole('alert').textContent ?? ''
+    expect(said).toMatch(/while Stripe retries/i)
+    expect(said).not.toMatch(/never completed/i)
+  })
+})

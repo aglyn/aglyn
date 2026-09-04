@@ -89,11 +89,25 @@ jest.mock('./firebase-admin', () => {
     get: (field: string) => data?.[field],
     data: () => data ?? undefined,
   })
+  /** The scope-lock reads are projected; model the mask rather than ignore it. */
+  const project = (
+    data: Record<string, unknown> | null | undefined,
+    fieldMask: string[] | undefined,
+  ) => {
+    if (data == null || !fieldMask) return data
+    const kept: Record<string, unknown> = {}
+    for (const field of fieldMask) {
+      if (field in data) kept[field] = data[field]
+    }
+    return kept
+  }
   const scopeDocRef = (
     collection: string,
     key: 'org' | 'host',
     scopeId: string,
   ) => ({
+    __collection: collection,
+    __key: key,
     collection: (sub: string) => ({
       doc: (mediaId: string) => ({
         get: async () => {
@@ -107,23 +121,30 @@ jest.mock('./firebase-admin', () => {
         },
       }),
     }),
-    get: async () => {
-      mockState.reads.push(collection)
-      return snapshotFor(mockState[key])
-    },
   })
   const firestoreApi = {
+    /** One call, one read entry — the gate's round trips, as the SDK counts them. */
+    getAll: async (...args: unknown[]) => {
+      const last = args[args.length - 1] as { fieldMask?: string[] } | undefined
+      const options =
+        last && typeof last === 'object' && 'fieldMask' in last
+          ? last
+          : undefined
+      const refs = (options ? args.slice(0, -1) : args) as {
+        __collection: string
+        __key: 'org' | 'host' | 'hostIndex'
+      }[]
+      mockState.reads.push(refs.map((ref) => ref.__collection).join('+'))
+      return refs.map((ref) =>
+        snapshotFor(project(mockState[ref.__key], options?.fieldMask)),
+      )
+    },
     collection: (name: string) => ({
       doc: (id: string) => {
         if (name === 'orgs') return scopeDocRef('orgs', 'org', id)
         if (name === 'hosts') return scopeDocRef('hosts', 'host', id)
         if (name === 'hostIndex') {
-          return {
-            get: async () => {
-              mockState.reads.push('hostIndex')
-              return snapshotFor(mockState.hostIndex)
-            },
-          }
+          return { __collection: 'hostIndex', __key: 'hostIndex' }
         }
         if (name === 'lockdowns') {
           return {

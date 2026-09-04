@@ -73,8 +73,10 @@ import {
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Alert,
   AlertTitle,
@@ -99,7 +101,10 @@ import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../components/staff-only.component'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
-import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
+import {
+  CONTENT_MAX_WIDTH,
+  TABLE_PAGE_SIZE_DEFAULT,
+} from '../../../../constants/shared'
 import { useStaffRole } from '../../../../hooks/use-is-staff'
 
 /** One key that could refuse the looked-up asset, and whether it is set. */
@@ -250,26 +255,20 @@ function AdminMediaQuarantine() {
     { atMs: number; text: string; confirmed: boolean }[]
   >([])
 
-  const idToken = useCallback(
-    async () => (await (user as any)?.getIdToken?.()) as string | undefined,
-    [user],
-  )
-
   /**
    * Read the asset and the keys, without writing anything. Open to every
    * staff role, deliberately: during an incident the person asking "is this
    * already disabled?" is usually support.
    */
   const look = useCallback(async () => {
-    const token = await idToken()
-    if (!token || !scopeId.trim() || !mediaId.trim()) return
+    if (!scopeId.trim() || !mediaId.trim()) return
     const params = new URLSearchParams({ mediaId: mediaId.trim() })
     params.set(scopeKind === 'org' ? 'orgId' : 'hostId', scopeId.trim())
     setBusy(true)
     try {
-      const response = await fetch(
+      const response = await authorizedFetch(
+        user,
         `/api/admin/media-quarantine?${params.toString()}`,
-        { headers: { Authorization: `Bearer ${token}` } },
       )
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
@@ -288,7 +287,7 @@ function AdminMediaQuarantine() {
     } finally {
       setBusy(false)
     }
-  }, [idToken, scopeKind, scopeId, mediaId, enqueueSnackbar])
+  }, [user, scopeKind, scopeId, mediaId, enqueueSnackbar])
 
   /**
    * The whole deny list. One document read, no media reads at all, and it
@@ -297,12 +296,11 @@ function AdminMediaQuarantine() {
    * and should not have to ask a second time to see what is in it.
    */
   const loadList = useCallback(async () => {
-    const token = await idToken()
-    if (!token) return
     try {
-      const response = await fetch('/api/admin/media-quarantine', {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      const response = await authorizedFetch(
+        user,
+        '/api/admin/media-quarantine',
+      )
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
         throw new Error(payload.error ?? `Failed (${response.status})`)
@@ -323,17 +321,17 @@ function AdminMediaQuarantine() {
         allowDuplicate: true,
       })
     }
-  }, [idToken, enqueueSnackbar])
+  }, [user, enqueueSnackbar])
 
   const signedInUid = (user as any)?.uid
   useEffect(() => {
     if (!signedInUid) return
     void loadList()
     // Keyed on WHO is signed in, not on `loadList`. `useUser` hands back a
-    // fresh object on every render, so `idToken` and therefore `loadList`
-    // change identity every render too — depending on the callback re-reads
-    // the index document on each one, which on this page means a Firestore
-    // read per keystroke typed into the form above.
+    // fresh object on every render, so `loadList` changes identity every
+    // render too — depending on the callback re-reads the index document on
+    // each one, which on this page means a Firestore read per keystroke
+    // typed into the form above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signedInUid])
 
@@ -346,18 +344,17 @@ function AdminMediaQuarantine() {
    */
   const releaseKey = useCallback(
     async (target: string) => {
-      const token = await idToken()
-      if (!token) return
       setBusy(true)
       try {
-        const response = await fetch('/api/admin/media-quarantine', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
+        const response = await authorizedFetch(
+          user,
+          '/api/admin/media-quarantine',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'release', by: 'key', key: target }),
           },
-          body: JSON.stringify({ action: 'release', by: 'key', key: target }),
-        })
+        )
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
           throw new Error(payload.error ?? `Failed (${response.status})`)
@@ -384,40 +381,40 @@ function AdminMediaQuarantine() {
         setBusy(false)
       }
     },
-    [idToken, enqueueSnackbar, loadList],
+    [user, enqueueSnackbar, loadList],
   )
 
   const act = useCallback(
     async (action: 'quarantine' | 'release') => {
-      const token = await idToken()
-      if (!token || !scopeId.trim() || !mediaId.trim()) return
+      if (!scopeId.trim() || !mediaId.trim()) return
       const untilMs = until ? new Date(until).getTime() : null
       setBusy(true)
       try {
-        const response = await fetch('/api/admin/media-quarantine', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
+        const response = await authorizedFetch(
+          user,
+          '/api/admin/media-quarantine',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action,
+              by: 'media',
+              [scopeKind === 'org' ? 'orgId' : 'hostId']: scopeId.trim(),
+              mediaId: mediaId.trim(),
+              prefer: narrow ? 'asset' : 'hash',
+              revokeRawUrl,
+              ...(action === 'quarantine'
+                ? {
+                    reason,
+                    message: message.trim() || undefined,
+                    note: note.trim() || undefined,
+                    untilMs:
+                      untilMs && Number.isFinite(untilMs) ? untilMs : undefined,
+                  }
+                : {}),
+            }),
           },
-          body: JSON.stringify({
-            action,
-            by: 'media',
-            [scopeKind === 'org' ? 'orgId' : 'hostId']: scopeId.trim(),
-            mediaId: mediaId.trim(),
-            prefer: narrow ? 'asset' : 'hash',
-            revokeRawUrl,
-            ...(action === 'quarantine'
-              ? {
-                  reason,
-                  message: message.trim() || undefined,
-                  note: note.trim() || undefined,
-                  untilMs:
-                    untilMs && Number.isFinite(untilMs) ? untilMs : undefined,
-                }
-              : {}),
-          }),
-        })
+        )
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
           throw new Error(payload.error ?? `Failed (${response.status})`)
@@ -468,7 +465,7 @@ function AdminMediaQuarantine() {
       }
     },
     [
-      idToken,
+      user,
       scopeKind,
       scopeId,
       mediaId,
@@ -512,6 +509,29 @@ function AdminMediaQuarantine() {
           (typeof b.record.atMs === 'number' ? b.record.atMs : 0),
       )
   }, [listing])
+  /*
+   * The deny list PAGES (AGL-2501). It rendered every entry in one wall — up
+   * to `maxEntries`, which is two thousand — on a table whose rows carry a
+   * key, a reason, two timestamps, an origin and a note apiece.
+   *
+   * The rows are already in memory and already sorted here, so the footer
+   * takes the real total and the counts above it keep describing the WHOLE
+   * list rather than the page: `clearable` and `listing.count` are facts
+   * about the deny list, and paging must not turn them into facts about ten
+   * rows.
+   */
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  const pagedRows = useMemo(
+    () => rows.slice(page * pageSize, page * pageSize + pageSize),
+    [rows, page, pageSize],
+  )
+  // Releasing a key shortens the list, and a reader on the last page of a
+  // list that just shrank gets an empty table with no way back.
+  useEffect(() => {
+    const lastPage = Math.max(0, Math.ceil(rows.length / pageSize) - 1)
+    if (page > lastPage) setPage(lastPage)
+  }, [rows.length, page, pageSize])
   const clearable = rows.filter((row) => row.state !== 'active').length
   const listFull = listing ? listing.count >= listing.maxEntries : false
 
@@ -933,7 +953,7 @@ function AdminMediaQuarantine() {
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {rows.map(({ record, state }) => (
+                        {pagedRows.map(({ record, state }) => (
                           <TableRow key={record.key}>
                             <TableCell>
                               <Stack spacing={0.5}>
@@ -1031,6 +1051,14 @@ function AdminMediaQuarantine() {
                         ))}
                       </TableBody>
                     </Table>
+                    <ListPagination
+                      page={page}
+                      pageSize={pageSize}
+                      rowCount={pagedRows.length}
+                      count={rows.length}
+                      onPageChange={setPage}
+                      onPageSizeChange={setPageSize}
+                    />
                   </Stack>
                 ) : null}
 

@@ -17,9 +17,14 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { fireEvent, render, screen } from '@testing-library/react'
+import type { ReactElement } from 'react'
+// The theme's rung list the type-step attributes offer, asserted against its
+// source rather than a copy of the values.
+import { typographyVariants } from './typography'
 import {
   CollectionCategories,
   CollectionEntries,
+  CollectionEntryAuthor,
   CollectionEntryBody,
   CollectionEntryMeta,
   CollectionRelated,
@@ -27,6 +32,7 @@ import {
   CollectionShare,
   collectionCategoriesSchema,
   collectionEntriesSchema,
+  collectionEntryAuthorSchema,
   collectionEntryBodySchema,
   collectionEntryMetaSchema,
   collectionPresets,
@@ -956,13 +962,441 @@ describe('Related posts block (AGL-582)', () => {
     expect(container.textContent).toBe('')
   })
 
-  it('shows an affordance inside editing surfaces', () => {
+  it('shows sample cards inside editing surfaces', () => {
     render(
       <Aglyn.ScreenLinkContext.Provider value={{ suppressNavigation: true }}>
         <CollectionRelated />
       </Aglyn.ScreenLinkContext.Provider>,
     )
-    expect(screen.getByText(/Related posts — entries sharing/)).toBeTruthy()
+    expect(screen.getByText(/Sample posts — entries sharing/)).toBeTruthy()
+    expect(screen.getByText('Sample related post')).toBeTruthy()
+  })
+})
+
+/**
+ * AGL-2486. The block is server-filled, and an editing surface has no routed
+ * entry — so the canvas drew a one-line dashed strip while every block around
+ * it rendered WYSIWYG, and an author was styling a layout they could not see.
+ *
+ * The sample is the block's REAL markup at the author's own settings, which
+ * is the only render that can answer "what will this look like". It is gated
+ * on `suppressNavigation` — the besigner canvas and Preview, never a
+ * published page — and says out loud that it is a sample, because a
+ * plausible-looking headline is one an author can design around.
+ */
+describe('Related posts sample cards on the canvas (AGL-2486)', () => {
+  const canvas = (element: ReactElement) =>
+    render(
+      <Aglyn.ScreenLinkContext.Provider value={{ suppressNavigation: true }}>
+        {element}
+      </Aglyn.ScreenLinkContext.Provider>,
+    )
+
+  it('renders the shipped 3-up when no limit is authored', () => {
+    canvas(<CollectionRelated />)
+    expect(screen.getByText('Sample related post')).toBeTruthy()
+    expect(screen.getByText('A second sample post')).toBeTruthy()
+    expect(screen.getByText('A third sample post')).toBeTruthy()
+  })
+
+  it('previews the author’s own limit, so the grid fills as it will', () => {
+    const { container } = canvas(
+      <CollectionRelated layout="cards" columns={3} limit={6} />,
+    )
+    // Heading, notice, six cards.
+    expect(container.firstElementChild?.children).toHaveLength(8)
+  })
+
+  it('bounds the preview by the same ceiling the server applies', () => {
+    const { container } = canvas(<CollectionRelated heading="" limit={999} />)
+    const root = container.firstElementChild as HTMLElement
+    // The notice plus the capped card count — never 999 cards.
+    expect(root.children).toHaveLength(Aglyn.COLLECTION_RELATED_MAX + 1)
+  })
+
+  it('never links a sample card anywhere', () => {
+    const { container } = canvas(<CollectionRelated layout="cards" />)
+    expect(container.querySelectorAll('a')).toHaveLength(0)
+  })
+
+  it('draws the cover slot so the card grid previews whole', () => {
+    // Sample posts have no cover to resolve, and the live rule — no box at
+    // all — would preview the grid without the thing being laid out.
+    const { container } = canvas(<CollectionRelated layout="cards" showCover />)
+    expect(
+      container.querySelectorAll('[aria-hidden="true"]').length,
+    ).toBeGreaterThan(0)
+    // A plate, never a fabricated image.
+    expect(container.querySelectorAll('img')).toHaveLength(0)
+  })
+
+  it('gives the sample slot the same proportion a real cover gets', () => {
+    // The slot exists to preview the layout, so it has to be the SHAPE the
+    // published card will be — a plate on a different ratio previews a grid
+    // that never ships.
+    const { container } = canvas(<CollectionRelated layout="cards" showCover />)
+    const style = window.getComputedStyle(
+      container.querySelector('[aria-hidden="true"]') as HTMLElement,
+    )
+    expect(style.aspectRatio.replace(/\s+/g, '')).toBe('445/180')
+    expect(style.height).toBe('')
+  })
+
+  it('leaves the cover slot out when covers are off', () => {
+    const { container } = canvas(<CollectionRelated layout="cards" />)
+    expect(container.querySelectorAll('[aria-hidden="true"]')).toHaveLength(0)
+  })
+
+  it('previews the chosen date format, so the picker shows its work', () => {
+    canvas(<CollectionRelated dateFormat="longDate" />)
+    expect(screen.getAllByText(/August 9, 2026/).length).toBeGreaterThan(0)
+  })
+
+  it('dates every sample from a fixed instant, not the clock', () => {
+    canvas(<CollectionRelated dateFormat="iso" />)
+    expect(screen.getAllByText(/2026-08-09/)).toHaveLength(3)
+  })
+
+  it('honours the show switches on the sample too', () => {
+    canvas(
+      <CollectionRelated
+        layout="cards"
+        showDate={false}
+        showCategory={false}
+        showExcerpt
+      />,
+    )
+    expect(screen.queryByText(/8\/9\/2026/)).toBeNull()
+    expect(screen.queryByText('Category')).toBeNull()
+    expect(screen.getAllByText(/Each post’s own excerpt/)).toHaveLength(3)
+  })
+
+  it('renders nothing at all on a published page', () => {
+    // The one guarantee that matters: no visitor is ever shown a post that
+    // does not exist.
+    const { container } = render(<CollectionRelated layout="cards" showCover />)
+    expect(container.textContent).toBe('')
+    expect(container.querySelectorAll('img')).toHaveLength(0)
+  })
+
+  it('steps aside the moment the server stamps real entries', () => {
+    canvas(
+      <CollectionRelated entries={[{ title: 'Real', url: '/blog/real' }]} />,
+    )
+    expect(screen.getByText('Real')).toBeTruthy()
+    expect(screen.queryByText('Sample related post')).toBeNull()
+    expect(screen.queryByText(/Sample posts —/)).toBeNull()
+  })
+})
+
+/**
+ * AGL-2486. Everything inside a related card is the block's own markup, so
+ * none of it is a node the Styles panel can select — an author had no handle
+ * on the title, the date, the chip or the excerpt at all. The card title was
+ * the visible symptom: a bare `AppLink` is MUI's `Link`, so it rendered
+ * `primary.main` and permanently underlined on a themed page.
+ */
+describe('Related posts is designable (AGL-2486)', () => {
+  const entries = [
+    {
+      title: 'First',
+      url: '/blog/first',
+      date: '1/1/2026',
+      category: 'Guides',
+      excerpt: 'A first excerpt',
+    },
+  ]
+
+  describe('the card title reads as a heading in the theme', () => {
+    it('gives the title a heading element and the theme’s type step', () => {
+      const { container } = render(<CollectionRelated entries={entries} />)
+      const title = container.querySelector('h3')
+      expect(title?.className).toContain('MuiTypography-subtitle1')
+      expect(title?.textContent).toBe('First')
+    })
+
+    it('takes the surrounding text colour, not the link colour', () => {
+      const { container } = render(<CollectionRelated entries={entries} />)
+      const anchor = container.querySelector('a') as HTMLElement
+      expect(anchor.getAttribute('href')).toBe('/blog/first')
+      expect(window.getComputedStyle(anchor).color).toBe('inherit')
+    })
+
+    it('honours an authored type step', () => {
+      const { container } = render(
+        <CollectionRelated entries={entries} titleVariant="h4" />,
+      )
+      expect(container.querySelector('h3')?.className).toContain(
+        'MuiTypography-h4',
+      )
+    })
+
+    it('honours an authored heading step', () => {
+      const { container } = render(
+        <CollectionRelated entries={entries} headingVariant="h3" />,
+      )
+      const heading = container.querySelector('h2')
+      expect(heading?.className).toContain('MuiTypography-h3')
+      expect(heading?.textContent).toBe('Related articles')
+    })
+  })
+
+  describe('the whole card is the link on the grid', () => {
+    it('wraps cover, chip, title and date in one anchor', () => {
+      const { container } = render(
+        <CollectionRelated entries={entries} layout="cards" />,
+      )
+      const anchors = container.querySelectorAll('a')
+      expect(anchors).toHaveLength(1)
+      expect(anchors[0].getAttribute('href')).toBe('/blog/first')
+      expect(anchors[0].querySelector('.MuiChip-root')).toBeTruthy()
+      expect(anchors[0].querySelector('h3')?.textContent).toBe('First')
+    })
+
+    it('never nests an anchor inside the card anchor', () => {
+      const { container } = render(
+        <CollectionRelated entries={entries} layout="cards" />,
+      )
+      expect(container.querySelectorAll('a a')).toHaveLength(0)
+    })
+  })
+
+  describe('Show date and Date format', () => {
+    it('shows the stamped date by default, exactly as it always has', () => {
+      render(<CollectionRelated entries={entries} />)
+      expect(screen.getByText('1/1/2026 · Guides')).toBeTruthy()
+    })
+
+    it('drops the date from the list line when the switch is off', () => {
+      render(<CollectionRelated entries={entries} showDate={false} />)
+      expect(screen.getByText('Guides')).toBeTruthy()
+      expect(screen.queryByText(/1\/1\/2026/)).toBeNull()
+    })
+
+    it('drops the date caption from a card when the switch is off', () => {
+      render(
+        <CollectionRelated entries={entries} layout="cards" showDate={false} />,
+      )
+      expect(screen.queryByText('1/1/2026')).toBeNull()
+      expect(screen.getByText('First')).toBeTruthy()
+    })
+
+    it('offers the ONE shared format list, never a second one', () => {
+      const attribute = (collectionRelatedSchema.attributes ?? []).find(
+        (item) => item.name === 'dateFormat',
+      )
+      expect(attribute?.component).toBe(Aglyn.FieldComponentType.SELECT)
+      expect(attribute?.options).toEqual([
+        ...Aglyn.COLLECTION_ENTRY_DATE_FORMAT_OPTIONS,
+      ])
+    })
+
+    it('keeps the compose-time format off the DOM', () => {
+      const { container } = render(
+        <CollectionRelated entries={entries} dateFormat="longDate" />,
+      )
+      const root = container.firstElementChild as HTMLElement
+      expect(root.getAttribute('dateFormat')).toBeNull()
+    })
+  })
+
+  describe('Show category', () => {
+    it('drops the chip from a card when the switch is off', () => {
+      const { container } = render(
+        <CollectionRelated
+          entries={entries}
+          layout="cards"
+          showCategory={false}
+        />,
+      )
+      expect(container.querySelectorAll('.MuiChip-root')).toHaveLength(0)
+    })
+
+    it('drops the category from the list line when the switch is off', () => {
+      render(<CollectionRelated entries={entries} showCategory={false} />)
+      expect(screen.getByText('1/1/2026')).toBeTruthy()
+      expect(screen.queryByText(/Guides/)).toBeNull()
+    })
+
+    it('renders no caption at all with both halves off', () => {
+      const { container } = render(
+        <CollectionRelated
+          entries={entries}
+          showDate={false}
+          showCategory={false}
+        />,
+      )
+      expect(container.querySelectorAll('.MuiTypography-caption')).toHaveLength(
+        0,
+      )
+    })
+  })
+
+  describe('Show excerpt', () => {
+    it('renders nothing until it is asked for', () => {
+      // The excerpt has been stamped since AGL-582 and rendered by nothing;
+      // switching that on by default would add a paragraph to live entries.
+      render(<CollectionRelated entries={entries} />)
+      expect(screen.queryByText('A first excerpt')).toBeNull()
+    })
+
+    it('renders under the title on the list', () => {
+      render(<CollectionRelated entries={entries} showExcerpt />)
+      expect(screen.getByText('A first excerpt')).toBeTruthy()
+    })
+
+    it('renders inside the card on the grid', () => {
+      const { container } = render(
+        <CollectionRelated entries={entries} layout="cards" showExcerpt />,
+      )
+      expect(container.querySelector('a')?.textContent).toContain(
+        'A first excerpt',
+      )
+    })
+
+    it('leaves an entry with no excerpt alone rather than gapping', () => {
+      const { container } = render(
+        <CollectionRelated
+          entries={[{ title: 'Bare', url: '/blog/bare' }]}
+          showExcerpt
+        />,
+      )
+      expect(container.querySelectorAll('.MuiTypography-body2')).toHaveLength(0)
+    })
+  })
+
+  describe('every new control is authorable and explains itself', () => {
+    const attribute = (name: string) =>
+      (collectionRelatedSchema.attributes ?? []).find(
+        (item) => item.name === name,
+      )
+
+    it.each([
+      ['headingVariant', Aglyn.FieldComponentType.SELECT],
+      ['titleVariant', Aglyn.FieldComponentType.SELECT],
+      ['showDate', Aglyn.FieldComponentType.SWITCH],
+      ['dateFormat', Aglyn.FieldComponentType.SELECT],
+      ['showCategory', Aglyn.FieldComponentType.SWITCH],
+      ['showExcerpt', Aglyn.FieldComponentType.SWITCH],
+    ])('offers %s with its own tooltip', (name, component) => {
+      const field = attribute(name as string)
+      expect(field?.component).toBe(component)
+      expect(field?.label).toBeTruthy()
+      // The guard in apps/console/specs asserts uniqueness repo-wide; a
+      // field added here without help fails the build, not just this file.
+      expect(field?.description?.trim()).toBeTruthy()
+    })
+
+    it('offers the theme’s own type steps, not a list invented here', () => {
+      for (const name of ['headingVariant', 'titleVariant']) {
+        const values = (attribute(name)?.options ?? []).map(
+          (option: any) => option.value,
+        )
+        expect(values).toEqual(
+          typographyVariants.map((variant) => variant.value),
+        )
+        // `''` cannot survive a save (AGL-1451/AGL-1453).
+        for (const value of values) expect(value).toBeTruthy()
+      }
+    })
+
+    it('seeds the preset with the steps and format it actually renders', () => {
+      const preset = collectionPresets.find(
+        (item) =>
+          item.data.componentId === Aglyn.COLLECTION_RELATED_COMPONENT_ID,
+      )
+      const props = preset?.data.props as any
+      expect(props.headingVariant).toBe('h5')
+      expect(props.titleVariant).toBe('subtitle1')
+      expect(props.dateFormat).toBe(Aglyn.COLLECTION_ENTRY_DATE_FORMAT_DEFAULT)
+      // The switches stay unset: their absent state IS today's render.
+      for (const key of ['showDate', 'showCategory', 'showExcerpt'])
+        expect(props[key]).toBeUndefined()
+    })
+  })
+
+  /**
+   * The live blog entry template is a block with none of the new props set.
+   * Everything it emitted before must still be emitted, and the ONE
+   * deliberate difference — the title is themed text rather than a default
+   * browser link — is asserted above rather than left to chance.
+   */
+  describe('a block with no new props set is otherwise unchanged', () => {
+    const shipped = [
+      {
+        title: 'First',
+        url: '/blog/first',
+        date: '1/1/2026',
+        category: 'Guides',
+        excerpt: 'A first excerpt',
+        coverImage: 'https://cdn.example.com/first.png',
+      },
+      { title: 'Third', url: '/blog/third' },
+    ]
+
+    it('renders the list exactly as it did', () => {
+      const { container } = render(<CollectionRelated entries={shipped} />)
+      expect(screen.getByText('Related articles')).toBeTruthy()
+      expect(
+        Array.from(container.querySelectorAll('a')).map((a) =>
+          a.getAttribute('href'),
+        ),
+      ).toEqual(['/blog/first', '/blog/third'])
+      expect(screen.getByText('1/1/2026 · Guides')).toBeTruthy()
+      expect(container.querySelectorAll('img')).toHaveLength(0)
+      expect(container.querySelectorAll('.MuiChip-root')).toHaveLength(0)
+      expect(screen.queryByText('A first excerpt')).toBeNull()
+    })
+
+    it('renders the card grid’s covers, chips and dates as it did', () => {
+      const { container } = render(
+        <CollectionRelated entries={shipped} layout="cards" showCover />,
+      )
+      expect(container.querySelector('img')?.getAttribute('src')).toBe(
+        'https://cdn.example.com/first.png',
+      )
+      expect(
+        Array.from(container.querySelectorAll('.MuiChip-root')).map(
+          (chip) => chip.textContent,
+        ),
+      ).toEqual(['Guides'])
+      expect(screen.getByText('1/1/2026')).toBeTruthy()
+      // Still no plate for a real entry that simply has no cover.
+      expect(container.querySelectorAll('img')).toHaveLength(1)
+      expect(container.querySelectorAll('[aria-hidden="true"]')).toHaveLength(0)
+    })
+
+    it('keeps every read-here prop off the DOM', () => {
+      const { container } = render(
+        <CollectionRelated
+          entries={shipped}
+          limit={3}
+          layout="cards"
+          columns={3}
+          showCover
+          headingVariant="h5"
+          titleVariant="subtitle1"
+          showDate
+          dateFormat="iso"
+          showCategory
+          showExcerpt
+        />,
+      )
+      const root = container.firstElementChild as HTMLElement
+      for (const attribute of [
+        'limit',
+        'layout',
+        'columns',
+        'showCover',
+        'headingVariant',
+        'titleVariant',
+        'showDate',
+        'dateFormat',
+        'showCategory',
+        'showExcerpt',
+      ])
+        expect(root.getAttribute(attribute)).toBeNull()
+    })
   })
 })
 
@@ -1063,6 +1497,27 @@ describe('Related posts covers and card grid (AGL-1457)', () => {
       )
       expect(container.querySelectorAll('img')).toHaveLength(0)
       expect(screen.getByText('Third')).toBeTruthy()
+    })
+
+    /**
+     * The frame's card is 445 x 180, and the cover has to keep that SHAPE at
+     * every width, not that height. A fixed height is the regression this
+     * guards: the grid's columns widen with the viewport while the number
+     * does not, so the box flattens and `objectFit: cover` eats further into
+     * art whose whole content is a composed title lockup.
+     */
+    it('holds the frame’s cover proportion instead of a fixed height', () => {
+      const { container } = render(
+        <CollectionRelated entries={entries} showCover />,
+      )
+      const style = window.getComputedStyle(
+        container.querySelector('img') as HTMLElement,
+      )
+      // jsdom re-serialises the ratio without spaces, so compare the value
+      // rather than its formatting.
+      expect(style.aspectRatio.replace(/\s+/g, '')).toBe('445/180')
+      expect(style.height).toBe('')
+      expect(style.objectFit).toBe('cover')
     })
   })
 
@@ -1705,5 +2160,390 @@ describe('Entry Meta byline (AGL-1459)', () => {
       expect(container.querySelector('img')).toBeTruthy()
       expect(screen.getByText('The Aglyn Team · Jul 2026')).toBeTruthy()
     })
+  })
+})
+
+/**
+ * AGL-2486. Entry Meta prints a byline — a NAME, beside a date. The record
+ * behind that name carries a portrait, a bio and a url, and nothing could
+ * render them, so the live blogEntryTmpl closed every article with a card
+ * whose name and blurb were typed in as literal text. It said "The Aglyn
+ * Team" under posts written by somebody else, and no edit to the author
+ * record could reach it.
+ */
+describe('Entry Author card (AGL-2486)', () => {
+  it('registers under the persisted compose-time component id', () => {
+    expect(collectionEntryAuthorSchema.$id).toBe(
+      Aglyn.COLLECTION_ENTRY_AUTHOR_COMPONENT_ID,
+    )
+  })
+
+  it('renders the portrait, the byline and the bio', () => {
+    const { container } = render(
+      <CollectionEntryAuthor
+        name="Zach Gover"
+        bio="Building the open web platform."
+        image="media:org:jWmGooWE3L/4GF1hRJBUp"
+      />,
+    )
+    expect(screen.getByText('Zach Gover')).toBeTruthy()
+    expect(screen.getByText('Building the open web platform.')).toBeTruthy()
+    expect(container.querySelector('img')?.getAttribute('src')).toBe(
+      '/api/media/cdn/org:jWmGooWE3L/4GF1hRJBUp',
+    )
+    // Decorative: the card names the author in text right beside it.
+    expect(container.querySelector('img')?.getAttribute('alt')).toBe('')
+  })
+
+  it('renders nothing at all for an entry with no author', () => {
+    // Never an empty bordered box on a post nobody signed.
+    const { container } = render(<CollectionEntryAuthor />)
+    expect(container.textContent).toBe('')
+    expect(container.querySelectorAll('img')).toHaveLength(0)
+  })
+
+  it('drops each part on its own rather than leaving a gap', () => {
+    const { container } = render(<CollectionEntryAuthor name="Zach Gover" />)
+    expect(container.querySelectorAll('img')).toHaveLength(0)
+    expect(container.textContent).toBe('Zach Gover')
+  })
+
+  it('hides the portrait and the bio behind their Show switches', () => {
+    const { container } = render(
+      <CollectionEntryAuthor
+        name="Zach Gover"
+        bio="Building the open web platform."
+        image="https://cdn.example.com/portrait.png"
+        showAvatar={false}
+        showBio={false}
+      />,
+    )
+    expect(container.querySelectorAll('img')).toHaveLength(0)
+    expect(container.textContent).toBe('Zach Gover')
+  })
+
+  it('renders NO portrait rather than a broken one', () => {
+    // An unresolved token on a non-entry surface is not an image.
+    const { container } = render(
+      <CollectionEntryAuthor name="Zach Gover" image="{{entry.authorImage}}" />,
+    )
+    expect(container.querySelectorAll('img')).toHaveLength(0)
+  })
+
+  it('opens an off-site author page in a new tab', () => {
+    // The same guard the Social Links block applies: the value comes from a
+    // stored record, so the scheme has to be checked rather than trusted.
+    const { container } = render(
+      <CollectionEntryAuthor name="Zach Gover" url="https://example.com/zach" />,
+    )
+    const link = container.querySelector('a')
+    expect(link?.getAttribute('href')).toBe('https://example.com/zach')
+    expect(link?.getAttribute('target')).toBe('_blank')
+    expect(link?.getAttribute('rel')).toContain('noopener')
+  })
+
+  it('keeps a route on this site in the same tab', () => {
+    const { container } = render(
+      <CollectionEntryAuthor name="Zach Gover" url="/about" />,
+    )
+    const link = container.querySelector('a')
+    expect(link?.getAttribute('href')).toBe('/about')
+    expect(link?.getAttribute('target')).toBeNull()
+  })
+
+  it('renders the name as plain text for an href it will not follow', () => {
+    for (const url of ['javascript:alert(1)', 'data:text/html,x', 'mailto:x@y.z']) {
+      const { container, unmount } = render(
+        <CollectionEntryAuthor name="Zach Gover" url={url} />,
+      )
+      expect(container.querySelectorAll('a')).toHaveLength(0)
+      expect(container.textContent).toBe('Zach Gover')
+      unmount()
+    }
+  })
+
+  it('ships a preset that seeds nothing, so the server fill is the mechanism', () => {
+    const preset = collectionPresets.find(
+      (item) =>
+        item.data.componentId === Aglyn.COLLECTION_ENTRY_AUTHOR_COMPONENT_ID,
+    )
+    expect(preset).toBeTruthy()
+    expect(preset?.data.props).toEqual({})
+  })
+
+  it('hangs a media picker on the portrait field', () => {
+    // `Browse media` is attached by field NAME (element-props-form): a text
+    // field called `image` gets one, which is why it is not called `portrait`.
+    const image = (collectionEntryAuthorSchema.attributes ?? []).find(
+      (item) => item.name === 'image',
+    )
+    expect(image?.component).toBe(Aglyn.FieldComponentType.TEXT_FIELD)
+  })
+})
+
+/**
+ * THE BYLINE AND THE AUTHOR CARD PREVIEW THEMSELVES (AGL-2486).
+ *
+ * Both resolve FROM the routed entry, and a besigner canvas has no routed
+ * entry, so both drew a one-line dashed strip: an author styling the byline
+ * or the author card was styling something they could not see, on a canvas
+ * where every block around them was WYSIWYG. Related Posts had the same gap
+ * and was answered the same way — the block's real markup, at the author's
+ * own settings, on editing surfaces only.
+ *
+ * The published guarantee is the half worth guarding: a visitor must never be
+ * shown `Sample author` under a real article.
+ */
+describe('Entry Meta previews itself on the canvas (AGL-2486)', () => {
+  const canvas = (node: React.ReactElement) =>
+    render(
+      <Aglyn.ScreenLinkContext.Provider value={{ suppressNavigation: true }}>
+        {node}
+      </Aglyn.ScreenLinkContext.Provider>,
+    )
+
+  it('renders a sample byline instead of a dashed strip', () => {
+    const { container } = canvas(<CollectionEntryMeta />)
+    expect(screen.getByText(/Sample author/)).toBeTruthy()
+    // The block's own markup, not a note about it: a caption and chips.
+    expect(container.querySelectorAll('.MuiChip-root').length).toBe(2)
+    expect(container.textContent).not.toMatch(/render here/)
+  })
+
+  it('draws the portrait SLOT, which is what the spacing is built around', () => {
+    // The entry's author supplies the portrait at compose time, so there is
+    // none to resolve here — but a byline with no disc previews at the wrong
+    // height, which is the measurement an author is actually taking.
+    const { container } = canvas(<CollectionEntryMeta />)
+    const plate = container.querySelector('[aria-hidden]')
+    expect(plate).toBeTruthy()
+    expect(container.querySelectorAll('img')).toHaveLength(0)
+  })
+
+  it('honours every Show switch in the sample', () => {
+    const { container } = canvas(
+      <CollectionEntryMeta
+        showAuthor={false}
+        showCategory={false}
+        showTags={false}
+        showAvatar={false}
+      />,
+    )
+    expect(screen.queryByText(/Sample author/)).toBeNull()
+    expect(screen.queryByText(/Category/)).toBeNull()
+    expect(container.querySelectorAll('.MuiChip-root')).toHaveLength(0)
+    expect(container.querySelector('[aria-hidden]')).toBeNull()
+  })
+
+  it('dates the sample in the format the block would use', () => {
+    canvas(<CollectionEntryMeta dateFormat="monthYear" />)
+    expect(screen.getByText(/Aug 2026/)).toBeTruthy()
+  })
+
+  it('renders NOTHING on a published page', () => {
+    // The guarantee: no visitor is ever shown a sample. A published entry
+    // with no meta values renders an empty box, exactly as it did before.
+    const { container } = render(<CollectionEntryMeta />)
+    expect(container.textContent).toBe('')
+    expect(container.querySelectorAll('img, .MuiChip-root')).toHaveLength(0)
+  })
+
+  it('a real value still wins over the sample', () => {
+    canvas(<CollectionEntryMeta author="Zach Gover" date="Aug 2026" />)
+    expect(screen.getByText('Zach Gover · Aug 2026')).toBeTruthy()
+    expect(screen.queryByText(/Sample author/)).toBeNull()
+  })
+})
+
+describe('Entry Author previews itself on the canvas (AGL-2486)', () => {
+  const canvas = (node: React.ReactElement) =>
+    render(
+      <Aglyn.ScreenLinkContext.Provider value={{ suppressNavigation: true }}>
+        {node}
+      </Aglyn.ScreenLinkContext.Provider>,
+    )
+
+  it('renders a sample card instead of a dashed strip', () => {
+    const { container } = canvas(<CollectionEntryAuthor />)
+    expect(screen.getByText('Sample author')).toBeTruthy()
+    expect(screen.getByText(/bio from this author’s record/)).toBeTruthy()
+    expect(container.querySelector('[aria-hidden]')).toBeTruthy()
+    expect(container.textContent).not.toMatch(/render here/)
+  })
+
+  it('honours Show bio and Show portrait in the sample', () => {
+    const { container } = canvas(
+      <CollectionEntryAuthor showBio={false} showAvatar={false} />,
+    )
+    expect(screen.getByText('Sample author')).toBeTruthy()
+    expect(screen.queryByText(/bio from this author’s record/)).toBeNull()
+    expect(container.querySelector('[aria-hidden]')).toBeNull()
+  })
+
+  it('renders NOTHING on a published page', () => {
+    const { container } = render(<CollectionEntryAuthor />)
+    expect(container.textContent).toBe('')
+    expect(container.querySelectorAll('img')).toHaveLength(0)
+  })
+
+  it('a real record still wins over the sample', () => {
+    canvas(<CollectionEntryAuthor name="Zach Gover" bio="Building Aglyn." />)
+    expect(screen.getByText('Zach Gover')).toBeTruthy()
+    expect(screen.getByText('Building Aglyn.')).toBeTruthy()
+    expect(screen.queryByText('Sample author')).toBeNull()
+  })
+})
+
+/**
+ * A SWITCH whose renderer treats UNSET as on has to be drawn on (AGL-2506).
+ *
+ * These three blocks render `props['showX'] !== false`, so an unset prop
+ * shows the field. The panel read the same prop as a plain boolean, and
+ * `undefined` is falsy — so five switches sat in the OFF position over a
+ * block that was visibly printing the author, the date, the category and the
+ * tags. Worse than the wrong picture: the first click writes the `true` that
+ * was already in effect and changes nothing on the canvas, so the control
+ * reads as dead, and only a second click reaches the `false` that does the
+ * work.
+ *
+ * Seeding the field with the renderer's own default fixes both halves at
+ * once — it draws in the right position AND the first click means something.
+ */
+describe('Show switches open in the position the renderer uses (AGL-2506)', () => {
+  const RENDERER_DEFAULTS_ON = [
+    'showDate',
+    'showCategory',
+    'showTags',
+    'showAuthor',
+    'showAvatar',
+    'showBio',
+  ]
+
+  const cases: [string, Aglyn.ComponentSchema][] = [
+    ['related posts', collectionRelatedSchema],
+    ['entry meta', collectionEntryMetaSchema],
+    ['entry author', collectionEntryAuthorSchema],
+  ]
+
+  it.each(cases)('seeds every such switch on %s', (_name, schema) => {
+    const switches = (schema.attributes ?? []).filter(
+      (attribute) =>
+        attribute.component === Aglyn.FieldComponentType.SWITCH &&
+        RENDERER_DEFAULTS_ON.includes(attribute.name),
+    )
+    // The guard is worthless if it asserts over an empty list.
+    expect(switches.length).toBeGreaterThan(0)
+    for (const attribute of switches) {
+      expect([attribute.name, attribute.initialValue]).toEqual([
+        attribute.name,
+        true,
+      ])
+    }
+  })
+
+  it('leaves a switch the renderer defaults OFF alone', () => {
+    // `showExcerpt` renders on a bare truthy check, so unset means hidden and
+    // an unchecked switch is already the truth. Seeding it would turn the
+    // excerpt on for every published entry.
+    const excerpt = (collectionRelatedSchema.attributes ?? []).find(
+      (attribute) => attribute.name === 'showExcerpt',
+    )
+    expect(excerpt?.component).toBe(Aglyn.FieldComponentType.SWITCH)
+    expect(excerpt?.initialValue).toBeUndefined()
+  })
+})
+
+/**
+ * The author card draws the record's profile links (AGL-2516).
+ *
+ * The mark on a known platform is NOT the author's to choose — an X link
+ * drawn as a GitHub glyph is a broken link that still resolves — so the icon
+ * and the accessible name come from the registry. Anything else takes the
+ * label and icon the author picked.
+ */
+describe('Entry Author profile links (AGL-2516)', () => {
+  /**
+   * These render through `AppLink`'s icon-button variant, which is an `<a>`
+   * carrying `role="button"` — the same shape the Share bar and the Social
+   * Links block already produce. Asserted on the role the DOM actually has
+   * rather than the one an anchor would have by default, because a spec that
+   * quietly queried something else would pass while announcing wrongly.
+   */
+  const withLinks = (links: unknown, extra: Record<string, unknown> = {}) =>
+    render(
+      <CollectionEntryAuthor name="Zach Gover" links={links as never} {...extra} />,
+    )
+
+  it('names a known platform from the registry, not from stored text', () => {
+    withLinks([{ platform: 'x', url: 'https://x.com/aglyn' }])
+    const link = screen.getByRole('button', { name: 'X' })
+    expect(link.getAttribute('href')).toBe('https://x.com/aglyn')
+  })
+
+  it('names a custom link with the author’s label', () => {
+    withLinks([{ label: 'Newsletter', url: 'https://example.com/n' }])
+    expect(
+      screen.getByRole('button', { name: 'Newsletter' }).getAttribute('href'),
+    ).toBe('https://example.com/n')
+  })
+
+  it('opens a profile away from the article, and says so to the browser', () => {
+    // `me` alongside noopener: these ARE identity links, which is the one
+    // place rel="me" means something.
+    withLinks([{ platform: 'github', url: 'https://github.com/aglyn' }])
+    const link = screen.getByRole('button', { name: 'GitHub' })
+    expect(link.getAttribute('target')).toBe('_blank')
+    expect(link.getAttribute('rel')).toContain('noopener')
+    expect(link.getAttribute('rel')).toContain('me')
+  })
+
+  it('refuses an unsafe scheme that never passed the store', () => {
+    // These arrive as PROPS, so a document can hand the renderer a link the
+    // record normalizer never saw. Two guards, because only one of them sits
+    // on the path an attacker would use.
+    withLinks([
+      // eslint-disable-next-line no-script-url
+      { label: 'Bad', url: 'javascript:alert(1)' },
+      { platform: 'x', url: 'https://x.com/aglyn' },
+    ])
+    expect(screen.queryByRole('button', { name: 'Bad' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'X' })).toBeTruthy()
+  })
+
+  it('allows mailto, which is a way to reach an author', () => {
+    withLinks([{ platform: 'email', url: 'mailto:hi@example.com' }])
+    expect(
+      screen.getByRole('button', { name: 'Email' }).getAttribute('href'),
+    ).toBe('mailto:hi@example.com')
+  })
+
+  it('draws nothing extra when Show links is off', () => {
+    withLinks([{ platform: 'x', url: 'https://x.com/aglyn' }], {
+      showLinks: false,
+    })
+    expect(screen.queryByRole('button', { name: 'X' })).toBeNull()
+    // The card itself still stands — the switch hides a row, not the author.
+    expect(screen.getByText('Zach Gover')).toBeTruthy()
+  })
+
+  it('renders a card that is ONLY links', () => {
+    // An author with no bio and no portrait still has somewhere to be
+    // followed, and that is not an empty box.
+    const { container } = render(
+      <CollectionEntryAuthor
+        links={[{ platform: 'x', url: 'https://x.com/aglyn' }] as never}
+      />,
+    )
+    expect(screen.getByRole('button', { name: 'X' })).toBeTruthy()
+    expect(container.querySelectorAll('svg').length).toBeGreaterThan(0)
+  })
+
+  it('offers a switch that opens in the position the renderer uses', () => {
+    const attribute = (collectionEntryAuthorSchema.attributes ?? []).find(
+      (entry) => entry.name === 'showLinks',
+    )
+    expect(attribute?.component).toBe(Aglyn.FieldComponentType.SWITCH)
+    // AGL-2506: unset means shown, so the switch has to say so.
+    expect(attribute?.initialValue).toBe(true)
   })
 })

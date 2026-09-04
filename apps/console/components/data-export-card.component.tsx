@@ -19,6 +19,7 @@
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { LEGAL_REFERENCE_URLS } from '../constants/shared'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { Box, Button, Link, Stack, Typography } from '@mui/material'
 import type { User } from 'firebase/auth'
 import { useCallback, useState } from 'react'
@@ -64,15 +65,17 @@ export function DataExportCard({ user, orgId, description }: DataExportCardProps
   const download = useCallback(async () => {
     setBusy(true)
     try {
-      // `true` forces a refresh so `auth_time` is the one just refreshed
-      // rather than a cached hour-old value — the route checks it.
-      const idToken = await user.getIdToken(true)
+      // `forceRefresh` so `auth_time` is the one just refreshed rather than
+      // a cached hour-old value — the route checks it.
       const url = orgId
         ? `/api/orgs/export-data?orgId=${encodeURIComponent(orgId)}`
         : '/api/account/export'
-      const response = await fetch(url, {
-        headers: { Authorization: `Bearer ${idToken}` },
-      })
+      const response = await authorizedFetch(
+        user,
+        url,
+        {},
+        { forceRefresh: true },
+      )
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}) as any)
         enqueueSnackbar(

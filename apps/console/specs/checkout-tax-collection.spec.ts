@@ -165,11 +165,35 @@ beforeEach(() => {
   })
   mockOrgGet.mockResolvedValue({ get: () => 'acme' })
   mockReadOrgBilling.mockResolvedValue({ stripeCustomerId: 'cus_test_1' })
-  global.fetch = jest.fn(async (_url: unknown, init: any) => {
+  global.fetch = jest.fn(async (url: unknown, init: any) => {
+    const href = String(url)
+    // The customer read the purchase path makes before it will charge
+    // anything: it needs a stored payment method and a stored address, both
+    // of which the Billing page now collects before a plan is chosen.
+    if (/\/customers\//.test(href)) {
+      return {
+        ok: true,
+        json: async () => ({
+          invoice_settings: { default_payment_method: 'pm_saved_1' },
+          address: { country: 'US' },
+        }),
+      }
+    }
     capturedBody = new URLSearchParams(String(init?.body ?? ''))
     return {
       ok: true,
-      json: async () => ({ url: 'https://checkout.stripe.com/c/session' }),
+      json: async () => ({
+        id: 'sub_1',
+        status: 'active',
+        latest_invoice: {
+          subtotal: 2500,
+          tax: 165,
+          total: 2665,
+          currency: 'usd',
+          automatic_tax: { status: 'complete' },
+          payment_intent: { status: 'succeeded', client_secret: 'pi_secret' },
+        },
+      }),
     }
   }) as never
 })
@@ -179,96 +203,149 @@ afterEach(() => {
   jest.restoreAllMocks()
 })
 
-describe('checkout charges sales tax (AGL-1133 / AGL-1537)', () => {
-  it('enables automatic tax on every session', async () => {
+describe('the subscription charges sales tax (AGL-1133 / AGL-1537)', () => {
+  /*
+   * Rewritten when Checkout was dropped. The tax POSITION did not change and
+   * neither did the parameter that carries it — `automatic_tax[enabled]` was
+   * always a property of the subscription rather than of the session, which is
+   * precisely why removing the session cost no tax behaviour.
+   *
+   * What DID change is where the prerequisites come from. Checkout collected
+   * the address and the tax id at purchase time via
+   * `billing_address_collection` and `tax_id_collection`; now the Billing page
+   * collects both before a plan is chosen, and the route REFUSES to subscribe
+   * without them. Those refusals are the new form of the same guarantee, and
+   * they are asserted below — an untaxed invoice in front of a tax authority
+   * is the failure either way.
+   */
+  it('enables automatic tax on every subscription', async () => {
     const post = loadCheckout()
     const response = await checkout(post)
     expect(response.status).toBe(200)
     expect(capturedBody?.get('automatic_tax[enabled]')).toBe('true')
   })
 
-  it('collects the address and tax id automatic tax depends on', async () => {
-    // `automatic_tax` on a session with no address reports
-    // `requires_location_inputs` and charges NOTHING — it looks enabled and
-    // quietly collects no tax. `required` is the prerequisite, not polish.
-    const post = loadCheckout()
-    await checkout(post)
-    expect(capturedBody?.get('billing_address_collection')).toBe('required')
-    expect(capturedBody?.get('tax_id_collection[enabled]')).toBe('true')
-  })
-
-  it('saves the collected address onto a REUSED customer (AGL-1537)', async () => {
-    // An existing customer's tax location comes from the CUSTOMER record;
-    // without `customer_update[address]=auto` a stored-address-less customer
-    // makes the automatic_tax session unresolvable.
+  it('bills the customer whose address the tax is computed from', async () => {
     const post = loadCheckout()
     await checkout(post)
     expect(capturedBody?.get('customer')).toBe('cus_test_1')
-    expect(capturedBody?.get('customer_update[address]')).toBe('auto')
+    // The stored card, so there is no payment step to collect one in.
+    expect(capturedBody?.get('default_payment_method')).toBe('pm_saved_1')
   })
 
-  it('lets the session update the REUSED customer name — tax_id_collection demands it (AGL-1823)', async () => {
-    // Stripe hard-rejects `tax_id_collection[enabled]=true` + `customer`
-    // without `customer_update[name]=auto`: "Tax ID collection requires
-    // updating business name on the customer." (reproduced against test-mode
-    // Stripe 2026-08-15, HTTP 400). Since this route enables tax id
-    // collection on EVERY session, omitting the name grant fails every
-    // churned org's resubscribe at session creation — the exact path where
-    // `stripeCustomerId` survives on the billing doc.
+  it('REFUSES to subscribe with no billing address, rather than billing untaxed', async () => {
+    // The replacement for `billing_address_collection: required`. Without an
+    // address `automatic_tax` reports `requires_location_inputs` and charges
+    // NOTHING — it looks enabled and quietly collects no tax. Checkout
+    // prevented that by demanding an address on the form; this prevents it by
+    // refusing before Stripe is called at all.
+    global.fetch = jest.fn(async (url: unknown, init: any) => {
+      const href = String(url)
+      if (/\/customers\//.test(href)) {
+        return {
+          ok: true,
+          json: async () => ({
+            invoice_settings: { default_payment_method: 'pm_saved_1' },
+            address: null,
+          }),
+        }
+      }
+      capturedBody = new URLSearchParams(String(init?.body ?? ''))
+      return { ok: true, json: async () => ({}) }
+    }) as never
     const post = loadCheckout()
     const response = await checkout(post)
-    expect(response.status).toBe(200)
-    expect(capturedBody?.get('customer')).toBe('cus_test_1')
-    expect(capturedBody?.get('tax_id_collection[enabled]')).toBe('true')
-    expect(capturedBody?.get('customer_update[name]')).toBe('auto')
+    expect(response.status).toBe(409)
+    expect((await response.json()).code).toBe('billing_address_required')
+    // And nothing was created: the refusal is before the subscription call.
+    expect(capturedBody).toBeNull()
   })
 
-  it('CONTROL — a first subscribe sends customer_email and NO customer_update', async () => {
-    // Stripe rejects `customer_update` on a session without a `customer`, so
-    // leaking it onto the first-purchase path would break every first
-    // subscribe.
+  it('REFUSES to subscribe with no payment method', async () => {
+    // Not a tax rule, but the same shape of guarantee: the flow requires the
+    // pieces up front instead of collecting them on a Stripe-rendered page.
+    global.fetch = jest.fn(async (url: unknown, init: any) => {
+      const href = String(url)
+      if (/\/customers\//.test(href)) {
+        return {
+          ok: true,
+          json: async () => ({
+            invoice_settings: {},
+            address: { country: 'US' },
+          }),
+        }
+      }
+      capturedBody = new URLSearchParams(String(init?.body ?? ''))
+      return { ok: true, json: async () => ({}) }
+    }) as never
+    const post = loadCheckout()
+    const response = await checkout(post)
+    expect(response.status).toBe(409)
+    expect((await response.json()).code).toBe('payment_method_required')
+    expect(capturedBody).toBeNull()
+  })
+
+  it('CONTROL — an org with no Stripe customer is refused before any Stripe call', async () => {
+    // There is no `customer_email` path any more: without a customer there is
+    // no address and no card, so there is nothing to charge and nothing to
+    // compute tax from.
     mockReadOrgBilling.mockResolvedValue({})
     const post = loadCheckout()
     const response = await checkout(post)
+    expect(response.status).toBe(409)
+    expect((await response.json()).code).toBe('billing_details_required')
+  })
+
+  it('CONTROL — the happy path really does reach Stripe', async () => {
+    // Four cases above assert a refusal before Stripe. Each is worthless if
+    // the wiring made the Stripe call impossible.
+    const post = loadCheckout()
+    const response = await checkout(post)
     expect(response.status).toBe(200)
-    expect(capturedBody?.get('customer_email')).toBe('owner@example.com')
-    expect(capturedBody?.get('customer')).toBeNull()
-    expect(capturedBody?.get('customer_update[address]')).toBeNull()
-    expect(capturedBody?.get('customer_update[name]')).toBeNull()
+    expect(capturedBody).not.toBeNull()
   })
+})
 
-  it('PIN — tax params ride ALONGSIDE the existing session shape', async () => {
-    // The tax work must not disturb what checkout already sends: the plan
-    // price, the metered usage item (AGL-635/1280), and the promo-code field
-    // (AGL-1105) are pinned here exactly so a tax refactor that drops one
-    // goes red in this suite rather than in production.
+describe('what the session used to carry, and where it went', () => {
+  it('PIN — the plan price and the metered item ride on the subscription', async () => {
+    // The tax work must not disturb what the purchase already sends: the plan
+    // price and the metered usage item (AGL-635/1280) are pinned here exactly
+    // so a refactor that drops one goes red in this suite rather than in
+    // production. They moved from `line_items[n]` to `items[n]` with the
+    // session; nothing else about them changed, and the interval-matching
+    // rule (AGL-1340) is what makes `meteredPriceId(interval)` the resolver.
     const post = loadCheckout()
     await checkout(post)
-    expect(capturedBody?.get('line_items[0][price]')).toBe(
-      'price_starter_monthly',
+    expect(capturedBody?.get('items[0][price]')).toBe('price_starter_monthly')
+    expect(capturedBody?.get('items[1][price]')).toBe('price_metered_usage')
+    expect(capturedBody?.get('metadata[orgId]')).toBe('org-1')
+    expect(capturedBody?.get('metadata[plan]')).toBe('starter')
+  })
+
+  it('opens the first invoice without charging until it is confirmed', async () => {
+    // `default_incomplete` is what lets the subscription be created and then
+    // authenticated: Stripe opens the first invoice and its PaymentIntent but
+    // takes nothing until it is confirmed, so an issuer challenge has
+    // somewhere to happen and an abandoned attempt expires on Stripe's side.
+    const post = loadCheckout()
+    await checkout(post)
+    expect(capturedBody?.get('payment_behavior')).toBe('default_incomplete')
+    expect(capturedBody?.get('expand[]')).toBe('latest_invoice.payment_intent')
+  })
+
+  it('a card is guaranteed even when nothing is due today', async () => {
+    // AGL-2486's guarantee, kept in a different shape. A $0-today signup — an
+    // enterprise first month free, a 100%-off promo code — must still have a
+    // card on file, or the FIRST RENEWAL fails and there is nothing to
+    // charge. Checkout enforced it with `payment_method_collection: always`;
+    // this flow enforces it earlier and harder, by refusing to subscribe at
+    // all without a stored default payment method (asserted above), and by
+    // pinning that method onto the subscription so the renewal uses it.
+    const post = loadCheckout()
+    await checkout(post)
+    expect(capturedBody?.get('default_payment_method')).toBe('pm_saved_1')
+    expect(capturedBody?.get('payment_settings[save_default_payment_method]')).toBe(
+      'on_subscription',
     )
-    expect(capturedBody?.get('line_items[1][price]')).toBe('price_metered_usage')
-    expect(capturedBody?.get('allow_promotion_codes')).toBe('true')
-    expect(capturedBody?.get('mode')).toBe('subscription')
-    expect(capturedBody?.get('subscription_data[metadata][orgId]')).toBe('org-1')
-  })
-
-  it('collects a payment method even when nothing is due today', async () => {
-    // AGL-2486. A $0-today signup — an enterprise first month free, a
-    // 100%-off promo code — must still put a card on file, or the FIRST
-    // RENEWAL fails and there is nothing to charge.
-    //
-    // Stripe's default for `mode: subscription` is already `always`, measured
-    // against the live API on 2026-08-23: a session carrying a 100%-off
-    // `duration: forever` coupon came back `payment_method_collection=always`
-    // with `amount_total=0`. So this parameter changes no behaviour today and
-    // is pinned for a different reason — the opposite value, `if_required`,
-    // fails SILENTLY and LATE. Nothing at signup looks wrong; the damage
-    // surfaces one billing period later, across every discounted account at
-    // once. An unstated default cannot be reviewed, and a default is not a
-    // promise Stripe made to us.
-    const post = loadCheckout()
-    await checkout(post)
-    expect(capturedBody?.get('payment_method_collection')).toBe('always')
   })
 })

@@ -16,7 +16,7 @@
  */
 
 /**
- * Keeps the credit badge and the abuse-report control on the page (AGL-1477).
+ * Keeps the credit badge and the abuse-report control on the page.
  *
  * Both render as ordinary elements in the published document, which means the
  * site's own author can take them off it. Not by breaking anything — by using

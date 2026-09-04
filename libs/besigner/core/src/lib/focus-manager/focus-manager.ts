@@ -302,6 +302,66 @@ export function setSelectedNode(
 }
 
 /**
+ * Where the selection should land once `nodes` are deleted, best first
+ * (AGL-2553).
+ *
+ * Deleting used to clear the selection outright, and the hierarchy collapsing
+ * was the consequence: the tree only holds a branch open to reveal what is
+ * selected, so with nothing selected a subtree the author had navigated into
+ * snapped shut on every delete.
+ *
+ * Order is next sibling, then previous, then the parent. NEXT first because
+ * it slides into the deleted node's slot — the highlight stays where the
+ * author's eye already is, rather than stepping backwards. Previous covers
+ * deleting the last child, and the parent covers an only child, where keeping
+ * the branch open one level up is still better than closing it.
+ *
+ * ⚑ Returns CANDIDATES rather than a node, because it must be called BEFORE
+ * the delete — sibling indices shift once it runs — and the caller selects the
+ * first that survives. That ordering is what makes multi-selection safe
+ * without walking ancestors: a sibling that was itself doomed, or that hung
+ * off a doomed node, is simply absent from the map afterwards and the next
+ * candidate wins.
+ */
+export function resolveSelectionAfterDeletion(
+  nodes: readonly Aglyn.NodeSchema<any>[],
+): Aglyn.NodeSchema<any>[] {
+  const anchor = nodes.find((node) => node?.$id && node?.parentId)
+  if (!anchor) return []
+  const parent = Aglyn.canvas.getNode(anchor.parentId!)
+  if (!parent) return []
+
+  const siblings = parent.nodes ?? []
+  const index = siblings.indexOf(anchor.$id)
+  const candidates: Aglyn.NodeSchema<any>[] = []
+  if (index > -1) {
+    for (let i = index + 1; i < siblings.length; i += 1) {
+      const sibling = Aglyn.canvas.getNode(siblings[i])
+      if (sibling) candidates.push(sibling)
+    }
+    for (let i = index - 1; i >= 0; i -= 1) {
+      const sibling = Aglyn.canvas.getNode(siblings[i])
+      if (sibling) candidates.push(sibling)
+    }
+  }
+  candidates.push(parent)
+  return candidates
+}
+
+/**
+ * Selects the first of `candidates` that still exists, or clears the
+ * selection when none do. The other half of
+ * {@link resolveSelectionAfterDeletion}; call it AFTER the delete.
+ */
+export function selectFirstSurviving(
+  candidates: readonly Aglyn.NodeSchema<any>[],
+): void {
+  const survivor = candidates.find((node) => !!Aglyn.canvas.getNode(node.$id))
+  if (survivor) setSelectedNode(survivor)
+  else clearSelection()
+}
+
+/**
  * Flat, depth-first list of the nodes currently visible in the hierarchy —
  * children of collapsed nodes are skipped (AGL-6). Range selection resolves
  * its slice against this order.

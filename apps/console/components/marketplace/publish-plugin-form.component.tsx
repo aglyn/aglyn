@@ -52,6 +52,7 @@ import MediaPickerDialog from '../media/media-picker-dialog.component'
 import { docsHelp } from '../../constants/docs-links'
 import { mediaNodeSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import { inheritedMediaAlt } from '@aglyn/aglyn/app-utils/media-metadata'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import mediaSrc from '../../utils/media-src'
 import { buildRoute, Route } from '../../constants/route-links'
 
@@ -467,41 +468,39 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
     setBusy(true)
     try {
       const bundle = await fileToBase64(bundleFile)
-      const idToken = await (
-        user as { getIdToken?: () => Promise<string> }
-      )?.getIdToken?.()
-      const response = await fetch('/api/marketplace/publish-plugin', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      const response = await authorizedFetch(
+        user,
+        '/api/marketplace/publish-plugin',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orgId,
+            bundle,
+            manifest,
+            displayName:
+              draft.displayName.trim() ||
+              String((manifest as { name?: unknown }).name ?? '').trim(),
+            description: draft.description.trim(),
+            category: draft.category || undefined,
+            changelog: draft.changelog.trim(),
+            // A private plugin has no buyers — its only audience already owns
+            // it — so it publishes free regardless of what the field held
+            // before the publisher switched visibility.
+            priceUsd:
+              draft.visibility === 'private'
+                ? 0
+                : Math.max(0, Math.round(Number(draft.priceUsd) || 0)),
+            visibility: draft.visibility,
+            attestation: draft.attested,
+            ...(draft.readme.trim() ? { readme: draft.readme.trim() } : {}),
+            ...(draft.license.trim() ? { license: draft.license.trim() } : {}),
+            ...(draft.repositoryUrl.trim()
+              ? { repositoryUrl: draft.repositoryUrl.trim() }
+              : {}),
+          }),
         },
-        body: JSON.stringify({
-          orgId,
-          bundle,
-          manifest,
-          displayName:
-            draft.displayName.trim() ||
-            String((manifest as { name?: unknown }).name ?? '').trim(),
-          description: draft.description.trim(),
-          category: draft.category || undefined,
-          changelog: draft.changelog.trim(),
-          // A private plugin has no buyers — its only audience already owns
-          // it — so it publishes free regardless of what the field held
-          // before the publisher switched visibility.
-          priceUsd:
-            draft.visibility === 'private'
-              ? 0
-              : Math.max(0, Math.round(Number(draft.priceUsd) || 0)),
-          visibility: draft.visibility,
-          attestation: draft.attested,
-          ...(draft.readme.trim() ? { readme: draft.readme.trim() } : {}),
-          ...(draft.license.trim() ? { license: draft.license.trim() } : {}),
-          ...(draft.repositoryUrl.trim()
-            ? { repositoryUrl: draft.repositoryUrl.trim() }
-            : {}),
-        }),
-      })
+      )
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
         if (Array.isArray(payload?.problems)) {

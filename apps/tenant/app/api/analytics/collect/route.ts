@@ -761,6 +761,63 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     /*
+     * FORM VIEWS AND STARTS — the denominators a completion rate needs.
+     *
+     * A form document carried counters for what ARRIVED and nothing for what
+     * was offered, so completion, abandonment and conversion were all rates
+     * over a population nobody had counted. They are counted here, on the
+     * beacon that already exists, in exactly the `overlays` shape one branch
+     * above: a per-form `update` keyed by the event, plus the same key under
+     * the month the submit route files submissions under, so a rate is taken
+     * over months both counters were live for.
+     *
+     * ⛔ `update`, never `set`. A beacon from a stale cached page naming a
+     * deleted form must not resurrect it as a stats-only stray document —
+     * the rule the overlay branch states and the submit route repeats.
+     *
+     * NOT a pageview, so it returns early like the overlay and dwell
+     * branches: folding it in would double the site's traffic count on every
+     * page that places a form.
+     *
+     * ## The cost, stated rather than assumed
+     *
+     * One Firestore write per rendered form and one more per form a visitor
+     * types into — the same per-impression cost the overlay counters have
+     * been paying, on a strictly smaller population, since a form is placed
+     * on fewer pages than a site-wide bar. There is no cheaper arrangement
+     * that produces the number: a denominator that is sampled is a
+     * denominator that has to be scaled back up, and a scaled denominator
+     * under a server-counted numerator is a rate that moves when traffic
+     * does. The client half sends one beacon per form MOUNT, never per
+     * render.
+     */
+    const formEvent = String(body.form ?? '')
+    if (formEvent) {
+      const FORM_EVENTS: Record<string, 'views' | 'starts'> = {
+        view: 'views',
+        start: 'starts',
+      }
+      const statKey = FORM_EVENTS[formEvent]
+      const formId = String(body.formId ?? '')
+      if (statKey && formId && formId.length <= 128) {
+        const month = Aglyn.submissionMonthKey()
+        await firebaseAdmin
+          .app()
+          .firestore()
+          .collection('hosts')
+          .doc(hostId)
+          .collection('forms')
+          .doc(formId)
+          .update({
+            [`stats.${statKey}`]: FieldValue.increment(1),
+            [`stats.periods.${month}.${statKey}`]: FieldValue.increment(1),
+          })
+          .catch(() => undefined)
+      }
+      return noContent()
+    }
+
+    /*
      * Dwell time (AGL-2182). `/product/analytics`'s per-screen mockup
      * shows `Avg. time 2m 04s / on this screen`, and nothing in the
      * pipeline recorded duration of any kind — the metric was not

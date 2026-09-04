@@ -34,6 +34,7 @@ import {
   campaignAttributionQuery,
   parseCampaignAttribution,
 } from '@aglyn/aglyn'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { getAdditionalUserInfo, type UserCredential } from 'firebase/auth'
 import { hardNavigate } from './hard-navigate'
 
@@ -163,13 +164,9 @@ export async function postLegalAcceptance(
   context: LegalAcceptanceContext,
 ): Promise<boolean> {
   try {
-    const idToken = await user.getIdToken()
-    const response = await fetch('/api/auth/legal-acceptance', {
+    const response = await authorizedFetch(user, '/api/auth/legal-acceptance', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${idToken}`,
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ version, context }),
     })
     if (!response.ok) {

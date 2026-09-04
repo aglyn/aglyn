@@ -96,6 +96,30 @@ jest.mock('@aglyn/tenant-runtime/compose-collection-page', () => ({
   composeCollectionTemplatePage: jest.fn(async () => null),
   composeCollectionFallbackPage: jest.fn(async () => null),
 }))
+// The author page (AGL-2518), mocked for the reason its collection siblings
+// above are: this suite's subject is which branch a path reaches, and the real
+// module reaches Firestore through `next/cache`, which does not load here.
+// Resolving to an unknown author is what makes the loader fall past it.
+jest.mock('@aglyn/tenant-runtime/get-author-content', () => ({
+  __esModule: true,
+  default: jest.fn(async () => ({
+    slug: '',
+    author: null,
+    name: '',
+    known: false,
+    entries: [],
+    categories: [],
+    page: 1,
+    perPage: 10,
+    totalEntries: 0,
+    totalPages: 1,
+  })),
+}))
+jest.mock('@aglyn/tenant-runtime/compose-author-page', () => ({
+  __esModule: true,
+  composeAuthorTemplatePage: jest.fn(async () => null),
+  composeAuthorFallbackPage: jest.fn(async () => null),
+}))
 jest.mock('@aglyn/tenant-runtime/template-screens', () => ({
   __esModule: true,
   default: jest.fn(async () => new Set<string>()),

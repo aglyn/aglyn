@@ -38,29 +38,39 @@ import { join } from 'node:path'
 const read = (relative: string) =>
   readFileSync(join(__dirname, '..', relative), 'utf8')
 
-const PAGE = 'app/(app)/[orgSlug]/marketplace/page.tsx'
+// Licences is a section ROUTE since AGL-2501, so its wiring lives in the
+// section list and its own page rather than in one page's tab array.
+const SECTIONS = 'constants/marketplace-sections.ts'
+const PAGE = 'app/(app)/[orgSlug]/marketplace/(sections)/licences/page.tsx'
 const PANEL = 'components/org-licences-panel.component.tsx'
 
-describe('the org marketplace carries a Licences tab (AGL-2331)', () => {
-  it('mounts the panel from the org marketplace page', () => {
+describe('the org marketplace carries a Licences section (AGL-2331)', () => {
+  it('mounts the panel from its own section page', () => {
     const page = read(PAGE)
-    expect(page).toContain("id: 'licences'")
     expect(page).toContain('<OrgLicencesPanel')
     expect(page).toContain('org-licences-panel.component')
   })
 
+  it('is listed as a section, so the rail and the trail both name it', () => {
+    expect(read(SECTIONS)).toContain("id: 'licences'")
+  })
+
   it('is NOT gated on the publisher permission', () => {
-    // The tab that answers "does this workspace own it" is for BUYERS. The
-    // seller tabs beside it are inside a `permissions.publishToMarketplace`
-    // branch, and dropping this one in there — the obvious place, since it is
-    // adjacent — would hide it from every customer who never publishes, which
-    // is nearly all of them.
-    const page = read(PAGE)
-    const licences = page.indexOf("id: 'licences'")
-    const sellerGate = page.indexOf('permissions.publishToMarketplace')
-    expect(licences).toBeGreaterThan(-1)
-    expect(sellerGate).toBeGreaterThan(-1)
-    expect(licences).toBeLessThan(sellerGate)
+    /*
+     * The section that answers "does this workspace own it" is for BUYERS.
+     * The seller sections beside it carry `seller: true`, which the layout
+     * turns into both a hidden rail entry and a refused route — and marking
+     * this one the same way, the obvious slip since it sits adjacent to them,
+     * would hide it from every customer who never publishes, which is nearly
+     * all of them.
+     *
+     * Read off the section's own entry rather than from its position in the
+     * file: ordering says nothing once the gate is a field.
+     */
+    const sections = read(SECTIONS)
+    const entry = sections.slice(sections.indexOf("id: 'licences'"))
+    const nextEntry = entry.indexOf("id: '", 1)
+    expect(entry.slice(0, nextEntry)).toContain('seller: false')
   })
 
   it('reads the licence by ORG, not only by buyer', () => {

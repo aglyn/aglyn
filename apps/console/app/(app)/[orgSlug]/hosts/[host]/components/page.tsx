@@ -138,7 +138,7 @@ const HostComponents: NextPageWithLayout<Record<string, never>> = () => {
       }}
       headerRight={
         // The readout leads the create buttons, as it does on Sites, screens,
-        // layouts and templates (AGL-2113/AGL-693). The numbers come from the
+        // layouts and templates (AGL-2113/AGL-2501). The numbers come from the
         // CARD, which owns the listener they are counted from.
         <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
           {quota ? (

@@ -31,7 +31,7 @@
 // query cannot reach where it is stored, denormalized into an array Firestore
 // will index. See that pass for the detail.
 //
-// ORGS WERE DELIBERATELY EXCLUDED, and are not any more (AGL-693). The
+// ORGS WERE DELIBERATELY EXCLUDED, and are not any more (AGL-2501). The
 // original reason was sound — "they stay client-filtered, so a nameLower on
 // them would be an index nothing reads" — and it stopped being true when the
 // staff organization list moved its search to the server. A filter applied in
@@ -366,7 +366,7 @@ if (!ONLY_HOST) {
 }
 
 /*
- * Products — the products hub searches these on the server (AGL-693).
+ * Products — the products hub searches these on the server (AGL-2501).
  *
  * A collection-group read, so one pass covers every host's catalog. Two keys
  * are being converged, not one:

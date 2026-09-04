@@ -45,6 +45,7 @@ import {
   usePagedCollection,
   useUser,
 } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import StaffOnly from '../../../../components/staff-only.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
@@ -81,13 +82,11 @@ function ArchiveCard() {
   const [busy, setBusy] = useState(false)
 
   const call = async (params: Record<string, string>) => {
-    const idToken = await (
-      user as { getIdToken?: () => Promise<string> }
-    )?.getIdToken?.()
     const search = new URLSearchParams(params).toString()
-    const response = await fetch(`/api/admin/audit-archive/browse?${search}`, {
-      headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
-    })
+    const response = await authorizedFetch(
+      user,
+      `/api/admin/audit-archive/browse?${search}`,
+    )
     const body = await response.json().catch(() => null)
     if (!response.ok) throw new Error(body?.error ?? 'Archive lookup failed')
     return body
@@ -266,7 +265,7 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
   const firestore = useFirestore()
 
   /*==========================================
-   * THE WINDOW, AND WHY IT MOVES (AGL-2324, AGL-693).
+   * THE WINDOW, AND WHY IT MOVES (AGL-2324, AGL-2501).
    *
    * This read was `orderBy('at','desc').limit(200)` with no cursor, no date
    * range and no way to ask for row 201. Roughly seventy distinct action
@@ -569,6 +568,24 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
             contentGutterY
           >
             <Stack spacing={2}>
+              {/*
+                * SAID ONCE, ABOUT EVERY ROW.
+                *
+                * `actorEmail` is a snapshot taken when the entry was written,
+                * and an account's address can change afterwards. The stored
+                * value is evidence and is never rewritten to match a current
+                * address — an audit trail that mutates is worth less than one
+                * that is stale — but a reader who assumes the address is
+                * current will contact the wrong mailbox. One statement here
+                * covers the whole list; a per-row suffix would repeat it on
+                * every line of a page that is historical by definition.
+                */}
+              <Typography variant="caption" color="text.secondary">
+                {'Each entry shows the actor’s address as it was when the ' +
+                  'action was recorded. It is not updated if that account’s ' +
+                  'address changes later — the uid beside it is the ' +
+                  'identifier that does not go out of date.'}
+              </Typography>
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                 <TextField
                   size="small"
@@ -719,6 +736,19 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
                         color="text.secondary"
                         sx={{ ml: 'auto' }}
                       >
+                        {/*
+                          * The address AS IT WAS when the entry was written,
+                          * and never re-resolved from the account: the row is
+                          * evidence, and rewriting stored history to match a
+                          * current address would make the trail worth less
+                          * than leaving it stale.
+                          *
+                          * Not suffixed per row — the page says it once, above
+                          * the list, and every row here is historical by
+                          * definition. The uid beside it is the identifier
+                          * that does not go out of date, which is why it is
+                          * always rendered.
+                          */}
                         {`${
                           entry.actorEmail
                             ? `${entry.actorEmail} (${entry.actorUid})`
@@ -778,7 +808,7 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
                 })
               )}
               {/*
-                The shared footer (AGL-693). `hasMore` is a FACT here, not a
+                The shared footer (AGL-2501). `hasMore` is a FACT here, not a
                 guess off `length >= pageSize`: the hook over-fetches by one
                 and never renders the probe row, so the last page cannot
                 offer a Next that leads nowhere — nor hide one that leads

@@ -44,6 +44,7 @@ const themeColorOptions = [
 const renderSelect = (
   options: Array<{ value: string; label: string }>,
   initialValues: Record<string, unknown> = {},
+  extraFieldProps: Record<string, unknown> = {},
 ) => {
   const onSubmit = jest.fn()
   render(
@@ -56,7 +57,13 @@ const renderSelect = (
       initialValues={initialValues}
       schema={{
         fields: [
-          { component: 'select', name: 'color', label: 'Theme color', options },
+          {
+            component: 'select',
+            name: 'color',
+            label: 'Theme color',
+            options,
+            ...extraFieldProps,
+          },
         ],
       }}
     />,
@@ -114,5 +121,77 @@ describe('Select round trip (AGL-1191)', () => {
     )
     pick('Default')
     expect(persisted(onSubmit)).not.toHaveProperty('color')
+  })
+})
+
+
+/**
+ * A schema field can hook the search box, and is told WHY the text changed.
+ *
+ * Two separate facts, and the first is the one that fails silently.
+ * `onInputChange` is owned by `@data-driven-forms/common/select` for its
+ * `loadOptions` support, and assigned AFTER the field's props are spread — so
+ * a handler declared on a schema field never arrives, while the dropdown goes
+ * on opening, filtering and selecting exactly as before. `onSearchInput` is
+ * the name that survives that spread.
+ *
+ * The reason is the second fact. Autocomplete emits one for a typed character
+ * (`input`), for the field taking its own value back (`reset` — on mount, and
+ * again on every selection) and for the clear button (`clear`). A consumer
+ * that spends a read per query and cannot tell them apart spends one on simply
+ * opening the panel, which is the read the entity pickers exist to avoid.
+ */
+describe('Select reports why its input text changed', () => {
+  const changes = () => {
+    const seen: Array<[string, string | undefined]> = []
+    renderSelect(themeColorOptions, {}, {
+      isSearchable: true,
+      onSearchInput: (value: string, reason?: string) =>
+        seen.push([value, reason]),
+    })
+    return seen
+  }
+
+  it('marks a typed character as input', () => {
+    const seen = changes()
+    fireEvent.change(input(), { target: { value: 'sec' } })
+    expect(seen).toContainEqual(['sec', 'input'])
+  })
+
+  it('marks the field describing itself as something other than input', () => {
+    const seen = changes()
+    pick('Secondary')
+    const reasons = seen.map(([, reason]) => reason)
+    // `selectOption` under this MUI version, `reset` under others. What the
+    // consumer's guard actually depends on is that it is NOT `input`, so
+    // that is what is asserted — a reason rename must not silently start
+    // spending reads.
+    expect(reasons).not.toEqual([])
+    expect(reasons.filter((reason) => reason === 'input')).toEqual([])
+  })
+
+  it('CONTROL: the reason is really reaching the handler at all', () => {
+    // Without this the two assertions above would both pass against a mapper
+    // that dropped the argument, since `undefined` is neither 'input' nor an
+    // extra 'input'.
+    const seen = changes()
+    fireEvent.change(input(), { target: { value: 'p' } })
+    expect(seen.length).toBeGreaterThan(0)
+    expect(seen.every(([, reason]) => reason !== undefined)).toBe(true)
+  })
+
+  it('THE TRAP: `onInputChange` on a schema field never arrives', () => {
+    // Not a wish, a fact about the vendored Select — and the reason the hook
+    // above has its own name. Pinned so the day the vendor stops clobbering
+    // it, somebody is told rather than leaving a second prop in place
+    // forever.
+    const seen: Array<[string, string | undefined]> = []
+    renderSelect(themeColorOptions, {}, {
+      isSearchable: true,
+      onInputChange: (value: string, reason?: string) =>
+        seen.push([value, reason]),
+    })
+    fireEvent.change(input(), { target: { value: 'sec' } })
+    expect(seen).toEqual([])
   })
 })

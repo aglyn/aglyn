@@ -130,8 +130,8 @@ describe('the console tab names the open document', () => {
 
   it('leaves the tab on the id when no name has loaded', async () => {
     // The whole point of the id fallback: a name that never arrives — a
-    // permission error, a slow read, the preview route that loads no
-    // document at all — still leaves four tabs distinguishable.
+    // permission error, a slow read, a document that was never given a name —
+    // still leaves four tabs distinguishable.
     render(<ConsoleBrandingEffects />)
     await settle()
     expect(document.title).toBe(served())

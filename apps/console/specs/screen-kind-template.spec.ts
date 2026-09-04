@@ -49,7 +49,10 @@
 /** Screen ids the create route hands out, in order. */
 let mockNextUid = 0
 
+import { readFileSync } from 'node:fs'
+
 const mockVerifyIdToken = jest.fn()
+const mockLogHostActivity = jest.fn(async (..._args: unknown[]) => undefined)
 
 interface Store {
   host: Record<string, unknown>
@@ -73,7 +76,23 @@ const snapshotOf = (id: string, data: Record<string, unknown> | null) => ({
 function fakeCollection(bucket: Record<string, Record<string, unknown>>) {
   const api: any = {
     select: () => api,
-    where: () => api,
+    /*
+     * The filter is APPLIED (AGL-118). It used to return the whole collection
+     * whatever was asked, which was invisible while nothing here queried —
+     * and became a false RED the moment the slug-uniqueness claim was
+     * exercised: every create collided with every existing document, so a
+     * route that claims slugs correctly answered 409 to a free name.
+     *
+     * A filtered VIEW, not a filtered store: query results are only ever read
+     * here, and building a new bucket keeps the parent's writes going to the
+     * real one.
+     */
+    where: (field: string, _operator: string, value: unknown) =>
+      fakeCollection(
+        Object.fromEntries(
+          Object.entries(bucket).filter(([, data]) => data[field] === value),
+        ),
+      ),
     limit: () => api,
     orderBy: () => api,
     count: () => ({
@@ -204,6 +223,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     }),
   },
   getOrgForHost: async () => ({ orgId: 'org-1', org: mockStore.org }),
+  // The route appends the audit entry itself now (AGL-118). CAPTURED rather
+  // than stubbed away, because /api/hosts/collections took this over from the
+  // browser and which branch writes is now part of what this file pins. This
+  // factory is a closed world, so an unnamed export is `undefined` and the
+  // route throws — a 500 that reads exactly like the behaviour under test
+  // regressing.
+  logHostActivity: (...args: unknown[]) => mockLogHostActivity(...args),
   isImpersonationSession: () => false,
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),
@@ -243,6 +269,11 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // the behaviour under test had regressed. Stubbed `() => true` it would be
   // worse: the suite would pass against a route that admits anybody.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/organizations'),
+  // The REAL node codec (AGL-1151). `/api/hosts/resources` compresses any
+  // `nodes` a create carries, and this factory is a CLOSED WORLD — an absent
+  // export throws inside the route and its own catch answers 500, which reads
+  // exactly like the CAP arithmetic under test regressing.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/stored-nodes'),
   createResourceUid: () => `made-${++mockNextUid}`,
   nameSearchKey: (value: string) => value.toLowerCase(),
   pluginRequestFromWeb: async (request: Request) => ({
@@ -329,9 +360,35 @@ const createScreen = (data: Record<string, unknown> = {}) =>
   })
 
 beforeEach(() => {
+  mockLogHostActivity.mockClear()
   mockVerifyIdToken.mockResolvedValue({ uid: 'user-1', email_verified: true })
   seed()
 })
+
+/** Create or rename a collection through the route. */
+const saveCollection = (
+  action: 'create' | 'update',
+  data: Record<string, unknown>,
+  id?: string,
+) =>
+  post('collections', {
+    hostId: 'host-1',
+    action,
+    kind: 'content',
+    ...(id ? { id } : {}),
+    data,
+  })
+
+/** The single call's arguments, so each case names what it is asserting. */
+function loggedEntry() {
+  const args = mockLogHostActivity.mock.calls[0] as unknown as [
+    string,
+    { uid: string; email: string | null },
+    string,
+    Record<string, unknown>,
+  ]
+  return { hostId: args[0], actor: args[1], action: args[2], target: args[3] }
+}
 
 describe('the fact lives on the screen (AGL-1400)', () => {
   it('stamps the screen when a collection designates it as an entry template', async () => {
@@ -534,6 +591,134 @@ describe('the pointer route itself', () => {
     await setTemplate({ entryScreenId: 's1' })
     expect((await setTemplate({ entryScreenId: null })).status).toBe(200)
     expect(billableNow()).toBe(6)
+  })
+})
+
+/**
+ * The collection log, moved off the browser (AGL-118).
+ *
+ * `Created collection` / `Updated collection` were appended by the content
+ * card after this route answered, so the entry carried whatever uid that tab
+ * held and any OTHER caller of this endpoint — the template dialog's bulk
+ * create already is one — recorded nothing at all.
+ *
+ * The terminal branch is past the transaction, and it has to be: the
+ * transaction returns four verdicts, three of which are refusals, and it
+ * RETRIES on contention, so a log call inside it writes one entry per attempt
+ * and a busy site quietly collects duplicates.
+ */
+describe('a collection save is recorded by the route, once', () => {
+  it('THE CONTROL — a create writes one entry naming the collection', async () => {
+    // First, because the "writes nothing" cases below also pass against a
+    // route that logs nothing at all, in any branch, forever.
+    const created = await saveCollection('create', {
+      slug: 'news',
+      displayName: 'News',
+    })
+
+    expect(created.status).toBe(200)
+    // The document really landed — otherwise this asserts the log of a create
+    // that did not happen.
+    expect(mockStore.collections[created.body.id]?.slug).toBe('news')
+
+    expect(mockLogHostActivity).toHaveBeenCalledTimes(1)
+    const { hostId, actor, action, target } = loggedEntry()
+    expect(hostId).toBe('host-1')
+    // The uid this route VERIFIED, not the one the card's session held.
+    expect(actor).toEqual({ uid: 'user-1', email: null })
+    expect(action).toBe('Created collection')
+    expect(target).toEqual({
+      type: 'content',
+      id: created.body.id,
+      name: 'News',
+    })
+  })
+
+  it('says UPDATED for a rename, so the two acts stay distinguishable', async () => {
+    const renamed = await saveCollection(
+      'update',
+      { slug: 'blog', displayName: 'The Blog' },
+      'blog',
+    )
+
+    expect(renamed.status).toBe(200)
+    expect(mockLogHostActivity).toHaveBeenCalledTimes(1)
+    expect(loggedEntry().action).toBe('Updated collection')
+    expect(loggedEntry().target).toMatchObject({ id: 'blog', name: 'The Blog' })
+  })
+
+  it('writes NOTHING when the slug is already taken', async () => {
+    // The transaction answers `taken` and the route 409s. The request looked
+    // exactly like the successful one and nothing was stored.
+    const clash = await saveCollection('create', {
+      slug: 'blog',
+      displayName: 'Second Blog',
+    })
+
+    expect(clash.status).toBe(409)
+    expect(mockLogHostActivity).not.toHaveBeenCalled()
+  })
+
+  it('writes NOTHING when the update names an unknown collection', async () => {
+    const missing = await saveCollection(
+      'update',
+      { slug: 'ghost', displayName: 'Ghost' },
+      'no-such',
+    )
+
+    expect(missing.status).toBe(404)
+    expect(mockLogHostActivity).not.toHaveBeenCalled()
+  })
+
+  it('writes NOTHING for a slug the validator refuses', async () => {
+    const bad = await saveCollection('create', {
+      slug: 'Not A Slug',
+      displayName: 'Nope',
+    })
+
+    expect(bad.status).toBe(400)
+    expect(mockLogHostActivity).not.toHaveBeenCalled()
+  })
+
+  it('records a template-pointer assignment, and how many screens it converted', async () => {
+    // Designating an entry template DEMOTES a screen: it stops being a page,
+    // stops being served at its own route, and stops being billable. A
+    // visitor holding that URL now gets a 404, and until this nothing said so.
+    expect((await setTemplate({ entryScreenId: 's1' })).status).toBe(200)
+
+    expect(mockLogHostActivity).toHaveBeenCalledTimes(1)
+    expect(loggedEntry().action).toBe(
+      'Assigned collection template screens (1 converted)',
+    )
+    expect(loggedEntry().target).toMatchObject({ type: 'content', id: 'blog' })
+  })
+
+  it('writes NOTHING when the pointer names a screen this site lacks', async () => {
+    expect((await setTemplate({ entryScreenId: 'not-a-screen' })).status).toBe(400)
+    expect(mockLogHostActivity).not.toHaveBeenCalled()
+  })
+
+  it('the content card no longer appends its own entry', () => {
+    /*
+     * A source assertion, because the failure it guards is invisible from
+     * either side alone: the route logs correctly, the card logs correctly,
+     * and the customer's feed shows every collection save TWICE. Neither a
+     * route test nor a component test can see that, because each is right.
+     *
+     * Scoped to the two actions that moved. The card still logs its own
+     * client-direct writes — deleting a collection, editing authors — and
+     * those must keep working, so this asserts the absence of these two
+     * strings rather than of the logger.
+     */
+    const card = readFileSync(
+      require.resolve('../components/content/collection-entries-page.component'),
+      'utf8',
+    )
+    expect(card).not.toContain("logActivity('Created collection'")
+    expect(card).not.toContain("logActivity('Updated collection'")
+    // The CONTROL for the two above: a bare `not.toContain` also passes on an
+    // empty file, or on a path that stopped resolving to this component.
+    expect(card).toContain("logActivity('Deleted collection'")
   })
 })
 

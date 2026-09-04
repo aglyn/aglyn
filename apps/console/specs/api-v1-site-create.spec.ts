@@ -152,6 +152,32 @@ function mockCollectionRef(path: string): any {
 
 const mockFirestore: any = {
   collection: (name: string) => mockCollectionRef(name),
+  /**
+   * The batched, projected read the site list issues. The field mask is
+   * APPLIED rather than ignored: the list case below asserts the whole
+   * resource, so a projection that dropped one of its fields must show up
+   * here as a `null`, not as a document that happens to carry everything.
+   */
+  getAll: async (...args: any[]) => {
+    const last = args[args.length - 1]
+    const options =
+      last && typeof last === 'object' && 'fieldMask' in last ? last : undefined
+    const refs = options ? args.slice(0, -1) : args
+    return refs.map((ref: any) => {
+      const snapshot = snapshotFor(ref.path)
+      if (!options?.fieldMask) return snapshot
+      const stored = mockDocs.get(ref.path)
+      const projected =
+        stored === undefined
+          ? undefined
+          : Object.fromEntries(
+              options.fieldMask
+                .filter((field: string) => field in stored)
+                .map((field: string) => [field, stored[field]]),
+            )
+      return { ...snapshot, data: () => projected }
+    })
+  },
   /** Resolves with the updateFunction's value, as the real one does. */
   runTransaction: async <T,>(work: (tx: any) => Promise<T>): Promise<T> => {
     // The race window, staged: a one-shot hook that fires after the caller's
@@ -203,6 +229,21 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   return {
     __esModule: true,
     ...apiHttp,
+    /*
+     * The site's sending-domain CLAIM, made at creation so the mail label is
+     * pinned from the name the site was created under.
+     *
+     * Stubbed to a no-op: this spec is about the API's create contract, and
+     * the claim is deliberately best-effort and after the transaction — a
+     * create must not fail because a mail claim did. What the claim does is
+     * proved in `host-sending-domain.spec.ts`.
+     */
+    ensureHostSendingDomain: async () => ({
+      domain: null,
+      label: null,
+      created: false,
+      error: null,
+    }),
     verifyApiKey: async () => ({ orgId: 'org-1', keyId: 'key-1', scopes: mockScopes }),
     getOrgDoc: async () => mockOrg,
     lockdownRefusal: async () => null,

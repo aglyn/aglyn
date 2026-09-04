@@ -22,7 +22,11 @@ export const CONTENT_MAX_WIDTH = 'xl'
 export const DRAWER_WIDTH = 290
 export const TAB_HEIGHT = 40
 export const TOP_BAR_HEIGHT = 48
-export const TABLE_ROW_HEIGHT = 48
+/*
+ * Declared beside `ListRowActions`, whose centring depends on it, and
+ * re-exported here so the console's other layout numbers still read together.
+ */
+export { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 /**
  * Table header height, shared by the DataTable (layouts, components,
  * templates) and the bespoke screens hierarchy table. MUI's size="small"

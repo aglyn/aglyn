@@ -54,7 +54,9 @@ import { getFirestore } from 'firebase-admin/firestore'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
   CRON_BEAT_COLLECTION,
+  CRON_BEAT_DEGRADED_DOC,
   CRON_BEAT_WATCH_DOC,
+  CRON_DEGRADED_WINDOW_CONTINUITY_MS,
   cronJobsHealth,
   deploymentCommitRef,
   deploymentEnvironmentLabel,
@@ -109,6 +111,153 @@ async function readWatchStart(
   return now
 }
 
+/**
+ * Name the rows that failed, in the log, at the moment the verdict is formed.
+ *
+ * The body already says which job is late — but only to whoever is holding
+ * it. The uptime probe reads the STATUS and throws the body away, so a red
+ * window leaves nothing behind saying what was red. Two of those windows in
+ * one week were unattributable afterwards for exactly that reason:
+ *
+ *   2026-08-27  08:00:53 → 14:43:26 UTC       169 × 503   median  83ms
+ *   2026-08-31  22:52:14 → 09-01 05:00:58 UTC   168 × 503   median 126ms
+ *
+ * The second is corroborated by the external monitor, which detected it at
+ * 22:53:08 and measured 22,252s — the two agree to within a minute. Quote
+ * bounds from a RANGE query: a `--limit` on a log read silently truncates to
+ * the newest N and makes the oldest survivor look like the start, which is
+ * how this window was once recorded as three hours beginning at 02:01.
+ *
+ * Both answered fast — 334 of the 337 in under a second — so these were
+ * deliberate refusals, not a Firestore read timing out into a 503. Which
+ * makes the absence the interesting part: the endpoint decided, quickly,
+ * that a row was late, and kept no record of which one.
+ *
+ * The monitor also shows 2026-08-24 at 68.22%, which no log can explain: the
+ * drain did not exist until 08-25 16:37. Three windows, none attributable.
+ *
+ * Neither start time lands on any single job's schedule plus its grace, so
+ * they cannot be attributed by arithmetic after the fact either. That is the
+ * whole argument for logging the verdict where it is formed.
+ *
+ * ⛔ A `console.error` ALONE does not outlive the window, and the drain does
+ * not change that. `isServerErrorEntry` forwards 5xx, `statusCode: -1` and
+ * `fatal`, and deliberately drops `level: 'error'` — which is the shape a
+ * `console.error` arrives in, as its own `stderr` entry rather than folded
+ * into the request's. Forwarding those is what a self-feeding bill is made
+ * of, so the gate is right and this line simply does not reach Cloud
+ * Logging. The objection in `../route.ts` — "a log retained for about an
+ * hour, so by the time anyone asked why, the answer was gone" — therefore
+ * still stands against the log on its own.
+ *
+ * It is kept for the live case, where an hour is plenty and tailing is how
+ * an incident is actually watched. What makes the window survive is
+ * `recordDegradedCrons` below.
+ *
+ * Written where the PROBE resolves rather than per request, so the rate is
+ * the read's (one per TTL at most), not the caller's. A burst of monitors,
+ * HEAD requests and staff opening /admin/health inside one window shares a
+ * single line instead of each emitting their own.
+ *
+ * Returns its input so it can wrap a return without moving anything.
+ */
+function reportDegradedCrons(
+  checks: Record<string, CronJobCheck>,
+): Record<string, CronJobCheck> {
+  const failing = Object.entries(checks).filter(([, check]) => !check.ok)
+  if (!failing.length) return checks
+  console.error(
+    `health/crons degraded (${failing.length}/${Object.keys(checks).length}): ` +
+      failing
+        .map(
+          ([jobId, check]) =>
+            `${jobId} schedule="${check.schedule}" runner=${check.runner} ` +
+            `dueAt=${check.dueAt ?? 'none'} ` +
+            `lastBeatAgeMinutes=${check.lastBeatAgeMinutes ?? 'never'} ` +
+            `graceMinutes=${check.graceMinutes}`,
+        )
+        .join(' | '),
+  )
+  return checks
+}
+
+/**
+ * Record the degraded verdict where it will still be there tomorrow.
+ *
+ * Firestore rather than a log, because the endpoint already holds the handle
+ * and the log cannot be relied on (see above). One document, replaced on each
+ * degraded probe, so the cost is bounded by the probe TTL and not by traffic:
+ * at most one write per five minutes per instance, and none at all while the
+ * board is green.
+ *
+ * `firstSeenAtMs` is what makes it answer the question the 503s could not.
+ * A window is the same window while the FAILING SET is unchanged and the last
+ * sighting is recent; anything else opens a new one. The previous record
+ * comes out of the census the probe already read, so continuity costs no
+ * extra read.
+ *
+ * AWAITED, not fired and forgotten. The write races the response otherwise,
+ * and a serverless instance is free to be frozen the moment it answers — the
+ * degraded probe is the one path where paying a few milliseconds is obviously
+ * worth it, and the green path pays nothing.
+ *
+ * Never throws into the verdict. If the record cannot be written we still owe
+ * the caller the health answer, and a probe that 500s while reporting that
+ * something else is unhealthy is the worse failure.
+ */
+async function recordDegradedCrons(
+  db: FirebaseFirestore.Firestore,
+  checks: Record<string, CronJobCheck>,
+  prior: { get: (field: string) => unknown } | undefined,
+  now: number,
+): Promise<void> {
+  const failing = Object.entries(checks).filter(([, check]) => !check.ok)
+  if (!failing.length) return
+  const signature = failing
+    .map(([jobId]) => jobId)
+    .sort()
+    .join(',')
+  const priorSignature = prior?.get('signature')
+  const priorLastSeen = prior?.get('lastSeenAtMs')
+  const continues =
+    priorSignature === signature &&
+    typeof priorLastSeen === 'number' &&
+    now - priorLastSeen <= CRON_DEGRADED_WINDOW_CONTINUITY_MS
+  const priorFirstSeen = prior?.get('firstSeenAtMs')
+  const firstSeenAtMs =
+    continues && typeof priorFirstSeen === 'number' ? priorFirstSeen : now
+  try {
+    await db
+      .collection(CRON_BEAT_COLLECTION)
+      .doc(CRON_BEAT_DEGRADED_DOC)
+      .set({
+        signature,
+        firstSeenAtMs,
+        firstSeenAt: new Date(firstSeenAtMs).toISOString(),
+        lastSeenAtMs: now,
+        lastSeenAt: new Date(now).toISOString(),
+        failingCount: failing.length,
+        totalCount: Object.keys(checks).length,
+        // Which build formed the verdict, so a window that turns out to be a
+        // deploy's fault says so without a separate correlation step.
+        commit: deploymentCommitRef(),
+        version: platformVersion(),
+        failing: failing.map(([jobId, check]) => ({
+          jobId,
+          code: check.code ?? null,
+          schedule: check.schedule,
+          runner: check.runner,
+          dueAt: check.dueAt,
+          lastBeatAgeMinutes: check.lastBeatAgeMinutes,
+          graceMinutes: check.graceMinutes,
+        })),
+      })
+  } catch {
+    // Deliberately silent beyond the line already logged: the caller is a
+    // health check, and the verdict it computed is still correct.
+  }
+}
+
 const cronsProbe = memoizeWithTtl<Record<string, CronJobCheck>>(
   PROBE_TTL_MS,
   async () => {
@@ -122,15 +271,35 @@ const cronsProbe = memoizeWithTtl<Record<string, CronJobCheck>>(
       const watchStartedAtMs = await readWatchStart(db, now)
       const snapshot = await db.collection(CRON_BEAT_COLLECTION).get()
       const beats: CronBeat[] = snapshot.docs
-        .filter((doc) => doc.id !== CRON_BEAT_WATCH_DOC)
+        .filter(
+          (doc) =>
+            doc.id !== CRON_BEAT_WATCH_DOC && doc.id !== CRON_BEAT_DEGRADED_DOC,
+        )
         .map((doc) => ({ jobId: doc.id, atMs: Number(doc.get('atMs')) }))
         .filter((beat) => Number.isFinite(beat.atMs))
-      return cronJobsHealth(beats, watchStartedAtMs, Date.now() - startedAt, now)
+      const checks = reportDegradedCrons(
+        cronJobsHealth(beats, watchStartedAtMs, Date.now() - startedAt, now),
+      )
+      // The previous record rides in on the census above, so continuity is
+      // free. A no-op unless something is actually red.
+      await recordDegradedCrons(
+        db,
+        checks,
+        snapshot.docs.find((doc) => doc.id === CRON_BEAT_DEGRADED_DOC),
+        now,
+      )
+      return checks
     } catch {
       // A null census is degraded for every row, by contract. "We cannot see
       // whether the jobs are running" is the condition this endpoint exists
       // to catch, not a reason to report calm.
-      return cronJobsHealth(null, Date.now(), Date.now() - startedAt)
+      // No record written here on purpose: the census failed, so the same
+      // Firestore is what we would be writing to. The log line is all this
+      // branch can leave behind, and "we could not see the jobs" is a
+      // different incident from "a job stopped".
+      return reportDegradedCrons(
+        cronJobsHealth(null, Date.now(), Date.now() - startedAt),
+      )
     }
   },
 )

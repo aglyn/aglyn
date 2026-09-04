@@ -37,6 +37,7 @@ import {
   isUnlimitedQuota,
   restoreQuotaLimit,
 } from '@aglyn/aglyn'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
 /** One site's row, as `/api/billing/register-allocations` reports it. */
 interface AllocationSite {
@@ -160,15 +161,15 @@ export default function BillingRegisterAllocationsCardComponent({
     async (
       body: Record<string, unknown>,
     ): Promise<{ ok: boolean; payload?: any }> => {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/billing/register-allocations', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      const response = await authorizedFetch(
+        user,
+        '/api/billing/register-allocations',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orgId, ...body }),
         },
-        body: JSON.stringify({ orgId, ...body }),
-      })
+      )
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
         // The route's own answer, verbatim. Its 409 already names the

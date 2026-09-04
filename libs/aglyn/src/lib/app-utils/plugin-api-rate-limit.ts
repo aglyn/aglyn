@@ -78,8 +78,8 @@ export const VISITOR_WRITE_RATE_LIMIT = 120
 export const VISITOR_WRITE_RATE_WINDOW_MS = 60_000
 
 /**
- * Machine-caller paths on the tenant plugin-API surface: the dispatcher does
- * NOT rate limit these.
+ * Machine-caller paths on EITHER plugin-API surface: neither dispatcher rate
+ * limits these.
  *
  * The membership rule, so this list is decidable rather than a taste call: the
  * caller proves a shared secret, a webhook signature or a console session that
@@ -116,16 +116,39 @@ export const VISITOR_WRITE_RATE_WINDOW_MS = 60_000
  *   with `timingSafeEqual`. It already carries its own 30/min per-hook
  *   limiter, so exempting it here removes nothing.
  *
+ * The four below are registered on the CONSOLE surface only, and each is a
+ * chunked cron sweep rather than a single beat — `sweepConsoleCron` follows
+ * `nextCursor` up to `CRON_SWEEP_MAX_CHUNKS` (50) POSTs per route per run,
+ * from one Cloud Functions address, and the key below carries no path. Three
+ * such routes on one beat is 150 requests in a minute against a single
+ * bucket, so this exemption is load-bearing and not decorative:
+ *
+ * - `campaigns/process-scheduled` — `x-cron-secret` against `CRON_SECRET`;
+ *   refuses outright when it is unset.
+ * - `lists/materialize` — the same header, the same refusal.
+ * - `commerce/process-abandoned` — the same header, the same refusal.
+ * - `commerce/process-restock` — the same header, the same refusal.
+ *
  * Note what is deliberately NOT exempt: presence of an `authorization` or
  * `svix-signature` HEADER. Header presence is not a credential — the
  * dispatcher cannot verify signatures it does not own, so exempting on the
  * header would let any caller skip the limiter by attaching a garbage one to
  * a cart POST.
+ *
+ * Nor is `commerce/supplier-update`, whose HMAC token makes it a machine
+ * caller but whose volume is set by a supplier's own system rather than by a
+ * schedule. It fails the second half of the membership rule, and the polarity
+ * above says which way to resolve a borderline case: leave it limited, where
+ * a mistake is a recoverable 429.
  */
 const MACHINE_API_PATHS: ReadonlySet<string> = new Set([
   'email/events',
   'campaigns/send',
   'bookings/reminders',
+  'campaigns/process-scheduled',
+  'lists/materialize',
+  'commerce/process-abandoned',
+  'commerce/process-restock',
 ])
 
 /** Prefixes whose whole subtree is a machine surface (`hooks/{host}/{hook}`). */
@@ -190,4 +213,79 @@ export function isMachinePluginApiPath(path: string): boolean {
  */
 export function visitorWriteRateLimitKey(hostId: string, ip: string): string {
   return `pluginwrite:${hostId || '-'}:${ip || 'unknown'}`
+}
+
+/**
+ * Policy for the CONSOLE plugin-API dispatcher's write rate limit.
+ *
+ * `apps/console/app/api/[...pluginApi]/route.ts` dispatches every plugin's
+ * console-facing handler — the marketplace installs and publishes, `ai/assist`,
+ * gift cards, POS orders, refunds, the email list previews and the suppression
+ * writes — and it carries no limiter of any kind. Its gates each refuse
+ * something narrower: per-site enablement needs a resolvable `hostId`, the
+ * release flag only asks whether the plugin is on, and lockdown only refuses
+ * during an incident. None of them bounds volume from an ordinary signed-in
+ * operator, which is every request the surface serves.
+ *
+ * The exposure is not the same one the visitor limiter closes. These handlers
+ * are authenticated, so nobody is minting documents anonymously; what they do
+ * instead is spend REAL money per call — a contact scan with a read budget, a
+ * bundle download and verify, a model call to a paid vendor — on a surface
+ * where a stuck retry loop in one console tab is indistinguishable from abuse.
+ */
+
+/**
+ * 120 requests per minute per console subject.
+ *
+ * `DEFAULT_RATE_LIMIT` / `DEFAULT_RATE_WINDOW_MS` again, and the same pair the
+ * visitor limiter and the public REST API use, so this introduces no bespoke
+ * number to reason about. It is far above a person pressing buttons: the
+ * costly routes on this surface are one-per-click, and the console's own
+ * page-load traffic reaches Firestore through the client SDK rather than
+ * through this dispatcher.
+ *
+ * Deliberately not tighter even though each call here costs more than a cart
+ * write. A limit that trips on genuine use gets raised until it means nothing,
+ * and the per-call cost is the wrong lever for that anyway — an entitlement or
+ * a quota bounds spend per org over a month, where this bounds a runaway loop
+ * over a minute. Two different jobs; this one only has to make the loop stop.
+ */
+export const CONSOLE_API_RATE_LIMIT = 120
+
+/** Fixed 60s window, matching every other limiter in the codebase. */
+export const CONSOLE_API_RATE_WINDOW_MS = 60_000
+
+/**
+ * The limiter key: one bucket per authenticated subject.
+ *
+ * ## Why this is NOT the visitor key
+ *
+ * `visitorWriteRateLimitKey` is compound because its surface is
+ * unauthenticated, and both halves of that argument are answers to anonymity.
+ * Per-site alone was rejected there because one attacker would spend a whole
+ * merchant's allowance and refuse real shoppers — an attacker-triggered denial
+ * of service against the victim. On the console the subject is a verified
+ * `uid`, so a caller can only ever refuse ITSELF: the self-DoS the compound key
+ * exists to prevent cannot be aimed at anyone else, and the isolation it buys
+ * is already bought by the identity.
+ *
+ * `hostId` is therefore left OUT rather than added, which is the opposite of
+ * the visitor key and for the reason the visitor key leaves the PATH out: an
+ * operator with fifty sites would otherwise hold fifty budgets and could
+ * multiply its allowance by cycling a field it controls. One person is one
+ * budget across every site they can reach.
+ *
+ * ## The unauthenticated fallback
+ *
+ * A caller whose bearer token did not decode — a plugin key, a POS device, an
+ * anonymous probe — has no `uid`, and its client address stands in. That
+ * bucket is shared by every such caller behind one address, which is the
+ * conservative direction: an unidentified caller on an authenticated surface
+ * should not get a private allowance for declining to identify itself. Keeping
+ * it counted at all is the point. A limiter a caller switches off by sending
+ * no credential is not a limiter, and this surface's whole exposure is what
+ * runs BEFORE a handler decides who is asking.
+ */
+export function consoleApiRateLimitKey(subject: string): string {
+  return `consoleapi:${subject || 'unknown'}`
 }

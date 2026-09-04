@@ -20,7 +20,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 
 /**
- * `?tab=` ↔ the selected vertical tab, in one place (AGL-2486, AGL-693).
+ * `?tab=` ↔ the selected vertical tab, in one place (AGL-2486, AGL-2501).
  *
  * Every surface with vertical tabs deep-links the same way, and it is this
  * hook that makes that true. Left to themselves, three pages produce three

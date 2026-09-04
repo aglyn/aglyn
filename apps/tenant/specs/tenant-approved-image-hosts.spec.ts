@@ -196,6 +196,37 @@ describe('measurement image origins (AGL-1152)', () => {
     }
   })
 
+  it('admits the audience-building redirect, a host of its own', () => {
+    // `td.doubleclick.net/td/ga/rul` is what joins a GA4 session to the Ads
+    // cookie so audiences can export, and it is NOT reached by
+    // `stats.g.doubleclick.net` — different hosts, and CSP matches hosts.
+    // Measured blocked on aglyn.com as an `img-src` violation while every
+    // other Google endpoint passed, which is remarketing going quiet with
+    // nothing in any report saying why.
+    expect(withMeasurement).toContain('https://td.doubleclick.net')
+  })
+
+  it('admits the cross-client measurement collector, a host of its own', () => {
+    // `ad.doubleclick.net/ccm/s/collect` is the hit that reconciles a Google
+    // Ads conversion with the analytics identity, and `ad.` is a SIBLING label
+    // of the `*.g.doubleclick.net` hosts, so none of them reaches it.
+    // Measured refused on a live `https://aglyn.com/pricing` while `td.`,
+    // `stats.g.` and `googleads.g.` all passed.
+    expect(withMeasurement).toContain('https://ad.doubleclick.net')
+  })
+
+  it('WILDCARDS the LinkedIn pixel host, which is a shard', () => {
+    // The Insight Tag picks a numbered prefix per page view — `px4` on every
+    // load of the marketing site — so the pinned bare `px.ads.linkedin.com`
+    // was the one prefix that never arrived. Measured: `px1` through `px4` all
+    // refused for img AND connect while `px.` passed.
+    expect(withMeasurement).toContain('https://*.ads.linkedin.com')
+    // The wildcard reaches the bare host too, so pinning it as well would be
+    // dead bytes on every response.
+    expect(withMeasurement).not.toContain('https://px.ads.linkedin.com')
+    expect(withMeasurement).toContain('https://snap.licdn.com')
+  })
+
   it('admits the Meta pixel, configured as a first-class ad tag', () => {
     // NOT via GTM — nothing on the platform has a container. The id lives at
     // `analytics.adTags.meta`, `advertising-tags.ts` loads

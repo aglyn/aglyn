@@ -26,10 +26,12 @@ import {
   isReleaseFlagOnForOrg,
   nodeMapBytes,
   parseOrgReleaseFlagOverrides,
+  priceEmailSendOverage,
   resolveEffectivePlan,
   resolveOrgEntitlements,
 } from '@aglyn/aglyn/server'
 import {
+  billsEmailSendOverage,
   billsOrgLibraryStorage,
   estimateMonthlyUsageCost,
   type HostUsageSnapshot,
@@ -1010,14 +1012,34 @@ async function handler(request: Request): Promise<Response> {
       // that is the overage the cap deliberately did not enforce, and writing
       // it down is what keeps it from being a surprise at invoicing.
       //
-      // RECORDED, NOT PRICED, exactly like the counts it derives from: it is
-      // deliberately absent from `billedCents` below and from `costUsd`, and
-      // `ORG_COGS_UNIT_RATES_USD` still has no per-email rate to price it
-      // with. No guardrail verdict moves by a cent because of this field.
+      // The COUNT, measured against the resolved band. It is not the COGS
+      // input: what the org costs us is every send on the cost meter, priced
+      // by `orgMonthlyCogsUsd`, because the provider charges for the first
+      // message of the month as much as the last.
       const emailOverage = emailSendsOverage(
         counterTotals.emailSends,
         resolveOrgEntitlements(orgData).emailSendsPerMonth,
       )
+      // …and what it costs the customer, at the plan's retail per-1,000 rate.
+      // NOT the infrastructure pass-through: email is not billed at cost x
+      // 1.3, it is a tiered price beside contacts and API requests.
+      //
+      // WITHHELD until `BILL_EMAIL_SEND_OVERAGE_FROM` names a month at or
+      // before this one, for the reason `billsOrgLibraryStorage` exists: this
+      // volume has been counted and never charged, the included bands moved
+      // in the same change as the rate, and the daily cron re-sweeps any
+      // org-month that has not reported. Without the gate the first run after
+      // deploy would invoice a month whose mail was sent under a larger
+      // allowance — and most of that mail is transactional, which no cap was
+      // ever allowed to refuse.
+      const emailOveragePrice = priceEmailSendOverage(orgData, emailOverage)
+      const emailOverageBilled = billsEmailSendOverage(
+        month,
+        process.env.BILL_EMAIL_SEND_OVERAGE_FROM,
+      )
+      const emailOverageUsd = emailOverageBilled
+        ? emailOveragePrice.overageMonthlyUsd
+        : 0
       /*==========================================
        * AGLYN ASSIST PROVIDER SPEND, RECORDED AND PRICED (AGL-2280).
        *
@@ -1060,6 +1082,7 @@ async function handler(request: Request): Promise<Response> {
         Math.round(dataQuota.overageMonthlyUsd * 100) +
         Math.round(apiQuota.overageMonthlyUsd * 100) +
         Math.round(contactsOverageUsd * 100) +
+        Math.round(emailOverageUsd * 100) +
         offlinePosFeeCents
       // `usageRef` / `existing` come from the batch above (AGL-2399) — the
       // stock basis needs the same document this guard does, and reading it
@@ -1160,7 +1183,7 @@ async function handler(request: Request): Promise<Response> {
           formSubmissionsOverageWithheldUsd: formSubmissionsWithheldUsd,
           costUsd: estimate.costUsd,
           // The excess only, at cost (AGL-1280) — `billedCents` is this
-          // number marked up, plus the three plan-priced overages. Read off
+          // number marked up, plus the four plan-priced overages. Read off
           // `billedEstimate` so it stays the pre-markup twin of what was
           // actually charged; `storageGb` and `costUsd` above are the truth.
           billableCostUsd: billedEstimate.billableCostUsd,
@@ -1284,21 +1307,30 @@ async function handler(request: Request): Promise<Response> {
           // the org's hosts. COUNTS for this month — see `orgCounterTotals`
           // for the unit and the double-count argument.
           //
-          // RECORDED, NOT PRICED, and deliberately so. There is no per-email
-          // or per-run rate anywhere in the platform, and inventing one here
-          // would put a made-up number into `billedCents` and into the
-          // discount guardrail's COGS on the same day it first had data to
-          // check it against. So these fields do NOT enter `billedCents`,
-          // `costUsd`, or `ORG_COGS_UNIT_RATES_USD` — the guardrail's verdicts
-          // are byte-for-byte unchanged by this commit. What changes is that
-          // the inputs now exist and accumulate a history, which is what a
-          // rate has to be derived FROM. Pricing them is a decision with an
-          // invoice behind it, not a default.
+          // `emailSends` is PRICED INTO COGS, at
+          // `ORG_COGS_UNIT_RATES_USD.perEmailSend` — every message the
+          // provider charged for, campaigns and transactional alike — and its
+          // OVERAGE is priced onto the invoice at the plan's retail
+          // per-1,000 rate. `workflowRuns` and `actionRuns` remain recorded
+          // and unpriced: no per-run rate exists, and inventing one here
+          // would put a made-up number into both the invoice and the discount
+          // guardrail on the same day.
           emailSends: counterTotals.emailSends,
-          // Volume above the plan's included band, in emails (AGL-1438). Not
-          // a failed send and not a charge — see the note where it is
-          // computed.
+          // Volume above the plan's included band, in emails (AGL-1438).
+          // Mostly transactional, because that is the mail no cap may refuse
+          // — see the note where it is computed.
           emailSendsOverage: emailOverage,
+          // What actually entered `billedCents`: zero until
+          // `BILL_EMAIL_SEND_OVERAGE_FROM` names this month or an earlier one.
+          emailSendsOverageUsd: emailOverageUsd,
+          // Whether THIS month charged for it, and what was forgone if not.
+          // Same pair, same reason, as `contactsOverageBilled` /
+          // `contactsOverageWithheldUsd`: a withheld month must not read as a
+          // month that stayed inside its band.
+          emailSendsOverageBilled: emailOverageBilled,
+          emailSendsOverageWithheldUsd: emailOverageBilled
+            ? 0
+            : emailOveragePrice.overageMonthlyUsd,
           workflowRuns: counterTotals.workflowRuns,
           actionRuns: counterTotals.actionRuns,
           // AGL-1390: the org's worst host, and every host past its cap. An

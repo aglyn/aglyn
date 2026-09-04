@@ -24,7 +24,7 @@ import {
   readOrgBilling,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
-import { describeMissingStripeCustomer } from '../../_lib/stripe-customer-mode-notice'
+import { describeStripeModeSplit } from '../../_lib/stripe-customer-mode-notice'
 
 // lockdown-423: exempt — a billing-locked org must be able to SEE what it owes to pay it;
 // part of the recovery surface AGL-1501 keeps sessions alive for.
@@ -86,7 +86,7 @@ async function handler(request: Request): Promise<Response> {
         {
           invoices: [],
           hasMore: false,
-          ...(await describeMissingStripeCustomer(orgId)),
+          ...(await describeStripeModeSplit(orgId)),
         },
         { status: 200 },
       )
@@ -145,10 +145,21 @@ async function handler(request: Request): Promise<Response> {
     const lastFetched = Array.isArray(payload?.data)
       ? payload.data[payload.data.length - 1]
       : null
+    // An EMPTY first page needs the same explanation the missing-customer
+    // branch gets, and for a reason that branch cannot see: a workspace that
+    // transacted live and was then opened in test has BOTH ids, so the
+    // customer is not missing — this mode's customer is simply empty while
+    // the other mode holds the history. Without this the card printed "No
+    // invoices yet." over an intact one.
+    //
+    // First page only. On a cursor the emptiness means "no older invoices",
+    // which is an observation about paging and not about the mode.
+    const emptyFirstPage = invoices.length === 0 && !startingAfter
     return Response.json({
       invoices,
       hasMore: payload?.has_more === true,
       nextCursor: payload?.has_more === true ? (lastFetched?.id ?? null) : null,
+      ...(emptyFirstPage ? await describeStripeModeSplit(orgId) : {}),
     }, { status: 200 })
   } catch (error) {
     console.error(error)

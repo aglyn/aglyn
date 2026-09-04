@@ -176,7 +176,7 @@ function Screens(props) {
   const createHostResource = useHostResourceApi()
   const createHostVersion = useHostVersionApi()
   /**
-   * THE WHOLE TREE, ordered, with the ceiling made visible (AGL-693).
+   * THE WHOLE TREE, ordered, with the ceiling made visible (AGL-2501).
    *
    * This list is the deliberate exception to the console's server-paged
    * lists, and it has to be: a hierarchy sliced by row puts a child on a
@@ -395,13 +395,6 @@ function Screens(props) {
             ? publishScreenRoute(firestore, { hostId, screenId: newId }, path)
             : undefined,
         )
-        .then(() =>
-          logActivity('Created screen', {
-            type: 'screen',
-            id: newId,
-            name: newValues.displayName,
-          }),
-        )
         .catch((error) => {
           console.error(error)
           setError({ ...error })
@@ -448,7 +441,7 @@ function Screens(props) {
           hostId,
           kind: 'screen',
           id,
-          idToken: await (user as any)?.getIdToken?.(),
+          user,
         }))()
       await confirm({
         title: 'Delete this screen?',
@@ -669,7 +662,7 @@ function Screens(props) {
 
   /*
     The row's LEFT is the drag handle and the expand chevron, and nothing else
-    (AGL-693). The screens should only have the drag or expand icon to
+    (AGL-2501). The screens should only have the drag or expand icon to
     the left.
 
     A "Details" icon used to sit there, on the argument that it is navigation
@@ -715,7 +708,7 @@ function Screens(props) {
   )
 
   /**
-   * The name column's link target (AGL-693).
+   * The name column's link target (AGL-2501).
    *
    * The same route `handleRowOpen` pushes, as an href — so the name is a real
    * link like it is on every other artifact list: middle-clickable, copyable,

@@ -25,7 +25,7 @@
  *
  * AGL-1918 made bounces and complaints WRITE a suppression; AGL-2407 gave the
  * transactional half of that a place to land. A list nothing consults is the
- * written-but-never-read shape one level up, so this file asserts the two
+ * written-but-never-read shape one level up, so this file asserts the three
  * senders that must consult it — and, just as load-bearing, the ones that must
  * NOT.
  *
@@ -86,22 +86,37 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   }),
   meterPlatformEmail: async () => undefined,
   meterOrgEmail: async () => undefined,
+  listOrgMembers: async () => mockOrgMembers,
   firebaseAdmin: {
     app: () => ({
       firestore: () => mockStore,
-      auth: () => ({}),
+      auth: () => ({
+        // The publisher fan-out resolves addresses through the auth pool
+        // rather than the member document, so the double answers in that
+        // shape: one user per requested uid, its address from the seed.
+        getUsers: async (identifiers: Array<{ uid: string }>) => ({
+          users: identifiers
+            .map(({ uid }) => mockAuthEmails[uid])
+            .filter(Boolean)
+            .map((email) => ({ email })),
+        }),
+      }),
     }),
     firestore: { FieldValue: { serverTimestamp: () => 'server-time' } },
   },
 }))
 
 // NOT mocked, on purpose: `@aglyn/tenant-data-admin/server/email-suppression`
-// is imported by both senders through its LEAF entry point precisely so the
-// barrel mock above cannot replace it. The gate under test is the shipped one.
+// is imported by every sender here through its LEAF entry point precisely so
+// the barrel mock above cannot replace it. The gate under test is the shipped
+// one.
 
 let mockStore: any
+let mockOrgMembers: Array<{ $id: string; role: string }> = []
+let mockAuthEmails: Record<string, string> = {}
 
 import { emailOrgAdmins, orgAdminEmails } from '../app/api/_lib/usage-alert-email'
+import { emailPublisher } from '../app/api/_lib/publisher-review-email'
 import { POST as usageEmailCron } from '../app/api/billing/usage-email/route'
 import { suppressEmail } from '@aglyn/tenant-data-admin/server/email-suppression'
 
@@ -244,6 +259,81 @@ describe('the usage-alert fan-out', () => {
     })
 
     expect(mockSent[0]['to']).toEqual(['owner@example.com'])
+  })
+})
+
+/**
+ * THE MARKETPLACE REVIEW FAN-OUT (AGL-2407).
+ *
+ * The third bulk sender and the last one that read no list. It addresses
+ * every owner and admin of a publishing org on every verdict — a publisher
+ * who ships monthly is mailed monthly — so a dead address here is re-attempted
+ * for as long as the publisher keeps publishing.
+ *
+ * What it must consult is the PLATFORM list and not the per-host pair: a
+ * review verdict is sent on no site's behalf, so there is no host to key
+ * `filterSendableForHost` by, and a publisher's own site suppressions answer
+ * a different question than "is this mailbox alive".
+ */
+describe('the marketplace review fan-out', () => {
+  const PUBLISHER = 'publisher-org'
+
+  beforeEach(() => {
+    mockOrgMembers = [
+      { $id: 'u-owner', role: 'owner' },
+      { $id: 'u-admin', role: 'admin' },
+      // Not an owner or admin, so never in the fan-out at all.
+      { $id: 'u-member', role: 'member' },
+    ]
+    mockAuthEmails = {
+      'u-owner': 'owner@example.com',
+      'u-admin': 'admin@example.com',
+      'u-member': 'member@example.com',
+    }
+  })
+
+  it('PREMISE: an ordinary publisher is mailed the verdict', async () => {
+    /*
+     * The anti-vacuity control, and the one that catches the filter being
+     * applied so broadly that nobody is mailed — a `filterSendableForHost`
+     * wired in with an empty host id returns [] for everybody and every
+     * assertion below would still pass.
+     */
+    const store = fakeFirestore()
+    await emailPublisher(PUBLISHER, 'Rejected', 'Reason', { firestore: store })
+
+    expect(mockSent.map((message) => message['to'])).toEqual([
+      'owner@example.com',
+      'admin@example.com',
+    ])
+  })
+
+  it('does not mail a publisher whose address hard-bounced', async () => {
+    const store = fakeFirestore()
+    await suppressEmail({
+      email: 'admin@example.com',
+      reason: 'bounce',
+      firestore: store,
+    })
+
+    await emailPublisher(PUBLISHER, 'Rejected', 'Reason', { firestore: store })
+
+    // Per address. The dead mailbox is dropped and the other owner still
+    // learns their plugin was rejected.
+    expect(mockSent.map((message) => message['to'])).toEqual([
+      'owner@example.com',
+    ])
+  })
+
+  it('sends nothing when every publisher address is suppressed', async () => {
+    const store = fakeFirestore()
+    for (const email of ['owner@example.com', 'admin@example.com']) {
+      await suppressEmail({ email, reason: 'complaint', firestore: store })
+    }
+
+    await emailPublisher(PUBLISHER, 'Rejected', 'Reason', { firestore: store })
+
+    expect(mockSent).toHaveLength(0)
   })
 })
 

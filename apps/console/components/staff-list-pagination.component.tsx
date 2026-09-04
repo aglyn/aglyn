@@ -40,7 +40,7 @@ export interface StaffListPaginationControlsProps<TRow> {
 }
 
 /**
- * The staff lists' footer — the console's shared one (AGL-693).
+ * The staff lists' footer — the console's shared one (AGL-2501).
  *
  * Extracted from the Organizations list so the Users list is the same control
  * and not a second one that looks like it; it is now the same control as

@@ -30,6 +30,7 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../components/staff-only.component'
 import { docsHelp } from '../../../../constants/docs-links'
@@ -94,30 +95,28 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
   )
   const [publishers, setPublishers] = useState<Record<string, string>>({})
   const [loaded, setLoaded] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('all')
 
-  const token = useCallback(
-    async () =>
-      (user as { getIdToken?: () => Promise<string> })?.getIdToken?.(),
-    [user],
-  )
-
   const refresh = useCallback(async () => {
-    const idToken = await token()
-    if (!idToken) return
-    const response = await fetch('/api/admin/plugin-reviews', {
-      headers: { Authorization: `Bearer ${idToken}` },
-    })
+    const response = await authorizedFetch(user, '/api/admin/plugin-reviews')
+    const payload = await response.json().catch(() => ({}))
     if (response.ok) {
-      const payload = await response.json()
+      setLoadError(null)
       setQueue(payload?.queue ?? [])
       setListed(payload?.listed ?? [])
       setVerificationRequests(payload?.verificationRequests ?? [])
       setPublishers(payload?.publishers ?? {})
+    } else {
+      // Named, not swallowed. An empty queue and a queue that could not be
+      // read look identical, and only one of them means there is no work.
+      setLoadError(
+        payload?.error ?? `Loading the queue failed (${response.status})`,
+      )
     }
     setLoaded(true)
-  }, [token])
+  }, [user])
 
   useEffect(() => {
     if (user) void refresh()
@@ -237,6 +236,10 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
                 ))}
               </TextField>
             </Stack>
+
+            {loadError ? (
+              <Alert severity="error">{loadError}</Alert>
+            ) : null}
 
             {!loaded ? (
               <Stack spacing={2}>

@@ -78,7 +78,7 @@ async function handler(request: Request): Promise<Response> {
   const mediaId = String(body?.mediaId ?? '')
   // Canonicalized before anything reads it, so the stored type, the SVG
   // sanitizer's check and the CDN's active-document check all see one
-  // spelling of a format (AGL-1476).
+  // spelling of a format.
   const contentType = normalizeImageContentType(body?.contentType)
   const data = String(body?.data ?? '')
   const expectedUpdatedAtMs = body?.expectedUpdatedAtMs
@@ -87,7 +87,7 @@ async function handler(request: Request): Promise<Response> {
   if (!mediaId || !data) {
     return Response.json({ error: 'Missing mediaId or data' }, { status: 400 })
   }
-  // An ALLOWLIST, not the `image/` prefix (AGL-1476). The prefix tested a
+  // An ALLOWLIST, not the `image/` prefix. The prefix tested a
   // string the caller picks, so `image/x-anything` replaced an asset's bytes
   // with a format nothing here recognises — and then skipped the signature
   // check, because `inspectUploadBytes` can only compare bytes against a type

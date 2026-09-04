@@ -50,9 +50,38 @@ import SuppressionsCard from './suppressions-card'
 /** Mutable so each case picks the rows before rendering. */
 let suppressionDocs: Array<Record<string, unknown>> = []
 
+/**
+ * ONE Firestore handle for the whole file: the aggregate effect keys on it,
+ * and a factory returning a fresh `{}` per render is an infinite loop.
+ */
+const FIRESTORE = {}
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
-  useFirestore: () => ({}),
-  useFirestoreCollection: () => ({ data: suppressionDocs }),
+  useFirestore: () => FIRESTORE,
+  // The Add drawer posts to a route, so the card holds a signed-in user to
+  // authenticate with. A double rather than nothing: `useUser()` returning
+  // undefined would throw on destructure and take every case in this file
+  // with it, which is a harness failure wearing a product failure's clothes.
+  useUser: () => ({ data: { uid: 'uid-test', getIdToken: async () => 'tok' } }),
+  /*
+   * The table pages its own query (AGL-2501), and the SERVER decides the order.
+   * The double sorts the way `orderBy('createdAt','desc')` would, so "newest
+   * first" is a property of the answer rather than of a client sort the card
+   * no longer performs.
+   */
+  usePagedCollection: () => ({
+    rows: [...suppressionDocs].sort(
+      (a: any, b: any) =>
+        (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0),
+    ),
+    hasMore: false,
+    page: 0,
+    setPage: jest.fn(),
+    pageSize: 10,
+    setPageSize: jest.fn(),
+    status: 'success',
+    fromCache: false,
+  }),
 }))
 
 jest.mock('@aglyn/aglyn', () => ({
@@ -60,9 +89,30 @@ jest.mock('@aglyn/aglyn', () => ({
 }))
 
 jest.mock('firebase/firestore', () => ({
-  collection: (...args: unknown[]) => args,
-  query: (value: unknown) => value,
+  collection: (...args: unknown[]) => ({ args, where: undefined }),
+  query: (base: any, ...constraints: any[]) => ({
+    ...base,
+    where: constraints.find((item) => item && 'field' in item) ?? base?.where,
+  }),
   limit: () => undefined,
+  orderBy: () => undefined,
+  count: () => 'count',
+  where: (field: string, op: string, value: unknown) => ({ field, op, value }),
+  /*
+   * The reason breakdown is a SERVER AGGREGATE now, not a tally of the rows on
+   * screen (AGL-2501) — a chip that counted the page would read the page size
+   * on a long list. The double answers from the same fixture the table is
+   * answered from, so the two cannot agree by coincidence.
+   */
+  getAggregateFromServer: async (built: any) => {
+    const predicate = built?.where
+    const matching = predicate
+      ? suppressionDocs.filter(
+          (row: any) => row[predicate.field] === predicate.value,
+        )
+      : suppressionDocs
+    return { data: () => ({ total: matching.length }) }
+  },
   // The DELETED PATH is what the assertions read, so the double records it
   // rather than answering an opaque token: "delete was called" and "the right
   // document was deleted" are different claims, and only the second one says
@@ -97,21 +147,56 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 
 const DAY = 1_800_000_000
 
+/**
+ * Remove one row, through the affordance the row actually has.
+ *
+ * The removal lives in the row's overflow menu rather than as a `Remove`
+ * button in the row, so reaching it is two presses: the menu, then the item.
+ * Addressed BY ADDRESS rather than by row index, which is also what makes
+ * "the row the operator pressed Remove on" a claim this file can check — an
+ * index says which button was pressed and nothing about which entry it
+ * belonged to.
+ */
+const pressRemove = (email: string) => {
+  fireEvent.click(
+    screen.getByRole('button', { name: `More actions for ${email}` }),
+  )
+  fireEvent.click(
+    screen.getByRole('menuitem', { name: 'Remove from the list' }),
+  )
+}
+
 beforeEach(() => {
   jest.clearAllMocks()
+  /*
+   * The Remove flow asks the server whether the address is ALSO suppressed
+   * platform-wide. `{ platform: [] }` is the ordinary answer — not blocked —
+   * so every case below reads the dialog it was written for. Without a
+   * double, jsdom attempts a real request to a relative URL and the run never
+   * settles, which is a harness failure that looks like a hang.
+   */
+  global.fetch = jest.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({ platform: [] }),
+  }) as unknown as typeof fetch
   confirmation.accepted = true
   confirmation.seen = []
   suppressionDocs = [
+    // `createdAt` on every row, because both writers stamp it when the
+    // document is created — which is why the list can be ordered on it
+    // without dropping anyone (AGL-2501). `suppressedAt` is the restamp.
     {
       $id: 'hash-a',
       email: 'dana@example.com',
       reason: 'bounce',
-      suppressedAt: { seconds: DAY },
+      createdAt: { seconds: DAY },
+      suppressedAt: { seconds: DAY + 172_800 },
     },
     {
       $id: 'hash-b',
       email: 'sam@example.com',
       reason: 'complaint',
+      createdAt: { seconds: DAY + 86_400 },
       suppressedAt: { seconds: DAY + 86_400 },
     },
     // Written before AGL-2408: the unsubscribe handler stored no reason.
@@ -142,9 +227,39 @@ describe('SuppressionsCard (AGL-2410)', () => {
     render(<SuppressionsCard hostId="host-1" />)
 
     // "My campaign says 500 recipients and 480 sent — who were the other
-    // 20?" begins here.
-    expect(screen.getByText('Bounced: 1')).toBeTruthy()
+    // 20?" begins here. Awaited, because the breakdown is a server aggregate
+    // rather than a tally of the rendered rows: it cannot resolve in the same
+    // tick as the mount that asked for it, and a synchronous assertion would
+    // read the "could not read the breakdown" state instead.
+    await waitFor(() => expect(screen.getByText('Bounced: 1')).toBeTruthy())
     expect(screen.getByText('Marked as spam: 1')).toBeTruthy()
+    // The reasonless legacy row, counted as the REMAINDER — an equality on
+    // `reason` would exclude it, which is the same field-presence trap as
+    // ordering on a field a writer can omit.
+    expect(screen.getByText('Unsubscribed: 1')).toBeTruthy()
+  })
+
+  it('counts a hand-added entry as its own reason, not as an unsubscribe', async () => {
+    // Unsubscribes are the REMAINDER — total minus the reasons counted
+    // explicitly — so every reason that gets its own writer has to get its
+    // own aggregate too. A `manual` row left out of that subtraction is
+    // reported as somebody who clicked a link they never saw, and the merchant
+    // reading the chip cannot tell the two apart.
+    suppressionDocs = [
+      ...suppressionDocs,
+      {
+        $id: 'hash-d',
+        email: 'kim@example.com',
+        reason: 'manual',
+        createdAt: { seconds: DAY + 200_000 },
+        suppressedAt: { seconds: DAY + 200_000 },
+      },
+    ]
+    render(<SuppressionsCard hostId="host-1" />)
+
+    await waitFor(() =>
+      expect(screen.getByText('Added by hand: 1')).toBeTruthy(),
+    )
     expect(screen.getByText('Unsubscribed: 1')).toBeTruthy()
   })
 
@@ -155,14 +270,14 @@ describe('SuppressionsCard (AGL-2410)', () => {
     render(<SuppressionsCard hostId="host-1" />)
 
     expect(screen.getByText(/Nobody is suppressed/i)).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Remove' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /More actions/ })).toBeNull()
   })
 
   it('deletes the row the operator pressed Remove on', async () => {
     render(<SuppressionsCard hostId="host-1" />)
 
     // Newest first, so `sam` is row one and `dana` row two.
-    fireEvent.click(screen.getAllByRole('button', { name: 'Remove' })[1])
+    pressRemove('dana@example.com')
 
     await waitFor(() => expect(deleteDoc).toHaveBeenCalledTimes(1))
     expect((deleteDoc as jest.Mock).mock.calls[0][0]).toEqual({
@@ -173,7 +288,7 @@ describe('SuppressionsCard (AGL-2410)', () => {
   it('confirms with the REASON, not a generic “are you sure”', async () => {
     render(<SuppressionsCard hostId="host-1" />)
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Remove' })[1])
+    pressRemove('dana@example.com')
 
     await waitFor(() => expect(confirmation.seen).toHaveLength(1))
     const [options] = confirmation.seen
@@ -187,11 +302,79 @@ describe('SuppressionsCard (AGL-2410)', () => {
     expect(options.description).toMatch(/email it again/i)
   })
 
+  it('warns that a PLATFORM-suppressed address will still be skipped', async () => {
+    // The platform list is invisible to a merchant and cannot be lifted by
+    // one, so removing the site's row changes nothing about whether the
+    // address is mailed. The alternative to saying it here is a merchant who
+    // removes the row, sends again, and sees a recipient count that is still
+    // short with nothing explaining it.
+    ;(global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ platform: ['dana@example.com'] }),
+    })
+    render(<SuppressionsCard hostId="host-1" />)
+
+    pressRemove('dana@example.com')
+
+    await waitFor(() => expect(confirmation.seen).toHaveLength(1))
+    const [options] = confirmation.seen
+    expect(options.title).toMatch(/still be skipped/i)
+    expect(options.description).toMatch(/platform-wide list/i)
+    expect(options.description).toMatch(/contact support/i)
+    // …and the removal still works: it is their row, and the dialog explains
+    // rather than refuses.
+    await waitFor(() => expect(deleteDoc).toHaveBeenCalled())
+  })
+
+  it('reads the ORDINARY dialog when the address is only on this site’s list', async () => {
+    // The other direction. A warning shown on every removal would be noise,
+    // and a card that always warned would pass a test that only checked the
+    // warning case.
+    render(<SuppressionsCard hostId="host-1" />)
+
+    pressRemove('dana@example.com')
+
+    await waitFor(() => expect(confirmation.seen).toHaveLength(1))
+    expect(confirmation.seen[0].title).toMatch(/back on your list/i)
+    expect(confirmation.seen[0].description).not.toMatch(/platform-wide/i)
+  })
+
+  it('does not INVENT a platform block when the check is refused', async () => {
+    // A check that answered "blocked" on a non-200 would warn on every
+    // removal the moment the route was unreachable, and tell the merchant
+    // their removal will not work when it will.
+    ;(global.fetch as jest.Mock).mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: 'Not a site admin or editor' }),
+    })
+    render(<SuppressionsCard hostId="host-1" />)
+
+    pressRemove('dana@example.com')
+
+    await waitFor(() => expect(confirmation.seen).toHaveLength(1))
+    expect(confirmation.seen[0].title).toMatch(/back on your list/i)
+    expect(confirmation.seen[0].description).not.toMatch(/platform-wide/i)
+  })
+
+  it('still offers the removal when the platform check FAILS', async () => {
+    // An outage on a supplementary explanation must not become an outage on
+    // the control it explains.
+    ;(global.fetch as jest.Mock).mockRejectedValue(new Error('offline'))
+    jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    render(<SuppressionsCard hostId="host-1" />)
+
+    pressRemove('dana@example.com')
+
+    await waitFor(() => expect(confirmation.seen).toHaveLength(1))
+    expect(confirmation.seen[0].title).toMatch(/back on your list/i)
+    await waitFor(() => expect(deleteDoc).toHaveBeenCalled())
+  })
+
   it('deletes NOTHING when the operator cancels', async () => {
     confirmation.accepted = false
     render(<SuppressionsCard hostId="host-1" />)
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Remove' })[0])
+    pressRemove('sam@example.com')
 
     await waitFor(() => expect(confirmation.seen).toHaveLength(1))
     expect(deleteDoc).not.toHaveBeenCalled()

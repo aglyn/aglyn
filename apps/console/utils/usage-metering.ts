@@ -79,8 +79,21 @@ export { METERED_MARKUP } from '@aglyn/aglyn/app-utils/plan-entitlements'
  *   transfer at ~$0.15/GB, see `ESTIMATED_PAGE_TRANSFER_BYTES`) together with
  *   the Firestore reads behind a render. Measured against a real cold tenant
  *   page load — 24 requests, **627 KB encoded** — giving ~$0.000088 transfer +
- *   ~40 reads @ $3e-7 + edge/ISR ≈ **$0.000102**, i.e. +2%. This is the one
- *   well-calibrated rate; leave it alone.
+ *   ~40 reads @ $3e-7 + edge/ISR ≈ **$0.000102**, i.e. +2%.
+ *
+ *   ⚠️ **The page has since outgrown this figure, and the rate has not
+ *   followed.** A cold load of `aglyn.com/` measures **1054.3 KB** of
+ *   first-party encoded bytes with every image accounted for — 1.68× the
+ *   627 KB this rate is calibrated against, which at the same per-KB basis
+ *   would be $0.000168/view. 792.4 KB of that is JavaScript every visitor to
+ *   every published site pays, whatever the page contains. The rate below is
+ *   deliberately UNCHANGED: it is inside the locked launch price set, and
+ *   moving it moves `METERED_BILLED_RATES_USD` and therefore what a customer
+ *   is charged, which is a pricing decision and not a measurement's to make.
+ *   The gap is recorded in `tools/tenant-page-budget.json` under
+ *   `wireCalibration` and held there by `npm run check:page-view-rate`, which
+ *   goes red if a later measurement widens it. Until it is closed, "at cost +
+ *   30%" overstates the margin on this meter rather than understating it.
  * - `perFormSubmission` **0.00005** (2026-08-09) — measured from
  *   `apps/tenant/app/api/forms/submit/route.ts`: ~12 Firestore reads, ~9
  *   writes, one ~0.4s function invocation. No email is sent
@@ -93,6 +106,33 @@ export const METERED_UNIT_RATES_USD = {
   storagePerGbMonth: 0.026,
   perPageView: 0.0001,
   perFormSubmission: 0.00005,
+}
+
+/**
+ * What a customer is CHARGED per unit past the included band: the table above
+ * times {@link METERED_MARKUP}.
+ *
+ * The rate above is our cost; this is the published price, and they are three
+ * decimal places apart. A billing surface that printed the cost table would be
+ * quoting a number no invoice uses — the terms are "at cost + 30%", and the
+ * customer-facing figure is the product, not the input.
+ *
+ * Derived rather than written out, so a rate correction moves both together.
+ * There is exactly one rate table in this file and it is the one above.
+ *
+ * ⛔ **Three meters, and email is not a fourth.** Every figure in this table
+ * is a cost passed through at `METERED_MARKUP`, and the published sentence
+ * for it is "at cost + 30%" — so anything added here inherits that claim.
+ * Email overage is a retail price on `PLAN_PRICING.extraEmailSendsUsdPer1k`
+ * that descends with the tier, like contacts and API requests; it is not
+ * derived from our cost and must never be quoted as though it were. Our
+ * per-email cost lives in `ORG_COGS_UNIT_RATES_USD.perEmailSend`, which the
+ * COGS model reads and no customer surface does.
+ */
+export const METERED_BILLED_RATES_USD = {
+  storagePerGbMonth: METERED_UNIT_RATES_USD.storagePerGbMonth * METERED_MARKUP,
+  perPageView: METERED_UNIT_RATES_USD.perPageView * METERED_MARKUP,
+  perFormSubmission: METERED_UNIT_RATES_USD.perFormSubmission * METERED_MARKUP,
 }
 
 /**
@@ -165,6 +205,46 @@ export function orgBandwidthGb(
  * wrote `yes` in a field that wanted a month.
  */
 export function billsOrgLibraryStorage(
+  month: string,
+  configuredStart: string | null | undefined,
+): boolean {
+  return billsFromMonth(month, configuredStart)
+}
+
+/**
+ * Whether `month`'s invoice charges for email past the plan's included band.
+ *
+ * Same mechanism as {@link billsOrgLibraryStorage}, same reason, one meter
+ * over. Email sends have been counted for a long time and priced for none of
+ * it, and the included bands moved at the same time the rate arrived — so a
+ * boolean would put a charge on a month whose mail was sent under a larger
+ * allowance, for volume that no cap refused because transactional mail is
+ * never refused.
+ *
+ * TO TURN IT ON: set `BILL_EMAIL_SEND_OVERAGE_FROM` to the first month whose
+ * invoice should carry it, as `YYYY-MM`, in the console project's
+ * environment. The rate, the measurement and the customer-facing readouts are
+ * live without it; this decides only when money starts moving.
+ *
+ * FAILS CLOSED, identically.
+ */
+export function billsEmailSendOverage(
+  month: string,
+  configuredStart: string | null | undefined,
+): boolean {
+  return billsFromMonth(month, configuredStart)
+}
+
+/**
+ * The start-month comparison both gates above are.
+ *
+ * One implementation because both are the same decision about different
+ * money, and a second hand-written copy of a fail-closed parser is how the
+ * two stop agreeing on what `true` means. `usage-budget.ts` carries a third
+ * copy for Assist; it is left where it is because importing this module from
+ * there would close a cycle.
+ */
+function billsFromMonth(
   month: string,
   configuredStart: string | null | undefined,
 ): boolean {
@@ -248,6 +328,25 @@ export interface UsageCostEstimate {
   /** Raw infra cost of the billable excess only. */
   billableCostUsd: number
   /**
+   * What each meter contributes to the charge, in USD AFTER markup.
+   *
+   * The three add up to `billableCostUsd × METERED_MARKUP` exactly — they are
+   * the same three products `billedCents` is rounded from, split out rather
+   * than recomputed, so a surface can attribute the total to the meter that
+   * caused it without running a second cost model. Zero on a plan that hard-
+   * caps rather than metering, matching `billableCostUsd`.
+   *
+   * Not rounded to cents individually. `billedCents` rounds the SUM once, and
+   * three separately-rounded figures need not add to it; a caller showing
+   * these must round for display and must not present the sum as the invoice
+   * total, which `billedCents` already is.
+   */
+  billableUsdByMeter: {
+    storage: number
+    pageViews: number
+    formSubmissions: number
+  }
+  /**
    * What the org is billed: billable excess × METERED_MARKUP, whole cents.
    * Zero on a plan that hard-caps rather than metering.
    */
@@ -301,6 +400,16 @@ export function estimateMonthlyUsageCost(
   const billableCostUsd = included.metered
     ? priced(billableStorageGb, billablePageViews, billableFormSubmissions)
     : 0
+  // One meter's share of the charge, from the SAME `priced` call the total
+  // uses — three isolated multiplications here would be a second cost model
+  // to drift from the first. Each is `priced` with the other two dimensions
+  // zeroed, so the three provably sum to `billableCostUsd`.
+  const billableShareUsd = (
+    storage: number,
+    views: number,
+    submissions: number,
+  ): number =>
+    included.metered ? priced(storage, views, submissions) * METERED_MARKUP : 0
   return {
     storageGb,
     pageViews,
@@ -311,6 +420,11 @@ export function estimateMonthlyUsageCost(
     billableFormSubmissions,
     costUsd: priced(storageGb, pageViews, formSubmissions),
     billableCostUsd,
+    billableUsdByMeter: {
+      storage: billableShareUsd(billableStorageGb, 0, 0),
+      pageViews: billableShareUsd(0, billablePageViews, 0),
+      formSubmissions: billableShareUsd(0, 0, billableFormSubmissions),
+    },
     billedCents: Math.round(billableCostUsd * METERED_MARKUP * 100),
   }
 }

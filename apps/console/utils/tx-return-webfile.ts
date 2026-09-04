@@ -570,11 +570,13 @@ export function taxReturnAttentionItems(
       // from the PRE-tax price, so the whole of this tax stays in Aglyn's
       // balance. It is in no Webfile line below.
       //
-      // Stated as the platform total rather than a Texas slice on purpose:
-      // `marketplacePurchases` stores no buyer address, so no jurisdiction
-      // can be claimed for any of it (see `rowsMissingJurisdiction`). A
-      // "Texas marketplace tax" figure would be a guess wearing a total's
-      // clothes, and this report does not print those.
+      // Stated as the PLATFORM TOTAL, with the per-jurisdiction split beside
+      // it in the marketplace figures rather than folded into this count.
+      // Purchases recorded before the webhook stored a jurisdiction state
+      // none and never will (`rowsMissingJurisdiction`), so a "Texas
+      // marketplace tax" figure presented as the whole answer would be a
+      // guess wearing a total's clothes. The total is what every period can
+      // honestly state; the split is what the attributable part of it says.
       id: 'marketplaceTaxCollected',
       severity: 'blocking',
       count: Number(payload.marketplace?.summary?.taxCollectedCents ?? 0),
@@ -615,10 +617,11 @@ export function taxReturnAttentionItems(
       ),
       label: 'Marketplace rows with no stated jurisdiction',
       detail:
-        'No buyer address is stored on a purchase row, so none of this tax ' +
-        'can be placed in a state — expect this to equal the marketplace ' +
-        'transaction count until purchase rows record an address. It is why ' +
-        'no marketplace figure appears on the jurisdiction table.',
+        'Their tax cannot be placed in a state, so it is in the marketplace ' +
+        'total and in no state’s figure. Purchases recorded before the ' +
+        'webhook stored a jurisdiction state none permanently — the address ' +
+        'they were taxed from is in Stripe, and copying it back would ' +
+        'attribute a filed period after the fact. Read them there instead.',
     },
     {
       id: 'marketplaceMissingCreatedAt',
@@ -1558,7 +1561,51 @@ export function taxReturnMarketplaceLines(
       value: `$${centsToDollars(summary.taxCollectedCents)}`,
       note: `The remittable figure — and it is in NO ${figuresLine} line above.`,
     },
+    // WHERE THAT FIGURE IS OWED. The total above is the only number every
+    // period can state, because rows recorded before the webhook stored a
+    // jurisdiction have none and are not given one. These lines say how much
+    // of it CAN be placed, and `unknown` says how much cannot — stated as its
+    // own line rather than dropped, so the split always sums to the total.
+    ...marketplaceJurisdictionLines(summary, filing.code),
   ]
+}
+
+/**
+ * The marketplace tax split by jurisdiction, one line each (AGL-2137).
+ *
+ * Filing jurisdiction first — it is the one obligation that does not wait on
+ * a threshold — then dearest first, and `unknown` last wherever it falls.
+ * `unknown` is deliberately not sorted among the states: it is not a place,
+ * it is the part of the total that has none.
+ */
+function marketplaceJurisdictionLines(
+  summary: MarketplaceTaxSummary,
+  filingCode: string,
+): TaxFigureLine[] {
+  const entries = Object.entries(summary.byJurisdiction ?? {})
+  if (entries.length === 0) return []
+  return entries
+    .sort(
+      ([aKey, aFigures], [bKey, bFigures]) =>
+        Number(bKey !== 'unknown') - Number(aKey !== 'unknown') ||
+        Number(bKey === filingCode) - Number(aKey === filingCode) ||
+        Number(bFigures?.taxCollectedCents ?? 0) -
+          Number(aFigures?.taxCollectedCents ?? 0) ||
+        aKey.localeCompare(bKey),
+    )
+    .map(([jurisdiction, figures]) => ({
+      label:
+        jurisdiction === 'unknown'
+          ? 'Tax collected — no stated jurisdiction'
+          : `Tax collected — ${jurisdiction}`,
+      value: `$${centsToDollars(figures?.taxCollectedCents)}`,
+      note:
+        jurisdiction === 'unknown'
+          ? `${Number(figures?.transactionCount ?? 0)} purchase(s) that state no jurisdiction. In the total above and in no state’s figure.`
+          : `${Number(figures?.transactionCount ?? 0)} purchase(s), $${centsToDollars(figures?.totalSalesCents)} of sales excluding tax.${
+              jurisdiction === filingCode ? ' The filing jurisdiction.' : ''
+            }`,
+    }))
 }
 
 /**

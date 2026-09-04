@@ -59,6 +59,23 @@
  *   operator's own Firebase project and their own GA property. Defaulting
  *   those to silence would break a customer's analytics to protect ours, which
  *   is the worse failure; our own builds are the ones that carry the marker.
+ * - **The document is served from a loopback host — never emits**, whatever
+ *   the other three say. The signals above are all build-time, and a build is
+ *   not a deployment: `next start`, `docker compose up` from a clone, and a
+ *   production container run locally all carry `NODE_ENV === 'production'`
+ *   with no `VERCEL_ENV`, which is byte-for-byte the self-host case the rule
+ *   above deliberately lets through. Run against
+ *   `apps/console/.env.development.local`, whose measurement id is the live
+ *   `G-YW5PG16YTM`, that path reports a developer's laptop as production
+ *   traffic — and it is not theoretical: `localhost` was 145 sessions of a
+ *   609-session month, arriving as `localhost:4200 / referral`, which also
+ *   overwrites the acquisition source of every session it touches.
+ *
+ *   The host is the one signal that separates the two cases, because a real
+ *   self-hosted deployment is reached at a real name. It is read from
+ *   `location` at call time and is therefore absent server-side, where it
+ *   changes nothing — the check can only ever tighten the client decision,
+ *   which is where the tag actually boots.
  *
  * ## The escape hatch
  *
@@ -76,6 +93,21 @@ export const ANALYTICS_ALLOW_NONPROD_ENV = 'NEXT_PUBLIC_ANALYTICS_ALLOW_NONPROD'
 /** The deploy-environment values that are never our production surface. */
 const NON_PRODUCTION_DEPLOY_ENVS = new Set(['preview', 'development'])
 
+/**
+ * Hostnames that mean "this machine, talking to itself".
+ *
+ * `.localhost` is matched as a suffix because the self-hosting compose serves
+ * a site subdomain as `{subdomain}.localhost:4500`, and RFC 6761 reserves the
+ * whole tree for exactly this purpose, so nothing real can be lost to it.
+ */
+function isLoopbackHostname(hostname: string): boolean {
+  const host = hostname.trim().toLowerCase().replace(/^\[/, '').replace(/]$/, '')
+  if (host === '') return false
+  if (host === 'localhost' || host.endsWith('.localhost')) return true
+  if (host === '::1' || host === '0.0.0.0') return true
+  return /^127\./.test(host)
+}
+
 export interface AnalyticsEnvironment {
   /** `process.env.NODE_ENV`. */
   nodeEnv?: string | null
@@ -83,6 +115,14 @@ export interface AnalyticsEnvironment {
   deployEnv?: string | null
   /** The escape hatch's raw value. */
   allowNonProduction?: string | null
+  /**
+   * The host this document is served from, absent server-side.
+   *
+   * Undefined is NOT loopback: a server render has no location and must keep
+   * the build-time answer, or the tenant's `<Script>` would stop rendering on
+   * every real deployment.
+   */
+  hostname?: string | null
 }
 
 /**
@@ -98,12 +138,14 @@ export function readAnalyticsEnvironment(): AnalyticsEnvironment {
     nodeEnv: process.env.NODE_ENV,
     deployEnv: process.env.NEXT_PUBLIC_DEPLOY_ENV,
     allowNonProduction: process.env[ANALYTICS_ALLOW_NONPROD_ENV],
+    hostname: globalThis.location?.hostname,
   }
 }
 
 /** Whether this build is one of our real production deployments. */
 function isProductionSurface(env: AnalyticsEnvironment): boolean {
   if (env.nodeEnv !== 'production') return false
+  if (isLoopbackHostname(env.hostname || '')) return false
   const deployEnv = (env.deployEnv || '').toLowerCase()
   return !NON_PRODUCTION_DEPLOY_ENVS.has(deployEnv)
 }
