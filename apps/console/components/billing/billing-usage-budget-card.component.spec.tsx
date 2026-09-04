@@ -84,7 +84,7 @@ const BUDGET_SET = {
   month: MONTH,
   spend: {
     meteredUsd: 25,
-    assistUsd: 0,
+    assistCredits: 0,
     totalUsd: 25,
     assistBilled: false,
     meteredFresh: true,
@@ -214,6 +214,37 @@ describe('the spend figure', () => {
       expect(screen.getByText(/haven’t totalled 2026-08 yet/i)).toBeTruthy(),
     )
     expect(screen.queryByText(/\$0\.00/)).toBeNull()
+  })
+
+  /*
+   * ASSIST CONSUMPTION IS SHOWN, AND IT IS SHOWN IN CREDITS.
+   *
+   * The figure behind a credit is `assistUsage/{month}.estCostUsd` — our
+   * provider bill at the serving model's list rates. This card used to print
+   * it in dollars, which put our unit cost, and with it our margin, on a
+   * customer's billing page. What a customer consumed is theirs to see; what
+   * it cost us is not.
+   */
+  it('renders Assist consumption in credits, and no dollar figure for it', async () => {
+    renderCard({
+      ...BUDGET_SET,
+      spend: { ...BUDGET_SET.spend, assistCredits: 2300 },
+    })
+    await waitFor(() =>
+      expect(screen.getByText(/2,300 Assist credits used/i)).toBeTruthy(),
+    )
+    // The provider bill behind 2,300 credits is $2.30. It must appear nowhere.
+    expect(screen.queryByText(/\$2\.30/)).toBeNull()
+    expect(screen.queryByText(/Assist/)?.textContent).not.toMatch(/\$/)
+  })
+
+  it('says nothing about Assist when none was consumed', async () => {
+    // Zero credits is not a fact worth a line, and a "0 Assist credits" row on
+    // every plan that has no Assist band would be noise standing where a real
+    // reading goes.
+    renderCard(BUDGET_SET)
+    await waitFor(() => expect(screen.getByText(/\$25\.00/)).toBeTruthy())
+    expect(screen.queryByText(/Assist credits used/i)).toBeNull()
   })
 })
 

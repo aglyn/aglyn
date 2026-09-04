@@ -67,6 +67,7 @@ import {
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { displayWindow } from '../../../../utils/display-window'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   USER_LIST_FILTER_FIELDS,
   USER_LIST_FILTER_HEADERS,
@@ -160,7 +161,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
 
   /*
    * SEARCH AND FILTER RUN ON THE SERVER, or they are not search and filter
-   * (AGL-693).
+   * (AGL-2501).
    *
    * Both used to narrow the rows already on screen — 200 accounts, one Auth
    * page — so both answered "no such account" for everyone past it. Firebase
@@ -190,7 +191,6 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
 
   const fetchUsersPage = useCallback(
     async (cursor: string | null, index: number) => {
-      const idToken = await (user as any)?.getIdToken?.()
       const params = new URLSearchParams()
       const { search: term, filter: item } = queryRef.current
       if (term) params.set('search', term)
@@ -203,9 +203,9 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
       // resuming one would page through the unfiltered directory instead.
       if (cursor && !term && !item) params.set('nextPageToken', cursor)
       const query = params.toString()
-      const response = await fetch(
+      const response = await authorizedFetch(
+        user,
         `/api/admin/users${query ? `?${query}` : ''}`,
-        { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
       )
       if (!response.ok) throw new Error(`Listing failed (${response.status})`)
       const payload = await response.json()
@@ -235,7 +235,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
     enqueueSnackbar('Could not load users', { variant: 'error' })
   }, [enqueueSnackbar])
   /*
-   * TWO PAGE SIZES, and they are not the same question (AGL-693).
+   * TWO PAGE SIZES, and they are not the same question (AGL-2501).
    *
    * `AUTH_LIST_PAGE_SIZE` is the width of the WALK — a transport detail.
    * `listUsersAcrossPools` only appends tenant-pool users once the
@@ -354,15 +354,15 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
     async (record: AdminUser, role: string) => {
       setBusy(true)
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/admin/users/manage', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        const response = await authorizedFetch(
+          user,
+          '/api/admin/users/manage',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'setRole', uid: record.uid, role }),
           },
-          body: JSON.stringify({ action: 'setRole', uid: record.uid, role }),
-        })
+        )
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
           return void enqueueSnackbar(payload?.error ?? 'Role change failed', {
@@ -400,15 +400,15 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
       if (!confirmed) return
       setBusy(true)
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/admin/users/manage', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        const response = await authorizedFetch(
+          user,
+          '/api/admin/users/manage',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action, uid: record.uid }),
           },
-          body: JSON.stringify({ action, uid: record.uid }),
-        })
+        )
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
           return void enqueueSnackbar(payload?.error ?? 'Action failed', {
@@ -448,7 +448,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
   )
 
   /*
-   * One row grammar, the console's (AGL-693). `valueGetter` on every column
+   * One row grammar, the console's (AGL-2501). `valueGetter` on every column
    * the grid must SORT by something other than what it draws — a timestamp
    * rendered as text sorts as text, which puts 12 January before 2 February.
    */
@@ -738,7 +738,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
               />
               {/*
                 The console's shared footer, driven by the DISPLAY page
-                (AGL-693). `rowCount` is the number of rows this page actually
+                (AGL-2501). `rowCount` is the number of rows this page actually
                 DREW — not the walk's length and not the collapsed total —
                 because this is the screen staff check when they think an
                 account is missing, and it must not claim a row it did not

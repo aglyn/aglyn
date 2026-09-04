@@ -64,6 +64,24 @@ const NOT_ENFORCEMENT = [
   'libs/tenant/runtime/src/lib/org-permissions.ts',
 ]
 
+/**
+ * A plugin's console REGISTRATION module, which names keys without enforcing
+ * any of them.
+ *
+ * `ConsoleExtension.permission` and `ConsoleNavItem.permission` put the key
+ * as a quoted literal into `libs/plugins/<name>/src/lib/plugin.ts`, which is
+ * inside `ENFORCEMENT_ROOTS` — so a surface that DECLARES a requirement would
+ * otherwise satisfy this guard on the strength of the declaration, which is
+ * the same "mentions it without enforcing it" the list above exists to strip.
+ * Worse than the declaration file's version of that mistake, because the
+ * shell gate a registration buys is real authorization: it looks like the
+ * missing server check while running in the browser.
+ *
+ * These modules are the client half by construction — a plugin's server
+ * surface is `server.ts` and `server/`, neither of which this matches.
+ */
+const REGISTRATION_MODULE = /^libs\/plugins\/[^/]+\/src\/lib\/plugin\.tsx?$/
+
 function gitGrepFiles(needle: string, roots: string[]): string[] {
   try {
     return execFileSync(
@@ -102,6 +120,7 @@ function serverFilesEnforcing(key: string): string[] {
     .flatMap((needle) => gitGrepFiles(needle, ENFORCEMENT_ROOTS))
     .filter((path) => !/\.spec\./.test(path))
     .filter((path) => !NOT_ENFORCEMENT.includes(path))
+    .filter((path) => !REGISTRATION_MODULE.test(path))
 }
 
 describe('every plugin-declared permission is enforced server-side (AGL-2474)', () => {
@@ -132,6 +151,25 @@ describe('every plugin-declared permission is enforced server-side (AGL-2474)', 
     )
     expect(serverFilesEnforcing('managePos')).not.toContain(
       'libs/plugins/commerce/src/lib/model/plugin-permissions.ts',
+    )
+  })
+
+  it('a surface DECLARING a key does not thereby enforce it', () => {
+    /*
+     * `libs/plugins/commerce/src/lib/plugin.ts` names `managePos` on the POS
+     * nav item so the console shell refuses the route before the register
+     * mounts. That is authorization, and it is worth having — but it runs in
+     * the browser, so counting it here would let a plugin satisfy this guard
+     * with a gate an HTTP client walks straight past. The key survives on
+     * `server/pos-order.ts`, which is the only thing that can refuse a sale.
+     */
+    const raw = gitGrepFiles('managePos', ['libs/plugins'])
+    expect(raw).toContain('libs/plugins/commerce/src/lib/plugin.ts')
+    expect(serverFilesEnforcing('managePos')).not.toContain(
+      'libs/plugins/commerce/src/lib/plugin.ts',
+    )
+    expect(serverFilesEnforcing('managePos')).toContain(
+      'libs/plugins/commerce/src/lib/server/pos-order.ts',
     )
   })
 

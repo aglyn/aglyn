@@ -36,6 +36,7 @@ import {
 } from '@mui/material'
 import { type ReactNode, useCallback, useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 import useBranding from '../hooks/use-branding'
 import useCurrentOrg from '../hooks/use-current-org'
@@ -286,13 +287,9 @@ export function OrgSsoCard() {
     ) => {
       if (!orgId) return null
        
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/orgs/sso', {
+      const response = await authorizedFetch(user, '/api/orgs/sso', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...body, orgId }),
       })
       const payload = await response.json().catch(() => ({}))

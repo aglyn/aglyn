@@ -59,6 +59,11 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     .writeGuardedBySeed,
   useFirestoreCollection: jest.requireActual('@aglyn/tenant-feature-instance')
     .useFirestoreCollection,
+  // Also real, and for the same reason: it is a pure function, and the rows
+  // these tests drive through the page are exactly what it returns. A stub
+  // free to slice differently would be testing the stub.
+  ceilingedWindow: jest.requireActual('@aglyn/tenant-feature-instance')
+    .ceilingedWindow,
   setFirestoreSessionReporters: jest.requireActual(
     '@aglyn/tenant-feature-instance',
   ).setFirestoreSessionReporters,

@@ -18,6 +18,11 @@ export const TENANT_PLUGIN_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-mui'),
   },
   {
+    id: 'forms',
+    register: {"site":"registerFormsPlugin"},
+    load: () => import('@aglyn/plugins-forms'),
+  },
+  {
     id: 'bookings',
     apiPrefixes: ["bookings"],
     register: {"site":"registerBookingsPlugin"},

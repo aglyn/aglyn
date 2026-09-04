@@ -15,6 +15,11 @@
  * limitations under the License.
  */
 
+import {
+  authorizedFetch,
+  type MaybeTokenSource,
+} from '@aglyn/shared-util-http/authorized-token'
+
 /**
  * Follow a staff list route's cursor to the end, with a page ceiling
  * (AGL-2083).
@@ -75,7 +80,15 @@ export interface FetchAllPagesOptions {
   cursorParam?: string
   /** Response field carrying the next cursor. */
   cursorField?: string
-  headers?: Record<string, string>
+  /**
+   * The signed-in account. Every page is authorized from it directly rather
+   * than from a header the caller assembled: a caller that resolved its own
+   * token first has already awaited a refresh with no deadline before the
+   * walk begins, and one that could not resolve a token would walk the whole
+   * list unauthenticated and read the route's refusal as a short list — the
+   * failure this helper exists to make impossible.
+   */
+  user: MaybeTokenSource
   maxPages?: number
   /** Abort check between pages, so an unmounted caller stops fetching. */
   active?: () => boolean
@@ -103,7 +116,7 @@ export async function fetchAllPages<T = unknown>(
     key,
     cursorParam = 'after',
     cursorField = 'nextCursor',
-    headers = {},
+    user,
     maxPages = MAX_PAGES,
     active,
     accumulate = [],
@@ -123,7 +136,7 @@ export async function fetchAllPages<T = unknown>(
       : path
     let payload: Record<string, unknown>
     try {
-      const response = await fetch(url, { headers })
+      const response = await authorizedFetch(user, url)
       if (!response.ok) return { items, truncated: true, pages, extras }
       payload = await response.json()
     } catch {

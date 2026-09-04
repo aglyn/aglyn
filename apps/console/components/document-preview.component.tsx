@@ -57,6 +57,7 @@ import {
   readPreviewState,
 } from '../constants/preview-state'
 import firestoreOneShotRetry from '../utils/firestore-one-shot-retry'
+import { useDeclareDocumentSubject } from './document-subject'
 
 const SUPPRESSED_SCREEN_LINKS = { suppressNavigation: true }
 
@@ -74,6 +75,25 @@ const KIND_LABEL: Record<PreviewKind, string> = {
   component: 'component',
   layout: 'layout',
   template: 'template',
+  form: 'form',
+}
+
+/**
+ * The host-scoped collection each previewable kind's PARENT document lives in
+ * (AGL-2551), i.e. `hosts/{hostId}/{collection}/{docId}`.
+ *
+ * Spelled out rather than pluralized from the kind. The two are equal today
+ * and the map is one line longer for it, but a kind whose collection is not
+ * `kind + 's'` would otherwise read a path that does not exist and fail as a
+ * missing name — silently, since the name is optional decoration on this
+ * surface.
+ */
+const KIND_COLLECTION: Record<PreviewKind, string> = {
+  screen: 'screens',
+  component: 'components',
+  layout: 'layouts',
+  template: 'templates',
+  form: 'forms',
 }
 
 /**
@@ -180,6 +200,13 @@ export function DocumentPreview(props: DocumentPreviewProps) {
   const [definitions, setDefinitions] = useState<
     Record<string, Aglyn.ReusableComponentTree> | undefined
   >(undefined)
+  // The published design of each form entity, keyed by id, on the same
+  // "`undefined` means still loading" contract. Read beside the definitions
+  // because a placed form resolves the same way an instance does, and Preview
+  // has to agree with the tenant about both.
+  const [formDesigns, setFormDesigns] = useState<
+    Record<string, Aglyn.PlacedFormDesign> | undefined
+  >(undefined)
   // Consent-banner region simulation (AGL-1498); see ConsentSimulation.
   const [consentSim, setConsentSim] = useState<ConsentSimulation>('off')
   const [consentHost, setConsentHost] = useState<Aglyn.VisitorConsentHost | null>(
@@ -194,10 +221,73 @@ export function DocumentPreview(props: DocumentPreviewProps) {
     advertising: boolean
   } | null>(null)
 
+  // The display name of the document being previewed, for the browser tab
+  // (AGL-2551). `undefined` while the read is outstanding, and it stays that
+  // way if the read finds nothing — see the declaration below.
+  const [subjectName, setSubjectName] = useState<string | undefined>(undefined)
+
   const hostId = ids?.hostId
   const kind = ids?.kind
   const docId = ids?.docId
   const versionId = ids?.versionId
+
+  /**
+   * The tab names WHICH document is open, not just its site (AGL-2486).
+   *
+   * The besigner routes get this for free: they already hold the document, so
+   * they hand its `displayName` to `useDeclareDocumentSubject` and the id the
+   * server put in the title is swapped for the name. Preview held nothing to
+   * hand over — the snapshot in `localStorage` carries `nodes` and `theme` and
+   * no name — so all five preview routes shipped titling themselves with the
+   * raw id (AGL-2551). That is not a fallback firing; it was the only title
+   * the route could produce.
+   *
+   * So the name is read here, once, from the PARENT document rather than the
+   * version: `displayName` is a property of the screen/component/layout/
+   * template/form, and `AglynScreenVersion` has no such field — unlike
+   * `layoutId`, which really is version-first and is resolved that way by the
+   * besigner and the tenant runtime alike. Reading the version for a name
+   * would find nothing on every document there is.
+   *
+   * One document read, on a surface that already reads the host, its
+   * component definitions and its form designs before it can paint. A failure
+   * is swallowed: an unnamed preview tab is the behavior that shipped, and
+   * the id title underneath it is still unique per document.
+   */
+  useEffect(() => {
+    if (!firestore || !hostId || !kind || !docId) return undefined
+    let cancelled = false
+    firestoreOneShotRetry(
+      () =>
+        getDoc(
+          firestoreDoc(
+            firestore,
+            'hosts',
+            hostId,
+            KIND_COLLECTION[kind],
+            docId,
+          ),
+        ),
+      'preview-subject',
+    )
+      .then((snapshot) => {
+        if (cancelled) return
+        setSubjectName(
+          (snapshot.data() as { displayName?: string } | undefined)
+            ?.displayName,
+        )
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [firestore, hostId, kind, docId])
+
+  // Unconditional, and tolerant of a name that has not arrived: until one
+  // does, the hook leaves the server's id title alone rather than blanking the
+  // subject. Clears on unmount so closing a preview cannot strand its name in
+  // a tab that has navigated elsewhere.
+  useDeclareDocumentSubject(docId, subjectName)
 
   // The host's consent config (GA id + mode), read lazily the first time the
   // simulator is switched on — the default 'off' costs nothing.
@@ -327,9 +417,16 @@ export function DocumentPreview(props: DocumentPreviewProps) {
         for (const docSnapshot of res.docs) {
           const value = docSnapshot.data() as Aglyn.AglynHostComponent
           if (value?.deletedAt || !value?.nodes || !value?.rootId) continue
+          // BOTH stored forms (AGL-1151), mirroring `get-components.ts`: this
+          // surface has to agree with the tenant about what each definition
+          // contains, and a raw read agrees with nothing.
+          const nodes = Aglyn.decodeStoredNodes<
+            Aglyn.ReusableComponentTree['nodes']
+          >(value.nodes)
+          if (!nodes) continue
           next[docSnapshot.id] = {
             rootId: value.rootId,
-            nodes: value.nodes as Aglyn.ReusableComponentTree['nodes'],
+            nodes,
             // Preview is a third render surface (AGL-1247): it must agree
             // with the tenant about each instance's prop values.
             ...(value.props?.length && { props: value.props }),
@@ -340,6 +437,37 @@ export function DocumentPreview(props: DocumentPreviewProps) {
       .catch((error) => {
         console.error(error)
         if (!cancelled) setDefinitions({})
+      })
+
+    // Form entities (`docs/specs/reusable-forms.md`), read the same way and
+    // failing open the same way: an empty map leaves each placed form
+    // rendering the fields the document itself holds, which is what Preview
+    // showed before entities existed.
+    firestoreOneShotRetry(
+      () =>
+        getDocs(
+          query(collection(firestore, 'hosts', hostId, 'forms'), limit(200)),
+        ),
+      'forms',
+    )
+      .then((res) => {
+        if (cancelled) return
+        const next: Record<string, Aglyn.PlacedFormDesign> = {}
+        for (const docSnapshot of res.docs) {
+          const value = docSnapshot.data() as Aglyn.FormDocument
+          if (!value?.nodes || !value?.rootId) continue
+          // BOTH stored forms (AGL-1151), mirroring `get-forms.ts`.
+          const nodes = Aglyn.decodeStoredNodes<
+            NonNullable<Aglyn.FormDocument['nodes']>
+          >(value.nodes)
+          if (!nodes?.[value.rootId]) continue
+          next[docSnapshot.id] = { rootId: value.rootId, nodes }
+        }
+        setFormDesigns(next)
+      })
+      .catch((error) => {
+        console.error(error)
+        if (!cancelled) setFormDesigns({})
       })
     // A read that never SETTLES is the case the `.catch` above cannot cover,
     // and it is the one that produced "Preview opens a tab that never
@@ -364,6 +492,17 @@ export function DocumentPreview(props: DocumentPreviewProps) {
         )
         return {}
       })
+      // The forms read is gated by the same apply effect, so a hang there
+      // holds the tab blank exactly as a hung components read would.
+      setFormDesigns((current) => {
+        if (current) return current
+        console.warn(
+          `[preview] the host forms read did not settle within ` +
+            `${DEFINITIONS_TIMEOUT_MS}ms — rendering each placed form from ` +
+            'the document itself rather than holding a blank page.',
+        )
+        return {}
+      })
     }, DEFINITIONS_TIMEOUT_MS)
     return () => {
       cancelled = true
@@ -377,7 +516,13 @@ export function DocumentPreview(props: DocumentPreviewProps) {
     // with a "loading" empty map would render the placeholder and then swap it
     // for the real nav a beat later — a visible flash of chrome that the live
     // site never shows.
-    if (!definitions) return
+    if (!definitions || !formDesigns) return
+    const previewableFormDesigns =
+      kind === 'form' && docId && docId in formDesigns
+        ? Object.fromEntries(
+            Object.entries(formDesigns).filter(([id]) => id !== docId),
+          )
+        : formDesigns
     const resolved: PreviewStateIds = { hostId, kind, docId, versionId }
 
     const applyState = () => {
@@ -393,6 +538,15 @@ export function DocumentPreview(props: DocumentPreviewProps) {
           Aglyn.composeReusableComponentNodes(
             state.nodes as any,
             definitions as any,
+            // Placed forms resolve here too, in the SAME call the tenant makes
+            // — one graft that expands a component inside a form design and a
+            // form inside a component, in either nesting order.
+            //
+            // Except the form being PREVIEWED. `checkFormContract` requires a
+            // form design's `form` node to name its own form, so previewing a
+            // form finds itself in the map — and would render the published
+            // version in place of the draft this preview exists to show.
+            [Aglyn.placedFormPlacement(previewableFormDesigns as any)],
           ) as any,
         ),
       )
@@ -406,7 +560,7 @@ export function DocumentPreview(props: DocumentPreviewProps) {
     }
     window.addEventListener('storage', handleStorage)
     return () => window.removeEventListener('storage', handleStorage)
-  }, [hostId, kind, docId, versionId, definitions])
+  }, [hostId, kind, docId, versionId, definitions, formDesigns])
 
   // Interactions parity (AGL-830): mount the registered site runtimes exactly
   // like the tenant page, each fed the page-props slice it rebuilds

@@ -78,7 +78,7 @@ true:
 - it is **unsaved work until you save**, like any other edit, rather than
   going live the moment the dialog closes.
 
-**Workflows → Actions is a different list.** Actions are things the *site*
+**Automation → Actions is a different list.** Actions are things the *site*
 does — an order was placed, a form was submitted — so they are site-wide and
 live outside any one page. Interactions are things an *element* does, and
 they are edited only here, on the element.

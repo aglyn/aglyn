@@ -31,7 +31,7 @@ import useOrgPermissions from '../../../../../hooks/use-org-permissions'
 import type { ReactNode } from 'react'
 
 /**
- * The Team page's sections, as routes (AGL-693).
+ * The Team page's sections, as routes (AGL-2501).
  *
  * A ROUTE GROUP, so this shell wraps the sections and NOT `team/[uid]` — the
  * member detail page is a destination in its own right and a section nav

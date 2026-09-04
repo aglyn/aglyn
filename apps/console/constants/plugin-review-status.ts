@@ -120,6 +120,12 @@ export const VERIFIED_STRIPPED_STATUS = 'listed'
  * the browse card's "Reviewed" chip and the listing page's caution alert — test
  * against `'approved'`, so any non-approved value behaves correctly; naming it
  * honestly costs nothing.
+ *
+ * This value belongs to the LISTING's summary field, never to a version's own
+ * `reviewState` — see `ListingLatestVersionReviewState` in the marketplace
+ * model for the distinction and for why the staff queue must keep keying on
+ * the version. The version keeps the `approved` it earned; only the listing's
+ * summary flips.
  */
 export const REVOKED_VERSION_REVIEW_STATE = 'revoked'
 

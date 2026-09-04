@@ -64,12 +64,16 @@ const REPO_ROOT = join(__dirname, '..', '..', '..')
 /** The two surfaces that start a checkout and then navigate away. */
 const EMITTERS = [
   {
-    file: 'apps/console/app/(app)/[orgSlug]/billing/page.tsx',
-    what: 'the console plan checkout (hosted Stripe redirect)',
-    // One emit, covering both the embedded and the redirect shape.
+    file: 'apps/console/app/(app)/[orgSlug]/billing/(sections)/page.tsx',
+    what: 'the console plan subscribe (no navigation at all)',
     emits: 1,
-    // ...and none of them may be the un-awaitable spelling.
-    bare: 0,
+    // The un-awaitable spelling is now the CORRECT one here. Subscribing is a
+    // server-side call against a stored payment method — the console never
+    // hands the browser to Stripe, so there is no navigation for the hit to
+    // lose a race against. `navigates: false` is what makes that a rule rather
+    // than an omission: the two navigation assertions invert for this file.
+    bare: 1,
+    navigates: false,
   },
   {
     file: 'libs/plugins/commerce/src/lib/components/cart.tsx',
@@ -83,6 +87,7 @@ const EMITTERS = [
     // this becomes two, the redirect branch has been downgraded back into the
     // race, and every other assertion here would still pass.
     bare: 1,
+    navigates: true,
   },
 ] as const
 
@@ -96,7 +101,7 @@ function read(file: string): string {
 }
 
 describe('begin_checkout survives the checkout navigation (AGL-1580)', () => {
-  describe.each(EMITTERS)('$what', ({ file, emits, bare }) => {
+  describe.each(EMITTERS)('$what', ({ file, emits, bare, navigates }) => {
     it('still emits begin_checkout, exactly as many times as it should', () => {
       // The bare regression guard: deleting an emit used to be entirely
       // silent. Counted rather than merely present, so losing ONE of the
@@ -105,7 +110,17 @@ describe('begin_checkout survives the checkout navigation (AGL-1580)', () => {
       expect(found).toHaveLength(emits)
     })
 
-    it('emits through the navigation-safe delivery helper', () => {
+    it('emits through the delivery helper its navigation demands', () => {
+      if (!navigates) {
+        // Nothing navigates on this path, so the navigation-safe helper would
+        // be borrowed machinery: it exists to hold a redirect open until the
+        // hit lands, and there is no redirect. Asserted as an ABSENCE so a
+        // future edit cannot quietly reintroduce one and keep this green.
+        expect(read(file)).not.toMatch(
+          /trackEventBeforeNavigation\(\s*'begin_checkout'/,
+        )
+        return
+      }
       expect(read(file)).toMatch(
         /trackEventBeforeNavigation\(\s*'begin_checkout'/,
       )
@@ -121,6 +136,15 @@ describe('begin_checkout survives the checkout navigation (AGL-1580)', () => {
 
     it('waits for the hit before handing the browser to Stripe', () => {
       const source = read(file)
+      if (!navigates) {
+        // The stronger statement: the browser is never handed to Stripe on
+        // this path at all. A `window.location.assign` reappearing next to
+        // this emit would mean the checkout redirect came back.
+        const emit = source.search(/trackEvent\(\s*'begin_checkout'/)
+        expect(emit).toBeGreaterThan(-1)
+        expect(source.indexOf('window.location.assign', emit)).toBe(-1)
+        return
+      }
 
       // Anchored on the EMIT, not on the first `window.location.assign` in the
       // file — the console page has an unrelated earlier redirect, and

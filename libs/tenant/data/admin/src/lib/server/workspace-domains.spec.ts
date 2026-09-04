@@ -35,6 +35,10 @@
  * A workspace must not fail to be created because a DNS API was slow.
  */
 
+// A module, not a script — without this the `load` helper below collides with
+// the identically named global in `domain-provider.spec.ts` under `tsc`.
+export {}
+
 const ENV = {
   VERCEL_TOKEN: 'tok_test',
   VERCEL_CONSOLE_PROJECT_ID: 'prj_test',

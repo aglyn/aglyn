@@ -23,9 +23,9 @@ import { resolve } from 'path'
  * Self-host ratchet: Aglyn's own hostnames may not appear in runtime code
  * except where it is written down WHY (AGL-2195).
  *
- * the rule: *"the self hosted owner should not have to edit the source to
- * update aglyn branded items urls or personal identification items, should
- * move these to env vars"*. `NEXT_PUBLIC_TENANT_DOMAIN` and
+ * The rule: a self-host operator changes Aglyn-branded URLs and identifying
+ * values by setting an environment variable, never by editing the source.
+ * `NEXT_PUBLIC_TENANT_DOMAIN` and
  * `NEXT_PUBLIC_WORKSPACE_DOMAIN` exist and are honoured by `TENANT_APEX` and
  * `WORKSPACE_DOMAIN` — and were then ignored by four surfaces that re-derived
  * the apex by hand, including the JSON-LD a published site emits. A
@@ -310,6 +310,12 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
     count: 1,
     reason:
       "The email mirror of TENANT_APEX. `shared-util-email` is tagged scope:shared and cannot import @aglyn/aglyn, so the copy is structural; apps/console/specs/email-media-src-drift.spec.ts holds the two to the same answer, including under a configured apex.",
+  },
+  {
+    file: 'libs/shared/util/email/src/lib/platform-sending-domain.ts',
+    count: 1,
+    reason:
+      "`tenantWebApex()` — the mail layer's reader of NEXT_PUBLIC_TENANT_DOMAIN, and the literal is only its `||` default. The same structural copy as email-media-src.ts above and for the same reason: `shared-util-email` is tagged scope:shared and cannot import TENANT_APEX from @aglyn/aglyn. The mail apex built on it is separately configurable through AGLYN_TENANT_MAIL_APEX and defaults to `mail.{web apex}`, so an operator who sets the tenant domain gets a sending namespace inside their own zone rather than inside ours; platform-sending-domain.spec.ts holds this function to the configured value, so the default cannot become the answer for a deployment that set one.",
   },
   {
     file: 'libs/aglyn/src/lib/app-utils/host-naming.ts',

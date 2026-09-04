@@ -88,7 +88,7 @@ async function handler(request: Request): Promise<Response> {
     // One extra row tells us whether a next page exists.
     const pageSize = resolvePageSize(query['pageSize'])
     /*
-     * SEARCH RUNS ON THE SERVER, or it is not a search (AGL-693).
+     * SEARCH RUNS ON THE SERVER, or it is not a search (AGL-2501).
      *
      * The staff list is paged, so a filter applied in the browser sees the
      * rows on screen and nothing else — ten of them by default. That reads
@@ -137,7 +137,7 @@ async function handler(request: Request): Promise<Response> {
           .catch(() => null)
       : null
     /*
-     * The column filter panel, answered by the QUERY (AGL-693).
+     * The column filter panel, answered by the QUERY (AGL-2501).
      *
      * The panel was switched off for a while because `filterMode="server"`
      * stops the grid applying anything itself, and this handler read only the

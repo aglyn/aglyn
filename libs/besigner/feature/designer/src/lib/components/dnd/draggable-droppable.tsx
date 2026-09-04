@@ -42,6 +42,7 @@ import {
 } from '../../utils/inline-text-edit.store'
 import { requestCanvasContextMenu } from '../../utils/canvas-context-menu'
 import { findInstanceLeafAtPoint } from '../../utils/instance-leaf-hit'
+import { findLeafTextElement } from '../../utils/in-place-edit-surface'
 
 export interface DraggableDroppableProps<T extends Aglyn.NodeSchema<any>> {
   children: JSX.Element
@@ -287,7 +288,15 @@ export const DraggableDroppable = observer(
         if (editable) {
           e.preventDefault()
           e.stopPropagation()
-          const element = e.currentTarget as Element
+          const root = e.currentTarget as Element
+          // The node's own `<aglyn-text>` whenever it renders one, and the
+          // root only as a fallback (AGL-2556). In-place editing EMPTIES
+          // whatever it is given, so handing it a composite's root deletes
+          // the chrome that composite built — for Accordion Summary that is
+          // the content div carrying MUI's `textAlign: 'start'`, without
+          // which the UA stylesheet centres the label inside the `<button>`
+          // for as long as the edit is open.
+          const element = findLeafTextElement(root) ?? root
           const rect = element.getBoundingClientRect()
           inlineTextEdit.open(
             node,

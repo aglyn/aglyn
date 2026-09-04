@@ -27,6 +27,8 @@ import {
   withBesignerContext,
   type BesignerSaveBaseline,
   type WorkspaceEditorComponentProps,
+  useClearCanvasCallback,
+  useRepairDocumentCallback,
 } from '@aglyn/besigner-ui'
 import {
   ICON_VARIANT_MODIFY_ADD,
@@ -46,6 +48,7 @@ import {
   saveNodesGuarded,
   useFirestore,
   useUser,
+  withBesignerNodes,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { Alert, Button, Stack, TextField, Typography } from '@mui/material'
@@ -189,12 +192,19 @@ function SystemEmailBesignerPage() {
   } = useFirestoreDoc<SystemEmailVersionState>(
     () =>
       editable
-        ? doc(
-            firestore,
-            SYSTEM_EMAIL_COLLECTION,
-            templateKey,
-            'versions',
-            versionId,
+        ? // Compressed at rest (AGL-1151). The converter has to be on the READ
+          // as well as the write: `useBesignerDocument` and `saveNodesGuarded`
+          // both compare the stored `nodes` against a baseline taken from this
+          // snapshot, so the two must arrive in the same shape or every save
+          // reads as somebody else's write.
+          withBesignerNodes<SystemEmailVersionState>(
+            doc(
+              firestore,
+              SYSTEM_EMAIL_COLLECTION,
+              templateKey,
+              'versions',
+              versionId,
+            ),
           )
         : null,
     [firestore, templateKey, versionId, editable],
@@ -216,14 +226,16 @@ function SystemEmailBesignerPage() {
       // writer's commit aborts server-side instead of clobbering it. The
       // pointer write below stays outside the guard — it carries no nodes.
       await saveNodesGuarded(
-        doc(
-          firestore,
-          SYSTEM_EMAIL_COLLECTION,
-          templateKey,
-          'versions',
-          versionId,
+        withBesignerNodes<SystemEmailVersionState>(
+          doc(
+            firestore,
+            SYSTEM_EMAIL_COLLECTION,
+            templateKey,
+            'versions',
+            versionId,
+          ),
         ),
-        { templateKey, nodes: nextNodes, updatedAt: stamp },
+        { templateKey, nodes: nextNodes, updatedAt: stamp } as never,
         baseline,
       )
       // Re-point the template at this version on every save, not just the
@@ -244,6 +256,12 @@ function SystemEmailBesignerPage() {
     [firestore, templateKey, versionId, user],
   )
 
+  // Document maintenance (AGL-2554 / AGL-2555). Both sit on Edit beside
+  // Raw JSON, which is the escape hatch they exist to make unnecessary:
+  // an unrenderable node cannot be selected, so neither Delete Element nor
+  // Add Element can reach one.
+  const clearCanvas = useClearCanvasCallback('email')
+  const repairDocument = useRepairDocumentCallback('email')
   const {
     saveAvailable,
     remoteChanged,
@@ -453,6 +471,21 @@ function SystemEmailBesignerPage() {
                 id: 'center-nav-edit-rawjson',
                 children: 'Raw JSON',
                 onClick: () => openJsonEditor(),
+                ListItemTextProps: { inset: true },
+              },
+              {
+                type: 'divider',
+              },
+              {
+                id: 'center-nav-edit-repair',
+                children: 'Repair email',
+                onClick: () => repairDocument(),
+                ListItemTextProps: { inset: true },
+              },
+              {
+                id: 'center-nav-edit-clear',
+                children: 'Clear canvas',
+                onClick: () => clearCanvas(),
                 ListItemTextProps: { inset: true },
               },
             ],

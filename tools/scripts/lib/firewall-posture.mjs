@@ -108,6 +108,35 @@
 // looser group. That is why `evaluateRule` below requires EVERY group to carry
 // EVERY required condition, rather than looking for one group that matches.
 //
+// ## Scope has a twin, and it was missing until 2026-09-03: COVERAGE
+//
+// Scope answers "is this hole still narrow". It cannot answer "is this hole
+// still THERE", because both of the mechanisms that let one rule serve several
+// paths — `valueAnyOf` and `alsoRequiresGroups` — describe what a live group is
+// ALLOWED to be, and an allowance is satisfied vacuously by a group that does
+// not exist. Delete the `/robots.txt` group from the crawler rule and every
+// surviving group still carries a path on the allowlist: green, with crawlers
+// challenged.
+//
+// AGL-2520 is the case that found it. `/sitemap.xml` became an index naming
+// children at `/sitemaps/{section}/{page}.xml`, the table declared the prefix
+// group those children need, and the checker went on reporting a match against
+// a live rule that did not have it — because the declaration only ever said
+// "a group of this shape is acceptable". The feature would have shipped with
+// every child sitemap answering Googlebot a 429, with the repo green and the
+// daily drift job green.
+//
+// So `evaluateRule` asserts BOTH directions:
+//
+//   scope     every live group carries every required condition
+//             → a rule cannot be widened by appending a looser group
+//   coverage  every declared path and every declared alternate group shape has
+//             SOME live group carrying it
+//             → a rule cannot be narrowed, or shipped un-widened, in silence
+//
+// Anything the table declares must exist. That is the whole rule, and it is
+// why `alsoRequiresGroups` is not named `alsoAllows`.
+//
 // ## Secrets
 //
 // The probe rule matches on a shared-secret header VALUE, and that value is
@@ -138,6 +167,34 @@ const PROBE_BYPASS_RULE = Object.freeze({
   name: 'CI and uptime probe bypass',
   why: 'uptime-probe.yml would report a false outage on every run without it',
   conditions: [PROBE_HEADER_CONDITION],
+})
+
+/**
+ * The link-preview crawler allowlist, named once so the tenant and docs
+ * entries cannot drift apart by transcription.
+ *
+ * A User-Agent match is the WEAKEST condition in this table, and it is here
+ * because the strong ones are unavailable: `bot_category` and `bot_name`,
+ * which Vercel verifies by reverse DNS rather than by a spoofable string,
+ * both answer `401 This feature requires an Advanced Project` on our plan.
+ *
+ * What that costs is bounded. The rule bypasses the bot challenge and nothing
+ * else, and everything it admits is public HTML that anyone may already fetch
+ * by solving a challenge in a headless browser. The exposure is function
+ * invocations, not confidentiality — so the proportionate control if it is
+ * ever abused is a rate limit on this User-Agent set, not a deny.
+ */
+const SOCIAL_CRAWLER_BYPASS_RULE = Object.freeze({
+  name: 'Social preview crawler bypass',
+  why: 'a link-preview crawler cannot solve a JavaScript challenge, so a 429 checkpoint means it never reads og:image and every shared link renders bare',
+  conditions: Object.freeze([
+    Object.freeze({
+      type: 'user_agent',
+      op: 're',
+      value:
+        'facebookexternalhit|Facebot|Twitterbot|LinkedInBot|Slackbot|WhatsApp|TelegramBot|Discordbot|Pinterest|redditbot|SkypeUriPreview|Applebot|Embedly|Iframely|Cardyb|Mastodon|GoogleImageProxy',
+    }),
+  ]),
 })
 
 /**
@@ -219,6 +276,157 @@ export const EXPECTED_POSTURE = Object.freeze([
           Object.freeze({ type: 'path', op: 'pre', value: '/api/health' }),
         ]),
       }),
+      Object.freeze({
+        name: 'Email link bypass',
+        why: 'RFC 8058 one-click unsubscribe is a mailbox-provider POST with no browser, so a challenge makes a legally required opt-out structurally impossible to complete',
+        // ADDED 2026-08-31 (AGL-2408). Every link in the footer of every
+        // campaign, and the `List-Unsubscribe` URL in its headers, points at
+        // this host and was answering 429 Vercel Security Checkpoint.
+        //
+        // WHY THIS IS NOT MERELY A BROKEN LINK. `campaign-send.ts` sets
+        // `List-Unsubscribe-Post: List-Unsubscribe=One-Click` alongside
+        // `List-Unsubscribe`, and Gmail and Yahoo honor that pair by POSTing
+        // to the URL from their own servers — no browser, no JavaScript, no
+        // cookie jar. A challenge is a JavaScript proof of work, so such a
+        // caller cannot pass it in principle rather than by misconfiguration.
+        // The consequence is not a degraded experience: the opt-out mechanism
+        // that CAN-SPAM and the GDPR require, and that both providers require
+        // of a bulk sender, cannot be completed by anyone.
+        //
+        // WHY PATH-ONLY IS CORRECT HERE, where the job runner above carries a
+        // header condition as well: a shared-secret condition is not merely
+        // inconvenient, it is unavailable. The callers are Gmail's servers and
+        // the recipient's own mail client, neither of which we configure and
+        // neither of which will ever send a header we invent. The
+        // authorization these routes actually rely on is already IN THE URL —
+        // `openSignedLink` in `libs/plugins/email/src/lib/server.ts` refuses
+        // any request whose `sig` is not an HMAC of the parameters under
+        // `EMAIL_UNSUBSCRIBE_SECRET`, so a caller who cannot forge the
+        // signature reaches a 403 and changes nothing. Bypassing the bot
+        // challenge removes a proof-of-work the real callers cannot perform;
+        // it does not remove the check that decides who may act.
+        //
+        // Writes still need a POST. All four handlers render a page on GET and
+        // act only on POST, so a link prescanner following any of them changes
+        // nothing — that property lives in the handlers and is not weakened by
+        // anything here.
+        //
+        // EXACT PATHS, NOT A `pre` PREFIX, and this is the part to preserve.
+        // `/api/email` is a SHARED namespace, not this plugin's private one:
+        // `email/events` (the Resend webhook), `email/list-import-*`,
+        // `email/list-members-add` and `email/suppression-*` all live under it
+        // too. Today they register on `consoleApi` and so are not served by
+        // this project at all — but they are one `plugins.config.json` edit
+        // away from being, and a prefix rule here would silently unchallenge
+        // whichever of them moved, on the day it moved. The four below are the
+        // complete set that `registerEmailApi` serves on the tenant, and each
+        // is a link we mail to a person.
+        //
+        // MEASURED on 2026-08-31, anonymous curl, deliberately invalid `sig`:
+        //   GET  /api/email/preferences  403 "Invalid preferences link"
+        //   POST /api/email/unsubscribe  403 "Invalid unsubscribe link"
+        //   GET  /                       429 (the page challenge still stands)
+        // A 403 from our own handler rather than a checkpoint page is the
+        // proof: the request reached the app, and the HMAC refused it there.
+        conditions: Object.freeze([
+          Object.freeze({
+            type: 'path',
+            op: 'eq',
+            valueAnyOf: Object.freeze([
+              '/api/email/unsubscribe',
+              '/api/email/preferences',
+              '/api/email/resubscribe',
+              '/api/email/confirm',
+            ]),
+          }),
+        ]),
+      }),
+      Object.freeze({
+        name: 'Publish revalidate bypass',
+        why: 'the publish path revalidates through this endpoint, and a challenge left published changes serving stale until the cache expired on its own',
+        // BOTH conditions are load-bearing, for the same reason as the job
+        // runner above: path-only would leave cache invalidation open to the
+        // internet, and header-only would unchallenge the site for anyone who
+        // guessed the header name.
+        conditions: Object.freeze([
+          Object.freeze({ type: 'path', op: 'eq', value: '/api/revalidate' }),
+          Object.freeze({ type: 'header', op: 'ex', key: 'x-revalidate-secret' }),
+        ]),
+      }),
+      Object.freeze({
+        name: 'Public asset delivery bypass',
+        why: 'the media CDN serves og:image and every image in every campaign email, and a challenge made both unfetchable by the only clients that request them',
+        // ADDED 2026-09-01. The og:image on aglyn.com answered 429 to every
+        // link-preview crawler and to Gmail's image proxy, so a shared link
+        // rendered with no card and a mailed image rendered broken.
+        //
+        // WHY PATH-ONLY IS CORRECT HERE, where the job runner carries a header
+        // condition as well: `/api/media/cdn` is ANONYMOUS PUBLIC DELIVERY by
+        // design — the route is annotated `lockdown-423: exempt` precisely
+        // because there is no caller identity to verdict. The callers are
+        // crawlers, mailbox image proxies and visitors' browsers, none of
+        // which we configure and none of which will send a header we invent.
+        //
+        // What the bypass does NOT remove: `serveMediaCdn` enforces lockdown
+        // itself since AGL-1520, answering a neutral 410 for security and
+        // manual locks. This removes a proof-of-work the real callers cannot
+        // perform; it does not remove the check that decides what is served.
+        //
+        // `pre` is a prefix, so this rule is exactly as narrow as the
+        // `/api/media/cdn` namespace is kept — every route under it must stay
+        // public and secrets-free.
+        conditions: Object.freeze([
+          Object.freeze({ type: 'path', op: 'pre', value: '/api/media/cdn' }),
+        ]),
+      }),
+      Object.freeze({
+        name: 'Crawler metadata bypass',
+        why: 'robots.txt and sitemap.xml answered 429, so the exclusions and the URL set a crawler is meant to read were both unreachable',
+        // EXACT PATHS, NOT A PREFIX. `/api/manifest` and `/api/collections-rss`
+        // are the two API routes the middleware rewrites the public
+        // `/manifest.webmanifest` and feed paths onto; naming them exactly
+        // keeps the neighboring `/api/*` namespace challenged.
+        //
+        // All five are public, read-only and secrets-free, and every client
+        // that fetches them — a search crawler, a feed reader, an install
+        // prompt — is by definition not a browser that can solve a challenge.
+        conditions: Object.freeze([
+          Object.freeze({
+            type: 'path',
+            op: 'eq',
+            valueAnyOf: Object.freeze([
+              '/robots.txt',
+              '/sitemap.xml',
+              '/manifest.webmanifest',
+              '/api/manifest',
+              '/api/collections-rss',
+            ]),
+          }),
+        ]),
+        // The child sitemaps `/sitemap.xml` names (AGL-2520). A prefix rather
+        // than an exact path because there is one per section and one per
+        // content collection, so the set is a function of the customer's own
+        // data and cannot be enumerated here.
+        //
+        // Its own group, not a sixth entry above, because the two conditions
+        // are different ops — `eq` on a fixed list and `pre` on a namespace —
+        // and the checker requires every declared condition of a group to hold
+        // for that group. This is the same "one hole, two mouths" shape the
+        // console's machine-traffic bypass has.
+        //
+        // Declaring it here REQUIRES it live (AGL-2520). It was an allowance
+        // for the few hours between the code landing and the PATCH, and in
+        // exactly those hours the checker reported a match against a rule that
+        // did not have this group — which is the gap the header describes.
+        //
+        // The namespace is safe to open wholesale: `/sitemaps/*` is served by
+        // the sitemap route alone, is public, read-only and secrets-free, and
+        // answers an empty `<urlset>` for a section that does not exist.
+        alsoRequiresGroups: Object.freeze([
+          Object.freeze({ type: 'path', op: 'pre', value: '/sitemaps/' }),
+        ]),
+      }),
+      SOCIAL_CRAWLER_BYPASS_RULE,
     ]),
   }),
   Object.freeze({
@@ -226,7 +434,21 @@ export const EXPECTED_POSTURE = Object.freeze([
     label: 'docs',
     expect: 'protected',
     serves: 'docs.aglyn.com',
-    bypassRules: Object.freeze([PROBE_BYPASS_RULE]),
+    bypassRules: Object.freeze([
+      PROBE_BYPASS_RULE,
+      SOCIAL_CRAWLER_BYPASS_RULE,
+      Object.freeze({
+        name: 'Crawler metadata bypass',
+        why: 'robots.txt and sitemap.xml answered 429, so the exclusions and the URL set a crawler is meant to read were both unreachable',
+        conditions: Object.freeze([
+          Object.freeze({
+            type: 'path',
+            op: 'eq',
+            valueAnyOf: Object.freeze(['/robots.txt', '/sitemap.xml']),
+          }),
+        ]),
+      }),
+    ]),
   }),
   Object.freeze({
     project: 'aglyn-console',
@@ -269,14 +491,27 @@ export const EXPECTED_POSTURE = Object.freeze([
               '/api/admin/reap-plugin-artifacts',
               '/api/admin/reverify-plugin-versions',
               '/api/admin/run-erasures',
+              // The marketing plugin's machine callers, live on the rule but
+              // undeclared here until 2026-08-31. Each enforces its own auth
+              // ahead of any work: `email/events` verifies the Svix HMAC of
+              // the Resend webhook against `RESEND_WEBHOOK_SECRET` and answers
+              // 401 without it, and both cron routes compare `x-cron-secret`
+              // against `CRON_SECRET`. Same standard as the eleven above — the
+              // bypass removes the bot challenge and nothing else.
+              '/api/email/events',
+              '/api/campaigns/process-scheduled',
+              '/api/lists/materialize',
             ]),
           }),
         ]),
         // The health routes ride the same rule as a `pre` group, which the
         // per-group loop below tolerates: a group carrying `path pre
         // /api/health` fails the `eq` expectation above. Declared separately
-        // so that stays honest rather than silently excused.
-        alsoAllowsGroups: Object.freeze([
+        // so that stays honest rather than silently excused — and, since
+        // AGL-2520, so its absence is a finding: without this group every
+        // health route is challenged and `uptime-probe.yml` reads a false
+        // outage.
+        alsoRequiresGroups: Object.freeze([
           Object.freeze({ type: 'path', op: 'pre', value: '/api/health' }),
         ]),
       }),
@@ -331,9 +566,33 @@ export const EXPECTED_POSTURE = Object.freeze([
         ]),
         // The host-origins lookup carries the id as a path segment, so it can
         // only be matched by prefix. Declared as an alternate group shape for
-        // the same reason `/api/health` is above.
-        alsoAllowsGroups: Object.freeze([
+        // the same reason `/api/health` is above — and required for the same
+        // reason: without it, a custom-domain site cannot frame a plugin at
+        // all, which is the outage this whole rule exists to prevent.
+        alsoRequiresGroups: Object.freeze([
           Object.freeze({ type: 'path', op: 'pre', value: '/api/plugin-host-origins' }),
+        ]),
+      }),
+      Object.freeze({
+        name: 'Public asset delivery bypass',
+        why: "every image in every campaign email is served from this project's media CDN, and Gmail's image proxy cannot solve a challenge, so all of them rendered broken",
+        // ADDED 2026-09-01, alongside the tenant rule of the same name.
+        // `render-system-email.ts` resolves mailed images to the CONSOLE's
+        // `/api/media/cdn` mount rather than the tenant's, so protecting this
+        // project on 2026-08-21 broke images in mail without touching a site.
+        //
+        // Same scope argument as the tenant rule: anonymous public delivery,
+        // no caller identity to verdict, and `serveMediaCdn` still enforces
+        // lockdown on both mounts.
+        conditions: Object.freeze([
+          Object.freeze({ type: 'path', op: 'pre', value: '/api/media/cdn' }),
+        ]),
+      }),
+      Object.freeze({
+        name: 'Crawler metadata bypass',
+        why: 'a crawler must be able to read robots.txt for its exclusions to be honored at all',
+        conditions: Object.freeze([
+          Object.freeze({ type: 'path', op: 'eq', value: '/robots.txt' }),
         ]),
       }),
     ]),
@@ -436,6 +695,26 @@ export function validatePostureTable(table) {
               'a hole through bot protection must have its scope asserted',
           )
         }
+        // Both multi-mouth mechanisms assert nothing when empty, and an empty
+        // one reads exactly like a populated one at a glance (AGL-2520). An
+        // empty `valueAnyOf` is worse than absent: `conditionSatisfies` would
+        // reject EVERY live value, so the rule would report as fully decayed.
+        for (const condition of rule?.conditions ?? []) {
+          if (!Object.prototype.hasOwnProperty.call(condition ?? {}, 'valueAnyOf')) continue
+          if (Array.isArray(condition.valueAnyOf) && condition.valueAnyOf.length > 0) continue
+          problems.push(
+            `"${name}": bypass rule "${rule?.name ?? '?'}" declares an empty \`valueAnyOf\` — ` +
+              'give it the paths the rule really carries, or drop the key and use `value`',
+          )
+        }
+        if (Object.prototype.hasOwnProperty.call(rule ?? {}, 'alsoRequiresGroups')) {
+          if (!Array.isArray(rule.alsoRequiresGroups) || rule.alsoRequiresGroups.length === 0) {
+            problems.push(
+              `"${name}": bypass rule "${rule?.name ?? '?'}" declares an empty ` +
+                '`alsoRequiresGroups` — remove the key rather than declaring no alternates',
+            )
+          }
+        }
       }
     }
     if (entry.expect === 'unprotected' && (typeof entry.gap !== 'string' || entry.gap.trim().length === 0)) {
@@ -491,9 +770,17 @@ export function ruleAction(rule) {
 /**
  * Assert one expected bypass rule against the live rule of the same name.
  *
- * The scope assertion is the point: EVERY `conditionGroup` must carry EVERY
- * required condition. Groups are OR'd, so checking "some group matches" would
- * pass a rule that had a second, wide-open group appended to it.
+ * TWO assertions, and neither implies the other (see the header):
+ *
+ *  - **Scope.** EVERY `conditionGroup` must carry EVERY required condition.
+ *    Groups are OR'd, so checking "some group matches" would pass a rule that
+ *    had a second, wide-open group appended to it.
+ *  - **Coverage.** Every declared `valueAnyOf` value and every declared
+ *    `alsoRequiresGroups` shape must be carried by SOME live group. Both of
+ *    those describe what a group is permitted to be, and a permission is
+ *    satisfied by a group that is not there — so without this a rule can lose
+ *    a mouth, or never grow the one the table says it has, and still report a
+ *    clean match.
  *
  * @returns {string[]} findings; empty means the rule is present and still scoped.
  */
@@ -530,9 +817,7 @@ export function evaluateRule(expectedRule, liveRule) {
     // one matches the `/api/health` prefix. Without this a legitimate shape
     // would read as decay; with it, a group still has to match SOME declared
     // shape, so an undeclared group is still caught.
-    const alternates = Array.isArray(expectedRule.alsoAllowsGroups)
-      ? expectedRule.alsoAllowsGroups
-      : []
+    const alternates = alternateGroupsOf(expectedRule)
     const matchesAlternate = alternates.some((alt) =>
       conditions.some((actual) => conditionSatisfies(alt, actual)),
     )
@@ -560,6 +845,75 @@ export function evaluateRule(expectedRule, liveRule) {
       )
     }
   })
+
+  findings.push(...uncoveredDeclarations(expectedRule, groups, label))
+
+  return findings
+}
+
+/** The alternate group shapes a rule declares, normalised to an array. */
+function alternateGroupsOf(expectedRule) {
+  return Array.isArray(expectedRule?.alsoRequiresGroups)
+    ? expectedRule.alsoRequiresGroups
+    : []
+}
+
+/**
+ * The COVERAGE half (AGL-2520): everything the table declares must be carried
+ * by some live group.
+ *
+ * The loop above walks live groups and asks whether each is permitted. This
+ * one walks the DECLARATION and asks whether each part of it is present. Only
+ * the two multi-mouth mechanisms need it, because a plain `conditions` entry
+ * is already required of every group and a rule with no groups is reported
+ * before this runs:
+ *
+ *  - `valueAnyOf` — an allowlist of the values the live groups may carry. Drop
+ *    the `/robots.txt` group from the crawler rule and the five that remain
+ *    all still carry a listed path, so the allowlist is satisfied while
+ *    `robots.txt` is challenged.
+ *  - `alsoRequiresGroups` — an alternate shape. Declared but absent is the
+ *    state a new public path is in between the code landing and the live
+ *    PATCH, and it is precisely then that a check is worth having.
+ *
+ * @param {object} expectedRule
+ * @param {object[]} groups  the live `conditionGroup` array
+ * @param {string} label     "bypass rule \"…\"", for the finding text
+ * @returns {string[]} findings; empty means every declaration is present.
+ */
+function uncoveredDeclarations(expectedRule, groups, label) {
+  const findings = []
+  const carriedBySomeGroup = (required) =>
+    groups.some((group) =>
+      (Array.isArray(group?.conditions) ? group.conditions : []).some((actual) =>
+        conditionSatisfies(required, actual),
+      ),
+    )
+
+  for (const required of expectedRule.conditions ?? []) {
+    if (!Array.isArray(required.valueAnyOf)) continue
+    for (const value of required.valueAnyOf) {
+      // Narrowed to the one value, so "some group carries a listed path" —
+      // which the allowlist alone asks — becomes "some group carries THIS
+      // path".
+      const one = { ...required, valueAnyOf: undefined, value }
+      if (carriedBySomeGroup(one)) continue
+      findings.push(
+        `${label} declares ${describeCondition(one)} but NO condition group carries it — ` +
+          'the rule has lost a mouth, or never grew one it is declared to have. ' +
+          'Everything reachable only through that path is challenged.',
+      )
+    }
+  }
+
+  for (const alternate of alternateGroupsOf(expectedRule)) {
+    if (carriedBySomeGroup(alternate)) continue
+    findings.push(
+      `${label} declares an alternate group ${describeCondition(alternate)} but NO condition ` +
+        'group carries it. A declared shape is REQUIRED, not merely permitted: add the group ' +
+        'to the live rule with `PATCH rules.update`, or delete the declaration if it was wrong.',
+    )
+  }
 
   return findings
 }

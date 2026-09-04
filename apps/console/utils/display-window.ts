@@ -16,7 +16,7 @@
  */
 
 /**
- * The rows on screen, when the fetch width and the page width differ (AGL-693).
+ * The rows on screen, when the fetch width and the page width differ (AGL-2501).
  *
  * Most lists have one page size: the query asks for it and the footer names
  * it. A few cannot. The staff Users list walks Firebase Auth pools two

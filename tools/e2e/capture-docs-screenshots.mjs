@@ -131,7 +131,7 @@ const shots = [
   },
   {
     out: 'workflows-and-actions/workflows-page.png',
-    path: `/${HOST_BASE}/workflows`,
+    path: `/${HOST_BASE}/automation`,
     waitFor: 'DozenQuote',
   },
   {

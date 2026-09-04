@@ -76,9 +76,19 @@ export function useInsertTokenOptions(
       current = current.parentId ? nodes[current.parentId] : undefined
     }
     const datasets = entityOptions.datasets ?? []
+    /*
+     * The browse window is a PAGE of the org's datasets, so a repeat bound to
+     * one outside it matches nothing here — and this is where the token menu
+     * would silently stop offering that dataset's fields on exactly the
+     * orgs with enough datasets to need them. A resolution counts as a match,
+     * which is the same keyed read the attributes panel already spends on a
+     * picker's stored value.
+     */
     const dataset = repeatDatasetKey
       ? datasets.find((candidate) => candidate.id === repeatDatasetKey) ??
-        datasets.find((candidate) => candidate.label === repeatDatasetKey)
+        datasets.find((candidate) => candidate.label === repeatDatasetKey) ??
+        entityOptions.resolved?.datasets?.[repeatDatasetKey] ??
+        undefined
       : undefined
     return {
       inCollectionEntries,
@@ -90,7 +100,12 @@ export function useInsertTokenOptions(
       // list without repeating it.
       repeatDatasetKey,
     }
-  }, [node, entityOptions.datasets, entityOptions.datasetFields])
+  }, [
+    node,
+    entityOptions.datasets,
+    entityOptions.datasetFields,
+    entityOptions.resolved,
+  ])
 
   /**
    * Ask for the dataset list, and only when this node is inside a repeat
@@ -103,11 +118,25 @@ export function useInsertTokenOptions(
    * token menu offers none.
    */
   const requestEntities = entityOptions.request
+  const resolveEntity = entityOptions.resolve
   useEffect(() => {
-    if (requestEntities && insertContext.repeatDatasetKey) {
-      requestEntities('datasets')
-    }
-  }, [requestEntities, insertContext.repeatDatasetKey])
+    const key = insertContext.repeatDatasetKey
+    if (!key) return
+    requestEntities?.('datasets')
+    // Nothing to look up once the dataset is named. `repeatDataset` may hold
+    // a legacy DISPLAY NAME, which the label match above answers from the
+    // window — reading a document at that name as though it were an id would
+    // be a read that could only ever miss.
+    if (insertContext.datasetLabel) return
+    const id = Aglyn.entityValueNeedsResolution(entityOptions, 'datasets', key)
+    if (id) resolveEntity?.('datasets', id)
+  }, [
+    requestEntities,
+    resolveEntity,
+    entityOptions,
+    insertContext.repeatDatasetKey,
+    insertContext.datasetLabel,
+  ])
 
   const options = useMemo(() => {
     const assembled: BindingOption[] = [...(bindingOptions ?? [])]
@@ -153,6 +182,15 @@ export function useInsertTokenOptions(
         token: entry.token,
         preview: entry.description,
         groupHint: 'Resolves on collection pages',
+      })
+    }
+    for (const entry of Aglyn.AUTHOR_TOKEN_CATALOG) {
+      assembled.push({
+        group: 'Author',
+        label: entry.label,
+        token: entry.token,
+        preview: entry.description,
+        groupHint: 'Resolves on author pages',
       })
     }
     for (const field of insertContext.datasetFields) {

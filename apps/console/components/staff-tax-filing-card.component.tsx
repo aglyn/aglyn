@@ -20,6 +20,7 @@
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Alert,
   AlertTitle,
@@ -115,11 +116,7 @@ export default function StaffTaxFilingCard() {
 
   const load = useCallback(async () => {
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      if (!idToken) return
-      const response = await fetch('/api/admin/tax-filing', {
-        headers: { Authorization: `Bearer ${idToken}` },
-      })
+      const response = await authorizedFetch(user, '/api/admin/tax-filing')
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
         setError(payload?.error ?? 'Could not load the filing configuration')
@@ -181,7 +178,6 @@ export default function StaffTaxFilingCard() {
     if (busy || !data) return
     setBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
       const body: Record<string, unknown> = {
         jurisdiction: proposedKey,
         firstTaxablePeriod: firstTaxablePeriod.trim(),
@@ -196,12 +192,9 @@ export default function StaffTaxFilingCard() {
         if (registrationId.trim()) body['registrationId'] = registrationId.trim()
         if (filingId.trim()) body['filingId'] = filingId.trim()
       }
-      const response = await fetch('/api/admin/tax-filing', {
+      const response = await authorizedFetch(user, '/api/admin/tax-filing', {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
       const payload = await response.json().catch(() => ({}))
@@ -230,13 +223,9 @@ export default function StaffTaxFilingCard() {
     if (busy || !data) return
     setBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/admin/tax-filing', {
+      const response = await authorizedFetch(user, '/api/admin/tax-filing', {
         method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ note: note.trim() }),
       })
       const payload = await response.json().catch(() => ({}))

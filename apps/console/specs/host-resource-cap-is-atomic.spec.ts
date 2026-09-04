@@ -199,6 +199,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     }),
   },
   getOrgForHost: async () => ({ orgId: 'org-1', org: mockState.org }),
+  // The route appends the audit entry itself now (AGL-118). This factory is
+  // a closed world, so an unnamed export is `undefined` and the route throws
+  // — a 500 that reads exactly like the behaviour under test regressing.
+  logHostActivity: async () => undefined,
   isImpersonationSession: () => false,
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),
@@ -217,6 +221,11 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // The REAL plan table and the REAL page-claim rule. Stubbing either would let
   // this suite pass against a route enforcing nothing — which IS the bug.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),
+  // The REAL node codec (AGL-1151). The route under test compresses any
+  // `nodes` it writes, and this factory is a CLOSED WORLD — an absent export
+  // throws inside the route and its own catch answers 500, which reads
+  // exactly like the behaviour under test regressing.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/stored-nodes'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/screen-route'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/actions'),
   // The REAL host-role gate (AGL-2334). These routes ask

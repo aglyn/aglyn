@@ -37,7 +37,7 @@
  * than no test. See {@link auditChildContract} for what is enforced instead.
  */
 
-import { FEATURE_FLAG } from '../foundation'
+import { FEATURE_FLAG } from '../foundation/constants/shared'
 
 /**
  * The slice of a component schema this contract reads. Structural on purpose:

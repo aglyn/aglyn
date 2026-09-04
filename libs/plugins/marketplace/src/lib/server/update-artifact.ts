@@ -17,6 +17,8 @@
 
 import {
   createResourceUid,
+  decodeStoredNodes,
+  encodeStoredNodes,
   newResourceScopeFields,
   ORG_SCOPE_TOKEN,
   type PluginApiHandler,
@@ -268,10 +270,19 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
       baseSha = doc.get('installedFrom.sha256') ?? null
       target = {
         ref: doc.ref,
-        current: { rootId: doc.get('rootId'), nodes: doc.get('nodes') },
+        current: {
+          rootId: doc.get('rootId'),
+          // DECODED, because everything downstream compares by VALUE: the
+          // divergence hash, and `planArtifactUpdate`'s three-way diff over
+          // dotted paths like `nodes.abc123.props.title`. A stored `Bytes`
+          // has no such paths, so the merge would see the whole tree as
+          // removed and write an empty one back (AGL-1151).
+          nodes: decodeStoredNodes(doc.get('nodes')),
+        },
         write: (content) => ({
           rootId: content?.rootId ?? null,
-          nodes: content?.nodes ?? {},
+          // Compressed at rest, like every other writer of this document.
+          nodes: Buffer.from(encodeStoredNodes(content?.nodes ?? {})!),
         }),
         // Detaching keeps the customised component as an ordinary one: it stays
         // on every page that uses it, and only stops being tracked against the
@@ -301,10 +312,19 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
       baseSha = doc.get('installedFrom.sha256') ?? null
       target = {
         ref: doc.ref,
-        current: { rootId: doc.get('rootId'), nodes: doc.get('nodes') },
+        current: {
+          rootId: doc.get('rootId'),
+          // DECODED, because everything downstream compares by VALUE: the
+          // divergence hash, and `planArtifactUpdate`'s three-way diff over
+          // dotted paths like `nodes.abc123.props.title`. A stored `Bytes`
+          // has no such paths, so the merge would see the whole tree as
+          // removed and write an empty one back (AGL-1151).
+          nodes: decodeStoredNodes(doc.get('nodes')),
+        },
         write: (content) => ({
           rootId: content?.rootId ?? null,
-          nodes: content?.nodes ?? {},
+          // Compressed at rest, like every other writer of this document.
+          nodes: Buffer.from(encodeStoredNodes(content?.nodes ?? {})!),
         }),
         detach: {
           source: { type: 'workspace' },

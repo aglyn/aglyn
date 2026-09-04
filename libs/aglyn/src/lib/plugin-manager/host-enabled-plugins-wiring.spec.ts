@@ -34,6 +34,17 @@ import { resolve } from 'path'
  */
 const REPO_ROOT = resolve(__dirname, '../../../../..')
 
+/**
+ * The rules with comments removed.
+ *
+ * Block comments first, then line comments, so a `//` inside a block cannot
+ * end it early — the strip-order defect that once swallowed 551 lines of this
+ * very file.
+ */
+function withoutComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+}
+
 function read(relativePath: string): string {
   return readFileSync(resolve(REPO_ROOT, relativePath), 'utf8')
 }
@@ -152,12 +163,35 @@ describe('per-site plugin enablement wiring (AGL-1014)', () => {
     // guarantee is "these keys are admin-gated", not "they are formatted on
     // one line". The single-list property is asserted separately below so
     // splitting them still fails.
-    const adminGate = rules.slice(rules.indexOf('hostMemberRole(hostId) =='))
+    // Matched against RULES, not prose (AGL-1014). Comments are stripped
+    // first: a docblock that merely quotes `hostMemberRole(hostId) == 'admin'`
+    // to tell a reader where the real admin gates live now appears EARLIER in
+    // the file than any of them, so anchoring on the raw text sliced from a
+    // sentence and read an admin key list that was not there. A guard whose
+    // subject is what the rules PERMIT must not be answerable by something
+    // written about them — the same reason the theme-history migration strips
+    // comments before reading its own precondition.
+    const executable = withoutComments(rules)
+    const adminGate = executable.slice(
+      executable.indexOf("hostMemberRole(hostId) == 'admin'"),
+    )
     const keyList = adminGate.slice(0, adminGate.indexOf('])') + 2)
     for (const key of ['disabledPlugins', 'enabledPlugins']) {
       expect(keyList).toContain(`'${key}'`)
     }
     // ONE list: both keys inside the same `hasAny([...])`.
     expect(keyList.match(/hasAny\(\[/g) ?? []).toHaveLength(1)
+  })
+
+  it('THE CONTROL: prose quoting the admin gate does not satisfy the check', () => {
+    // Without this, the assertion above passes by reading a sentence. A
+    // docblock naming the gate is legitimate and should stay legitimate.
+    const prose = `
+      /** See \`hostMemberRole(hostId) == 'admin'\`, which gates
+       * hasAny(['disabledPlugins', 'enabledPlugins']) elsewhere. */
+      allow write: if false;
+    `
+    expect(withoutComments(prose)).not.toContain('disabledPlugins')
+    expect(withoutComments(prose).indexOf("hostMemberRole(hostId) == 'admin'")).toBe(-1)
   })
 })

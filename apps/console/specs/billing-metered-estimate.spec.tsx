@@ -50,6 +50,9 @@ import { render, screen, waitFor } from '@testing-library/react'
 import {
   estimateMonthlyUsageCost,
   meteredIncludedAllowance,
+  METERED_BILLED_RATES_USD,
+  METERED_MARKUP,
+  METERED_UNIT_RATES_USD,
   type HostUsageSnapshot,
 } from '../utils/usage-metering'
 
@@ -352,5 +355,152 @@ describe('a loading state is not an answer', () => {
     await waitFor(() => {
       expect(screen.getByText(dollars(conservative))).toBeTruthy()
     })
+  })
+})
+
+/**
+ * THE RATE AND THE CHARGE, PER DIMENSION.
+ *
+ * The card told a customer how much of each band they had spent and what the
+ * whole month came to, and never once what a unit past the band costs. So the
+ * only way to learn the price of a GB was to go over and read the difference
+ * in the total — the learn-your-cap-by-refusal shape, with money.
+ *
+ * Two properties, and the second is the one that could go quietly wrong:
+ *
+ *  1. The published rate is the one that is CHARGED — our cost × the markup —
+ *     not the cost table. They are 30% apart, and printing the input would be
+ *     quoting a number no invoice uses.
+ *  2. The per-dimension charges are the same three products `billedCents` is
+ *     rounded from. They are asserted to SUM to it, so a second cost model in
+ *     the component (or in the split) diverges here exactly as it would
+ *     diverge from the invoice.
+ */
+describe('each metered dimension names its overage rate', () => {
+  const included = meteredIncludedAllowance(ORG)
+
+  it('quotes the CHARGED rate, not our unit cost', async () => {
+    mockUsageConfig({ orgLibraryBilledFrom: MONTH })
+    seed({ hostMediaBytes: 1 * GB })
+    render(<BillingMeteredEstimateComponent org={ORG} hosts={HOSTS} />)
+    // $0.026 × 1.30 = $0.0338. Both halves asserted: the charged rate is
+    // present, and the raw cost — which differs only in the third decimal —
+    // is not, so a component that printed `METERED_UNIT_RATES_USD` fails.
+    await waitFor(() => {
+      expect(screen.getByText(/\$0\.0338\/GB-month/)).toBeTruthy()
+    })
+    expect(METERED_BILLED_RATES_USD.storagePerGbMonth).toBeCloseTo(
+      METERED_UNIT_RATES_USD.storagePerGbMonth * METERED_MARKUP,
+      10,
+    )
+    expect(screen.queryByText(/\$0\.026\/GB-month/)).toBeNull()
+  })
+
+  it('quotes page views and form submissions PER 1,000', async () => {
+    // Per unit these are $0.00013 and $0.000065, which read as zero at any
+    // precision a customer would trust — the reason the unit is 1,000 here
+    // and a GB-month for storage.
+    mockUsageConfig({ orgLibraryBilledFrom: MONTH })
+    seed({ hostMonthViews: 10, hostFormSubmissions: 3 })
+    render(<BillingMeteredEstimateComponent org={ORG} hosts={HOSTS} />)
+    await waitFor(() => {
+      expect(screen.getByText(/\$0\.13 per 1,000/)).toBeTruthy()
+    })
+    expect(screen.getByText(/\$0\.065 per 1,000/)).toBeTruthy()
+  })
+
+  it('shows the rate while still INSIDE the band', async () => {
+    // The question a customer asks about a meter they are not over is "what
+    // happens if I go over". Nothing is billable here, so nothing may be
+    // called billable — but the price is still printed.
+    mockUsageConfig({ orgLibraryBilledFrom: MONTH })
+    seed({ hostMediaBytes: Math.round(0.5 * GB) })
+    render(<BillingMeteredEstimateComponent org={ORG} hosts={HOSTS} />)
+    await waitFor(() => {
+      expect(screen.getByText(/0\.50 of 2\.00 GB/)).toBeTruthy()
+    })
+    expect(screen.getByText(/\$0\.0338\/GB-month past the band/)).toBeTruthy()
+    expect(screen.queryByText(/billable/)).toBeNull()
+  })
+
+  it('attributes the charge to the meter that caused it, and the three sum', async () => {
+    const messy: Seed = {
+      hostMediaBytes: Math.round(4.31 * GB),
+      hostMonthViews: 999_999,
+      hostFormSubmissions: 12_345,
+    }
+    mockUsageConfig({ orgLibraryBilledFrom: MONTH })
+    seed(messy)
+    const billed = invoiceEstimate(messy, true)
+    const byMeter = billed.billableUsdByMeter
+
+    // Every dimension is genuinely over, so this is not passing because two
+    // of the three are zero.
+    expect(byMeter.storage).toBeGreaterThan(0)
+    expect(byMeter.pageViews).toBeGreaterThan(0)
+    expect(byMeter.formSubmissions).toBeGreaterThan(0)
+    // THE INVARIANT: the split is the total, not a second opinion about it.
+    const sum = byMeter.storage + byMeter.pageViews + byMeter.formSubmissions
+    expect(sum).toBeCloseTo(billed.billableCostUsd * METERED_MARKUP, 10)
+    expect(Math.round(sum * 100)).toBe(billed.billedCents)
+
+    render(<BillingMeteredEstimateComponent org={ORG} hosts={HOSTS} />)
+    await waitFor(() => {
+      expect(screen.getByText(dollars(billed))).toBeTruthy()
+    })
+    // Each row carries its own share, rendered from the same numbers.
+    for (const share of [
+      byMeter.storage,
+      byMeter.pageViews,
+      byMeter.formSubmissions,
+    ]) {
+      expect(
+        screen.getByText(new RegExp(`≈ \\$${share.toFixed(2)}\\b`)),
+      ).toBeTruthy()
+    }
+  })
+
+  it('reports a sub-cent share as <$0.01, never as $0.00', async () => {
+    // A dimension can genuinely contribute less than a cent while the month
+    // still bills something, because `billedCents` rounds the SUM once.
+    // "$0.00 billable" beside a non-zero total is the contradiction a
+    // customer would correctly read as a broken number.
+    const barelyOver: Seed = {
+      hostMediaBytes: Math.round((included.storageGb + 5) * GB),
+      hostFormSubmissions: included.formSubmissions + 1,
+    }
+    mockUsageConfig({ orgLibraryBilledFrom: MONTH })
+    seed(barelyOver)
+    const billed = invoiceEstimate(barelyOver, true)
+    // One form submission over: $0.00005 × 1.30 = $0.000065.
+    expect(billed.billableUsdByMeter.formSubmissions).toBeGreaterThan(0)
+    expect(billed.billableUsdByMeter.formSubmissions).toBeLessThan(0.005)
+    // …while the month as a whole bills real money, off the storage overage.
+    expect(billed.billedCents).toBeGreaterThan(0)
+
+    render(<BillingMeteredEstimateComponent org={ORG} hosts={HOSTS} />)
+    await waitFor(() => {
+      expect(screen.getByText(/1 billable at .* ≈ <\$0\.01/)).toBeTruthy()
+    })
+  })
+
+  it('a plan with NO pass-through is quoted no rate at all', async () => {
+    // Free has no subscription to hang a metered item on, so its bands are
+    // hard caps. Quoting an overage rate there would advertise a charge that
+    // cannot arise — the same reason Agency's contacts rate went null.
+    const freeOrg = { $id: 'org-1', plan: 'free' } as any
+    mockUsageConfig({ orgLibraryBilledFrom: MONTH })
+    seed({ hostMediaBytes: 50 * GB, hostMonthViews: 5_000_000 })
+    render(<BillingMeteredEstimateComponent org={freeOrg} hosts={HOSTS} />)
+    await waitFor(() => {
+      expect(
+        screen.getByText(/included caps, not meters — no usage charges/i),
+      ).toBeTruthy()
+    })
+    // Massively over every band, and still not one price on the card.
+    expect(meteredIncludedAllowance(freeOrg).metered).toBe(false)
+    expect(screen.queryByText(/per 1,000/)).toBeNull()
+    expect(screen.queryByText(/GB-month/)).toBeNull()
+    expect(screen.queryByText(/billable/)).toBeNull()
   })
 })

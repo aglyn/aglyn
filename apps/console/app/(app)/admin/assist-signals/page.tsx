@@ -38,6 +38,7 @@ import {
 } from '@mui/material'
 import { useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../components/staff-only.component'
 import { docsHelp } from '../../../../constants/docs-links'
@@ -224,12 +225,10 @@ const AdminAssistSignals: NextPageWithLayout<Record<string, never>> = () => {
       setLoading(true)
       setError(null)
       try {
-        const idToken = await (
-          user as { getIdToken?: () => Promise<string> }
-        )?.getIdToken?.()
-        const response = await fetch('/api/admin/assist-signals', {
-          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
-        })
+        const response = await authorizedFetch(
+          user,
+          '/api/admin/assist-signals',
+        )
         const body = await response.json().catch(() => null)
         if (!active) return
         if (!response.ok) {

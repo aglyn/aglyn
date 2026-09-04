@@ -23,6 +23,7 @@ import {
 } from '@aglyn/aglyn'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Button,
   Dialog,
@@ -87,13 +88,9 @@ export function PublishArtifactDialog({
     if (!target || !name.trim() || busy) return
     setBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch(`/api/${target.endpoint}`, {
+      const response = await authorizedFetch(user, `/api/${target.endpoint}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...target.payload,
           displayName: name.trim(),

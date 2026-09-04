@@ -97,6 +97,9 @@ function makeCollectionRef(path: string): any {
   return {
     doc: (id?: string) =>
       makeDocRef(`${path}/${id ?? `auto-${++autoIdCounter}`}`),
+    // Chainable, so the host-level discounts read resolves through the same
+    // `get()` below rather than throwing on a missing method.
+    limit: () => makeCollectionRef(path),
     get: async () => ({ docs: childPaths(path).map(makeSnapshot) }),
   }
 }
@@ -116,6 +119,19 @@ const mockOrg: any = {
 }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  /*
+   * The real resolution's shape: an org that declared no pooling resolves
+   * every site to a group of ONE. Faked rather than imported because this
+   * file mocks the whole module — but faked to the NARROW answer, which is
+   * the direction a wrong group may fail in.
+   */
+  consentGroupForSite: async (hostId: string) => ({
+    hostId,
+    groupId: hostId,
+    name: null,
+    hostIds: [hostId],
+    declared: false,
+  }),
   firebaseAdmin: {
     app: () => ({ firestore: () => fakeFirestore }),
   },

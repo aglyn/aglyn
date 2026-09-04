@@ -24,11 +24,16 @@
  */
 
 import {
+  EMAIL_BATCH_MIN_REQUEST_INTERVAL_MS,
+  EMAIL_BATCH_REQUESTS_PER_SECOND,
+  EMAIL_PROVIDER_REQUESTS_PER_SECOND,
   EMAIL_SEND_RATE_DEFAULT_PER_HOUR,
   EMAIL_SEND_RATE_MAX_PER_HOUR,
   EMAIL_SEND_RATE_MIN_PER_HOUR,
   EMAIL_SEND_RATE_NOTE_MAX,
   EMAIL_SEND_RATE_WINDOW_MS,
+  batchRequestIntervalMs,
+  createProviderRequestPacer,
   emailSendRateVerdict,
   emailSendRateWindowStartMs,
   isRefusablePriority,
@@ -219,5 +224,79 @@ describe('emailSendRateWindowStartMs', () => {
     expect(
       emailSendRateWindowStartMs(WINDOW_START + EMAIL_SEND_RATE_WINDOW_MS),
     ).toBe(WINDOW_START + EMAIL_SEND_RATE_WINDOW_MS)
+  })
+})
+
+describe('the provider request rate', () => {
+  it('leaves the published rate a request per second of headroom', () => {
+    // The reserved request is the transactional mail sharing the key, not a
+    // rounding allowance — see the constant.
+    expect(EMAIL_BATCH_REQUESTS_PER_SECOND).toBe(
+      EMAIL_PROVIDER_REQUESTS_PER_SECOND - 1,
+    )
+    expect(
+      EMAIL_BATCH_REQUESTS_PER_SECOND * EMAIL_BATCH_MIN_REQUEST_INTERVAL_MS,
+    ).toBeGreaterThanOrEqual(1_000)
+  })
+
+  it('takes a configured rate for an account whose limit was raised', () => {
+    expect(batchRequestIntervalMs('20')).toBe(Math.ceil(1_000 / 19))
+    expect(batchRequestIntervalMs(20)).toBe(Math.ceil(1_000 / 19))
+  })
+
+  it('paces at a second for a rate of one, rather than dividing by zero', () => {
+    expect(batchRequestIntervalMs('1')).toBe(1_000)
+  })
+
+  it('turns pacing off only for an explicit zero', () => {
+    expect(batchRequestIntervalMs('0')).toBe(0)
+    // Every other unreadable value falls back to the shipped interval. A typo
+    // in an env var must not silently remove a rate control.
+    for (const raw of [undefined, null, '', '  ', 'ten', '-4', NaN]) {
+      expect(batchRequestIntervalMs(raw)).toBe(EMAIL_BATCH_MIN_REQUEST_INTERVAL_MS)
+    }
+  })
+
+  it('lets the first request through and spaces the ones behind it', async () => {
+    const pace = createProviderRequestPacer(30)
+    const startedAt = Date.now()
+    await pace()
+    const firstAt = Date.now()
+    await pace()
+    await pace()
+
+    // One tick of slack: `setTimeout` may fire a millisecond early.
+    expect(firstAt - startedAt).toBeLessThan(30)
+    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(59)
+  })
+
+  it('costs a caller that is already slower than the interval nothing', async () => {
+    const pace = createProviderRequestPacer(20)
+    await pace()
+    await new Promise((resolve) => setTimeout(resolve, 40))
+    const before = Date.now()
+    await pace()
+    expect(Date.now() - before).toBeLessThan(20)
+  })
+
+  it('does not bank the slots a stalled caller did not use', async () => {
+    // The burst this exists to remove: a loop that paused must not be able to
+    // spend the interval it skipped on a run of requests with no gap at all.
+    const pace = createProviderRequestPacer(25)
+    await pace()
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    const before = Date.now()
+    await pace()
+    await pace()
+    expect(Date.now() - before).toBeGreaterThanOrEqual(24)
+  })
+
+  it('waits for nothing at all when pacing is off', async () => {
+    const pace = createProviderRequestPacer(0)
+    const before = Date.now()
+    await pace()
+    await pace()
+    await pace()
+    expect(Date.now() - before).toBeLessThan(20)
   })
 })

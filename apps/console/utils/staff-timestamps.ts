@@ -16,7 +16,7 @@
  */
 
 /**
- * When something happened, for a staff surface (AGL-1482).
+ * When something happened, for a staff surface.
  *
  * The same moment was rendered three different ways on two pages: the account
  * list printed `toLocaleDateString()`, which is a date with the time thrown

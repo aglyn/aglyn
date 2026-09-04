@@ -26,10 +26,24 @@ import {
   pluginDocsHelp,
   VARIABLE_NAME_PATTERN,
 } from '@aglyn/aglyn'
+/*
+ * The MODULE, not the barrel, for the two PURE helpers. Every spec that renders
+ * this card mocks `@aglyn/tenant-feature-instance` wholesale to stage its
+ * Firestore hooks, and a query builder imported through that barrel disappears
+ * under the mock — which fails as "not a function" in the component rather than
+ * as anything about the test's subject. Neither of these is a hook.
+ */
+import {
+  ceilingedWindow,
+  collectionCeiling,
+} from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
+  Alert,
   Button,
   Dialog,
   DialogActions,
@@ -41,8 +55,14 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { collection, doc, getCountFromServer, limit, query, setDoc, updateDoc } from 'firebase/firestore'
-import { useCallback, useEffect, useState } from 'react'
+import {
+  collection,
+  doc,
+  getCountFromServer,
+  setDoc,
+  updateDoc,
+} from 'firebase/firestore'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
@@ -56,6 +76,23 @@ import {
   summarizeDependents,
   type WhereUsedResult,
 } from '../utils/fetch-where-used'
+
+/**
+ * How many variables the card reads.
+ *
+ * A CEILING, not a page size — see the query, which explains why this list
+ * cannot be paged by the server without making the duplicate-name check lie.
+ */
+const VARIABLE_CEILING = 100
+
+/**
+ * How many workflows the computed-variable picker offers.
+ *
+ * Paid for only while the editor is open, which is what makes a ceiling this
+ * size affordable: it is one reader mid-edit rather than every visitor to the
+ * page.
+ */
+const WORKFLOW_OPTION_CEILING = 100
 
 export interface HostVariablesCardProps {
   hostId: string
@@ -181,29 +218,115 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
      */
     fromCache: variablesFromCache,
   } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'variables'), limit(100)),
+    /*
+     * ORDERED AND CEILINGED, deliberately not paged by the query (AGL-2501).
+     *
+     * `limit(100)` alone is answered in DOCUMENT-ID order, so the window is a
+     * pseudo-random hundred that the `localeCompare` below arranges into a
+     * convincing A-to-Z list. `variablesPerHost` runs to 5,000, so a Scale
+     * site with three hundred variables sees a hundred of them and nothing
+     * said so.
+     *
+     * `collectionCeiling` does not change WHICH hundred — document-id order is
+     * what the bare cap already returned. What it changes is that the order is
+     * NAMED, so the obvious next edit is caught: ordering on `name` would not
+     * mis-sort this list, it would HIDE from it every variable written without
+     * one, and `/api/hosts/resources` validates no field for presence while
+     * `IMPORTABLE_FIELDS.variables` copies a name only if the exported
+     * document carried it. The document name cannot be absent.
+     *
+     * The QUERY is not paged because `nameTaken` below tests the draft against
+     * these rows. Case-insensitive uniqueness is what keeps legacy `{{name}}`
+     * token resolution unambiguous (AGL-185), and on a ten-row server page
+     * that check would compare a new variable against a tenth of the site and
+     * cheerfully create the duplicate it exists to prevent.
+     *
+     * The check is still only as complete as the ceiling, and that is now
+     * SAID rather than assumed: the notice under the list appears exactly when
+     * the probe finds a variable this card did not read.
+     */
+    () =>
+      collectionCeiling(
+        collection(firestore, 'hosts', hostId, 'variables'),
+        VARIABLE_CEILING,
+      ),
     [firestore, hostId],
     { idField: '$id' },
   )
-  // Workflow picker options (AGL-261): computed variables reference the
-  // workflow by doc id instead of a typed name.
+  const { rows: readVariables, truncated: variablesTruncated } =
+    ceilingedWindow<any>(variableDocs, VARIABLE_CEILING)
+  const [draft, setDraft] = useState<VariableDraft | null>(null)
+  /**
+   * The editor has been opened at least once in this session.
+   *
+   * A LATCH rather than `draft` itself, because the workflow picker below keys its
+   * listeners on it. Tracking the dialog would tear that subscription down
+   * on Cancel and pay for them again on the next Edit, so a merchant working
+   * through ten variables would buy the same window ten times — worse than
+   * the mount-time read this replaces. Latched, a reader who never edits pays
+   * nothing and a reader who edits pays once.
+   */
+  const [editorOpened, setEditorOpened] = useState(false)
+  if (draft && !editorOpened) setEditorOpened(true)
+  /*
+   * Workflow picker options (AGL-261): computed variables reference the
+   * workflow by doc id instead of a typed name.
+   *
+   * READ WHEN THE EDITOR OPENS, not when the card mounts (AGL-2501). Nothing
+   * outside the dialog below touches these rows — the table shows a computed
+   * variable's stored `workflowName`, never a name looked up here — so an
+   * unconditional listener would charge every visitor to this page for a
+   * hundred workflows to fill a select most of them never see.
+   *
+   * Ceilinged and ordered for the same reason as the variables above: a bare
+   * `limit` is answered in document-id order, so the `localeCompare` below
+   * would arrange a pseudo-random hundred into a convincing alphabet and a
+   * workflow past it could not be picked, with nothing saying why.
+   */
   const { data: workflowDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'workflows'), limit(100)),
-    [firestore, hostId],
+    () =>
+      editorOpened
+        ? collectionCeiling(
+            collection(firestore, 'hosts', hostId, 'workflows'),
+            WORKFLOW_OPTION_CEILING,
+          )
+        : null,
+    [firestore, hostId, editorOpened],
     { idField: '$id' },
   )
-  const workflowOptions = [...(workflowDocs ?? [])]
+  const { rows: readWorkflows, truncated: workflowOptionsTruncated } =
+    ceilingedWindow<any>(workflowDocs, WORKFLOW_OPTION_CEILING)
+  // Sorting the whole ceiling, not a page of it.
+  const workflowOptions = readWorkflows
     .filter((workflow: any) => !workflow.deletedAt && workflow.name)
     .map((workflow: any) => ({
       id: workflow.$id as string,
       name: workflow.name as string,
     }))
     .sort((a, b) => a.name.localeCompare(b.name))
-  const variables = [...(variableDocs ?? [])]
-    .filter((variable: any) => !variable.deletedAt)
-    .sort((a: any, b: any) =>
-      String(a.name ?? '').localeCompare(String(b.name ?? '')),
-    )
+  /*
+   * Sorting is safe HERE in a way it is not on a paged list: these rows are
+   * the whole collection below the ceiling, not a slice of one, so the order
+   * on screen is the order of everything the card holds.
+   */
+  const variables = useMemo(
+    () =>
+      readVariables
+        .filter((variable: any) => !variable.deletedAt)
+        .sort((a: any, b: any) =>
+          String(a.name ?? '').localeCompare(String(b.name ?? '')),
+        ),
+    [readVariables],
+  )
+  // The page is a SLICE, because the rows are already in hand and `nameTaken`
+  // needs all of them. What the card lacked was not a cheaper read but a
+  // control: a hundred variables rendered as one wall.
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  const visibleVariables = useMemo(
+    () => variables.slice(page * pageSize, page * pageSize + pageSize),
+    [variables, page, pageSize],
+  )
   /**
    * The variable HEAD-COUNT is a server aggregate, not the length of the
    * capped listener (AGL-1716, the AGL-1706 shape).
@@ -249,7 +372,6 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
   }, [firestore, hostId, variableCountEpoch])
   const variableCount = serverVariableCount ?? variables.length
 
-  const [draft, setDraft] = useState<VariableDraft | null>(null)
   const validName = VARIABLE_NAME_PATTERN.test(draft?.name ?? '')
   // Case-insensitive (AGL-185): names must stay unambiguous for legacy
   // {{name}} token resolution and picker display.
@@ -403,7 +525,7 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
               'next publish.'}
           </Typography>
         ) : (
-          variables.map((variable: any) => (
+          visibleVariables.map((variable: any) => (
             <Stack
               key={variable.$id}
               direction="row"
@@ -452,6 +574,27 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
             </Stack>
           ))
         )}
+        {variables.length === 0 ? null : (
+          <ListPagination
+            page={page}
+            pageSize={pageSize}
+            rowCount={visibleVariables.length}
+            // The variables the card HOLDS. Not `variableCount`, which is the
+            // site's total including soft-deleted rows and answers the quota's
+            // question rather than the reader's.
+            count={variables.length}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+        )}
+        {variablesTruncated ? (
+          <Alert severity="info">
+            {`Showing ${VARIABLE_CEILING} variables, ordered by id. This site ` +
+              'has more — the duplicate-name check below only covers the ' +
+              'ones listed here, so a name may already be taken by one that ' +
+              'is not.'}
+          </Alert>
+        ) : null}
         <Button
           size="small"
           color="primary"
@@ -554,8 +697,12 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
             select
             label="Computed from workflow (optional)"
             helperText={
-              'Pick a workflow — its result becomes this variable\u2019s ' +
-              'value at render; the value above is the fallback (AGL-129)'
+              workflowOptionsTruncated
+                ? `Showing ${WORKFLOW_OPTION_CEILING} workflows, ordered by ` +
+                  'id. This site has more, so one of them is not offered here.'
+                : 'Pick a workflow — its result becomes this ' +
+                  'variable\u2019s value at render; the value above is the ' +
+                  'fallback (AGL-129)'
             }
             value={
               draft?.workflowId ||

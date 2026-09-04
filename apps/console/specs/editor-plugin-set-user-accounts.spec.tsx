@@ -72,7 +72,7 @@ jest.mock('../utils/realm-plugins.client', () => ({
   loadOrgRealmPlugins: jest.fn(async () => []),
 }))
 
-import { renderHook } from '@testing-library/react'
+import { renderHook, waitFor } from '@testing-library/react'
 import { ACCOUNTS_PLUGIN_ID } from '@aglyn/aglyn'
 import { useEnabledPluginIds } from '../components/console-plugins-gate.component'
 
@@ -100,39 +100,70 @@ jest.mock('@aglyn/aglyn', () => {
   }
 })
 
+/*==========================================
+ * EVERY READ WAITS FOR THE SETTLED VALUE (AGL-2530).
+ *
+ * `useEnabledPluginIds` narrows the org set through `loadOrgRealmPlugins`,
+ * which this suite stubs as an `async` function — so at least one promise has
+ * to settle before the narrowed set exists. `result.current` read straight
+ * after `renderHook` is the value of the FIRST render. On an idle machine the
+ * microtask drains inside `renderHook`'s own `act` and the read is correct by
+ * luck; under contention it does not, and the assertion sees `ORG_SET`
+ * verbatim: `["mui", "commerce", "accounts"]`, the value before any narrowing.
+ *
+ * Measured once on a full `apps/console` run at `--maxWorkers=2`, on the two
+ * cases asserting the NARROWED outcome. They are the only two that can fail
+ * this way, and they are NOT the only two that were wrong.
+ *
+ * ⚑ The other three assert values that are identical before and after
+ * narrowing, so they never went red — and could not have. `toContain('mui')`
+ * holds on the unnarrowed set too, which means those cases were passing
+ * without ever observing the behaviour they name. Waiting fixes a flake in two
+ * of them and a vacuous pass in the other three, which is why the whole file
+ * changes rather than the two that fired.
+ *
+ * `waitFor` costs nothing when the value is already settled, and RTL's
+ * `asyncUtilTimeout` is lifted to 5s workspace-wide (AGL-2382).
+ *==========================================*/
 describe('the editor plugin set honours the user-accounts opt-in (AGL-2486)', () => {
-  it('drops accounts on a site that never opted in', () => {
+  it('drops accounts on a site that never opted in', async () => {
     const { result } = renderHook(() => useEnabledPluginIds())
-    expect(result.current).not.toContain(ACCOUNTS_PLUGIN_ID)
+    await waitFor(() =>
+      expect(result.current).not.toContain(ACCOUNTS_PLUGIN_ID),
+    )
   })
 
-  it('keeps accounts once the site opts in', () => {
+  it('keeps accounts once the site opts in', async () => {
     mockHostOptIn = [ACCOUNTS_PLUGIN_ID]
     const { result } = renderHook(() => useEnabledPluginIds())
-    expect(result.current).toContain(ACCOUNTS_PLUGIN_ID)
+    await waitFor(() => expect(result.current).toContain(ACCOUNTS_PLUGIN_ID))
   })
 
-  it('an explicit deny still beats the opt-in', () => {
+  it('an explicit deny still beats the opt-in', async () => {
     mockHostOptIn = [ACCOUNTS_PLUGIN_ID]
     mockHostDisabled = [ACCOUNTS_PLUGIN_ID]
     const { result } = renderHook(() => useEnabledPluginIds())
-    expect(result.current).not.toContain(ACCOUNTS_PLUGIN_ID)
+    await waitFor(() =>
+      expect(result.current).not.toContain(ACCOUNTS_PLUGIN_ID),
+    )
   })
 
-  it('leaves the ordinary bundles exactly as they were', () => {
+  it('leaves the ordinary bundles exactly as they were', async () => {
     // The regression fence: this must be invisible to the twelve plugins
     // that are not default-off.
     const { result } = renderHook(() => useEnabledPluginIds())
-    expect(result.current).toContain('mui')
-    expect(result.current).toContain('commerce')
+    await waitFor(() => {
+      expect(result.current).toContain('mui')
+      expect(result.current).toContain('commerce')
+    })
   })
 
-  it('OFF a host route the org set is unchanged', () => {
+  it('OFF a host route the org set is unchanged', async () => {
     // There is no site to have opted in, so subtracting here would answer a
     // question nobody asked — and would differ from how the deny-list
     // behaves off host routes, where [] subtracts nothing.
     mockHostId = null
     const { result } = renderHook(() => useEnabledPluginIds())
-    expect(result.current).toContain(ACCOUNTS_PLUGIN_ID)
+    await waitFor(() => expect(result.current).toContain(ACCOUNTS_PLUGIN_ID))
   })
 })

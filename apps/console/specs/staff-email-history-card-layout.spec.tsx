@@ -118,6 +118,37 @@ describe('the delivery table', () => {
     expect(document.querySelectorAll('[role="row"][data-id]')).toHaveLength(10)
   })
 
+  /*
+   * The grid centres a plain value it renders itself and does NOT centre a
+   * node returned from `renderCell`. A row mixing the two sat its text and
+   * its chips on lines a few pixels apart — misalignment that reads as broken
+   * without being nameable, and the second layout defect reported on this
+   * card.
+   */
+  it('centres every cell so text and chips sit on one line', () => {
+    render(
+      <StaffUserEmailHistoryCard rows={[ROW]} lookupFailed={false} address={ROW.to} />,
+    )
+    const cell = document.querySelector(
+      '[data-field="status"][role="gridcell"]',
+    ) as HTMLElement
+    const style = getComputedStyle(cell)
+    expect(style.display).toBe('flex')
+    expect(style.alignItems).toBe('center')
+  })
+
+  it('renders Sent through a formatter, so the grid owns its layout', () => {
+    render(
+      <StaffUserEmailHistoryCard rows={[ROW]} lookupFailed={false} address={ROW.to} />,
+    )
+    // A formatter leaves the grid to draw the text, which is what puts it on
+    // the same line as every other plain cell; a custom node opts out of that
+    // and has to reproduce the centering itself.
+    const cell = document.querySelector('[data-field="sentAtMs"][role="gridcell"]')
+    expect(cell?.querySelector('p')).toBeNull()
+    expect(cell?.textContent).toMatch(/\d{4}/)
+  })
+
   it('sorts Sent on the timestamp, not on its formatted text', () => {
     render(
       <StaffUserEmailHistoryCard

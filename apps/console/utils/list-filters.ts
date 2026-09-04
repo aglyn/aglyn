@@ -18,7 +18,7 @@
 import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
 
 /**
- * What each console list can be filtered by (AGL-693).
+ * What each console list can be filtered by (AGL-2501).
  *
  * These are imported by BOTH the route that queries and the page that renders,
  * so the operator menu and the predicate cannot disagree. Adding a field here
@@ -100,7 +100,7 @@ export const ORG_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
 }
 
 /*
- * The staff ACCOUNT list is not a Firestore query (AGL-693).
+ * The staff ACCOUNT list is not a Firestore query (AGL-2501).
  *
  * It is Firebase Auth, whose `listUsers` takes a page size and a cursor and
  * nothing else — no predicate, no ordering, no search — and there is no

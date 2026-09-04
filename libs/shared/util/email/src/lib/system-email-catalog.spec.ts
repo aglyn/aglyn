@@ -205,6 +205,7 @@ describe('SYSTEM_EMAIL_TEMPLATES', () => {
         nodes: map as never,
         rootId: EMAIL_NODE_ROOT_ID,
         merge: { 'org.name': 'Test Org', 'invite.role': 'editor' },
+        sanitize: (value) => value,
       })
       expect(html).toContain('invited to join Test Org as editor')
       // The Sign in button block made it through too.

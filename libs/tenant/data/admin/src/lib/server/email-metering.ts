@@ -454,21 +454,20 @@ export async function reconcileCampaignSendReservation(
 }
 
 /**
- * Volume above the plan's included band, in emails.
+ * Volume above the plan's included band, in emails — RE-EXPORTED, not defined
+ * here, the same move AGL-2155 made for the bandwidth helpers.
  *
- * Transactional mail is never refused, so an org CAN and will finish a month
- * over its included allowance. That is not an error and not a failed send —
- * it is the overage the cap chose not to enforce, and recording it is what
- * keeps it from being a surprise at invoicing. `UNLIMITED` (and any
- * non-positive limit, which is how "no included allowance" is expressed)
- * yields 0 rather than the whole month's volume.
+ * The definition moved down to `@aglyn/aglyn/app-utils/plan-entitlements`
+ * because the billing page has to render the overage BEFORE it is charged,
+ * and that page is a client component which cannot import this module: the
+ * Admin SDK comes with it. A second copy of the subtraction on the client is
+ * the shape where the readout and the invoice quietly stop agreeing.
+ *
+ * Re-exported so every server caller keeps importing it from the module it
+ * always did — one definition, no drift, no import churn.
+ *
+ * @see priceEmailSendOverage — what the excess costs, at the plan's rate.
  */
-export function emailSendsOverage(total: number, limit: number): number {
-  const sends = Number(total)
-  const included = Number(limit)
-  if (!Number.isFinite(sends) || sends <= 0) return 0
-  if (!Number.isFinite(included) || included <= 0) return 0
-  return Math.max(0, sends - included)
-}
+export { emailSendsOverage } from '@aglyn/aglyn/app-utils/plan-entitlements'
 
 export default recordEmailSends

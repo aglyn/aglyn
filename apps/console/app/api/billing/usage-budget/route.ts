@@ -16,6 +16,7 @@
  */
 
 import {
+  isOrgWideMember,
   planMetersInfraOverage,
   pluginRequestFromWeb,
 } from '@aglyn/aglyn/server'
@@ -37,6 +38,7 @@ import {
   DEFAULT_BUDGET_THRESHOLD_PCTS,
   normalizeBudgetThresholds,
   orgMonthlySpend,
+  publicOrgMonthlySpend,
   resolveUsageBudget,
 } from '../../../../utils/usage-budget'
 
@@ -117,9 +119,25 @@ async function handler(request: Request): Promise<Response> {
     }
     const isStaff = decoded['staff'] === true
     const actor = await resolveOrgMembership(decoded.uid, orgId)
+    /*
+     * ORG-WIDE, and then the permission.
+     *
+     * A permission answers WHAT KIND OF ACTION, never WHICH RESOURCES. A site
+     * collaborator is an `orgs/{id}/members` document like any other, so a
+     * bare `memberHasOrgPermission` reads as though it answered a scope
+     * question when it answered only a kind-of-action one — and
+     * `resolveOrgPermissions` layers a custom role and per-member overrides
+     * over the role default, either of which can put `billing.manage` on a
+     * host-scoped document.
+     *
+     * A budget is org-scoped: it governs the whole organization's invoice, and
+     * a collaborator on one site of an agency's account has no claim on it.
+     * `email-ceiling` guards the same way, for the same reason.
+     */
     if (
       !isStaff &&
-      !(await memberHasOrgPermission(orgId, actor?.member, 'billing.manage'))
+      (!isOrgWideMember(actor?.member) ||
+        !(await memberHasOrgPermission(orgId, actor?.member, 'billing.manage')))
     ) {
       return Response.json({ error: 'billing.manage required' }, { status: 403 })
     }
@@ -177,7 +195,22 @@ async function handler(request: Request): Promise<Response> {
         {
           ...current,
           month,
-          spend,
+          /*
+           * PROJECTED, never the breakdown itself.
+           *
+           * `OrgSpendBreakdown.assistUsd` is `assistUsage/{month}.estCostUsd`
+           * verbatim — our provider bill at the serving model's list rates.
+           * This response reaches an org billing admin's browser, so a dollar
+           * figure on it is our unit cost published to a customer, whether or
+           * not they are charged a cent of it.
+           *
+           * `publicOrgMonthlySpend` is the same boundary `publicAssistCredits`
+           * holds on `/api/billing/assist-credits` and `publicAssistQuota`
+           * holds on the chat route: credits cross, dollars of OUR cost do not.
+           * The breakdown stays available to `usage-alerts`, which is cron-run
+           * and mails the dollar figures to staff.
+           */
+          spend: publicOrgMonthlySpend(spend),
           lastAlert,
           /*
             WHETHER THIS PLAN HAS METERED USAGE AT ALL (AGL-2250).

@@ -81,6 +81,8 @@ jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...path: string[]) => path.join('/'),
   query: (ref: string) => ref,
   limit: () => undefined,
+  orderBy: () => undefined,
+  documentId: () => '__name__',
 }))
 
 /** Settled, unentitled — the tiles stay off and the table still renders. */
@@ -88,6 +90,16 @@ const ORG_PLAN = { org: { plan: 'starter' }, ready: true }
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
+  /*
+   * The card asks for its windows through the shared builders. Both carry the
+   * collection reference straight through, so a ceilinged read still routes to
+   * its fixture by path.
+   */
+  collectionCeiling: (ref: string) => ref,
+  ceilingedWindow: (read: unknown[] | undefined, ceiling: number) => ({
+    rows: (read ?? []).slice(0, ceiling),
+    truncated: (read ?? []).length > ceiling,
+  }),
   /**
    * AGL-2136 added the `commerceAnalytics`-gated money tiles to this card,
    * so the module's closed-world mock has to carry `useOrgPlan` or the

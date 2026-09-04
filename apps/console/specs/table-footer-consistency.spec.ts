@@ -16,7 +16,7 @@
  */
 
 /**
- * ONE table footer, and no call site may re-decide it (AGL-693).
+ * ONE table footer, and no call site may re-decide it (AGL-2501).
  *
  * Left to themselves the lists disagree: layouts page 5 at a time, components
  * and templates 10, the team list 10, the screens tree 25, with the size menu
@@ -79,7 +79,11 @@ const FOOTERS: Array<[string, string]> = [
 const SHARED_FOOTER: Array<[string, string]> = [
   ['org activity', 'apps/console/components/org-activity-card.component.tsx'],
   ['site activity', 'apps/console/components/host-activity-table.component.tsx'],
-  ['actor activity', 'apps/console/components/actor-activity-table.component.tsx'],
+  // The shared activity/audit table, which is where the actor feed's footer
+  // now lives — two audit tables stacked on the staff user page were two
+  // implementations, and adding a footer to the hand-rolled one would have
+  // made them similar rather than the same.
+  ['activity table', 'apps/console/components/activity-table.component.tsx'],
   ['notifications', 'apps/console/app/(app)/manage/notifications/page.tsx'],
   /*
    * The staff audit log, which kept a "Load older" of its own — a fifth
@@ -136,6 +140,22 @@ const SHARED_FOOTER: Array<[string, string]> = [
     'datasets records',
     'libs/plugins/data/src/lib/components/host-datasets-card.component.tsx',
   ],
+  /*
+   * The two workspace pickers, which shared a "Load more workspaces" button —
+   * the last bespoke grower in the console outside the two documented grids.
+   * They page a SLICE of the membership window rather than re-keying it: that
+   * window is app-wide (it resolves which workspace the console is in), so
+   * `useWorkspacePage` grows it when a reader walks to its end instead of
+   * asking the picker to own it.
+   */
+  [
+    'workspace picker',
+    'apps/console/app/(app)/(home)/page.tsx',
+  ],
+  [
+    'billing workspace picker',
+    'apps/console/app/(app)/billing/page.tsx',
+  ],
 ]
 
 /**
@@ -156,6 +176,36 @@ const LOAD_MORE_ALLOWED = [
   'libs/plugins/commerce/src/lib/components/product-grid.tsx',
 ]
 
+/**
+ * Surfaces that still GROW instead of paging, and what stands in the way.
+ *
+ * A second list rather than more entries in the one above, for the same reason
+ * `OWES_A_FOOTER` is not `NOT_A_LIST`: an exemption and a debt read identically
+ * in an allow-list, and the debt is the one that has to shrink. This one is
+ * ratcheted below; the exemption above is not.
+ *
+ * They were invisible until the check learned the other spellings — see the
+ * pattern, which used to demand the exact string `'Load more'`.
+ */
+const GROWS_INSTEAD_OF_PAGING: Array<[string, string]> = [
+  [
+    'apps/console/components/org-switcher-nav.component.tsx',
+    'The workspace switcher: a cursor feed inside a NAV menu, where the row ' +
+      'count is the accounts one person belongs to and the control is a ' +
+      'dropdown rather than a list surface. The two workspace PAGES it shared ' +
+      'the button with now page on the shared footer; this one keeps growing ' +
+      'because a menu that reveals as you scroll is not the same act as a ' +
+      'list you page — a pager inside a dropdown puts a Next button under a ' +
+      'search field and makes finding a workspace take two controls.',
+  ],
+  [
+    'apps/console/app/(app)/[orgSlug]/billing/(sections)/invoices/page.tsx',
+    'Invoices, one per month forever, behind a "Load older invoices" that ' +
+      'only goes one way. Billing is out of this pass’s scope, and the same ' +
+      'table is already named in `OWES_A_FOOTER` for the footer it lacks.',
+  ],
+]
+
 /** A literal page-size array anywhere in a footer prop. */
 const LITERAL_OPTIONS = /(?:rowsPerPage|pageSize)Options=\{\[/
 /**
@@ -165,7 +215,7 @@ const LITERAL_OPTIONS = /(?:rowsPerPage|pageSize)Options=\{\[/
  */
 const LITERAL_LABEL = /labelRowsPerPage(?:=|:\s*)(?:["']|\{\s*['"])/
 
-describe('the console has one table footer (AGL-693)', () => {
+describe('the console has one table footer (AGL-2501)', () => {
   it.each(FOOTERS)('%s takes the shared options and label', (_label, path) => {
     const source = read(path)
     expect(source).toContain('TABLE_PAGE_SIZE_OPTIONS')
@@ -211,7 +261,12 @@ describe('the console has one table footer (AGL-693)', () => {
     for (const path of [
       'apps/console/components/screens-hierarchy-table.component.tsx',
       'apps/console/components/org-members-card.component.tsx',
-      'apps/console/components/content/collection-entries-page.component.tsx',
+      // The content entries window, which the provider above the three content
+      // routes owns rather than the page that draws its footer. Asserted where
+      // the state lives, for the same reason the layouts page is not named
+      // here: a path that only MENTIONS the constant in prose satisfies a
+      // source-text check without the rule holding anywhere.
+      'apps/console/components/content/content-scope.context.tsx',
       'apps/console/components/analytics/screens-analytics-table.component.tsx',
       'libs/shared/ui/jsx/src/lib/components/list-table.component.tsx',
       // The shared window hook, which is where a server-paged list gets its
@@ -237,7 +292,7 @@ describe('the console has one table footer (AGL-693)', () => {
 })
 
 /**
- * No list may grow its own pager again (AGL-693, extended).
+ * No list may grow its own pager again (AGL-2501, extended).
  *
  * A constant and a component are not enough on their own: the previous round
  * of this left four grammars standing, and every one of them began as a
@@ -300,7 +355,7 @@ function pluginComponentFiles(): string[] {
 const handRolledPager = (source: string) =>
   /\{'Previous'\}/.test(source) && /\{'Next'\}/.test(source)
 
-describe('no list hand-rolls a pager (AGL-693)', () => {
+describe('no list hand-rolls a pager (AGL-2501)', () => {
   it('THE CONTROL: the shape check catches what it is meant to catch', () => {
     // Guard the guard. A check that matched nothing would pass over a console
     // that had grown ten new two-button pagers.
@@ -332,32 +387,71 @@ describe('no list hand-rolls a pager (AGL-693)', () => {
   })
 })
 
-describe('no list keeps a bespoke "Load more" (AGL-693)', () => {
+describe('no list keeps a bespoke "Load more" (AGL-2501)', () => {
   const CONSOLE_ROOT = join(REPO, 'apps', 'console', 'components')
-  // The literal, not one JSX spelling of it: the storefront grid writes
-  // `{loadingMore ? 'Loading…' : 'Load more'}`, which a check for
-  // `{'Load more'}` walks straight past.
-  const LOADS_MORE = /'Load more'/
+  /**
+   * A button that GROWS the list, in any of the spellings this repo uses.
+   *
+   * `/'Load more'/` was the whole check, and three things walked past it. The
+   * workspace lists say `'Load more workspaces'`, so the closing quote never
+   * arrived where the pattern wanted it. The staff audit log said
+   * `'Load older'`. And the site activity card said `Show ${more} more`, which
+   * is how a FOURTH pagination grammar stood beside this guard for as long as
+   * the guard existed — the one failure it was written to prevent.
+   *
+   * So the shape, not the string: a quoted or templated label that opens with
+   * Load or Show and carries `more` or `older`. It stays narrow enough not to
+   * fire on the counts this console writes everywhere — `+${n} more`,
+   * `Confirm ${n} more` — because those do not begin with the verb.
+   */
+  const LOADS_MORE =
+    /(['"`])(?:Load|Show)\s[^'"`]*\b(?:more|older)\b[^'"`]*\1/
   const repoRelative = (path: string) => path.replace(`${REPO}/`, '')
 
-  it('THE CONTROL: the check catches both spellings', () => {
+  it('THE CONTROL: the check catches every spelling, and no counts', () => {
     expect(LOADS_MORE.test(`<Button>{'Load more'}</Button>`)).toBe(true)
     expect(
       LOADS_MORE.test(`{loadingMore ? 'Loading…' : 'Load more'}`),
     ).toBe(true)
+    // The three that escaped it, each of which was a real surface.
+    expect(LOADS_MORE.test(`{'Load more workspaces'}`)).toBe(true)
+    expect(LOADS_MORE.test(`{'Load older invoices'}`)).toBe(true)
+    expect(LOADS_MORE.test('{`Show ${more} more`}')).toBe(true)
+    // And what it must NOT claim: a count is not a pager.
+    expect(LOADS_MORE.test('{`+${n} more`}')).toBe(false)
+    expect(LOADS_MORE.test('{`Confirm ${n} more`}')).toBe(false)
     expect(LOADS_MORE.test(`<ListPagination page={0} />`)).toBe(false)
   })
 
-  it('only the two documented grids still grow instead of paging', () => {
-    const offenders = [
+  it('THE CONTROL: it reads code, not the prose that discusses it', () => {
+    // This check used to read raw source, so a docblock explaining the rule
+    // broke the rule — which is not a hypothetical: the activity card's
+    // conversion is documented in the card, quoting the button it removed.
+    expect(
+      LOADS_MORE.test(
+        withoutComments(`/* the old 'Load more' button */\nconst x = 1`),
+      ),
+    ).toBe(false)
+  })
+
+  it('only the documented grids and the owed list still grow', () => {
+    const growing = [
       ...tsxFilesUnder(CONSOLE_ROOT),
       ...tsxFilesUnder(join(REPO, 'apps', 'console', 'app')),
       ...pluginComponentFiles(),
     ]
-      .filter((path) => LOADS_MORE.test(readFileSync(path, 'utf8')))
+      .filter((path) => LOADS_MORE.test(withoutComments(readFileSync(path, 'utf8'))))
       .map(repoRelative)
-      .filter((path) => !LOAD_MORE_ALLOWED.includes(path))
-    expect(offenders).toEqual([])
+    const owed = GROWS_INSTEAD_OF_PAGING.map(([path]) => path)
+    expect(
+      growing.filter(
+        (path) => !LOAD_MORE_ALLOWED.includes(path) && !owed.includes(path),
+      ),
+    ).toEqual([])
+    // The debt only ever shrinks, and every entry still describes a surface
+    // that really does grow — a stale line here widens the exemption silently.
+    expect(GROWS_INSTEAD_OF_PAGING).toHaveLength(2)
+    for (const path of owed) expect(growing).toContain(path)
   })
 
   it('THE CONTROL: the plugin walk reaches more than one plugin', () => {
@@ -387,7 +481,7 @@ describe('no list keeps a bespoke "Load more" (AGL-693)', () => {
 })
 
 /**
- * A paged list names its ORDER (AGL-693, and the six times before it).
+ * A paged list names its ORDER (AGL-2501, and the six times before it).
  *
  * `limit()` with no `orderBy` is not "the first N". Firestore answers it in
  * document-id order, and every collection here is keyed by a generated id — so
@@ -445,6 +539,18 @@ const withoutComments = (source: string) =>
  * a different answer. This guard is about the surfaces a reader pages
  * through.
  */
+/**
+ * A file NAMES its order when it writes an `orderBy` — or when it asks
+ * through the shared builder that carries one.
+ *
+ * The plugin cards moved their ordering into `collectionPage` /
+ * `collectionCeiling` for the same reason the console's four artifact lists
+ * moved theirs into `hostArtifactQuery`: the decision is subtle, identical
+ * everywhere, and wrong in a way nobody sees. A guard that only knew the word
+ * would have reported every one of those conversions as unordered.
+ */
+const NAMES_ITS_ORDER = /\borderBy\(|\bcollectionPage\(|\bcollectionCeiling\(/
+
 const DRAWS_A_FOOTER =
   /<ListPagination|<ListTable|<DataTableComponent|<TablePagination|<DataGrid|<ScreensHierarchyTable/
 
@@ -457,7 +563,7 @@ function footerFiles(): string[] {
   ].filter((path) => DRAWS_A_FOOTER.test(withoutComments(readFileSync(path, 'utf8'))))
 }
 
-describe('every list that DRAWS a footer names its order (AGL-693)', () => {
+describe('every list that DRAWS a footer names its order (AGL-2501)', () => {
   const repoRelative = (path: string) => path.replace(`${REPO}/`, '')
 
   it('THE CONTROL: the footer check catches what it is meant to catch', () => {
@@ -499,14 +605,72 @@ describe('every list that DRAWS a footer names its order (AGL-693)', () => {
       .filter((path) => !UNORDERED_BY_DESIGN.includes(path))
       .filter((path) => {
         const code = withoutComments(read(path))
-        return /\blimit\(/.test(code) && !/\borderBy\(/.test(code)
+        return /\blimit\(/.test(code) && !NAMES_ITS_ORDER.test(code)
       })
     expect(unordered).toEqual([])
+  })
+
+  it('THE CONTROL: asking through the builder counts, a bare cap does not', () => {
+    // Guard the widened guard. `collectionPage`/`collectionCeiling` carry the
+    // `orderBy` for their callers, so a file that asks through one has named
+    // its order without writing the word — and a pattern that did not know
+    // that would report every converted card as unordered. A pattern that
+    // accepted anything would report none.
+    expect(NAMES_ITS_ORDER.test("orderBy('createdAt', 'desc')")).toBe(true)
+    expect(NAMES_ITS_ORDER.test('collectionPage(ref, pageLimit)')).toBe(true)
+    expect(NAMES_ITS_ORDER.test('collectionCeiling(ref, CEILING)')).toBe(true)
+    expect(NAMES_ITS_ORDER.test('query(ref, limit(200))')).toBe(false)
   })
 })
 
 /**
- * The four site artifact lists ask ONE query builder (AGL-693).
+ * The plugin console lists share ONE ordering decision (AGL-2501).
+ *
+ * `hostArtifactQuery` answered this for the console's four site-artifact
+ * lists and could not share the answer: an app cannot be imported from a
+ * library, so every plugin card faced the same question alone and eleven of
+ * them answered it by not ordering at all. `collectionPage` and
+ * `collectionCeiling` are that decision where a plugin can ask for it, and
+ * this asserts the decision itself rather than that a file contains a word.
+ */
+describe('the shared plugin query builder orders on the document NAME', () => {
+  const BUILDER =
+    'libs/tenant/feature/instance/src/lib/hooks/host-collection-queries.ts'
+
+  it('orders on the document id, and on no FIELD', () => {
+    const builder = withoutComments(read(BUILDER))
+    expect(builder).toContain('orderBy(documentId())')
+    // The three that look safe and are not: `/api/hosts/resources` validates
+    // no field for presence, and `IMPORTABLE_FIELDS` copies a name only if
+    // the exported document carried one — so ordering on any of these hides
+    // rows rather than mis-sorting them.
+    for (const field of ['name', 'displayName', 'createdAt', 'updatedAt']) {
+      expect(builder).not.toContain(`orderBy('${field}'`)
+    }
+  })
+
+  it('the CEILING probes one document past itself', () => {
+    // `length >= ceiling` is wrong at exactly the count that equals the
+    // ceiling, which is the one collection size where a reader is told rows
+    // are missing and none are.
+    const builder = withoutComments(read(BUILDER))
+    expect(builder).toMatch(/limit\(ceiling \+ 1\)/)
+    expect(builder).toMatch(/rows\.length > ceiling/)
+  })
+
+  it('the console re-exports the probe rather than keeping a copy', () => {
+    // Two implementations of "can this bounded list admit it is bounded" is
+    // how the two halves of the console come to disagree about it.
+    const consoleUtil = read('apps/console/utils/host-artifact-queries.ts')
+    expect(consoleUtil).toContain('host-collection-queries')
+    expect(withoutComments(consoleUtil)).not.toContain(
+      'export function ceilingedWindow',
+    )
+  })
+})
+
+/**
+ * The four site artifact lists ask ONE query builder (AGL-2501).
  *
  * They read four different collections under `hosts/{id}` and every one of
  * them faces the same question: `orderBy` matches only documents that HAVE
@@ -528,7 +692,7 @@ const ARTIFACT_LISTS: Array<[string, string]> = [
   ],
 ]
 
-describe('the site artifact lists share one ordering decision (AGL-693)', () => {
+describe('the site artifact lists share one ordering decision (AGL-2501)', () => {
   it.each(ARTIFACT_LISTS)('the %s list asks through the shared builder', (
     _label,
     path,
@@ -582,7 +746,7 @@ describe('the site artifact lists share one ordering decision (AGL-693)', () => 
   })
 })
 
-describe('a paged list names its order (AGL-693)', () => {
+describe('a paged list names its order (AGL-2501)', () => {
   it('THE CONTROL: the comment stripper reads code, not prose', () => {
     // Both halves matter. A stripper that removed nothing would let a file
     // pass on its own docblock; one that removed everything would make every
@@ -630,8 +794,640 @@ describe('a paged list names its order (AGL-693)', () => {
   })
 })
 
+
 /**
- * A control that silently does nothing (AGL-693).
+ * A TABLE with no footer under it (AGL-2501, and the reason this kept being
+ * found one at a time).
+ *
+ * Every check above this point looks for a PAGER — a hand-rolled Previous/Next
+ * pair, a "Load more", a `limit()` that forgot its `orderBy`. A card that
+ * renders a `<Table>` over an array it already holds matches none of them: it
+ * has no pager to be inconsistent, no cap to be unordered, and no footer at
+ * all. So three consecutive sweeps each scoped to a directory found these one
+ * at a time, and the guard was silent between them because it was looking for
+ * the wrong shape.
+ *
+ * This looks for the shape that actually matters: rows mapped into a `<Table>`
+ * (or a grid with its own footer switched off) and nothing under them. Every
+ * such file must be classified — converted, or named here with the reason it
+ * is not a list. A file in neither list fails, which is what stops the next
+ * one arriving unnoticed.
+ */
+const RENDERS_A_TABLE = /<Table\b/
+const MAPS_ROWS_INTO_IT = /\.map\([\s\S]{0,400}?<TableRow/
+/** A grid renders its own footer unless the caller turns it off. */
+const GRID_FOOTER_SWITCHED_OFF = /hideFooter/
+/**
+ * A capped Firestore read — which is what makes a repeated element a LIST.
+ *
+ * The `<Table>` shape above found ten plugin surfaces and the owner went on
+ * finding more, because a table is not how most of this console draws a list:
+ * a row here is a `<Stack direction="row">` in a `CardDisplay`, and the
+ * redirects, variables, functions, workflows, events and campaign lists were
+ * every one of them that shape. A check that only knew about `<TableRow>` was
+ * asking the wrong question for the third time.
+ *
+ * `limit(` is the half that keeps this from firing on everything. A row built
+ * from a constant — a menu of statuses, a set of tabs, a form's fields — is a
+ * fixed vocabulary and always was; a row built from a CAPPED COLLECTION READ
+ * is a window over something that grows, which is the entire subject of this
+ * file.
+ *
+ * `collectionPage` and `collectionCeiling` count as the same thing, because
+ * they ARE it: the cap moved inside the shared query builders and the word
+ * `limit` moved with it, so a card converted to them left this detector's
+ * sight whether or not it grew a footer. That is the shape of a guard that
+ * retires itself — the more of this list is fixed the right way, the less of
+ * the console the check can still see.
+ */
+const READS_A_CAPPED_COLLECTION =
+  /\blimit\(|\bcollection(?:Page|Ceiling)\(/
+/**
+ * The repeated ROW elements, as this codebase actually writes them.
+ *
+ * Derived from the surfaces rather than guessed: every unpaginated plugin list
+ * mapped into one of these. `MenuItem` is deliberately absent — a picker's
+ * options are a lookup and not a list a reader pages through, which is the
+ * same line the ordering guard above draws. `Box` is absent for the opposite
+ * reason: it is the wrapper every non-list also uses, so including it bought
+ * two more files and no more lists.
+ */
+const MAPS_INTO_ROWS =
+  /\.map\([\s\S]{0,400}?<(TableRow|ListItem|ListItemButton|Card|Paper|Accordion|Stack|Grid)\b/
+/**
+ * `StaffListPagination` counts: it is `ListPagination` with the page size
+ * fixed by the route behind it, and a check that missed it would report three
+ * already-paged staff lists as unpaginated.
+ */
+const RENDERS_A_FOOTER = /<ListPagination|<TablePagination|<StaffListPagination/
+
+const unpaginatedTable = (source: string) => {
+  const code = withoutComments(source)
+  if (RENDERS_A_FOOTER.test(code)) return false
+  return (
+    (RENDERS_A_TABLE.test(code) && MAPS_ROWS_INTO_IT.test(code)) ||
+    (READS_A_CAPPED_COLLECTION.test(code) && MAPS_INTO_ROWS.test(code)) ||
+    GRID_FOOTER_SWITCHED_OFF.test(code)
+  )
+}
+
+/**
+ * Every table in the console AND in the plugins.
+ *
+ * The walk stopped at `apps/console`, which is how a sweep that found twelve
+ * of these could report itself complete with twenty-five more standing one
+ * directory over. A plugin console card is the same surface as a console one —
+ * it renders into the same shell, under the same header, for the same reader —
+ * and the collections behind the plugin cards are the ones that grow FASTEST:
+ * a site's form submissions, its leads, its stock ledger, its suppression list.
+ */
+function tablesWithoutFooters(): string[] {
+  return [
+    ...tsxFilesUnder(CONSOLE_PAGES),
+    ...tsxFilesUnder(CONSOLE_COMPONENTS),
+    ...pluginComponentFiles(),
+  ]
+    .filter((path) => unpaginatedTable(readFileSync(path, 'utf8')))
+    .map((path) => path.replace(`${REPO}/`, ''))
+    .sort()
+}
+
+/**
+ * NOT a list: a fixed or bounded set, where a pager would be a control about
+ * nothing and the second page would always be empty.
+ *
+ * The distinction is what the row COUNT is a function of. A row per US state,
+ * per configuration knob, per month in a fixed window or per line of a
+ * statutory form is bounded by the taxonomy; a row per invoice, per version or
+ * per audited action is bounded by how long the account has existed.
+ */
+const NOT_A_LIST: Array<[string, string]> = [
+  [
+    'libs/plugins/mui/src/lib/components/data-table.tsx',
+    'The Table ELEMENT (AGL-2543), not a view of a collection. Its rows are ' +
+      'typed into the attributes panel by the author — a feature matrix or a ' +
+      'spec sheet — so there is no query behind it, nothing that grows while ' +
+      'the page is open, and no cursor a footer could advance. A pager here ' +
+      'would offer to page a constant the author can see in full while they ' +
+      'edit it. It maps rows into itself, which is why the detector sees it: ' +
+      'the map is over a parsed prop, not over documents.',
+  ],
+  [
+    'apps/console/app/(app)/admin/margin-utilization/page.tsx',
+    'Two tables, and neither wants a footer. The first is one row per BAND — ' +
+      'a fixed vocabulary, the same rows on every load, so a pager would ' +
+      'offer to page a constant. The second IS a window over a growing ' +
+      'collection, and its pager is the SCAN: the route pages an id-ordered ' +
+      'walk with a truncation probe and the page reports the cursor as a ' +
+      'banner plus a "scan the next page" control, because four Firestore ' +
+      'reads per organization is a cost that must be asked for rather than ' +
+      'spent by a footer click. A second pager over rows already in memory ' +
+      'would page a slice while the collection continued past it — the exact ' +
+      'shape this file exists to stop — and the rendered window is bounded ' +
+      'by `ceilingedWindow`, which discloses when it bit.',
+  ],
+  [
+    'libs/plugins/email/src/lib/components/list-import-drawer.tsx',
+    'The import drawer’s two tables are BOUNDED READOUTS of one act, not ' +
+      'windows onto a collection. The first shows at most ten of the sampled ' +
+      'addresses the server checked, beside the sample size and the file ' +
+      'total, so its length is a constant; the second is one row per refusal ' +
+      'REASON, and there are six reasons. Neither grows with the size of the ' +
+      'file, and a pager on either would offer to page a fixed list.',
+  ],
+  [
+    'libs/plugins/email/src/lib/components/sending-sender-drawer.tsx',
+    'A PICKER’s option list, which this file’s own prose puts out of scope: ' +
+      'the roster read fills a select of teammates to fill a sender’s three ' +
+      'fields from, and a person choosing one knows who they are looking ' +
+      'for. `MenuItem` is deliberately absent from the row shapes above for ' +
+      'exactly this reason; what trips the check is the `Stack` INSIDE the ' +
+      'menu item that puts a name over an address. Paging it would page a ' +
+      'lookup — and the read is already ceilinged at the largest per-site ' +
+      'collaborator allowance any finite plan grants, so on every plan below ' +
+      'Enterprise the whole entitled set fits and nothing is cut.',
+  ],
+  [
+    'libs/plugins/email/src/lib/components/sending-domains-card.tsx',
+    'The org’s proved sending identities. Not a growing collection: a domain ' +
+      'is here because somebody published DNS records for it and waited for ' +
+      'them to verify, so its cardinality is how many domains the business ' +
+      'owns — a handful, and bounded by an act outside this product rather ' +
+      'than by a read. The set arrives whole from the sending-identity ' +
+      'route, so there is no client window to truncate and nothing a footer ' +
+      'could page through.',
+  ],
+  [
+    'libs/plugins/email/src/lib/components/email-detail.tsx',
+    'One message’s report. Its tables are the message’s own facts — state, ' +
+      'send time, campaign, list, template — the fixed population taxonomy, ' +
+      'and the link rollup, which is bounded at WRITE time by ' +
+      '`CAMPAIGN_LINK_ROLLUP_MAX` with anything past the cap counted and ' +
+      'reported instead of dropped. A 50,000-recipient send draws the same ' +
+      'number of rows as a fifty-recipient one.',
+  ],
+  [
+    'libs/plugins/email/src/lib/components/email-template-detail.tsx',
+    'One template’s report. The audiences table is one row per named ' +
+      'audience the template has been sent to and the caveats are a fixed ' +
+      'set; the messages table is the ceilinged window the card already ' +
+      'holds, and it owns up to the ceiling rather than paging a window that ' +
+      'cannot be ordered on a date every writer stamps.',
+  ],
+  [
+    'libs/plugins/email/src/lib/components/email-topics-card.tsx',
+    'The org’s topic CATALOG — one row per stream a recipient can leave. Its ' +
+      'cardinality is a merchant’s own vocabulary, read ordered and ceilinged ' +
+      'at 200, and a preference page stops being a preference page well ' +
+      'before that many checkboxes: an org that reaches the ceiling has a ' +
+      'different problem than a truncated table.',
+  ],
+  [
+    'libs/plugins/email/src/lib/components/campaign-composer.tsx',
+    'A FORM, not a list. Everything it maps over is a picker’s options — the ' +
+      'org’s segments and lists at `limit(50)`, the site’s email designs at ' +
+      '`limit(200)`, its running experiments at `limit(50)` — plus the three ' +
+      'merge tags, which are a fixed set the send path resolves. A page ' +
+      'control belongs under rows a reader is working through, not under the ' +
+      'options of a select. The campaign’s own emails ARE a list, and they ' +
+      'are in `campaign-detail-card.tsx`, where they page on the shared ' +
+      'footer.',
+  ],
+  [
+    'libs/plugins/marketing/src/lib/components/campaign-report-card.tsx',
+    'Two tables, neither of which grows with the audience. The populations ' +
+      'table is one row per named part of the send — consented, ' +
+      'grandfathered, withheld, suppressed — a fixed taxonomy. The links ' +
+      'table is bounded by `CAMPAIGN_LINK_ROLLUP_MAX` (50), enforced at ' +
+      'ROLLUP time rather than at read time, with anything past the cap ' +
+      'counted and reported instead of dropped. A 50,000-recipient send and ' +
+      'a 50-recipient one render the same number of rows.',
+  ],
+  [
+    'apps/console/app/(app)/admin/revenue/page.tsx',
+    'Attribution and earnings BREAKDOWNS — one row per traffic source, plan ' +
+      'or refund cause. The cardinality is the taxonomy’s, not the traffic’s.',
+  ],
+  [
+    'apps/console/app/(app)/admin/tax-return/page.tsx',
+    'Form 01-114’s filing lines are fixed by the form, and the breakdowns ' +
+      'beside them run one row per state or jurisdiction. Another agent owns ' +
+      'this file today; the classification is not why it is untouched.',
+  ],
+  [
+    'apps/console/components/server-config-card.component.tsx',
+    'One row per declared configuration knob — a fixed set the server ships.',
+  ],
+  [
+    'apps/console/components/staff-org-usage-table.component.tsx',
+    'One row per month in a fixed window.',
+  ],
+  [
+    'apps/console/components/theme-editor/theme-overrides-card.component.tsx',
+    'One row per overridden theme token on one site, described from the ' +
+      'theme’s own shape.',
+  ],
+  [
+    'apps/console/app/(app)/[orgSlug]/hosts/[host]/templates/[templateId]/page.tsx',
+    'The sibling PAGES of one starter bundle, bounded by what the bundle ' +
+      'holds — the library that lists bundles is paged separately.',
+  ],
+  [
+    'apps/console/app/(app)/admin/users/[uid]/page.tsx',
+    'The two tables left here are one row per ORGANIZATION this account ' +
+      'belongs to and one per legal document version it has accepted — both ' +
+      'bounded by what the account IS rather than by what it has done. The ' +
+      'audit trail, which was bounded by the latter, renders `ActivityTable`.',
+  ],
+  [
+    'libs/plugins/commerce/src/lib/components/console/product-editor-dialog.component.tsx',
+    'One row per VARIANT of the single product being edited, and the variant ' +
+      'set is the cross-product of the options this same dialog defines a few ' +
+      'lines above the table. Its size is the author’s own choice, made on ' +
+      'screen, and every row is an input the save reads — a page boundary ' +
+      'would hide half a form from the submit that posts all of it.',
+  ],
+  [
+    'libs/plugins/commerce/src/lib/components/console/storefront-tax-summary-card.component.tsx',
+    'One row per JURISDICTION inside one liability bucket, which is the same ' +
+      'shape as the console’s revenue breakdowns: the cardinality belongs to ' +
+      'the tax taxonomy a store sells into, not to how long it has traded.',
+  ],
+  /*========================================================================
+   * Caught by the widened shape: a row built from a CAPPED READ, with no
+   * footer. Everything below draws repeated rows and is still not a list.
+   *=======================================================================*/
+  [
+    'apps/console/app/(editor)/[orgSlug]/hosts/[host]/screens/[screenId]/versions/[versionId]/besigner/page.tsx',
+    'The editor. Its capped reads are the layout and screen PICKERS a node ' +
+      'binds to, and the rows it maps are one screen’s node definitions — an ' +
+      'editing working set, not a collection anybody pages through.',
+  ],
+  [
+    'apps/console/components/content/content-scope.context.tsx',
+    'A provider. It reads collections, authors and screens to fill the ' +
+      'content pickers its consumers render, opens the paged entries WINDOW ' +
+      'that the collection page draws the footer for, and probes one slug at ' +
+      'a time for the entry editor’s address check; it draws no list of its ' +
+      'own.',
+  ],
+  [
+    'apps/console/components/document-preview.component.tsx',
+    'One document, previewed. The rows are that document’s runtime fields ' +
+      'and its format options — bounded by the document, not by the account.',
+  ],
+  [
+    'apps/console/components/error-screens-card.component.tsx',
+    'One row per declared error slot (`HOST_ERROR_SCREEN_SLOTS`), which is a ' +
+      'fixed vocabulary the product ships. The capped `screens` read behind ' +
+      'it fills each slot’s picker rather than the rows themselves.',
+  ],
+  [
+    'apps/console/components/interaction-builder-dialog.component.tsx',
+    'A picker dialog: workflows, overlays and screens are read as the ' +
+      'OPTIONS an interaction can be bound to, which is a lookup and not a ' +
+      'surface a reader scans — the same line the ordering guard draws.',
+  ],
+  [
+    'libs/plugins/inbox/src/lib/components/inbox-glance-card.component.tsx',
+    'The dashboard inbox preview: three rows over a four-document read, ' +
+      'where the fourth is the probe that lets the card say the rest are in ' +
+      'the Inbox. The Inbox page owns the paged list and the header links ' +
+      'to it — the same reading as the site-users preview below.',
+  ],
+  [
+    'libs/plugins/commerce/src/lib/components/console/newest-site-users-card.component.tsx',
+    'A dashboard preview at `limit(5)` with a View all link to the paged ' +
+      'list. Five rows chosen to be five, not a window that got cut short. ' +
+      'It moved into the commerce package when the dashboard cards became ' +
+      'registered widgets (AGL-433); the reading is unchanged.',
+  ],
+  [
+    'apps/console/components/media/media-library.component.tsx',
+    'The DAM grid, already exempt and already explained: it completes a ' +
+      'SEARCH as it loads (AGL-1460), so "how many pages" is not a question ' +
+      'it can answer. Named here too because the widened shape reaches it.',
+  ],
+  [
+    'libs/plugins/commerce/src/lib/components/console/commerce-analytics-card.component.tsx',
+    'Revenue and conversion BREAKDOWNS — a row per period, channel or ' +
+      'status. A metric computed from a capped window is its own defect and ' +
+      'not this one; a pager over four summary rows would answer nothing.',
+  ],
+  [
+    'libs/plugins/commerce/src/lib/components/console/commerce-glance-card.component.tsx',
+    'The storefront glance: a handful of headline figures with a row each. ' +
+      'The cardinality is the set of figures, which the card declares.',
+  ],
+  [
+    'libs/plugins/commerce/src/lib/components/console/locations-card.component.tsx',
+    'One row per inventory location, and the plan bands are 1 / 1 / 2 / 4 / ' +
+      '6 against a `limit(25)` window — the ceiling is four times the largest ' +
+      'band, so the second page is empty on every plan that exists.',
+  ],
+  [
+    'libs/plugins/commerce/src/lib/components/console/registers-card.component.tsx',
+    'One row per POS register, bands 0 / 0 / 1 / 2 under the same `limit(25)`. ' +
+      'Bounded by what the plan sells, not by how long the store has traded.',
+  ],
+  [
+    'libs/plugins/data/src/lib/components/dataset-schema-dialog.component.tsx',
+    'One row per FIELD of the dataset being edited, which is the schema the ' +
+      'author is defining in the dialog above the rows.',
+  ],
+  [
+    'libs/plugins/logic/src/lib/components/host-reference-health-card.component.tsx',
+    'A diagnostic: one row per BROKEN reference found across a fixed set of ' +
+      'collections. A healthy site renders none, and a site with hundreds ' +
+      'has a bigger problem than a pager would solve.',
+  ],
+  [
+    'libs/plugins/marketing/src/lib/components/host-marketing-summary-card.component.tsx',
+    'A summary card — overlays, campaigns and experiments counted into one ' +
+      'row each, as a link to the surface that lists them properly.',
+  ],
+  [
+    'libs/plugins/marketplace/src/lib/components/listing-content.component.tsx',
+    'Registered as a WIDGET (`widgetId: marketplace-listing-content`), not a ' +
+      'console page: it renders one listing’s own content — its versions, ' +
+      'its screenshots, its install targets — inside whatever embeds it.',
+  ],
+  [
+    'libs/plugins/workflows/src/lib/components/host-webhooks-card.component.tsx',
+    'One row per inbound webhook, and `WEBHOOK_MAX_PER_HOST` is 5 while the ' +
+      'listener reads 20. The cap is enforced server-side in ' +
+      '`/api/hosts/resources`, so the window is four times a bound that ' +
+      'cannot be exceeded and the second page can never exist.',
+  ],
+  [
+    'libs/plugins/marketing/src/lib/components/host-overlays-card.component.tsx',
+    'A PRECEDENCE list: the first enabled overlay of each kind is the one a ' +
+      'visitor sees, and the arrows reorder by swapping `order` with the ' +
+      'ADJACENT row — so a page boundary separates a row from the neighbor it ' +
+      'would trade places with and the eleventh overlay could never be moved ' +
+      'into tenth. Ceilinged and ordered instead, with a probe, exactly like ' +
+      'the console’s screen tree and starter bundles.',
+  ],
+  [
+    'libs/plugins/contacts/src/lib/components/contacts-console-page.tsx',
+    'MISCLASSIFIED as the contact roster, which is not what the detector ' +
+      'found here: the roster renders `ListTable` and has had a footer and a ' +
+      'server-side filter since AGL-2292. The rows this matches are one ' +
+      'contact’s interaction timeline in the drawer, and ' +
+      '`CONTACT_INTERACTIONS_CAP` is 50 — `mergeContactInteraction` slices to ' +
+      'it on every write, so the array cannot hold a fifty-first row and the ' +
+      'second page is empty for every contact that will ever exist.',
+  ],
+]
+
+/**
+ * A real list that still owes a footer, and what stands in the way today.
+ *
+ * Listed rather than skipped, and listed even where this pass could not fix
+ * it: a guard that omits what it cannot fix today is exactly how this became
+ * a dozen surfaces found one at a time. The list may shrink. It may not grow
+ * without someone writing a reason next to the addition.
+ */
+const OWES_A_FOOTER: Array<[string, string]> = [
+  [
+    'libs/plugins/inbox/src/lib/components/submission-reply.component.tsx',
+    'Replies sent on one submission. The row count is a function of how often ' +
+      'the merchant answered, not of any taxonomy, so it is a list by this ' +
+      'file’s own test. It over-fetches by one and SAYS when the thread is ' +
+      'longer than the window — which makes the truncation honest but does ' +
+      'not make it navigable, and the eleventh reply is still unreachable.',
+  ],
+  [
+    // The invoice table moved to its own section when billing was split
+    // (AGL-2501). Same table, same reason, same scope decision — only the file
+    // it lives in changed.
+    'apps/console/app/(app)/[orgSlug]/billing/(sections)/invoices/page.tsx',
+    'Invoices, one per month forever. Billing is out of this pass’s scope.',
+  ],
+  [
+    'apps/console/app/(app)/[orgSlug]/hosts/[host]/components/[componentId]/page.tsx',
+    'Version history, `limit(100)` unordered and sorted by `createdAt` in the ' +
+      'browser. Blocked on the ordering trap: `IMPORTABLE_FIELDS.versions` ' +
+      'carries no `createdAt`, so a version restored from a site bundle has ' +
+      'none — `orderBy(\'createdAt\')` would hide restored versions rather ' +
+      'than mis-order them. Needs an audit of `updatedAt`’s writers, or a ' +
+      'backfill, before it can be paged.',
+  ],
+  [
+    'apps/console/app/(app)/[orgSlug]/hosts/[host]/layouts/[layoutId]/page.tsx',
+    'The same version history, the same block.',
+  ],
+  [
+    'libs/plugins/forms/src/lib/components/form-detail-card.tsx',
+    'The same version history, the same block — a form versions exactly as a ' +
+      'component does and reads its versions the same unordered way.',
+  ],
+  [
+    'apps/console/app/(editor)/[orgSlug]/hosts/[host]/screens/[screenId]/versions/[versionId]/view/page.tsx',
+    'The same version history, the same block.',
+  ],
+  [
+    'apps/console/components/besigner-versions.component.tsx',
+    'The same version history, the same block.',
+  ],
+  [
+    'apps/console/app/(app)/admin/assist-signals/page.tsx',
+    'Mined signal rows, which grow with usage. Another agent owns this file.',
+  ],
+  [
+    'apps/console/app/(app)/admin/health/page.tsx',
+    'The CSP report table renders `csp.rows.slice(0, 100)` — a silent ' +
+      'truncation, not a bound. The CHECK tables beside it are a fixed set ' +
+      'and would not want a pager.',
+  ],
+  [
+    'apps/console/app/(app)/admin/orgs/[orgId]/page.tsx',
+    'An organization’s invoices, one per month forever.',
+  ],
+  [
+    'apps/console/components/org-sso-card.component.tsx',
+    'The accounts a domain claim would move. A large customer’s domain is ' +
+      'not a bounded preview.',
+  ],
+  /*========================================================================
+   * The widened shape's own tranche: real lists, still footerless, each with
+   * what stands in the way TODAY. Listed even where this pass could not fix
+   * them — a guard that omits what it cannot fix is how this became three
+   * rounds of somebody finding these by hand.
+   *=======================================================================*/
+  [
+    'apps/console/components/billing/billing-usage-history.component.tsx',
+    'Metered usage, one row per period forever. Billing is held by another ' +
+      'agent’s split of that page; the classification is not why it is ' +
+      'untouched.',
+  ],
+  [
+    'libs/plugins/bookings/src/lib/components/bookings-console-page.tsx',
+    'Bookings, which grow with every reservation. A plugin PAGE SHELL, ' +
+      'being converted to routed sections by another agent — the list lives ' +
+      'in the shell here rather than in a card, so it cannot be paged ' +
+      'without editing across that work.',
+  ],
+  [
+    'libs/plugins/commerce/src/lib/components/console/pos-page.component.tsx',
+    'The POS catalog grid, a page shell reading `limit(500)`. It is also the ' +
+      'one surface here where a pager is the wrong control — a till is ' +
+      'searched, not paged — so it wants the search-first treatment the DAM ' +
+      'grid has rather than a footer.',
+  ],
+  [
+    'libs/plugins/marketplace/src/lib/components/host-plugins-card.component.tsx',
+    'Installed plugins, per site and per org, both unordered `limit(50)`. ' +
+      'Bounded by the marketplace rather than by the account, but the ' +
+      'marketplace is the thing that grows.',
+  ],
+]
+
+describe('a table with rows under it has a footer under those (AGL-2501)', () => {
+  it('THE CONTROL: the detector fires on a <Table> with no footer', () => {
+    // The assertion this whole block turns on. The previous guards looked for
+    // a pager, and a table that never had one matched nothing — so the spec
+    // passed by asking the wrong question, which is how twelve of these
+    // shipped.
+    expect(
+      unpaginatedTable(`
+        <Table><TableBody>{rows.map((row) => (<TableRow key={row.id} />))}</TableBody></Table>
+      `),
+    ).toBe(true)
+    // A grid whose own footer was switched off and given nothing in its place.
+    expect(unpaginatedTable(`<ListTable rows={rows} hideFooter />`)).toBe(true)
+    /*
+     * And a card that caps its read through the SHARED builders, which is
+     * the spelling every conversion in this arc leaves behind. The word
+     * `limit` lives inside `collectionPage`/`collectionCeiling` now, so a
+     * detector that only knew the literal went blind to a surface at exactly
+     * the moment it was half-fixed — capped correctly, still footerless, and
+     * no longer visible to the check that would have said so.
+     */
+    expect(
+      unpaginatedTable(`
+        const rows = collectionCeiling(collection(db, 'reviews'), 200)
+        return rows.map((row) => (<Stack key={row.$id} />))
+      `),
+    ).toBe(true)
+    expect(
+      unpaginatedTable(`
+        const rows = collectionPage(collection(db, 'suppliers'), pageLimit)
+        return rows.map((row) => (<Stack key={row.$id} />))
+      `),
+    ).toBe(true)
+  })
+
+  it('THE CONTROL: it does not fire when a footer IS present', () => {
+    // A check that fired on everything would make the classification below a
+    // list of every file in the console, which is no classification at all.
+    expect(
+      unpaginatedTable(`
+        <Table><TableBody>{rows.map((row) => (<TableRow key={row.id} />))}</TableBody></Table>
+        <ListPagination page={0} pageSize={10} rowCount={rows.length} />
+      `),
+    ).toBe(false)
+    // The staff wrapper counts: it is `ListPagination` with the page size
+    // fixed by the route behind it.
+    expect(
+      unpaginatedTable(`<ListTable rows={rows} hideFooter /><StaffListPagination page={0} />`),
+    ).toBe(false)
+    // A table of static content maps nothing into itself.
+    expect(
+      unpaginatedTable(`<Table><TableBody><TableRow><TableCell>One</TableCell></TableRow></TableBody></Table>`),
+    ).toBe(false)
+  })
+
+  it('THE CONTROL: the walk reaches both the pages and the components', () => {
+    // Scoping this walk to one directory is what let three separate sweeps
+    // each miss what the others had not reached.
+    const found = tablesWithoutFooters()
+    expect(found.some((path) => path.startsWith('apps/console/app/'))).toBe(true)
+    expect(
+      found.some((path) => path.startsWith('apps/console/components/')),
+    ).toBe(true)
+  })
+
+  it('every unpaginated table is classified', () => {
+    const classified = new Set([
+      ...NOT_A_LIST.map(([path]) => path),
+      ...OWES_A_FOOTER.map(([path]) => path),
+    ])
+    const unclassified = tablesWithoutFooters().filter(
+      (path) => !classified.has(path),
+    )
+    expect(unclassified).toEqual([])
+  })
+
+  it('every classification still describes a real file', () => {
+    // A stale entry silently widens the exemption, and an entry for a file
+    // that has since been paged makes the owed list read as longer than it is.
+    const found = new Set(tablesWithoutFooters())
+    for (const [path, reason] of [...NOT_A_LIST, ...OWES_A_FOOTER]) {
+      expect({ path, found: found.has(path) }).toEqual({ path, found: true })
+      expect(reason.length).toBeGreaterThan(30)
+    }
+  })
+
+  it('THE CONTROL: the walk reaches the PLUGIN trees too', () => {
+    // The narrowing this widening exists to prevent, and the one that let a
+    // sweep report itself complete: every check above walked `apps/console`
+    // and stopped, so twenty-five plugin lists — the inbox, the suppression
+    // list, the stock ledger — sat outside a guard whose name says it covers
+    // a table with rows under it. A walk that lost the plugins would pass
+    // every assertion below by never looking at them.
+    const found = tablesWithoutFooters()
+    expect(found.some((path) => path.startsWith('libs/plugins/'))).toBe(true)
+    // And it reaches more than the one plugin that happens to be classified
+    // today, or the guard narrows back the moment that file is converted.
+    const plugins = new Set(
+      pluginComponentFiles().map(
+        (path) => path.replace(`${REPO}/`, '').split('/')[2],
+      ),
+    )
+    expect(plugins.size).toBeGreaterThan(4)
+  })
+
+  it('the owed list only ever shrinks', () => {
+    // A ratchet. Converting one of these means lowering the number with it;
+    // adding a surface to the list means raising it, which is a change a
+    // reviewer sees rather than a line lost in a diff.
+    // 15 since a form became a designable document: its detail page carries
+    // the same version history the component and layout ones do, read the
+    // same unordered way, and is blocked on the same `createdAt` audit.
+    expect(OWES_A_FOOTER).toHaveLength(15)
+    // 37 since a site's senders became a list the composer picks from: the
+    // drawer that edits one carries a picker of teammates, and a picker's
+    // option list is a lookup rather than a window a reader pages through.
+    //
+    // 36 since the staff margin surface arrived: one table is a fixed band
+    // taxonomy, and the other is windowed by an explicit SCAN rather than by
+    // a footer, because its rows cost four Firestore reads each.
+    //
+    // 35 since the Emails surface grew a page per message, per template and
+    // per topic and an import drawer on an audience's own page, and since the
+    // forms catalog joined them: `FORMS_MAX_PER_HOST` is a flat platform
+    // ceiling of 50 enforced server-side, so that read's `limit(100)` already
+    // exceeds the largest population that can exist. Every table on this list
+    // is bounded by something other than the audience — a fixed taxonomy, a
+    // rollup capped at WRITE time, a ceilinged window that says so, a
+    // merchant's own vocabulary, or a readout of one act whose length does
+    // not follow the size of the file it describes — which is the property
+    // this list exists to record. Raised here deliberately rather than by a
+    // walk that quietly stopped reaching a file.
+    //
+    // 38 since the besigner gained a Table ELEMENT (AGL-2543). It is the
+    // first entry here that is not a console surface at all: its rows are
+    // typed by an author into the attributes panel, so the map the detector
+    // sees is over a parsed prop rather than over documents, and there is no
+    // query behind it for a footer to page. Bounded by what somebody typed
+    // is the strongest form of the property this list records.
+    expect(NOT_A_LIST).toHaveLength(38)
+  })
+})
+
+/**
+ * A control that silently does nothing (AGL-2501).
  *
  * `filterMode="server"` hands the whole filter model to the caller and stops
  * the grid applying any of it. A list that answers only `quickFilterValues`

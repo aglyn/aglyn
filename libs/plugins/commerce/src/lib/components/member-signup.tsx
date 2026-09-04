@@ -17,6 +17,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { trackEventBeforeNavigation } from '@aglyn/aglyn/app-utils/analytics-events'
+import { campaignTouchField } from '@aglyn/aglyn/app-utils/campaign-touch'
 import { mdiAccountPlusOutline } from '@aglyn/shared-data-mdi'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
@@ -78,6 +79,10 @@ const MemberSignup = forwardRef<HTMLDivElement, MemberSignupProps>(
             password,
             ...(displayName ? { displayName } : {}),
             ...(marketingConsent ? { marketingConsent: true } : {}),
+            // The campaign this visitor came from, when they came from one.
+            // A sign-up is the identify moment that also writes a lead, so
+            // the touch has to arrive with the request that creates it.
+            ...campaignTouchField(),
           }),
         })
         if (!response.ok) {
@@ -221,7 +226,9 @@ export const schema: Aglyn.ComponentSchema<MemberSignupProps> = {
     {
       name: 'heading',
       label: 'Heading',
-      description: 'Shown above the form.',
+      description:
+        'The title above the sign-up fields. Say what joining gets them; ' +
+        'blank renders no heading at all.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
     },
     {
@@ -234,7 +241,10 @@ export const schema: Aglyn.ComponentSchema<MemberSignupProps> = {
       name: 'continueFallback',
       label: 'After sign-up',
       description:
-        'Where members land when the URL has no continue param (default /).',
+        'Where a new member goes once the account EXISTS, when nothing sent ' +
+        'them here. A `?continue=` on the URL always wins. Point it at a ' +
+        'welcome or onboarding page rather than the home page if you have ' +
+        'one.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
     },
   ],

@@ -87,7 +87,7 @@ export const publishTemplateHandler: PluginApiHandler = async (req, res) => {
     }
     const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
     if (memberRole !== 'admin' && memberRole !== 'editor') {
-      return res.status(403).json({ error: 'Not a site admin' })
+      return res.status(403).json({ error: 'Not a site admin or editor' })
     }
 
     // Plan gate rides the owning org's doc (AGL-238).

@@ -23,6 +23,11 @@ import {
 import MuiContainer, { type ContainerProps } from '@mui/material/Container'
 import { createElement, forwardRef } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import {
+  applySemanticElement,
+  semanticElementAttribute,
+  semanticElementLabelAttribute,
+} from '../utils/element-picker'
 import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
 
@@ -46,7 +51,10 @@ import { generatePresetId } from '../utils/generate-preset-id'
  * theoretical. Dropping the key instead lets MUI's own `lg` apply.
  */
 const Container = forwardRef<HTMLDivElement, ContainerProps>((props, ref) =>
-  createElement(MuiContainer, { ...dropClearedProps(props), ref }),
+  createElement(MuiContainer, {
+    ...applySemanticElement(dropClearedProps(props) as Record<string, unknown>),
+    ref,
+  }),
 )
 Container.displayName = 'AglynContainer'
 
@@ -64,6 +72,8 @@ export const schema: Aglyn.ComponentSchema<ContainerProps> = {
     sx: { color: '#2196f3' },
   },
   attributes: [
+    semanticElementAttribute('this container'),
+    semanticElementLabelAttribute(),
     {
       name: 'fixed',
       description:
@@ -73,7 +83,10 @@ export const schema: Aglyn.ComponentSchema<ContainerProps> = {
     },
     {
       name: 'disableGutters',
-      description: 'If true, the left and right padding is removed.',
+      description:
+        'Removes the container’s side padding, so its content runs to the ' +
+        'full width it is centered in. Use it for a full-bleed band; leave ' +
+        'it off for text, which needs the margin on a phone.',
       component: Aglyn.FieldComponentType.SWITCH,
       label: 'Disable Gutters?',
     },

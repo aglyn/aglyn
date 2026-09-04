@@ -22,6 +22,7 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 // URL. Resolved where it is DISPLAYED, never in `values`.
 import { mediaNodeSrc, resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import { inheritedMediaAlt } from '@aglyn/aglyn/app-utils/media-metadata'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Box,
   Button,
@@ -175,21 +176,14 @@ export function ListingDetailEditor(props: ListingDetailEditorProps) {
       )
   }
 
-  const idToken = async () =>
-    (user as { getIdToken?: () => Promise<string> })?.getIdToken?.()
-
   const save = async () => {
     setBusy(true)
     try {
-      const token = await idToken()
-      const headers = {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      }
+      const headers = { 'Content-Type': 'application/json' }
       // Preview image isn't a content field, so it has its own endpoint
       // (AGL-863). Only touch it when it actually changed.
       if (values.previewImageUrl !== originalPreview.current) {
-        await fetch('/api/marketplace/preview-image', {
+        await authorizedFetch(user, '/api/marketplace/preview-image', {
           method: values.previewImageUrl ? 'POST' : 'DELETE',
           headers,
           body: JSON.stringify({
@@ -198,23 +192,27 @@ export function ListingDetailEditor(props: ListingDetailEditorProps) {
           }),
         })
       }
-      const response = await fetch('/api/marketplace/publish-plugin', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          action: 'update-listing',
-          listingId,
-          displayName: values.displayName,
-          description: values.description,
-          readme,
-          logoUrl: values.logoUrl,
-          homepageUrl: values.homepageUrl,
-          repositoryUrl: values.repositoryUrl,
-          license: values.license,
-          categories: values.category ? [values.category] : [],
-          screenshots,
-        }),
-      })
+      const response = await authorizedFetch(
+        user,
+        '/api/marketplace/publish-plugin',
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            action: 'update-listing',
+            listingId,
+            displayName: values.displayName,
+            description: values.description,
+            readme,
+            logoUrl: values.logoUrl,
+            homepageUrl: values.homepageUrl,
+            repositoryUrl: values.repositoryUrl,
+            license: values.license,
+            categories: values.category ? [values.category] : [],
+            screenshots,
+          }),
+        },
+      )
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
         return void enqueueSnackbar(payload?.error ?? 'Update failed', {

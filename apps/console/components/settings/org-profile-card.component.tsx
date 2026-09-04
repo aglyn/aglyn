@@ -17,79 +17,95 @@
 
 'use client'
 
-import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import {
   Alert,
   AlertTitle,
   Avatar,
   Button,
-  MenuItem,
   Stack,
   TextField,
+  Typography,
 } from '@mui/material'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useEffect, useState } from 'react'
 import MediaUrlField from '../media-url-field.component'
 import { SITE_LOGO_HINT } from '../../constants/media-size-hints'
 import { docsHelp } from '../../constants/docs-links'
+import { buildRoute, Route } from '../../constants/route-links'
 import useCurrentOrg from '../../hooks/use-current-org'
-import { useOrgScope } from '../../hooks/use-org-scope'
+import { useOrgScope, useOrgSlug } from '../../hooks/use-org-scope'
 import useOrgSettingsRequest from '../../hooks/use-org-settings-request'
-import { canManageOrg } from '@aglyn/aglyn'
 
 /**
- * The organization's public profile — logo, contact details and the billing
- * address Stripe Tax reads (AGL-363, AGL-1133).
+ * The organization's identity — logo and contact details (AGL-363).
  *
- * Extracted from the settings page when its sections became routes (AGL-693).
+ * Extracted from the settings page when its sections became routes (AGL-2501).
  * It owns its own form state and its own save: the section is a module now,
  * not a panel sharing the page's closure.
+ *
+ * ## What this card deliberately does not edit
+ *
+ * The platform billing address is READ-ONLY here. It is a tax input — Stripe
+ * computes `automatic_tax` from it — and it had two editors, this card and
+ * Billing → Settings, writing one stored field by two different code paths.
+ * Whichever saved last won, so an address corrected on the billing page was
+ * silently reverted by an unrelated logo change here. Billing → Settings is
+ * the single editor; this card shows the value and links to it, because a
+ * field that vanishes from the page someone knows it by reads as data loss.
+ *
+ * Three addresses exist in this product and none of them is the others:
+ * the PLATFORM BILLING address below (what the org pays Aglyn, and the tax on
+ * it); the SELLER PAYOUT identity, which lives in Stripe Connect and reaches
+ * it through the hosted onboarding flow under Marketplace → Payouts; and the
+ * STOREFRONT TAX ORIGIN, which is per-site and set in Commerce → Settings →
+ * Taxes. Editing one must never look like editing another, which is why each
+ * says at the field what it affects.
  */
 export function OrgProfileCard() {
   const { currentOrg } = useOrgScope()
+  const orgSlug = useOrgSlug()
   const { org, ready: orgReady } = useCurrentOrg()
   const { enqueueSnackbar } = useSnackbar()
   const settingsRequest = useOrgSettingsRequest()
-  const canManage = canManageOrg(currentOrg?.role)
   const [busy, setBusy] = useState(false)
   const [profile, setProfile] = useState({
     logoUrl: '',
     contactEmail: '',
     contactPhone: '',
     contactWebsite: '',
-    // Structured (AGL-1133) — this is the address an invoice uses, so it has
-    // to be parseable. A free-text blob reads as an address to a human and
-    // is unusable to Stripe Tax.
-    contactAddressLine1: '',
-    contactAddressLine2: '',
-    contactAddressCity: '',
-    contactAddressState: '',
-    contactAddressPostalCode: '',
-    contactAddressCountry: '',
   })
   useEffect(() => {
-    const address = ((org as any)?.contact?.address ?? {}) as Record<
-      string,
-      string | undefined
-    >
     setProfile({
       logoUrl: String((org as any)?.logoUrl ?? ''),
       contactEmail: String((org as any)?.contact?.email ?? ''),
       contactPhone: String((org as any)?.contact?.phone ?? ''),
       contactWebsite: String((org as any)?.contact?.website ?? ''),
-      // `?? {}` above rather than a String() cast: the field was a string
-      // before this change, and casting an object would have painted
-      // "[object Object]" into the form.
-      contactAddressLine1: String(address.line1 ?? ''),
-      contactAddressLine2: String(address.line2 ?? ''),
-      contactAddressCity: String(address.city ?? ''),
-      contactAddressState: String(address.state ?? ''),
-      contactAddressPostalCode: String(address.postalCode ?? ''),
-      contactAddressCountry: String(address.country ?? ''),
     })
   }, [org])
-  // Written by the settings route after it tells Stripe about an address
-  // change — or finds it cannot (AGL-1133).
+  // The stored billing address, shown but not edited. Structured since
+  // AGL-1133, so it renders as lines rather than as one opaque blob.
+  const billingAddress = ((org as any)?.contact?.address ?? null) as {
+    line1?: string
+    line2?: string
+    city?: string
+    state?: string
+    postalCode?: string
+    country?: string
+  } | null
+  const billingAddressLines = [
+    billingAddress?.line1,
+    billingAddress?.line2,
+    [billingAddress?.city, billingAddress?.state, billingAddress?.postalCode]
+      .filter(Boolean)
+      .join(' '),
+    billingAddress?.country,
+  ]
+    .map((line) => String(line ?? '').trim())
+    .filter(Boolean)
+  // Written when a save could not be carried across to Stripe (AGL-1133).
+  // The fix is on the billing page now, so the copy sends people there
+  // rather than telling them to save a form this card no longer has.
   const stripeAddressDiverged = Boolean(
     (org as any)?.billing?.addressDivergedFromStripe,
   )
@@ -102,9 +118,8 @@ export function OrgProfileCard() {
     // resolves every field above is the empty string it was initialised to —
     // and `update-profile` posts the whole object. A save inside the loading
     // window therefore does not fail, it SUCCEEDS at erasing the logo,
-    // contact email, phone, website and the billing address Stripe Tax
-    // reads. Nothing here is worth saving until there is something to have
-    // loaded.
+    // contact email, phone and website. Nothing here is worth saving until
+    // there is something to have loaded.
     if (!orgReady) {
       return void enqueueSnackbar(
         'Still loading this organization’s profile — try again in a moment',
@@ -187,94 +202,6 @@ export function OrgProfileCard() {
         }))
       }
     />
-    {/* Structured, and labelled as the billing address (AGL-1133):
-        this is the one that goes on an invoice, and it is distinct
-        from the owner's personal address in Manage Account. Saying
-        which is which at the field is the cheapest way to stop
-        someone entering a home address here. */}
-    <TextField
-      label="Billing address"
-      helperText="Used on your invoices and receipts"
-      value={profile.contactAddressLine1}
-      onChange={(event) =>
-        setProfile((prev) => ({
-          ...prev,
-          contactAddressLine1: event.target.value,
-        }))
-      }
-    />
-    <TextField
-      label="Apartment, suite, etc."
-      value={profile.contactAddressLine2}
-      onChange={(event) =>
-        setProfile((prev) => ({
-          ...prev,
-          contactAddressLine2: event.target.value,
-        }))
-      }
-    />
-    <TextField
-      label="City"
-      value={profile.contactAddressCity}
-      onChange={(event) =>
-        setProfile((prev) => ({
-          ...prev,
-          contactAddressCity: event.target.value,
-        }))
-      }
-    />
-    <TextField
-      label="State / Province"
-      value={profile.contactAddressState}
-      onChange={(event) =>
-        setProfile((prev) => ({
-          ...prev,
-          contactAddressState: event.target.value,
-        }))
-      }
-    />
-    <TextField
-      label="Postal code"
-      value={profile.contactAddressPostalCode}
-      onChange={(event) =>
-        setProfile((prev) => ({
-          ...prev,
-          contactAddressPostalCode: event.target.value,
-        }))
-      }
-    />
-    <TextField
-      label="Country"
-      helperText="Two-letter code, e.g. US — required for tax"
-      value={profile.contactAddressCountry}
-      onChange={(event) =>
-        setProfile((prev) => ({
-          ...prev,
-          contactAddressCountry: event.target.value,
-        }))
-      }
-    />
-    {/* The address here and the one Stripe bills from can be out
-        of step, and used to be so invisibly (AGL-1133). Clearing
-        this form deliberately does not clear Stripe's copy —
-        that is what an active subscription's invoices carry and
-        what tax is computed from — so the difference is said out
-        loud instead. The flag is written from what Stripe was
-        ASKED, not assumed, so this cannot cry wolf. */}
-    {stripeAddressDiverged && (
-      <Alert severity="warning">
-        <AlertTitle>{'Invoices use a different address'}</AlertTitle>
-        {stripeAddressReason === 'sync-failed'
-          ? 'The last change here did not reach Stripe, so invoices ' +
-            'and tax still use the previous address. Saving again ' +
-            'will retry.'
-          : 'Stripe still has a billing address on file for this ' +
-            'organization, and invoices and tax will keep using it. ' +
-            'Clearing the fields here does not remove it — an ' +
-            'invoice with no address cannot have tax calculated. ' +
-            'Enter the correct address and save to replace it.'}
-      </Alert>
-    )}
     <Stack direction="row">
       <Button
         variant="contained"
@@ -286,54 +213,76 @@ export function OrgProfileCard() {
     </Stack>
   </Stack>
 </CardDisplay>
-{/* Default sharing (AGL-1048): what a NEW dataset or upload
-    starts as. Changes nothing that already exists — narrowing a
-    whole library from a toggle would break live pages with no
-    confirmation, which is what the per-resource flow prevents. */}
+{/* The billing address, SHOWN and not edited. Its editor is
+    Billing → Settings, which writes Stripe first and refuses the
+    save when Stripe rejects it — a second best-effort writer here
+    could only ever put a stale address back over an accepted one.
+    Left visible because this is the page people know the address
+    by, and a field that simply disappears reads as data loss. */}
 <CardDisplay
-  header={'Default sharing for new data and media'}
-  help={docsHelp('datasets', {
+  header={'Billing address'}
+  help={docsHelp('billing', {
     excerpt:
-      'Sets what a NEW dataset or upload is shared with. Existing ' +
-      'ones keep the sharing they already have.',
+      'The address Aglyn issues this organization’s invoices to, and ' +
+      'the input sales tax on your Aglyn subscription is computed from.',
   })}
   contentGutterX
   contentGutterY
   sx={{ mt: 3 }}
 >
   <Stack spacing={2} sx={{ maxWidth: 480 }}>
-    <TextField
-      select
-      size="small"
-      label="New datasets and files are shared with"
-      value={currentOrg?.defaultResourceScope ?? 'org'}
-      disabled={!canManage || busy}
-      onChange={(event) =>
-        void settingsRequest({
-          action: 'set-default-resource-scope',
-          defaultResourceScope: event.target.value,
-        })
-          .then(() =>
-            enqueueSnackbar('Default sharing updated', {
-              variant: 'success',
-              persist: false,
-            }),
-          )
-          .catch((error: Error) =>
-            enqueueSnackbar(error.message, { variant: 'error' }),
-          )
-      }
-      helperText={
-        'Only affects things created from now on. Created from ' +
-        'an organization page there is no site to limit them to, ' +
-        'so those stay shared with all sites either way.'
-      }
-    >
-      <MenuItem value="org">{'All sites'}</MenuItem>
-      <MenuItem value="host">
-        {'Only the site they were created in'}
-      </MenuItem>
-    </TextField>
+    {billingAddressLines.length ? (
+      <Stack>
+        {billingAddressLines.map((line) => (
+          <Typography key={line} variant="body2">
+            {line}
+          </Typography>
+        ))}
+      </Stack>
+    ) : (
+      <Typography variant="body2" color="text.secondary">
+        {'No billing address on file.'}
+      </Typography>
+    )}
+    {/* Which of the three addresses this is. A merchant who reads
+        "billing address" and assumes it keys their payouts has been
+        misled by us, so the two it is NOT are named here. */}
+    <Typography variant="body2" color="text.secondary">
+      {'Where Aglyn bills this organization, and the tax input on what ' +
+        'you pay us. It does not set where your marketplace payouts ' +
+        'are sent — that identity lives in Stripe, under Marketplace → ' +
+        'Payouts — and it is not the origin address sales tax on your ' +
+        'own storefront’s orders is calculated from, which is set per ' +
+        'site in Commerce → Settings → Taxes.'}
+    </Typography>
+    {/* The stored address and the one Stripe bills from can be out of
+        step (AGL-1133). The flag is written from what Stripe was
+        ASKED, not assumed, so this cannot cry wolf; saving on the
+        billing page clears it. */}
+    {stripeAddressDiverged && (
+      <Alert severity="warning">
+        <AlertTitle>{'Invoices use a different address'}</AlertTitle>
+        {stripeAddressReason === 'sync-failed'
+          ? 'The last change did not reach Stripe, so invoices and tax ' +
+            'still use the previous address. Saving it again in ' +
+            'Billing → Settings will retry.'
+          : 'Stripe still has a billing address on file for this ' +
+            'organization, and invoices and tax will keep using it — ' +
+            'an invoice with no address cannot have tax calculated. ' +
+            'Enter the correct address in Billing → Settings to ' +
+            'replace it.'}
+      </Alert>
+    )}
+    <Stack direction="row">
+      <AppLink
+        componentVariant="button"
+        size="small"
+        variant="outlined"
+        href={buildRoute(Route.MANAGE_BILLING_SETTINGS, { orgSlug })}
+      >
+        {'Edit in Billing settings'}
+      </AppLink>
+    </Stack>
   </Stack>
 </CardDisplay>
               </>

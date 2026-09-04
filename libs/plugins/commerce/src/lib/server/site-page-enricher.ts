@@ -16,7 +16,11 @@
  */
 
 import type { SitePageEnricher } from '@aglyn/aglyn/server'
-import { queryPublicCatalog, type PublicCatalogResult } from './catalog'
+import {
+  createCatalogReadScope,
+  queryPublicCatalog,
+  type PublicCatalogResult,
+} from './catalog'
 
 /** Component id of the block this enricher seeds; persisted, never renamed. */
 const PRODUCT_GRID_ID = 'product-grid'
@@ -131,6 +135,10 @@ export const commerceSitePageEnricher: SitePageEnricher = async ({
   if (!grids.length) return undefined
 
   const seeds: Record<string, PublicCatalogResult> = {}
+  // One scope for this render, so four grids on a page cost one catalog read
+  // instead of four identical ones. Each grid still filters and sorts that
+  // snapshot for itself — the seeds stay keyed by node id.
+  const reads = createCatalogReadScope()
   await Promise.all(
     grids.map(async (node) => {
       const props = (node.resolvedProps ??
@@ -169,6 +177,7 @@ export const commerceSitePageEnricher: SitePageEnricher = async ({
           // Facets ride along only when a control needs them, matching the
           // grid's `facets=1` condition on its first request.
           facets: Boolean(props.showCategories || props.showPriceFilter),
+          reads,
         })
         seeds[node.$id as string] = result
       } catch (error) {

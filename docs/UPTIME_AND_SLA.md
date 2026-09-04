@@ -198,7 +198,7 @@ carrying **zero** `data-status-target` nodes is the unconfigured failure above.
 
 ### The external monitors (UptimeRobot, free tier)
 
-**Ten** keyword monitors, keyword `"status":"ok"`, `ALERT_NOT_EXISTS`, 5-minute
+**Eleven** keyword monitors, keyword `"status":"ok"`, `ALERT_NOT_EXISTS`, 5-minute
 interval, email to the operator's mailbox. Read from the status page's own monitor-list
 API on 2026-08-24 rather than transcribed from memory — this list said *five*
 for most of that day, because five more were created after it was written:
@@ -215,6 +215,7 @@ for most of that day, because five more were created after it was written:
 | Signups | 09:31 |
 | Rate limiting | 09:32 |
 | Error beacon (console) | 09:33 |
+| Server errors | 2026-08-25 15:00 |
 
 ```bash
 # The count and the names, unauthenticated. `url` is null in this payload —
@@ -224,6 +225,13 @@ curl -s https://stats.uptimerobot.com/api/getMonitorList/7NGEl81zvD |
   node -e 'const j=JSON.parse(require("fs").readFileSync(0));
     console.log(j.psp.totalMonitors); for (const m of j.psp.monitors) console.log(m.name)'
 ```
+
+The same payload also carries `createdAt`, `statusClass` (`success` = up),
+`lastDowntime` (`{date, duration, reason}`) and 30/90-day ratios per monitor —
+which is the whole unauthenticated health check, and the only place a past
+window's START time can be read back. Cloud Logging cannot be trusted for that
+bound unless the query is a RANGE: a `--limit` truncates to the newest N and
+makes the oldest survivor look like the beginning of the incident.
 
 ✅ **`server-errors` now has a monitor.** Uptime check
 `server-errors-app-aglyn-com-api-health-server-errors-status-ok-u6GLENjkYKg`
@@ -371,41 +379,52 @@ colour (AGL-2496); the rules themselves are pure functions in
 
 ### `status.aglyn.com`
 
-Unclaimed today: it resolves through the `*.aglyn.com` wildcard to Vercel and
-answers `404 DEPLOYMENT_NOT_FOUND`. **When it is claimed, point it at
-`aglyn-docs` and serve `/status` — not at a besigner screen on the marketing
-site.** A marketing screen cannot probe anything live, cannot tell `unknown`
-from `down`, and would put the status page on `aglyn-tenant`, the runtime it is
-supposed to report on. Pointing it at UptimeRobot instead is the $144/yr option
-above.
+Claimed, and pointed at `aglyn-docs` as an **alias** — the host serves the
+build, it does not redirect to `docs.aglyn.com`. `status.aglyn.com/status` is
+therefore a live copy of `docs.aglyn.com/status`, and before the rules below
+every other route in the build was live on the second host too: measured
+2026-09-01, `status.aglyn.com/enterprise/uptime-and-status`, `/getting-started`
+and `/sitemap.xml` each answered `200` at that URL.
 
-The footer of every marketing page already links `docs.aglyn.com/status`, so
-this is about giving the existing surface a memorable name, not about building
-a second one. **Two surfaces competing to be "the status page" is the failure
-mode to avoid** — whichever way this is done, one URL must end up serving the
-other.
+**Two surfaces competing to be "the status page" is the failure mode to avoid**
+— the footer of every marketing page, the `/pricing` FAQ and AGL-2411 F2 all
+name `docs.aglyn.com/status`, so that is the URL search engines have to end up
+holding.
 
-**Exact steps (account owner — this is a domain change, not an agent action):**
+`apps/docs/vercel.json` settles it without a domain change:
 
-1. Vercel → `aglyn-docs` → Settings → Domains → **Add** `status.aglyn.com`.
-   The apex is already on Vercel DNS, so no registrar work is needed and the
-   certificate issues automatically.
-2. Choose **redirect**, not rewrite: set the domain's redirect target to
-   `docs.aglyn.com` (Vercel offers this in the same dialog). A visitor typing
-   `status.aglyn.com` lands on the real page at its canonical URL, and there is
-   exactly one indexable copy.
-3. Add `{ "source": "/", "destination": "/status", "permanent": false }` to
-   `apps/docs/vercel.json`'s `redirects` **only if** step 2's redirect lands on
-   `/` rather than `/status` — check before adding, since a redirect chain is
-   worse than either link alone.
-4. Verify from a **browser**, not curl (`aglyn-docs` challenges anonymous
-   clients with 429): `status.aglyn.com` must end on the status page with
-   cards rendered, and `docs.aglyn.com/status` must still work unchanged.
+- `/` on the status host redirects to `/status`, so the bare hostname still
+  lands on the page it is named for.
+- Every other path on the status host is a **301 to the same path on
+  `docs.aglyn.com`**, which removes the several hundred duplicate pages
+  outright rather than asking a crawler to fold them away.
+- `/status`, `/assets/`, `/img/` and `/search-index.json` are the exceptions.
+  The first is the page being preserved; the rest are what it loads from its
+  own origin, and `@easyops-cn/docusaurus-search-local` fetches that index with
+  no CORS headers waiting on the far side.
 
-A rewrite (serving the page at `status.aglyn.com` without changing the URL) is
-the tempting option and the wrong one here: it produces two live copies of the
-same page, and every footer link, the `/pricing` FAQ and AGL-2411 F2 all name
-`docs.aglyn.com/status`.
+That leaves exactly one duplicated page, `/status` itself, and Docusaurus
+already emits an absolute `<link rel="canonical" href="https://docs.aglyn.com/status">`
+on it (built from `url` in `docusaurus.config.ts`) to consolidate it. See
+`apps/docs/specs/status-host-redirects.spec.ts`.
+
+⛔ Not `X-Robots-Tag: noindex` on the status host. It contradicts the canonical
+on the same response — one says drop this URL, the other says fold it into
+`docs.aglyn.com/status` — and the risk is that the `noindex` travels with the
+canonical and takes the real page out of the index.
+
+**Verify from a browser, not curl** (`aglyn-docs` challenges anonymous clients
+with 429): `status.aglyn.com` ends on the status page with cards rendered and
+search working, `status.aglyn.com/getting-started` ends on `docs.aglyn.com`,
+and `docs.aglyn.com/status` is unchanged.
+
+An account-owner alternative is a Vercel domain-level redirect (Settings →
+Domains → redirect `status.aglyn.com` to `docs.aglyn.com`). It is the stronger
+signal — no copy at all — at the cost of the vanity URL never staying in the
+address bar. Pointing the hostname at a besigner screen on the marketing site
+is the one option that is simply wrong: a marketing screen cannot probe
+anything live, cannot tell `unknown` from `down`, and would put the status page
+on `aglyn-tenant`, the runtime it is supposed to report on.
 
 ## The probe
 
@@ -656,7 +675,9 @@ Notes that keep these honest:
   the project. The exclusion is on the URL rather than on the absence of
   `serviceContext.version`, which separates the two just as cleanly today but
   fails the wrong way: a deployment that stopped stamping a commit ref would
-  go silently unwatched, whereas a dev report with no URL merely stays noisy. **A dead beacon is
+  go silently unwatched, whereas a dev report with no URL merely stays noisy.
+  That exclusion is now defence in depth rather than the fix — since AGL-1925
+  the beacon refuses to write at all off a deployed runtime. **A dead beacon is
   indistinguishable from zero errors**, and all three failure paths in
   `reportClientErrors` end in a `console.warn` to a log that retains an hour
   and drains nowhere. The endpoint writes one INFO entry to the separate
@@ -673,6 +694,32 @@ Notes that keep these honest:
   check period (15 min). The heartbeat log id is *not* `client-errors` on
   purpose — writing there at `severity >= ERROR` would trip the existing
   policy on every probe, building the alert fatigue this exists to prevent.
+- **Hydration mismatches are split off into a RATE policy (AGL-2523).** React
+  #418/#423/#425 are reported by `onRecoverableError` — the visitor has a
+  working page, React re-rendered — and a page translator or an in-app-browser
+  webview produces exactly what a genuine server/client divergence produces.
+  Measured 2026-09-01: eight #418s inside a nine-minute window, one build,
+  three different pages, and those pages loaded with a clean console the next
+  day. One visitor. So the beacon labels them `kind: "hydration"`, the
+  per-entry `Client error beacon` policy excludes that kind, and
+  `Client hydration mismatches spiking (AGL-2523)` watches the log-based metric
+  `client_hydration_errors` for **more than 15 in 30 minutes**. Nothing is
+  dropped — the entries are written at full severity and still group in Error
+  Reporting — and the threshold sits above one visitor because the beacon caps
+  a pageview at 10 events and dedupes identical ones. ⚑ `kind` reaches the
+  payload as a TOP-LEVEL field for exactly this reason; before AGL-2523 it was
+  folded into `message` on the stackless path only, so every stacked error
+  arrived unclassifiable and the policy could express nothing narrower than
+  "any entry at all".
+- **A stack with no frame of ours never arrives.** `isInjectedThirdPartyFrame`
+  drops an error whose every frame is the DOCUMENT rather than a script we
+  served — the signature of code a webview or extension evaluated inline. Found
+  on `sendDataToNative`, the Meta in-app browser's native bridge, reported as an
+  error of ours from aglyn.com/pricing. The comparison is against the document
+  and never against `/_next/static/`: an asset-path rule would delete every
+  error from a self-hosted deployment serving assets off a CDN. The honest cost
+  is that a throw from one of our own inline bootstrap scripts looks identical
+  and goes with it.
 - `scheduled-jobs` is the AGL-1955 half of the dead-man's switch, and it is
   the second condition here that watches for **silence**. The `Cloud
   Scheduler` row below it can only report the *presence* of a failed attempt:
@@ -1285,8 +1332,27 @@ same admin credential and the same Cloud Logging transport the AGL-1538 client
 beacon uses. Entries carry the `ReportedErrorEvent` `@type`, so Error Reporting
 groups them, *and* they are real log entries a log-match policy can page on.
 
-Three properties worth knowing before you tune anything:
+Four properties worth knowing before you tune anything:
 
+- **A deployment reports; a laptop does not** (2026-09-02). `firebase-admin` is
+  configured from the root `.env`, which names the platform project, so `nx dev`
+  held the same credential production does and wrote to the same log. Measured
+  2026-08-31: three parse errors from an interrupted rebase, carrying local
+  `file:///Users/.../aglyn/apps/...` stacks, landed in `server-errors` and opened
+  the `Server errors: uncaught 5xx` policy — still open two days later while all
+  thirteen uptime checks read 100%. `reportServerError` now returns `dropped`
+  unless `isDeployedRuntime()`. That is `isDeployedRuntime`, not
+  `isProductionDeployment`: a preview's 5xx is a real 5xx served by a real
+  deployment, and the `environment` stamp separates it for anyone who filters.
+
+  **The client half gates the same way** (AGL-1925). `reportClientErrors` was
+  the original case: measured 2026-08-18, 13 of 17 Error Reporting events over
+  a trailing week were not production, and the top-ranked group in the whole
+  project was a dev artifact with `http://localhost:4200` frames. That stream
+  carries no `environment` stamp at all — the only marker was an absent
+  `serviceContext.version` off Vercel, which stopped being a marker once
+  `deploymentCommitRef` learned to resolve a commit for self-hosted builds — so
+  refusing the write is the only fix that works there.
 - **A separate log id, on purpose.** `server-errors`, never `client-errors`. The
   existing `Client error beacon` policy keys on the latter; merging them would
   make it fire for both and force triage to start by asking which it was.
@@ -1328,7 +1394,11 @@ grades those counts in the same 200/503 contract as every sibling endpoint.
 Four things about it that are decisions rather than details:
 
 - **The count is written FIRST**, above the Logging budget gate, the credential
-  check and the fetch. A beacon whose transport is dead otherwise reports zero
+  check and the fetch — but BELOW the deployment gate above, which is the one
+  exception and the only gate that belongs there. Those gates are about a write
+  that failed and must still be counted; that one is about a process that should
+  not be reporting at all, and a counted laptop error would turn
+  `/api/health/server-errors` red for everyone. A beacon whose transport is dead otherwise reports zero
   errors, and it reports it during exactly the incident that killed the
   transport.
 - **Unknown is its own state.** A failed marker query is `errors-unavailable`
@@ -1535,6 +1605,18 @@ step 5 onward costs money and is a decision, not a task.
      our own thrown errors properly) and `proxy.statusCode === -1`, which is
      *background ISR revalidation* and would otherwise forward healthy traffic
      forever. On a healthy day this endpoint writes nothing at all.
+   - **It exempts the lockdown notice's deliberate 503** (2026-09-02).
+     `apps/tenant/app/api/locked/route.ts` answers a takedown or a
+     bandwidth-cap with a real 503 on purpose — answering 200 would tell
+     crawlers and uptime checks a suspended site is fine — and the middleware
+     rewrites *every* path of a locked host to it. Forwarded, one suspended
+     host being crawled emits a 5xx per request, forever, into an arm whose
+     only consumer is an alert policy: the policy fires on a working feature
+     and the next real incident arrives in a stream that is already red.
+     Measured 2026-09-02 on `acme.aglyn.app`. The exemption is narrow — path
+     matched exactly, and only a clean 503. A 500 the handler threw, a
+     `statusCode -1`, or a `fatal` line still forward, because those mean a
+     locked host is serving nothing at all.
    - **It writes to `vercel-runtime`, not `server-errors`.** The latter is the
      `onRequestError` hook's log and step 4's policy keys on it; merging would
      count one incident twice and make triage start by asking which arm saw

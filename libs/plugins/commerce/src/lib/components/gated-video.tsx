@@ -184,11 +184,15 @@ export const schema: Aglyn.ComponentSchema<GatedVideoProps> = {
       label: 'Video number',
       description: 'Which of the product’s videos to play (1st = 0).',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
+      type: 'number',
     },
     {
       name: 'lockedText',
       label: 'Locked text',
-      description: 'Shown to non-members.',
+      description:
+        'The message over the poster frame when the viewer cannot play ' +
+        'this video. The poster image still shows, so this only has to ' +
+        'explain the lock.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
     },
   ],

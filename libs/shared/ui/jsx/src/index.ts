@@ -40,6 +40,24 @@
 // minified and GZIPPED: re-exporting data-table.component costs +162,866 B and
 // grid-list +20,386 B on every page of every published customer site.
 // Until then this rule was a comment, and a comment cannot fail.
+//
+// `package.json` here declares `"sideEffects": false`, which is what lets a
+// bundler act on the paragraph above rather than only obey it. Without the
+// declaration every module reachable from this file has to be assumed
+// side-effectful and kept, so a named import of one component through this
+// barrel still drags the rest — measured on a published page's cold load, the
+// PAGES ROUTER (`next/router`, reached from `hooks/router-events`) was a 40 KB
+// chunk on a page that has no Pages Router, and declaring this tree pure is
+// what took it off the wire. The claim was audited file by file: the only
+// module-scope work here is local `.displayName` / `.aglyn` assignment and
+// `createContext`, none of which another module can observe. `shadow-dom` and
+// `mui-shadow-dom` build a Proxy over a module-local Map, and
+// `use-observer-resize` takes `resize-observer-polyfill` as a DEFAULT import —
+// a ponyfill that patches no global — so neither is an exception.
+// A module added here that DOES do observable
+// work at import time — a global write, a registration, a bare polyfill
+// import — must be listed in `sideEffects` in the same commit, or it will be
+// dropped from builds that never name it.
 export * from './lib/components/app-link'
 // aspect-ratio, background-image, children-function-prop, dialog-confirm +
 // confirmation-provider, ellipsis-pulse, grid-buttons, loading-layout,

@@ -593,7 +593,7 @@ describe('/api/admin/assist-signals authorization (AGL-2252)', () => {
 })
 
 /**
- * A RANKING KNOWS HOW TALL IT WAS (AGL-693).
+ * A RANKING KNOWS HOW TALL IT WAS (AGL-2501).
  *
  * `truncated` reports only that the SCAN hit its ceiling. Every ranking built
  * from what was scanned is cut too — each is sliced to `limit` — and a table
@@ -601,7 +601,7 @@ describe('/api/admin/assist-signals authorization (AGL-2252)', () => {
  * like one showing all twenty-five there are. That is the AGL-2220 shape the
  * scan ceiling was given a banner to avoid, reproduced one layer down.
  */
-describe('the mined report states how tall each ranking was (AGL-693)', () => {
+describe('the mined report states how tall each ranking was (AGL-2501)', () => {
   const many = (count: number, make: (index: number) => AssistSignalRow) =>
     Array.from({ length: count }, (_, index) => make(index))
 

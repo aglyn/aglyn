@@ -32,7 +32,7 @@ import {
   Typography,
 } from '@mui/material'
 import { getTenantEmail } from '@aglyn/shared-util-email'
-import { collection, doc, limit, query } from 'firebase/firestore'
+import { collection, doc, limit, query, where } from 'firebase/firestore'
 import { useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../constants/docs-links'
@@ -51,6 +51,7 @@ type PublishKind =
   | 'site'
   | 'datasetSchema'
   | 'emailTemplate'
+  | 'emailStarter'
   | 'theme'
   | 'plugin'
 
@@ -89,6 +90,13 @@ const PICKERS: Record<
     empty: 'This site has no designed emails to publish yet.',
     // The doc id IS the catalog key; the design carries no name of its own.
     optionLabel: (entry) => emailLabel(entry.$id),
+  },
+  // A campaign email is an ordinary screen document, so unlike the row above
+  // it carries its own name and there is no catalog to look one up in.
+  emailStarter: {
+    label: 'Email',
+    empty: 'This site has no saved campaign emails to publish yet.',
+    optionLabel: (entry) => artifactName(entry) ?? entry.$id,
   },
   site: { label: 'Site', empty: '', optionLabel: () => '' },
   // A theme is a field on the site, so like `site` there is nothing to pick —
@@ -180,6 +188,24 @@ export function OrgPublishPanel({
     [firestore, hostId],
     { idField: '$id' },
   )
+  /**
+   * Campaign emails are `kind: 'email'` SCREENS, not entries in the
+   * transactional catalog above — a different collection, a different shape,
+   * and a different marketplace artifact type. The equality filter is on the
+   * query so a site with many pages does not read them all to find its emails.
+   */
+  const emailScreenDocs = useFirestoreCollection<any>(
+    () =>
+      hostId
+        ? query(
+            collection(firestore, 'hosts', hostId, 'screens'),
+            where('kind', '==', 'email'),
+            limit(100),
+          )
+        : null,
+    [firestore, hostId],
+    { idField: '$id' },
+  ).data
   const components = useMemo(
     () => (componentDocs ?? []).filter((entry: any) => !entry.deletedAt),
     [componentDocs],
@@ -201,6 +227,15 @@ export function OrgPublishPanel({
       ),
     [emailDocs],
   )
+  // Same rule, same reason: a screen with no `versionId` was opened and never
+  // saved, so there is no design to publish.
+  const emailScreens = useMemo(
+    () =>
+      (emailScreenDocs ?? []).filter(
+        (entry: any) => !entry.deletedAt && entry.versionId,
+      ),
+    [emailScreenDocs],
+  )
 
   // Validate the pick against the current list rather than resetting it in an
   // effect (a classic render-loop source — the reset runs a `setState` after
@@ -217,7 +252,9 @@ export function OrgPublishPanel({
           ? datasets
           : kind === 'emailTemplate'
             ? emails
-            : []
+            : kind === 'emailStarter'
+              ? emailScreens
+              : []
   // One descriptor per source kind, so adding an artifact type is a row here
   // rather than another arm of a nested ternary in the JSX below.
   const picker = PICKERS[kind]
@@ -269,6 +306,15 @@ export function OrgPublishPanel({
         payload: { hostId, templateKey: selectedId },
         displayName: emailLabel(selectedId),
         noun: 'email template',
+      })
+    }
+    if (kind === 'emailStarter') {
+      const chosen = emailScreens.find((entry: any) => entry.$id === selectedId)
+      return setTarget({
+        endpoint: 'marketplace/publish-email-starter',
+        payload: { hostId, screenId: selectedId },
+        displayName: artifactName(chosen),
+        noun: 'email starter',
       })
     }
     const chosen = layouts.find((entry: any) => entry.$id === selectedId)
@@ -385,6 +431,9 @@ export function OrgPublishPanel({
           <MenuItem value="layout">{'A layout'}</MenuItem>
           <MenuItem value="datasetSchema">{'A dataset schema'}</MenuItem>
           <MenuItem value="emailTemplate">{'An email template'}</MenuItem>
+        <MenuItem value="emailStarter">
+          {'A campaign email others can start from'}
+        </MenuItem>
           <MenuItem value="theme">{'This site’s theme'}</MenuItem>
           <MenuItem value="site">{'This entire site (as a template)'}</MenuItem>
           <MenuItem value="plugin">{'A plugin (upload a bundle)'}</MenuItem>
@@ -431,6 +480,19 @@ export function OrgPublishPanel({
           <Typography variant="caption" color="text.secondary">
             {'Installing an email template adds it as a draft version — it ' +
               'never replaces the design a site is already sending.'}
+          </Typography>
+        ) : null}
+        {/* The publish rules, said before the publish rather than as a 422.
+            They are narrower than the ones for a page, and the reason is worth
+            a sentence: a design published here is mailed by other people, from
+            a sending domain everyone shares. */}
+        {kind === 'emailStarter' && activeList.length ? (
+          <Typography variant="caption" color="text.secondary">
+            {'A published email is copied into the sites that install it, so ' +
+              'later edits of yours never reach them. Images must come from ' +
+              'your media library or be inline, links must be https, and rich ' +
+              'text blocks are not published — an email you send is loaded ' +
+              'inside somebody else’s recipient’s mail client.'}
           </Typography>
         ) : null}
         <Box>

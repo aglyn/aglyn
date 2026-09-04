@@ -162,3 +162,75 @@ export const PLATFORM_MARK_URL: string | null =
   (isAglynOperatedBrand()
     ? '/_static/images/brand/aglyn-logo-mark-white.svg'
     : null)
+
+/**
+ * A branding profile with every field present — what a branded surface
+ * renders. Image/color/domain fields are nullable (Aglyn's own surfaces
+ * bake those in rather than carry a URL); the remaining text fields always
+ * have a value so callers never string-concatenate `undefined`.
+ *
+ * `supportUrl` is nullable too, and it is the one field where null carries a
+ * decision rather than an absence — see {@link resolveBrandingProfile}. A
+ * caller must render NOTHING for it, never a placeholder and never a
+ * substitute.
+ */
+export interface ResolvedBrandingProfile {
+  productName: string
+  logoUrl: string | null
+  faviconUrl: string | null
+  primaryColor: string | null
+  supportUrl: string | null
+  /**
+   * The brand's own FRONT DOOR — where "Made with <product>" sends a visitor
+   * who wants to know what built the site they are looking at.
+   *
+   * Deliberately separate from {@link ResolvedBrandingProfile.supportUrl},
+   * which the badge used to borrow: a help-desk address is the wrong answer to
+   * "what is this", and on this deployment it resolves to a `mailto:`, so the
+   * badge opened a blank email instead of a web page.
+   *
+   * Nullable for the same reason `supportUrl` is — a brand with nowhere to
+   * send that visitor gets a plain label, never a substitute destination.
+   */
+  homeUrl: string | null
+  fromName: string
+  emailLogoUrl: string | null
+  customConsoleDomain: string | null
+}
+
+/**
+ * The PLATFORM (non-white-label) brand — the fallback every surface gets when
+ * an org lacks the `whiteLabel` entitlement, and the gap-filler for a partial
+ * agency profile.
+ *
+ * It lives beside the literals it is assembled from rather than beside the
+ * entitlement gate that hands it out, and that placement is load-bearing
+ * rather than tidying. A published tenant page renders the attribution badge
+ * from this constant and reads nothing else out of `plan-entitlements.ts`;
+ * defining it there put that module's whole plan, quota and entitlement table
+ * — the single largest first-party module a visitor could reach — into the
+ * first load of every anonymous visitor to every customer site.
+ * `plan-entitlements.ts` re-exports it, so every existing caller is unchanged.
+ *
+ * The name says the PLATFORM's brand rather than Aglyn's because on a
+ * self-host install that assertion stops being true: which platform this is,
+ * is configuration. `resolveBrandingProfile` is the single resolver EVERY
+ * branded surface routes through — console chrome, published-site badge and
+ * title, transactional email — and this is its fallback, so all of them get a
+ * self-host brand without extending the white-label machinery at all.
+ */
+export const PLATFORM_BRANDING_PROFILE: ResolvedBrandingProfile = {
+  productName: PLATFORM_BRAND_NAME,
+  // The platform's own surfaces still bake their logo in — this is here for
+  // the surfaces that CANNOT, which is every surface rendered on somebody
+  // else's site. The free-tier attribution badge is the one that exists
+  // today, and it carried no mark at all while this was null.
+  logoUrl: PLATFORM_MARK_URL,
+  faviconUrl: null,
+  primaryColor: null,
+  supportUrl: PLATFORM_SUPPORT_URL,
+  homeUrl: PLATFORM_HOME_URL,
+  fromName: PLATFORM_BRAND_NAME,
+  emailLogoUrl: null,
+  customConsoleDomain: null,
+}

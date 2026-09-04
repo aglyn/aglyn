@@ -75,8 +75,11 @@ export async function runEventWorkflows(
     // rule: workspaces without a plan are uncapped, like every other gate.
     const monthKey = new Date().toISOString().slice(0, 7)
     const runCounterRef = hostRef.collection('counters').doc('workflowRuns')
-    const hostSnapshot = await hostRef.get()
-    // Run caps ride the owning org's doc (AGL-238).
+    // Run caps ride the owning org's doc (AGL-238) — read through
+    // `getOrgForHost` below. The host document itself is not consulted: the
+    // cap, the counter and the workflow definitions all live elsewhere, so a
+    // read of it here would be billed on every host event and used for
+    // nothing.
     {
       const org = (await getOrgForHost(hostId))?.org
       // Plan-less orgs resolve as free (AGL-247) — the cap always runs.

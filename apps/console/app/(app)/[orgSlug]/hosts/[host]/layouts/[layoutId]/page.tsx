@@ -371,7 +371,7 @@ const LayoutDetails: NextPageWithLayout<Record<string, never>> = () => {
               fullWidth
               multiline
               minRows={2}
-              helperText="Shown in the components list and the element drawer"
+              helperText="Shown in the layouts list, and on the listing if you publish this layout"
             />
             {/* Nested layouts (AGL-703): shared chrome can sit OUTSIDE a
                 more specific frame, the same relationship a screen has

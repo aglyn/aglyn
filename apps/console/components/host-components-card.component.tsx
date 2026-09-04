@@ -82,13 +82,14 @@ import ComponentIconField from './component-icon-field.component'
 import { docsHelp } from '../constants/docs-links'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
 import useCurrentOrg from '../hooks/use-current-org'
-import useLiveArtifactCount from '../hooks/use-live-artifact-count'
+import { useLiveArtifactCount } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { hostArtifactQuery } from '../utils/host-artifact-queries'
 import SaveAsTemplateDialog, {
   type SaveAsTemplateSource,
 } from './templates/save-as-template-dialog.component'
 
-/** The count and cap a components readout renders (AGL-693). */
+/** The count and cap a components readout renders (AGL-2501). */
 export interface ComponentQuotaReadout {
   ready: boolean
   used: number
@@ -135,7 +136,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
   const { confirm } = useConfirmationContext()
   const { org, ready: orgReady } = useCurrentOrg()
   /**
-   * The list PAGES, over an ordered walk (AGL-693).
+   * The list PAGES, over an ordered walk (AGL-2501).
    *
    * It was `limit(100)` with no `orderBy`, sorted by `displayName` in the
    * browser. That is the shape this repo has now hit eight times: Firestore
@@ -196,7 +197,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
   )
 
   /**
-   * The readout the page header renders (AGL-693).
+   * The readout the page header renders (AGL-2501).
    *
    * `reusableComponents` is a BOOLEAN entitlement, which looks like a reason
    * to print no denominator at all. It is not: the denominator is exactly what
@@ -261,13 +262,9 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
     if (!publisher || !publisher.name.trim() || publisher.busy) return
     setPublisher((prev) => (prev ? { ...prev, busy: true } : prev))
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/marketplace/publish', {
+      const response = await authorizedFetch(user, '/api/marketplace/publish', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           hostId,
           componentId: publisher.id,
@@ -386,7 +383,10 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
               hostId,
               displayName: 'Initial version',
               rootId: definition.rootId ?? null,
-              nodes: definition.nodes ?? {},
+              // BOTH stored forms (AGL-1151). This list is a raw paged
+              // query, so a promoted definition arrives as `Bytes` — seeding
+              // a version with the wrapper would open an uneditable canvas.
+              nodes: Aglyn.decodeStoredNodes(definition.nodes) ?? {},
             },
           })
           await updateDoc(
@@ -436,7 +436,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
           hostId,
           kind: 'component',
           id: definition.$id,
-          idToken: await (user as any)?.getIdToken?.(),
+          user,
         }))()
       const confirmed = await confirm({
         title: 'Delete this component?',
@@ -538,7 +538,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
       valueFormatter: (value: any) => value?.toLocaleString?.() || '--',
     },
     /*
-      ONE quick action, then the overflow (AGL-693). This list had five inline
+      ONE quick action, then the overflow (AGL-2501). This list had five inline
       icons — besigner, rename, and three behind MUI's own `showInMenu` — which
       is the arrangement the other three lists each varied in their own way.
       Everything except Preview now lives in the menu.
@@ -624,11 +624,15 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
                   kind: 'component',
                   displayName: definition.displayName ?? '',
                   // Unlike screens and layouts, a component definition holds
-                  // its own nodes — there is no version doc to fetch.
-                  loadNodes: async () =>
-                    definition.nodes
-                      ? { nodes: definition.nodes, rootId: definition.rootId }
-                      : null,
+                  // its own nodes — there is no version doc to fetch. Decoded
+                  // for the same reason the screen and layout loaders decode
+                  // theirs (AGL-1151): what this returns is posted as the new
+                  // template's tree, so an undecoded one saves a template
+                  // whose whole content is a byte array.
+                  loadNodes: async () => {
+                    const nodes = Aglyn.decodeStoredNodes(definition.nodes)
+                    return nodes ? { nodes, rootId: definition.rootId } : null
+                  },
                 }),
             },
             {
@@ -683,7 +687,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
           ) : null
         }
         rows={components}
-        // The whole row opens the detail page (AGL-693); the action cluster
+        // The whole row opens the detail page (AGL-2501); the action cluster
         // stops propagation so a menu click never navigates underneath it.
         onOpen={(id) =>
           router.push(
@@ -698,7 +702,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
         // this one did not, so the four lists that render the SAME table
         // disagreed about whether a fetch is worth mentioning — components
         // showed an empty table until the rows arrived, which reads as "you
-        // have none" rather than "these are on their way" (AGL-693).
+        // have none" rather than "these are on their way" (AGL-2501).
         loading={componentsStatus === 'loading'}
         // Paged by the footer below, so the grid must not also slice.
         hideFooter

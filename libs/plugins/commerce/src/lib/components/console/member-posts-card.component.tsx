@@ -48,6 +48,7 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import { EntitlementGatedCard } from './entitlement-gate.component'
 import { pluginDocsHelp } from '@aglyn/aglyn'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
 export interface MemberPostsCardProps {
   hostId: string
@@ -120,15 +121,15 @@ export function MemberPostsCard(props: MemberPostsCardProps) {
     if (!draft?.title.trim()) return
     setDraft((prev) => (prev ? { ...prev, busy: true } : prev))
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/commerce/member-post', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      const response = await authorizedFetch(
+        user,
+        '/api/commerce/member-post',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hostId, ...draft }),
         },
-        body: JSON.stringify({ hostId, ...draft }),
-      })
+      )
       const payload = await response.json()
       if (!response.ok) {
         return void enqueueSnackbar(payload?.error ?? 'Publish failed', {

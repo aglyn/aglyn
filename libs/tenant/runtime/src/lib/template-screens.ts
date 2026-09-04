@@ -64,6 +64,25 @@ export const STORE_TEMPLATE_SCREEN_FIELDS = [
   'collectionScreenId',
 ] as const
 
+/**
+ * The field the HOST points a template screen at (AGL-2518).
+ *
+ * One so far: the screen every `/author/{slug}` page renders through. It sits
+ * on the host rather than on a collection because there is one author page
+ * shape per SITE, not per collection.
+ *
+ * Listed here rather than left to `kind: 'template'` because designating this
+ * screen deliberately does NOT demote it. An author template is a designed
+ * page in exactly the sense a collection's LIST template is (AGL-1387) — it
+ * stays billable, and the site keeps paying for the page it built — but like
+ * that one it must still 404 at the slug it was published under, or the site
+ * ships a page rendering raw `{{author.*}}` as body text. That is AGL-1267's
+ * defect, and the pointer half of this union is what closes it without the
+ * stamp that would also make the screen free (AGL-1400's settlement: a
+ * pointer excuses nothing, only the stamp does).
+ */
+export const HOST_TEMPLATE_SCREEN_FIELDS = ['authorScreenId'] as const
+
 /** The shape this reads off a Firestore snapshot — kept structural so unit
  * tests don't need the admin SDK. */
 interface FieldSnapshotLike {
@@ -106,6 +125,8 @@ export function collectTemplateScreenIds(sources: {
   collections?: QuerySnapshotLike | null
   storeSettings?: FieldSnapshotLike | null
   templateScreens?: { docs: Array<IdSnapshotLike> } | null
+  /** The host document, for {@link HOST_TEMPLATE_SCREEN_FIELDS}. */
+  host?: FieldSnapshotLike | null
 }): Set<string> {
   const ids = new Set<string>()
   const add = (screenId: unknown) => {
@@ -120,6 +141,11 @@ export function collectTemplateScreenIds(sources: {
   if (sources.storeSettings) {
     for (const field of STORE_TEMPLATE_SCREEN_FIELDS) {
       add(sources.storeSettings.get(field))
+    }
+  }
+  if (sources.host) {
+    for (const field of HOST_TEMPLATE_SCREEN_FIELDS) {
+      add(sources.host.get(field))
     }
   }
   return ids
@@ -283,52 +309,72 @@ async function readTemplateScreenRouting(options: {
       .collection('hosts')
       .doc(options.hostId)
 
-    const [templateScreens, collections, storeSettings] = await Promise.all([
-      // The screens that say so (AGL-1400). `select()` with no fields returns
-      // ids only, and the equality filter rides Firestore's automatic
-      // single-field index — no composite index, and no read of the 100+ screen
-      // documents a large site has.
-      hostRef
-        .collection('screens')
-        .where('kind', '==', SCREEN_KIND_TEMPLATE)
-        .select()
-        .limit(200)
-        .get()
-        .catch((error: unknown) => {
-          console.error('template screen kind lookup failed:', error)
-          return null
-        }),
-      hostRef
-        .collection('collections')
-        // `slug` and `kind` ride along for AGL-1998: which route a LIST
-        // template is really served at is decided by the same document, and
-        // widening a field mask costs nothing next to a second query.
-        .select(...COLLECTION_TEMPLATE_SCREEN_FIELDS, 'slug', 'kind')
-        .limit(100)
-        .get()
-        .catch((error: unknown) => {
-          console.error('collection template lookup failed:', error)
-          return null
-        }),
-      // A host with commerce disabled — or one that never opened Store
-      // settings — has no doc here. A missing doc is not an error: `get()`
-      // resolves with `exists: false` and every field read returns undefined,
-      // so it contributes nothing and costs nothing else.
-      hostRef
-        .collection('settings')
-        .doc('store')
-        .get()
-        .catch((error: unknown) => {
-          console.error('store template lookup failed:', error)
-          return null
-        }),
-    ])
+    const [templateScreens, collections, storeSettings, host] =
+      await Promise.all([
+        // The screens that say so (AGL-1400). `select()` with no fields returns
+        // ids only, and the equality filter rides Firestore's automatic
+        // single-field index — no composite index, and no read of the 100+ screen
+        // documents a large site has.
+        hostRef
+          .collection('screens')
+          .where('kind', '==', SCREEN_KIND_TEMPLATE)
+          .select()
+          .limit(200)
+          .get()
+          .catch((error: unknown) => {
+            console.error('template screen kind lookup failed:', error)
+            return null
+          }),
+        hostRef
+          .collection('collections')
+          // `slug` and `kind` ride along for AGL-1998: which route a LIST
+          // template is really served at is decided by the same document, and
+          // widening a field mask costs nothing next to a second query.
+          .select(...COLLECTION_TEMPLATE_SCREEN_FIELDS, 'slug', 'kind')
+          .limit(100)
+          .get()
+          .catch((error: unknown) => {
+            console.error('collection template lookup failed:', error)
+            return null
+          }),
+        // A host with commerce disabled — or one that never opened Store
+        // settings — has no doc here. A missing doc is not an error: `get()`
+        // resolves with `exists: false` and every field read returns undefined,
+        // so it contributes nothing and costs nothing else.
+        hostRef
+          .collection('settings')
+          .doc('store')
+          .get()
+          .catch((error: unknown) => {
+            console.error('store template lookup failed:', error)
+            return null
+          }),
+        // The host's own template pointer (AGL-2518). A FOURTH concurrent RPC
+        // in the same round trip rather than a fourth round trip, which is what
+        // the cold-start budget cares about (AGL-1152) — and the document is
+        // one every request has already read through `getHostCached`, so it is
+        // warm by the time this asks for it.
+        // Wrapped rather than called directly, so this source fails open the
+        // way the three above it do. `.catch()` only guards a REJECTION; a
+        // synchronous throw here would escape into the outer catch, which
+        // returns an EMPTY set — and an empty set re-exposes every template
+        // screen on the site as a page. Per-source isolation is the contract
+        // this function states, and it has to hold for the source that reads
+        // a different shape of ref from the other three.
+        Promise.resolve()
+          .then(() => hostRef.get())
+          .catch((error: unknown) => {
+            console.error('host template pointer lookup failed:', error)
+            return null
+          }),
+      ])
 
     return {
       templateScreenIds: collectTemplateScreenIds({
         templateScreens,
         collections,
         storeSettings,
+        host,
       }),
       listRoutes: collectCollectionListRoutes({ collections }),
     }

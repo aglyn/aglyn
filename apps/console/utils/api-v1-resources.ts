@@ -35,11 +35,16 @@ import {
   datasetIntegrityFields,
   datasetIntegrityUpdate,
   defaultScopeForNewResource,
+  CAPTURED_BY_HOST_FIELD,
   effectiveDatasetModel,
   getOrderFulfilmentService,
   inspectUploadBytes,
   isHostPluginEnabled,
+  consentGroupForHost,
   isBlockedSubdomain,
+  MARKETING_CONSENT_BY_HOST_FIELD,
+  marketingConsentHostIds,
+  marketingConsentFieldsForGroup,
   newResourceScopeFields,
   normalizeContactEmail,
   ORG_SCOPE_TOKEN,
@@ -886,14 +891,54 @@ function orgOwnsHost(ctx: ApiV1Context, hostId: string): boolean {
   return Boolean(hosts[hostId])
 }
 
+/**
+ * The only fields a `site` resource is made of, and the projection every
+ * host-document read behind it carries. Built from the same list the view
+ * reads so a field cannot be added to one and forgotten in the other — a
+ * projection missing a field renders it `null` rather than failing, which
+ * is the kind of omission a test has to be looking for to catch.
+ *
+ * The host document is the largest in the product and most of it is theme
+ * and routing data no API consumer asked for, so the list read below sends
+ * bytes proportional to the page size only through these three names.
+ */
+const SITE_VIEW_FIELDS = ['displayName', 'subdomain', 'cname'] as const
+
 function siteView(hostId: string, data: FirebaseFirestore.DocumentData | undefined) {
   return {
     id: hostId,
     object: 'site',
-    displayName: data?.displayName ?? null,
-    subdomain: data?.subdomain ?? null,
-    domain: data?.cname ?? null,
+    displayName: data?.[SITE_VIEW_FIELDS[0]] ?? null,
+    subdomain: data?.[SITE_VIEW_FIELDS[1]] ?? null,
+    domain: data?.[SITE_VIEW_FIELDS[2]] ?? null,
   }
+}
+
+/**
+ * The host documents behind one page of `/v1/sites`, in the order asked for.
+ *
+ * `Promise.all(ids.map((id) => …doc(id).get()))` is one BatchGetDocuments
+ * per site — `DocumentReference.get()` is `getAll([ref])` — so a
+ * `?limit=100` list was 100 round trips and 100 whole host documents for
+ * three fields each. `getAll` is one round trip for the whole page.
+ *
+ * Snapshots are paired back by document id and the page is rebuilt in the
+ * order it was ASKED for, rather than trusting the order they arrive in: a
+ * batch that came back permuted would otherwise hand every site its
+ * neighbour's name, and the cursor is the last id of this array.
+ */
+async function siteViews(
+  firestore: FirebaseFirestore.Firestore,
+  hostIds: string[],
+) {
+  // `getAll` requires at least one reference; an empty page is not an error.
+  if (!hostIds.length) return []
+  const snapshots = await firestore.getAll(
+    ...hostIds.map((id) => firestore.collection('hosts').doc(id)),
+    { fieldMask: [...SITE_VIEW_FIELDS] },
+  )
+  const byId = new Map(snapshots.map((snapshot) => [snapshot.id, snapshot]))
+  return hostIds.map((id) => siteView(id, byId.get(id)?.data()))
 }
 
 /**
@@ -1075,10 +1120,11 @@ async function handleSites(
     const start = cursor ? hostIds.findIndex((id) => id > cursor) : 0
     const page = hostIds.slice(start < 0 ? hostIds.length : start, (start < 0 ? hostIds.length : start) + limit)
     const nextCursor = start >= 0 && start + limit < hostIds.length ? encodeCursor(page[page.length - 1]) : null
-    const sites = await Promise.all(
-      page.map(async (id) => siteView(id, (await ctx.firestore.collection('hosts').doc(id).get()).data())),
+    return listResponse(
+      await siteViews(ctx.firestore, page),
+      nextCursor,
+      ctx.headers,
     )
-    return listResponse(sites, nextCursor, ctx.headers)
   }
 
 
@@ -1090,8 +1136,8 @@ async function handleSites(
     const denied = requireScope(ctx, 'sites:read')
     if (denied) return denied
     if (request.method !== 'GET') return ApiErrors.methodNotAllowed({ headers: ctx.headers })
-    const snap = await ctx.firestore.collection('hosts').doc(hostId).get()
-    return apiJson(siteView(hostId, snap.data()), { headers: ctx.headers })
+    const [site] = await siteViews(ctx.firestore, [hostId])
+    return apiJson(site, { headers: ctx.headers })
   }
 
   if (sub === 'form-submissions') {
@@ -1282,10 +1328,20 @@ function formSubmissionView(doc: FirebaseFirestore.DocumentSnapshot) {
   return {
     id: doc.id,
     object: 'form_submission',
+    // The form ENTITY this was sent to, `null` for a row written before the
+    // form was adopted. `form` below stays the caption — an integration
+    // grouping by it is grouping by a display string that a rename splits,
+    // which is the whole reason this field exists.
+    form_id: doc.get('formId') ?? null,
     form: doc.get('formName') ?? null,
     path: doc.get('path') ?? null,
     fields: doc.get('fields') ?? {},
     read: Boolean(doc.get('read')),
+    // Where the platform already sent this row. Omitting it meant an
+    // integration syncing submissions into a CRM could not tell that a record
+    // had already been written to a dataset — the one fact that stops it
+    // duplicating work the platform had done.
+    routing: doc.get('routing') ?? null,
     created: serialize(doc.get('createdAt')) ?? null,
   }
 }
@@ -1344,7 +1400,15 @@ async function handleFormSubmissions(
 
     let query: FirebaseFirestore.Query = collection
     const form = url.searchParams.get('form')
-    if (form) query = query.where('formName', '==', form)
+    const formId = url.searchParams.get('formId')
+    // `formId` is the id-first filter and wins when both are sent: it is the
+    // one that survives a rename. `?form=` is NOT removed and is not
+    // deprecated here — it filters on the caption every submission still
+    // carries, which is the only thing a form that has not been adopted yet
+    // can be filtered by. The same posture the legacy `?collection=` content
+    // parameters take.
+    if (formId) query = query.where('formId', '==', formId)
+    else if (form) query = query.where('formName', '==', form)
     // `read` goes to FIRESTORE only when it is the sole filter, and is
     // applied after the read when it joins `form` (AGL-2460).
     //
@@ -1366,10 +1430,19 @@ async function handleFormSubmissions(
     // it has stamped `read: false` on every row since the feature's first
     // commit (AGL-76/77, `fc149e538`). There is no fieldless generation to
     // drop, so the cheap query is also the correct one.
-    if (read !== null && !form) query = query.where('read', '==', read)
+    // Either form filter already spent this list's one equality clause, so
+    // `read` is applied after the read exactly as it is for `?form=` — a
+    // second `where` plus the document-id ordering is a three-clause query
+    // and needs its own composite index per combination. The `formId ASC,
+    // createdAt DESC` index this work ships serves the CONSOLE's ordered
+    // list; `/v1` lists are ordered by document id and are a different query.
+    const narrowedByForm = Boolean(formId || form)
+    if (read !== null && !narrowedByForm) {
+      query = query.where('read', '==', read)
+    }
     const { docs, nextCursor } = await paginate(query, url)
     const matched =
-      read !== null && form
+      read !== null && narrowedByForm
         ? docs.filter((doc) => Boolean(doc.get('read')) === read)
         : docs
     return listResponse(matched.map(formSubmissionView), nextCursor, ctx.headers)
@@ -2391,7 +2464,18 @@ function contactView(doc: FirebaseFirestore.DocumentSnapshot) {
     name: data.name ?? null,
     tags: data.tags ?? [],
     notes: data.notes ?? null,
-    marketingConsent: Boolean(data.marketingConsent),
+    /*
+     * TRUE means "some site may mail this person", and `consentSites` says
+     * which. A single boolean is what the org-wide model published, and it is
+     * exactly the claim that turned out to be wrong: an agency's key read
+     * `true` and could not tell which of its brands the person had agreed to
+     * hear from. Both are published so a client can act on either.
+     */
+    marketingConsent:
+      data.marketingConsent === false
+        ? false
+        : marketingConsentHostIds(data).length > 0,
+    consentSites: marketingConsentHostIds(data),
     sources: data.sources ? Object.keys(data.sources) : [],
     created: serialize(data.createdAt) ?? null,
     updated: serialize(data.updatedAt) ?? null,
@@ -2404,7 +2488,13 @@ const CONTACT_TAGS_MAX = 50
 const CONTACT_TAG_MAX = 60
 
 /** Fields a client may send. Anything else is named, never silently dropped. */
-const CONTACT_WRITABLE = ['name', 'tags', 'notes', 'marketingConsent'] as const
+const CONTACT_WRITABLE = [
+  'name',
+  'tags',
+  'notes',
+  'marketingConsent',
+  'consentSiteId',
+] as const
 
 /**
  * Validate the writable half of a contact (AGL-2276). `partial` separates
@@ -2429,6 +2519,7 @@ function readContactInput(
         tags?: string[]
         notes?: string
         marketingConsent?: boolean
+        consentSiteId?: string
       }
     }
   | { errors: Record<string, string> } {
@@ -2439,6 +2530,7 @@ function readContactInput(
     tags?: string[]
     notes?: string
     marketingConsent?: boolean
+    consentSiteId?: string
   } = {}
 
   const allowed = new Set<string>([
@@ -2488,12 +2580,45 @@ function readContactInput(
     values.notes = String(body.notes ?? '').slice(0, CONTACT_NOTES_MAX)
   }
 
+  if (body.consentSiteId !== undefined) {
+    const siteId = String(body.consentSiteId ?? '').trim()
+    if (!siteId) errors.consentSiteId = 'Must name a site'
+    else values.consentSiteId = siteId
+  }
+
   if (body.marketingConsent !== undefined) {
     if (typeof body.marketingConsent !== 'boolean') {
       errors.marketingConsent = 'Must be true or false'
     } else {
       values.marketingConsent = body.marketingConsent
     }
+  }
+
+  /*
+   * AN OPT-IN MUST NAME THE SITE IT WAS GIVEN TO; A REFUSAL MUST NOT.
+   *
+   * An API key belongs to an ORGANIZATION, and an organization is not a
+   * controller — an agency's key reaches every client brand it runs. So an
+   * integration asserting that somebody opted in has to say which brand they
+   * opted in to, exactly as a form does by being served from one site. There
+   * is no safe default: picking the org's only site works until the org has
+   * two, and picking none is the org-wide grant this field exists to stop.
+   *
+   * A refusal is the mirror image and is refused a site on purpose. It
+   * applies to every brand in the account, which is what `readMarketingBasis`
+   * does with an unscoped `false`, and accepting a site alongside it would
+   * imply a per-brand opt-out this endpoint does not write.
+   */
+  if (values.marketingConsent === true && !values.consentSiteId) {
+    errors.consentSiteId =
+      'Required with marketingConsent: true — name the site the person opted in to'
+  }
+  if (values.marketingConsent === false && values.consentSiteId) {
+    errors.consentSiteId =
+      'Not accepted with marketingConsent: false — a refusal applies to every site'
+  }
+  if (values.consentSiteId && values.marketingConsent === undefined) {
+    errors.consentSiteId = 'Only accepted alongside marketingConsent'
   }
 
   return Object.keys(errors).length ? { errors } : { values }
@@ -2576,7 +2701,16 @@ async function createContact(
       headers: ctx.headers,
     })
   }
-  const { email, name, tags, notes, marketingConsent } = parsed.values
+  const { email, name, tags, notes, marketingConsent, consentSiteId } =
+    parsed.values
+  if (consentSiteId && !orgOwnsHost(ctx, consentSiteId)) {
+    return ApiErrors.badRequest({
+      message: 'Contact failed validation',
+      code: 'validation_failed',
+      fields: { consentSiteId: 'No such site in this organization' },
+      headers: ctx.headers,
+    })
+  }
 
   const collection = contactsCollection(ctx)
   const claimed = await claimWrite(
@@ -2626,9 +2760,20 @@ async function createContact(
       ...(name ? nameSearchFields(name) : {}),
       tags: tags ?? [],
       ...(notes ? { notes } : {}),
-      ...(marketingConsent
-        ? { marketingConsent: true, marketingConsentAtMs: Date.now() }
+      ...(marketingConsent && consentSiteId
+        ? {
+            // The declared controller the named site belongs to, so an API
+            // opt-in pools exactly where a form on that site would.
+            ...marketingConsentFieldsForGroup(
+              consentGroupForHost(ctx.org as Record<string, unknown>, consentSiteId),
+              Date.now(),
+            ),
+          }
         : {}),
+      [CAPTURED_BY_HOST_FIELD]: consentSiteId ? [consentSiteId] : [],
+      // A refusal carries no site: it stands against every brand in the
+      // account — see `readMarketingBasis` for the asymmetry.
+      ...(marketingConsent === false ? { marketingConsent: false } : {}),
       // `sources.api` — a first-class provenance value beside `form`,
       // `member`, `order` and `booking`, so a merchant reading the console
       // can see which people an integration put there.
@@ -2680,19 +2825,51 @@ async function updateContact(
     })
   }
 
-  const { name, tags, notes, marketingConsent } = parsed.values
+  const { name, tags, notes, marketingConsent, consentSiteId } = parsed.values
+  if (consentSiteId && !orgOwnsHost(ctx, consentSiteId)) {
+    return ApiErrors.badRequest({
+      message: 'Contact failed validation',
+      code: 'validation_failed',
+      fields: { consentSiteId: 'No such site in this organization' },
+      headers: ctx.headers,
+    })
+  }
   const update: Record<string, unknown> = {}
   // A rename must move the search keys with it, or the contact stays findable
   // only by the name they no longer have.
   if (name !== undefined) Object.assign(update, nameSearchFields(name))
   if (tags !== undefined) update.tags = tags
   if (notes !== undefined) update.notes = notes
-  if (marketingConsent !== undefined) {
-    update.marketingConsent = marketingConsent
-    // The consent timestamp is the evidence, so it is stamped when consent is
-    // GIVEN and left alone when it is withdrawn — an audit needs to know when
-    // the person opted in, and clearing it would destroy that record.
-    if (marketingConsent) update.marketingConsentAtMs = Date.now()
+  if (marketingConsent === true && consentSiteId) {
+    /*
+     * A dotted path rather than a nested object, because this is an `update`
+     * and an `update` REPLACES a map field it is handed whole. Writing the
+     * nested form here would delete every other site's grant — the exact
+     * over-application this change exists to end, arriving through the write
+     * side instead of the read side.
+     */
+    const group = consentGroupForHost(
+      ctx.org as Record<string, unknown>,
+      consentSiteId,
+    )
+    for (const hostId of group.hostIds) {
+      update[`${MARKETING_CONSENT_BY_HOST_FIELD}.${hostId}`] = {
+        marketingConsent: true,
+        // The consent timestamp is the evidence, so it is stamped when
+        // consent is GIVEN and left alone when it is withdrawn — an audit
+        // needs to know when the person opted in, and clearing it would
+        // destroy that record.
+        marketingConsentAtMs: Date.now(),
+        ...(group.declared
+          ? {
+              consentGroupId: group.groupId,
+              consentGroupName: group.name ?? '',
+            }
+          : {}),
+      }
+    }
+  } else if (marketingConsent === false) {
+    update.marketingConsent = false
   }
   // An empty body is a no-op answered with the current contact, matching
   // `updateDataset`: a client re-sending an unchanged object should not have
@@ -2952,12 +3129,17 @@ export async function handleUsage(
   }
   const orgRef = ctx.firestore.collection('orgs').doc(ctx.orgId)
   const month = apiUsageMonth()
-  const [apiSnap, storageSnap, contactsSnap, datasetsSnap] = await Promise.all([
-    orgRef.collection('apiUsage').doc(month).get(),
-    orgRef.collection('usage').doc(month).get(),
-    orgRef.collection('contacts').count().get(),
-    orgRef.collection('datasets').count().get(),
-  ])
+  const [apiSnap, storageSnap, contactsSnap, datasetsSnap, campaignEmailSnap] =
+    await Promise.all([
+      orgRef.collection('apiUsage').doc(month).get(),
+      orgRef.collection('usage').doc(month).get(),
+      orgRef.collection('contacts').count().get(),
+      orgRef.collection('datasets').count().get(),
+      // The ORG counter, which is what `reserveCampaignEmailSends` claims
+      // against. The per-site counter beside it is site history and answers a
+      // different question; reporting it here would disagree with the gate.
+      orgRef.collection('counters').doc('campaignEmailSends').get(),
+    ])
 
   const apiQuota = checkApiRequestQuota(
     ctx.org as never,
@@ -2971,6 +3153,18 @@ export async function handleUsage(
   const storageQuota = checkDataStorageQuota(
     ctx.org as never,
     Number(storageSnap.get('dataStorageMb') ?? 0),
+  )
+  // A corrupt or negative counter must not read as headroom, the same clamp
+  // `orgCampaignEmailSendsForMonth` applies on the server.
+  const rawCampaignEmails = Number(campaignEmailSnap.get(month) ?? 0)
+  const campaignEmailsUsed =
+    Number.isFinite(rawCampaignEmails) && rawCampaignEmails > 0
+      ? Math.floor(rawCampaignEmails)
+      : 0
+  const campaignEmailQuota = checkQuota(
+    ctx.org as never,
+    'emailSendsPerMonth',
+    campaignEmailsUsed,
   )
 
   return apiJson(
@@ -3004,6 +3198,24 @@ export async function handleUsage(
         storageQuota.includedMb,
         storageQuota.remainingMb,
         storageQuota.overageRateUsd,
+      ),
+      /*
+       * CAMPAIGN emails, not every email. `emailSendsPerMonth` governs
+       * campaign volume alone — transactional mail is counted for cost and
+       * never refused at any tier — so a band named `emails` would report a
+       * limit the product does not enforce.
+       *
+       * `metered: false`, because this band is REFUSED rather than billed.
+       * It is the one dimension here that hard-walls on a paid plan; the
+       * others accept the excess and put it on the invoice. Passing a null
+       * rate is how that difference reaches a caller rather than being
+       * something they discover from a 403.
+       */
+      campaignEmails: usageBand(
+        campaignEmailsUsed,
+        campaignEmailQuota.limit,
+        campaignEmailQuota.remaining,
+        null,
       ),
     },
     { headers: ctx.headers },

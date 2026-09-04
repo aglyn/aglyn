@@ -21,6 +21,7 @@ import { LoadingTextComponent } from '@aglyn/shared-ui-jsx/components/loading-te
 import { Button, CircularProgress } from '@mui/material'
 import { useEffect, useState } from 'react'
 import { useAuth } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import AuthFormComponent from '../../../../components/auth-form.component'
 // One declaration of the workspace apex, for the AGL-1135 reason recorded on
 // the constant itself.
@@ -77,15 +78,15 @@ function HandoffContinue() {
       // this one only governs `.aglyn.com`.
       await mintSession(user, { current: null })
       try {
-        const idToken = await user.getIdToken()
-        const response = await fetch('/api/auth/handoff/authorize', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${idToken}`,
+        const response = await authorizedFetch(
+          user,
+          '/api/auth/handoff/authorize',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ handoff }),
           },
-          body: JSON.stringify({ handoff }),
-        })
+        )
         const body = await response.json().catch(() => null)
         if (!active) return
         if (!response.ok || !body?.url) {

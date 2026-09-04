@@ -30,7 +30,7 @@ import useOrgSettingsRequest from '../../hooks/use-org-settings-request'
 /**
  * The organization's identity — its name and its workspace URL.
  *
- * Extracted from the settings page when its sections became routes (AGL-693).
+ * Extracted from the settings page when its sections became routes (AGL-2501).
  * Both fields prefill from the org-scope projection, and both write through
  * the settings route rather than Firestore so the reverse index that feeds the
  * switcher and the breadcrumbs fans out with the change.

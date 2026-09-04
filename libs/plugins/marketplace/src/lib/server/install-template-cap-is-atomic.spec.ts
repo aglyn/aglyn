@@ -265,6 +265,11 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // The REAL plan table. Stubbing `checkQuota` would let this suite pass
   // against a route enforcing nothing — which IS the bug.
   ...jest.requireActual('../../../../../aglyn/src/lib/app-utils/plan-entitlements'),
+  // The REAL node codec (AGL-1151). Both install handlers compress the tree
+  // they write, and this factory is a CLOSED WORLD — an absent export throws
+  // and the handler's own catch answers 500, which reads exactly like the CAP
+  // arithmetic under test regressing.
+  ...jest.requireActual('../../../../../aglyn/src/lib/app-utils/stored-nodes'),
   createResourceUid: () => `tpl-${(mockUid += 1)}`,
 }))
 

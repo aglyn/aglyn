@@ -114,6 +114,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<
   Record<string, PublishedSiteImpact>
 > = {
   mui: 'elements',
+  forms: 'elements',
   accounts: 'routes',
   bookings: 'elements',
   commerce: 'elements',
@@ -151,6 +152,15 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
     description: 'The base component and theme library every site builds on.',
   },
   {
+    id: 'forms',
+    label: 'Forms',
+    alwaysOn: true,
+    description:
+      'Forms on the site and the catalog that owns them. Always on: the ' +
+      'submit endpoint and the publish-time contract check are core, so a ' +
+      'switch here would remove only the half that draws the form.',
+  },
+  {
     id: ACCOUNTS_PLUGIN_ID,
     label: 'User Accounts',
     description:
@@ -174,7 +184,8 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
   { id: 'logic', label: 'Logic', description: 'Variables, functions, and reference health.', releaseFlag: 'release_logic' },
   { id: 'marketing', label: 'Marketing', description: 'Overlays, campaigns, and experiments.', releaseFlag: 'release_marketing' },
   { id: 'redirects', label: 'Redirects', description: 'URL redirect rules.', releaseFlag: 'release_redirects' },
-  { id: 'workflows', label: 'Workflows', description: 'Automations, webhooks, and run logs.', releaseFlag: 'release_workflows' },
+  // `id` is stored on every org's enabled-plugin list; only the label moved.
+  { id: 'workflows', label: 'Automation', description: 'Workflows, actions, webhooks, and run logs.', releaseFlag: 'release_workflows' },
 ] as const
 
 /** Ids loaded for orgs that have never touched the switchboard. */

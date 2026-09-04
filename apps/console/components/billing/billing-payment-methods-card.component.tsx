@@ -57,12 +57,13 @@ export interface BillingPaymentMethodsCardProps {
  * our own theme, so the fields render at our sizes, in our type, between our
  * own inputs, and the card-data guarantee is untouched.
  *
- * ## Why the empty state names the plan
+ * ## No plan is required to put a card on file
  *
- * A card is attached to a Stripe customer, and an org that has never checked
- * out has no customer to attach one to. That is not a failure to explain away
- * — it is the honest shape of the thing, so the empty state says what unlocks
- * it rather than offering a button that could only fail.
+ * A card attaches to a Stripe CUSTOMER, not to a subscription. The customer
+ * used to be minted only by Checkout, which is the only reason this card ever
+ * asked for a plan first — an implementation detail wearing the clothes of a
+ * rule. The route creates one on demand at the moment a card is added, so the
+ * button is offered whatever the plan state is.
  */
 function describeMethod(method: BillingPaymentMethod): string {
   // Not card-only. Link and the wallet methods have no `.card` at all and
@@ -189,12 +190,7 @@ export default function BillingPaymentMethodsCardComponent({
     >
       {(loaded) => (
         <Stack spacing={2}>
-          {!loaded.customer ? (
-            <Typography variant="body2" color="text.secondary">
-              {'There are no payment methods yet. Upgrade to a paid plan to ' +
-                'add a new one.'}
-            </Typography>
-          ) : loaded.paymentMethods.length === 0 ? (
+          {loaded.paymentMethods.length === 0 ? (
             <Typography variant="body2" color="text.secondary">
               {'There are no payment methods yet.'}
             </Typography>
@@ -251,7 +247,13 @@ export default function BillingPaymentMethodsCardComponent({
             </List>
           )}
 
-          {loaded.customer && canManage ? (
+          {/*
+            Offered with or without a subscription. A card needs a Stripe
+            CUSTOMER, not a plan — and someone putting one on file before they
+            upgrade is a customer trying to pay us. The route creates the
+            customer on demand when the setup intent is asked for.
+          */}
+          {canManage ? (
             setupClientSecret ? (
               /*
                 Stripe's fields, inline. Nothing opens over the page and the

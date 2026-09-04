@@ -149,7 +149,7 @@ describe('ListPagination', () => {
 })
 
 /**
- * A MENU OVER STATE THIS FOOTER DOES NOT OWN (AGL-693).
+ * A MENU OVER STATE THIS FOOTER DOES NOT OWN (AGL-2501).
  *
  * Without `onPageSizeChange` the size menu was still drawn and did nothing.
  * On a list whose page size is dictated elsewhere it was worse than inert:

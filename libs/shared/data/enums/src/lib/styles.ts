@@ -404,6 +404,17 @@ export interface CssGradient {
   type: CssGradientType
   /** Degrees, linear only. Absent means CSS's default (`to bottom`). */
   angle?: number
+  /**
+   * Where a RADIAL gradient's centre sits, in percent of the box
+   *. Absent means CSS's default, dead centre.
+   *
+   * A radial gradient is how a page paints a glow, and a glow is almost
+   * never centred — the one behind a hero sits high and bleeds off the top.
+   * Without this the control could only ever centre it, so authors either
+   * accepted a halo in the middle of their text or dropped to Custom CSS.
+   * Linear's counterpart is {@link angle}; this is radial's.
+   */
+  position?: { x: number; y: number }
   stops: CssGradientStop[]
   /** Set ONLY when the value is a gradient this model cannot express. */
   raw?: string
@@ -454,6 +465,9 @@ const GRADIENT_FUNCTION_PATTERN =
   /^([a-z-]*gradient)\s*\(([\s\S]*)\)$/i
 const GRADIENT_ANGLE_PATTERN = /^(-?\d+(?:\.\d+)?)deg$/i
 const GRADIENT_STOP_PATTERN = /^([\s\S]+?)\s+(-?\d+(?:\.\d+)?)%$/
+/** `at 50% 18%` — a radial gradient's centre, the only prefix form modelled. */
+const GRADIENT_POSITION_PATTERN =
+  /^at\s+(-?\d+(?:\.\d+)?)%\s+(-?\d+(?:\.\d+)?)%$/i
 
 /** Whether a value is gradient-shaped — the check the colour fields reject on. */
 export function isCssGradientValue(value: unknown): boolean {
@@ -511,12 +525,20 @@ export function parseCssGradient(
   const unparsed: CssGradient = { type, stops: [], raw: text }
 
   let angle: number | undefined
+  let position: { x: number; y: number } | undefined
   let stopArgs = args
   const first = args[0] ?? ''
   const angleMatch = GRADIENT_ANGLE_PATTERN.exec(first)
+  const positionMatch = GRADIENT_POSITION_PATTERN.exec(first)
   if (angleMatch) {
     if (type === 'radial') return unparsed
     angle = Number(angleMatch[1])
+    stopArgs = args.slice(1)
+  } else if (positionMatch && type === 'radial') {
+    // `at X% Y%` is the one prefix the Position boxes round-trip. Anything
+    // richer (`ellipse 60% 40% at …`, `circle closest-side`) still falls
+    // through to `raw` below, so a hand-written gradient is never flattened.
+    position = { x: Number(positionMatch[1]), y: Number(positionMatch[2]) }
     stopArgs = args.slice(1)
   } else if (/^(to\s|at\s|circle|ellipse|closest|farthest|\d)/i.test(first)) {
     // A direction or shape/position prefix the control has no editor for.
@@ -539,7 +561,7 @@ export function parseCssGradient(
     stops.push({ color, position: Number(stopMatch[2]) })
   }
   if (stops.length < 2) return unparsed
-  return { type, angle, stops }
+  return { type, angle, position, stops }
 }
 
 /**
@@ -560,7 +582,15 @@ export function buildCssGradient(gradient?: CssGradient): string {
       ? `${stop.color.trim()} ${stop.position}%`
       : stop.color.trim(),
   )
-  if (gradient.type === 'radial') return `radial-gradient(${parts.join(', ')})`
+  if (gradient.type === 'radial') {
+    const at =
+      gradient.position &&
+      Number.isFinite(gradient.position.x) &&
+      Number.isFinite(gradient.position.y)
+        ? `at ${gradient.position.x}% ${gradient.position.y}%, `
+        : ''
+    return `radial-gradient(${at}${parts.join(', ')})`
+  }
   const angle =
     typeof gradient.angle === 'number' && Number.isFinite(gradient.angle)
       ? `${gradient.angle}deg, `

@@ -27,6 +27,7 @@ import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { useFirestoreDoc } from '@aglyn/tenant-feature-instance'
 import { useOrgPlan } from '@aglyn/tenant-feature-instance'
 import { pluginDocsHelp } from '@aglyn/aglyn'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
 export interface PaymentsSettingsCardProps {
   hostId: string
@@ -43,6 +44,12 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const [busy, setBusy] = useState(false)
+  /**
+   * A one-time Stripe Express dashboard link, minted by the connect route on
+   * request. Not persisted: login links are single-use and short-lived, so a
+   * stored one would be a button that fails the second time it is pressed.
+   */
+  const [dashboardUrl, setDashboardUrl] = useState<string | null>(null)
   const { org, ready: planReady } = useOrgPlan(hostId)
   /** Bumped by Retry to re-subscribe the profile listen (AGL-1380). */
   const [retryNonce, setRetryNonce] = useState(0)
@@ -94,13 +101,9 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
   const handleConnect = useCallback(async () => {
     setBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/commerce/connect', {
+      const response = await authorizedFetch(user, '/api/commerce/connect', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hostId }),
       })
       const payload = await response.json()
@@ -125,10 +128,43 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
         // `chargesEnabled` is the state read from the profile BEFORE this
         // request, so the event fires only when onboarding actually completed.
         if (!chargesEnabled) trackEvent('stripe_connected', {})
-        return void enqueueSnackbar('Payments are enabled', {
-          variant: 'success',
-          persist: false,
-        })
+        // CHARGES AND PAYOUTS ARE TWO FLAGS, AND ONLY ONE OF THEM IS THIS
+        // SENTENCE (AGL-1997). `chargesEnabled` says Stripe will let the
+        // account take money; whether the money can LEAVE is `payoutsEnabled`,
+        // which the route answers alongside it. Charges-yes/payouts-no is an
+        // ordinary Stripe state — verification pending or lapsed, no payout
+        // method — and announcing "Payments are enabled" in it is false in the
+        // direction that costs the merchant: they sell believing they are
+        // paid, and the funds sit in a Connect account that cannot release
+        // them. Read three-valued, so only a literal `false` from Stripe
+        // downgrades the claim; an absent flag means unasked, not off.
+        const payoutsBlocked = payload.payoutsEnabled === false
+        // A WARNING THAT NAMES A PROBLEM MUST OFFER THE FIX.
+        //
+        // Stripe is the only place payouts can be released — an Express
+        // account has no password and no direct login — so telling the
+        // merchant their funds are stranded and then keeping them here is half
+        // an answer. The route now mints the remediation link for exactly this
+        // state; going there is the whole point of pressing the button.
+        if (payoutsBlocked && payload.url) {
+          return void window.location.assign(payload.url)
+        }
+        // Payouts are flowing, so the link is the Express dashboard: balance,
+        // payout schedule, and the reason a payout failed. Held in state
+        // rather than followed, because this click was a status check and
+        // navigating away from one nobody asked to leave is its own defect.
+        if (!payoutsBlocked && typeof payload.dashboardUrl === 'string') {
+          setDashboardUrl(payload.dashboardUrl)
+        }
+        return void enqueueSnackbar(
+          payoutsBlocked
+            ? 'Connected — payouts are not released yet'
+            : 'Payments are enabled',
+          {
+            variant: payoutsBlocked ? 'warning' : 'success',
+            persist: false,
+          },
+        )
       }
       if (payload.url) window.location.assign(payload.url)
     } catch (error) {
@@ -327,21 +363,63 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
           action offered, because acting on a setup we could not read is how
           a connected merchant gets sent back through onboarding.
         */}
+        {/*
+          WHERE THE MONEY STOPPED. Mirrored onto this profile by the
+          `payout.failed` handler and retired by the next successful payout, so
+          it names a live problem rather than a scar. Without it a merchant sold
+          into an account that could not release the funds and the card said
+          "Payments are enabled" the whole time — the storefront looked healthy
+          from every angle available to them.
+        */}
+        {stripeState === 'loaded' && profile?.lastPayoutFailureAtMs ? (
+          <Alert severity="warning" variant="outlined">
+            {`A payout of $${(
+              Number(profile.lastPayoutFailureCents ?? 0) / 100
+            ).toFixed(2)} did not reach your bank on ${new Date(
+              Number(profile.lastPayoutFailureAtMs),
+            ).toLocaleDateString()} — ${String(
+              profile.lastPayoutFailureReason ?? 'Stripe did not say why',
+            )} The money is still in your Stripe account. Open Stripe to fix your payout details.`}
+          </Alert>
+        ) : null}
         {!planReady || stripeState !== 'loaded' ? null : isOwner ? (
-          <Button
-            size="small"
-            variant={chargesEnabled ? 'text' : 'contained'}
-            color="primary"
-            disabled={busy}
-            onClick={handleConnect}
-            sx={{ alignSelf: 'flex-start' }}
-          >
-            {chargesEnabled
-              ? 'Refresh status'
-              : busy
-                ? 'Opening Stripe…'
-                : 'Set up payments'}
-          </Button>
+          <>
+            <Button
+              size="small"
+              variant={chargesEnabled ? 'text' : 'contained'}
+              color="primary"
+              disabled={busy}
+              onClick={handleConnect}
+              sx={{ alignSelf: 'flex-start' }}
+            >
+              {chargesEnabled
+                ? 'Refresh status'
+                : busy
+                  ? 'Opening Stripe…'
+                  : 'Set up payments'}
+            </Button>
+            {/*
+            Where the money actually is. Aglyn records none of it —
+            no balance, no payout schedule, and no `payout.failed` handling
+            anywhere — so a merchant whose payout bounced has no way to learn
+            that from this console. An Express account has no direct login
+            either, which leaves a link minted by the platform as the only
+            route in. `target="_blank"` because it leaves the app entirely.
+          */}
+            {dashboardUrl ? (
+              <Button
+                size="small"
+                variant="text"
+                color="primary"
+                href={dashboardUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                sx={{ alignSelf: 'flex-start' }}
+              >
+                {'View payouts in Stripe'}
+              </Button>
+            ) : null}
+          </>
         ) : (
           <Typography variant="caption" color="text.secondary">
             {'Only the organization owner can set up payments.'}

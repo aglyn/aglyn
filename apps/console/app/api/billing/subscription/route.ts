@@ -47,6 +47,11 @@ import {
   restateExistingPhase,
   writePhaseItems,
 } from '../../../../utils/server/billing-schedule'
+import {
+  CAPACITY_ADDON_KINDS,
+  planDowngradeRefusal,
+  readCapacityCounts,
+} from '../../../../utils/server/capacity-in-use'
 import { RETENTION_COLLECTION, RETENTION_KINDS } from '../../_lib/retention'
 
 // lockdown-423: exempt — managing/reactivating the subscription IS the recovery path out of a
@@ -219,8 +224,10 @@ async function activeSubscription(
  * Subscription management (AGL-269), billing.manage-gated:
  * - `cancel`   → cancel_at_period_end (plan runs out at renewal)
  * - `resume`   → clears a pending cancelation
- * - `preview`  → prorated amount for switching to another plan today,
- *   via Stripe's upcoming-invoice preview
+ * - `preview`  → what switching plan costs, via Stripe's upcoming-invoice
+ *   preview. `prorationCents` is the cost of the change and rides the NEXT
+ *   invoice (`create_prorations` bills nothing today); `amountDueCents` is
+ *   that whole invoice, next period's recurring charge included.
  * - `switch`   → UP the ladder: updates the subscription item to the
  *   target plan's price with prorations, today (an existing subscription
  *   never goes through Checkout again); per-plan add-on items re-price to
@@ -329,6 +336,15 @@ async function handler(request: Request): Promise<Response> {
           `subscriptions/${subscription.id}`,
           new URLSearchParams({
             cancel_at_period_end: action === 'cancel' ? 'true' : 'false',
+            // Re-stamped on THIS call (AGL-118), not left as whoever last
+            // switched plans. The stamp names the person who performed the
+            // most recent console act on this subscription and says which
+            // act it was; a cancel that inherited a `switch` stamp would
+            // hand the webhook a uid it must not attribute, and one that
+            // inherited nothing would leave a deliberate cancellation
+            // looking Stripe-initiated.
+            'metadata[actorUid]': decoded.uid,
+            'metadata[actorAction]': action,
           }),
         )
       } catch (error) {
@@ -493,6 +509,36 @@ async function handler(request: Request): Promise<Response> {
       )
     }
 
+    // A DOWNGRADE IS AN ADD-ON REDUCTION ONE LEVEL UP, and gets the same
+    // answer: you cannot drop capacity you are standing on.
+    //
+    // `/api/billing/addons` refuses shrinking a purchase below what its
+    // capacity is carrying. A plan change moves the SAME capacity by moving
+    // what the plan includes, so "buy Pro, make eight datasets, drop to
+    // Starter, keep the eight" was the identical leak through a different
+    // door. Nothing here revokes anything — the org keeps every dataset,
+    // every site and every teammate; the plan change is what waits.
+    //
+    // Measured with `over-limit.ts`, the same comparison the plan grid and the
+    // retention funnel already show the customer BEFORE they choose. Two
+    // calculations would eventually disagree, and a refusal that contradicts
+    // the warning that preceded it is worse than either alone.
+    //
+    // `switch` only. `preview` still answers, because a customer is entitled
+    // to see what a plan costs before being told they cannot have it yet, and
+    // because the surfaces that render the over-limit list call it.
+    if (action === 'switch' && downgrade) {
+      const refusal = planDowngradeRefusal(
+        await readCapacityCounts({
+          orgId,
+          org: org.data(),
+          kinds: CAPACITY_ADDON_KINDS,
+        }),
+        targetPlan as OrgPlan,
+      )
+      if (refusal) return Response.json(refusal, { status: 409 })
+    }
+
     // The shared metered price (AGL-635), interval-matched to the target
     // (AGL-1340/1280) — resolved here because BOTH the delta below and the
     // absolute phase list further down need it.
@@ -510,6 +556,19 @@ async function handler(request: Request): Promise<Response> {
       meteredPrice: metered,
     })
     const dropped = targetItems.droppedAddons
+    // Add-ons the target plan sells, but not in the quantity the org holds.
+    //
+    // Reported for the same reason `droppedAddons` is: the alternative was
+    // silence. `checkSeatQuota`/`checkDatasetQuota` apply `Math.min(…, max)`
+    // at the point of USE, so an org that moved to a smaller plan kept paying
+    // for the full quantity and received the capped one — billing for
+    // capacity that was never delivered, with nothing said anywhere.
+    //
+    // `buildTargetItems` reduces the Stripe line item itself, so the invoice
+    // follows the delivery. This carries the fact to the caller so the confirm
+    // can say it BEFORE the customer agrees, rather than leaving them to
+    // notice a smaller number later.
+    const clamped = targetItems.clampedAddons
     // Items neither path can classify. The instant switch leaves them alone
     // and the schedule now carries them through verbatim — but "carried
     // through" is a claim, and until AGL-2150 the only report on this
@@ -699,6 +758,14 @@ async function handler(request: Request): Promise<Response> {
         // doc's plan never moves.
         params.set('phases[1][metadata][plan]', targetPlan)
         params.set('phases[1][metadata][orgId]', orgId)
+        // On the PHASE, so the actor rides the flip (AGL-118). The event the
+        // webhook logs happens at period end, weeks after this request is
+        // over and with nobody present — and the person who scheduled it is
+        // genuinely its actor. Phase metadata replaces the subscription's at
+        // the flip, so this also retires the stamp that authorized whatever
+        // came before it.
+        params.set('phases[1][metadata][actorUid]', decoded.uid)
+        params.set('phases[1][metadata][actorAction]', 'downgrade')
         // Same tax posture as an instant switch (AGL-1537).
         params.set('phases[1][automatic_tax][enabled]', 'true')
         await stripeRequest(
@@ -729,6 +796,7 @@ async function handler(request: Request): Promise<Response> {
           pendingPlan: targetPlan,
           effectiveAt: periodEndIso,
           droppedAddons: dropped,
+      clampedAddons: clamped,
           unrecognizedItems,
           clearedPendingCancel,
         }, { status: 200 })
@@ -773,6 +841,11 @@ async function handler(request: Request): Promise<Response> {
         'automatic_tax[enabled]': 'true',
         'metadata[plan]': targetPlan,
         'metadata[orgId]': orgId,
+        // AGL-118, as at checkout: the uid and the act it authorized, so the
+        // webhook can attribute the plan change this call causes and nothing
+        // else.
+        'metadata[actorUid]': decoded.uid,
+        'metadata[actorAction]': 'switch',
       })
       itemChanges.forEach((change, index) => {
         for (const [key, value] of change) {
@@ -812,6 +885,7 @@ async function handler(request: Request): Promise<Response> {
         ok: true,
         plan: targetPlan,
         droppedAddons: dropped,
+      clampedAddons: clamped,
         unrecognizedItems,
         clearedPendingCancel,
       }, { status: 200 })
@@ -824,9 +898,14 @@ async function handler(request: Request): Promise<Response> {
       // not to offer.
       return Response.json({
         amountDueCents: 0,
+        // Nothing prorates on a scheduled downgrade: phase 0 restates what
+        // the customer already bought and phase 1 opens a clean period, so
+        // the cost of the change is zero on both readings of the word.
+        prorationCents: 0,
         currency: subscription.currency ?? 'usd',
         periodEnd: periodEndIso,
         droppedAddons: dropped,
+      clampedAddons: clamped,
         unrecognizedItems,
         downgrade: true,
       }, { status: 200 })
@@ -852,13 +931,70 @@ async function handler(request: Request): Promise<Response> {
         // another.
         `&automatic_tax[enabled]=true`,
     )
+    // What the switch COSTS, kept apart from what the next invoice TOTALS.
+    //
+    // `create_prorations` charges nothing today. Stripe writes the proration
+    // adjustments onto the upcoming invoice, so `amount_due` is that whole
+    // invoice — the next period's recurring charge included. Presented as the
+    // price of the change it overstates an upgrade by a full billing period
+    // and dates it wrong, and it is the number a customer reads immediately
+    // before committing money.
+    //
+    // The cost of the change is the proration lines alone: positive when the
+    // move bills the difference, negative when it issues a credit. Derived
+    // exactly as `/api/billing/addons` derives it, because both routes are
+    // previewing the same Stripe mechanic on the same subscription and the
+    // two answering differently is indistinguishable from a pricing bug.
+    const prorationLines = (preview?.lines?.data ?? []).filter(
+      (line: any) => line?.proration,
+    )
+    const prorationCents = prorationLines.reduce(
+      (sum: number, line: any) => sum + Number(line?.amount ?? 0),
+      0,
+    )
+    // The TAX ON THE CHANGE, and only on the change.
+    //
+    // `automatic_tax` was already enabled on this preview, so Stripe computed
+    // the tax — the response simply never carried it, and the confirm dialog
+    // quoted a bare proration as though a mid-cycle switch were untaxed. A
+    // charge quoted without its tax is an incomplete number presented as
+    // final, which is the same failure the plan quote was fixed for.
+    //
+    // Summed from the PRORATION LINES' own `tax_amounts`, never from the
+    // invoice's `tax`: that figure covers the whole upcoming invoice
+    // including next period's recurring charge, so adding it to a proration
+    // would overstate the change by a period's tax — the proration bug again,
+    // one field over.
+    const prorationTaxCents = prorationLines.reduce(
+      (sum: number, line: any) =>
+        sum +
+        (line?.tax_amounts ?? []).reduce(
+          (lineSum: number, tax: any) => lineSum + Number(tax?.amount ?? 0),
+          0,
+        ),
+      0,
+    )
     return Response.json({
       amountDueCents: preview?.amount_due ?? 0,
+      prorationCents,
+      prorationTaxCents,
+      // Whether Stripe finished computing it. `requires_location_inputs`
+      // yields a tax of 0 that is indistinguishable from a real zero unless
+      // the status travels with it.
+      taxComplete: preview?.automatic_tax?.status === 'complete',
+      // Stripe's own verdict for the change's tax, so a zero can be explained
+      // rather than presented bare.
+      taxReason:
+        prorationLines
+          .flatMap((line: any) => line?.tax_amounts ?? [])
+          .find((tax: any) => tax?.taxability_reason)?.taxability_reason ??
+        null,
       currency: preview?.currency ?? 'usd',
       periodEnd: preview?.period_end
         ? new Date(preview.period_end * 1000).toISOString()
         : null,
       droppedAddons: dropped,
+      clampedAddons: clamped,
       unrecognizedItems,
     }, { status: 200 })
   } catch (error) {

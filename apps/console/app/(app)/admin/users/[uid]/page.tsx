@@ -28,13 +28,13 @@ import {
   Container,
   GridItems,
 } from '@aglyn/shared-ui-jsx'
-import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
   Button,
   Chip,
+  Link,
   Stack,
   TextField,
   Table,
@@ -45,8 +45,10 @@ import {
   Typography,
 } from '@mui/material'
 import { useParams } from 'next/navigation'
+import type { GridColDef } from '@mui/x-data-grid'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth, useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
 import CardColumns from '../../../../../components/card-columns.component'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
@@ -67,7 +69,10 @@ import {
   CONTENT_MAX_WIDTH,
   TABLE_PAGE_SIZE_DEFAULT,
 } from '../../../../../constants/shared'
+import ActivityTable from '../../../../../components/activity-table.component'
+import { useDeclareDocumentSubject } from '../../../../../components/document-subject'
 import ActorActivityTable from '../../../../../components/actor-activity-table.component'
+import { legalAcceptanceDocumentHref } from '../../../../../utils/legal-document-link'
 import { formatStaffTimestamp } from '../../../../../utils/staff-timestamps'
 
 interface UserDetail {
@@ -78,7 +83,15 @@ interface UserDetail {
     disabled: boolean
     staff: boolean
     staffRole: string | null
-    providers: string[]
+    /**
+     * Each sign-in provider AND the address it carries.
+     *
+     * Was `string[]` of provider ids alone, which showed that an account had
+     * a Google provider and not which mailbox it was for — while that address
+     * receives real mail and, never having entered the uniqueness index, is
+     * the one most likely to be quietly shared with another account.
+     */
+    providers: Array<{ providerId: string; email: string | null }>
     createdAt: string | null
     lastSignInAt: string | null
     /**
@@ -111,10 +124,21 @@ interface UserDetail {
     actorUid: string | null
     action: string | null
     target: string | null
+    /** The person the entry is ABOUT, when the writer could resolve one. */
+    subjectUid: string | null
     /** WHY, when the row carries one (AGL-1652) — see `org.override`. */
     reason: string | null
     note: string | null
     at: string | null
+    /**
+     * One act recorded more than once, collapsed onto one row. `1` and a null
+     * `lastAt` are the ordinary case; anything higher must be rendered, or
+     * the card under-reports an access the writer merged.
+     */
+    repeatCount: number
+    lastAt: string | null
+    /** `access` looked; `change` altered something or acted on someone. */
+    kind: 'access' | 'change'
   }>
   /**
    * Clickwrap acceptance history and the ToS §18.5 verdicts (AGL-2316).
@@ -172,7 +196,28 @@ interface UserDetail {
   emails?: {
     lookupFailed: boolean
     rows: StaffEmailDeliveryRow[]
+    /** The addresses the history was actually read under. */
+    addressesRead?: string[]
+    /**
+     * Addresses whose delivery records were destroyed under an erasure
+     * request. Kept apart from "no mail" for the same reason `lookupFailed`
+     * is: all three render as an empty table and mean different things.
+     */
+    erasures?: Record<string, { at: number; count: number }>
   }
+  /**
+   * Every address this account holds — primary, provider-supplied, and the
+   * ones it has been moved off — with whether another account holds it too.
+   */
+  addresses?: Array<{
+    address: string
+    sources: string[]
+    shared: boolean
+    /** A provider asserted this address but another account already held it. */
+    indexConflict: boolean
+  }>
+  /** A source was unreadable, so `addresses` may be short. */
+  addressesIncomplete?: boolean
 }
 
 /**
@@ -188,7 +233,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
   const { enqueueSnackbar } = useSnackbar()
   const [detail, setDetail] = useState<UserDetail | null>(null)
   /*
-   * The audit trail PAGES (AGL-693). It is the one table on this page whose
+   * The audit trail PAGES (AGL-2501). It is the one table on this page whose
    * length is a function of how much the account has DONE rather than of what
    * it is: memberships and legal acceptances are a handful either way, and an
    * audited action is written every time staff act on this user or this user
@@ -201,10 +246,145 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
    */
   const [auditPage, setAuditPage] = useState(0)
   const [auditPageSize, setAuditPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  const [accessPage, setAccessPage] = useState(0)
+  const [accessPageSize, setAccessPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
   const [error, setError] = useState<string | null>(null)
   // Memoized rather than `detail?.audit ?? []` inline: a fresh empty array on
   // every render re-runs the slice below forever.
-  const auditEntries = useMemo(() => detail?.audit ?? [], [detail])
+  const allAuditEntries = useMemo(() => detail?.audit ?? [], [detail])
+  /*
+   * TWO TABLES, BECAUSE A READ MUST NOT BE ABLE TO BURY AN IMPERSONATION.
+   *
+   * One list held both, newest first, and a handful of `email.message-viewed`
+   * rows pushed `user.impersonate` and `org.override` off the visible page —
+   * the entries somebody opens this card to find. Separating them is what
+   * makes that structurally impossible rather than a matter of how the
+   * ranking happens to fall today: the two categories no longer compete for
+   * the same rows, and each pages on its own.
+   *
+   * Filtering one table would have been less page, but it puts the answer
+   * behind a control whose default hides half the record. These are also two
+   * different questions — "what was done to this account" and "who looked at
+   * this account's data" — and the page already reads as a stack of separately
+   * titled logs.
+   */
+  const auditEntries = useMemo(
+    () => allAuditEntries.filter((entry) => entry.kind !== 'access'),
+    [allAuditEntries],
+  )
+  const accessEntries = useMemo(
+    () => allAuditEntries.filter((entry) => entry.kind === 'access'),
+    [allAuditEntries],
+  )
+  /**
+   * The audit trail's columns, in the console's row grammar (AGL-2501).
+   *
+   * This card and "Activity by this account" directly above it now render the
+   * same table — `ActivityTable` owns the card, the grid, the toolbar, the
+   * empty state and the footer — so a staff member reading two audit tables
+   * stacked on one page reads them the same way. What stays different is what
+   * they are OF: the one above is what this account DID, this one is what was
+   * done BY or TO it, and both descriptions say so.
+   */
+  /**
+   * NAME first, then email, then uid.
+   *
+   * The header and the breadcrumb both printed the email while the Identity
+   * card directly beneath them printed the name, so the page led with one
+   * identifier and then introduced the account by another. Staff still search
+   * by address — the Identity card keeps it above the fold, which is why the
+   * header can lead with the name at all.
+   *
+   * The uid is the last entry rather than a blank: an account genuinely
+   * without a name or an address is rare and must still be identifiable, and
+   * an empty header would be the one answer that names nothing. Same
+   * precedence the staff console already uses for an organization.
+   *
+   * `null` until the read settles, so both surfaces hold their placeholder
+   * rather than painting the email and swapping it a moment later — a title
+   * that corrects itself reads as the page having made a mistake.
+   */
+  const accountLabel = detail
+    ? (detail.user.displayName?.trim() ||
+      detail.user.email ||
+      detail.user.uid)
+    : null
+  // The browser tab, through the shared subject — which already holds the
+  // server's id title until a name arrives, so the tab cannot flicker through
+  // the wrong one either.
+  useDeclareDocumentSubject(uid, accountLabel ?? undefined)
+
+  const auditColumns: GridColDef[] = useMemo(
+    () => [
+      { field: 'action', headerName: 'Action', flex: 1.2, minWidth: 180 },
+      { field: 'target', headerName: 'Target', flex: 1.2, minWidth: 180 },
+      {
+        // An `org.override` this account performed shows up here too, so the
+        // reason has to reach this table as well (AGL-1652) — the audit page
+        // is not the only place the act is read from.
+        field: 'reason',
+        headerName: 'Why',
+        flex: 1,
+        minWidth: 160,
+        valueGetter: (_value: unknown, row: any) =>
+          orgOverrideReasonSummary(row.reason, row.note) ?? '—',
+      },
+      {
+        field: 'actorUid',
+        headerName: 'Actor',
+        flex: 0.9,
+        minWidth: 150,
+        /*
+         * "this account" is a real answer, not a placeholder: the route reads
+         * two halves — entries this account performed, and entries performed
+         * against it — so a row is either one or the other. The other half
+         * still shows a bare staff uid, which is a name this page does not
+         * resolve; that is a separate gap from the one this column had.
+         */
+        valueGetter: (_value: unknown, row: any) =>
+          row.actorUid === detail?.user.uid
+            ? 'this account'
+            : (row.actorUid ?? '—'),
+        renderCell: ({ row }: any) =>
+          row.actorUid === detail?.user.uid ? (
+            <Chip size="small" variant="outlined" label="this account" />
+          ) : (
+            (row.actorUid ?? '—')
+          ),
+      },
+      {
+        field: 'at',
+        headerName: 'When',
+        flex: 1,
+        minWidth: 180,
+        // `type: 'date'` gives the panel a date picker, and sorting happens on
+        // the instant rather than on the rendered string — a grid sorting the
+        // rendered text orders it alphabetically.
+        type: 'date',
+        valueGetter: (_value: unknown, row: any) =>
+          row.at ? new Date(row.at) : null,
+        /*
+         * A COLLAPSED ROW SAYS SO.
+         *
+         * The writer merges an immediate repeat of one act onto the row
+         * already there rather than adding a second. Printing only the first
+         * instant would hide that, and a row that quietly stands for several
+         * accesses is the same lie as a missing row — so the count and the
+         * last occurrence are rendered whenever there was more than one.
+         */
+        renderCell: ({ row }: any) => {
+          if (!row.at) return '—'
+          const first = new Date(row.at).toLocaleString()
+          if (!(row.repeatCount > 1)) return first
+          const last = row.lastAt
+            ? new Date(row.lastAt).toLocaleTimeString()
+            : null
+          return `${first} · ${row.repeatCount}x${last ? `, last ${last}` : ''}`
+        },
+      },
+    ],
+    [detail?.user.uid],
+  )
   const pagedAudit = useMemo(
     () =>
       auditEntries.slice(
@@ -212,6 +392,14 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
         auditPage * auditPageSize + auditPageSize,
       ),
     [auditEntries, auditPage, auditPageSize],
+  )
+  const pagedAccess = useMemo(
+    () =>
+      accessEntries.slice(
+        accessPage * accessPageSize,
+        accessPage * accessPageSize + accessPageSize,
+      ),
+    [accessEntries, accessPage, accessPageSize],
   )
   // A reload that returns a shorter trail can strand a reader past the last
   // page, which renders as an empty table with no way back.
@@ -222,16 +410,22 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
     )
     if (auditPage > lastPage) setAuditPage(lastPage)
   }, [auditEntries.length, auditPage, auditPageSize])
+  useEffect(() => {
+    const lastPage = Math.max(
+      0,
+      Math.ceil(accessEntries.length / accessPageSize) - 1,
+    )
+    if (accessPage > lastPage) setAccessPage(lastPage)
+  }, [accessEntries.length, accessPage, accessPageSize])
 
   useEffect(() => {
     if (!uid || !user) return
     let active = true
     void (async () => {
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch(
+        const response = await authorizedFetch(
+          user,
           `/api/admin/users/detail?uid=${encodeURIComponent(uid)}`,
-          { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
         )
         const payload = await response.json()
         if (!active) return
@@ -269,13 +463,9 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
     if (!uid || editBusy) return
     setEditBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/admin/users/manage', {
+      const response = await authorizedFetch(user, '/api/admin/users/manage', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'updateProfile', uid, ...edit }),
       })
       const payload = await response.json().catch(() => ({}))
@@ -300,13 +490,9 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
   // verbatim to know what to do next.
   const callManage = useCallback(
     async (payload: Record<string, unknown>) => {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/admin/users/manage', {
+      const response = await authorizedFetch(user, '/api/admin/users/manage', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ uid, ...payload }),
       })
       const body = await response.json().catch(() => ({}))
@@ -321,6 +507,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
           {
             skippedReason: body?.skippedReason,
             blockers: body?.blockers,
+            sharedAddresses: body?.sharedAddresses,
             status: response.status,
           },
         )
@@ -341,13 +528,12 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
     <DashboardLayout
       breadcrumbItems={[
         { children: 'Users', href: buildRoute(Route.ADMIN_USERS) },
-        {
-          children: detail?.user.email ?? uid ?? '',
-          href: '#',
-        },
+        // No href: this is the page the reader is standing on, and `#` is a
+        // link that scrolls them to the top for their trouble.
+        { children: accountLabel ?? 'User' },
       ]}
       header={{
-        children: detail?.user.email ?? 'User',
+        children: accountLabel ?? 'User',
         icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
       }}
       help={{ topic: 'staffConsole', anchor: '#password-help' }}
@@ -467,7 +653,20 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                                 ].join(' · ')}
                               </Typography>
                               <Typography variant="caption" color="text.secondary">
-                                {`Providers: ${detail.user.providers.join(', ') || '—'}`}
+                                {`Providers: ${
+                                  detail.user.providers
+                                    .map((provider) =>
+                                      // The address is the point of showing
+                                      // this at all; a provider carrying none
+                                      // (phone, anonymous) still renders as
+                                      // itself rather than as a dangling
+                                      // separator.
+                                      provider.email
+                                        ? `${provider.providerId} (${provider.email})`
+                                        : provider.providerId,
+                                    )
+                                    .join(', ') || '—'
+                                }`}
                               </Typography>
                               <Typography variant="caption" color="text.secondary">
                                 {`Created ${formatStaffTimestamp(
@@ -799,6 +998,12 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                     // which reads to a human exactly like a read that failed
                     // — and NOT like "we never emailed them".
                     lookupFailed={detail.emails?.lookupFailed ?? true}
+                    // Every address the rows were gathered from, so a staffer
+                    // can see they are looking at mail sent to an address
+                    // that is no longer this account's primary.
+                    addresses={detail.addresses ?? []}
+                    addressesIncomplete={detail.addressesIncomplete === true}
+                    erasures={detail.emails?.erasures ?? {}}
                   />
                 ),
               },
@@ -929,14 +1134,32 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                                   <TableCell>
                                     {record.documents.length === 0
                                       ? '—'
-                                      : record.documents
-                                          .map(
-                                            (doc) =>
-                                              `${doc.key}:${(
-                                                doc.sha256 ?? ''
-                                              ).slice(0, 12)}`,
+                                      : record.documents.map((doc, index) => {
+                                          const label = `${doc.key}:${(
+                                            doc.sha256 ?? ''
+                                          ).slice(0, 12)}`
+                                          const href =
+                                            legalAcceptanceDocumentHref(
+                                              doc.url,
+                                            )
+                                          return (
+                                            <span key={doc.key}>
+                                              {index > 0 ? ' · ' : null}
+                                              {href ? (
+                                                <Link
+                                                  href={href}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  underline="always"
+                                                >
+                                                  {label}
+                                                </Link>
+                                              ) : (
+                                                label
+                                              )}
+                                            </span>
                                           )
-                                          .join(' · ')}
+                                        })}
                                   </TableCell>
                                   <TableCell>
                                     {record.ipAddress ?? '—'}
@@ -955,7 +1178,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                 size: { xs: 12 },
                 children: (
                   /*
-                   * What this ACCOUNT did, everywhere (AGL-1488).
+                   * What this ACCOUNT did, everywhere.
                    *
                    * The card above is the log of STAFF actions taken against
                    * the account — a different log answering a different
@@ -963,6 +1186,18 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                    * page is open for a reason, "what did they do" is the
                    * question being asked, and nothing here could answer it.
                    * Every org, every site, newest first.
+                   *
+                   * The copy says "console actions", not "everything". The
+                   * feed is `collectionGroup('activity')`, which spans
+                   * `orgs/{orgId}/activity` and `hosts/{hostId}/activity` —
+                   * so the SCOPE half of the claim holds. Completeness does
+                   * not: an entry exists only where a mutation point calls
+                   * the logger, and a flow that forgets to is indistinguishable
+                   * here from a person who did nothing. Promising
+                   * "everything" turns that gap into a false negative on a
+                   * page read as an audit trail, which is the reading that
+                   * matters — an empty feed must be understood as "nothing
+                   * was logged", never as "nothing was done".
                    */
                   <ActorActivityTable
                     endpoint={`/api/admin/user-activity?uid=${encodeURIComponent(uid)}`}
@@ -970,87 +1205,88 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                     help={docsHelp('staffConsole', {
                       anchor: '#whats-there',
                       excerpt:
-                        'Everything this account has done, across every organization and site — as distinct from the staff actions taken against it.',
+                        'Console actions logged for this account, across every organization and site — as distinct from the staff actions taken against it.',
                     })}
                     description={
-                      'Everything this account has done, across every ' +
-                      'organization and site. Not the same as the staff ' +
-                      'actions above, which were done TO it.'
+                      'Console actions logged for this account, across every ' +
+                      'organization and site. An empty feed means nothing was ' +
+                      'logged, not that nothing was done. Not the same as the ' +
+                      'staff actions above, which were done TO it.'
                     }
                   />
                 ),
               },
+
               {
                 size: { xs: 12 },
                 children: (
-                  <CardDisplay
+                  <ActivityTable
                     header="Recent audit trail"
                     help={docsHelp('staffConsole', {
                       anchor: '#whats-there',
                       excerpt:
                         'Audited staff actions performed by or on this account — the full record lives on the Audit log page.',
                     })}
-                    contentGutterX
-                    contentGutterY
-                  >
-                    {detail.audit.length === 0 ? (
-                      <Typography variant="body2" color="text.secondary">
-                        {'No audited actions involve this account.'}
-                      </Typography>
-                    ) : (
-                      <>
-                      <Table size="small">
-                        <TableHead>
-                          <TableRow>
-                            <TableCell>{'Action'}</TableCell>
-                            <TableCell>{'Target'}</TableCell>
-                            {/*
-                              An `org.override` this account performed shows
-                              up here too, so the reason has to reach this
-                              table as well (AGL-1652) — the audit page is
-                              not the only place the act is read from.
-                            */}
-                            <TableCell>{'Why'}</TableCell>
-                            <TableCell>{'Actor'}</TableCell>
-                            <TableCell>{'When'}</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {pagedAudit.map((entry) => (
-                            <TableRow key={entry.id}>
-                              <TableCell>{entry.action ?? '—'}</TableCell>
-                              <TableCell>{entry.target ?? '—'}</TableCell>
-                              <TableCell>
-                                {orgOverrideReasonSummary(
-                                  entry.reason,
-                                  entry.note,
-                                ) ?? '—'}
-                              </TableCell>
-                              <TableCell>
-                                {entry.actorUid === detail.user.uid
-                                  ? 'this account'
-                                  : (entry.actorUid ?? '—')}
-                              </TableCell>
-                              <TableCell>
-                                {entry.at
-                                  ? new Date(entry.at).toLocaleString()
-                                  : '—'}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                      <ListPagination
-                        page={auditPage}
-                        pageSize={auditPageSize}
-                        rowCount={pagedAudit.length}
-                        count={detail.audit.length}
-                        onPageChange={setAuditPage}
-                        onPageSizeChange={setAuditPageSize}
-                      />
-                      </>
-                    )}
-                  </CardDisplay>
+                    description={
+                      'Audited staff actions performed BY or ON this ' +
+                      'account. Not the same as the activity above, which ' +
+                      'is what the account itself did. Data staff merely ' +
+                      'LOOKED at is the card below. The full record lives ' +
+                      'on the Audit log page.'
+                    }
+                    columns={auditColumns}
+                    rows={pagedAudit}
+                    getRowId={(row: any) => row.id}
+                    emptyLabel="No audited actions involve this account."
+                    page={auditPage}
+                    pageSize={auditPageSize}
+                    count={auditEntries.length}
+                    onPageChange={setAuditPage}
+                    onPageSizeChange={setAuditPageSize}
+                  />
+                ),
+              },
+
+              {
+                size: { xs: 12 },
+                children: (
+                  /*
+                   * WHO LOOKED — its own card, so it cannot crowd the one
+                   * above.
+                   *
+                   * Reads are cheap to perform and so arrive far more often
+                   * than the acts anybody opens this page to review; sharing
+                   * one window with them is how four message views buried an
+                   * impersonation. They are separated rather than dropped
+                   * because this is the half that answers the question the
+                   * audit trail exists for — a customer asking who at Aglyn
+                   * read their mail — and that answer must be on the page of
+                   * the person whose mail it was.
+                   */
+                  <ActivityTable
+                    header="Data access by staff"
+                    help={docsHelp('staffConsole', {
+                      anchor: '#whats-there',
+                      excerpt:
+                        'Audited staff READS of this account’s private data — kept apart from the actions above so a burst of views cannot bury an impersonation.',
+                    })}
+                    description={
+                      'Times a staff member opened this account’s ' +
+                      'private data without changing it — reading a sent ' +
+                      'message, for example. Repeats of a single opening ' +
+                      'collapse onto one row and say how many; two separate ' +
+                      'openings are two rows.'
+                    }
+                    columns={auditColumns}
+                    rows={pagedAccess}
+                    getRowId={(row: any) => row.id}
+                    emptyLabel="No audited staff reads of this account's data."
+                    page={accessPage}
+                    pageSize={accessPageSize}
+                    count={accessEntries.length}
+                    onPageChange={setAccessPage}
+                    onPageSizeChange={setAccessPageSize}
+                  />
                 ),
               },
             ]}

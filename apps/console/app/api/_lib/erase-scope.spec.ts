@@ -88,11 +88,26 @@ describe('eraseScopeDenial (AGL-1046)', () => {
       }
     })
 
-    it('treats a missing visibleTo as org-wide, not as denied', () => {
-      // Fail-closed here would delete nothing rather than leak, but it
-      // would also break every pre-backfill doc for a scoped member.
+    /**
+     * A document carrying NO scope is seen by nobody, so a scoped
+     * collaborator is answered 404 — the same answer a resource in another
+     * site's scope gets, and for the same reason: learning that it EXISTS is
+     * the leak. Failing closed here deletes nothing rather than exposing a
+     * resource whose sharing nobody ever chose.
+     */
+    it('treats a missing visibleTo as visible to nobody, and says only "not found"', () => {
       expect(
         eraseScopeDenial({ ...base, visibleTo: undefined, member: COLLABORATOR }),
+      ).toMatchObject({ status: 404 })
+      // ANTI-VACUITY: a scope the collaborator holds is still admitted, so
+      // this is the absent field being refused and not the rail refusing
+      // everything.
+      expect(
+        eraseScopeDenial({
+          ...base,
+          visibleTo: ['host:client-1'],
+          member: COLLABORATOR,
+        }),
       ).toBeNull()
     })
   })

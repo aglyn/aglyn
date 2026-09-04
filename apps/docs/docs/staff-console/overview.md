@@ -340,12 +340,18 @@ payments, refunds — are sent by Stripe from its Dashboard and are listed read-
 #### Platform send rate {#platform-send-rate}
 
 At the top of the same page. Everything Aglyn sends leaves on **one** Resend key
-from **one** verified sending domain, under a `p=reject` DMARC record — so a
-throttle or a reputation hit there is a rejection, not a spam folder, and it
-lands on every customer's password resets at the same time. This is the ceiling
-on outbound mail per hour across the whole platform, and it is a **value, not a
-deploy**: a sending-domain warm-up or a deliverability incident is handled by
-changing the number here.
+and the provider's rate limit is per account, so a throttle lands on every
+customer's password resets at the same time whatever domain each site sends
+from. This is the ceiling on outbound mail per hour across the whole platform,
+and it is a **value, not a deploy**: a sending-domain warm-up or a
+deliverability incident is handled by changing the number here.
+
+Reputation is not shared the same way the rate limit is. Under a `p=reject`
+DMARC record, a hit is a rejection rather than a spam folder — and which mail it
+reaches depends on the domain: the platform's own account mail is on its own
+name, a site with a sending domain of its own carries its reputation alone, and
+the sites with none share one of four pooled members, which is why only
+transactional mail leaves on those.
 
 The card shows the current hour's volume beside the ceiling, because the
 question during an incident is never "what is the limit" but "are we near it".
@@ -354,7 +360,7 @@ question during an incident is never "what is the limit" but "are we near it".
 and a scheduled **bulk sweep** (the monthly usage summary). It can **never**
 refuse transactional mail — password resets, invites, order receipts, booking
 reminders — at any value. Those are counted, because the ceiling is about total
-volume on the domain, but they send regardless.
+volume through the provider account, but they send regardless.
 
 Nothing is lost when the ceiling bites. A scheduled campaign over it goes back
 to `scheduled` and the 15-minute processor picks it up in the next window; a
@@ -422,6 +428,14 @@ costs more than the floor, which no organization's usage does yet.
 
 **Existing coupons** lists every Stripe coupon with its promotion codes, redemption
 count, and a **valid** or **expired** state.
+
+Each promotion code carries **Activate** / **Deactivate**. Checkout only resolves a code
+that is active, so a deactivated code is reported to the customer as one we do not
+recognize — deactivating is how a code is pulled mid-campaign, and activating is how a
+code that was turned off is put back. Both directions ask for confirmation first and are
+recorded in the staff audit log; turning a code back on for a discount of 40% or more
+also asks for the same sign-off creating it would. A discount already applied to a
+subscription is unaffected either way.
 
 ### Do not contact {#contact-suppressions}
 

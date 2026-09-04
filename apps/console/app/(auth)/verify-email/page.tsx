@@ -36,6 +36,10 @@ import { applyActionCode } from 'firebase/auth'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth, useSigninCheck } from '@aglyn/tenant-feature-instance'
+import {
+  authorizedFetch,
+  resolveIdToken,
+} from '@aglyn/shared-util-http/authorized-token'
 import AuthFormComponent from '../../../components/auth-form.component'
 import hardNavigate from '../../../utils/hard-navigate'
 import { verifiedContinueTarget } from '../../../utils/verified-continue-target'
@@ -95,7 +99,10 @@ function VerifyEmail() {
   const goToApp = useCallback(async () => {
     const user = firebaseAuth.currentUser
     if (!user) return
-    await user.getIdToken(true).catch(() => undefined)
+    // Under a deadline: this is the last step before a hard navigation, so
+    // a refresh that is never answered leaves the page on the waiting screen
+    // it was meant to leave.
+    await resolveIdToken(user, { forceRefresh: true }).catch(() => undefined)
     hardNavigate(verifiedContinueTarget(continueUrl) ?? '/')
   }, [continueUrl, firebaseAuth])
 
@@ -109,15 +116,15 @@ function VerifyEmail() {
       // reset mail: the Firebase template is locked, so its subject still
       // carries `[aglyn.io]` and its link lands on a firebaseapp.com host.
       // The one-time code is still minted by Firebase.
-      const idToken = await user.getIdToken()
-      const response = await fetch('/api/auth/send-verification', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${idToken}`,
-          'Content-Type': 'application/json',
+      const response = await authorizedFetch(
+        user,
+        '/api/auth/send-verification',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}',
         },
-        body: '{}',
-      })
+      )
       const payload = (await response.json().catch(() => ({}))) as {
         error?: string
         alreadyVerified?: boolean

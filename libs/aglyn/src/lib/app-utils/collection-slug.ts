@@ -96,10 +96,14 @@ export interface EntrySlugCandidate {
  * slug must not collide with itself. Case- and space-insensitive for the same
  * reason the collection rule is: `Hello` and `hello` resolve to one URL.
  *
- * ⚠️ The caller's list is the console's LOADED entries, which the manager caps
- * at 200. This is fast feedback, not an enforcement point: on a collection
- * past that cap a collision can still be created. Say so where it is used
- * rather than implying a guarantee this cannot make.
+ * ⚠️ This decides nothing on its own — it reports what the caller handed it.
+ * The console's caller asks Firestore for the slug directly, so its answer
+ * covers the whole collection rather than a loaded window; a caller that
+ * passes a page instead can only report collisions inside that page, and must
+ * say so rather than implying a guarantee this cannot make.
+ *
+ * It remains fast feedback rather than an enforcement point in either case:
+ * two authors saving the same address at once both read no owner.
  */
 export function findEntrySlugOwner(
   slug: string,

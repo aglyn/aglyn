@@ -79,6 +79,7 @@ import { CardDisplay, Container, GridItems } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Alert,
   AlertTitle,
@@ -153,10 +154,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
     void (async () => {
       let configured: string | null = null
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/admin/tax-filing', {
-          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
-        })
+        const response = await authorizedFetch(user, '/api/admin/tax-filing')
         const body = await response.json().catch(() => ({}))
         const value = body?.config?.firstTaxablePeriod
         if (response.ok && typeof value === 'string') configured = value
@@ -209,10 +207,9 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
     setError(null)
     void (async () => {
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch(
+        const response = await authorizedFetch(
+          user,
           `/api/admin/tax-return?period=${encodeURIComponent(period)}`,
-          { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
         )
         const body = await response.json().catch(() => ({}))
         if (!active) return
@@ -997,9 +994,11 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
               THE THIRD BUCKET (AGL-2137/2163). One liability arm, not three:
               marketplace checkout adds the tax EXCLUSIVE on the platform's own
               charge and pays the publisher from the pre-tax price, so all of
-              it is Aglyn's. Stated as a platform figure with no jurisdiction
-              breakdown because purchase rows store no buyer address — a
-              "Texas" slice here would be a guess printed as a total.
+              it is Aglyn's. The platform total leads and the per-state split
+              follows it, including the part that has no state: purchases
+              recorded before the webhook stored a jurisdiction have none and
+              are not given one, so a "Texas" slice presented as the whole
+              answer would be a guess printed as a total.
             */}
             <CardDisplay
               header={'Marketplace tax — plugin and theme purchases'}
@@ -1018,10 +1017,11 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
               >
                 {'All of this tax is Aglyn’s: it is added on top of the ' +
                   'listing price on Aglyn’s own charge, and the publisher’s ' +
-                  'transfer is computed from the pre-tax price. No buyer ' +
-                  'address is stored on a purchase row, so none of it can be ' +
-                  'placed in a state — which is why it is absent from the ' +
-                  'jurisdiction table below.'}
+                  'transfer is computed from the pre-tax price. Each purchase ' +
+                  'records the jurisdiction Stripe computed its tax for, so ' +
+                  'the total below breaks down by state. Purchases recorded ' +
+                  'before that carry no jurisdiction and are counted as ' +
+                  'such rather than placed — read those in Stripe.'}
               </Typography>
               <Stack spacing={1}>
                 {marketplaceLines.length === 0 ? (

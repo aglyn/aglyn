@@ -34,10 +34,16 @@ import { entityPageTitle } from '../../../../../../../entity-page-title'
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ pluginRef: string }>
+  params: Promise<{ host: string; pluginRef: string }>
 }): Promise<Metadata> {
-  const { pluginRef } = await params
-  return { title: entityPageTitle({ subject: pluginRef, noun: 'Plugin' }) }
+  const { host, pluginRef } = await params
+  // Scoped to the SITE, which is what separates this page from the
+  // workspace-scoped `/[orgSlug]/plugins/[pluginRef]`. Both are about the
+  // same plugin, and without the site both name it identically — two tabs
+  // reading the same string for two pages that do different things.
+  return {
+    title: entityPageTitle({ subject: pluginRef, noun: 'Plugin', scope: host }),
+  }
 }
 
 export default function SitePluginTitleLayout({

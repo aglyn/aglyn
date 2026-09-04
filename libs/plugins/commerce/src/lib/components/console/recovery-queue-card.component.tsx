@@ -18,9 +18,14 @@
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Chip, Divider, Stack, Typography } from '@mui/material'
-import { collection, limit, query } from 'firebase/firestore'
+import { collection } from 'firebase/firestore'
 import { useMemo } from 'react'
-import { useFirestore, useFirestoreCollection } from '@aglyn/tenant-feature-instance'
+import {
+  ceilingedWindow,
+  collectionCeiling,
+  useFirestore,
+  useFirestoreCollection,
+} from '@aglyn/tenant-feature-instance'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import {
   EntitlementUpsell,
@@ -52,6 +57,23 @@ const relative = (atMs: number | undefined): string => {
   if (hours < 48) return `${hours}h ago`
   return `${Math.round(hours / 24)}d ago`
 }
+
+/**
+ * How many documents each set of counters may be computed from.
+ *
+ * Every figure this card renders is a COUNT, so neither read can be paged — a
+ * tally over page one is not a tally. What makes a count trustworthy instead
+ * is that the walk reaching it is total, which is why both ask through
+ * `collectionCeiling` and order on the document name: an unordered cap returns
+ * a pseudo-random slice, and a count over a random slice is an undercount with
+ * nothing on screen to suggest it.
+ *
+ * These chips claim to mirror what `scanAbandonedCheckouts` will act on, so a
+ * ceiling that bites has to say so rather than quietly report a smaller queue
+ * than the job will find.
+ */
+const CHECKOUT_CEILING = 200
+const ALERT_CEILING = 200
 
 /**
  * Recovery & alerts (AGL-2227).
@@ -93,15 +115,30 @@ export function RecoveryQueueCard(props: RecoveryQueueCardProps) {
   )
 
   const { data: checkoutDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'checkouts'), limit(200)),
+    () =>
+      collectionCeiling(
+        collection(firestore, 'hosts', hostId, 'checkouts'),
+        CHECKOUT_CEILING,
+      ),
     [firestore, hostId],
     { idField: '$id' },
   )
   const { data: alertDocs } = useFirestoreCollection<any>(
     () =>
-      query(collection(firestore, 'hosts', hostId, 'restockAlerts'), limit(200)),
+      collectionCeiling(
+        collection(firestore, 'hosts', hostId, 'restockAlerts'),
+        ALERT_CEILING,
+      ),
     [firestore, hostId],
     { idField: '$id' },
+  )
+  const checkoutWindow = useMemo(
+    () => ceilingedWindow<any>(checkoutDocs ?? undefined, CHECKOUT_CEILING),
+    [checkoutDocs],
+  )
+  const alertWindow = useMemo(
+    () => ceilingedWindow<any>(alertDocs ?? undefined, ALERT_CEILING),
+    [alertDocs],
   )
 
   const checkouts = useMemo(() => {
@@ -109,7 +146,7 @@ export function RecoveryQueueCard(props: RecoveryQueueCardProps) {
     // The same three tests `scanAbandonedCheckouts` applies, in the same
     // order, so the number here is the number the job will act on rather
     // than a looser "open checkouts" count that would always read higher.
-    const open = (checkoutDocs ?? []).filter(
+    const open = checkoutWindow.rows.filter(
       (row: any) => row.status === 'open' && row.email,
     )
     return {
@@ -129,17 +166,17 @@ export function RecoveryQueueCard(props: RecoveryQueueCardProps) {
         .sort((a: any, b: any) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0))
         .slice(0, 5),
     }
-  }, [checkoutDocs])
+  }, [checkoutWindow])
 
   const alerts = useMemo(() => {
-    const rows = alertDocs ?? []
+    const rows = alertWindow.rows
     return {
       pending: rows.filter((row: any) => row.notifiedAtMs == null).length,
       notified: rows.filter(
         (row: any) => row.notifiedAtMs != null && !row.skipped,
       ).length,
     }
-  }, [alertDocs])
+  }, [alertWindow])
 
   return (
     <CardDisplay
@@ -173,6 +210,11 @@ export function RecoveryQueueCard(props: RecoveryQueueCardProps) {
                   label={`${checkouts.reminded} reminded`}
                 />
               </Stack>
+              {checkoutWindow.truncated ? (
+                <Typography variant="caption" color="text.secondary">
+                  {`Counted across ${CHECKOUT_CEILING} checkouts. The reminder job reads the rest; these figures do not.`}
+                </Typography>
+              ) : null}
               <Typography variant="caption" color="text.secondary">
                 {'Reminders send automatically about 15 minutes after a ' +
                   'checkout has been idle for an hour. A checkout that is ' +
@@ -215,6 +257,11 @@ export function RecoveryQueueCard(props: RecoveryQueueCardProps) {
             />
             <Chip size="small" label={`${alerts.notified} notified`} />
           </Stack>
+          {alertWindow.truncated ? (
+            <Typography variant="caption" color="text.secondary">
+              {`Counted across ${ALERT_CEILING} alerts. The notify job reads the rest; these figures do not.`}
+            </Typography>
+          ) : null}
           <Typography variant="caption" color="text.secondary">
             {'Anyone who used “Notify me when it’s back” on a sold-out ' +
               'product is emailed once its stock goes above zero. Waiting ' +

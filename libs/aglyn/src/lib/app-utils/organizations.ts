@@ -390,6 +390,72 @@ export function countCollaboratorSeats(
 }
 
 /**
+ * Every principal consuming a MANAGER seat, as identities rather than rows.
+ *
+ * The org-wide half of `collaboratorSeatKeys`, drawn from the same entries and
+ * split on the same predicate, so the two counters partition one roster
+ * instead of overlapping on it.
+ *
+ * Deduplicating by identity is the difference from {@link countManagerSeats},
+ * and it is what makes this composable with an `exclude`: a person holding a
+ * pending invite AND the membership it became is one seat, and the row-wise
+ * counter reports two because it is handed the two collections separately and
+ * sums them.
+ */
+export function managerSeatKeys(
+  entries: ReadonlyArray<CollaboratorSeatEntry | null | undefined>,
+): Set<string> {
+  const keys = new Set<string>()
+  for (const entry of entries) {
+    if (!entry) continue
+    if (!isOrgWideMember(entry as Partial<AglynOrgMember>)) continue
+    const key = collaboratorSeatKey(entry)
+    if (key) keys.add(key)
+  }
+  return keys
+}
+
+/**
+ * How many manager seats are spoken for by someone OTHER than `exclude`.
+ *
+ * The manager twin of {@link countCollaboratorSeats}, and it exists for the
+ * same reason that one takes an `exclude`: `checkSeatQuota`'s contract is
+ * "usage BEFORE the resource being created", and on the invite-accept path the
+ * accepter holds a pending invite and is about to hold a membership at the
+ * same instant. Counted plainly they are charged once or twice for a seat they
+ * are the subject of, and an org on its last seat refuses its own invitation.
+ *
+ * Both identities are dropped, and `emails` carries the further addresses
+ * proven to belong to that account — an invitation may be accepted at any
+ * confirmed address, so the invite being consumed need not be keyed by the
+ * primary one. Passing an address that is not theirs would hand out a free
+ * seat, so callers must pass confirmed addresses for that uid and nothing
+ * else.
+ *
+ * Kept SEPARATE from {@link countManagerSeats} rather than replacing it: that
+ * one is row-wise and is what the billing and console surfaces count with, and
+ * quietly making it identity-wise would change every one of those totals.
+ */
+export function countManagerSeatsExcluding(
+  entries: ReadonlyArray<CollaboratorSeatEntry | null | undefined>,
+  exclude?: {
+    uid?: string | null
+    email?: string | null
+    /** Further addresses on the SAME account; see above. */
+    emails?: readonly (string | null | undefined)[] | null
+  },
+): number {
+  const keys = managerSeatKeys(entries)
+  for (const candidate of [exclude?.email, ...(exclude?.emails ?? [])]) {
+    const email = typeof candidate === 'string' ? candidate.trim().toLowerCase() : ''
+    if (email) keys.delete(email)
+  }
+  const uid = typeof exclude?.uid === 'string' ? exclude.uid.trim() : ''
+  if (uid) keys.delete(`uid:${uid}`)
+  return keys.size
+}
+
+/**
  * What KIND of user a console row represents (AGL-1114) — the distinction
  * that decides which seat they consume, and the one the Team table could not
  * express because a manager and a collaborator differ only by fields the

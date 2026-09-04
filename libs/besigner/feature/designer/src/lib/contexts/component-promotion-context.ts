@@ -69,6 +69,24 @@ export interface ComponentPromotionContextValue {
    * the canvas and the hierarchy disagree about what a definition is.
    */
   definitions?: Record<string, Aglyn.ReusableComponentTree | undefined>
+  /**
+   * The host's FORM entities, keyed by id — the published `rootId`/`nodes`
+   * design of each, in the shape the graft consumes
+   * (`docs/specs/reusable-forms.md`).
+   *
+   * Beside {@link definitions} rather than in a context of its own because a
+   * placed form and a component instance are one mechanism: both are a node
+   * standing for a tree stored on another document, both are expanded by
+   * `composeReusableComponentNodes`, and `NodeLeaf` needs both in the same
+   * memo — a form design may contain an instance, and a component may contain
+   * a placed form. Two contexts would have to be kept in step by hand for a
+   * canvas that has to graft them together anyway.
+   *
+   * `undefined` while the read is still settling, distinct from `{}` for "this
+   * host has none": grafting against an empty map would draw the page's own
+   * fields and swap them for the entity's a beat later.
+   */
+  formDesigns?: Record<string, Aglyn.PlacedFormDesign | undefined>
 }
 
 export const ComponentPromotionContext =

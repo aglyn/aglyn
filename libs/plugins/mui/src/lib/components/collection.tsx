@@ -17,17 +17,26 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import {
+  mdiAccountCircleOutline,
   mdiContentCopy,
+  mdiEmail,
   mdiFacebook,
+  mdiGithub,
+  mdiInstagram,
+  mdiLinkVariant,
   mdiLinkedin,
   mdiMagnify,
+  mdiMastodon,
   mdiNewspaperVariantOutline,
   mdiPostOutline,
+  mdiRss,
   mdiShareVariant,
   mdiTagMultipleOutline,
   mdiTagOutline,
   mdiTextLong,
   mdiTwitter,
+  mdiWeb,
+  mdiYoutube,
 } from '@aglyn/shared-data-mdi'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 // The icon picker's fuzzy matcher (use-mdi-icons-fuzzy), not a re-implementation
@@ -48,6 +57,9 @@ import { generatePresetId } from '../utils/generate-preset-id'
 // One coercion for every authored count in this bundle (AGL-1457) — number
 // fields round-trip as strings, and a second parser here would drift.
 import { toCount } from './image-list'
+// The theme's own type steps (AGL-2486), shared with the Typography element
+// rather than a second list here — one rung list, one place to extend.
+import { typographyVariants } from './typography'
 
 // Persisted component ids (AGL-551/582); the compose pipeline references
 // them through @aglyn/aglyn constants. Never rename.
@@ -60,10 +72,14 @@ export const RELATED_ID: Aglyn.ComponentId =
 export const SHARE_ID: Aglyn.ComponentId = Aglyn.COLLECTION_SHARE_COMPONENT_ID
 export const ENTRY_META_ID: Aglyn.ComponentId =
   Aglyn.COLLECTION_ENTRY_META_COMPONENT_ID
+export const ENTRY_AUTHOR_ID: Aglyn.ComponentId =
+  Aglyn.COLLECTION_ENTRY_AUTHOR_COMPONENT_ID
 export const CATEGORIES_ID: Aglyn.ComponentId =
   Aglyn.COLLECTION_CATEGORIES_COMPONENT_ID
 export const SEARCH_ID: Aglyn.ComponentId =
   Aglyn.COLLECTION_SEARCH_COMPONENT_ID
+export const AUTHOR_PROFILE_ID: Aglyn.ComponentId =
+  Aglyn.CONTENT_AUTHOR_PROFILE_COMPONENT_ID
 
 /* ── Collection entries (repeater) ──────────────────────────────────────── */
 
@@ -759,7 +775,9 @@ export const collectionEntriesSchema: Aglyn.ComponentSchema<CollectionEntriesPro
         name: 'searchPlaceholder',
         label: 'Search placeholder',
         description:
-          'Hint text inside the search box (blank = "Search posts…").',
+          'Hint text inside this block’s own search box — the one that ' +
+          'filters the entries below it as a reader types. Blank shows ' +
+          '"Search posts…".',
         component: Aglyn.FieldComponentType.TEXT_FIELD,
         // Meaningless while there is no search box to hint in.
         condition: { when: 'search', is: true },
@@ -1100,6 +1118,41 @@ export interface CollectionRelatedProps extends StackProps {
   /** Columns in the `cards` grid (default 3, the frame's 3-up). */
   columns?: number | string
   /**
+   * Type step the section heading reads at (default `h5`). One of the
+   * theme's own rungs, shared with the Typography element — a heading sized
+   * by hand in the Styles panel is the pixel-typing the tokens exist to stop.
+   */
+  headingVariant?: string
+  /**
+   * Type step each card title reads at (default `subtitle1`, what the block
+   * has always emitted). The title is the block's own markup, so the Styles
+   * panel — which edits the node's root — cannot reach it; this is the only
+   * handle on it.
+   */
+  titleVariant?: string
+  /** Show each post's published date. On is the shipped behaviour. */
+  showDate?: boolean
+  /**
+   * How each card's published date reads (AGL-1459) — a COMPOSE-TIME prop
+   * like {@link limit}: it is answered in `expandCollectionRelated`, where
+   * the timestamp still exists, and never reaches the DOM. Blank, or
+   * `default`, is the locale date the block has always emitted.
+   *
+   * Read here too, but only to date the SAMPLE cards: an editing surface has
+   * no routed entry and therefore no server fill, so the picker would
+   * otherwise preview nothing.
+   */
+  dateFormat?: Aglyn.CollectionEntryDateFormat
+  /** Show each post's category. On is the shipped behaviour. */
+  showCategory?: boolean
+  /**
+   * Show each post's excerpt. OFF is the default and the shipped behaviour:
+   * the excerpt has been stamped onto every related item since AGL-582 and
+   * rendered by nothing, so turning it on by default would add a paragraph
+   * to every published entry nobody asked about.
+   */
+  showExcerpt?: boolean
+  /**
    * Server-stamped related posts (`expandCollectionRelated`); never set by
    * hand — the tenant computes it from the current entry's category/tags.
    */
@@ -1109,8 +1162,19 @@ export interface CollectionRelatedProps extends StackProps {
 /** The frame's 3-up (Figma 170:242) when nothing usable is authored. */
 const RELATED_DEFAULT_COLUMNS = 3
 
-/** Cover height in the card grid, from the frame. */
-const RELATED_COVER_HEIGHT = 180
+/**
+ * The cover's PROPORTION in the card grid, from the frame's 445 x 180 card
+ * (Figma 170:243).
+ *
+ * It was a fixed 180px height, which is the frame's number without the
+ * frame's shape. A card is 445 wide there; the grid's columns grow with the
+ * viewport and 180 does not, so every extra pixel of width flattened the box
+ * and `objectFit: cover` cropped further into the art to fill it. At a 2000px
+ * viewport the cover had reached 3.57:1 against the design's 2.47:1 — about a
+ * third of the image gone, and the cover art is a composed lockup, so what it
+ * loses is the title text on it. A ratio holds the shape at every width.
+ */
+const RELATED_COVER_ASPECT = '445 / 180'
 
 /**
  * The card's category chip (AGL-1457). ONE fixed token pair for every
@@ -1123,27 +1187,137 @@ const relatedChipSx = {
   alignSelf: 'flex-start',
   borderColor: 'divider',
   color: 'text.secondary',
+  '& .MuiChip-label': {
+    // 9px, the frame's own inset on a 69 x 24 chip.
+    px: 1.125,
+    // The frame sets this label in the same uppercase, letter-spaced step as
+    // the kicker above an article title, which is what `overline` IS in the
+    // site theme. Naming the step keeps the chip on the theme's scale instead
+    // of a hand-written size that drifts the moment the theme moves.
+    typography: 'overline',
+    // `size="small"` gives the chip the frame's 24px height, and `overline`
+    // carries a 2.66 line-height meant for a standalone kicker with room
+    // around it. Inside a fixed-height chip the box sets the height, so the
+    // line collapses to it and the label centres.
+    lineHeight: 1,
+  },
+}
+
+/** The heading step the block has always emitted. */
+const RELATED_DEFAULT_HEADING_VARIANT = 'h5'
+
+/** The card-title step the block has always emitted. */
+const RELATED_DEFAULT_TITLE_VARIANT = 'subtitle1'
+
+/**
+ * The instant the sample cards are dated. A FIXED one, never `Date.now()`:
+ * the canvas has to render the same bytes every time it opens, and this is
+ * the date the Date-format labels use as their worked example — so the
+ * dropdown and the cards it previews agree word for word.
+ */
+const RELATED_SAMPLE_PUBLISHED_AT = { seconds: Date.UTC(2026, 7, 9) / 1000 }
+
+/**
+ * Titles for the sample cards. Deliberately unmistakable as copy: the author
+ * is looking at a LAYOUT, and a plausible-looking headline here is one an
+ * author can mistake for a post that exists — or worse, design around.
+ */
+const RELATED_SAMPLE_TITLES = [
+  'Sample related post',
+  'A second sample post',
+  'A third sample post',
+]
+
+/** Category chip text for the sample cards; names the field, not a taxonomy. */
+const RELATED_SAMPLE_CATEGORY = 'Category'
+
+/** Excerpt text for the sample cards; one line, so the card keeps its shape. */
+const RELATED_SAMPLE_EXCERPT =
+  'Each post’s own excerpt reads here, trimmed to a line or two.'
+
+/**
+ * Stand-in posts for editing surfaces (AGL-2486).
+ *
+ * Related posts are resolved FROM the routed entry, and a besigner canvas has
+ * no routed entry — so the block used to draw a one-line dashed strip and the
+ * author styled a layout they could not see. The sample is the block's REAL
+ * markup, at the author's own settings, which is the only way the canvas can
+ * answer "what will this look like".
+ *
+ * It exists only where {@link ScreenLinkContext.suppressNavigation} is on —
+ * the besigner canvas and Preview. A published render reaches this function
+ * on no path at all, so no visitor can ever be shown a post that does not
+ * exist.
+ *
+ * The count follows the author's own `limit` so a 6-post rail at 3 columns
+ * previews as two rows, and is bounded by the same ceiling the server
+ * applies rather than a second one.
+ */
+const sampleRelatedEntries = (
+  limit: number | string | undefined,
+  dateFormat: Aglyn.CollectionEntryDateFormat,
+): Aglyn.CollectionRelatedItem[] => {
+  const count = Math.min(
+    // `|| default` also rejects 0, which `toCount` would otherwise accept and
+    // preview as an empty rail — the one thing the sample exists to avoid.
+    toCount(limit, Aglyn.COLLECTION_RELATED_DEFAULT_LIMIT) ||
+      Aglyn.COLLECTION_RELATED_DEFAULT_LIMIT,
+    Aglyn.COLLECTION_RELATED_MAX,
+  )
+  const date = Aglyn.formatCollectionEntryDate(
+    RELATED_SAMPLE_PUBLISHED_AT,
+    dateFormat,
+  )
+  return Array.from({ length: count }, (_, index) => ({
+    title: RELATED_SAMPLE_TITLES[index] ?? `Sample related post ${index + 1}`,
+    // Empty, not a plausible path: every surface that renders the sample
+    // suppresses navigation, so the title is text rather than an anchor and
+    // this is never read. A real-looking href would be a link to nowhere the
+    // moment that stopped being true.
+    url: '',
+    date,
+    category: RELATED_SAMPLE_CATEGORY,
+    excerpt: RELATED_SAMPLE_EXCERPT,
+  }))
 }
 
 /**
  * Lists other entries of the same collection sharing the current entry's
  * category or a tag (AGL-582). The tenant stamps `entries` at compose time
- * on entry renders; without them the besigner shows an affordance and the
- * published site renders nothing.
+ * on entry renders; without them the published site renders nothing and an
+ * editing surface renders sample cards (AGL-2486).
  *
  * Two layouts (AGL-1457). `list` is the plain-link list that has always
  * shipped and stays the default — the block is live on every blog entry, so
  * a new default would restyle published pages nobody asked about. `cards` is
  * the article frame's grid: cover, category chip, title, at an author-set
  * column count.
+ *
+ * The block owns its markup, so nothing inside a card is a node the Styles
+ * panel can select. Every part it renders therefore needs an attribute, or
+ * it is unauthorable by construction — which is what the type steps and the
+ * `show*` switches are (AGL-2486).
  */
 const CollectionRelated = forwardRef<HTMLDivElement, CollectionRelatedProps>(
   (props, ref) => {
-    // `limit` is compose-time: the tenant resolves it while stamping
-    // `entries`; strip it so it never hits the DOM. `showCover`/`layout`/
-    // `columns` are read here, so they must not reach it either.
-    const { heading, limit, entries, showCover, layout, columns, ...rest } =
-      props
+    // `limit` and `dateFormat` are compose-time: the tenant resolves them
+    // while stamping `entries`; strip them so they never hit the DOM. The
+    // rest are read here, so they must not reach it either.
+    const {
+      heading,
+      limit,
+      entries,
+      showCover,
+      layout,
+      columns,
+      headingVariant,
+      titleVariant,
+      showDate,
+      dateFormat,
+      showCategory,
+      showExcerpt,
+      ...rest
+    } = props
     // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
     const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
@@ -1152,54 +1326,96 @@ const CollectionRelated = forwardRef<HTMLDivElement, CollectionRelatedProps>(
     // reference keeps working across sites. Called before the early return —
     // it is a hook.
     const { hostId } = Aglyn.useSite()
-    if (!entries?.length) {
-      if (!suppressNavigation) return <Box ref={ref} {...rest} />
-      return (
-        <Box
-          ref={ref}
-          {...rest}
-          sx={[
-            {
-              p: 2,
-              border: '1px dashed',
-              borderColor: 'divider',
-              color: 'text.secondary',
-              fontSize: 12,
-              fontFamily: 'system-ui, sans-serif',
-            },
-            ...nodeSx,
-          ]}
-        >
-          {'Related posts — entries sharing this entry’s category or ' +
-            'tags render here'}
-        </Box>
-      )
-    }
+    // An editing surface has no routed entry, so nothing is stamped and the
+    // block used to be the one part of the page that was not WYSIWYG. The
+    // sample stands in for exactly that gap, and only there.
+    const sample = !entries?.length && Boolean(suppressNavigation)
+    const items = entries?.length
+      ? entries
+      : sample
+        ? sampleRelatedEntries(
+            limit,
+            Aglyn.normalizeCollectionEntryDateFormat(dateFormat),
+          )
+        : []
+    if (!items.length) return <Box ref={ref} {...rest} />
     const title = heading ?? 'Related articles'
     const headingNode = title ? (
-      <Typography variant="h5" component="h2">
+      <Typography
+        variant={(headingVariant || RELATED_DEFAULT_HEADING_VARIANT) as 'h5'}
+        component="h2"
+      >
         {title}
       </Typography>
     ) : null
-    const titleNode = (entry: Aglyn.CollectionRelatedItem) =>
-      suppressNavigation ? (
-        <Typography variant="subtitle1">{entry.title}</Typography>
-      ) : (
-        <AppLink href={entry.url} variant="subtitle1">
-          {entry.title}
-        </AppLink>
-      )
+    /**
+     * The card title, as a HEADING in the site theme.
+     *
+     * It used to be a bare `AppLink`, which is MUI's `Link` — `primary.main`
+     * and `underline="always"` — so the one thing a related card is FOR read
+     * as a default browser link on a themed page, at no heading level, and
+     * with no attribute able to touch it. The type step now comes from the
+     * theme's own rungs and the anchor inherits the colour, exactly as the
+     * Entry Author card's byline link does.
+     *
+     * `linked` is false wherever the whole card is already the anchor: an
+     * `<a>` inside an `<a>` is invalid markup that browsers silently unnest.
+     */
+    const titleNode = (entry: Aglyn.CollectionRelatedItem, linked: boolean) => (
+      <Typography
+        variant={(titleVariant || RELATED_DEFAULT_TITLE_VARIANT) as 'subtitle1'}
+        component="h3"
+      >
+        {linked && !suppressNavigation && entry.url ? (
+          <AppLink href={entry.url} sx={{ color: 'inherit' }} underline="hover">
+            {entry.title}
+          </AppLink>
+        ) : (
+          entry.title
+        )}
+      </Typography>
+    )
+    const dateNode = (entry: Aglyn.CollectionRelatedItem) =>
+      showDate !== false && entry.date ? (
+        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+          {entry.date}
+        </Typography>
+      ) : null
+    const excerptNode = (entry: Aglyn.CollectionRelatedItem) =>
+      showExcerpt && entry.excerpt ? (
+        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+          {entry.excerpt}
+        </Typography>
+      ) : null
     /**
      * The cover, when the author asked for one AND the entry has one. An
      * entry without a cover gets no box at all rather than a placeholder:
      * the related list is a real feed, and a row of grey rectangles is worse
      * than a row of titles.
+     *
+     * The sample cards are the exception, and for the opposite reason: they
+     * stand in for posts that do not exist yet, so the cover SLOT is what
+     * the author is looking at. A card grid previewing without its images is
+     * not the grid being styled.
      */
     const coverNode = (entry: Aglyn.CollectionRelatedItem) => {
       const src = showCover
         ? Aglyn.resolveMediaSrc(entry.coverImage, { hostId })
         : undefined
-      if (!src) return null
+      if (!src) {
+        if (!sample || !showCover) return null
+        return (
+          <Box
+            aria-hidden
+            sx={{
+              width: '100%',
+              aspectRatio: RELATED_COVER_ASPECT,
+              borderRadius: 1,
+              backgroundColor: 'action.hover',
+            }}
+          />
+        )
+      }
       return (
         <Box
           component="img"
@@ -1213,7 +1429,7 @@ const CollectionRelated = forwardRef<HTMLDivElement, CollectionRelatedProps>(
           sx={{
             display: 'block',
             width: '100%',
-            height: RELATED_COVER_HEIGHT,
+            aspectRatio: RELATED_COVER_ASPECT,
             objectFit: 'cover',
             borderRadius: 1,
           }}
@@ -1227,11 +1443,59 @@ const CollectionRelated = forwardRef<HTMLDivElement, CollectionRelatedProps>(
       )
     }
 
+    /**
+     * The notice that says these cards are not posts (AGL-2486). Editing
+     * surfaces only, and outside the card markup rather than inside it, so
+     * the author is styling the same tree the site will render.
+     */
+    const sampleNotice = sample ? (
+      <Typography
+        variant="caption"
+        sx={{
+          display: 'block',
+          p: 1,
+          border: '1px dashed',
+          borderColor: 'divider',
+          borderRadius: 1,
+          color: 'text.secondary',
+          fontFamily: 'system-ui, sans-serif',
+        }}
+      >
+        {'Sample posts — entries sharing this entry’s category or tags ' +
+          'replace these on the published page'}
+      </Typography>
+    ) : null
+
     if (layout === 'cards') {
       // `toCount` rounds and rejects junk; `|| default` also rejects 0, which
       // it would otherwise accept as a column count and emit `repeat(0, …)`.
       const columnCount =
         toCount(columns, RELATED_DEFAULT_COLUMNS) || RELATED_DEFAULT_COLUMNS
+      /**
+       * One card's contents, always with a PLAIN title: the caller wraps the
+       * whole card in the anchor, because a reader aiming at a 180px cover
+       * should not have to hit the line of text under it — and a second
+       * anchor around the title inside that one is markup browsers unnest.
+       */
+      const card = (entry: Aglyn.CollectionRelatedItem) => (
+        // 12px between cover, chip and title — the frame's rhythm (170:243
+        // puts the chip at y=192 under a cover ending at 180, and the title
+        // at y=228 under a chip ending at 216).
+        <MuiStack spacing={1.5}>
+          {coverNode(entry)}
+          {showCategory !== false && entry.category ? (
+            <Chip
+              label={entry.category}
+              size="small"
+              variant="outlined"
+              sx={relatedChipSx}
+            />
+          ) : null}
+          {titleNode(entry, false)}
+          {excerptNode(entry)}
+          {dateNode(entry)}
+        </MuiStack>
+      )
       return (
         <Box
           ref={ref}
@@ -1254,45 +1518,52 @@ const CollectionRelated = forwardRef<HTMLDivElement, CollectionRelatedProps>(
           {headingNode ? (
             <Box sx={{ gridColumn: '1 / -1' }}>{headingNode}</Box>
           ) : null}
-          {entries.map((entry, index) => (
-            <MuiStack key={index} spacing={1}>
-              {coverNode(entry)}
-              {entry.category ? (
-                <Chip
-                  label={entry.category}
-                  size="small"
-                  variant="outlined"
-                  sx={relatedChipSx}
-                />
-              ) : null}
-              {titleNode(entry)}
-              {entry.date ? (
-                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                  {entry.date}
-                </Typography>
-              ) : null}
-            </MuiStack>
-          ))}
+          {sampleNotice ? (
+            <Box sx={{ gridColumn: '1 / -1' }}>{sampleNotice}</Box>
+          ) : null}
+          {items.map((entry, index) => {
+            const linked = !suppressNavigation && Boolean(entry.url)
+            return linked ? (
+              <AppLink
+                key={index}
+                href={entry.url}
+                underline="none"
+                // A grid ITEM, so it has to be a block; `color: inherit`
+                // keeps the cover, chip and date reading as themed content
+                // rather than as the inside of a link.
+                sx={{ color: 'inherit', display: 'block' }}
+              >
+                {card(entry)}
+              </AppLink>
+            ) : (
+              <Box key={index}>{card(entry)}</Box>
+            )
+          })}
         </Box>
       )
     }
     return (
       <MuiStack ref={ref} spacing={1.5} {...rest}>
         {headingNode}
-        {entries.map((entry, index) => (
-          <MuiStack key={index} spacing={0.25}>
-            {coverNode(entry)}
-            {titleNode(entry)}
-            {entry.date || entry.category ? (
-              <Typography
-                variant="caption"
-                sx={{ color: 'text.secondary' }}
-              >
-                {[entry.date, entry.category].filter(Boolean).join(' · ')}
-              </Typography>
-            ) : null}
-          </MuiStack>
-        ))}
+        {sampleNotice}
+        {items.map((entry, index) => {
+          const meta = [
+            showDate !== false ? entry.date : '',
+            showCategory !== false ? entry.category : '',
+          ].filter(Boolean)
+          return (
+            <MuiStack key={index} spacing={0.25}>
+              {coverNode(entry)}
+              {titleNode(entry, true)}
+              {excerptNode(entry)}
+              {meta.length ? (
+                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                  {meta.join(' · ')}
+                </Typography>
+              ) : null}
+            </MuiStack>
+          )
+        })}
       </MuiStack>
     )
   },
@@ -1353,6 +1624,77 @@ export const collectionRelatedSchema: Aglyn.ComponentSchema<CollectionRelatedPro
         description:
           'Show each post’s cover image. Posts without one show their ' +
           'title alone rather than an empty box.',
+        component: Aglyn.FieldComponentType.SWITCH,
+      },
+      {
+        name: 'headingVariant',
+        label: 'Heading style',
+        description:
+          'Which type step from the site theme the section heading above ' +
+          'the posts reads at. Default Heading 5.',
+        component: Aglyn.FieldComponentType.SELECT,
+        // The theme's own rungs, shared with the Typography element rather
+        // than a second list here: two lists is how a step added to the
+        // theme becomes reachable in one place and not the other.
+        options: [...typographyVariants],
+      },
+      {
+        name: 'titleVariant',
+        label: 'Title style',
+        description:
+          'Which type step from the site theme each post’s title reads at. ' +
+          'Default Subtitle 1; the title takes the surrounding text colour ' +
+          'rather than the link colour.',
+        component: Aglyn.FieldComponentType.SELECT,
+        options: [...typographyVariants],
+      },
+      {
+        name: 'showDate',
+        label: 'Show date',
+        description:
+          'Off drops each post’s published date. The posts stay in ' +
+          'newest-first order either way — this is about the card, not the ' +
+          'ordering.',
+        component: Aglyn.FieldComponentType.SWITCH,
+        // Unset means SHOWN in the renderer above, so the switch has to
+        // OPEN in that position or it lies about the block in front of
+        // the author — and the first click, which writes the `true` that
+        // was already in effect, changes nothing and reads as a dead
+        // control (AGL-2506).
+        initialValue: true,
+      },
+      {
+        name: 'dateFormat',
+        label: 'Date format',
+        description:
+          'How each post’s published date reads on its card. Site default ' +
+          'is the format this block has always used.',
+        component: Aglyn.FieldComponentType.SELECT,
+        // The formats the pure layer knows how to produce, so the list
+        // cannot offer a shape nothing renders. Every value is REAL,
+        // including the do-nothing one (AGL-1451/AGL-1453).
+        options: [...Aglyn.COLLECTION_ENTRY_DATE_FORMAT_OPTIONS],
+      },
+      {
+        name: 'showCategory',
+        label: 'Show category',
+        description:
+          'Off drops the category — the chip above each card title, or the ' +
+          'second half of the line under each link on the list layout.',
+        component: Aglyn.FieldComponentType.SWITCH,
+        // Unset means SHOWN in the renderer above, so the switch has to
+        // OPEN in that position or it lies about the block in front of
+        // the author — and the first click, which writes the `true` that
+        // was already in effect, changes nothing and reads as a dead
+        // control (AGL-2506).
+        initialValue: true,
+      },
+      {
+        name: 'showExcerpt',
+        label: 'Show excerpt',
+        description:
+          'Adds each post’s excerpt under its title. Posts with no excerpt ' +
+          'are unchanged rather than leaving a gap.',
         component: Aglyn.FieldComponentType.SWITCH,
       },
     ],
@@ -1525,10 +1867,75 @@ export interface CollectionEntryMetaProps extends StackProps {
   avatarImage?: string
   showDate?: boolean
   showAuthor?: boolean
+  /**
+   * Where the byline's NAME links — the author's page on this site
+   * (AGL-2519). Server-filled from the routed entry's author, like the
+   * avatar beside it; blank renders the name as plain text.
+   *
+   * Distinct from the author's own `url`, which the Entry Author card offers
+   * as a link row: this is "everything they wrote here", that is "their
+   * site", and a byline that conflated them would send a reader off-site from
+   * every article.
+   */
+  authorPageUrl?: string
+  /** Off leaves the byline as plain text even when the author has a page. */
+  linkAuthor?: boolean
   showCategory?: boolean
   showTags?: boolean
   showAvatar?: boolean
 }
+
+/**
+ * THE SAMPLE VALUES THE ENTRY BLOCKS PREVIEW WITH (AGL-2486).
+ *
+ * Entry Meta and Entry Author resolve FROM the routed entry, and a besigner
+ * canvas has no routed entry — so both drew a one-line dashed strip and an
+ * author styling a byline or an author card was styling something they could
+ * not see. Related Posts had the same gap and was answered the same way: the
+ * block's REAL markup, at the author's own settings, on editing surfaces
+ * only.
+ *
+ * These two need no "this is a sample" notice the way the related CARDS do.
+ * A card carries a title, a cover and a category, which is what a real post
+ * looks like; a byline reading `Sample author` says what it is in the words
+ * themselves, and a notice above a single line of caption text would be
+ * taller than the thing it labels.
+ *
+ * The date is a FIXED instant, never `Date.now()`: the canvas has to render
+ * the same bytes every time it opens, and it is the same instant the related
+ * sample uses, so two blocks on one template never disagree about what day
+ * their example is.
+ */
+const ENTRY_SAMPLE_PUBLISHED_AT = RELATED_SAMPLE_PUBLISHED_AT
+
+/** Byline name for the samples; names the field rather than a person. */
+const ENTRY_SAMPLE_AUTHOR = 'Sample author'
+
+/** Category text for the samples; names the field, not a taxonomy. */
+const ENTRY_SAMPLE_CATEGORY = RELATED_SAMPLE_CATEGORY
+
+/** Two chips, so the row previews its own wrapping and gap. */
+const ENTRY_SAMPLE_TAGS = 'first tag, second tag'
+
+/** Bio line for the author-card sample; one sentence, as a real one is. */
+const ENTRY_SAMPLE_BIO =
+  'The bio from this author’s record reads here, in a line or two.'
+
+/**
+ * The portrait STAND-IN, for a sample that has no image to resolve.
+ *
+ * A neutral plate rather than nothing, and for the reason the related sample
+ * draws its cover slot: on an entry template the portrait arrives from the
+ * author record at render, so the slot is exactly what the author is sizing
+ * and spacing. `aria-hidden` because it depicts nothing.
+ */
+const samplePortraitSx = (size: number) => ({
+  width: size,
+  height: size,
+  flexShrink: 0,
+  borderRadius: '50%',
+  backgroundColor: 'action.hover',
+})
 
 /** Byline avatar, from the article frame (Figma 170:190). */
 const ENTRY_AVATAR_SIZE = 36
@@ -1565,6 +1972,8 @@ const CollectionEntryMeta = forwardRef<
     // the timestamp. Destructured so it never reaches the DOM.
     dateFormat: _dateFormat,
     author,
+    authorPageUrl,
+    linkAuthor,
     category,
     tags,
     avatarImage,
@@ -1602,30 +2011,55 @@ const CollectionEntryMeta = forwardRef<
       : ''
   // Author leads, so the frame's "The Aglyn Team · Jul 2026" reads in that
   // order. With no author the join is character-for-character what it was.
-  const line = [authorValue, dateValue, categoryValue]
+  const filledLine = [authorValue, dateValue, categoryValue]
     .filter(Boolean)
     .join(' · ')
-  if (!line && !tagList.length && !avatarSrc) {
-    if (!suppressNavigation) return <Box ref={ref} {...rest} />
-    return (
-      <Box
-        ref={ref}
-        {...rest}
-        sx={[
-          {
-            p: 1,
-            border: '1px dashed',
-            borderColor: 'divider',
-            color: 'text.secondary',
-            fontSize: 12,
-            fontFamily: 'system-ui, sans-serif',
-          },
-          ...nodeSx,
-        ]}
-      >
-        {'Entry meta — date · category · tags render here'}
-      </Box>
-    )
+  /*
+    The rest of the line, WITHOUT the author (AGL-2519).
+
+    The row is one string everywhere else, which is what a `·`-joined byline
+    wants — but a link is an element, so the author has to come out of the
+    join to be one. Split rather than reassembled from parts, so the
+    separator, the order and the empty-field collapsing all stay in the one
+    expression above: the linked row and the plain row cannot render a
+    different sentence.
+  */
+  const authorHrefRaw = metaValue(authorPageUrl, suppressNavigation)
+  const authorHref =
+    linkAuthor !== false && SAFE_AUTHOR_HREF.test(authorHrefRaw)
+      ? authorHrefRaw
+      : ''
+  const trailingLine = [dateValue, categoryValue].filter(Boolean).join(' · ')
+  // Nothing to show and nothing to route from: an editing surface previews
+  // the block's own markup at the author's own settings, and a published page
+  // renders nothing at all (AGL-2486). The switches are honoured here exactly
+  // as they are below, so a row with Show date off previews without one.
+  const sample = !filledLine && !tagList.length && !avatarSrc && suppressNavigation
+  const line = sample
+    ? [
+        showAuthor !== false ? ENTRY_SAMPLE_AUTHOR : '',
+        showDate !== false
+          ? Aglyn.formatCollectionEntryDate(
+              ENTRY_SAMPLE_PUBLISHED_AT,
+              Aglyn.normalizeCollectionEntryDateFormat(_dateFormat),
+            )
+          : '',
+        showCategory !== false ? ENTRY_SAMPLE_CATEGORY : '',
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : filledLine
+  const chips = sample
+    ? showTags !== false
+      ? ENTRY_SAMPLE_TAGS.split(',').map((tag) => tag.trim())
+      : []
+    : tagList
+  // The portrait an entry's own author record supplies arrives at compose
+  // time, so on the canvas there is none to resolve — the slot is drawn
+  // instead, which is what a byline's spacing is actually built around.
+  const samplePortrait = sample && showAvatar !== false
+  if (!line && !chips.length && !avatarSrc && !samplePortrait) {
+    return <Box ref={ref} {...rest} />
   }
   return (
     <MuiStack
@@ -1663,13 +2097,33 @@ const CollectionEntryMeta = forwardRef<
           // outranking anything.
           {...Aglyn.DEFERRED_IMAGE_ATTRIBUTES}
         />
+      ) : samplePortrait ? (
+        <Box aria-hidden sx={samplePortraitSx(ENTRY_AVATAR_SIZE)} />
       ) : null}
       {line ? (
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-          {line}
+          {
+            // Linked only on the real byline, never on the canvas sample: a
+            // preview whose placeholder name navigates is a trap, and the
+            // sample author has no page to go to.
+            authorHref && authorValue && !sample ? (
+              <>
+                <AppLink
+                  href={authorHref}
+                  sx={{ color: 'inherit' }}
+                  underline="hover"
+                >
+                  {authorValue}
+                </AppLink>
+                {trailingLine ? ` · ${trailingLine}` : ''}
+              </>
+            ) : (
+              line
+            )
+          }
         </Typography>
       ) : null}
-      {tagList.map((tag) => (
+      {chips.map((tag) => (
         <Chip key={tag} label={tag} size="small" variant="outlined" />
       ))}
     </MuiStack>
@@ -1745,27 +2199,809 @@ export const collectionEntryMetaSchema: Aglyn.ComponentSchema<CollectionEntryMet
       {
         name: 'showDate',
         label: 'Show date',
+        description:
+          'Off hides the published date from the line without clearing what ' +
+          'the Date field would have shown.',
         component: Aglyn.FieldComponentType.SWITCH,
+        // Unset means SHOWN in the renderer above, so the switch has to
+        // OPEN in that position or it lies about the block in front of
+        // the author — and the first click, which writes the `true` that
+        // was already in effect, changes nothing and reads as a dead
+        // control (AGL-2506).
+        initialValue: true,
       },
       {
         name: 'showCategory',
         label: 'Show category',
+        description:
+          'Off drops the category from the line. The entry keeps its ' +
+          'category — this is about the byline, not the taxonomy.',
         component: Aglyn.FieldComponentType.SWITCH,
+        // Unset means SHOWN in the renderer above, so the switch has to
+        // OPEN in that position or it lies about the block in front of
+        // the author — and the first click, which writes the `true` that
+        // was already in effect, changes nothing and reads as a dead
+        // control (AGL-2506).
+        initialValue: true,
       },
       {
         name: 'showTags',
         label: 'Show tags',
+        description:
+          'Off hides the tag chips below the line. Leave it on and the ' +
+          'other three off for a tags-only row.',
         component: Aglyn.FieldComponentType.SWITCH,
+        // Unset means SHOWN in the renderer above, so the switch has to
+        // OPEN in that position or it lies about the block in front of
+        // the author — and the first click, which writes the `true` that
+        // was already in effect, changes nothing and reads as a dead
+        // control (AGL-2506).
+        initialValue: true,
+      },
+      {
+        name: 'authorPageUrl',
+        label: 'Author links to',
+        description:
+          'Blank sends the byline to the author’s page on this site. Type ' +
+          'here (or bind {{entry.authorPageUrl}}) only to override it.',
+        component: Aglyn.FieldComponentType.TEXT_FIELD,
+      },
+      {
+        name: 'linkAuthor',
+        label: 'Link author',
+        description:
+          'Off leaves the byline as plain text even when the author has a ' +
+          'page. On, the name links there and the date and category beside ' +
+          'it do not.',
+        component: Aglyn.FieldComponentType.SWITCH,
+        // Unset means LINKED in the renderer above, so the switch has to open
+        // in that position or it lies about the block in front of the author
+        // (AGL-2506).
+        initialValue: true,
       },
       {
         name: 'showAuthor',
         label: 'Show author',
+        description:
+          'Off hides the byline. The avatar follows it: a block with no ' +
+          'author shown never fills in the author’s portrait.',
         component: Aglyn.FieldComponentType.SWITCH,
+        // Unset means SHOWN in the renderer above, so the switch has to
+        // OPEN in that position or it lies about the block in front of
+        // the author — and the first click, which writes the `true` that
+        // was already in effect, changes nothing and reads as a dead
+        // control (AGL-2506).
+        initialValue: true,
       },
       {
         name: 'showAvatar',
         label: 'Show avatar',
+        description:
+          'Off hides the round image in front of the byline, including an ' +
+          'author’s own portrait.',
         component: Aglyn.FieldComponentType.SWITCH,
+        // Unset means SHOWN in the renderer above, so the switch has to
+        // OPEN in that position or it lies about the block in front of
+        // the author — and the first click, which writes the `true` that
+        // was already in effect, changes nothing and reads as a dead
+        // control (AGL-2506).
+        initialValue: true,
+      },
+    ],
+  }
+
+/* ── Entry author card (AGL-2486) ───────────────────────────────────────── */
+
+export interface CollectionEntryAuthorProps extends StackProps {
+  /**
+   * The byline. Server-filled from the routed entry's author record on entry
+   * templates (`expandCollectionEntryAuthor`), exactly like Entry Meta's
+   * fields; set it — or bind `{{entry.author}}` — only to override.
+   */
+  name?: string
+  /**
+   * The author's blurb, from their record's `bio`; bind
+   * `{{entry.authorBio}}` to override.
+   */
+  bio?: string
+  /**
+   * Portrait or logo — a media reference (AGL-1215) or any URL. Server-filled
+   * from the author record, so the face changes with the byline instead of
+   * being picked once on the template the way Entry Meta's avatar is.
+   */
+  image?: string
+  /** The author's own site; offered as a link row beside the profile ones. */
+  url?: string
+  /**
+   * The author's page on THIS site (AGL-2519), server-filled from the routed
+   * entry. The name links here.
+   *
+   * It wins over {@link url} for the NAME, and the ordering is the point: a
+   * reader who clicks a byline at the end of an article is asking "what else
+   * has this person written here", not "take me off this site". Their own
+   * url is still reachable — it is one of the link rows — so nothing is lost
+   * by giving the name the destination that answers the question asked.
+   */
+  pageUrl?: string
+  /**
+   * The author's profile links, server-filled from their record (AGL-2516).
+   *
+   * Not authorable as text: each row carries a platform or a picked icon, and
+   * the console's author editor is where those are chosen. `Show links` is
+   * the template's control over them.
+   */
+  links?: Aglyn.ContentAuthorLink[]
+  showBio?: boolean
+  showAvatar?: boolean
+  showLinks?: boolean
+}
+
+/** The card's portrait, larger than the byline's 36px mark (Figma 170:190). */
+const AUTHOR_AVATAR_SIZE = 48
+
+/**
+ * The mark for each platform the author model knows (AGL-2516).
+ *
+ * Imported rather than resolved through the icon catalog, because this set is
+ * CLOSED and known at build time — the catalog is ~2.9 MB and only picker
+ * surfaces load it, so a renderer that reached for it to draw ten glyphs
+ * would ship the whole thing to every visitor of every article.
+ *
+ * Keyed by the registry's `icon`, so adding a platform is one entry there and
+ * one import here, and a platform whose mark was never imported falls through
+ * to the generic link glyph rather than rendering nothing.
+ */
+const AUTHOR_LINK_ICON_PATHS: Record<string, string> = {
+  twitter: mdiTwitter.path,
+  linkedin: mdiLinkedin.path,
+  github: mdiGithub.path,
+  mastodon: mdiMastodon.path,
+  youtube: mdiYoutube.path,
+  instagram: mdiInstagram.path,
+  facebook: mdiFacebook.path,
+  web: mdiWeb.path,
+  email: mdiEmail.path,
+  rss: mdiRss.path,
+}
+
+/**
+ * What one link row draws.
+ *
+ * A known platform takes its mark from the table above. A CUSTOM link takes
+ * the path the console stored beside the picked id (AGL-1212) — and falls back
+ * to a generic link glyph rather than to nothing, because a row with a label
+ * and a url is still a working link whose icon simply failed to resolve.
+ */
+function authorLinkIconPath(link: Aglyn.ContentAuthorLink): string {
+  const platform = Aglyn.authorLinkPlatform(link.platform)
+  if (platform) {
+    return AUTHOR_LINK_ICON_PATHS[platform.icon] ?? mdiLinkVariant.path
+  }
+  return (link.iconPath ?? '').trim() || mdiLinkVariant.path
+}
+
+/**
+ * Schemes a rendered author link may use — the model's own guard, restated at
+ * the boundary that produces the `href`.
+ *
+ * `normalizeContentAuthorLinks` already drops everything else, and this is
+ * deliberately not trusting that: the props on this component are authorable,
+ * so a link can reach the renderer without ever passing through the store's
+ * normalizer. Two checks, because only one of them is on the path an attacker
+ * would use.
+ */
+const SAFE_AUTHOR_LINK_HREF = /^(https:\/\/|mailto:)/i
+
+/**
+ * What the byline may link to — an absolute `https:` page, or a route on this
+ * site. The Social Links block guards its hrefs the same way and for the same
+ * reason: the value comes from a stored record, so `javascript:` and friends
+ * have to be unreachable rather than merely unlikely.
+ */
+const SAFE_AUTHOR_HREF = /^(https:\/\/|\/(?!\/))/i
+
+/** An off-site author page opens in a new tab; a route on this site does not. */
+const EXTERNAL_AUTHOR_HREF = /^https:\/\//i
+
+/**
+ * The author's profile links as a row of marks (AGL-2516).
+ *
+ * Shared by the article's Entry Author card and the Author Profile block on
+ * the author's own page (AGL-2518) — the one part of the two that would
+ * genuinely drift, since an icon row is where the accessible-name rule and
+ * the `rel` on an off-site profile live.
+ *
+ * Renders nothing for an empty list, so a caller can drop it in
+ * unconditionally rather than guarding at every call site.
+ */
+function AuthorLinkRows(props: {
+  links: readonly Aglyn.ContentAuthorLink[]
+  /** Glyph scale; the profile draws them a step larger than the card. */
+  size?: number
+}) {
+  if (!props.links.length) return null
+  return (
+    <MuiStack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', ml: -1 }}>
+      {props.links.map((link, index) => {
+        const label = Aglyn.authorLinkLabel(link)
+        return (
+          <AppLink
+            key={index}
+            componentVariant="icon-button"
+            href={(link.url ?? '').trim()}
+            // The name IS the icon here, so it has to be announced — a row of
+            // unlabelled icon buttons is a row a screen reader reads as
+            // "link, link, link".
+            aria-label={label}
+            title={label}
+            size="small"
+            sx={{ color: 'text.secondary' }}
+            // A profile lives off this site by definition, and `mailto:` must
+            // not replace the article either.
+            target="_blank"
+            rel="noopener noreferrer me"
+          >
+            <MdiIcon path={authorLinkIconPath(link)} size={props.size ?? 0.85} />
+          </AppLink>
+        )
+      })}
+    </MuiStack>
+  )
+}
+
+/**
+ * The rows a card will actually draw, guarded at the boundary.
+ *
+ * These arrive as PROPS, so a link can reach a renderer without ever passing
+ * through the store's normalizer — the reason the byline's own `url` is
+ * checked twice as well.
+ */
+function safeAuthorLinks(
+  links: readonly Aglyn.ContentAuthorLink[] | undefined,
+  show: boolean | undefined,
+): Aglyn.ContentAuthorLink[] {
+  if (show === false) return []
+  return (links ?? []).filter((link) =>
+    SAFE_AUTHOR_LINK_HREF.test((link?.url ?? '').trim()),
+  )
+}
+
+/**
+ * The author card that closes an article (AGL-2486) — portrait, byline, bio.
+ *
+ * Entry Meta prints a NAME beside a date, which is all an entry carried when
+ * it was written: one free-typed string. Custom authors made the byline a
+ * record with a portrait, a bio and a url, and a template that wanted the
+ * card the article frame draws still had to type the name and the blurb in as
+ * literal text — text that keeps saying whatever it said under posts somebody
+ * else wrote, and that no edit to the author record can ever reach. This is
+ * that card, filled from the record.
+ *
+ * Every field is independently overridable and every one of them collapses
+ * when empty: an author with no portrait renders the text alone rather than a
+ * gap where a face would be, and an entry with no author at all renders
+ * nothing — never an empty bordered box.
+ */
+const CollectionEntryAuthor = forwardRef<
+  HTMLDivElement,
+  CollectionEntryAuthorProps
+>((props, ref) => {
+  // None of these are DOM attributes (`name` least of all), so they are
+  // destructured rather than spread — the stack.ts pattern.
+  const {
+    name,
+    bio,
+    image,
+    url,
+    pageUrl,
+    links,
+    showBio,
+    showAvatar,
+    showLinks,
+    ...rest
+  } = props
+  const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
+  const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
+  const { hostId } = Aglyn.useSite()
+  const nameValue = metaValue(name, suppressNavigation)
+  const bioValue = showBio !== false ? metaValue(bio, suppressNavigation) : ''
+  // Their page here first, their own site second (AGL-2519) — see `pageUrl`.
+  const hrefRaw = metaValue(pageUrl, suppressNavigation) ||
+    metaValue(url, suppressNavigation)
+  const urlValue = SAFE_AUTHOR_HREF.test(hrefRaw) ? hrefRaw : ''
+  // An unresolved token empties on EVERY surface, as in the byline: a literal
+  // `{{…}}` in a src is a broken portrait in the canvas.
+  const imageRaw = (image ?? '').trim()
+  const imageSrc =
+    showAvatar !== false && imageRaw && !UNRESOLVED_TOKEN.test(imageRaw)
+      ? Aglyn.resolveMediaSrc(imageRaw, { hostId })
+      : ''
+  // Nothing to show and nothing to route from: an editing surface previews
+  // the card's own markup at the author's own settings, and a published page
+  // renders nothing at all (AGL-2486). Every part still answers its own
+  // switch, so a card with Show bio off previews as portrait and name.
+  const sample = !nameValue && !bioValue && !imageSrc && Boolean(suppressNavigation)
+  const displayName = sample ? ENTRY_SAMPLE_AUTHOR : nameValue
+  const displayBio = sample && showBio !== false ? ENTRY_SAMPLE_BIO : bioValue
+  // The record's portrait arrives at compose time, so there is none to
+  // resolve on the canvas — the card draws its slot, which is the thing its
+  // spacing is built around.
+  const samplePortrait = sample && showAvatar !== false
+  /**
+   * The rows this card will actually draw (AGL-2516).
+   *
+   * Guarded here rather than trusted from the store: these arrive as PROPS,
+   * so a link can reach the renderer without passing the record normalizer,
+   * and `javascript:` has to be unreachable rather than merely unlikely — the
+   * same reason the byline's own `url` is checked twice.
+   */
+  const linkRows = safeAuthorLinks(links, showLinks)
+  if (
+    !displayName &&
+    !displayBio &&
+    !imageSrc &&
+    !samplePortrait &&
+    !linkRows.length
+  ) {
+    return <Box ref={ref} {...rest} />
+  }
+  return (
+    <MuiStack
+      ref={ref}
+      direction="row"
+      spacing={2}
+      {...rest}
+      // MERGE, never replace (AGL-1450): `rest.sx` is the array leaf.tsx
+      // builds, and spreading it into an object drops every authored value.
+      sx={[
+        {
+          alignItems: 'flex-start',
+          p: 2.5,
+          border: '1px solid',
+          borderColor: 'divider',
+          borderRadius: 1,
+        },
+        ...nodeSx,
+      ]}
+    >
+      {imageSrc ? (
+        <Box
+          component="img"
+          src={imageSrc}
+          // Decorative: the card names the author in text right beside it.
+          alt=""
+          sx={{
+            display: 'block',
+            flexShrink: 0,
+            width: AUTHOR_AVATAR_SIZE,
+            height: AUTHOR_AVATAR_SIZE,
+            borderRadius: '50%',
+            objectFit: 'cover',
+          }}
+          {...Aglyn.DEFERRED_IMAGE_ATTRIBUTES}
+        />
+      ) : samplePortrait ? (
+        <Box aria-hidden sx={samplePortraitSx(AUTHOR_AVATAR_SIZE)} />
+      ) : null}
+      <MuiStack spacing={0.5} sx={{ minWidth: 0 }}>
+        {displayName ? (
+          <Typography component="p" variant="subtitle2">
+            {urlValue ? (
+              <AppLink
+                href={urlValue}
+                sx={{ color: 'inherit' }}
+                underline="hover"
+                {...(EXTERNAL_AUTHOR_HREF.test(urlValue)
+                  ? { target: '_blank', rel: 'noopener noreferrer' }
+                  : {})}
+              >
+                {displayName}
+              </AppLink>
+            ) : (
+              displayName
+            )}
+          </Typography>
+        ) : null}
+        {displayBio ? (
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            {displayBio}
+          </Typography>
+        ) : null}
+        <AuthorLinkRows links={linkRows} />
+      </MuiStack>
+    </MuiStack>
+  )
+})
+CollectionEntryAuthor.displayName = 'AglynCollectionEntryAuthor'
+
+export const collectionEntryAuthorSchema: Aglyn.ComponentSchema<CollectionEntryAuthorProps> =
+  {
+    $id: ENTRY_AUTHOR_ID,
+    pluginId: BUNDLE_ID,
+    displayName: 'Entry Author',
+    description: 'The author card for an entry — portrait, byline and bio.',
+    category: Aglyn.ComponentCategory.TEXT,
+    icon: {
+      path: mdiAccountCircleOutline.path,
+      sx: { color: 'secondary.main' },
+    },
+    flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
+    attributes: [
+      {
+        name: 'name',
+        label: 'Name',
+        description:
+          'Blank shows the name from the entry’s author record. Type here ' +
+          '(or bind {{entry.author}}) to sign this card differently from ' +
+          'the byline above the article.',
+        component: Aglyn.FieldComponentType.TEXT_FIELD,
+      },
+      {
+        name: 'bio',
+        label: 'Bio',
+        description:
+          'Blank shows the bio from the author’s record. Type here (or bind ' +
+          '{{entry.authorBio}}) only to override it.',
+        component: Aglyn.FieldComponentType.TEXTAREA,
+      },
+      {
+        name: 'image',
+        label: 'Portrait',
+        description:
+          'Blank shows the portrait from the author’s record. Pick from your ' +
+          'media library with "Browse media" only to override it.',
+        component: Aglyn.FieldComponentType.TEXT_FIELD,
+      },
+      {
+        name: 'pageUrl',
+        label: 'Name links to',
+        description:
+          'Blank sends the name to the author’s page on this site — ' +
+          'everything they wrote. Falls back to their own url when they have ' +
+          'no page; type here to override both.',
+        component: Aglyn.FieldComponentType.TEXT_FIELD,
+      },
+      {
+        name: 'url',
+        label: 'Their own site',
+        description:
+          'Blank uses the url on the author’s record. Used only when they ' +
+          'have no page on this site for the name to link to.',
+        component: Aglyn.FieldComponentType.TEXT_FIELD,
+      },
+      {
+        name: 'showLinks',
+        label: 'Show links',
+        description:
+          'Off hides the author’s profile links. They come from the author ' +
+          'record — a known platform brings its own mark, and a custom link ' +
+          'brings the icon and label chosen there.',
+        component: Aglyn.FieldComponentType.SWITCH,
+        // Unset means SHOWN in the renderer above, so the switch has to open
+        // in that position or it lies about the card in front of the author
+        // (AGL-2506).
+        initialValue: true,
+      },
+      {
+        name: 'showBio',
+        label: 'Show bio',
+        description:
+          'Off leaves the card as a portrait and a name — for a masthead ' +
+          'where the blurb would repeat what the page already says.',
+        component: Aglyn.FieldComponentType.SWITCH,
+        // Unset means SHOWN in the renderer above, so the switch has to
+        // OPEN in that position or it lies about the block in front of
+        // the author — and the first click, which writes the `true` that
+        // was already in effect, changes nothing and reads as a dead
+        // control (AGL-2506).
+        initialValue: true,
+      },
+      {
+        name: 'showAvatar',
+        label: 'Show portrait',
+        description:
+          'Off leaves the text alone, with no space held for a picture.',
+        component: Aglyn.FieldComponentType.SWITCH,
+        // Unset means SHOWN in the renderer above, so the switch has to
+        // OPEN in that position or it lies about the block in front of
+        // the author — and the first click, which writes the `true` that
+        // was already in effect, changes nothing and reads as a dead
+        // control (AGL-2506).
+        initialValue: true,
+      },
+    ],
+  }
+
+/* ── Author profile (AGL-2518) ──────────────────────────────────────────── */
+
+export interface ContentAuthorProfileProps extends StackProps {
+  /**
+   * The byline. Server-filled from the routed author on their own page
+   * (`expandContentAuthorProfile`); set it — or bind `{{author.name}}` —
+   * only to override.
+   */
+  name?: string
+  /** The blurb from their record; bind `{{author.bio}}` to override. */
+  bio?: string
+  /**
+   * Portrait or logo — a media reference (AGL-1215) or any URL, filled from
+   * the record so the face follows the person rather than the template.
+   */
+  image?: string
+  /** Person only — what they do; blank on an Organization. */
+  jobTitle?: string
+  /** Person only — who they write for. */
+  worksFor?: string
+  /**
+   * Their OWN site. The name links here; blank renders it as plain text.
+   * This block already IS the author's page, so it does not link to itself.
+   */
+  url?: string
+  /** Their profile links, server-filled from the record (AGL-2516). */
+  links?: Aglyn.ContentAuthorLink[]
+  showBio?: boolean
+  showAvatar?: boolean
+  showRole?: boolean
+  showLinks?: boolean
+}
+
+/** The page subject's portrait — a step up from the card's 48px. */
+const PROFILE_AVATAR_SIZE = 96
+
+/**
+ * Who an author page is about (AGL-2518) — portrait, name, role, bio, links.
+ *
+ * The Entry Author card renders the same person as a footnote under an
+ * article. This renders them as the SUBJECT of a page, which is why it has
+ * the two fields that card has no room for: `jobTitle` and `worksFor` are
+ * what tell a stranger who they are looking at, and they are already on the
+ * record because `schema.org/Person` defines them (AGL-2486).
+ *
+ * Every field is independently overridable and every one collapses when
+ * empty, exactly as the card's do — an author with no portrait renders the
+ * text alone rather than a gap where a face would be. On an editing surface
+ * the block previews its own shape with sample text, because a template is
+ * designed before any author is routed through it.
+ */
+const ContentAuthorProfile = forwardRef<
+  HTMLDivElement,
+  ContentAuthorProfileProps
+>((props, ref) => {
+  // None of these are DOM attributes (`name` least of all), so they are
+  // destructured rather than spread — the stack.ts pattern.
+  const {
+    name,
+    bio,
+    image,
+    jobTitle,
+    worksFor,
+    url,
+    links,
+    showBio,
+    showAvatar,
+    showRole,
+    showLinks,
+    ...rest
+  } = props
+  const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
+  const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
+  const { hostId } = Aglyn.useSite()
+  const nameValue = metaValue(name, suppressNavigation)
+  const bioValue = showBio !== false ? metaValue(bio, suppressNavigation) : ''
+  const jobValue = showRole !== false ? metaValue(jobTitle, suppressNavigation) : ''
+  const worksForValue =
+    showRole !== false ? metaValue(worksFor, suppressNavigation) : ''
+  const urlRaw = metaValue(url, suppressNavigation)
+  const urlValue = SAFE_AUTHOR_HREF.test(urlRaw) ? urlRaw : ''
+  // An unresolved token empties on EVERY surface, as in the byline: a literal
+  // `{{…}}` in a src is a broken portrait in the canvas.
+  const imageRaw = (image ?? '').trim()
+  const imageSrc =
+    showAvatar !== false && imageRaw && !UNRESOLVED_TOKEN.test(imageRaw)
+      ? Aglyn.resolveMediaSrc(imageRaw, { hostId })
+      : ''
+  const linkRows = safeAuthorLinks(links, showLinks)
+  // Nothing routed and nothing typed: an editing surface previews the block's
+  // own markup at its own settings, and a published page renders nothing at
+  // all. Every part still answers its own switch, so a block with Show bio
+  // off previews as portrait and name.
+  const sample =
+    !nameValue &&
+    !bioValue &&
+    !jobValue &&
+    !imageSrc &&
+    !linkRows.length &&
+    Boolean(suppressNavigation)
+  const displayName = sample ? ENTRY_SAMPLE_AUTHOR : nameValue
+  const displayBio = sample && showBio !== false ? ENTRY_SAMPLE_BIO : bioValue
+  const samplePortrait = sample && showAvatar !== false
+  /**
+   * "Founder at Aglyn" — one line, from two fields, and a middle dot would be
+   * wrong here: this is a phrase, not a list of facts like the byline's
+   * `name · date`. Either field alone still reads.
+   */
+  const roleLine = [jobValue, worksForValue].filter(Boolean).join(' at ')
+  if (
+    !displayName &&
+    !displayBio &&
+    !roleLine &&
+    !imageSrc &&
+    !samplePortrait &&
+    !linkRows.length
+  ) {
+    return <Box ref={ref} {...rest} />
+  }
+  return (
+    <MuiStack
+      ref={ref}
+      direction="row"
+      spacing={3}
+      {...rest}
+      // MERGE, never replace (AGL-1450): `rest.sx` is the array leaf.tsx
+      // builds, and spreading it into an object drops every authored value.
+      sx={[{ alignItems: 'flex-start' }, ...nodeSx]}
+    >
+      {imageSrc ? (
+        <Box
+          component="img"
+          src={imageSrc}
+          // Decorative: the block names the author in text right beside it.
+          alt=""
+          sx={{
+            display: 'block',
+            flexShrink: 0,
+            width: PROFILE_AVATAR_SIZE,
+            height: PROFILE_AVATAR_SIZE,
+            borderRadius: '50%',
+            objectFit: 'cover',
+          }}
+          {...Aglyn.DEFERRED_IMAGE_ATTRIBUTES}
+        />
+      ) : samplePortrait ? (
+        <Box aria-hidden sx={samplePortraitSx(PROFILE_AVATAR_SIZE)} />
+      ) : null}
+      <MuiStack spacing={1} sx={{ minWidth: 0 }}>
+        {displayName ? (
+          // `h1` because the author IS this page's subject — the one heading
+          // rule a built-in body has to get right, since the template around
+          // it cannot know what the block will be handed.
+          <Typography component="h1" variant="h4">
+            {urlValue ? (
+              <AppLink
+                href={urlValue}
+                sx={{ color: 'inherit' }}
+                underline="hover"
+                {...(EXTERNAL_AUTHOR_HREF.test(urlValue)
+                  ? { target: '_blank', rel: 'noopener noreferrer' }
+                  : {})}
+              >
+                {displayName}
+              </AppLink>
+            ) : (
+              displayName
+            )}
+          </Typography>
+        ) : null}
+        {roleLine ? (
+          <Typography variant="subtitle2" sx={{ color: 'text.secondary' }}>
+            {roleLine}
+          </Typography>
+        ) : null}
+        {displayBio ? (
+          <Typography variant="body1" sx={{ color: 'text.secondary' }}>
+            {displayBio}
+          </Typography>
+        ) : null}
+        <AuthorLinkRows links={linkRows} size={1} />
+      </MuiStack>
+    </MuiStack>
+  )
+})
+ContentAuthorProfile.displayName = 'AglynContentAuthorProfile'
+
+export { ContentAuthorProfile }
+
+export const contentAuthorProfileSchema: Aglyn.ComponentSchema<ContentAuthorProfileProps> =
+  {
+    $id: AUTHOR_PROFILE_ID,
+    pluginId: BUNDLE_ID,
+    displayName: 'Author Profile',
+    description:
+      'Who an author page is about — portrait, name, role, bio and links.',
+    category: Aglyn.ComponentCategory.TEXT,
+    icon: {
+      path: mdiAccountCircleOutline.path,
+      sx: { color: 'secondary.main' },
+    },
+    flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
+    attributes: [
+      {
+        name: 'name',
+        label: 'Name',
+        description:
+          'Blank shows the name of the author whose page this is. Type here ' +
+          '(or bind {{author.name}}) only to override it.',
+        component: Aglyn.FieldComponentType.TEXT_FIELD,
+      },
+      {
+        name: 'bio',
+        label: 'Bio',
+        description:
+          'Blank shows the bio from the author’s record. Type here (or bind ' +
+          '{{author.bio}}) only to override it.',
+        component: Aglyn.FieldComponentType.TEXTAREA,
+      },
+      {
+        name: 'image',
+        label: 'Portrait',
+        description:
+          'Blank shows the portrait of the author whose page this is, at the ' +
+          'larger size a profile takes. Pick from your media library only to ' +
+          'override it.',
+        component: Aglyn.FieldComponentType.TEXT_FIELD,
+      },
+      {
+        name: 'jobTitle',
+        label: 'Role',
+        description:
+          'Blank shows the job title from the author’s record. Only a person ' +
+          'has one — an author record set to Organization leaves it empty.',
+        component: Aglyn.FieldComponentType.TEXT_FIELD,
+      },
+      {
+        name: 'worksFor',
+        label: 'Organization',
+        description:
+          'Blank shows who the author writes for, from their record. Shown ' +
+          'after the role as "Role at Organization".',
+        component: Aglyn.FieldComponentType.TEXT_FIELD,
+      },
+      {
+        name: 'url',
+        label: 'Link',
+        description:
+          'Blank uses the author’s own url. The name links here; with no url ' +
+          'it renders as plain text. This block is already the author’s page ' +
+          'on this site, so it never links to itself.',
+        component: Aglyn.FieldComponentType.TEXT_FIELD,
+      },
+      {
+        name: 'showLinks',
+        label: 'Show links',
+        description:
+          'Off hides the row of profile links under the bio — the place a ' +
+          'reader follows this author elsewhere. Turning it off on a page ' +
+          'about them is rarely what you want.',
+        component: Aglyn.FieldComponentType.SWITCH,
+        // Unset means SHOWN in the renderer above, so the switch has to open
+        // in that position or it lies about the block in front of the author
+        // (AGL-2506).
+        initialValue: true,
+      },
+      {
+        name: 'showBio',
+        label: 'Show bio',
+        description:
+          'Off leaves the block as a portrait, a name and a role.',
+        component: Aglyn.FieldComponentType.SWITCH,
+        initialValue: true,
+      },
+      {
+        name: 'showRole',
+        label: 'Show role',
+        description:
+          'Off hides the "Role at Organization" line under the name.',
+        component: Aglyn.FieldComponentType.SWITCH,
+        initialValue: true,
+      },
+      {
+        name: 'showAvatar',
+        label: 'Show portrait',
+        description:
+          'Off drops the portrait and lets the name and bio run the full ' +
+          'width, with no space held for a picture.',
+        component: Aglyn.FieldComponentType.SWITCH,
+        initialValue: true,
       },
     ],
   }
@@ -2056,7 +3292,8 @@ export const collectionSearchSchema: Aglyn.ComponentSchema<CollectionSearchProps
         name: 'searchPlaceholder',
         label: 'Search placeholder',
         description:
-          'Hint text inside the search box (blank = "Search posts…").',
+          'Hint text inside this box. Blank shows "Search posts…", which is ' +
+          'worth changing when the collection is not posts.',
         component: Aglyn.FieldComponentType.TEXT_FIELD,
       },
       // `searchIndex`, `searchTotal` and `searchCapped` are deliberately NOT
@@ -2156,11 +3393,19 @@ export const collectionPresets: Aglyn.PresetSchema[] = [
       $id: null,
       componentId: RELATED_ID,
       pluginId: BUNDLE_ID,
-      // `layout` is seeded rather than left to the runtime fallback so the
-      // dropdown opens on the value the block is actually rendering, and an
-      // author who tries Cards has a named route back (AGL-1457). `showCover`
-      // is deliberately absent: OFF is the shipped behaviour.
-      props: { heading: 'Related articles', limit: 3, layout: 'list' },
+      // `layout`, the two type steps and `dateFormat` are seeded rather than
+      // left to the runtime fallback so each dropdown opens on the value the
+      // block is actually rendering, and an author who tries another has a
+      // named route back (AGL-1457/AGL-1459). The `show*` switches are
+      // deliberately absent: their unset state IS the shipped behaviour.
+      props: {
+        heading: 'Related articles',
+        limit: 3,
+        layout: 'list',
+        headingVariant: 'h5',
+        titleVariant: 'subtitle1',
+        dateFormat: Aglyn.COLLECTION_ENTRY_DATE_FORMAT_DEFAULT,
+      },
     },
   },
   {
@@ -2198,6 +3443,34 @@ export const collectionPresets: Aglyn.PresetSchema[] = [
     },
   },
   {
+    // Every author-placeable component needs a preset: the element drawer is
+    // built from PRESETS alone (`ComponentManager.schemasByCategory` iterates
+    // `this.presets`), so a component with only a schema renders correctly
+    // once a node exists but can never be put on a canvas by clicking.
+    //
+    // This one earns its place in the drawer because the entries block's own
+    // search field cannot leave that block, and the toolbar row wants the
+    // search beside the category pills rather than above the entries.
+    $id: generatePresetId(SEARCH_ID),
+    type: Aglyn.NodeType.PRESET,
+    displayName: 'Collection Search',
+    pluginId: BUNDLE_ID,
+    description:
+      'Search box for a collection, with a dropdown of matching entries',
+    category: Aglyn.ComponentCategory.NAVIGATION,
+    icon: { path: mdiMagnify.path, sx: { color: 'secondary.main' } },
+    data: {
+      $id: null,
+      componentId: SEARCH_ID,
+      pluginId: BUNDLE_ID,
+      // Deliberately no seeded props. Both attributes read blank as a real
+      // choice — `collectionSlug` blank means "take the collection from the
+      // URL", which is correct on the list templates this block is for, and
+      // `searchPlaceholder` blank means the designed "Search posts…".
+      props: {},
+    },
+  },
+  {
     $id: generatePresetId(ENTRY_META_ID),
     type: Aglyn.NodeType.PRESET,
     displayName: 'Entry Meta',
@@ -2222,11 +3495,55 @@ export const collectionPresets: Aglyn.PresetSchema[] = [
       },
     },
   },
+  {
+    $id: generatePresetId(ENTRY_AUTHOR_ID),
+    type: Aglyn.NodeType.PRESET,
+    displayName: 'Entry Author',
+    pluginId: BUNDLE_ID,
+    description: 'Portrait, byline and bio card for the entry’s author',
+    category: Aglyn.ComponentCategory.TEXT,
+    icon: {
+      path: mdiAccountCircleOutline.path,
+      sx: { color: 'secondary.main' },
+    },
+    data: {
+      $id: null,
+      componentId: ENTRY_AUTHOR_ID,
+      pluginId: BUNDLE_ID,
+      // Seeded EMPTY, unlike Entry Meta's preset. Those bindings predate the
+      // server fill and stay for compatibility; here the fill is the only
+      // mechanism, and a seeded `{{entry.authorImage}}` would render a broken
+      // portrait on every surface that is not an entry template.
+      props: {},
+    },
+  },
+  {
+    $id: generatePresetId(AUTHOR_PROFILE_ID),
+    type: Aglyn.NodeType.PRESET,
+    displayName: 'Author Profile',
+    pluginId: BUNDLE_ID,
+    description: 'Portrait, name, role, bio and links for an author page',
+    category: Aglyn.ComponentCategory.TEXT,
+    icon: {
+      path: mdiAccountCircleOutline.path,
+      sx: { color: 'secondary.main' },
+    },
+    data: {
+      $id: null,
+      componentId: AUTHOR_PROFILE_ID,
+      pluginId: BUNDLE_ID,
+      // Seeded EMPTY, for the reason the card above it is: the server fill is
+      // the only mechanism here, and a seeded `{{author.image}}` would render
+      // a broken portrait on every surface that is not an author page.
+      props: {},
+    },
+  },
 ]
 
 export {
   CollectionCategories,
   CollectionEntries,
+  CollectionEntryAuthor,
   CollectionEntryBody,
   CollectionEntryMeta,
   CollectionRelated,

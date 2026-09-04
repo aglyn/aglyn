@@ -82,8 +82,12 @@ import getHost from '../utils/get-host'
 
 const mockGetHost = getHost as jest.MockedFunction<typeof getHost>
 
+// The `pages` child sitemap, because that is where screens live since AGL-2520
+// split the flat sitemap into an index over one child per section. Addressed by
+// the path a crawler uses, which is also what the route parses the section out
+// of. The exclusions under test are the same ones; only their file changed.
 const request = () =>
-  new Request('https://aglyn.com/api/sitemap?host=marketing', {
+  new Request('https://aglyn.com/sitemaps/pages/1.xml?host=marketing', {
     headers: { host: 'aglyn.com' },
   })
 

@@ -71,6 +71,74 @@ describe('analyticsMayEmit (AGL-2067)', () => {
     expect(analyticsMayEmit({ nodeEnv: 'test' })).toBe(false)
   })
 
+  it.each([
+    'localhost',
+    'LOCALHOST',
+    'demo.localhost',
+    '127.0.0.1',
+    '127.1.2.3',
+    '::1',
+    '[::1]',
+    '0.0.0.0',
+  ])(
+    'stays silent on a PRODUCTION build served from %p',
+    (hostname) => {
+      // The gap the three build-time signals cannot see. `next start`,
+      // `docker compose up` from a clone, and a production container run on a
+      // laptop are all `NODE_ENV=production` with no VERCEL_ENV — identical to
+      // the self-host case above — while pointing at the live measurement id
+      // in `.env.development.local`. 145 of one month's 609 sessions came in
+      // this way.
+      expect(analyticsMayEmit({ nodeEnv: 'production', hostname })).toBe(false)
+      expect(
+        analyticsMayEmit({
+          nodeEnv: 'production',
+          deployEnv: 'production',
+          hostname,
+        }),
+      ).toBe(false)
+    },
+  )
+
+  it.each(['aglyn.com', 'app.aglyn.com', 'console.example.com', 'localhost.example.com'])(
+    'still emits from a production build served from %p',
+    (hostname) => {
+      // The loopback test must not swallow the self-host default it sits
+      // beside, and must match a host, not a substring:
+      // `localhost.example.com` is somebody's real domain.
+      expect(analyticsMayEmit({ nodeEnv: 'production', hostname })).toBe(true)
+    },
+  )
+
+  it('keeps the build-time answer when there is no location at all', () => {
+    // A server render has no hostname. Reading undefined as loopback would
+    // stop the tenant rendering its `<Script>` on every real deployment.
+    expect(analyticsMayEmit({ nodeEnv: 'production', hostname: undefined })).toBe(
+      true,
+    )
+    expect(analyticsMayEmit({ nodeEnv: 'production', hostname: '' })).toBe(true)
+  })
+
+  it('still honors the escape hatch on a loopback host', () => {
+    // DebugView work happens on localhost or nowhere. The hatch has to reach
+    // the one place it exists for, and `analyticsEnvironmentForcesInternal`
+    // stamps whatever it lets through.
+    expect(
+      analyticsMayEmit({
+        nodeEnv: 'production',
+        hostname: 'localhost',
+        allowNonProduction: '1',
+      }),
+    ).toBe(true)
+    expect(
+      analyticsEnvironmentForcesInternal({
+        nodeEnv: 'production',
+        hostname: 'localhost',
+        allowNonProduction: '1',
+      }),
+    ).toBe(true)
+  })
+
   it('stays silent on a Vercel PREVIEW, whose NODE_ENV is production', () => {
     // The case nothing else catches, and the one already visible in the data.
     expect(

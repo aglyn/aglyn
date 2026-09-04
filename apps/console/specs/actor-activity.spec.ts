@@ -107,7 +107,7 @@ beforeEach(() => {
   mockHostsInOrg = []
 })
 
-describe('readActorActivity (AGL-1488)', () => {
+describe('readActorActivity', () => {
   it('answers with the actor entries, newest first, flattened for the client', async () => {
     mockCorpus = [doc('a', 'hosts/h1', 900), doc('b', 'orgs/o1', 800)]
     const page = await readActorActivity({ actorId: 'u1', pageSize: 25 })

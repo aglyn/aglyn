@@ -178,11 +178,24 @@ describe('the org detail page uses it', () => {
   })
 })
 
-describe('the billing page pairs its narrow cards (AGL-2486)', () => {
-  const source = readFileSync(
-    join(__dirname, '..', 'app/(app)/[orgSlug]/billing/page.tsx'),
+describe('the billing sections pair their narrow cards (AGL-2486)', () => {
+  /*
+   * Billing became four routed sections (AGL-2501), so the band this describes
+   * is split: the wide/narrow masonry pair and the usage cards moved to the
+   * Usage section, and the plan-side cards stayed with Plan. Both are read,
+   * because the layout rule is about the CARDS and it has to hold wherever
+   * they ended up — checking only one would let the other regress to a stack
+   * of full-width bands.
+   */
+  const plan = readFileSync(
+    join(__dirname, '..', 'app/(app)/[orgSlug]/billing/(sections)/page.tsx'),
     'utf8',
   )
+  const usage = readFileSync(
+    join(__dirname, '..', 'app/(app)/[orgSlug]/billing/(sections)/usage/page.tsx'),
+    'utf8',
+  )
+  const source = plan + usage
 
   it('reads a real file', () => {
     expect(source.length).toBeGreaterThan(10000)
@@ -210,13 +223,160 @@ describe('the billing page pairs its narrow cards (AGL-2486)', () => {
       'usage-history',
       'storage-cap',
       'usage-budget',
-      'billing-history',
-      'plan-addons',
       'register-seats',
       'collaborator-seats',
     ]) {
       expect(source).toContain(`key: '${key}'`)
     }
+  })
+
+  it('buying comes before assigning, as two bands rather than three cards', () => {
+    // The owner read "collaborator seats in more than one area" as
+    // duplication. It is not — `Plan add-ons` SELLS an org-level pool and the
+    // two cards under it PUT those seats on a site — but three peers in one
+    // balanced flow, which the masonry could order however it liked, is
+    // exactly how a two-part relationship reads as the same thing listed
+    // twice.
+    //
+    // So: the purchase card takes a full-width band, and the two assignment
+    // cards balance directly beneath it. The order is the explanation.
+    const buy = plan.indexOf("header={'Plan add-ons — buy capacity'}")
+    const registers = plan.indexOf("key: 'register-seats'")
+    const collaborators = plan.indexOf("key: 'collaborator-seats'")
+    expect(buy).toBeGreaterThan(-1)
+    expect(registers).toBeGreaterThan(buy)
+    expect(collaborators).toBeGreaterThan(buy)
+
+    // And each card says WHICH HALF it is, in its own header — not only in an
+    // info box that shows when the list is empty, which is precisely when
+    // nobody has a mental model yet and gone once they do.
+    expect(plan).toContain("header={'POS register seats — assign to a site'}")
+    expect(plan).toContain(
+      "header={'Site collaborator seats — assign to a site'}",
+    )
+    // The pointer is symmetric: the assign cards already named the buy card,
+    // and now the buy card names where its pooled lines get assigned.
+    expect(plan).toMatch(/assign to a site in the two\s*\n?\s*'?\s*\+?\s*'?cards below/)
+  })
+
+  it('the short cards that are NOT in CardColumns carry a width instead', () => {
+    // Two mechanisms, one rule. `CardColumns` balances same-width cards inside
+    // a full-width band; a masonry `size` pairs a short card with a tall one
+    // in the SAME band. What must never happen is a one-sentence card alone on
+    // a page-wide row — which is what `Outstanding` and the quote did after
+    // the split, while `Current plan` sat beside two thirds of a dead row.
+    for (const marker of [
+      // `Outstanding` beside `Current plan`'s md: 4.
+      "size: { xs: 12, md: 8 }",
+    ]) {
+      expect(plan).toContain(marker)
+    }
+    expect(plan).toContain("size: { xs: 12, md: 4 }")
+    // And the quote no longer renders at all when there is no plan to quote —
+    // an empty card with a header reads as a thing that failed to load.
+    expect(plan).toMatch(/\.\.\.\(quotedPlan\n?\s*\?/)
+  })
+
+  it('every sized item is full width at xs, so narrow can only stack', () => {
+    // The wide case is where the hole appears and the narrow case is where a
+    // layout silently reorders or overlaps. Masonry's own contract is that at
+    // a breakpoint where every item is full width the columns stack — so the
+    // guarantee for narrow is simply that no item declares a width WITHOUT an
+    // `xs: 12` beside it. Asserted here because it cannot be seen at the one
+    // viewport a person happens to be testing at.
+    const invoices = readFileSync(
+      join(
+        __dirname,
+        '..',
+        'app/(app)/[orgSlug]/billing/(sections)/invoices/page.tsx',
+      ),
+      'utf8',
+    )
+    const usage = readFileSync(
+      join(
+        __dirname,
+        '..',
+        'app/(app)/[orgSlug]/billing/(sections)/usage/page.tsx',
+      ),
+      'utf8',
+    )
+    for (const [name, src] of [
+      ['plan', plan],
+      ['invoices', invoices],
+      ['usage', usage],
+    ] as const) {
+      // Every `md:` in a `size` must be preceded by `xs: 12` in the same
+      // object literal. A bare `size: { md: n }` would leave the item
+      // unsized on a phone, which is where things pile up.
+      const sizes = src.match(/size:\s*\{[^}]*\}/g) ?? []
+      const bare = sizes.filter(
+        (decl) => /md:/.test(decl) && !/xs:\s*12/.test(decl),
+      )
+      expect(`${name}: ${bare.join(' | ') || 'all sized at xs'}`).toBe(
+        `${name}: all sized at xs`,
+      )
+    }
+  })
+
+  it('the pricing tiers stay OUT of the masonry flow', () => {
+    // A comparison table whose columns must line up. As a masonry item it
+    // would be bucketed by width and could share a band with a card beside
+    // it; as a full-width item it takes a band of its own, which is the
+    // behaviour the grid already provides and the tiers depend on.
+    const at = plan.indexOf('<BillingPlanCardsComponent')
+    expect(at).toBeGreaterThan(-1)
+    const around = plan.slice(Math.max(0, at - 200), at)
+    expect(around).toContain('size: { xs: 12 }')
+    expect(around).not.toMatch(/md:\s*[1-9]/)
+  })
+
+  it('settings and invoices do not stack short cards at full width either', () => {
+    // Both were cut from the same page and inherited the same shape: four
+    // form cards and a one-sentence card, each taking a 1110px row.
+    const settings = readFileSync(
+      join(
+        __dirname,
+        '..',
+        'app/(app)/[orgSlug]/billing/(sections)/settings/page.tsx',
+      ),
+      'utf8',
+    )
+    const invoices = readFileSync(
+      join(
+        __dirname,
+        '..',
+        'app/(app)/[orgSlug]/billing/(sections)/invoices/page.tsx',
+      ),
+      'utf8',
+    )
+    // Settings is four cards of ONE width — masonry would bucket them into a
+    // single column, so it balances instead.
+    expect(settings).toContain('<CardColumns')
+    expect(settings).not.toContain('<Stack spacing={3}>')
+    // Invoices is a short card and a table: two widths, so masonry pairs them.
+    expect(invoices).toContain('masonry')
+    expect(invoices).toContain("size: { xs: 12, md: 4 }")
+    expect(invoices).toContain("size: { xs: 12, md: 8 }")
+  })
+
+  it('the invoices section stacks its two cards rather than banding them', () => {
+    // `billing-history` left CardColumns when billing was split (AGL-2501).
+    // Invoices holds exactly two cards — an outstanding-balance card and a
+    // wide history TABLE — and a table earns its width, so a balanced
+    // two-column flow would be the wrong shape here. Asserted rather than
+    // assumed, because "it moved" is also what a card silently disappearing
+    // looks like.
+    const invoices = readFileSync(
+      join(
+        __dirname,
+        '..',
+        'app/(app)/[orgSlug]/billing/(sections)/invoices/page.tsx',
+      ),
+      'utf8',
+    )
+    expect(invoices).toContain('Billing history')
+    expect(invoices).toContain('Outstanding')
+    expect(invoices).not.toContain('<CardColumns')
   })
 
   it('leaves the plan comparison grid at full width', () => {

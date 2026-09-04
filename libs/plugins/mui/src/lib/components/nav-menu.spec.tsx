@@ -492,3 +492,58 @@ describe('menu trigger typography (AGL-1198)', () => {
     expect(getComputedStyle(trigger()).textTransform).not.toBe('uppercase')
   })
 })
+
+describe('the trigger is a nav item, not a button (AGL-2542)', () => {
+  const trigger = () => screen.getByRole('button', { name: /Product/ })
+
+  it.each([
+    ['fontFamily', 'font-family'],
+    ['fontSize', 'font-size'],
+    ['fontWeight', 'font-weight'],
+    ['lineHeight', 'line-height'],
+    ['letterSpacing', 'letter-spacing'],
+    ['color', 'color'],
+  ])('hands %s back to the element, so STYLES reaches the label', (_, css) => {
+    // Every one of these used to come from MUI's `typography.button` and
+    // outrank anything an author could set: node sx lands on the wrapper,
+    // and the Button's own class beat an inherited value. `color` is the
+    // exception and passed before this change — the Button already carried
+    // `color="inherit"` as a prop — so that row guards it rather than
+    // proving it.
+    renderLive(<MegaMenu label="Product" />)
+    expect(getComputedStyle(trigger()).getPropertyValue(css)).toBe('inherit')
+  })
+
+  it('carries no button chrome — the label is as wide as its own text', () => {
+    // `min-width: 64px` padded a short label out to a width its text never
+    // asked for, and `6px 8px` widened the gap on the menu items alone.
+    // jsdom reports a zero length unitless, so read the number, not the text.
+    renderLive(<MegaMenu label="Product" />)
+    const style = getComputedStyle(trigger())
+    expect(parseFloat(style.minWidth)).toBe(0)
+    expect(parseFloat(style.paddingLeft)).toBe(0)
+    expect(parseFloat(style.paddingTop)).toBe(0)
+  })
+
+  it('does not let the chevron hang outside the element', () => {
+    // MUI tucks endIcon into the padding with `margin-right: -4px`. With the
+    // padding gone that overhang lands in the nav's gap.
+    //
+    // Asserted on the emitted rule rather than through `getComputedStyle`:
+    // jsdom resolves the element's own class but not a DESCENDANT selector
+    // written into sx, so the computed value here reports MUI's -4px whether
+    // or not the override shipped — it cannot tell the two apart.
+    renderLive(<MegaMenu label="Product" />)
+    // Read the SHEETS, not the <style> text: emotion inserts through CSSOM,
+    // so the tags it writes carry no text content at all.
+    const css = [...document.styleSheets]
+      .flatMap((sheet) => [...sheet.cssRules].map((rule) => rule.cssText))
+      .join('\n')
+    expect(css).toMatch(/\.MuiButton-endIcon\s*\{[^}]*margin-right:\s*0/)
+  })
+
+  it('applies to the plain dropdown trigger too', () => {
+    renderLive(<NavMenu label="Product" />)
+    expect(getComputedStyle(trigger()).fontSize).toBe('inherit')
+  })
+})

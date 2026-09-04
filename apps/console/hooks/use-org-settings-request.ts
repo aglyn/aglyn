@@ -19,6 +19,7 @@
 
 import { useCallback } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useOrgScope } from './use-org-scope'
 
 /**
@@ -39,13 +40,9 @@ export function useOrgSettingsRequest() {
   const { currentOrg } = useOrgScope()
   return useCallback(
     async (body: Record<string, unknown>) => {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/orgs/settings', {
+      const response = await authorizedFetch(user, '/api/orgs/settings', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orgId: currentOrg?.$id, ...body }),
       })
       if (!response.ok) {

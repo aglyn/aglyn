@@ -19,30 +19,65 @@ import { deploymentLivemode } from '@aglyn/aglyn/app-utils/stripe-deployment-mod
 import { readOrgBillingCustomerModes } from '@aglyn/tenant-data-admin'
 
 /**
- * WHY an org's Stripe customer id came back empty (AGL-2486, follow-up).
+ * WHY a billing history looks empty on this deployment (AGL-2486, follow-up).
  *
  * `readOrgBilling(orgId).stripeCustomerId` is mode-scoped, and deliberately
  * does not fall back to the other mode's id — that fallback is the bug the
- * mode split exists to prevent. The cost of that correctness is that a
- * workspace with a month of live invoices and a workspace that has never been
- * billed hand a test-mode deployment the identical answer: nothing.
+ * mode split exists to prevent. The cost of that correctness is that an empty
+ * screen has more than one cause, and they are not interchangeable.
  *
- * Both billing surfaces then printed "No invoices yet." over an intact
- * history. This is the census that lets them tell the two apart, and it
- * carries no ids: a test-mode response must never publish a live `cus_…`.
+ * ## Three states, and collapsing any two recreates the bug
  *
- * `otherModeOnly` is only ever true when THIS deployment has no customer and
- * the other mode does, so it can be attached unconditionally to a
- * missing-customer response without changing what "never subscribed" means.
+ *  1. **Never billed.** No customer in either mode. "No invoices yet." is the
+ *     true answer.
+ *  2. **Billed, and readable here.** Invoices come back. No notice at all.
+ *  3. **Billed in the mode this deployment cannot reach.** The history exists
+ *     and this key cannot see it. Rendering that as (1) is the falsehood.
+ *
+ * ## Why this asks about the OTHER mode, not about a missing customer
+ *
+ * The first version of this answered "does this deployment have no customer
+ * while the other mode does", and was attached only to a missing-customer
+ * response. That covered a workspace touched in one mode only — and missed
+ * the normal state of any workspace that has ever transacted live and been
+ * opened in test, which has BOTH ids populated:
+ *
+ *     stripeCustomerId     → live, holds the history
+ *     stripeCustomerIdTest → test, empty
+ *
+ * On localhost the customer is then not missing at all, the notice never
+ * fired, and the card printed "No invoices yet." over an intact live history —
+ * state 3 rendered as state 1, on the exact org the spec was written for.
+ *
+ * So the question is now the one the cards actually ask: **is there a customer
+ * in the mode this deployment cannot read?** Callers attach the answer
+ * whenever the history they are about to render is EMPTY, whatever made it
+ * empty. A non-empty history needs no explanation and gets none.
+ *
+ * It carries no ids: a test-mode response must never publish a live `cus_…`.
  */
 export interface StripeCustomerModeNotice {
-  /** The org's customer exists, but only in the mode this deployment is not. */
+  /**
+   * The org has a customer in the mode this deployment is NOT running against.
+   *
+   * NOT "and none in this one" — that narrower reading is what missed the
+   * both-ids case. Only meaningful beside an empty history; on its own it says
+   * nothing about whether anything was billed.
+   */
   readonly otherModeOnly: boolean
   /** Which Stripe world this deployment spends in. */
   readonly deploymentMode: 'live' | 'test'
 }
 
-export async function describeMissingStripeCustomer(
+/**
+ * The census, for a history that is about to render EMPTY.
+ *
+ * Attach it on every empty-history path — the no-customer branch and the
+ * customer-with-no-invoices branch alike. Attaching it to a NON-empty listing
+ * would be a second bug: there is nothing to explain, and a notice beside real
+ * invoices reads as though they were the wrong ones.
+ */
+export async function describeStripeModeSplit(
   orgId: string,
 ): Promise<StripeCustomerModeNotice> {
   const livemode = deploymentLivemode()

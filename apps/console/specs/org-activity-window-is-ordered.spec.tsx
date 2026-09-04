@@ -258,7 +258,7 @@ describe('the feed pages (AGL-2292 follow-up)', () => {
   it('asks for the console-wide default page, not a 200-row window', async () => {
     // The size is not this card's to pick. Every list in the console starts
     // at the smallest shared option, which on a feed bounded by its page size
-    // is also the smallest read (AGL-693/AGL-703) — the staff org page was
+    // is also the smallest read (AGL-2501/AGL-703) — the staff org page was
     // asking for fifty rows to fill a card nobody had scrolled.
     render(<OrgActivityCard orgId="org-1" />)
     await waitFor(() => expect(fetches.length).toBeGreaterThan(0))

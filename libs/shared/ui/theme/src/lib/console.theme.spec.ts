@@ -96,6 +96,47 @@ describe('brand display ramp', () => {
     expect(typography.overline.fontWeight).toBe(400)
   })
 
+  it('gives a 72px hero a token, one rung above h1', () => {
+    // Without this rung the brand's display ramp stopped at h1's 56px, so a
+    // hero drawn at 72px hand-wrote the pixels — and that literal then lost
+    // to h1's own responsive ramp on wide viewports.
+    const ceiling = (v: Record<string, any>) =>
+      Math.max(
+        ...[
+          v.fontSize,
+          ...Object.keys(v)
+            .filter((k) => k.startsWith('@media'))
+            .map((k) => v[k]?.fontSize),
+        ].map((x) => Number.parseFloat(String(x ?? '')) || 0),
+      )
+    expect(typography.displayXl.fontWeight).toBe(900)
+    expect(ceiling(typography.displayXl)).toBeGreaterThan(
+      ceiling(typography.h1),
+    )
+  })
+
+  it('ramps the custom display variant too, so 72px is not a phone size', () => {
+    // Passing `variants` to `responsiveFontSizes` REPLACES MUI's default
+    // list; a custom variant left off it keeps its desktop size everywhere.
+    const queries = Object.keys(typography.displayXl).filter((key) =>
+      key.startsWith('@media'),
+    )
+    expect(queries.length).toBeGreaterThan(0)
+    expect(
+      Number.parseFloat(String(typography.displayXl.fontSize)),
+    ).toBeLessThan(4.5)
+  })
+
+  it('leaves body-scale rungs unramped', () => {
+    // `lede`/`bodyCompact`/`micro` read the same at every width; ramping
+    // them would shrink 11px metadata into unreadability on a phone.
+    for (const key of ['lede', 'bodyCompact', 'micro']) {
+      expect(
+        Object.keys(typography[key]).filter((k) => k.startsWith('@media')),
+      ).toHaveLength(0)
+    }
+  })
+
   it('scales itself instead of being pinned to desktop pixels', () => {
     // `responsiveFontSizes` runs over these, so the small-screen value is the
     // base and the breakpoints climb to the desktop figure the frames show.

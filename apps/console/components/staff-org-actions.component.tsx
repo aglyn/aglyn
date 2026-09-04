@@ -63,6 +63,8 @@ import {
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+import { resolveIdToken } from '@aglyn/shared-util-http/authorized-token'
 
 /**
  * Every plan staff can assign, derived from `PLAN_LABELS` so a new tier can
@@ -111,6 +113,8 @@ const QUOTA_LABELS: Readonly<Record<string, string>> = {
   maxMembersPerHost: 'Max member seats',
   bandwidthGb: 'Bandwidth GB',
   formSubmissionsPerMonth: 'Form subs / mo',
+  // The catalog, not the traffic — the neighboring key is the traffic.
+  formsPerHost: 'Saved forms / site',
   variablesPerHost: 'Variables',
   functionsPerHost: 'Functions',
   workflowsPerHost: 'Workflows',
@@ -281,7 +285,7 @@ export interface StaffOrgActionsProps {
   onChanged: () => void
   /**
    * Render as a ROW's action cluster rather than a strip of buttons
-   * (AGL-693).
+   * (AGL-2501).
    *
    * A list row's actions belong behind one overflow: three inline buttons per
    * row is three chances to mis-click a suspension next to the row's own open
@@ -360,13 +364,9 @@ const StaffOrgActions = ({
     if (!suspender) return
     try {
       const suspending = !suspender.suspended
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/admin/lockdown', {
+      const response = await authorizedFetch(user, '/api/admin/lockdown', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           scope: 'org',
           targetId: suspender.id,
@@ -483,13 +483,9 @@ const StaffOrgActions = ({
     // best-effort. The completion confirmation is sent later by run-erasures.
     if (requesting) {
       void (async () => {
-        const idToken = await (user as any)?.getIdToken?.()
-        await fetch('/api/admin/erasure-request', {
+        await authorizedFetch(user, '/api/admin/erasure-request', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ orgId: org.$id }),
         })
       })().catch(() => undefined)
@@ -614,14 +610,23 @@ const StaffOrgActions = ({
     }
 
     // Refreshed BEFORE the request and outside its try, so a failed refresh
-    // is reported as what it is: nothing left the browser.
-    let idToken: string | undefined
+    // is reported as what it is: nothing left the browser. Under a deadline,
+    // because a refresh with none is a Save button that reports neither
+    // success nor failure for the life of the page.
+    let idToken: string
     try {
-      idToken = await (user as any)?.getIdToken?.()
+      idToken = await resolveIdToken(user)
     } catch (error) {
       console.error(error)
+      /*
+       * The surface's own sentence, not the shared one. Everything else
+       * this dialog can report is UNKNOWN — a request that died in the
+       * network proves nothing about whether the override was applied — so
+       * the one case that is genuinely safe to retry has to say those words
+       * and no other message here may.
+       */
       enqueueSnackbar(
-        'Could not refresh your staff session, so nothing was sent — the ' +
+        'Could not confirm your staff sign-in, so nothing was sent — the ' +
           'organization is unchanged. Safe to retry.',
         { variant: 'error', allowDuplicate: true },
       )
@@ -652,7 +657,7 @@ const StaffOrgActions = ({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          Authorization: `Bearer ${idToken}`,
         },
         body: JSON.stringify({
           orgId: editor.id,

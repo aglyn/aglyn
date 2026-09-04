@@ -35,7 +35,21 @@ import { generatePresetId } from '../utils/generate-preset-id'
 
 // Component ids are persisted in screen documents; keep the legacy ids.
 export const ID: Aglyn.ComponentId = 'muiTypography'
-const typographyVariants = [
+// The brand's own rungs sit alongside MUI's. They were added to the theme
+// (AGL-1308 for the body scale, for the display rung) but never to
+// this list, so the only way to reach one was to hand-write its pixels into
+// the Styles panel — which is the very thing the tokens exist to stop.
+// Display first: the list reads largest to smallest.
+//
+// Exported because it is the theme's rung list, not this element's: any block
+// that offers a type step has to offer the SAME one, or a rung added to the
+// theme becomes reachable from the Typography element and nowhere else.
+export const typographyVariants = [
+  {
+    value: 'displayXl',
+    label: 'Display XL',
+    icon: { path: mdiFormatHeader1.path },
+  },
   { value: 'h1', label: 'Heading 1', icon: { path: mdiFormatHeader1.path } },
   { value: 'h2', label: 'Heading 2', icon: { path: mdiFormatHeader2.path } },
   { value: 'h3', label: 'Heading 3', icon: { path: mdiFormatHeader3.path } },
@@ -54,8 +68,15 @@ const typographyVariants = [
   },
   { value: 'body1', label: 'Body 1', icon: { path: mdiFormatText.path } },
   { value: 'body2', label: 'Body 2', icon: { path: mdiFormatText.path } },
+  { value: 'lede', label: 'Lede', icon: { path: mdiFormatText.path } },
   { value: 'overline', label: 'Overline', icon: { path: mdiFormatText.path } },
   { value: 'caption', label: 'Caption', icon: { path: mdiFormatText.path } },
+  {
+    value: 'bodyCompact',
+    label: 'Body compact',
+    icon: { path: mdiFormatText.path },
+  },
+  { value: 'micro', label: 'Micro', icon: { path: mdiFormatText.path } },
 ]
 
 export const schema: Aglyn.ComponentSchema = {
@@ -77,7 +98,11 @@ export const schema: Aglyn.ComponentSchema = {
     // FIELD_COLOR,
     {
       name: 'variant',
-      description: 'The variant to use.',
+      description:
+        'Which typography step from the site theme this text uses — h1–h6, ' +
+        'body, subtitle, caption, overline. It sets size, weight and line ' +
+        'height together; it does NOT change the HTML element, which is the ' +
+        'field below.',
       component: Aglyn.FieldComponentType.SELECT,
       label: 'Variant',
       // "Default" deleted (AGL-1453): unpersistable, and a second name for
@@ -194,7 +219,7 @@ function sanitizeTypographyHtml(html: string): string {
  */
 /**
  * The element each variant renders as, and the ONE place that decides
- * (AGL-1487).
+ *.
  *
  * MUI's own `variantMapping` sends `subtitle1` and `subtitle2` to `<h6>`.
  * That is a typographic choice made in a component library, and on a page

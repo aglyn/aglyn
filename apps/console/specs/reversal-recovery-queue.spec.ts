@@ -378,7 +378,7 @@ describe('an empty queue is a real answer', () => {
 })
 
 /**
- * THE ORG BEHIND THE ID (AGL-693).
+ * THE ORG BEHIND THE ID (AGL-2501).
  *
  * A staff reader recognizes a customer by name, never by a document id. Both
  * answers below are ABOUT an org rather than merely keyed on one: the

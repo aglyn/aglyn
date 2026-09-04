@@ -88,19 +88,25 @@ const seedCanvas = () => {
 
 describe('clipboard-manager — besigner element clipboard (AGL-1202)', () => {
   beforeAll(() => {
-    Aglyn.components.registerComponent((() => null) as any, {
-      $id: STACK,
-      pluginId: 'test-plugin',
-      displayName: 'Stack',
-    } as any)
+    Aglyn.components.registerComponent(
+      (() => null) as any,
+      {
+        $id: STACK,
+        pluginId: 'test-plugin',
+        displayName: 'Stack',
+      } as any,
+    )
     // A Screen Link renders its children as inline text, so it is a LEAF:
     // `resolveInsertTarget` must place a paste beside it, not inside it.
-    Aglyn.components.registerComponent((() => null) as any, {
-      $id: LINK,
-      pluginId: 'test-plugin',
-      displayName: 'Screen Link',
-      flags: { textEditable: Aglyn.FEATURE_FLAG.ENABLED },
-    } as any)
+    Aglyn.components.registerComponent(
+      (() => null) as any,
+      {
+        $id: LINK,
+        pluginId: 'test-plugin',
+        displayName: 'Screen Link',
+        flags: { textEditable: Aglyn.FEATURE_FLAG.ENABLED },
+      } as any,
+    )
   })
 
   afterAll(() => {
@@ -144,7 +150,9 @@ describe('clipboard-manager — besigner element clipboard (AGL-1202)', () => {
     expect(pasted.nodes).toHaveLength(2)
     expect(pasted.nodes).not.toContain('link-a')
     expect(
-      pasted.nodes!.map((id: string) => Aglyn.canvas.getNode(id)?.props.children),
+      pasted.nodes!.map(
+        (id: string) => Aglyn.canvas.getNode(id)?.props.children,
+      ),
     ).toEqual(['Besigner', 'Console'])
     // The source column is untouched.
     expect(Aglyn.canvas.getNode('column')!.nodes).toEqual(['link-a', 'link-b'])
@@ -184,9 +192,10 @@ describe('clipboard-manager — besigner element clipboard (AGL-1202)', () => {
 
     const result = pasteInto(Aglyn.canvas.getNode('other-column')!)
 
-    expect(
-      result.nodes.map((node) => node.props.children),
-    ).toEqual(['Besigner', 'Console'])
+    expect(result.nodes.map((node) => node.props.children)).toEqual([
+      'Besigner',
+      'Console',
+    ])
   })
 
   it('refuses to copy the document root', () => {
@@ -255,6 +264,76 @@ describe('clipboard-manager — besigner element clipboard (AGL-1202)', () => {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const reloaded = require('./clipboard-manager')
       expect(reloaded.hasContent()).toBe(false)
+    })
+  })
+
+  /**
+   * Two besigner documents open at once. Neither reloads, so hydrate-once is
+   * not enough: the second document has to follow every copy the first makes
+   * or it pastes the first clipping forever (AGL-2507).
+   */
+  describe('following a copy made in another tab', () => {
+    /** What the browser delivers to the OTHER documents on this origin. */
+    const copyInAnotherTab = (raw: string | null) => {
+      if (raw === null) window.localStorage.removeItem(CLIPBOARD_STORAGE_KEY)
+      else window.localStorage.setItem(CLIPBOARD_STORAGE_KEY, raw)
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: CLIPBOARD_STORAGE_KEY,
+          newValue: raw,
+          storageArea: window.localStorage,
+        }),
+      )
+    }
+
+    /** A clipping of `label`, shaped the way the other tab would write it. */
+    const mirroredCopy = (label: string) =>
+      JSON.stringify({
+        version: CLIPBOARD_FORMAT_VERSION,
+        labels: [label],
+        nodes: [{ componentId: STACK, pluginId: 'test-plugin', nodes: [] }],
+      })
+
+    it('replaces an entry this document already hydrated', () => {
+      copyInAnotherTab(mirroredCopy('First'))
+      expect(getLabels()).toEqual(['First'])
+
+      copyInAnotherTab(mirroredCopy('Second'))
+
+      expect(getLabels()).toEqual(['Second'])
+      expect(
+        pasteInto(Aglyn.canvas.getNode('other-column')!).error,
+      ).toBeUndefined()
+    })
+
+    it('replaces an entry copied in THIS document', () => {
+      copyNodes([Aglyn.canvas.getNode('column')!])
+
+      copyInAnotherTab(mirroredCopy('Second'))
+
+      expect(getLabels()).toEqual(['Second'])
+    })
+
+    it('empties the clipboard when the other tab clears it', () => {
+      copyNodes([Aglyn.canvas.getNode('column')!])
+
+      copyInAnotherTab(null)
+
+      expect(hasContent()).toBe(false)
+    })
+
+    it('keeps its entry when an unrelated key changes', () => {
+      copyNodes([Aglyn.canvas.getNode('column')!])
+
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: 'aglyn:besigner:something-else',
+          newValue: 'whatever',
+          storageArea: window.localStorage,
+        }),
+      )
+
+      expect(hasContent()).toBe(true)
     })
   })
 })

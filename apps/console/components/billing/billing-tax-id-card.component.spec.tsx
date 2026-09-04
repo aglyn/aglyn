@@ -196,15 +196,47 @@ describe('the four load outcomes are four different sentences', () => {
     expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy()
   })
 
-  it('offers no form to an org that has never subscribed', () => {
+  it('offers the form to an org that has never subscribed', () => {
+    // The inverse of what this asserted before. A tax ID is a detail that
+    // belongs on an invoice, decided before there is an invoice to put it on —
+    // and it needs a Stripe customer, which the route creates on the first
+    // save, not a plan.
     render(
       <BillingTaxIdCardComponent
         profile={profileDouble({ state: { ...LOADED, customer: null } })}
         canManage
       />,
     )
-    expect(screen.getByText(/Upgrade to a paid plan to add one/i)).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull()
+    expect(screen.queryByText(/Upgrade to a paid plan/i)).toBeNull()
+    expect(screen.getByRole('combobox', { name: /type/i })).toBeTruthy()
+    expect(screen.getByRole('textbox', { name: 'Tax ID' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeTruthy()
+  })
+
+  it('CONTROL — the plan gate is gone from the SAVE path too, not just the fields', async () => {
+    // Rendering the inputs while the save still refused would look fixed and
+    // not be. Drive the form with no customer and assert the request goes.
+    const request = jest.fn(async () => ({ ok: true }))
+    render(
+      <BillingTaxIdCardComponent
+        profile={profileDouble({
+          state: { ...LOADED, customer: null },
+          request,
+        })}
+        canManage
+      />,
+    )
+    await chooseType('us_ein')
+    fireEvent.change(screen.getByRole('textbox', { name: 'Tax ID' }), {
+      target: { value: '00-0000000' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(request).toHaveBeenCalled())
+    expect(request).toHaveBeenCalledWith({
+      action: 'add-tax-id',
+      taxIdType: 'us_ein',
+      taxIdValue: '00-0000000',
+    })
   })
 
   it('shows a viewer their tax IDs without giving them a way to change one', () => {

@@ -17,7 +17,7 @@ design: the surface is small and curated, and each entry needs semantics
 | API | What it does |
 | --- | --- |
 | `registerConsoleExtension(extension)` | Declares everything a plugin adds to the console shell. Idempotent by `pluginId` (re-registration replaces). |
-| `listConsoleNavItems()` / `resolveConsolePluginPage(href)` | How the shell renders nav + serves plugin pages under `/[hostId]/[pluginSlug]`. |
+| `listConsoleNavItems()` / `resolveConsolePluginPage(href)` | How the shell renders nav + serves plugin pages under `/[orgSlug]/hosts/[host]/[...pluginSlug]`. The resolver matches an exact `href`, or a declared section beneath one — longest href wins, prefixes match on a segment boundary, and a tie between two enabled plugins refuses. It answers `{ extension, navItem, section?, segments }`. |
 | `listConsoleWidgets(slot)` | Widgets registered for a named zone — see [Injection zones](injection-zones.md). |
 | `listConsoleProviders()` | App-level providers mounted around every console page. |
 | `defineUiFeatureBundle(options, components)` | Site/canvas component bundle; auto-depends on the base `mui` bundle. Component and bundle ids are **persisted in screen docs — never rename**. |
@@ -25,9 +25,40 @@ design: the surface is small and curated, and each entry needs semantics
 
 `ConsoleExtension` fields: `pluginId`, `displayName`, `featureFlag?`
 (plan-entitlement gate the shell applies — extensions cannot bypass plans),
-`navItems?` (a nav item with a `Component` becomes a full page and receives
-`ConsolePluginPageProps { hostId, entitled, org?, permissions? }`),
-`dashboardCards?`, `settingsSections?`, `widgets?`, `providers?`.
+`permission?` (authorization gate the shell applies — see below), `navItems?`
+(a nav item with a `Component` becomes a full page and receives
+`ConsolePluginPageProps { hostId, entitled, org?, permissions?, releaseFlag?,
+basePath?, sections?, section?, segments? }`), `dashboardCards?`,
+`settingsSections?`, `widgets?`, `providers?`.
+
+`ConsoleExtension.permission?` (and `ConsoleNavItem.permission?`, which
+narrows one surface) name a permission the reader must hold. `featureFlag`
+answers what the **organization** bought; `permission` answers what the
+**person** may open, and both are resolved by the shell before the surface is
+constructed — an extension declares a requirement and cannot supply an answer
+to one. Requirements compose by AND, so a nav item's key is applied on top of
+its extension's rather than instead of it.
+
+The key belongs to one of two vocabularies and they are **not**
+interchangeable: a dotted `OrgPermission` from the built-in catalog
+(`'data.manage'`), answered from the member's granular map; or a key some
+plugin declared through `registerPluginPermissions` (`'managePos'`), answered
+from the resolved permission map that carries those keys. A key in neither is
+**refused**, so a typo takes the surface offline rather than opening it.
+Declare a key that is already enforced somewhere real — a permission a
+customer can untick that changes nothing is worse than its absence. A surface
+that omits both fields is open to every member of the workspace.
+
+Reference adopter: `libs/plugins/contacts` gates the CRM on `data.manage`.
+
+`ConsoleNavItem.sections?` turns one surface into a hub of routes — each
+`{ id, label, navTabId? }` becomes a URL at `${href}/${id}`, and the shell
+hands the page `section`, `sections` (hrefs + release verdict), `basePath` and
+`segments`. An id nobody declared is a 404, never a fallback to the first
+section; a section's own `navTabId` ANDs with its nav item's, so a section is
+never reachable when its surface is not. Omitting `sections` keeps the nav
+item matched exactly as before — a path beneath it does not resolve. See
+[Building feature plugins → Routed sections](../building-feature-plugins.md).
 
 ## Loading — `plugin-loader`
 
@@ -58,7 +89,7 @@ batch, so read registries lazily rather than snapshotting.
 | `registerSiteRuntime({runtimeId, Component})` | Components rendered on every published page (overlay engines, experiment runners); they read back the props their server enricher wrote. |
 | `registerSiteRedirectResolver(fn)` | Runs before route resolution; first non-null redirect wins. |
 | `registerSitePageResolver(fn)` | Composes plugin-owned pages (commerce PDP/PLP). |
-| `registerSitePageEnricher(fn)` | Contributes page-prop slices; **enricher errors are isolated** — a broken plugin drops its slice, never the page. |
+| `registerSitePageEnricher(fn)` | Contributes page-prop slices to every page that renders nodes — published screens, collection routes, designed auth screens and a resolver's own page alike; a resolver's keys win, and `pageData` merges per plugin. Gated screens (password-protected, members-only) enrich behind the gate and deliver the slice with their nodes. The designed 404 body sets `pathUnknown` — it is cached per host, so contribute only what does not depend on a path and never substitute one. Maintenance, lockdown and bandwidth-containment notices are not enriched. **Enricher errors are isolated** — a broken plugin drops its slice, never the page. |
 
 ## Stylesheets — `plugin-styles`
 

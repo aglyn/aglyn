@@ -45,6 +45,25 @@ jest.mock('@aglyn/aglyn/server', () => ({
   registerBillingWebhookHandler: () => undefined,
 }))
 
+/*
+ * The campaign revenue reversal, mocked. Whether it lands correctly on the
+ * rollup is settled against a real double in
+ * `email-revenue-attribution.spec.ts`; what this file is the only place to
+ * prove is that a booking refund REACHES it. A paid booking is credited to a
+ * campaign the same way a store order is — through `upsertHostContact` with
+ * this booking's id — so without the reversal a booking site's campaign
+ * revenue could only ever rise.
+ */
+const reverseAttributedRevenue = jest.fn(async () => true)
+jest.mock(
+  '@aglyn/tenant-data-admin/server/email-revenue-attribution',
+  () => ({
+    __esModule: true,
+    reverseEmailAttributedRevenue: (...args: unknown[]) =>
+      (reverseAttributedRevenue as any)(...args),
+  }),
+)
+
 jest.mock('@aglyn/tenant-data-admin', () => {
   const booking: Record<string, unknown> = {}
   const claims = new Map<string, Record<string, unknown>>()
@@ -274,6 +293,25 @@ describe('a booking refund reverses the seller share (AGL-2315)', () => {
     })
     // A part-refunded appointment is still happening.
     expect(mockAdmin.__state.booking['status']).toBe('confirmed')
+    // And the campaign loses THIS attempt's money, not the booking total,
+    // while keeping the order it was credited with.
+    expect(reverseAttributedRevenue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: 'booking-1',
+        amountCents: 3000,
+        closedTheOrder: false,
+      }),
+    )
+  })
+
+  it('tells the campaign reversal when the refund ended the booking', async () => {
+    reverseAttributedRevenue.mockClear()
+    const res = makeRes()
+    await bookingRefundHandler(makeReq(), res)
+    expect(res.statusCode).toBe(200)
+    expect(reverseAttributedRevenue).toHaveBeenCalledWith(
+      expect.objectContaining({ amountCents: 7500, closedTheOrder: true }),
+    )
   })
 
   it('accumulates partials and ends the booking when they reach the total', async () => {

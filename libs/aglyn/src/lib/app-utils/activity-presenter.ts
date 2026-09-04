@@ -172,7 +172,7 @@ export function activityHref(
       case 'function':
         return buildRoute(Route.HOST_LOGIC, { orgSlug, host })
       case 'workflow':
-        return buildRoute(Route.HOST_WORKFLOWS, { orgSlug, host })
+        return buildRoute(Route.HOST_AUTOMATION, { orgSlug, host })
       case 'member':
         // Site team is managed on the Setup page — there is no per-member
         // host route.

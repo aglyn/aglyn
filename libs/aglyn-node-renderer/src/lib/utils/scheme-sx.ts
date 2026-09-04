@@ -30,11 +30,14 @@ export {
   resolveSchemeSx,
   resolveSchemeSx as default,
   type SxScheme,
-} from '@aglyn/aglyn'
+} from '@aglyn/aglyn/app-utils/scheme-sx'
 
 /**
  * Palette `var()` substitution (AGL-1331) rides along beside the scheme
  * pass: both resolve persisted sx against the ACTIVE theme, and the leaf
  * applies them together.
  */
-export { resolvePaletteVars, resolvePaletteVarsSx } from '@aglyn/aglyn'
+export {
+  resolvePaletteVars,
+  resolvePaletteVarsSx,
+} from '@aglyn/aglyn/app-utils/palette-sx'

@@ -112,6 +112,19 @@ function makeCollectionRef(path: string): any {
 }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  /*
+   * The real resolution's shape: an org that declared no pooling resolves
+   * every site to a group of ONE. Faked rather than imported because this
+   * file mocks the whole module — but faked to the NARROW answer, which is
+   * the direction a wrong group may fail in.
+   */
+  consentGroupForSite: async (hostId: string) => ({
+    hostId,
+    groupId: hostId,
+    name: null,
+    hostIds: [hostId],
+    declared: false,
+  }),
   firebaseAdmin: {
     app: () => ({
       firestore: () => ({
@@ -140,7 +153,12 @@ afterAll(() => {
 // ---------------------------------------------------------------------------
 
 const HOST_ID = 'host-1'
-const SESSION_ID = 'cs_test_subscription_abc123'
+// A LIVE session id. This constant was `cs_test_…`, so every test
+// in this file was exercising a rehearsal — and once test-mode sales stopped
+// being reported into the merchant's analytics, the whole suite described a
+// path no real shopper takes. A fixture whose id says "this never happened" is
+// the wrong control for an endpoint about real purchases.
+const SESSION_ID = 'cs_live_subscription_abc123'
 const OPENING_INVOICE_ID = 'in_opening_1'
 const RENEWAL_INVOICE_ID = 'in_renewal_2'
 
@@ -500,5 +518,96 @@ describe('the id is shape-checked before it reaches Firestore', () => {
   it('requires both parameters', async () => {
     expect((await callHandler({ hostId: HOST_ID })).status).toBe(400)
     expect((await callHandler({ sessionId: SESSION_ID })).status).toBe(400)
+  })
+})
+
+/**
+ * A REHEARSAL MUST NOT REACH THE MERCHANT'S OWN ANALYTICS.
+ *
+ * This endpoint hands the browser a `purchase` payload that
+ * `use-storefront-purchase-event.ts` pushes through the MERCHANT's `gtag` into
+ * the MERCHANT's GA4 property. A smoke-test checkout therefore writes a fake
+ * sale into a real merchant's funnel — the same pollution as the revenue
+ * cards, except it lands somewhere Aglyn does not control and cannot correct.
+ *
+ * Not a summing surface, so the question is whether the event fires AT ALL,
+ * and that is what these assert: a `409` is terminal for the client
+ * (`use-storefront-purchase-event` retries only a 404), so no event is sent
+ * and no poll continues.
+ *
+ * Every case has a LIVE counterpart. With only a test-mode fixture, a change
+ * that suppressed every purchase would look exactly like one that worked —
+ * and suppressing a real sale corrupts a merchant's funnel in the direction
+ * they can never spot.
+ */
+describe('a test-mode sale reports no purchase', () => {
+  const TEST_SESSION = 'cs_test_smoke_abc123'
+
+  const paidOrder = {
+    status: 'paid',
+    lineItems: [
+      { productId: 'prod-mug', name: 'Mug', quantity: 1, unitAmountCents: 1800 },
+    ],
+    totals: { totalCents: 1800, taxCents: 0 },
+  }
+
+  it('refuses a test-mode session outright', async () => {
+    docs.set(`hosts/${HOST_ID}/orders/${TEST_SESSION}`, paidOrder)
+
+    const result = await callHandler({
+      hostId: HOST_ID,
+      sessionId: TEST_SESSION,
+    })
+
+    expect(result.status).toBe(409)
+    expect(result.body.reason).toBe('test-mode')
+  })
+
+  it('CONTROL: the identical order on a live session still reports', async () => {
+    // Only the session id differs. This is what separates "suppresses
+    // rehearsals" from "suppresses everything".
+    docs.set(`hosts/${HOST_ID}/orders/${SESSION_ID}`, paidOrder)
+
+    const result = await callHandler({ hostId: HOST_ID, sessionId: SESSION_ID })
+
+    expect(result.status).toBe(200)
+    expect(result.body.totalCents).toBe(1800)
+  })
+
+  it('refuses an order the webhook RECORDED as test mode', async () => {
+    // The stronger signal: a live-looking id on an order stamped
+    // `livemode: false`.
+    docs.set(`hosts/${HOST_ID}/orders/${SESSION_ID}`, {
+      ...paidOrder,
+      livemode: false,
+    })
+
+    const result = await callHandler({ hostId: HOST_ID, sessionId: SESSION_ID })
+
+    expect(result.status).toBe(409)
+    expect(result.body.reason).toBe('test-mode')
+  })
+
+  it('CONTROL: a recorded livemode:true still reports', async () => {
+    docs.set(`hosts/${HOST_ID}/orders/${SESSION_ID}`, {
+      ...paidOrder,
+      livemode: true,
+    })
+
+    const result = await callHandler({ hostId: HOST_ID, sessionId: SESSION_ID })
+
+    expect(result.status).toBe(200)
+    expect(result.body.totalCents).toBe(1800)
+  })
+
+  it('CONTROL: an order with no livemode field at all still reports', async () => {
+    // Every order written before the webhook stamped the fact. An absent
+    // signal fires: erasing a real sale from a merchant's funnel is the error
+    // nobody can detect.
+    docs.set(`hosts/${HOST_ID}/orders/${SESSION_ID}`, paidOrder)
+
+    const result = await callHandler({ hostId: HOST_ID, sessionId: SESSION_ID })
+
+    expect(result.status).toBe(200)
   })
 })

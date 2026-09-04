@@ -156,7 +156,9 @@ beforeEach(() => {
         ? { id: 'acct_new' }
         : target.includes('/account_links')
           ? { url: 'https://connect.stripe.com/setup/x' }
-          : { id: 'acct_new', ...accountState }
+          : target.includes('/login_links')
+            ? { url: 'https://connect.stripe.com/express/dash/y' }
+            : { id: 'acct_new', ...accountState }
       return { ok: true, json: async () => payload }
     },
   ) as unknown as typeof fetch
@@ -282,5 +284,102 @@ describe('Storefront Connect onboarding hardening (AGL-1994)', () => {
     await connectHandler(makeReq(), res)
     expect(res.statusCode).toBe(403)
     expect(creationCall()).toBeUndefined()
+  })
+})
+
+/**
+ * A CONNECTED MERCHANT STILL NEEDS A DOOR INTO STRIPE.
+ *
+ * The route returned the moment `charges_enabled` was true, with a status and
+ * no link of any kind, and the console card read `chargesEnabled` before it
+ * ever looked for a url. So the state that most needs Stripe — charges on,
+ * payouts NOT released, funds piling up in an account that cannot pay them out
+ * — drove a button labelled "Finish payout setup in Stripe" that went nowhere.
+ * An Express account has no password and no direct login, so a link minted
+ * here is the merchant's only way in.
+ *
+ * Asserted on the CALL and the link it returns, never on anything rendered.
+ */
+describe('a charges-enabled merchant gets a link', () => {
+  beforeEach(() => {
+    state.profile = { stripeAccountId: 'acct_new' }
+  })
+
+  it('mints a remediation link when payouts are not released', async () => {
+    accountState = { charges_enabled: true, payouts_enabled: false }
+    const res = makeRes()
+
+    await connectHandler(makeReq(), res)
+
+    expect(res.statusCode).toBe(200)
+    expect(res.body).toMatchObject({
+      chargesEnabled: true,
+      payoutsEnabled: false,
+      url: 'https://connect.stripe.com/setup/x',
+    })
+    // The remediation flow, not the dashboard: an account with outstanding
+    // requirements needs onboarding, and Stripe says so.
+    expect(
+      stripeCalls.some(
+        (call) =>
+          call.url.includes('/account_links') &&
+          call.params.get('type') === 'account_onboarding',
+      ),
+    ).toBe(true)
+  })
+
+  it('mints an Express dashboard link when payouts are flowing', async () => {
+    // The other half of the gap: Aglyn records no balance, no payout schedule
+    // and handles no `payout.failed`, so this link is the only way a merchant
+    // can see where their money is.
+    accountState = { charges_enabled: true, payouts_enabled: true }
+    const res = makeRes()
+
+    await connectHandler(makeReq(), res)
+
+    expect(res.statusCode).toBe(200)
+    expect(res.body).toMatchObject({
+      chargesEnabled: true,
+      payoutsEnabled: true,
+      dashboardUrl: 'https://connect.stripe.com/express/dash/y',
+    })
+    expect(
+      stripeCalls.some((call) => call.url.includes('/login_links')),
+    ).toBe(true)
+  })
+
+  it('CONTROL: a mid-onboarding merchant is unaffected', async () => {
+    // The pre-existing path must keep answering exactly as it did — the change
+    // is additive, and a suite that only pinned the new arms could not say so.
+    accountState = { charges_enabled: false, payouts_enabled: false }
+    const res = makeRes()
+
+    await connectHandler(makeReq(), res)
+
+    expect(res.body).toMatchObject({
+      chargesEnabled: false,
+      url: 'https://connect.stripe.com/setup/x',
+    })
+  })
+
+  it('still reports status when the dashboard link cannot be minted', async () => {
+    // A convenience link must never turn a working status check into an error:
+    // the merchant is told payouts are on, just without the shortcut.
+    accountState = { charges_enabled: true, payouts_enabled: true }
+    const realFetch = global.fetch
+    global.fetch = jest.fn(async (url: unknown, init?: any) => {
+      const target = String(url)
+      if (target.includes('/login_links')) {
+        return { ok: false, json: async () => ({ error: { message: 'no' } }) }
+      }
+      return (realFetch as any)(url, init)
+    }) as unknown as typeof fetch
+    const res = makeRes()
+
+    await connectHandler(makeReq(), res)
+
+    expect(res.statusCode).toBe(200)
+    expect(res.body).toMatchObject({ chargesEnabled: true, payoutsEnabled: true })
+    expect((res.body as { dashboardUrl?: string }).dashboardUrl).toBeUndefined()
   })
 })

@@ -98,13 +98,52 @@ its own beyond AGL-2089.
 
 ### 2 — Promote, as usual
 
-Gate the batch with [`tools/gate.sh`](#the-gate) (below), open the `main` →
-`production` PR, real merge commit, never squash, no intermediate branches.
-Then verify the deploy is live and serving that commit:
+Open the `main` → `production` PR, real merge commit, never squash, no
+intermediate branches. Then verify the deploy is live and serving that commit:
 
 ```bash
 node tools/deploy/verify-production-aliases.mjs
 ```
+
+**`production` is branch-protected (AGL-1777).** A direct push is rejected: the
+promotion is a PR or it does not happen, and these four checks must be green
+before it can merge.
+
+| required check | comes from |
+|---|---|
+| `ci` | `nx-ci.yml` — typecheck, lint, test, build, the affected-scoped guards |
+| `guards` | `tools-guards.yml` — the whole-repo guard sweep |
+| `*.emulator.spec.ts` | `emulator-guards.yml` |
+| `Firestore + RTDB rules matrix` | `emulator-guards.yml` |
+
+Force-push and deletion are blocked on `main` and `production` both. `main` is
+deliberately **not** PR-gated — many agents land on it continuously and
+requiring a PR there would stop the work rather than protect it.
+
+Three settings are deliberate and worth knowing before you tighten them:
+
+- **`ci` is the only nx-ci check required**, not the individual jobs. A matrix
+  publishes one check name per leg (`test (1)` … `test (8)`), so requiring
+  those directly would need re-configuring protection on every shard-count
+  change — and a required check that stops reporting leaves the PR pending
+  **forever**. `ci` is a stable name over a shape that is free to move.
+- **`selfhost-images` is NOT required**, because its `pull_request` trigger is
+  path-filtered. On a PR touching none of those paths it never reports, and a
+  required check that never reports is the same permanent-pending trap.
+- **`enforce_admins` is off and `required_approving_review_count` is 0.**
+  Requiring an approval would block a solo operator outright — GitHub will not
+  let you approve your own PR — and enforcing admins with no second admin makes
+  a lockout unrecoverable. The rule still stops every accidental and automated
+  direct push.
+
+#### Is `tools/gate.sh` still required?
+
+**No — CI now runs the same things**, and since AGL-2505 it does so in about
+nine minutes. The gate remains the right pre-flight when you want the verdict
+before pushing, or when you are offline, but the promotion no longer waits on
+it. The one difference is scope: the gate runs `--all`, CI runs
+`nx affected` — and on a promotion PR the affected base **is** `production`, so
+the range is the whole release delta either way.
 
 ### 3 — Tag the commit that is actually deployed
 
@@ -127,6 +166,61 @@ of the newest existing tag, and `CHANGELOG.md` there documents it. The second
 guard catches the commonest real mistake — promoting a batch that did not
 include the `chore(release)` commit.
 
+### 4 — Deploy the security rules the batch contains
+
+Rules do **not** ride the merge. They deploy from a checkout pinned to the
+promoted SHA, by hand, with `tools/scripts/deploy-*-rules.mjs` — so a merged PR
+touching `cloud/firebase-*.rules` is not evidence the ruleset shipped.
+
+```bash
+npm run check:rules-drift -- --baseline=origin/production
+```
+
+Run it **before** promoting to see what is owed, and again after deploying to
+confirm it converged. `PENDING DEPLOY` is the ledger; it is information, not a
+failure, until you have merged the batch and not deployed.
+
+### 5 — Deploy the Cloud Functions the batch contains
+
+`cloud/functions` does not ride the merge either. The promotion deploys the
+Next.js apps on Vercel; the scheduled functions are a standalone package that
+no workflow deploys, so a merged PR touching `cloud/functions/src/index.ts` is
+not evidence that anything is scheduled.
+
+```bash
+npm --prefix cloud/functions run deploy   # firebase deploy --only functions
+```
+
+**This step has a deadline the rules step does not.** `SCHEDULED_JOBS` in
+`libs/aglyn/src/lib/app-utils/health-report.ts` is the inventory
+`/api/health/crons` judges against, and production begins judging a new
+`runner: 'cloud-scheduler'` row the moment the promotion serves it — while the
+Cloud Scheduler job that drives it exists only after the deploy above. The
+watch floor in `readWatchStart` is a single stored document, created once, so
+it grants a bootstrap window to the jobs present when the watch began and none
+at all to a row added later: the new job is judged from its first fire time.
+
+A batch that adds a scheduled job and skips this step therefore ships a job
+that does not run, and says so within the job's grace — `/api/health/crons`
+returns 503, the `Scheduled jobs` monitor goes red, and the card of the same
+name on `docs.aglyn.com/status` goes degraded in front of customers. The
+endpoint is working correctly when that happens; the scheduler is missing.
+
+Verify against the two things that can disagree — what is deployed, and what
+production thinks:
+
+```bash
+gcloud scheduler jobs list --location=us-central1 --project=aglyn-main
+curl -s https://app.aglyn.com/api/health/crons   # 200 ok, or 503 naming the job
+```
+
+`/api/health*` is exempt from the bot challenge on both Vercel projects, so
+this one needs no `x-aglyn-probe` header; a page route would answer `429`.
+Every `cloud-scheduler` row is either an export in `cloud/functions/src/index.ts`
+or an entry in `CONSOLE_FAST_CRON_ROUTES`, and `scheduled-crons-wiring.spec.ts`
+proves that mapping in both directions — but it proves it about the **source**,
+which is the half a stale deploy does not change.
+
 ## The gate
 
 ```bash
@@ -136,6 +230,12 @@ tools/gate.sh --phases build       # one phase, same isolation
 tools/gate.sh --keep               # keep the worktree for triage
 tools/gate.sh --no-install         # refuse on lockfile drift, never install
 ```
+
+Since AGL-2505 this is a **pre-flight, not a gate of record** — NX CI runs the
+same phases on the promotion PR in about nine minutes, and those are the checks
+`production` actually requires. Reach for the gate when you want a verdict
+before pushing, when you are offline, or when you need the isolation described
+below to reproduce something CI saw.
 
 It provisions a detached worktree at `/private/tmp/aglyn-gate/<stamp>/wt`, runs
 **typecheck → lint → guards → test → production build**, and prints one exit

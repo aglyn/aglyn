@@ -210,21 +210,20 @@ describe('orgMonthlyCogsUsd', () => {
   })
 
   /**
-   * Email is RECORDED, NOT PRICED (AGL-1134, and still true after AGL-1438
-   * made the counter complete).
+   * Email SENDS are priced. The three figures beside them are not.
    *
-   * AGL-1438 multiplied the recorded email figure by however much
-   * transactional volume an org sends — every receipt, invite, booking
-   * reminder and password reset now lands on the same rollup document. If any
-   * of that reached the cost model, a change whose whole point was to write a
-   * number down would silently re-rate every discount in the staff console on
-   * the day it shipped. There is no per-email rate to price it with, and
-   * inventing one is a decision with an invoice month behind it.
+   * The rollup document carries five email-ish and run-ish fields and only
+   * one of them is a cost: `emailSends` is every message a provider charged
+   * for, so it enters the model at `perEmailSend`. `emailSendsOverage` is a
+   * SUBSET of that same volume — pricing it too would bill the excess twice
+   * — and `campaignEmailSends` is a subset again. `workflowRuns` and
+   * `actionRuns` have no rate at all.
    *
-   * So: a rollup carrying enormous email figures must produce the SAME verdict
-   * as one carrying none, to the cent.
+   * The distinction is the whole test. A model that priced "anything that
+   * looks like email" would double-count by however much an org exceeded its
+   * band, and a model that priced none of it reports a busy sender as free.
    */
-  it('prices no email field, however large (AGL-1438)', () => {
+  it('prices emailSends, and nothing else on the email axis', () => {
     const priced = {
       storageGb: 3,
       pageViews: 12_000,
@@ -237,41 +236,68 @@ describe('orgMonthlyCogsUsd', () => {
     const withEmail = orgMonthlyCogsUsd(
       {
         ...priced,
-        emailSends: 5_000_000,
-        emailSendsOverage: 4_995_000,
+        emailSends: 100_000,
+        emailSendsOverage: 95_000,
         campaignEmailSends: 5_000,
         workflowRuns: 900_000,
         actionRuns: 900_000,
       } as never,
       2,
     )
-    expect(withEmail.measuredUsd).toBe(withoutEmail.measuredUsd)
-    expect(withEmail.cogsUsd).toBe(withoutEmail.cogsUsd)
-    expect(withEmail.basis).toBe(withoutEmail.basis)
-    expect(withEmail.breakdown).toEqual(withoutEmail.breakdown)
-    // And the rate table has nothing to price them WITH. Asserted separately
-    // because adding a rate is what would make the equality above start
-    // failing — this names the cause rather than leaving it to be diagnosed.
+    // 100,000 x $0.0009 = $90.00, and not a cent more from the four fields
+    // beside it.
+    expect(withEmail.measuredUsd - withoutEmail.measuredUsd).toBeCloseTo(90, 6)
+    expect(withEmail.breakdown.emailSends).toBeCloseTo(90, 6)
+    expect(ORG_COGS_UNIT_RATES_USD.perEmailSend).toBe(0.0009)
+    // Every OTHER breakdown line is untouched — the new term did not land in
+    // one of the six that were already there.
+    for (const key of Object.keys(withoutEmail.breakdown)) {
+      if (key === 'emailSends') continue
+      expect(`${key}=${withEmail.breakdown[key]}`).toBe(
+        `${key}=${withoutEmail.breakdown[key]}`,
+      )
+    }
+    // The rate table prices email ONCE. A `perEmailSendOverage` or a
+    // per-campaign rate appearing here is the double-count.
     expect(
       Object.keys(ORG_COGS_UNIT_RATES_USD).filter((rate) =>
         /email|campaign|workflow|action/i.test(rate),
       ),
-    ).toEqual([])
+    ).toEqual(['perEmailSend'])
+  })
+
+  /**
+   * NOT vacuous: with the rate at zero the assertion above would read the
+   * same as "email is not priced", which is the state this replaced.
+   */
+  it('the email term really moves the total', () => {
+    const base = orgMonthlyCogsUsd({ emailSends: 0 } as never, 0)
+    const busy = orgMonthlyCogsUsd({ emailSends: 1_000_000 } as never, 0)
+    expect(base.measuredUsd).toBe(0)
+    expect(busy.measuredUsd).toBeCloseTo(900, 6)
+    // …and it clears the per-site floor on its own, which no other meter has
+    // ever done. That is why it is worth pricing at all.
+    expect(busy.basis).toBe('measured')
   })
 
   /**
    * The projection is the other half: `orgCogsInputFrom` decides which fields
-   * ever reach the model, and it must not start forwarding email because the
-   * rollup grew a field with a plausible-looking name.
+   * ever reach the model. It must forward `emailSends` — a projection that
+   * drops a priced field returns a SMALLER cost, and a smaller cost is the
+   * direction that approves a discount — and it must not start forwarding the
+   * overage or the campaign subset because they have plausible-looking names.
    */
-  it('does not project any email field into the cost model (AGL-1438)', () => {
+  it('projects emailSends alone off the rollup document', () => {
     const input = orgCogsInputFrom({
       storageGb: 3,
-      emailSends: 5_000_000,
-      emailSendsOverage: 4_995_000,
+      emailSends: 100_000,
+      emailSendsOverage: 95_000,
       campaignEmailSends: 5_000,
     })
-    expect(Object.keys(input).some((key) => /email/i.test(key))).toBe(false)
+    expect(input.emailSends).toBe(100_000)
+    expect(Object.keys(input).filter((key) => /email/i.test(key))).toEqual([
+      'emailSends',
+    ])
     expect(input.storageGb).toBe(3)
   })
 })

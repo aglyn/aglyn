@@ -14,314 +14,57 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-'use client'
 
-import { mdiStorefrontOutline } from '@aglyn/shared-data-mdi'
-import { AppLink, Container } from '@aglyn/shared-ui-jsx'
-import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
-import { Alert, Button, MenuItem, Stack, TextField, Typography } from '@mui/material'
-import { useMemo, useState } from 'react'
-import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import FeatureGate from '../../../../components/feature-gate.component'
-import HubTabs from '../../../../components/hub-tabs.component'
-import DashboardLayout from '../../../../components/layouts/dashboard.layout'
-import OrgLicencesPanel from '../../../../components/org-licences-panel.component'
-import OrgPublishPanel from '../../../../components/org-publish-panel.component'
-import OrgSellerPanel from '../../../../components/org-seller-panel.component'
-import PluginWidgetSlot from '../../../../components/plugin-widget-slot.component'
-import { buildRoute, Route } from '../../../../constants/route-links'
-import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
-import { useOrgHosts } from '../../../../hooks/use-org-hosts'
-import { useOrgScope, useOrgSlug } from '../../../../hooks/use-org-scope'
-import useOrgPermissions from '../../../../hooks/use-org-permissions'
+import { redirect } from 'next/navigation'
+import {
+  DEFAULT_MARKETPLACE_SECTION_ID,
+  MARKETPLACE_RETURN_SECTIONS,
+  marketplaceSections,
+} from '../../../../constants/marketplace-sections'
+import {
+  sectionIndexTarget,
+  type SearchParams,
+} from '../../../../utils/section-index-redirect'
 
 /**
- * Org marketplace (AGL-772): the single org-scope place to browse and
- * install marketplace items, replacing the per-site marketplace tab. The app
- * owns only the chrome — the grid is the marketplace plugin's `orgMarketplace`
- * widget (the app never imports the plugin), rendered with `orgScoped` so
- * listing links resolve to this route.
+ * `/marketplace` is the section index and renders nothing of its own
+ * (AGL-2501).
  *
- * Installs still act through a site (pins are validated against host
- * membership), so an "Installing to" selector names the acting site until
- * All-sites / selected-sites targeting lands (AGL-773).
+ * A SERVER component. This was a client page that returned `null`, waited for
+ * hydration, resolved the org slug from a hook and then client-navigated, and
+ * every step of that was a blank main area in front of the reader. The slug is
+ * in `params`, so the redirect is issued before any JavaScript ships.
+ *
+ * No `?tab=` compatibility map, for the reason the settings sections have
+ * none: nothing shipped holds a `?tab=` link into this hub, and a map kept
+ * "just in case" is a second set of names for the same eight pages.
+ *
+ * `?connect=` and `?purchase=` are the opposite case and ARE honored. Stripe
+ * bakes them into onboarding links and checkout sessions, so they are held
+ * externally by a third party rather than by us — see
+ * `MARKETPLACE_RETURN_SECTIONS`. Each is sent to the section it is about
+ * rather than to the default: a seller returning from Connect onboarding wants
+ * Payouts, and a buyer returning from checkout wants what they now own. The
+ * whole query is carried across either way, so a marker nothing routes on
+ * still survives the hop.
  */
-const OrgMarketplace: NextPageWithLayout<Record<string, never>> = () => {
-  const orgSlug = useOrgSlug()
-  const { currentOrg, loading } = useOrgScope()
-  const { data: user } = useUser()
-  const firestore = useFirestore()
-  const { permissions, loaded: permissionsLoaded } = useOrgPermissions()
-
-  const { hosts } = useOrgHosts(
-    firestore,
-    user?.uid,
-    loading ? undefined : (currentOrg?.$id ?? null),
+export default async function OrgMarketplaceIndex({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ orgSlug: string }>
+  searchParams: Promise<SearchParams>
+}): Promise<never> {
+  const { orgSlug } = await params
+  const query = await searchParams
+  const sections = marketplaceSections(orgSlug)
+  const returning = Object.keys(MARKETPLACE_RETURN_SECTIONS).find(
+    (key) => query[key] !== undefined,
   )
-  const typedHosts = (hosts as Array<{
-    $id: string
-    subdomain?: string
-    displayName?: string
-  }>) ?? []
-  // Key the memo on the hosts' content, not the array's identity: useOrgHosts
-  // hands back a fresh array on each snapshot, and passing a new-but-equal
-  // `hosts` prop into OrgPublishPanel on every parent render is exactly the
-  // churn AGL-785 fingered. A stable string key keeps hostList (and that prop)
-  // referentially stable until a host is actually added, removed, or renamed.
-  const hostsKey = typedHosts
-    .map((host) => `${host.$id}:${host.displayName || host.subdomain || ''}`)
-    .join('|')
-  const hostList = useMemo(
-    () =>
-      typedHosts.map((host) => ({
-        id: host.$id,
-        label: host.displayName || host.subdomain || host.$id,
-      })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [hostsKey],
-  )
-  const [selectedHost, setSelectedHost] = useState('')
-  const actingHost = selectedHost || hostList[0]?.id || ''
-
-  return (
-    <DashboardLayout
-      breadcrumbItems={[
-        {
-          children: 'Marketplace',
-          href: buildRoute(Route.ORG_MARKETPLACE, { orgSlug }),
-        },
-      ]}
-      help={{ topic: 'plugins', anchor: '#install--upgrade' }}
-      header={{
-        children: 'Marketplace',
-        icon: { path: mdiStorefrontOutline.path },
-      }}
-    >
-      <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-        {/*
-          The gate the flag always assumed was here (AGL-2019). `release_marketplace`
-          feeds the plugin LOADER as well as nav visibility, so switching it off
-          subtracted the marketplace plugin from the console and both API
-          dispatchers — while this page went on rendering in full, its widgets
-          silently empty, reachable by deep link and by every bookmark. Turning
-          the feature off was therefore its own broken state, which made "just
-          turn the flag off" useless advice for a self-hoster who does not want
-          a marketplace. Now the flag genuinely gates the page, and staff still
-          get the preview banner FeatureGate renders for them.
-        */}
-        <FeatureGate flag="release_marketplace">
-        {!loading && !currentOrg ? (
-          <Alert severity="info">
-            {'Create your first site to start an organization, then browse ' +
-              'and install marketplace items here.'}
-          </Alert>
-        ) : !actingHost ? (
-          <Alert severity="info">
-            {'Add a site to your organization to install marketplace ' +
-              'items — installs apply to a site (or every site).'}
-          </Alert>
-        ) : (
-          <Stack spacing={2}>
-            {hostList.length > 1 ? (
-              <Stack
-                direction="row"
-                spacing={1}
-                sx={{ alignItems: 'center', flexWrap: 'wrap' }}
-              >
-                <Typography variant="body2" color="text.secondary">
-                  {'Acting site'}
-                </Typography>
-                <TextField
-                  select
-                  size="small"
-                  label="Site"
-                  value={actingHost}
-                  onChange={(event) => setSelectedHost(event.target.value)}
-                  sx={{ minWidth: 200 }}
-                >
-                  {hostList.map((host) => (
-                    <MenuItem key={host.id} value={host.id}>
-                      {host.label}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              </Stack>
-            ) : null}
-            {/* Browse + manage in one place (AGL-774). Both are the
-                marketplace plugin's widgets (the app stays plugin-free) and
-                render nothing if the marketplace plugin is disabled. */}
-            <HubTabs
-              // Lazy panels (AGL-785): Browse, Installed and Publish each
-              // run their own Firestore subscriptions; mounting all three at
-              // once on load made their settling re-renders collide and trip
-              // React's update-depth limit. Mount only the active tab, then
-              // keep it.
-              lazy
-              tabs={[
-                {
-                  id: 'browse',
-                  // "Browse All" (AGL-1024): the same grid also renders
-                  // publisher-filtered views, so the unqualified verb was
-                  // ambiguous about which of the two you were getting.
-                  label: 'Browse All',
-                  content: (
-                    <PluginWidgetSlot
-                      slot="orgMarketplace"
-                      hostId={actingHost}
-                      permissions={permissions}
-                      orgScoped
-                      // The URL already knows the org (AGL-867): pass it so
-                      // listing links resolve synchronously instead of via an
-                      // async hostIndex→org lookup that can come back empty
-                      // and leave the detail page unreachable from browse.
-                      orgSlug={orgSlug}
-                    />
-                  ),
-                },
-                {
-                  id: 'installed',
-                  label: 'Installed',
-                  content: (
-                    <Stack spacing={2}>
-                      {/* A convenience, not the inventory (AGL-1011).
-                          Administering what you already run belongs in the
-                          Plugins section; this stays so that uninstalling
-                          something you just installed does not send you
-                          somewhere else, and every row links through. The
-                          first-party switchboard and the per-plugin config
-                          forms moved out entirely — they were never
-                          marketplace concerns. */}
-                      <Alert
-                        severity="info"
-                        action={
-                          <AppLink
-                            href={buildRoute(Route.ORG_PLUGINS, { orgSlug })}
-                          >
-                            <Button
-                              size="small"
-                              color="inherit"
-                              component="span"
-                            >
-                              {'Open Plugins'}
-                            </Button>
-                          </AppLink>
-                        }
-                      >
-                        {'A quick list of what this organization installed ' +
-                          'from the marketplace. Settings, per-site scope ' +
-                          'and built-in plugins live in Plugins.'}
-                      </Alert>
-                      <PluginWidgetSlot
-                        slot="orgAddons"
-                        hostId={actingHost}
-                        // Lets each row link to its installation page
-                        // (AGL-1007).
-                        orgSlug={orgSlug}
-                      />
-                    </Stack>
-                  ),
-                },
-                {
-                  // WHAT THIS WORKSPACE OWNS (AGL-2331). A purchase licenses
-                  // an organization, so "do we already own this, or was that
-                  // the other client?" became a real question the console
-                  // could not answer anywhere. Beside Installed rather than
-                  // inside it, because a licence and an install are different
-                  // things now: an org can hold a licence nobody has installed
-                  // yet, and a member can install something they never bought.
-                  //
-                  // Buyer-side, so it is NOT gated on `publishToMarketplace`
-                  // like the seller tabs below — the person who needs it is a
-                  // buyer, and often not a publisher at all.
-                  id: 'licences',
-                  label: 'Licences',
-                  content: (
-                    <OrgLicencesPanel
-                      orgId={currentOrg?.$id ?? null}
-                      orgSlug={orgSlug}
-                    />
-                  ),
-                },
-                // Seller area (AGL-776/798/801): one tab each for the
-                // publish action and the seller sections — profile,
-                // listings, payouts and sales — folded in from the retired
-                // Marketplace page. Gated on the publish permission; the server
-                // enforces it too.
-                // `permissionsLoaded &&` is load-bearing, not defensive. This
-                // file read only `{ permissions }`, and that map is
-                // `allTrueWhileLoading()` — an ADMIN's — until the member read
-                // lands, so every member got the seller area for the length of
-                // that read. Payouts and Sales are the sharp ones: they mount
-                // `OrgSellerPanel`, which fetches and renders the org's revenue.
-                ...(permissionsLoaded &&
-                permissions.publishToMarketplace &&
-                currentOrg?.$id
-                  ? [
-                      {
-                        id: 'publish',
-                        // Covers uploading a bundle as well as publishing
-                        // an existing artifact (AGL-1024).
-                        label: 'Upload / Publish',
-                        content: (
-                          <OrgPublishPanel
-                            orgId={currentOrg.$id}
-                            hosts={hostList}
-                          />
-                        ),
-                      },
-                      {
-                        id: 'profile',
-                        // Whose profile (AGL-1024) — the console also has
-                        // org and user profiles.
-                        label: 'Publisher Profile',
-                        content: (
-                          <OrgSellerPanel
-                            orgId={currentOrg.$id}
-                            section="profile"
-                          />
-                        ),
-                      },
-                      {
-                        id: 'listings',
-                        label: 'Listings',
-                        content: (
-                          <OrgSellerPanel
-                            orgId={currentOrg.$id}
-                            section="listings"
-                          />
-                        ),
-                      },
-                      {
-                        id: 'payouts',
-                        label: 'Payouts',
-                        content: (
-                          <OrgSellerPanel
-                            orgId={currentOrg.$id}
-                            section="payouts"
-                          />
-                        ),
-                      },
-                      {
-                        id: 'sales',
-                        label: 'Sales',
-                        content: (
-                          <OrgSellerPanel
-                            orgId={currentOrg.$id}
-                            section="sales"
-                          />
-                        ),
-                      },
-                    ]
-                  : []),
-              ]}
-            />
-          </Stack>
-        )}
-        </FeatureGate>
-      </Container>
-    </DashboardLayout>
-  )
+  const targetId = returning
+    ? MARKETPLACE_RETURN_SECTIONS[returning]
+    : DEFAULT_MARKETPLACE_SECTION_ID
+  const target =
+    sections.find((section) => section.id === targetId) ?? sections[0]
+  redirect(sectionIndexTarget(target.href, query))
 }
-OrgMarketplace.displayName = 'Page:OrgMarketplace'
-
-export default OrgMarketplace

@@ -64,7 +64,7 @@ beforeEach(() => {
   document.elementFromPoint = () => null
 })
 
-describe('inspectAttributionElement (AGL-1477)', () => {
+describe('inspectAttributionElement', () => {
   it('passes an element that is really on the page', () => {
     const element = makeBadge()
     document.elementFromPoint = () => element

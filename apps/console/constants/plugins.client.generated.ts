@@ -18,6 +18,11 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-mui'),
   },
   {
+    id: 'forms',
+    register: {"site":"registerFormsPlugin","console":"registerFormsConsole"},
+    load: () => import('@aglyn/plugins-forms'),
+  },
+  {
     id: 'bookings',
     apiPrefixes: ["bookings"],
     register: {"site":"registerBookingsPlugin","console":"registerBookingsConsole"},
@@ -59,6 +64,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
   },
   {
     id: 'inbox',
+    apiPrefixes: ["inbox"],
     register: {"console":"registerInboxConsole"},
     load: () => import('@aglyn/plugins-inbox'),
   },

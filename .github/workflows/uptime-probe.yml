@@ -64,7 +64,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
 
       # No install step on purpose: the probe uses only built-in fetch, so
       # this job cannot be broken by a dependency, a lockfile, or a registry

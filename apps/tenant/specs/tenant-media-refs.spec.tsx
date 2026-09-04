@@ -33,6 +33,17 @@ import type { ReactElement } from 'react'
 import CatchAllPage from '../app/[host]/[[...slug]]/catch-all-client'
 
 /**
+ * The plugin gate loads nothing. Both `<img>` sinks below are plain JSX in
+ * `catch-all-client.tsx` and every render here passes `nodes` null or `{}`,
+ * so no canvas node — and therefore no plugin-registered component — can
+ * contribute a `src`. See the stub for the measurement and for why the
+ * suspension these specs flush is still the real one.
+ */
+jest.mock('../utils/site-plugin-loader', () =>
+  require('./site-plugin-loader-empty-manifest'),
+)
+
+/**
  * Renders and lets the page settle.
  *
  * `CatchAllPage` opens with `use(sitePluginLoader.ensure(…))`, so the first

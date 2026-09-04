@@ -24,11 +24,15 @@
  */
 export * from './binding-token-catalog'
 export * from './binding-tokens'
+export * from './breadcrumb-json-ld'
 export * from './collection-delete'
 export * from './collection-entries'
 export * from './collection-kind'
 export * from './collection-slug'
 export * from './content-authors'
+export * from './content-schema-type'
+export * from './content-author-profile'
+export * from './url-slug'
 export * from './child-contract'
 export * from './child-contract-compose'
 export * from './console-routes'
@@ -37,7 +41,35 @@ export * from './console-routes'
 export * from './screen-link-value'
 export * from './analytics-path-key'
 export * from './contacts'
+// The consent JOIN (`docs/specs/email-overhaul.md` §3f). Pure, and it composes
+// `contacts` for the normalizer, so it sits directly beside it. No Node
+// builtin, which is what keeps it out of the `/server`-only group `person-key`
+// belongs to.
+export * from './consent-groups'
+export * from './marketing-consent'
+// The ENROLLMENT-time half of the same question, beside its reader for the
+// same reason: `marketing-consent` decides whether a recorded basis lets us
+// mail somebody, and this decides what basis putting them on a list may
+// record. Two enrollment surfaces import it — the Inbox assignment route and
+// the Emails console's audience card — and neither could import the other.
+export * from './list-assignment-policy'
+// Reading the FILE a merchant arrives with (`docs/specs/email-competitive-gaps.md`
+// G5/P4), directly after the policy it hands its addresses to: parsing and
+// mechanical screening only, so that an import asks the enrollment question
+// through the same module the one-address add path asks it through rather
+// than answering it a second way.
+export * from './list-import'
+// The dynamic-list rule (§3b/§3c), beside it for the same reasons: pure, and
+// it composes `contacts` for the segment vocabulary rather than restating it.
+export * from './dynamic-list-rule'
+// The subscribable streams a recipient can leave one at a time
+// (`docs/specs/email-competitive-gaps.md` §1f). Pure, and read from all three
+// sides of the feature: the composer picks one, the send path signs it into
+// the unsubscribe link, and the unauthenticated preference page renders the
+// catalog. No Node builtin, so it stays out of the `/server`-only group.
+export * from './email-topics'
 export * from './compose-layout-nodes'
+export * from './document-landmark'
 export * from './functions'
 export * from './compose-reusable-components'
 export * from './compress'
@@ -57,6 +89,11 @@ export * from './onboarding-deep-link'
 // they are the same hop — the marketing CTA's query string — and both are
 // remembered on `users/{uid}` across the verification wall.
 export * from './campaign-attribution'
+// The edge between a campaign and the forms, screens and contacts a push is
+// coordinated across. Beside the attribution above because the two answer
+// opposite questions about the same word: attribution records where somebody
+// CAME from, this records what a merchant DECLARED belongs together.
+export * from './campaign-membership'
 export * from './deployment-shape'
 // Which browser origins may complete a signed direct-to-GCS upload (AGL-1452).
 // GCS matches the origin list EXACTLY, so every serving console name needs its
@@ -72,6 +109,10 @@ export * from './plan-entitlements'
 // `plan-entitlements`, which owns the predicate it keys off.
 export * from './bandwidth-cap'
 export * from './form-abuse-ceiling'
+export * from './forms'
+// What a form's DESIGN must still satisfy for its submissions to arrive.
+// After `forms`, whose field walk it reads the drawn fields with.
+export * from './form-contract'
 export * from './visitor-record-ceiling'
 export * from './health-report'
 // Did a webhook delivery actually DO anything (AGL-1954)? After
@@ -119,6 +160,7 @@ export * from './markdown-lite'
 export * from './notifications'
 export * from './definition-canvas-tree'
 export * from './ensure-canvas-root'
+export * from './repair-canvas-nodes'
 export * from './detect-template-placeholders'
 export * from './guarded-version-save'
 export * from './local-storage-budget'
@@ -149,17 +191,24 @@ export * from './author-css'
 // The isomorphic HTML rule (AGL-1901), after the CSS one it depends on.
 export * from './author-html'
 export * from './dataset-models'
+// The record-view descriptors, after the model and formatter they build on.
+export * from './dataset-record-view'
 export * from './dataset-csv'
 export * from './marketplace-merge'
 export * from './marketplace-provenance'
 export * from './marketplace-update-state'
 export * from './dataset-query'
 export * from './plugin-manifest'
+// After `plugin-manifest`, whose revocation predicates it asks the kill
+// question with, and after `media-ref`, whose grammar decides what counts as a
+// first-party image.
+export * from './email-starter-policy'
 export * from './safe-json-ld'
 export * from './request-geo'
 export * from './request-ip'
 export * from './search-indexing'
 export * from './seo-title'
+export * from './sitemap'
 export * from './visitor-consent'
 export * from './social-image'
 export * from './scope-tokens'

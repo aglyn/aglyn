@@ -18,9 +18,11 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import {
+  getMdiIconPath,
   mdiCalendarClock,
   mdiCalendarEdit,
   mdiChevronDown,
+  mdiClose,
   mdiCogOutline,
   mdiDeleteOutline,
   mdiFileDocumentMultipleOutline,
@@ -29,6 +31,8 @@ import {
   mdiPublish,
   mdiPublishOff,
 } from '@aglyn/shared-data-mdi'
+import { IconSelectControl } from '@aglyn/shared-ui-jsx-forms'
+import { IconButton } from '@mui/material'
 import {
   CardDisplay,
   Container,
@@ -62,7 +66,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { deleteDoc, doc, updateDoc } from 'firebase/firestore'
+import { deleteDoc, deleteField, doc, updateDoc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
@@ -79,6 +83,7 @@ import MediaPickerDialog from '../media/media-picker-dialog.component'
 import RowActionsMenu, {
   type RowActionsMenuItem,
 } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../../constants/docs-links'
 import { buildRoute, Route } from '../../constants/route-links'
 import CreateArtifactDrawer from '../create-artifact-drawer.component'
@@ -90,7 +95,6 @@ import {
 import {
   CONTENT_MAX_WIDTH,
   TABLE_HEAD_HEIGHT,
-  TABLE_PAGE_SIZE_DEFAULT,
   TABLE_PAGE_SIZE_OPTIONS,
   TABLE_ROWS_PER_PAGE_LABEL,
 } from '../../constants/shared'
@@ -147,7 +151,14 @@ export function CollectionEntriesPage() {
     collections,
     selected,
     entries,
+    entriesStatus,
+    entriesHasMore,
+    entryPage,
+    setEntryPage,
+    entriesPerPage,
+    setEntriesPerPage,
     authors,
+    hostDoc,
     screenOptions,
     screensById,
     isSiteAdmin,
@@ -190,30 +201,31 @@ export function CollectionEntriesPage() {
       async (event: { target: { value: string } }) => {
         const value = event.target.value
         try {
-          const idToken = await (user as any)?.getIdToken?.()
-          const response = await fetch('/api/hosts/collections', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          const response = await authorizedFetch(
+            user,
+            '/api/hosts/collections',
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                hostId,
+                action: 'templates',
+                id: collectionId,
+                // `null` is the clear — `deleteField()` does not survive
+                // JSON, and an empty string has meant cleared in older
+                // documents too.
+                data:
+                  kind === 'list'
+                    ? { listScreenId: value || null }
+                    : {
+                        entryScreenId: value || null,
+                        // Superseded AGL-105 pointer; clear it so the entry
+                        // select stays the single source of truth.
+                        templateScreenId: null,
+                      },
+              }),
             },
-            body: JSON.stringify({
-              hostId,
-              action: 'templates',
-              id: collectionId,
-              // `null` is the clear — `deleteField()` does not survive JSON,
-              // and an empty string has meant cleared in older documents too.
-              data:
-                kind === 'list'
-                  ? { listScreenId: value || null }
-                  : {
-                      entryScreenId: value || null,
-                      // Superseded AGL-105 pointer; clear it so the entry
-                      // select stays the single source of truth.
-                      templateScreenId: null,
-                    },
-            }),
-          })
+          )
           const result = await response.json().catch(() => ({}))
           if (!response.ok) {
             throw new Error(result?.error ?? 'Template assignment failed')
@@ -344,13 +356,9 @@ export function CollectionEntriesPage() {
     // feedback in this dialog. Rules deny a client create.
     let id: string
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/hosts/collections', {
+      const response = await authorizedFetch(user, '/api/hosts/collections', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(
           collectionCreateBody({ hostId, displayName, slug }),
         ),
@@ -388,15 +396,11 @@ export function CollectionEntriesPage() {
     })
     if (templateBodies.length) {
       try {
-        const idToken = await (user as any)?.getIdToken?.()
         await Promise.all(
           templateBodies.map((body) =>
-            fetch('/api/hosts/collections', {
+            authorizedFetch(user, '/api/hosts/collections', {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-              },
+              headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(body),
             }),
           ),
@@ -421,18 +425,12 @@ export function CollectionEntriesPage() {
       variant: 'success',
       persist: false,
     })
-    logActivity('Created collection', {
-      type: 'content',
-      id,
-      name: displayName,
-    })
     },
   [
     collections,
     user,
     hostId,
     enqueueSnackbar,
-    logActivity,
     claimNavigation,
     router,
     collectionHref,
@@ -479,13 +477,9 @@ export function CollectionEntriesPage() {
     if (!displayName || !slug || editorSlugOwner !== null) return
     setEditorBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/hosts/collections', {
+      const response = await authorizedFetch(user, '/api/hosts/collections', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           hostId,
           action: 'update',
@@ -523,11 +517,6 @@ export function CollectionEntriesPage() {
       variant: 'success',
       persist: false,
     })
-    logActivity('Updated collection', {
-      type: 'content',
-      id: selected.$id,
-      name: displayName,
-    })
   }, [
     editor,
     editorBusy,
@@ -536,7 +525,6 @@ export function CollectionEntriesPage() {
     user,
     hostId,
     enqueueSnackbar,
-    logActivity,
     claimNavigation,
     router,
     collectionHref,
@@ -550,42 +538,42 @@ export function CollectionEntriesPage() {
    * /{slug} routes the site publishes, which is not a content edit.
    */
   /**
-   * Entry pagination (AGL-693).
+   * Entry pagination, where the page IS the query (AGL-2501).
    *
-   * The listener already caps at 200 entries — this is about the READING, not
-   * the query: a collection with a hundred posts rendered as one uninterrupted
-   * table, so the collection settings above it and the Authors tab beside it
-   * were a scroll away from anything. Every other artifact list pages, and
-   * this is the list with the most rows on it.
+   * The window belongs to the SCOPE: the footer below and the Firestore read
+   * behind it are one control, so `page` and `pageSize` are the query's own —
+   * `usePagedCollection`, opened at `TABLE_PAGE_SIZE_DEFAULT`, the smallest
+   * option the console offers, by the rule that every paginated list defaults
+   * to its minimum. Paging a slice of an array the provider already read
+   * would leave this footer in charge of nothing: the rows past that read
+   * would still be unreachable, and every one of them still billed.
    *
-   * Starts at `TABLE_PAGE_SIZE_DEFAULT` — the smallest option the console
-   * offers, by the rule that every paginated list defaults to its minimum.
+   * A different collection is a different list, and the hook resets the page
+   * with the subject — page 3 of the last collection means nothing here.
    */
-  const [entryPage, setEntryPage] = useState(0)
-  const [entriesPerPage, setEntriesPerPage] = useState(TABLE_PAGE_SIZE_DEFAULT)
-  const pagedEntries = useMemo(
-    () =>
-      entries.slice(
-        entryPage * entriesPerPage,
-        entryPage * entriesPerPage + entriesPerPage,
-      ),
-    [entries, entryPage, entriesPerPage],
-  )
   /*
-    Deleting the last entry on the last page, or switching to a shorter
-    collection, would otherwise strand the reader past the end — an empty
-    table with no control that says so. Clamp rather than reset: staying on
-    page 3 of 4 is right; jumping home on every delete is not.
+    Deleting the last entry on the last page strands the reader past the end:
+    an empty table under a footer that says there is nothing further. Step
+    back one, and only once the read has SETTLED — an in-flight page is empty
+    too, and clamping on it would walk the reader home while their page
+    loads.
   */
   useEffect(() => {
-    const lastPage = Math.max(0, Math.ceil(entries.length / entriesPerPage) - 1)
-    if (entryPage > lastPage) setEntryPage(lastPage)
-  }, [entryPage, entries.length, entriesPerPage])
-  // A different collection is a different list; page 3 of the last one means
-  // nothing here.
-  useEffect(() => {
-    setEntryPage(0)
-  }, [selected?.$id])
+    if (
+      entryPage > 0 &&
+      entries.length === 0 &&
+      !entriesHasMore &&
+      entriesStatus === 'success'
+    ) {
+      setEntryPage(entryPage - 1)
+    }
+  }, [
+    entryPage,
+    entries.length,
+    entriesHasMore,
+    entriesStatus,
+    setEntryPage,
+  ])
 
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState('')
@@ -593,8 +581,10 @@ export function CollectionEntriesPage() {
   /**
    * The same rule the route enforces, run here for fast feedback — so the
    * dialog can NAME what still depends on the collection instead of arming a
-   * button that 409s. The server owns the truth: `entries` is capped at 200 by
-   * the listener, while the route counts them for real.
+   * button that 409s. The server owns the truth: `entries` is ONE PAGE of the
+   * collection, so this understates a long one, while the route counts them
+   * for real. It cannot understate the only thing the gate turns on — a
+   * collection with any entries at all has them on its first page.
    */
   const deleteDenial = selected
     ? Aglyn.collectionDeleteDenial({
@@ -609,16 +599,12 @@ export function CollectionEntriesPage() {
     const deletedId = selected.$id
     setDeleteBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
       // RecursiveDelete is Admin-SDK-only and the rules deny a client delete of
       // a collection doc (AGL-947), so this goes through the shared erase route
       // — never a hand-rolled loop over `entries`.
-      const response = await fetch('/api/resources/erase', {
+      const response = await authorizedFetch(user, '/api/resources/erase', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           scope: 'hosts',
           scopeId: hostId,
@@ -666,7 +652,75 @@ export function CollectionEntriesPage() {
     contentHref,
   ])
 
+  /**
+   * What KIND of article this collection publishes (AGL-2536).
+   *
+   * A plain client write, unlike `handleTemplateChange` above. That one goes
+   * through the API because the three template fields DEMOTE a screen and so
+   * move the plan's billable count (AGL-1390); this changes one string on the
+   * collection and costs nothing, so there is no accounting to defend.
+   */
+  const handleSchemaTypeChange = useCallback(
+    (collectionId: string) =>
+      async (event: { target: { value: string } }) => {
+        if (!collectionId) return
+        const schemaType = Aglyn.normalizeContentSchemaType(event.target.value)
+        try {
+          await updateDoc(
+            doc(firestore, 'hosts', hostId, 'collections', collectionId),
+            { schemaType, updatedAt: Timestamp.now() },
+          )
+        } catch (error: any) {
+          return void enqueueSnackbar(
+            error?.message ?? 'Could not set the article type',
+            { variant: 'error' },
+          )
+        }
+        enqueueSnackbar(
+          `Entries publish as ${schemaType}`,
+          { variant: 'success', persist: false },
+        )
+      },
+    [firestore, hostId, enqueueSnackbar],
+  )
+
   /* ── authors (AGL-2486) ────────────────────────────────────────────── */
+
+  /**
+   * The screen every author page renders through (AGL-2518).
+   *
+   * A plain client write, unlike the collection template pointers above,
+   * because this one carries no billing consequence to defend. Those three
+   * fields DEMOTE a screen — it stops being billable, so the write had to move
+   * server-side (AGL-1390). An author template stays a page of the site in
+   * exactly the sense a collection's LIST template does (AGL-1387): the site
+   * designed it and keeps paying for it; it simply serves at `/author/{slug}`
+   * instead of at its own slug. A pointer with nothing to excuse is an
+   * ordinary host field (AGL-1400).
+   */
+  const handleAuthorScreenChange = useCallback(
+    async (value: string) => {
+      try {
+        await updateDoc(doc(firestore, 'hosts', hostId), {
+          authorScreenId: value || deleteField(),
+          updatedAt: Timestamp.now(),
+        })
+      } catch (error: any) {
+        return void enqueueSnackbar(
+          error?.message ?? 'Could not set the author page template',
+          { variant: 'error' },
+        )
+      }
+      enqueueSnackbar(
+        value
+          ? 'Author pages render through that screen — it no longer serves ' +
+              'at its own address'
+          : 'Author pages render through the built-in themed page',
+        { variant: 'success', persist: false },
+      )
+    },
+    [firestore, hostId, enqueueSnackbar],
+  )
 
   /**
    * The author being edited, or null. `sameAs` stays a NEWLINE-SEPARATED
@@ -677,15 +731,34 @@ export function CollectionEntriesPage() {
     id: string | null
     type: string
     name: string
+    slug: string
     url: string
     image: string
     jobTitle: string
     worksFor: string
     sameAs: string
+    links: Aglyn.ContentAuthorLink[]
     bio: string
   } | null>(null)
   const [authorBusy, setAuthorBusy] = useState(false)
   const [authorPickerOpen, setAuthorPickerOpen] = useState(false)
+
+  /**
+   * The address this author's page will actually have (AGL-2518) — shown
+   * rather than described, because the field is slugified on save and a
+   * helper that only SAYS so leaves the author to discover what happened to
+   * their spaces and capitals after they publish.
+   *
+   * Falls back to the name, which is exactly what `contentAuthorSlug` does.
+   */
+  const authorSlugPreview = authorEditor
+    ? Aglyn.contentAuthorPageUrl({
+        author: {
+          slug: Aglyn.urlSlugSegment(authorEditor.slug),
+          name: authorEditor.name,
+        },
+      })
+    : ''
 
   const openAuthor = useCallback((author?: Aglyn.ContentAuthorRecord) => {
     setAuthorEditor({
@@ -700,11 +773,15 @@ export function CollectionEntriesPage() {
           : Aglyn.HostEntityType.ORGANIZATION,
       ),
       name: author?.name ?? '',
+      slug: author?.slug ?? '',
       url: author?.url ?? '',
       image: author?.image ?? '',
       jobTitle: author?.jobTitle ?? '',
       worksFor: author?.worksFor ?? '',
       sameAs: (author?.sameAs ?? []).join('\n'),
+      // Rows, not text: each carries a platform or a picked icon, so there is
+      // no line-per-URL form of them to edit (AGL-2516).
+      links: Aglyn.normalizeContentAuthorLinks(author?.links),
       bio: author?.bio ?? '',
     })
   }, [])
@@ -737,11 +814,20 @@ export function CollectionEntriesPage() {
         ? Aglyn.HostEntityType.PERSON
         : Aglyn.HostEntityType.ORGANIZATION,
       name,
+      // Slugified on the way out, because it is a PATH SEGMENT: a stored
+      // `Chris Taylor` would build `/author/Chris Taylor` while every request
+      // arrived slugified and matched nothing (AGL-2518). Blank derives it
+      // from the name.
+      slug: Aglyn.urlSlugSegment(authorEditor.slug),
       url: authorEditor.url.trim(),
       image: authorEditor.image.trim(),
       jobTitle: isPerson ? authorEditor.jobTitle.trim() : '',
       worksFor: isPerson ? authorEditor.worksFor.trim() : '',
       sameAs,
+      // Normalized on the way out as well as the way in: the editor lets a row
+      // exist while it is being filled, and a half-typed row is not something
+      // to store (AGL-2516).
+      links: Aglyn.normalizeContentAuthorLinks(authorEditor.links),
       bio: authorEditor.bio.trim(),
     }
     setAuthorBusy(true)
@@ -774,11 +860,16 @@ export function CollectionEntriesPage() {
       variant: 'success',
       persist: false,
     })
-    logActivity(authorEditor.id ? 'Updated author' : 'Created author', {
-      type: 'content',
-      id: authorEditor.id ?? name,
-      name,
-    })
+    // Updates only — the create rides /api/hosts/resources and is logged
+    // there from a verified uid (AGL-118). See the same split on the entry
+    // editor.
+    if (authorEditor.id) {
+      logActivity('Updated author', {
+        type: 'content',
+        id: authorEditor.id,
+        name,
+      })
+    }
   }, [
     authorEditor,
     authorBusy,
@@ -875,6 +966,20 @@ export function CollectionEntriesPage() {
               and the small-screen collapse. */}
           <HubTabs
             navHeader="Content"
+            /*
+             * Mount the tab being read, and not the other (AGL-2501).
+             *
+             * `HubTabs` keeps every panel mounted unless told otherwise, so an
+             * author browsing entries also subscribed the Authors list. Both
+             * panels stay mounted once visited, so switching between them is
+             * still instant — the deferral only covers the tab nobody opened.
+             *
+             * A route rather than a tab would make this structural, and this
+             * pair is the case where a tab is right: an author is managed
+             * ALONGSIDE the entries that reference it, and the collection and
+             * entry already own the path segments here.
+             */
+            lazy
             tabs={[
               {
                 id: ENTRIES_TAB_ID,
@@ -1284,6 +1389,50 @@ export function CollectionEntriesPage() {
                                     ))}
                                   </TextField>
                                 </Box>
+                                {/*
+                                  What KIND of article this collection
+                                  publishes (AGL-2536).
+
+                                  Beside the template screens because it is the
+                                  same class of decision — how this collection
+                                  is rendered and described — and because it is
+                                  a per-collection setting rather than a
+                                  per-entry one. Nothing on the document could
+                                  answer it before, so every entry on every
+                                  site published as a bare `Article`.
+                                */}
+                                <TextField
+                                  select
+                                  size="small"
+                                  label="Publishes as"
+                                  value={
+                                    Aglyn.normalizeContentSchemaType(
+                                      selected?.schemaType,
+                                    )
+                                  }
+                                  onChange={handleSchemaTypeChange(
+                                    selected?.$id ?? '',
+                                  )}
+                                  helperText={
+                                    'The schema.org type search engines read ' +
+                                    'for every entry in this collection.'
+                                  }
+                                  sx={{ maxWidth: 420 }}
+                                >
+                                  {Aglyn.CONTENT_SCHEMA_TYPES.map((type) => (
+                                    <MenuItem key={type.value} value={type.value}>
+                                      <Stack spacing={0}>
+                                        <span>{type.label}</span>
+                                        <Typography
+                                          variant="caption"
+                                          color="text.secondary"
+                                        >
+                                          {type.description}
+                                        </Typography>
+                                      </Stack>
+                                    </MenuItem>
+                                  ))}
+                                </TextField>
                               </Stack>
                               {/*
                                 AGL-1324 gave the collection shell a delete;
@@ -1341,7 +1490,12 @@ export function CollectionEntriesPage() {
                             </Stack>
                           </AccordionDetails>
                         </Accordion>
-                        {entries.length === 0 ? (
+                        {/* An empty FIRST page is an empty collection. An
+                            empty later one is a page that has been emptied
+                            underneath the reader, and the effect above walks
+                            them back rather than telling them they have never
+                            written anything. */}
+                        {entries.length === 0 && entryPage === 0 ? (
                           <Stack
                             spacing={1.5}
                             sx={{
@@ -1420,7 +1574,7 @@ export function CollectionEntriesPage() {
                               </TableRow>
                             </TableHead>
                             <TableBody>
-                              {pagedEntries.map((entry) => {
+                              {entries.map((entry: any) => {
                                 const published = entry.status === 'published'
                                 /*
                                   Five equal text links (EDIT · UNPUBLISH ·
@@ -1632,21 +1786,36 @@ export function CollectionEntriesPage() {
                             </TableBody>
                           </Table>
                         )}
-                        {entries.length > 0 ? (
+                        {entries.length > 0 || entryPage > 0 ? (
                           <TablePagination
                             component="div"
-                            count={entries.length}
+                            /*
+                              Nobody has paid to learn how many entries the
+                              collection holds, and counting them is the cost
+                              paging exists to avoid. MUI models that: `-1`
+                              renders "1–10 of more than 10" and leaves Next
+                              live. On the LAST page the total stops being
+                              unknown — `page × size + rows` IS it — and
+                              handing MUI the real number there is what
+                              disables Next and stops the count line saying
+                              "more than" at the moment that would be false.
+                            */
+                            count={
+                              entriesHasMore
+                                ? -1
+                                : entryPage * entriesPerPage + entries.length
+                            }
                             page={entryPage}
                             onPageChange={(_event, next) =>
                               setEntryPage(next)
                             }
                             rowsPerPage={entriesPerPage}
-                            onRowsPerPageChange={(event) => {
-                              setEntriesPerPage(
-                                parseInt(event.target.value, 10),
-                              )
-                              setEntryPage(0)
-                            }}
+                            // Back to the first page with it: the hook does
+                            // that, because page four of a ten-row list does
+                            // not exist once fifty at a time are asked for.
+                            onRowsPerPageChange={(event) =>
+                              setEntriesPerPage(parseInt(event.target.value, 10))
+                            }
                             rowsPerPageOptions={TABLE_PAGE_SIZE_OPTIONS}
                             labelRowsPerPage={TABLE_ROWS_PER_PAGE_LABEL}
                           />
@@ -1701,6 +1870,40 @@ export function CollectionEntriesPage() {
                           {'New author'}
                         </Button>
                       </Stack>
+                      {/*
+                        The template for EVERY author page (AGL-2518), which
+                        is why it sits above the roster rather than inside a
+                        row: there is one author page shape per site, not one
+                        per person. Letting each record name its own screen
+                        would give a reader a masthead whose design changes as
+                        they click between colleagues.
+                      */}
+                      <TextField
+                        select
+                        size="small"
+                        label="Author page screen"
+                        value={hostDoc?.authorScreenId ?? ''}
+                        onChange={(event) =>
+                          void handleAuthorScreenChange(event.target.value)
+                        }
+                        helperText={
+                          'Renders every author’s page at /author/…. Design ' +
+                          'it with an Author Profile block and a Collection ' +
+                          'Entries block; {{author.name}}, {{author.bio}} and ' +
+                          '{{author.entryCountLabel}} resolve per author. The ' +
+                          'screen you pick stops serving at its own address.'
+                        }
+                        sx={{ maxWidth: 420 }}
+                      >
+                        <MenuItem value="">
+                          {'Built-in themed author page'}
+                        </MenuItem>
+                        {screenOptions.map((screen: any) => (
+                          <MenuItem key={screen.$id} value={screen.$id}>
+                            {screen.displayName ?? screen.$id}
+                          </MenuItem>
+                        ))}
+                      </TextField>
                       {authors.length === 0 ? (
                         <Typography variant="body2" color="text.secondary">
                           {'No authors yet. Entries fall back to a one-off ' +
@@ -1770,11 +1973,11 @@ export function CollectionEntriesPage() {
                                   />
                                 </TableCell>
                                 <TableCell>
-                                  {/* Counted off the SELECTED collection's
-                                      loaded entries only — the listener holds
-                                      one collection at a time, so this is a
-                                      hint about where a byline is in use, not a
-                                      site-wide total it cannot know. */}
+                                  {/* Counted off the entries ON THE PAGE the
+                                      Entries tab is showing — one page of one
+                                      collection. A hint about where a byline
+                                      is in use, not a site-wide total it
+                                      cannot know without reading for it. */}
                                   {
                                     entries.filter(
                                       (entry: any) =>
@@ -1953,6 +2156,21 @@ export function CollectionEntriesPage() {
             helperText="The byline, exactly as it should read"
           />
           <TextField
+            label="Page address"
+            size="small"
+            value={authorEditor?.slug ?? ''}
+            onChange={(event) =>
+              setAuthorEditor((prev) =>
+                prev ? { ...prev, slug: event.target.value } : prev,
+              )
+            }
+            helperText={
+              authorSlugPreview
+                ? `Their page: ${authorSlugPreview}`
+                : 'Their page on this site. Blank uses the name.'
+            }
+          />
+          <TextField
             label="URL"
             size="small"
             value={authorEditor?.url ?? ''}
@@ -1961,7 +2179,7 @@ export function CollectionEntriesPage() {
                 prev ? { ...prev, url: event.target.value } : prev,
               )
             }
-            helperText="Author page or personal site"
+            helperText="Their OWN site, if they have one — not their page here"
           />
           <Stack direction="row" spacing={2} sx={{ alignItems: 'flex-start' }}>
             <TextField
@@ -2018,6 +2236,153 @@ export function CollectionEntriesPage() {
               />
             </>
           ) : null}
+          {/*
+            The links this author's card PRINTS (AGL-2516).
+
+            Separate from `Profile links` below, and the split is the point:
+            that field is `sameAs`, which exists for crawlers and renders
+            nowhere. These are the rows a reader clicks, so each one has to say
+            what it is before the click — which a known platform does with its
+            own mark, and anything else does with a label the author writes.
+          */}
+          <Box>
+            <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
+              {'Links'}
+            </Typography>
+            <Typography
+              variant="caption"
+              sx={{ color: 'text.secondary', display: 'block', mb: 1 }}
+            >
+              {'Shown on the author card. A known platform brings its own ' +
+                'icon; anything else takes a label and an icon you pick. ' +
+                `Up to ${Aglyn.AUTHOR_LINKS_MAX}.`}
+            </Typography>
+            <Stack spacing={1.5}>
+              {(authorEditor?.links ?? []).map((link, index) => {
+                const known = Aglyn.authorLinkPlatform(link.platform)
+                const patch = (next: Partial<Aglyn.ContentAuthorLink>) =>
+                  setAuthorEditor((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          links: prev.links.map((row, i) =>
+                            i === index ? { ...row, ...next } : row,
+                          ),
+                        }
+                      : prev,
+                  )
+                return (
+                  <Stack key={index} spacing={1}>
+                    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                      <TextField
+                        select
+                        size="small"
+                        label="Kind"
+                        sx={{ minWidth: 148 }}
+                        value={known?.id ?? ''}
+                        onChange={(event) =>
+                          // Switching to a platform DROPS the custom label and
+                          // icon rather than keeping them hidden: the registry
+                          // owns both for a known platform, and a value the
+                          // editor stops showing is one nobody can clear.
+                          patch(
+                            event.target.value
+                              ? {
+                                  platform: event.target.value,
+                                  label: '',
+                                  icon: '',
+                                  iconPath: '',
+                                }
+                              : { platform: '' },
+                          )
+                        }
+                      >
+                        <MenuItem value="">{'Custom link'}</MenuItem>
+                        {Aglyn.AUTHOR_SOCIAL_PLATFORMS.map((platform) => (
+                          <MenuItem key={platform.id} value={platform.id}>
+                            {platform.label}
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                      <TextField
+                        size="small"
+                        fullWidth
+                        label="URL"
+                        value={link.url ?? ''}
+                        onChange={(event) => patch({ url: event.target.value })}
+                        placeholder={
+                          known?.id === 'email'
+                            ? 'mailto:hello@example.com'
+                            : 'https://…'
+                        }
+                      />
+                      <IconButton
+                        aria-label={`Remove ${Aglyn.authorLinkLabel(link)}`}
+                        size="small"
+                        onClick={() =>
+                          setAuthorEditor((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  links: prev.links.filter(
+                                    (_, i) => i !== index,
+                                  ),
+                                }
+                              : prev,
+                          )
+                        }
+                      >
+                        <MdiIcon path={mdiClose.path} size={0.8} />
+                      </IconButton>
+                    </Stack>
+                    {known ? null : (
+                      <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
+                        <TextField
+                          size="small"
+                          fullWidth
+                          label="Label"
+                          value={link.label ?? ''}
+                          onChange={(event) =>
+                            patch({ label: event.target.value })
+                          }
+                          helperText="What this link is called, e.g. Newsletter"
+                        />
+                        <IconSelectControl
+                          value={link.icon ?? ''}
+                          label="Icon"
+                          // The id AND its path (AGL-1212): the catalog is
+                          // loaded HERE and nowhere the card renders, so a
+                          // renderer handed an id alone draws a help glyph.
+                          onChange={(iconId) =>
+                            patch({
+                              icon: iconId,
+                              iconPath: iconId ? getMdiIconPath(iconId) : '',
+                            })
+                          }
+                        />
+                      </Stack>
+                    )}
+                  </Stack>
+                )
+              })}
+            </Stack>
+            <Button
+              size="small"
+              sx={{ mt: 1 }}
+              disabled={
+                (authorEditor?.links?.length ?? 0) >= Aglyn.AUTHOR_LINKS_MAX
+              }
+              onClick={() =>
+                setAuthorEditor((prev) =>
+                  prev
+                    ? { ...prev, links: [...prev.links, { url: '' }] }
+                    : prev,
+                )
+              }
+            >
+              {'Add link'}
+            </Button>
+          </Box>
           <TextField
             label="Profile links"
             size="small"

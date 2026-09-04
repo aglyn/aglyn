@@ -2,7 +2,7 @@
  * @jest-environment node
  *
  * Pragma must stay in the FIRST block comment — behind the license header it is
- * silently ignored and the suite runs on jsdom without `Request`/`Response`.
+ * silently ignored and the suite runs on jsdom.
  *
  * @license
  * Copyright 2026 Aglyn LLC
@@ -21,285 +21,93 @@
  */
 
 /**
- * A per-org grant of `release_native_checkout` reaches the CHECKOUT ROUTE
- * (AGL-2486).
+ * The money path branches on NOTHING.
  *
- * The route used to read `getServerReleaseFlagValues()` — the platform-wide
- * Remote Config template — and call `isReleaseFlagOn` itself. That two-step
- * cannot see `orgs/{orgId}.releaseFlags`, so a staff grant was written,
+ * ## What this file used to be
+ *
+ * `release_native_checkout` chose between Stripe's embedded Checkout and the
+ * hosted redirect, and AGL-2486 fixed a real bug in how that flag was read:
+ * the route consulted the platform-wide Remote Config template rather than
+ * `isServerReleaseFlagOnForOrg`, so a staff per-org grant was written,
  * confirmed on the document, and then ignored by the one code path that takes
- * money. Measured live before the fix: with the override set to true on
- * `test-org`, Upgrade created a correct `cs_test_…` session and the browser was
- * sent to `checkout.stripe.com` anyway. Native checkout was all-or-nothing
- * platform-wide, on the surface that most needs a single-customer pilot.
+ * money.
  *
- * ## Why this suite does not stub the flag resolver
+ * ## Why it is now the opposite assertion
  *
- * A resolver stub that answers `true` proves the route branches on a boolean —
- * which was never in doubt. The bug was that the boolean came from the wrong
- * source. So the REAL `isServerReleaseFlagOnForOrg` runs here, over the real
- * `parseOrgReleaseFlagOverrides`, the real `isReleaseFlagOnForOrg` and the real
- * template parse; only Firebase itself is faked, at the SDK boundary. The
- * inputs this suite moves are the two things an operator actually edits: the
- * Remote Config parameter, and the `releaseFlags` map on the org document.
- * A route that went back to the platform-wide read would go red on the grant
- * case here, which the stubbed version could not do.
+ * There is no choice left to make. Checkout — embedded and hosted alike — is
+ * gone: a customer arrives at the plan grid with a payment method and a
+ * billing address already saved, and subscribing is a server-side call against
+ * the stored method. Nothing renders Stripe's page, so nothing needs to decide
+ * whether to.
  *
- * NO STRIPE CALL HAPPENS. `fetch` is mocked; the captured session params are
- * the assertion surface. (Localhost carries a LIVE secret key at times — see
- * the Stripe live-vs-test note in the runbook.)
+ * A flag would be worse than useless here — it would be the thing that brings
+ * the deleted surface back. So this suite pins the ABSENCE: no release flag is
+ * consulted on the money path, and no Checkout Session is ever created. Those
+ * are the two shapes a resurrection would take.
+ *
+ * The AGL-2486 lesson survives in the file it belongs to:
+ * `libs/aglyn/.../release-flags.ts` still has its own tests, and the org-aware
+ * resolver is still what every OTHER flag consumer uses.
  */
 
-// A module, not a script — without this these consts collide with the other
-// billing route specs' identical globals under `tsc`.
 export {}
 
-const ORG_ID = 'org-1'
-const FLAG = 'release_native_checkout'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { stripTypeScriptComments } from '@aglyn/aglyn/foundation/definitions/write-deny-coverage.util'
 
-/** The raw Remote Config parameter value, as the template stores it. */
-let mockTemplateRaw: string | undefined
-/** The `orgs/{ORG_ID}` document body, as Firestore returns it. */
-let mockOrgData: Record<string, unknown>
-/** How many times the org document was read — the override's only source. */
-let mockOrgReads: number
-/** The session params captured at the `fetch` boundary. */
-let capturedBody: URLSearchParams | null
-
-const fakeFirebaseAdmin = {
-  app: () => ({
-    auth: () => ({
-      verifyIdToken: async () => ({
-        uid: 'u-1',
-        email: 'owner@example.com',
-        email_verified: true,
-      }),
-    }),
-    remoteConfig: () => ({
-      getTemplate: async () => ({
-        parameters:
-          mockTemplateRaw === undefined
-            ? {}
-            : { [FLAG]: { defaultValue: { value: mockTemplateRaw } } },
-      }),
-    }),
-    firestore: () => ({
-      collection: () => ({
-        doc: () => ({
-          get: async () => {
-            mockOrgReads += 1
-            return {
-              // The route reads `slug` off the snapshot; the release-flag
-              // resolver reads the whole document. One doc, both shapes —
-              // exactly as the real snapshot behaves.
-              get: (field: string) => mockOrgData?.[field],
-              data: () => mockOrgData,
-            }
-          },
-        }),
-      }),
-    }),
-  }),
-}
-
-// The release-flag resolver's OWN Firebase dependency. Mocking it here is what
-// lets the real resolver run: `jest.requireActual` below unmocks only the
-// module it names, so this fake is still what that module imports.
-jest.mock(
-  '../../../libs/tenant/data/admin/src/lib/server/firebase-admin',
-  () => ({ __esModule: true, firebaseAdmin: fakeFirebaseAdmin }),
+const ROUTE = join(
+  __dirname,
+  '..',
+  'app',
+  'api',
+  'billing',
+  'checkout',
+  'route.ts',
 )
 
-jest.mock('@aglyn/tenant-data-admin', () => {
-  // THE REAL RESOLVER (AGL-2486). Not a stub — see the header.
-  const releaseFlags = jest.requireActual(
-    '../../../libs/tenant/data/admin/src/lib/server/release-flags',
-  )
-  return {
-    __esModule: true,
-    firebaseAdmin: fakeFirebaseAdmin,
-    isServerReleaseFlagOnForOrg: releaseFlags.isServerReleaseFlagOnForOrg,
-    isImpersonationSession: () => false,
-    emailUnverifiedResponse: () =>
-      Response.json({ error: 'Verify your email' }, { status: 403 }),
-    // Inert: the checkout feature lockdown (AGL-1510) has its own specs, and a
-    // refusal here would be indistinguishable from the release gate working.
-    featureLockdownRefusal: async () => null,
-    memberHasOrgPermission: async () => true,
-    // No live subscription, so the duplicate-subscription guard (AGL-1715)
-    // cannot short-circuit before the gate under test.
-    readOrgBilling: async () => ({ stripeCustomerId: 'cus_test_1' }),
-    resolveOrgMembership: async () => ({
-      orgId: ORG_ID,
-      member: { id: 'm-1', role: 'owner' },
-    }),
-  }
-})
-
-jest.mock('@aglyn/aglyn/server', () => ({
-  __esModule: true,
-  // The REAL module throughout, including every release-flag primitive the
-  // resolver above composes — `parseOrgReleaseFlagOverrides`,
-  // `isReleaseFlagOnForOrg`, `parseReleaseFlagValue`, `RELEASE_FLAGS`. Replacing
-  // any of them with a hand-written double would be re-typing the semantics
-  // under test, which is the failure this suite exists to catch.
-  ...jest.requireActual('@aglyn/aglyn/server'),
-  buildRoute: () => '/acme/manage/billing',
-  Route: { MANAGE_BILLING: 'MANAGE_BILLING' },
-}))
-
-/** Env without a trace of the developer's own Stripe config (`nx test` leaks the root env). */
-const CLEAN_ENV = (() => {
-  const clean = { ...process.env }
-  for (const key of Object.keys(clean)) {
-    if (key.startsWith('STRIPE_') || key.startsWith('NEXT_PUBLIC_STRIPE_')) {
-      delete clean[key]
-    }
-  }
-  return clean
-})()
-
-const ORIGINAL_ENV = process.env
-
-const STRIPE_ENV = {
-  STRIPE_SECRET_KEY: 'sk_test_fake',
-  STRIPE_PRICE_STARTER: 'price_starter_monthly',
-  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: 'pk_test_fake',
-}
-
 /**
- * The route snapshots `PRICE_ENV` at module load, so env has to be in place
- * BEFORE the require — which is also why this is a require and not an import.
- * `resetModules` additionally hands each case a fresh resolver, so the
- * resolver's 60s template and per-org caches cannot carry a verdict across.
+ * Comments discuss the history at length; only CODE is asserted on.
+ *
+ * The SHARED stripper, not a local regex. A naive `//.*$` also eats the `//`
+ * in `https://api.stripe.com/...` inside a string literal, which silently
+ * removed the very line the control below looks for — a guard that passes
+ * because it deleted its own evidence.
  */
-function loadCheckout(env: Record<string, string> = {}) {
-  jest.resetModules()
-  process.env = { ...CLEAN_ENV, ...STRIPE_ENV, ...env } as NodeJS.ProcessEnv
-  return require('../app/api/billing/checkout/route').POST as (
-    request: Request,
-  ) => Promise<Response>
-}
+describe('the subscribe path has no flag and no checkout session', () => {
+  const source = stripTypeScriptComments(readFileSync(ROUTE, 'utf8'))
 
-function checkout(post: (request: Request) => Promise<Response>) {
-  return post(
-    new Request('https://app.aglyn.com/api/billing/checkout', {
-      method: 'POST',
-      headers: {
-        authorization: 'Bearer tok',
-        'content-type': 'application/json',
-        origin: 'https://app.aglyn.com',
-        host: 'app.aglyn.com',
-      },
-      body: JSON.stringify({ plan: 'starter', interval: 'month', orgId: ORG_ID }),
-    }),
-  )
-}
-
-/** True when the created session is the in-page one, per Stripe's own shape. */
-function isEmbeddedSession(params: URLSearchParams | null): boolean {
-  return params?.get('ui_mode') === 'embedded'
-}
-
-beforeEach(() => {
-  capturedBody = null
-  mockOrgReads = 0
-  // The platform-wide value is OFF — the default, and the state the live
-  // template was actually in when the grant was measured being ignored.
-  mockTemplateRaw = JSON.stringify({ enabled: false })
-  mockOrgData = { slug: 'acme', plan: 'free' }
-  global.fetch = jest.fn(async (_url: unknown, init: any) => {
-    capturedBody = new URLSearchParams(String(init?.body ?? ''))
-    return {
-      ok: true,
-      json: async () => ({
-        id: 'cs_test_123',
-        url: 'https://checkout.stripe.com/c/session',
-        client_secret: 'cs_test_123_secret',
-      }),
-    }
-  }) as never
-})
-
-afterEach(() => {
-  process.env = ORIGINAL_ENV
-  jest.restoreAllMocks()
-})
-
-describe('native checkout honours a PER-ORG grant (AGL-2486)', () => {
-  it('CONTROL — platform off and no override sends the hosted redirect', async () => {
-    const response = await checkout(loadCheckout())
-    expect(response.status).toBe(200)
-    expect(isEmbeddedSession(capturedBody)).toBe(false)
-    expect(capturedBody?.get('success_url')).toContain('status=success')
-    expect(capturedBody?.get('return_url')).toBeNull()
+  it('CONTROL — the file being read really is the checkout route', () => {
+    // A guard that reads the wrong file, or an empty one, reports "no flags"
+    // forever. Prove the read with things that must be present.
+    expect(source).toContain('claimAttempt')
+    expect(source).toContain('isOrgSubscriptionLive')
+    expect(source).toContain('api.stripe.com/v1/subscriptions')
   })
 
-  it('a staff grant on the ORG DOCUMENT mounts checkout in-page', async () => {
-    // The exact write that was measured landing on `orgs/hz_KgetqSq` and then
-    // being ignored: `{"release_edit_bar":true,"release_native_checkout":true}`.
-    mockOrgData = {
-      slug: 'acme',
-      plan: 'free',
-      releaseFlags: { release_edit_bar: true, [FLAG]: true },
-    }
-    const response = await checkout(loadCheckout())
-    expect(response.status).toBe(200)
-    expect(isEmbeddedSession(capturedBody)).toBe(true)
-    // An embedded session takes a single `return_url` and Stripe REJECTS it
-    // alongside the success/cancel pair, so the absence is load-bearing.
-    expect(capturedBody?.get('return_url')).toContain(
-      'session_id={CHECKOUT_SESSION_ID}',
-    )
-    expect(capturedBody?.get('success_url')).toBeNull()
-    expect(capturedBody?.get('cancel_url')).toBeNull()
-    // The override has exactly one source, and it is a document read.
-    expect(mockOrgReads).toBeGreaterThan(0)
+  it('consults no release flag', () => {
+    // Both spellings: the org-aware resolver and the platform-wide template
+    // read that AGL-2486 replaced. Either one reappearing means a branch has
+    // come back.
+    expect(source).not.toContain('isServerReleaseFlagOnForOrg')
+    expect(source).not.toContain('getServerReleaseFlagValues')
+    expect(source).not.toContain('isReleaseFlagOn')
+    expect(source).not.toContain('release_native_checkout')
   })
 
-  it('a per-org KILL switch beats a platform-wide ON', async () => {
-    // Half the point of overrides, and the half a grant-only test would miss:
-    // one org can be pulled back off native checkout while it ships to
-    // everyone else.
-    mockTemplateRaw = JSON.stringify({ enabled: true })
-    mockOrgData = { slug: 'acme', plan: 'free', releaseFlags: { [FLAG]: false } }
-    const response = await checkout(loadCheckout())
-    expect(response.status).toBe(200)
-    expect(isEmbeddedSession(capturedBody)).toBe(false)
-    expect(capturedBody?.get('success_url')).toContain('status=success')
+  it('creates no Checkout Session, in either mode', () => {
+    expect(source).not.toContain('checkout/sessions')
+    expect(source).not.toContain('ui_mode')
+    // The hosted redirect's parameters, which only a session takes.
+    expect(source).not.toContain('success_url')
+    expect(source).not.toContain('cancel_url')
   })
 
-  it('CONTROL — a platform-wide ON still reaches this route', async () => {
-    // Without this, the kill-switch case above would pass just as well if the
-    // route ignored the flag entirely and always redirected.
-    mockTemplateRaw = JSON.stringify({ enabled: true })
-    const response = await checkout(loadCheckout())
-    expect(response.status).toBe(200)
-    expect(isEmbeddedSession(capturedBody)).toBe(true)
-  })
-
-  it('a grant WITHOUT a publishable key still redirects', async () => {
-    // Both conditions, not just the flag: an embedded session returns a client
-    // secret and no `url`, so a browser that cannot boot Stripe.js would get a
-    // dead Upgrade button. The worst case of a premature grant stays the
-    // redirect we already ship.
-    mockOrgData = { slug: 'acme', plan: 'free', releaseFlags: { [FLAG]: true } }
-    const post = loadCheckout({ NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: '' })
-    const response = await checkout(post)
-    expect(response.status).toBe(200)
-    expect(isEmbeddedSession(capturedBody)).toBe(false)
-    expect(capturedBody?.get('success_url')).toContain('status=success')
-  })
-
-  it('an unrelated flag granted to the org does NOT open native checkout', async () => {
-    // A gate keyed on "any override present" would pass every case above.
-    mockOrgData = {
-      slug: 'acme',
-      plan: 'free',
-      releaseFlags: { release_edit_bar: true },
-    }
-    const response = await checkout(loadCheckout())
-    expect(response.status).toBe(200)
-    expect(isEmbeddedSession(capturedBody)).toBe(false)
+  it('still refuses a second subscription, which is the guard that mattered', () => {
+    // The one thing from the old flow that MUST survive its removal: two
+    // completed purchases on one org are two recurring charges, and the
+    // webhook cannot undo that because its job is to mirror what Stripe
+    // reports.
+    expect(source).toContain('subscription_exists')
   })
 })

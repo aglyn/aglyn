@@ -80,6 +80,12 @@ jest.mock('@aglyn/aglyn/server', () => ({
   parseCollectionRoute: jest.requireActual(
     '../../../libs/aglyn/src/lib/app-utils/collection-entries',
   ).parseCollectionRoute,
+  // And the REAL author-page parser beside it (AGL-2518), for the same
+  // reason: `/author/{slug}` is resolved after the collection route and
+  // before the 404, so a stub here would decide this suite's subject.
+  parseContentAuthorRoute: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/content-authors',
+  ).parseContentAuthorRoute,
   // The REAL link-route derivation (AGL-1998), for the same reason again: the
   // designed 404 carries the site's nav, and a stub would let this suite pass
   // while every link on it resolved somewhere else.
