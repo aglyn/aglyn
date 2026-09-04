@@ -24,6 +24,19 @@
 # It is surfaced as a loud WARNING instead, because "cannot check" must never
 # print as "clean" - the rule `external-facts.mjs` applies for the same reason.
 # Only exit 1, a tip that Main Gate has actually graded RED, fails the job.
+#
+# ---------------------------------------------------------------------------
+# WHY EXIT 3 DOES NOT FAIL THE JOB EITHER (AGL-2564)
+# ---------------------------------------------------------------------------
+# Exit 3 means "the fast gate passed on this tip and the full sweep never ran
+# on it", so its tests and production builds are unexamined. `d1cbc338f` was
+# exactly that shape - three broken console specs under a green tick - and it
+# graded the same as a fully swept commit until this state existed.
+#
+# It does not block, for the reason above: `full` is cron-driven and absent
+# from most shas, so refusing on it would refuse nearly every promotion for a
+# reason that says nothing about the code. It warns in its OWN words instead,
+# so a human reads "nobody ran the tests on this" rather than a bare green.
 name: Promotion verdict
 
 on:
@@ -87,17 +100,20 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           exit 0
 
-      - name: Refuse a red tip, warn on no verdict
+      - name: Refuse a red tip, warn on no verdict and on an unswept one
         run: |
           set -euo pipefail
           case "${{ steps.verdict.outputs.code }}" in
-            0) echo "Main Gate graded the tip green." ;;
+            0) echo "Main Gate passed a FULL sweep on the tip - tests and production builds included." ;;
             1)
               echo "::error::Main Gate graded the tip of this promotion RED. See the job summary."
               exit 1
               ;;
             2)
               echo "::warning::Main Gate has no verdict for the tip of this promotion. Not blocking - see the job summary and re-run once the gate has graded it."
+              ;;
+            3)
+              echo "::warning::UNEXAMINED - the fast gate passed on this tip but no full sweep has run on it, so its tests and production builds have been graded by nobody. Not blocking; read the job summary and decide."
               ;;
             *)
               echo "::error::the verdict script exited unexpectedly (${{ steps.verdict.outputs.code }})."

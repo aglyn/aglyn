@@ -83,12 +83,31 @@ npm run release:prepare -- --write           # writes package.json + CHANGELOG.m
 Report-only is the default. Run it bare first to see what the batch contains
 before committing to a number.
 
+`--write` also regenerates `package-lock.json`, which carries the version in
+two fields of its own (AGL-2108). That step re-resolves the whole dependency
+graph and takes **two to five minutes** with nothing printed while it runs; it
+is not stuck. It passes `--ignore-scripts`, because a release is often cut from
+a temp worktree with no `node_modules`, where the `postinstall` hook is missing
+and npm would exit 127 and abandon the lockfile (AGL-2565).
+
+**The exit code of that install is not the verdict — the lockfile is.** The
+script re-reads `package-lock.json` afterwards and compares it against
+`package.json`, so a slow resolve that was signalled but had already written a
+correct lockfile reports success, and a failed one reports failure. Trust what
+it says over what the install printed. If it does report the lockfile stale,
+repair it by hand and keep the flag:
+
+```bash
+npm install --package-lock-only --ignore-scripts
+```
+
 Then commit with explicit paths — never `git add -A`, which sweeps up other
-agents' work:
+agents' work. **Commit the lockfile alongside `package.json`**: a bump whose
+lockfile was not regenerated reds the promotion gate.
 
 ```bash
 git add CHANGELOG.md    # first release only; --only cannot stage a new file
-git commit --only package.json CHANGELOG.md \
+git commit --only package.json package-lock.json CHANGELOG.md \
   -m 'chore(release): v1.0.0-beta.1 (AGL-2089)'
 git push origin main
 ```
@@ -135,6 +154,31 @@ Three settings are deliberate and worth knowing before you tighten them:
   let you approve your own PR — and enforcing admins with no second admin makes
   a lockout unrecoverable. The rule still stops every accidental and automated
   direct push.
+
+#### Read the Main Gate verdict on the PR
+
+`promotion-verdict.yml` grades the range the PR would ship and prints it in the
+job summary. Only a red fails the job; everything else is a report you read.
+There are **four** states, and the same exit codes come out of
+`npm run check:main-gate-verdicts` (add `-- --range=A..B` for an explicit
+range):
+
+| exit | verdict | what it means |
+|---|---|---|
+| 0 | green | the tip passed `main-gate/full` — the whole test sweep and all three production builds |
+| 1 | RED | Main Gate graded the tip a failure. The job fails. Do not promote |
+| 2 | no verdict | Main Gate has not graded the tip at all, normally a race with a very recent push. Warns |
+| 3 | **unexamined** | the tip passed `main-gate/fast` only, and no full sweep has ever run on it, so nobody has run its tests. Warns |
+
+An absent `full` never blocks, and that is deliberate: it runs on a cron GitHub
+delivers a fraction of the time, so most shas legitimately carry `fast` and no
+`full`, and demanding both would refuse nearly every promotion for a reason
+that says nothing about the code. It used to print identically to a passing
+sweep, which is how `d1cbc338f` shipped a three-spec tests regression under a
+green tick on 2026-09-03 (AGL-2564). Exit 3 gives that case its own words. It
+also names the newest commit in the range a sweep did pass on, so you can see
+how much of what you are shipping is unexamined — decide knowingly, or run the
+full gate yourself first.
 
 #### Is `tools/gate.sh` still required?
 
@@ -229,6 +273,7 @@ tools/gate.sh --ref <sha>          # gate a specific commit
 tools/gate.sh --phases build       # one phase, same isolation
 tools/gate.sh --keep               # keep the worktree for triage
 tools/gate.sh --no-install         # refuse on lockfile drift, never install
+tools/gate.sh --lock-wait 300      # queue behind a run holding the same root
 ```
 
 Since AGL-2505 this is a **pre-flight, not a gate of record** — NX CI runs the
@@ -326,6 +371,18 @@ symptom is a syntax error on a line number with nothing wrong with it. The gate
 copies itself into its gate root and re-execs the copy, so a run is immune from
 startup onward and callers do not have to know the hazard exists.
 
+**It locks its root.** A gate root holds one run at a time, claimed by an
+atomic `mkdir` of `<root>/.lock` before anything writes into the tree — above
+all before the entry-time `reset --hard`, which against a run still in flight
+moves the worktree to a different sha and discards whatever that run is
+mid-write. Both runs then report a verdict for a tree neither controls, and one
+of those verdicts can be green. A second run refuses with exit **75**, naming
+the pid, ref and sha of the holder so you can decide between waiting and
+killing; `--lock-wait <seconds>` queues instead. A lock whose owner is gone —
+a `kill -9`, a closed laptop — is reclaimed by the next run, so a killed gate
+never wedges the root. `flock(1)` is not installed on macOS, which is why the
+lock is a directory rather than a file descriptor.
+
 The guard phase is **derived from the CI workflows** (`nx-ci.yml` and
 `tools-guards.yml`) rather than listed here, so a guard added to CI is gated
 automatically and this file cannot quietly fall behind. If the derivation ever
@@ -385,7 +442,9 @@ summary always names which path ran (`PATH: FAST` / `PATH: FULL`).
 
 The fast path reuses a stable gate root, so a second run skips the ~1m35s
 `cp -Rc` of the three module trees. Re-provisioning triggers on
-`package-lock.json`'s blob hash.
+`package-lock.json`'s blob hash. That stable root is the one two sessions can
+collide in, so it is also where the lock above earns its keep: a second
+`--affected` run refuses rather than resetting the first one's worktree.
 
 **Promote a release with the full gate.** `--affected` proves a diff is sound
 against a workspace it has not rebuilt; that is the right trade for a hot fix

@@ -22,6 +22,7 @@ import type { SxProps } from '@mui/material/styles'
 import { forwardRef, type ReactNode } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { FIELD_TEXT_CONTENT } from '../constants/field-presets'
+import { authorHtmlLabel } from '../utils/author-html-label'
 import { generatePresetId } from '../utils/generate-preset-id'
 
 // Component ids are persisted in screen documents; never rename.
@@ -111,6 +112,12 @@ export interface InlineTextProps {
    * undeclared, no typed caller could style a run (AGL-1323).
    */
   sx?: SxProps
+  /**
+   * Sanitized emphasis markup for the run, written by the inline editor's
+   * rich mode (AGL-2557). `children` keeps the plain-text reading of it, and
+   * is what every surface that cannot render markup falls back to.
+   */
+  html?: string
   /** The text of this run; edited inline on the canvas. */
   children?: ReactNode
 }
@@ -131,7 +138,8 @@ export interface InlineTextProps {
  * `p`, then one of these per style change.
  */
 const InlineText = forwardRef<HTMLElement, InlineTextProps>((props, ref) => {
-  const { element, tone, weight, decoration, children, sx, ...rest } = props
+  const { element, tone, weight, decoration, children, sx, html, ...rest } =
+    props
   const component = INLINE_TEXT_ELEMENTS.includes(element as InlineTextElement)
     ? (element as InlineTextElement)
     : 'span'
@@ -159,7 +167,7 @@ const InlineText = forwardRef<HTMLElement, InlineTextProps>((props, ref) => {
         ...nodeSx,
       ]}
     >
-      {children}
+      {authorHtmlLabel(html) ?? children}
     </MuiBox>
   )
 })
@@ -177,7 +185,15 @@ export const schema: Aglyn.ComponentSchema<InlineTextProps> = {
   flags: {
     // The run IS its text: edited inline on the canvas, like Typography.
     textEditable: Aglyn.FEATURE_FLAG.ENABLED,
+    richTextEditable: Aglyn.FEATURE_FLAG.ENABLED,
   },
+  // Emphasis only (AGL-2557), for a different reason than the controls: this
+  // run is not interactive, it is `display: inline`. Every element it may
+  // render as is phrasing content — that is the guarantee INLINE_TEXT_ELEMENTS
+  // exists to make — so a list inside one is a block in an inline box, which
+  // the parser lifts straight back out of the enclosing paragraph. Links stay
+  // with Screen Link, whose job is a resolved target rather than a typed href.
+  richTextCommands: [Aglyn.RICH_TEXT_COMMANDS.EMPHASIS],
   attributes: [
     FIELD_TEXT_CONTENT,
     {
