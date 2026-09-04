@@ -120,7 +120,13 @@ export const SLUG_RESERVATION_MS = 21 * 24 * 60 * 60 * 1000
  * reason to hand it to the next caller.
  */
 export function isSlugReservationLapsed(
-  reservation: { reservedUntil?: unknown } | undefined,
+  // The whole `orgSlugs/{slug}` document, not just the field being read: every
+  // caller has one in hand, and a parameter narrowed to `reservedUntil` alone
+  // makes the ordinary case — a grant, which carries `orgId` and no expiry —
+  // an excess-property error at the call site.
+  reservation:
+    | { orgId?: unknown; movedTo?: unknown; reservedUntil?: unknown }
+    | undefined,
   now: number = Date.now(),
 ): boolean {
   const until = reservation?.reservedUntil
