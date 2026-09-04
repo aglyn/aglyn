@@ -9,6 +9,31 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.70 — 2026-09-04
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.69...v1.0.0-beta.70)
+
+### Added
+
+- **publish:** a closed tab no longer strands a publish ([AGL-2575](https://linear.app/aglyn/issue/AGL-2575), [AGL-2573](https://linear.app/aglyn/issue/AGL-2573))
+
+### Fixed
+
+- **console:** the Use template dialog refuses a path-shaped slug too ([AGL-2572](https://linear.app/aglyn/issue/AGL-2572))
+- **tools:** the raw-log guard checks that an upload exists, not which major it pins ([AGL-2574](https://linear.app/aglyn/issue/AGL-2574))
+- **aglyn:** a slug field refuses a typed "/" instead of gluing the words ([AGL-2572](https://linear.app/aglyn/issue/AGL-2572))
+
+<details>
+<summary>Also in this release: 5 chore</summary>
+
+- **tools:** the Linear ceiling reads AGL-2578, the workspace head ([AGL-2578](https://linear.app/aglyn/issue/AGL-2578), [AGL-2575](https://linear.app/aglyn/issue/AGL-2575), [AGL-2573](https://linear.app/aglyn/issue/AGL-2573))
+- **deps:** next reaches 16.3.3, closing two critical advisories ([AGL-2577](https://linear.app/aglyn/issue/AGL-2577))
+- **deps:** cloud functions move to eslint 10.9 and typescript-eslint 8.68 ([AGL-2577](https://linear.app/aglyn/issue/AGL-2577))
+- **deps:** the CI workflows pin setup-java 6 and upload-artifact 7 ([AGL-2577](https://linear.app/aglyn/issue/AGL-2577))
+- **tools:** the Linear ceiling reads AGL-2577, the workspace head ([AGL-2577](https://linear.app/aglyn/issue/AGL-2577))
+
+</details>
+
 ## v1.0.0-beta.69 — 2026-09-04
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.68...v1.0.0-beta.69)
