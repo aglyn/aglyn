@@ -498,7 +498,7 @@ function ScreenDetails() {
     try {
       await Promise.all([
         updateDoc(screenRef, { deletedAt: Timestamp.now() }),
-        unpublishScreenRoute(firestore, { hostId, screenId }),
+        unpublishScreenRoute(firestore, { hostId, screenId, user }),
       ])
       enqueueSnackbar('Screen deleted', { variant: 'success', persist: false })
       logActivity('Deleted screen', {
@@ -568,7 +568,7 @@ function ScreenDetails() {
     try {
       await publishScreenRoute(
         firestore,
-        { hostId, screenId },
+        { hostId, screenId, user },
         slug,
         composed ?? slug,
       )
@@ -603,12 +603,13 @@ function ScreenDetails() {
     logActivity,
     isCollectionTemplate,
     routesByScreenId,
+    user,
   ])
 
   const handleUnpublishRoute = useCallback(async () => {
     const dequeue = queueLoading()
     try {
-      await unpublishScreenRoute(firestore, { hostId, screenId })
+      await unpublishScreenRoute(firestore, { hostId, screenId, user })
       enqueueSnackbar('Screen unpublished', {
         variant: 'success',
         persist: false,
@@ -624,7 +625,16 @@ function ScreenDetails() {
     } finally {
       dequeue()
     }
-  }, [queueLoading, firestore, hostId, screenId, enqueueSnackbar, displayName, logActivity])
+  }, [
+    queueLoading,
+    firestore,
+    hostId,
+    screenId,
+    enqueueSnackbar,
+    displayName,
+    logActivity,
+    user,
+  ])
 
   /**
    * Drop the published page's cached HTML (AGL-1150).

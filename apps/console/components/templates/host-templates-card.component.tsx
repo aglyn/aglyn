@@ -560,6 +560,7 @@ export function HostTemplatesCard({
               seo: page.seo,
               slug: page.slug,
               usedSlugs: used,
+              user,
             },
           )
           created += 1

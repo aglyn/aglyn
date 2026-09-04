@@ -26,6 +26,7 @@ import {
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
+  useUser,
   useHostResourceApi,
   useHostVersionApi,
 } from '@aglyn/tenant-feature-instance'
@@ -66,6 +67,7 @@ export function UseTemplateDialog({
   onClose: () => void
 }) {
   const firestore = useFirestore()
+  const { data: user } = useUser()
   const createHostResource = useHostResourceApi()
   const createHostVersion = useHostVersionApi()
   const { enqueueSnackbar } = useSnackbar()
@@ -190,6 +192,7 @@ export function UseTemplateDialog({
           seo: template.seo,
           slug,
           usedSlugs: used,
+          user,
         },
       )
       enqueueSnackbar(

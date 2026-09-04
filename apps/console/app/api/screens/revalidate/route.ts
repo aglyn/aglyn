@@ -476,6 +476,29 @@ export async function POST(request: Request): Promise<Response> {
     const redirectPath = String(
       (payload as { redirectPath?: unknown })?.redirectPath ?? '',
     )
+    /**
+     * Addresses named OUTRIGHT by the caller (AGL-2573).
+     *
+     * Every id above is resolved to URLs through the host's `screens` map,
+     * which only works while the map still points at the page. It does not
+     * for the two changes that need this most: an UNPUBLISH removes the entry
+     * before anything is announced, and a RENAME leaves the old address
+     * pointing nowhere. Resolving a `screenId` in either case finds nothing
+     * and answers `not-routed` — a success, over a page that is still cached
+     * and still being served.
+     *
+     * So the surface that changed the map, which read the old addresses
+     * before overwriting them, sends them. Validated exactly like
+     * `redirectPath`, because it is the same kind of value: a site-absolute
+     * URL path, trusted no further than one.
+     */
+    const namedPaths = Array.isArray((payload as { paths?: unknown })?.paths)
+      ? ((payload as { paths: unknown[] }).paths
+          .map((path) => String(path ?? '').trim())
+          .filter((path) => path.startsWith('/') && !path.includes('..'))
+          // The tenant's own `MAX_PATHS`; more would be dropped there anyway.
+          .slice(0, 250) as string[])
+      : []
     // Publishing a FORM changes every page that PLACES it, because a placed
     // form renders the entity's published design rather than the fields the
     // page holds. Before that graft existed a form publish changed nothing a
@@ -513,12 +536,13 @@ export async function POST(request: Request): Promise<Response> {
         !componentId &&
         !formId &&
         !collectionId &&
-        !redirectPath)
+        !redirectPath &&
+        !namedPaths.length)
     ) {
       return Response.json(
         {
           error:
-            'Missing hostId, and one of screenId, layoutId, componentId, formId, collectionId or redirectPath',
+            'Missing hostId, and one of screenId, layoutId, componentId, formId, collectionId, redirectPath or paths',
         },
         { status: 400 },
       )
@@ -616,6 +640,10 @@ export async function POST(request: Request): Promise<Response> {
     // lead, because the tenant's cap takes the first paths it is handed and
     // they are the addresses the change is about.
     const routePaths = [
+      // Caller-named addresses lead for the same reason derived ones do: the
+      // tenant takes the first paths it is handed, and an address the routing
+      // map can no longer resolve is one nothing else in this list will name.
+      ...namedPaths,
       ...extraPaths,
       ...affectedScreenIds
         .map((id) => screens[id])

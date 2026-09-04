@@ -448,6 +448,9 @@ describe('Screen Properties ▸ Slug · Done commits the field (AGL-2570)', () =
       expect.anything(),
       'host-1',
       { 'screen-1': 'alternatives/webflow' },
+      // The announcer (AGL-2573). A rename changes which address serves the
+      // page, so the seam drops both the old one and the new one.
+      expect.objectContaining({ user: expect.anything() }),
     )
     // A rename is not a new publication, so the published date is untouched.
     expect(stored).not.toHaveProperty('publishedAt')
@@ -585,6 +588,9 @@ describe('Screen Properties ▸ Slug · the seed (AGL-2572)', () => {
       expect.anything(),
       'host-1',
       { 'screen-1': 'alternatives/webflow' },
+      // The announcer (AGL-2573). A rename changes which address serves the
+      // page, so the seam drops both the old one and the new one.
+      expect.objectContaining({ user: expect.anything() }),
     )
   })
 })

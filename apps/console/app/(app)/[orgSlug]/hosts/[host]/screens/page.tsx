@@ -392,7 +392,11 @@ function Screens(props) {
         )
         .then(() =>
           path
-            ? publishScreenRoute(firestore, { hostId, screenId: newId }, path)
+            ? publishScreenRoute(
+                firestore,
+                { hostId, screenId: newId, user },
+                path,
+              )
             : undefined,
         )
         .catch((error) => {
@@ -422,6 +426,7 @@ function Screens(props) {
       createHostResource,
       createHostVersion,
       logActivity,
+      user,
     ],
   )
 
@@ -468,7 +473,7 @@ function Screens(props) {
             }),
             // A deleted screen must leave the routing map or its path keeps
             // resolving (then 404s deep in the tenant render).
-            unpublishScreenRoute(firestore, { hostId, screenId: id }),
+            unpublishScreenRoute(firestore, { hostId, screenId: id, user }),
           ]),
         )
         .then(() => logActivity('Deleted screen', { type: 'screen', id }))
@@ -557,6 +562,7 @@ function Screens(props) {
             buildScreenRouteEntries(screenId, nextById, routingMap, {
               publish: false,
             }),
+            { user },
           )
         }
         enqueueSnackbar(
@@ -587,6 +593,7 @@ function Screens(props) {
       hostId,
       queueLoading,
       enqueueSnackbar,
+      user,
     ],
   )
 

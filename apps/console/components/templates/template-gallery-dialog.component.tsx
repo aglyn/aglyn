@@ -566,6 +566,7 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
               seo: screen.seo,
               slug: screen.slug,
               usedSlugs: used,
+              user,
             },
           )
         }

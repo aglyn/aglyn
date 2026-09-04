@@ -230,7 +230,7 @@ describe('every entry action announces itself', () => {
     expect(source).toMatch(/screenIdsUsingCollectionDeep\(collectionSlug/)
     // The 400 has to name the new key, or a caller sending one gets told the
     // field it just sent is not a field.
-    expect(source).toMatch(/formId, collectionId or redirectPath/)
+    expect(source).toMatch(/formId, collectionId, redirectPath or paths/)
   })
 
   it('the route sends the collection ADDRESSES too, not just screens', () => {
