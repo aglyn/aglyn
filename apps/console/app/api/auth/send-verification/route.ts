@@ -19,6 +19,7 @@ import { PLATFORM_BRAND_NAME, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import {
   consumeRateLimit,
+  consumeVerifyEmailAutoSend,
   firebaseAdmin,
   meterPlatformEmail,
 } from '@aglyn/tenant-data-admin'
@@ -42,7 +43,11 @@ import { renderSystemEmail } from '../../_lib/render-system-email'
  * conceal — they already know their own address has an account.
  */
 async function handler(request: Request): Promise<Response> {
-  const { method, headers: rawHeaders } = await pluginRequestFromWeb(request)
+  const {
+    method,
+    headers: rawHeaders,
+    body,
+  } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
   if (method !== 'POST') {
     return Response.json({ error: 'Method not allowed' }, { status: 405 })
@@ -52,6 +57,12 @@ async function handler(request: Request): Promise<Response> {
     ? authorization.slice('Bearer '.length)
     : undefined
   if (!idToken) return Response.json({ error: 'Unauthenticated' }, { status: 401 })
+
+  // The page sets this on the send it fires from a mount; the "Resend
+  // verification email" button leaves it off. It is the one thing the body is
+  // trusted for, and only ever to send LESS — a caller who lies about it gets
+  // the cooldown they were entitled to skip, never somebody else's mail.
+  const automatic = (body as { auto?: unknown } | undefined)?.auto === true
 
   try {
     const auth = firebaseAdmin.app().auth()
@@ -72,6 +83,25 @@ async function handler(request: Request): Promise<Response> {
     // sending a mail whose link is a no-op.
     if (decoded.email_verified) {
       return Response.json({ ok: true, alreadyVerified: true }, { status: 200 })
+    }
+
+    // Arriving here is a request to know whether the first mail worked, not a
+    // request for another one (AGL-2584). Checked BEFORE the hourly budget so
+    // a send that is not going to happen spends nothing a deliberate resend
+    // would want, and answered 200: a link is already on its way, so the page
+    // shows the state it would have shown anyway and nothing is wrong.
+    if (automatic) {
+      const cooldown = await consumeVerifyEmailAutoSend(decoded.uid)
+      if (!cooldown.allowed) {
+        return Response.json(
+          {
+            ok: true,
+            alreadySent: true,
+            retryAfterSeconds: cooldown.retryAfterSeconds,
+          },
+          { status: 200 },
+        )
+      }
     }
 
     const limited = await consumeRateLimit(`verify-email:${decoded.uid}`, {
