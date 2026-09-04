@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.66 — 2026-09-04
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/f331e6e12...v1.0.0-beta.66)
+
+### Added
+
+- **besigner:** bold reaches the button family, by asking what each element can hold ([AGL-2557](https://linear.app/aglyn/issue/AGL-2557), [AGL-54](https://linear.app/aglyn/issue/AGL-54), [AGL-1232](https://linear.app/aglyn/issue/AGL-1232), [AGL-497](https://linear.app/aglyn/issue/AGL-497), [AGL-2556](https://linear.app/aglyn/issue/AGL-2556))
+
 ## v1.0.0-beta.65 — 2026-09-04
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.64...v1.0.0-beta.65)
