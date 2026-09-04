@@ -36,6 +36,7 @@ import {
   OrgSlugTakenError,
   recordSignupRefusal,
   signupProvisioningGraceAllows,
+  SLUG_RESERVATION_MS,
 } from '@aglyn/tenant-data-admin'
 import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
 
@@ -79,6 +80,22 @@ async function handler(request: Request): Promise<Response> {
 
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+    /*
+     * THE ADDRESS IS HELD, NOT GRANTED, WHEN NOBODY HAS PROVED THE EMAIL
+     * (AGL-2585).
+     *
+     * The org's name becomes its workspace address, and this route runs
+     * seconds after `createUserWithEmailAndPassword` — so until the
+     * reservation could expire, anyone with a throwaway inbox, or with no
+     * working inbox at all, permanently claimed a name here, a competitor's
+     * and a customer's included. Read from the SAME token the grace below
+     * reads, so the two can never disagree about who was verified.
+     *
+     * An impersonation session is a staff member acting for an owner who
+     * already exists, so it grants like any other verified caller.
+     */
+    const addressIsProven =
+      decoded.email_verified === true || isImpersonationSession(decoded)
     if (!decoded.email_verified && !isImpersonationSession(decoded)) {
       // Signup-time provisioning (AGL-1523): a fresh password account is
       // ALWAYS unverified when the signup form posts the org name it just
@@ -173,6 +190,9 @@ async function handler(request: Request): Promise<Response> {
       // them to a top-level claim, so this was empty for every SSO account —
       // stamping the org's first roster row, its owner, as nameless.
       ownerDisplayName: resolveIdpDisplayName(decoded) || null,
+      // Null for a proven address — the grant this collection has always
+      // written. An expiry for everyone else (AGL-2585).
+      reserveSlugUntilMs: addressIsProven ? null : Date.now() + SLUG_RESERVATION_MS,
     })
 
     // Welcome email on the owner's FIRST org only (AGL-768): someone who

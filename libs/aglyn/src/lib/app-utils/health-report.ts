@@ -1803,7 +1803,7 @@ export interface ScheduledJob {
  *
  * Six GitHub Actions schedules (`.github/workflows/scheduled-crons.yml`) — the
  * weekly jobs plus the month-boundary usage-email sweep, for which an hour of
- * drift is nothing — and eleven rows driven by Cloud Scheduler out of
+ * drift is nothing — and twelve rows driven by Cloud Scheduler out of
  * `cloud/functions/src/index.ts`: `pluginJobsBeat` (every minute), the four
  * the `consoleFastCrons` job carries every fifteen (AGL-1617), and one
  * `consoleDailyCron` export per daily job.
@@ -1897,6 +1897,19 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     graceMinutes: 90,
     drives:
       'Releases the provider domain object and the zone records of every sending domain whose site or workspace is gone. If it stops, each deleted site keeps one of a bounded number of provider domain slots forever — until the ceiling is reached and a site that asks for a domain of its own is refused one, which leaves it on the shared pool rather than stopping its mail — and leaves a live DKIM key in our zone under a label a future site can claim and inherit a stranger’s signature from.',
+  },
+  {
+    id: 'reap-unverified-orgs',
+    label: 'Unverified signup reaper',
+    // 06:00, after `run-erasures` and the sending-domain sweep and before the
+    // billing pair. It calls `eraseOrg` itself, so it wants the erasure runner
+    // to have already finished with whatever it was holding.
+    cron: '0 6 * * *',
+    runner: 'cloud-scheduler',
+    target: '/api/admin/reap-unverified-orgs?dryRun=0',
+    graceMinutes: 90,
+    drives:
+      'Erases workspaces whose sole owner never confirmed an email address, releasing the workspace address they took, and promotes the held address of every owner who has since verified. If it stops, a name claimed with a throwaway inbox is held until its reservation expires — and, worse, a real customer who verified keeps a pending address that becomes claimable by anyone on day twenty-one.',
   },
   {
     id: 'usage-email',

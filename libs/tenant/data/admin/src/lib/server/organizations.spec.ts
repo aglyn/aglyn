@@ -17,8 +17,10 @@
 
 import {
   isSlugReservationClaimable,
+  isSlugReservationLapsed,
   isWithinSignupProvisioningGrace,
   SIGNUP_PROVISIONING_GRACE_MS,
+  SLUG_RESERVATION_MS,
 } from './organizations'
 
 // AGL-585: a slug an org renamed AWAY from leaves a `movedTo` tombstone so
@@ -69,6 +71,86 @@ describe('isSlugReservationClaimable (AGL-585)', () => {
     expect(
       isSlugReservationClaimable({ orgId: 'org-a', movedTo: null }, 'org-b'),
     ).toBe(false)
+  })
+})
+
+/*
+ * AGL-2585 — the address a signup takes is HELD, not granted.
+ *
+ * A workspace's name is its URL, and it used to be handed over before
+ * anything proved the email belonged to the person typing it. These hold the
+ * two halves of the rule that ends that: a reservation with an expiry lapses,
+ * and a reservation without one — every workspace made by a verified owner,
+ * and every workspace that predates the field — never does.
+ */
+describe('isSlugReservationLapsed (AGL-2585)', () => {
+  const NOW = Date.parse('2026-09-04T12:00:00Z')
+
+  it('never lapses a GRANT', () => {
+    // The load-bearing case. Every existing reservation on the platform looks
+    // like this, and a rule that expired them would put every workspace URL
+    // in the product up for grabs.
+    expect(isSlugReservationLapsed({ orgId: 'org-a' }, NOW)).toBe(false)
+    expect(isSlugReservationLapsed(undefined, NOW)).toBe(false)
+  })
+
+  it('lapses a hold whose window has run out', () => {
+    expect(
+      isSlugReservationLapsed({ reservedUntil: NOW - 1 }, NOW),
+    ).toBe(true)
+    expect(isSlugReservationLapsed({ reservedUntil: NOW }, NOW)).toBe(true)
+  })
+
+  it('holds a reservation that is still inside its window', () => {
+    expect(
+      isSlugReservationLapsed(
+        { reservedUntil: NOW + SLUG_RESERVATION_MS },
+        NOW,
+      ),
+    ).toBe(false)
+  })
+
+  it('never lapses on an expiry it cannot read', () => {
+    // A corrupt or half-written expiry is a reason to leave an address alone.
+    for (const reservedUntil of [
+      '1757000000000',
+      null,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      {},
+      true,
+    ]) {
+      expect(isSlugReservationLapsed({ reservedUntil }, NOW)).toBe(false)
+    }
+  })
+
+  it('makes a lapsed hold claimable and an unexpired one not', () => {
+    expect(
+      isSlugReservationClaimable(
+        { orgId: 'org-a', reservedUntil: NOW - 1 },
+        'org-b',
+        NOW,
+      ),
+    ).toBe(true)
+    expect(
+      isSlugReservationClaimable(
+        { orgId: 'org-a', reservedUntil: NOW + 1 },
+        'org-b',
+        NOW,
+      ),
+    ).toBe(false)
+    // And a grant is still refused, which is the whole of AGL-585 unchanged.
+    expect(
+      isSlugReservationClaimable({ orgId: 'org-a' }, 'org-b', NOW),
+    ).toBe(false)
+  })
+
+  it('holds the address for longer than the reaper waits', () => {
+    // The ordering the two mechanisms depend on: the ordinary way an address
+    // comes back is the sweep erasing the workspace at seven days, and this
+    // window is the sweep's outage budget rather than a second deadline
+    // racing it.
+    expect(SLUG_RESERVATION_MS).toBeGreaterThan(7 * 24 * 60 * 60 * 1000)
   })
 })
 

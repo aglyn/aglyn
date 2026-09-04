@@ -516,6 +516,23 @@ const CONSOLE_DAILY_CRONS = {
     schedule: '0 5 * * *',
     route: '/api/admin/reap-sending-domains',
   },
+  /*
+   * ⛔ THE `?dryRun=0` IS WHAT ARMS IT (AGL-2585).
+   *
+   * `/api/admin/reap-unverified-orgs` erases whole workspaces, so unlike its
+   * five siblings it reports rather than acts unless a caller says otherwise —
+   * on a POST as much as on a GET. This is the one place that says otherwise,
+   * which makes putting the sweep back into preview a four-character edit here
+   * rather than a code change, and makes the fact that a scheduled job deletes
+   * workspaces legible at the schedule instead of only inside the route.
+   *
+   * An hour after `run-erasures`, for the same ordering reason the sweep above
+   * carries: it calls `eraseOrg`, and the erasure runner should be done first.
+   */
+  'reap-unverified-orgs': {
+    schedule: '0 6 * * *',
+    route: '/api/admin/reap-unverified-orgs?dryRun=0',
+  },
 } as const
 
 /**
@@ -557,6 +574,7 @@ export const consoleRunErasures = consoleDailyCron('run-erasures')
 export const consoleReportUsageCurrent = consoleDailyCron('report-usage-current')
 export const consoleUsageAlerts = consoleDailyCron('usage-alerts')
 export const consoleReapSendingDomains = consoleDailyCron('reap-sending-domains')
+export const consoleReapUnverifiedOrgs = consoleDailyCron('reap-unverified-orgs')
 
 /*==============================================================
  * THE SIGNUPS LOCK, AT ACCOUNT CREATION (AGL-1531)
