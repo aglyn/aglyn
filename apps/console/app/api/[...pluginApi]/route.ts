@@ -24,9 +24,12 @@ import {
 } from '@aglyn/aglyn/server'
 import {
   consoleApiRateLimitRefusal,
+  emailUnverifiedResponse,
   featureLockdownRefusal,
   filterEnabledPluginsByReleaseFlags,
   firebaseAdmin,
+  isEmailVerified,
+  isImpersonationSession,
   getHostDisabledPlugins,
   getHostDocAdmin,
   getOrgForHost,
@@ -136,6 +139,7 @@ async function dispatch(
   // per-call user-lockdown read is only paid by signed-in console callers.
   let staff = false
   let uid: string | null = null
+  let emailUnverified = false
   const authorization = request.headers.get('authorization') ?? ''
   if (authorization.startsWith('Bearer ')) {
     try {
@@ -145,10 +149,39 @@ async function dispatch(
         .verifyIdToken(authorization.slice('Bearer '.length))
       staff = decoded['staff'] === true
       uid = decoded.uid
+      emailUnverified =
+        !isEmailVerified(decoded) && !isImpersonationSession(decoded)
     } catch {
       // Not a Firebase token (plugin key / anonymous) — no bypass, no uid.
     }
   }
+  /*
+   * The email-verification gate (AGL-479) reaches this dispatcher too
+   * (AGL-2589). Its ~135 named siblings each spell the check out beside
+   * their own token decode; this one decoded a token for `staff` and `uid`
+   * and then asked nothing about the address behind it, so every plugin
+   * console handler behind it — marketplace installs and purchases, gift
+   * cards, POS orders, refunds, the campaign composer's own surfaces — was
+   * reachable by an account that had never opened its mail.
+   *
+   * CONDITIONED ON A TOKEN BEING PRESENT, which is the whole design of the
+   * gate here and not a softening of it. This dispatcher shares ONE route
+   * registry with the tenant dispatcher (`registerPluginApiRoute`), so the
+   * paths it can resolve include the storefront handlers a shop visitor
+   * calls with no Firebase identity at all — `commerce/cart`,
+   * `commerce/catalog`, `membership/login`, `bookings/slots`. Refusing a
+   * tokenless request here would 403 those instead of letting each handler
+   * answer its own, different question about who may call it. What the gate
+   * says is the same sentence AGL-479 says everywhere else: a Firebase
+   * ACCOUNT that has not verified its address is not a caller. No token is
+   * not an unverified account.
+   *
+   * Placed before the lockdown verdict so an unverified caller cannot spend
+   * a lockdown read or a rate-limit transaction, and before route
+   * resolution so it applies to every path this dispatcher owns rather than
+   * a list somebody has to maintain.
+   */
+  if (emailUnverified) return emailUnverifiedResponse()
   const locked = await lockdownRefusal({
     request,
     staff,

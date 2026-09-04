@@ -216,6 +216,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         verifyIdToken: async () => ({
           uid: mockUid,
           email: 'admin@example.com',
+          // Verified: a host member is, since nothing enters a `memberRoles`
+          // map unverified, and the send gate reads this claim (AGL-2589).
+          email_verified: true,
         }),
       }),
     }),

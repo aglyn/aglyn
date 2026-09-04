@@ -312,7 +312,17 @@ describe('the writer and the rule are held to ONE field list', () => {
   )
 
   it('the rule allows exactly the keys the writer writes', () => {
-    const clause = /publishOutbox[\s\S]*?hasOnly\(\s*\[([^\]]*)\]/.exec(rules)?.[1]
+    /*
+     * Anchored on the MATCH BLOCK, not on the word. `publishOutbox` appears
+     * in prose above the block it names — `canPublishHostContent`'s docstring
+     * cites it (AGL-2589) — and a bare-name anchor took the first `hasOnly`
+     * after that mention instead, which belongs to a different collection
+     * entirely. The comparison then held this rule against another rule's
+     * field list: green or red for reasons that have nothing to do with the
+     * coupling this test exists to keep.
+     */
+    const clause =
+      /match \/publishOutbox\/[\s\S]*?hasOnly\(\s*\[([^\]]*)\]/.exec(rules)?.[1]
     // A regex that matched nothing would make the comparison below vacuous.
     expect(clause).toBeDefined()
     const allowed = [...(clause as string).matchAll(/'([\w]+)'/g)].map(

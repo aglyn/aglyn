@@ -147,7 +147,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   firebaseAdmin: {
     app: () => ({
       firestore: () => mockFirestore(),
-      auth: () => ({ verifyIdToken: async () => ({ uid: mockUid }) }),
+      auth: () => ({
+        // Verified, because a host member is one: nothing enters a
+        // `memberRoles` map unverified, and the send gate reads this
+        // claim directly since AGL-2589.
+        verifyIdToken: async () => ({ uid: mockUid, email_verified: true }),
+      }),
     }),
     firestore: {
       FieldValue: {

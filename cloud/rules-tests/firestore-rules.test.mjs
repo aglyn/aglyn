@@ -459,7 +459,22 @@ const LEGACY = 'uid-legacy' // only in the retired host admins map
 const OUTSIDER = 'uid-outsider'
 const STAFF = 'uid-staff'
 
-const authed = (uid, tokens) => env.authenticatedContext(uid, tokens).firestore()
+/**
+ * A signed-in principal, VERIFIED unless a case says otherwise (AGL-2589).
+ *
+ * `createMockUserToken` stamps no `email_verified` at all, so before this
+ * default every context in this file read as unverified — which is not what
+ * any of these suites are about, and would have turned a rule about
+ * unverified accounts into a rewrite of two thousand assertions. A member of
+ * an org is a verified account in production: nothing can enter a `members`
+ * collection or a `memberRoles` map without having verified, which is the
+ * very property AGL-2589 wrote down instead of inheriting.
+ *
+ * Spread AFTER the default, so a case that means to test the unverified side
+ * says `authed(OWNER, { email_verified: false })` and gets it.
+ */
+const authed = (uid, tokens) =>
+  env.authenticatedContext(uid, { email_verified: true, ...tokens }).firestore()
 const anon = () => env.unauthenticatedContext().firestore()
 
 /**
@@ -8012,7 +8027,7 @@ describe('an org can read the marketplace licences it holds (AGL-2331)', () => {
 
 /**
  * `storagePath` and `private` are server-owned on a media document
- * (AGL-1881) — the defence-in-depth half of the pre-launch review's one
+ * (AGL-1881) — the defense-in-depth half of the pre-launch review's one
  * CRITICAL finding.
  *
  * The sink is fixed (`media-storage-path.ts` refuses a key outside the
@@ -9064,6 +9079,242 @@ describe('a publish outbox entry may only be written for a host you can publish 
     await mustAllow(
       'staff reading it while diagnosing a publish that never went live',
       getDoc(doc(authed(STAFF, { staff: true }), OUTBOX, 'unreadable')),
+    )
+  })
+})
+
+describe('an unverified address cannot write org or site data (AGL-2589)', () => {
+  /*
+   * THE CONTAINMENT PROPERTY, STATED.
+   *
+   * Email verification (AGL-479) was enforced in roughly 135 Next.js route
+   * handlers and NOWHERE in this file, so it was not a defense against the
+   * thing rules are for: a client holding a Firebase ID token, talking to
+   * Firestore directly, past every route. What refused an unverified account
+   * in practice was a side effect of provisioning — nothing can enter an
+   * org's `members` collection or a host's `memberRoles` map without having
+   * verified, so every role lookup resolved to nothing.
+   *
+   * These suites are the reason that is no longer the load-bearing sentence.
+   * They seed membership DIRECTLY, with the rules disabled, for an account
+   * whose token says `email_verified: false` — which is exactly the state a
+   * grace exception on host creation would produce, the way signup already
+   * provisions an org for an unverified account (AGL-2585). Under the old
+   * rules every assertion below would have PASSED the write.
+   *
+   * Both directions, and the permit half is not decoration: an over-broad
+   * verification gate locks a person out of the flow that would let them
+   * verify, which is a worse outcome than the hole it closes.
+   */
+  const unverified = (uid) => authed(uid, { email_verified: false })
+
+  /** One org-wide contact on file, so the read half tests a real document. */
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'orgs', ORG, 'contacts', 'c-seeded'), {
+        email: 'buyer@acme.test',
+        visibleTo: ['org'],
+      })
+    })
+  })
+
+  it('HALF ONE — a verified member still writes everything a send draws on', async () => {
+    // Asserted FIRST. Every refusal below would pass just as well against a
+    // rule that denied these outright, which would break the campaign
+    // composer for every paying customer.
+    await mustAllow(
+      'a verified editor saving the canvas a campaign renders from',
+      setDoc(
+        doc(authed(EDITOR), 'hosts', HOST, 'screens', 'screen-1', 'versions', 'v1'),
+        { screenId: 'screen-1', nodes: { root: { type: 'Text' } } },
+      ),
+    )
+    await mustAllow(
+      'a verified owner adding a contact to the audience',
+      setDoc(doc(authed(OWNER), 'orgs', ORG, 'contacts', 'c-verified'), {
+        email: 'buyer@acme.test', visibleTo: ['org'],
+      }),
+    )
+    await mustAllow(
+      'a verified owner creating the list a campaign sends to',
+      setDoc(doc(authed(OWNER), 'orgs', ORG, 'lists', 'list-verified'), {
+        name: 'Newsletter',
+      }),
+    )
+  })
+
+  it('refuses the MESSAGE — the canvas a campaign body is rendered from', async () => {
+    await mustDeny(
+      'an unverified editor saving a screen version',
+      setDoc(
+        doc(unverified(EDITOR), 'hosts', HOST, 'screens', 'screen-1', 'versions', 'v1'),
+        { screenId: 'screen-1', nodes: { root: { type: 'Text' } } },
+      ),
+    )
+    await mustDeny(
+      'an unverified editor editing the screen document itself',
+      updateDoc(doc(unverified(EDITOR), 'hosts', HOST, 'screens', 'screen-1'), {
+        name: 'Renamed',
+      }),
+    )
+    await mustDeny(
+      'an unverified editor publishing — registering a live route',
+      updateDoc(doc(unverified(EDITOR), 'hosts', HOST), {
+        'screens.screen-2': '/pricing',
+      }),
+    )
+    await mustDeny(
+      'an unverified editor writing through the host catch-all',
+      updateDoc(doc(unverified(EDITOR), 'hosts', HOST, 'variables', 'var-1'), {
+        value: '2',
+      }),
+    )
+  })
+
+  it('refuses the AUDIENCE — contacts, segments, topics, lists and datasets', async () => {
+    await mustDeny(
+      'an unverified owner adding a contact',
+      setDoc(doc(unverified(OWNER), 'orgs', ORG, 'contacts', 'c-new'), {
+        email: 'someone@acme.test', visibleTo: ['org'],
+      }),
+    )
+    await mustDeny(
+      'an unverified owner saving a segment — a campaign audience',
+      setDoc(doc(unverified(OWNER), 'orgs', ORG, 'contactSegments', 'seg-new'), {
+        name: 'Everyone', visibleTo: ['org'],
+      }),
+    )
+    await mustDeny(
+      'an unverified owner creating an email topic',
+      setDoc(doc(unverified(OWNER), 'orgs', ORG, 'emailTopics', 'topic-new'), {
+        name: 'Offers',
+      }),
+    )
+    await mustDeny(
+      'an unverified owner creating a list',
+      setDoc(doc(unverified(OWNER), 'orgs', ORG, 'lists', 'list-new'), {
+        name: 'Newsletter',
+      }),
+    )
+  })
+
+  it('refuses the SITE RECORD and the settings a send resolves from', async () => {
+    await mustDeny(
+      'an unverified admin renaming the site',
+      updateDoc(doc(unverified(OWNER), 'hosts', HOST), { displayName: 'New' }),
+    )
+    await mustDeny(
+      "an unverified admin writing a plugin's site settings",
+      setDoc(doc(unverified(OWNER), 'hosts', HOST, 'pluginSettings', 'marketing'), {
+        fromName: 'Acme',
+      }),
+    )
+    await mustDeny(
+      "an unverified admin writing a plugin's ORG settings",
+      setDoc(doc(unverified(OWNER), 'orgs', ORG, 'pluginSettings', 'marketing'), {
+        fromName: 'Acme',
+      }),
+    )
+    await mustDeny(
+      'an unverified admin renaming the org',
+      updateDoc(doc(unverified(OWNER), 'orgs', ORG), { name: 'Renamed' }),
+    )
+    await mustDeny(
+      'an unverified admin mutating a webhook',
+      updateDoc(doc(unverified(OWNER), 'hosts', HOST, 'webhooks', 'wh1'), {
+        url: 'https://elsewhere.example',
+      }),
+    )
+  })
+
+  it('refuses the publish outbox, which makes the PLATFORM act', async () => {
+    await mustDeny(
+      'an unverified editor staging a cache-drop announce',
+      setDoc(doc(unverified(EDITOR), 'publishOutbox', 'unverified-entry'), {
+        hostId: HOST,
+        paths: ['/home'],
+        createdAt: serverTimestamp(),
+        attempts: 0,
+      }),
+    )
+  })
+
+  it('STILL PERMITS what a person needs to complete verification', async () => {
+    /*
+     * The half that makes this a gate rather than a lockout. A blanket
+     * `isVerified()` inside `isSignedIn()` would have been three characters
+     * and would have refused every one of these — including the write
+     * `signup/page.tsx` makes client-side from the credential it has just
+     * created, before any mail has been opened.
+     */
+    await mustAllow(
+      'an unverified account writing its own user document, as signup does',
+      setDoc(doc(unverified(OWNER), 'users', OWNER), {
+        displayName: 'New person',
+      }),
+    )
+    await mustAllow(
+      'an unverified account reading its own "my organizations" index',
+      getDoc(doc(unverified(OWNER), 'users', OWNER, 'orgs', ORG)),
+    )
+    await mustAllow(
+      'an unverified member reading the org they belong to',
+      getDoc(doc(unverified(OWNER), 'orgs', ORG)),
+    )
+    await mustAllow(
+      'an unverified member reading the site they belong to',
+      getDoc(doc(unverified(EDITOR), 'hosts', HOST)),
+    )
+    await mustAllow(
+      'an unverified member reading a screen — the console still renders',
+      getDoc(doc(unverified(EDITOR), 'hosts', HOST, 'screens', 'screen-1')),
+    )
+    await mustAllow(
+      'an unverified member reading the contacts they may already see',
+      getDoc(doc(unverified(OWNER), 'orgs', ORG, 'contacts', 'c-seeded')),
+    )
+  })
+
+  it('exempts a staff impersonation session, exactly as the routes do', async () => {
+    /*
+     * AGL-480's carve-out, mirrored. `impersonatedBy` is a custom claim only
+     * the Admin SDK can set (/api/admin/impersonate), the act is audited, and
+     * the account most likely to need support is the newest one — which is
+     * precisely the account that has not verified. Rules that exempted a
+     * different set than the routes do would reintroduce the divergence this
+     * issue closed, pointed the other way.
+     */
+    const impersonated = authed(OWNER, {
+      email_verified: false,
+      impersonatedBy: STAFF,
+    })
+    await mustAllow(
+      'staff, signed in as an unverified owner, fixing their site',
+      updateDoc(doc(impersonated, 'hosts', HOST), { displayName: 'Fixed' }),
+    )
+    await mustDeny(
+      'an empty impersonatedBy claim, which is nobody',
+      updateDoc(
+        doc(
+          authed(OWNER, { email_verified: false, impersonatedBy: '' }),
+          'hosts',
+          HOST,
+        ),
+        { displayName: 'Nope' },
+      ),
+    )
+  })
+
+  it('refuses an unverified OUTSIDER exactly as before — no new grant', async () => {
+    // The negative control for the permit half above: nothing here widened a
+    // read for somebody who was already refused one.
+    await mustDeny(
+      'an unverified outsider reading the org',
+      getDoc(doc(unverified(OUTSIDER), 'orgs', ORG)),
+    )
+    await mustDeny(
+      'an unverified outsider reading the site',
+      getDoc(doc(unverified(OUTSIDER), 'hosts', HOST)),
     )
   })
 })
