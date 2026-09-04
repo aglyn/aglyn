@@ -72,6 +72,8 @@ export function shouldReport(results) {
  * this list gets no claim made about it beyond the code the probe reported.
  */
 export const JOURNEY_MEANING = {
+  'console/auth-doors':
+    'a way IN may be shut — password recovery, the verification link, Google, SSO or passkeys',
   'console/journeys': 'creating or publishing may be refused for every customer',
   'tenant/funnel': 'the contact, sales and demo forms may be losing every lead',
   'console/signups': 'org creation is outside its expected volume',

@@ -35,6 +35,11 @@ GET  https://aglyn.com/api/health/render/marketing
                                                marketing home RENDERS (AGL-2486)
 GET  https://demo.aglyn.app/api/health/render/site
                                                a tenant site RENDERS (AGL-2486)
+GET  https://app.aglyn.com/api/health/auth-doors
+                                               can a person still get IN —
+                                               password recovery, the
+                                               verification link, Google, SSO,
+                                               passkeys (AGL-2586)
 GET  https://app.aglyn.com/api/health/journeys
                                                create + publish stay AUTHORIZED,
                                                and published cache drops land
@@ -44,15 +49,62 @@ GET  https://aglyn.com/api/health/funnel       contact / sales / demo forms stil
 HEAD <any>                                     the SAME probe and status as GET
 ```
 
-The last two are JOURNEY checks rather than component checks, and the
+The last three are JOURNEY checks rather than component checks, and the
 distinction is the whole of AGL-2586: every endpoint above them can be green
-while nobody can sign up, nobody can publish, and every lead the site collects
-is dropped on the floor. Neither writes anything — both assert reachability and
-authorization without committing, so no synthetic org, site, screen or lead is
-ever created in production. What each one asserts, and what it deliberately does
-not, is in the docblocks:
+while nobody can get in, nobody can publish, and every lead the site collects
+is dropped on the floor. None writes anything — all three assert reachability
+and authorization without committing, so no synthetic account, org, site,
+screen or lead is ever created in production. What each one asserts, and what
+it deliberately does not, is in the docblocks:
+`apps/console/app/api/health/auth-doors/auth-doors-probe.ts`,
 `apps/console/app/api/health/journeys/journeys-probe.ts` and
 `apps/tenant/app/api/health/funnel/funnel-probe.ts`.
+
+### The doors — what `/api/health/auth-doors` asserts
+
+| Check | Green means | Goes red when |
+| --- | --- | --- |
+| `passwordReset` | the reset link is built on an allowlisted console origin, email is configured, and the redemption endpoint refuses an invalid code | the console URL is malformed or non-TLS, the resolver starts honoring request-supplied origins, email transport is unconfigured, or `accounts:resetPassword` stops answering |
+| `emailVerification` | the link mint path answers, the AGL-1112 rewrite still lands on a console handler URL carrying the code, and redemption refuses an invalid code | the mint answers anything but `auth/user-not-found` for an unclaimable address, the rewrite drifts off our origin or drops the code, or `accounts:update` stops answering |
+| `googleOauth` | Identity Platform builds a Google authorization URL for the console origin, carrying a client id | the provider is disabled or its client id was removed (`OPERATION_NOT_ALLOWED`), the console origin fell off the authorized-domain list (`INVALID_CONTINUE_URI`), App Check refuses, or the web API key is rejected |
+| `sso` | the per-org GCIP tenant pools list, and a bounded sample still carries an enabled SAML or OIDC provider | the tenant manager stops answering — which locks out every enterprise customer at once — or a sampled pool's provider config was deleted or disabled |
+| `passkey` | the console origin resolves to a relying-party context and a discoverable-credential challenge can be issued | the deployment's workspace domain is wrong, which `400`s every registration and every sign-in and is otherwise invisible |
+
+Every probe is a question whose answer is a known refusal: the mint asks about
+an address at `.invalid`, a TLD RFC 2606 reserves so it can never be
+registered, and the redemption probes present a code that is not a code. A
+refusal is the *success*, the same trick the root check plays on Firestore. One
+sweep is memoized for five minutes per instance.
+
+**The body carries codes, never messages,** and that matters more here than on
+the siblings: the Identity Platform surfaces behind these probes return the
+OAuth **client secret** and the password-hash **signer key**, and a tenant id
+names a customer. Every verdict is computed from booleans and counts in
+`auth-doors-verdict.ts`, which cannot be handed a string a provider wrote.
+
+#### What it deliberately does NOT assert
+
+- **A real Google, SAML or passkey login.** We cannot hold a Google session, a
+  customer's IdP assertion, or an authenticator's private key. These assert
+  reachability and authorization — the step the browser takes first, answered
+  by the same configuration the real handshake depends on. That is how OAuth
+  actually breaks.
+- **That a password-reset mail leaves the building.** Firebase's
+  email-enumeration protection refuses to distinguish a missing account from a
+  present one — measured on the live project, `generatePasswordResetLink` for
+  an address that does not exist returns `auth/internal-error`, not
+  `auth/user-not-found` — so there is no negative case to probe with.
+- **A full round trip through a redeemed code.** Same reason: following a real
+  verification link end to end needs an account whose address we control.
+- **A customer's own identity provider.** Theirs, not ours to probe.
+
+**If a probe identity is ever added** it is a decision about production, not a
+side effect of adding a check, and it is not made here. It would need: a
+dedicated account on a domain we control, exempt from metering and from every
+funnel metric, reaped on a schedule; its address named by an environment
+variable in the repo with the value in the secret store, exactly as
+`AGLYN_PROBE_TOKEN` is handled; and its own line in the table above saying what
+the extra coverage buys.
 
 **A red now reaches a person.** The `Uptime probe` workflow watched every
 endpoint above for weeks and told nobody — its own header says *"the run

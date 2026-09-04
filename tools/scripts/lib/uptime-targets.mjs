@@ -117,6 +117,12 @@ export const SUBSYSTEM_HEALTH = {
     // documents and produce a second alert for one event. The body's
     // `byService` is what tells the two apart.
     '/api/health/server-errors',
+    // Can a person still get IN (AGL-2586)? The doors that are not email and
+    // password: password recovery, the verification link, Google, SSO and
+    // passkeys. `signups` above counts org creations; this asks the providers
+    // whether the handshake would still be accepted, which is the question no
+    // component check answers and no count can distinguish from quiet demand.
+    '/api/health/auth-doors',
     // Can a customer create and publish (AGL-2586)? Component health was
     // green through the twelve minutes on 2026-09-04 when late-shipping
     // Firestore rules refused every publish batch on the platform.
