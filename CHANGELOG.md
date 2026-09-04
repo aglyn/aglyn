@@ -9,6 +9,19 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.69 — 2026-09-04
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.68...v1.0.0-beta.69)
+
+<details>
+<summary>Also in this release: 3 chore</summary>
+
+- **deps-dev:** bump the linters group with 6 updates
+- **deps:** bump the firebase group with 3 updates
+- **deps:** bump the mui-emotion group with 2 updates
+
+</details>
+
 ## v1.0.0-beta.68 — 2026-09-04
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.67...v1.0.0-beta.68)
