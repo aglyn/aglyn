@@ -13,6 +13,7 @@
 #   tools/gate.sh --keep                   # leave the worktree for triage
 #   tools/gate.sh --affected               # THE FAST PATH — see below
 #   tools/gate.sh --no-install             # refuse on lockfile drift, never install
+#   tools/gate.sh --lock-wait 300          # queue behind a run holding the root
 #
 # ---------------------------------------------------------------------------
 # TWO PATHS, AND THE ONE THAT RAN IS ALWAYS NAMED (AGL-2486)
@@ -139,6 +140,10 @@ AFFECTED_BASE=""
 # an install into a REFUSAL, for an offline box — never into a silent clone.
 ALLOW_INSTALL=1
 PROVISION_NOTE=""
+# Seconds to queue behind a run already holding the gate root before refusing.
+# Zero — refuse immediately — is the default because the caller is usually a
+# human at a terminal who would rather be told than blocked.
+GATE_LOCK_WAIT="${GATE_LOCK_WAIT:-0}"
 
 # The parse loop consumes "$@", and the self-snapshot below has to re-exec with
 # exactly what the caller passed. Saved before anything eats it.
@@ -164,6 +169,7 @@ while [ $# -gt 0 ]; do
     --self-test)    SELF_TEST=1; shift ;;
     --affected)     AFFECTED=1; shift ;;
     --no-install)   ALLOW_INSTALL=0; shift ;;
+    --lock-wait)    GATE_LOCK_WAIT="$2"; shift 2 ;;
     --base)         AFFECTED_BASE="$2"; shift 2 ;;
     -h|--help)      sed -n '2,80p' "$0"; exit 0 ;;
     *) echo "gate: unknown argument '$1'" >&2; exit 64 ;;
@@ -448,6 +454,216 @@ verify_modules() {
   return $bad
 }
 
+# --- the gate-root lock ----------------------------------------------------
+# TRAP 8 — TWO RUNS IN ONE GATE ROOT, and the second one resets the first's
+# worktree out from under it (AGL-2561).
+#
+# `--affected` deliberately shares a STABLE root (see the GATE_ROOT block
+# below), so any two fast runs land in the same `wt` — two sessions reaching
+# for it at once, or one session that killed a run and relaunched it, which is
+# routine. The entry-time `checkout --detach` + `reset --hard` + `clean -xdf`
+# that correctly heals a tree a PREVIOUS run damaged is, against a run still in
+# flight, the damage itself: it moves the tree to a different sha and discards
+# whatever that run's tasks are mid-write. The first run keeps executing and
+# reports a verdict for a tree it no longer controls, so a FALSE GREEN is
+# reachable here, not only a false red. Nothing detected it and nothing warned.
+#
+# The lock is an atomic `mkdir` of `<root>/.lock` holding the owner's pid, its
+# process start time, its ref and its sha. `mkdir` is the portable choice and
+# not merely the cheap one: `flock(1)` is a util-linux program and is NOT
+# installed on macOS, which is the only platform this gate runs on.
+#
+# EVERY root is locked, not only the shared fast one. A timestamped root
+# collides with a second run started in the same second; `--root` is by
+# definition a path two callers can name; and one unconditional code path is
+# the version whose correctness does not depend on which flags were passed.
+# On a root nobody else can be in, the lock costs one `mkdir` and always wins.
+#
+# The four properties that make it safe to rely on:
+#   TAKEN BEFORE THE RESET   the acquisition sits above every write into the
+#                            root — the summary truncation, the self-snapshot,
+#                            and above all the entry-time `reset --hard`.
+#   RELEASED ON EXIT         including INT/TERM/HUP, so a killed gate does not
+#                            wedge the fast path for every later run.
+#   STALE-CHECKED ON ENTRY   a lock whose owner is gone is reclaimed. Killing
+#                            and relaunching a gate is routine, so a lock that
+#                            could only be cleared by hand would be a worse
+#                            bug than the one it fixes.
+#   PID-REUSE PROOF          the owner's process START TIME is recorded beside
+#                            its pid. A recycled pid looks alive to `kill -0`,
+#                            and treating one as the holder would wedge the
+#                            root exactly as badly as never releasing it.
+#
+# Everything from the marker below to its closing marker is self-contained:
+# it reads no gate global, so the self-test extracts it and exercises it in a
+# child shell against a throwaway root rather than against the real one, which
+# a peer session may be using right now.
+#
+# >>> gate-root lock
+GATE_LOCK_DIR="${GATE_LOCK_DIR:-}"
+# EX_TEMPFAIL. The root is busy, which is a "try again", not a red verdict —
+# and it must not collide with 64/65/66 or with a phase failure's 1.
+GATE_LOCK_EXIT=75
+
+gate_lock_field() { # gate_lock_field <lockdir> <key>
+  sed -n "s/^$2=//p" "$1/owner" 2>/dev/null | head -1
+}
+
+gate_lock_proc_start() { # gate_lock_proc_start <pid>
+  ps -o lstart= -p "$1" 2>/dev/null | sed 's/^ *//;s/ *$//'
+}
+
+# A pid alone is not proof of life: pids are reused, and a recycled one would
+# make a lock nobody holds look held forever. The recorded start time settles
+# it. Missing evidence never downgrades a live pid to stale — `kill -0` said
+# yes and that stands.
+gate_lock_holder_alive() { # gate_lock_holder_alive <pid> <recorded start>
+  local pid="$1" want="$2" now
+  case "$pid" in ''|*[!0-9]*) return 1 ;; esac
+  kill -0 "$pid" 2>/dev/null || return 1
+  now=$(gate_lock_proc_start "$pid")
+  [ -n "$want" ] && [ -n "$now" ] || return 0
+  [ "$now" = "$want" ]
+}
+
+# The lock directory exists for an instant before its owner file does. A reader
+# arriving inside that window sees no pid and must read it as HELD; reading it
+# as stale would reclaim a lock that is about to be perfectly valid.
+gate_lock_being_written() { # gate_lock_being_written <lockdir> <pid>
+  [ -z "$2" ] || return 1
+  [ -n "$(find "$1" -maxdepth 0 -mmin -1 2>/dev/null)" ]
+}
+
+# Written through a temp file and renamed, so a concurrent reader sees either
+# the whole record or no record — never half a pid.
+gate_lock_write() { # gate_lock_write <lockdir> <ref> <sha>
+  { printf 'pid=%s\n'   "$$"
+    printf 'start=%s\n' "$(gate_lock_proc_start "$$")"
+    printf 'ref=%s\n'   "$2"
+    printf 'sha=%s\n'   "$3"
+    printf 'since=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')"
+  } > "$1/owner.tmp" 2>/dev/null && mv "$1/owner.tmp" "$1/owner" 2>/dev/null
+  return 0
+}
+
+# The sha is not known at acquisition time — the lock has to be held before the
+# ref is even resolved, because resolving it is followed immediately by the
+# reset. It is filled in the moment it exists, so a run refused later names the
+# commit the holder is gating rather than a placeholder.
+gate_lock_note_sha() { # gate_lock_note_sha <sha>
+  local owner
+  [ -n "${GATE_LOCK_DIR:-}" ] || return 0
+  [ "$(gate_lock_field "$GATE_LOCK_DIR" pid)" = "$$" ] || return 0
+  owner="$GATE_LOCK_DIR/owner"
+  sed "s|^sha=.*|sha=$1|" "$owner" > "$owner.tmp" 2>/dev/null \
+    && mv "$owner.tmp" "$owner" 2>/dev/null
+  return 0
+}
+
+# Reached through `trap`, which shellcheck cannot see as a call site.
+# shellcheck disable=SC2329
+gate_lock_release() {
+  local lock="${GATE_LOCK_DIR:-}"
+  [ -n "$lock" ] || return 0
+  # Only the recorded owner removes it. A run whose lock was reclaimed while it
+  # was alive must not delete the lock the reclaiming run now holds.
+  if [ "$(gate_lock_field "$lock" pid)" = "$$" ]; then
+    rm -rf "$lock"
+  fi
+  GATE_LOCK_DIR=""
+  return 0
+}
+
+# Reached through `trap`, which shellcheck cannot see as a call site.
+# shellcheck disable=SC2329
+gate_lock_on_signal() { # gate_lock_on_signal <signal> <exit code>
+  gate_lock_release
+  echo "gate: $1 — gate-root lock released" >&2
+  exit "$2"
+}
+
+gate_lock_arm_traps() {
+  trap gate_lock_release EXIT
+  trap 'gate_lock_on_signal INT 130' INT
+  trap 'gate_lock_on_signal TERM 143' TERM
+  trap 'gate_lock_on_signal HUP 129' HUP
+}
+
+# Names the pid AND the sha, because those are the two facts a human needs to
+# decide between waiting and killing.
+gate_lock_refuse() { # gate_lock_refuse <lockdir>
+  local lock="$1"
+  {
+    echo "gate: REFUSING — this gate root is already held by another run."
+    echo "      root         : $(dirname "$lock")"
+    echo "      holder pid   : $(gate_lock_field "$lock" pid)"
+    echo "      holder sha   : $(gate_lock_field "$lock" sha)"
+    echo "      holder ref   : $(gate_lock_field "$lock" ref)"
+    echo "      holding since: $(gate_lock_field "$lock" since)"
+    echo
+    echo "      Entering it would 'reset --hard' that run's worktree out from"
+    echo "      under it. Both runs would then report a verdict for a tree"
+    echo "      neither controls, and one of those verdicts can be green."
+    echo
+    echo "      Wait for it, re-run with --lock-wait <seconds> to queue behind"
+    echo "      it, or kill the pid above — a lock whose owner is gone is"
+    echo "      reclaimed automatically by the next run."
+  } >&2
+}
+
+gate_lock_acquire() { # gate_lock_acquire <root> <ref> <wait seconds>
+  local root="$1" ref="$2" budget="${3:-0}"
+  local lock="$root/.lock" waited=0 reclaims=0 pid start
+
+  case "$budget" in ''|*[!0-9]*) budget=0 ;; esac
+
+  while : ; do
+    if mkdir "$lock" 2>/dev/null; then
+      GATE_LOCK_DIR="$lock"
+      export GATE_LOCK_DIR
+      gate_lock_write "$lock" "$ref" "(resolving)"
+      return 0
+    fi
+
+    pid=$(gate_lock_field "$lock" pid)
+    start=$(gate_lock_field "$lock" start)
+
+    # The self-snapshot re-execs the SAME process into its copy, so the second
+    # pass through here meets a lock this very pid already holds. Adopt it;
+    # re-acquiring would deadlock the run against itself.
+    if [ -n "$pid" ] && [ "$pid" = "$$" ]; then
+      GATE_LOCK_DIR="$lock"
+      export GATE_LOCK_DIR
+      return 0
+    fi
+
+    if gate_lock_holder_alive "$pid" "$start" || gate_lock_being_written "$lock" "$pid"; then
+      if [ "$waited" -ge "$budget" ]; then
+        gate_lock_refuse "$lock"
+        return "$GATE_LOCK_EXIT"
+      fi
+      sleep 2
+      waited=$((waited + 2))
+      continue
+    fi
+
+    # Stale. Reclaim by RENAME rather than by `rm -rf`: two runs can meet the
+    # same stale lock, and only one of them can win a rename — the loser's `rm`
+    # would otherwise delete the winner's brand-new lock and put both runs back
+    # in the tree together, which is the bug this whole block exists to stop.
+    reclaims=$((reclaims + 1))
+    if [ "$reclaims" -gt 3 ]; then
+      echo "gate: cannot reclaim the lock at $lock — remove it by hand" >&2
+      return "$GATE_LOCK_EXIT"
+    fi
+    if mv "$lock" "$lock.stale.$$" 2>/dev/null; then
+      echo "gate: reclaimed a stale lock at $lock (owner pid ${pid:-unknown} is gone)" >&2
+      rm -rf "$lock.stale.$$"
+    fi
+  done
+}
+# <<< gate-root lock
+
 # --- self-test -------------------------------------------------------------
 # `verify_modules` is the guard that stands between a mis-provisioned worktree
 # and a gate result that reads like a verdict. A guard nobody has ever seen
@@ -693,6 +909,182 @@ tenant-e2e')"
     echo "ok   the typecheck phase is whole-workspace on both paths"; pass=$((pass + 1))
   fi
 
+  # --- AGL-2561: the gate-root lock ---------------------------------------
+  # Every case here runs against a THROWAWAY root under $tmp. Pointing them at
+  # the real /private/tmp/aglyn-gate/fast would reproduce the very bug — a peer
+  # session may be holding it right now.
+  #
+  # The lock block is self-contained by construction, so it is extracted and
+  # sourced in a child shell. That buys the two cases a same-process test
+  # cannot reach at all: release on normal exit, and release on SIGTERM.
+  local _lockmod="$tmp/lock.sh" _lockroot _lockout _lockrc _holder _dead
+  sed -n '/^# >>> gate-root lock$/,/^# <<< gate-root lock$/p' "$0" > "$_lockmod"
+  if [ -s "$_lockmod" ] && bash -n "$_lockmod" 2>/dev/null; then
+    echo "ok   the lock block extracts and parses on its own"; pass=$((pass + 1))
+  else
+    echo "FAIL the lock block could not be extracted from $0"; fail=$((fail + 1))
+  fi
+
+  _lock_child() { # _lock_child <script body> <args...> — sources the block first
+    local body="$1"; shift
+    bash -c '. "$0"; '"$body" "$_lockmod" "$@"
+  }
+
+  # ORDERING — the hard requirement. A lock taken after the reset protects
+  # nothing, and the reset is what destroys the other run's tree.
+  local _acq_line _reset_line
+  _acq_line=$(grep -n '^gate_lock_acquire "\$GATE_ROOT"' "$0" | head -1 | cut -d: -f1)
+  _reset_line=$(grep -n 'reset --hard "\$GATE_SHA"' "$0" | head -1 | cut -d: -f1)
+  if [ -n "$_acq_line" ] && [ -n "$_reset_line" ] && [ "$_acq_line" -lt "$_reset_line" ]; then
+    echo "ok   the lock is taken before the entry-time reset --hard"; pass=$((pass + 1))
+  else
+    echo "FAIL the entry-time reset --hard can run unlocked"; fail=$((fail + 1))
+  fi
+
+  # A FREE ROOT is simply taken.
+  _lockroot="$tmp/lock-free"; mkdir -p "$_lockroot"
+  _lock_child 'gate_lock_acquire "$1" origin/main 0' "$_lockroot" >/dev/null 2>&1
+  _assert "a free root is locked" "0" "$?"
+
+  # A HELD ROOT is refused, and the refusal names the pid AND the sha. The
+  # holder is a real, live process, because a fake pid proves nothing about
+  # the liveness check.
+  _lockroot="$tmp/lock-held"; mkdir -p "$_lockroot/.lock"
+  sleep 30 & _holder=$!
+  { printf 'pid=%s\n' "$_holder"
+    printf 'start=%s\n' "$(gate_lock_proc_start "$_holder")"
+    printf 'ref=%s\n' "origin/production"
+    printf 'sha=%s\n' "c0ffee1"
+    printf 'since=%s\n' "2026-09-03 18:44:01"
+  } > "$_lockroot/.lock/owner"
+  _lockout=$(_lock_child 'gate_lock_acquire "$1" origin/main 0' "$_lockroot" 2>&1)
+  _lockrc=$?
+  _assert "a held root is refused, not entered" "75" "$_lockrc"
+  case "$_lockout" in
+    *"$_holder"*) echo "ok   the refusal names the holding pid ($_holder)"; pass=$((pass + 1)) ;;
+    *) echo "FAIL the refusal does not name the holding pid"; fail=$((fail + 1)) ;;
+  esac
+  case "$_lockout" in
+    *c0ffee1*) echo "ok   the refusal names the holding sha"; pass=$((pass + 1)) ;;
+    *) echo "FAIL the refusal does not name the holding sha"; fail=$((fail + 1)) ;;
+  esac
+  # And it must not have touched the holder's lock on its way out.
+  if [ "$(gate_lock_field "$_lockroot/.lock" pid)" = "$_holder" ]; then
+    echo "ok   a refused run leaves the holder's lock intact"; pass=$((pass + 1))
+  else
+    echo "FAIL a refused run damaged the lock it was refused by"; fail=$((fail + 1))
+  fi
+
+  # --lock-wait QUEUES instead of refusing immediately. Asserted as elapsed
+  # time, because a budget that is read but never slept on looks identical.
+  local _t0 _t1
+  _t0=$(date +%s)
+  _lock_child 'gate_lock_acquire "$1" origin/main 2' "$_lockroot" >/dev/null 2>&1
+  _lockrc=$?
+  _t1=$(date +%s)
+  _assert "--lock-wait still refuses when the budget runs out" "75" "$_lockrc"
+  if [ $((_t1 - _t0)) -ge 2 ]; then
+    echo "ok   --lock-wait actually waits ($((_t1 - _t0))s)"; pass=$((pass + 1))
+  else
+    echo "FAIL --lock-wait returned instantly; the budget is ignored"; fail=$((fail + 1))
+  fi
+  kill "$_holder" 2>/dev/null; wait "$_holder" 2>/dev/null
+
+  # A STALE lock — owner pid gone — is reclaimed. Killing and relaunching a
+  # gate is routine, so this is the difference between a lock and a wedge.
+  _lockroot="$tmp/lock-stale"; mkdir -p "$_lockroot/.lock"
+  ( exit 0 ) & _dead=$!; wait "$_dead" 2>/dev/null
+  { printf 'pid=%s\n' "$_dead"
+    printf 'start=%s\n' "Wed Sep  3 18:44:01 2026"
+    printf 'ref=%s\n' "origin/main"
+    printf 'sha=%s\n' "deadbee"
+    printf 'since=%s\n' "2026-09-03 18:44:01"
+  } > "$_lockroot/.lock/owner"
+  _lockout=$(_lock_child 'gate_lock_acquire "$1" origin/main 0' "$_lockroot" 2>&1)
+  _lockrc=$?
+  _assert "a stale lock is reclaimed, not obeyed forever" "0" "$_lockrc"
+  case "$_lockout" in
+    *reclaimed*) echo "ok   the reclaim says so out loud"; pass=$((pass + 1)) ;;
+    *) echo "FAIL a stale lock was reclaimed silently"; fail=$((fail + 1)) ;;
+  esac
+
+  # A RECYCLED PID looks alive to `kill -0`. Without the recorded start time
+  # this wedges the root exactly as badly as never releasing the lock.
+  _lockroot="$tmp/lock-recycled"; mkdir -p "$_lockroot/.lock"
+  sleep 30 & _holder=$!
+  { printf 'pid=%s\n' "$_holder"
+    printf 'start=%s\n' "Thu Jan  1 00:00:00 1970"
+    printf 'ref=%s\n' "origin/main"
+    printf 'sha=%s\n' "deadbee"
+    printf 'since=%s\n' "1970-01-01 00:00:00"
+  } > "$_lockroot/.lock/owner"
+  _lock_child 'gate_lock_acquire "$1" origin/main 0' "$_lockroot" >/dev/null 2>&1
+  _assert "a recycled pid does not hold the root hostage" "0" "$?"
+  kill "$_holder" 2>/dev/null; wait "$_holder" 2>/dev/null
+
+  # RELEASE ON NORMAL EXIT. The lock must not outlive the run that took it.
+  _lockroot="$tmp/lock-exit"; mkdir -p "$_lockroot"
+  _lock_child 'gate_lock_acquire "$1" origin/main 0 && gate_lock_arm_traps; exit 0' \
+    "$_lockroot" >/dev/null 2>&1
+  if [ -d "$_lockroot/.lock" ]; then
+    echo "FAIL the lock survived a normal exit"; fail=$((fail + 1))
+  else
+    echo "ok   the lock is released on normal exit"; pass=$((pass + 1))
+  fi
+
+  # RELEASE ON SIGTERM. The near-miss in AGL-2561 was one session killing its
+  # own gate twice and relaunching into the same root, so this is the signal
+  # that actually happens here.
+  # Backgrounded DIRECTLY rather than through _lock_child: backgrounding a
+  # shell function forks a subshell, `$!` would be that subshell's pid, and the
+  # SIGTERM would never reach the process actually holding the lock — the test
+  # would then report a wedge that is only an artifact of how it was launched.
+  _lockroot="$tmp/lock-term"; mkdir -p "$_lockroot"
+  bash -c '. "$0"; gate_lock_acquire "$1" origin/main 0 >/dev/null 2>&1 && gate_lock_arm_traps
+           : > "$1.ready"; while : ; do sleep 0.2; done' \
+    "$_lockmod" "$_lockroot" >/dev/null 2>&1 &
+  _holder=$!
+  local _spins=0
+  while [ ! -f "$_lockroot.ready" ] && [ "$_spins" -lt 50 ]; do
+    sleep 0.1; _spins=$((_spins + 1))
+  done
+  if [ -d "$_lockroot/.lock" ]; then
+    kill -TERM "$_holder" 2>/dev/null
+    wait "$_holder" 2>/dev/null
+    _spins=0
+    while [ -d "$_lockroot/.lock" ] && [ "$_spins" -lt 30 ]; do sleep 0.1; _spins=$((_spins + 1)); done
+    if [ -d "$_lockroot/.lock" ]; then
+      echo "FAIL the lock survived SIGTERM — the fast root would be wedged"; fail=$((fail + 1))
+    else
+      echo "ok   the lock is released on SIGTERM"; pass=$((pass + 1))
+    fi
+  else
+    kill -TERM "$_holder" 2>/dev/null; wait "$_holder" 2>/dev/null
+    echo "FAIL the SIGTERM fixture never took the lock"; fail=$((fail + 1))
+  fi
+
+  # A RUN THAT LOST ITS LOCK must not delete the reclaiming run's. Otherwise
+  # the release path itself puts two runs back in one tree.
+  _lockroot="$tmp/lock-notmine"; mkdir -p "$_lockroot/.lock"
+  printf 'pid=999999\nstart=x\nref=r\nsha=s\nsince=t\n' > "$_lockroot/.lock/owner"
+  _lock_child 'GATE_LOCK_DIR="$1/.lock"; gate_lock_release' "$_lockroot" >/dev/null 2>&1
+  if [ -d "$_lockroot/.lock" ]; then
+    echo "ok   a run only releases a lock it still owns"; pass=$((pass + 1))
+  else
+    echo "FAIL the release path deletes another run's lock"; fail=$((fail + 1))
+  fi
+
+  # EVERY root is claimed, not only the shared fast one: a single call site, at
+  # column zero, so it sits inside no `if` and its reach cannot depend on which
+  # flags were passed. A timestamped root collides with a run started in the
+  # same second and `--root` is a path two callers can name, so the uniform
+  # version is both the simpler one and the strictly more correct one.
+  if [ "$(grep -c 'gate_lock_acquire "\$GATE_ROOT"' "$0")" = "1" ] \
+     && grep -q '^gate_lock_acquire "\$GATE_ROOT"' "$0"; then
+    echo "ok   the root is claimed once, unconditionally"; pass=$((pass + 1))
+  else
+    echo "FAIL the claim is conditional, or made from more than one place"; fail=$((fail + 1))
+  fi
   # THE GUARD RUNNER's own self-test, delegated. gate.sh's guards phase is now
   # one call into that script, so its derivation is part of this gate's
   # correctness and a green here must depend on a green there.
@@ -739,6 +1131,14 @@ EXITS="$GATE_ROOT/exit"
 SUMMARY="$GATE_ROOT/summary.txt"
 
 mkdir -p "$LOGS" "$EXITS"
+
+# --- claim the root --------------------------------------------------------
+# TRAP 8. This line sits above EVERYTHING that writes into the gate root: the
+# summary truncation, the self-snapshot, and the entry-time `reset --hard` that
+# would otherwise land on a worktree another run is still using. Ordering is
+# the whole property — a lock taken after the reset protects nothing.
+gate_lock_acquire "$GATE_ROOT" "$REF" "$GATE_LOCK_WAIT" || exit $?
+gate_lock_arm_traps
 
 # --- self-snapshot ---------------------------------------------------------
 # TRAP 7 — bash reads a script LAZILY, BY BYTE OFFSET, as it executes it.
@@ -817,6 +1217,10 @@ GATE_SHA=$(git -C "$SOURCE_REPO" rev-parse "$REF" 2>/dev/null) || {
   exit 65
 }
 log "gating ref  : $REF  ->  $GATE_SHA"
+# The lock was taken before the ref could be resolved. Record the sha now, so a
+# run refused against this root names the commit being gated rather than a
+# placeholder — that is half of what tells the reader to wait or to kill.
+gate_lock_note_sha "$GATE_SHA"
 
 if [ ! -d "$WT" ]; then
   # --detach: the gate must never move a branch anyone else is standing on.

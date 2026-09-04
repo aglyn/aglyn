@@ -229,6 +229,7 @@ tools/gate.sh --ref <sha>          # gate a specific commit
 tools/gate.sh --phases build       # one phase, same isolation
 tools/gate.sh --keep               # keep the worktree for triage
 tools/gate.sh --no-install         # refuse on lockfile drift, never install
+tools/gate.sh --lock-wait 300      # queue behind a run holding the same root
 ```
 
 Since AGL-2505 this is a **pre-flight, not a gate of record** — NX CI runs the
@@ -326,6 +327,18 @@ symptom is a syntax error on a line number with nothing wrong with it. The gate
 copies itself into its gate root and re-execs the copy, so a run is immune from
 startup onward and callers do not have to know the hazard exists.
 
+**It locks its root.** A gate root holds one run at a time, claimed by an
+atomic `mkdir` of `<root>/.lock` before anything writes into the tree — above
+all before the entry-time `reset --hard`, which against a run still in flight
+moves the worktree to a different sha and discards whatever that run is
+mid-write. Both runs then report a verdict for a tree neither controls, and one
+of those verdicts can be green. A second run refuses with exit **75**, naming
+the pid, ref and sha of the holder so you can decide between waiting and
+killing; `--lock-wait <seconds>` queues instead. A lock whose owner is gone —
+a `kill -9`, a closed laptop — is reclaimed by the next run, so a killed gate
+never wedges the root. `flock(1)` is not installed on macOS, which is why the
+lock is a directory rather than a file descriptor.
+
 The guard phase is **derived from the CI workflows** (`nx-ci.yml` and
 `tools-guards.yml`) rather than listed here, so a guard added to CI is gated
 automatically and this file cannot quietly fall behind. If the derivation ever
@@ -385,7 +398,9 @@ summary always names which path ran (`PATH: FAST` / `PATH: FULL`).
 
 The fast path reuses a stable gate root, so a second run skips the ~1m35s
 `cp -Rc` of the three module trees. Re-provisioning triggers on
-`package-lock.json`'s blob hash.
+`package-lock.json`'s blob hash. That stable root is the one two sessions can
+collide in, so it is also where the lock above earns its keep: a second
+`--affected` run refuses rather than resetting the first one's worktree.
 
 **Promote a release with the full gate.** `--affected` proves a diff is sound
 against a workspace it has not rebuilt; that is the right trade for a hot fix
