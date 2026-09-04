@@ -113,6 +113,13 @@ jest.mock('@aglyn/aglyn', () => ({
   ...jest.requireActual(
     '../../../libs/aglyn/src/lib/app-utils/content-authors',
   ),
+  // The REAL normalizer and option list. The "Publishes as" Select renders its
+  // options from one and its value from the other, so a stub returning the
+  // stored string would let an unknown type reach the field as a value with no
+  // matching option — the shape MUI warns about and renders blank.
+  ...jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/content-schema-type',
+  ),
   HostEntityType: jest.requireActual(
     '../../../libs/aglyn/src/lib/foundation/definitions/platform.types',
   ).HostEntityType,

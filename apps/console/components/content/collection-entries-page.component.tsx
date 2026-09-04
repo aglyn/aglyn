@@ -652,6 +652,38 @@ export function CollectionEntriesPage() {
     contentHref,
   ])
 
+  /**
+   * What KIND of article this collection publishes (AGL-2536).
+   *
+   * A plain client write, unlike `handleTemplateChange` above. That one goes
+   * through the API because the three template fields DEMOTE a screen and so
+   * move the plan's billable count (AGL-1390); this changes one string on the
+   * collection and costs nothing, so there is no accounting to defend.
+   */
+  const handleSchemaTypeChange = useCallback(
+    (collectionId: string) =>
+      async (event: { target: { value: string } }) => {
+        if (!collectionId) return
+        const schemaType = Aglyn.normalizeContentSchemaType(event.target.value)
+        try {
+          await updateDoc(
+            doc(firestore, 'hosts', hostId, 'collections', collectionId),
+            { schemaType, updatedAt: Timestamp.now() },
+          )
+        } catch (error: any) {
+          return void enqueueSnackbar(
+            error?.message ?? 'Could not set the article type',
+            { variant: 'error' },
+          )
+        }
+        enqueueSnackbar(
+          `Entries publish as ${schemaType}`,
+          { variant: 'success', persist: false },
+        )
+      },
+    [firestore, hostId, enqueueSnackbar],
+  )
+
   /* ── authors (AGL-2486) ────────────────────────────────────────────── */
 
   /**
@@ -1357,6 +1389,50 @@ export function CollectionEntriesPage() {
                                     ))}
                                   </TextField>
                                 </Box>
+                                {/*
+                                  What KIND of article this collection
+                                  publishes (AGL-2536).
+
+                                  Beside the template screens because it is the
+                                  same class of decision — how this collection
+                                  is rendered and described — and because it is
+                                  a per-collection setting rather than a
+                                  per-entry one. Nothing on the document could
+                                  answer it before, so every entry on every
+                                  site published as a bare `Article`.
+                                */}
+                                <TextField
+                                  select
+                                  size="small"
+                                  label="Publishes as"
+                                  value={
+                                    Aglyn.normalizeContentSchemaType(
+                                      selected?.schemaType,
+                                    )
+                                  }
+                                  onChange={handleSchemaTypeChange(
+                                    selected?.$id ?? '',
+                                  )}
+                                  helperText={
+                                    'The schema.org type search engines read ' +
+                                    'for every entry in this collection.'
+                                  }
+                                  sx={{ maxWidth: 420 }}
+                                >
+                                  {Aglyn.CONTENT_SCHEMA_TYPES.map((type) => (
+                                    <MenuItem key={type.value} value={type.value}>
+                                      <Stack spacing={0}>
+                                        <span>{type.label}</span>
+                                        <Typography
+                                          variant="caption"
+                                          color="text.secondary"
+                                        >
+                                          {type.description}
+                                        </Typography>
+                                      </Stack>
+                                    </MenuItem>
+                                  ))}
+                                </TextField>
                               </Stack>
                               {/*
                                 AGL-1324 gave the collection shell a delete;

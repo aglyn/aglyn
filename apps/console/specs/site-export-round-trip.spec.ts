@@ -651,6 +651,9 @@ const SEEDS: Array<{
     path: 'hosts/host-1/collections',
     id: 'collection-1',
     doc: {
+      // AGL-2536: a NON-default value, so an import that dropped the field
+      // would land on `Article` rather than coincidentally matching.
+      schemaType: 'NewsArticle',
       kind: 'content',
       slug: 'blog',
       displayName: 'Blog',

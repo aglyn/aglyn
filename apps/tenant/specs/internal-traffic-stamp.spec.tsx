@@ -139,11 +139,16 @@ function runInit(script: string, search: string, seeded: boolean) {
   }
 }
 
+// The stamp is the one `set` whose payload is an OBJECT carrying the param.
+// The block also issues scalar `set` calls — `gtag('set', 'url_passthrough',
+// true)` (AGL-2548) — and `in` on a string throws, so the payload's shape is
+// checked before its keys are.
 const stampOf = (calls: Array<[string, ...unknown[]]>) => {
   const set = calls.find(
     ([name, payload]) =>
       name === 'set' &&
-      payload &&
+      typeof payload === 'object' &&
+      payload !== null &&
       INTERNAL_TRAFFIC_PARAM in (payload as Record<string, unknown>),
   )
   return set

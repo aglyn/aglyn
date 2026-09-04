@@ -26,6 +26,7 @@ import {
   entryMatchesCategoryRoute,
   hostCollectionKind,
   normalizeContentAuthor,
+  normalizeContentSchemaType,
   resolveCollectionCategoryBySlug,
   resolveEntryAuthor,
 } from '@aglyn/aglyn/server'
@@ -123,6 +124,14 @@ export interface CollectionEntrySummary {
   tags?: string[]
   publishedAt?: { seconds: number } | null
   /**
+   * Last edited, which is what `Article.dateModified` publishes (AGL-2534).
+   *
+   * Distinct from {@link publishedAt} on purpose: re-dating a post is not
+   * editing it, so the console writes `publishedAt` alone when an author
+   * backdates and this stays put. Google reads `dateModified` for freshness.
+   */
+  updatedAt?: { seconds: number } | null
+  /**
    * The collection this entry came out of (AGL-2518), stamped only by a
    * reader that MIXES collections — the author page. Unset on every routed
    * listing, where the route already answers the question. See
@@ -148,6 +157,7 @@ function mapEntryFields(
   | 'categoryId'
   | 'category'
   | 'tags'
+  | 'updatedAt'
 > {
   return {
     excerpt: value['excerpt'] ?? '',
@@ -170,6 +180,28 @@ function mapEntryFields(
     tags: Array.isArray(value['tags'])
       ? value['tags'].filter((tag): tag is string => typeof tag === 'string')
       : [],
+    /*
+      `dateModified`'s source (AGL-2534), and it was missing for the same
+      reason `authorName` was — the reason this function's own comment above
+      describes.
+
+      The console has written `updatedAt` on every save, `page.tsx` reads
+      `entry.updatedAt.seconds` to publish `Article.dateModified`, a spec
+      asserts the conversion, and two console comments explain why it must not
+      track `publishedAt`. Nothing mapped it, so `entry.updatedAt` was
+      `undefined` on every entry the loader has ever returned and no published
+      article has ever carried a `dateModified` — the freshness signal Google
+      reads. The spec passed throughout because it builds its entry object by
+      hand and never crosses this boundary.
+
+      Mapped HERE rather than beside `publishedAt` at the two call sites: this
+      is an ordinary field with no `publishAt` fallback and nothing sorts on
+      it, so one place is enough — and one place is what stops the next read
+      path from forgetting it.
+    */
+    updatedAt: value['updatedAt']?.seconds
+      ? { seconds: value['updatedAt'].seconds }
+      : null,
   }
 }
 
@@ -209,6 +241,11 @@ function mapCollectionDoc(
     templateScreenId: collectionDoc.get('templateScreenId') ?? undefined,
     listScreenId: collectionDoc.get('listScreenId') ?? undefined,
     entryScreenId: collectionDoc.get('entryScreenId') ?? undefined,
+    // Normalized HERE rather than at the head (AGL-2536), so an unrecognised
+    // stored value can never reach the JSON-LD: an `@type` the vocabulary
+    // does not define makes a consumer discard the whole node, costing the
+    // page every property it publishes rather than just this one.
+    schemaType: normalizeContentSchemaType(collectionDoc.get('schemaType')),
     categories: mapCollectionCategories(collectionDoc.get('categories')),
   }
 }
@@ -426,6 +463,12 @@ export interface CollectionContent {
      * through it with `{{entry.*}}` tokens.
      */
     entryScreenId?: string
+    /**
+     * What KIND of article this collection publishes (AGL-2536) — the
+     * `schema.org` type its entries serialise as. Unset publishes `Article`,
+     * which is what every collection published before the setting existed.
+     */
+    schemaType?: string
     /**
      * Category taxonomy (AGL-582): entries reference these by stable
      * `id`; `name` is the renameable display label.

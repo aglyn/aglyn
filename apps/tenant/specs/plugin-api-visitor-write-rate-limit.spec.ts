@@ -175,7 +175,10 @@ jest.mock('../utils/server-plugin-loader', () => ({
 }))
 
 import { GET, POST } from '../app/api/[...pluginApi]/route'
-import { VISITOR_WRITE_RATE_LIMIT } from '@aglyn/aglyn/server'
+import {
+  VISITOR_WRITE_RATE_LIMIT,
+  VISITOR_WRITE_RATE_WINDOW_MS,
+} from '@aglyn/aglyn/server'
 
 const params = Promise.resolve({ pluginApi: ['commerce', 'cart'] })
 
@@ -188,10 +191,46 @@ function cartPost(ip: string, body: Record<string, unknown> = { hostId: 'host-1'
   })
 }
 
+/*==========================================
+ * THE CLOCK IS FROZEN, AND THE WINDOW IS WHY (AGL-2532).
+ *
+ * `rateLimitStore` windows are TUMBLING, not sliding —
+ * `Math.floor(now / windowMs) * windowMs` — so the counter resets at absolute
+ * wall-clock boundaries rather than relative to the first request. Every case
+ * below fires `VISITOR_WRITE_RATE_LIMIT (+n)` requests in a loop and then
+ * asserts the ceiling held. If that loop straddles a boundary the counter
+ * resets mid-loop, the request that should be refused is allowed, and the
+ * assertion reads `Expected: 429  Received: 200` — a red that says the runner
+ * was slow, not that the limiter is broken.
+ *
+ * That is not hypothetical: it turned Main Gate red on `be2165a60`
+ * (2026-09-03 04:18, `full` → `test`), and because the window is 60s and 123
+ * dispatches are fast, it had passed every local run before and since. The
+ * exposure is roughly `loop duration / 60_000` per run, which is small on a
+ * developer machine and considerably less small on a loaded CI runner.
+ *
+ * `Date.now` rather than `jest.useFakeTimers()`: the store reads the clock
+ * through `options.now`, which defaults to `Date.now()`, so this is the whole
+ * surface — and faking timers as well would stall the promises the dispatcher
+ * awaits for no benefit.
+ *
+ * Anchored to the START of a window, so the entire 60s is left for a
+ * `Retry-After` that must be greater than zero.
+ *==========================================*/
+let nowSpy: jest.SpyInstance<number, []>
+
 beforeEach(() => {
   mockHandlerCalls = 0
   mockPath = 'commerce/cart'
   rateLimitDocs.clear()
+  const windowStart =
+    Math.floor(Date.now() / VISITOR_WRITE_RATE_WINDOW_MS) *
+    VISITOR_WRITE_RATE_WINDOW_MS
+  nowSpy = jest.spyOn(Date, 'now').mockReturnValue(windowStart)
+})
+
+afterEach(() => {
+  nowSpy.mockRestore()
 })
 
 describe('tenant plugin API dispatcher — visitor-write rate limit', () => {

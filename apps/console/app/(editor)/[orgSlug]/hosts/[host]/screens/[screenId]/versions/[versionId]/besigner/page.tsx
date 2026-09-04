@@ -42,6 +42,8 @@ import {
   type ComponentPropagationChange,
   type WorkspaceEditorComponentProps,
   clearServerDraft,
+  useClearCanvasCallback,
+  useRepairDocumentCallback,
 } from '@aglyn/besigner-ui'
 // Import '@aglyn/foundation-feature-singleton'
 import {
@@ -383,6 +385,12 @@ function BesignerPage(props) {
   // (AGL-746). What stays in this route is what is actually about a screen
   // belonging to a host — SEO, password protection, publishing, layout
   // chrome and the live URL.
+  // Document maintenance (AGL-2554 / AGL-2555). Both sit on Edit beside
+  // Raw JSON, which is the escape hatch they exist to make unnecessary:
+  // an unrenderable node cannot be selected, so neither Delete Element nor
+  // Add Element can reach one.
+  const clearCanvas = useClearCanvasCallback('page')
+  const repairDocument = useRepairDocumentCallback('page')
   const {
     saveAvailable,
     remoteChanged,
@@ -890,8 +898,38 @@ function BesignerPage(props) {
      */
     if (!savedLandedRef.current) {
       if (livePublished) {
+        /*
+          Nothing to promote, but that is not the same as nothing to do
+          (AGL-2540).
+
+          `livePublished` is a fact about the POINTER. "The live site matches"
+          is a claim about the CACHE, and this path used to make it without
+          checking. The two come apart whenever the version document's content
+          moved while the pointer stood still — a direct Firestore write, an
+          import, or an earlier publish whose revalidate the tenant refused.
+          The author then sees the right tree, clicks the button whose whole
+          meaning is "make the live site match", and is told it already does
+          while the tenant serves stale HTML for the rest of its window.
+
+          Dropping the cache is the one thing this click can still deliver, so
+          do it. Best effort like the success path: a failed hint must never
+          make a completed publish look failed.
+        */
+        if (!isEmailScreen) {
+          void revalidateLivePages({ user, hostId, screenId }).then(
+            (result) => {
+              const shortfall = describeRevalidateShortfall(result)
+              if (shortfall) {
+                enqueueSnackbar(shortfall, {
+                  variant: 'warning',
+                  persist: false,
+                })
+              }
+            },
+          )
+        }
         return enqueueSnackbar(
-          'Already published — the live site matches this version.',
+          'Already published — refreshing the live pages to match.',
           { variant: 'info', persist: false },
         )
       }
@@ -1513,6 +1551,21 @@ function BesignerPage(props) {
                             id: 'center-nav-edit-rawjson',
                             children: 'Raw JSON',
                             onClick: () => openJsonEditor(),
+                            ListItemTextProps: { inset: true },
+                          },
+                          {
+                            type: 'divider',
+                          },
+                          {
+                            id: 'center-nav-edit-repair',
+                            children: 'Repair page',
+                            onClick: () => repairDocument(),
+                            ListItemTextProps: { inset: true },
+                          },
+                          {
+                            id: 'center-nav-edit-clear',
+                            children: 'Clear canvas',
+                            onClick: () => clearCanvas(),
                             ListItemTextProps: { inset: true },
                           },
                         ],

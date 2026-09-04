@@ -18,6 +18,7 @@
 export * from './lib/aglyn'
 export * from './lib/aglyn-applications'
 export * from './lib/breakpoint-span'
+export * from './lib/data-table'
 export * from './lib/firebase-auth'
 export * from './lib/global'
 export * from './lib/http'

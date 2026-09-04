@@ -26,17 +26,32 @@ name: Main Gate
 #     committing. That is the entire noise problem, solved by arithmetic.
 #   - The window is small enough that a red still names a short list of
 #     suspects instead of a day of them. The summary prints that list.
-#   - It reports into ONE tracking issue that is opened on red and closed on
-#     green, so a break is a visible STATE on the repo rather than an email
-#     that scrolls away.
+#   - The verdict lands as a COMMIT STATUS on the gated sha (see `statuses:
+#     write` below for why it is not a tracking issue). A break is therefore a
+#     visible STATE rather than an email that scrolls away.
+#
+#     ⚠️ It is a state NOBODY IS NOTIFIED OF, and that is a real gap rather
+#     than a nuance (AGL-2533). A status sits on a sha the branch has already
+#     moved past, so a red is only ever found by someone who goes looking at
+#     that sha. Two reds went unread for hours on 2026-09-03 — a linear-id
+#     ceiling violation and a genuine 429-vs-200 assertion failure — and the
+#     second was misread as an already-explained flake because nothing
+#     surfaced it. Do not treat "Main Gate would have caught it" as meaning
+#     anyone would have SEEN it.
 #
 # ---------------------------------------------------------------------------
 # WHY TWO JOBS
 # ---------------------------------------------------------------------------
-# `fast` is typecheck + docs:typecheck + every derived guard. It finishes in minutes,
-# so it runs every 15. `full` adds the test sweep and the PRODUCTION builds and
-# runs hourly, because it cannot finish in 15 minutes and pretending otherwise
-# just queues runs behind each other.
+# `fast` is typecheck + docs:typecheck + every derived guard. It finishes in
+# minutes, so it runs on every push. `full` adds the test sweep and the
+# PRODUCTION builds; it takes a measured 25-41 minutes, so it cannot run per
+# push and is DEBOUNCED to at most one run an hour (AGL-2552) — a push asks
+# whether the last sweep has aged out, and only a stale one runs.
+#
+# ⚑ Both cadences were once written as crons, and both were fiction. `full`
+# asked for 24 runs a day and got 6; median gap 246 minutes, for the job that
+# says a release is safe. Do not describe a cadence here without measuring the
+# delivered one — that is twice this file has claimed a rate it did not have.
 #
 # The split is not a guess about which half matters. ALL FOUR of the 2026-08-22
 # failures were in the `fast` half — one typecheck, three guards. That is what
@@ -48,13 +63,36 @@ name: Main Gate
 # where running it is uneventful.
 
 on:
+  # THE PRIMARY TRIGGER. Measured 2026-09-03: the crons below asked for 120
+  # runs in 24 hours and GitHub delivered 13 — an 11% delivery rate, median
+  # gap 89 minutes, longest 227. The comment under `schedule` had always said
+  # runs "may be late or skipped entirely"; what nobody had measured is that
+  # skipping is the NORMAL case, so the job sized to catch a break within 15
+  # minutes was in practice catching it within an hour and a half. A session
+  # waiting on the gate as a signal waited two hours for a run that never came.
+  #
+  # A clock was always the wrong instrument for this. The event that can break
+  # `main` is a push to `main`, so that is what gates it now, and the crons
+  # stay as a backstop for the case a push-triggered run is lost.
+  #
+  # ⚑ This does NOT restore the noise that moved `nx-ci.yml`'s push trigger off
+  # `main` for the Sept-1 freeze. That workflow notifies on every red, which is
+  # why continuous agent pushes made it noise; this one notifies nobody
+  # (AGL-2533) and writes a commit status instead. The `full` sweep is
+  # deliberately NOT reachable from a push — see its `if:` — so a push costs
+  # the `fast` job's few minutes, never the 90-minute sweep.
+  push:
+    branches:
+      - main
   schedule:
     # Every 15 minutes, offset off :00 — GitHub's scheduler is most congested
     # on the hour and schedules are best-effort, so a run may be late or
-    # skipped entirely. This is a tightener, not a guarantee; `tools/gate.sh`
-    # at promotion time remains the guarantee.
+    # skipped entirely (measured: 11% delivered). A BACKSTOP now rather than
+    # the cadence; `tools/gate.sh` at promotion time remains the guarantee.
     - cron: '7,22,37,52 * * * *'
-    # Hourly for the full sweep, offset again.
+    # Hourly, offset again. No longer the only path to `full` — a push now asks
+    # whether the sweep is stale (AGL-2552) — so this is a BACKSTOP for a quiet
+    # `main`, where nothing pushes and nothing therefore asks.
     - cron: '11 * * * *'
   workflow_dispatch:
     inputs:
@@ -62,6 +100,10 @@ on:
         description: 'Run the full sweep (tests + production builds)'
         type: boolean
         default: true
+      test_notification:
+        description: 'Send a TEST alert down the real notification path'
+        type: boolean
+        default: false
 
 
 env:
@@ -101,8 +143,16 @@ jobs:
     # pending one. That is correct for a timer — a superseded scheduled run
     # covers a range the next run also covers — and wrong for a push, where
     # each commit needs its own verdict.
+    #
+    # So a push gets its OWN group, keyed by its commit, exactly as
+    # `nx-ci.yml` does for the same reason: a fixed group holds one running
+    # plus one pending, and a third arrival drops the pending one. With four
+    # sessions landing on `main` that would silently discard verdicts for the
+    # middle commits of every burst — the failure this trigger exists to end.
+    # Timer runs keep sharing one group, which is correct for them: a
+    # superseded scheduled run covers a range the next one also covers.
     concurrency:
-      group: main-gate-fast
+      group: main-gate-fast-${{ github.event_name == 'push' && github.sha || 'timer' }}
       cancel-in-progress: false
     outputs:
       # Whether this job actually ran its checks. A job that skipped every step
@@ -177,6 +227,39 @@ jobs:
             echo "Gated \`$(git rev-parse --short HEAD)\`."
           } >> "$GITHUB_STEP_SUMMARY"
 
+  # IS THE FULL SWEEP DUE? (AGL-2552)
+  #
+  # AGL-2534 moved `fast` off the clock and onto the push event, because GitHub
+  # delivered 13 of 120 requested cron runs. It deliberately left `full` on the
+  # hourly cron, and measuring that half a day later gave the number the file
+  # never had: the sweep asked for 24 runs and got 6 — 25%, median gap 246
+  # minutes. The job that decides whether a release is safe was the one running
+  # least often, while the file said "hourly".
+  #
+  # A push cannot fire a 33-minute sweep directly; that is why AGL-2534 did not
+  # do it. So the push instead ASKS whether the sweep is stale, and only a stale
+  # one runs. The interval sets the cadence, not the push rate: a burst of six
+  # commits buys one sweep, and an hour with any activity reliably gets one.
+  #
+  # Cheap by construction — no checkout, no install, one API walk, seconds.
+  sweep-due:
+    name: is the full sweep due
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      due: ${{ steps.decide.outputs.due }}
+      reason: ${{ steps.decide.outputs.reason }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: tools/scripts
+          sparse-checkout-cone-mode: false
+      - id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAIN_GATE_SCHEDULE: ${{ github.event.schedule }}
+          MAIN_GATE_INPUTS_FULL: ${{ inputs.full }}
+        run: node tools/scripts/check-main-gate-full-sweep.mjs
   full:
     name: full (tests + production builds)
     runs-on: ubuntu-latest
@@ -191,14 +274,17 @@ jobs:
     # spread — a bound below the real distribution turns honest slow runs into
     # cancellations, which is the AGL-2378 mistake.
     timeout-minutes: 90
-    # `inputs.full` is READ here. It was declared and then ignored, so every
-    # manual dispatch ran the 90-minute sweep whatever the box said — including
-    # a dispatch whose only purpose was to check the fast path. A declared input
-    # that nothing reads is worse than no input: the UI offers a choice that
-    # silently does not exist.
-    if: >-
-      (github.event_name == 'workflow_dispatch' && inputs.full) ||
-      github.event.schedule == '11 * * * *'
+    # The three original paths — a dispatch that asked for the sweep, and the
+    # hourly cron — are unchanged and still decided here, inside
+    # `check-main-gate-full-sweep.mjs`. `sweep-due` only ever ADDS the push
+    # path, so nothing that used to run stops running.
+    #
+    # `inputs.full` is READ (via that script). It was once declared and then
+    # ignored, so every manual dispatch ran the long sweep whatever the box
+    # said. A declared input that nothing reads is worse than no input: the UI
+    # offers a choice that silently does not exist.
+    needs: sweep-due
+    if: needs.sweep-due.outputs.due == 'true'
     steps:
       - uses: actions/checkout@v7
         with:
@@ -284,7 +370,11 @@ jobs:
   report:
     name: report
     runs-on: ubuntu-latest
-    needs: [fast, full]
+    # `sweep-due` is needed for its RESULT, not its output: `full` depends on
+    # it, so a failed `sweep-due` leaves `full` skipped — and a skipped `full`
+    # is not a red. Without this the sweep would stop running on every push
+    # while the reporter said "nothing to report" (AGL-2552).
+    needs: [fast, full, sweep-due]
     if: always() && github.event_name != 'pull_request'
     permissions:
       contents: read
@@ -309,6 +399,54 @@ jobs:
             --fast-verified "${{ needs.fast.outputs.verified }}" \
             --full "${{ needs.full.result }}" \
             --full-verified "${{ needs.full.result != 'skipped' }}"
+
+      # THE NOTIFICATION (AGL-2533). The commit status above is correct,
+      # precise, and attached to a sha the branch has already moved past —
+      # which is why two real reds went unread for hours on 2026-09-03 while
+      # four promotions went out. This posts the red into Linear, the channel
+      # this team actually reads, restoring the "ONE tracking issue" design the
+      # header used to claim: it was abandoned only because
+      # `gh api repos/aglyn/aglyn` returns has_issues:false.
+      #
+      # `if: always()` and the script's own exit-0 discipline are both
+      # deliberate — a gate that failed BECAUSE it could not report would be
+      # strictly worse than the silence it replaces. A green posts nothing; a
+      # repeat of the same red posts nothing.
+      - name: red -> Linear
+        if: always()
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          # Optional. Linear is the durable record; Slack is the immediate
+          # ping. Absent, the reporter says so and posts to Linear alone.
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          set -uo pipefail
+          node tools/scripts/report-main-gate-red.mjs \
+            --sha="${{ needs.fast.outputs.sha || github.sha }}" \
+            --fast="${{ needs.fast.result }}" \
+            --full="${{ needs.full.result }}" \
+            --sweep-due="${{ needs.sweep-due.result }}" \
+            --run-url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --subject="$(git log -1 --format=%s || true)"
+
+      # Proving the notifier without waiting for a failure (AGL-2533). A
+      # notification path whose only test is a real incident is unverifiable
+      # until the day it matters, which is the shape this issue is about. This
+      # sends a clearly-labelled message through the real secrets and the real
+      # code, on demand.
+      - name: TEST the notification path
+        if: github.event_name == 'workflow_dispatch' && inputs.test_notification
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          set -uo pipefail
+          node tools/scripts/report-main-gate-red.mjs --test \
+            --sha="${{ github.sha }}" \
+            --fast=failure \
+            --full=skipped \
+            --run-url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --subject='TEST of the notification path - not a real failure'
 
       # The suspect list. Its length is the whole argument for gating on a short
       # timer: a day of accumulated commits is not a suspect list, an hour of

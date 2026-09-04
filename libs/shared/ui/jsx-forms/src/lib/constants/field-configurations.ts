@@ -24,6 +24,7 @@ import {
   FieldCssBorder,
   FieldCssDimension,
   FieldCssGradient,
+  FieldDataTable,
   FieldDatePicker,
   FieldDualListSelect,
   FieldFieldArray,
@@ -101,6 +102,11 @@ export const FIELD_MAP_BREAKPOINT_SPAN: ExtendedMapperComponent = {
 export const FIELD_MAP_CSS_GRADIENT: ExtendedMapperComponent = {
   ...fieldSharedOptions,
   component: FieldCssGradient,
+}
+/** Row-and-column grid for the Table element (AGL-2543). */
+export const FIELD_MAP_DATA_TABLE: ExtendedMapperComponent = {
+  ...fieldSharedOptions,
+  component: FieldDataTable,
 }
 /** Theme scale + raw value for font size / weight / z-index (AGL-2486). */
 export const FIELD_MAP_THEME_SCALE: ExtendedMapperComponent = {

@@ -29,6 +29,7 @@ import {
   FIELD_MAP_COLOR_PICKER,
   FIELD_MAP_CSS_DIMENSION,
   FIELD_MAP_CSS_GRADIENT,
+  FIELD_MAP_DATA_TABLE,
   FIELD_MAP_ICON_PICKER,
   simpleComponentMapper,
   useFormApi,
@@ -253,6 +254,7 @@ export const elementPropsComponentMapper = {
   // Background fill editor for gradient-capable attributes (AGL-1331);
   // the Styles panel reaches it through the shared componentMapper.
   [Aglyn.FieldComponentType.CSS_GRADIENT]: FIELD_MAP_CSS_GRADIENT,
+  [Aglyn.FieldComponentType.DATA_TABLE]: FIELD_MAP_DATA_TABLE,
   // Per-breakpoint span/offset row for Grid cells (AGL-2486). Registered
   // here or the attributes memo's unknown-editor filter drops Span and
   // Offset from the panel entirely rather than throwing (AGL-584).

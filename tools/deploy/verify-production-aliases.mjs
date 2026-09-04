@@ -373,6 +373,60 @@ async function deploymentCommitSha(deploymentId, token) {
   }
 }
 
+/** Vercel states that mean a build exists and has not finished yet. */
+const IN_FLIGHT_STATES = new Set(['QUEUED', 'INITIALIZING', 'BUILDING'])
+
+/**
+ * Production deployments in ANY state, newest first (AGL-2515).
+ *
+ * `listReadyProdDeployments` filters to READY on purpose, which is right for
+ * picking the baseline and WRONG for asking "was this commit ever built": a
+ * build still running is invisible to it, so "not finished yet" and "the
+ * webhook dropped" produce identical output. That conflation cost a
+ * production rollback — a session read `BUILD MISSING ... production merge
+ * never built`, followed the remedy the text offered, and redeployed the
+ * newest READY deployment, which was two releases old.
+ *
+ * The REST API returns state and commit together, so this is one call rather
+ * than an inspect per URL.
+ */
+async function listProdDeploymentsAnyState(project, token, limit = 10) {
+  if (!token) return { error: 'no Vercel token, so build state cannot be read' }
+  try {
+    const res = await fetch(
+      `https://api.vercel.com/v6/deployments?app=${encodeURIComponent(project.name)}` +
+        `&target=production&limit=${limit}&teamId=${TEAM_SCOPE}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    )
+    if (!res.ok) return { error: `deployments API returned ${res.status}` }
+    const body = await res.json()
+    return {
+      deployments: (body?.deployments ?? []).map((d) => ({
+        uid: d.uid,
+        url: d.url,
+        state: String(d.state ?? d.readyState ?? '').toUpperCase(),
+        sha: d.meta?.githubCommitSha ?? d.meta?.gitSource?.sha ?? null,
+      })),
+    }
+  } catch (error) {
+    return { error: `deployments API unreachable: ${String(error).slice(0, 120)}` }
+  }
+}
+
+/**
+ * Is HEAD built, building, or genuinely absent? Returns one of
+ * `in-flight` / `missing` / `unknown`, never a guess.
+ */
+async function headBuildState(project, headSha, token) {
+  const listed = await listProdDeploymentsAnyState(project, token)
+  if (listed.error) return { state: 'unknown', note: listed.error }
+  const forHead = listed.deployments.filter((d) => d.sha === headSha)
+  if (forHead.length === 0) return { state: 'missing' }
+  const inFlight = forHead.find((d) => IN_FLIGHT_STATES.has(d.state))
+  if (inFlight) return { state: 'in-flight', deployment: inFlight }
+  return { state: 'built', deployment: forHead[0] }
+}
+
 /** Pull id / name / status / url out of `vercel inspect` output (stderr!). */
 function parseInspect(out) {
   const grab = (re) => out.match(re)?.[1] ?? null
@@ -572,8 +626,31 @@ async function verifyProject(project, { token, head }) {
             : ` (trails HEAD by design; nothing since touched ${project.buildsOnPaths.join(', ')})`
         }
       } else {
-        commit.behind = true
-        detail = ' — BUILD MISSING for HEAD (production merge never built)'
+        // Ask whether HEAD is BUILDING before calling it missing (AGL-2515).
+        // The old text asserted "production merge never built" as fact and
+        // attached a remedy to it; following that remedy during a running
+        // build rolled app.aglyn.com back two releases.
+        const headState = await headBuildState(project, head.sha, token)
+        commit.headBuild = headState.state
+        if (headState.state === 'in-flight') {
+          // NOT `behind`: there is nothing wrong and nothing to do. A verdict
+          // that says "wait" must not also fail the check.
+          commit.behind = false
+          detail =
+            ` — BUILD IN PROGRESS for HEAD (${headState.deployment.state.toLowerCase()});` +
+            ' nothing to do but wait. Do NOT redeploy or --fix.'
+        } else if (headState.state === 'unknown') {
+          commit.behind = false
+          detail =
+            ` — build state for HEAD UNKNOWN (${headState.note}); this is not` +
+            ' evidence the merge was never built, so no remedy is offered.'
+        } else {
+          commit.behind = true
+          detail =
+            ` — BUILD MISSING for HEAD: no production deployment exists for ` +
+            `${short(head.sha)} in any state. Rebuild THAT commit — never ` +
+            'promote "the newest deployment", which is an older release.'
+        }
       }
       log(`[${project.label}] commit ${short(sha)} ${onHead ? '==' : '!='} HEAD ${short(head.sha)}${detail}`)
     }
@@ -585,7 +662,47 @@ async function verifyProject(project, { token, head }) {
   }
 
   let promoted = false
-  if (FIX && domains.some((d) => d.verdict === 'STALE')) {
+  /*========================================================================
+   * `--fix` PROMOTES HEAD OR NOTHING (AGL-2515).
+   *
+   * It used to promote `newestReady` unconditionally. "Newest READY" is the
+   * right baseline for detecting a stale alias and the wrong thing to
+   * promote: after a stray CLI redeploy of an older commit, the newest READY
+   * deployment IS that older commit, so the repair rolls production back —
+   * measured, app.aglyn.com served beta.51 for several minutes. The script
+   * even printed `Stale alias detected — re-run with --fix` in exactly that
+   * state, so following its own advice would have done it a second time.
+   *
+   * A commit we could not read (`commit.status` unknown/skipped, no token) is
+   * NOT permission to promote. Refusing costs a manual promote; promoting the
+   * wrong build costs an outage.
+   *======================================================================*/
+  /*
+   * A path-scoped project (docs, plugins) trails HEAD BY DESIGN — it only
+   * rebuilds when its own paths change — so `onHead` is the wrong test there
+   * and requiring it would refuse every legitimate repair for them. The
+   * question that generalises is "is this deployment the one that SHOULD be
+   * live", which `commit.behind` already answers for both shapes: false means
+   * nothing since has changed anything this project builds from.
+   */
+  const fixTargetsHead =
+    commit?.onHead === true ||
+    (Boolean(project.buildsOnPaths) && commit?.behind === false && Boolean(commit?.sha))
+  if (FIX && domains.some((d) => d.verdict === 'STALE') && !fixTargetsHead) {
+    const why = !commit?.sha
+      ? 'its commit could not be read, so it cannot be shown to be the right build'
+      : project.buildsOnPaths
+        ? `it was built from ${short(commit.sha)} and later commits changed ` +
+          `${project.buildsOnPaths.join(', ')}, so it is genuinely behind`
+        : `it was built from ${short(commit.sha)}, not HEAD ${short(head?.sha)}`
+    log(
+      `[${project.label}] REFUSING to promote ${hostOf(newestReady.url)} — ${why}. ` +
+        'Promoting it would roll production back (AGL-2515). Rebuild HEAD and re-run.',
+    )
+    domains = domains.map((d) =>
+      d.verdict === 'STALE' ? { ...d, note: `--fix refused: ${why}` } : d,
+    )
+  } else if (FIX && domains.some((d) => d.verdict === 'STALE')) {
     log(`[${project.label}] STALE domain detected — promoting ${hostOf(newestReady.url)}`)
     const res = await vercel(['promote', newestReady.url, '--yes'], {
       timeoutMs: PROMOTE_TIMEOUT_MS,
@@ -694,7 +811,11 @@ async function main() {
   } else {
     printTable(results)
     if (anyStale && !FIX) {
-      console.log('Stale alias detected — re-run with --fix to promote the newest deployment.')
+      console.log(
+        'Stale alias detected — re-run with --fix. It promotes the deployment ' +
+          'built from HEAD and refuses anything else, so if HEAD is still ' +
+          'building, wait rather than redeploying (AGL-2515).',
+      )
     }
     if (anyBuildMissing) {
       const behind = results.filter((r) => r.commit?.behind)

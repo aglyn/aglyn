@@ -63,6 +63,10 @@ export {
   serializeGradientDraft,
   type CssGradientProps,
 } from './css-gradient'
+export {
+  default as DataTableField,
+  type DataTableFieldProps,
+} from './data-table'
 export { default as DatePicker, type DatePickerProps } from './date-picker'
 export {
   default as DualListSelect,

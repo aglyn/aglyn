@@ -9,6 +9,93 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.64 — 2026-09-03
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.63...v1.0.0-beta.64)
+
+### Fixed
+
+- **tenant:** the marketing site passes the ad click id to the console by URL ([AGL-2548](https://linear.app/aglyn/issue/AGL-2548))
+
+## v1.0.0-beta.63 — 2026-09-03
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.62...v1.0.0-beta.63)
+
+### Added
+
+- **ci:** the notification path can be tested on demand ([AGL-2533](https://linear.app/aglyn/issue/AGL-2533))
+- **seo:** a collection says what kind of article it publishes ([AGL-2536](https://linear.app/aglyn/issue/AGL-2536))
+- **ci:** a red Main Gate also pings Slack, with Linear as the dedupe oracle ([AGL-2533](https://linear.app/aglyn/issue/AGL-2533))
+- **ci:** a red Main Gate posts into Linear instead of nowhere ([AGL-2533](https://linear.app/aglyn/issue/AGL-2533), [AGL-2537](https://linear.app/aglyn/issue/AGL-2537))
+- **seo:** content routes publish a breadcrumb, and an author page its publisher ([AGL-2535](https://linear.app/aglyn/issue/AGL-2535), [AGL-2518](https://linear.app/aglyn/issue/AGL-2518))
+
+### Fixed
+
+- **besigner:** the raw JSON editor loads behind its warning, and says when it is loading ([AGL-2541](https://linear.app/aglyn/issue/AGL-2541))
+- **plugins-mui:** a menu trigger is a nav item, not a button ([AGL-2542](https://linear.app/aglyn/issue/AGL-2542), [AGL-1198](https://linear.app/aglyn/issue/AGL-1198))
+- **besigner:** an already-published version still drops the live cache ([AGL-2540](https://linear.app/aglyn/issue/AGL-2540))
+- **ci:** the notification test no longer impersonates an incident ([AGL-2533](https://linear.app/aglyn/issue/AGL-2533))
+- **aglyn:** a placement's own interactions survive the component merge ([AGL-2521](https://linear.app/aglyn/issue/AGL-2521))
+- **seo:** the entity logo stores a media reference, not a baked-in domain ([AGL-2538](https://linear.app/aglyn/issue/AGL-2538), [AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+
+<details>
+<summary>Also in this release: 3 test</summary>
+
+- **json-editor:** the hoisting the dynamic mock depends on is declared, not smuggled ([AGL-2541](https://linear.app/aglyn/issue/AGL-2541))
+- **console:** the second barrel mock learns the schema-type rule too ([AGL-2536](https://linear.app/aglyn/issue/AGL-2536))
+- **tenant:** a declared entry field that the loader drops fails the gate ([AGL-2535](https://linear.app/aglyn/issue/AGL-2535), [AGL-686](https://linear.app/aglyn/issue/AGL-686), [AGL-2417](https://linear.app/aglyn/issue/AGL-2417))
+
+</details>
+
+## v1.0.0-beta.62 — 2026-09-03
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/56119b9b0...v1.0.0-beta.62)
+
+### Fixed
+
+- **ci:** the verdict step reads its exit code instead of dying on it ([AGL-2533](https://linear.app/aglyn/issue/AGL-2533))
+- **deploy:** --fix promotes the right build, and a running build is not a missing one ([AGL-2515](https://linear.app/aglyn/issue/AGL-2515))
+- **tenant:** every article publishes a dateModified, which none ever has ([AGL-2535](https://linear.app/aglyn/issue/AGL-2535), [AGL-686](https://linear.app/aglyn/issue/AGL-686))
+
+<details>
+<summary>Also in this release: 1 test, 1 ci</summary>
+
+- **console:** the plugin-set hook is read after it settles, not on first render ([AGL-2530](https://linear.app/aglyn/issue/AGL-2530), [AGL-2382](https://linear.app/aglyn/issue/AGL-2382))
+- **promotion:** a promotion reads Main Gate's verdict for what it ships ([AGL-2533](https://linear.app/aglyn/issue/AGL-2533), [AGL-2534](https://linear.app/aglyn/issue/AGL-2534))
+
+</details>
+
+## v1.0.0-beta.61 — 2026-09-03
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/8db009345...v1.0.0-beta.61)
+
+<details>
+<summary>Also in this release: 1 test, 1 ci</summary>
+
+- **tenant:** the visitor-write limit is asserted against a frozen clock ([AGL-2532](https://linear.app/aglyn/issue/AGL-2532))
+- **gate:** main is gated by the push that changes it, not by a clock ([AGL-2534](https://linear.app/aglyn/issue/AGL-2534), [AGL-2378](https://linear.app/aglyn/issue/AGL-2378), [AGL-2533](https://linear.app/aglyn/issue/AGL-2533))
+
+</details>
+
+## v1.0.0-beta.60 — 2026-09-03
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.59...v1.0.0-beta.60)
+
+### Fixed
+
+- **console:** the backfill idempotency guard asserts its own org, not the project ([AGL-2528](https://linear.app/aglyn/issue/AGL-2528))
+
+### Documentation
+
+- **ci:** the gate's header describes a reporting path it does not have ([AGL-2533](https://linear.app/aglyn/issue/AGL-2533))
+
+<details>
+<summary>Also in this release: 1 ci</summary>
+
+- **tools:** the repo runs one node major, and nothing may name a second ([AGL-2531](https://linear.app/aglyn/issue/AGL-2531), [AGL-2528](https://linear.app/aglyn/issue/AGL-2528))
+
+</details>
+
 ## v1.0.0-beta.59 — 2026-09-03
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.58...v1.0.0-beta.59)

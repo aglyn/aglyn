@@ -31,6 +31,8 @@ import {
   withBesignerContext,
   type BesignerSaveBaseline,
   type WorkspaceEditorComponentProps,
+  useClearCanvasCallback,
+  useRepairDocumentCallback,
 } from '@aglyn/besigner-ui'
 import {
   ICON_VARIANT_MODIFY_ADD,
@@ -282,6 +284,12 @@ function HostEmailBesignerPage() {
     getCanvasRoot,
   })
 
+  // Document maintenance (AGL-2554 / AGL-2555). Both sit on Edit beside
+  // Raw JSON, which is the escape hatch they exist to make unnecessary:
+  // an unrenderable node cannot be selected, so neither Delete Element nor
+  // Add Element can reach one.
+  const clearCanvas = useClearCanvasCallback('email')
+  const repairDocument = useRepairDocumentCallback('email')
   const {
     saveAvailable,
     remoteChanged,
@@ -547,6 +555,21 @@ function HostEmailBesignerPage() {
                 id: 'center-nav-edit-rawjson',
                 children: 'Raw JSON',
                 onClick: () => openJsonEditor(),
+                ListItemTextProps: { inset: true },
+              },
+              {
+                type: 'divider',
+              },
+              {
+                id: 'center-nav-edit-repair',
+                children: 'Repair email',
+                onClick: () => repairDocument(),
+                ListItemTextProps: { inset: true },
+              },
+              {
+                id: 'center-nav-edit-clear',
+                children: 'Clear canvas',
+                onClick: () => clearCanvas(),
                 ListItemTextProps: { inset: true },
               },
             ],

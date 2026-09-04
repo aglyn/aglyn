@@ -1,7 +1,7 @@
 {
   "name": "aglyn",
   "description": "",
-  "version": "1.0.0-beta.59",
+  "version": "1.0.0-beta.64",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": "github:aglyn/aglyn",
@@ -207,7 +207,13 @@
     "test:run-guards": "node tools/scripts/run-guards.mjs --self-test",
     "typecheck:changed": "node tools/scripts/typecheck.mjs --changed",
     "test:gate-report": "node tools/scripts/gate-report.mjs --self-test",
-    "check:feature-matrix": "SWC_NODE_PROJECT=tools/marketing/tsconfig.tables.json node --import @swc-node/register/esm-register tools/scripts/gen-feature-matrix.mts --check"
+    "check:feature-matrix": "SWC_NODE_PROJECT=tools/marketing/tsconfig.tables.json node --import @swc-node/register/esm-register tools/scripts/gen-feature-matrix.mts --check",
+    "check:main-gate-verdicts": "node tools/scripts/check-main-gate-verdicts.mjs",
+    "test:main-gate-verdicts": "node --test tools/scripts/lib/main-gate-verdicts.test.mjs",
+    "report:main-gate-red": "node tools/scripts/report-main-gate-red.mjs",
+    "test:main-gate-red": "node --test tools/scripts/lib/main-gate-red-report.test.mjs",
+    "check:main-gate-full-sweep": "node tools/scripts/check-main-gate-full-sweep.mjs",
+    "test:main-gate-full-sweep": "node --test tools/scripts/lib/main-gate-full-sweep.test.mjs"
   },
   "dependencies": {
     "@base-ui/react": "1.6.0",

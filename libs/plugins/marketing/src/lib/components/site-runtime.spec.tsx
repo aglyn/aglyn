@@ -91,6 +91,126 @@ describe('automations engine — nav interactions (AGL-562)', () => {
     expect(target.classList.contains(HIDDEN)).toBe(true)
   })
 
+  describe('attribute steps announce a hand-built disclosure (AGL-2546)', () => {
+    it('sets and removes an aria attribute on the target', () => {
+      runEngine([
+        {
+          event: 'elementClick',
+          selector: '#menu-button',
+          everyTime: true,
+          steps: [
+            {
+              type: 'setAttribute',
+              selector: '[data-aglyn="leaf:links-1"]',
+              name: 'aria-expanded',
+              value: 'true',
+            },
+          ],
+        },
+      ])
+      fireEvent.click(button)
+      expect(target.getAttribute('aria-expanded')).toBe('true')
+
+      runEngine([
+        {
+          event: 'elementClick',
+          selector: '#menu-button',
+          everyTime: true,
+          steps: [
+            {
+              type: 'removeAttribute',
+              selector: '[data-aglyn="leaf:links-1"]',
+              name: 'aria-expanded',
+            },
+          ],
+        },
+      ])
+      fireEvent.click(button)
+      expect(target.hasAttribute('aria-expanded')).toBe(false)
+    })
+
+    it('REFUSES a name outside the allowlist, at the runtime', () => {
+      // The console form also refuses it, but the form is a convenience.
+      // A step reaches this loop from a stored document, which may predate
+      // the allowlist or never have passed through the console at all — so
+      // the runtime is where the refusal has to be real.
+      runEngine([
+        {
+          event: 'elementClick',
+          selector: '#menu-button',
+          everyTime: true,
+          steps: [
+            {
+              type: 'setAttribute',
+              selector: '[data-aglyn="leaf:links-1"]',
+              name: 'onclick',
+              value: 'alert(1)',
+            },
+          ],
+        },
+      ])
+      fireEvent.click(button)
+      expect(target.hasAttribute('onclick')).toBe(false)
+    })
+
+    it('a refused name does not swallow the steps after it', () => {
+      // The executor wraps each automation in try/catch, so a throw here
+      // would silently drop every later step in the same automation — the
+      // author would see one typo disable an entire interaction.
+      runEngine([
+        {
+          event: 'elementClick',
+          selector: '#menu-button',
+          everyTime: true,
+          steps: [
+            {
+              type: 'setAttribute',
+              selector: '[data-aglyn="leaf:links-1"]',
+              name: 'href',
+              value: 'javascript:alert(1)',
+            },
+            {
+              type: 'setAttribute',
+              selector: '[data-aglyn="leaf:links-1"]',
+              name: 'aria-expanded',
+              value: 'true',
+            },
+          ],
+        },
+      ])
+      fireEvent.click(button)
+      expect(target.hasAttribute('href')).toBe(false)
+      expect(target.getAttribute('aria-expanded')).toBe('true')
+    })
+
+    it('reaches a layout-namespaced element from a raw-id selector', () => {
+      // Same `expandLeafSelector` path the visibility steps use (AGL-573).
+      // Without it the step works in the canvas and silently misses on a
+      // composed page, which is the worst possible failure shape.
+      document.body.innerHTML =
+        '<button id="menu-button">Menu</button>' +
+        '<nav id="ns" data-aglyn="leaf:layout__links-1">Links</nav>'
+      const namespaced = document.getElementById('ns') as HTMLElement
+      runEngine([
+        {
+          event: 'elementClick',
+          selector: '#menu-button',
+          everyTime: true,
+          steps: [
+            {
+              type: 'setAttribute',
+              selector: '[data-aglyn="leaf:links-1"]',
+              name: 'aria-expanded',
+              value: 'true',
+            },
+          ],
+        },
+      ])
+      fireEvent.click(document.getElementById('menu-button') as HTMLElement)
+      expect(namespaced.getAttribute('aria-expanded')).toBe('true')
+    })
+  })
+
   it('fires once per pageview without everyTime (legacy default)', () => {
     runEngine([
       {
