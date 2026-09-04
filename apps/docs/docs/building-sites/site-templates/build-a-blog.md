@@ -120,15 +120,38 @@ only the fields that apply:
 | Field | Person | Organization |
 | --- | --- | --- |
 | **Name** | required | required |
-| **URL** | author page or personal site | site |
+| **Page address** | their page on your site | their page on your site |
+| **URL** | their own site, elsewhere | their own site, elsewhere |
 | **Portrait / Logo** | published as `image` | published as `logo` |
 | **Job title** | yes | — |
 | **Works for** | yes | — |
+| **Links** | the row of marks a reader clicks | same |
 | **Profile links** | `sameAs`, one URL per line | `sameAs`, one URL per line |
 | **Bio** | shown beside the byline; not structured data | same |
 
 The portrait is a **media-picker target** — choose from the site or organization
 library, or paste a URL if the avatar lives elsewhere.
+
+#### Links a reader can click
+
+**Profile links** and **Links** answer two different questions, which is why both
+exist. Profile links are `sameAs`: a bare list of URLs, published for crawlers so
+they can join this author to the same person elsewhere. Nothing draws them.
+
+**Links** are the ones your visitors see — a row of marks under the bio on the
+author card and the author page. Each row is one of two kinds:
+
+- pick a **platform** (X, LinkedIn, GitHub, Mastodon, YouTube, Instagram, Facebook,
+  Website, Email, RSS) and the mark and the label come with it. You cannot change
+  them, and that is deliberate: an X link drawn with a GitHub glyph is a broken link
+  that still resolves;
+- pick **Custom link** for anything else — a newsletter, a conference talk, an ORCID
+  record — and you choose the label and the icon yourself, because no mark for it
+  would mean anything to a reader.
+
+`https://` and `mailto:` only. Every link you add here is also published into
+`sameAs`, so you never have to type a profile URL twice — an email address is the
+one exception, since `sameAs` is for pages that identify the same entity.
 
 An author flows straight into the entry page's **structured data**: the `Article`'s
 `author` becomes that Person or Organization, with its url, image, job title and
@@ -145,6 +168,54 @@ existed keep their typed byline and are published as a `Person` with that name, 
 they always were.
 
 A site holds up to 200 authors.
+
+#### The author's page
+
+Every author gets **one page**, at `/author/{slug}`, collecting everything they wrote
+**across every collection** — blog posts, changelog notes and press releases in a
+single list, newest first. One person, one address, however many sections your site
+has. Deeper pages live at `/author/{slug}/page/2`.
+
+**Page address** is that slug. Leave it blank and it comes from the name
+(`Zach Gover` → `/author/zach-gover`); set it when you want an address that survives
+a rename, or when two people share a name. The old address keeps working either way
+— a page answers to the stored slug, the display name and the record id at once.
+
+The byline links there on its own. **Entry Meta** turns the author's name into a link
+to their page, and the **Entry Author** card does the same — their own site stays
+available as one of the link rows rather than competing for the name. Both have a
+switch if you want plain text instead.
+
+Author pages are also submitted in your sitemap, one URL per author.
+
+#### Designing the author page
+
+Left alone, an author page renders a built-in themed page inside your site's shared
+layout — portrait, name, role, bio, links, then their posts. To design your own, build
+a screen and pick it under **Author page screen** on the Authors tab. It applies to
+every author, because a masthead whose design changed as a reader clicked between
+colleagues would be a strange thing to build on purpose.
+
+On that screen:
+
+- the **Author Profile** block draws the person — portrait, name, role, bio and links —
+  filled from whichever author's page is being rendered;
+- a **Collection Entries** block lists their posts. Leave its collection blank: on an
+  author page it repeats their entries from every collection. Bind
+  `{{entry.collection}}` on the card to label which section each post came from;
+- `{{author.name}}`, `{{author.bio}}`, `{{author.jobTitle}}`, `{{author.worksFor}}`,
+  `{{author.image}}`, `{{author.url}}`, `{{author.pageUrl}}` and
+  `{{author.entryCountLabel}}` ("12 posts", pluralized for you) resolve per author;
+- `{{pagination.page}}`, `{{pagination.totalPages}}`, `{{pagination.prevUrl}}` and
+  `{{pagination.nextUrl}}` are the same four a collection list template uses, so a
+  pager you have already built works here unchanged.
+
+The screen you pick stops serving at its own address, exactly like a collection's
+entry template — it renders `/author/…` instead.
+
+The page publishes `ProfilePage` structured data with the author as its
+`mainEntity`, using the same Person or Organization shape every article of theirs
+already carries as its `author`.
 
 ### Categories
 
@@ -231,18 +302,59 @@ in the block library:
   *Site default* (`8/9/2026`), *Month and year* (`Aug 2026`), *Short date*, *Long date*
   or *ISO*. It applies to the date the block fills in for itself; a date you typed in by
   hand is left exactly as typed. **Avatar** takes any image from the media library
-  (usually your brand mark) and renders it 36px and round; blank shows no avatar. The
-  avatar is chosen on the block, not per author — entries carry an author *name*, not a
-  portrait.
+  (usually your brand mark) and renders it 36px and round; blank shows no avatar. When
+  the entry's author is a record with a portrait, that portrait is shown instead of the
+  mark you picked — the face follows the byline. It only appears where a byline does: a
+  block with **Show author** off (a tag row at the foot of an article, say) keeps
+  whatever avatar you chose for it, and gets none if you chose none.
+- **Entry Author** — the author card that closes an article: portrait, name and bio,
+  filled from the entry's author record. Drop it on the entry template and it works;
+  nothing needs typing. **Name**, **Bio**, **Portrait** and **Link** each override one
+  field (the `{{entry.author}}` / `{{entry.authorBio}}` / `{{entry.authorImage}}` /
+  `{{entry.authorUrl}}` bindings say the same thing, for a card you laid out yourself),
+  and **Show bio** / **Show portrait** hide a part you do not want. Each part collapses
+  when the record has nothing for it, and an entry with no author renders no card at
+  all. The name links to the author's own url, off-site links opening in a new tab.
 - **Related Posts** — other entries of the same collection that share the current
   entry's **category or a tag**, newest first. Attributes: **Heading** (default
-  "Related articles"), **Limit** (default 3), **Layout**, **Columns** and **Show
-  cover**. Layout **List** — the default — is a plain list of links with a
-  `date · category` line under each. Layout **Card grid** lays the posts out in
-  **Columns** cards per row (default 3), each with a category chip above its title.
-  **Show cover** adds each post's cover image; posts without one show their title
-  alone rather than an empty box. Renders nothing when the entry has no
-  category/tags or nothing matches.
+  "Related articles"), **Limit** (default 3), **Layout**, **Columns**, **Show
+  cover**, **Heading style**, **Title style**, **Show date**, **Date format**,
+  **Show category** and **Show excerpt**. Layout **List** — the default — is a plain
+  list of links with a `date · category` line under each. Layout **Card grid** lays
+  the posts out in **Columns** cards per row (default 3), each with a category chip
+  above its title, and makes the whole card the link. **Show cover** adds each post's
+  cover image; posts without one show their title alone rather than an empty box.
+  **Heading style** and **Title style** pick which type step from the site theme the
+  section heading and each post title read at — the same list the Typography element
+  offers, defaulting to *Heading 5* and *Subtitle 1*. **Show date**, **Show category**
+  and **Show excerpt** each add or drop one part of a card; the excerpt is off until
+  you ask for it. **Date format** picks how each card's published date reads — the
+  same five choices as Entry Meta's, so a card and the byline above it can be made to
+  agree. Renders nothing when the entry has no category/tags or nothing matches.
+
+  On the besigner canvas there is no entry being rendered, so the block cannot know
+  its real posts. It draws **sample cards** instead — the same markup, at your own
+  settings, above a dashed note saying so — so you can style the layout and watch it
+  change. The samples never reach a published page; the real posts replace them there.
+
+:::tip Entry blocks work inside a listing card too
+Drop **Entry Meta** (or **Entry Author**) inside a Collection Entries card and each card
+fills from its **own** entry — byline, date, category, tags. **Date format** applies per
+card, so a listing can read *Aug 2026* while another block on the same page reads the
+full date. Typing a value into the block still overrides what it would have shown, on
+every card at once.
+:::
+
+:::info The canvas previews all three entry blocks
+**Entry Meta**, **Entry Author** and **Related Posts** all read from the entry being
+rendered, and the canvas has none — so each previews itself with sample values
+(`Sample author`, a portrait slot, two example tags) rather than a placeholder strip.
+Your **Show** switches and your **Date format** apply to the preview, so what you are
+styling is the arrangement the page will actually ship. None of it can reach a
+published page: a real entry replaces it, and an entry with nothing to show renders
+nothing at all.
+:::
+
 - **Share Bar** — X, LinkedIn, Facebook, and copy-link buttons for the current page
   URL. Attribute: **Heading** (default "Share").
 - **Category Pills** — the collection's categories as a row of links: **All** plus one

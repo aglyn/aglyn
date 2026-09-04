@@ -103,6 +103,21 @@ function docsStringField(vendorId: string, field: string): string {
   return match ? match[1] : ''
 }
 
+/**
+ * The docs copy's `scriptSrcFor`, rebuilt as a function.
+ *
+ * Extracted the same way as the boot snippet rather than imported: the docs
+ * file is a standalone browser script, and importing it would test the module
+ * graph instead of the text that actually ships.
+ */
+function docsScriptSrcFor(vendorId: string): (accountId: string) => string {
+  const block = vendorBlock(vendorId)
+  const match = block.match(/scriptSrcFor: \(accountId: string\) =>\s*\n?\s*`([^`]*)`/)
+  const template = match ? match[1] : ''
+  return (accountId: string) =>
+    template.replace(/\$\{accountId\}/g, accountId)
+}
+
 /** A regex-literal field from the docs source. */
 function docsPatternField(vendorId: string, field: string): string {
   const block = vendorBlock(vendorId)
@@ -154,6 +169,18 @@ describe("the docs site's advertising vendor copy", () => {
     expect(docsPatternField(vendorId, 'accountIdPattern')).toBe(
       String(vendor.accountIdPattern),
     )
+  })
+
+  it('builds google-ads\'s per-account loader byte-identically', () => {
+    /*
+     * AGL-2559. The docs copy mounts its own `gtag/js` whenever the docs GA
+     * preset has not already put one on the page, and a copy that fetched it
+     * bare would register no container — measurable nowhere on the docs site,
+     * because nothing there reads the result back.
+     */
+    const built = docsScriptSrcFor('google-ads')(PROBE)
+    expect(built).toBe(GOOGLE_ADS_VENDOR.scriptSrcFor?.(PROBE))
+    expect(built).toContain(PROBE)
   })
 
   it("shares the library marker for the vendor that shares a library", () => {

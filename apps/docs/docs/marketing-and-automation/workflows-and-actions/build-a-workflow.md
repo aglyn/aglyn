@@ -17,7 +17,7 @@ site. This guide builds one end to end.
 
 ## 1. Open the workflows page
 
-In the console, go to **Data → Workflows** and choose **New workflow**. Give it a name that
+In the console, go to **Automation → Workflows** and choose **New workflow**. Give it a name that
 describes the outcome (e.g. "Welcome new member").
 
 ## 2. Choose a trigger
@@ -54,7 +54,7 @@ the time it took beneath.
 :::note Runs recorded before this shipped are not in the table
 Workflow executions were written in a shape the table did not recognize, so anything
 that ran before AGL-2222 is filtered out of it. Those runs are not lost — the
-dashboard's **Recent Activity** card and **Setup → Activity** show every one of them,
+dashboard's **Recent Activity** card and **Admin → Activity** show every one of them,
 as *"Workflow ran on formSubmission"* with the duration appended and failures in red.
 :::
 

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { encode } from '@msgpack/msgpack'
 import {
   loadHostEmail,
   renderHostEmail,
@@ -78,13 +79,25 @@ const NODES = {
   },
 }
 
+/**
+ * The policy these tests hand the renderer. Identity on purpose: nothing here
+ * is about WHAT the sanitizer keeps — `email-render.spec.ts` owns that — only
+ * that this layer has one to pass and passes it. The real senders supply
+ * `sanitizeAuthorHtml`.
+ */
+const SANITIZE = (html: string) => html
+
 describe('renderHostEmail (AGL-770)', () => {
   beforeEach(() => jest.spyOn(console, 'error').mockImplementation(() => undefined))
 
   it('returns null for an unknown key without reading Firestore', async () => {
     const reads = { templates: 0, versions: 0 }
     const fs = fakeFirestore(null, null, reads)
-    expect(await renderHostEmail(fs, 'h1', 'not-a-real-email')).toBeNull()
+    expect(
+      await renderHostEmail(fs, 'h1', 'not-a-real-email', {}, {
+        sanitize: SANITIZE,
+      }),
+    ).toBeNull()
     expect(reads.templates).toBe(0)
   })
 
@@ -92,15 +105,27 @@ describe('renderHostEmail (AGL-770)', () => {
     const reads = { templates: 0, versions: 0 }
     const fs = fakeFirestore(null, null, reads)
     // member-post is `fixed`, campaign is `external` — neither is besigner.
-    expect(await renderHostEmail(fs, 'h1', 'member-post')).toBeNull()
-    expect(await renderHostEmail(fs, 'h1', 'campaign')).toBeNull()
+    expect(
+      await renderHostEmail(fs, 'h1', 'member-post', {}, {
+        sanitize: SANITIZE,
+      }),
+    ).toBeNull()
+    expect(
+      await renderHostEmail(fs, 'h1', 'campaign', {}, {
+        sanitize: SANITIZE,
+      }),
+    ).toBeNull()
     expect(reads.templates).toBe(0)
   })
 
   it('falls back (null) when no version is published', async () => {
     const reads = { templates: 0, versions: 0 }
     const fs = fakeFirestore({ versionId: null }, null, reads)
-    expect(await renderHostEmail(fs, 'h1', 'booking-confirmed')).toBeNull()
+    expect(
+      await renderHostEmail(fs, 'h1', 'booking-confirmed', {}, {
+        sanitize: SANITIZE,
+      }),
+    ).toBeNull()
   })
 
   it('renders a published designable template', async () => {
@@ -112,7 +137,7 @@ describe('renderHostEmail (AGL-770)', () => {
     )
     const result = await renderHostEmail(fs, 'h1', 'booking-confirmed', {
       name: 'Alex',
-    })
+    }, { sanitize: SANITIZE })
     expect(result?.subject).toBe('See you Alex')
     expect(result?.html).toContain('Hi Alex')
   })
@@ -129,8 +154,8 @@ describe('renderHostEmail (AGL-770)', () => {
     expect(reads.templates).toBe(1)
     expect(reads.versions).toBe(1)
 
-    const a = renderLoadedHostEmail(loaded!, { name: 'Alex' })
-    const b = renderLoadedHostEmail(loaded!, { name: 'Sam' })
+    const a = renderLoadedHostEmail(loaded!, { name: 'Alex' }, SANITIZE)
+    const b = renderLoadedHostEmail(loaded!, { name: 'Sam' }, SANITIZE)
     expect(a?.subject).toBe('Hello Alex')
     expect(b?.subject).toBe('Hello Sam')
     // Rendering touched Firestore no further.
@@ -162,7 +187,13 @@ describe('renderHostEmail (AGL-770)', () => {
         subdomain: 'acme',
         cname: 'shop.acme.com',
       })
-      const result = await renderHostEmail(fs, 'h1', 'booking-confirmed')
+      const result = await renderHostEmail(
+        fs,
+        'h1',
+        'booking-confirmed',
+        {},
+        { sanitize: SANITIZE },
+      )
       expect(result?.html).toContain(
         'src="https://shop.acme.com/api/media/cdn/org:o1:h1/med7"',
       )
@@ -173,7 +204,13 @@ describe('renderHostEmail (AGL-770)', () => {
       const fs = fakeFirestore(published, { nodes: IMAGE_NODES }, reads, {
         subdomain: 'acme',
       })
-      const result = await renderHostEmail(fs, 'h1', 'booking-confirmed')
+      const result = await renderHostEmail(
+        fs,
+        'h1',
+        'booking-confirmed',
+        {},
+        { sanitize: SANITIZE },
+      )
       expect(result?.html).toContain(
         'src="https://acme.aglyn.app/api/media/cdn/org:o1:h1/med7"',
       )
@@ -182,7 +219,13 @@ describe('renderHostEmail (AGL-770)', () => {
     it('drops the image when the host has no origin at all', async () => {
       const reads = { templates: 0, versions: 0 }
       const fs = fakeFirestore(published, { nodes: IMAGE_NODES }, reads, {})
-      const result = await renderHostEmail(fs, 'h1', 'booking-confirmed')
+      const result = await renderHostEmail(
+        fs,
+        'h1',
+        'booking-confirmed',
+        {},
+        { sanitize: SANITIZE },
+      )
       expect(result?.html).not.toContain('media:org')
       expect(result?.html).not.toContain('src="/api/media/cdn')
     })
@@ -197,7 +240,7 @@ describe('renderHostEmail (AGL-770)', () => {
         'h1',
         'booking-confirmed',
         {},
-        { origin: 'https://passed.test' },
+        { origin: 'https://passed.test', sanitize: SANITIZE },
       )
       expect(result?.html).toContain('src="https://passed.test/api/media/cdn/')
       expect(reads.hosts).toBe(0)
@@ -209,8 +252,8 @@ describe('renderHostEmail (AGL-770)', () => {
         subdomain: 'acme',
       })
       const loaded = await loadHostEmail(fs, 'h1', 'booking-reminder')
-      renderLoadedHostEmail(loaded!, { name: 'Alex' })
-      renderLoadedHostEmail(loaded!, { name: 'Sam' })
+      renderLoadedHostEmail(loaded!, { name: 'Alex' }, SANITIZE)
+      renderLoadedHostEmail(loaded!, { name: 'Sam' }, SANITIZE)
       expect(reads.hosts).toBe(1)
     })
 
@@ -221,7 +264,11 @@ describe('renderHostEmail (AGL-770)', () => {
       const fs = fakeFirestore({ versionId: null }, null, reads, {
         subdomain: 'acme',
       })
-      expect(await renderHostEmail(fs, 'h1', 'booking-confirmed')).toBeNull()
+      expect(
+        await renderHostEmail(fs, 'h1', 'booking-confirmed', {}, {
+          sanitize: SANITIZE,
+        }),
+      ).toBeNull()
       expect(reads.hosts).toBe(0)
     })
   })
@@ -233,8 +280,108 @@ describe('renderHostEmail (AGL-770)', () => {
       { nodes: NODES },
       reads,
     )
-    const result = await renderHostEmail(fs, 'h1', 'booking-confirmed', {})
+    const result = await renderHostEmail(
+      fs,
+      'h1',
+      'booking-confirmed',
+      {},
+      { sanitize: SANITIZE },
+    )
     expect(result?.subject).not.toContain('{{')
     expect(result?.html).not.toContain('{{')
+  })
+
+  /**
+   * THE SEND PATH READS BOTH STORED FORMS (AGL-1223).
+   *
+   * `nodes` is msgpack for anything the besigner has saved since AGL-1151, and
+   * a plain map for every version written before it — and nothing migrates
+   * those, so both are live forever.
+   *
+   * The failure this pins is silent rather than loud. `loadHostEmail` guards
+   * on `!Object.keys(nodes).length`, and over a `Buffer` those keys are BYTE
+   * INDICES: the guard passes, `renderEmailHtml` walks byte numbers, finds no
+   * root, and the customer gets an empty email — where returning null would
+   * have fallen back to the built-in copy and sent something correct.
+   */
+  describe('both stored forms of the version', () => {
+    /**
+     * What firebase-admin actually hands back for a bytes field: a Node
+     * `Buffer` carved out of the shared allocation pool, so `byteOffset` is
+     * non-zero and the backing `ArrayBuffer` is bigger than the field. A
+     * zero-offset buffer would pass even against a decoder that ignores the
+     * offset, which is the mistake most likely to come back.
+     */
+    const pooledNodes = () => {
+      const bytes = encode(NODES)
+      const pool = Buffer.allocUnsafeSlow(Buffer.poolSize)
+      const packed = pool.subarray(64, 64 + bytes.byteLength)
+      packed.set(bytes)
+      return packed
+    }
+
+    it('renders a version stored as msgpack bytes', async () => {
+      const packed = pooledNodes()
+      // Guard the premise, or this passes for the wrong reason.
+      expect(packed.byteOffset).toBeGreaterThan(0)
+      expect(packed.buffer.byteLength).toBeGreaterThan(packed.byteLength)
+
+      const reads = { templates: 0, versions: 0 }
+      const fs = fakeFirestore(
+        { versionId: 'v1', subject: 'See you {{name}}' },
+        { nodes: packed },
+        reads,
+      )
+      const result = await renderHostEmail(
+        fs,
+        'h1',
+        'booking-confirmed',
+        { name: 'Alex' },
+        { sanitize: SANITIZE },
+      )
+      expect(result?.subject).toBe('See you Alex')
+      expect(result?.html).toContain('Hi Alex')
+    })
+
+    it('gives both forms the same output', async () => {
+      const render = async (nodes: unknown) => {
+        const reads = { templates: 0, versions: 0 }
+        return renderHostEmail(
+          fakeFirestore(
+            { versionId: 'v1', subject: 'See you {{name}}' },
+            { nodes },
+            reads,
+          ),
+          'h1',
+          'booking-confirmed',
+          { name: 'Alex' },
+          { sanitize: SANITIZE },
+        )
+      }
+      expect(await render(pooledNodes())).toEqual(await render(NODES))
+    })
+
+    it('falls back rather than sending an empty design it could not decode', async () => {
+      const spy = jest
+        .spyOn(console, 'error')
+        .mockImplementation(() => undefined)
+      try {
+        const reads = { templates: 0, versions: 0 }
+        const fs = fakeFirestore(
+          { versionId: 'v1', subject: 'Hi' },
+          { nodes: Buffer.from([0xc1, 0xc1, 0xc1]) },
+          reads,
+        )
+        expect(
+          await renderHostEmail(fs, 'h1', 'booking-confirmed', {}, {
+            sanitize: SANITIZE,
+          }),
+        ).toBeNull()
+        // Silence is how an undecodable design becomes an empty send.
+        expect(spy).toHaveBeenCalled()
+      } finally {
+        spy.mockRestore()
+      }
+    })
   })
 })

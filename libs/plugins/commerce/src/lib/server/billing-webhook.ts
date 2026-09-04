@@ -26,8 +26,11 @@ import {
   notifyStaff,
   upsertHostContact,
   renderHostEmailWithTokens,
+  clearConnectPayoutFailure,
+  recordConnectPayoutFailure,
   syncConnectAccountStatus,
   updateExisting,
+  hostSendingIdentity,
 } from '@aglyn/tenant-data-admin'
 import { createHmac } from 'crypto'
 import {
@@ -36,6 +39,10 @@ import {
 } from '@aglyn/shared-util-email'
 import * as CommerceModel from '../model'
 import { recordContactRefund } from './contact-refund'
+// Leaf import, not the barrel, for the reason `contact-refund.ts` records: the
+// specs in this library mock `@aglyn/tenant-data-admin` wholesale, and a
+// permissive stub would turn a reversal that never happened green.
+import { reverseEmailAttributedRevenue } from '@aglyn/tenant-data-admin/server/email-revenue-attribution'
 import { mintDownloadToken, tokenSigningSecret } from './download'
 import { alertLowStockCrossing } from './low-stock'
 import { decrementVariantStock } from './reserve-stock'
@@ -1890,6 +1897,43 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
     return
   }
 
+  // A PAYOUT OR TRANSFER THAT NEVER LANDED.
+  //
+  // Placed beside `account.updated` because it is the same kind of event —
+  // account-level, nothing to do with the `metadata.type` order sections
+  // below — and returns for the same reason.
+  //
+  // `payout.failed` is the CONNECTED account's balance failing to reach its
+  // bank, so the account id is `event.account`: the Payout object's own
+  // `destination` names the bank, not the Connect account. `transfer.failed`
+  // is the platform's balance failing to reach the connected account, a
+  // platform event whose `destination` IS the account.
+  //
+  // Recorded and surfaced, never retried: Stripe runs its own retry schedule
+  // and a second transfer against an account that just refused one is how a
+  // duplicate lands.
+  if (type === 'payout.failed' || type === 'transfer.failed') {
+    const failedAccountId =
+      type === 'payout.failed'
+        ? String(event?.account ?? '')
+        : String(object?.destination?.id ?? object?.destination ?? '')
+    await recordConnectPayoutFailure('profiles', {
+      kind: type === 'payout.failed' ? 'payout' : 'transfer',
+      object,
+      accountId: failedAccountId,
+      livemode: event?.livemode,
+    })
+    return
+  }
+  // A later success retires the warning the card shows. The history in
+  // `connectPayoutFailures` is kept — "has this account failed before" is what
+  // that record exists to answer — but a stale warning on a resolved problem
+  // trains people to ignore the surface.
+  if (type === 'payout.paid') {
+    await clearConnectPayoutFailure('profiles', String(event?.account ?? ''))
+    return
+  }
+
   // A DEAD SESSION GIVES ITS RESERVATIONS BACK (AGL-2453).
   //
   // Stripe expires a Checkout Session 24 hours after creation, and emits this
@@ -2136,6 +2180,14 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 ? { interval: liftedForSnapshot.subscription.interval }
                 : {}),
               checkoutSessionId: String(object.id),
+              // WHICH STRIPE WORLD THIS SALE HAPPENED IN (AGL-305). A recorded fact,
+              // so no revenue surface has to infer it from the session id's `cs_test_`
+              // prefix — Stripe's convention rather than our data, and all that the
+              // orders written before this carry. Only a literal boolean is written; an
+              // event stating none leaves the field absent and the reader falls back.
+              ...(typeof event?.livemode === 'boolean'
+                ? { livemode: event.livemode }
+                : {}),
               createdAtMs: Date.now(),
               // WHICH TAX this subscription will bill, for as long as it
               // lives (AGL-2323).
@@ -2911,6 +2963,14 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 status: 'confirmed',
                 paidCents,
                 checkoutSessionId: String(object.id),
+                // WHICH STRIPE WORLD THIS SALE HAPPENED IN (AGL-305). A recorded fact,
+                // so no revenue surface has to infer it from the session id's `cs_test_`
+                // prefix — Stripe's convention rather than our data, and all that the
+                // orders written before this carry. Only a literal boolean is written; an
+                // event stating none leaves the field absent and the reader falls back.
+                ...(typeof event?.livemode === 'boolean'
+                  ? { livemode: event.livemode }
+                  : {}),
                 paymentIntentId: String(object?.payment_intent ?? '') || null,
                 // The regime this stay carried, on the record the merchant
                 // reads (AGL-1969).
@@ -3042,6 +3102,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               text: designed?.text || fallbackText,
               ...(designed?.html ? { html: designed.html } : {}),
               fromName: (await brandFor(hostId)).fromName,
+              sendingIdentity: await hostSendingIdentity(String(hostId)),
+              audience: 'tenant',
               context: 'reservation confirmation',
             })
             // Cost meter (AGL-1438). Transactional: the guest has paid, and a
@@ -3194,6 +3256,14 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             ...(unresolvedLines.length ? { unresolvedLines } : {}),
             paymentIntentId: String(object?.payment_intent ?? '') || null,
             checkoutSessionId: String(object.id),
+            // WHICH STRIPE WORLD THIS SALE HAPPENED IN (AGL-305). A recorded fact,
+            // so no revenue surface has to infer it from the session id's `cs_test_`
+            // prefix — Stripe's convention rather than our data, and all that the
+            // orders written before this carry. Only a literal boolean is written; an
+            // event stating none leaves the field absent and the reader falls back.
+            ...(typeof event?.livemode === 'boolean'
+              ? { livemode: event.livemode }
+              : {}),
             customerName: object?.customer_details?.name ?? null,
             customerEmail: object?.customer_details?.email ?? null,
             ...(shipping?.address
@@ -3373,6 +3443,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             text: designed?.text || fallbackText,
             ...(designed?.html ? { html: designed.html } : {}),
             fromName: (await brandFor(hostId)).fromName,
+            sendingIdentity: await hostSendingIdentity(String(hostId)),
+            audience: 'tenant',
             context: 'cart receipt',
           })
           // Cost meter (AGL-1438). Transactional: a dropped receipt looks to
@@ -3663,6 +3735,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 text: designed?.text || fallbackText,
                 ...(designed?.html ? { html: designed.html } : {}),
                 fromName: (await brandFor(hostId)).fromName,
+                sendingIdentity: await hostSendingIdentity(String(hostId)),
+                audience: 'tenant',
                 context: 'gift card',
               })
               // Cost meter (AGL-1438). Transactional: this email IS the
@@ -3901,6 +3975,33 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         }
         if (flipped) {
           const order = paidOrder as unknown as CommerceModel.HostOrder
+          // Discounts engine redemptions (AGL-305), for this branch's BOTH
+          // tenants: a console draft order and a POS card sale, which carry the
+          // same `commerce-draft` metadata type. The cart branch has settled
+          // its redemptions since AGL-305 and these two counted nothing, so a
+          // capped promotion was bounded on the website and unbounded through a
+          // merchant's payment link and their own register.
+          //
+          // INSIDE the `flipped` guard, and that placement is load-bearing: the
+          // no-`holdKey` path in `settleRedemption` is an unconditional
+          // `increment(1)` for uncapped promotions and sessions minted before
+          // the hold existed, which Stripe's at-least-once delivery would run
+          // twice. The transition is what makes it once.
+          if (object.metadata?.discountId) {
+            await settleRedemption({
+              firestore,
+              ref: hostRef
+                .collection('discounts')
+                .doc(String(object.metadata.discountId)),
+              holdKey: String(object.metadata?.discountHoldKey ?? ''),
+              orderRef,
+              label: `discount ${object.metadata.discountId}`,
+              detail:
+                `Discount ${object.metadata.discountId} was applied to this ` +
+                'order but no longer exists, so the redemption is uncounted ' +
+                'against its limit.',
+            })
+          }
           void notifyHostManagers(String(hostId), {
             type: 'content.order',
             title: `Draft order paid — ${CommerceModel.formatOrderNumber(order, String(orderId))}`,
@@ -4152,6 +4253,14 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             timeline: [{ atMs: Date.now(), event: 'paid' }],
             paymentIntentId: String(object?.payment_intent ?? '') || null,
             checkoutSessionId: String(object.id),
+            // WHICH STRIPE WORLD THIS SALE HAPPENED IN (AGL-305). A recorded fact,
+            // so no revenue surface has to infer it from the session id's `cs_test_`
+            // prefix — Stripe's convention rather than our data, and all that the
+            // orders written before this carry. Only a literal boolean is written; an
+            // event stating none leaves the field absent and the reader falls back.
+            ...(typeof event?.livemode === 'boolean'
+              ? { livemode: event.livemode }
+              : {}),
             customerName: object?.customer_details?.name ?? null,
             createdAtMs: Date.now(),
             // Legacy Commerce Starter fields (AGL-90).
@@ -4278,6 +4387,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                   `Ship to: ${payload.shippingName ?? payload.customerEmail ?? 'see order'}\n\n` +
                   `Add tracking: ${payload.updateUrl}&trackingNumber=TRACKING&carrier=CARRIER`,
                 fromName: (await brandFor(hostId)).fromName,
+                sendingIdentity: await hostSendingIdentity(String(hostId)),
+                audience: 'tenant',
                 context: 'dropship supplier notice',
               })
               // Cost meter (AGL-1438). Transactional: without it the order is
@@ -4394,6 +4505,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               text: designed?.text || fallbackText,
               ...(designed?.html ? { html: designed.html } : {}),
               fromName: (await brandFor(hostId)).fromName,
+              sendingIdentity: await hostSendingIdentity(String(hostId)),
+              audience: 'tenant',
               context: 'receipt',
             })
             // Cost meter (AGL-1438). Transactional, as the cart receipt above.
@@ -4445,6 +4558,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 text: designed?.text || fallbackText,
                 ...(designed?.html ? { html: designed.html } : {}),
                 fromName: (await brandFor(hostId)).fromName,
+                sendingIdentity: await hostSendingIdentity(String(hostId)),
+                audience: 'tenant',
                 context: 'seller order notice',
               })
               // Cost meter (AGL-1438). Transactional: the seller learns about
@@ -4566,6 +4681,19 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               orderId: snapshot.id,
               kind: 'chargeback',
               closedTheOrder: settled.closedTheOrder,
+            })
+            // The campaign's side, through the same door an admin-initiated
+            // refund writes. Money reversed is money reversed whichever way it
+            // left, so a campaign credited with this order stops being paid
+            // for it — and the reversal is recorded beside the credit rather
+            // than subtracted from it, exactly as the contact ledger above
+            // records `refundedCents` beside `ltvCents`.
+            await reverseEmailAttributedRevenue({
+              hostId,
+              orderId: snapshot.id,
+              amountCents: settled.reversedCents,
+              closedTheOrder: settled.closedTheOrder,
+              kind: 'chargeback',
             })
           }
         }

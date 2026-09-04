@@ -17,6 +17,10 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
+import {
+  authorizedFetch,
+  type MaybeTokenSource,
+} from '@aglyn/shared-util-http/authorized-token'
 import * as React from 'react'
 import * as jsxRuntime from 'react/jsx-runtime'
 
@@ -124,7 +128,7 @@ function warnMissingPluginOrigin(): void {
 
 export async function loadOrgRealmPlugins(
   orgId: string,
-  idToken?: string,
+  user: MaybeTokenSource,
 ): Promise<void> {
   await loadDevRealmBundles()
   const artifactsBase = process.env.NEXT_PUBLIC_PLUGIN_ORIGIN ?? ''
@@ -133,9 +137,9 @@ export async function loadOrgRealmPlugins(
     return
   }
   try {
-    const response = await fetch(
+    const response = await authorizedFetch(
+      user,
       `/api/orgs/realm-plugins?orgId=${encodeURIComponent(orgId)}`,
-      idToken ? { headers: { Authorization: `Bearer ${idToken}` } } : undefined,
     )
     if (!response.ok) {
       // Was silent, and indistinguishable from "this org has none" (AGL-1184).

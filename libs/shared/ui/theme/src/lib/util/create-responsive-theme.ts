@@ -212,6 +212,35 @@ function ensureAccessibleShades(
   }
 }
 
+/**
+ * MUI's own default `responsiveFontSizes` variant list, spelled out because
+ * passing `variants` replaces it rather than extending it.
+ */
+const RAMPED_MUI_VARIANTS = [
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'subtitle1',
+  'subtitle2',
+  'body1',
+  'body2',
+  'caption',
+  'button',
+  'overline',
+] as const
+
+/**
+ * The brand's custom display rungs, which MUI cannot know about.
+ *
+ * Only variants whose size genuinely needs to shrink belong here. `lede`,
+ * `bodyCompact` and `micro` are body-scale text that reads the same at every
+ * width and are deliberately absent.
+ */
+const RAMPED_DISPLAY_VARIANTS = ['displayXl'] as const
+
 export type CreateResponsiveThemeOptions = {
   themeOptions?: ThemeOptions
   responsiveFontSizesOptions?: Parameters<typeof responsiveFontSizes>[1]
@@ -283,6 +312,12 @@ export function createResponsiveTheme(
   theme = responsiveFontSizes(theme, {
     // Override to include `xs` and `xl` - default: ['sm', 'md', 'lg']
     breakpoints: ['xs', 'sm', 'md', 'lg', 'xl'],
+    // MUI only ramps the variants it ships, so a CUSTOM display variant would
+    // keep its desktop size on a phone — `displayXl` at 72px on a 375px
+    // screen. Passing `variants` REPLACES MUI's default list, so the defaults
+    // are spelled out here and ours appended; drop one and that variant
+    // silently stops scaling.
+    variants: [...RAMPED_MUI_VARIANTS, ...RAMPED_DISPLAY_VARIANTS],
     ...responsiveFontSizesOptions,
   })
 

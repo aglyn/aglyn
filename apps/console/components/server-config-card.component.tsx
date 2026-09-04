@@ -43,6 +43,7 @@
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Alert,
   AlertTitle,
@@ -72,10 +73,7 @@ export function ServerConfigCard() {
     setBusy(true)
     setError(null)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/admin/server-config', {
-        headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
-      })
+      const response = await authorizedFetch(user, '/api/admin/server-config')
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
         throw new Error(String(payload?.error ?? `HTTP ${response.status}`))

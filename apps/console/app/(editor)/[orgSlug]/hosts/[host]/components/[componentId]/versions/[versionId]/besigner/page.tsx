@@ -32,7 +32,8 @@ import {
   type BesignerSaveBaseline,
   type WorkspaceEditorComponentProps,
   clearServerDraft,
-  writeServerDraft,
+  useClearCanvasCallback,
+  useRepairDocumentCallback,
 } from '@aglyn/besigner-ui'
 import {
   ICON_VARIANT_MODIFY_ADD,
@@ -61,7 +62,7 @@ import ComponentPropsDialog from '../../../../../../../../../../components/compo
 import revalidateLivePages, {
   describeRevalidateShortfall,
 } from '../../../../../../../../../../utils/revalidate-live-pages'
-import { collection, doc, limit, query, updateDoc } from 'firebase/firestore'
+import { Bytes, collection, doc, limit, query, updateDoc } from 'firebase/firestore'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { observer } from 'mobx-react-lite'
 import dynamic from 'next/dynamic'
@@ -302,11 +303,18 @@ function ComponentBesignerPage(props) {
   // Canvas lifecycle, first load, concurrent-write detection (AGL-674) and
   // the size-guarded save (AGL-678) are shared by every besigner editor
   // (AGL-746). What stays here is what is actually about a component.
+  // Document maintenance (AGL-2554 / AGL-2555). Both sit on Edit beside
+  // Raw JSON, which is the escape hatch they exist to make unnecessary:
+  // an unrenderable node cannot be selected, so neither Delete Element nor
+  // Add Element can reach one.
+  const clearCanvas = useClearCanvasCallback('component')
+  const repairDocument = useRepairDocumentCallback('component')
   const {
     saveAvailable,
     remoteChanged,
     draft,
     handleSave,
+    saveWorkingDraft,
     markOwnWrite,
     jsonOpen,
     openJsonEditor,
@@ -491,7 +499,12 @@ function ComponentBesignerPage(props) {
       await updateDoc(
         doc(firestore, 'hosts', hostId, 'components', componentId),
         {
-          nodes: publishedNodes,
+          // Compressed at rest (AGL-1151), like the version this promotes
+          // from. A definition is grafted into every page that places it, so
+          // it is copied far more often than it is written — and it was the
+          // one document in the family still stored as a plain map, at about
+          // 1.4x the bytes against the same 1 MiB ceiling.
+          nodes: Bytes.fromUint8Array(Aglyn.encodeStoredNodes(publishedNodes)!),
           ...(rootId ? { rootId } : {}),
           props: declaredProps ?? [],
           versionId,
@@ -577,17 +590,10 @@ function ComponentBesignerPage(props) {
    * a draft is for.
    */
   const handleSaveDraft = useCallback(async () => {
-    const nodes = Aglyn.canvas.toJSON().nodes as Aglyn.ProcessableNodes
-    const wrote = await writeServerDraft(
-      firestore,
-      { scope: hostId, kind: 'component', docId: componentId, versionId },
-      {
-        nodes,
-        baseStamp: Aglyn.versionStamp(componentResult?.data?.updatedAt),
-        updatedByUid: user?.uid ?? null,
-        updatedByEmail: user?.email ?? null,
-      },
-    ).catch(() => 'failed' as const)
+    const wrote = await saveWorkingDraft({
+      uid: user?.uid,
+      email: user?.email,
+    })
     if (wrote === 'failed') {
       enqueueSnackbar('Could not save the draft — your work is still here.', {
         variant: 'error',
@@ -613,15 +619,7 @@ function ComponentBesignerPage(props) {
       variant: 'success',
       persist: false,
     })
-  }, [
-    firestore,
-    hostId,
-    componentId,
-    versionId,
-    componentResult?.data?.updatedAt,
-    user,
-    enqueueSnackbar,
-  ])
+  }, [saveWorkingDraft, user, enqueueSnackbar])
 
   /**
    * Do the live sites already match this version?
@@ -658,15 +656,37 @@ function ComponentBesignerPage(props) {
      * the author why, and promoting past it would push a canvas the document
      * does not hold. NOTHING TO SAVE is not a refusal: the document already
      * has the tree, so the promote is exactly the step that is left.
-     *  is what tells them apart, and it is also what makes a
+     * `livePublished` is what tells them apart, and it is also what makes a
      * second click on an up-to-date document say so instead of republishing.
      */
     if (!savedLandedRef.current) {
       if (livePublished) {
-        return enqueueSnackbar('Already published — the live sites match this version.', {
-          variant: 'info',
-          persist: false,
-        })
+        /*
+          Nothing to promote, but that is not the same as nothing to do
+          (AGL-2540).
+
+          `livePublished` is a fact about the POINTER. "The live sites match"
+          is a claim about the CACHE, and this path used to make it without
+          checking. The two come apart whenever the version document's content
+          moved while the pointer stood still — a direct Firestore write, an
+          import, or an earlier publish whose revalidate the tenant refused.
+
+          `promoteToSites` is what normally carries this call; on this branch
+          there is no promotion to carry it, so it is made directly. Best
+          effort, exactly as it is there.
+        */
+        void revalidateLivePages({ user, hostId, componentId }).then(
+          (result) => {
+            const shortfall = describeRevalidateShortfall(result)
+            if (shortfall) {
+              enqueueSnackbar(shortfall, { variant: 'warning', persist: false })
+            }
+          },
+        )
+        return enqueueSnackbar(
+          'Already published — refreshing the live sites to match.',
+          { variant: 'info', persist: false },
+        )
       }
       if (remoteChanged) return
     }
@@ -686,6 +706,7 @@ function ComponentBesignerPage(props) {
     remoteChanged,
     enqueueSnackbar,
     firestore,
+    user,
     hostId,
     componentId,
     versionId,
@@ -869,6 +890,21 @@ function ComponentBesignerPage(props) {
                             id: 'center-nav-edit-rawjson',
                             children: 'Raw JSON',
                             onClick: () => openJsonEditor(),
+                            ListItemTextProps: { inset: true },
+                          },
+                          {
+                            type: 'divider',
+                          },
+                          {
+                            id: 'center-nav-edit-repair',
+                            children: 'Repair component',
+                            onClick: () => repairDocument(),
+                            ListItemTextProps: { inset: true },
+                          },
+                          {
+                            id: 'center-nav-edit-clear',
+                            children: 'Clear canvas',
+                            onClick: () => clearCanvas(),
                             ListItemTextProps: { inset: true },
                           },
                         ],

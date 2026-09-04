@@ -20,6 +20,7 @@
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
 /** One saved card, wallet or Link account, as the payment-methods card reads it. */
 export interface BillingPaymentMethod {
@@ -136,13 +137,9 @@ export function useBillingProfile(
       status: number
       payload: any
     }> => {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/billing/profile', {
+      const response = await authorizedFetch(user, '/api/billing/profile', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orgId, ...body }),
       })
       const payload = await response.json().catch(() => ({}))

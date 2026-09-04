@@ -16,13 +16,22 @@
  */
 
 import type { EmailDeliveryEvent } from '@aglyn/shared-util-email'
+import { FieldValue } from 'firebase-admin/firestore'
 import {
   eraseEmailDeliveries,
+  eraseEmailDeliveriesForAddresses,
   importEmailDeliveryHistory,
   readEmailDeliveries,
+  readEmailDeliveryErasure,
   readEmailDeliveryHistory,
+  readPersonEngagement,
+  readPersonEngagementByKeys,
   recordEmailDeliveryEvent,
+  recordEmailCampaignTouch,
   recordEmailDeliverySnapshot,
+  recordPersonEngagement,
+  readEmailCampaignTouch,
+  EMAIL_TOUCH_FIELD,
 } from './email-delivery-log'
 import { emailSuppressionKey } from './email-suppression'
 
@@ -70,6 +79,19 @@ function applyWrite(
       next[key] = Number(next[key] ?? 0) + Number((value as any).operand)
       continue
     }
+    // `FieldValue.delete()` — asked before the timestamp branch below, which
+    // matches every sentinel and would otherwise turn a deletion into a
+    // written field. Compared through the sentinel's own `isEqual` rather
+    // than by class name, so it stays right across SDK versions.
+    if (
+      value &&
+      typeof value === 'object' &&
+      typeof (value as any).isEqual === 'function' &&
+      FieldValue.delete().isEqual(value as any)
+    ) {
+      delete next[key]
+      continue
+    }
     // A server timestamp sentinel: frozen so a spec can see it landed.
     if (
       value &&
@@ -111,6 +133,11 @@ function fakeDeliveryFirestore() {
       exists: store.has(path),
       id: path.split('/').pop(),
       data: () => store.get(path),
+      // Real snapshots carry `get(field)` alongside `data()`, and the
+      // tombstone reader uses it. A double offering only `data()` would throw
+      // on the one read that proves an erasure was recorded — which reads as
+      // a broken spec rather than the missing behaviour it is.
+      get: (field: string) => store.get(path)?.[field],
     }),
     set: async (update: Record<string, any>) => {
       store.set(path, applyWrite(store.get(path) ?? {}, update))
@@ -167,8 +194,44 @@ function fakeDeliveryFirestore() {
     return api
   }
 
+  /**
+   * Collection-group reads, which the erasure needs and no other case here
+   * does. The conversion attributions an erasure has to reach live under
+   * `hosts/{hostId}/campaignAttributions`, per SITE, while an erasure request
+   * names only an ADDRESS — so a double that could only walk one host's
+   * collection would let the sweep pass while reaching nothing. It swallows
+   * its own errors, so a missing `collectionGroup` here reads as an erasure
+   * that removed zero records rather than as a broken double.
+   */
+  const groupQuery = (
+    name: string,
+    field?: string,
+    value?: unknown,
+    cap = Infinity,
+  ): any => ({
+    where: (nextField: string, _op: string, nextValue: unknown) =>
+      groupQuery(name, nextField, nextValue, cap),
+    limit: (n: number) => groupQuery(name, field, value, n),
+    get: async () => {
+      const matched = [...store.entries()]
+        .filter(([path]) => path.split('/').slice(-2)[0] === name)
+        .filter(([, data]) => !field || data[field] === value)
+        .slice(0, cap)
+      return {
+        empty: matched.length === 0,
+        size: matched.length,
+        docs: matched.map(([path, data]) => ({
+          id: path.split('/').pop(),
+          ref: docRef(path),
+          data: () => data,
+        })),
+      }
+    },
+  })
+
   return {
     collection: (name: string) => collectionRef(name),
+    collectionGroup: (name: string) => groupQuery(name),
     runTransaction: async (body: (transaction: any) => Promise<void>) =>
       body({
         get: async (ref: any) => ref.get(),
@@ -183,11 +246,35 @@ function fakeDeliveryFirestore() {
         },
       }
     },
+    /**
+     * Keyed multi-get. Real `getAll` answers for EVERY reference given,
+     * including ones that do not exist — a double that returned only the
+     * present ones would let a reader that silently dropped absent keys pass.
+     */
+    getAll: async (...refs: Array<{ path: string }>) =>
+      refs.map((ref) => ({
+        exists: store.has(ref.path),
+        id: ref.path.split('/').pop(),
+        data: () => store.get(ref.path),
+        get: (field: string) => store.get(ref.path)?.[field],
+      })),
+    /** Spec helper: seed and read one conversion attribution record. */
+    seedAttribution: (hostId: string, id: string, personKey: string) =>
+      store.set(`hosts/${hostId}/campaignAttributions/${id}`, {
+        kind: 'form',
+        refId: id,
+        personKey,
+      }),
+    attribution: (hostId: string, id: string) =>
+      store.get(`hosts/${hostId}/campaignAttributions/${id}`),
     /** Spec helper: the raw document, by address and message id. */
     read: (email: string, messageId: string) =>
       store.get(
         `emailDeliveries/${emailSuppressionKey(email)}/messages/${messageId}`,
       ),
+    /** Spec helper: the PERSON document — the rollup's and the tombstone's home. */
+    readPerson: (email: string) =>
+      store.get(`emailDeliveries/${emailSuppressionKey(email)}`),
     size: () => store.size,
   }
 }
@@ -267,6 +354,92 @@ describe('recordEmailDeliveryEvent', () => {
     expect(stored?.clickedLinks).toEqual(['https://app.aglyn.com/billing'])
   })
 
+  /*==========================================
+   * `firstOfType` — the distinct-recipient signal.
+   *
+   * The delivery webhook's campaign counters (`delivered`, `bounced`,
+   * `complained`, `uniqueOpens`, `uniqueClicks`) are all "one per MESSAGE,
+   * not one per event", and this transaction is where that can be answered
+   * for free: it already reads the row to decide whether to stamp
+   * `firstSeenAtMs`. Deriving it anywhere else would cost a document read per
+   * delivery event.
+   *
+   * It is also the whole idempotency of those counters. A provider retry, a
+   * duplicate webhook and a dashboard replay all arrive as a second event for
+   * the same message, and each has to contribute nothing.
+   *=========================================*/
+
+  it('reports the first event of a type as first', async () => {
+    const firestore = fakeDeliveryFirestore()
+
+    expect(
+      await recordEmailDeliveryEvent(event({ type: 'delivered' }), firestore),
+    ).toEqual({
+      firstOfType: true,
+      providerMessageId: 'msg_1',
+      // Carried out with the verdict so the person rollup can be driven from
+      // the outcomes alone. Deriving them by re-pairing outcomes against the
+      // events they came from would need index alignment the filtered return
+      // has already destroyed.
+      to: 'person@example.com',
+      type: 'delivered',
+      at: 1_000,
+    })
+  })
+
+  it('reports a SECOND event of the same type as not first', async () => {
+    const firestore = fakeDeliveryFirestore()
+    await recordEmailDeliveryEvent(event({ type: 'delivered' }), firestore)
+
+    expect(
+      await recordEmailDeliveryEvent(event({ type: 'delivered' }), firestore),
+    ).toMatchObject({ firstOfType: false })
+  })
+
+  /*
+   * PER TYPE, not per document. An `opened` after a `delivered` is the first
+   * open even though the row already existed — a counter keyed on "is this
+   * row new" would count the delivery and silently never count an open.
+   */
+  it('is per event type, not per message row', async () => {
+    const firestore = fakeDeliveryFirestore()
+    await recordEmailDeliveryEvent(event({ type: 'delivered' }), firestore)
+
+    expect(
+      await recordEmailDeliveryEvent(event({ type: 'opened' }), firestore),
+    ).toMatchObject({ firstOfType: true })
+  })
+
+  it('is per message, so a second recipient is first again', async () => {
+    const firestore = fakeDeliveryFirestore()
+    await recordEmailDeliveryEvent(
+      event({ type: 'opened', providerMessageId: 'msg_a' }),
+      firestore,
+    )
+
+    expect(
+      await recordEmailDeliveryEvent(
+        event({ type: 'opened', providerMessageId: 'msg_b' }),
+        firestore,
+      ),
+    ).toMatchObject({ firstOfType: true })
+  })
+
+  /*
+   * An event whose timestamp is 0 is still an event. Reading the flag off a
+   * truthiness check rather than off presence would report every such row as
+   * first, forever — and 0 is what a payload carrying no usable timestamp
+   * falls back to in more than one adapter.
+   */
+  it('treats a recorded timestamp of 0 as recorded', async () => {
+    const firestore = fakeDeliveryFirestore()
+    await recordEmailDeliveryEvent(event({ type: 'opened', at: 0 }), firestore)
+
+    expect(
+      await recordEmailDeliveryEvent(event({ type: 'opened', at: 9 }), firestore),
+    ).toMatchObject({ firstOfType: false })
+  })
+
   /*
    * The property the transaction exists for. Events arrive out of order, and
    * a document created by an `opened` must still be found by a read that
@@ -320,7 +493,7 @@ describe('recordEmailDeliveryEvent', () => {
     const firestore = fakeDeliveryFirestore()
     expect(
       await recordEmailDeliveryEvent(event({ to: 'not-an-address' }), firestore),
-    ).toBe(false)
+    ).toBeNull()
     expect(firestore.size()).toBe(0)
   })
 
@@ -334,7 +507,7 @@ describe('recordEmailDeliveryEvent', () => {
     // the same event forever.
     await expect(
       recordEmailDeliveryEvent(event(), exploding),
-    ).resolves.toBe(false)
+    ).resolves.toBeNull()
   })
 })
 
@@ -427,6 +600,99 @@ describe('eraseEmailDeliveries', () => {
   it('erases nothing, and reports nothing, for an account with no address', async () => {
     const firestore = fakeDeliveryFirestore()
     expect(await eraseEmailDeliveries(null, firestore)).toBe(0)
+  })
+})
+
+/*==========================================
+ * THE SWEEP ACROSS AN ACCOUNT'S ADDRESSES.
+ *
+ * What this function does with a set of addresses. THE RULE ITSELF — that an
+ * address a second account also holds is left intact, and why — is specified
+ * in `account-addresses.spec.ts`, end to end from the resolver that decides
+ * `shared`. Repeating it here would be two places to keep a policy in step.
+ *
+ * Every assertion is on the DOCUMENTS — the messages that survive or do not,
+ * and the tombstone — never on rendered output. The card is one more reader
+ * of these documents; a spec that drove the card would pass on a page that
+ * renders correctly over data that is wrong.
+ *=========================================*/
+
+describe('eraseEmailDeliveriesForAddresses', () => {
+  const held = (address: string, shared = false) => ({ address, shared })
+
+  it('erases an address only this account holds, and tombstones it', async () => {
+    // CONTROL. If the contested-address cases ever pass because the sweep
+    // reached nothing at all, this fails first and says so: same fixture,
+    // same double, and it asserts the sweep DOES erase.
+    const firestore = fakeDeliveryFirestore()
+    await recordEmailDeliveryEvent(event({ providerMessageId: 'a' }), firestore)
+    await recordEmailDeliveryEvent(event({ providerMessageId: 'b' }), firestore)
+
+    const result = await eraseEmailDeliveriesForAddresses(
+      [held('person@example.com')],
+      firestore,
+    )
+
+    expect(result.removed).toBe(2)
+    expect(result.addresses).toEqual(['person@example.com'])
+    expect(result.contestedAddresses).toEqual([])
+    expect(
+      await readEmailDeliveries('person@example.com', { firestore }),
+    ).toEqual([])
+
+    // The tombstone: what the ordinary case leaves behind so no reader meets
+    // a blank table and concludes we never wrote to them.
+    const tombstone = await readEmailDeliveryErasure(
+      'person@example.com',
+      firestore,
+    )
+    expect(tombstone).not.toBeNull()
+    expect(tombstone?.count).toBe(2)
+  })
+
+  it('erases the addresses it can decide about even when another is contested', async () => {
+    // A contested address must not turn the sweep into a no-op. `eraseUser`
+    // refuses the whole run before reaching here, but the guarantee belongs
+    // to this function too: it stops at the contested address, not at the
+    // first one.
+    const firestore = fakeDeliveryFirestore()
+    await recordEmailDeliveryEvent(event({ to: 'role@example.com' }), firestore)
+    await recordEmailDeliveryEvent(
+      event({ to: 'person@example.com' }),
+      firestore,
+    )
+
+    const result = await eraseEmailDeliveriesForAddresses(
+      [held('role@example.com', true), held('person@example.com')],
+      firestore,
+    )
+
+    expect(result.contestedAddresses).toEqual(['role@example.com'])
+    expect(result.addresses).toEqual(['person@example.com'])
+    expect(result.removed).toBe(1)
+    expect(
+      await readEmailDeliveries('role@example.com', { firestore }),
+    ).toHaveLength(1)
+    expect(
+      await readEmailDeliveries('person@example.com', { firestore }),
+    ).toEqual([])
+  })
+
+  it('tombstones an erased address that held nothing', async () => {
+    // An address swept and found empty is still covered by the request, and a
+    // later import must not be able to refill it silently.
+    const firestore = fakeDeliveryFirestore()
+
+    const result = await eraseEmailDeliveriesForAddresses(
+      [held('person@example.com')],
+      firestore,
+    )
+
+    expect(result.removed).toBe(0)
+    expect(result.addresses).toEqual(['person@example.com'])
+    expect(
+      await readEmailDeliveryErasure('person@example.com', firestore),
+    ).not.toBeNull()
   })
 })
 
@@ -642,5 +908,349 @@ describe('recordEmailDeliverySnapshot', () => {
       await recordEmailDeliverySnapshot(snapshot({ sentAt: 0 }), firestore),
     ).toBe(false)
     expect(firestore.size()).toBe(0)
+  })
+})
+
+/*==========================================
+ * THE PER-PERSON ENGAGEMENT ROLLUP.
+ *
+ * The two things that make it safe are the two asserted hardest here: it
+ * moves only on a FIRST event of its type, which is what makes a replay free,
+ * and it only ever moves FORWARD, which is what stops an out-of-order event
+ * making an active subscriber look cold to the control that refuses to mail
+ * cold people.
+ *=========================================*/
+
+/** One outcome, as `recordEmailDeliveryEvent` returns it. */
+const outcome = (
+  over: Partial<{
+    firstOfType: boolean
+    providerMessageId: string
+    to: string
+    type: EmailDeliveryEvent['type']
+    at: number
+  }> = {},
+) => ({
+  firstOfType: true,
+  providerMessageId: 'msg_1',
+  to: 'person@example.com',
+  type: 'opened' as EmailDeliveryEvent['type'],
+  at: 5_000,
+  ...over,
+})
+
+describe('recordPersonEngagement', () => {
+  it('stamps the person document an open belongs to', async () => {
+    const firestore = fakeDeliveryFirestore()
+    await recordPersonEngagement([outcome({ at: 5_000 })], firestore)
+
+    expect(firestore.readPerson('person@example.com')).toMatchObject({
+      lastOpenedAtMs: 5_000,
+      lastEngagedAtMs: 5_000,
+    })
+  })
+
+  it('keeps opens and clicks apart, and engaged is the later of the two', async () => {
+    const firestore = fakeDeliveryFirestore()
+    await recordPersonEngagement(
+      [
+        outcome({ type: 'opened', at: 5_000 }),
+        outcome({ type: 'clicked', at: 9_000, providerMessageId: 'msg_2' }),
+      ],
+      firestore,
+    )
+
+    expect(firestore.readPerson('person@example.com')).toMatchObject({
+      lastOpenedAtMs: 5_000,
+      lastClickedAtMs: 9_000,
+      lastEngagedAtMs: 9_000,
+    })
+  })
+
+  /**
+   * ⚠️ THE ASSERTION THE ROLLUP EXISTS UNDER.
+   *
+   * Delivery is at-least-once and a human can press Replay in the provider's
+   * dashboard. The reason a replay is free here is structural rather than
+   * lucky: it finds its type already recorded on the message, so
+   * `firstOfType` is false and the rollup is never reached.
+   */
+  it('writes nothing for an event that is not the first of its type', async () => {
+    const firestore = fakeDeliveryFirestore()
+    await recordPersonEngagement([outcome({ at: 5_000 })], firestore)
+    const written = await recordPersonEngagement(
+      [outcome({ firstOfType: false, at: 9_000 })],
+      firestore,
+    )
+
+    expect(written).toBe(0)
+    expect(firestore.readPerson('person@example.com')).toMatchObject({
+      lastEngagedAtMs: 5_000,
+    })
+  })
+
+  it('never walks a stamp backwards', async () => {
+    const firestore = fakeDeliveryFirestore()
+    await recordPersonEngagement([outcome({ at: 9_000 })], firestore)
+    // A replay of an event whose first delivery never landed: first of its
+    // type on a message we have not seen, and older than what we hold.
+    await recordPersonEngagement(
+      [outcome({ providerMessageId: 'msg_old', at: 1_000 })],
+      firestore,
+    )
+
+    expect(firestore.readPerson('person@example.com')).toMatchObject({
+      lastOpenedAtMs: 9_000,
+      lastEngagedAtMs: 9_000,
+    })
+  })
+
+  it('spends no write when nothing moved forward', async () => {
+    const firestore = fakeDeliveryFirestore()
+    await recordPersonEngagement([outcome({ at: 9_000 })], firestore)
+
+    expect(
+      await recordPersonEngagement(
+        [outcome({ providerMessageId: 'msg_old', at: 1_000 })],
+        firestore,
+      ),
+    ).toBe(0)
+  })
+
+  /*
+   * `delivered`, `bounced`, `sent` and `delayed` are facts about the MESSAGE,
+   * not about whether anybody read it. A rollup that moved on delivery would
+   * make every mailed address permanently "engaged" and the sunset inert.
+   */
+  it.each(['sent', 'delivered', 'bounced', 'complained', 'delayed'] as const)(
+    'does not treat %s as engagement',
+    async (type) => {
+      const firestore = fakeDeliveryFirestore()
+      await recordPersonEngagement([outcome({ type, at: 5_000 })], firestore)
+
+      expect(firestore.readPerson('person@example.com')).toBeUndefined()
+    },
+  )
+
+  it('costs one document write per person, not per event', async () => {
+    const firestore = fakeDeliveryFirestore()
+
+    expect(
+      await recordPersonEngagement(
+        [
+          outcome({ type: 'opened', at: 5_000 }),
+          outcome({ type: 'clicked', at: 6_000 }),
+          outcome({ to: 'other@example.com', at: 7_000 }),
+        ],
+        firestore,
+      ),
+    ).toBe(2)
+  })
+
+  it('writes nothing for an address that is not an address', async () => {
+    const firestore = fakeDeliveryFirestore()
+
+    expect(
+      await recordPersonEngagement(
+        [outcome({ to: 'not-an-address' })],
+        firestore,
+      ),
+    ).toBe(0)
+  })
+
+  /*
+   * The whole chain rather than the rollup alone: the outcome that drives it
+   * is the one the delivery log actually produces, and a spec that hand-built
+   * one would not notice the two drifting apart.
+   */
+  it('is driven by the delivery log’s own verdict, replay included', async () => {
+    const firestore = fakeDeliveryFirestore()
+    const first = await recordEmailDeliveryEvent(
+      event({ type: 'opened', at: 5_000 }),
+      firestore,
+    )
+    await recordPersonEngagement([first as any], firestore)
+    // The same provider event, delivered twice.
+    const replay = await recordEmailDeliveryEvent(
+      event({ type: 'opened', at: 5_000 }),
+      firestore,
+    )
+
+    expect(replay).toMatchObject({ firstOfType: false })
+    expect(await recordPersonEngagement([replay as any], firestore)).toBe(0)
+    expect(firestore.readPerson('person@example.com')).toMatchObject({
+      lastEngagedAtMs: 5_000,
+    })
+    // And the MESSAGE row still counted both opens, which is the honest
+    // answer to "how many times was this opened".
+    expect(firestore.read('person@example.com', 'msg_1')?.openCount).toBe(2)
+  })
+})
+
+describe('reading a person’s engagement', () => {
+  it('answers with nulls for somebody we hold nothing about', async () => {
+    const firestore = fakeDeliveryFirestore()
+
+    expect(
+      await readPersonEngagement('stranger@example.com', firestore),
+    ).toEqual({
+      lastEngagedAtMs: null,
+      lastOpenedAtMs: null,
+      lastClickedAtMs: null,
+    })
+  })
+
+  it('answers with nulls for an address that is not an address', async () => {
+    const firestore = fakeDeliveryFirestore()
+
+    expect(await readPersonEngagement('nope', firestore)).toMatchObject({
+      lastEngagedAtMs: null,
+    })
+  })
+
+  /*
+   * A row written before `lastEngagedAtMs` existed, or by a write that landed
+   * half — the derived stamp is recomputed from the two it is derived from
+   * rather than read back as absent. Absent would make the person look like
+   * somebody who has never engaged, to the one control that refuses to mail
+   * people who have never engaged.
+   */
+  it('derives the engaged stamp from the two beneath it when it is missing', async () => {
+    const firestore = fakeDeliveryFirestore()
+    await firestore
+      .collection('emailDeliveries')
+      .doc(emailSuppressionKey('person@example.com') as string)
+      .set({ lastOpenedAtMs: 4_000, lastClickedAtMs: 7_000 })
+
+    expect(
+      await readPersonEngagement('person@example.com', firestore),
+    ).toMatchObject({ lastEngagedAtMs: 7_000 })
+  })
+
+  it('returns an entry for every key asked about, present or not', async () => {
+    const firestore = fakeDeliveryFirestore()
+    await recordPersonEngagement([outcome({ at: 5_000 })], firestore)
+    const known = emailSuppressionKey('person@example.com') as string
+    const unknown = emailSuppressionKey('stranger@example.com') as string
+
+    const found = await readPersonEngagementByKeys([known, unknown], firestore)
+    expect(found.get(known)).toMatchObject({ lastEngagedAtMs: 5_000 })
+    // Present, and empty — a caller must never have to tell "absent" from
+    // "not read", because those lead to opposite decisions about mailing.
+    expect(found.get(unknown)).toMatchObject({ lastEngagedAtMs: null })
+  })
+})
+
+describe('erasure removes the summary, not only the messages it came from', () => {
+  it('clears the engagement stamps it tombstones over', async () => {
+    const firestore = fakeDeliveryFirestore()
+    await recordEmailDeliveryEvent(
+      event({ type: 'opened', at: 5_000 }),
+      firestore,
+    )
+    await recordPersonEngagement([outcome({ at: 5_000 })], firestore)
+
+    await eraseEmailDeliveriesForAddresses(
+      [{ address: 'person@example.com' }],
+      firestore,
+    )
+
+    const person = firestore.readPerson('person@example.com')
+    // The tombstone stays — it is the proof the erasure covered this address.
+    expect(person).toMatchObject({ erasedCount: 1 })
+    // "This person read our mail on the 3rd" is the same personal fact as the
+    // row it was derived from. A summary that outlived its source would be an
+    // erasure that removed the evidence and kept the conclusion.
+    expect(person).not.toHaveProperty('lastEngagedAtMs')
+    expect(person).not.toHaveProperty('lastOpenedAtMs')
+    expect(person).not.toHaveProperty('lastClickedAtMs')
+    expect(
+      await readPersonEngagement('person@example.com', firestore),
+    ).toMatchObject({ lastEngagedAtMs: null })
+  })
+
+  it('clears the campaign touches revenue attribution is taken over', async () => {
+    const firestore = fakeDeliveryFirestore()
+    await recordEmailCampaignTouch(
+      {
+        email: 'person@example.com',
+        hostId: 'host1',
+        campaignId: 'spring',
+        atMs: 5_000,
+      },
+      firestore,
+    )
+    expect(firestore.readPerson('person@example.com')).toHaveProperty(
+      EMAIL_TOUCH_FIELD,
+    )
+
+    await eraseEmailDeliveriesForAddresses(
+      [{ address: 'person@example.com' }],
+      firestore,
+    )
+
+    // The strongest personal fact on the document — it names the person AND
+    // what they were reading — so it goes with the stamps beside it. Nothing
+    // may go on attributing their future orders to mail they asked us to
+    // forget.
+    expect(firestore.readPerson('person@example.com')).not.toHaveProperty(
+      EMAIL_TOUCH_FIELD,
+    )
+    expect(
+      await readEmailCampaignTouch('person@example.com', 'host1', firestore),
+    ).toBeNull()
+  })
+
+  it('clears the CONVERSIONS those touches were credited with, on every site', async () => {
+    const firestore = fakeDeliveryFirestore()
+    const key = emailSuppressionKey('person@example.com') as string
+    firestore.seedAttribution('host1', 'form:s1', key)
+    firestore.seedAttribution('host2', 'lead:l1', key)
+    firestore.seedAttribution('host2', 'form:s2', 'somebody-else')
+
+    await eraseEmailDeliveriesForAddresses(
+      [{ address: 'person@example.com' }],
+      firestore,
+    )
+
+    // "This person came from that campaign and then filled in this form" is a
+    // strictly stronger statement than the click it was derived from, so
+    // deleting the click above and keeping this would be an erasure that
+    // removed the evidence and kept the conclusion.
+    expect(firestore.attribution('host1', 'form:s1')).toBeUndefined()
+    // Per ADDRESS, not per host: the request names an address and knows
+    // nothing about which sites it ever visited.
+    expect(firestore.attribution('host2', 'lead:l1')).toBeUndefined()
+    // And nobody else's.
+    expect(firestore.attribution('host2', 'form:s2')).toBeDefined()
+  })
+
+  it('leaves a contested address’s conversions exactly where they are', async () => {
+    const firestore = fakeDeliveryFirestore()
+    const key = emailSuppressionKey('person@example.com') as string
+    firestore.seedAttribution('host1', 'form:s1', key)
+
+    await eraseEmailDeliveriesForAddresses(
+      [{ address: 'person@example.com', shared: true }],
+      firestore,
+    )
+
+    // A contested address is not erased at all, and the sweep must not run
+    // past the `continue` that decided so — there is no undo below that line.
+    expect(firestore.attribution('host1', 'form:s1')).toBeDefined()
+  })
+
+  it('leaves a contested address’s engagement exactly where it was', async () => {
+    const firestore = fakeDeliveryFirestore()
+    await recordPersonEngagement([outcome({ at: 5_000 })], firestore)
+
+    await eraseEmailDeliveriesForAddresses(
+      [{ address: 'person@example.com', shared: true }],
+      firestore,
+    )
+
+    expect(firestore.readPerson('person@example.com')).toMatchObject({
+      lastEngagedAtMs: 5_000,
+    })
   })
 })

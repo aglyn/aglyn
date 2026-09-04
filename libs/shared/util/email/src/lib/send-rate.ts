@@ -117,6 +117,143 @@ export const EMAIL_SEND_RATE_MAX_PER_HOUR = 100_000
 /** A configured ceiling of 0 would refuse every campaign; 1 is the floor. */
 export const EMAIL_SEND_RATE_MIN_PER_HOUR = 1
 
+/*==========================================
+ * THE PROVIDER'S OWN RATE, WHICH IS A DIFFERENT UNIT.
+ *
+ * Everything above this point counts MESSAGES OVER AN HOUR. Resend counts
+ * REQUESTS OVER A SECOND, and the two are independent: an hour's worth of
+ * granted budget spent in four seconds satisfies the governor completely and
+ * trips the provider on the fifth request.
+ *
+ * That gap is what a loop with a sequential `await` and nothing else does not
+ * close. Sequential is a pace, but its rate is whatever the round trip
+ * happens to be — so the same code that is comfortably inside the limit
+ * against a slow network is over it against a fast one, and the only symptom
+ * is a 429 the loop then has to be right about.
+ *=========================================*/
+
+/**
+ * Requests per second the provider accepts, from its published default.
+ *
+ * Resend documents 10 requests per second PER TEAM — across every API key on
+ * the account, not per key and not per sending domain. Past it the API
+ * answers HTTP 429 `rate_limit_exceeded`, carrying `retry-after` and
+ * `ratelimit-reset` in whole seconds
+ * (https://resend.com/changelog/api-rate-limit).
+ *
+ * A vendor's number, so it is stated once here rather than divided into an
+ * interval at the one loop that has to respect it. It can be raised by
+ * arrangement with the provider; raising it here without that arrangement
+ * buys 429s.
+ */
+export const EMAIL_PROVIDER_REQUESTS_PER_SECOND = 10
+
+/**
+ * Requests per second a BATCH may take of that rate.
+ *
+ * One less than the provider allows, and the missing request is not a safety
+ * margin — it is the transactional mail. The limit is counted per TEAM, so a
+ * campaign loop running flat out at the full rate is a campaign that answers
+ * a password reset arriving in the same second with a 429. That is the
+ * outcome this file's opening rule forbids a rate control from producing, and
+ * a batch is the only sender in the tree fast enough to produce it.
+ *
+ * One request per second is not much headroom, and it is not meant to be a
+ * budget for concurrent campaigns: it is enough for the one-off sends that
+ * make up all of this deployment's other traffic. It also keeps a batch off
+ * the exact boundary, where clock jitter alone would earn a 429 on a send
+ * that is nominally inside the limit.
+ */
+export const EMAIL_BATCH_REQUESTS_PER_SECOND =
+  EMAIL_PROVIDER_REQUESTS_PER_SECOND - 1
+
+/** The shortest gap between two batch requests that stays inside that rate. */
+export const EMAIL_BATCH_MIN_REQUEST_INTERVAL_MS = Math.ceil(
+  1_000 / EMAIL_BATCH_REQUESTS_PER_SECOND,
+)
+
+/**
+ * Environment name for a provider rate that is not the published default.
+ *
+ * Deployment-level rather than stored config, because it is a property of the
+ * Resend ACCOUNT the deployment holds a key for — the same layer
+ * `RESEND_API_KEY` lives at, and a different question from the hourly ceiling
+ * an operator ramps. Resend raises the limit for trusted senders on request,
+ * and a self-host runs its own account entirely, so the number cannot be a
+ * constant in a shipped build.
+ */
+export const EMAIL_PROVIDER_RATE_ENV = 'EMAIL_PROVIDER_REQUESTS_PER_SECOND'
+
+/**
+ * The interval a batch paces itself by on this deployment.
+ *
+ * Unset or unreadable resolves to the published default, never to zero: a
+ * typo in an env var must not silently remove a rate control. Zero is
+ * accepted only when it is written explicitly, and it disables pacing — which
+ * is what a harness with no provider behind it passes, and what an operator
+ * who has moved rate control somewhere else in front of this process sets.
+ */
+export function batchRequestIntervalMs(
+  raw: unknown = process.env[EMAIL_PROVIDER_RATE_ENV],
+): number {
+  if (raw === null || raw === undefined || String(raw).trim() === '') {
+    return EMAIL_BATCH_MIN_REQUEST_INTERVAL_MS
+  }
+  const perSecond = Number(raw)
+  if (!Number.isFinite(perSecond) || perSecond < 0) {
+    return EMAIL_BATCH_MIN_REQUEST_INTERVAL_MS
+  }
+  if (perSecond === 0) return 0
+  // The same one-request reservation the default makes, and floored at one so
+  // a configured rate of 1 paces at a second rather than dividing by zero.
+  return Math.ceil(1_000 / Math.max(1, Math.floor(perSecond) - 1))
+}
+
+/**
+ * A pace for a loop that issues one provider request per iteration.
+ *
+ * Returns a function to await once per iteration. It waits only for whatever
+ * is LEFT of the interval since the previous request rather than sleeping a
+ * fixed amount, which is the property that makes it free where it is not
+ * needed: a loop whose own work already takes longer than the interval —
+ * every send in production, which pays a network round trip and a Firestore
+ * read per recipient — never waits at all, and a loop that would otherwise
+ * fire five hundred requests as fast as the socket allows is spread out to
+ * the documented rate.
+ *
+ * Per-caller state rather than a module-level clock, so two concurrent sends
+ * do not share one pace. That is deliberately NOT a claim that the process as
+ * a whole stays under the rate: the provider counts the whole team, and this
+ * bounds one loop. It removes the burst a single batch produces, which is the
+ * only place in this codebase that issues requests in a tight loop.
+ *
+ * `intervalMs` of 0 (or anything unreadable) disables the wait entirely,
+ * which is what a caller with nothing to pace passes. Read per call rather
+ * than captured at module load, for the reason `getEmailConfig` is: these run
+ * in serverless handlers where the module may be evaluated during a build,
+ * long before the runtime env exists.
+ */
+export function createProviderRequestPacer(
+  intervalMs: number = batchRequestIntervalMs(),
+): () => Promise<void> {
+  const gap = Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : 0
+  /** The earliest instant the next request may go. Zero lets the first fly. */
+  let nextAtMs = 0
+  return async () => {
+    if (!gap) return
+    const waitMs = nextAtMs - Date.now()
+    if (waitMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, waitMs))
+    }
+    // Measured from the moment this call RELEASES rather than from the slot
+    // it was owed. A schedule of fixed instants lets a loop that stalled for
+    // a minute bank a minute's worth of slots and spend them at once, which
+    // is the burst this exists to remove; measuring forward from here means
+    // the gap can only ever be longer than the interval, never shorter.
+    nextAtMs = Date.now() + gap
+  }
+}
+
 /** The live ceiling, as stored and as the console edits it. */
 export interface EmailSendRateConfig {
   /** Messages per hour across the whole platform. */

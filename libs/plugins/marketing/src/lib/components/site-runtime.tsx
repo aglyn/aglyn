@@ -17,10 +17,12 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
+import { sendAnalyticsBeacon } from '@aglyn/aglyn/app-utils/analytics-beacon'
 import {
   trackAuthoredEvent,
   trackEvent,
 } from '@aglyn/aglyn/app-utils/analytics-events'
+import { campaignTouchField } from '@aglyn/aglyn/app-utils/campaign-touch'
 import { type CSSProperties, useEffect, useRef, useState } from 'react'
 import type { SiteRuntimeProps } from '@aglyn/aglyn'
 import * as MarketingModel from '../model'
@@ -42,14 +44,15 @@ function sendOverlayBeacon(
   overlayId?: string,
 ) {
   if (!hostId) return
-  try {
-    navigator.sendBeacon(
-      '/api/analytics/collect',
-      JSON.stringify({ hostId, overlay, ...(overlayId ? { overlayId } : {}) }),
-    )
-  } catch {
-    // Beacons are best-effort.
-  }
+  // Best-effort, and refused outright from a non-production build or a browser
+  // marked ours — the same gate the pageview beacon passes. The GA mirror
+  // below is NOT gated here: `trackEvent` carries the taxonomy's own
+  // environment check and stamps `traffic_type` rather than dropping the hit.
+  sendAnalyticsBeacon({
+    hostId,
+    overlay,
+    ...(overlayId ? { overlayId } : {}),
+  })
   // GA mirror (wave v8): sites with Analytics configured see overlay
   // engagement in their own property; no-op without gtag.
   //
@@ -286,6 +289,41 @@ function AutomationsEngine(props: {
                 element.classList.toggle(step.className)
               }
             })
+          } else if (
+            step.type === 'setAttribute' ||
+            step.type === 'removeAttribute'
+          ) {
+            /*
+              The semantics half of a hand-built disclosure (AGL-2546).
+
+              Deliberately in THIS loop rather than behind a guard of its own:
+              it then inherits exactly the gating the visibility steps have,
+              including which surfaces mount the runtime at all. A separate
+              path reaching `document.querySelector` directly is how this
+              would come to run somewhere `showElement` does not.
+
+              The name is re-checked here and not only in the editor. The
+              editor is a convenience; a step can reach this runtime from a
+              document written before the allowlist existed, or by any route
+              that does not pass through the console UI.
+
+              A rejected name is a NO-OP, not a throw — the `catch` around
+              this loop would otherwise let one bad attribute name silently
+              drop every step after it in the same automation.
+            */
+            if (Aglyn.isInteractionAttributeAllowed(step.name)) {
+              const name = step.name.trim().toLowerCase()
+              const targets = document.querySelectorAll(
+                Aglyn.expandLeafSelector(step.selector),
+              )
+              targets.forEach((element) => {
+                if (step.type === 'setAttribute') {
+                  element.setAttribute(name, step.value ?? '')
+                } else {
+                  element.removeAttribute(name)
+                }
+              })
+            }
           } else if (step.type === 'stickyNav') {
             const target = document.querySelector(
               Aglyn.expandLeafSelector(step.selector?.trim() || 'header, nav'),
@@ -494,6 +532,52 @@ function AutomationsEngine(props: {
       }
     }
 
+    /**
+     * Elements that arrive AFTER this effect binds (AGL-2512).
+     *
+     * `elementVisible` and `scrollToElement` are the only two triggers that
+     * resolve their targets by querying the DOM — every other one listens on
+     * `document` and so needs no element to exist yet. A single query at bind
+     * time made them dead on the two pages where the tree lands late: a
+     * deferred lazy panel patched back in on interaction (AGL-1285), and a
+     * gated screen's tree swapped in once the visitor is past the gate
+     * (AGL-2510).
+     *
+     * One MutationObserver for all of them, not one each, and it stops the
+     * moment nothing is left watching — these triggers fire once per pageview
+     * by construction, so a page whose targets have all been seen pays
+     * nothing for the rest of the visit. A page with no such automation never
+     * starts one at all.
+     */
+    const pendingObservers: Array<() => void> = []
+    let domObserver: MutationObserver | null = null
+    const rescan = () => {
+      for (const attach of [...pendingObservers]) attach()
+      if (!pendingObservers.length) {
+        domObserver?.disconnect()
+        domObserver = null
+      }
+    }
+    const watchLateElements = (attach: () => void) => {
+      pendingObservers.push(attach)
+      if (domObserver || typeof MutationObserver === 'undefined') return
+      domObserver = new MutationObserver(rescan)
+      domObserver.observe(document.body, { childList: true, subtree: true })
+    }
+    const stopWatching = (attach: () => void) => {
+      const index = pendingObservers.indexOf(attach)
+      if (index >= 0) pendingObservers.splice(index, 1)
+      if (!pendingObservers.length) {
+        domObserver?.disconnect()
+        domObserver = null
+      }
+    }
+    cleanups.push(() => {
+      pendingObservers.length = 0
+      domObserver?.disconnect()
+      domObserver = null
+    })
+
     for (const automation of automations) {
       const { event, threshold } = automation
       // Composition namespaces a node's live `data-aglyn` id, but the
@@ -527,15 +611,25 @@ function AutomationsEngine(props: {
         cleanups.push(() => window.removeEventListener('scroll', onScroll))
       } else if (event === 'elementVisible' || event === 'scrollToElement') {
         if (!selector) continue
-        const targets = document.querySelectorAll(selector)
-        if (!targets.length) continue
+        let fired = false
         const observer = new IntersectionObserver((entries) => {
-          if (entries.some((entry) => entry.isIntersecting)) {
-            fire(automation)
-            observer.disconnect()
-          }
+          if (fired || !entries.some((entry) => entry.isIntersecting)) return
+          fired = true
+          fire(automation)
+          observer.disconnect()
+          stopWatching(attachTargets)
         })
-        targets.forEach((target) => observer.observe(target))
+        // Re-entrant: called again on every DOM change until the trigger
+        // fires, and observing an element twice is a no-op, so a rescan costs
+        // one `querySelectorAll` and nothing else.
+        const attachTargets = () => {
+          if (fired) return stopWatching(attachTargets)
+          document
+            .querySelectorAll(selector)
+            .forEach((target) => observer.observe(target))
+        }
+        attachTargets()
+        watchLateElements(attachTargets)
         cleanups.push(() => observer.disconnect())
       } else if (event === 'elementClick') {
         if (!selector) continue
@@ -786,6 +880,10 @@ function PopupOverlay(props: {
           // own hidden `website` input off the FormData and forwards it the
           // same way; `/api/forms/submit` is the single place that decides.
           website,
+          // The campaign this visitor came from, when they came from one. A
+          // popup capture is often a site's highest-converting door, so it
+          // reports its campaign for the same reason it reports its lead.
+          ...campaignTouchField(),
         }),
       })
       // The popup's email capture is a lead, and it reported none: an

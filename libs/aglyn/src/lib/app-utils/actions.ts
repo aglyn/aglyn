@@ -215,7 +215,54 @@ export interface HostActionTrigger {
   everyTime?: boolean
 }
 
-export type HostActionStep =
+/**
+ * A per-STEP condition, and the difference between an automation and a flow.
+ *
+ * `HostActionTrigger.conditions` gates the whole action: every step runs or
+ * none does. That is enough for "when a form is submitted, do these three
+ * things" and not enough for anything with a shape — "wait three days, then,
+ * only if they have not ordered, send the reminder" needs the condition to
+ * belong to the step rather than to the run.
+ *
+ * Same clause type and the same combinator as the trigger's, evaluated
+ * against the same scope, so an author learns one condition editor and the
+ * two can never disagree about what `contains` means.
+ */
+export interface HostActionStepGuard {
+  conditions: HostActionTriggerCondition[]
+  /** How the clauses combine; default `and`, as on the trigger. */
+  combinator?: TriggerCombinator | null
+}
+
+/**
+ * The scope key a resumed flow carries to say the wait ended on the CLOCK
+ * rather than on the event it was watching for.
+ *
+ * This is how a `waitForEvent` gets its timeout branch without a nested step
+ * list: the flow resumes either way, and the step after it carries a `when`
+ * naming this field. Underscored because it shares a namespace with the
+ * event payload's own fields, which are merchant-authored form field names.
+ */
+export const FLOW_TIMED_OUT_FIELD = '_waitTimedOut'
+
+/**
+ * Evaluates a step's own guard, with the trigger's semantics.
+ *
+ * An absent or clause-less guard passes, exactly as an absent trigger
+ * condition does — so every step written before guards existed keeps running.
+ */
+export function evaluateStepGuard(
+  guard: HostActionStepGuard | undefined | null,
+  scope: Record<string, unknown>,
+): boolean {
+  const conditions = (guard?.conditions ?? []).filter(Boolean)
+  if (!conditions.length) return true
+  return guard?.combinator === 'or'
+    ? conditions.some((condition) => evaluateTriggerCondition(condition, scope))
+    : conditions.every((condition) => evaluateTriggerCondition(condition, scope))
+}
+
+export type HostActionStep = (
   // Entity references carry a doc id (AGL-261, rename-safe) with the name
   // kept as a display hint; pre-AGL-261 docs have only the name and the
   // executor resolves either.
@@ -261,6 +308,23 @@ export type HostActionStep =
   // Drawer commands (AGL-562): delivered to muiDrawer instances over the
   // window event bus keyed by node id; an empty target addresses the
   // page's first drawer.
+  // Attribute steps (AGL-2546): the semantics half of a hand-built
+  // disclosure. `showElement` opens the panel; these are what let it say so.
+  //
+  // `selector`, deliberately, and NOT a new targeting field. Two mechanisms
+  // key off that exact name: `regraftStepSelectors` rewrites it to the
+  // grafted `cmp__{instance}__{id}` when an interaction is authored inside a
+  // reusable component, and the runtime wraps it in `expandLeafSelector`.
+  // The menu steps took `menuNodeId` instead, get neither, and compensate at
+  // run time — one concept should not have three targeting models.
+  //
+  // Two verbs rather than one with an empty value: `""` does not mean
+  // "absent" uniformly. `hidden=""` is true, `aria-expanded=""` is invalid
+  // and discarded, `data-x=""` is a real value an attribute selector still
+  // matches. Overloading it would make the step's meaning depend on which
+  // attribute the author picked.
+  | { type: 'setAttribute'; selector: string; name: string; value: string }
+  | { type: 'removeAttribute'; selector: string; name: string }
   | { type: 'openDrawer'; drawerNodeId?: string }
   | { type: 'closeDrawer'; drawerNodeId?: string }
   | { type: 'toggleDrawer'; drawerNodeId?: string }
@@ -283,11 +347,58 @@ export type HostActionStep =
       params?: Record<string, string>
     }
   // Server-side steps (AGL-257).
-  | { type: 'sendEmail'; subject: string; body: string; toField?: string }
+  | {
+      type: 'sendEmail'
+      subject: string
+      body: string
+      toField?: string
+      /**
+       * The stream this message belongs to, so a recipient who left it is not
+       * mailed. Absent on every step authored before topics reached the
+       * actions editor, which the executor resolves to the default topic.
+       */
+      topicId?: string
+    }
   | { type: 'notifyAdmins'; title: string; body?: string }
   | { type: 'enrollList'; listId?: string; listName?: string }
   | { type: 'updateDataset'; datasetId?: string; datasetName?: string }
   | { type: 'assignCampaign'; campaignId?: string; campaignName?: string }
+  /*
+   * THE THREE FLOW STEPS.
+   *
+   * `wait` is the one that matters: without a durable delay an automation is
+   * always trigger → immediate actions, so no welcome series, win-back or
+   * post-purchase follow-up can exist at all. The other two are what make a
+   * delay useful — something to end the flow early, and a wait that ends on
+   * an event instead of on the clock.
+   *
+   * All three are SERVER steps. A delay outlives the page view that started
+   * it by days, so the browser that fired the trigger is long gone by the time
+   * the flow continues; `hostActionStepsForClient` truncates the client's copy
+   * of the step list at the first of these for that reason.
+   */
+  | {
+      type: 'wait'
+      /** Whole minutes to hold before the next step. */
+      delayMinutes: number
+    }
+  | {
+      type: 'waitForEvent'
+      /** The host or custom event that resumes this person's flow. */
+      eventName: string
+      /**
+       * Whole minutes after which the flow continues anyway, with
+       * {@link FLOW_TIMED_OUT_FIELD} true in scope. There is always a
+       * deadline: a wait with no timeout is an enrollment that lives forever.
+       */
+      timeoutMinutes: number
+    }
+  /** Ends the enrollment here. Paired with a `when`, this is the exit branch. */
+  | { type: 'exitFlow' }
+) & {
+  /** See {@link HostActionStepGuard}. Absent means the step always runs. */
+  when?: HostActionStepGuard | null
+}
 
 /** Steps the tenant page runtime executes client-side (AGL-257). */
 export const CLIENT_ACTION_STEP_TYPES: ReadonlySet<HostActionStepType> =
@@ -306,6 +417,8 @@ export const CLIENT_ACTION_STEP_TYPES: ReadonlySet<HostActionStepType> =
     'openMenu',
     'closeMenu',
     'toggleMenu',
+    'setAttribute',
+    'removeAttribute',
     'showHtml',
     'runJs',
     'redirect',
@@ -315,6 +428,41 @@ export const CLIENT_ACTION_STEP_TYPES: ReadonlySet<HostActionStepType> =
 
 export function isClientActionStep(step: HostActionStep): boolean {
   return CLIENT_ACTION_STEP_TYPES.has(step.type)
+}
+
+/**
+ * The steps that suspend a run and continue it later, from a job beat.
+ *
+ * Named as a set rather than checked inline because three surfaces have to
+ * agree on it: the executor stops here and writes an enrollment, the client
+ * payload is truncated here, and the validator refuses a flow that waits
+ * without a person to wait for.
+ */
+export const FLOW_SUSPENDING_STEP_TYPES: ReadonlySet<HostActionStepType> =
+  new Set(['wait', 'waitForEvent'] as const)
+
+export function isFlowSuspendingStep(step: HostActionStep): boolean {
+  return FLOW_SUSPENDING_STEP_TYPES.has(step.type)
+}
+
+/**
+ * The step list as the visitor's browser may see it.
+ *
+ * A client step AFTER a wait must never reach the page. The client engine
+ * runs its slice of the list immediately, so shipping the whole list would
+ * make "wait three days, then show the popup" show the popup at once — the
+ * delay would appear to work on the server, be ignored in the browser, and
+ * the two halves of one authored flow would disagree about when it happened.
+ *
+ * Truncating rather than filtering: everything past the first wait belongs to
+ * a run that has not happened yet, whichever side would have executed it.
+ */
+export function hostActionStepsForClient(
+  steps: readonly HostActionStep[] | undefined | null,
+): HostActionStep[] {
+  const list = steps ?? []
+  const suspendAt = list.findIndex(isFlowSuspendingStep)
+  return [...(suspendAt < 0 ? list : list.slice(0, suspendAt))]
 }
 
 /**
@@ -346,6 +494,8 @@ export const BASIC_CLIENT_ACTION_STEP_TYPES: ReadonlySet<HostActionStepType> =
     'openMenu',
     'closeMenu',
     'toggleMenu',
+    'setAttribute',
+    'removeAttribute',
     'redirect',
     'siteAlert',
   ] as const)
@@ -423,6 +573,49 @@ export const ELEMENT_VISIBILITY_MAX_DELAY_MS = 5000
 /** Custom event names: short, no collision with built-ins. */
 export const CUSTOM_EVENT_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]{1,39}$/
 
+/**
+ * The shortest and longest a flow may wait.
+ *
+ * The floor is a minute because the resume beat runs on a minute, so anything
+ * under one is a delay the scheduler cannot honor and would only read as
+ * imprecision. The ceiling is ninety days: long enough for the win-back that
+ * is the longest sequence anybody writes, and short enough that an enrollment
+ * is not an unbounded lease on a document. A person waiting inside a flow is
+ * storage the merchant is not looking at, and a wait measured in years is
+ * indistinguishable from one nobody will ever collect.
+ */
+export const FLOW_WAIT_MIN_MINUTES = 1
+export const FLOW_WAIT_MAX_MINUTES = 90 * 24 * 60
+
+/**
+ * The attribute names an interaction may write (AGL-2546).
+ *
+ * An unrestricted attribute setter is a self-XSS vector authored through the
+ * interactions UI: it reaches `href`, `src`, `onclick`, `formaction` and
+ * `style`, and on a site with collaborators the author and the victim need
+ * not be the same person. `aria-*` and `data-*` carry the entire
+ * accessibility use case and none of that exposure.
+ *
+ * Deliberately NOT solved by an entitlement gate. `runJs` is Business-gated
+ * because it is dangerous at any tier; this has to work on every plan,
+ * because a screen-reader user's access to a menu is not a paid feature.
+ */
+export const INTERACTION_ATTRIBUTE_NAME_PATTERN = /^(?:aria|data)-[a-z][a-z0-9-]*$/
+
+/**
+ * Whether an interaction is allowed to write this attribute name.
+ *
+ * Case-insensitive because HTML attribute names are, and a rejected name is
+ * a no-op rather than an error: a step that cannot run must not break the
+ * steps after it in the same automation.
+ */
+export function isInteractionAttributeAllowed(name: unknown): boolean {
+  return (
+    typeof name === 'string' &&
+    INTERACTION_ATTRIBUTE_NAME_PATTERN.test(name.trim().toLowerCase())
+  )
+}
+
 export const HOST_ACTION_STEP_LABELS: Record<HostActionStepType, string> = {
   runWorkflow: 'Run a workflow',
   siteAlert: 'Show a site alert',
@@ -443,6 +636,8 @@ export const HOST_ACTION_STEP_LABELS: Record<HostActionStepType, string> = {
   openMenu: 'Open a menu',
   closeMenu: 'Close a menu',
   toggleMenu: 'Open/close a menu',
+  setAttribute: 'Set an ARIA or data attribute',
+  removeAttribute: 'Remove an ARIA or data attribute',
   showHtml: 'Show custom HTML',
   runJs: 'Run custom JS (Business)',
   redirect: 'Redirect the visitor',
@@ -452,6 +647,9 @@ export const HOST_ACTION_STEP_LABELS: Record<HostActionStepType, string> = {
   enrollList: 'Enroll in a list',
   updateDataset: 'Update a dataset record',
   assignCampaign: 'Assign to a campaign',
+  wait: 'Wait',
+  waitForEvent: 'Wait for something to happen',
+  exitFlow: 'End the flow here',
 }
 
 /**
@@ -482,6 +680,9 @@ export const HOST_ACTION_STEP_OUTCOMES: Partial<
   notifyAdmins: 'notified admins',
   enrollList: 'enrolled in list',
   assignCampaign: 'assigned to campaign',
+  wait: 'waiting',
+  waitForEvent: 'waiting for',
+  exitFlow: 'ended the flow',
 }
 
 /**
@@ -505,6 +706,15 @@ export function describeStepOutcome(
     return `${base.replace(/ dataset$/, '')} ${trimmed}`
   }
   return `${base} ${trimmed}`
+}
+
+/** A whole number of minutes inside the wait band. */
+export function isFlowWaitMinutes(value: unknown): boolean {
+  return (
+    Number.isInteger(value) &&
+    (value as number) >= FLOW_WAIT_MIN_MINUTES &&
+    (value as number) <= FLOW_WAIT_MAX_MINUTES
+  )
 }
 
 /** True for a custom (non-built-in) event name an action may fire. */
@@ -582,6 +792,44 @@ export function validateHostAction(action: HostAction): string | null {
   }
   for (const [index, step] of steps.entries()) {
     const label = `Step ${index + 1}`
+    // A step's own guard, checked with the same messages the trigger's
+    // clauses get — one condition editor, one set of complaints about it.
+    const guardClauses = (step.when?.conditions ?? []).filter(Boolean)
+    if (guardClauses.length > ACTION_MAX_CONDITIONS) {
+      return `${label}: conditions are capped at ${ACTION_MAX_CONDITIONS}`
+    }
+    if (
+      step.when?.combinator != null &&
+      !TRIGGER_COMBINATORS.includes(step.when.combinator)
+    ) {
+      return `${label}: combine conditions with AND or OR`
+    }
+    for (const clause of guardClauses) {
+      if (!TRIGGER_CONDITION_OPS.includes(clause.op)) {
+        return `${label}: pick a condition operator`
+      }
+      if (!clause.field?.trim()) {
+        return `${label}: name the field the condition checks`
+      }
+      if (clause.op !== 'notEmpty' && !clause.value?.trim()) {
+        return `${label}: enter the value the condition compares against`
+      }
+    }
+    if (step.type === 'wait' && !isFlowWaitMinutes(step.delayMinutes)) {
+      return `${label}: wait between ${FLOW_WAIT_MIN_MINUTES} minute and ${FLOW_WAIT_MAX_MINUTES} minutes`
+    }
+    if (step.type === 'waitForEvent') {
+      const waited = step.eventName?.trim() ?? ''
+      if (
+        !waited ||
+        (!HOST_EVENT_TYPES.includes(waited as any) && !isCustomEventName(waited))
+      ) {
+        return `${label}: pick the event to wait for`
+      }
+      if (!isFlowWaitMinutes(step.timeoutMinutes)) {
+        return `${label}: give up after ${FLOW_WAIT_MIN_MINUTES}–${FLOW_WAIT_MAX_MINUTES} minutes`
+      }
+    }
     if (
       step.type === 'runWorkflow' &&
       !step.workflowId?.trim() &&

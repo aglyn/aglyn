@@ -57,4 +57,27 @@ describe('events-calendar plugin', () => {
     registerEventsCalendarPlugin()
     expect(Aglyn.plugins.getDependency(BUNDLE_ID)).toBe(bundle)
   })
+
+  /**
+   * The refusal a blocked org reads names a price, so it is the one piece of
+   * plugin copy that can contradict an invoice (AGL-2484).
+   *
+   * `eventCalendar` is false on every plan and reachable only by buying the
+   * add-on, which is why this extension supplies its own sentence instead of
+   * taking the shell's plan-tier one — and why the figure in it has to come
+   * from the constant the charge is computed from rather than be typed out
+   * beside it.
+   */
+  it('quotes the add-on price the billing code charges', () => {
+    registerEventsCalendarPlugin()
+    const notice = Aglyn.listConsoleExtensions().find(
+      (entry) => entry.pluginId === BUNDLE_ID,
+    )?.upgradeNotice
+    expect(notice?.message).toContain(
+      `$${Aglyn.EVENT_CALENDAR_ADDON_MONTHLY_USD}/mo`,
+    )
+    // A fragment id for the shell to validate, never a URL it would follow.
+    expect(notice?.billingAnchor).toBe('addons')
+    expect(notice?.billingAnchor).not.toMatch(/^https?:/)
+  })
 })

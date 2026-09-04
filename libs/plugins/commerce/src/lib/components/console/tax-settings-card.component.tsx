@@ -256,6 +256,18 @@ export function TaxSettingsCard(props: TaxSettingsCardProps) {
                 placeholder="TX"
               />
             </Stack>
+            {/* Which of the product's three addresses this is. A merchant
+                who reads an unlabeled origin as "our address" may set it
+                from the wrong one: the address the workspace pays Aglyn
+                from is a different jurisdiction question, and the payout
+                identity is a third. Naming the two it is NOT costs a line
+                and prevents a mis-taxed order. */}
+            <Typography variant="body2" color="text.secondary">
+              {'Where this store ships or sells FROM — the jurisdiction the ' +
+                'manual rates below are applied from. Not the address your ' +
+                'workspace is billed at by Aglyn, and not where your payouts ' +
+                'are sent.'}
+            </Typography>
             {(current.rates ?? []).map((rate, index) => (
               <Stack key={index} direction="row" spacing={1}>
                 <TextField

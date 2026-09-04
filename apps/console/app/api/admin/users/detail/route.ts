@@ -26,13 +26,18 @@ import {
   type ContactChannel,
   type LegalAcceptanceStatus,
 } from '@aglyn/tenant-data-admin'
+import { adminAuditKind } from '../../../_lib/admin-audit'
 import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
 import { LEGAL_DOCUMENT_VERSION } from '../../../../../constants/legal-documents'
 import { type DeviceRow, readDeviceRows } from '../../../_lib/device-registry'
 // From the LEAF: the barrel above reaches the admin SDK and is mocked wholesale
 // by route specs, and a mocked-away reader renders an empty email history that
 // looks exactly like "we never mailed this person".
-import { readEmailDeliveryHistory } from '@aglyn/tenant-data-admin/server/email-delivery-log'
+import { readEmailDeliveryHistoryForAddresses } from '@aglyn/tenant-data-admin/server/email-delivery-log'
+import {
+  addressKeys,
+  resolveAccountAddresses,
+} from '@aglyn/tenant-data-admin/server/account-addresses'
 
 /**
  * Staff user detail (AGL-244): everything the console needs to answer
@@ -278,6 +283,29 @@ async function handler(request: Request): Promise<Response> {
       firestore.collection('users').doc(uid).collection('orgs').limit(50).get(),
       firestore.collection('users').doc(uid).get(),
     ])
+    /*
+     * EVERY ADDRESS THIS ACCOUNT HOLDS — primary, provider-supplied, and the
+     * ones it has been moved off.
+     *
+     * The delivery log is keyed on `sha256(address)` because that is what a
+     * mail provider reports against. Passing only `record.email` meant an
+     * account whose address had changed read an EMPTY document while its real
+     * history sat under the old hash, unreachable — and this card's own copy
+     * warns that reading a blank table as "we never emailed them" is how
+     * staff mislead a customer.
+     *
+     * `detectShared` so the card can say when an address is one another
+     * account also holds. The log describes an address, not a uid, and
+     * attributing shared mail to whichever account is on screen would be a
+     * guess presented as a fact.
+     */
+    const addressSet = await resolveAccountAddresses({
+      uid,
+      record,
+      detectShared: true,
+      firestore,
+    })
+
     const [phone, legal, devices, emails] = await Promise.all([
       readPhoneDisclosure(profile),
       readLegalDisclosure(uid, firestore),
@@ -285,17 +313,14 @@ async function handler(request: Request): Promise<Response> {
       /*
        * WHAT WE SENT THIS PERSON, and what they did with it.
        *
-       * Keyed on the ADDRESS rather than the uid, because that is what a
-       * mail provider reports against and what the delivery log is filed
-       * under — an account whose address was changed since a send will not
-       * show the older mail, which is the honest answer rather than a
-       * confident wrong one.
-       *
        * Reads our own store, never the sending provider: see
        * `email-delivery-log.ts` for why a staff screen must not depend on a
        * vendor's list endpoint.
        */
-      readEmailDeliveryHistory(record.email),
+      readEmailDeliveryHistoryForAddresses(
+        addressSet.addresses.map((entry) => entry.address),
+        { firestore },
+      ),
     ])
     const memberships = await Promise.all(
       reverse.docs.map(async (entry) => {
@@ -319,36 +344,176 @@ async function handler(request: Request): Promise<Response> {
       }),
     )
 
-    // Recent audit trail: actions BY this account and ON this account.
-    const [byActor, onTarget] = await Promise.all([
+    /*
+     * Recent audit trail: actions BY this account, ON this account, and
+     * ABOUT this account.
+     *
+     * Both halves are ORDERED (AGL-2501). They were `limit(10)` with no
+     * `orderBy`, which Firestore answers in document-id order over generated
+     * ids — so "recent" was ten arbitrary entries per half, and the sort
+     * below arranged that sample newest-first, which is what made it look
+     * right. An account with a long history showed ten entries from anywhere
+     * in it, on the card a staff member reads to find out what just happened.
+     *
+     * `at` is safe to order on, which is the question `orderBy` always
+     * raises: it matches only documents that HAVE the field. Every one of the
+     * twenty-four writers of `adminAudit` in this app sets `at` on the same
+     * `add()` that creates the entry, and there is no client write path — the
+     * collection is server-only — so an entry without it cannot be produced.
+     *
+     * ⚠️ Each half needs a composite index (`actorUid ASC, at DESC`,
+     * `target ASC, at DESC` and `subjectUid ASC, at DESC`), declared in
+     * `cloud/firebase-firestore.indexes.json`. All three are live. A half
+     * whose index is missing fails its own `catch` and renders EMPTY rather
+     * than erroring — so an empty card is not by itself evidence of an index
+     * problem, and the card keeps saying the full record lives on the Audit
+     * log page.
+     *
+     * ## Why a THIRD half, on `subjectUid`
+     *
+     * `target` names the thing acted on, which for most staff actions is the
+     * account itself — but not for all of them. Reading somebody's mail
+     * targets `emailDeliveries/{messageId}`, which can never equal
+     * `users/{uid}`, so the access was invisible on the page of the person
+     * whose mail it was. The log could answer "what did this staff member
+     * do" and could not answer "who accessed my data", which is the question
+     * the collection exists for.
+     *
+     * `subjectUid` is that second fact, kept separate from `target` on
+     * purpose: overloading the target to mean the subject would lose which
+     * record was actually touched. Entries written before the field existed
+     * do not have one and cannot be given one by inference, so this history
+     * stays incomplete — the `target` half remains the only way to reach
+     * them, and dropping it would lose them entirely.
+     */
+    const [byActor, onTarget, onSubject, onSubjectAddress] = await Promise.all([
       firestore
         .collection('adminAudit')
         .where('actorUid', '==', uid)
+        .orderBy('at', 'desc')
         .limit(10)
         .get()
         .catch(() => null),
       firestore
         .collection('adminAudit')
         .where('target', '==', `users/${uid}`)
+        .orderBy('at', 'desc')
         .limit(10)
         .get()
         .catch(() => null),
+      firestore
+        .collection('adminAudit')
+        .where('subjectUid', '==', uid)
+        .orderBy('at', 'desc')
+        .limit(10)
+        .get()
+        .catch(() => null),
+      /*
+       * ## A FOURTH HALF, on the ADDRESS the access was about
+       *
+       * `subjectUid` can only be written when the recipient resolves to
+       * exactly one account, and an address is not reliably resolvable to
+       * one: a provider-supplied address never enters the uniqueness index,
+       * so an address can be held by two accounts with nothing recording it.
+       * The writer therefore omits the subject rather than guessing — naming
+       * one customer on another's data access is a false answer, not a weaker
+       * one.
+       *
+       * Omitting it would make the access invisible on BOTH pages, which is
+       * strictly worse than the guess it replaced. `subjectAddressKey` is the
+       * fact that needs no guess: the same `sha256(address)` the delivery log
+       * is filed under. Querying it by the keys of every address THIS account
+       * holds puts the access on the page of each account that holds the
+       * address, which is the honest answer when the mail went to a mailbox
+       * rather than to a uid.
+       *
+       * ⚠️ Needs `subjectAddressKey ASC, at DESC` in
+       * `cloud/firebase-firestore.indexes.json`. Like the other halves, a
+       * missing index fails its own `catch` and renders empty.
+       *
+       * Chunked at 30, Firestore's `in` ceiling. The set is far smaller in
+       * every realistic shape, but a slice here would silently drop an
+       * address rather than fail, and that is the failure mode this whole
+       * change exists to remove.
+       */
+      (async () => {
+        const keys = addressKeys(addressSet)
+        if (!keys.length) return null
+        const chunks: string[][] = []
+        for (let index = 0; index < keys.length; index += 30) {
+          chunks.push(keys.slice(index, index + 30))
+        }
+        const pages = await Promise.all(
+          chunks.map((chunk) =>
+            firestore
+              .collection('adminAudit')
+              .where('subjectAddressKey', 'in', chunk)
+              .orderBy('at', 'desc')
+              .limit(10)
+              .get()
+              .catch(() => null),
+          ),
+        )
+        return { docs: pages.flatMap((page) => page?.docs ?? []) }
+      })().catch(() => null),
     ])
-    const audit = [...(byActor?.docs ?? []), ...(onTarget?.docs ?? [])]
+    const seenAuditIds = new Set<string>()
+    const auditEntries = [
+      ...(byActor?.docs ?? []),
+      ...(onTarget?.docs ?? []),
+      ...(onSubject?.docs ?? []),
+      ...(onSubjectAddress?.docs ?? []),
+    ]
+      // The halves OVERLAP: an action targeting `users/{uid}` that also
+      // names the same person as its subject is one act answered by two
+      // queries, and rendering it twice would read as two.
+      .filter((doc) => {
+        if (seenAuditIds.has(doc.id)) return false
+        seenAuditIds.add(doc.id)
+        return true
+      })
       .map((doc) => ({
         id: doc.id,
         actorUid: doc.get('actorUid') ?? null,
         action: doc.get('action') ?? null,
         target: doc.get('target') ?? null,
+        subjectUid: doc.get('subjectUid') ?? null,
         // WHY (AGL-1652). An `org.override` performed BY this account is in
         // the `byActor` half above, so dropping the reason here would hide
         // it on one of the three surfaces the act is read from.
         reason: doc.get('reason') ?? null,
         note: doc.get('note') ?? null,
         at: doc.get('at')?.toDate?.()?.toISOString() ?? null,
+        /*
+         * How many times one act was recorded, and when it last happened.
+         * A repeat COLLAPSES onto its row rather than adding one, so without
+         * these two fields the card would under-report the access it just
+         * merged. Absent on rows written before the writer carried them,
+         * which read as a single occurrence — which is what they are.
+         */
+        repeatCount: Number(doc.get('repeatCount')) || 1,
+        lastAt: doc.get('lastAt')?.toDate?.()?.toISOString() ?? null,
+        kind: adminAuditKind(doc.get('action')),
       }))
       .sort((a, b) => String(b.at ?? '').localeCompare(String(a.at ?? '')))
-      .slice(0, 15)
+    /*
+     * A BURST OF READS MUST NOT PUSH OUT AN IMPERSONATION.
+     *
+     * One flat window sorted by time let four `email.message-viewed` rows
+     * crowd `user.impersonate` and `org.override` off a ten-row card — the
+     * entries somebody opens that card to find. The window is taken PER KIND
+     * instead, so the two categories cannot compete for the same slots and a
+     * change is displaced only by another change.
+     *
+     * Both kinds are returned in full; the console renders them as two
+     * tables. Reads are never dropped — an unrecorded look is the failure
+     * this collection exists to prevent, and hiding one from the page is a
+     * quieter version of the same thing.
+     */
+    const audit = [
+      ...auditEntries.filter((entry) => entry.kind === 'change').slice(0, 15),
+      ...auditEntries.filter((entry) => entry.kind === 'access').slice(0, 15),
+    ].sort((a, b) => String(b.at ?? '').localeCompare(String(a.at ?? '')))
 
     return Response.json({
       user: {
@@ -371,7 +536,23 @@ async function handler(request: Request): Promise<Response> {
         ...phone,
         staff: record.customClaims?.['staff'] === true,
         staffRole: record.customClaims?.['staffRole'] ?? null,
-        providers: record.providerData.map((provider) => provider.providerId),
+        /*
+         * The provider AND the address it carries.
+         *
+         * This mapped to `providerId` alone, so staff could see that an
+         * account had a Google provider and not which mailbox it was for —
+         * while that address is a real recipient of real mail and, because
+         * a provider-supplied address never enters `emailIdentityIndex`, the
+         * one most likely to be quietly shared with another account.
+         *
+         * Kept as objects rather than flattened to strings: a provider with
+         * no address (phone, anonymous) is a real case and must render as
+         * itself rather than as a blank half of a joined label.
+         */
+        providers: record.providerData.map((provider) => ({
+          providerId: provider.providerId,
+          email: provider.email ?? null,
+        })),
         createdAt: record.metadata.creationTime ?? null,
         lastSignInAt: record.metadata.lastSignInTime ?? null,
         /** GCIP tenant id, or null for a project-pool account (AGL-1122). */
@@ -392,13 +573,31 @@ async function handler(request: Request): Promise<Response> {
        */
       devices,
       /**
-       * Delivery history for the account's address — what was sent, whether
-       * it arrived, and whether it was opened or clicked. Same
+       * Delivery history across EVERY address the account holds — what was
+       * sent, whether it arrived, and whether it was opened or clicked. Same
        * `lookupFailed` split as `devices`, for the same reason: "no mail
        * recorded" and "the log is unreachable" send a staffer in opposite
        * directions.
+       *
+       * `erasures` is a third state the same reasoning demands: an address
+       * whose records were destroyed under an erasure request also reads as
+       * an empty table, and letting it would recreate the bug this card was
+       * built to fix.
        */
       emails,
+      /**
+       * The addresses the history was read under, and which of them another
+       * account also holds.
+       *
+       * Rendered rather than kept internal: a staffer looking at mail sent to
+       * an address that is no longer this account's primary has to be able to
+       * see that that is what they are looking at, and a shared address has
+       * to be visibly shared — the delivery log records that mail went to a
+       * MAILBOX, and it cannot say which of two accounts it was "for".
+       */
+      addresses: addressSet.addresses,
+      /** A source was unreadable, so the list above may be short. */
+      addressesIncomplete: addressSet.incomplete,
     }, { status: 200 })
   } catch (error) {
     // An unverifiable credential is a 401, not a fault of ours

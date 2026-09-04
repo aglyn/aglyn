@@ -32,6 +32,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useCallback, useEffect, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
 
@@ -91,11 +92,7 @@ export default function StaffEmailSendRateCard() {
 
   const load = useCallback(async () => {
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      if (!idToken) return
-      const response = await fetch('/api/admin/email-send-rate', {
-        headers: { Authorization: `Bearer ${idToken}` },
-      })
+      const response = await authorizedFetch(user, '/api/admin/email-send-rate')
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
         setError(payload?.error ?? 'Could not load the send rate')
@@ -118,19 +115,19 @@ export default function StaffEmailSendRateCard() {
     if (busy) return
     setBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/admin/email-send-rate', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      const response = await authorizedFetch(
+        user,
+        '/api/admin/email-send-rate',
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            perHour: Number(perHour),
+            enabled,
+            ...(note.trim() ? { note: note.trim() } : {}),
+          }),
         },
-        body: JSON.stringify({
-          perHour: Number(perHour),
-          enabled,
-          ...(note.trim() ? { note: note.trim() } : {}),
-        }),
-      })
+      )
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
         enqueueSnackbar(payload?.error ?? 'Could not set the send rate', {

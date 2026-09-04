@@ -215,11 +215,17 @@ describeEmulated('media CDN scope boundary (AGL-1047)', () => {
     expect(res.headers['cache-control']).toBe(stableCacheControl)
   }, 60_000)
 
-  it('treats a pre-backfill asset with no scope as org-wide', async () => {
-    // Absent `visibleTo` must stay visible (AGL-1040 ordering); a fail-closed
-    // read here would blank every image uploaded before the backfill.
+  it('refuses an asset carrying no scope, which is visible to nobody', async () => {
+    // "Nobody has said who may see this" and "everybody may see this" are
+    // different facts, and the two enforcement layers under this one already
+    // answer the first way: `array-contains-any` matches nothing on a
+    // document with no array, and the rules' `hasAny` is false for the same
+    // reason. The scope backfill stamps these and the drift detector reports
+    // what it has not reached, so the 60s negative window is what lets a
+    // newly stamped asset start serving promptly.
     const res = await get(serveMediaCdn, [`org:${ORG}`, 'm-legacy'])
-    expect(res.headers['cache-control']).toBe(stableCacheControl)
+    expect(res.captured.status).toBe(404)
+    expect(res.headers['cache-control']).toBe('public, max-age=60')
   }, 60_000)
 
   describe('private assets (AGL-1051)', () => {
@@ -318,8 +324,8 @@ async function seed(db: Firestore): Promise<void> {
   const media: Array<[string, Record<string, unknown>]> = [
     ['m-shared', { fileName: 'logo.png', visibleTo: ['org'] }],
     ['m-internal', { fileName: 'rates.png', visibleTo: [`host:${INTERNAL}`] }],
-    // No `visibleTo` at all — the pre-AGL-1040 shape, which must stay
-    // visible rather than vanish.
+    // No `visibleTo` at all — a document the scope backfill has not reached,
+    // which no scoped read may see.
     ['m-legacy', { fileName: 'old.png' }],
     // Private (AGL-1051): org-wide by scope, and still unfetchable without
     // a signature. The two flags are orthogonal and this proves it.

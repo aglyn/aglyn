@@ -149,7 +149,44 @@ const TRIGGER_SHELL_SX = {
   display: 'inline-flex',
   textTransform: 'none',
 } as const
-const TRIGGER_SX = { textTransform: 'inherit' } as const
+/**
+ * The rest of the same argument, generalized (AGL-2542).
+ *
+ * `textTransform` was one symptom of a whole button's worth of them. The
+ * trigger still arrived as a `Button`: 0.875rem where the links beside it
+ * were 15px, `min-width: 64px` padding "Docs" out to a width its own text
+ * never asked for, and `6px 8px` of padding widening the visual gap on two
+ * items out of five. In a nav laid out on a flat gap, that is a rhythm one
+ * element breaks and no author can fix — the Button is internal, so a font
+ * size set in STYLES lands on the wrapper and MUI's own class outranks it.
+ *
+ * So every typographic property is handed back to the wrapper the same way
+ * `textTransform` was, and the button chrome that has no meaning on a nav
+ * item is dropped. The element now renders as what it is — a label in a nav
+ * — and STYLES → Typography on it reaches the label, which is the control an
+ * author was reaching for when they found there wasn't one.
+ *
+ * `endIcon`'s negative right margin goes with the padding it was tucking
+ * into; left at -4px against zero padding, the chevron would hang outside
+ * the element and break the gap it just stopped breaking.
+ *
+ * ⚠️ Padding is where the hover target came from, and a hover-opened menu is
+ * only as reachable as its trigger. It belongs on the WRAPPER now — which is
+ * both what an author can actually edit and what `onMouseLeave` measures, so
+ * padding added there enlarges the target instead of merely looking like it.
+ */
+const TRIGGER_SX = {
+  fontFamily: 'inherit',
+  fontSize: 'inherit',
+  fontWeight: 'inherit',
+  lineHeight: 'inherit',
+  letterSpacing: 'inherit',
+  textTransform: 'inherit',
+  color: 'inherit',
+  minWidth: 0,
+  padding: 0,
+  '& .MuiButton-endIcon': { marginRight: 0 },
+} as const
 
 const MenuShell = forwardRef<HTMLDivElement, MenuShellProps>((props, ref) => {
   const { label, editorHint, panelSx, sx, children, ...rest } = props

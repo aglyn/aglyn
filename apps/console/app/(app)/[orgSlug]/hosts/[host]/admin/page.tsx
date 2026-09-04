@@ -15,36 +15,46 @@
  * limitations under the License.
  */
 
-'use client'
-
-import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
-import { useRouter } from 'next/navigation'
-import { useEffect } from 'react'
+import { redirect } from 'next/navigation'
 import { buildRoute, Route } from '../../../../../../constants/route-links'
-import { useHostSubdomain } from '../../../../../../components/host-id-provider'
-import { useOrgSlug } from '../../../../../../hooks/use-org-scope'
+import {
+  sectionIndexTarget,
+  type SearchParams,
+} from '../../../../../../utils/section-index-redirect'
 
 /**
- * `/admin` is the section index and renders nothing of its own (AGL-693).
+ * `/admin` is the section index and renders nothing of its own (AGL-2501).
  *
- * No `?tab=` compatibility map. The sections were panels behind a query
- * parameter and are routes now; with no shipped customers there is nothing
- * holding an old link, and a map kept "just in case" is a second set of names
- * for the same eight pages that has to be maintained against them.
+ * Both segments come from `params` — the org slug and the site subdomain — so
+ * neither needs the host provider this page used to wait on.
  *
- * `replace`, not `push`: a redirect the reader did not ask for must not become
- * a history entry their back button bounces off.
+ * A SERVER component, deliberately (AGL-2501). This was a client page that
+ * returned `null`, waited for hydration, resolved the org slug from a hook and
+ * then client-navigated — load the index chunk, hydrate, resolve, navigate,
+ * load the target chunk, render. Every step of that was a blank main area in
+ * front of the reader. The slug is in `params`, so the redirect can be issued
+ * before any JavaScript ships.
+ *
+ * The incoming query is carried across: a redirect that drops it silently
+ * deletes whatever somebody else put in the URL.
+ *
+ * `redirect()` is a 307 — a temporary, non-cached hop. Deliberately not
+ * `permanentRedirect`: which section is the default is a product decision that
+ * may change, and a 308 is cached by the browser past the point where changing
+ * it would help.
  */
-const HostAdmin: NextPageWithLayout<Record<string, never>> = () => {
-  const router = useRouter()
-  const orgSlug = useOrgSlug()
-  const host = useHostSubdomain()
-  useEffect(() => {
-    if (!orgSlug || !host) return
-    router.replace(buildRoute(Route.HOST_ADMIN_PLUGINS, { orgSlug, host }))
-  }, [router, orgSlug, host])
-  return null
+export default async function HostAdminIndex({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ orgSlug: string; host: string }>
+  searchParams: Promise<SearchParams>
+}): Promise<never> {
+  const { orgSlug, host } = await params
+  redirect(
+    sectionIndexTarget(
+      buildRoute(Route.HOST_ADMIN_PLUGINS, { orgSlug, host }),
+      await searchParams,
+    ),
+  )
 }
-HostAdmin.displayName = 'Page:HostAdmin'
-
-export default HostAdmin

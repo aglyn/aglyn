@@ -37,21 +37,37 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import {
-  collection,
-  deleteDoc,
-  doc,
-  limit,
-  query,
-  setDoc,
-} from 'firebase/firestore'
+import { collection, deleteDoc, doc, setDoc } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import {
+  ceilingedWindow,
+  collectionCeiling,
   useFirestoreCollection,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { pluginDocsHelp } from '@aglyn/aglyn'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+
+/**
+ * How many category documents the card reads.
+ *
+ * A CEILING, not a page size — the walk below is a TREE and cannot be sliced
+ * by document without orphaning children from parents on another page.
+ */
+const CATEGORY_CEILING = 250
+/** The same, for collections: the slug check needs every row to be correct. */
+const COLLECTION_CEILING = 250
+/**
+ * The catalog the match counts are computed over.
+ *
+ * Neither a page size nor a promise: it is how much of the catalog this card
+ * is willing to read, and the counts below say "at least" once the probe finds
+ * a product past it.
+ */
+const PRODUCT_CEILING = 500
 
 export interface CatalogOrganizationCardProps {
   hostId: string
@@ -103,14 +119,33 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
      */
     fromCache: categoriesFromCache,
   } = useFirestoreCollection<any>(
+    /*
+     * ORDERED AND CEILINGED, deliberately not paged by the query (AGL-2501).
+     *
+     * `limit(250)` alone is answered in DOCUMENT-ID order and the ids are
+     * `createResourceUid()`, so the window was a pseudo-random sample. Naming
+     * the order does not change WHICH 250 come back; what it changes is that
+     * the obvious next edit is caught — `orderBy('name')` would HIDE every
+     * category saved without one, and `orderBy('order')` is worse still, since
+     * the walk below already treats a missing `order` as 0.
+     *
+     * The QUERY is not paged because this is a TREE. The walk puts parents
+     * before children and collects orphans by scanning the whole set, so a
+     * page boundary would separate a child from the parent that positions it
+     * and re-label as an orphan every category whose parent is on another
+     * page. The parent PICKER in the dialog reads the same rows for the same
+     * reason.
+     */
     () =>
-      query(
+      collectionCeiling(
         collection(firestore, 'hosts', hostId, 'productCategories'),
-        limit(250),
+        CATEGORY_CEILING,
       ),
     [firestore, hostId],
     { idField: '$id' },
   )
+  const { rows: readCategories, truncated: categoriesTruncated } =
+    ceilingedWindow<any>(categoryDocs, CATEGORY_CEILING)
   const {
     data: collectionDocs,
     status: collectionsStatus,
@@ -124,25 +159,63 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
      */
     fromCache: collectionsFromCache,
   } = useFirestoreCollection<any>(
+    /*
+     * ORDERED AND CEILINGED, deliberately not paged (AGL-2501).
+     *
+     * The slug check below tests a draft against these rows — two catalog
+     * collections answering `/collections/{slug}` is a storefront route that
+     * resolves to whichever the server reaches first — so a ten-row server
+     * page would compare a new collection against a tenth of the catalog and
+     * create the collision the check exists to prevent.
+     *
+     * The rows are also filtered after reading: content collections (AGL-81)
+     * share this subcollection and are classified out below, so a page of ten
+     * documents arrives holding anywhere from zero to ten catalog collections.
+     */
     () =>
-      query(collection(firestore, 'hosts', hostId, 'collections'), limit(250)),
+      collectionCeiling(
+        collection(firestore, 'hosts', hostId, 'collections'),
+        COLLECTION_CEILING,
+      ),
     [firestore, hostId],
     { idField: '$id' },
   )
+  const { rows: readCollections, truncated: collectionsTruncated } =
+    ceilingedWindow<any>(collectionDocs, COLLECTION_CEILING)
   const { data: productDocs } = useFirestoreCollection<any>(
+    /*
+     * The catalog behind the MATCH COUNTS, ceilinged with a probe (AGL-2501).
+     *
+     * `collectionCount` and the smart-collection preview both count this array
+     * and print the result as a number of products. It was a bare `limit(500)`,
+     * so on a three-thousand-product catalog "Matches 47 products" meant "47 of
+     * the five hundred I read" — a count that is a window length, on the
+     * control that decides what a collection contains.
+     *
+     * It stays a window, because the honest alternative is reading the whole
+     * catalog on every mount of this card. What changes is that the probe makes
+     * the shortfall a FACT, and the counts say "at least" when it bit rather
+     * than stating a total they cannot know.
+     */
     () =>
-      query(collection(firestore, 'hosts', hostId, 'products'), limit(500)),
+      collectionCeiling(
+        collection(firestore, 'hosts', hostId, 'products'),
+        PRODUCT_CEILING,
+      ),
     [firestore, hostId],
     { idField: '$id' },
   )
+  const { rows: readProducts, truncated: productsTruncated } =
+    ceilingedWindow<any>(productDocs, PRODUCT_CEILING)
   const products: ProductRow[] = useMemo(
     () =>
-      [...(productDocs ?? [])]
+      [...readProducts]
         .filter((product: any) => !product.deletedAt)
         .map((product: any) => ({
           ...CommerceModel.liftLegacyProduct(product),
           $id: product.$id,
         })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [productDocs],
   )
   // Content collections (AGL-81) live in the same `hosts/{hostId}/collections`
@@ -154,13 +227,14 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
   // check (AGL-954); the route re-checks it, and AGL-1324 now refuses any
   // collection with entries besides.
   const commerceCollections: CollectionRow[] = useMemo(
-    () => (collectionDocs ?? []).filter(Aglyn.isHostCollectionKind('catalog')),
+    () => readCollections.filter(Aglyn.isHostCollectionKind('catalog')),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [collectionDocs],
   )
 
   // Categories ordered as a walked tree: parents before children.
   const categories: Array<CategoryRow & { depth: number }> = useMemo(() => {
-    const rows = [...(categoryDocs ?? [])] as CategoryRow[]
+    const rows = [...readCategories] as CategoryRow[]
     rows.sort(
       (a, b) => (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name),
     )
@@ -184,7 +258,37 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
       }
     }
     return walked
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [categoryDocs])
+
+  /*
+   * Both pages are SLICES: the rows are already in hand, and the tree walk,
+   * the parent picker and the slug check all need every one of them.
+   */
+  const [categoryPage, setCategoryPage] = useState(0)
+  const [categoryPageSize, setCategoryPageSize] = useState(
+    TABLE_PAGE_SIZE_DEFAULT,
+  )
+  const visibleCategories = useMemo(
+    () =>
+      categories.slice(
+        categoryPage * categoryPageSize,
+        categoryPage * categoryPageSize + categoryPageSize,
+      ),
+    [categories, categoryPage, categoryPageSize],
+  )
+  const [collectionPage, setCollectionPage] = useState(0)
+  const [collectionPageSize, setCollectionPageSize] = useState(
+    TABLE_PAGE_SIZE_DEFAULT,
+  )
+  const visibleCollections = useMemo(
+    () =>
+      commerceCollections.slice(
+        collectionPage * collectionPageSize,
+        collectionPage * collectionPageSize + collectionPageSize,
+      ),
+    [commerceCollections, collectionPage, collectionPageSize],
+  )
 
   const [categoryDraft, setCategoryDraft] = useState<{
     id: string | null
@@ -439,25 +543,25 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
           fromCache: Boolean(draftId) && collectionsFromCache,
         },
         async () => {
-          const idToken = await (user as any)?.getIdToken?.()
-          const response = await fetch('/api/hosts/collections', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          const response = await authorizedFetch(
+            user,
+            '/api/hosts/collections',
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                hostId,
+                action: draftId ? 'update' : 'create',
+                kind: 'catalog',
+                ...(draftId ? { id: draftId } : {}),
+                data: {
+                  ...data,
+                  name: collectionDraft.name.trim().slice(0, 80),
+                  slug: draftSlug,
+                },
+              }),
             },
-            body: JSON.stringify({
-              hostId,
-              action: draftId ? 'update' : 'create',
-              kind: 'catalog',
-              ...(draftId ? { id: draftId } : {}),
-              data: {
-                ...data,
-                name: collectionDraft.name.trim().slice(0, 80),
-                slug: draftSlug,
-              },
-            }),
-          })
+          )
           const result = await response.json().catch(() => ({}))
           if (!response.ok) {
             throw new Error(result?.error ?? 'Collection save failed')
@@ -518,13 +622,9 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
       // also refuses rather than cascading; the 409's message names the
       // blockers and is surfaced by the catch below.
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/resources/erase', {
+        const response = await authorizedFetch(user, '/api/resources/erase', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             scope: 'hosts',
             scopeId: hostId,
@@ -550,10 +650,31 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
     [confirm, user, hostId, enqueueSnackbar],
   )
 
+  /**
+   * How many products a collection holds — over the CATALOG WINDOW.
+   *
+   * Rendered with "at least" when the probe found a product past the ceiling,
+   * because past that point this is a lower bound and printing it as a total
+   * is the count-that-is-a-window-length defect. The number itself is honest
+   * either way; only the claim around it changes.
+   */
   const collectionCount = (row: CollectionRow) =>
     products.filter((product) =>
       CommerceModel.matchesCollection(product, row, product.$id),
     ).length
+  /*
+   * "at least", or nothing at all.
+   *
+   * Every count on this card is computed over `products`, which is the catalog
+   * WINDOW rather than the catalog. While the probe finds a product past the
+   * ceiling those counts are lower bounds, and printing one as a total is the
+   * count-that-is-a-window-length defect this ceiling exists to make visible.
+   *
+   * Keyed on the probe rather than on `products.length >= PRODUCT_CEILING`,
+   * because a catalog of exactly the ceiling is complete: nothing is missing,
+   * and a comparison would put "at least" on a number that is exact.
+   */
+  const countPrefix = productsTruncated ? 'at least ' : ''
 
   const updateRule = (
     index: number,
@@ -587,7 +708,7 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
             {'Group products into a browsable tree (e.g. Brakes → Pads).'}
           </Typography>
         ) : (
-          categories.map((category) => (
+          visibleCategories.map((category) => (
             <Stack
               key={category.$id}
               direction="row"
@@ -626,6 +747,25 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
             </Stack>
           ))
         )}
+        {categories.length === 0 ? null : (
+          <ListPagination
+            page={categoryPage}
+            pageSize={categoryPageSize}
+            rowCount={visibleCategories.length}
+            // The categories the card HOLDS — a client slice of rows already
+            // read, so the total is known exactly.
+            count={categories.length}
+            onPageChange={setCategoryPage}
+            onPageSizeChange={setCategoryPageSize}
+          />
+        )}
+        {categoriesTruncated ? (
+          <Alert severity="info">
+            {`Showing ${CATEGORY_CEILING} categories, ordered by id. This ` +
+              'catalog has more — a category whose parent is past that ' +
+              'boundary is drawn at the top level here rather than under it.'}
+          </Alert>
+        ) : null}
         <Button
           size="small"
           sx={{ alignSelf: 'flex-start' }}
@@ -636,7 +776,7 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
 
         <Divider sx={{ my: 1 }} />
         <Typography variant="subtitle2">{'Collections'}</Typography>
-        {commerceCollections.map((row) => (
+        {visibleCollections.map((row) => (
           <Stack
             key={row.$id}
             direction="row"
@@ -650,7 +790,9 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
                 variant="caption"
                 color="text.secondary"
               >
-                {` · ${row.mode ?? 'manual'} · ${collectionCount(row)} products`}
+                {` · ${row.mode ?? 'manual'} · ${countPrefix}${collectionCount(
+                  row,
+                )} products`}
               </Typography>
             </Typography>
             <Button
@@ -674,6 +816,27 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
             </Button>
           </Stack>
         ))}
+        {commerceCollections.length === 0 ? null : (
+          <ListPagination
+            page={collectionPage}
+            pageSize={collectionPageSize}
+            rowCount={visibleCollections.length}
+            // The CATALOG collections, which is what this list is. Not the
+            // window's length: content collections share the subcollection
+            // and are classified out before this count is taken.
+            count={commerceCollections.length}
+            onPageChange={setCollectionPage}
+            onPageSizeChange={setCollectionPageSize}
+          />
+        )}
+        {collectionsTruncated ? (
+          <Alert severity="info">
+            {`Showing ${COLLECTION_CEILING} collections, ordered by id. This ` +
+              'site has more — the slug check below only covers the ones ' +
+              'listed here, so an address may already be taken by one that ' +
+              'is not.'}
+          </Alert>
+        ) : null}
         <Button
           size="small"
           sx={{ alignSelf: 'flex-start' }}
@@ -727,6 +890,9 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
             select
           >
             <MenuItem value="">{'None (top level)'}</MenuItem>
+            {/* The whole set, not `visibleCategories` — a parent picker
+                that offered only the current page could not reparent a
+                category under one two pages away. */}
             {categories
               .filter((category) => category.$id !== categoryDraft?.id)
               .map((category) => (
@@ -924,7 +1090,7 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
           {collectionDraft ? (
             <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }}>
               <Typography variant="caption" color="text.secondary">
-                {`Matches ${previewMatches.length} products: `}
+                {`Matches ${countPrefix}${previewMatches.length} products: `}
               </Typography>
               {previewMatches.slice(0, 6).map((product) => (
                 <Chip key={product.$id} label={product.name} size="small" />

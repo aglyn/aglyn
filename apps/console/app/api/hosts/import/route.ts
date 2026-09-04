@@ -25,6 +25,7 @@ import {
   COLLECTIONS_MAX_PER_HOST,
   datasetIntegrityFields,
   decodeStoredNodes,
+  encodeStoredNodes,
   effectiveDatasetModel,
   hostScopeToken,
   legacyCollectionKind,
@@ -858,12 +859,34 @@ async function handler(request: Request): Promise<Response> {
       }
     }
 
+    /**
+     * `nodes` in the form the platform stores it: msgpack (AGL-1151).
+     *
+     * Applied to every document a restore writes, because a restore must land
+     * a site in the shape the product writes — not in whichever shape the
+     * bundle happens to hold. A bundle carries the DECODED tree by design
+     * (see the export route: a backup nobody can read is most of the way to
+     * no backup), so without this a restored component or template is a plain
+     * map at roughly 1.4x the bytes, sitting against the same 1 MiB ceiling
+     * as everything else, until somebody happens to open and re-save it.
+     *
+     * `elements` is deliberately left alone. It is the legacy alias that only
+     * exists on documents written before compression, several readers take it
+     * raw, and `screenVersionConverter` migrates it to `nodes` on the next
+     * read anyway.
+     */
+    const storedNodes = (data: Record<string, unknown>) => {
+      if (data['nodes'] === undefined) return data
+      const packed = encodeStoredNodes(data['nodes'])
+      return packed ? { ...data, nodes: Buffer.from(packed) } : data
+    }
+
     const importPlain = async (name: string) => {
       for (const item of bundleItems(name)) {
         if (!item?.$id) continue
         await write(
           hostRef.collection(name).doc(String(item.$id)),
-          cleanDoc(name, item),
+          storedNodes(cleanDoc(name, item)),
         )
       }
     }
@@ -924,10 +947,10 @@ async function handler(request: Request): Promise<Response> {
            * exported before the fix carries `{"type":"Buffer","data":[…]}`,
            * which `decodeStoredNodes` now recognises as a third storage form.
            *
-           * It lands as a PLAIN MAP rather than being re-encoded to `Bytes`:
-           * both forms are live and every reader handles both, so old and new
-           * bundles converge on one restored shape instead of two, and the
-           * besigner re-compresses on the next save anyway.
+           * The decode is what makes old and new bundles converge on one
+           * shape; `storedNodes` below then writes that shape the way every
+           * other writer does, so a restored version is compressed from the
+           * moment it lands rather than on whatever day somebody re-saves it.
            *
            * It also has to happen BEFORE the rewrite below. Over an opaque
            * envelope `rewriteBindingTokensDeep` finds no `{{` strings and
@@ -951,7 +974,7 @@ async function handler(request: Request): Promise<Response> {
           }
           await writeDoc(
             docRef.collection('versions').doc(String(item.version.$id)),
-            version,
+            storedNodes(version),
           )
         }
       }

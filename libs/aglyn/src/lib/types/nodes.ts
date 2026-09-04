@@ -36,7 +36,7 @@ import type {
   NodeId,
   PresetId,
 } from '../foundation'
-import { ComponentCategory } from '../foundation'
+import { ComponentCategory } from '../foundation/constants/components'
 import type { ITimestamp } from '@aglyn/shared-util-timestamp'
 import type React from 'react'
 import type { ComponentClass, ComponentProps } from 'react'
@@ -270,7 +270,7 @@ export interface PresetSchema<P = JSX.AnyProps> extends PresetII {
    * primitive dropdown panel) ship working out of the box instead of asking
    * the user to author the interactions by hand.
    *
-   * TEMPLATES, and named so (AGL-1478). These are not interactions: they are
+   * TEMPLATES, and named so. These are not interactions: they are
    * unresolved, they reference nodes that do not exist yet, and they are
    * consumed at insert time and never stored. What they resolve INTO lives
    * on the node as {@link NodeSchema.interactions}, and a `PresetSchema` is
@@ -376,7 +376,7 @@ export interface NodeSchema<P = JSX.AnyProps> extends NodeI<P> {
    */
   attrOverrides?: Record<string, Record<string, unknown>>
   /**
-   * Interactions this element carries (AGL-1478) — the click, hover and
+   * Interactions this element carries — the click, hover and
    * scroll-into-view choreography authored on it in the besigner.
    *
    * ## Why they live on the NODE
@@ -410,7 +410,7 @@ export interface NodeSchema<P = JSX.AnyProps> extends NodeI<P> {
    */
   interactions?: NodeInteraction[]
   /**
-   * Hidden by the author (AGL-1479) — the eye on the element's hierarchy row.
+   * Hidden by the author — the eye on the element's hierarchy row.
    *
    * Renders `display: none` on the canvas AND on the published site. It is
    * the plain "I do not want this on the page" switch: no runtime, no

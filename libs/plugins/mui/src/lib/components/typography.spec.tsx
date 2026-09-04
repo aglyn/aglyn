@@ -28,7 +28,7 @@ import AglynTypography from './typography'
  * reporting on the marketing site, from a card label whose author had
  * selected Subtitle 1 and nothing else.
  */
-describe('subtitles are not headings (AGL-1487)', () => {
+describe('subtitles are not headings', () => {
   const render1 = (props: Record<string, unknown>) =>
     render(<AglynTypography {...props}>{'Label'}</AglynTypography>)
 

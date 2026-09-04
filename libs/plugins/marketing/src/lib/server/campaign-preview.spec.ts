@@ -36,6 +36,42 @@ const mockState: {
 } = { store: {}, sent: [] }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  // The literal three call sites compare against — the unsubscribe writes
+  // it, the resubscribe link refuses to reverse anything else, and the
+  // preference page reads it. A mock that omitted it would write `undefined`
+  // and every one of those comparisons would silently stop matching.
+  UNSUBSCRIBE_SUPPRESSION_REASON: 'unsubscribe',
+  /*
+   * The real resolution's shape: an org that declared no pooling resolves
+   * every site to a group of ONE. Faked rather than imported because this
+   * file mocks the whole module — but faked to the NARROW answer, which is
+   * the direction a wrong group may fail in.
+   */
+  consentGroupForSite: async (hostId: string) => ({
+    hostId,
+    groupId: hostId,
+    name: null,
+    hostIds: [hostId],
+    declared: false,
+  }),
+  /*
+   * The unsubscribe-link signer and URL builder are the REAL ones. They need
+   * nothing but `crypto`, and a double would let a spec assert on a URL shape
+   * the product does not actually mint — which is the whole failure mode of a
+   * stubbed policy module.
+   */
+  ...jest.requireActual(
+    '@aglyn/tenant-data-admin/server/email-unsubscribe-link',
+  ),
+  /*
+   * The marketing frequency window is a no-op here, and deliberately so: it
+   * is a durable counter whose behavior is proven against a Firestore double
+   * in `tenant-data-admin`, and the campaign sender's only contract with it
+   * is that it is called with the addresses that were reached and that it
+   * cannot fail a send.
+   */
+  recordMarketingSends: async (_hostId: string, emails: readonly string[]) =>
+    emails.length,
   firebaseAdmin: {
     app: () => ({ firestore: () => mockFirestore() }),
     firestore: {
@@ -43,9 +79,45 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         increment: (value: number) => ({ increment: value }),
         serverTimestamp: () => 'server-timestamp',
       },
+      FieldPath: { documentId: () => '__name__' },
     },
   },
-  getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'starter' } }),
+  // Both suppression lists, the shape the real helper has: the platform list
+  // first, then this site's. The count under the audience picker has to
+  // exclude the same people the send will.
+  // Nobody in these fixtures has left a topic, so the send's third filter is
+  // a pass-through. Modeled rather than omitted: an absent export reads as
+  // `undefined` and fails the send with a TypeError, which is a red that says
+  // nothing about the behavior under test.
+  filterTopicSendable: async (
+    _hostId: string,
+    _topicId: string,
+    emails: string[],
+  ) => emails,
+  filterSendableForHost: async (hostId: string, emails: string[]) =>
+    emails.filter((email) => {
+      // `require` inside the factory rather than the file's own import: a
+      // mock factory is hoisted above every import, so a top-level binding
+      // is still in its temporal dead zone when this object is built.
+      const key = require('crypto')
+        .createHash('sha256')
+        .update(email.trim().toLowerCase())
+        .digest('hex')
+      return (
+        !mockState.store[`emailSuppressions/${key}`] &&
+        !mockState.store[`hosts/${hostId}/suppressions/${key}`]
+      )
+    }),
+  getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'pro' } }),
+  // No site here selects a custom sending domain, so every send resolves to
+  // the platform identity — the behavior these suites were written against.
+  resolveHostSendingIdentity: async () =>
+    jest
+      .requireActual('@aglyn/shared-util-email')
+      .resolveSendingIdentity({
+        selection: null,
+        platformFrom: process.env.USAGE_EMAIL_FROM || 'noreply@aglyn.com',
+      }),
   orgDataCollectionForHost: jest.fn(),
   orgDataQueryForHost: jest.fn(),
   meterHostEmail: async () => undefined,
@@ -74,6 +146,18 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     updatedByEmail: null,
     note: '',
   }),
+  claimOrgEmailSendBudget: async (options: any = {}) => {
+    const ceiling = Math.max(1, Math.floor((options.platformPerHour ?? 100_000) * 0.25))
+    const count = Math.max(0, Math.floor(Number(options.count) || 0))
+    return {
+      allowed: true,
+      used: 0,
+      ceiling,
+      remaining: Math.max(0, ceiling - count),
+      retryAtMs: 3_600_000,
+      degraded: false,
+    }
+  },
   readEmailSendRateWindow: async () => ({
     windowStartMs: 0,
     resetMs: 3_600_000,
@@ -113,24 +197,58 @@ function mockFirestore(): any {
     },
     collection: (name: string) => collectionRef(`${path}/${name}`),
   })
+  /**
+   * The ids directly under `path`, in `__name__` order — which is what the
+   * audience sweep asks for, and what the real Firestore returns for it.
+   */
+  const childIds = (path: string) =>
+    Object.keys(store)
+      .filter(
+        (key) =>
+          key.startsWith(`${path}/`) &&
+          !key.slice(path.length + 1).includes('/'),
+      )
+      .map((key) => key.slice(path.length + 1))
+      .sort()
+  /**
+   * `orderBy` / `startAfter` / `limit`, and `limit` HONORS its argument.
+   *
+   * A double whose `limit` returns everything cannot fail the way the real
+   * one does, so a paging bug would pass here and truncate in production.
+   */
+  const queryRef = (path: string, after?: string): any => ({
+    orderBy: () => queryRef(path, after),
+    startAfter: (cursor: any) => queryRef(path, cursor?.id ?? String(cursor)),
+    limit: (max: number) => ({
+      get: async () => {
+        const ids = childIds(path).filter((id) => !after || id > after)
+        return { docs: ids.slice(0, max).map((id) => snapshot(`${path}/${id}`)) }
+      },
+    }),
+  })
   const collectionRef = (path: string): any => ({
     doc: (id: string) => docRef(`${path}/${id}`),
-    limit: () => ({
-      get: async () => ({
-        docs: Object.keys(store)
-          .filter(
-            (key) =>
-              key.startsWith(`${path}/`) &&
-              !key.slice(path.length + 1).includes('/'),
-          )
-          .map(snapshot),
-      }),
-    }),
+    ...queryRef(path),
     get parent() {
       return docRef(path.split('/').slice(0, -1).join('/'))
     },
   })
   return { collection: (name: string) => collectionRef(name) }
+}
+
+/**
+ * A recorded opt-in, in the shape every capture path writes it.
+ *
+ * A preview reports `recipients`, `sendable` and `suppressed` over the
+ * audience the send would actually mail, and the consent join runs before all
+ * three. A lead with no basis is withheld and never reaches those counts, so
+ * every fixture whose contribution to a count is being asserted declares one.
+ */
+const CONSENT_GRANTED = {
+  // The basis belongs to the site sending, not to the org.
+  marketingConsentByHost: {
+    'host-1': { marketingConsent: true, marketingConsentAtMs: Date.UTC(2026, 7, 1) },
+  },
 }
 
 /** A site with `count` leads, plus whatever else the case needs. */
@@ -140,7 +258,11 @@ const seed = (count: number, extra: Record<string, Record<string, unknown>> = {}
     ...Object.fromEntries(
       Array.from({ length: count }, (_item, index) => [
         `hosts/host-1/leads/lead-${index}`,
-        { email: `lead${index}@example.com`, name: `Lead ${index}` },
+        {
+          email: `lead${index}@example.com`,
+          name: `Lead ${index}`,
+          ...CONSENT_GRANTED,
+        },
       ]),
     ),
     ...extra,
@@ -215,8 +337,11 @@ describe('a campaign recipient preview', () => {
 
   it('de-duplicates the way the send does', async () => {
     seed(0, {
-      'hosts/host-1/leads/a': { email: 'dana@example.com' },
-      'hosts/host-1/leads/b': { email: 'DANA@example.com' },
+      'hosts/host-1/leads/a': { email: 'dana@example.com', ...CONSENT_GRANTED },
+      'hosts/host-1/leads/b': { email: 'DANA@example.com', ...CONSENT_GRANTED },
+      // No basis on the junk address, and it needs none: the address pattern
+      // rejects it while the audience is being normalized, which is upstream
+      // of the consent join.
       'hosts/host-1/leads/c': { email: 'not-an-email' },
     })
     const result = await preview()
@@ -232,7 +357,7 @@ describe('a campaign recipient preview', () => {
   })
 
   it('surfaces the monthly cap before the email is written', async () => {
-    // Starter's emailSendsPerMonth is finite; a month already at the cap
+    // Pro's emailSendsPerMonth is finite; a month already at the cap
     // refuses, and the composer shows that message under the picker.
     seed(2)
     // `jest.requireMock`, not a deferred `require('@aglyn/tenant-data-admin')`.

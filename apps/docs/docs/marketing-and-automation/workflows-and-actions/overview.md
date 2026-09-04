@@ -1,16 +1,17 @@
 ---
 sidebar_position: 1
-title: Workflows, Actions & Webhooks
+title: Automation
 description: Automate your site — run multi-step workflows on site events, and connect to other systems with webhooks.
 ---
 
-# Workflows, Actions & Webhooks
+# Automation
 
-Automate what happens on your site. **Workflows** run multi-step logic when something
+Automate what happens on your site. The section holds three tabs — **Workflows**,
+**Actions** and **Webhooks**. **Workflows** run multi-step logic when something
 happens; the **actions builder** maps an event to an action; **webhooks** connect Aglyn to
 outside systems.
 
-![The Workflows page in the Aglyn console, with Workflows, Actions, and Webhooks cards](/img/workflows-and-actions/workflows-page.png)
+![The Automation page in the Aglyn console, with its Workflows, Actions, and Webhooks tabs](/img/workflows-and-actions/workflows-page.png)
 
 ```mermaid
 flowchart LR

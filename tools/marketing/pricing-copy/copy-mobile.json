@@ -302,7 +302,7 @@
               "name": "Frame",
               "cells": [
                 "For high-growth stores and multi-site teams that have outgrown Business.",
-                "15 sites · 75 collaborators · 1% commerce fees · 300k API requests/mo · 25,000 products per site · 2.5 TB bandwidth"
+                "15 sites · 75 collaborators · 1% commerce fees · 300k API requests/mo · 25,000 products per site · 700 GB bandwidth"
               ]
             },
             {
@@ -502,7 +502,7 @@
               "name": "row",
               "cells": [
                 "Bandwidth / mo",
-                "250 GB"
+                "225 GB"
               ]
             },
             {
@@ -739,7 +739,7 @@
               "name": "row",
               "cells": [
                 "Digital transaction fee",
-                "5%"
+                "3%"
               ]
             },
             {
@@ -1053,7 +1053,7 @@
               "name": "row",
               "cells": [
                 "Extra data storage",
-                "$0.25 / GB-mo"
+                "$0.36 / GB-mo"
               ]
             },
             {

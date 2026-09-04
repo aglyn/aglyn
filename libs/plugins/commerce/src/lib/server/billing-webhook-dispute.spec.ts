@@ -277,6 +277,24 @@ const fakeFirestore = {
 const managerNotices: any[] = []
 const staffNotices: any[] = []
 
+/*
+ * The campaign revenue reversal, mocked for the reason `refund.spec.ts` mocks
+ * it: whether a reversal lands correctly is settled against a real double in
+ * `email-revenue-attribution.spec.ts`, and what this file is the only place
+ * to prove is that a LOST DISPUTE reaches it — money reversed is money
+ * reversed whichever door it left by. Left unmocked it would reach the real
+ * firebase-admin, which this suite has no app for.
+ */
+const reverseAttributedRevenue = jest.fn(async () => true)
+jest.mock(
+  '@aglyn/tenant-data-admin/server/email-revenue-attribution',
+  () => ({
+    __esModule: true,
+    reverseEmailAttributedRevenue: (...args: unknown[]) =>
+      (reverseAttributedRevenue as any)(...args),
+  }),
+)
+
 jest.mock('@aglyn/tenant-data-admin', () => {
   // The REAL `updateExisting`, from its leaf path: it is what distinguishes
   // gRPC NOT_FOUND from every other failure, and `contact-refund.ts` imports it
@@ -629,6 +647,28 @@ describe('charge.dispute.closed — the only event that moves money', () => {
     expect(contact().refundedOrdersCount).toBe(1)
     expect(typeof contact().lastRefundAtMs).toBe('number')
     expectNothingSwallowed()
+  })
+
+  /** The campaign's side of the same ledger. */
+  it('takes the credit back off the campaign that earned the order', async () => {
+    reverseAttributedRevenue.mockClear()
+    await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
+    expect(reverseAttributedRevenue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: 'order-1',
+        amountCents: DISPUTE_CENTS,
+        closedTheOrder: true,
+        kind: 'chargeback',
+      }),
+    )
+  })
+
+  it('takes nothing back off a campaign when the dispute is WON', async () => {
+    // Nothing was reversed, so nothing is missing — the same guard that keeps
+    // a $0 entry off the buyer's contact.
+    reverseAttributedRevenue.mockClear()
+    await deliver('charge.dispute.closed', disputeEvent({ status: 'won' }))
+    expect(reverseAttributedRevenue).not.toHaveBeenCalled()
   })
 
   /** Gross stays gross — AGL-1754's decision, not re-litigated here. */

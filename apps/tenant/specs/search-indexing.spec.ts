@@ -131,15 +131,14 @@ function given(options: {
   // `where` is honoured rather than swallowed: `getTemplateScreenIds` asks the
   // screens collection for `kind == 'template'` (AGL-1400), and a fake that
   // returned every screen for that query would call the whole site a template.
-  const collectionRef = (name: string, filter?: [string, unknown]): any => ({
-    select: () => collectionRef(name, filter),
-    limit: () => collectionRef(name, filter),
-    where: (field: string, _op: string, value: unknown) =>
-      collectionRef(name, [field, value]),
-    doc: () => ({
-      get: async () => (name === 'settings' ? storeDoc : emptySnapshot),
-    }),
-    get: async () => {
+  //
+  // `orderBy`/`offset`/`count` are the surface the split sitemap added
+  // (AGL-2520). They are no-ops on fixtures this small — every section here
+  // fits one child sitemap — but they must EXIST, or the route's fail-open
+  // catches would swallow a real programming error and the suite would still
+  // read green.
+  const collectionRef = (name: string, filter?: [string, unknown]): any => {
+    const resolve = () => {
       const snapshot =
         name === 'screens'
           ? screenSnapshot
@@ -152,12 +151,25 @@ function given(options: {
       const [field, value] = filter
       return {
         ...snapshot,
-        docs: snapshot.docs.filter(
-          (row: any) => row.get?.(field) === value,
-        ),
+        docs: snapshot.docs.filter((row: any) => row.get?.(field) === value),
       }
-    },
-  })
+    }
+    return {
+      select: () => collectionRef(name, filter),
+      limit: () => collectionRef(name, filter),
+      orderBy: () => collectionRef(name, filter),
+      offset: () => collectionRef(name, filter),
+      where: (field: string, _op: string, value: unknown) =>
+        collectionRef(name, [field, value]),
+      doc: () => ({
+        get: async () => (name === 'settings' ? storeDoc : emptySnapshot),
+      }),
+      count: () => ({
+        get: async () => ({ data: () => ({ count: resolve().docs.length }) }),
+      }),
+      get: async () => resolve(),
+    }
+  }
   const hostRef = { collection: (name: string) => collectionRef(name) }
   ;(firebaseAdmin.app as jest.Mock).mockReturnValue({
     firestore: () => ({ collection: () => ({ doc: () => hostRef }) }),
@@ -166,6 +178,34 @@ function given(options: {
 
 const locsIn = (xml: string) =>
   [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1])
+
+/** The origin the site publishes under — never the caller's. */
+const SITE_ORIGIN = 'https://acme.aglyn.app'
+
+/**
+ * Every URL the site submits, gathered the way a crawler gathers it: fetch
+ * `/sitemap.xml`, then fetch each child sitemap it names (AGL-2520).
+ *
+ * Walking the index rather than asserting one file is the point. It is what
+ * proves the index's page arithmetic and the children's slicing agree — a
+ * child the index forgets to name, or names but cannot fill, is a URL the site
+ * has silently stopped submitting, and no assertion on a single file can see
+ * either. A discouraged site answers with a plain empty `<urlset>` and is
+ * returned as-is.
+ */
+const allLocs = async () => {
+  const index = await (await sitemapGet(requestFor('/sitemap.xml'))).text()
+  if (!index.includes('<sitemapindex')) return locsIn(index)
+  const urls: string[] = []
+  for (const child of locsIn(index)) {
+    expect(child.startsWith(`${SITE_ORIGIN}/sitemaps/`)).toBe(true)
+    const body = await (
+      await sitemapGet(requestFor(child.slice(SITE_ORIGIN.length)))
+    ).text()
+    urls.push(...locsIn(body))
+  }
+  return urls
+}
 
 describe('robots.txt (AGL-1263)', () => {
   beforeEach(() => jest.clearAllMocks())
@@ -231,7 +271,7 @@ describe('sitemap.xml (AGL-1263)', () => {
       ],
     })
 
-    const locs = locsIn(await (await sitemapGet(requestFor('/sitemap.xml'))).text())
+    const locs = await allLocs()
 
     expect(locs).toEqual([
       'https://acme.aglyn.app/',
@@ -258,7 +298,7 @@ describe('sitemap.xml (AGL-1263)', () => {
       ],
     })
 
-    const locs = locsIn(await (await sitemapGet(requestFor('/sitemap.xml'))).text())
+    const locs = await allLocs()
 
     expect(locs).toEqual(['https://acme.aglyn.app/'])
   })
@@ -281,7 +321,7 @@ describe('sitemap.xml (AGL-1263)', () => {
       collectionDocs: [{ slug: 'blog' }],
     })
 
-    const locs = locsIn(await (await sitemapGet(requestFor('/sitemap.xml'))).text())
+    const locs = await allLocs()
 
     expect(locs).toEqual(['https://acme.aglyn.app/', 'https://acme.aglyn.app/blog'])
   })
@@ -312,7 +352,7 @@ describe('sitemap.xml (AGL-1263)', () => {
       ],
     })
 
-    const locs = locsIn(await (await sitemapGet(requestFor('/sitemap.xml'))).text())
+    const locs = await allLocs()
 
     expect(locs).not.toContain('https://acme.aglyn.app/blog-entry-template')
     // The collection itself still has a URL — contributed by the collection
@@ -346,7 +386,7 @@ describe('sitemap.xml (AGL-1263)', () => {
       collectionDocs: [{ slug: 'tools', kind: 'catalog' }],
     })
 
-    const locs = locsIn(await (await sitemapGet(requestFor('/sitemap.xml'))).text())
+    const locs = await allLocs()
 
     expect(locs).not.toContain('https://acme.aglyn.app/product-page-template')
     expect(locs).not.toContain(
@@ -372,7 +412,7 @@ describe('sitemap.xml (AGL-1263)', () => {
       productDocs: [{ slug: 'anvil', status: 'active' }],
     })
 
-    const locs = locsIn(await (await sitemapGet(requestFor('/sitemap.xml'))).text())
+    const locs = await allLocs()
 
     expect(locs).toEqual([
       'https://acme.aglyn.app/',
@@ -407,14 +447,13 @@ describe('sitemap.xml (AGL-1263)', () => {
     ]
 
     given({ discouraged: true, screens, screenDocs })
-    expect(
-      locsIn(await (await sitemapGet(requestFor('/sitemap.xml'))).text()),
-    ).toEqual([])
+    expect(await allLocs()).toEqual([])
 
     given({ screens, screenDocs })
-    expect(
-      locsIn(await (await sitemapGet(requestFor('/sitemap.xml'))).text()),
-    ).toEqual(['https://acme.aglyn.app/', 'https://acme.aglyn.app/about'])
+    expect(await allLocs()).toEqual([
+      'https://acme.aglyn.app/',
+      'https://acme.aglyn.app/about',
+    ])
   })
 
   it('keeps listing screens when the visibility read fails', async () => {
@@ -434,7 +473,7 @@ describe('sitemap.xml (AGL-1263)', () => {
       }),
     })
 
-    const locs = locsIn(await (await sitemapGet(requestFor('/sitemap.xml'))).text())
+    const locs = await allLocs()
 
     expect(locs).toEqual(['https://acme.aglyn.app/'])
   })

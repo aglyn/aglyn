@@ -34,7 +34,7 @@ import { EmptyStateComponent } from './empty-state.component'
 import { HelpTip } from './help-tip.component'
 
 /**
- * The grid's empty state is THE console empty state (AGL-693).
+ * The grid's empty state is THE console empty state (AGL-2501).
  *
  * The illustration and its five mode-aware fills used to live here, which is
  * why the media library — not a grid — had a bare line of text where every
@@ -82,7 +82,7 @@ export interface DataTableProps extends Partial<MuiDataGridProps> {
   /**
    * The empty state's second line and its way OUT (AGL-1152).
    *
-   * `EmptyStateComponent` has drawn a description and an action since AGL-693;
+   * `EmptyStateComponent` has drawn a description and an action since AGL-2501;
    * this grid only ever handed it a label, so every list built on it — layouts,
    * components, templates — showed an illustration and a dead end, while the
    * screens list (which is not a grid) grew its own empty state WITH buttons
@@ -171,7 +171,7 @@ const DataTableComponent = forwardRef<HTMLElement, DataTableProps>(
               // as "close but wrong".
               '& .MuiDataGrid-columnSeparator': { display: 'none' },
               /*
-                NO border-bottom here, and that is the point (AGL-693).
+                NO border-bottom here, and that is the point (AGL-2501).
 
                 A `1px solid divider` on the header CONTAINER duplicates a line
                 the grid already draws one level down: every

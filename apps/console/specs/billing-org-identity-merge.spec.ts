@@ -124,20 +124,21 @@ describe('AGL-1991 — merging the billing doc must not swap the org identity', 
   it('the billing page does not reintroduce the plain spread', () => {
     // The helper being correct proves nothing if the page stops calling it —
     // the defect was at the CALL SITE, not in any library.
-    const pagePath = path.join(
-      __dirname,
-      '..',
-      'app',
-      '(app)',
-      '[orgSlug]',
-      'billing',
-      'page.tsx',
-    )
-    const source = fs.readFileSync(pagePath, 'utf8')
-
-    // Fail loudly if the file moves, rather than passing on an empty read.
-    expect(source.length).toBeGreaterThan(1000)
-    expect(source).toContain('mergeOrgBillingOverOrg')
+    // BOTH readers, since billing was split into sections (AGL-2501): the
+    // Plan section merges for the subscription status and price, and the
+    // Usage section merges for the metered estimate's interval and price ids.
+    // Checking one would let the other reintroduce the plain spread.
+    const pagePaths = [
+      path.join(__dirname, '..', 'app', '(app)', '[orgSlug]', 'billing', '(sections)', 'page.tsx'),
+      path.join(__dirname, '..', 'app', '(app)', '[orgSlug]', 'billing', '(sections)', 'usage', 'page.tsx'),
+    ]
+    for (const pagePath of pagePaths) {
+      const source = fs.readFileSync(pagePath, 'utf8')
+      // Fail loudly if the file moves, rather than passing on an empty read.
+      expect(source.length).toBeGreaterThan(1000)
+      expect(source).toContain('mergeOrgBillingOverOrg')
+    }
+    const source = fs.readFileSync(pagePaths[0], 'utf8')
     expect(source).not.toContain('...(orgDoc ?? {}), ...(orgBilling ?? {})')
   })
 })

@@ -61,7 +61,43 @@ let mockRivalHosts: Array<{ id: string }> = []
 
 const ORG = { $id: 'org-1', slug: 'acme', plan: 'business' }
 
+/**
+ * Stands in for `FreeWorkspaceCapError` — the class the route's catch arm
+ * discriminates on (AGL-2265).
+ *
+ * Declared here rather than reached through `jest.requireActual`, because the
+ * defining file imports `firebase-admin.ts`, which initializes the admin app
+ * on load. Referenced only from inside the refusal double below, so it is
+ * dereferenced at call time and never at factory time — the factory runs
+ * during the hoisted route import, before this declaration is evaluated.
+ */
+class MockFreeWorkspaceCapError extends Error {
+  limit: number
+  held: number
+  constructor(limit: number, held: number) {
+    super(`Free workspace ceiling reached: ${held} of ${limit}`)
+    this.name = 'FreeWorkspaceCapError'
+    this.limit = limit
+    this.held = held
+  }
+}
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  /*
+   * The site's sending-domain CLAIM, made at creation so the mail label is
+   * pinned from the name the site was created under.
+   *
+   * Stubbed to a no-op here: these specs are about the host-creation
+   * transaction, and the claim is deliberately best-effort and after it — a
+   * create must not fail because a mail claim did. What the claim actually
+   * does is proved in `host-sending-domain.spec.ts`.
+   */
+  ensureHostSendingDomain: async () => ({
+    domain: null,
+    label: null,
+    created: false,
+    error: null,
+  }),
   __esModule: true,
   firebaseAdmin: {
     firestore: {
@@ -128,8 +164,41 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       { status: 403 },
     ),
   ensureOrgForUser: async () => ({ orgId: 'org-1', member: { role: 'owner' } }),
+  /**
+   * The AGL-2265 ceiling refusal, MODELED rather than stubbed.
+   *
+   * The route's catch arm BRANCHES on this return value, and both lazy stubs
+   * read green while removing a guard. A constant `null` sends a real ceiling
+   * refusal into the generic "Site creation failed" 500, which any assertion
+   * looser than an exact status still accepts. A constant `Response` is worse:
+   * every unrelated fault in the handler would answer 403 and the suite would
+   * report a working ceiling over a crashing route.
+   *
+   * So it discriminates on what the real one discriminates on — that error
+   * class and nothing else — and answers with the same status and `code`.
+   */
+  freeWorkspaceCapRefusalResponse: (error: unknown) =>
+    error instanceof MockFreeWorkspaceCapError
+      ? Response.json(
+          {
+            error:
+              `You already have ${error.held} free workspaces, which is the ` +
+              `limit of ${error.limit}.`,
+            code: 'free_workspace_limit',
+            limit: error.limit,
+            held: error.held,
+          },
+          { status: 403 },
+        )
+      : null,
   isImpersonationSession: (decoded: Record<string, unknown>) =>
     typeof decoded['impersonatedBy'] === 'string',
+  // The route writes the new site's first activity entry (AGL-118). The real
+  // one swallows its own failures and resolves with nothing, and the route
+  // does not branch on it, so a no-op IS the contract. Named explicitly
+  // because this factory is a closed world: an absent export is `undefined`,
+  // and the route throws on the success path every control below depends on.
+  logHostActivity: async () => undefined,
   lockdownRefusal: (...args: unknown[]) => mockLockdownRefusal(...args),
   registerOrgHost: (...args: unknown[]) => mockRegisterOrgHost(...args),
   /**

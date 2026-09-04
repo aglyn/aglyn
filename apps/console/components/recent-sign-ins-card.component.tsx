@@ -34,6 +34,7 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 
 interface DeviceRow {
@@ -123,17 +124,15 @@ export function RecentSignInsCard() {
       setRevoking(true)
       setError(null)
       try {
-        const idToken = await (
-          user as { getIdToken?: () => Promise<string> }
-        )?.getIdToken?.()
-        const response = await fetch('/api/account/devices/revoke', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        const response = await authorizedFetch(
+          user,
+          '/api/account/devices/revoke',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ deviceId: device.id }),
           },
-          body: JSON.stringify({ deviceId: device.id }),
-        })
+        )
         const body = await response.json().catch(() => null)
         if (!response.ok) {
           // Named, never swallowed — for the same reason the load error is.
@@ -171,12 +170,7 @@ export function RecentSignInsCard() {
     void (async () => {
       setLoading(true)
       try {
-        const idToken = await (
-          user as { getIdToken?: () => Promise<string> }
-        )?.getIdToken?.()
-        const response = await fetch('/api/account/devices', {
-          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
-        })
+        const response = await authorizedFetch(user, '/api/account/devices')
         const body = await response.json().catch(() => null)
         if (!active) return
         if (!response.ok) {

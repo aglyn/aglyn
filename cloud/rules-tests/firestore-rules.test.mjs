@@ -32,6 +32,7 @@ import {
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing'
 import {
+  addDoc,
   collection,
   deleteDoc,
   deleteField,
@@ -1169,6 +1170,105 @@ describe('hosts', () => {
   })
 
   /**
+   * AGL-553. `authScreens` designates the screen rendered at `/signin`,
+   * `/signup` and `/recover`. It was persisted, written by the console and
+   * read by the tenant loader while appearing in NO deny-list and on NO
+   * TypeScript interface, so it fell through every tier: any site member who
+   * could write content could repoint the address a site's members type
+   * their password into.
+   *
+   * It is the sharper twin of `enabledPlugins`, which sits in this same
+   * admin tier for deciding whether those three addresses exist at all. And
+   * unlike every other live-content surface it does not go through the
+   * `screens` routing map — the loader resolves the slot straight to a
+   * screen document — so freezing that map for an `author` in AGL-2334 never
+   * reached it.
+   *
+   * THE DOTTED PATH IS THE TEST. The console writes
+   * `authScreens.signinScreenId`, not a whole `authScreens` map, and a rule
+   * naming the top-level key only bites here because `affectedKeys()` reports
+   * the top-level key for a dotted merge. Asserting against a whole-map write
+   * would prove the rule fires on a shape the product never sends.
+   */
+  it('only a site admin may designate the sign-in screen (AGL-553)', async () => {
+    // The fixture reaches the tier under test only if these are the roles the
+    // projection really writes. A deny proved against an invented role name
+    // proves the rule rejects nonsense and nothing more.
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      const roles = (await getDoc(doc(db, 'hosts', HOST))).data().memberRoles
+      assert.equal(
+        roles[AUTHOR], 'author',
+        'the AUTHOR principal is no longer projected as `author` on the ' +
+          'host, so this test can no longer reproduce the hole it covers.',
+      )
+      assert.equal(
+        roles[EDITOR], 'editor',
+        'the EDITOR principal is no longer projected as `editor`, so the ' +
+          'middle tier this test exists to pin is no longer being exercised.',
+      )
+      assert.equal(
+        roles[OWNER], 'admin',
+        'the OWNER principal is no longer projected as `admin`, so the ' +
+          'positive control below would pass for the wrong reason.',
+      )
+    })
+
+    // ── The hole itself ────────────────────────────────────────────────────
+    await mustDeny(
+      'an AUTHOR repointing /signin — the role sold as "edit content but ' +
+        'not publish", putting a screen on the site\'s sign-in address',
+      updateDoc(doc(authed(AUTHOR), 'hosts', HOST), {
+        'authScreens.signinScreenId': 'screen-forged',
+      }),
+    )
+    await mustDeny(
+      'an EDITOR repointing /signin — an editor may publish pages, but ' +
+        '/signin is the address visitors trust with a password, and the ' +
+        'switch that opens it is admin-only one tier down',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST), {
+        'authScreens.signinScreenId': 'screen-forged',
+      }),
+    )
+    await mustDeny(
+      'an EDITOR repointing /recover, the slot that mails a reset link',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST), {
+        'authScreens.recoveryScreenId': 'screen-forged',
+      }),
+    )
+    // A whole-map overwrite is the other spelling of the same act, and it
+    // must not be the way around the dotted-path deny.
+    await mustDeny(
+      'an EDITOR replacing the whole authScreens map at once',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST), {
+        authScreens: { signinScreenId: 'screen-forged' },
+      }),
+    )
+
+    // ── The controls ───────────────────────────────────────────────────────
+    // A deny that also refuses the admin is not a tier, it is an outage: the
+    // console card writes this key from Admin -> Plugins and has to keep
+    // working.
+    await mustAllow(
+      'a site ADMIN designating the sign-in screen, which is what the ' +
+        'Sign-in & sign-up pages card does',
+      updateDoc(doc(authed(OWNER), 'hosts', HOST), {
+        'authScreens.signinScreenId': 'screen-designed',
+      }),
+    )
+    // The sibling slot stays authoring, so this deny must not have widened
+    // into `errorScreens`: that one binds screens the editor already owns and
+    // serves only their own visitors.
+    await mustAllow(
+      'an EDITOR designating a 404 screen — errorScreens is authoring and ' +
+        'is deliberately NOT in the admin tier',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST), {
+        'errorScreens.notFound': 'screen-404',
+      }),
+    )
+  })
+
+  /**
    * AGL-1050. Datasets moved to the org in AGL-237, and the ORG block has
    * enforced API-only create/delete since AGL-473/945 so the per-plan
    * `datasets` quota has somewhere to be checked. The host catch-all never
@@ -1313,6 +1413,42 @@ describe('hosts', () => {
       // hold's TTL lapsed, and one who could forge one would have the webhook
       // release reservations it does not own.
       'stockHolds',
+      // AGL-1302. The previous theme, kept verbatim so "Go back to the
+      // previous theme" can restore it. Written only by `install-theme.ts` on
+      // the Admin SDK, and read by nothing on the tenant render path — which
+      // is why it moves out of the host document at all. A client that could
+      // forge one would be choosing the CSS a publisher's revert restores:
+      // arbitrary styling pushed onto a live site from the narrowest role we
+      // sell, arriving disguised as the site's own history.
+      'themeHistory',
+      // One document per email SEND. Every field is server-written — the send
+      // route stamps the audience and the consent and suppression
+      // populations, the Resend webhook and the unsubscribe handler increment
+      // `stats` — so an editor who could write one would author the campaign
+      // report and the compliance record of who the send was allowed to
+      // reach. Named here for the `registers` reason above: the loops derive
+      // their set from the rules, so dropping the name from one exclusion
+      // list would shorten the parse and leave the suite green having tested
+      // one collection fewer.
+      'campaigns',
+      // One document per ORDER, recording which campaign the sale was
+      // credited to and how much of it has since come back. Written only by
+      // `email-revenue-attribution.ts` on the Admin SDK, and every operation
+      // is load-bearing: the CREATE is what makes crediting an order
+      // idempotent, so a client that could `set` one would credit a campaign
+      // twice for one sale, and one that could DELETE one would leave a
+      // refund with nothing to reverse — a revenue figure that can only ever
+      // go up. Named here for the `registers` reason above.
+      'emailAttributions',
+      // One document per CONVERSION — a form submission, a lead, a contact or
+      // a booking — naming the campaign the visitor came from and carrying
+      // `personKey`, the address hash an erasure joins on. Written only by
+      // `campaign-conversion-attribution.ts` on the Admin SDK. A client that
+      // could create one would credit a campaign for a conversion that never
+      // happened and forge a claim about where somebody else came from; one
+      // that could delete one would remove the record an erasure is meant to
+      // be the only remover of. Named here for the `registers` reason above.
+      'campaignAttributions',
     ]) {
       assert.ok(
         hostServerOnlySubcollections().includes(name),
@@ -1701,6 +1837,203 @@ describe('hosts', () => {
   })
 
   /**
+   * `campaigns` — one document per email SEND, and every field on it is
+   * server-written.
+   *
+   * `campaign-send.ts` creates the document on the Admin SDK and stamps the
+   * audience, the send-time consent population and the suppression population
+   * onto it; `email-events.ts` increments the `stats` map from the Resend
+   * webhook as mail is delivered, opened, clicked, bounced or complained
+   * about; the unsubscribe handler in the email plugin's server module
+   * increments it too. No client-SDK writer exists anywhere in `apps` or
+   * `libs` — every reference is a `collection(...)`/`doc(...)` listen.
+   *
+   * The collection was in NONE of the three exclusion lists, so the catch-all
+   * granted an editor create, update and delete on `canWriteHostContent` —
+   * the `screenAnalytics` shape, a subcollection open because nobody typed
+   * the name. What that bought is not a vanity metric: `stats` is the
+   * campaign report the customer reads, and the consent and suppression
+   * populations are the evidence of who a marketing send was allowed to
+   * reach. Both are exactly the documents that must not be author-writable.
+   *
+   * `{document=**}` spans the nested `reports/links` rollup as well, so the
+   * per-link click breakdown was reachable by the same grant and is asserted
+   * separately below — a name-based exclusion that stopped at the top level
+   * would leave the deeper document open and this suite green.
+   */
+  it("an editor cannot forge a campaign's delivery record", async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'hosts', HOST, 'campaigns', 'send-1'), {
+        subject: 'A real send',
+        stats: { delivered: 10, opened: 2, clicked: 1, bounced: 0 },
+        consentedRecipients: 10,
+        suppressedRecipients: 3,
+      })
+      await setDoc(
+        doc(db, 'hosts', HOST, 'campaigns', 'send-1', 'reports', 'links'),
+        { links: { 'https://example.com': 1 } },
+      )
+    })
+    await mustDeny(
+      'inflating the open and click counts on a real send',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'campaigns', 'send-1'), {
+        stats: { delivered: 10, opened: 10, clicked: 10, bounced: 0 },
+      }),
+    )
+    await mustDeny(
+      'rewriting the send-time consent and suppression populations',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'campaigns', 'send-1'), {
+        consentedRecipients: 5000,
+        suppressedRecipients: 0,
+      }),
+    )
+    await mustDeny(
+      'forging a send that never happened',
+      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'campaigns', 'send-forged'), {
+        subject: 'Never sent',
+        stats: { delivered: 5000, opened: 4000, clicked: 3000, bounced: 0 },
+      }),
+    )
+    await mustDeny(
+      'destroying the record of a send that did happen',
+      deleteDoc(doc(authed(EDITOR), 'hosts', HOST, 'campaigns', 'send-1')),
+    )
+    // An OWNER too: this is a path question rather than a role one. A site
+    // admin has the same incentive to improve their own report and no more
+    // right to write the counters the webhook owns.
+    await mustDeny(
+      'inflating the counts as a site owner',
+      updateDoc(doc(authed(OWNER), 'hosts', HOST, 'campaigns', 'send-1'), {
+        stats: { delivered: 10, opened: 10, clicked: 10, bounced: 0 },
+      }),
+    )
+
+    // THE NESTED ROLLUP. `{document=**}` spans it, so it was granted by the
+    // same catch-all and is denied by the same exclusion — asserted by write
+    // because "the name is in the list" says nothing about a deeper path.
+    await mustDeny(
+      'rewriting the per-link click rollup',
+      updateDoc(
+        doc(
+          authed(EDITOR),
+          'hosts',
+          HOST,
+          'campaigns',
+          'send-1',
+          'reports',
+          'links',
+        ),
+        { links: { 'https://example.com': 9999 } },
+      ),
+    )
+    await mustDeny(
+      'forging a click rollup for a campaign with none',
+      setDoc(
+        doc(
+          authed(EDITOR),
+          'hosts',
+          HOST,
+          'campaigns',
+          'send-forged',
+          'reports',
+          'links',
+        ),
+        { links: { 'https://example.com': 9999 } },
+      ),
+    )
+    await mustDeny(
+      'deleting the per-link click rollup',
+      deleteDoc(
+        doc(
+          authed(EDITOR),
+          'hosts',
+          HOST,
+          'campaigns',
+          'send-1',
+          'reports',
+          'links',
+        ),
+      ),
+    )
+
+    // THE READ IS THE PRODUCT and survives, at both depths. The report screen
+    // (`campaign-report-card.tsx`) listens to the campaign document and to
+    // `reports/links` beside it with the client SDK, and `email-detail.tsx`
+    // does the same — a fix that denied these would blank the report screen,
+    // which is worse than the hole it closed.
+    await assertSucceeds(
+      getDoc(doc(authed(EDITOR), 'hosts', HOST, 'campaigns', 'send-1')),
+    )
+    await assertSucceeds(
+      getDoc(
+        doc(
+          authed(EDITOR),
+          'hosts',
+          HOST,
+          'campaigns',
+          'send-1',
+          'reports',
+          'links',
+        ),
+      ),
+    )
+    // A VIEWER too — the narrowest host member the console renders for. Read
+    // is `isHostMember`, and `campaigns` is not in the read exclusion list
+    // that `webhooks`/`orders`/`mediaTombstones` share.
+    await assertSucceeds(
+      getDoc(doc(authed(VIEWER), 'hosts', HOST, 'campaigns', 'send-1')),
+    )
+    await assertSucceeds(
+      getDoc(
+        doc(
+          authed(VIEWER),
+          'hosts',
+          HOST,
+          'campaigns',
+          'send-1',
+          'reports',
+          'links',
+        ),
+      ),
+    )
+  })
+
+  /**
+   * The control that proves the right collection was closed.
+   *
+   * `emailCampaigns` is the campaign CONTAINER — a name, a date window and
+   * the lists it is aimed at — and the campaigns card's create drawer writes
+   * one with a plain client `setDoc`. It is a different collection from
+   * `campaigns` despite the name, holds no counter and no entitlement input,
+   * and must stay editor-writable or campaign creation stops for every
+   * customer. Denying `campaigns` while leaving this open is the entire
+   * distinction the change rests on, so it is asserted rather than assumed.
+   */
+  it('an editor can still create a campaign container', async () => {
+    await mustAllow(
+      'creating a campaign container from the create drawer',
+      setDoc(
+        doc(authed(EDITOR), 'hosts', HOST, 'emailCampaigns', 'container-1'),
+        { name: 'Spring launch', listIds: ['list-1'] },
+      ),
+    )
+    await mustAllow(
+      'renaming a campaign container',
+      updateDoc(
+        doc(authed(EDITOR), 'hosts', HOST, 'emailCampaigns', 'container-1'),
+        { name: 'Spring launch, renamed' },
+      ),
+    )
+    await mustAllow(
+      'deleting a campaign container',
+      deleteDoc(
+        doc(authed(EDITOR), 'hosts', HOST, 'emailCampaigns', 'container-1'),
+      ),
+    )
+  })
+
+  /**
    * The negative control for the fix itself (AGL-2038), and the reason the
    * rules were NOT flipped to deny-by-default.
    *
@@ -1725,7 +2058,7 @@ describe('hosts', () => {
     // stamping `deletedAt`). The three legs are asserted separately in
     // `an editor cannot create an action client-direct (AGL-2266)`.
     const AUTHORING = [
-      'overlays', 'experiments', 'campaigns', 'emailTemplates',
+      'overlays', 'experiments', 'emailCampaigns', 'emailTemplates',
       'coupons', 'discounts', 'reviews', 'siteMembers',
       'subscriptions', 'suppliers', 'events', 'bookings', 'activity',
       'settings', 'media', 'mediaFolders', 'leads',
@@ -1739,6 +2072,15 @@ describe('hosts', () => {
       // is the assertion that would catch the next attempt.
       'suppressions',
     ]
+    // `emailCampaigns` stands here and `campaigns` does not, and the pair is
+    // the whole point: `emailCampaigns` is the campaign CONTAINER the
+    // campaigns card's create drawer writes client-side, while `campaigns` is
+    // one document per SEND, carrying the delivery counters and the send-time
+    // consent record, and is denied outright. Swapping the two names breaks
+    // campaign creation for every customer while reopening the counters —
+    // which is why the denial is asserted separately, by write, in
+    // `an editor cannot forge a campaign's delivery record`.
+    //
     // `memberPosts` LEFT this list in AGL-2372: create and update are now
     // denied outright and delete is decided by a dedicated block, so it fails
     // the create leg below by design. All three of its legs are asserted in
@@ -3237,7 +3579,11 @@ describe('org-shared data (AGL-237)', () => {
   it('members read; editors write datasets/contacts; viewers stay read-only', async () => {
     await assertSucceeds(getDoc(doc(authed(VIEWER), 'orgs', ORG, 'datasets', 'ds1')))
     await assertSucceeds(getDoc(doc(authed(VIEWER), 'orgs', ORG, 'datasets', 'ds1', 'records', 'r1')))
-    await assertSucceeds(getDoc(doc(authed(VIEWER), 'orgs', ORG, 'contacts', 'c1')))
+    // Datasets are content and the CRM is people, so the viewer's read stops
+    // at the collection above. Owner reads the same contact two lines down,
+    // which is what keeps this a statement about the role.
+    await assertFails(getDoc(doc(authed(VIEWER), 'orgs', ORG, 'contacts', 'c1')))
+    await assertSucceeds(getDoc(doc(authed(OWNER), 'orgs', ORG, 'contacts', 'c1')))
     await assertFails(getDoc(doc(authed(OUTSIDER), 'orgs', ORG, 'datasets', 'ds1')))
     // Dataset/record CREATES are API-only (AGL-473) — the console route
     // enforces quotas server-side; even editors cannot create directly.
@@ -3282,6 +3628,61 @@ describe('org-shared data (AGL-237)', () => {
     )
   })
 
+  /**
+   * Enrolling is API-only; removing is not.
+   *
+   * A member document carries the consent basis that says why this person may
+   * be mailed. A browser that can write one can write `marketingConsent: true`
+   * beside an address nothing has checked — no stored opt-in consulted, no
+   * suppression list consulted, and nothing afterwards to tell it apart from a
+   * basis somebody actually gave. So the CREATE and the UPDATE belong to the
+   * route that runs the shared enrollment policy, and only the DELETE is the
+   * client's: taking somebody off a list needs no basis.
+   *
+   * Asserted from the OWNER, who holds every org-wide write there is. A denial
+   * proved only against a viewer or a scoped collaborator would be a denial of
+   * their role rather than of the operation.
+   */
+  it('list membership: create/update are API-only, delete is not (AGL-254)', async () => {
+    // THE CONTROL. The same account, on the same collection, doing the thing
+    // that IS allowed — without it every assertion below passes for an owner
+    // who simply cannot reach this path at all.
+    await assertSucceeds(
+      getDoc(doc(authed(OWNER), 'orgs', ORG, 'lists', 'l1', 'members', 'm1')),
+    )
+
+    // A membership minted in the browser, consent field and all.
+    await assertFails(
+      setDoc(doc(authed(OWNER), 'orgs', ORG, 'lists', 'l1', 'members', 'm2'), {
+        email: 'new@y.z',
+        marketingConsent: true,
+        marketingConsentBasis: 'contact-opt-in',
+      }),
+    )
+    // The same act against a row that already exists: an UPDATE is the other
+    // half of the same hole, and a rule that closed only the create would let
+    // a client add the consent field to any enrollment it can name.
+    await assertFails(
+      updateDoc(
+        doc(authed(OWNER), 'orgs', ORG, 'lists', 'l1', 'members', 'm1'),
+        { marketingConsent: true },
+      ),
+    )
+    await assertFails(
+      setDoc(
+        doc(authed(OWNER), 'orgs', ORG, 'lists', 'l1', 'members', 'm1'),
+        { marketingConsent: true },
+        { merge: true },
+      ),
+    )
+
+    // Removal stays the client's. Console list management is what needs it,
+    // and it is not suppression: nothing here writes the list that stops mail.
+    await assertSucceeds(
+      deleteDoc(doc(authed(OWNER), 'orgs', ORG, 'lists', 'l1', 'members', 'm1')),
+    )
+  })
+
   it('media docs and folders are editor-writable (DAM parity); installs stay API-only', async () => {
     await assertSucceeds(getDoc(doc(authed(VIEWER), 'orgs', ORG, 'media', 'm1')))
     await assertSucceeds(getDoc(doc(authed(EDITOR), 'orgs', ORG, 'installs', 'p1')))
@@ -3303,6 +3704,280 @@ describe('org-shared data (AGL-237)', () => {
       setDoc(doc(authed(OUTSIDER), 'orgs', ORG, 'media', 'm2'), { url: 'x' }),
     )
     await assertFails(setDoc(doc(authed(OWNER), 'orgs', ORG, 'installs', 'p2'), { version: '2' }))
+  })
+})
+
+/**
+ * A LIST IS METADATA; ITS `members` ARE PEOPLE, and the two reads differ for
+ * exactly that reason.
+ *
+ * An enrollment document carries an address, a name and the consent record
+ * that says why this person may be mailed — the basis, the moment it was
+ * given, and the console account that attested to it. `isOrgWideMember()` is
+ * the ROSTER question and has no role in it, so a rule that asks only that
+ * hands every audience the workspace has, and everybody on it, to an org
+ * VIEWER — the role whose whole definition is reading and changing nothing.
+ * The Emails console admits nobody to that page without `data.manage`, and
+ * the rule underneath asks the same thing, which is what makes the page gate
+ * defense in depth instead of the only door.
+ *
+ * The list DOCUMENT keeps the roster-only read on purpose, and the tests below
+ * assert the split rather than assuming it: the document holds a name, a kind
+ * and a selection rule, it names no human, and four surfaces outside the
+ * Emails console read it so a campaign row, a workflow step and the
+ * reference-health card can print a name instead of an id.
+ */
+describe('audience membership is people data; the list document is not', () => {
+  // The org-wide shapes the fixtures did not have. EDITOR is `allHosts: false`
+  // — a site collaborator — so a denial proved against them proves AGL-1026
+  // and says nothing about the ROLE, which is the axis under test here.
+  const ORG_ADMIN = 'uid-org-admin'
+  const ORG_EDITOR = 'uid-org-editor'
+  // Org-wide editors that differ from ORG_EDITOR only in the permission maps
+  // `memberResolves` reads: the resolved projection a custom role produces,
+  // the raw per-member override it falls back to, a map that never mentions
+  // the key, and the pair that proves which of the two leads.
+  const CUSTOM_ROLE_EDITOR = 'uid-org-editor-role-revokes-data-manage'
+  const REVOKED_EDITOR = 'uid-org-editor-data-manage-revoked'
+  const UNRELATED_OVERRIDES_EDITOR = 'uid-org-editor-other-overrides'
+  const REGRANTED_EDITOR = 'uid-org-editor-resolved-regrants'
+
+  const enrollment = (uid) =>
+    doc(authed(uid), 'orgs', ORG, 'lists', 'l1', 'members', 'm1')
+  const enrollments = (uid) =>
+    collection(authed(uid), 'orgs', ORG, 'lists', 'l1', 'members')
+  const listDoc = (uid) => doc(authed(uid), 'orgs', ORG, 'lists', 'l1')
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'orgs', ORG, 'members', ORG_ADMIN), {
+        role: 'admin', allHosts: true, scopeTokens: ['org'],
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'members', ORG_EDITOR), {
+        role: 'editor', allHosts: true, scopeTokens: ['org'],
+      })
+      // A CUSTOM ROLE's revocation, as `syncOrgAuthProjections` stamps it:
+      // the resolver's own output, all three layers already applied.
+      await setDoc(doc(db, 'orgs', ORG, 'members', CUSTOM_ROLE_EDITOR), {
+        role: 'editor', allHosts: true, scopeTokens: ['org'],
+        roleId: 'role-read-only-data',
+        resolvedPermissions: { 'data.manage': false, 'plugins.install': true },
+      })
+      // The per-member override layer, on a member the projection has not
+      // reached — the fallback `memberResolves` reads second.
+      await setDoc(doc(db, 'orgs', ORG, 'members', REVOKED_EDITOR), {
+        role: 'editor', allHosts: true, scopeTokens: ['org'],
+        permissions: { 'data.manage': false },
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'members', UNRELATED_OVERRIDES_EDITOR), {
+        role: 'editor', allHosts: true, scopeTokens: ['org'],
+        permissions: { 'billing.view': false, 'plugins.install': false },
+      })
+      // The two maps disagreeing. `resolvedPermissions` is the resolver's
+      // ANSWER and has already applied the per-member layer, so it leads —
+      // reading the raw override on a member that carries both would report a
+      // revocation the resolver did not make.
+      await setDoc(doc(db, 'orgs', ORG, 'members', REGRANTED_EDITOR), {
+        role: 'editor', allHosts: true, scopeTokens: ['org'],
+        permissions: { 'data.manage': false },
+        resolvedPermissions: { 'data.manage': true },
+      })
+      // A dynamic list: a name and a rule, and not one person's details on it.
+      await setDoc(doc(db, 'orgs', ORG, 'lists', 'l1'), {
+        name: 'Lapsed customers', kind: 'dynamic',
+        rule: { sources: ['contacts'], behavior: { noPurchaseForDays: 180 } },
+      })
+      // An enrollment with the fields the denial is actually about: the
+      // address, and an ATTESTATION naming the account answerable for it.
+      await setDoc(doc(db, 'orgs', ORG, 'lists', 'l1', 'members', 'm1'), {
+        email: 'buyer@example.test', name: 'A Buyer',
+        marketingConsent: true,
+        consent: {
+          basis: 'operator-attested', atMs: 1,
+          byUid: OWNER, reason: 'badge scanned at a trade show',
+        },
+      })
+      // A second row so the collection query has something to page over and
+      // cannot pass by being empty.
+      await setDoc(doc(db, 'orgs', ORG, 'lists', 'l1', 'members', 'm2'), {
+        email: 'other@example.test',
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'contacts', 'c1'), {
+        email: 'buyer@example.test', visibleTo: ['org'],
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'datasets', 'ds1'), {
+        name: 'Team', visibleTo: ['org'],
+      })
+    })
+  })
+
+  /**
+   * The gap this closes, and the controls that stop it reading as a vacuous
+   * pass. The viewer is a full org-wide member: they read the org's contacts,
+   * its datasets and the list document itself in the same test, so the denial
+   * is about THIS collection and not about an account that cannot reach the
+   * org at all.
+   */
+  it('an org-wide VIEWER is refused an enrollment, and still reads the rest', async () => {
+    await mustDeny(
+      'an org-wide viewer reading one enrollment',
+      getDoc(enrollment(VIEWER)),
+    )
+    // The shape the console actually uses: the members panel subscribes to
+    // the collection and the audiences card counts it. A rule that denied
+    // only the document read would leave both working.
+    await mustDeny(
+      'an org-wide viewer listing a list\'s enrollments',
+      getDocs(enrollments(VIEWER)),
+    )
+
+    // THE CONTROLS. Same account, same org, two reads that must survive.
+    await mustAllow(
+      'the same viewer reading the LIST document (the name a campaign row shows)',
+      getDoc(listDoc(VIEWER)),
+    )
+    await mustAllow(
+      'the same viewer reading an org dataset',
+      getDoc(doc(authed(VIEWER), 'orgs', ORG, 'datasets', 'ds1')),
+    )
+    // The CRM answers to the same permission this enrollment does, so the
+    // viewer is refused there too. Asserted here rather than dropped: the
+    // enrollment denial's argument is that a list's PEOPLE are not its name,
+    // and a contact sitting readable beside a refused enrollment would have
+    // undercut it.
+    await mustDeny(
+      'the same viewer reading an org contact',
+      getDoc(doc(authed(VIEWER), 'orgs', ORG, 'contacts', 'c1')),
+    )
+  })
+
+  /**
+   * The other half of the same rule: everybody the product needs here keeps
+   * working. A narrowing that broke the audiences page would be worse than
+   * the hole it closed.
+   */
+  it('owner, admin and an ORG-WIDE editor read and manage enrollments', async () => {
+    for (const [label, uid] of [
+      ['the owner', OWNER],
+      ['an org-wide admin', ORG_ADMIN],
+      ['an org-wide editor', ORG_EDITOR],
+      ['an org-wide editor whose overrides never mention data.manage',
+        UNRELATED_OVERRIDES_EDITOR],
+    ]) {
+      await mustAllow(`${label} reading one enrollment`, getDoc(enrollment(uid)))
+      await mustAllow(`${label} listing enrollments`, getDocs(enrollments(uid)))
+    }
+    // Removal is the client's, and it is the write that has to follow the
+    // read: whoever may see who is on a list may take them off it.
+    await mustAllow(
+      'an org-wide editor removing an enrollment',
+      deleteDoc(enrollment(ORG_EDITOR)),
+    )
+  })
+
+  /**
+   * AGL-1026, unchanged. A collaborator invited to one site is refused the
+   * whole audience — the list document as well as its people — because an
+   * audience has no per-site slice: it belongs to the org and every host in
+   * it may mail the same list.
+   */
+  it('a site collaborator is still refused the list AND its enrollments', async () => {
+    await mustDeny(
+      'a scoped editor reading the list document',
+      getDoc(listDoc(EDITOR)),
+    )
+    await mustDeny(
+      'a scoped editor reading an enrollment',
+      getDoc(enrollment(EDITOR)),
+    )
+    await mustDeny(
+      'a scoped author reading an enrollment',
+      getDoc(enrollment(AUTHOR)),
+    )
+    await mustDeny(
+      'an outsider reading an enrollment',
+      getDoc(enrollment(OUTSIDER)),
+    )
+    // THE CONTROL: the collaborator is a real member of this org and reads
+    // the org-wide data they were invited for. Without it the three denials
+    // above would pass against an account with no membership at all.
+    await mustAllow(
+      'the same scoped editor reading an org-wide dataset',
+      getDoc(doc(authed(EDITOR), 'orgs', ORG, 'datasets', 'ds1')),
+    )
+  })
+
+  /**
+   * The permission layer, which is what makes this rule agree with the Emails
+   * console rather than merely resemble it: the page resolves `data.manage`,
+   * and a member whose resolved verdict is `false` is refused by both.
+   *
+   * Both halves of `memberResolves` are exercised — the `resolvedPermissions`
+   * projection a custom role produces, and the raw `permissions` override it
+   * falls back to on a member the projection has not reached.
+   *
+   * DEFAULT TRUE is the safety argument, so the controls are the point of the
+   * test: no map at all, and a map that names other keys, both still read. An
+   * absent key must never read as `false`.
+   */
+  it('a revoked data.manage is honored on both layers; an absent one is not a denial', async () => {
+    await mustDeny(
+      'an editor whose CUSTOM ROLE revokes data.manage reading an enrollment',
+      getDoc(enrollment(CUSTOM_ROLE_EDITOR)),
+    )
+    await mustDeny(
+      'an org-wide editor whose per-member override revokes it',
+      getDoc(enrollment(REVOKED_EDITOR)),
+    )
+    await mustDeny(
+      'the same member removing an enrollment',
+      deleteDoc(enrollment(REVOKED_EDITOR)),
+    )
+    // The projection is the resolver's ANSWER and has already applied the
+    // per-member layer, so it leads rather than being ORed with it.
+    await mustAllow(
+      'an editor whose projection GRANTS what their raw override revokes',
+      getDoc(enrollment(REGRANTED_EDITOR)),
+    )
+    // The override governs the PEOPLE, not the audience's name — the list
+    // document is metadata and stays on the roster question.
+    await mustAllow(
+      'the same member reading the list document',
+      getDoc(listDoc(REVOKED_EDITOR)),
+    )
+    // The two default-true controls.
+    await mustAllow(
+      'the owner, who carries no permissions map at all',
+      getDoc(enrollment(OWNER)),
+    )
+    await mustAllow(
+      'an editor whose permissions map never mentions data.manage',
+      getDoc(enrollment(UNRELATED_OVERRIDES_EDITOR)),
+    )
+  })
+
+  /**
+   * Suspension freezes writing, not looking. A workspace that may not read
+   * its own audience may not export it either, and winding down is precisely
+   * when that is asked for — so the read helper deliberately leaves
+   * `orgNotSuspended()` to the write half.
+   */
+  it('a suspended org still READS its audience and cannot change it', async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(
+        doc(context.firestore(), 'orgs', ORG, 'members', ORG_EDITOR),
+        { orgSuspended: true },
+      )
+    })
+    await mustAllow(
+      'a suspended org-wide editor reading an enrollment',
+      getDoc(enrollment(ORG_EDITOR)),
+    )
+    await mustDeny(
+      'a suspended org-wide editor removing an enrollment',
+      deleteDoc(enrollment(ORG_EDITOR)),
+    )
   })
 })
 
@@ -7626,5 +8301,587 @@ describe('media object fields are server-owned (AGL-1881)', () => {
     )
   })
 })
+
+/**
+ * WHO MAY APPEND TO A SITE'S ACTIVITY LOG (AGL-118)
+ *
+ * `hosts/{hostId}/activity` has no dedicated match block. It falls to the
+ * host catch-all, and its name is deliberately absent from every exclusion
+ * list there, so a member holding a content role appends straight from the
+ * browser. That absence is load-bearing and was never asserted, which is how
+ * an empty activity log came to be read as a permission denial: the log is
+ * silent whether the write was refused or never attempted, and with nothing
+ * pinning the rule, "the rules must be denying it" is the cheapest available
+ * explanation and it is wrong.
+ *
+ * These cases exist to make that explanation impossible to reach again. The
+ * ALLOW half is the important half — a suite where every case is a deny
+ * passes just as well when the collection has been closed by accident.
+ *
+ * The role axis is exactly `canWriteHostContent`: admin, editor and author
+ * append; a viewer does not. That is deliberate rather than incidental — an
+ * audit entry is written BY the act it records, so anyone who can perform a
+ * logged mutation must be able to log it, and nobody else needs to write here
+ * at all.
+ */
+describe('a site activity entry is appended by the member who caused it (AGL-118)', () => {
+  const ACTIVITY = ['hosts', HOST, 'activity']
+  /**
+   * A host in a healthy org whose `memberRoles` projection is EMPTY.
+   *
+   * `syncOrgAuthProjections` stamps owner/admin onto every host in the org,
+   * so this state should not occur — which is the reason to pin it. It is the
+   * shape a missed projection would take, and it must read as a denial rather
+   * than as a quietly writable log.
+   */
+  const UNPROJECTED_HOST = 'host-unprojected'
+
+  /** The document the console's activity logger actually writes. */
+  const entry = (actorId) => ({
+    actorId,
+    actorEmail: 'member@acme.test',
+    action: 'Saved the screen',
+    target: { type: 'screen', id: 'screen-1', name: 'Home' },
+    createdAt: new Date(),
+  })
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'hosts', UNPROJECTED_HOST), {
+        displayName: 'Unprojected', orgId: ORG, memberRoles: {},
+      })
+    })
+  })
+
+  it('THE CONTROL — the roles that mutate content can record having done so', async () => {
+    // Asserted FIRST and deliberately: every refusal below would still pass
+    // if this collection were closed outright, and a log nobody can write is
+    // the defect, not the fix.
+    await mustAllow(
+      'an org owner (projected admin on every host) logging a screen save',
+      addDoc(collection(authed(OWNER), ...ACTIVITY), entry(OWNER)),
+    )
+    await mustAllow(
+      'a site editor logging a screen save',
+      addDoc(collection(authed(EDITOR), ...ACTIVITY), entry(EDITOR)),
+    )
+    // The author edits content without publishing it, so the author generates
+    // audit entries too. Excluding this role would lose exactly the actions a
+    // reviewer most wants attributed.
+    await mustAllow(
+      'a site author logging a screen save',
+      addDoc(collection(authed(AUTHOR), ...ACTIVITY), entry(AUTHOR)),
+    )
+    await mustAllow(
+      'staff logging a screen save',
+      addDoc(
+        collection(authed(STAFF, { staff: true }), ...ACTIVITY),
+        entry(STAFF),
+      ),
+    )
+  })
+
+  it('a viewer, an outsider and a signed-out browser cannot forge one', async () => {
+    // A viewer performs no logged mutation, so an entry from one is either a
+    // forgery or a bug. `isHostAdmin` admits a viewer for READS; the write
+    // gate is `canWriteHostContent`, which does not.
+    await mustDeny(
+      'a viewer appending to the activity log',
+      addDoc(collection(authed(VIEWER), ...ACTIVITY), entry(VIEWER)),
+    )
+    await mustDeny(
+      'a member of another org appending to this log',
+      addDoc(collection(authed(OUTSIDER), ...ACTIVITY), entry(OUTSIDER)),
+    )
+    await mustDeny(
+      'a signed-out browser appending to the activity log',
+      addDoc(collection(anon(), ...ACTIVITY), entry('nobody')),
+    )
+    // The retired uid map must not authorize an append any more than it
+    // authorizes anything else.
+    await mustDeny(
+      'a legacy `admins` entry appending to the activity log',
+      addDoc(collection(authed(LEGACY), ...ACTIVITY), entry(LEGACY)),
+    )
+  })
+
+  it('an org owner with no projected role on the host is refused', async () => {
+    // Org standing alone authorizes nothing here: the rules read the host
+    // doc's `memberRoles`, never the org roster. So a host the projection
+    // never reached is unwritable by its own org's owner — which is the
+    // failure this case names, and the reason a missed `registerOrgHost`
+    // would present as a site that quietly records nothing.
+    await mustDeny(
+      'an org owner appending to a host with an empty memberRoles projection',
+      addDoc(
+        collection(authed(OWNER), 'hosts', UNPROJECTED_HOST, 'activity'),
+        entry(OWNER),
+      ),
+    )
+  })
+
+  it('a suspended site stops accepting activity like every other write', async () => {
+    // `hostWritesFrozen` is the second conjunct, so the log is not an exception
+    // to a takedown. Staff keep the append — the un-panic invariant — because
+    // the people working inside the lock are the ones whose actions most need
+    // recording.
+    await mustDeny(
+      'an editor appending to a suspended site\'s activity log',
+      addDoc(
+        collection(authed(EDITOR), 'hosts', LOCKED_HOST, 'activity'),
+        entry(EDITOR),
+      ),
+    )
+    await mustAllow(
+      'staff appending to a suspended site\'s activity log',
+      addDoc(
+        collection(authed(STAFF, { staff: true }), 'hosts', LOCKED_HOST, 'activity'),
+        entry(STAFF),
+      ),
+    )
+  })
+
+  it('the catch-all exclusion lists still leave `activity` client-writable', async () => {
+    // The mechanism, asserted directly. Adding `activity` to the create list
+    // would deny every append above, and the console has no server route to
+    // fall back on — the log would simply stop, silently, exactly as it
+    // appeared to have done.
+    const lists = hostSubcollectionExclusions()
+    assert.ok(
+      !lists.create.includes('activity'),
+      '`activity` has been added to the host catch-all CREATE exclusion ' +
+        'list. The console appends activity entries client-direct and no ' +
+        'Admin-SDK route writes them, so this silently ends host activity ' +
+        'logging rather than moving it.',
+    )
+    assert.ok(
+      !hostServerOnlySubcollections().includes('activity'),
+      '`activity` is now denied to the client outright under hosts/{hostId}, ' +
+        'which stops the console writing the audit trail it reads back.',
+    )
+  })
+})
+
+/**
+ * A sending domain's `status` is what decides whether mail may leave as that
+ * domain, so a client that could write it could send as a domain it does not
+ * control — and would defeat the send path's refusal at the same time, since
+ * that refusal reads exactly this field.
+ *
+ * The read denial stands on its own: `dkimSelector` names the record an org
+ * was issued, which is the first half of impersonating its sending setup.
+ */
+describe('a custom sending domain is unwritable and unreadable from any client', () => {
+  const DOMAIN = 'sender.test'
+  const claimPath = (orgId = ORG) => ['orgs', orgId, 'sendingDomains', DOMAIN]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      // A record midway through the honest path: key issued, DNS not proved.
+      // Exactly the document an attacker wants one field flipped on.
+      await setDoc(doc(db, ...claimPath()), {
+        domain: DOMAIN,
+        status: 'records-issued',
+        dkimSelector: 'aglyn-org-acme',
+        dkimPublicKey: 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A',
+        createdAtMs: Date.now(),
+      })
+    })
+  })
+
+  it('nobody marks their own sending domain verified — owner, staff alike', async () => {
+    for (const [label, db] of [
+      ['an anonymous visitor', anon()],
+      ['the org owner', authed(OWNER)],
+      ['an editor', authed(EDITOR)],
+      ['an outsider', authed(OUTSIDER)],
+      ['staff', authed(STAFF, { staff: true })],
+    ]) {
+      await mustDeny(
+        `${label} marking orgs/${ORG}/sendingDomains/${DOMAIN} verified`,
+        updateDoc(doc(db, ...claimPath()), { status: 'verified' }),
+      )
+      await mustDeny(
+        `${label} creating a pre-verified sending domain`,
+        setDoc(doc(db, 'orgs', ORG, 'sendingDomains', 'someone-else.test'), {
+          domain: 'someone-else.test',
+          status: 'verified',
+        }),
+      )
+      await mustDeny(
+        `${label} deleting a sending domain to start it over`,
+        deleteDoc(doc(db, ...claimPath())),
+      )
+      await mustDeny(
+        `${label} reading the DKIM selector`,
+        getDoc(doc(db, ...claimPath())),
+      )
+    }
+  })
+
+  it('an outsider cannot plant a verified sending domain on another org', async () => {
+    await mustDeny(
+      `${OUTSIDER} planting a sending domain on ${OTHER_ORG}`,
+      setDoc(doc(authed(OUTSIDER), 'orgs', OTHER_ORG, 'sendingDomains', DOMAIN), {
+        domain: DOMAIN,
+        status: 'verified',
+      }),
+    )
+  })
+})
+
+/**
+ * THE CRM IS SCOPED, AND ITS DELETE IS A DETACH.
+ *
+ * `contacts` was `isOrgWideMember()` on both sides, so every site in an
+ * account read every contact in it: an agency running twelve client brands
+ * had one address book with twelve readers. The predicate is now the one
+ * `datasets` uses, which is also the one the client's `array-contains-any`
+ * filter matches — that pairing is what makes an UNFILTERED list denied
+ * rather than quietly returning the collection.
+ *
+ * `EDITOR` is the persona that matters: a site collaborator, scoped to one
+ * host, which is exactly the shape an agency's client has.
+ */
+describe('contacts are per-site, and letting go of one is not a delete', () => {
+  const MINE = `host:${HOST}`
+  const THEIRS = 'host:host-b'
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'orgs', ORG, 'contacts', 'mine'), {
+        email: 'mine@acme.test',
+        visibleTo: [MINE],
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'contacts', 'theirs'), {
+        email: 'theirs@acme.test',
+        visibleTo: [THEIRS],
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'contacts', 'shared'), {
+        email: 'shared@acme.test',
+        visibleTo: [MINE, THEIRS],
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'contacts', 'unscoped'), {
+        email: 'unscoped@acme.test',
+      })
+    })
+  })
+
+  it('refuses a scoped collaborator another site’s contact', async () => {
+    await assertFails(
+      getDoc(doc(authed(EDITOR), 'orgs', ORG, 'contacts', 'theirs')),
+    )
+    // A document nobody scoped is seen by nobody, which is the fail-open
+    // this change closed — the field was present and said `['org']`, or was
+    // absent and read as org-wide. Neither is "this site may see it".
+    await assertFails(
+      getDoc(doc(authed(EDITOR), 'orgs', ORG, 'contacts', 'unscoped')),
+    )
+  })
+
+  /**
+   * THE CONTROL. Every assertion above passes against a rules file that
+   * denies the whole collection, which would take Contacts away from
+   * everybody. This is the door still opening.
+   */
+  it('still admits the collaborator’s OWN contacts', async () => {
+    await assertSucceeds(
+      getDoc(doc(authed(EDITOR), 'orgs', ORG, 'contacts', 'mine')),
+    )
+    await assertSucceeds(
+      getDoc(doc(authed(EDITOR), 'orgs', ORG, 'contacts', 'shared')),
+    )
+    // And an org-wide member is the org, so they read everything.
+    await assertSucceeds(
+      getDoc(doc(authed(OWNER), 'orgs', ORG, 'contacts', 'theirs')),
+    )
+  })
+
+  /**
+   * An unfiltered LIST is denied outright rather than filtered. That is the
+   * property that makes the rule provable per-document — and the one whose
+   * absence let a console page with no `where()` stream the whole
+   * collection.
+   */
+  it('denies an unfiltered list and allows the scoped one', async () => {
+    await assertFails(
+      getDocs(collection(authed(EDITOR), 'orgs', ORG, 'contacts')),
+    )
+    const scoped = await assertSucceeds(
+      getDocs(
+        query(
+          collection(authed(EDITOR), 'orgs', ORG, 'contacts'),
+          where('visibleTo', 'array-contains-any', ['org', MINE]),
+        ),
+      ),
+    )
+    assert.deepEqual(
+      scoped.docs.map((entry) => entry.id).sort(),
+      ['mine', 'shared'],
+    )
+  })
+
+  /**
+   * DELETE IS SOLE-HOLDER ONLY. Another site that captured the same person
+   * keeps its own notes, order history and consent, and the deleting site
+   * never had a claim on any of it — so letting go is an UPDATE that drops
+   * this holder's half, and the document dies with the last holder.
+   */
+  it('refuses to destroy a contact another site still holds', async () => {
+    await assertFails(
+      deleteDoc(doc(authed(EDITOR), 'orgs', ORG, 'contacts', 'shared')),
+    )
+  })
+
+  it('allows the LAST holder to delete, and the detach in between', async () => {
+    await assertSucceeds(
+      deleteDoc(doc(authed(EDITOR), 'orgs', ORG, 'contacts', 'mine')),
+    )
+    // The detach: the same collaborator drops their own half of the shared
+    // row, which is an update and is allowed.
+    await assertSucceeds(
+      updateDoc(doc(authed(OWNER), 'orgs', ORG, 'contacts', 'shared'), {
+        'facets.host-a': deleteField(),
+      }),
+    )
+  })
+})
+
+/**
+ * READING THE CRM IS AN AUTHORITY, NOT A MEMBERSHIP.
+ *
+ * `contacts` and `contactSegments` asked `canReadScoped()` and nothing else,
+ * which is the question "is this member near these documents" — the same
+ * predicate `datasets` and `media` use, where being near them IS the whole
+ * question because a collaborator's pages bind those rows and place those
+ * assets. A contact is a person: a name, an address, an order history, notes
+ * and a consent record. An org VIEWER — the role whose entire definition is
+ * reading and changing nothing — read every one of them, and so did any
+ * member whose custom role revoked `data.manage`.
+ *
+ * `data.manage` is the key because it is the key the surfaces over this data
+ * already gate on: the Contacts console registers `permission: 'data.manage'`
+ * and the Emails console registers the same. Contact and segment writes are
+ * client-direct, so a browser that skips the console reaches Firestore and
+ * nothing else — which is what makes those gates defense in depth only once
+ * the rule underneath asks the same thing.
+ *
+ * ## The two halves, and why both are load-bearing
+ *
+ * SCOPE survives. A site collaborator holding `data.manage` still reads the
+ * contacts their own host captured, because that is a shipped capability an
+ * agency depends on and the hole being closed is on the ROLE axis. `EDITOR`
+ * below is that persona.
+ *
+ * ROLE now applies to the scoped half too. `AUTHOR` is the counter-case: the
+ * same site, the same tokens, an org role of `viewer`. A rule that added the
+ * capability only to the org-wide branch would still hand them their host's
+ * customer list.
+ */
+describe('the CRM answers to data.manage, on both halves of the scope', () => {
+  const MINE = `host:${HOST}`
+  const THEIRS = 'host:host-b'
+  // Org-wide shapes the base fixtures do not carry. The permission maps are
+  // the four `memberResolves`/`memberStamps` read between them: the resolved
+  // projection a custom role produces, the raw per-member override it falls
+  // back to, no map at all, and a map that GRANTS to a role that does not
+  // hold the permission by default.
+  const ORG_ADMIN = 'uid-crm-admin'
+  const ORG_EDITOR = 'uid-crm-editor'
+  const ROLE_REVOKED_EDITOR = 'uid-crm-editor-role-revoked'
+  const OVERRIDE_REVOKED_EDITOR = 'uid-crm-editor-override-revoked'
+  const BARE_EDITOR = 'uid-crm-editor-bare'
+  const GRANTED_VIEWER = 'uid-crm-viewer-granted'
+
+  const contact = (uid, id) => doc(authed(uid), 'orgs', ORG, 'contacts', id)
+  const segment = (uid) => doc(authed(uid), 'orgs', ORG, 'contactSegments', 'seg-vip')
+  /** The console's own query shape: filtered on the reader's tokens. */
+  const scopedList = (uid, tokens) =>
+    query(
+      collection(authed(uid), 'orgs', ORG, 'contacts'),
+      where('visibleTo', 'array-contains-any', tokens),
+    )
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'orgs', ORG, 'members', ORG_ADMIN), {
+        role: 'admin', allHosts: true, scopeTokens: ['org'],
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'members', ORG_EDITOR), {
+        role: 'editor', allHosts: true, scopeTokens: ['org'],
+      })
+      // A custom role's revocation, as `syncOrgAuthProjections` stamps it:
+      // the resolver's own output, all three layers already applied.
+      await setDoc(doc(db, 'orgs', ORG, 'members', ROLE_REVOKED_EDITOR), {
+        role: 'editor', allHosts: true, scopeTokens: ['org'],
+        roleId: 'role-read-only-data',
+        resolvedPermissions: { 'data.manage': false, 'plugins.install': true },
+      })
+      // The same revocation on a member the projection never reached — the
+      // per-member layer `memberResolves` falls back to.
+      await setDoc(doc(db, 'orgs', ORG, 'members', OVERRIDE_REVOKED_EDITOR), {
+        role: 'editor', allHosts: true, scopeTokens: ['org'],
+        permissions: { 'data.manage': false },
+      })
+      // NO permission map of any kind — every member written before the
+      // field existed. If this one is refused the deploy is a mass lockout.
+      await setDoc(doc(db, 'orgs', ORG, 'members', BARE_EDITOR), {
+        role: 'editor', allHosts: true, scopeTokens: ['org'],
+      })
+      // The resolver WIDENS as well as narrows, and the Contacts console
+      // admits this member on the resolved map. A rule that stopped at the
+      // role list would hand them a page that never loads.
+      await setDoc(doc(db, 'orgs', ORG, 'members', GRANTED_VIEWER), {
+        role: 'viewer', allHosts: true, scopeTokens: ['org'],
+        roleId: 'role-crm-only',
+        resolvedPermissions: { 'data.manage': true },
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'contacts', 'shared-org'), {
+        email: 'everyone@acme.test', visibleTo: ['org'],
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'contacts', 'mine'), {
+        email: 'mine@acme.test', visibleTo: [MINE],
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'contacts', 'theirs'), {
+        email: 'theirs@acme.test', visibleTo: [THEIRS],
+      })
+      // Segments are stamped org-wide at creation, so scope alone admits
+      // every member here and the verdict below is about the permission.
+      await setDoc(doc(db, 'orgs', ORG, 'contactSegments', 'seg-vip'), {
+        name: 'VIPs', tags: ['vip'], visibleTo: ['org'],
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'datasets', 'ds-crm'), {
+        name: 'Products', visibleTo: ['org'],
+      })
+    })
+  })
+
+  it('refuses an org-wide VIEWER the contact, the segment and the list', async () => {
+    await mustDeny(
+      'an org-wide viewer reading an org-wide contact',
+      getDoc(contact(VIEWER, 'shared-org')),
+    )
+    await mustDeny(
+      'an org-wide viewer reading a saved segment',
+      getDoc(segment(VIEWER)),
+    )
+    // The shape the console actually opens. A rule that denied only the
+    // document read would leave the table streaming.
+    await mustDeny(
+      'an org-wide viewer listing contacts on the scoped query',
+      getDocs(scopedList(VIEWER, ['org'])),
+    )
+  })
+
+  it('refuses a member whose data.manage was revoked, by either layer', async () => {
+    for (const [label, uid] of [
+      ['a custom role revocation, resolved onto the member', ROLE_REVOKED_EDITOR],
+      ['a per-member override on an unprojected member', OVERRIDE_REVOKED_EDITOR],
+    ]) {
+      await mustDeny(`${label} — reading a contact`, getDoc(contact(uid, 'shared-org')))
+      await mustDeny(`${label} — reading a segment`, getDoc(segment(uid)))
+    }
+  })
+
+  /**
+   * The scoped half is not exempt. AUTHOR carries the SAME tokens as EDITOR
+   * and differs only in the org role, so a denial here is about the role and
+   * a rule that guarded the org-wide branch alone would fail this and only
+   * this.
+   */
+  it('refuses a scoped collaborator whose ORG role is viewer', async () => {
+    await mustDeny(
+      'a site author reading a contact inside their own host scope',
+      getDoc(contact(AUTHOR, 'mine')),
+    )
+    await mustDeny(
+      'a site author listing their own host\'s contacts',
+      getDocs(scopedList(AUTHOR, ['org', MINE])),
+    )
+  })
+
+  /**
+   * THE OTHER DIRECTION. Every denial above passes against a rules file that
+   * refuses the collection to everybody, which would delete Contacts from the
+   * product. These are the doors that must still open.
+   */
+  it('still admits every principal the product needs', async () => {
+    for (const [label, uid] of [
+      ['the owner', OWNER],
+      ['an org-wide admin', ORG_ADMIN],
+      ['an org-wide editor', ORG_EDITOR],
+      ['an editor carrying no permission map at all', BARE_EDITOR],
+      ['a viewer a custom role granted data.manage', GRANTED_VIEWER],
+    ]) {
+      await mustAllow(`${label} reading an org-wide contact`, getDoc(contact(uid, 'shared-org')))
+      await mustAllow(`${label} reading a saved segment`, getDoc(segment(uid)))
+      await mustAllow(
+        `${label} listing contacts on the scoped query`,
+        getDocs(scopedList(uid, ['org'])),
+      )
+    }
+  })
+
+  /**
+   * The site collaborator, whose access this change had to leave intact: the
+   * scope still decides WHICH contacts, and the permission only decides
+   * whether they may ask.
+   */
+  it('keeps the scoped collaborator on exactly their own host\'s contacts', async () => {
+    await mustAllow(
+      'a scoped editor reading a contact their host captured',
+      getDoc(contact(EDITOR, 'mine')),
+    )
+    await mustAllow(
+      'a scoped editor listing on their own tokens',
+      getDocs(scopedList(EDITOR, ['org', MINE])),
+    )
+    await mustDeny(
+      'a scoped editor reading another host\'s contact',
+      getDoc(contact(EDITOR, 'theirs')),
+    )
+    await mustDeny(
+      'a scoped editor listing the collection unfiltered',
+      getDocs(collection(authed(EDITOR), 'orgs', ORG, 'contacts')),
+    )
+  })
+
+  /**
+   * POSITIVE CONTROL FOR THE HARNESS ITSELF. If the emulator were serving a
+   * stale ruleset, or these accounts could not reach the org at all, or
+   * `mustAllow` had stopped asserting, the denials above would pass for
+   * reasons that have nothing to do with the CRM. Every one of these is a
+   * read by a REFUSED principal that must still succeed.
+   */
+  it('CONTROL: the refused readers still reach the org they belong to', async () => {
+    await mustAllow(
+      'the org-wide viewer reading their own membership document',
+      getDoc(doc(authed(VIEWER), 'orgs', ORG, 'members', VIEWER)),
+    )
+    await mustAllow(
+      'the org-wide viewer reading an org DATASET — content, not people',
+      getDoc(doc(authed(VIEWER), 'orgs', ORG, 'datasets', 'ds-crm')),
+    )
+    await mustAllow(
+      'the revoked editor reading the same dataset',
+      getDoc(doc(authed(ROLE_REVOKED_EDITOR), 'orgs', ORG, 'datasets', 'ds-crm')),
+    )
+    await mustAllow(
+      'the site author reading the host they were invited to',
+      getDoc(doc(authed(AUTHOR), 'hosts', HOST)),
+    )
+    // And the negative control on the same axis: an outsider reaches none of
+    // it, so "allowed" above is not the ruleset admitting the world.
+    await mustDeny(
+      'an outsider reading an org contact',
+      getDoc(contact(OUTSIDER, 'shared-org')),
+    )
+  })
+})
+
 
 assert.ok(true)

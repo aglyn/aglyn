@@ -71,18 +71,18 @@ These four are where a new site's work happens:
 | **Dashboard** | The site at a glance — analytics and recent-signup summaries, and the ten most recent activity entries. |
 | **Screens** | The screen hierarchy — create, reorder (drag-and-drop), and open screens. This is where you build; start at [Publish your first screen](publish-your-first-screen.md). |
 | **Media** | The media library — folders, images, video, and files. |
-| **Setup** | Basic details, SEO, theme, custom domain, emails, and the full activity log. Each tab is deep-linkable — the `?tab=` in the URL follows you, so you can bookmark or share the exact one. |
+| **Setup** | Basic details, SEO, tracking, theme, and emails. Each tab is deep-linkable — the `?tab=` in the URL follows you, so you can bookmark or share the exact one. |
 
 Alongside them, and always present: **Layouts** and **Components** (the shared frames and
 reusable pieces screens are assembled from — see
 [Screens & Layouts](../building-sites/screens-and-layouts/overview.md)), **Templates**
 (saved starting points), **Content** (collections and blog entries), **Users** (the people
 who sign in to the site you're building, not your own team), and **Analytics**. **Admin**
-appears only if you're an owner or admin of the site; it holds per-site plugin settings and
-the danger zone.
+appears only if you're an owner or admin of the site; it holds per-site plugin settings,
+the custom domain, the site's security lists, the full activity log, and the danger zone.
 
 :::note Sections that come and go
-Tabs such as **Data**, **Products**, **Logic**, **Workflows**, **Inbox**, **Bookings**,
+Tabs such as **Data**, **Products**, **Logic**, **Automation**, **Inbox**, **Bookings**,
 **Events**, **Redirects**, **Marketing** and **Marketplace** are contributed by plugins
 and appear only where that plugin is enabled for your workspace (they're inserted after
 **Analytics**). If a section these docs describe isn't in your tab strip, that's usually
@@ -180,7 +180,7 @@ edit it — every card is a summary with a link to the section that owns the det
   **View all** opens **Users**.
 - **Recent Activity** — the ten most recent changes, each naming the thing that changed
   ("Saved the screen — Home") and linking straight to it. The full, paginated log lives
-  under **Setup → Activity**.
+  under **Admin → Activity**.
 
 Plugins contribute the rest, so this list is a floor rather than an exact match for your
 own dashboard: **Last campaign** appears once you've sent an email campaign, and

@@ -84,7 +84,7 @@ export const schema: Aglyn.ComponentSchema<BoxElementProps> = {
   attributes: [
     {
       name: 'component',
-      label: 'HTML element',
+      label: 'Component',
       description:
         'The DOM element this box renders as. For landmarks ' +
         '(section, article, nav, header, footer, main) use the Section ' +

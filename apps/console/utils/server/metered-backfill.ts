@@ -57,6 +57,32 @@
  * full, recovering the gap at the cost of a retroactive charge. It is the
  * right setting once no pre-correction events remain on the meter, which is
  * why this is an env knob and not a hardcoded choice.
+ *
+ * ── The months `boundary` declined to bill: WRITTEN OFF ──────────────────
+ *
+ * The historical months this mode held back are not going to be recovered.
+ * Nothing here needs to change, and nothing should be run to chase them — the
+ * decision is recorded so the next person who finds the gap does not spend a
+ * day rediscovering why it is not worth closing.
+ *
+ * Recoverable unbilled usage across the WHOLE platform came to **$0.03**, and
+ * all of it sat on a subscription that is canceled — so there is no
+ * subscription to attach a metered item to and the amount cannot be billed
+ * even in principle.
+ *
+ * The figure is also an artifact of arithmetic that has since been superseded.
+ * It was produced while metering priced TOTAL usage from unit zero; AGL-1280
+ * corrected that to usage ABOVE the plan's included allowance, which is what
+ * the published terms always promised. The one org involved had used 0.25% of
+ * its page-view allowance, so under the arithmetic that ships it owes nothing
+ * at all — the three cents were never really a debt, they were a rounding
+ * error in a formula that was wrong in the customer's disfavour.
+ *
+ * ⚠️ The write-off is of the RECOVERY, not of the guard. `boundary` still
+ * protects future periods from retroactive pricing, and
+ * `tools/scripts/audit-metered-coverage.mjs` still reports unmetered paying
+ * subscriptions — an unmetered LIVE subscription is a real revenue leak and
+ * this note says nothing about those.
  */
 
 import {

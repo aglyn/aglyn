@@ -209,16 +209,21 @@ export const ASSIST_VIEWS: readonly AssistView[] = [
     actions: [],
   },
   {
+    // The key is the analytics/debug handle and stays as it is; the section
+    // it names is what was renamed. Both addresses match because the console
+    // redirects the older one, so a client can report either.
     key: 'host-workflows',
-    match: /^\/[^/]+\/hosts\/[^/]+\/workflows(\/|$)/,
-    screen: 'Workflows — automations that run when something happens on the site.',
+    match: /^\/[^/]+\/hosts\/[^/]+\/(automation|workflows)(\/|$)/,
+    screen:
+      'Automation — workflows, actions and webhooks that run when something happens on the site.',
     plain: [
       'A workflow is a trigger plus the actions that follow it, such as sending an email when a form is submitted.',
       'Build the trigger first, then add the actions it should run.',
+      'Workflows, Actions and Webhooks are the three tabs of this section.',
     ],
     technical: [
-      'Route: /[orgSlug]/hosts/[host]/workflows.',
-      'Webhook actions let a workflow call an external endpoint; see the workflows docs for the payload shape.',
+      'Route: /[orgSlug]/hosts/[host]/automation, with ?tab=workflows, ?tab=actions or ?tab=webhooks.',
+      'Webhook actions let a workflow call an external endpoint; see the automation docs for the payload shape.',
     ],
     actions: [],
   },

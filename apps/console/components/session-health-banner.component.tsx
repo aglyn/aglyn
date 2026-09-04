@@ -20,6 +20,10 @@ import { Alert } from '@mui/material'
 import { useEffect, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import {
+  resolveIdToken,
+  type MaybeTokenSource,
+} from '@aglyn/shared-util-http/authorized-token'
+import {
   probePublicRead,
   type PublicReadProbe,
 } from '../utils/probe-public-read'
@@ -161,8 +165,12 @@ export function SessionHealthBanner() {
       const result = await (user as any)
         ?.getIdTokenResult?.()
         .catch(() => null)
-      const refreshed = await (user as any)
-        ?.getIdToken?.(true)
+      // Under a deadline. This diagnostic runs BEFORE the dialog is shown
+      // and `setProbe` below is its gate, so a refresh that never answers
+      // means no log, no verdict, and a banner that never explains itself.
+      const refreshed = await resolveIdToken(user as MaybeTokenSource, {
+        forceRefresh: true,
+      })
         .then(() => true)
         .catch((error: unknown) => error)
       const publicRead = await probePublicRead(firestore)

@@ -21,6 +21,7 @@ import {
   trackEvent,
   trackEventBeforeNavigation,
 } from '@aglyn/aglyn/app-utils/analytics-events'
+import { campaignTouchField } from '@aglyn/aglyn/app-utils/campaign-touch'
 import { mdiCalendarClock } from '@aglyn/shared-data-mdi'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
@@ -160,6 +161,10 @@ const Booking = forwardRef<HTMLDivElement, BookingProps>((props, ref) => {
           name,
           email,
           ...(marketingConsent ? { marketingConsent: true } : {}),
+          // The campaign this visitor came from, when they came from one.
+          // A booking is an identify moment like a form submission: the
+          // visitor was anonymous until this request named them.
+          ...campaignTouchField(),
         }),
       })
       const payload = await response.json().catch(() => ({}))

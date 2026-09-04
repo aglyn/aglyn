@@ -37,6 +37,7 @@ import {
 import { useParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import AuthenticatedLayout from '../../../../../../../components/layouts/authenticated.layout'
 import StaffOnly from '../../../../../../../components/staff-only.component'
 import { SuperStaffOnly } from '../../../../../../../components/staff-super-only.component'
@@ -131,13 +132,9 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
     if (!next || next === host?.subdomain || busy) return
     setBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/admin/host', {
+      const response = await authorizedFetch(user, '/api/admin/host', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hostId, action: 'set-subdomain', subdomain: next }),
       })
       const payload = await response.json().catch(() => ({}))
@@ -351,7 +348,7 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                 size: { xs: 12 },
                 children: (
                   /*
-                   * The site's own activity log (AGL-1488).
+                   * The site's own activity log.
                    *
                    * The same feed the owner reads on Setup → Activity, on the
                    * page staff open when they are working out what happened

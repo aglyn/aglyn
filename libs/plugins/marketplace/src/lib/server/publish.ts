@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { checkEntitlement, createResourceUid } from '@aglyn/aglyn/server'
+import {
+  checkEntitlement,
+  createResourceUid,
+  decodeStoredNodes,
+} from '@aglyn/aglyn/server'
 import {
   marketplacePriceRefusal,
   sanitizeMarketplaceDefinition,
@@ -82,7 +86,7 @@ export const publishHandler: PluginApiHandler = async (req, res) => {
     }
     const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
     if (memberRole !== 'admin' && memberRole !== 'editor') {
-      return res.status(403).json({ error: 'Not a site admin' })
+      return res.status(403).json({ error: 'Not a site admin or editor' })
     }
 
     // Plan gate rides the owning org's doc (AGL-238).
@@ -115,18 +119,21 @@ export const publishHandler: PluginApiHandler = async (req, res) => {
       .collection('components')
       .doc(componentId)
       .get()
-    // Raw on purpose, unlike the screen and layout publish paths (AGL-1395):
-    // this is the component DOCUMENT, not its versions subcollection, and
-    // `use-component.tsx` stores that `nodes` PLAINLY so the tenant runtime
-    // can read it without decoding. Component *versions* are compressed; this
-    // route never reads them.
+    // Decoded, like the screen and layout publish paths (AGL-1395). This is
+    // the component DOCUMENT rather than its versions subcollection, and it
+    // is now compressed like everything else (AGL-1151) — a plain map from
+    // before that comes back unchanged.
+    //
+    // `sanitizeMarketplaceDefinition` refuses an undecoded tree by name, so
+    // reading raw here is the difference between publishing a component and
+    // being told the design is stored compressed on every attempt.
     const definition = definitionSnapshot.data() as any
     if (!definition || definition.deletedAt) {
       return res.status(404).json({ error: 'Unknown component' })
     }
     const sanitized = sanitizeMarketplaceDefinition({
       rootId: definition.rootId,
-      nodes: definition.nodes ?? {},
+      nodes: decodeStoredNodes<Record<string, any>>(definition.nodes) ?? {},
     })
     if (sanitized.ok === false) {
       return res.status(422).json({ error: sanitized.error })

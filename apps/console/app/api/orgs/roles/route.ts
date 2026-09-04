@@ -30,6 +30,7 @@ import {
   logOrgActivity,
   memberHasOrgPermission,
   resolveOrgMembership,
+  syncOrgAuthProjections,
 } from '@aglyn/tenant-data-admin'
 import { FieldPath } from 'firebase-admin/firestore'
 
@@ -151,6 +152,23 @@ async function handler(request: Request): Promise<Response> {
         },
         { merge: true },
       )
+      /*
+       * Re-project the roster, because this document is an INPUT to the
+       * member docs' `resolvedPermissions` and the rules read only that.
+       *
+       * Editing a role is the one authorization change in the console that
+       * touches no membership, so it reached none of the six mutations that
+       * already call this — which would leave a revoked key still granted in
+       * the rules, indefinitely and silently, while every server route
+       * refused it. Staleness is bounded to this request: the map is
+       * recomputed before the response, so a member's next read is decided
+       * by the role as saved.
+       *
+       * AWAITED, not fired and forgotten. A permission narrowing that
+       * returns 200 before it is in force is a window in which the console
+       * says the change is live and the rules still grant.
+       */
+      await syncOrgAuthProjections(orgId)
       await logOrgActivity(
         orgId,
         { uid: decoded.uid, email: decoded.email },
@@ -183,6 +201,12 @@ async function handler(request: Request): Promise<Response> {
         }
         await batch.commit()
       }
+      // The carriers just fell back to their role defaults, which is a
+      // different permission set from the one their `resolvedPermissions`
+      // still holds. Same reason as the save path: clearing `roleId` without
+      // re-projecting leaves the deleted role's verdict in force for the
+      // rules alone.
+      await syncOrgAuthProjections(orgId)
       await logOrgActivity(
         orgId,
         { uid: decoded.uid, email: decoded.email },

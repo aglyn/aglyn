@@ -137,6 +137,8 @@ const REPO_WIDE = new Set([
   'check:app-router-graph',
   'check:jsx-barrel',
   'check:aglyn-barrel',
+  'check:tenant-page-weight',
+  'check:page-view-rate',
   'check:monaco-dompurify',
   // Assert against the workflow files and the package.json script table,
   // which belong to no nx project.

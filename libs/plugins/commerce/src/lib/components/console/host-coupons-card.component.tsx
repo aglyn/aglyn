@@ -81,6 +81,8 @@ export function HostCouponsCard(props: HostCouponsCardProps) {
     code: string
     percentOff: string
     maxRedemptions: string
+    /** `YYYY-MM-DD` from a native date input, or '' for no expiry. */
+    expiresOn: string
   } | null>(null)
 
   const handleCouponSave = useCallback(async () => {
@@ -92,6 +94,14 @@ export function HostCouponsCard(props: HostCouponsCardProps) {
       .slice(0, 40)
     const percentOff = Math.round(Number(couponDraft.percentOff))
     if (!code || !(percentOff > 0 && percentOff <= 100)) return
+    // An unparseable value is dropped rather than written: a NaN here would
+    // be a coupon that never expires or one that is born dead, depending on
+    // how the server coerced it, and neither is what anyone typed.
+    const expiresOn = couponDraft.expiresOn.trim()
+    const parsedExpiry = expiresOn
+      ? Date.parse(`${expiresOn}T23:59:59.999`)
+      : NaN
+    const expiresAtMs = Number.isFinite(parsedExpiry) ? parsedExpiry : null
     await setDoc(doc(firestore, 'hosts', hostId, 'coupons', code), {
       percentOff,
       enabled: true,
@@ -104,6 +114,19 @@ export function HostCouponsCard(props: HostCouponsCardProps) {
             ),
           }
         : {}),
+      // THE FIELD THE CHECKOUTS ALREADY GATE ON.
+      //
+      // `checkout.ts` and `cart-checkout.ts` both refuse a coupon whose
+      // `expiresAtMs` has passed, and nothing wrote it — so the gate read as
+      // enforcement while every coupon ever created was immortal. A launch
+      // code stays redeemable forever, which is a discount the merchant
+      // believed they had withdrawn.
+      //
+      // The END of the chosen day, in the merchant's own timezone: "expires
+      // September 5th" has to mean the 5th still works. The comparison on the
+      // server is absolute epoch, so the local end-of-day is what carries that
+      // meaning across.
+      ...(expiresAtMs != null ? { expiresAtMs } : {}),
       createdAt: Timestamp.now(),
     })
     setCouponDraft(null)
@@ -151,6 +174,16 @@ export function HostCouponsCard(props: HostCouponsCardProps) {
                   // Held slots are named separately (AGL-2453) — see the
                   // discounts card for why the used figure alone now misleads.
                   CommerceModel.promotionUsageLabel(coupon, Date.now()) +
+                  // An expiry nobody can see is one the merchant cannot act
+                  // on, and an EXPIRED coupon still listed as live is the
+                  // question this card exists to answer.
+                  (coupon.expiresAtMs != null
+                    ? Number(coupon.expiresAtMs) < Date.now()
+                      ? ' · expired'
+                      : ` · expires ${new Date(
+                          Number(coupon.expiresAtMs),
+                        ).toLocaleDateString()}`
+                    : '') +
                   (coupon.enabled === false ? ' · disabled' : '')}
               </Typography>
               <Button size="small" onClick={handleCouponToggle(coupon)}>
@@ -171,7 +204,12 @@ export function HostCouponsCard(props: HostCouponsCardProps) {
           size="small"
           sx={{ alignSelf: 'flex-start' }}
           onClick={() =>
-            setCouponDraft({ code: '', percentOff: '', maxRedemptions: '' })
+            setCouponDraft({
+              code: '',
+              percentOff: '',
+              maxRedemptions: '',
+              expiresOn: '',
+            })
           }
         >
           {'Add coupon'}
@@ -220,6 +258,19 @@ export function HostCouponsCard(props: HostCouponsCardProps) {
               )
             }
             size="small"
+          />
+          <TextField
+            label="Expires"
+            type="date"
+            value={couponDraft?.expiresOn ?? ''}
+            onChange={(event) =>
+              setCouponDraft((prev) =>
+                prev ? { ...prev, expiresOn: event.target.value } : prev,
+              )
+            }
+            size="small"
+            slotProps={{ inputLabel: { shrink: true } }}
+            helperText="Blank = never expires. The code works through this day."
           />
         </DialogContent>
         <DialogActions>

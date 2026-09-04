@@ -118,7 +118,7 @@ async function handler(request: Request): Promise<Response> {
       }, { status: 200 })
     }
     /*
-     * The column filter, answered ACROSS THE POOLS (AGL-693).
+     * The column filter, answered ACROSS THE POOLS (AGL-2501).
      *
      * The staff list paged 200 accounts at a time and filtered the rows it
      * had — so it answered "no such account" for everyone past the current

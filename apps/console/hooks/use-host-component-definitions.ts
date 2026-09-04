@@ -17,6 +17,8 @@
 'use client'
 
 import type * as Aglyn from '@aglyn/aglyn'
+// Deep path, keeping the type-only barrel import above erased.
+import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { collection, limit, query } from 'firebase/firestore'
 import { useMemo } from 'react'
@@ -78,9 +80,19 @@ export function useHostComponentDefinitions(
     const next: Record<string, Aglyn.ReusableComponentTree> = {}
     for (const value of data ?? []) {
       if (value?.deletedAt || !value?.nodes || !value?.rootId) continue
+      // BOTH stored forms (AGL-1151). This is a raw collection query, so
+      // `nodes` arrives exactly as stored — msgpack for anything promoted
+      // since components were compressed, a plain map for everything older.
+      // The canvas grafts every instance from this map, so a `Bytes` reaching
+      // it blanks every placed component in the editor while the live site
+      // still renders them.
+      const nodes = decodeStoredNodes<Aglyn.ReusableComponentTree['nodes']>(
+        value.nodes,
+      )
+      if (!nodes) continue
       next[value.$id] = {
         rootId: value.rootId,
-        nodes: value.nodes as Aglyn.ReusableComponentTree['nodes'],
+        nodes,
         // Declared props ride along (AGL-1247) so the editor's graft
         // substitutes the same values the live site will.
         ...(value.props?.length && { props: value.props }),

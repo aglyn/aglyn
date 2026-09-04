@@ -36,16 +36,16 @@ import {
   collection,
   deleteDoc,
   doc,
-  limit,
-  query,
   setDoc,
 } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import {
-  useFirestoreCollection,
+  collectionPage,
+  usePagedCollection,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 
 export interface DiscountsCardProps {
@@ -63,7 +63,6 @@ export function DiscountsCard(props: DiscountsCardProps) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const {
-    data: discountDocs,
     status: discountsStatus,
     /**
      * The row this dialog is seeded from is unconfirmed by the server
@@ -73,8 +72,37 @@ export function DiscountsCard(props: DiscountsCardProps) {
      * and hands out redemptions that were already spent.
      */
     fromCache: discountsFromCache,
-  } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'discounts'), limit(100)),
+    rows: discounts,
+    hasMore,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+  } = usePagedCollection<any>(
+    /*
+     * SERVER-PAGED, and ordered (AGL-2501).
+     *
+     * `limit(100)` alone is answered in DOCUMENT-ID order and the ids are
+     * `createResourceUid()`, so the hundred were a pseudo-random sample of the
+     * shop's promotions — and the hundred-and-first was UNREACHABLE, because
+     * nothing rendered it and no control asked for more.
+     *
+     * The query can be paged here, unlike the cards carrying a duplicate-name
+     * check: a discount's identity is its document id, `code` is an ordinary
+     * field with no uniqueness test on this surface, and nothing on the card
+     * is computed from rows that are off the page.
+     *
+     * `collectionPage` orders on the document NAME. `orderBy('code')` is the
+     * tempting one and would be wrong twice: an AUTOMATIC promotion is stored
+     * with `code: null`, so ordering on it would hide every automatic discount
+     * the shop has, and a merchant reading "no automatic promotions" would be
+     * reading a query artifact.
+     */
+    (pageLimit) =>
+      collectionPage(
+        collection(firestore, 'hosts', hostId, 'discounts'),
+        pageLimit,
+      ),
     [firestore, hostId],
     { idField: '$id' },
   )
@@ -160,7 +188,19 @@ export function DiscountsCard(props: DiscountsCardProps) {
         : discount.kind === 'fixed'
           ? `$${((discount.valueCents ?? 0) / 100).toFixed(2)} off`
           : 'Free shipping'
+    const scopeCount = Array.isArray(discount.productIds)
+      ? discount.productIds.length
+      : 0
     const extras = [
+      // THE SCOPE, SAID OUT LOUD. A discount can cover named
+      // products rather than the catalog, and the card showed no sign of it —
+      // so a merchant could not tell a store-wide discount from a scoped one,
+      // and had no way to understand why a scoped one takes less off than the
+      // basket total. "Store-wide" is stated rather than left blank, because a
+      // silent absence is what a narrower scope would also look like.
+      scopeCount > 0
+        ? `${scopeCount} product${scopeCount === 1 ? '' : 's'} only`
+        : 'store-wide',
       discount.minSubtotalCents
         ? `min $${(discount.minSubtotalCents / 100).toFixed(0)}`
         : '',
@@ -190,13 +230,13 @@ export function DiscountsCard(props: DiscountsCardProps) {
       contentGutterY
     >
       <Stack spacing={1}>
-        {(discountDocs ?? []).length === 0 ? (
+        {discounts.length === 0 && page === 0 ? (
           <Typography variant="body2" color="text.secondary">
             {'Codes buyers enter at checkout, or automatic promotions that ' +
               'apply on their own.'}
           </Typography>
         ) : (
-          (discountDocs ?? []).map((discount: any) => (
+          discounts.map((discount: any) => (
             <Stack
               key={discount.$id}
               direction="row"
@@ -232,6 +272,19 @@ export function DiscountsCard(props: DiscountsCardProps) {
               </Button>
             </Stack>
           ))
+        )}
+        {discounts.length === 0 && page === 0 ? null : (
+          <ListPagination
+            page={page}
+            pageSize={pageSize}
+            rowCount={discounts.length}
+            // No `count`: a server window does not know the collection's
+            // total, and `hasMore` is the probe row's answer rather than a
+            // comparison against the cap.
+            hasMore={hasMore}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         )}
         <Button
           size="small"

@@ -23,8 +23,12 @@
  */
 
 import {
+  consentGroupForHost,
+  type ConsentGroup,
   checkHostCollaboratorQuota,
+  checkSeatQuota,
   countCollaboratorSeats,
+  countManagerSeatsExcluding,
   createResourceUid,
   generateOrgSlug,
   resolveOrgPermissions,
@@ -271,7 +275,7 @@ export async function createOrganization(
     tx.set(db.collection('orgs').doc(orgId), {
       name,
       /*
-       * The searchable form of `name`, written beside it (AGL-693).
+       * The searchable form of `name`, written beside it (AGL-2501).
        *
        * Firestore cannot search a string it has not been given in search
        * form: a prefix range needs the normalized key to ORDER by, and
@@ -286,7 +290,7 @@ export async function createOrganization(
        */
       nameLower: nameSearchKey(name),
       // Word-prefix tokens, so the staff search can answer "contains a word
-      // starting with X" rather than only "starts with X" (AGL-693).
+      // starting with X" rather than only "starts with X" (AGL-2501).
       nameTokens: nameSearchTokens(name),
       // Reversed, so the list's "ends with" filter is a prefix range like
       // every other string operator Firestore can answer.
@@ -324,6 +328,21 @@ export async function createOrganization(
          * with the projection every other path uses.
          */
         scopeTokens: projectMemberScopeTokens({ role: 'owner', allHosts: true }),
+        /*
+         * The permission projection, stamped here for the same reason and
+         * with the same consequence if it is missed.
+         *
+         * No custom role can exist in an org being created, so the resolver
+         * is handed an explicit null and returns the owner's role defaults —
+         * which is also what the rules fall back to for a member carrying no
+         * map, so a failure to stamp this is invisible rather than a lockout.
+         * It is written anyway: an unstamped owner is a row the drift check
+         * has to keep explaining.
+         */
+        resolvedPermissions: resolveOrgPermissions(
+          { role: 'owner', allHosts: true },
+          null,
+        ),
       },
     )
     tx.set(
@@ -353,6 +372,19 @@ export async function createOrganization(
   // `erase.ts` already awaits the matching detach, which is what made the
   // asymmetry worth looking at.
   await attachWorkspaceDomain(slug)
+  // The first entry in the workspace's log (AGL-118). Creation is the one
+  // category the activity log never covered — it was assembled by adding
+  // calls at mutation points in the console UI, and the acts that bring a
+  // top-level object into existence happen out here, in provisioning code no
+  // UI mutation point ever reaches. The visible symptom was a customer whose
+  // page read as though they had never used the product, because their whole
+  // session had been creation.
+  await logOrgActivity(
+    orgId,
+    { uid: ownerUid, email: ownerEmail ?? null },
+    'Created the workspace',
+    { type: 'org', id: orgId, name },
+  )
   return orgId
 }
 
@@ -632,6 +664,7 @@ export type OrgDataCollection =
   | 'datasets'
   | 'contacts'
   | 'contactSegments'
+  | 'lists'
   | 'media'
   | 'mediaFolders'
 
@@ -759,20 +792,81 @@ export async function listOrgMembers(
 }
 
 /**
- * Recomputes both denormalized authorization projections after a
- * membership change: `memberRoles` on every host the org owns (or one host
- * when given), and `scopeTokens` on every member doc.
+ * The custom role documents this roster actually references, read once each.
  *
- * The rules resolve a request from these two reads — the host doc for host
+ * A roster of hundreds shares a handful of roles, so this is bounded by the
+ * number of DISTINCT `roleId`s and not by the member count.
+ *
+ * A role id that resolves to nothing is left ABSENT rather than recorded as
+ * an empty role. The two happen to reach the same verdict today —
+ * `resolveOrgPermissions` skips a key whose value is not a boolean, so an
+ * empty map changes nothing — but they are different claims, and only one of
+ * them is true: a dangling id means the lookup MISSED, not that a role
+ * granting nothing was found. Recording the miss honestly is what keeps the
+ * fallback correct if that resolver ever treats an empty map as a revocation,
+ * which is what its own type comment already says it does.
+ */
+async function loadOrgCustomRoles(
+  orgId: string,
+  members: readonly AglynOrgMember[],
+): Promise<Map<string, AglynOrgCustomRole>> {
+  const roleIds = [
+    ...new Set(
+      members
+        .map((member) => member.roleId)
+        .filter((roleId): roleId is string => typeof roleId === 'string' && !!roleId),
+    ),
+  ]
+  const rolesRef = firestore()
+    .collection('orgs')
+    .doc(orgId)
+    .collection('roles')
+  const found = new Map<string, AglynOrgCustomRole>()
+  await Promise.all(
+    roleIds.map(async (roleId) => {
+      const snapshot = await rolesRef.doc(roleId).get()
+      if (snapshot.exists) {
+        found.set(roleId, snapshot.data() as AglynOrgCustomRole)
+      }
+    }),
+  )
+  return found
+}
+
+/**
+ * Recomputes the denormalized authorization projections after a membership
+ * change: `memberRoles` on every host the org owns (or one host when given),
+ * and `scopeTokens` + `resolvedPermissions` on every member doc.
+ *
+ * The rules resolve a request from these reads — the host doc for host
  * content (docs/MULTI_TENANT_FIRESTORE.md §5), the member doc for scoped
  * org resources (AGL-1038) — so this is what makes a membership effective.
- * Both live here, in one writer called by every mutation below, because a
- * grant path that updates one projection and forgets the other silently
- * over- or under-grants.
+ * They live here, in one writer called by every mutation below, because a
+ * grant path that updates one projection and forgets another silently over-
+ * or under-grants.
  *
- * `scopeTokens` is recomputed for the whole roster rather than the changed
+ * Everything is recomputed for the whole roster rather than the changed
  * member: the roster is already loaded for `memberRoles`, and a full pass
  * self-heals rows that an earlier partial failure left stale.
+ *
+ * ## `resolvedPermissions`, and why the rules need it denormalized
+ *
+ * Security rules cannot resolve a custom role. `member.roleId` points at
+ * `orgs/{orgId}/roles/{roleId}`, and reproducing the three-layer precedence
+ * (per-member beats custom role beats role default) in CEL takes a second
+ * cross-document get() plus a correct handling of a dangling id — where a
+ * naive version over-denies and locks out paying customers. So the rules read
+ * the ANSWER instead of the inputs, which is the same trade `scopeTokens`
+ * already makes for a reason the rules language shares: it has no `.map()`
+ * either.
+ *
+ * The map is `resolveOrgPermissions`' own output, so the rules and every
+ * server route are reading one resolver's verdict rather than two
+ * implementations of it.
+ *
+ * ONE READ PER DISTINCT ROLE, not per member: an org assigns a handful of
+ * custom roles across a roster that can run to hundreds, and resolving each
+ * member independently would re-read the same few documents once each.
  */
 export async function syncOrgAuthProjections(
   orgId: string,
@@ -781,6 +875,7 @@ export async function syncOrgAuthProjections(
   const db = firestore()
   const orgRef = db.collection('orgs').doc(orgId)
   const members = await listOrgMembers(orgId)
+  const customRoles = await loadOrgCustomRoles(orgId, members)
   const hostIds = hostId
     ? [hostId]
     : Object.keys(
@@ -803,7 +898,19 @@ export async function syncOrgAuthProjections(
       (member) =>
         [
           orgRef.collection('members').doc(member.$id),
-          { scopeTokens: projectMemberScopeTokens(member) },
+          {
+            scopeTokens: projectMemberScopeTokens(member),
+            resolvedPermissions: resolveOrgPermissions(
+              member,
+              // `?? null`, never `?? undefined`: a member whose `roleId`
+              // points at a DELETED role must resolve to their role
+              // defaults, which is what the resolver does with an explicit
+              // null and what every server route already does with the same
+              // dangling id. Leaving it undefined would be the same value,
+              // but the null says the lookup happened and missed.
+              member.roleId ? (customRoles.get(member.roleId) ?? null) : null,
+            ),
+          },
         ] as [FirebaseFirestore.DocumentReference, object],
     ),
   ]
@@ -827,7 +934,17 @@ export const syncHostMemberRoles = syncOrgAuthProjections
 
 /** What an org activity entry points at; `id` lets detail views filter. */
 export interface OrgActivityTarget {
-  type: 'org' | 'member' | 'invite'
+  /**
+   * `host` and `subscription` are the two facts about a workspace that no
+   * host feed can hold (AGL-118).
+   *
+   * A site's own log lives at `hosts/{hostId}/activity` and is destroyed with
+   * the site — `eraseHost` recursive-deletes the whole tree — so "this site
+   * was deleted" written there is an entry with no reader by construction.
+   * A subscription belongs to no single site at all. Both are org-level
+   * events, and this is the only feed that outlives them.
+   */
+  type: 'org' | 'member' | 'invite' | 'host' | 'subscription'
   id?: string
   name?: string
 }
@@ -840,13 +957,77 @@ export interface OrgActivityTarget {
  */
 export async function logOrgActivity(
   orgId: string,
-  actor: { uid: string; email?: string | null },
+  /**
+   * `uid` is nullable because some org events HAVE no actor (AGL-118). Stripe
+   * cancels a subscription after a month of failed retries with nobody
+   * present, and the honest record of that says so. Naming the last person
+   * who touched billing instead would put a real name on an act nobody
+   * performed — and `actorId` is a filterable field, so the invented
+   * attribution would then show up under that person when somebody asks what
+   * they have done.
+   */
+  actor: { uid: string | null; email?: string | null },
   action: string,
   target: OrgActivityTarget,
 ): Promise<void> {
   await firestore()
     .collection('orgs')
     .doc(orgId)
+    .collection('activity')
+    .add({
+      actorId: actor.uid ?? null,
+      actorEmail: actor.email ?? null,
+      action,
+      target: {
+        type: target.type,
+        ...(target.id ? { id: target.id } : {}),
+        ...(target.name ? { name: target.name } : {}),
+      },
+      createdAt: FieldValue.serverTimestamp(),
+    })
+    .catch(() => undefined)
+}
+
+/** What a host activity entry points at. Mirrors `HostActivityTarget`. */
+export interface HostActivityTarget {
+  type:
+    | 'host' | 'screen' | 'layout' | 'theme' | 'media' | 'content' | 'variable'
+    | 'function' | 'workflow' | 'member' | 'component' | 'template'
+  id?: string
+  name?: string
+  versionId?: string
+}
+
+/**
+ * Append to `hosts/{hostId}/activity` with the ADMIN SDK (AGL-118).
+ *
+ * The host log's twin of {@link logOrgActivity}, and the beginning of the
+ * migration off the browser. Every entry in this collection has been written
+ * by the client since the log existed, which makes it an audit trail its
+ * subject can decline to write: three template surfaces created screens,
+ * layouts and components while calling no logger at all, and nothing noticed
+ * for months because a log that is missing an entry looks exactly like a
+ * person who did nothing.
+ *
+ * A route that already authenticated the caller has the two things the client
+ * cannot be trusted for — a VERIFIED uid, and the certainty that the write it
+ * is recording actually happened, because it performed it. So an entry from
+ * here is worth more than the one it replaces, not merely more reliable.
+ *
+ * Never throws, for the reason the client logger never throws: an audit miss
+ * must not turn a successful create into a failed request. It is `await`ed
+ * rather than floated because a serverless response ending cancels in-flight
+ * work, which would make the drop the common case rather than the rare one.
+ */
+export async function logHostActivity(
+  hostId: string,
+  actor: { uid: string; email?: string | null },
+  action: string,
+  target: HostActivityTarget,
+): Promise<void> {
+  await firestore()
+    .collection('hosts')
+    .doc(hostId)
     .collection('activity')
     .add({
       actorId: actor.uid,
@@ -856,6 +1037,7 @@ export async function logOrgActivity(
         type: target.type,
         ...(target.id ? { id: target.id } : {}),
         ...(target.name ? { name: target.name } : {}),
+        ...(target.versionId ? { versionId: target.versionId } : {}),
       },
       createdAt: FieldValue.serverTimestamp(),
     })
@@ -1087,6 +1269,206 @@ export async function collaboratorSeatRefusal(options: {
   return null
 }
 
+/**
+ * The refusal string, taken from `/api/orgs/members`.
+ *
+ * The four doors each phrased this differently — "upgrade your plan to invite
+ * more members", "to add more members", "This organization is out of team
+ * seats", "This workspace has used all N of its team seats" — which is what a
+ * gate copied four times produces. One wording now, from the one place the
+ * refusal is built. Nothing matches these strings but a human, so the
+ * consolidation costs no caller.
+ */
+function managerSeatMessage(quota: {
+  limit: number
+  upgradeRequired: boolean
+  addonPriceUsd: number | null
+}): string {
+  return quota.upgradeRequired
+    ? `Team seat limit reached (${quota.limit}) — upgrade your ` +
+        'plan to add more members'
+    : `Team seats full (${quota.limit}) — add seats for ` +
+        `$${quota.addonPriceUsd}/mo each from Billing`
+}
+
+/**
+ * A manager seat refused, thrown rather than returned, for the reason
+ * {@link CollaboratorSeatLimitError} is thrown: it has to travel out of
+ * `upsertOrgMember`, whose contract is "make it so" and which three routes
+ * already call as a bare `await`. A verdict would be silently discarded by
+ * every one of them, which is the shape of the bug being fixed.
+ */
+export class ManagerSeatLimitError extends Error {
+  readonly limit: number
+  readonly upgradeRequired: boolean
+  readonly addonPriceUsd: number | null
+  /**
+   * Seats the org holds ABOVE `limit`. Non-zero means it is GRANDFATHERED:
+   * those managers keep their access and only the NEXT one is refused, so the
+   * console can say that instead of letting an admin read a 403 as "somebody
+   * was removed".
+   */
+  readonly retainedOverCap: number
+  constructor(quota: {
+    limit: number
+    upgradeRequired: boolean
+    addonPriceUsd: number | null
+    retainedOverCap?: number
+  }) {
+    super(managerSeatMessage(quota))
+    this.name = 'ManagerSeatLimitError'
+    this.limit = quota.limit
+    this.upgradeRequired = quota.upgradeRequired
+    this.addonPriceUsd = quota.addonPriceUsd
+    this.retainedOverCap = Math.max(0, quota.retainedOverCap ?? 0)
+  }
+}
+
+/**
+ * The manager cap, evaluated against the POST-state and inside the same
+ * transaction that performs the grant (AGL-2068, on the manager key).
+ *
+ * The collaborator cap above learned this the hard way and this is the same
+ * defect one key over: all four doors that admit a manager — invite create,
+ * invite accept, direct member add and SSO-JIT — read the roster, decided,
+ * and then wrote, with nothing between the read and the write. N concurrent
+ * accepts all measured against the same roster, all passed, and all landed.
+ * Reading THROUGH the transaction is the fix: Firestore tracks the read set,
+ * so a second grant that measured the same roster cannot commit — it retries,
+ * re-reads a roster that now holds the first, and refuses.
+ *
+ * PENDING INVITES COUNT, AT EVERY DOOR. Only invite-create counted them
+ * before, so the cap was enforced against a different population depending on
+ * which door was used — and the doors that ignored them are the ones that
+ * actually grant access. An invite reserves the seat it will become, and a
+ * cap that only bites on acceptance is walked past by mailing N invitations
+ * first. `readSeatEntries` is shared with the collaborator gate precisely so
+ * the two populations cannot drift apart again.
+ *
+ * `checkSeatQuota(org, 'managers', used)` and NOT the per-host collaborator
+ * quota: `managersPerOrg` really is org-level, so purchased add-ons raise it
+ * (AGL-2439 removed that only for the per-site `members` key).
+ *
+ * THE GRANDFATHER LIVES HERE, in what this does NOT do. It charges only the
+ * TRANSITION into an org-wide seat — `becomesManager` is false when the
+ * membership already held one — so an org already above its cap keeps every
+ * manager it has, can still have their role or profile rewritten, and is
+ * merely refused the next one. There is no sweep and no revocation, and none
+ * may be added: the cap binds ADMISSION, never ACCESS.
+ */
+async function assertManagerSeats(options: {
+  orgRef: FirebaseFirestore.DocumentReference
+  org: Partial<AglynOrgBilling>
+  /** Is this write ADMITTING a manager who was not one already? */
+  becomesManager: boolean
+  self: {
+    uid?: string | null
+    email?: string | null
+    emails?: readonly (string | null | undefined)[] | null
+  }
+  read: (query: FirebaseFirestore.Query) => Promise<FirebaseFirestore.QuerySnapshot>
+}): Promise<void> {
+  const { orgRef, org, becomesManager, self, read } = options
+  if (!becomesManager) return
+  const entries = await readSeatEntries(orgRef, read)
+  const used = countManagerSeatsExcluding(entries, self)
+  const quota = checkSeatQuota(org, 'managers', used)
+  if (!quota.allowed) {
+    throw new ManagerSeatLimitError({
+      ...quota,
+      retainedOverCap: Math.max(0, used - quota.limit),
+    })
+  }
+}
+
+/**
+ * Is this write admitting a manager who was not one already?
+ *
+ * The manager analogue of `newlyScopedHosts`, and it exists for the same
+ * reason: a seat is charged when it is TAKEN, not every time the row holding
+ * it is rewritten. Re-saving an existing manager's title, or moving them from
+ * `editor` to `admin`, re-writes a seat they already hold — charging that
+ * would strand an over-cap org unable to even demote its way back down.
+ *
+ * A scoped collaborator being promoted to org-wide DOES take a manager seat,
+ * and gives one up on the collaborator side; that is a real transition and is
+ * charged.
+ */
+function becomesOrgManager(options: {
+  role: OrgRole
+  allHosts: boolean
+  hostAccess: Record<string, HostAccessRole>
+  existing: Partial<AglynOrgMember> | undefined
+}): boolean {
+  const next = isOrgWideMember({
+    role: options.role,
+    allHosts: options.allHosts,
+    hostAccess: options.hostAccess,
+  } as Partial<AglynOrgMember>)
+  if (!next) return false
+  // An ABSENT row is not a manager, and `isOrgWideMember(undefined)` is
+  // already false — but saying so explicitly keeps the "was it one before?"
+  // question readable next to the legacy shape that predates `allHosts`.
+  return !options.existing || !isOrgWideMember(options.existing)
+}
+
+/**
+ * Turn a manager-seat refusal into the 403 the admitting routes return, or
+ * null when the error is something else and must keep propagating to the 500.
+ *
+ * Sits beside `collaboratorSeatRefusalResponse` and stacks with it in a
+ * route's catch block, each returning null for a non-match.
+ */
+export function managerSeatRefusalResponse(error: unknown): Response | null {
+  if (!(error instanceof ManagerSeatLimitError)) return null
+  return Response.json(
+    {
+      error: error.message,
+      code: 'manager_seat_limit',
+      limit: error.limit,
+      upgradeRequired: error.upgradeRequired,
+      // How many seats the org is over by. NOBODY was removed — the client
+      // renders this as retention, not as a loss.
+      retainedOverCap: error.retainedOverCap,
+    },
+    { status: 403 },
+  )
+}
+
+/**
+ * The same cap, asked BEFORE anything is written.
+ *
+ * Not the enforcement — the transaction inside `upsertOrgMember` is. This
+ * exists for the one door that never calls it: `/api/orgs/invites` create
+ * writes an invite document directly, so it refuses at the point the admin is
+ * looking at rather than mailing someone a link that will be refused when
+ * they click it. A race here over-reserves invites; it cannot over-grant
+ * access, because access is only ever granted through the transactional path.
+ */
+export async function managerSeatRefusal(options: {
+  orgId: string
+  org: Partial<AglynOrgBilling>
+  becomesManager: boolean
+  self?: { uid?: string | null; email?: string | null }
+}): Promise<Response | null> {
+  const { orgId, org, becomesManager, self } = options
+  if (!becomesManager) return null
+  try {
+    await assertManagerSeats({
+      orgRef: firestore().collection('orgs').doc(orgId),
+      org,
+      becomesManager,
+      self: self ?? {},
+      read: (query) => query.get(),
+    })
+  } catch (error) {
+    const refusal = managerSeatRefusalResponse(error)
+    if (refusal) return refusal
+    throw error
+  }
+  return null
+}
+
 export interface UpsertOrgMemberOptions {
   orgId: string
   uid: string
@@ -1270,6 +1652,24 @@ export async function upsertOrgMember(
       self: { uid, email, emails: seatAliasEmails },
       read: (query) => tx.get(query),
     })
+    // Manager seat cap, in the same read slot and for the same reason. This
+    // is the door invite ACCEPTANCE, `/api/orgs/members` and SSO-JIT all come
+    // through, and all three read the roster outside any transaction before
+    // this — so concurrent accepts measured one roster and every one of them
+    // passed. The read below joins this transaction's read set, which is what
+    // serialises them.
+    await assertManagerSeats({
+      orgRef: db.collection('orgs').doc(orgId),
+      org: orgSnapshot.data() as Partial<AglynOrgBilling>,
+      becomesManager: becomesOrgManager({
+        role,
+        allHosts: allHosts ?? false,
+        hostAccess: hostAccess ?? {},
+        existing: existing.data() as Partial<AglynOrgMember> | undefined,
+      }),
+      self: { uid, email, emails: seatAliasEmails },
+      read: (query) => tx.get(query),
+    })
     tx.set(
       memberRef,
       {
@@ -1423,6 +1823,42 @@ export async function transferOrgOwnership(
     syncMemberHostProjections(orgId, toUid),
     syncMemberHostProjections(orgId, fromUid),
   ])
+  /*
+   * A workspace changing hands is the highest-consequence thing that can
+   * happen to an account, and until AGL-118 it left no trace anywhere: the
+   * transaction above rewrites five documents and wrote nothing that says it
+   * happened, so the only evidence was the new state itself.
+   *
+   * BOTH principals are on the row. The actor is the outgoing owner, who is
+   * the only party allowed to perform this, and the target names the
+   * incoming one — a transfer identified by one party is half a record, and
+   * the half it keeps is the one already implied by `ownerUid`.
+   *
+   * Emails are read after the fact and best-effort. The uids are the
+   * identity; the addresses only save a reader a lookup, so a failure to
+   * resolve them must not cost the entry.
+   */
+  const [fromEmail, toEmail] = await Promise.all(
+    [fromUid, toUid].map(async (uid) =>
+      firestore()
+        .collection('orgs')
+        .doc(orgId)
+        .collection('members')
+        .doc(uid)
+        .get()
+        .then((snapshot) => {
+          const email = snapshot.get('email')
+          return typeof email === 'string' ? email : null
+        })
+        .catch(() => null),
+    ),
+  )
+  await logOrgActivity(
+    orgId,
+    { uid: fromUid, email: fromEmail },
+    'Transferred workspace ownership',
+    { type: 'member', id: toUid, ...(toEmail ? { name: toEmail } : {}) },
+  )
 }
 
 /**
@@ -1609,4 +2045,33 @@ export async function registerOrgHost(
   await syncOrgAuthProjections(orgId, hostId)
   // Seed the per-user projection for everyone who can reach the new host.
   await syncHostProjectionForMembers(orgId, hostId)
+}
+
+/**
+ * The consent group a site belongs to, read off its owning org.
+ *
+ * The ONE server-side door to pooling. Every capture surface and every send
+ * path resolves a group through this rather than reading
+ * `CONSENT_GROUPS_FIELD` itself, so there is one place that decides what a
+ * site's consent covers and one place a mistake could live.
+ *
+ * FAILS TO THE GROUP OF ONE. An org that cannot be resolved, or a read that
+ * throws, answers "this site alone" — which withholds mail from an org that
+ * had legitimately pooled and never sends mail on a pooling nobody could
+ * confirm. That is the only direction a failure here may fall.
+ *
+ * The org read is `React.cache`-deduped per request by {@link getOrgForHost},
+ * so a send that already resolved the org for its policy pays nothing extra.
+ */
+export async function consentGroupForSite(
+  hostId: string,
+  org?: Record<string, unknown> | null,
+): Promise<ConsentGroup> {
+  if (!hostId) throw new Error('[organizations] no site to resolve a group for')
+  if (org) return consentGroupForHost(org, hostId)
+  const resolved = await getOrgForHost(hostId).catch(() => null)
+  return consentGroupForHost(
+    (resolved?.org as Record<string, unknown> | undefined) ?? null,
+    hostId,
+  )
 }

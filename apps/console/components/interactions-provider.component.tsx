@@ -37,6 +37,7 @@ import { buildInteractionCandidate } from './interaction-builder-doc'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import { collection, doc, limit, query, setDoc } from 'firebase/firestore'
+import { computed } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import { useCallback, useMemo, useState } from 'react'
 import InteractionBuilderDialog, {
@@ -72,9 +73,12 @@ export interface InteractionsProviderProps {
  * save enabled. Section experiments still draft to the Marketing page.
  */
 /**
- * Observed (AGL-1478): an interaction now lives on the node, which is a MobX
- * observable in the editor's canvas. Without this the list would refresh only
- * when the legacy `actions` listener happened to fire.
+ * An `observer`, because an interaction lives on the node and the node is a
+ * MobX observable in the editor's canvas: nothing else would re-render this
+ * provider when one is added, removed or flipped.
+ *
+ * Re-rendering is only half of it — see `nodeAutomationsComputed` for the
+ * half that decides whether the re-render carries a new list.
  */
 export const InteractionsProvider = observer(function InteractionsProvider(
   props: InteractionsProviderProps,
@@ -109,7 +113,7 @@ export const InteractionsProvider = observer(function InteractionsProvider(
   )
 
   /**
-   * Write one interaction onto the node that owns it (AGL-1478).
+   * Write one interaction onto the node that owns it.
    *
    * The canvas node IS the document, so this needs no Firestore call and no
    * id allocation from the server: the interaction rides the editor's next
@@ -133,33 +137,55 @@ export const InteractionsProvider = observer(function InteractionsProvider(
     [],
   )
 
+  /**
+   * The document's own interactions, listed first.
+   *
+   * Read straight off the canvas, which is the editor's live copy — so a
+   * new interaction appears the moment it is written, with no round trip
+   * and nothing to reconcile against a listener.
+   *
+   * Presented in the same `{ id, name, event, selector, enabled }` shape
+   * the legacy actions produce, with the selector DERIVED, so the props
+   * form's per-element filter needs no knowledge of where an interaction
+   * is stored.
+   *
+   * A `computed` read on every render, deliberately, rather than a value
+   * built inside the context memo below. MobX only tracks what a render
+   * actually READS, and a memo whose dependencies do not change is not
+   * re-run — so a list built in there keeps serving whatever the canvas held
+   * the last time one of those dependencies moved. The canvas is filled a
+   * second or more after this provider mounts, which is exactly such a
+   * moment: the list is built over an empty canvas and then never rebuilt,
+   * and the Interactions panel reports that an element carrying a hover menu
+   * has no interactions. The computed caches on the same observables the
+   * canvas mutates, so the walk costs nothing between changes and its result
+   * keeps its identity, which is what keeps the memo below stable.
+   */
+  const nodeAutomationsComputed = useMemo(
+    () =>
+      computed(() =>
+        disabled
+          ? []
+          : collectNodeInteractions(
+              canvas.nodes ? [...canvas.nodes.values()] : [],
+            ).map((entry) => ({
+              id: entry.id,
+              name: entry.action.name,
+              event: String(entry.action.trigger?.event ?? ''),
+              selector: String(entry.action.trigger?.selector ?? ''),
+              enabled: entry.action.enabled !== false,
+            })),
+      ),
+    [disabled],
+  )
+  const nodeAutomations = nodeAutomationsComputed.get()
+
   const value = useMemo<InteractionsContextValue>(() => {
     // Unavailable (AGL-587): no callbacks means the designer's props form
     // never renders the Interactions section (it gates on the creators).
     if (disabled) return {}
     /**
-     * The document's own interactions, listed first (AGL-1478).
-     *
-     * Read straight off the canvas, which is the editor's live copy — so a
-     * new interaction appears the moment it is written, with no round trip
-     * and nothing to reconcile against a listener.
-     *
-     * Presented in the same `{ id, name, event, selector, enabled }` shape
-     * the legacy actions produce, with the selector DERIVED, so the props
-     * form's per-element filter needs no knowledge of where an interaction
-     * is stored.
-     */
-    const nodeAutomations = collectNodeInteractions(
-      canvas.nodes ? [...canvas.nodes.values()] : [],
-    ).map((entry) => ({
-      id: entry.id,
-      name: entry.action.name,
-      event: String(entry.action.trigger?.event ?? ''),
-      selector: String(entry.action.trigger?.selector ?? ''),
-      enabled: entry.action.enabled !== false,
-    }))
-    /**
-     * The legacy host actions, still listed (AGL-1478).
+     * The legacy host actions, still listed.
      *
      * Every element interaction authored before this change is a row in
      * `hosts/{hostId}/actions`, and it keeps working and keeps being editable
@@ -201,7 +227,7 @@ export const InteractionsProvider = observer(function InteractionsProvider(
       // Manage in place (wave v7): flip or retire an element automation
       // without leaving the canvas.
       onToggleInteraction: ({ id, enabled }) => {
-        // Two stores until the backfill, so the id says which one (AGL-1478).
+        // Two stores until the backfill, so the id says which one.
         const owned = parseNodeInteractionId(id)
         if (owned) {
           const node = canvas.getNode(owned.nodeId)
@@ -280,7 +306,7 @@ export const InteractionsProvider = observer(function InteractionsProvider(
             continue
           }
           /**
-           * Onto the node the template resolved against (AGL-1478).
+           * Onto the node the template resolved against.
            *
            * The draft's selector is the only place that node is named — the
            * preset resolver minted it — so it is read back out and then
@@ -362,11 +388,8 @@ export const InteractionsProvider = observer(function InteractionsProvider(
           }
         : {}),
     }
-    // `canvas.nodes` is observed, not a dep: this component is an `observer`,
-    // so MobX re-runs the render when a node's interactions change and the
-    // memo is rebuilt with it. Listing it here would be a lie — the Map's
-    // identity does not change when a field on one of its nodes does.
   }, [
+    nodeAutomations,
     actionDocs,
     experimentDocs,
     firestore,
@@ -379,7 +402,7 @@ export const InteractionsProvider = observer(function InteractionsProvider(
   ])
 
   /**
-   * What the dialog is editing, from whichever store holds it (AGL-1478).
+   * What the dialog is editing, from whichever store holds it.
    *
    * A node interaction is reshaped into the action the dialog understands —
    * the selector derived, exactly as the runtime derives it — so the dialog

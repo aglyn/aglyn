@@ -17,6 +17,10 @@
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
+// Leaf import, not the barrel: the specs in this library mock
+// `@aglyn/tenant-data-admin` wholesale, and a permissive stub would turn a
+// reversal that never happened green.
+import { reverseEmailAttributedRevenue } from '@aglyn/tenant-data-admin/server/email-revenue-attribution'
 import { createHash } from 'crypto'
 
 /**
@@ -271,6 +275,27 @@ export const bookingRefundHandler: PluginApiHandler = async (req, res) => {
         { merge: true },
       )
       .catch(() => undefined)
+    /*
+     * The campaign's side of the ledger.
+     *
+     * A paid booking is credited to the campaign that led to it — the sale
+     * announces itself through `upsertHostContact` with a `purchaseCents` and
+     * this booking's id, exactly as a store order does — so a refunded one
+     * has to stop counting. Without this, a booking site's campaign revenue
+     * could only ever rise.
+     *
+     * Keyed by the BOOKING id, which is what the credit was filed under, so
+     * this needs no email and works for a guest who never became a contact.
+     * Recorded beside the credit rather than subtracted from it, and swallowed
+     * whole: the money has already left the merchant's account and the booking
+     * already records it, so nothing here may fail a refund.
+     */
+    await reverseEmailAttributedRevenue({
+      hostId,
+      orderId: bookingId,
+      amountCents: refundCents,
+      closedTheOrder: fullyRefunded,
+    })
     return res.status(200).json(payload)
   } catch (error) {
     console.error(error)

@@ -31,7 +31,7 @@ import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import useAccountSignInMethods from '../../../../../hooks/use-account-sign-in-methods'
 
 /**
- * Manage Account, section by section (AGL-693).
+ * Manage Account, section by section (AGL-2501).
  *
  * The six areas were `HubTabs` panels on one route, and `HubTabs` mounts every
  * panel it is given — `keepMounted`, with `lazy` off by default and passed by

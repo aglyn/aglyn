@@ -50,6 +50,14 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
  * it versus one without — not who.
  */
 
+/**
+ * The reports collection, named once.
+ *
+ * The audit row's `target` is built from this, so the path staff search for
+ * and the document the route actually mutates cannot drift apart.
+ */
+const REPORTS_COLLECTION = 'marketplaceReports'
+
 const REPORT_ID = /^[a-f0-9]{40}$/
 
 const asString = (value: unknown): string | null =>
@@ -93,7 +101,7 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: 'Staff only' }, { status: 403 })
     }
     const firestore = firebaseAdmin.app().firestore()
-    const collection = firestore.collection('marketplaceReports')
+    const collection = firestore.collection(REPORTS_COLLECTION)
     const showIdentity = identityVisible(decoded as Record<string, unknown>)
 
     if (method === 'GET') {
@@ -193,6 +201,8 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: 'No such report' }, { status: 404 })
     }
     const beforeStatus = asString(before.get('status')) ?? 'open'
+    // Present only when a REVIEW was reported; a reported listing has none.
+    const reportedReviewUid = asString(before.get('reviewUid'))
     const FieldValue = firebaseAdmin.firestore.FieldValue
 
     await ref.set(
@@ -215,12 +225,46 @@ async function handler(request: Request): Promise<Response> {
      * decided. `before`/`after` here match the abuse queue's shape so the two
      * queues read the same way in one audit log.
      */
+    /*
+     * `target` AND `scope`, the same two fields the abuse queue writes.
+     *
+     * An entry nobody can retrieve is indistinguishable from one that was
+     * never written. `target` is what every reader of this collection looks
+     * up by — the audit log page filters on it and exports it, and the org
+     * page matches it by substring — so a row without one is recorded and
+     * unreachable by the thing it acted on. It is the document this route
+     * mutates: the report. The listing stays beside it, because the row has
+     * to still mean something a year later.
+     *
+     * `targetType`/`targetId` are gone rather than kept alongside. Nothing
+     * read either, and `targetType` here said `marketplaceReport` while
+     * `targetType` on the report document says `listing` or `review` — the
+     * same key naming two different things one hop apart.
+     */
     await firestore.collection('adminAudit').add({
       action: 'marketplace-report-status',
       actorUid: decoded.uid,
       actorEmail: decoded.email ? String(decoded.email) : null,
-      targetType: 'marketplaceReport',
-      targetId: id,
+      scope: 'marketplaceReport',
+      target: `${REPORTS_COLLECTION}/${id}`,
+      /*
+       * The subject is the REVIEW'S AUTHOR, and only when a review is what
+       * was reported.
+       *
+       * A report against a listing lands on its publisher, which is an
+       * ORGANIZATION (`publisherOrgId`) and not a person — so there is no uid
+       * to name, and resolving one from the org's roster would file a
+       * moderation decision under whichever member happened to answer the
+       * lookup. A review document is keyed by its author's uid, so that case
+       * has a real person, and it is the same subject a takedown of the same
+       * review records.
+       *
+       * The REPORTER is deliberately not it. `reporterUid` is withheld from
+       * staff below `super` by this route, and `adminAudit` is readable by
+       * any staff role — writing it here would hand every support-tier
+       * session the identity the queue above refuses them.
+       */
+      ...(reportedReviewUid ? { subjectUid: reportedReviewUid } : {}),
       listingId: asString(before.get('listingId')),
       before: { status: beforeStatus },
       after: { status, resolution: resolution || null },

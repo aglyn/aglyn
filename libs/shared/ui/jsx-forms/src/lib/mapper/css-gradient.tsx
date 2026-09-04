@@ -126,6 +126,9 @@ type GradientFillType = '' | 'solid' | CssGradientType
 interface GradientDraft {
   fill: GradientFillType
   angle: string
+  /** Radial centre, percent, as typed. Empty means CSS's default (centre). */
+  positionX: string
+  positionY: string
   stops: CssGradientStop[]
   /** The value is not a gradient this editor can model — held verbatim. */
   raw?: string
@@ -134,10 +137,22 @@ interface GradientDraft {
 const DEFAULT_ANGLE = 180
 
 /** No value at all — the property stays off the node. */
-const emptyDraft: GradientDraft = { fill: '', angle: '', stops: [] }
+const emptyDraft: GradientDraft = {
+  fill: '',
+  angle: '',
+  positionX: '',
+  positionY: '',
+  stops: [],
+}
 
 /** An explicit `background-image: none`. */
-const solidDraft: GradientDraft = { fill: 'solid', angle: '', stops: [] }
+const solidDraft: GradientDraft = {
+  fill: 'solid',
+  angle: '',
+  positionX: '',
+  positionY: '',
+  stops: [],
+}
 
 export const seedGradientDraft = (value: unknown): GradientDraft => {
   const text = typeof value === 'string' ? value.trim() : ''
@@ -150,11 +165,20 @@ export const seedGradientDraft = (value: unknown): GradientDraft => {
   // A non-gradient background image (`url(…)`) is still someone's value.
   if (!parsed) return { ...emptyDraft, fill: 'linear', raw: text }
   if (parsed.raw !== undefined) {
-    return { fill: parsed.type, angle: '', stops: [], raw: parsed.raw }
+    return {
+      fill: parsed.type,
+      angle: '',
+      positionX: '',
+      positionY: '',
+      stops: [],
+      raw: parsed.raw,
+    }
   }
   return {
     fill: parsed.type,
     angle: parsed.angle === undefined ? '' : `${parsed.angle}`,
+    positionX: parsed.position ? `${parsed.position.x}` : '',
+    positionY: parsed.position ? `${parsed.position.y}` : '',
     stops: parsed.stops,
   }
 }
@@ -164,9 +188,16 @@ export const serializeGradientDraft = (draft: GradientDraft): string => {
   if (draft.fill === '') return ''
   if (draft.fill === 'solid') return SOLID_FILL_VALUE
   const angle = draft.angle.trim()
+  // Both boxes or neither: `at 50%` alone is a different CSS value (it
+  // defaults Y to centre), and writing one while the author has only filled
+  // the other would move the glow the moment they tabbed out of the first.
+  const x = draft.positionX.trim()
+  const y = draft.positionY.trim()
+  const hasPosition = draft.fill === 'radial' && x !== '' && y !== ''
   const gradient: CssGradient = {
     type: draft.fill,
     angle: angle === '' ? undefined : Number(angle),
+    position: hasPosition ? { x: Number(x), y: Number(y) } : undefined,
     stops: draft.stops,
   }
   return buildCssGradient(gradient)
@@ -421,9 +452,29 @@ export const CssGradientField = (props: CssGradientProps) => {
       const stops = draft.stops.length >= 2 ? draft.stops : defaultStops(options)
       const angle =
         fill === 'linear' ? draft.angle || `${DEFAULT_ANGLE}` : ''
-      commit({ fill, angle, stops, raw: undefined })
+      // Position belongs to radial; carried across a radial→radial change
+      // (Solid and back) and dropped when the fill is no longer radial, so a
+      // linear gradient cannot persist a centre no CSS would use.
+      const positionX = fill === 'radial' ? draft.positionX : ''
+      const positionY = fill === 'radial' ? draft.positionY : ''
+      commit({ fill, angle, positionX, positionY, stops, raw: undefined })
     },
-    [commit, draft.angle, draft.stops, options],
+    [
+      commit,
+      draft.angle,
+      draft.positionX,
+      draft.positionY,
+      draft.stops,
+      options,
+    ],
+  )
+
+  const handlePositionChange = useCallback(
+    (axis: 'positionX' | 'positionY') =>
+      (event: { target: { value: string } }) => {
+        commit({ ...draft, [axis]: event.target.value })
+      },
+    [commit, draft],
   )
 
   const handleAngleChange = useCallback(
@@ -603,6 +654,46 @@ export const CssGradientField = (props: CssGradientProps) => {
                 input: { endAdornment: <Typography variant="caption">deg</Typography> },
               }}
             />
+          ) : null}
+          {draft.fill === 'radial' ? (
+            <Stack direction="row" spacing={0.5} sx={{ mt: 1 }}>
+              <MuiTextField
+                fullWidth
+                size="small"
+                type="number"
+                label="Center X"
+                value={draft.positionX}
+                onChange={handlePositionChange('positionX')}
+                disabled={locked}
+                slotProps={{
+                  htmlInput: {
+                    'aria-label': 'Center X',
+                    inputMode: 'numeric',
+                  },
+                  input: {
+                    endAdornment: <Typography variant="caption">{'%'}</Typography>,
+                  },
+                }}
+              />
+              <MuiTextField
+                fullWidth
+                size="small"
+                type="number"
+                label="Center Y"
+                value={draft.positionY}
+                onChange={handlePositionChange('positionY')}
+                disabled={locked}
+                slotProps={{
+                  htmlInput: {
+                    'aria-label': 'Center Y',
+                    inputMode: 'numeric',
+                  },
+                  input: {
+                    endAdornment: <Typography variant="caption">{'%'}</Typography>,
+                  },
+                }}
+              />
+            </Stack>
           ) : null}
           <Stack spacing={0.5} sx={{ mt: 1 }}>
             {draft.stops.map((stop, index) => (

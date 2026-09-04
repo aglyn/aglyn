@@ -39,7 +39,22 @@ import {
 } from './lib/standalone-installs.mjs'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
-const WORKFLOW = join('.github', 'workflows', 'nx-ci.yml')
+
+/**
+ * Both files that make up NX CI's install surface (AGL-2505).
+ *
+ * The install steps used to sit in nx-ci.yml itself. They moved into the
+ * composite action when the workflow became four parallel jobs — every job
+ * calls it, so that is where a nested package gets installed now. The guard
+ * reads BOTH rather than following the steps to their new home, because the
+ * question it asks is "does CI install this package anywhere", and pinning it
+ * to one file is what would make the next move silently disarm it.
+ */
+const INSTALL_SURFACE = [
+  join('.github', 'workflows', 'nx-ci.yml'),
+  join('.github', 'actions', 'nx-ci-setup', 'action.yml'),
+]
+const WORKFLOW = INSTALL_SURFACE[0]
 
 /**
  * Ask git, not the filesystem: an UNTRACKED lockfile is somebody's local
@@ -59,7 +74,9 @@ function standalonePackageDirs() {
 }
 
 const packageDirs = standalonePackageDirs()
-const workflow = readFileSync(join(repoRoot, WORKFLOW), 'utf8')
+const workflow = INSTALL_SURFACE.map((file) =>
+  readFileSync(join(repoRoot, file), 'utf8'),
+).join('\n')
 const rootPkg = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'))
 
 const result = evaluateStandaloneInstalls({
@@ -70,9 +87,10 @@ const result = evaluateStandaloneInstalls({
 
 if (result.ok) {
   const listed = packageDirs.length === 0 ? 'none' : packageDirs.join(', ')
-  console.log(
-    `Standalone packages installed by ${WORKFLOW.split(sep).join('/')}: ${listed}`,
+  const where = INSTALL_SURFACE.map((file) => file.split(sep).join('/')).join(
+    ' + ',
   )
+  console.log(`Standalone packages installed by ${where}: ${listed}`)
   process.exit(0)
 }
 

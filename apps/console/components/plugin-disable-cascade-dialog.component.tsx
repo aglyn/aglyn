@@ -22,6 +22,7 @@ import {
   type PublishedSiteImpact,
 } from '@aglyn/aglyn'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Alert,
   Button,
@@ -159,19 +160,17 @@ export function PluginDisableCascadeDialog(
     setLoading(true)
     void (async () => {
       try {
-        const idToken = await (
-          userRef.current as { getIdToken?: () => Promise<string> }
-        )?.getIdToken?.()
         const results = await Promise.all(
           countable.map(async (id) => {
-            const response = await fetch('/api/hosts/plugin-impact', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+            const response = await authorizedFetch(
+              userRef.current,
+              '/api/hosts/plugin-impact',
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pluginId: id, hostIds: [host] }),
               },
-              body: JSON.stringify({ pluginId: id, hostIds: [host] }),
-            })
+            )
             if (!response.ok) return null
             return [id, (await response.json()) as ImpactCount] as const
           }),

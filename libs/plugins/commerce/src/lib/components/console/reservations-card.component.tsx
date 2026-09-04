@@ -237,12 +237,17 @@ export function ReservationsCard(props: ReservationsCardProps) {
     if (!resource) return
     const checkInDayMs = Date.parse(`${walkIn.checkIn}T00:00:00Z`)
     const checkOutDayMs = Date.parse(`${walkIn.checkOut}T00:00:00Z`)
+    // `createdAtMs` carried through because the pending hold lapses on it
+    // (`reservationHoldsDates`). Dropping it made every unpaid `pending` row
+    // block forever, so the front desk was refused a walk-in into a room that
+    // an abandoned online checkout had left empty.
     const existing = reservations
       .filter((item: any) => item.resourceId === walkIn.resourceId)
       .map((item: any) => ({
         checkInDayMs: item.checkInDayMs,
         checkOutDayMs: item.checkOutDayMs,
         status: item.status,
+        createdAtMs: item.createdAtMs,
       }))
     if (
       !CommerceModel.isRangeAvailable(resource, existing, checkInDayMs, checkOutDayMs)

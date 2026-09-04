@@ -27,7 +27,19 @@ import {
   pluginDocsHelp,
   runWorkflow,
 } from '@aglyn/aglyn'
+/*
+ * The MODULE, not the barrel, for the two PURE helpers — every spec that
+ * renders this card mocks `@aglyn/tenant-feature-instance` wholesale to stage
+ * its Firestore hooks, and a query builder imported through that barrel
+ * disappears under the mock. Neither of these is a hook.
+ */
+import {
+  ceilingedWindow,
+  collectionCeiling,
+} from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
@@ -44,7 +56,13 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { collection, doc, getCountFromServer, limit, query, setDoc, updateDoc } from 'firebase/firestore'
+import {
+  collection,
+  doc,
+  getCountFromServer,
+  setDoc,
+  updateDoc,
+} from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   useFirestore,
@@ -60,6 +78,23 @@ import {
   summarizeDependents,
   type WhereUsedResult,
 } from '@aglyn/plugins-logic'
+
+/**
+ * How many workflows the card reads.
+ *
+ * A CEILING, not a page size — see the query, which explains why this list
+ * cannot be paged by the server without making the duplicate-name check lie.
+ */
+const WORKFLOW_CEILING = 100
+
+/**
+ * How many functions and variables the step editor offers.
+ *
+ * Paid for only while the editor is open, which is what makes a ceiling this
+ * size affordable: it is one author mid-edit rather than every visitor to the
+ * page.
+ */
+const EDITOR_OPTION_CEILING = 100
 
 export interface HostWorkflowsCardProps {
   hostId: string
@@ -102,28 +137,115 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
      */
     fromCache: workflowsFromCache,
   } = useFirestoreCollection<any>(
+    /*
+     * ORDERED AND CEILINGED, deliberately not paged by the query (AGL-2501) —
+     * the same decision as the logic plugin's two cards, for the same reasons.
+     *
+     * `limit(100)` alone is answered in DOCUMENT-ID order, so the window is a
+     * pseudo-random hundred that the `localeCompare` below arranges
+     * alphabetically, and nothing said the list was bounded.
+     *
+     * `collectionCeiling` does not change WHICH hundred — document-id order is
+     * what the bare cap already returned. What it changes is that the order is
+     * NAMED, so the obvious next edit is caught: ordering on `name` would HIDE
+     * every workflow written without one rather than mis-sorting the list, and
+     * `/api/hosts/resources` validates no field for presence while
+     * `IMPORTABLE_FIELDS.workflows` copies one only if the export carried it.
+     *
+     * The QUERY is not paged because `nameTaken` below tests the draft against
+     * these rows: computed variables look their workflow up BY NAME
+     * (AGL-185/AGL-261), so a duplicate silently rebinds a live binding, and a
+     * uniqueness check over a ten-row page would let one through.
+     */
     () =>
-      query(collection(firestore, 'hosts', hostId, 'workflows'), limit(100)),
+      collectionCeiling(
+        collection(firestore, 'hosts', hostId, 'workflows'),
+        WORKFLOW_CEILING,
+      ),
     [firestore, hostId],
     { idField: '$id' },
   )
-  const { data: functionDocs } = useFirestoreCollection<any>(
+  const { rows: readWorkflows, truncated: workflowsTruncated } =
+    ceilingedWindow<any>(workflowDocs, WORKFLOW_CEILING)
+  const [draft, setDraft] = useState<WorkflowDraft | null>(null)
+  /**
+   * The editor has been opened at least once in this session.
+   *
+   * A LATCH rather than `draft` itself, because the two reads below key their
+   * listeners on it. Tracking the dialog would tear those subscriptions down
+   * on Cancel and pay for them again on the next Edit, so a merchant working
+   * through ten actions would buy the same two windows ten times — worse than
+   * the mount-time read this replaces. Latched, a reader who never edits pays
+   * nothing and a reader who edits pays once.
+   */
+  const [editorOpened, setEditorOpened] = useState(false)
+  if (draft && !editorOpened) setEditorOpened(true)
+  /*
+   * THE EDITOR'S WORKING SET, read when the editor opens.
+   *
+   * Nothing outside the dialog reads either of these: the table renders a
+   * workflow's stored step names, and `runWorkflow` is only reachable from the
+   * test-run button inside the dialog. Mounting them unconditionally charges
+   * every visitor to this page two windows to fill a select and seed a
+   * scratchpad most of them never open.
+   *
+   * Ceilinged and ordered for the reason the workflows query above gives: a
+   * bare `limit` is answered in document-id order, so the `localeCompare` on
+   * the options below would arrange a pseudo-random hundred into a convincing
+   * alphabet, and a function past the window could not be picked with nothing
+   * saying why.
+   */
+  const { data: functionRead } = useFirestoreCollection<any>(
     () =>
-      query(collection(firestore, 'hosts', hostId, 'functions'), limit(100)),
-    [firestore, hostId],
+      editorOpened
+        ? collectionCeiling(
+            collection(firestore, 'hosts', hostId, 'functions'),
+            EDITOR_OPTION_CEILING,
+          )
+        : null,
+    [firestore, hostId, editorOpened],
     { idField: '$id' },
   )
-  const { data: variableDocs } = useFirestoreCollection<any>(
+  // Memoised so the window keeps one identity while the rows do — the option
+  // list and the two lookup maps below are all built from it.
+  const { rows: functionDocs, truncated: functionsTruncated } = useMemo(
+    () => ceilingedWindow<any>(functionRead, EDITOR_OPTION_CEILING),
+    [functionRead],
+  )
+  const { data: variableRead } = useFirestoreCollection<any>(
     () =>
-      query(collection(firestore, 'hosts', hostId, 'variables'), limit(100)),
-    [firestore, hostId],
+      editorOpened
+        ? collectionCeiling(
+            collection(firestore, 'hosts', hostId, 'variables'),
+            EDITOR_OPTION_CEILING,
+          )
+        : null,
+    [firestore, hostId, editorOpened],
     { idField: '$id' },
   )
-  const workflows = [...(workflowDocs ?? [])]
-    .filter((workflow: any) => !workflow.deletedAt)
-    .sort((a: any, b: any) =>
-      String(a.name ?? '').localeCompare(String(b.name ?? '')),
-    )
+  const { rows: variableDocs, truncated: variablesTruncated } = useMemo(
+    () => ceilingedWindow<any>(variableRead, EDITOR_OPTION_CEILING),
+    [variableRead],
+  )
+  // Sorting is safe here in a way it is not on a paged list: these rows are
+  // the whole collection below the ceiling, not a slice of one.
+  const workflows = useMemo(
+    () =>
+      readWorkflows
+        .filter((workflow: any) => !workflow.deletedAt)
+        .sort((a: any, b: any) =>
+          String(a.name ?? '').localeCompare(String(b.name ?? '')),
+        ),
+    [readWorkflows],
+  )
+  // The page is a SLICE: the rows are already in hand and `nameTaken` needs
+  // all of them.
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  const visibleWorkflows = useMemo(
+    () => workflows.slice(page * pageSize, page * pageSize + pageSize),
+    [workflows, page, pageSize],
+  )
   /**
    * The workflow HEAD-COUNT is a server aggregate, not the length of the
    * capped listener (AGL-1716, the AGL-1706 shape).
@@ -191,8 +313,6 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
     }
     return map
   }, [variableDocs])
-
-  const [draft, setDraft] = useState<WorkflowDraft | null>(null)
 
   // Where-used dialog (AGL-193).
   const [usage, setUsage] = useState<{
@@ -390,7 +510,7 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
               'feeds the next. Site-event triggers are coming next.'}
           </Typography>
         ) : (
-          workflows.map((workflow: any) => (
+          visibleWorkflows.map((workflow: any) => (
             <Stack
               key={workflow.$id}
               direction="row"
@@ -450,6 +570,27 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
             </Stack>
           ))
         )}
+        {workflows.length === 0 ? null : (
+          <ListPagination
+            page={page}
+            pageSize={pageSize}
+            rowCount={visibleWorkflows.length}
+            // The workflows the card HOLDS. Not `workflowCount`, which is the
+            // site's total including soft-deleted rows and answers the quota's
+            // question rather than the reader's.
+            count={workflows.length}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+        )}
+        {workflowsTruncated ? (
+          <Alert severity="info">
+            {`Showing ${WORKFLOW_CEILING} workflows, ordered by id. This site ` +
+              'has more — the duplicate-name check below only covers the ' +
+              'ones listed here, so a name may already be taken by one that ' +
+              'is not.'}
+          </Alert>
+        ) : null}
         <Button
           size="small"
           color="primary"
@@ -501,6 +642,25 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
           <Typography variant="overline" color="text.secondary">
             {'Steps'}
           </Typography>
+          {/*
+            The pickers and the test run speak only for what was read. A step
+            calling a function past the ceiling still RUNS on the site — this
+            editor simply cannot name it, and a test run resolves its
+            expression against an incomplete variable set.
+           */}
+          {functionsTruncated || variablesTruncated ? (
+            <Alert severity="info">
+              {`Offering the first ${EDITOR_OPTION_CEILING} ` +
+                (functionsTruncated && variablesTruncated
+                  ? 'functions and variables'
+                  : functionsTruncated
+                    ? 'functions'
+                    : 'variables') +
+                ' on this site, ordered by id. There are more, so the ' +
+                'pickers below are short and a test run may not resolve ' +
+                'every expression.'}
+            </Alert>
+          ) : null}
           {(draft?.steps ?? []).map((step, index) => {
             const definition =
               functions[(step as any).functionId ?? ''] ??
@@ -749,7 +909,6 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
               hostId={hostId}
               targetId={runsFor.$id}
               header="Recent runs"
-              max={25}
             />
           ) : null}
         </DialogContent>

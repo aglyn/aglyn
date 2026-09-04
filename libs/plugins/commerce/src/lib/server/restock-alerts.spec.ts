@@ -194,6 +194,40 @@ const meterHostEmail = jest.fn<Promise<undefined>, [string]>(
 )
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  /*
+   * The site's own sending identity, which every tenant send now resolves.
+   *
+   * A VERIFIED one, because these specs are about the mail their subject
+   * sends rather than about the identity boundary — a refusing stub would
+   * turn each of them into an assertion that no mail was sent, which is not
+   * what any of them was written to check. The boundary itself is proved in
+   * `platform-sending-domain.spec.ts`, `host-sending-domain.spec.ts` and
+   * `email-audience-coverage.spec.ts`.
+   *
+   * The domain is the SITE's, never `aglyn.com`, so an assertion on a From:
+   * address in this file cannot accidentally pass against a platform
+   * fallback.
+   */
+  hostSendingIdentity: async () => ({
+    from: 'hello@site.mail.aglyn.app',
+    source: 'custom',
+    domain: 'site.mail.aglyn.app',
+    summary: 'Sending as hello@site.mail.aglyn.app.',
+    refusal: null,
+  }),
+  /*
+   * The real resolution's shape: an org that declared no pooling resolves
+   * every site to a group of ONE. Faked rather than imported because this
+   * file mocks the whole module — but faked to the NARROW answer, which is
+   * the direction a wrong group may fail in.
+   */
+  consentGroupForSite: async (hostId: string) => ({
+    hostId,
+    groupId: hostId,
+    name: null,
+    hostIds: [hostId],
+    declared: false,
+  }),
   firebaseAdmin: { app: () => ({ firestore: () => fakeFirestore }) },
   getOrgForHost: async () => ({ org: {} }),
   meterHostEmail: (...args: unknown[]) => meterHostEmail(...(args as [string])),
@@ -207,6 +241,13 @@ const sendEmail = jest.fn<
 >(async () => ({ sent: true }))
 
 jest.mock('@aglyn/shared-util-email', () => ({
+  // The REAL classifier, not a double. It is what decides whether the sweep
+  // stamps `notifiedAtMs` or leaves the alert for the next beat, so a stub
+  // here would let this suite pass over a sweep that discards deferred
+  // messages — the exact behavior the stamping rule exists to prevent.
+  isDeferrableSendResult: jest.requireActual(
+    '@aglyn/shared-util-email/send-email',
+  ).isDeferrableSendResult,
   isEmailConfigured: () => true,
   loadHostEmail: async () => null,
   renderLoadedHostEmail: () => null,

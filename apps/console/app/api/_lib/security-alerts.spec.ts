@@ -152,7 +152,7 @@ describe('recordDeviceAndMaybeAlert (AGL-665)', () => {
     expect(String(options.text)).toContain('Denver, CO, US')
     expect(String(options.text)).toContain('203.0.113.7')
     expect(String(options.text)).toContain('2026-08-08 14:03 UTC')
-    // The SECTION, not the page (AGL-693). Landing someone who has just been
+    // The SECTION, not the page (AGL-2501). Landing someone who has just been
     // told a stranger signed in on their email address, to go looking for
     // Recent sign-ins themselves, is the thing this link exists to prevent.
     expect(String(options.text)).toContain('/manage/user/security')

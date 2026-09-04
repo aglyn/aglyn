@@ -27,6 +27,7 @@ import {
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useHost, useUser, writeGuardedBySeed } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import type { CascadeEntry } from '../components/plugin-disable-cascade-dialog.component'
 import useCurrentOrg from './use-current-org'
 import { useOrgScope } from './use-org-scope'
@@ -139,15 +140,9 @@ export function useOrgPluginSwitchboard(
     async (pluginIds: string[]) => {
       setBusy(true)
       try {
-        const idToken = await (
-          user as { getIdToken?: () => Promise<string> }
-        )?.getIdToken?.()
-        const response = await fetch('/api/orgs/settings', {
+        const response = await authorizedFetch(user, '/api/orgs/settings', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             orgId,
             action: 'set-enabled-plugins',

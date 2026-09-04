@@ -45,16 +45,18 @@ describe('Section renders the element the author chose (AGL-336)', () => {
 /**
  * `main` IS NOT AN ELEMENT AN AUTHOR MAY PICK (AGL-2486).
  *
- * The tenant root layout renders the document's single `main` landmark, so a
- * `main` chosen here could only ever be the SECOND one — and two `main`
- * elements is a worse accessibility outcome than none, because the landmark
- * stops naming anything in particular. It was offered in this select with
- * field help recommending it, which made the duplicate the documented choice
- * rather than a mistake an author had to work at.
+ * A published page carries exactly one `main` landmark, placed by composition
+ * on the page's content region — the layout slot, or the screen root when
+ * there is no layout. A `main` chosen on a grouping container that may appear
+ * any number of times per page could only ever be the SECOND one, and two
+ * `main` elements is a worse accessibility outcome than none, because the
+ * landmark stops naming anything in particular. It was offered in this select
+ * with field help recommending it, which made the duplicate the documented
+ * choice rather than a mistake an author had to work at.
  *
  * ⛔ Restoring it to `SECTION_ELEMENTS` re-opens that, silently and
- * platform-wide: nothing at render time can see the layout's landmark to
- * refuse a competing one.
+ * platform-wide: nothing at render time can see the page's landmark to refuse
+ * a competing one.
  */
 describe('the Section picker cannot mint a second `main` (AGL-2486)', () => {
   it('does not offer `main`', () => {
@@ -70,7 +72,7 @@ describe('the Section picker cannot mint a second `main` (AGL-2486)', () => {
     // Published screens authored while `main` was on offer still carry it, and
     // they must keep rendering. The resolver falls back for any unlisted value,
     // so the node stays where the author put it and stops competing with the
-    // layout's landmark.
+    // page's landmark.
     render(<Section element={'main' as never}>{'legacy'}</Section>)
     expect(screen.getByText('legacy').tagName).toBe('SECTION')
   })

@@ -307,7 +307,7 @@ export function domainProvider(): DomainProvider {
     process.env.AGLYN_DOMAIN_WILDCARD_SUFFIXES ?? '',
     process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN ?? '',
     process.env.NEXT_PUBLIC_TENANT_DOMAIN ?? '',
-  ].join(' ')
+  ].join('\x00')
   if (cached?.key === key) return cached.provider
 
   const provider = selectProvider(requested)

@@ -151,4 +151,41 @@ describe('compileClientAutomations (AGL-830)', () => {
       compileClientAutomations([action], { ...opts, path: '/', matchAllPaths: true }),
     ).toHaveLength(1)
   })
+
+  it('drops a path-scoped action outright when the path is unknowable', () => {
+    // AGL-2511, and the opposite of `matchAllPaths` on purpose: Preview knows
+    // which page it is showing, the designed 404 does not know which URL it
+    // stands in for. `/shop` would otherwise match `/` here through a
+    // placeholder path nobody chose.
+    const scoped = raw('p', {
+      trigger: {
+        event: 'elementHoverEnter',
+        selector: '[data-aglyn="leaf:x"]',
+        pathPattern: '/*',
+      },
+      steps: [{ type: 'openMenu' } as never],
+    })
+    expect(
+      compileClientAutomations([scoped], { ...opts, path: '/' }),
+    ).toHaveLength(1)
+    expect(
+      compileClientAutomations([scoped], {
+        ...opts,
+        path: '/',
+        dropPathScoped: true,
+      }),
+    ).toHaveLength(0)
+  })
+
+  it('keeps an unscoped action — a nav’s hover choreography — when the path is unknowable', () => {
+    // The half that must survive: interactions authored on nodes carry no
+    // path pattern, and they are the reason the surface is enriched at all.
+    expect(
+      compileClientAutomations([hoverOpenMenu('a1', '[data-aglyn="leaf:x"]')], {
+        ...opts,
+        path: '/',
+        dropPathScoped: true,
+      }),
+    ).toHaveLength(1)
+  })
 })

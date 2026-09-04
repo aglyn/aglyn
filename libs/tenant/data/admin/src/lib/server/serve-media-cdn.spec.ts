@@ -17,6 +17,7 @@
 
 import {
   mediaCdnAllows,
+  mediaCdnScopeRefusal,
   MEDIA_CDN_STABLE_CACHE_CONTROL,
   parseMediaCdnScope,
 } from './serve-media-cdn'
@@ -82,9 +83,19 @@ describe('mediaCdnAllows (AGL-1043)', () => {
     expect(mediaCdnAllows(forSiteA, ['org'])).toBe(true)
   })
 
-  it('treats a MISSING scope as org-wide, for pre-backfill docs', () => {
-    expect(mediaCdnAllows(orgWide, undefined)).toBe(true)
-    expect(mediaCdnAllows(forSiteA, undefined)).toBe(true)
+  /**
+   * An UNSCOPED asset is served to nobody, matching what both enforcement
+   * layers already do with a document carrying no `visibleTo`. The CDN is
+   * unauthenticated and the URL is the only thing it can decide from, so this
+   * is the surface where the permissive reading was worth the least and cost
+   * the most.
+   */
+  it('refuses a MISSING scope rather than serving it to everyone', () => {
+    expect(mediaCdnAllows(orgWide, undefined)).toBe(false)
+    expect(mediaCdnAllows(forSiteA, undefined)).toBe(false)
+    // The control: a stamped asset is still served, so this is the absent
+    // field being refused and not the whole CDN.
+    expect(mediaCdnAllows(orgWide, ['org'])).toBe(true)
   })
 
   it('fails closed on an empty scope', () => {
@@ -99,6 +110,89 @@ describe('mediaCdnAllows (AGL-1043)', () => {
     >
     expect(mediaCdnAllows(hostScope, undefined)).toBe(true)
     expect(mediaCdnAllows(hostScope, [])).toBe(true)
+  })
+})
+
+/**
+ * The three refusals behind the one 404.
+ *
+ * The wire cannot tell them apart and must not: whether a restricted asset
+ * exists is not an anonymous caller's business. Whoever is holding the
+ * broken page has the opposite problem — "this URL names the wrong site" and
+ * "this document names no site at all" are the same blank image, and the
+ * second one is broken on every URL there is. Separating them is what lets
+ * the route say the difference in its logs.
+ */
+describe('mediaCdnScopeRefusal', () => {
+  const orgWide = parseMediaCdnScope('org:acme') as NonNullable<
+    ReturnType<typeof parseMediaCdnScope>
+  >
+  const forSiteA = parseMediaCdnScope('org:acme:site-a') as NonNullable<
+    ReturnType<typeof parseMediaCdnScope>
+  >
+
+  it('calls a wrong-URL refusal restricted', () => {
+    // Somebody chose sites, and this is not one of them. The asset still
+    // serves from the site it IS shared with, so the URL is the fault.
+    expect(mediaCdnScopeRefusal(orgWide, ['host:site-b'])).toBe('restricted')
+    expect(mediaCdnScopeRefusal(forSiteA, ['host:site-b'])).toBe('restricted')
+  })
+
+  it('calls a document with no scope unscoped', () => {
+    // Nobody ever chose. Undeliverable under EVERY URL form, which is the
+    // difference that matters: a creation path skipped the field, and the
+    // scope backfill is what repairs it.
+    expect(mediaCdnScopeRefusal(orgWide, undefined)).toBe('unscoped')
+    expect(mediaCdnScopeRefusal(forSiteA, undefined)).toBe('unscoped')
+    expect(mediaCdnScopeRefusal(orgWide, null)).toBe('unscoped')
+  })
+
+  it('distinguishes a stored empty scope from an absent one', () => {
+    // Both are refused; only one of them the backfill will repair. It leaves
+    // `[]` alone rather than widening a resource nobody asked to widen, so
+    // an asset in this state needs a person and never appears in the drift
+    // report — which is exactly why the route has to name it.
+    expect(mediaCdnScopeRefusal(orgWide, [])).toBe('no-sites')
+    expect(mediaCdnScopeRefusal(forSiteA, [])).toBe('no-sites')
+  })
+
+  it('refuses nothing that is allowed', () => {
+    expect(mediaCdnScopeRefusal(orgWide, ['org'])).toBeNull()
+    expect(mediaCdnScopeRefusal(forSiteA, ['org'])).toBeNull()
+    expect(mediaCdnScopeRefusal(forSiteA, ['host:site-a'])).toBeNull()
+    const hostScope = parseMediaCdnScope('site-a') as NonNullable<
+      ReturnType<typeof parseMediaCdnScope>
+    >
+    expect(mediaCdnScopeRefusal(hostScope, undefined)).toBeNull()
+  })
+
+  it('is the only thing mediaCdnAllows answers from', () => {
+    // The delivery decision and the diagnosis have to be one function, or a
+    // later edit can make the log say one thing while the gate does another.
+    const scopes = [
+      orgWide,
+      forSiteA,
+      parseMediaCdnScope('site-a') as NonNullable<
+        ReturnType<typeof parseMediaCdnScope>
+      >,
+    ]
+    const values: unknown[] = [
+      undefined,
+      null,
+      [],
+      ['org'],
+      ['host:site-a'],
+      ['host:site-b'],
+      ['org', 'host:site-b'],
+      'not-an-array',
+    ]
+    for (const scope of scopes) {
+      for (const visibleTo of values) {
+        expect(mediaCdnAllows(scope, visibleTo)).toBe(
+          mediaCdnScopeRefusal(scope, visibleTo) === null,
+        )
+      }
+    }
   })
 })
 

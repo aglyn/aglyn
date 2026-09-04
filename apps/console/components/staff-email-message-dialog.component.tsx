@@ -30,8 +30,9 @@ import {
   Tabs,
   Typography,
 } from '@mui/material'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import type { StaffEmailDeliveryRow } from './staff-user-email-history-card.component'
 
 /** The message body, as `/api/admin/emails/message` returns it. */
@@ -158,22 +159,78 @@ export function StaffEmailMessageDialog({
 
   const messageId = row?.messageId ?? null
 
+  /*
+   * THE USER IS READ THROUGH A REF, NOT DEPENDED ON.
+   *
+   * `useUser()` is not contractually stable, and a hook that returns a fresh
+   * object each render makes `[messageId, user]` a dependency that changes
+   * every time — so the effect re-runs, its cleanup sets `active = false`, the
+   * in-flight response is discarded as stale, and `setLoading(false)` is
+   * skipped along with it. The dialog then spins on "Loading the message"
+   * forever while re-fetching in a loop.
+   *
+   * A ref for the value and a BOOLEAN for the condition: the effect re-runs
+   * when a message is opened or when the user first becomes available, and at
+   * no other time.
+   */
+  const userRef = useRef(user)
+  userRef.current = user
+  const signedIn = Boolean(user)
+
+  /*
+   * ONE REQUEST PER OPENING, BECAUSE EACH REQUEST IS AN AUDITED ACCESS.
+   *
+   * Reading a message writes an `adminAudit` row. That makes this fetch
+   * unlike any other read in the console: firing it twice does not merely
+   * waste a round trip, it records a second access to somebody's mail that
+   * nobody performed. React runs an effect twice on mount under
+   * StrictMode — on in every non-production build — and the cleanup below
+   * only discards the RESPONSE, so both requests still reached the server
+   * and both were logged.
+   *
+   * The in-flight request is therefore held by message id and REUSED rather
+   * than re-issued. A second run of the effect for the same id awaits the
+   * same promise, so one opening is one request and the second run still
+   * receives the body — a guard that merely skipped the duplicate would
+   * leave the dialog spinning, because the first run's result was already
+   * disowned by its own cleanup.
+   *
+   * Cleared when the dialog closes (`messageId` goes null), because opening
+   * the same message again IS a second access and must be recorded as one.
+   */
+  const inFlightRef = useRef<{
+    id: string
+    request: Promise<{ ok: boolean; payload: any }>
+  } | null>(null)
+  if (!messageId) inFlightRef.current = null
+
   useEffect(() => {
-    if (!messageId || !user) return
+    if (!messageId || !signedIn) return
     let active = true
     setLoading(true)
     setError(null)
     setMessage(null)
+    if (inFlightRef.current?.id !== messageId) {
+      inFlightRef.current = {
+        id: messageId,
+        request: (async () => {
+          const response = await authorizedFetch(
+            userRef.current,
+            `/api/admin/emails/message?id=${encodeURIComponent(messageId)}`,
+          )
+          return {
+            ok: response.ok,
+            payload: await response.json().catch(() => ({})),
+          }
+        })(),
+      }
+    }
+    const pending = inFlightRef.current.request
     void (async () => {
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch(
-          `/api/admin/emails/message?id=${encodeURIComponent(messageId)}`,
-          { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
-        )
-        const payload = await response.json().catch(() => ({}))
+        const { ok, payload } = await pending
         if (!active) return
-        if (!response.ok) {
+        if (!ok) {
           // The endpoint's own message. "Set RESEND_READ_API_KEY" and "the
           // provider no longer holds this message" are different problems
           // with different remedies, and a generic failure hides which.
@@ -181,9 +238,18 @@ export function StaffEmailMessageDialog({
           return
         }
         setMessage(payload as StaffEmailMessage)
-        // Default to whichever part actually exists, so a text-only message
-        // does not open on an empty HTML tab.
-        setTab(payload?.html ? 'html' : 'text')
+        /*
+         * An EMPTY html part still opens on the HTML tab, because the notice
+         * shown there — "this went out as plain text only, so no click could
+         * be recorded" — is the most useful sentence in this dialog and the
+         * finding this whole feature came from. Falling through to the text
+         * tab hid it behind a tab nobody would click.
+         *
+         * `null` is different: the body could not be read at all, and there
+         * is nothing to explain, so the text part (if any) is the better
+         * landing.
+         */
+        setTab((payload as StaffEmailMessage)?.html === null ? 'text' : 'html')
       } catch {
         if (active) setError('Could not load the message')
       } finally {
@@ -193,7 +259,7 @@ export function StaffEmailMessageDialog({
     return () => {
       active = false
     }
-  }, [messageId, user])
+  }, [messageId, signedIn])
 
   const close = useCallback(() => {
     setMessage(null)

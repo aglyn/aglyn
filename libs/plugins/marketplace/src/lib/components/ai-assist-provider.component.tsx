@@ -38,6 +38,7 @@ import {
 } from '@mui/material'
 import { useCallback, useMemo, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
 
 export interface AiAssistProviderProps {
@@ -145,13 +146,9 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
         typeof current?.props?.[effectiveTarget] === 'string'
           ? (current.props[effectiveTarget] as string)
           : ''
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/ai/assist', {
+      const response = await authorizedFetch(user, '/api/ai/assist', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           orgId,
           text,
@@ -227,13 +224,9 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
     if (!sectionPrompt.trim() || busy) return
     setBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/ai/assist', {
+      const response = await authorizedFetch(user, '/api/ai/assist', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           orgId,
           mode: 'section',

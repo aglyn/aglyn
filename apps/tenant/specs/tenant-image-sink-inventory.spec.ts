@@ -228,9 +228,9 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     why: 'The fallback renderer: entry cover, markdown body images and the white-label brand logo, each through resolveMediaSrc. Its <style> carries ELEMENT_HIDDEN_STYLE_TEXT, a build-time constant.',
   },
   'apps/tenant/app/[host]/[[...slug]]/page.tsx': {
-    markers: 9,
+    markers: 11,
     guard: 'raw',
-    why: 'og:image/twitter:image and Article.image go through resolveSocialImage → absoluteMediaSrc. The Product JSON-LD emits seededProduct.mediaUrls with no resolver at all, and a crawler fetches it with no browser and no CSP, so no img-src can ever cover it.',
+    why: 'og:image/twitter:image and Article.image go through resolveSocialImage → absoluteMediaSrc. The author page adds two more of the same (AGL-2518): the portrait behind og:image and the one inside ProfilePage.mainEntity, both through absoluteMediaSrc, from an author record the customer wrote. The Product JSON-LD emits seededProduct.mediaUrls with no resolver at all, and a crawler fetches it with no browser and no CSP, so no img-src can ever cover it.',
   },
   'apps/tenant/app/[host]/admin-bar/admin-bar.tsx': {
     markers: 2,
@@ -276,6 +276,11 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     markers: 2,
     guard: 'scheme-guard',
     why: 'This file IS the scheme rule: sanitizeAuthorCss, sanitizeAuthorSx and isRefusedAuthorImageSrc. The markers are its own recursion over nested sx slices.',
+  },
+  'libs/aglyn/src/lib/app-utils/collection-entries.ts': {
+    markers: 1,
+    guard: 'projection',
+    why: "The {{entry.authorImage}} token (AGL-2486): the author record's portrait string, handed to whatever node an author bound it into. This file resolves nothing — the value is a stored reference until a renderer asks, and every renderer that can show it (the Entry Author card, the Image element) calls resolveMediaSrc. Binding it into a text field prints the reference and fetches nothing.",
   },
   'libs/aglyn/src/lib/app-utils/content-authors.ts': {
     markers: 1,
@@ -332,6 +337,11 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'off-tenant',
     why: 'An email body, not a page. A remote image here is an open-tracking pixel aimed at the RECIPIENT, which is a different problem with a different owner — recorded so it is not mistaken for a tenant sink.',
   },
+  'libs/plugins/email/src/lib/unsubscribe-link.ts': {
+    markers: 1,
+    guard: 'scheme-guard',
+    why: "The sending site's logo on the unsubscribe and preference pages. NOT off-tenant: the reader is an email recipient, so the IP at risk is a visitor's, exactly this issue's actor pair. `safeLogoUrl` resolves the stored `logo` token through absoluteMediaSrc and then keeps the result only if it matches https:, so http: and every unknown scheme are dropped to the wordmark; the host stays open, as everywhere else under AGL-1725. The page additionally carries `<meta name=\"referrer\" content=\"no-referrer\">` and the img carries referrerpolicy=\"no-referrer\", because THIS URL names the recipient and carries the HMAC that authorizes acting on it — so the image host learns an IP and not the link.",
+  },
   'libs/plugins/events-calendar/src/lib/components/event-list.tsx': {
     markers: 3,
     guard: 'media-ref',
@@ -358,16 +368,21 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     why: 'The listing card image on the same console surface, and the besigner standalone preview of it.',
   },
   'libs/plugins/mui/src/lib/components/collection.tsx': {
-    markers: 3,
+    markers: 5,
     guard: 'media-ref',
-    why: 'Markdown body image, entry cover and author avatar, all three through resolveMediaSrc. The body image is additionally scheme-checked at parse time by markdown-lite (AGL-1713); the cover and the avatar are not.',
+    why: 'Markdown body image, entry cover, byline avatar, the Entry Author card portrait and the Author Profile portrait, all five through resolveMediaSrc. The body image is additionally scheme-checked at parse time by markdown-lite (AGL-1713); the other four are not. The two portraits differ from the rest only in where the string comes from — an author RECORD the customer wrote, not a node prop (AGL-2486/2518) — and they are the SAME record field rendered at two sizes, so neither is a new class of input.',
   },
   'libs/plugins/mui/src/lib/components/custom-html.tsx': {
     markers: 1,
     guard: 'scheme-guard',
     why: "The author's own <style> block — the first of the two sinks this issue is named for. sanitizeAuthorCss rewrites a refused target to url(about:invalid) so the surrounding shorthand stays well-formed. The style ATTRIBUTE route is covered by sanitizeAuthorHtml, because DOMPurify performs no CSS filtering of its own.",
   },
-  'libs/plugins/mui/src/lib/components/form.tsx': {
+  'libs/plugins/forms/src/lib/components/form-design-preview.component.tsx': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: 'A console preview of a form design, rendered into a sandboxed srcDoc frame with no same-origin and no network of its own. The <style> is a literal constant in this file; nothing an author wrote reaches it, and the frame never renders on a customer site.',
+  },
+  'libs/plugins/forms/src/lib/components/form.tsx': {
     markers: 1,
     guard: 'platform',
     why: 'A one-rule <style> hiding the honeypot field. The selector is generated by us and the declaration is a literal; no author string reaches it.',
@@ -401,6 +416,16 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     markers: 2,
     guard: 'projection',
     why: "Composes the entry's coverImage into the screen SEO that page.tsx then hands to resolveSocialImage. Nothing is fetched here.",
+  },
+  'libs/tenant/runtime/src/lib/author-page-nodes.ts': {
+    markers: 1,
+    guard: 'projection',
+    why: "Sets the routed author's stored `image` as a PROP on the built-in page's Author Profile node. The string is passed on untouched; ContentAuthorProfile in libs/plugins/mui/src/lib/components/collection.tsx resolves it with resolveMediaSrc at render, which is the same resolver and the same record field the Entry Author card already uses (AGL-2518). Nothing is fetched here.",
+  },
+  'libs/aglyn/src/lib/app-utils/content-author-profile.ts': {
+    markers: 2,
+    guard: 'projection',
+    why: "Two projections of the same record field (AGL-2518): the `{{author.image}}` token, RAW because a token map is a string map with no rendering host to resolve against, and the Author Profile fill, which sets it as a node prop. Both are resolved downstream by resolveMediaSrc inside ContentAuthorProfile. Nothing is fetched here, and nothing is escaped here either — safeJsonLd is what turns a value into markup.",
   },
 }
 

@@ -71,6 +71,8 @@ export interface ProductDetailProps {
   buyLabel?: string
   /** Hide the description block (design it separately with tokens). */
   hideDescription?: boolean
+  /** Offer a discount/coupon code field before the buy button. */
+  showCoupon?: boolean
 }
 
 interface DetailVariant {
@@ -150,7 +152,8 @@ function slugFromLocation(): string {
  */
 const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
   (props, ref) => {
-    const { slug: slugProp, buyLabel, hideDescription, ...rest } = props
+    const { slug: slugProp, buyLabel, hideDescription, showCoupon, ...rest } =
+      props
     // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
     const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const site = Aglyn.useSite()
@@ -175,6 +178,8 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
     )
     const [selections, setSelections] = useState<Record<string, string>>({})
     const [quantity, setQuantity] = useState(1)
+    /** A discount or coupon code typed on the product page. */
+    const [coupon, setCoupon] = useState('')
     const [activeImage, setActiveImage] = useState(0)
     // `unconfigured` is not an `error` with softer words (AGL-2019). A store
     // with no Stripe key answers 501, and rendering that at `severity="error"`
@@ -321,7 +326,12 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
     const attemptKey = useRef('')
     useEffect(() => {
       attemptKey.current = ''
-    }, [resolved?.id, variant?.id, quantity, billing, shipTo])
+      // `coupon` is in here because it CHANGES THE PRICE. Without it a shopper
+      // who buys, comes back, types a code and buys again presents the same
+      // key, and the server replays the original full-price session — a quoted
+      // number that is not the number charged, which is the whole defect class
+      // this path has been cleared of.
+    }, [resolved?.id, variant?.id, quantity, billing, shipTo, coupon])
 
     const handleBuy = async () => {
       if (!hostId || !resolved || !variant || status === 'sending') return
@@ -351,6 +361,10 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
             // country's rates AND restricts the session to addresses in it,
             // so naming a cheap zone here cannot ship a parcel anywhere else.
             ...(shipTo ? { shippingCountry: shipTo } : {}),
+            // The server resolves this against the discounts hub first and the
+            // legacy coupons second, and refuses a code it cannot apply with a
+            // reason — never a silent full-price charge.
+            ...(coupon.trim() ? { couponCode: coupon.trim() } : {}),
           }),
         })
         const payload = await response.json().catch(() => ({}))
@@ -672,6 +686,15 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               ))}
             </TextField>
           ))}
+          {showCoupon ? (
+            <TextField
+              label="Discount code"
+              value={coupon}
+              onChange={(event) => setCoupon(event.target.value)}
+              size="small"
+              sx={{ mb: 2, display: 'block' }}
+            />
+          ) : null}
           <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', mb: 2 }}>
             <TextField
               label="Qty"
@@ -859,6 +882,16 @@ export const schema: Aglyn.ComponentSchema<ProductDetailProps> = {
       name: 'hideDescription',
       label: 'Hide description',
       description: 'Design the description separately with tokens.',
+      component: Aglyn.FieldComponentType.CHECKBOX,
+    },
+    {
+      // Off by default, so no existing page changes shape on deploy. The cart
+      // has carried this field all along and the product page had none, so a
+      // shopper buying the same goods through Buy now had nowhere to enter a
+      // code the merchant had advertised.
+      name: 'showCoupon',
+      label: 'Show discount code field',
+      description: 'Lets a buyer enter a discount or coupon code before buying.',
       component: Aglyn.FieldComponentType.CHECKBOX,
     },
   ],

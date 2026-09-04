@@ -25,6 +25,7 @@ import {
   getOrgForHost,
   isImpersonationSession,
   lockdownRefusal,
+  logHostActivity,
   projectDomainStatus,
   validatePlatformDomain,
 } from '@aglyn/tenant-data-admin'
@@ -290,6 +291,16 @@ async function handler(request: Request): Promise<Response> {
         )
         .catch(() => undefined)
     }
+    // The site's public address changed hands (AGL-118). One entry, at the
+    // single terminal success — the earlier returns are refusals and a
+    // pending state, and a log line on either would record an attachment that
+    // did not happen.
+    await logHostActivity(
+      hostId,
+      { uid: decoded.uid, email: decoded.email ? String(decoded.email) : null },
+      'Attached a custom domain',
+      { type: 'host', id: hostId, name: domain },
+    )
     return Response.json({
       attached: true,
       // The wizard renders these rather than a bare tick: which of "still

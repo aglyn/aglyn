@@ -1,0 +1,179 @@
+name: NX CI setup
+description: >-
+  Check out at full depth, install all three npm trees, restore the nx
+  computation cache, and resolve the affected base for this event.
+
+# WHY THIS IS AN ACTION AND NOT A JOB (AGL-2505).
+#
+# NX CI used to be ONE job running typecheck → guards → lint → test → build
+# back to back, and its wall clock was their SUM: a median of 43m across the
+# green runs. The phases do not depend on one another, so they are now four
+# parallel jobs and the wall clock is the LONGEST of them instead.
+#
+# That makes this preamble run four times over. It is duplicated on purpose:
+#
+#   · The repo is PUBLIC, so GitHub-hosted runners are free and unlimited.
+#     Four setups in parallel cost ~1m46s of wall clock, not 4x of anything
+#     that is billed. Runner-minutes were never the constraint; the release
+#     gate's latency was.
+#   · A composite action is the only DRY option that works here. GitHub
+#     Actions does not expand YAML anchors, and a reusable workflow cannot
+#     hand `$GITHUB_ENV` back to the caller — which is exactly what the
+#     affected base has to do.
+#
+# ⛔ EVERY job must call this. `resolve affected base` below is what makes
+# `nx affected` honest, and a job that skips it falls back to nx's own default
+# base and quietly checks something else. See the note in the workflow's test
+# job for why the four jobs still agree on one affected set.
+
+inputs:
+  nx-base:
+    description: The affected base resolved once by the workflow's `base` job.
+    required: true
+  nx-head:
+    description: The affected head resolved once by the workflow's `base` job.
+    required: true
+  cache-scope:
+    description: >-
+      A short name for the calling job, used to key that job's nx cache
+      entry. Each job caches only the tasks it actually runs, so scoping the
+      key per job keeps four small caches that always hit rather than one
+      large one that four jobs race to write.
+    required: true
+
+# ⛔ THE CHECKOUT IS NOT IN HERE, AND CANNOT BE.
+#
+# A local `uses: ./.github/actions/...` is resolved from the runner's disk
+# BEFORE the action runs, so the repository has to be on disk already. An
+# action that checks out the repo it lives in cannot be found in order to do
+# it. The whole run failed this way once (33672856335, every job in seconds):
+#
+#   Can't find 'action.yml' … under '.github/actions/nx-ci-setup'.
+#   Did you forget to run actions/checkout before running your local action?
+#
+# So every calling job does its own `actions/checkout` with `fetch-depth: 0`
+# immediately before `uses: ./.github/actions/nx-ci-setup`, and the depth
+# matters: `nx affected` walks between NX_BASE and NX_HEAD, and the `checks`
+# job diffs them directly.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v7
+      with:
+        node-version-file: .nvmrc
+        cache: 'npm'
+
+    - run: npm ci
+      shell: bash
+
+    # cloud/functions is a SEPARATE npm package, not a workspace of the root
+    # one — the root package.json has no `workspaces` key and its postinstall
+    # is only patch-package, so the `npm ci` above installs nothing for it.
+    # tools/scripts/typecheck.mjs nonetheless walks cloud/functions/tsconfig
+    # (`cloud/` is in neither its SKIP nor its PRUNE list), so without this
+    # the typecheck step below fails with three TS2307s on firebase-functions
+    # subpaths — a missing-install artifact, not a source defect (AGL-1776).
+    # It goes unnoticed locally because every dev checkout has a nested
+    # install left over from a past `firebase deploy`.
+    #
+    # Installing is deliberately preferred over adding `cloud/` to that
+    # script's SKIP list: the Cloud Functions are a production surface, and
+    # skipping would silently drop them from the workspace's ONLY type gate
+    # to make a red go away.
+    - run: npm ci --prefix cloud/functions
+      shell: bash
+    # apps/docs is the SECOND such package, and it breaks a different step:
+    # `docs` is an nx project whose build target shells `docusaurus build`,
+    # so the `nx affected -t lint test build` at the bottom of this file
+    # fails with `sh: docusaurus: command not found` on a root-only install
+    # (AGL-1781). Same invisibility as above — every dev checkout has
+    # apps/docs/node_modules from a past docs build.
+    #
+    # It stays standalone rather than becoming an npm workspace, and that is
+    # not inertia: apps/docs/package.json pins React 18 and says in its own
+    # description that its node_modules are self-contained so they never
+    # collide with the root's React 19. Hoisting it is the one change that
+    # would break it. cloud/functions is standalone for its own reason —
+    # `firebase deploy` packs and uploads that directory as a self-contained
+    # package. A `workspaces` key would move both problems, not solve them.
+    #
+    # So the policy is: standalone packages are enumerated here, and
+    # `check:standalone-installs` — in the workflow's `checks` job — fails
+    # when a THIRD one lands without a line of its own, which is the part
+    # that stops this recurring, since neither of the first two was visible
+    # until CI (or a hand-run gate) hit it.
+    - run: npm ci --prefix apps/docs
+      shell: bash
+    # THE NX COMPUTATION CACHE, CARRIED BETWEEN RUNS (AGL-2505).
+    #
+    # nx hashes a task's inputs and stores its result under `.nx/cache`, and
+    # a fresh runner starts with that directory empty — so every CI run
+    # recomputed everything. Measured on run 33666851764: the test step
+    # reported `Cache: 0/39 hit (0%)`, against `19/39 hit (49%)` for the same
+    # work under `tools/gate.sh`, which keeps its cache on disk between runs.
+    #
+    # Be honest about what this buys. `nx affected` already narrows the task
+    # list to what the range touched, and a task inside that list normally
+    # has a changed input, so a first run on a new commit still mostly
+    # misses. What it does buy is large and was being paid for repeatedly:
+    #
+    #   · A RE-RUN of the same commit is near-total hits. Re-running a red
+    #     job is routine here — the two flakes on 2026-09-02 each cost a full
+    #     ~43m re-run that recomputed a suite already known green.
+    #   · Tasks whose inputs the range did not touch but that `affected`
+    #     selected anyway, because a DEPENDENT changed.
+    #
+    # Keyed per job (`cache-scope`) rather than once for the workspace: the
+    # four jobs run different targets, they finish at different times, and a
+    # single shared key would have them racing to write one entry that only
+    # the first writer wins. `actions/cache` entries are immutable, so
+    # `github.sha` in the key makes every run save a fresh entry while the
+    # restore-keys fall back to the most recent one for this job and lockfile.
+    - uses: actions/cache@v4
+      with:
+        path: .nx/cache
+        key: nx-${{ runner.os }}-${{ inputs.cache-scope }}-${{ hashFiles('package-lock.json', 'apps/docs/package-lock.json', 'cloud/functions/package-lock.json') }}-${{ github.sha }}
+        restore-keys: |
+          nx-${{ runner.os }}-${{ inputs.cache-scope }}-${{ hashFiles('package-lock.json', 'apps/docs/package-lock.json', 'cloud/functions/package-lock.json') }}-
+          nx-${{ runner.os }}-${{ inputs.cache-scope }}-
+
+    # THE AFFECTED BASE, RECEIVED RATHER THAN RE-DERIVED (AGL-2505).
+    #
+    # The long argument for how this base is chosen now lives in the `base`
+    # job of nx-ci.yml, which resolves it ONCE per run. This action only
+    # republishes it into the calling job's environment.
+    #
+    # ⛔ Do NOT move the resolution back in here. It would run once per job,
+    # and the candidate it prefers — `origin/<base ref>` — is the base branch
+    # AS IT STANDS NOW. Four jobs start seconds apart, so a promotion landing
+    # on `production` mid-run could hand two of them different bases, and the
+    # run would report one verdict over two different affected sets. The old
+    # single-job workflow could not have that problem because it resolved
+    # once; resolving once in `base` is what keeps that property after the
+    # split, rather than assuming the window is too small to matter.
+    #
+    # nx re-reads NX_BASE/NX_HEAD from process.env on every invocation
+    # (nx/src/utils/command-line-utils.js), so exporting them through
+    # $GITHUB_ENV here reaches every later step in the job. A job that skips
+    # this action gets nx's own default base and quietly checks something
+    # else; `test:ci-test-digest` asserts the ordering within a job.
+    - name: publish affected base
+      shell: bash
+      env:
+        NX_BASE_IN: ${{ inputs.nx-base }}
+        NX_HEAD_IN: ${{ inputs.nx-head }}
+      run: |
+        set -euo pipefail
+
+        if [ -z "$NX_BASE_IN" ] || [ -z "$NX_HEAD_IN" ]; then
+          echo "::error::nx-base/nx-head were not supplied; the base job must run first."
+          exit 1
+        fi
+
+        {
+          echo "NX_BASE=$NX_BASE_IN"
+          echo "NX_HEAD=$NX_HEAD_IN"
+        } >> "$GITHUB_ENV"
+
+        echo "NX_BASE=$NX_BASE_IN"
+        echo "NX_HEAD=$NX_HEAD_IN"

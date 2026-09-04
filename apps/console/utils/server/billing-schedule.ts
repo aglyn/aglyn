@@ -17,6 +17,7 @@
 
 import type { OrgPlan } from '@aglyn/aglyn/server'
 import {
+  addonMaxForPlan,
   addonKindFromPriceId,
   addonPriceId,
   findPlanItem,
@@ -57,11 +58,32 @@ function taxRateIdsOf(item: any): string[] | undefined {
   return ids.length > 0 ? ids : undefined
 }
 
+/**
+ * An add-on the target plan sells, but not in the quantity the org holds.
+ *
+ * Reported so a plan change can SAY what it reduced. Silence here is how an
+ * org came to pay for ten seats and receive five.
+ */
+export interface ClampedAddon {
+  kind: AddonKind
+  from: number
+  to: number
+}
+
 export interface TargetItemPlan {
   /** The item list, plan item first, metered item last. */
   items: PhaseItem[]
   /** Recognised add-on kinds the target plan does not sell. */
   droppedAddons: AddonKind[]
+  /**
+   * Add-ons reduced to what the target plan can deliver.
+   *
+   * Separate from `droppedAddons` because they are different sentences to a
+   * customer: one line is gone, the other is smaller. Collapsing them would
+   * tell somebody their POS registers vanished when they went from four to
+   * two.
+   */
+  clampedAddons: ClampedAddon[]
   /**
    * Price ids on the subscription that are neither the plan item, the metered
    * item, nor a recognised add-on — carried through verbatim, and REPORTED so
@@ -106,6 +128,7 @@ export function buildTargetItems(
   const planItem = findPlanItem<any>(list)
   const result: PhaseItem[] = [{ price: options.targetPlanPrice, quantity: 1 }]
   const droppedAddons: AddonKind[] = []
+  const clampedAddons: ClampedAddon[] = []
   const unrecognizedPriceIds: string[] = []
   for (const item of list) {
     if (planItem && item === planItem) continue
@@ -114,8 +137,36 @@ export function buildTargetItems(
     const kind = addonKindFromPriceId(priceId)
     if (kind) {
       const target = addonPriceId(kind, options.targetPlan, options.targetInterval)
-      if (target) result.push({ price: target, quantity: item?.quantity ?? 1 })
-      else droppedAddons.push(kind)
+      if (!target) {
+        droppedAddons.push(kind)
+        continue
+      }
+      // CLAMP to what the target plan can actually deliver.
+      //
+      // Kinds the target does not sell were already dropped. Quantities were
+      // not, and the gap is the expensive one: `checkSeatQuota` and
+      // `checkDatasetQuota` apply `Math.min(…, maxSeats)` at the point of USE,
+      // so an org moving to a smaller plan kept paying for ten manager seats
+      // and silently received five. Nothing said so anywhere — the excess was
+      // discarded by a `Math.min` and invoiced in full.
+      //
+      // Clamped rather than refused: a downgrade is a legitimate thing to want,
+      // and refusing it would trap a customer on a plan they are trying to
+      // leave. Clamped rather than carried: carrying it is the current defect.
+      // Because the quantity IS the Stripe line item, reducing it here reduces
+      // the invoice too — delivery and the charge move together, which is the
+      // only version of this that is not billing for nothing.
+      const wanted = Number(item?.quantity ?? 1)
+      const ceiling = addonMaxForPlan(kind, options.targetPlan)
+      const quantity = Math.max(0, Math.min(wanted, ceiling))
+      if (quantity < wanted) {
+        clampedAddons.push({ kind, from: wanted, to: quantity })
+      }
+      // A ceiling of zero is a kind the target plan cannot deliver at all —
+      // the same outcome as an unsold kind, so it is reported the same way
+      // rather than as a line item of quantity 0 nobody can read.
+      if (quantity === 0) droppedAddons.push(kind)
+      else result.push({ price: target, quantity })
       continue
     }
     // An item with no price id cannot be restated at all — Stripe would reject
@@ -137,7 +188,7 @@ export function buildTargetItems(
     })
   }
   if (options.meteredPrice) result.push({ price: options.meteredPrice })
-  return { items: result, droppedAddons, unrecognizedPriceIds }
+  return { items: result, droppedAddons, clampedAddons, unrecognizedPriceIds }
 }
 
 /** A live subscription's items, as phase items. */

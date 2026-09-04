@@ -97,6 +97,11 @@ const EXPECTED: Array<[string, string]> = [
   // the three cards above are a positional instruction and a new card must
   // not push its way between them.
   ['Used by', 'CARD_NARROW'],
+  // Which campaigns this page is part of, appended under the same rule. It
+  // sits beside "Used by" because the two answer the same kind of question
+  // about the record — what it belongs to, and what depends on it — and
+  // neither is something an author came to this page to change.
+  ['Campaigns', 'CARD_NARROW'],
   ['SEO', 'CARD_WIDE'],
   ['Versions', 'CARD_WIDE'],
   // Traffic sits ABOVE Page Activity: what the page is doing outranks who
@@ -159,7 +164,13 @@ describe('the screen version view card layout (AGL-2486)', () => {
       assignment(source)
         .filter(([, span]) => span === 'CARD_NARROW')
         .map(([card]) => card),
-    ).toEqual(['Basic Details', 'Publishing', 'Page Access', 'Used by'])
+    ).toEqual([
+      'Basic Details',
+      'Publishing',
+      'Page Access',
+      'Used by',
+      'Campaigns',
+    ])
   })
 
   it('THE CONTROLS: the assignment checks actually discriminate', () => {

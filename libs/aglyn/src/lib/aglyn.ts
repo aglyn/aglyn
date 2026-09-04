@@ -21,7 +21,7 @@ import { timestampNowJson } from '@aglyn/shared-util-timestamp/timestamp-json'
 import CanvasManager from './canvas-manager'
 import ComponentManager from './components-manager'
 import EmitManager, { AglynEvent } from './emit-manager'
-import { namespace } from './foundation'
+import { namespace } from './foundation/constants/app'
 import PluginManager from './plugin-manager'
 
 export * from './types'

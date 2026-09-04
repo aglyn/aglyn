@@ -21,6 +21,7 @@ import { Alert, Button, Link, Stack, Typography } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { LEGAL_DOCUMENT_VERSION } from '../constants/legal-documents'
 import { LEGAL_URLS } from '../constants/shared'
 import { postLegalAcceptance } from '../utils/legal-consent'
@@ -177,10 +178,10 @@ export function LegalReacceptanceBanner() {
     if (!anyUser?.getIdToken) return undefined
     void (async () => {
       try {
-        const idToken = await anyUser.getIdToken()
-        const response = await fetch('/api/auth/legal-acceptance', {
-          headers: { Authorization: `Bearer ${idToken}` },
-        })
+        const response = await authorizedFetch(
+          anyUser,
+          '/api/auth/legal-acceptance',
+        )
         if (!response.ok) return
         const payload = (await response.json()) as LegalStatus
         if (!cancelled) setStatus(payload)

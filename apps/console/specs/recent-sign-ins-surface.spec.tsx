@@ -335,7 +335,7 @@ describe('the card is mounted where the email sends people', () => {
       require('node:path').join(
         __dirname,
         // The Security section, a component since Manage Account's panels
-        // became routes (AGL-693).
+        // became routes (AGL-2501).
         '../components/account/account-security-card.component.tsx',
       ),
       'utf8',

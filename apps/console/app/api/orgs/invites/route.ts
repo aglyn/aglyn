@@ -23,8 +23,6 @@ import {
 import type { AglynOrgBilling } from '@aglyn/aglyn/server'
 import {
   buildRoute,
-  checkSeatQuota,
-  countManagerSeats,
   createResourceUid,
   type HostAccessRole,
   isOrgRole,
@@ -38,6 +36,8 @@ import { renderSystemEmail } from '../../_lib/render-system-email'
 import {
   collaboratorSeatRefusal,
   collaboratorSeatRefusalResponse,
+  managerSeatRefusal,
+  managerSeatRefusalResponse,
   consumeRateLimit,
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -409,36 +409,29 @@ async function handler(request: Request): Promise<Response> {
         .get()
       const reusing = !existingPending.empty
       // Manager-seat quota (AGL-471): only a genuinely NEW invite consumes a
-      // seat — reusing an already-pending row does not, so skip the gate then
-      // (it already counts toward `used`). Accept re-checks authoritatively.
-      // A site-scoped invite becomes a COLLABORATOR, not a manager (AGL-1113):
-      // it is metered per host against `membersPerHost`, so it must not be
-      // gated on — or counted toward — the manager quota.
-      if (!reusing && isOrgWideMember({ role, allHosts: body?.allHosts === true, hostAccess })) {
-        const orgRef = firestore.collection('orgs').doc(orgId)
-        const [orgSnapshot, members, pendingInvites] = await Promise.all([
-          orgRef.get(),
-          orgRef.collection('members').get(),
-          invitesRef.where('acceptedAt', '==', null).get(),
-        ])
-        // Managers only, on both sides: the roster mixes managers and
-        // collaborators, and so does the pending-invite list.
-        const used =
-          countManagerSeats(members.docs.map((doc) => doc.data() as never)) +
-          countManagerSeats(
-            pendingInvites.docs.map((doc) => doc.data() as never),
-          )
-        const quota = checkSeatQuota(orgSnapshot.data() as any, 'managers', used)
-        if (!quota.allowed) {
-          return Response.json({
-            error: quota.upgradeRequired
-              ? `Team seat limit reached (${quota.limit}) — upgrade your ` +
-                'plan to invite more members'
-              : `Team seats full (${quota.limit}) — add seats for ` +
-                `$${quota.addonPriceUsd}/mo each from Billing`,
-          }, { status: 403 })
-        }
-      }
+      // seat — reusing an already-pending row does not, since it already
+      // counts toward the roster this measures. A site-scoped invite becomes
+      // a COLLABORATOR, not a manager (AGL-1113): it is metered per host
+      // against `membersPerHost`, so it is neither gated on nor counted here.
+      //
+      // This is the ONE manager door that never reaches `upsertOrgMember` —
+      // it writes an invite document directly — so it is the one that still
+      // needs a pre-flight. The other three are enforced transactionally
+      // inside that function; this one refuses at the point the admin is
+      // looking at, so nobody is mailed a link that will be refused when they
+      // click it. `managerSeatRefusal` counts the roster AND the pending
+      // invites through the shared `readSeatEntries`, which is what stops the
+      // four doors measuring four different populations.
+      const managerRefusal = await managerSeatRefusal({
+        orgId,
+        // The request-deduped read, like the collaborator gate below — this
+        // is the second of the two and must not pay for the org doc twice.
+        org: ((await getOrgDoc(orgId)) ?? {}) as Partial<AglynOrgBilling>,
+        becomesManager:
+          !reusing &&
+          isOrgWideMember({ role, allHosts: body?.allHosts === true, hostAccess }),
+      })
+      if (managerRefusal) return managerRefusal
       // Collaborator seats (AGL-2068) — the OTHER branch of the same
       // question, and the one nothing has ever asked. A site-scoped invite
       // becomes a COLLABORATOR, metered per host against `membersPerHost`;
@@ -610,45 +603,13 @@ async function handler(request: Request): Promise<Response> {
           error: 'This invite is for a different (or unverified) email',
         }, { status: 403 })
       }
-      // Manager-seat quota (AGL-471): accept is where the seat is actually
-      // consumed — authoritative re-check (already-members re-accepting
-      // don't add a seat, but the upsert is idempotent for them anyway).
-      const existingMember = await firestore
-        .collection('orgs')
-        .doc(orgId)
-        .collection('members')
-        .doc(decoded.uid)
-        .get()
-      // Accepting a SITE-SCOPED invite makes the user a collaborator, metered
-      // per host — never a manager seat (AGL-1113). Only an org-wide invite
-      // re-checks the manager gate here.
-      const acceptingAsManager = isOrgWideMember({
-        role: invite['role'],
-        allHosts: invite['allHosts'] === true,
-        hostAccess: invite['hostAccess'] ?? {},
-      })
-      if (!existingMember.exists && acceptingAsManager) {
-        const [orgSnapshot, members] = await Promise.all([
-          firestore.collection('orgs').doc(orgId).get(),
-          firestore
-            .collection('orgs')
-            .doc(orgId)
-            .collection('members')
-            .get(),
-        ])
-        const quota = checkSeatQuota(
-          orgSnapshot.data() as any,
-          'managers',
-          countManagerSeats(members.docs.map((doc) => doc.data() as never)),
-        )
-        if (!quota.allowed) {
-          return Response.json({
-            error:
-              `This organization is out of team seats (${quota.limit}) — ` +
-              'ask its owner to add seats or upgrade from Billing',
-          }, { status: 403 })
-        }
-      }
+      // The manager seat is charged INSIDE `upsertOrgMember`'s transaction
+      // (AGL-2068 on the manager key). The gate that stood here read the
+      // roster and then wrote through a separate call, so N people accepting
+      // at once all measured the same roster and all passed — and it counted
+      // members only, never the pending invites they were themselves holding,
+      // so it enforced a smaller population than the door that issued them.
+      // Both are fixed by asking in the same transaction that writes.
       await upsertOrgMember({
         orgId,
         uid: decoded.uid,
@@ -718,6 +679,11 @@ async function handler(request: Request): Promise<Response> {
     // bare 500. Nothing was written and the invite is left unaccepted.
     const ownerRefusal = orgOwnerSeatRefusalResponse(error)
     if (ownerRefusal) return ownerRefusal
+    // Accepting an invite into a full org (AGL-2068 on the manager key). The
+    // refusal is now raised inside the grant transaction, so it arrives here
+    // as a throw rather than as an early return.
+    const managerRefusal = managerSeatRefusalResponse(error)
+    if (managerRefusal) return managerRefusal
     console.error(error)
     return Response.json({ error: 'Invite operation failed' }, { status: 500 })
   }

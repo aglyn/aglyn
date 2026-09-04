@@ -113,6 +113,12 @@ export const MEDIA_SCAN_EXCLUDED: Record<string, string> = {
     'Folder records: a name, a parent pointer and a scope. A folder never ' +
     'holds an asset reference, and it is not a dependent either — deleting a ' +
     'file does not break the folder it sat in.',
+  emailCampaigns:
+    'The campaign CONTAINER — a name, a date window, the list ids it is ' +
+    'aimed at and a topic. Distinct from `campaigns`, which holds the sends ' +
+    'and IS scanned because a send carries the copy that went out. A ' +
+    'container carries no copy and no asset reference: the design a send ' +
+    'renders is a screen, and the screen is where the picker writes.',
 
   // ── Machine-written telemetry: unbounded, and no author picks into it ──
   analytics:
@@ -154,6 +160,13 @@ export const MEDIA_SCAN_EXCLUDED: Record<string, string> = {
     'Booking records — a customer, a time and a service pointer. The service ' +
     'holds the imagery and IS scanned; a booking is the transaction against ' +
     'it.',
+  campaignAttributions:
+    'One row per conversion — a form submission, a lead, a contact or a ' +
+    'booking — recording which campaign the visitor arrived from. Written ' +
+    'only by the Admin SDK, and the whole record is three sanitized UTM ' +
+    'strings capped at a hundred characters: there is no field an asset ' +
+    'could occupy and no surface that could pick one into it. Unbounded on ' +
+    'the same footing as the conversions it credits.',
   reservations:
     'POS and booking holds. Short-lived transaction rows pointing at a ' +
     'resource that is itself scanned.',
@@ -216,6 +229,7 @@ export const PLUGIN_CONTENT_COLLECTIONS = [
   'discounts',
   'events',
   'experiments',
+  'forms',
   'functions',
   'installs',
   'locations',

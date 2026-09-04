@@ -101,16 +101,6 @@ async function handler(request: Request): Promise<Response> {
       if (hostData[field] !== undefined) host[field] = hostData[field]
     }
 
-    const exportCollection = async (name: string) => {
-      const snapshot = await hostRef
-        .collection(name)
-        .limit(EXPORT_COLLECTION_LIMITS[name] ?? 100)
-        .get()
-      return snapshot.docs
-        .filter((doc) => !doc.get('deletedAt'))
-        .map((doc) => ({ $id: doc.id, ...doc.data() }))
-    }
-
     /**
      * A version's `nodes`, decoded to the map a bundle can actually carry
      * (AGL-1391).
@@ -150,6 +140,34 @@ async function handler(request: Request): Promise<Response> {
         readable[key] = decodeStoredNodes(data[key]) ?? data[key]
       }
       return readable
+    }
+
+    /**
+     * Every exported document, with any node tree made readable.
+     *
+     * `readableNodes` runs on the DOCUMENT here, not only on the published
+     * versions below, because a document can carry a tree of its own:
+     * components and forms hold their published design on the parent, and
+     * both are compressed at rest (AGL-1151). Without this a bundle ships
+     * `{"type":"Buffer","data":[…]}` for every component and the import
+     * writes that envelope straight back — the AGL-1391 failure exactly, one
+     * collection over.
+     *
+     * Applied to every collection rather than a named few, so a collection
+     * that gains a `nodes` field is covered the day it does. The helper is a
+     * no-op on a document that has neither key.
+     */
+    const exportCollection = async (name: string) => {
+      const snapshot = await hostRef
+        .collection(name)
+        .limit(EXPORT_COLLECTION_LIMITS[name] ?? 100)
+        .get()
+      return snapshot.docs
+        .filter((doc) => !doc.get('deletedAt'))
+        .map((doc) => {
+          const data = doc.data()
+          return { $id: doc.id, ...data, ...readableNodes(data) }
+        })
     }
 
     // Screens/layouts carry only their published version's nodes.

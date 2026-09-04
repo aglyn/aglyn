@@ -57,7 +57,7 @@ back with 60 rows — or with none — and `has_more: true`. The full list:
 | [Products](resources/products.md), [media](resources/media.md) | Rows deleted since they were written. |
 | [Orders](resources/orders.md) `?channel=online` | `online` is the default rather than a stored value, so older orders carry no `channel` field to match. |
 | [Contacts](resources/contacts.md#combined-filter) `?email=` **with** `?tag=` | `email` narrows the query; `tag` is checked on the result. |
-| [Form submissions](resources/form-submissions.md#read-filter) `?form=` **with** `?read=` | `form` narrows the query; `read` is checked on the result. |
+| [Form submissions](resources/form-submissions.md#read-filter) `?form=` or `?formId=` **with** `?read=` | The form filter narrows the query; `read` is checked on the result. |
 
 The last two share one cause, and it is worth knowing because it predicts the next
 one: **only one filter can narrow the query itself.** Every list here is ordered by

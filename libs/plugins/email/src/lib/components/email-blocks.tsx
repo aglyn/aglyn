@@ -115,6 +115,9 @@ export const emailSectionSchema: Aglyn.ComponentSchema<EmailSectionProps> = {
     {
       name: 'align',
       label: 'Content alignment',
+      description:
+        'How every block inside this section lines up. Each block can still ' +
+        'override it with its own alignment.',
       component: Aglyn.FieldComponentType.SELECT,
       options: [
         { value: 'left', label: 'Left' },
@@ -194,6 +197,9 @@ export const emailTextSchema: Aglyn.ComponentSchema<EmailTextProps> = {
     {
       name: 'variant',
       label: 'Style',
+      description:
+        'Size and weight of this text — Heading and Subheading also give it ' +
+        'the spacing above and below that a heading needs.',
       component: Aglyn.FieldComponentType.SELECT,
       options: [
         { value: 'heading', label: 'Heading' },
@@ -205,11 +211,15 @@ export const emailTextSchema: Aglyn.ComponentSchema<EmailTextProps> = {
     {
       name: 'color',
       label: 'Color',
+      description:
+        'Text color. Keep it dark on a light background: many clients ' +
+        'ignore dark mode overrides and show your color as-is.',
       component: Aglyn.FieldComponentType.COLOR_PICKER,
     },
     {
       name: 'align',
       label: 'Alignment',
+      description: 'How this block of text lines up within the section.',
       component: Aglyn.FieldComponentType.SELECT,
       options: [
         { value: 'left', label: 'Left' },
@@ -377,17 +387,24 @@ export const emailImageSchema: Aglyn.ComponentSchema<EmailImageProps> = {
     {
       name: 'width',
       label: 'Width (px)',
+      description:
+        'How wide the image renders. Blank fills the section — which is ' +
+        'usually right, since a phone is narrower than any number you pick.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       type: 'number',
     },
     {
       name: 'href',
       label: 'Link URL',
+      description:
+        'Where the image goes when it is clicked. Blank leaves it as a ' +
+        'plain picture.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
     },
     {
       name: 'align',
       label: 'Alignment',
+      description: 'Where the image sits when it is narrower than the section.',
       component: Aglyn.FieldComponentType.SELECT,
       options: [
         { value: 'left', label: 'Left' },
@@ -453,6 +470,9 @@ export const emailButtonSchema: Aglyn.ComponentSchema<EmailButtonProps> = {
     {
       name: 'children',
       label: 'Label',
+      description:
+        'The words on the button. Say what happens next — "See the report" ' +
+        'reads as a destination where "Click here" does not.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
     },
     {
@@ -464,16 +484,21 @@ export const emailButtonSchema: Aglyn.ComponentSchema<EmailButtonProps> = {
     {
       name: 'backgroundColor',
       label: 'Button color',
+      description:
+        'The fill behind the label. Check it against the label color — a ' +
+        'button nobody can read is a link nobody clicks.',
       component: Aglyn.FieldComponentType.COLOR_PICKER,
     },
     {
       name: 'color',
       label: 'Label color',
+      description: 'The color of the words on the button.',
       component: Aglyn.FieldComponentType.COLOR_PICKER,
     },
     {
       name: 'align',
       label: 'Alignment',
+      description: 'Where the button sits across the width of the section.',
       component: Aglyn.FieldComponentType.SELECT,
       options: [
         { value: 'left', label: 'Left' },
@@ -530,6 +555,9 @@ export const emailDividerSchema: Aglyn.ComponentSchema<EmailDividerProps> = {
     {
       name: 'color',
       label: 'Line color',
+      description:
+        'The color of the rule. A light grey separates sections without ' +
+        'drawing the eye to the line itself.',
       component: Aglyn.FieldComponentType.COLOR_PICKER,
     },
   ],
@@ -569,6 +597,9 @@ export const emailSpacerSchema: Aglyn.ComponentSchema<EmailSpacerProps> = {
     {
       name: 'height',
       label: 'Height (px)',
+      description:
+        'How much empty vertical space this block adds. Email clients drop ' +
+        'CSS margins, so a spacer is how you get reliable breathing room.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       type: 'number',
     },
@@ -636,6 +667,9 @@ export const emailProductSchema: Aglyn.ComponentSchema<EmailProductProps> = {
     {
       name: 'buttonLabel',
       label: 'Button label',
+      description:
+        'The words on the card’s button. Blank uses the block’s default, ' +
+        'and the link always points at this product’s page.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
     },
   ],

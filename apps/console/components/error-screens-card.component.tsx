@@ -39,6 +39,7 @@ import {
 } from 'firebase/firestore'
 import { useCallback } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 import { unpublishScreenRoute } from '../constants/screen-publishing'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
@@ -154,13 +155,9 @@ export function ErrorScreensCard(props: ErrorScreensCardProps) {
       // The route owns BOTH halves — the `kind: 'error'` stamp on the screen
       // and the pointer on the host — so they can never disagree, and the
       // stamp is bounded by the four slots (AGL-2092).
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/hosts/screens', {
+      const response = await authorizedFetch(user, '/api/hosts/screens', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           hostId,
           action: 'error-screen',

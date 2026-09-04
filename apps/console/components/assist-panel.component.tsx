@@ -61,6 +61,7 @@ import {
   useState,
 } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { DocsHelpTip } from './docs-help-tip.component'
 import { HostIdContext } from './host-id-provider'
 import useBranding from '../hooks/use-branding'
@@ -506,15 +507,9 @@ export function AssistPanelComponent() {
       }))
     }
     try {
-      const idToken = await (
-        user as { getIdToken?: () => Promise<string> } | null | undefined
-      )?.getIdToken?.()
-      const response = await fetch('/api/assist/chat', {
+      const response = await authorizedFetch(user, '/api/assist/chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           orgId: scopedOrgId,
           question,
@@ -644,15 +639,9 @@ export function AssistPanelComponent() {
       )
       trackEvent('assistant_feedback', { feedback })
       try {
-        const idToken = await (
-          user as { getIdToken?: () => Promise<string> } | null | undefined
-        )?.getIdToken?.()
-        await fetch('/api/assist/feedback', {
+        await authorizedFetch(user, '/api/assist/feedback', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             orgId: scopedOrgId,
             exchangeId: message.exchangeId,

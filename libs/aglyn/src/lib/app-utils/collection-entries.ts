@@ -16,6 +16,12 @@
  */
 
 import type { AglynNodeSchema, NodeId } from '../foundation'
+import {
+  type ContentAuthorLink,
+  type ContentAuthorRecord,
+  contentAuthorPageUrl,
+  normalizeContentAuthorLinks,
+} from './content-authors'
 import { resolveNamedTokens } from './resolve-named-tokens'
 
 /**
@@ -40,6 +46,21 @@ export const COLLECTION_SHARE_COMPONENT_ID = 'collectionShare'
 
 /** Persisted component id of the entry-meta block (plugins-mui, AGL-582). */
 export const COLLECTION_ENTRY_META_COMPONENT_ID = 'collectionEntryMeta'
+
+/**
+ * Persisted component id of the author card that closes an article
+ * (plugins-mui, AGL-2486).
+ *
+ * Entry Meta prints the byline — a NAME, on one line, beside the date. The
+ * author record it now resolves against carries a portrait, a bio, a job
+ * title and a url, and none of those have anywhere to render: a template that
+ * wanted the card the article frame draws had to type the name and the blurb
+ * as literal text, which then said "The Aglyn Team" under a post somebody
+ * else wrote and went stale the moment the author record was edited. The id
+ * lives here, with the other collection blocks, so the compose pipeline can
+ * fill the card without importing the bundle.
+ */
+export const COLLECTION_ENTRY_AUTHOR_COMPONENT_ID = 'collectionEntryAuthor'
 
 /**
  * Persisted component id of the "Category Pills" block (plugins-mui,
@@ -251,6 +272,13 @@ export interface CollectionEntryRecord {
    * on any entry whose editor chose a one-off byline instead of a record.
    */
   authorId?: string
+  /**
+   * The resolved author record, attached by the tenant runtime alongside the
+   * `authorName` it denormalizes (`get-collection-content.ts`). Carries the
+   * portrait, which is why the byline can show the author's own face rather
+   * than the site's mark — see {@link expandCollectionEntryMeta}.
+   */
+  author?: ContentAuthorRecord | null
   body?: string
   coverImage?: string
   /** Search-result title override (AGL-582); falls back to `title`. */
@@ -272,6 +300,29 @@ export interface CollectionEntryRecord {
   /** Free-form labels (AGL-582), e.g. ["nextjs", "seo"]. */
   tags?: string[]
   publishedAt?: { seconds: number } | null
+  /**
+   * The collection this entry came OUT of, stamped where the read happened
+   * (AGL-2518).
+   *
+   * Absent everywhere the routed collection already answers the question,
+   * which is every listing the platform had until now: a `/blog` page renders
+   * blog entries, so `entry.url` is built from the one slug the route
+   * resolved and no entry needs to carry its own.
+   *
+   * The author page breaks that assumption — it lists a blog post, a
+   * changelog note and a press release side by side, and building all three
+   * URLs from a single routed slug would produce two links to pages that do
+   * not exist. So the reader that mixes collections stamps each entry with
+   * where it came from, and {@link collectionEntryTokens} prefers it. Every
+   * other caller keeps passing one slug and keeps behaving identically.
+   */
+  collectionSlug?: string
+  /**
+   * The display name of {@link collectionSlug} — "Changelog", not
+   * "changelog" — so a card on a mixed listing can label which section a
+   * post belongs to. Stamped by the same reader, for the same reason.
+   */
+  collectionName?: string
 }
 
 /** A collection's published entries, keyed for expansion by its slug. */
@@ -494,11 +545,66 @@ export function collectionEntryMetaValues(
     // The per-entry byline the editor already collects (AGL-686). It was
     // reachable in the entry's JSON-LD and nowhere on the page, which is what
     // made the frame's byline unauthorable (AGL-1459).
-    author: (entry.authorName ?? '').trim(),
+    //
+    // The resolved RECORD first, then the legacy string (AGL-2486) — the
+    // precedence `resolveEntryAuthor` applies, spelled the same way here. The
+    // tenant denormalizes the record's name onto `authorName` before this
+    // runs, so on a live render the two agree; reading the record directly is
+    // what makes that a convenience rather than the only thing holding the
+    // byline up.
+    author: (entry.author?.name || entry.authorName || '').trim(),
     // Entry model v2 (AGL-582): category resolves by stable ID against the
     // collection's taxonomy, falling back to the legacy free-typed string.
     category: resolveEntryCategoryName(entry, categories) ?? '',
     tags: (entry.tags ?? []).join(', '),
+  }
+}
+
+/**
+ * The values an Entry Author card shows (AGL-2486) — the fields of the
+ * resolved author RECORD, in the spellings the `{{entry.author*}}` tokens
+ * produce.
+ *
+ * Extracted for the reason {@link collectionEntryMetaValues} was: the card,
+ * the token map and {@link expandCollectionEntryAuthor} have to agree, and
+ * three copies of "name, falling back to the legacy string" would not.
+ *
+ * `image` stays RAW — a `media:` reference or a plain url, whichever the
+ * author saved — because the resolver that turns one into a fetchable src
+ * needs the rendering host and this function has no host (`resolveMediaSrc`,
+ * AGL-1215). Every other consumer of an image field in this file does the
+ * same.
+ */
+export function collectionEntryAuthorValues(entry: CollectionEntryRecord): {
+  name: string
+  bio: string
+  image: string
+  url: string
+  pageUrl: string
+  links: ContentAuthorLink[]
+} {
+  const author = entry.author
+  return {
+    // Their page on THIS site (AGL-2518/2519) — a different destination from
+    // `url`, which is their own. Empty when nothing addresses them, so the
+    // byline renders as plain text rather than as a link to `/author/`.
+    pageUrl: contentAuthorPageUrl({
+      ...(author ? { author } : {}),
+      ...(entry.authorId ? { authorId: entry.authorId } : {}),
+      ...(entry.authorName ? { authorName: entry.authorName } : {}),
+    }),
+    // The rows the card PRINTS (AGL-2516). Normalized here rather than
+    // trusted, because this is the boundary a stored document crosses to
+    // become props: the renderer guards the href too, but only one of the two
+    // sits on the path a hand-written document would take.
+    links: normalizeContentAuthorLinks(author?.links),
+    // The record wins, then the legacy free-typed byline (AGL-686), which is
+    // the same precedence `resolveEntryAuthor` applies — an entry written
+    // before custom authors still fills a card, with the one field it has.
+    name: (author?.name ?? entry.authorName ?? '').trim(),
+    bio: (author?.bio ?? '').trim(),
+    image: (author?.image ?? '').trim(),
+    url: (author?.url ?? '').trim(),
   }
 }
 
@@ -514,17 +620,50 @@ export function collectionEntryTokens(
   categories?: CollectionCategory[],
 ): Record<string, string> {
   const meta = collectionEntryMetaValues(entry, categories)
+  const author = collectionEntryAuthorValues(entry)
+  // The entry's OWN collection wins over the routed one (AGL-2518) — see
+  // `CollectionEntryRecord.collectionSlug`. Unset on every single-collection
+  // listing, which is why this changes nothing for them.
+  const slug = (entry.collectionSlug ?? '').trim() || collectionSlug
   return {
     'entry.title': entry.title ?? '',
     'entry.excerpt': entry.excerpt ?? '',
     'entry.body': entry.body ?? '',
     'entry.coverImage': entry.coverImage ?? '',
     'entry.slug': entry.slug ?? '',
-    'entry.url': `/${collectionSlug}/${entry.slug ?? ''}`,
+    'entry.url': `/${slug}/${entry.slug ?? ''}`,
+    // Which section this entry belongs to (AGL-2518). Worth binding only on a
+    // listing that MIXES collections — the author page — where a card
+    // otherwise gives a reader no way to tell a release note from an essay.
+    'entry.collection': (entry.collectionName ?? '').trim(),
+    'entry.collectionSlug': slug,
+    'entry.collectionUrl': slug ? `/${slug}` : '',
     'entry.date': meta.date,
     // The byline (AGL-1459). Bindable by hand for the same reason every other
     // field is: a template that wants it somewhere Entry Meta does not reach.
     'entry.author': meta.author,
+    // The rest of the author RECORD (AGL-2486). Bindable by hand for the
+    // same reason `entry.author` is: a card laid out by the designer rather
+    // than dropped as the Entry Author block still has to say who wrote the
+    // piece, and typing the blurb in as literal text is how a byline starts
+    // naming the wrong person.
+    'entry.authorBio': author.bio,
+    'entry.authorImage': author.image,
+    'entry.authorUrl': author.url,
+    /**
+     * This author's page on this site (AGL-2518) — "more from the person who
+     * wrote this".
+     *
+     * A separate token from `entry.authorUrl`, which is the author's own site,
+     * because they are different destinations and a template should be able to
+     * offer either or both. Empty when there is nothing addressable, so a
+     * binding renders no link rather than one pointing at `/author/`.
+     */
+    'entry.authorPageUrl': contentAuthorPageUrl({
+      ...(entry.author ? { author: entry.author } : {}),
+      ...(entry.authorId ? { authorId: entry.authorId } : {}),
+      ...(entry.authorName ? { authorName: entry.authorName } : {}),
+    }),
     // Entry model v2 (AGL-582): taxonomy + SEO tokens. The SEO pair falls
     // back to title/excerpt so templates can bind them unconditionally.
     'entry.category': meta.category,
@@ -910,13 +1049,84 @@ export function buildCollectionSearchIndex(
       // Absent keys rather than empty strings, so the row asks one question
       // per field instead of two — the shape Related posts settled on
       // (AGL-1457).
-      ...(entry.slug ? { url: `/${collectionSlug}/${entry.slug}` } : {}),
+      // The entry's own collection wins over the passed one, as in
+      // `collectionEntryTokens` and for the same reason (AGL-2518): a mixed
+      // listing's search index must not send every hit to one collection.
+      ...(entry.slug
+        ? {
+            url: `/${(entry.collectionSlug ?? '').trim() || collectionSlug}/${
+              entry.slug
+            }`,
+          }
+        : {}),
       ...(entry.publishedAt?.seconds
         ? { date: formatCollectionEntryDate(entry.publishedAt) }
         : {}),
       ...(categoryName ? { category: categoryName } : {}),
     }
   })
+}
+
+/**
+ * The collection blocks that can be BOUND to a collection by name, rather
+ * than inheriting the routed one.
+ *
+ * The same three `scanCollectionBlocks` resolves a source for, and the same
+ * three that can therefore put a collection's entries on a page that is not
+ * one of the collection's own routes — a "Latest posts" rail on the home
+ * page, a category pill strip in a layout's chrome, a search box in a header.
+ *
+ * Related posts is deliberately absent. It resolves against the routed
+ * collection and renders nothing without a current entry in context, so it
+ * only ever appears on an entry page, which the entry's own address already
+ * covers.
+ */
+const COLLECTION_BOUND_COMPONENT_IDS: readonly string[] = [
+  COLLECTION_ENTRIES_COMPONENT_ID,
+  COLLECTION_CATEGORIES_COMPONENT_ID,
+  COLLECTION_SEARCH_COMPONENT_ID,
+]
+
+/**
+ * Does this tree render the collection `collectionSlug` away from the
+ * collection's own routes?
+ *
+ * The content twin of {@link nodesPlaceForm}, and it exists for the same
+ * reason: an entry edit changes every page that renders the collection, and
+ * those pages are found by SEARCHING node trees rather than by matching a
+ * pointer. A collection's own addresses are derivable from its slug; a rail
+ * on the home page is not derivable from anything.
+ *
+ * Matches only an EXPLICIT `collectionSlug`. A block that names none inherits
+ * the routed collection — which means it renders nothing at all off-route
+ * (`scanCollectionBlocks` adds no slug, so the block is left untouched) and
+ * renders the routed collection on-route, where the collection's own list and
+ * entry addresses already reach it. Treating an unbound block as a dependent
+ * of every collection on the site would make every entry save drop every page
+ * that carries one.
+ *
+ * The comparison is against the slug rather than the document id because that
+ * is what the binding stores, and what `scanCollectionBlocks` resolves. A
+ * collection whose slug was just changed is a different question, and one the
+ * slug change itself has to answer.
+ */
+export function nodesRenderCollection(
+  nodes: Record<NodeId, AglynNodeSchema | undefined> | undefined | null,
+  collectionSlug: string,
+): boolean {
+  const wanted = String(collectionSlug ?? '').trim()
+  if (!wanted) return false
+  for (const node of Object.values(nodes ?? {})) {
+    if (!node) continue
+    if (!COLLECTION_BOUND_COMPONENT_IDS.includes(String(node.componentId))) {
+      continue
+    }
+    const bound = (node.props as Record<string, unknown> | undefined)?.[
+      'collectionSlug'
+    ]
+    if (typeof bound === 'string' && bound.trim() === wanted) return true
+  }
+  return false
 }
 
 /**
@@ -1082,6 +1292,35 @@ export function expandCollectionEntries<
       for (const templateId of templateIds) {
         cloneSubtree(templateId, containerId)
         childIds.push(prefixId(templateId))
+      }
+      // Fill the entry blocks in THIS card from THIS card's entry (AGL-2486).
+      //
+      // The routed-entry passes (`expandCollectionEntryMeta`,
+      // `expandCollectionEntryAuthor`) skip clones deliberately: stamping the
+      // routed entry into a listing would date every card the same. That left
+      // a cloned block with only its `{{entry.*}}` bindings, and a binding
+      // carries no FORMAT — so an Entry Meta inside a card rendered the locale
+      // default whatever its Date format said, while the identical block on
+      // the article above it obeyed the picker. A field that cannot move the
+      // thing it names is worse than a missing one.
+      //
+      // The fill runs against each clone's own entry, so every card dates
+      // itself, and it runs BEFORE substitution so a filled value is already
+      // a literal by the time the tokens resolve. The precedence is the
+      // shared one: an authored value wins, except the `{{entry.date}}`
+      // binding under a chosen format, which is the case this exists for.
+      for (const [cloneId, cloneNode] of Object.entries(cloned)) {
+        const fill =
+          cloneNode?.componentId === COLLECTION_ENTRY_META_COMPONENT_ID
+            ? entryMetaFill(cloneNode, entry, source.categories)
+            : cloneNode?.componentId === COLLECTION_ENTRY_AUTHOR_COMPONENT_ID
+              ? entryAuthorFill(cloneNode, entry)
+              : undefined
+        if (!fill || !Object.keys(fill).length) continue
+        cloned[cloneId] = {
+          ...cloneNode,
+          props: { ...(cloneNode.props ?? {}), ...fill },
+        } as N
       }
       Object.assign(
         next,
@@ -1332,6 +1571,34 @@ export function expandCollectionEntryMeta<
 
   const next: Record<NodeId, N> = { ...nodes }
   for (const [containerId, container] of containers) {
+    const filled = entryMetaFill(container, entry, categories)
+    if (!Object.keys(filled).length) continue
+    next[containerId] = {
+      ...container,
+      props: { ...(container.props ?? {}), ...filled } as any,
+    }
+  }
+  return next
+}
+
+/**
+ * The values ONE Entry Meta node takes from ONE entry (AGL-2486).
+ *
+ * Extracted so a node inside a listing's card can be filled from the entry
+ * that card is for, which is a different entry per clone and therefore
+ * cannot come from the routed-entry pass above. Both callers apply the same
+ * precedence, because the same block cannot mean two things depending on
+ * where an author dropped it.
+ *
+ * Returns only the keys that change; an empty object means "leave this node
+ * exactly as authored".
+ */
+function entryMetaFill(
+  container: { props?: unknown },
+  entry: CollectionEntryRecord,
+  categories?: readonly CollectionCategory[],
+): Record<string, string> {
+  {
     const props = (container.props ?? {}) as Record<string, unknown>
     // Per node: the format is a prop, so two blocks on one template can read
     // their dates differently.
@@ -1346,10 +1613,123 @@ export function expandCollectionEntryMeta<
       if (!values[key]) continue
       filled[key] = values[key]
     }
+    // The byline avatar follows the BYLINE, and is the second narrow
+    // exception to "an authored value always wins" (after `dateFormat`).
+    //
+    // `avatarImage` was introduced as a block-level pick because entries then
+    // carried a byline STRING and no portrait anywhere, so the site's brand
+    // mark chosen once on the template was the only answer available. Custom
+    // authors changed that: an entry resolves to a record, and a record has
+    // an `image`. Keeping the authored mark in front of it would print the
+    // company logo beside a named person — the wrong face, on every post that
+    // person wrote, which is worse than the generic mark it was standing in
+    // for.
+    //
+    // Deliberately narrow, so nothing else moves: only a resolved author
+    // RECORD that actually carries an image displaces the authored value. A
+    // legacy string byline, an author with no portrait, and an entry with no
+    // author at all all leave the template's mark exactly where it was.
+    //
+    // And only where a byline is actually PRINTED. This block is also the
+    // product's tag row — the article frame ends on one with `Show author`,
+    // `Show date` and `Show category` off and nothing but chips left — so a
+    // portrait filled in unconditionally lands beside the tags, halfway down
+    // the page from the byline it belongs to. The avatar is `alt=""` on the
+    // grounds that "the byline names the author in text right beside it",
+    // which is exactly the thing a chips-only block does not have.
+    const authorImage = String(entry.author?.image ?? '').trim()
+    const bylineShown =
+      props['showAuthor'] !== false &&
+      Boolean(filled['author'] || String(props['author'] ?? '').trim())
+    if (authorImage && bylineShown && props['showAvatar'] !== false) {
+      filled['avatarImage'] = authorImage
+    }
+    /*
+      Where the byline GOES (AGL-2519).
+
+      Filled on the same terms as the avatar and for the same reason: it
+      belongs to the byline, so it is only filled where a byline is actually
+      printed. This block doubles as the product's tag row — the article frame
+      ends on one with the author, date and category all switched off — and a
+      link stamped there would have nothing to attach to.
+
+      An authored value still wins, which is what `Link author` off leaves
+      behind once the switch has written an explicit `false`: the switch is
+      read by the renderer, and this only supplies the destination.
+    */
+    if (bylineShown) {
+      const pageUrl = collectionEntryAuthorValues(entry).pageUrl
+      if (pageUrl && !String(props['authorPageUrl'] ?? '').trim()) {
+        filled['authorPageUrl'] = pageUrl
+      }
+    }
+    return filled
+  }
+}
+
+/**
+ * Fill Entry Author cards from the routed entry's author record (AGL-2486),
+ * on the same terms {@link expandCollectionEntryMeta} fills the byline:
+ *
+ *  - an authored value always wins, and a blank one is a blank, not a
+ *    request for the default — the way to hide a field is its Show switch;
+ *  - per-entry clones (`centry__`) are skipped, so a listing's cards keep
+ *    resolving their own tokens rather than every card naming the routed
+ *    entry's author;
+ *  - without a routed entry nothing is stamped, which leaves the besigner's
+ *    placeholder card visible on the canvas.
+ *
+ * Inputs are never mutated.
+ */
+export function expandCollectionEntryAuthor<
+  N extends AglynNodeSchema = AglynNodeSchema,
+>(
+  nodes: Record<NodeId, N>,
+  entry: CollectionEntryRecord | null | undefined,
+): Record<NodeId, N> {
+  if (!entry) return nodes
+  const containers = Object.entries(nodes).filter(
+    ([id, node]) =>
+      node?.componentId === COLLECTION_ENTRY_AUTHOR_COMPONENT_ID &&
+      !id.startsWith(COLLECTION_ENTRIES_NODE_ID_PREFIX),
+  )
+  if (!containers.length) return nodes
+
+  const next: Record<NodeId, N> = { ...nodes }
+  for (const [containerId, container] of containers) {
+    const filled = entryAuthorFill(container, entry)
     if (!Object.keys(filled).length) continue
-    next[containerId] = { ...container, props: { ...props, ...filled } as any }
+    next[containerId] = {
+      ...container,
+      props: { ...(container.props ?? {}), ...filled } as any,
+    }
   }
   return next
+}
+
+/**
+ * The values ONE Entry Author node takes from ONE entry (AGL-2486) — the
+ * companion to {@link entryMetaFill}, extracted for the same reason: a card
+ * inside a listing is filled from the entry that card is for.
+ */
+function entryAuthorFill(
+  container: { props?: unknown },
+  entry: CollectionEntryRecord,
+): Record<string, unknown> {
+  const values = collectionEntryAuthorValues(entry)
+  const props = (container.props ?? {}) as Record<string, unknown>
+  const filled: Record<string, unknown> = {}
+  for (const key of ['name', 'bio', 'image', 'url', 'pageUrl'] as const) {
+    if (String(props[key] ?? '').trim()) continue
+    if (!values[key]) continue
+    filled[key] = values[key]
+  }
+  // `links` is not authorable as text — a row carries a platform or a picked
+  // icon, and the console's author editor is where those are chosen — so
+  // there is no authored value to defer to. The record's rows are the only
+  // ones there are; `Show links` is the template's control over them.
+  if (values.links.length) filled['links'] = values.links
+  return filled
 }
 
 /** The one binding a chosen date format may replace (AGL-1459). */
@@ -1511,8 +1891,8 @@ export function selectRelatedEntries(
  * the current entry's related posts as a serializable `entries` prop the
  * component renders directly (no template cloning — the block owns its
  * markup). Runs only on entry renders; without an entry context the nodes
- * stay untouched, so the component's besigner placeholder / empty site
- * render applies. Inputs are never mutated.
+ * stay untouched, so the component's sample cards (editing surfaces) or its
+ * empty site render apply. Inputs are never mutated.
  */
 export function expandCollectionRelated<
   N extends AglynNodeSchema = AglynNodeSchema,
@@ -1530,6 +1910,11 @@ export function expandCollectionRelated<
   const next: Record<NodeId, N> = { ...nodes }
   for (const [containerId, container] of containers) {
     const limitRaw = Number((container.props as any)?.limit)
+    // Per node, exactly as the byline reads it (AGL-1459): the format is a
+    // prop, so two rails on one template can date their cards differently.
+    const dateFormat = normalizeCollectionEntryDateFormat(
+      (container.props as any)?.dateFormat,
+    )
     const related = selectRelatedEntries(
       source.entries ?? [],
       currentEntry,
@@ -1549,8 +1934,14 @@ export function expandCollectionRelated<
         // to be the ones `formatCollectionEntryDate` now pins; a related-post
         // card is the same published date as the byline above it and must not
         // be able to disagree with it.
+        //
+        // Answered HERE and not in the block (AGL-2486), for the reason the
+        // byline's format is: by the time a date reaches the component it is
+        // a formatted string, and re-parsing one is ambiguous by
+        // construction — `8/9/2026` is 9 August under `en-US` and 8 September
+        // under `en-GB`. The timestamp only exists on this side.
         ...(entry.publishedAt?.seconds
-          ? { date: formatCollectionEntryDate(entry.publishedAt) }
+          ? { date: formatCollectionEntryDate(entry.publishedAt, dateFormat) }
           : {}),
         ...(entry.excerpt ? { excerpt: entry.excerpt } : {}),
         // AGL-1457: the block owns its markup, so there is no template to

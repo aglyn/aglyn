@@ -19,6 +19,7 @@
 import {
   onboardingDestination,
   parseOnboardingPlanIntent,
+  PLAN_LABELS,
 } from '@aglyn/aglyn'
 import {
   ICON_VARIANT_HOST_GROUP,
@@ -31,6 +32,7 @@ import {
   GridItems,
   MdiIcon,
 } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import {
   Alert,
   Box,
@@ -40,7 +42,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import CreateHostDialog from '../../../components/create-host-dialog.component'
 import CreateOrgDialog from '../../../components/create-org-dialog.component'
@@ -50,6 +52,7 @@ import OrgInvitesBanner from '../../../components/org-invites-banner.component'
 import { buildRoute, Route } from '../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
 import { useOrgScope } from '../../../hooks/use-org-scope'
+import { useWorkspacePage } from '../../../hooks/use-workspace-page'
 import { readOutcome } from '../../../utils/read-outcome'
 import { usePendingInvites } from '../../../hooks/use-pending-invites'
 import {
@@ -76,6 +79,18 @@ function OrgJump() {
     error: orgsError,
     retry: retryOrgs,
   } = useOrgScope()
+  // The picker pages on the console's own footer (AGL-2501); the membership
+  // window still grows underneath when the reader walks to its end.
+  const {
+    visible: visibleOrgs,
+    page: orgPage,
+    setPage: setOrgPage,
+    pageSize: orgPageSize,
+    hasMore: hasMoreOrgPages,
+  } = useWorkspacePage(orgs, {
+    hasMoreRows: hasMoreOrgs,
+    loadMoreRows: loadMoreOrgs,
+  })
   /**
    * `useOrgScope` has said all along that an errored membership listen "says
    * nothing about what orgs exist" (AGL-1260), and this page read `orgs`
@@ -141,6 +156,39 @@ function OrgJump() {
     return () => void (active = false)
   }, [firestore, uid, urlIntent])
 
+  /**
+   * The one resolved answer to "what is this visit trying to buy", shared by
+   * every exit from this page — the single-org jump below, the picker's
+   * workspace links, and the org the picker creates.
+   *
+   * An intent on the URL outranks a remembered one, and it is resolved ONCE
+   * here so the exits cannot disagree: a multi-org member's click and a
+   * single-org member's redirect are the same decision reached by different
+   * routes, and a picker link that dropped the plan sent a buyer to their
+   * sites to go find billing on their own.
+   *
+   * `undefined` — the account read still in flight — collapses to null for the
+   * links, which re-render with the intent the moment it answers. The redirect
+   * effect cannot do that: it HOLDS on `undefined` instead, because a
+   * navigation is not a render you can correct a beat later.
+   */
+  const intent = urlIntent ?? storedIntent ?? null
+  /**
+   * Where entering `orgSlug` should land. `onboardingDestination` is the sole
+   * builder of that path — it owns the enterprise-goes-to-support branch and
+   * the interval serialization, and hand-appending `&interval=` anywhere else
+   * turns "the CTA stated no interval" into "the CTA said monthly" (AGL-1535).
+   */
+  const enterOrg = useCallback(
+    (orgSlug: string) =>
+      intent
+        ? onboardingDestination(orgSlug, intent)
+        : buildRoute(Route.HOST_LIST, { orgSlug }),
+    // Stable while the intent is: the jump effect below depends on this, and a
+    // fresh function every render would re-fire a navigation on every render.
+    [intent],
+  )
+
   // Single-org members never see a picker — go straight to their sites.
   //
   // Gated on `confirmed`, not merely `loading` (AGL-1149). The console runs a
@@ -170,10 +218,8 @@ function OrgJump() {
     // Failing that, the intent the ACCOUNT remembers from signup: this is the
     // landing the email-verification bounce discards, and it arrives here as a
     // bare `/` with nothing to read off the URL (AGL-1535).
-    const intent = urlIntent ?? storedIntent
-    if (intent) return void router.replace(onboardingDestination(slug, intent))
-    router.replace(buildRoute(Route.HOST_LIST, { orgSlug: slug }))
-  }, [loading, confirmed, orgs, router, storedIntent, urlIntent])
+    router.replace(enterOrg(slug))
+  }, [loading, confirmed, orgs, router, storedIntent, enterOrg])
 
   return (
     <DashboardLayout
@@ -184,6 +230,10 @@ function OrgJump() {
         children: 'Workspaces',
         icon: { path: ICON_VARIANT_ORGANIZATION.path },
       }}
+      // The one page in the console with no help affordance (AGL-2486), and
+      // the first page a new member sees: it is where "what IS a workspace,
+      // and why am I picking one" is asked.
+      help={{ topic: 'consoleTour', anchor: '#workspace-settings--notifications' }}
       // The primary action belongs in the header, like every other list page
       // (sites, screens, layouts) — at the foot of the list it sat below the
       // fold once you had more than a couple of workspaces. The zero-org
@@ -254,6 +304,7 @@ function OrgJump() {
                 <CreateHostDialog
                   open={creatingSite}
                   onClose={() => setCreatingSite(false)}
+                  destination={intent ? enterOrg : undefined}
                 />
               </Stack>
             ) : (
@@ -286,9 +337,16 @@ function OrgJump() {
                     </Stack>
                   }
                 />
+                {/* The first site provisions the workspace, so this is the
+                    whole of the zero-org buyer's path: someone arriving from
+                    a plan CTA with no workspace at all has no picker and no
+                    create-workspace dialog to carry the intent for them. The
+                    prop is passed only when there IS an intent, so an
+                    ordinary first site still lands on its Setup page. */}
                 <CreateHostDialog
                   open={creatingSite}
                   onClose={() => setCreatingSite(false)}
+                  destination={intent ? enterOrg : undefined}
                 />
               </>
             )
@@ -300,13 +358,20 @@ function OrgJump() {
                 <Typography variant="h6" component="h1">
                   {'Choose a workspace'}
                 </Typography>
+                {/* Name the plan when the visit is carrying one. The picker
+                    is a detour a buyer did not ask for, and saying what the
+                    choice is FOR is what keeps it a step in the purchase
+                    rather than a dead end they have to reason about. */}
                 <Typography variant="body2" color="text.secondary">
-                  {'You belong to several organizations — pick one to manage.'}
+                  {intent
+                    ? `You belong to several organizations — pick the one you ` +
+                      `want ${PLAN_LABELS[intent.plan] ?? intent.plan} on.`
+                    : 'You belong to several organizations — pick one to manage.'}
                 </Typography>
               </Box>
               <GridItems
                 spacing={3}
-                items={orgs.map((org) => ({
+                items={visibleOrgs.map((org) => ({
                   size: { xs: 12, sm: 6, md: 4 },
                   children: (
                     <CardDisplay
@@ -325,7 +390,7 @@ function OrgJump() {
                       subheader={org.slug ?? undefined}
                       actions={
                         /*
-                         * A real anchor (AGL-1484). `router.push` from an
+                         * A real anchor. `router.push` from an
                          * onClick renders a <button>, so this could not be
                          * middle-clicked, ⌘-clicked, opened in a new tab, or
                          * copied as a link — and opening one workspace beside
@@ -336,6 +401,13 @@ function OrgJump() {
                          * An org with no slug has nowhere to link to, so it
                          * stays a disabled button rather than an anchor whose
                          * href would be a route with a hole in it.
+                         *
+                         * The href carries the plan intent (AGL-1117): the
+                         * single-org member is redirected to billing with it,
+                         * and a multi-org member reaches the same place by
+                         * choosing. The choice is the thing this page exists
+                         * for and stays theirs — what it must not do is
+                         * discard the plan on the way through.
                          */
                         org.slug ? (
                           <Button
@@ -345,9 +417,7 @@ function OrgJump() {
                               componentVariant: 'naked',
                               nativeButton: false,
                             } as any)}
-                            href={buildRoute(Route.HOST_LIST, {
-                              orgSlug: org.slug,
-                            })}
+                            href={enterOrg(org.slug)}
                           >
                             {'Open'}
                           </Button>
@@ -366,29 +436,33 @@ function OrgJump() {
                   ),
                 }))}
               />
-              {/* AGL-2336: this grid is a WINDOW over the membership list and
-                  used to end in silence, so an agency past its 50th client
-                  saw a complete-looking picker that was not complete. */}
-              {hasMoreOrgs ? (
-                <Box>
-                  <Typography
-                    variant="body2"
-                    color="text.secondary"
-                    gutterBottom
-                  >
-                    {`Showing ${orgs.length} of your workspaces.`}
-                  </Typography>
-                  <Button variant="outlined" onClick={loadMoreOrgs}>
-                    {'Load more workspaces'}
-                  </Button>
-                </Box>
-              ) : null}
+              {/* This grid is a WINDOW over the membership list and used to
+                  end in silence, so an agency past its 50th client saw a
+                  complete-looking picker that was not complete (AGL-2336).
+                  The footer states the position instead: "1–5 of more than 5"
+                  while another page is known to exist, the real total once it
+                  is not. */}
+              <ListPagination
+                page={orgPage}
+                pageSize={orgPageSize}
+                rowCount={visibleOrgs.length}
+                hasMore={hasMoreOrgPages}
+                onPageChange={setOrgPage}
+                labelDisplayedRows={({ from, to, count }) =>
+                  `${from}–${to} of ${count === -1 ? 'more than ' + to : count} workspaces`
+                }
+              />
             </Stack>
           )}
           <CreateOrgDialog
             open={creatingOrg}
             onClose={() => setCreatingOrg(false)}
             initialName={signupOrgFailure?.name}
+            /* A workspace created DURING a buy-intent visit is the one most
+               likely to be billed — the visitor came to buy and made a place
+               to put it. Landing it on its sites drops the plan exactly where
+               it was most wanted. */
+            destination={enterOrg}
           />
         </Container>
       )}

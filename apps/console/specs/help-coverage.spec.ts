@@ -64,8 +64,6 @@ const CONSOLE_ROOT = join(REPO_ROOT, 'apps/console')
 const EXCEPTIONS: Record<string, string> = {
   'apps/console/components/card-display-form-template.tsx':
     'Infrastructure wrapper — forwards schema-level help via CardDisplayProps, has no header of its own.',
-  'apps/console/app/(app)/(home)/page.tsx':
-    'Org jump page — navigational workspace picker, not a documented feature surface.',
 }
 
 /**
@@ -81,6 +79,8 @@ const EXCEPTIONS: Record<string, string> = {
  * header has been renamed away, fails rather than lingering.
  */
 const CARD_EXCEPTIONS: Record<string, string> = {
+  'apps/console/app/(app)/(home)/page.tsx#{org.orgName ?? org.slug ?? org.$id}':
+    'The workspace picker itself — one card per workspace the reader belongs to, headed by its name. It claims nothing that could need explaining, and the twin below (the billing entry point) was already exempt for exactly this reason. The page carried a whole-file exemption until AGL-2486 gave it `help` on its DashboardLayout, which is where "what is a workspace" belongs.',
   'apps/console/app/(app)/billing/page.tsx#{org.orgName ?? org.slug ?? org.$id}':
     'The workspace picker on the org-agnostic billing entry point (AGL-2430) — the same navigational card the org jump page renders, and exempt for the same reason: it names one of the reader\'s own workspaces and claims nothing about billing. The surface itself carries help="billing" on its DashboardLayout, which is where the explanation belongs.',
 }

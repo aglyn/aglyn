@@ -35,12 +35,32 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { useEffect, useRef } from 'react'
 import JsonEditor from './json-editor'
 
+/**
+ * Every options object `dynamic()` was called with, in order.
+ *
+ * `var`, not `const`: `json-editor.tsx` calls `dynamic()` at MODULE scope, so
+ * it runs while this spec's own import of it is still evaluating — before a
+ * `const` here would have initialized, which is a TDZ ReferenceError that
+ * fails the whole suite. A `var` is hoisted as `undefined` and assigned on
+ * first use instead.
+ *
+ * `no-var` is disabled rather than obeyed: the rule exists to stop hoisting
+ * being relied on by accident, and here it is the whole point. Obeying it
+ * reintroduces the TDZ error the comment above describes.
+ */
+// eslint-disable-next-line no-var
+var mockDynamicOptions: any[] | undefined
+
 jest.mock('next/dynamic', () => ({
   __esModule: true,
   // `json-editor.tsx` has exactly one dynamic import: the Monaco editor.
   // `mockEditor` is only dereferenced when the component renders, which is
   // after this module body has run.
-  default: () => (props: any) => mockEditor(props),
+  default: (_loader: any, options: any) => {
+    if (!mockDynamicOptions) mockDynamicOptions = []
+    mockDynamicOptions.push(options)
+    return (props: any) => mockEditor(props)
+  },
 }))
 
 /**
@@ -129,6 +149,40 @@ describe('JsonEditor', () => {
   it('should render successfully', () => {
     const { baseElement } = render(<JsonEditor open={false} />)
     expect(baseElement).toBeTruthy()
+  })
+
+  describe('the editor is loading before it is needed (AGL-2541)', () => {
+    it('mounts the editor UNDER the warning, not instead of it', () => {
+      render(<JsonEditor open defaultValue={DOC as any} />)
+
+      // Both, at once. The warning gate used to be an `If`/`Else`, so the
+      // editor was not rendered at all while the warning stood — its chunk
+      // was never requested and Monaco's loader never ran. Dismissing the
+      // warning then started a download from cold, against a pane that shows
+      // nothing while it waits, which is what "the editor never mounts" was.
+      expect(
+        screen.getByText('Warning: Advanced Feature Ahead!'),
+      ).toBeTruthy()
+      expect(editor()).toBeTruthy()
+    })
+
+    it('seeds that editor with the document, not with an empty buffer', () => {
+      // Mounting it early is only safe if it mounts with the real document:
+      // an editor warmed on `{}` would hand the author a wiped buffer the
+      // moment they dismissed the warning.
+      render(<JsonEditor open defaultValue={DOC as any} />)
+      expect(editor().value).toBe(JSON.stringify(DOC, null, 2))
+      expect(editor().value).not.toBe(WIPED)
+    })
+
+    it('gives the dynamic import something visible to render while it waits', () => {
+      // `dynamic()` with no `loading` renders `null` — the same empty box for
+      // "still downloading" and for "this will never arrive". The blank pane
+      // with no console error was indistinguishable from a broken build.
+      const [options] = mockDynamicOptions ?? []
+      expect(options?.ssr).toBe(false)
+      expect(typeof options?.loading).toBe('function')
+    })
   })
 
   describe('a transiently invalid buffer (AGL-2486 item 17)', () => {

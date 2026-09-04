@@ -35,6 +35,7 @@ import {
 } from '@mui/material'
 import { useCallback, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 
 /**
@@ -58,21 +59,21 @@ export function SiteTemplateCard(props: { hostId: string }) {
     if (!name.trim() || busy) return
     setBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/marketplace/publish-template', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      const response = await authorizedFetch(
+        user,
+        '/api/marketplace/publish-template',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            hostId,
+            displayName: name.trim(),
+            description: description.trim(),
+            category: category.trim(),
+            priceUsd: Number(price) || 0,
+          }),
         },
-        body: JSON.stringify({
-          hostId,
-          displayName: name.trim(),
-          description: description.trim(),
-          category: category.trim(),
-          priceUsd: Number(price) || 0,
-        }),
-      })
+      )
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
         return void enqueueSnackbar(payload?.error ?? 'Publish failed', {

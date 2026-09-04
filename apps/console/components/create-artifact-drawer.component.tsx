@@ -16,151 +16,48 @@
  */
 'use client'
 
-import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
 import {
-  Container,
-  MdiIcon,
-  SrOnly,
-} from '@aglyn/shared-ui-jsx'
-import { NavigationDrawerComponent } from '@aglyn/shared-ui-jsx/components/navigation-drawer.component'
-import { FormRenderer, simpleComponentMapper } from '@aglyn/shared-ui-jsx-forms'
-import { Button, IconButton, Typography } from '@mui/material'
+  CreateArtifactDrawer as SharedCreateArtifactDrawer,
+  type CreateArtifactDrawerProps as SharedCreateArtifactDrawerProps,
+} from '@aglyn/shared-ui-jsx-forms'
 import AuthErrorAlertComponent from './auth-error-alert.component'
 import AuthFormTemplateComponent from './auth-form-template.component'
 
-export interface CreateArtifactDrawerProps {
-  open: boolean
-  onClose: () => void
-  /** Drawer heading, e.g. "Create new component". */
-  title: string
-  /** Receives the collected field values; closing is the caller's job. */
-  onSubmit: (values: Record<string, any>) => void | Promise<void>
-  /** Extra fields appended after name and description. */
-  extraFields?: any[]
+export interface CreateArtifactDrawerProps
+  extends Omit<
+    SharedCreateArtifactDrawerProps,
+    'errorSlot' | 'FormTemplate'
+  > {
   /** Rendered under the form when a submit fails. */
   error?: unknown
-  /**
-   * Whether to offer the shared Description box (AGL-2498).
-   *
-   * True for every artifact whose document stores one. Content collections do
-   * not: `/api/hosts/collections` filters `data` through a per-kind allowlist
-   * of `displayName` + `slug`, so a description typed here would be dropped
-   * without a word. A field the writer silently discards is worse than a field
-   * that was never offered.
-   */
-  includeDescription?: boolean
 }
 
 /**
- * The naming step in front of Create (AGL-700).
+ * The console's binding of the shared create drawer (AGL-700).
  *
- * Components and templates used to write an `Untitled …` document and
- * navigate straight to it, so a library filled with rows nobody could tell
- * apart and every one of them needed a rename afterwards. Layouts already
- * collected a name first; this is that drawer, lifted out of the layouts
- * list so all three surfaces share one implementation rather than three
- * copies that drift.
+ * The drawer itself moved to `@aglyn/shared-ui-jsx-forms` so the console pages
+ * that PLUGINS ship can create a record the same way the app's own list pages
+ * do — a plugin card cannot import from the app that renders it, so leaving
+ * the drawer here meant every plugin either stacked an inline form above its
+ * table or drew a second drawer that looked almost like this one.
  *
- * A drawer rather than a dialog on purpose: creating is a drawer, picking is
- * a dialog (AGL-699).
+ * What stays here is the console's own form chrome, which reaches for the
+ * session through `useSigninCheck` and therefore cannot live in a UI library.
+ * Binding it here rather than at each call site is what keeps the four
+ * existing console creates byte-identical to what they rendered before.
  */
 export function CreateArtifactDrawer(props: CreateArtifactDrawerProps) {
-  const {
-    open,
-    onClose,
-    title,
-    onSubmit,
-    extraFields,
-    error,
-    includeDescription = true,
-  } = props
-  const schema = {
-    fields: [
-      ...(includeDescription
-        ? BASE_FIELDS
-        : BASE_FIELDS.filter((field) => field.name !== 'description')),
-      ...(extraFields ?? []),
-    ],
-  }
+  const { error, ...rest } = props
   return (
-    <NavigationDrawerComponent
-      open={open}
-      anchor="right"
-      variant="temporary"
-      onClose={onClose}
-      AppBarProps={{ color: 'surface' }}
-      appBarLeft={
-        <>
-          <IconButton
-            color="inherit"
-            edge="start"
-            onClick={onClose}
-            sx={{ mr: 2 }}
-          >
-            <MdiIcon path={ICON_VARIANT_CLOSE.path} />
-            <SrOnly>close drawer</SrOnly>
-          </IconButton>
-          <Typography variant="h6" component="div">
-            {title}
-          </Typography>
-        </>
-      }
-      appBarRight={
-        <Button variant="outlined" color="inherit" onClick={onClose}>
-          {'Cancel'}
-        </Button>
-      }
-    >
-      <Container gutterY>
-        <FormRenderer
-          FormTemplate={AuthFormTemplateComponent}
-          componentMapper={simpleComponentMapper}
-          onSubmit={onSubmit}
-          schema={schema}
-          subscription={{ values: true }}
-          clearOnUnmount
-        />
+    <SharedCreateArtifactDrawer
+      {...rest}
+      FormTemplate={AuthFormTemplateComponent}
+      errorSlot={
         <AuthErrorAlertComponent error={error as any} sx={{ mt: 2, mb: 1 }} />
-      </Container>
-    </NavigationDrawerComponent>
+      }
+    />
   )
 }
-
-/**
- * Same shape and limits the layouts drawer has used since AGL-473, so the
- * three creates validate identically.
- */
-const BASE_FIELDS = [
-  {
-    component: 'text-field',
-    name: 'displayName',
-    helperText: 'Friendly name for internal reference',
-    type: 'text',
-    label: 'Display name',
-    isRequired: true,
-    validate: [
-      { type: 'required', message: 'Provide a display name' },
-      {
-        type: 'max-length',
-        threshold: 25,
-        message: 'Must not exceed 25 characters',
-      },
-    ],
-  },
-  {
-    component: 'textarea',
-    name: 'description',
-    label: 'Description',
-    helperText: 'Brief description for internal reference',
-    validate: [
-      {
-        type: 'max-length',
-        threshold: 80,
-        message: 'Must not exceed 80 characters',
-      },
-    ],
-  },
-]
 
 CreateArtifactDrawer.displayName = 'CreateArtifactDrawer'
 

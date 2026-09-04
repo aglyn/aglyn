@@ -247,7 +247,7 @@ export const NodeContextMenu = observer(
     }, [node, isRootNode, multi, hiddenOnSite, onAction, setRevealedNodeIds])
 
     /**
-     * Copy and paste a LOOK (AGL-1480).
+     * Copy and paste a LOOK.
      *
      * `node.sx` — the Styles panel's whole output, including its responsive,
      * `@scheme` and state slices, which are keys inside that object. Classes

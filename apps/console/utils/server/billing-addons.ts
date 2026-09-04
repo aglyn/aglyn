@@ -17,9 +17,13 @@
 
 import {
   EVENT_CALENDAR_ADDON_MONTHLY_USD,
+  EXTRA_HOSTS_ADDON_MAX,
   PLAN_PRICING,
   POS_REGISTER_ADDON_MONTHLY_USD,
+  POS_REGISTERS_ADDON_MAX,
+  resolveOrgEntitlements,
   SELF_SERVE_PLANS,
+  UNLIMITED,
   type OrgPlan,
   type OrgSeatAddons,
 } from '@aglyn/aglyn/server'
@@ -290,4 +294,44 @@ export function addonQuantitiesFromItems(
     }
   }
   return quantities
+}
+
+/**
+ * Max purchasable quantity per kind, from a purchases-free entitlement
+ * resolution (plan defaults + staff overrides only) so the ceiling does not
+ * drift as the org buys: seat/dataset kinds stop at the plan's hard max,
+ * hosts/registers use flat ceilings, the Event Calendar is a 0/1 toggle. POS
+ * registers additionally require the `pos` feature.
+ *
+ * Lives here rather than inside `/api/billing/addons` because a PLAN CHANGE
+ * needs the same ceiling for a different plan. The addons route asks "how many
+ * may this org buy on the plan it is on"; `buildTargetItems` asks "how many of
+ * what it already bought can the plan it is moving to actually deliver". Two
+ * readers, one definition — a second copy is how they answer differently.
+ */
+export function addonMaxForBaseline(
+  kind: AddonKind,
+  baseline: ReturnType<typeof resolveOrgEntitlements>,
+): number {
+  const bounded = (included: number, max: number) =>
+    Number.isFinite(max) ? Math.max(0, max - included) : EXTRA_HOSTS_ADDON_MAX
+  switch (kind) {
+    case 'managers':
+      return bounded(baseline.managersPerOrg, baseline.maxManagersPerOrg)
+    case 'members':
+      return bounded(baseline.membersPerHost, baseline.maxMembersPerHost)
+    case 'datasets':
+      return bounded(baseline.datasetsPerOrg, baseline.maxDatasetsPerOrg)
+    case 'hosts':
+      return baseline.hostLimit === UNLIMITED ? 0 : EXTRA_HOSTS_ADDON_MAX
+    case 'posRegisters':
+      return baseline.features.pos ? POS_REGISTERS_ADDON_MAX : 0
+    case 'eventCalendar':
+      return 1
+  }
+}
+
+/** The ceiling a PLAN would impose on an add-on kind, purchases excluded. */
+export function addonMaxForPlan(kind: AddonKind, plan: OrgPlan): number {
+  return addonMaxForBaseline(kind, resolveOrgEntitlements({ plan } as never))
 }

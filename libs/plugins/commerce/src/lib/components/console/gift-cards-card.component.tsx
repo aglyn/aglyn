@@ -43,6 +43,7 @@ import {
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import { pluginDocsHelp } from '@aglyn/aglyn'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { EntitlementGatedCard } from './entitlement-gate.component'
 
 export interface GiftCardsCardProps {
@@ -186,15 +187,15 @@ export function GiftCardsCard(props: GiftCardsCardProps) {
     async (payload: Record<string, unknown>, success: (body: any) => string) => {
       setBusy(true)
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/commerce/gift-cards', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        const response = await authorizedFetch(
+          user,
+          '/api/commerce/gift-cards',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ hostId, ...payload }),
           },
-          body: JSON.stringify({ hostId, ...payload }),
-        })
+        )
         const body = await response.json().catch(() => ({}))
         if (!response.ok) {
           return void enqueueSnackbar(body?.error ?? 'Gift card action failed', {

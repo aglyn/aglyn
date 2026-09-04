@@ -36,7 +36,7 @@ import type { NodeInteraction } from '../app-utils/node-interactions'
 import { schemaAcceptsChildren } from '../app-utils/child-contract'
 import { REUSABLE_INSTANCE_COMPONENT_ID } from '../app-utils/compose-reusable-components'
 import { stripUndefinedDeep } from '../app-utils/strip-undefined'
-import { createIdUrlSafe } from '../foundation'
+import { createIdUrlSafe } from '../foundation/constants/app'
 import type { PluginId } from '../plugin-manager'
 import {
   type ComponentId,
@@ -82,13 +82,13 @@ export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
    */
   public attrOverrides?: Record<string, Record<string, unknown>>
   /**
-   * Interactions authored on this element (AGL-1478) — see `NodeSchema`.
+   * Interactions authored on this element — see `NodeSchema`.
    * Third field under the same three-touch-point rule as the two above:
    * declared here, assigned in the constructor, emitted in `toJSON`.
    */
   public interactions?: NodeInteraction[]
   /**
-   * Hidden by the author (AGL-1479) — see `NodeSchema`. Same three touch
+   * Hidden by the author — see `NodeSchema`. Same three touch
    * points, and it needs all of them for a second reason as well: an
    * undeclared field assigned at runtime is not observable, so the hierarchy
    * row would not repaint when the eye was clicked.
@@ -210,7 +210,7 @@ export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
     if (attrOverrides && Object.keys(attrOverrides).length > 0) {
       json['attrOverrides'] = attrOverrides
     }
-    // Element interactions (AGL-1478): emitted like the bags above, absent
+    // Element interactions: emitted like the bags above, absent
     // when empty. This is the field that makes them versioned with the
     // document at all — an interaction the canvas holds but this method
     // does not write is one that never reaches a save.
@@ -218,7 +218,7 @@ export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
     if (Array.isArray(interactions) && interactions.length > 0) {
       json['interactions'] = interactions
     }
-    // Author visibility (AGL-1479). Emitted only when TRUE: `false` and
+    // Author visibility. Emitted only when TRUE: `false` and
     // absent mean the same thing, and a field on every node in the document
     // is bytes on every save and every page.
     if (this.hidden) json['hidden'] = true
@@ -469,9 +469,17 @@ export class CanvasManager {
     (nodeOrId: NodeId | NodeSchema<any>): NodeBreadcrumbPath => {
       const hierarchy = [NODE_ROOT_ID]
 
+      // Visited ids, not just the root check: the root terminates the walk on
+      // a well-formed document, but two nodes that parent each other
+      // terminate nothing. An unbounded ancestor walk is a synchronous
+      // infinite loop on the renderer's main thread — the tab stops answering
+      // input entirely — so a malformed tree has to cost a truncated
+      // breadcrumb instead.
+      const seen = new Set<string>()
       let currentId: string | undefined =
         typeof nodeOrId !== 'string' ? nodeOrId?.$id : nodeOrId
-      while (currentId && !this.isRootNodeId(currentId)) {
+      while (currentId && !this.isRootNodeId(currentId) && !seen.has(currentId)) {
+        seen.add(currentId)
         hierarchy.splice(1, 0, currentId)
         currentId = this.getNode(currentId)?.parentId
       }
@@ -1294,7 +1302,7 @@ export class CanvasManager {
    * live tree honest for everything that reads it before a save.
    */
   /**
-   * Writes top-level node FIELDS, with an undo step (AGL-1480).
+   * Writes top-level node FIELDS, with an undo step.
    *
    * The sibling of {@link updateNodeProps}, and it exists for the same two
    * reasons that one documents. An edit with no `saveHistory` is an edit the

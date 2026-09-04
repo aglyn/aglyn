@@ -33,6 +33,7 @@ import {
   readAssistAnswerCache,
   recordAssistExchange,
   releaseAssistMessage,
+  publicAssistQuota,
   reserveAssistMessage,
   writeAssistAnswerCache,
   assistAnswerCacheKey,
@@ -72,9 +73,16 @@ import {
  * feature kill switch) → 429 rate limit → **the docs answer, if retrieval is
  * confident** → with no ANTHROPIC_API_KEY: **the closest docs pages**, or 501
  * when retrieval found nothing at all → 429 quota (free: N messages/UTC-
- * day; entitled: monthly runaway guard; plus a monthly SPEND ceiling on both,
- * ARMED by default at $40/org — `assistOrgMonthlyCostLimitUsd`, removed only
- * by the literal word `off`) → the model call.
+ * day; entitled: monthly runaway guard; plus a monthly SPEND ceiling on both
+ * — the plan's own assist band in credits where it has one, otherwise the
+ * operator backstop armed by default at $40/org, removed only by the literal
+ * word `off`; see `assistMonthlyCeilingUsd`) → the model call.
+ *
+ * The spend ceiling is the gate that decides what a paying workspace gets,
+ * because assist actions differ in cost by up to two orders of magnitude —
+ * a question against generating a screen. Quota returned to the client is
+ * `publicAssistQuota`, which reports CREDITS: the reservation's own figures
+ * are our provider bill and do not leave the server.
  *
  * ── Retrieval-first (AGL-2486) ─────────────────────────────────────────────
  *
@@ -841,7 +849,17 @@ async function handler(request: Request): Promise<Response> {
     // (check now, count at stream completion) let concurrent requests and
     // abandoned streams past the cap, and an abandoned-stream loop is
     // unbounded provider spend on a workspace that pays nothing.
-    const quota = await reserveAssistMessage(firestore, body.orgId, entitled)
+    // `org` is the same document `entitled` was resolved from, and it is what
+    // makes the plan's own assist band bind rather than the operator backstop
+    // alone. Omitting it resolves as free — a band of none — so it is passed
+    // beside `entitled` rather than anywhere else.
+    const quota = await reserveAssistMessage(
+      firestore,
+      body.orgId,
+      entitled,
+      new Date(),
+      org,
+    )
     if (!quota.allowed) {
       // Three refusals, not two. The spend ceiling (AGL-2264) is armed by
       // default at $40, and it must not borrow the message cap's words:
@@ -853,12 +871,17 @@ async function handler(request: Request): Promise<Response> {
         {
           error:
             quota.refusedBy === 'budget'
-              ? 'This workspace reached its assistant spending limit for the month'
+              ? quota.budgetUsd === null
+                ? 'This workspace reached its assistant spending limit for the month'
+                : 'This workspace used its assistant credits for the month'
               : entitled
                 ? 'This workspace reached its assistant limit for the month'
                 : `Free workspaces get ${quota.limit} assistant messages a day — upgrade to Pro for more`,
           reason: 'quota',
-          quota,
+          // CREDITS, never the reservation itself: it carries `costUsd`,
+          // `costLimitUsd` and `budgetUsd`, all three of which are our
+          // provider bill at the serving model's rates.
+          quota: publicAssistQuota(quota),
         },
         { status: 429 },
       )
@@ -1115,7 +1138,7 @@ async function handler(request: Request): Promise<Response> {
             // reservation that same `+1` counts the message twice, and the
             // panel renders the result: a free workspace's first question
             // came back "8 of 10 free messages left today".
-            quota,
+            quota: publicAssistQuota(quota),
           })
         } catch (error) {
           console.error('assist stream failed', error)

@@ -27,6 +27,7 @@ import {
   isBasicClientActionStep,
   isClientStepEntitled,
   isCustomEventName,
+  isInteractionAttributeAllowed,
   isSiteEventType,
   normalizeTriggerConditions,
   validateHostAction,
@@ -655,9 +656,63 @@ describe('basic-interaction tiering (AGL-577)', () => {
       'stickyNav',
       'redirect',
       'siteAlert',
+      // Every plan (AGL-2546). A screen-reader user's access to a menu is
+      // not a paid feature, so these must never join the entitlement-gated
+      // set the way `showOverlay` and `runJs` did.
+      'setAttribute',
+      'removeAttribute',
     ]) {
       expect(isBasicClientActionStep(step(type))).toBe(true)
     }
+  })
+
+  describe('the attribute allowlist (AGL-2546)', () => {
+    it('admits the names the accessibility case needs', () => {
+      for (const name of [
+        'aria-expanded',
+        'aria-haspopup',
+        'aria-controls',
+        'aria-hidden',
+        'data-state',
+        'data-x1',
+      ]) {
+        expect(isInteractionAttributeAllowed(name)).toBe(true)
+      }
+    })
+
+    it('REFUSES the names that make it an XSS vector', () => {
+      // The whole reason the step is scoped rather than free-form: each of
+      // these is script or navigation authored through the interactions UI,
+      // and on a site with collaborators the author and the victim need not
+      // be the same person.
+      for (const name of [
+        'href',
+        'src',
+        'onclick',
+        'onerror',
+        'formaction',
+        'style',
+        'srcdoc',
+        'action',
+      ]) {
+        expect(isInteractionAttributeAllowed(name)).toBe(false)
+      }
+    })
+
+    it('is not fooled by case, padding, or a lookalike prefix', () => {
+      expect(isInteractionAttributeAllowed('  ARIA-Expanded ')).toBe(true)
+      // `aria` and `data` must be the whole prefix, not a substring: an
+      // attribute called `datafoo` or `ariah` is not in the safe set, and a
+      // naive `startsWith('data')` would admit both.
+      expect(isInteractionAttributeAllowed('datafoo')).toBe(false)
+      expect(isInteractionAttributeAllowed('ariah')).toBe(false)
+      expect(isInteractionAttributeAllowed('data-')).toBe(false)
+      expect(isInteractionAttributeAllowed('aria-')).toBe(false)
+      // Not a string at all — the runtime re-checks values that never came
+      // through the console form.
+      expect(isInteractionAttributeAllowed(undefined)).toBe(false)
+      expect(isInteractionAttributeAllowed(42)).toBe(false)
+    })
   })
 
   it('does not classify powerful client steps as basic', () => {

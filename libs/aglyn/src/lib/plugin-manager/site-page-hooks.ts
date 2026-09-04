@@ -50,6 +50,23 @@ export interface SitePageContext {
   /** Request path, '/a/b' form ('/' for the site root). */
   path: string
   slugSegments: string[]
+  /**
+   * This surface has NO single request path, so `path` above is a
+   * placeholder and nothing may be targeted by it (AGL-2511).
+   *
+   * One surface sets it: the host's designed 404 body. The `not-found`
+   * boundary fetches it by host and the response is cached per HOST — one
+   * compose a minute however many missing URLs are hit, which is the whole
+   * reason a scan of ten thousand dead URLs is cheap. Enriching it per path
+   * would key that cache per URL and make the same scan ten thousand
+   * composes.
+   *
+   * An enricher that reads `path` must, when this is set, contribute only
+   * what is path-INDEPENDENT and drop the rest — never substitute a plausible
+   * path. A site-wide announcement bar is path-independent and shows; an
+   * overlay pinned to `/pricing` cannot be evaluated and does not.
+   */
+  pathUnknown?: boolean
   screenId?: string
   /** The resolved screen doc (enrichers only). */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

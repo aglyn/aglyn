@@ -25,6 +25,7 @@ import {
   getOrgForHost,
   isImpersonationSession,
   lockdownRefusal,
+  logHostActivity,
 } from '@aglyn/tenant-data-admin'
 
 /**
@@ -172,6 +173,37 @@ async function handler(request: Request): Promise<Response> {
         subdomainRedirectPending: firebaseAdmin.firestore.FieldValue.delete(),
       },
       { merge: true },
+    )
+
+    /*==========================================
+     * THE EVENT IS `cname` LEAVING THE DOCUMENT (AGL-118), which is the
+     * write directly above — the mirror image of where attach logs, and
+     * chosen the same way.
+     *
+     * Two of this route's exits answer 200 and neither is this event:
+     *
+     *  - `alreadyClear`, on a site with no domain to release. It is a 200
+     *    because the caller's desired end state already holds, not because
+     *    anything moved — and an entry there would put "released
+     *    example.com" in the feed of a site that has never had a domain,
+     *    with no domain name to even put in it.
+     *  - `outcome === 'failed'` is a 502, but it is the branch most likely
+     *    to attract a log line, because it is where the platform is
+     *    genuinely doing something. It stamps `cnameDetachmentPending` and
+     *    KEEPS `cname`: the domain is still attached, still certifying,
+     *    still counting against the deployment. A row there would say the
+     *    customer released a domain we are in fact still holding — the exact
+     *    orphan this route exists to make visible, made invisible again by
+     *    the audit trail agreeing with the mistake.
+     *
+     * Everything after this write is best-effort cache work that cannot
+     * re-attach the domain, so the state the entry describes is settled.
+     *=========================================*/
+    await logHostActivity(
+      hostId,
+      { uid: decoded.uid, email: decoded.email ? String(decoded.email) : null },
+      'Released the custom domain',
+      { type: 'host', id: hostId, name: domain },
     )
 
     // AFTER the write, never before: the tenant re-reads on the next request,

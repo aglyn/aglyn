@@ -16,8 +16,10 @@
  */
 
 import {
+  nodesPlaceForm,
   nodesReferenceComponent,
   nodesReferenceScreen,
+  nodesRenderCollection,
 } from '@aglyn/aglyn/server'
 
 export interface UsageDependent {
@@ -409,6 +411,140 @@ export function screenIdsUsingComponentDeep(
       }
     }
     frontier = next
+  }
+
+  return [...screenIds]
+}
+
+/**
+ * Every live screen whose rendered output contains the form `formId`, however
+ * indirectly.
+ *
+ * The form twin of {@link screenIdsUsingComponentDeep}, and the same walk for
+ * the same reason: a placed form is found by SEARCHING node trees, not by
+ * matching a pointer, and it can sit on a screen, inside page chrome, or
+ * inside a reusable component that a third component nests. Publishing a form
+ * changes every page that renders it, so anything this misses keeps serving
+ * the old fields for the whole revalidate window while the editor reports that
+ * the live sites now serve the new design.
+ *
+ * The first level is the only thing that differs from the component walk: a
+ * document uses a form by PLACING it. After that the fan-out is identical, so
+ * it is delegated rather than restated — a component that holds the form is
+ * reached by whatever reaches that component, and a layout by whatever renders
+ * inside it.
+ *
+ * Pure, and separate from the Firestore read, so the closure is testable
+ * without a database. Cycle-safe by delegation: both walks it defers to bound
+ * themselves.
+ */
+export function screenIdsUsingFormDeep(
+  formId: string,
+  sources: {
+    screens: UsageCandidate[]
+    layouts: UsageCandidate[]
+    components: UsageCandidate[]
+  },
+): string[] {
+  if (!formId) return []
+  const screenIds = new Set<string>()
+
+  for (const candidate of sources.screens) {
+    if (!isLive(candidate)) continue
+    if (nodesPlaceForm(candidate.nodes, formId)) screenIds.add(candidate.id)
+  }
+  for (const candidate of sources.layouts) {
+    if (!isLive(candidate)) continue
+    if (!nodesPlaceForm(candidate.nodes, formId)) continue
+    // The layout itself renders no URL; the screens beneath it do.
+    for (const screenId of screenIdsUsingLayoutDeep(
+      candidate.id,
+      sources.screens,
+      sources.layouts,
+    )) {
+      screenIds.add(screenId)
+    }
+  }
+  for (const candidate of sources.components) {
+    if (!isLive(candidate)) continue
+    if (!nodesPlaceForm(candidate.nodes, formId)) continue
+    // And a component renders wherever it is placed, however deeply nested.
+    for (const screenId of screenIdsUsingComponentDeep(candidate.id, sources)) {
+      screenIds.add(screenId)
+    }
+  }
+
+  return [...screenIds]
+}
+
+/**
+ * Every live screen whose rendered output renders the collection
+ * `collectionSlug`, however indirectly.
+ *
+ * The content twin of {@link screenIdsUsingFormDeep}, and the same walk for
+ * the same reason. Saving, publishing or deleting an ENTRY changes every page
+ * that renders the collection it belongs to, and only some of those pages are
+ * derivable from the collection's slug. `/blog`, `/blog/my-post` and
+ * `/blog/category/guides` are; the "Latest posts" rail on the home page, the
+ * category pills in a layout's chrome and the search box in a header are not
+ * — they are found by searching node trees, and they can sit on a screen,
+ * inside page chrome, or inside a reusable component that a third component
+ * nests.
+ *
+ * Miss them and an entry edit reports success while the pages that advertise
+ * it keep serving the old set for the whole revalidate window — with the rail
+ * on the home page, the single most visible place the change was supposed to
+ * appear.
+ *
+ * The first level is the only thing that differs from the form walk: a
+ * document uses a collection by BINDING a collection block to its slug. After
+ * that the fan-out is identical, so it is delegated rather than restated.
+ *
+ * The collection's OWN routes are deliberately not here. They are addresses,
+ * not screens — a fallback listing has no screen document at all, and a
+ * template screen serves the collection's paths rather than its own — so the
+ * caller derives them from the slug and sends them beside these.
+ *
+ * Pure, and separate from the Firestore read, so the closure is testable
+ * without a database. Cycle-safe by delegation: both walks it defers to bound
+ * themselves.
+ */
+export function screenIdsUsingCollectionDeep(
+  collectionSlug: string,
+  sources: {
+    screens: UsageCandidate[]
+    layouts: UsageCandidate[]
+    components: UsageCandidate[]
+  },
+): string[] {
+  if (!collectionSlug) return []
+  const screenIds = new Set<string>()
+
+  for (const candidate of sources.screens) {
+    if (!isLive(candidate)) continue
+    if (nodesRenderCollection(candidate.nodes, collectionSlug)) {
+      screenIds.add(candidate.id)
+    }
+  }
+  for (const candidate of sources.layouts) {
+    if (!isLive(candidate)) continue
+    if (!nodesRenderCollection(candidate.nodes, collectionSlug)) continue
+    // The layout itself renders no URL; the screens beneath it do.
+    for (const screenId of screenIdsUsingLayoutDeep(
+      candidate.id,
+      sources.screens,
+      sources.layouts,
+    )) {
+      screenIds.add(screenId)
+    }
+  }
+  for (const candidate of sources.components) {
+    if (!isLive(candidate)) continue
+    if (!nodesRenderCollection(candidate.nodes, collectionSlug)) continue
+    // And a component renders wherever it is placed, however deeply nested.
+    for (const screenId of screenIdsUsingComponentDeep(candidate.id, sources)) {
+      screenIds.add(screenId)
+    }
   }
 
   return [...screenIds]

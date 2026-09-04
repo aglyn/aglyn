@@ -38,6 +38,7 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
 export interface StorefrontTaxSummaryCardProps {
   hostId: string
@@ -175,17 +176,15 @@ export function StorefrontTaxSummaryCard(props: StorefrontTaxSummaryCardProps) {
   const selected = months.find((month) => month.value === period) ?? months[0]
 
   const load = useCallback(async () => {
-    const idToken = await (user as any)?.getIdToken?.()
     const search = new URLSearchParams({
       hostId,
       from: selected.from,
       to: selected.to,
     })
-    const response = await fetch(`/api/hosts/tax-summary?${search.toString()}`, {
-      headers: {
-        ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-      },
-    })
+    const response = await authorizedFetch(
+      user,
+      `/api/hosts/tax-summary?${search.toString()}`,
+    )
     if (!response.ok) throw new Error('tax summary failed')
     return (await response.json()) as Payload
   }, [user, hostId, selected.from, selected.to])

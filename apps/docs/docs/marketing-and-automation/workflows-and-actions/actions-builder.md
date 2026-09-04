@@ -21,7 +21,7 @@ place; steps that need a higher plan are labeled in the editor.
 
 ## Create an action
 
-1. Open the **actions builder** from **Workflows**.
+1. Open the **actions builder** from **Automation → Actions**.
 2. Choose the **event** (the trigger).
 3. Choose the **steps** to run in response.
 4. Save.
@@ -109,9 +109,55 @@ Steps run in order and mix **in-page effects** with **server-side work**:
 - **On the server (Pro+)**: run a workflow, write to or update a dataset, send a webhook
   (Business), send an email, notify site admins, enroll the contact in a list, assign a
   campaign, fire a custom event to chain more actions.
+- **Flow steps (Pro+)**: **Wait**, **Wait for something to happen**, and **End the flow
+  here**. See [Sequences](#sequences) below.
 
 On plans without the automations entitlement, an automation that mixes tiers still runs
 its basic in-page steps — the Pro+ steps are simply skipped until you upgrade.
+
+### Only run this step {#step-conditions}
+
+Every step has its own **Only if** condition, under the step. It reads the same fields
+the trigger's conditions read, and when it is not met that one step is skipped and the
+automation carries on with the next.
+
+The trigger's conditions decide whether the automation runs at all. A step's condition
+decides whether that step runs — which is what lets one automation say "wait three days,
+then, only if they have not ordered, send the reminder."
+
+## Sequences {#sequences}
+
+A **Wait** step splits an automation in two. Everything before it runs immediately, and
+everything after it runs later, on its own — so a welcome series, a win-back, or a
+"three days after they sign up, ask how it's going" is one automation rather than several.
+
+- **Wait** holds for anything from a minute to 90 days.
+- **Wait for something to happen** continues as soon as the event you pick happens for
+  that person, or when the time you set runs out — whichever comes first. Put an
+  **Only if** condition of `_waitTimedOut` **is not empty** on the next step to make it
+  the "they never did it" path.
+- **End the flow here** stops the rest. With an **Only if** condition it is the exit —
+  "stop if they have ordered."
+
+A few things worth knowing before you build one:
+
+- **A waiting automation needs to know who it is waiting for.** The trigger's information
+  has to include an email address; a wait step reports an error without one.
+- **One at a time per person.** Somebody already partway through an automation is not
+  enrolled in it a second time until they finish.
+- **Editing an automation does not change it for people already waiting inside it.** They
+  finish the version they started. Your edit applies to everybody who enters afterwards.
+- **Turning an automation off, or deleting it, stops it for everyone** — including people
+  mid-wait.
+- **In-page steps after a wait do not run.** By the time the wait ends the visitor's
+  browser has long since moved on, so put popups, alerts and element effects before the
+  first wait.
+
+Emails sent from a step after a wait are treated as marketing: they carry an unsubscribe
+link and header, skip anyone who has unsubscribed or bounced, respect the topic the step
+is set to, count toward how much mail one person receives from your site in a day, and go
+only to people with a marketing consent record. An email sent *before* any wait is an
+immediate reply to what the visitor just did and is treated as transactional.
 
 Every reference (workflow, dataset, webhook, overlay, list, campaign) is picked from a
 list and stored by id — renaming things never breaks an automation. Deleting can,
@@ -171,7 +217,7 @@ deliberate:
   no paging in the dialog.
 - **Nothing prunes run records on a schedule**, so an automation's history keeps
   accumulating in the site's activity log even though this dialog only ever shows a
-  window of it. **Setup → Activity** is the full log, ordered newest-first and paginated
+  window of it. **Admin → Activity** is the full log, ordered newest-first and paginated
   — go there when the Runs dialog doesn't show the run you're looking for.
 
 ## Interactions from the Besigner
@@ -181,8 +227,8 @@ attributes panel to attach a **when clicked**, **when hovered**, or **when scrol
 view** trigger to that exact element — no CSS selectors to write. Pairing a **when
 hovered** trigger with an **open menu** or **open drawer** step is how you build
 hover-to-reveal navigation, and — like all basic in-page effects — it works on every
-plan. The interaction is created disabled with a placeholder step; finish and enable it
-on the Workflows page. The same panel lists the
+plan. The interaction is saved and enabled on the element itself — it belongs to the
+document it is on, not to this section. The same panel lists the
 element's existing interactions with an **enable switch and a remove button** — so you
 can pause or retire one without leaving the canvas — and offers **"A/B test this
 section"**, which creates a draft section experiment for the element.

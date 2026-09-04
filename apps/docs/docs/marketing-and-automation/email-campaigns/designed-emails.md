@@ -49,18 +49,49 @@ Use these anywhere in text, rich text, or button links:
 | `{{contact.name}}` | Full name |
 | `{{contact.email}}` | Email address |
 | `{{site.url}}` | Your site's base URL |
-| `{{unsubscribeUrl}}` | Signed unsubscribe link |
+| `{{unsubscribeUrl}}` | Signed link to this recipient's email preferences |
 
 Unknown tokens stay visible in the output so a typo shows up in your
 test send instead of silently rendering blank.
 
+`{{unsubscribeUrl}}` opens the preference page, where the recipient can
+leave just the topic this email belongs to or unsubscribe from
+everything. You do not have to place it: a design that carries no
+opt-out gets one appended to the bottom of both the HTML and the
+plain-text part. Put it in your own footer if you would rather choose
+where it sits — the appended one is skipped when your design already
+has the link.
+
 ## Send it
 
-In the campaign composer, pick your template under **Email design**
-(stored by id — renaming the template never breaks scheduled sends).
-The plain-text message field disappears; the render pipeline produces
-inline-styled table HTML plus a plain-text alternative per recipient.
+Open the email you want to send and choose **Write this email**. Set
+**How this email is written** to *Designed in the besigner*, then pick
+your template under **Email design** (stored by id — renaming the
+template never breaks scheduled sends).
 
-- **Send test to me** delivers a proof to your own address without
-  recording a campaign.
+An email is written one way or the other, never both. Choosing a design
+puts the message box away, so a typed message cannot be silently
+discarded in favor of the design — if you had already typed one, the
+composer offers it to you as the plain-text version rather than dropping
+it.
+
+### The plain-text version
+
+Every campaign goes out as two alternatives: the styled HTML most people
+see, and a plain-text version for readers whose mail shows no styling.
+
+- **Generated from the design** is the default. Buttons and product
+  blocks keep their links in it, and it follows the design as you edit.
+- **Written here** replaces it with your own. Merge tags resolve in it,
+  and the unsubscribe link is added as a plain address at the end.
+
+Editing the design never overwrites a plain-text version you wrote. If
+the design changes afterwards, the composer says so and offers to take
+the design's text — nothing is rewritten behind you.
+
+**Preview email** shows both halves, so you can read the plain-text
+version before it goes.
+
+- **Send test** delivers a proof to a real address without recording a
+  campaign.
 - Scheduling and A/B experiments work exactly as with plain campaigns.

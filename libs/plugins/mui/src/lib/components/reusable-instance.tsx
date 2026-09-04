@@ -126,6 +126,14 @@ export const schema: Aglyn.ComponentSchema<ReusableInstanceProps> = {
     // nothing may be dropped inside from the canvas.
     dropping: Aglyn.FEATURE_FLAG.DISABLED,
   },
+  /*
+   * No attributes. An instance is a REFERENCE, not an element: the graft puts
+   * the definition's root in its place, so the only node that reaches a
+   * published page is the component's own (AGL-2521). An element picker here
+   * briefly existed (AGL-2514) and configured a wrapper that no longer
+   * exists — what it was reaching for is **Attribute overrides → Component
+   * root**, which sets the definition root's element for this placement.
+   */
   attributes: [],
 }
 

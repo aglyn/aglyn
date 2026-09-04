@@ -341,7 +341,7 @@ const NodeTreeItem = observer(
     const dragDisabled = Boolean(isRootNode || !dragAllowed)
 
     /**
-     * The row's eye: this element's VISIBILITY (AGL-1479).
+     * The row's eye: this element's VISIBILITY.
      *
      * `display: none`, on the canvas and on the published site, and nothing
      * reveals it. The plain "I do not want this on the page" switch every
@@ -635,6 +635,12 @@ const NodeTreeItem = observer(
             <MuiListItemIcon sx={{ minWidth: 20, mr: '1px' }}>
               <IconButton
                 color="default"
+                // The chevron is the only control in the row that is not the
+                // row itself, and it had no name in any form — a screen
+                // reader announced "button", and hovering it said nothing.
+                // It states which way it will go, not which way it points.
+                aria-label={collapseIn ? 'Collapse children' : 'Expand children'}
+                title={collapseIn ? 'Collapse children' : 'Expand children'}
                 sx={{
                   padding: '2px',
                   visibility: !node?.hasNodes ? 'hidden' : 'visible',

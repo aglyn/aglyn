@@ -24,10 +24,22 @@ import {
   releaseConsoleDomain,
 } from './console-domains'
 import { authForPool, findUserByUidAcrossPools } from './auth-pools'
-import { eraseEmailDeliveries } from './email-delivery-log'
+import { eraseEmailDeliveriesForAddresses } from './email-delivery-log'
+import {
+  type AccountAddressSet,
+  type AccountAddressSource,
+  resolveAccountAddresses,
+} from './account-addresses'
+import { EMAIL_IDENTITY_INDEX_COLLECTION } from './account-emails'
 import { removeOrgMember } from './organizations'
 import { isBillingSubscription } from '@aglyn/aglyn/server'
 import { readOrgBilling } from './org-billing'
+import {
+  disposeHostSendingDomain,
+  readSendingDomainTeardownByLabel,
+  type SendingDomainDisposition,
+  type TeardownSendingDomainDriver,
+} from './sending-domain-debt'
 
 /** The reversible hold before a requested erasure is executed (AGL-485). */
 export const ERASURE_HOLD_MS = 7 * 24 * 60 * 60 * 1000
@@ -125,11 +137,51 @@ async function eraseHostSupplierDeliveries(hostId: string): Promise<number> {
  * (AGL-487). Fail-soft on Storage/index cleanup so a partial failure never
  * blocks the Firestore delete; safe to re-run.
  */
-export async function eraseHost(hostId: string): Promise<void> {
+export interface EraseHostOptions {
+  /**
+   * The console-side sending-domain teardown, injected because this library
+   * may not hold the credentials it needs — see `sending-domain-debt.ts`.
+   *
+   * Absent, the site's domain is not released inline: the debt is recorded on
+   * the surviving label claim and `/api/admin/reap-sending-domains` settles
+   * it. That is the only correct default here. A library the tenant runtime
+   * imports cannot reach a full-access mail credential, and an erasure must
+   * not fail or stall because a vendor is unreachable.
+   */
+  tearDownSendingDomain?: TeardownSendingDomainDriver | null
+}
+
+export interface EraseHostResult {
+  /** What became of the site's dedicated sending domain, if it had one. */
+  sendingDomain: SendingDomainDisposition
+}
+
+export async function eraseHost(
+  hostId: string,
+  options: EraseHostOptions = {},
+): Promise<EraseHostResult> {
   const firestore = firebaseAdmin.app().firestore()
   const hostRef = firestore.collection('hosts').doc(hostId)
   const hostSnapshot = await hostRef.get()
   const orgId = hostSnapshot.get('orgId') as string | undefined
+
+  /*==========================================
+   * THE SENDING DOMAIN, READ FIRST AND RELEASED LAST.
+   *
+   * Read here because the pinned label lives on the host document and the
+   * `recursiveDelete` at the bottom of this function destroys it. Read
+   * afterwards there would be nothing left to say WHICH provider domain holds
+   * a plan-capped account slot and WHICH records in our zone carry a signing
+   * key for a name a future site can claim.
+   *
+   * Released after everything else, so a teardown that dies partway leaves the
+   * claim standing and the domain findable rather than orphaning two vendors'
+   * resources with nothing pointing at them.
+   *=========================================*/
+  const sendingLabel = String(hostSnapshot.get('sendingLabel') ?? '').trim()
+  const sendingTeardown = sendingLabel
+    ? await readSendingDomainTeardownByLabel(sendingLabel).catch(() => null)
+    : null
 
   // Storage first (best-effort — the object tree is derived, regenerable).
   try {
@@ -182,6 +234,15 @@ export async function eraseHost(hostId: string): Promise<void> {
 
   // The host document tree (screens/layouts/versions/counters/products/…).
   await firestore.recursiveDelete(hostRef)
+
+  // Never throws, and never leaves the slot unaccounted for: whatever the
+  // vendors refuse is recorded on the label claim for the reaper to finish.
+  return {
+    sendingDomain: await disposeHostSendingDomain({
+      teardown: sendingTeardown ? { ...sendingTeardown, hostId } : null,
+      tearDown: options?.tearDownSendingDomain,
+    }),
+  }
 }
 
 /**
@@ -781,6 +842,13 @@ export interface EraseOrgOptions {
    * most irreversible action the platform performs.
    */
   actorUid?: string
+  /**
+   * The console-side sending-domain teardown, passed through to every host
+   * this erasure destroys. See {@link EraseHostOptions.tearDownSendingDomain}.
+   *
+   * Never consulted on a dry run: a plan touches no vendor.
+   */
+  tearDownSendingDomain?: TeardownSendingDomainDriver | null
 }
 
 export interface EraseOrgResult {
@@ -836,6 +904,21 @@ export interface EraseOrgResult {
    * the highest-PII-density collection outside the org path.
    */
   supportTickets?: number
+  /**
+   * What became of the erased sites' dedicated sending domains.
+   *
+   * `deferred` is the number an operator reads: those provider slots and zone
+   * records are still held, the debt is on each label claim, and
+   * `/api/admin/reap-sending-domains` is what settles them. The erasure itself
+   * is complete either way — a vendor outage may delay a slot's release and
+   * may not delay a deletion somebody has a legal right to.
+   */
+  sendingDomains?: {
+    released: number
+    deferred: number
+    /** Shared pool members refused. Always 0; a non-zero is a real alarm. */
+    protected: number
+  }
 }
 
 /**
@@ -1010,7 +1093,11 @@ export async function eraseOrg(
   orgId: string,
   options: EraseOrgOptions = {},
 ): Promise<EraseOrgResult> {
-  const { dryRun = false, actorUid = 'cron:run-erasures' } = options
+  const {
+    dryRun = false,
+    actorUid = 'cron:run-erasures',
+    tearDownSendingDomain = null,
+  } = options
   const firestore = firebaseAdmin.app().firestore()
   const orgRef = firestore.collection('orgs').doc(orgId)
   const orgSnapshot = await orgRef.get()
@@ -1079,11 +1166,35 @@ export async function eraseOrg(
     step = 'support'
     progress.supportTickets = await eraseOrgSupportTickets(orgId, dryRun)
 
-    // Hosts (Storage + routing + Firestore trees).
+    /*
+     * Hosts (Storage + routing + Firestore trees + the sending domain).
+     *
+     * Each site's dedicated domain is released here rather than by a sweep
+     * that never existed: a workspace erasure used to leave one plan-capped
+     * provider slot and three zone records per site standing forever, with
+     * the DKIM key still live under a label a future site could claim.
+     *
+     * The driver is passed in and may be absent, and either way the erasure
+     * finishes. What the vendors refuse is recorded as a debt on the label
+     * claim, which survives the `recursiveDelete` of both the host and the
+     * org, and the reaper settles it.
+     */
     step = 'hosts'
     progress.hosts = 0
+    progress.sendingDomains = { released: 0, deferred: 0, protected: 0 }
     for (const host of hosts.docs) {
-      if (!dryRun) await eraseHost(host.id)
+      if (!dryRun) {
+        const erased = await eraseHost(host.id, { tearDownSendingDomain })
+        if (erased.sendingDomain === 'released') {
+          progress.sendingDomains.released += 1
+        }
+        if (erased.sendingDomain === 'deferred') {
+          progress.sendingDomains.deferred += 1
+        }
+        if (erased.sendingDomain === 'protected') {
+          progress.sendingDomains.protected += 1
+        }
+      }
       progress.hosts += 1
     }
 
@@ -1315,12 +1426,55 @@ export function userErasureBlockers(
     }))
 }
 
+/**
+ * An address this account holds that a SECOND account also holds, which stops
+ * the erasure until a human decides what it is.
+ *
+ * ⛔ Carries no address and no other uid. The whole question is about a second
+ * customer, and a refusal that names them — or hands back an address in the
+ * clear, which `emailDeliveries` is hashed precisely to avoid keeping —
+ * discloses the person the refusal exists to protect. The staff account page
+ * already lists this account's own addresses and marks the shared ones, so
+ * the operator has the specifics without this record carrying them.
+ */
+export interface SharedAddressBlocker {
+  /** `sha256(address)` — matches the delivery log's own key. Not readable. */
+  key: string
+  /** Where this account got it: `primary`, `provider`, `stored`. */
+  sources: AccountAddressSource[]
+}
+
+/**
+ * Which of an account's addresses a second account is also known to hold.
+ *
+ * Pure, and separate from the sweep, for the same reason `userErasureBlockers`
+ * is: the policy is the arguable part. The mechanical part is deleting rows.
+ *
+ * ⚠️ `shared` is evidence in ONE direction. True proves a second holder;
+ * false only means none was found, because no lookup exists for an account
+ * holding an address through a federated provider. So this finds every case
+ * we can SEE and cannot promise there is no other — which is exactly why the
+ * sweep still tombstones every address it erases.
+ */
+export function sharedAddressBlockers(
+  set: Pick<AccountAddressSet, 'addresses'>,
+): SharedAddressBlocker[] {
+  return set.addresses
+    .filter((entry) => entry.shared === true)
+    .map((entry) => ({ key: entry.key, sources: [...entry.sources] }))
+}
+
 export interface EraseUserResult {
   ok: boolean
   /** Set when the account was NOT erased. */
-  skippedReason?: 'not-found' | 'owns-orgs'
+  skippedReason?: 'not-found' | 'owns-orgs' | 'shared-address'
   /** Orgs that must be handed over or deleted first. */
   blockers?: UserErasureBlocker[]
+  /**
+   * Addresses a second account also holds. Set with
+   * `skippedReason: 'shared-address'`, and NOTHING was erased.
+   */
+  sharedAddresses?: SharedAddressBlocker[]
   /** What was actually removed, for the audit row and the caller's message. */
   deleted?: {
     subcollections: string[]
@@ -1338,8 +1492,38 @@ export interface EraseUserResult {
      * Messages removed from `emailDeliveries/{sha256(address)}/messages` —
      * the per-recipient delivery log. Zero for an account with no address on
      * file, or one we never mailed.
+     *
+     * Across EVERY address the account held, not just the current primary.
      */
     emailDeliveries: number
+    /**
+     * `emailIdentityIndex/{address}` rows released — the address-keyed
+     * uniqueness claims, which no `recursiveDelete` of the user can reach.
+     */
+    emailIdentityIndex: number
+    /**
+     * How wide the address sweep actually was.
+     *
+     * ⚠️ `incomplete` is the field a compliance answer turns on: true means a
+     * source could not be read and an address the account held may have been
+     * missed, so this was not a complete erasure and must not be reported as
+     * one. Counts only — never the addresses, which is the data being erased.
+     */
+    addressSweep: {
+      /** Addresses found across the Auth record, its providers and the store. */
+      resolved: number
+      /** Addresses the delivery sweep actually visited. */
+      erased: number
+      /**
+       * Addresses left INTACT because a second account also holds them.
+       *
+       * Always 0 on a successful erasure: a contested address refuses the
+       * whole run before anything is destroyed. It is reported so the audit
+       * row states that rather than leaving a reader to infer it.
+       */
+      contested: number
+      incomplete: boolean
+    }
   }
 }
 
@@ -1357,6 +1541,9 @@ export interface EraseUserResult {
  *
  * Order matters:
  *   1. Refuse if they own an org — see `userErasureBlockers`.
+ *   1b. Refuse if a second account holds one of their addresses — see
+ *      `sharedAddressBlockers`. Both refusals come before any delete, so a
+ *      blocked erasure leaves the account exactly as it was.
  *   2. Remove their membership from every org they belong to, so no roster
  *      keeps their email and no host projection keeps granting them access.
  *      This runs BEFORE the profile delete: a half-erased account that still
@@ -1407,6 +1594,71 @@ export async function eraseUser(uid: string): Promise<EraseUserResult> {
   // An erasure audit trail that understates what it destroyed is the one
   // record that has to be right. Measured 2026-08-01 (AGL-1140).
   const subcollections = (await userRef.listCollections()).map((c) => c.id)
+
+  /*
+   * EVERY ADDRESS, RESOLVED BEFORE ANY OF THEM IS DESTROYED.
+   *
+   * Two of the three sources are erased by this function itself:
+   * `users/{uid}/emails` goes with the `recursiveDelete` below, and the Auth
+   * record — the only place the primary lives — goes at the very end. Reading
+   * them afterwards is reading nothing, and an erasure that resolves an empty
+   * address set sweeps nothing while reporting success. That is the exact
+   * shape of a spec passing because its fixture never reached the code, and
+   * here it would be a live erasure reporting a completeness it does not have.
+   *
+   * `detectShared` because the SHARED case changes what the caller is told,
+   * not what is destroyed — see `eraseEmailDeliveriesForAddresses`.
+   */
+  const pooledForAddresses = await findUserByUidAcrossPools(uid).catch(() => null)
+  const addressSet: AccountAddressSet = await resolveAccountAddresses({
+    uid,
+    record: pooledForAddresses?.record ?? null,
+    detectShared: true,
+    firestore,
+  }).catch(() => ({
+    uid,
+    primary: null,
+    addresses: [],
+    incomplete: true,
+  }))
+
+  /*
+   * A SECOND ACCOUNT HOLDS ONE OF THESE ADDRESSES — REFUSE, HERE.
+   *
+   * The delivery log is filed under the address, so an address two accounts
+   * hold has one set of rows answering "what did you send me" for two account
+   * records. Whether that is one human with two accounts (the ordinary live
+   * shape — a federated provider address that is another account's primary)
+   * or a genuinely shared role mailbox like `billing@` decides whether
+   * erasing those rows honours a request or destroys a stranger's history,
+   * and NOTHING readable here distinguishes them. The data records that two
+   * accounts name one address; it records nothing about the humans.
+   *
+   * Both automatic answers are unacceptable, and they fail differently:
+   * erasing the second party's mail cannot be undone, while leaving it and
+   * reporting the erasure complete is the gap this whole area was opened to
+   * close. So neither is chosen — the erasure stops and says why.
+   *
+   * BEFORE the membership sweep, deliberately. A refusal raised after the
+   * account is half-deleted is not a refusal, and the uid is the only handle
+   * a human has to act on this: erase the auth record and there is no longer
+   * anything to look at, no way to see which address was contested, and no
+   * way to run the erasure once the question is settled. Refusing while the
+   * account is whole is the only version of this that stays reversible.
+   *
+   * The remedy is ordinary staff work, not a special path: decide whether the
+   * accounts are one person, detach the address from this one or merge them,
+   * then run the erasure again. `/admin/users/[uid]` already lists this
+   * account's addresses and marks the shared ones.
+   */
+  const contested = sharedAddressBlockers(addressSet)
+  if (contested.length) {
+    return {
+      ok: false,
+      skippedReason: 'shared-address',
+      sharedAddresses: contested,
+    }
+  }
 
   // Memberships first — a roster row carries their email and a host
   // projection carries their access, and both outlive the profile doc.
@@ -1469,6 +1721,12 @@ export async function eraseUser(uid: string): Promise<EraseUserResult> {
   // address exists. Erase it while there is still something to erase it by.
   let authRecord = false
   let emailDeliveries = 0
+  /** Addresses actually swept — not the same as the ones we hold, on failure. */
+  let erasedAddressCount = 0
+  /** Addresses left intact because a second account also holds them. */
+  let contestedAddressCount = 0
+  /** Identity-index rows released, one per address that had one. */
+  let emailIdentityIndex = 0
   try {
     const record = await findUserByUidAcrossPools(uid)
     if (record) {
@@ -1481,17 +1739,81 @@ export async function eraseUser(uid: string): Promise<EraseUserResult> {
        * the `profiles/{uid}` omission this function already documents above:
        * a store nothing in the sweep list would prompt a reader to notice.
        *
+       * EVERY ADDRESS, not the current primary. Passing one address left a
+       * prior or provider-supplied address holding its full history —
+       * recipient, subjects, open and click times — after the request had
+       * been honoured and reported complete.
+       *
        * Best-effort, like every other step here — a log that survives must
        * not stop the auth record from going.
        */
-      emailDeliveries = await eraseEmailDeliveries(record.record?.email).catch(
-        () => 0,
-      )
+      const sweep = await eraseEmailDeliveriesForAddresses(
+        addressSet.addresses,
+        firestore,
+      ).catch(() => null)
+      emailDeliveries = sweep?.removed ?? 0
+      erasedAddressCount = sweep?.addresses.length ?? 0
+      contestedAddressCount = sweep?.contestedAddresses.length ?? 0
+
+      /*
+       * `emailIdentityIndex/{address}` — the SAME omission one collection
+       * over.
+       *
+       * A top-level collection keyed by the address IN THE CLEAR, holding
+       * `{uid, address, claimedAt}`. `recursiveDelete(users/{uid})` cannot
+       * see it for exactly the reason it cannot see the delivery log, so an
+       * erased account left a readable address still pointing at its uid.
+       *
+       * Released rather than tombstoned, unlike the delivery log: this is a
+       * uniqueness claim, and `removeAccountEmail` already argues that
+       * holding one after the address is gone burns the address for whoever
+       * might legitimately want it next.
+       *
+       * ⛔ Only rows this uid actually owns. The index is the guard against
+       * two accounts holding one address, and deleting another account's
+       * claim would hand their sign-in identifier to the next taker.
+       */
+      for (const entry of addressSet.addresses) {
+        try {
+          const ref = firestore
+            .collection(EMAIL_IDENTITY_INDEX_COLLECTION)
+            .doc(entry.address)
+          const indexed = await ref.get()
+          if (indexed.exists && indexed.get('uid') === uid) {
+            await ref.delete()
+            emailIdentityIndex += 1
+          }
+        } catch (error) {
+          console.error(`eraseUser: identity index release failed for ${uid}`, error)
+        }
+      }
       await authForPool(record.tenantId).deleteUser(uid)
       authRecord = true
     }
   } catch (error) {
     console.error(`eraseUser: auth record delete failed for ${uid}`, error)
+  }
+
+  /*
+   * WHAT THE ADDRESS SWEEP ACTUALLY COVERED.
+   *
+   * Counts, never the addresses themselves: this collection is readable by
+   * any staff role and `maskEmailAddress` exists because an audit row holding
+   * a readable address made `adminAudit` the leakier of the two stores for
+   * the same data. An erasure record listing the addresses it destroyed would
+   * be the sharpest version of that — it would preserve, in the clear, the
+   * exact set the request existed to remove.
+   *
+   * `addressesIncomplete` is the one that matters to a reader. It says a
+   * source could not be read, so the sweep may have missed an address the
+   * account held — the difference between "erased everywhere" and "erased
+   * everywhere we could see", which is the difference a regulator asks about.
+   */
+  const addressSweep = {
+    resolved: addressSet.addresses.length,
+    erased: erasedAddressCount,
+    contested: contestedAddressCount,
+    incomplete: addressSet.incomplete,
   }
 
   await firestore
@@ -1508,6 +1830,8 @@ export async function eraseUser(uid: string): Promise<EraseUserResult> {
         profile,
         supportMessagesRedacted,
         emailDeliveries,
+        emailIdentityIndex,
+        addressSweep,
       },
       at: FieldValue.serverTimestamp(),
     })
@@ -1522,6 +1846,8 @@ export async function eraseUser(uid: string): Promise<EraseUserResult> {
       profile,
       supportMessagesRedacted,
       emailDeliveries,
+      emailIdentityIndex,
+      addressSweep,
     },
   }
 }

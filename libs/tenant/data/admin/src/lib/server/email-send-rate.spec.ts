@@ -45,6 +45,9 @@ import {
   invalidateEmailSendRateConfigCache,
   readEmailSendRateConfig,
   readEmailSendRateWindow,
+  claimOrgEmailSendBudget,
+  emailOrgSendRateWindowDocId,
+  readOrgEmailSendWindow,
 } from './email-send-rate'
 import { RATE_LIMIT_COLLECTION } from './rate-limit-store'
 
@@ -358,5 +361,238 @@ describe('installation', () => {
     expect(getEmailSendGovernor()).toBeNull()
     installEmailSendGovernor()
     expect(getEmailSendGovernor()).toBeInstanceOf(Function)
+  })
+})
+
+describe('the per-org share of the platform hour', () => {
+  const ORG = 'org_alpha'
+  const ORG_PATH = `${RATE_LIMIT_COLLECTION}/${emailOrgSendRateWindowDocId(WINDOW_START, ORG)}`
+  /** 25% of the 2,000/hour default. */
+  const ORG_CEILING = 500
+
+  it('derives the ceiling from the live platform ceiling', async () => {
+    const firestore = makeFirestore()
+    const claim = await claimOrgEmailSendBudget({
+      orgId: ORG,
+      count: 1,
+      platformPerHour: EMAIL_SEND_RATE_DEFAULT_PER_HOUR,
+      now: NOW,
+      firestore,
+    })
+    expect(claim.ceiling).toBe(ORG_CEILING)
+    // A staff ramp moves both together — the share is of whatever is live,
+    // so the two ceilings cannot drift into contradiction.
+    const ramped = await claimOrgEmailSendBudget({
+      orgId: 'org_beta',
+      count: 1,
+      platformPerHour: 8_000,
+      now: NOW,
+      firestore,
+    })
+    expect(ramped.ceiling).toBe(2_000)
+  })
+
+  it('grants a send that fits and counts it', async () => {
+    const firestore = makeFirestore()
+    const claim = await claimOrgEmailSendBudget({
+      orgId: ORG,
+      count: 300,
+      platformPerHour: EMAIL_SEND_RATE_DEFAULT_PER_HOUR,
+      now: NOW,
+      firestore,
+    })
+    expect(claim.allowed).toBe(true)
+    expect(claim.used).toBe(0)
+    expect(claim.remaining).toBe(200)
+    expect(docs.get(ORG_PATH)?.count).toBe(300)
+    expect(docs.get(ORG_PATH)?.orgId).toBe(ORG)
+  })
+
+  /**
+   * THE REFUSAL, AND WHAT IT MUST CARRY.
+   *
+   * A workspace at its ceiling is refused with the numbers in hand — used,
+   * ceiling and when the window rolls — because a refusal that does not state
+   * its number is the silent cap this product keeps rediscovering.
+   */
+  it('refuses a workspace at its ceiling and states every number', async () => {
+    const firestore = makeFirestore()
+    await claimOrgEmailSendBudget({
+      orgId: ORG,
+      count: 450,
+      platformPerHour: EMAIL_SEND_RATE_DEFAULT_PER_HOUR,
+      now: NOW,
+      firestore,
+    })
+    const refused = await claimOrgEmailSendBudget({
+      orgId: ORG,
+      count: 100,
+      platformPerHour: EMAIL_SEND_RATE_DEFAULT_PER_HOUR,
+      now: NOW,
+      firestore,
+    })
+    expect(refused.allowed).toBe(false)
+    expect(refused.used).toBe(450)
+    expect(refused.ceiling).toBe(ORG_CEILING)
+    expect(refused.remaining).toBe(50)
+    expect(refused.retryAtMs).toBe(WINDOW_START + EMAIL_SEND_RATE_WINDOW_MS)
+  })
+
+  it('a refused claim writes nothing', async () => {
+    const firestore = makeFirestore()
+    await claimOrgEmailSendBudget({
+      orgId: ORG,
+      count: 500,
+      platformPerHour: EMAIL_SEND_RATE_DEFAULT_PER_HOUR,
+      now: NOW,
+      firestore,
+    })
+    const before = docs.get(ORG_PATH)?.count
+    const refused = await claimOrgEmailSendBudget({
+      orgId: ORG,
+      count: 1,
+      platformPerHour: EMAIL_SEND_RATE_DEFAULT_PER_HOUR,
+      now: NOW,
+      firestore,
+    })
+    expect(refused.allowed).toBe(false)
+    // A campaign retried next hour must not have spent budget on being told no.
+    expect(docs.get(ORG_PATH)?.count).toBe(before)
+  })
+
+  /**
+   * The other tenants are the whole point. One org exhausting its share must
+   * leave every other org's share untouched — that is the difference between
+   * a fairness control and a second platform ceiling.
+   */
+  it('one workspace at its ceiling does not refuse another', async () => {
+    const firestore = makeFirestore()
+    await claimOrgEmailSendBudget({
+      orgId: ORG,
+      count: 500,
+      platformPerHour: EMAIL_SEND_RATE_DEFAULT_PER_HOUR,
+      now: NOW,
+      firestore,
+    })
+    const other = await claimOrgEmailSendBudget({
+      orgId: 'org_beta',
+      count: 500,
+      platformPerHour: EMAIL_SEND_RATE_DEFAULT_PER_HOUR,
+      now: NOW,
+      firestore,
+    })
+    expect(other.allowed).toBe(true)
+    expect(other.used).toBe(0)
+  })
+
+  it('two concurrent campaigns cannot both take the same headroom', async () => {
+    const firestore = makeFirestore()
+    afterRead = async () => {
+      await claimOrgEmailSendBudget({
+        orgId: ORG,
+        count: 400,
+        platformPerHour: EMAIL_SEND_RATE_DEFAULT_PER_HOUR,
+        now: NOW,
+        firestore,
+      })
+    }
+    const second = await claimOrgEmailSendBudget({
+      orgId: ORG,
+      count: 400,
+      platformPerHour: EMAIL_SEND_RATE_DEFAULT_PER_HOUR,
+      now: NOW,
+      firestore,
+    })
+    expect(aborts).toBeGreaterThan(0)
+    // The re-run reads the raised figure and is refused. A read-then-write
+    // cap is not a cap.
+    expect(second.allowed).toBe(false)
+    expect(second.used).toBe(400)
+    expect(docs.get(ORG_PATH)?.count).toBe(400)
+  })
+
+  it('fails OPEN when the counter is unreachable', async () => {
+    const firestore = makeFirestore({ failReads: true })
+    const claim = await claimOrgEmailSendBudget({
+      orgId: ORG,
+      count: 500,
+      platformPerHour: EMAIL_SEND_RATE_DEFAULT_PER_HOUR,
+      now: NOW,
+      firestore,
+    })
+    // A refusal produced by a Firestore blip is a refused campaign for a
+    // paying customer; the hour of pacing it buys back is not worth it.
+    expect(claim.allowed).toBe(true)
+    expect(claim.degraded).toBe(true)
+    expect(claim.ceiling).toBe(ORG_CEILING)
+  })
+
+  it('a parked control grants everything and still reports the ceiling', async () => {
+    const firestore = makeFirestore()
+    const claim = await claimOrgEmailSendBudget({
+      orgId: ORG,
+      count: 5_000,
+      platformPerHour: EMAIL_SEND_RATE_DEFAULT_PER_HOUR,
+      enabled: false,
+      now: NOW,
+      firestore,
+    })
+    expect(claim.allowed).toBe(true)
+    expect(claim.ceiling).toBe(ORG_CEILING)
+    expect(docs.get(ORG_PATH)).toBeUndefined()
+  })
+
+  it('does not read a corrupt counter as headroom', async () => {
+    const firestore = makeFirestore()
+    writeDoc(ORG_PATH, { count: -900 }, false)
+    const claim = await claimOrgEmailSendBudget({
+      orgId: ORG,
+      count: 600,
+      platformPerHour: EMAIL_SEND_RATE_DEFAULT_PER_HOUR,
+      now: NOW,
+      firestore,
+    })
+    // A negative counter must not read as 1,500 of headroom on a 500 ceiling.
+    expect(claim.allowed).toBe(false)
+    expect(claim.used).toBe(0)
+  })
+
+  it('carries the TTL field and not the health probe field', async () => {
+    const firestore = makeFirestore()
+    await claimOrgEmailSendBudget({
+      orgId: ORG,
+      count: 1,
+      platformPerHour: EMAIL_SEND_RATE_DEFAULT_PER_HOUR,
+      now: NOW,
+      firestore,
+    })
+    const written = docs.get(ORG_PATH)!
+    expect(written.expiresAt).toBeInstanceOf(Date)
+    expect(written.sentAtMs).toBe(NOW)
+    // `lastAtMs` would compete with the degradation markers the rate-limiter
+    // health probe queries this collection to find.
+    expect(written.lastAtMs).toBeUndefined()
+  })
+
+  it('reads a window back for a usage surface without claiming anything', async () => {
+    const firestore = makeFirestore()
+    await claimOrgEmailSendBudget({
+      orgId: ORG,
+      count: 120,
+      platformPerHour: EMAIL_SEND_RATE_DEFAULT_PER_HOUR,
+      now: NOW,
+      firestore,
+    })
+    const window = await readOrgEmailSendWindow({ orgId: ORG, now: NOW, firestore })
+    expect(window.used).toBe(120)
+    expect(window.resetMs).toBe(WINDOW_START + EMAIL_SEND_RATE_WINDOW_MS)
+    // Still 120 — a read is not a claim.
+    expect(docs.get(ORG_PATH)?.count).toBe(120)
+  })
+
+  it('reports a quiet hour as zero rather than throwing', async () => {
+    const firestore = makeFirestore()
+    const window = await readOrgEmailSendWindow({ orgId: ORG, now: NOW, firestore })
+    expect(window.used).toBe(0)
   })
 })

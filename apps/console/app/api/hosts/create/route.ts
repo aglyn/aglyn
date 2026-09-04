@@ -32,6 +32,7 @@ import {
   freeWorkspaceCapRefusalResponse,
   isImpersonationSession,
   lockdownRefusal,
+  logHostActivity,
   memberHasOrgPermission,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
@@ -233,6 +234,16 @@ async function handler(request: Request): Promise<Response> {
       }, { status: 403 })
     }
     const hostId = claim.hostId
+    // The site's own first entry (AGL-118). Provisioning is exactly the class
+    // of act the activity log never covered: the console's mutation points
+    // wrote every save and delete, and nothing wrote the creates, so a site
+    // built and then left alone had an empty feed and read as untouched.
+    await logHostActivity(
+      hostId,
+      { uid: decoded.uid, email: decoded.email ? String(decoded.email) : null },
+      'Created the site',
+      { type: 'host', id: hostId, name: displayName },
+    )
     // No starter seeding here (AGL-687). Starters render from the code
     // definitions and are copied in only when a user uses or edits one, so a
     // new site starts with an empty library and still gets every later

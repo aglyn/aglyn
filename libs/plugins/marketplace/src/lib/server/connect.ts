@@ -145,12 +145,6 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
       },
       { merge: true },
     )
-    if (chargesEnabled) {
-      return res
-        .status(200)
-        .json({ accountId, chargesEnabled: true, payoutsEnabled })
-    }
-
     const origin = req.headers.origin ?? `https://${req.headers.host}`
     const orgSlug = (
       await firestore.collection('orgs').doc(orgId).get()
@@ -161,6 +155,48 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
     const payoutsPath = orgSlug
       ? buildRoute(Route.ORG_MARKETPLACE, { orgSlug })
       : Route.ORG_MARKETPLACE
+    // A CONNECTED PUBLISHER STILL NEEDS A DOOR INTO STRIPE. The
+    // commerce twin carries the full note; the shape and the reasoning are the
+    // same, and the seller panel's "Finish payout setup in Stripe" button was
+    // the surface that named a problem it could not act on.
+    if (chargesEnabled) {
+      if (!payoutsEnabled) {
+        const fix = await stripe(
+          'account_links',
+          new URLSearchParams({
+            account: accountId as string,
+            type: 'account_onboarding',
+            refresh_url: `${origin}${payoutsPath}?connect=refresh`,
+            return_url: `${origin}${payoutsPath}?connect=done`,
+          }),
+        )
+        return res.status(200).json({
+          accountId,
+          chargesEnabled: true,
+          payoutsEnabled,
+          url: fix.url,
+        })
+      }
+      // Best-effort, for the same reason as the twin: a missing convenience
+      // link must never turn a working status check into an error.
+      let dashboardUrl: string | undefined
+      try {
+        const login = await stripe(
+          `accounts/${accountId}/login_links`,
+          new URLSearchParams(),
+        )
+        dashboardUrl = typeof login?.url === 'string' ? login.url : undefined
+      } catch (error) {
+        console.error('Stripe Express dashboard link failed', error)
+      }
+      return res.status(200).json({
+        accountId,
+        chargesEnabled: true,
+        payoutsEnabled,
+        ...(dashboardUrl ? { dashboardUrl } : {}),
+      })
+    }
+
     const link = await stripe(
       'account_links',
       new URLSearchParams({

@@ -72,11 +72,21 @@ async function authorize(
   return { decoded }
 }
 
+/**
+ * `subjectUid` is the account the suppression is ABOUT, when staff named one.
+ *
+ * The target here is `phone/{key}` — the number, which is the thing acted on
+ * and is deliberately not a user path, because a number can be suppressed
+ * with no account behind it. Without the subject the act reached the actor's
+ * history and nowhere near the page of the person who asked us to stop
+ * calling them.
+ */
 async function audit(
   actorUid: string,
   action: string,
   target: string,
   after: Record<string, unknown>,
+  subjectUid?: string | null,
 ): Promise<void> {
   try {
     await firebaseAdmin
@@ -87,6 +97,7 @@ async function audit(
         actorUid,
         action,
         target,
+        ...(subjectUid ? { subjectUid } : {}),
         before: null,
         after,
         at: FieldValue.serverTimestamp(),
@@ -200,13 +211,19 @@ async function writeHandler(request: Request): Promise<Response> {
       note: body?.note ? String(body.note) : null,
       erasePhoneOnFile,
     })
-    await audit(actorUid, 'contact.suppression.recorded', `phone/${contactSuppressionKey(phoneNumber)}`, {
-      phoneNumber: result.phoneNumber,
-      channels: result.channels,
-      source,
-      erasePhoneOnFile,
+    await audit(
+      actorUid,
+      'contact.suppression.recorded',
+      `phone/${contactSuppressionKey(phoneNumber)}`,
+      {
+        phoneNumber: result.phoneNumber,
+        channels: result.channels,
+        source,
+        erasePhoneOnFile,
+        uid,
+      },
       uid,
-    })
+    )
     return Response.json(
       { ok: true, phoneNumber: result.phoneNumber, channels: result.channels },
       { status: 200 },

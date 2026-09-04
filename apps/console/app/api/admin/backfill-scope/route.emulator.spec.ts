@@ -42,6 +42,11 @@ import { request as httpRequest } from 'node:http'
 import { getApps, initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { getFirestore, type Firestore } from 'firebase-admin/firestore'
+import {
+  planMemberScopeTokens,
+  planScopeStamp,
+  SCOPED_COLLECTIONS,
+} from '../../../../utils/server/backfill-scope'
 
 const EMULATED =
   Boolean(process.env.FIRESTORE_EMULATOR_HOST) &&
@@ -113,10 +118,60 @@ describeEmulated('backfill-scope route (emulator)', () => {
     expect(scopes.members['legacy']).toEqual(['org'])
   }, 60_000)
 
-  it('is idempotent — a second pass plans zero writes', async () => {
+  it('is idempotent — a second pass plans nothing for THIS org', async () => {
     const second = await call(handler, token, { dryRun: true })
-    expect(second.planned).toBe(0)
-    expect(second.nextAfterOrg).toBeNull()
+    expect(second.dryRun).toBe(true)
+
+    /*======================================================================
+     * SCOPED TO THIS ORG, and that is the whole point of the assertion.
+     *
+     * `planned` and `nextAfterOrg` are WORKSPACE-WIDE: the route walks
+     * `orgs` in id order and counts every unstamped document it finds, in
+     * every org. This file shares ONE emulator with the other
+     * `*.emulator.spec.ts` suites, which jest runs in parallel workers, and
+     * several of them create orgs holding media and folders.
+     *
+     * So `expect(second.planned).toBe(0)` was an assertion about the whole
+     * project made by a test that seeds and owns exactly one org. It passed
+     * only while no sibling happened to write between the stamping pass
+     * above and this one. Measured 2026-09-03: `Received: 1` on the
+     * production Emulator guards run, green twice on `main` at the
+     * byte-identical tree; and `Received: 401` locally with one sibling org
+     * present, which is the same bug with the timing made deterministic.
+     *
+     * `nextAfterOrg` goes the same way — it is null only while the whole
+     * project fits in one 25-org page, which is again not this suite's
+     * property to assert.
+     *
+     * The invariant this test actually owns is that OUR documents are fully
+     * stamped, so a second pass has nothing left to do for us. It is checked
+     * with the same planners the route itself uses, so it cannot drift from
+     * the production rule.
+     *====================================================================*/
+    const orgRef = db.collection('orgs').doc(ORG)
+    for (const collection of SCOPED_COLLECTIONS) {
+      const snapshot = await orgRef.collection(collection).get()
+      const plan = planScopeStamp(
+        snapshot.docs.map((doc) => ({
+          id: doc.id,
+          data: doc.data() as { visibleTo?: unknown },
+        })),
+      )
+      // The collection rides in the assertion so a failure names it.
+      expect({ collection, writes: plan.writes }).toEqual({
+        collection,
+        writes: [],
+      })
+    }
+
+    const members = await orgRef.collection('members').get()
+    const memberPlan = planMemberScopeTokens(
+      members.docs.map((doc) => ({
+        $id: doc.id,
+        ...(doc.data() as Record<string, unknown>),
+      })),
+    )
+    expect(memberPlan.writes).toEqual([])
   }, 60_000)
 })
 

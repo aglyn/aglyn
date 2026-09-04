@@ -297,7 +297,7 @@ describe('the Assist cost breakdown reaches the screen (AGL-2340)', () => {
 })
 
 /**
- * A CARD THAT READS AS BROKEN OVER DATA THAT IS FINE (AGL-693).
+ * A CARD THAT READS AS BROKEN OVER DATA THAT IS FINE (AGL-2501).
  *
  * "Where the money goes" rendered two tables of `$0.0000` with an em dash in
  * every Share cell whenever nothing had been spent. A share is a proportion
@@ -310,7 +310,7 @@ describe('the Assist cost breakdown reaches the screen (AGL-2340)', () => {
  * reached a model and still priced at zero is a model missing from the rate
  * table, and reporting that as thrift is the more expensive mistake.
  */
-describe('zero spend is a finding, not an empty grid (AGL-693)', () => {
+describe('zero spend is a finding, not an empty grid (AGL-2501)', () => {
   afterEach(() => {
     jest.clearAllMocks()
   })
@@ -365,7 +365,7 @@ describe('zero spend is a finding, not an empty grid (AGL-693)', () => {
 })
 
 /**
- * THE WORKSPACE, BY NAME, AND THE RANKING'S OWN EDGE (AGL-693).
+ * THE WORKSPACE, BY NAME, AND THE RANKING'S OWN EDGE (AGL-2501).
  *
  * The cost table's header said "Workspace" over a column of generated
  * document ids, which is the defect `/api/admin/overview` was fixed for. And
@@ -373,7 +373,7 @@ describe('zero spend is a finding, not an empty grid (AGL-693)', () => {
  * table showing 25 of 137 cited pages looks exactly like one showing all 25
  * there are.
  */
-describe('the workspace is named and the ranking states its cut (AGL-693)', () => {
+describe('the workspace is named and the ranking states its cut (AGL-2501)', () => {
   afterEach(() => {
     jest.clearAllMocks()
   })

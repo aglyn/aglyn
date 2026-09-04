@@ -26,6 +26,7 @@ import type {
   CssBorderProps,
   CssDimensionProps,
   CssGradientProps,
+  DataTableFieldProps,
   DatePickerProps,
   DualListSelectProps,
   FieldArrayProps,
@@ -89,6 +90,11 @@ export const FieldBreakpointSpan = dynamic<BreakpointSpanProps>(() =>
 )
 // Background fill editor (AGL-1331). `ssr: false` like the other pickers:
 // it mounts a Popper on an anchor element and the react-color picker.
+// Row-and-column grid for the Table element (AGL-2543). Not `ssr: false`:
+// text boxes and toggle buttons, no popper anchor of its own.
+export const FieldDataTable = dynamic<DataTableFieldProps>(() =>
+  import('../mapper/data-table').then((mod) => mod.default),
+)
 export const FieldCssGradient = dynamic<CssGradientProps>(
   () => import('../mapper/css-gradient').then((mod) => mod.default),
   { ssr: false },

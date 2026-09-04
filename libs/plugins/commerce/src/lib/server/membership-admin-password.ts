@@ -23,6 +23,7 @@ import {
   consumePasswordResetSend,
   firebaseAdmin,
   getOrgForHost,
+  hostSendingIdentity,
   isImpersonationSession,
   meterHostEmail,
   passwordResetThrottleMessage,
@@ -162,6 +163,8 @@ export const membershipAdminPasswordHandler: PluginApiHandler = async (
           'The link works once and expires in 1 hour. Your current ' +
           'password keeps working until you use it.',
         fromName: branding.fromName,
+        sendingIdentity: await hostSendingIdentity(hostId),
+        audience: 'tenant',
         context: 'membership admin recovery',
       })
       if (!result.sent) {
@@ -201,6 +204,8 @@ export const membershipAdminPasswordHandler: PluginApiHandler = async (
           `the new password to sign back in at ${siteBase}.\n\n` +
           'If you did not expect this, contact the site owner.',
         fromName: branding.fromName,
+        sendingIdentity: await hostSendingIdentity(hostId),
+        audience: 'tenant',
         context: 'membership admin password change',
       })
       notified = result.sent

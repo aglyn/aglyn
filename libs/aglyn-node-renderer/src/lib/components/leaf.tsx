@@ -15,8 +15,37 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
-import { AglynText } from '@aglyn/shared-ui-jsx'
+// Type-only, with every value this file reads named below (AGL-2486's rule,
+// applied to the render path's hottest file): a VALUE namespace import of the
+// core barrel is opaque to a bundler — it cannot know which exports are read,
+// so every module the barrel reaches is pinned into the published page's first
+// load.
+import type * as Aglyn from '@aglyn/aglyn'
+import { components } from '@aglyn/aglyn/aglyn'
+import { sanitizeAuthorSx } from '@aglyn/aglyn/app-utils/author-css'
+import { pinRampedTypographySx } from '@aglyn/aglyn/app-utils/responsive-typography-sx'
+import {
+  NODE_HIDE_IF_PROP,
+  NODE_HIDE_UNLESS_PROP,
+} from '@aglyn/aglyn/app-utils/compose-reusable-components'
+import {
+  NODE_ANIMATION_DELAY_PROP,
+  NODE_ANIMATION_DURATION_PROP,
+  NODE_ANIMATION_EASE_PROP,
+  NODE_ANIMATION_PROP,
+  NODE_ANIMATION_REPEAT_PROP,
+  NODE_ANIMATION_STAGGER_PROP,
+  NODE_ANIMATION_STAGGER_STEP_PROP,
+  NODE_ANIMATION_TRIGGER_PROP,
+  resolveElementAnimation,
+} from '@aglyn/aglyn/app-utils/element-animation'
+import { NodeIdentityContext } from '@aglyn/aglyn/app-utils/node-identity'
+import { FEATURE_FLAG } from '@aglyn/aglyn/foundation/constants/shared'
+// Deep import, NOT the barrel: `@aglyn/shared-ui-jsx`'s index re-exports the
+// Pages Router hooks (`next/router`), the inline SVG icon set and the whole
+// ~12,000-module MDI catalog, none of which a rendered node needs. This file
+// is on every published page, so the barrel's reach is that page's reach.
+import { AglynText } from '@aglyn/shared-ui-jsx/components/aglyn-text'
 import { styled, useTheme } from '@aglyn/shared-ui-theme'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import { observer } from 'mobx-react-lite'
@@ -52,8 +81,8 @@ export const Leaf = observer(
       sx: propsSx,
       className: propsClassName,
       style: propsStyle,
-      [Aglyn.NODE_HIDE_IF_PROP]: _hideIf,
-      [Aglyn.NODE_HIDE_UNLESS_PROP]: _hideUnless,
+      [NODE_HIDE_IF_PROP]: _hideIf,
+      [NODE_HIDE_UNLESS_PROP]: _hideUnless,
       // Element animation (AGL-2486): the reserved animation props come
       // out here for the same reason the visibility directives above do —
       // they are directives to the RENDERER, and spreading them onto the
@@ -62,14 +91,14 @@ export const Leaf = observer(
       // `none` case is stripped too (it resolves to no animation, but it is
       // still a prop an author saved) and so the props object keeps one
       // shape.
-      [Aglyn.NODE_ANIMATION_PROP]: _animation,
-      [Aglyn.NODE_ANIMATION_TRIGGER_PROP]: _animationTrigger,
-      [Aglyn.NODE_ANIMATION_DURATION_PROP]: _animationDuration,
-      [Aglyn.NODE_ANIMATION_DELAY_PROP]: _animationDelay,
-      [Aglyn.NODE_ANIMATION_REPEAT_PROP]: _animationRepeat,
-      [Aglyn.NODE_ANIMATION_EASE_PROP]: _animationEase,
-      [Aglyn.NODE_ANIMATION_STAGGER_PROP]: _animationStagger,
-      [Aglyn.NODE_ANIMATION_STAGGER_STEP_PROP]: _animationStaggerStep,
+      [NODE_ANIMATION_PROP]: _animation,
+      [NODE_ANIMATION_TRIGGER_PROP]: _animationTrigger,
+      [NODE_ANIMATION_DURATION_PROP]: _animationDuration,
+      [NODE_ANIMATION_DELAY_PROP]: _animationDelay,
+      [NODE_ANIMATION_REPEAT_PROP]: _animationRepeat,
+      [NODE_ANIMATION_EASE_PROP]: _animationEase,
+      [NODE_ANIMATION_STAGGER_PROP]: _animationStagger,
+      [NODE_ANIMATION_STAGGER_STEP_PROP]: _animationStaggerStep,
       ...resolvedProps
     } = (node?.resolvedProps ?? node?.props ?? {}) as Record<string, any>
 
@@ -78,17 +107,17 @@ export const Leaf = observer(
     // JS on any surface. The besigner canvas never ships that stylesheet
     // (same posture as the AGL-562 hidden class), so an author sees the
     // element in its normal, selectable, un-animated state while editing.
-    const animation = Aglyn.resolveElementAnimation({
-      [Aglyn.NODE_ANIMATION_PROP]: _animation,
-      [Aglyn.NODE_ANIMATION_TRIGGER_PROP]: _animationTrigger,
-      [Aglyn.NODE_ANIMATION_DURATION_PROP]: _animationDuration,
-      [Aglyn.NODE_ANIMATION_DELAY_PROP]: _animationDelay,
-      [Aglyn.NODE_ANIMATION_REPEAT_PROP]: _animationRepeat,
-      [Aglyn.NODE_ANIMATION_EASE_PROP]: _animationEase,
-      [Aglyn.NODE_ANIMATION_STAGGER_PROP]: _animationStagger,
-      [Aglyn.NODE_ANIMATION_STAGGER_STEP_PROP]: _animationStaggerStep,
+    const animation = resolveElementAnimation({
+      [NODE_ANIMATION_PROP]: _animation,
+      [NODE_ANIMATION_TRIGGER_PROP]: _animationTrigger,
+      [NODE_ANIMATION_DURATION_PROP]: _animationDuration,
+      [NODE_ANIMATION_DELAY_PROP]: _animationDelay,
+      [NODE_ANIMATION_REPEAT_PROP]: _animationRepeat,
+      [NODE_ANIMATION_EASE_PROP]: _animationEase,
+      [NODE_ANIMATION_STAGGER_PROP]: _animationStagger,
+      [NODE_ANIMATION_STAGGER_STEP_PROP]: _animationStaggerStep,
     })
-    const Factory = Aglyn.components.getFactory(node?.componentId)
+    const Factory = components.getFactory(node?.componentId)
     const Component = isValidElementType(Factory) ? Factory : DefaultComponent
 
     // Self-closing components (AGL-579): a component whose schema flags it
@@ -97,9 +126,9 @@ export const Leaf = observer(
     // `[undefined, false]` the JSX below always produces. Rendering the whole
     // page 500s off one image node (blog covers, AGL-579), so honor the flag
     // here: no JSX children, and strip a stray `children` prop too.
-    const schema = Aglyn.components.getSchema(node?.componentId)
+    const schema = components.getSchema(node?.componentId)
     const selfClosing = Boolean(
-      (schema?.flags?.selfClosing ?? 0) & Aglyn.FEATURE_FLAG.ENABLED,
+      (schema?.flags?.selfClosing ?? 0) & FEATURE_FLAG.ENABLED,
     )
     if (selfClosing) delete resolvedProps['children']
 
@@ -149,16 +178,24 @@ export const Leaf = observer(
     // deliberately left alone. The scrub is scheme-only and returns its
     // input by identity when nothing is refused, so the overwhelmingly
     // common case (no `url()` at all) costs one walk and no new object.
-    const authorSx = Aglyn.sanitizeAuthorSx(node?.sx)
-    const composedSx = resolvePaletteVarsSx(
-      resolveSchemeSx(
-        mergeSxProps(sx as any, propsSx as any, authorSx as any),
-        activeScheme,
+    // Responsive type ramp: LAST of the three sx passes, and it has to be —
+    // it moves a scalar `fontSize` into the `xs` slice so the author's
+    // explicit size sorts after the variant's `responsiveFontSizes` at-rules,
+    // and the scheme pass above is what collapses a dark-scheme slice down
+    // into that same top level. Running it earlier would leave a dark
+    // override's font size unpinned.
+    const authorSx = sanitizeAuthorSx(node?.sx)
+    const composedSx = pinRampedTypographySx(
+      resolvePaletteVarsSx(
+        resolveSchemeSx(
+          mergeSxProps(sx as any, propsSx as any, authorSx as any),
+          activeScheme,
+        ),
+        theme?.palette,
       ),
-      theme?.palette,
     )
     /**
-     * Author visibility (AGL-1479) — the eye on the hierarchy row.
+     * Author visibility — the eye on the hierarchy row.
      *
      * LAST, and deliberately so. It has to override the element's own
      * display, not replace it: an author who hides a Stack laid out with
@@ -204,7 +241,7 @@ export const Leaf = observer(
     // as ONE child to `Children.toArray`, so the first slot swallowed the
     // whole subtree and every later slot got nothing.
     const positional = Boolean(
-      (schema?.flags?.positionalChildren ?? 0) & Aglyn.FEATURE_FLAG.ENABLED,
+      (schema?.flags?.positionalChildren ?? 0) & FEATURE_FLAG.ENABLED,
     )
     const childNodes = positional ? (node?.children ?? []) : null
 
@@ -234,9 +271,9 @@ export const Leaf = observer(
     )
 
     return (
-      <Aglyn.NodeIdentityContext.Provider value={node?.$id ?? ''}>
+      <NodeIdentityContext.Provider value={node?.$id ?? ''}>
         {element}
-      </Aglyn.NodeIdentityContext.Provider>
+      </NodeIdentityContext.Provider>
     )
   }),
 )

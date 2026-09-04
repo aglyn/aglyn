@@ -20,6 +20,7 @@ import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import { generateOrgSlug } from '@aglyn/aglyn'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Button,
   Dialog,
@@ -45,6 +46,18 @@ export interface CreateOrgDialogProps {
    * the person doesn't have to type it a second time. Editable as ever.
    */
   initialName?: string
+  /**
+   * Where to land once the workspace exists, given its reserved slug.
+   * Defaults to the new workspace's sites.
+   *
+   * The org jump page passes a builder that carries the marketing plan intent
+   * (AGL-1117), so a workspace created while `?plan=` is on the URL opens on
+   * billing with that plan rather than on an empty site list. The dialog does
+   * not read the intent itself: the page that owns the intent owns the
+   * destination, and the org switcher — which has no intent — keeps the
+   * default.
+   */
+  destination?: (orgSlug: string) => string
 }
 
 /**
@@ -54,7 +67,7 @@ export interface CreateOrgDialogProps {
  * subdomain when workspace subdomains are live.
  */
 export function CreateOrgDialog(props: CreateOrgDialogProps) {
-  const { open, onClose, initialName } = props
+  const { open, onClose, initialName, destination } = props
   const { data: user } = useUser()
   const router = useRouter()
   const { enqueueSnackbar } = useSnackbar()
@@ -83,13 +96,9 @@ export function CreateOrgDialog(props: CreateOrgDialogProps) {
     if (!name.trim() || busy) return
     setBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/orgs/create', {
+      const response = await authorizedFetch(user, '/api/orgs/create', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name.trim(), slug: slug.trim() }),
       })
       const payload = await response.json().catch(() => ({}))
@@ -108,7 +117,10 @@ export function CreateOrgDialog(props: CreateOrgDialogProps) {
       onClose()
       // The server returns the reserved slug — land in the new workspace.
       const createdSlug = payload.slug ?? slug.trim()
-      router.push(buildRoute(Route.HOST_LIST, { orgSlug: createdSlug }))
+      router.push(
+        destination?.(createdSlug) ??
+          buildRoute(Route.HOST_LIST, { orgSlug: createdSlug }),
+      )
     } catch (error) {
       console.error(error)
       enqueueSnackbar('Creating the organization failed', { variant: 'error' })

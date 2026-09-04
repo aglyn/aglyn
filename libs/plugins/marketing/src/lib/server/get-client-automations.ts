@@ -55,7 +55,7 @@ export async function getClientAutomations(options: {
   /** Leading-slash page path for pathPattern targeting. */
   path: string
   /**
-   * The composed nodes of the page being rendered (AGL-1478).
+   * The composed nodes of the page being rendered.
    *
    * Interactions authored on an element live ON the node, so they arrive with
    * the document rather than from a second query — which is the point: they
@@ -78,6 +78,11 @@ export async function getClientAutomations(options: {
   actionsEntitled: boolean
   /** Business-tier gate for `runJs` steps (dropped when false). */
   allowJs: boolean
+  /**
+   * The page has no request path of its own (AGL-2511), so path-scoped
+   * automations are dropped rather than matched. See `dropPathScoped`.
+   */
+  dropPathScoped?: boolean
 }): Promise<ClientAutomation[]> {
   try {
     const actions = await withRenderCache({
@@ -87,7 +92,7 @@ export async function getClientAutomations(options: {
       read: () => readHostActions(options.hostId),
     })
     /**
-     * The document's own interactions, merged before the compile (AGL-1478).
+     * The document's own interactions, merged before the compile.
      *
      * AFTER the host actions, so an element's own choreography enrols last
      * and a site-wide automation on the same event still runs first — the
@@ -107,6 +112,7 @@ export async function getClientAutomations(options: {
       path: options.path,
       actionsEntitled: options.actionsEntitled,
       allowJs: options.allowJs,
+      ...(options.dropPathScoped ? { dropPathScoped: true } : {}),
     })
   } catch (error) {
     console.error(error)

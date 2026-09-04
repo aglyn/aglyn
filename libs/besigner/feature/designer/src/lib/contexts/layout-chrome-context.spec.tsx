@@ -69,15 +69,22 @@ describe('useLayoutChromeCanvas — chrome renders real components (AGL-1217)', 
     expect(nodes['nav-instance'].nodes ?? []).toHaveLength(0)
   })
 
-  it('grafts the definition under the instance when definitions are given', () => {
+  it('grafts the definition in the instance\u2019s place when definitions are given', () => {
     const { result } = renderHook(() =>
       useLayoutChromeCanvas(layoutNodes(), definitions()),
     )
     const nodes = result.current?.toJSON().nodes as Record<string, any>
+    // The definition's root IS the placement — no wrapper (AGL-2521).
+    expect(nodes['nav-instance'].componentId).toBe('muiAppBar')
+    expect(
+      nodes[`${Aglyn.COMPONENT_NODE_ID_PREFIX}nav-instance__def-root`],
+    ).toBeUndefined()
     const [childId] = nodes['nav-instance'].nodes as string[]
-    // Namespaced per instance, so one definition can appear many times.
-    expect(childId).toBe(`${Aglyn.COMPONENT_NODE_ID_PREFIX}nav-instance__def-root`)
-    expect(nodes[childId].componentId).toBe('muiAppBar')
+    // Its children stay namespaced per instance, so one definition can
+    // appear many times.
+    expect(childId).toBe(
+      `${Aglyn.COMPONENT_NODE_ID_PREFIX}nav-instance__def-brand`,
+    )
     // The whole subtree comes along — the placeholder stood for all of it.
     expect(
       nodes[`${Aglyn.COMPONENT_NODE_ID_PREFIX}nav-instance__def-brand`]

@@ -36,12 +36,12 @@ import { FieldValue } from 'firebase-admin/firestore'
  * Firestore bills a minimum of one read for a query returning nothing — so a
  * site that has never written a rule still paid for asking, forever. The rules
  * are pure host-scoped published config: `revalidateTag(tenant-data:{hostId})`
- * busts them on publish, and 60s is the backstop for a manager edit that does
- * not publish.
- *
- * Worst stale read: a rule edited in the console takes up to 60s longer to
- * start (or stop) firing than the ≤30s this file already documents. The paid
- * gate and the hit counters stay OUTSIDE the cache — see below.
+ * busts them, and the shared hour-long TTL is only the backstop for a write
+ * that never announces itself. Rule edits DO announce themselves: the
+ * console's redirect manager posts `/api/screens/revalidate` with the rule's
+ * source path after every save, toggle and delete, which busts the tag and
+ * drops that path's cached HTML — that call is what keeps the manager's
+ * "live within ~30 seconds" true, not this TTL.
  */
 const REDIRECT_RULES_TTL_SECONDS = PUBLISHED_SITE_DATA_TTL_SECONDS
 

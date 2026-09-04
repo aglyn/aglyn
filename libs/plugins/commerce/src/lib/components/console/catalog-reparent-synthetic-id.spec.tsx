@@ -85,6 +85,15 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   // guard lets it through — which is exactly when this bug fires.
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
     .writeGuardedBySeed,
+  // The real builders (AGL-2501). A stub would decide the ordering and the
+  // ceiling these cards are built on, which is the thing under test elsewhere
+  // and must not be re-invented here.
+  collectionCeiling: jest.requireActual('@aglyn/tenant-feature-instance')
+    .collectionCeiling,
+  ceilingedWindow: jest.requireActual('@aglyn/tenant-feature-instance')
+    .ceilingedWindow,
+  collectionPage: jest.requireActual('@aglyn/tenant-feature-instance')
+    .collectionPage,
 }))
 
 jest.mock('firebase/firestore', () => ({

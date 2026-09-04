@@ -31,6 +31,7 @@ import { installPluginHandler } from './server/install-plugin'
 import { listingVersionsHandler } from './server/listing-versions'
 import { RATING_FIELD } from './model/rating-field'
 import { installDatasetSchemaHandler } from './server/install-dataset-schema'
+import { installEmailStarterHandler } from './server/install-email-starter'
 import { installEmailTemplateHandler } from './server/install-email-template'
 import { installLayoutHandler } from './server/install-layout'
 import { installTemplateHandler } from './server/install-template'
@@ -41,6 +42,7 @@ import { reportHandler } from './server/report'
 import { reviewsHandler } from './server/reviews'
 import { publisherProfileSaveHandler } from './server/publisher-profile-save'
 import { publishDatasetSchemaHandler } from './server/publish-dataset-schema'
+import { publishEmailStarterHandler } from './server/publish-email-starter'
 import { publishEmailTemplateHandler } from './server/publish-email-template'
 import { publishLayoutHandler } from './server/publish-layout'
 import { publishTemplateHandler } from './server/publish-template'
@@ -78,6 +80,10 @@ export function registerMarketplaceConsoleApi(): void {
     installDatasetSchemaHandler,
   )
   registerPluginApiRoute(
+    'marketplace/install-email-starter',
+    installEmailStarterHandler,
+  )
+  registerPluginApiRoute(
     'marketplace/install-email-template',
     installEmailTemplateHandler,
   )
@@ -104,6 +110,10 @@ export function registerMarketplaceConsoleApi(): void {
   registerPluginApiRoute(
     'marketplace/publish-dataset-schema',
     publishDatasetSchemaHandler,
+  )
+  registerPluginApiRoute(
+    'marketplace/publish-email-starter',
+    publishEmailStarterHandler,
   )
   registerPluginApiRoute(
     'marketplace/publish-email-template',

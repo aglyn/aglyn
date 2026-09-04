@@ -16,13 +16,13 @@
  */
 'use client'
 
+import { CONSOLE_WIDGET_SLOTS } from '@aglyn/aglyn'
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import { Container } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { Stack } from '@mui/material'
 import HostAnalyticsCard from '../../../../../../components/analytics/host-analytics-card.component'
 import ScreensAnalyticsTable from '../../../../../../components/analytics/screens-analytics-table.component'
-import CampaignGlanceCard from '../../../../../../components/dashboard/campaign-glance-card.component'
 import PluginWidgetSlot from '../../../../../../components/plugin-widget-slot.component'
 import { useHostId, useHostSubdomain } from '../../../../../../components/host-id-provider'
 import HostDisplayNameComponent from '../../../../../../components/host-display-name.component'
@@ -67,7 +67,17 @@ const HostAnalytics: NextPageWithLayout<Record<string, never>> = () => {
           {/* Per-screen comparison (AGL-1844), Pro-gated inside. */}
           <ScreensAnalyticsTable hostId={hostId} />
           <PluginWidgetSlot slot="commerceGlance" hostId={hostId} />
-          <CampaignGlanceCard hostId={hostId} />
+          {/*
+            The capability glances, registered rather than imported
+            (AGL-433). The campaign card was imported here as well as on the
+            dashboard, so a workspace with the email plugin switched off got
+            it on both — the slot asks the shell instead, and renders
+            whatever the workspace actually has.
+           */}
+          <PluginWidgetSlot
+            slot={CONSOLE_WIDGET_SLOTS.hostDashboard}
+            hostId={hostId}
+          />
         </Stack>
       </Container>
     </DashboardLayout>

@@ -260,6 +260,10 @@ const renderRow = (row: AppBarMenubarRowProps, i: number, hasAnyIcon: boolean) =
       id={id}
       disabled={disabled}
       onClick={onClick}
+      // The render IS a native <button>; without saying so, Base UI assumes
+      // a non-native element, synthesises its own Enter/Space click, and
+      // logs a dev error on every row.
+      nativeButton
       render={
         <ListItemButton component="button" {...(rest as any)} sx={rowSx} />
       }
@@ -309,7 +313,9 @@ const renderEntry = (entry: AppBarMenubarEntryProps, i: number) => {
 
   return (
     <Menu.Root key={key}>
-      <Menu.Trigger id={id} render={renderTrigger(icon, rest)}>
+      {/* The rendered MUI Button is a native <button>; a custom `render`
+          flips Base UI's assumption to non-native, so it must be told. */}
+      <Menu.Trigger id={id} nativeButton render={renderTrigger(icon, rest)}>
         {children}
       </Menu.Trigger>
       <Menu.Portal>

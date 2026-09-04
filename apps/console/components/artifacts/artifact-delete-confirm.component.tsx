@@ -18,6 +18,10 @@
 
 import { useEffect, useState } from 'react'
 import {
+  authorizedFetch,
+  type MaybeTokenSource,
+} from '@aglyn/shared-util-http/authorized-token'
+import {
   SCAN_PENDING_NOTE,
   deleteConfirmationLead,
   deleteConfirmationNote,
@@ -105,16 +109,19 @@ export async function fetchArtifactUsage(options: {
   hostId: string
   kind: ArtifactUsageKind
   id: string
-  idToken?: string
+  /**
+   * The signed-in account, NOT a token the caller has already awaited: a
+   * caller that awaits one first has already blocked its confirm dialog on a
+   * refresh with no deadline, and one that could not get a token would send
+   * this scan unauthenticated and read the refusal as "no dependents".
+   */
+  user: MaybeTokenSource
 }): Promise<ArtifactUsageScan | null> {
-  const { hostId, kind, id, idToken } = options
+  const { hostId, kind, id, user } = options
   try {
-    const response = await fetch('/api/hosts/where-used', {
+    const response = await authorizedFetch(user, '/api/hosts/where-used', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ hostId, kind, id }),
     })
     if (!response.ok) return null

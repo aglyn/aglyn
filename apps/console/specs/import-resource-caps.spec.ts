@@ -187,6 +187,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     orgId: ORG_OF_HOST[hostId] ?? 'org-1',
     org: mockOrg,
   }),
+  // The route appends the audit entry itself now (AGL-118). This factory is
+  // a closed world, so an unnamed export is `undefined` and the route throws
+  // — a 500 that reads exactly like the behaviour under test regressing.
+  logHostActivity: async () => undefined,
   isImpersonationSession: () => false,
   // AGL-1506: inert verdict — the 423 wiring has its own specs; these
   // suites test other properties and must not depend on lockdown reads.

@@ -22,6 +22,7 @@ import { useLoading } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useCallback, useRef } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   type InstallPlanStep,
   listingArtifactType,
@@ -45,6 +46,8 @@ function endpointForArtifact(artifactType: string): string {
       return 'marketplace/install-dataset-schema'
     case 'emailTemplate':
       return 'marketplace/install-email-template'
+    case 'emailStarter':
+      return 'marketplace/install-email-starter'
     case 'theme':
       return 'marketplace/install-theme'
     default:
@@ -73,6 +76,13 @@ function landingMessage(
       return (
         `Saved "${displayName}" as a draft version — activate it in the ` +
         'email designer to start sending it.'
+      )
+    case 'emailStarter':
+      // A copy, and saying so is the point: the publisher cannot reach it
+      // again, and nothing goes out until a campaign is sent from it.
+      return (
+        `Added "${displayName}" to your Email templates as your own copy — ` +
+        'edit it freely, nothing is sent until you send a campaign.'
       )
     case 'datasetSchema':
       return `Created "${displayName}" as a new, empty dataset.`
@@ -168,15 +178,11 @@ export function useMarketplaceActions(hostId: string, orgId?: string | null) {
     ) => {
       const dequeue = queueLoading()
       try {
-        const idToken = await (user as any)?.getIdToken?.()
         const artifactType = listingArtifactType(listing)
         const endpoint = endpointForArtifact(artifactType)
-        const response = await fetch(`/api/${endpoint}`, {
+        const response = await authorizedFetch(user, `/api/${endpoint}`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             listingId: listing.$id,
             hostId,
@@ -229,6 +235,47 @@ export function useMarketplaceActions(hostId: string, orgId?: string | null) {
             persist: true,
           })
         }
+        /**
+         * What was, and was not, checked about an email somebody else wrote.
+         *
+         * Said HERE because this is the moment the design enters the
+         * workspace, and because the two facts are the ones a sender cannot
+         * recover afterwards by looking at the design. `unreviewed` is the
+         * ordinary case — email starters are auto-listed like every other
+         * copied artifact — so the sentence has to be a statement rather than
+         * an alarm, and it must never be silence: an install that said nothing
+         * would be read as a review that happened.
+         *
+         * The link hosts are the inspectable half of the link policy. The
+         * remote-asset rule is mechanical and the route enforces it, but where
+         * a template points a tenant's own customers is a judgment only the
+         * tenant can make, and they can only make it if they are shown the
+         * list.
+         */
+        if (payload.assurance) {
+          const hosts: string[] = payload.linkHosts ?? []
+          enqueueSnackbar(
+            (payload.assurance === 'approved'
+              ? 'Reviewed by Aglyn. '
+              : 'Nobody at Aglyn has reviewed this design. ') +
+              (hosts.length
+                ? `It links to ${hosts.join(', ')}. `
+                : 'It links nowhere outside your site. ') +
+              'Read it before you send from it.',
+            { variant: 'info', persist: true },
+          )
+        }
+        // A media reference that still resolves against the publisher's own
+        // library — served by our CDN, so no third party learns who opened the
+        // mail, but the picture behind it is still theirs to change.
+        if (payload.foreignMediaScopes?.length) {
+          enqueueSnackbar(
+            'Some images in this email are still served from the publisher’s ' +
+              'own media library, so they can change after you install. ' +
+              'Replace them with your own to pin them.',
+            { variant: 'info', persist: false },
+          )
+        }
         // A schema whose reference fields couldn't be relinked installs with
         // those fields degraded to text — silently changing a field's type
         // would be the kind of thing you discover much later (AGL-657).
@@ -279,7 +326,6 @@ export function useMarketplaceActions(hostId: string, orgId?: string | null) {
       if (!steps.length) return
       const dequeue = queueLoading()
       try {
-        const idToken = await (user as any)?.getIdToken?.()
         const artifactType = listingArtifactType(listing)
         const endpoint = endpointForArtifact(artifactType)
         let installed = 0
@@ -309,12 +355,9 @@ export function useMarketplaceActions(hostId: string, orgId?: string | null) {
           // Org steps still need a host to resolve the org server-side, so
           // fall back to the acting host; host steps target their own site.
           const targetHostId = step.scope === 'host' ? step.hostId : hostId
-          const response = await fetch(`/api/${endpoint}`, {
+          const response = await authorizedFetch(user, `/api/${endpoint}`, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               listingId: listing.$id,
               hostId: targetHostId,
@@ -404,54 +447,56 @@ export function useMarketplaceActions(hostId: string, orgId?: string | null) {
     async (listing: any) => {
       const dequeue = queueLoading()
       try {
-        const idToken = await (user as any)?.getIdToken?.()
         const listingId = String(listing.$id)
         const attemptKey =
           purchaseAttempts.current.get(listingId) ??
           `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
         purchaseAttempts.current.set(listingId, attemptKey)
-        const response = await fetch('/api/marketplace/checkout', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-            // Stable across a retry of THIS attempt (AGL-1697), so a
-            // double-click or a re-submit after a timeout cannot open a second
-            // Stripe session on a live account.
-            'Idempotency-Key': attemptKey,
-          },
-          // The browser's GA client id rides along so the SERVER-side
-          // `purchase` the Stripe webhook sends can be attributed to the
-          // session — and therefore the campaign — that produced it
-          // (AGL-1638). The webhook has always read this off the session
-          // metadata; until now nothing captured it, so every marketplace
-          // sale landed on a synthetic, sessionless GA user and plugin
-          // revenue had no acquisition channel at all.
-          //
-          // Resolves to null within 500ms when gtag is absent (consent
-          // refused, ad blocker, analytics unconfigured), so it can never
-          // delay or block a purchase — same contract as the console's
-          // subscription checkout.
-          body: JSON.stringify({
-            listingId: listing.$id,
-            hostId,
-            // WHICH WORKSPACE IS BUYING (AGL-2331). A purchase licenses an
-            // organization, so the acting org is named rather than inferred:
-            // at org scope the surface acts through an arbitrary FIRST site,
-            // and letting the server derive the licence holder from that site
-            // would make which client workspace got the licence depend on the
-            // order sites happen to come back in.
+        const response = await authorizedFetch(
+          user,
+          '/api/marketplace/checkout',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              // Stable across a retry of THIS attempt (AGL-1697), so a
+              // double-click or a re-submit after a timeout cannot open a
+              // second Stripe session on a live account.
+              'Idempotency-Key': attemptKey,
+            },
+            // The browser's GA client id rides along so the SERVER-side
+            // `purchase` the Stripe webhook sends can be attributed to the
+            // session — and therefore the campaign — that produced it
+            // (AGL-1638). The webhook has always read this off the session
+            // metadata; until now nothing captured it, so every marketplace
+            // sale landed on a synthetic, sessionless GA user and plugin
+            // revenue had no acquisition channel at all.
             //
-            // Advisory, not authority — the server resolves it through the
-            // caller's own membership and refuses an org they are not in. An
-            // older cached bundle that sends none still works: the server
-            // falls back to resolving the org from `hostId` the same way.
-            ...(orgId ? { orgId } : {}),
-            gaClientId: await readGaClientId(
-              process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
-            ),
-          }),
-        })
+            // Resolves to null within 500ms when gtag is absent (consent
+            // refused, ad blocker, analytics unconfigured), so it can never
+            // delay or block a purchase — same contract as the console's
+            // subscription checkout.
+            body: JSON.stringify({
+              listingId: listing.$id,
+              hostId,
+              // WHICH WORKSPACE IS BUYING (AGL-2331). A purchase licenses an
+              // organization, so the acting org is named rather than inferred:
+              // at org scope the surface acts through an arbitrary FIRST site,
+              // and letting the server derive the licence holder from that site
+              // would make which client workspace got the licence depend on the
+              // order sites happen to come back in.
+              //
+              // Advisory, not authority — the server resolves it through the
+              // caller's own membership and refuses an org they are not in. An
+              // older cached bundle that sends none still works: the server
+              // falls back to resolving the org from `hostId` the same way.
+              ...(orgId ? { orgId } : {}),
+              gaClientId: await readGaClientId(
+                process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
+              ),
+            }),
+          },
+        )
         const payload = await response.json()
         // The PAID install door refuses under a lock too (AGL-1545): both
         // `checkout` and `marketplace-installs` gate it. A buyer must not
@@ -509,20 +554,20 @@ export function useMarketplaceActions(hostId: string, orgId?: string | null) {
     ) => {
       const dequeue = queueLoading()
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/marketplace/install-plugin', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        const response = await authorizedFetch(
+          user,
+          '/api/marketplace/install-plugin',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              listingId: listing.$id,
+              hostId: targetHostId ?? hostId,
+              action: 'uninstall',
+              ...(scope ? { scope } : {}),
+            }),
           },
-          body: JSON.stringify({
-            listingId: listing.$id,
-            hostId: targetHostId ?? hostId,
-            action: 'uninstall',
-            ...(scope ? { scope } : {}),
-          }),
-        })
+        )
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
           // Uninstall rides the install-plugin route, so an installs lock

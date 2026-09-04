@@ -46,6 +46,37 @@ type RevealNode = {
   parent?: RevealNode
 } | null
 
+/**
+ * A node's ancestors, innermost first, visiting each at most once.
+ *
+ * The chain a canvas document offers is NOT acyclic. A stored document's root
+ * is its own parent — `CanvasManager.processNodesToDenormalized` builds it
+ * through `denormalizeNodes([{ $id: NODE_ROOT_ID, … }], NODE_ROOT_ID)`, and
+ * `denormalizeNodes` stamps its `parentId` argument onto every node it writes,
+ * the root included — and `AglynNode.parent` resolves that id straight back to
+ * the root. So `current = current.parent` has no null to arrive at: it settles
+ * on the root and stays there.
+ *
+ * That is a synchronous infinite loop on the renderer's main thread, not a
+ * slow walk. It costs the whole tab: Chrome stops answering input and script
+ * evaluation entirely and the page has to be closed.
+ *
+ * The visited set is keyed by node identity, so it terminates on ANY parent
+ * chain rather than only on the root's — a document whose nodes parent each
+ * other yields a wrong dim on one row instead of a locked browser.
+ */
+function* ancestorsOf(node: RevealNode): Generator<NonNullable<RevealNode>> {
+  const seen = new Set<unknown>()
+  let current = node?.parent
+  while (current) {
+    const key = current.$id ?? current
+    if (seen.has(key)) return
+    seen.add(key)
+    yield current
+    current = current.parent
+  }
+}
+
 /** The class names a node contributes to its rendered element. */
 function nodeClassNames(node: RevealNode): string[] {
   return [node?.props?.['className'], node?.className]
@@ -147,17 +178,15 @@ export function nodePropsWithHiddenOnSite(
  * own would fade a panel inside a hidden drawer to near-invisible.
  */
 export function isAncestorHiddenOnSite(node: RevealNode): boolean {
-  let current = node?.parent
-  while (current) {
-    if (isNodeHiddenOnSite(current)) return true
-    current = current.parent
+  for (const ancestor of ancestorsOf(node)) {
+    if (isNodeHiddenOnSite(ancestor)) return true
   }
   return false
 }
 
 
 /**
- * Whether the AUTHOR has hidden this element (AGL-1479).
+ * Whether the AUTHOR has hidden this element.
  *
  * The plain switch behind the eye on the hierarchy row: `display: none` on
  * the canvas and on the published site, with nothing that reveals it.
@@ -178,10 +207,10 @@ export function isNodeHiddenByAuthor(node: RevealNode): boolean {
  * hierarchy dims both the same way.
  */
 export function isAncestorHidden(node: RevealNode): boolean {
-  let current = node?.parent
-  while (current) {
-    if (isNodeHiddenByAuthor(current) || isNodeHiddenOnSite(current)) return true
-    current = current.parent
+  for (const ancestor of ancestorsOf(node)) {
+    if (isNodeHiddenByAuthor(ancestor) || isNodeHiddenOnSite(ancestor)) {
+      return true
+    }
   }
   return false
 }

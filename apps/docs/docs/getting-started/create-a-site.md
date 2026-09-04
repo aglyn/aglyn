@@ -38,7 +38,7 @@ the console suggests an available variation.
 - **Screens & layouts** — the pages and the shared frames they render in.
 - **Data** — datasets, variables, functions, and workflows.
 - **Media** — images, video, and files, organized in folders.
-- **Setup** — theme, custom domain, SEO, and integrations under tabbed settings.
+- **Setup** — theme, SEO, tracking, and emails under tabbed settings.
   The **Site logo** card (Details tab) sets your brand mark: it's shown on the
   live site's page-navigation loading overlay — a themed, blurred scrim with a
   progress bar. Without a logo, the loader shows your site name instead.

@@ -182,7 +182,7 @@ export const schema: Aglyn.ComponentSchema<InlineTextProps> = {
     FIELD_TEXT_CONTENT,
     {
       name: 'element',
-      label: 'HTML element',
+      label: 'Component',
       description:
         'The DOM element this run renders as. `strong` and `em` carry ' +
         'meaning for screen readers and search engines; `mark` marks a ' +

@@ -213,7 +213,12 @@ export function SiteStatusScreen(props: SiteStatusScreenProps) {
         </Box>
       ) : null}
 
+      {/* The document's `main` landmark (AGL-2486): the content between this
+          screen's own header and footer, which is exactly what the landmark
+          names. It used to come from the tenant root layout, which wrapped
+          the header and the footer in it too. */}
       <Container
+        component="main"
         maxWidth="sm"
         gutterY
         sx={{

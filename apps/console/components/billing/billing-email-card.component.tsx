@@ -19,7 +19,7 @@
 
 import { useLoading } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { Button, Stack, TextField, Typography } from '@mui/material'
+import { Button, Stack, TextField } from '@mui/material'
 import { useEffect, useState } from 'react'
 import BillingProfileGateComponent from './billing-profile-gate.component'
 import type { BillingProfile } from './use-billing-profile'
@@ -88,37 +88,37 @@ export default function BillingEmailCardComponent({
       onRetry={reload}
       subject="billing email"
     >
-      {(loaded) =>
-        !loaded.customer ? (
-          <Typography variant="body2" color="text.secondary">
-            {'Invoices go to the address on your account until you subscribe. ' +
-              'Once you are on a paid plan you can send them somewhere else.'}
-          </Typography>
-        ) : (
-          <Stack spacing={2}>
-            <TextField
-              label="Billing email"
-              type="email"
+      {() => (
+        <Stack spacing={2}>
+          {/*
+            Editable with or without a subscription. Choosing where invoices go
+            is account setup, not a privilege a purchase unlocks — and the
+            person filling it in before they subscribe is the one about to. The
+            Stripe customer these save against is created on demand by the
+            route, on the first save; a page view creates nothing.
+          */}
+          <TextField
+            label="Billing email"
+            type="email"
+            size="small"
+            fullWidth
+            value={email}
+            disabled={!canManage || busy}
+            onChange={(event) => setEmail(event.target.value)}
+            slotProps={{ htmlInput: { 'aria-label': 'Billing email' } }}
+          />
+          <Stack direction="row" spacing={1}>
+            <Button
+              variant="contained"
               size="small"
-              fullWidth
-              value={email}
-              disabled={!canManage || busy}
-              onChange={(event) => setEmail(event.target.value)}
-              slotProps={{ htmlInput: { 'aria-label': 'Billing email' } }}
-            />
-            <Stack direction="row" spacing={1}>
-              <Button
-                variant="contained"
-                size="small"
-                disabled={!canManage || busy || email.trim() === serverEmail}
-                onClick={save}
-              >
-                {'Save'}
-              </Button>
-            </Stack>
+              disabled={!canManage || busy || email.trim() === serverEmail}
+              onClick={save}
+            >
+              {'Save'}
+            </Button>
           </Stack>
-        )
-      }
+        </Stack>
+      )}
     </BillingProfileGateComponent>
   )
 }

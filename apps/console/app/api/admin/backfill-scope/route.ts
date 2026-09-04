@@ -232,7 +232,11 @@ async function handler(request: Request): Promise<Response> {
         body:
           `${said}. They are invisible to every site-scoped read until ` +
           'stamped — this is a report, nothing has been changed.',
-        link: '/admin/overview',
+        // The staff health page, because that is where the Sharing-scope
+        // drift card scans and stamps (AGL-2062). The repair being a human
+        // act is the design; an alert that opens a page with no way to
+        // perform it leaves the human where the alert found them.
+        link: '/admin/health',
       }).catch(() => undefined)
     }
 

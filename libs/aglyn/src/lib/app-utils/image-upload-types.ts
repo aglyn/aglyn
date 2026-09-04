@@ -16,7 +16,7 @@
  */
 
 /**
- * The image content types media ingress accepts (AGL-1476).
+ * The image content types media ingress accepts.
  *
  * Every upload surface used to answer "is this an image?" with
  * `contentType.startsWith('image/')`, against a string the CALLER chooses.

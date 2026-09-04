@@ -44,6 +44,7 @@ import {
 import { usePathname } from 'next/navigation'
 import { useEffect } from 'react'
 import { currentOriginPersistenceClass } from '../../constants/workspace-domain'
+import { OrgPermissionsProvider } from '../../hooks/use-org-permissions'
 import { OrgScopeProvider } from '../../hooks/use-org-scope'
 import { useUrlNamedOrg } from '../../hooks/use-url-names-org'
 import { useOrgPlans } from '../../hooks/use-org-plans'
@@ -633,9 +634,17 @@ function FirebaseAppLayout(props: FirebaseAppLayoutProps) {
             gives no signal for that: the console simply resolved every flag
             against a null subject and silently ignored every override. */}
         <OrgScopeProvider>
-          <ReleaseFlagsProvider>
-            <AnalyticsGlobalEvents>{children}</AnalyticsGlobalEvents>
-          </ReleaseFlagsProvider>
+          {/* Inside the org scope for the same reason the flags provider is:
+              it resolves the reader's membership in `useOrgScope().currentOrg`
+              and would read the context DEFAULT — no org, forever — mounted
+              above it. Above the route groups so the two member reads happen
+              ONCE for a page however many surfaces gate on them; the host
+              dashboard alone has five consumers. */}
+          <OrgPermissionsProvider>
+            <ReleaseFlagsProvider>
+              <AnalyticsGlobalEvents>{children}</AnalyticsGlobalEvents>
+            </ReleaseFlagsProvider>
+          </OrgPermissionsProvider>
         </OrgScopeProvider>
       </FirebaseServicesProvider>
     </NoSsr>

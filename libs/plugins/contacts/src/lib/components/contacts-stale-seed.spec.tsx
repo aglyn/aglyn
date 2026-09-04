@@ -50,12 +50,20 @@ const contactDocs = [
     $id: 'con-1',
     email: 'ada@example.test',
     name: 'Ada Lovelace',
-    sources: ['inbox'],
-    interactions: [{ summary: 'Submitted the contact form', atMs: 1 }],
-    // The tags a stale seed would roll back — and with them, who a saved
-    // segment sends to.
-    tags: ['vip', 'newsletter'],
-    notes: 'Prefers email',
+    // The HOLDER's own records. A contact row is shared by every site that
+    // captured the person; the notes, tags and timeline on it are not, so
+    // they sit under the viewing group's facet.
+    facets: {
+      'host-1': {
+        sources: ['inbox'],
+        interactions: [{ summary: 'Submitted the contact form', atMs: 1 }],
+        // The tags a stale seed would roll back — and with them, who a saved
+        // segment sends to.
+        tags: ['vip', 'newsletter'],
+        notes: 'Prefers email',
+      },
+    },
+    visibleTo: ['host:host-1'],
   },
 ]
 const collections: Record<string, Array<Record<string, unknown>>> = {
@@ -75,6 +83,8 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   ).listFilterConstraints,
   useFirestore: () => ({}),
   useOrgDataScope: () => ({ scope: ['orgs', 'org-1'] }),
+  // The site's campaigns, which fill the picker in the contact profile panel.
+  useHostCampaigns: () => ({ options: [], truncated: false, ready: true }),
   useFirestoreCollection: (build: () => unknown) => ({
     data: collections[build() as string] ?? [],
     status: listener.status,
@@ -169,9 +179,11 @@ describe('ContactsConsolePage (AGL-1358)', () => {
 
     await waitFor(() => expect(updateDoc).toHaveBeenCalledTimes(1))
     const [, payload] = (updateDoc as jest.Mock).mock.calls[0]
-    expect(payload.notes).toBe('Prefers a phone call')
+    // Written into THIS holder's facet by dotted path, so no other holder's
+    // notes are replaced by the save.
+    expect(payload['facets.host-1.notes']).toBe('Prefers a phone call')
     // The tags ride along untouched — which is exactly why the guard is here.
-    expect(payload.tags).toEqual(['vip', 'newsletter'])
+    expect(payload['facets.host-1.tags']).toEqual(['vip', 'newsletter'])
   })
 
   it('REFUSES when the contacts read failed, and says so differently', async () => {

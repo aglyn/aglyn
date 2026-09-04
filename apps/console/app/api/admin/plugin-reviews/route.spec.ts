@@ -641,6 +641,63 @@ describe('a takedown and a restore re-derive the offer (AGL-2368)', () => {
     expect(docs.has(`revocations/${LISTING}`)).toBe(false)
     expect(mirror()).toBe(VERSION)
   })
+
+  /**
+   * An email starter is the one copied artifact that keeps ACTING after a
+   * takedown.
+   *
+   * A component or a template renders on the tenant's own site; hiding the
+   * listing blocks the next install and that is honestly the whole of what a
+   * takedown can promise. An installed email is MAILED — from the sending
+   * domain every other tenant shares — so a takedown that reached only the
+   * storefront would leave the design going out from every workspace that
+   * already had it. The revocation is what `emailStarterSendBlock` reads at
+   * the send, which is the last chokepoint that can still refuse.
+   */
+  const seedEmailStarter = () => {
+    docs.set(`marketplaceListings/${LISTING}`, {
+      artifactType: 'emailStarter',
+      displayName: 'Spring sale',
+      reviewStatus: 'listed',
+      latestVersion: '2',
+    })
+  }
+
+  it('writes the kill switch when an EMAIL STARTER is taken down', async () => {
+    seedEmailStarter()
+    const response = await hide('Hidden tracking image.')
+    expect(response.status).toBe(200)
+    expect(docs.get(`revocations/${LISTING}`)?.['versions']).toBe('all')
+    expect(docs.get(`revocations/${LISTING}`)?.['reason']).toBe(
+      'Hidden tracking image.',
+    )
+  })
+
+  it('reports the kill in the response, so staff are not left guessing', async () => {
+    seedEmailStarter()
+    const response = await hide()
+    expect(await response.json()).toMatchObject({ revoked: true })
+  })
+
+  it('lifts the kill when the listing is restored', async () => {
+    seedEmailStarter()
+    await hide()
+    const response = await POST(post({ listingId: LISTING, action: 'unhide' }))
+    expect(response.status).toBe(200)
+    expect(docs.has(`revocations/${LISTING}`)).toBe(false)
+  })
+
+  it('does not touch the plugin-only approved-version mirror', async () => {
+    // Recomputed from `pluginVersions`, a collection this type has none of, so
+    // running the repair would derive "nothing approved" from an empty read.
+    seedEmailStarter()
+    docs.set(`marketplaceListings/${LISTING}`, {
+      ...(docs.get(`marketplaceListings/${LISTING}`) as object),
+      latestApprovedVersion: '2',
+    })
+    await hide()
+    expect(mirror()).toBe('2')
+  })
 })
 
 /**
@@ -857,5 +914,90 @@ describe('the element-metadata criterion gates the customer-facing verdicts', ()
     expect(approved.status).toBe(200)
     const listed = await POST(post({ listingId: LISTING, action: 'list' }))
     expect(listed.status).toBe(200)
+  })
+})
+
+/**
+ * A KILL IS NOT A REVIEW VERDICT.
+ *
+ * `latestVersionReviewState: 'revoked'` is written to the LISTING's summary
+ * field, and only there. The version keeps the `approved` it earned, and the
+ * staff surface shows "Disabled" beside that verdict rather than instead of
+ * it — collapsing the two would erase what the publisher earned and would make
+ * a deliberate kill indistinguishable from a rejection.
+ *
+ * The consequence worth guarding is in the QUEUE. It keys on the VERSION's
+ * `reviewState`, so a revoked version stays out of it. Were it ever switched
+ * to the listing's summary field, every revoked version would reappear looking
+ * exactly like one awaiting its first review, and a reviewer trusting the queue
+ * could approve something somebody had deliberately killed.
+ *
+ * Asserted on the RECORDED STATE of both documents, and on the queue's own
+ * filter expression, which is the thing that would have to change for the
+ * failure above to become possible.
+ */
+describe('revoking a version does not un-review it', () => {
+  it('flips the listing summary while the version keeps its verdict', async () => {
+    seedListing({ latestApprovedVersion: VERSION, reviewStatus: 'listed' })
+    seedVersion()
+    const path = `marketplaceListings/${LISTING}/pluginVersions/${VERSION}`
+    docs.set(path, {
+      ...(docs.get(path) as Record<string, unknown>),
+      reviewState: 'approved',
+    })
+
+    const response = await POST(
+      post({ listingId: LISTING, action: 'revoke-version', version: VERSION }),
+    )
+    expect(response.status).toBe(200)
+
+    // The listing's cached summary is the ONLY thing that flips.
+    expect(
+      (docs.get(`marketplaceListings/${LISTING}`) as Record<string, unknown>)[
+        'latestVersionReviewState'
+      ],
+    ).toBe('revoked')
+    // The verdict the publisher earned survives, which is what keeps a kill
+    // and a rejection distinguishable in the audit trail.
+    expect(
+      (docs.get(path) as Record<string, unknown>)['reviewState'],
+    ).toBe('approved')
+  })
+
+  it('CONTROL: revoking an OLDER version leaves the summary alone', async () => {
+    // The summary describes the version on offer, so revoking something else
+    // must not touch it — and without this control the assertion above would
+    // pass against a handler that flipped the summary unconditionally.
+    seedListing({ latestVersion: '2.0.0', latestApprovedVersion: '2.0.0' })
+    seedVersion('1.2.0')
+
+    const response = await POST(
+      post({ listingId: LISTING, action: 'revoke-version', version: '1.2.0' }),
+    )
+    expect(response.status).toBe(200)
+
+    expect(
+      (docs.get(`marketplaceListings/${LISTING}`) as Record<string, unknown>)[
+        'latestVersionReviewState'
+      ],
+    ).toBe(undefined)
+  })
+
+  it('SOURCE PIN: the queue keys on the version state, never the summary', () => {
+    // The one-line change that would resurrect every killed version into the
+    // review queue as though it had never been read.
+    const source = require('node:fs').readFileSync(
+      require('node:path').join(__dirname, 'route.ts'),
+      'utf8',
+    ) as string
+    expect(source).toContain(
+      "rows.filter((row) => row.latestReviewState !== 'approved')",
+    )
+    expect(source).toContain(
+      "latestReviewState: String(latest?.get('reviewState') ?? 'pending')",
+    )
+    expect(source).not.toContain(
+      "row.latestVersionReviewState !== 'approved'",
+    )
   })
 })

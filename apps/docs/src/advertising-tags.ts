@@ -109,6 +109,15 @@ interface DocsAdVendor {
   readonly accountIdPattern: RegExp
   /** ⚠️ VERBATIM COPY of the vendor's `scriptSrc`. */
   readonly scriptSrc: string
+  /**
+   * ⚠️ VERBATIM COPY of the vendor's `scriptSrcFor`, where it has one.
+   *
+   * The loader URL for a vendor that carries its account id in the query
+   * rather than in the boot snippet. `gtag.js` resolves which container to
+   * configure from `?id=`, so a copy without it registers nothing and every
+   * `config` queues against a runtime that never serves the account.
+   */
+  readonly scriptSrcFor?: (accountId: string) => string
   /** ⚠️ VERBATIM COPY of the vendor's `scriptMatch`. */
   readonly scriptMatch: string
   /** ⚠️ VERBATIM COPY of the vendor's `sharesLibrary`, where it has one. */
@@ -155,6 +164,8 @@ const VENDORS: readonly DocsAdVendor[] = [
     id: 'google-ads',
     accountIdPattern: /^AW-[0-9]{6,16}$/,
     scriptSrc: 'https://www.googletagmanager.com/gtag/js',
+    scriptSrcFor: (accountId: string) =>
+      `https://www.googletagmanager.com/gtag/js?id=${accountId}`,
     sharesLibrary: 'googletagmanager.com/gtag/js',
     scriptMatch: 'googletagmanager.com/gtag/js',
     cookiePrefixes: ['_gcl'],
@@ -370,7 +381,11 @@ function mountVendor(vendor: DocsAdVendor, accountId: string): void {
   if (vendor.sharesLibrary && sharedLibraryPresent(vendor.sharesLibrary)) return
   appendScript(vendor.id, (element) => {
     element.async = true
-    element.src = vendor.scriptSrc
+    // The account rides the loader where the vendor says so: gtag resolves
+    // its container from the query, not from the `config` that follows.
+    element.src = vendor.scriptSrcFor
+      ? vendor.scriptSrcFor(accountId)
+      : vendor.scriptSrc
   })
 }
 

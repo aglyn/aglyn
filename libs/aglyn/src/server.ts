@@ -33,6 +33,12 @@ export * from './lib/app-utils/api-adapter'
 // same rule: exposed ONLY through this `/server` entry, never the full
 // `@aglyn/aglyn` barrel that client code bundles.
 export * from './lib/app-utils/api-idempotency'
+// The address-derived document id (`docs/specs/email-overhaul.md` §3d,
+// `docs/specs/reusable-forms.md` §4) imports `node:crypto`, so it rides the
+// same rule as the two above: exposed ONLY through this `/server` entry, never
+// the full `@aglyn/aglyn` barrel that client code bundles. Its normalizer
+// stays in `app-utils/contacts`, which has no Node builtin and may stay there.
+export * from './lib/app-utils/person-key'
 // The marketplace bundle verifier (AGL-2486) imports `acorn` to parse an
 // untrusted plugin bundle, so it rides the same rule as the two above:
 // exposed ONLY through this `/server` entry, never re-exported by the full

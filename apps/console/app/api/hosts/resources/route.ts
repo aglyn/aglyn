@@ -23,6 +23,7 @@ import {
   checkHostRegisterQuota,
   checkQuota,
   createResourceUid,
+  encodeStoredNodes,
   ENTRIES_MAX_PER_COLLECTION,
   nameSearchKey,
   NON_PAGE_SCREEN_MAX_PER_HOST,
@@ -37,8 +38,10 @@ import {
   firebaseAdmin,
   getLockdownVerdict,
   getOrgForHost,
+  type HostActivityTarget,
   isImpersonationSession,
   lockdownJsonResponse,
+  logHostActivity,
 } from '@aglyn/tenant-data-admin'
 import { Timestamp } from 'firebase-admin/firestore'
 import {
@@ -133,6 +136,17 @@ const RESOURCES: Record<string, {
   /** Human label for quota error messages. */
   label: string
   /**
+   * How a create of this resource appears in the site activity log.
+   *
+   * Declared per resource rather than derived from `label`, which is
+   * PLURAL for quota copy ("this site can run 5 screens") and reads wrong
+   * as an audit line. `type` is the `HostActivityTarget` union, so a row
+   * filters and deep-links exactly like one the console used to write;
+   * `content` is the honest fallback for the resources that union has no
+   * member for, rather than inventing one per collection.
+   */
+  activity: { type: HostActivityTarget['type']; noun: string }
+  /**
    * Keys the client may set. Anything else in `data` is dropped rather
    * than stored — including the fields the UI later presents as
    * trustworthy (provenance, counts, review verdicts), which the client
@@ -149,6 +163,7 @@ const RESOURCES: Record<string, {
     collection: 'screens',
     quotaKey: 'screensPerHost',
     label: 'screens',
+    activity: { type: 'screen', noun: 'screen' },
     fields: ['displayName', 'description', 'slug', 'seo', 'kind', 'versionId'],
   },
   // Templates (AGL-666) are inert until instantiated, so they carry no
@@ -160,6 +175,7 @@ const RESOURCES: Record<string, {
     collection: 'templates',
     quotaKey: 'templatesPerHost',
     label: 'templates',
+    activity: { type: 'template', noun: 'template' },
     fields: [
       'kind',
       'displayName',
@@ -182,18 +198,21 @@ const RESOURCES: Record<string, {
     collection: 'layouts',
     quotaKey: 'sharedLayoutsPerHost',
     label: 'shared layouts',
+    activity: { type: 'layout', noun: 'shared layout' },
     fields: ['displayName', 'description', 'versionId'],
   },
   variable: {
     collection: 'variables',
     quotaKey: 'variablesPerHost',
     label: 'variables',
+    activity: { type: 'variable', noun: 'variable' },
     fields: ['name', 'type', 'value', 'workflowId', 'workflowName'],
   },
   function: {
     collection: 'functions',
     quotaKey: 'functionsPerHost',
     label: 'functions',
+    activity: { type: 'function', noun: 'function' },
     fields: ['name', 'parameters', 'variables', 'operations', 'returnValue'],
   },
   workflow: {
@@ -201,6 +220,7 @@ const RESOURCES: Record<string, {
     quotaKey: 'workflowsPerHost',
     entitlement: 'workflows',
     label: 'workflows',
+    activity: { type: 'workflow', noun: 'workflow' },
     fields: ['name', 'steps', 'returnValue', 'trigger'],
   },
   service: {
@@ -208,6 +228,7 @@ const RESOURCES: Record<string, {
     quotaKey: 'servicesPerHost',
     entitlement: 'bookings',
     label: 'services',
+    activity: { type: 'content', noun: 'service' },
     fields: [
       'name',
       'description',
@@ -232,6 +253,7 @@ const RESOURCES: Record<string, {
     entitlement: 'redirects',
     requiresPublishRole: true,
     label: 'redirects',
+    activity: { type: 'content', noun: 'redirect' },
     fields: [
       'source',
       'destination',
@@ -246,6 +268,7 @@ const RESOURCES: Record<string, {
     quotaKey: 'inventoryLocations',
     entitlement: 'commerce',
     label: 'inventory locations',
+    activity: { type: 'content', noun: 'inventory location' },
     fields: ['name', 'isDefault', 'address'],
   },
   // The whole `HostProduct` model: the editor, the duplicate action and
@@ -257,6 +280,7 @@ const RESOURCES: Record<string, {
     quotaKey: 'productsPerHost',
     entitlement: 'commerce',
     label: 'products',
+    activity: { type: 'content', noun: 'product' },
     fields: [
       'name',
       'slug',
@@ -283,7 +307,7 @@ const RESOURCES: Record<string, {
       'createdAtMs',
       'updatedAtMs',
       /*
-       * Search keys, derived by the plugin that owns the catalog (AGL-693).
+       * Search keys, derived by the plugin that owns the catalog (AGL-2501).
        *
        * The console shell does not import the commerce plugin, so it cannot
        * flatten `variants[].sku` or normalize a name the way the products hub
@@ -321,7 +345,57 @@ const RESOURCES: Record<string, {
     collection: 'components',
     entitlement: 'reusableComponents',
     label: 'reusable components',
+    activity: { type: 'component', noun: 'reusable component' },
     fields: ['displayName', 'description', 'rootId', 'nodes'],
+  },
+  /*
+   * The form entity (`docs/specs/reusable-forms.md` §2b):
+   * `hosts/{hostId}/forms/{formId}`, the thing a submission's `formId` points
+   * at. Before it, a form's whole identity was the caption an author typed —
+   * so renaming one split its submission history, and two pages sharing a
+   * label had always been one list.
+   *
+   * TWO gates, asking different questions. `reusableComponents` asks whether
+   * the plan has the reuse engine a bound form rides at all — a promoted
+   * `Form` subtree is placed like any other definition and the `formId`
+   * travels inside it. `formsPerHost` asks how many distinct intake forms one
+   * site may hold, and answers `FORMS_PER_HOST_CEILING` on every plan that
+   * passes the first gate: it is an abuse ceiling, not a tier. It rides an
+   * entitlement key so the refusal happens inside the counting transaction,
+   * and so one org's number can be overridden by contract.
+   *
+   * The catalog is the only thing this counts. A `Form` node drawn on a page
+   * and left unbound has no document here, so a site whose allowance is spent
+   * — or zero — still collects submissions; those are rationed by
+   * `formSubmissionsPerMonth`, on their own axis, at their own numbers.
+   *
+   * ⚠️ No `softDeletes`. That branch reads EVERY document to count live ones,
+   * and a form is deleted outright — its submissions are not, and they keep
+   * their `formId`, so the per-form list of a deleted form is still readable
+   * and nothing a visitor sent is lost with the definition.
+   */
+  form: {
+    collection: 'forms',
+    entitlement: 'reusableComponents',
+    quotaKey: 'formsPerHost',
+    label: 'forms',
+    activity: { type: 'content', noun: 'form' },
+    // `rootId` and `nodes` are the DESIGN, seeded at create the way a
+    // reusable component's are, so a form opens in the besigner with a canvas
+    // instead of needing one grafted on later. `fields` is what the form
+    // DECLARES and stays separate: the design is what an author draws, the
+    // declaration is what the submission path reads, and publishing is the
+    // moment `checkFormContract` requires the two to agree.
+    fields: [
+      'displayName',
+      'slug',
+      'fields',
+      'consentFieldName',
+      'routing',
+      'legacyMatch',
+      'rootId',
+      'nodes',
+    ],
   },
   // POS registers (AGL-472): the `posRegisters` cap becomes enforceable
   // by routing register creation here. `pos` gates access to POS at all
@@ -336,6 +410,7 @@ const RESOURCES: Record<string, {
     quotaKey: 'posRegisters',
     entitlement: 'pos',
     label: 'POS registers',
+    activity: { type: 'content', noun: 'POS register' },
     fields: ['name', 'locationId'],
   },
   // Webhooks (AGL-1360): the cap used to be checked in the console by
@@ -362,6 +437,7 @@ const RESOURCES: Record<string, {
     maxPerHost: WEBHOOK_MAX_PER_HOST,
     softDeletes: true,
     label: 'webhooks',
+    activity: { type: 'content', noun: 'webhook' },
     fields: ['name', 'direction', 'url', 'workflowName', 'secret', 'enabled'],
   },
   /**
@@ -392,6 +468,7 @@ const RESOURCES: Record<string, {
     maxPerHost: ACTIONS_MAX_PER_HOST,
     softDeletes: true,
     label: 'interactions and actions',
+    activity: { type: 'content', noun: 'action' },
     fields: [
       'name',
       'description',
@@ -428,6 +505,7 @@ const RESOURCES: Record<string, {
     parentCollection: 'collections',
     maxPerHost: ENTRIES_MAX_PER_COLLECTION,
     label: 'entries',
+    activity: { type: 'content', noun: 'entry' },
     fields: [
       'title',
       'slug',
@@ -465,14 +543,24 @@ const RESOURCES: Record<string, {
     collection: 'authors',
     maxPerHost: AUTHORS_MAX_PER_HOST,
     label: 'authors',
+    activity: { type: 'content', noun: 'author' },
     fields: [
       'type',
       'name',
+      // The author's page address (AGL-2518). Same reasoning as `links`
+      // below: dropped on creation and kept on every edit after is the kind
+      // of half-working that reads as a flaky save.
+      'slug',
       'url',
       'image',
       'jobTitle',
       'worksFor',
       'sameAs',
+      // The rendered profile rows (AGL-2516). Creation goes through this
+      // allowlist while updates are client-direct, so omitting it here would
+      // drop the links off a NEW author and keep them on every edit after —
+      // the kind of half-working that reads as a flaky save.
+      'links',
       'bio',
     ],
   },
@@ -655,6 +743,24 @@ async function handler(request: Request): Promise<Response> {
     for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
       if (allowed.has(key) && value !== undefined) doc[key] = value
     }
+    /*
+     * COMPRESSED AT REST (AGL-1151).
+     *
+     * Three of the resource kinds above seed a besigner tree at create —
+     * `template`, `reusableComponent` and `form` all carry `nodes` on their
+     * allow-list — and all three wrote it as a plain Firestore map. That
+     * costs roughly 1.4x the bytes of the msgpack form against a hard 1 MiB
+     * per-document ceiling, and "save as template" seeds this route with a
+     * whole page's tree.
+     *
+     * One line here rather than three at the kinds, because the hazard is a
+     * FOURTH kind gaining `nodes` and nobody remembering: this runs on
+     * whatever the allow-list let through, so a new kind is compressed the
+     * day it is added. `encodeStoredNodes` returns null for an absent field,
+     * which leaves a create that carries no design untouched.
+     */
+    const packedNodes = encodeStoredNodes(doc['nodes'])
+    if (packedNodes) doc['nodes'] = Buffer.from(packedNodes)
     // Normalized search key for the name-prefix query (AGL-835). Only screens
     // are queried by name (the switcher loads the rest client-side), so only
     // screens carry the field — stamping it on every resource kind would be an
@@ -824,10 +930,44 @@ async function handler(request: Request): Promise<Response> {
         // JSON hop, so what they used to be able to send was junk anyway.
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
+        // WHO MADE THIS (AGL-118). Every artifact under a host — screens,
+        // layouts, components, templates — carried no author field of any
+        // kind, so nothing in the stored data could say who built a site.
+        // That is not a gap a later script can close: an artifact that never
+        // recorded its creator cannot be attributed afterwards without
+        // inferring a name from org ownership, which is a guess about a
+        // person written into what is read as an audit record.
+        //
+        // Stamped from `decoded.uid` and absent from every allow-list above,
+        // the `externalDestinationApprovedBy` discipline exactly: provenance
+        // the caller supplies is provenance the caller chose.
+        createdBy: decoded.uid,
       })
       return null
     })
     if (refusal) return Response.json(refusal, { status: 403 })
+    // The audit entry, written HERE rather than by whoever called this route
+    // (AGL-118). Three template surfaces created resources through this
+    // endpoint and appended nothing, so the log reported sites nobody had
+    // touched — a client-written audit trail is one the client can decline to
+    // write, and declining is silent. A create that reaches this line has
+    // committed, so the entry records something that demonstrably happened,
+    // attributed to a uid this route verified rather than one it was handed.
+    //
+    // After the transaction on purpose: a refused or rolled-back create must
+    // not leave a row claiming it succeeded.
+    await logHostActivity(
+      hostId,
+      { uid: decoded.uid, email: decoded.email ? String(decoded.email) : null },
+      `Created ${resource.activity.noun}`,
+      {
+        type: resource.activity.type,
+        id,
+        ...(typeof doc['displayName'] === 'string' && doc['displayName']
+          ? { name: doc['displayName'] as string }
+          : {}),
+      } satisfies HostActivityTarget,
+    )
     return Response.json({ ok: true, id }, { status: 200 })
   } catch (error: any) {
     if (error?.code === 6 /* ALREADY_EXISTS */) {

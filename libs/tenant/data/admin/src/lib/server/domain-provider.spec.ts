@@ -25,6 +25,11 @@
  * accepting an operator endpoint's answer without checking it is one of ours.
  */
 
+// A module, not a script — without this the `load` helper below collides with
+// the identically named global in `workspace-domains.spec.ts` under `tsc`, and
+// the merged symbol resolves every `load()` here to the wrong module's exports.
+export {}
+
 const BASE: Record<string, string | undefined> = {
   VERCEL_TOKEN: undefined,
   VERCEL_CONSOLE_PROJECT_ID: undefined,

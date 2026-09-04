@@ -57,8 +57,10 @@ const PAGE = join(
   '[orgSlug]',
   'hosts',
   '[host]',
-  'setup',
-  'page.tsx',
+  // The scope both settings hubs mount, which is where the form schemas and
+  // the save handler that reads `CLEARABLE_TRACKING_PATHS` live. The Setup and
+  // Admin sections layouts each provide it; neither declares a schema.
+  'host-settings-scope.tsx',
 )
 
 const source = () => readFileSync(PAGE, 'utf8')

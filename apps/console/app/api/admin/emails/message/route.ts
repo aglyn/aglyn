@@ -22,6 +22,12 @@ import {
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
+import {
+  maskEmailAddresses,
+  recordAdminAudit,
+  resolveSubjectUidForRecipients,
+  subjectAddressKeyForRecipients,
+} from '../../../_lib/admin-audit'
 import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
 
 /**
@@ -44,6 +50,12 @@ import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
  * the message id, the same as impersonation and the erase path. The record is
  * what makes the access reviewable; nothing here is hidden from the person
  * whose mail it is.
+ *
+ * The row carries the SUBJECT as well as the target, so the access shows up
+ * on the recipient's own staff page and not only in the actor's history —
+ * "who read my email" is the question this record exists to answer, and a
+ * message id alone cannot answer it. Repeats of one click collapse onto a
+ * single row carrying a count; two separate openings stay two rows.
  *
  * A 404 from the provider is an ANSWER, not a failure: the message aged out
  * of their retention and we can say so exactly, rather than presenting an
@@ -96,18 +108,39 @@ async function handler(request: Request): Promise<Response> {
       )
     }
 
-    await firebaseAdmin
-      .app()
-      .firestore()
-      .collection('adminAudit')
-      .add({
-        actorUid: decoded.uid,
-        action: 'email.message-viewed',
-        target: `emailDeliveries/${messageId}`,
-        note: message.to.join(', '),
-        at: new Date(),
-      })
-      .catch(() => undefined)
+    /*
+     * WHO the access was about, resolved from the recipient — not from the
+     * target. `target` names the message; `subjectUid` names the person, and
+     * without it a staffer reading somebody's mail appears nowhere on that
+     * person's page, because `emailDeliveries/{messageId}` can never match a
+     * `users/{uid}` lookup.
+     *
+     * A null subject is the ordinary case for most of our outbound mail —
+     * site members, prospects, plain contacts — and stays null. Those reads
+     * are still answerable through the delivery log, which is keyed by
+     * `sha256(address)`: hash the address, take the message ids, and the
+     * `target` half of the audit query finds them.
+     */
+    const subjectUid = await resolveSubjectUidForRecipients(message.to)
+    await recordAdminAudit({
+      actorUid: decoded.uid,
+      action: 'email.message-viewed',
+      target: `emailDeliveries/${messageId}`,
+      subjectUid,
+      /*
+       * The hashed recipient, ALWAYS — including when `subjectUid` came back
+       * null. Null now covers "more than one account holds this address" as
+       * well as "no account", because naming one of two accounts would put
+       * one customer's name on another's data access. This key is what keeps
+       * the access findable without that guess: each holder's page queries it
+       * from the addresses that account holds.
+       */
+      subjectAddressKey: subjectAddressKeyForRecipients(message.to),
+      // MASKED. The delivery log hashes addresses so we do not hold a
+      // readable list of who we mail; a row echoing the address in full made
+      // this collection — readable by any staff role — the leakier of the two.
+      note: maskEmailAddresses(message.to),
+    }).catch(() => undefined)
 
     return Response.json(message, { status: 200 })
   } catch (error) {

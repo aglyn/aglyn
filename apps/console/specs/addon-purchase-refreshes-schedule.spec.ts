@@ -92,6 +92,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
+  // The REAL entitlement resolver and its constants. `buildTargetItems` now
+  // clamps add-on quantities to what the TARGET plan can deliver, and the
+  // ceiling comes from here — a stubbed resolver answers zero for every kind,
+  // which reads as "the target plan sells none of this" and drops add-ons the
+  // plan really does sell. A hand-written entitlement table in a spec is the
+  // drift these fixtures exist to catch, not to create.
+  ...jest.requireActual('@aglyn/aglyn/app-utils/plan-entitlements'),
   isLiveSubscriptionStatus: jest.requireActual('@aglyn/aglyn/app-utils/org-billing-doc')
     .isLiveSubscriptionStatus,
   // The REAL plan model — the ceilings that decide whether a 5-seat purchase
@@ -304,15 +311,48 @@ function buySeats(post: (request: Request) => Promise<Response>) {
 }
 
 describe('buying an add-on refreshes a pending downgrade (AGL-2150)', () => {
-  it('rewrites the TARGET phase with the quantity that was just paid for', async () => {
+  it('rewrites the TARGET phase with what that plan can DELIVER', async () => {
     const post = loadAddons()
     const response = await buySeats(post)
     expect(response.status).toBe(200)
-    // The subscription really was updated — the seats are charged.
+    // The subscription really was updated — five seats are charged NOW, on
+    // the plan the org is still on, which can deliver five.
     expect(capturedSubUpdateBody?.get('items[0][quantity]')).toBe('5')
-    // ...and the phase that would otherwise have deleted four of them at the
-    // period end now carries all five, at the TARGET plan's seat price.
-    expect(quantityOf(1, 'price_starter_seat')).toBe('5')
+
+    // The TARGET phase carries THREE, not five.
+    //
+    // AGL-2150's repair was that the phase must not delete seats the customer
+    // just paid for. It still does not: what it carries now is everything
+    // Starter can actually deliver. Starter includes two manager seats and
+    // caps at five, so three is its purchasable ceiling — and `checkSeatQuota`
+    // would have applied `Math.min` to anything above it at the point of use.
+    //
+    // Carrying five would have meant billing five and delivering three from
+    // the moment the phase flipped, which is the defect this clamp exists to
+    // remove. The charge drops with the delivery, in the same phase.
+    const ceiling = String(
+      // From the resolver rather than a literal: a plan table edit that
+      // changes Starter's cap must move this expectation with it, not leave a
+      // number here quietly asserting the old shape.
+      require('../utils/server/billing-addons').addonMaxForPlan(
+        'managers',
+        'starter',
+      ),
+    )
+    expect(ceiling).toBe('3')
+    expect(quantityOf(1, 'price_starter_seat')).toBe(ceiling)
+  })
+
+  it('CONTROL — the seats are not DELETED, which is AGL-2150’s invariant', async () => {
+    // The clamp must not become the deletion AGL-2150 fixed. A phase that
+    // dropped the seat line entirely — or wrote it at zero — would satisfy
+    // "carries the ceiling" trivially if the ceiling were ever zero, so the
+    // presence of a positive line is asserted separately from its size.
+    const post = loadAddons()
+    await buySeats(post)
+    const carried = quantityOf(1, 'price_starter_seat')
+    expect(carried).toBeDefined()
+    expect(Number(carried)).toBeGreaterThan(0)
   })
 
   it('keeps the phase metadata the webhook mirror reads at the flip', async () => {

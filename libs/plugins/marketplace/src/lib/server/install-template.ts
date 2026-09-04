@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { checkQuota, createResourceUid } from '@aglyn/aglyn/server'
+import {
+  checkQuota,
+  createResourceUid,
+  encodeStoredNodes,
+} from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
@@ -82,7 +86,7 @@ export const installTemplateHandler: PluginApiHandler = async (req, res) => {
     }
     const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
     if (memberRole !== 'admin' && memberRole !== 'editor') {
-      return res.status(403).json({ error: 'Not a site admin' })
+      return res.status(403).json({ error: 'Not a site admin or editor' })
     }
 
     const listingRef = firestore
@@ -310,7 +314,12 @@ export const installTemplateHandler: PluginApiHandler = async (req, res) => {
           // A suggestion only — de-conflicted against the routing map when a
           // page is actually created from this.
           ...(screen.slug && { slug: String(screen.slug) }),
-          nodes: screen.nodes,
+          // Compressed at rest, matching what the template converter writes
+          // on every save after this install (AGL-1151). A listing version
+          // holds the tree as a plain map; `encodeStoredNodes` passes an
+          // already-encoded one through, so this cannot double-encode if the
+          // listing form ever changes.
+          nodes: Buffer.from(encodeStoredNodes(screen.nodes ?? {})!),
           // Carried, not applied: see the note on AglynTemplate.theme. The
           // `applyTheme` request flag is now meaningless here — nothing is
           // applied at install — so the theme always travels with the
