@@ -326,8 +326,10 @@ function Screens(props) {
       // reaches one segment by DELETING the separator, so a screen created
       // with `alternatives/webflow` was stored and routed as the glued
       // `alternativeswebflow` — an address nobody typed, with nothing said.
-      // Refused rather than repaired: what this form does with a path is an
-      // open question, and no reading of the value is safe to guess at.
+      // Refused rather than read as a hierarchy. This form uses the value as
+      // both the stored slug and the whole routing-map path, so a `/` could
+      // mean a nested address here; a slug is ONE segment on every surface
+      // instead, and nesting is expressed by choosing a parent.
       if (screenSlugHasPathSeparator(slugInput)) {
         dequeueLoading()
         return enqueueSnackbar(SCREEN_SLUG_PATH_SEPARATOR_MESSAGE, {

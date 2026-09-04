@@ -22,6 +22,8 @@ import {
   normalizeScreenSlug,
   resolveNamedTokens,
   screenRoutePathToUrl,
+  SCREEN_SLUG_PATH_SEPARATOR_MESSAGE,
+  screenSlugHasPathSeparator,
 } from '@aglyn/aglyn'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -172,6 +174,21 @@ export function UseTemplateDialog({
         return void onClose()
       }
 
+      // A slug is ONE path segment. `normalizeScreenSlug` deletes an interior
+      // `/` rather than separating on it, so `alternatives/webflow` would be
+      // stored and routed as the glued `alternativeswebflow` — an address
+      // nobody typed, with nothing said (AGL-2572). This value is both the
+      // stored slug and the whole routing path, so a `/` could be read as a
+      // deliberate nested address; the decision is that it is not. Every slug
+      // field in the console refuses a separator and nesting is expressed by
+      // choosing a parent, so one meaning holds everywhere.
+      if (screenSlugHasPathSeparator(slug)) {
+        return enqueueSnackbar(SCREEN_SLUG_PATH_SEPARATOR_MESSAGE, {
+          variant: 'warning',
+          persist: false,
+        })
+      }
+
       // page — read the routing map fresh so the slug check reflects
       // anything published since this dialog opened.
       const hostSnapshot = await getDoc(doc(firestore, 'hosts', hostId))
@@ -266,14 +283,21 @@ export function UseTemplateDialog({
               value={slug}
               onChange={(event) => setSlug(event.target.value)}
               disabled={busy}
+              error={screenSlugHasPathSeparator(slug)}
               // Mirrors `resolveTemplateSlug`: an address that sanitizes away
               // falls back to the page name, and `/` IS an address — the site
-              // root — rather than punctuation to be stripped (AGL-1575).
-              helperText={screenRoutePathToUrl(
-                normalizeScreenSlug(slug) ??
-                  normalizeScreenSlug(name) ??
-                  'page',
-              )}
+              // root — rather than punctuation to be stripped (AGL-1575). A
+              // separator inside the value is refused instead, so the reason
+              // is on the field rather than in a snackbar after the click.
+              helperText={
+                screenSlugHasPathSeparator(slug)
+                  ? SCREEN_SLUG_PATH_SEPARATOR_MESSAGE
+                  : screenRoutePathToUrl(
+                      normalizeScreenSlug(slug) ??
+                        normalizeScreenSlug(name) ??
+                        'page',
+                    )
+              }
               fullWidth
             />
           ) : null}

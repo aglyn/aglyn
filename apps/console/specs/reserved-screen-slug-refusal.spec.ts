@@ -102,21 +102,32 @@ describe('a reserved slug is refused everywhere a slug can be set', () => {
  * shape. A field that enforces this while another still glues would leave the
  * author publishing from whichever surface stays quiet.
  *
- * The Screens page create form is here for the refusal only. What a `/` should
- * MEAN there is still open: that form uses the normalized value as both the
- * stored slug and the whole routing-map path, so reading it as a hierarchy
- * would create the screen at a different address than the besigner would.
- * Refusing decides nothing and destroys nothing.
+ * A slug is ONE path segment, on every surface. The Screens page create form
+ * and the Use template dialog both use the value as the stored slug AND the
+ * whole routing-map path, so a `/` there could have been read as a deliberate
+ * nested address; the decision is that it is not, because two fields where a
+ * separator nests and two where it is refused is worse than one rule. Nesting
+ * is expressed by choosing a parent.
+ *
+ * This list is WIDER than the reserved-slug list above, and deliberately: the
+ * Use template dialog reaches `createPageFromTemplate`, so it can put a screen
+ * at an address without going through any of the three publish surfaces.
  */
+const SLUG_ENTRY_SURFACES: Record<string, string> = {
+  ...PUBLISH_SURFACES,
+  'the Use template dialog':
+    'components/templates/use-template-dialog.component.tsx',
+}
+
 describe('a path-shaped slug is refused everywhere a slug can be set', () => {
-  it.each(Object.entries(PUBLISH_SURFACES))(
+  it.each(Object.entries(SLUG_ENTRY_SURFACES))(
     '%s consults screenSlugHasPathSeparator',
     (_label, relative) => {
       expect(read(relative)).toContain('screenSlugHasPathSeparator')
     },
   )
 
-  it.each(Object.entries(PUBLISH_SURFACES))(
+  it.each(Object.entries(SLUG_ENTRY_SURFACES))(
     '%s tells the author WHY, in the shared wording',
     (_label, relative) => {
       expect(read(relative)).toContain('SCREEN_SLUG_PATH_SEPARATOR_MESSAGE')
