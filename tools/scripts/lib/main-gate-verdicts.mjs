@@ -51,10 +51,37 @@
 // hourly cron, which GitHub delivers at roughly 11%. So most shas legitimately
 // carry `fast` and no `full`. Demanding both would make this check refuse
 // almost every promotion, for a reason that says nothing about the code.
-// A sha with SOME green gate context and no red one is `ok`.
+// An absent `full` is therefore never a refusal.
+//
+// ── WHY AN ABSENT `main-gate/full` IS NOT GREEN EITHER (AGL-2564) ──────────
+//
+// The paragraph above is still right, and on its own it left a hole. Refusing
+// a KNOWN red is correct; tolerating an ABSENT full is correct; together they
+// mean nothing guarantees a full sweep ever ran on the code being promoted,
+// and a commit nobody examined graded identically to one that passed
+// everything. `d1cbc338f` broke three console specs, carried `fast=success`
+// with no `full` at all, and would have promoted clean — a peer session
+// bisecting by hand is what caught it.
+//
+// So the shape is a THIRD state rather than a stricter second one. `fast`
+// covers typecheck and the guards; `full` adds the test sweep and the three
+// production builds. A tip green on `fast` alone has had its tests looked at
+// by nobody, which is a different claim from "the tests passed" and now prints
+// as a different claim. The human still promotes — the grader reports, it does
+// not refuse.
+//
+// The sweep must be on THE TIP. An ancestor's `full` graded different code, so
+// it cannot vouch for what is being shipped; it is reported as context for the
+// person deciding (how far back the last swept commit is) and never as a pass.
 
 /** The prefix every Main Gate commit status shares. */
 export const MAIN_GATE_CONTEXT_PREFIX = 'main-gate/'
+
+/**
+ * The context carrying the test sweep and the production builds. `fast` makes
+ * a weaker claim, so its green alone leaves a tip unexamined.
+ */
+export const FULL_SWEEP_CONTEXT = 'main-gate/full'
 
 /** GitHub commit-status states that mean the gate said no. */
 const RED_STATES = new Set(['failure', 'error'])
@@ -65,13 +92,18 @@ const PENDING_STATES = new Set(['pending'])
  * EXIT CODES — "cannot check" must never masquerade as "clean", which is the
  * same rule `external-facts.mjs` and `check-shipped-not-closed.mjs` apply.
  *
- *   0  the tip carries a gate verdict and none of it is red
+ *   0  the tip passed a FULL sweep — tests and production builds included
  *   1  the tip is RED — refuse the promotion
  *   2  the tip carries no verdict at all, or only a pending one
+ *   3  the tip is green on `fast`, and no full sweep ever ran on it
+ *
+ * 3 is not a refusal and must never become one; see the header. It exists so
+ * that "nobody ran the tests on this" stops printing as "the tests passed".
  */
 export const OK = 0
 export const REFUSE = 1
 export const UNVERIFIED = 2
+export const UNEXAMINED = 3
 
 /** Only the Main Gate contexts, ignoring every other status on the sha. */
 export function gateContexts(commit) {
@@ -84,12 +116,63 @@ function redContexts(commit) {
   return gateContexts(commit).filter((c) => RED_STATES.has(c.state))
 }
 
+/** The full sweep's own context on a sha, whatever state it is in. */
+function fullSweepContext(commit) {
+  return (
+    gateContexts(commit).find((c) => c.context === FULL_SWEEP_CONTEXT) ?? null
+  )
+}
+
+/** Whether a full sweep ran on this sha and passed. */
+function sweptFull(commit) {
+  const full = fullSweepContext(commit)
+  return (
+    Boolean(full) &&
+    !RED_STATES.has(full.state) &&
+    !PENDING_STATES.has(full.state)
+  )
+}
+
+/**
+ * How the tip stands with respect to the full sweep, for the report.
+ *
+ *   `passed`   a full sweep ran on this sha and came back green
+ *   `pending`  one is running now — the answer exists shortly, it is not here
+ *   `absent`   no full sweep has ever run on this sha
+ */
+function sweepStanding(commit) {
+  const full = fullSweepContext(commit)
+  if (!full) return 'absent'
+  if (PENDING_STATES.has(full.state)) return 'pending'
+  return RED_STATES.has(full.state) ? 'red' : 'passed'
+}
+
+/**
+ * The newest commit in the range a full sweep passed on, or `null`.
+ *
+ * It never makes a promotion green — it graded different code. It answers the
+ * question the person deciding actually has: how much of what I am shipping
+ * has had its tests run at all.
+ */
+function lastSweptCommit(list) {
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    if (sweptFull(list[i])) {
+      return { commit: list[i], behind: list.length - 1 - i }
+    }
+  }
+  return null
+}
+
 /**
  * Grade a promotion range.
  *
  * `commits` is oldest-first, exactly as `git log --reverse base..head` gives
  * it, so the LAST entry is the tip being promoted. Each entry is
  * `{ sha, subject, contexts: [{ context, state, targetUrl }] }`.
+ *
+ * The verdict carries `sweep` (`passed` / `pending` / `absent` / `red`) and
+ * `lastSwept` alongside the code, so a caller can say WHICH kind of green it
+ * is holding without re-deriving it from the contexts.
  */
 export function gradePromotion(commits) {
   const list = Array.isArray(commits) ? commits : []
@@ -100,21 +183,27 @@ export function gradePromotion(commits) {
     .map((c) => ({ commit: c, contexts: redContexts(c) }))
     .filter((r) => r.contexts.length > 0)
 
+  const lastSwept = lastSweptCommit(list)
+
   if (!tip) {
     return {
       code: UNVERIFIED,
       tip: null,
       reds,
+      sweep: 'absent',
+      lastSwept,
       reason: 'no commits in the promotion range — nothing to grade',
     }
   }
 
+  const sweep = sweepStanding(tip)
+  const base = { tip, reds, sweep, lastSwept }
+
   const tipRed = redContexts(tip)
   if (tipRed.length > 0) {
     return {
+      ...base,
       code: REFUSE,
-      tip,
-      reds,
       reason:
         `the tip ${tip.sha.slice(0, 9)} is RED: ` +
         tipRed.map((c) => c.context).join(', '),
@@ -125,21 +214,33 @@ export function gradePromotion(commits) {
   const decided = tipGate.filter((c) => !PENDING_STATES.has(c.state))
   if (decided.length === 0) {
     return {
+      ...base,
       code: UNVERIFIED,
-      tip,
-      reds,
       reason: tipGate.length
         ? `the tip ${tip.sha.slice(0, 9)} has only a pending gate verdict`
         : `the tip ${tip.sha.slice(0, 9)} carries no Main Gate status at all`,
     }
   }
 
+  if (sweep !== 'passed') {
+    return {
+      ...base,
+      code: UNEXAMINED,
+      reason:
+        `the tip ${tip.sha.slice(0, 9)} is green on ` +
+        `${decided.map((c) => c.context).join(', ')}, and ` +
+        (sweep === 'pending'
+          ? `${FULL_SWEEP_CONTEXT} is still running on it`
+          : `${FULL_SWEEP_CONTEXT} has never run on it`) +
+        ' — its tests and production builds are UNEXAMINED',
+    }
+  }
+
   return {
+    ...base,
     code: OK,
-    tip,
-    reds,
     reason:
-      `the tip ${tip.sha.slice(0, 9)} is green on ` +
+      `the tip ${tip.sha.slice(0, 9)} passed a full sweep — green on ` +
       decided.map((c) => c.context).join(', '),
   }
 }

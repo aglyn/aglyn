@@ -136,6 +136,31 @@ Three settings are deliberate and worth knowing before you tighten them:
   a lockout unrecoverable. The rule still stops every accidental and automated
   direct push.
 
+#### Read the Main Gate verdict on the PR
+
+`promotion-verdict.yml` grades the range the PR would ship and prints it in the
+job summary. Only a red fails the job; everything else is a report you read.
+There are **four** states, and the same exit codes come out of
+`npm run check:main-gate-verdicts` (add `-- --range=A..B` for an explicit
+range):
+
+| exit | verdict | what it means |
+|---|---|---|
+| 0 | green | the tip passed `main-gate/full` — the whole test sweep and all three production builds |
+| 1 | RED | Main Gate graded the tip a failure. The job fails. Do not promote |
+| 2 | no verdict | Main Gate has not graded the tip at all, normally a race with a very recent push. Warns |
+| 3 | **unexamined** | the tip passed `main-gate/fast` only, and no full sweep has ever run on it, so nobody has run its tests. Warns |
+
+An absent `full` never blocks, and that is deliberate: it runs on a cron GitHub
+delivers a fraction of the time, so most shas legitimately carry `fast` and no
+`full`, and demanding both would refuse nearly every promotion for a reason
+that says nothing about the code. It used to print identically to a passing
+sweep, which is how `d1cbc338f` shipped a three-spec tests regression under a
+green tick on 2026-09-03 (AGL-2564). Exit 3 gives that case its own words. It
+also names the newest commit in the range a sweep did pass on, so you can see
+how much of what you are shipping is unexamined — decide knowingly, or run the
+full gate yourself first.
+
 #### Is `tools/gate.sh` still required?
 
 **No — CI now runs the same things**, and since AGL-2505 it does so in about
