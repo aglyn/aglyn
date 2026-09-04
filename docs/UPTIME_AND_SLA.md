@@ -287,8 +287,9 @@ carrying **zero** `data-status-target` nodes is the unconfigured failure above.
 
 ### The external monitors (UptimeRobot, free tier)
 
-**Eleven** keyword monitors, keyword `"status":"ok"`, `ALERT_NOT_EXISTS`, 5-minute
-interval, email to the operator's mailbox. Read from the status page's own monitor-list
+**Fourteen** keyword monitors, keyword `"status":"ok"`, `ALERT_NOT_EXISTS`, 5-minute
+interval, email to the operator's mailbox (the three added on 2026-09-04 are email-only;
+the earlier eleven also page SMS and voice). Read from the status page's own monitor-list
 API on 2026-08-24 rather than transcribed from memory — this list said *five*
 for most of that day, because five more were created after it was written:
 
@@ -305,6 +306,14 @@ for most of that day, because five more were created after it was written:
 | Rate limiting | 09:32 |
 | Error beacon (console) | 09:33 |
 | Server errors | 2026-08-25 15:00 |
+| Sign-in doors | 2026-09-04 22:55 |
+| First-run journeys | 2026-09-04 23:07 |
+| Lead forms | 2026-09-04 23:09 |
+
+Sign-in doors watches `/api/health/auth-doors`, First-run journeys `/api/health/journeys`,
+Lead forms `aglyn.com/api/health/funnel`. The same evening **Signups** was repointed from
+`/api/health/signups` to `/api/health/signup-volume` — the old path grades an abuse flood and
+read green through three days of every signup being refused (AGL-2583).
 
 ```bash
 # The count and the names, unauthenticated. `url` is null in this payload —
