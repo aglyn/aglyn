@@ -22,13 +22,15 @@
 //   npm run check:main-gate-verdicts -- --range=A..B   # an explicit range
 //   npm run check:main-gate-verdicts -- --repo=o/r     # override the repo
 //
-// Exit 0 clean, 1 the tip is red, 2 the tip carries no verdict.
+// Exit 0 the tip passed a full sweep, 1 the tip is red, 2 the tip carries no
+// verdict, 3 the tip is green on `fast` with no full sweep ever run on it.
 import { execFileSync } from 'node:child_process'
 import {
   gradePromotion,
   gateContexts,
   REFUSE,
   UNVERIFIED,
+  UNEXAMINED,
 } from './lib/main-gate-verdicts.mjs'
 
 // A promotion range is small; a runaway one means something is wrong, and 50
@@ -132,6 +134,23 @@ if (verdict.reds.length > 0) {
       'by a later commit, or it may have been a flake. Read them before merging;\n' +
       'that reading is the thing whose absence let four promotions go out over\n' +
       'two unread reds on 2026-09-03.\n',
+  )
+}
+
+if (verdict.code === UNEXAMINED) {
+  const swept = verdict.lastSwept
+  process.stdout.write(
+    '\nUNEXAMINED: the fast gate passed on this tip; the full sweep - the ' +
+      'tests\nand the three production builds - has not run on it. That is ' +
+      'not the same\nclaim as a passing sweep, and this is where the two used ' +
+      'to print alike.\n' +
+      (swept
+        ? `\nThe newest commit in this range that DID pass a full sweep is ` +
+          `${swept.commit.sha.slice(0, 9)}, ${swept.behind} commit(s) behind ` +
+          `the tip.\nEverything after it is unexamined.\n`
+        : '\nNo commit in this range has ever passed a full sweep.\n') +
+      '\nThis is a REPORT, not a refusal. Promote if you have another reason ' +
+      'to trust\nthe range, or run the full gate yourself first.\n',
   )
 }
 
