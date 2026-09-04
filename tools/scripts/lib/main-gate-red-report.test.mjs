@@ -22,6 +22,7 @@ import {
   redMarker,
   shouldPingSlack,
   shouldReport,
+  sinkAlreadyCarries,
   slackPayload,
 } from './main-gate-red-report.mjs'
 
@@ -191,4 +192,97 @@ test('a sweep-due red does not claim `main` is broken', () => {
 test('a real job red still says `main` is broken', () => {
   const body = redCommentBody({ sha: 'abc123def456', results: { fast: 'failure', sweepDue: 'failure' } })
   assert.match(body, /`main` is broken until/)
+})
+
+/*==========================================
+ * THE DEDUPE WALK
+ *
+ * The sink is append-only and keeps one comment per distinct red forever, so a
+ * scan bounded to one page is a date after which idempotency silently stops
+ * working. These pin the walk to the whole history.
+ *========================================*/
+
+/** A comment history cut into pages, served the way Linear serves them. */
+const paged = (bodies, size = 100) => {
+  const pages = []
+  for (let i = 0; i < bodies.length; i += size) pages.push(bodies.slice(i, i + size))
+  if (pages.length === 0) pages.push([])
+  const calls = []
+  const query = async (after) => {
+    const index = after === null || after === undefined ? 0 : Number(after)
+    calls.push(index)
+    return {
+      nodes: pages[index].map((body) => ({ body })),
+      pageInfo: { hasNextPage: index + 1 < pages.length, endCursor: String(index + 1) },
+    }
+  }
+  return { query, calls }
+}
+
+const walkMarker = redMarker({ sha: 'be2165a60', results: { fast: 'failure' } })
+
+test('the walk finds a marker on the first page', async () => {
+  const { query, calls } = paged(['noise', `${walkMarker}\n\nred`])
+  assert.equal(await sinkAlreadyCarries({ query, marker: walkMarker }), true)
+  assert.deepEqual(calls, [0])
+})
+
+test('THE BUG: a marker beyond the first page is still found', async () => {
+  // 250 comments is about ten weeks of this sink at the rate 2026-09-03 set.
+  // Bounded to one page the scan answers "no", and the gate reposts a red it
+  // has already reported - invisibly, because a double-post looks exactly like
+  // two reds.
+  const bodies = Array.from({ length: 250 }, (_, i) => `old red ${i}`)
+  bodies.push(`${walkMarker}\n\nthe red we are grading again`)
+  const { query, calls } = paged(bodies)
+  assert.equal(await sinkAlreadyCarries({ query, marker: walkMarker }), true)
+  assert.ok(calls.length > 1, 'the walk must page rather than read only the first page')
+})
+
+test('an absent marker answers no after exhausting the history', async () => {
+  const { query } = paged(Array.from({ length: 250 }, (_, i) => `old red ${i}`))
+  assert.equal(await sinkAlreadyCarries({ query, marker: walkMarker }), false)
+})
+
+test('the walk stops at maxPages and FAILS OPEN', async () => {
+  // A duplicate comment is visible and annoying; a swallowed red is silent.
+  const { query, calls } = paged(
+    Array.from({ length: 1000 }, () => 'old red'),
+    10,
+  )
+  assert.equal(await sinkAlreadyCarries({ query, marker: walkMarker, maxPages: 3 }), false)
+  assert.equal(calls.length, 3)
+})
+
+test('a page Linear could not answer for fails open rather than throwing', async () => {
+  const empty = async () => null
+  assert.equal(await sinkAlreadyCarries({ query: empty, marker: walkMarker }), false)
+  const noPageInfo = async () => ({ nodes: [{ body: 'unrelated' }] })
+  assert.equal(await sinkAlreadyCarries({ query: noPageInfo, marker: walkMarker }), false)
+  const nullNodes = async () => ({ nodes: null, pageInfo: null })
+  assert.equal(await sinkAlreadyCarries({ query: nullNodes, marker: walkMarker }), false)
+})
+
+test('a comment with no body does not crash the walk', async () => {
+  const query = async () => ({
+    nodes: [{}, { body: null }, { body: walkMarker }],
+    pageInfo: null,
+  })
+  assert.equal(await sinkAlreadyCarries({ query, marker: walkMarker }), true)
+})
+
+test('an already-fetched first page is reused rather than re-requested', async () => {
+  // The script takes page one and the issue id from a single request; asking
+  // again would double every report job's Linear traffic for nothing.
+  const { query, calls } = paged(['unrelated', `${walkMarker}\n\nred`])
+  const firstPage = await query(null)
+  calls.length = 0
+  assert.equal(await sinkAlreadyCarries({ query, marker: walkMarker, firstPage }), true)
+  assert.deepEqual(calls, [])
+})
+
+test('a DIFFERENT red on the same sha is not mistaken for this one', async () => {
+  const other = redMarker({ sha: 'be2165a60', results: { fast: 'failure', full: 'failure' } })
+  const { query } = paged([`${other}\n\na different failing set`])
+  assert.equal(await sinkAlreadyCarries({ query, marker: walkMarker }), false)
 })
