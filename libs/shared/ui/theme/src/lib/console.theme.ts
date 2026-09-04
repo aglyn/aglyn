@@ -435,6 +435,18 @@ const baseOptions: ThemeOptions = {
     // `responsiveFontSizes` runs over these afterwards (xs→xl), so these are
     // the DESKTOP end of a ramp that scales itself down — 56px/40px here
     // land near the 34px/30px the mobile frames show.
+    // The rung ABOVE h1. h1 is the brand's 56px display size and
+    // stays that; a hero drawn at 72px had nothing to ask for, so every one
+    // hand-wrote `fontSize: '72px'` — and that literal then LOST to h1's own
+    // `responsiveFontSizes` ramp on wide viewports, silently rendering 56px.
+    // Listed in `RAMPED_DISPLAY_VARIANTS` so it scales down like the rest of
+    // the ramp rather than staying 72px on a phone.
+    displayXl: {
+      fontSize: '4.5rem',
+      fontWeight: 900,
+      lineHeight: 1.04,
+      letterSpacing: '-0.028em',
+    },
     h1: {
       fontSize: '3.5rem',
       fontWeight: 900,

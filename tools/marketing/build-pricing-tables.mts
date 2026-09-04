@@ -36,8 +36,8 @@
  *     tools/marketing/build-pricing-tables.mts
  */
 
-import { writeFileSync, readFileSync, mkdirSync } from 'node:fs'
-import { join, dirname } from 'node:path'
+import { writeFileSync, readFileSync, mkdirSync, readdirSync } from 'node:fs'
+import { join, dirname, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   PLAN_ENTITLEMENTS,
@@ -238,12 +238,27 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
       { label: 'Workflow runs / mo', value: talk((p) => num(E(p).workflowRunsPerMonth)) },
       { label: 'Actions builder', value: (p) => bool(F(p).actions) },
       { label: 'Appointment bookings', value: (p) => bool(F(p).bookings) },
+      /*
+       * One form row, not two. `formsPerHost` is an abuse ceiling identical
+       * on every plan that has forms at all, so a row for it would be eight
+       * matching cells inviting a reader to hunt for a difference that is
+       * not there. What a plan buys on this axis is the submissions band
+       * below, which is tiered and metered.
+       */
       {
         label: 'Form submissions / mo',
         value: talk((p) => num(E(p).formSubmissionsPerMonth)),
       },
       { label: 'Contacts included', value: talk((p) => num(E(p).contactsPerHost)) },
       { label: 'Email sends / mo', value: talk((p) => num(E(p).emailSendsPerMonth)) },
+      // Beside the send band rather than beside "Custom domain & SSL", which
+      // is the site's public web address and authorizes nothing about mail.
+      // What this row answers is where a campaign's reputation lives, so it
+      // belongs to the email axis and reads with the allowance above it.
+      {
+        label: 'Send email from your own domain',
+        value: (p) => bool(F(p).customSendingDomain),
+      },
       { label: 'Video & file uploads', value: (p) => bool(F(p).videoMedia) },
     ],
   },
@@ -329,36 +344,163 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
 const money = (v: number | null): string =>
   v == null ? NO : v < 1 ? `$${v.toFixed(2)}` : `$${v}`
 
-const USAGE_ROWS: Array<{ label: string; value: (p: Plan) => string }> = [
+/*
+ * The same rate wearing the frame's decoration.
+ *
+ * The number is the code's; the leading `+`, the unit and the spacing are the
+ * design's, and they are not uniform — the storage row is written flat where
+ * the four monthly rows carry a `+`. Rendering our value the frame's way is
+ * what lets the two be compared as whole strings. A comparison that stripped
+ * the decoration and matched digits would pass a row that had silently
+ * changed unit, which on a per-1,000 rate is a 1000x error.
+ */
+const perMo = (v: number | null): string => (v == null ? NO : `+${money(v)}/mo`)
+const perThousand = (v: number | null): string =>
+  v == null ? NO : `+${money(v)} / 1k`
+const perGbMonth = (v: number | null): string =>
+  v == null ? NO : `${money(v)} / GB-mo`
+
+/**
+ * A `PLAN_PRICING` field that states an add-on or overage rate.
+ *
+ * Every one of them is a price a customer is billed, and the `extra` prefix
+ * is what the completeness check below enumerates — see `UNPUBLISHED_RATES`.
+ */
+type RateKey = {
+  [K in keyof (typeof PLAN_PRICING)['pro']]: K extends `extra${string}`
+    ? K
+    : never
+}[keyof (typeof PLAN_PRICING)['pro']]
+
+interface UsageRow {
+  label: string
+  /** The frame's label for this row; it is the shorter one throughout. */
+  frameLabel: string
+  /**
+   * The `PLAN_PRICING` field this row publishes.
+   *
+   * Structural, not an annotation. Both renderings below are derived from it,
+   * so a row cannot claim to publish one rate while printing another — and
+   * `UNPUBLISHED_RATES` enumerates the same keys off `PLAN_PRICING` itself to
+   * find the ones NO row publishes, which is how the email-send and assist
+   * rates came to be billed against a page that stated neither.
+   */
+  rate: RateKey
+  /** The unit decoration the frame writes this rate with. */
+  decorate: (v: number | null) => string
+}
+
+const USAGE_ROWS: UsageRow[] = [
   {
     label: 'Extra site, per month',
-    value: (p) => money(PLAN_PRICING[p].extraHostMonthlyUsd),
+    frameLabel: 'Extra site / host',
+    rate: 'extraHostMonthlyUsd',
+    decorate: perMo,
   },
   {
     label: 'Extra team seat, per month',
-    value: (p) => money(PLAN_PRICING[p].extraSeatMonthlyUsd),
+    frameLabel: 'Extra team seat',
+    rate: 'extraSeatMonthlyUsd',
+    decorate: perMo,
   },
   {
     label: 'Extra site collaborator, per month',
-    value: (p) => money(PLAN_PRICING[p].extraCollaboratorMonthlyUsd),
+    frameLabel: 'Extra site collaborator',
+    rate: 'extraCollaboratorMonthlyUsd',
+    decorate: perMo,
   },
   {
     label: 'Extra dataset, per month',
-    value: (p) => money(PLAN_PRICING[p].extraDatasetMonthlyUsd),
+    frameLabel: 'Extra dataset',
+    rate: 'extraDatasetMonthlyUsd',
+    decorate: perMo,
   },
   {
     label: 'Extra data storage, per GB-month',
-    value: (p) => money(PLAN_PRICING[p].extraDataGbMonthlyUsd),
+    frameLabel: 'Extra data storage',
+    rate: 'extraDataGbMonthlyUsd',
+    decorate: perGbMonth,
   },
   {
     label: 'API requests, per 1,000 over limit',
-    value: (p) => money(PLAN_PRICING[p].extraApiRequestsUsdPer1k),
+    frameLabel: 'API requests over limit',
+    rate: 'extraApiRequestsUsdPer1k',
+    decorate: perThousand,
   },
   {
     label: 'Contacts, per 1,000 over the included band',
-    value: (p) => money(PLAN_PRICING[p].extraContactsUsdPer1k),
+    frameLabel: 'Contacts over included band',
+    rate: 'extraContactsUsdPer1k',
+    decorate: perThousand,
+  },
+  /*
+   * EMAIL SENDS AND ASSIST — billed everywhere, published nowhere until now.
+   *
+   * Both rates were already charged. `priceEmailSendOverage` reads
+   * `extraEmailSendsUsdPer1k` and `report-usage` puts the result on the
+   * invoice; `priceAssistCreditOverage` reads `extraAssistCreditsUsdPer1k` the
+   * same way. Neither had a row on this table, so `/pricing` stated an email
+   * ALLOWANCE ("Email sends / mo") and an assist CAPABILITY ("AI assist ✓")
+   * while stating the price of exceeding either nowhere at all.
+   *
+   * The rates are published exactly as the code carries them. No price moves
+   * here, which matters under the launch freeze: a charged figure that has
+   * never been disclosed is fixed by disclosing it, not by repricing it.
+   *
+   * Both are RETAIL rates set beside the two rows above, NOT the
+   * infrastructure pass-through, and neither is derived from `METERED_MARKUP`.
+   * Our own costs — `ORG_COGS_UNIT_RATES_USD.perEmailSend` and
+   * `ASSIST_CREDIT_COST_USD` — are cost-model inputs and stay off this table;
+   * the pass-through strip is the only place a cost column is published, and
+   * only because its heading claims one.
+   */
+  {
+    label: 'Email sends, per 1,000 over the included band',
+    frameLabel: 'Email sends over included band',
+    rate: 'extraEmailSendsUsdPer1k',
+    decorate: perThousand,
+  },
+  {
+    /*
+     * Credits, not messages, and the label has to say so: a credit is a fixed
+     * quantity of provider spend, so one question and one generated screen
+     * draw wildly different amounts. "Per 1,000 assists" would price them the
+     * same and be wrong by two orders of magnitude.
+     *
+     * Starter's dash is CORRECT rather than a gap, and for the opposite
+     * reason to the email row above. Assist is refused at the band on every
+     * tier, so a plan with no rate simply stops; email cannot be refused —
+     * transactional mail goes out at every tier — so a null there would be
+     * unbounded absorbed spend. Same-looking cell, different fact.
+     */
+    label: 'AI assist, per 1,000 credits over the included band',
+    frameLabel: 'Assist credits over included band',
+    rate: 'extraAssistCreditsUsdPer1k',
+    decorate: perThousand,
   },
 ]
+
+/** The bare rate, as the compare-style tables print it. */
+const rowValue = (r: UsageRow, p: Plan): string => money(PLAN_PRICING[p][r.rate])
+/** The same rate wearing the frame's unit decoration. */
+const rowFrameValue = (r: UsageRow, p: Plan): string =>
+  r.decorate(PLAN_PRICING[p][r.rate])
+
+/**
+ * Rates `PLAN_PRICING` carries that NO row above publishes.
+ *
+ * The enumeration is the guard. Read off the pricing table itself rather than
+ * from a list somebody maintains beside it, so a rate added to the code with
+ * no row here is reported the day it lands — which is the failure that had to
+ * be found by hand this time: `extraEmailSendsUsdPer1k` and
+ * `extraAssistCreditsUsdPer1k` were both billed, and the only artifact that
+ * could have noticed was this table, which did not read them.
+ */
+const RATE_KEYS = Object.keys(PLAN_PRICING.pro).filter((k) =>
+  k.startsWith('extra'),
+) as RateKey[]
+const PUBLISHED_RATES = new Set<RateKey>(USAGE_ROWS.map((r) => r.rate))
+const UNPUBLISHED_RATES = RATE_KEYS.filter((k) => !PUBLISHED_RATES.has(k))
 
 // ---------------------------------------------------------------- emit
 
@@ -397,10 +539,11 @@ const usage = {
   highlightPlan: 'pro' as const,
   rows: USAGE_ROWS.map((r) => ({
     label: r.label,
+    rate: r.rate,
     values: Object.fromEntries(
       USAGE_PLANS.map((p) => [
         p,
-        p === 'enterprise' ? CUSTOM_LABEL : r.value(p),
+        p === 'enterprise' ? CUSTOM_LABEL : rowValue(r, p),
       ]),
     ),
   })),
@@ -828,9 +971,20 @@ const frameRows = new Map<string, string[]>()
  * record that is not a band we know about is still reported.
  */
 const groupBands = new Set(GROUPS.map((g) => g.title))
+/**
+ * The two records the extractor names for their Figma layer rather than for a
+ * feature: the plan header (Free…Enterprise) and the price strip ($0…Custom).
+ * They carry a full complement of cells, so they are plan ROWS as far as the
+ * loop below is concerned, and they are skipped here because they are
+ * reconciled as `compare.columns` further down — against `PLAN_LABELS` and
+ * against the eight `priceLabel`s — rather than against a feature spec.
+ */
+const FRAME_FURNITURE_LABEL = 'Text'
 for (const rec of frameTable?.records ?? []) {
   const label = rec.cells[0]
-  if (rec.cells.length === FRAME_ROW_CELLS) {
+  if (label === FRAME_FURNITURE_LABEL) {
+    continue
+  } else if (rec.cells.length === FRAME_ROW_CELLS) {
     frameRows.set(label, rec.cells.slice(1))
   } else if (rec.cells.length === 1 && groupBands.has(label)) {
     continue
@@ -853,18 +1007,21 @@ if (!frameTable) {
 const EXPECTED_MISSING: Record<string, string> = {
   'Single sign-on (SAML/OIDC)':
     'added beyond the frame when AGL-1210 shipped self-serve SSO; `ssoEnabled` is real and Enterprise-only, and the page said so before the design did',
+  'Send email from your own domain':
+    '`customSendingDomain` is a capability the frame predates entirely — sending identity was not a published axis when it was drawn. It is real from Pro up, and it is the row that says a campaign leaves on a name whose reputation is the merchant’s. Resolves when the four responsive /pricing frames are hand-edited',
 }
 
 /** Rows the FRAME carries that we deliberately do not emit, each with why. */
 const EXPECTED_EXTRA: Record<string, string> = {
   'Total site size':
     'AGL-2133 retired `totalSiteSizeMb`: it was enforced by nothing, and AGL-678 caps a node map at 900 KB, so the measurable org total can only reach a fraction of it. There is no number left to publish',
-  // Two records, both named for their Figma layer rather than for a feature:
-  // the header row (Free…Enterprise) and the price strip ($0…Custom). They
-  // are table furniture with a full complement of cells, which is why they
-  // reach this list rather than the group-band branch above.
-  Text: 'the table header row and the price strip, whose first cell is the Figma layer name rather than a feature label',
 }
+
+// The plan header and the price strip are deliberately absent from this list.
+// Both are named for their Figma layer rather than for a feature, and it is
+// tempting to excuse them together as furniture — but the header is furniture
+// and the strip beside it is EIGHT PRICES. They are reconciled as
+// `compare.columns` below instead of being declared away here.
 
 // `'Site backup & restore'` was exempted here until AGL-1278's reopening. It
 // is not a label the frame has ever carried — the row is `Site export &
@@ -893,11 +1050,22 @@ const FRAME_STALE_CELLS: Record<string, { frame: string; why: string }> = {
     frame: '—',
     why: 'AGL-1152 moved the CDN to every plan, Free included; the frame still shows the pre-AGL-1152 split',
   },
+  'Email sends / mo · Starter': {
+    frame: '500',
+    why: 'campaign email begins at Pro — a site that may send needs its own verified provider sending domain, so the allowance attaches to the tiers that carry that cost. Starter is banded at 0 like Free; the frame still draws the allowance. Resolves when the four responsive /pricing frames are hand-edited',
+  },
 }
 
 const diffs: string[] = []
 /** Declared-stale cells the frame has since caught up on. */
 const staleCellsResolved: string[] = []
+/**
+ * Every cell key the loop below actually reached. A declaration keyed at a
+ * cell nothing carries excuses nothing while reading as a considered
+ * decision, and a reconciler that compared no cells at all would report just
+ * as clean as one that compared them and found them right.
+ */
+const comparedCells = new Set<string>()
 const missing: string[] = []
 for (const g of GROUPS) {
   for (const r of g.rows) {
@@ -910,6 +1078,7 @@ for (const g of GROUPS) {
     framePlanOrder.forEach((p, i) => {
       const ours = r.value(p)
       const theirs = got[i]
+      comparedCells.add(`${r.label} · ${PLAN_LABELS[p]}`)
       // Enterprise used to be excused here, on the grounds that "Talk to us"
       // is a copy choice rather than a claim. It is now generated to match
       // (see the `enterprise` note on Row), so the excuse is gone and all 50
@@ -1042,6 +1211,733 @@ fail(
   ),
 )
 
+// --------------------------------------------- the four remaining tables
+//
+// `tables.json` carries six tables, and all six are reconciled: the compare
+// grid and the metered pass-through strip above, and the plan columns, the
+// "Need more scale?" strip, the add-on capacity table and the optional add-on
+// cards here. A generated table with no reconciler is the shape of gap that
+// published a 10x form-submission rate — correct on the day somebody typed
+// it, and unfalsifiable afterwards — so the one thing this section must never
+// become is a reader that finds nothing and reports agreement. Every table
+// below counts the cells it compared, and a count of zero is a failure.
+//
+// These read EVERY breakpoint export rather than only the primary frame,
+// because the exports drift from each other as well as from the code: the
+// mobile export renders one selected plan as two-cell records instead of a
+// full row, so it can carry a rate none of the wide frames do.
+//
+// Declaration keys are NOT qualified by breakpoint. The four exports are one
+// design at four sizes, so a Figma cell that has gone stale is stale in all of
+// them; a per-breakpoint key would let three rot quietly behind a declaration
+// written for the fourth. A declared cell therefore resolves only when EVERY
+// breakpoint that carries it has caught up.
+
+type FrameFile = {
+  sections: Array<{
+    name: string
+    groups: Array<{ name: string; records: Array<{ cells: string[] }> }>
+  }>
+}
+
+interface FrameView {
+  /** The breakpoint's name, so a reported disagreement says where it is. */
+  name: string
+  data: FrameFile
+}
+
+const COPY_FILE = /^copy-(.+)\.json$/
+const frameDir = dirname(framePath)
+/**
+ * Every breakpoint export sitting beside the primary frame. Discovered rather
+ * than listed so a fifth breakpoint is covered the day it is exported, and so
+ * the self-test — which drives this against a scratch directory holding
+ * whichever fixtures a case needs — reconciles exactly what it put there.
+ */
+const frames: FrameView[] = readdirSync(frameDir)
+  .filter((f: string) => COPY_FILE.test(f))
+  .sort()
+  .map((f: string) => ({
+    name: COPY_FILE.exec(f)![1],
+    data:
+      f === basename(framePath)
+        ? (frame as FrameFile)
+        : (JSON.parse(readFileSync(join(frameDir, f), 'utf8')) as FrameFile),
+  }))
+
+if (!frames.length) {
+  problems.push(`no copy-*.json breakpoint export found in ${frameDir}`)
+}
+
+/** One group's records, or null when this breakpoint does not carry it. */
+const records = (v: FrameView, section: string, group: string) =>
+  v.data.sections.find((s) => s.name === section)?.groups.find((g) => g.name === group)
+    ?.records ?? null
+
+/** A cell where the code has moved and the published frame has not. */
+interface Divergence {
+  frame: string
+  why: string
+}
+
+/**
+ * One table's comparison against every breakpoint that carries it.
+ *
+ * Every table below reports the same five ways, because each of them is a
+ * distinct failure and reporting only the first is how a guard becomes a
+ * printout: a cell that disagrees, a row the frame has dropped, a declaration
+ * the frame has caught up on, a declaration keyed at a cell that does not
+ * exist, and — the one that would otherwise be invisible — a table whose
+ * frame group was not found at all, so that nothing was compared and the
+ * silence read as agreement.
+ */
+const reconciler = (
+  table: string,
+  declared: Record<string, Divergence>,
+  /**
+   * Rows we PUBLISH that the frame carries nowhere, each with the reason.
+   *
+   * The compare grid has had `EXPECTED_MISSING` for this since AGL-1278; the
+   * five tables below had nothing, so a row added to the code with no surface
+   * on the page could only ever be reported as a flat failure. That is not a
+   * theoretical shape: the email-send and assist rates are billed today and
+   * appear on no breakpoint, so publishing them here has to be sayable.
+   *
+   * Checked in BOTH directions, like every other declaration in this file. A
+   * key resolves — and fails until the entry is deleted — the moment every
+   * breakpoint carries the row, because at that point the cells can be
+   * compared for real and an exemption would only hide them again.
+   */
+  expectedAbsent: Record<string, string> = {},
+) => {
+  const diffs: string[] = []
+  const absent: string[] = []
+  /** Keys where at least one breakpoint still shows the declared value. */
+  const stillStale = new Set<string>()
+  /** Declared-absent keys at least one breakpoint really did not carry. */
+  const stillAbsent = new Set<string>()
+  const seen = new Set<string>()
+  let compared = 0
+  return {
+    /** Compares one cell, naming the breakpoint it was read from. */
+    cell(key: string, ours: string, theirs: string, where: string) {
+      compared += 1
+      seen.add(key)
+      const d = declared[key]
+      if (ours === theirs) return
+      if (d && theirs === d.frame) {
+        stillStale.add(key)
+        return
+      }
+      diffs.push(
+        `${key} [${where}]: code=${ours}  frame=${theirs}` +
+          (d ? `  (declared stale value was ${d.frame})` : ''),
+      )
+    },
+    /** Records that a breakpoint does not carry something it should. */
+    absent(what: string, where: string) {
+      absent.push(`${what} [${where}]`)
+    },
+    /**
+     * Records a NAMED row a breakpoint does not carry, honoring a declaration.
+     *
+     * Separate from `absent` above because only a named row can be declared:
+     * the structural complaints that go through `absent` ("no plan header",
+     * "an unrecognized column header") describe a frame we cannot read at all,
+     * and excusing one of those would excuse the reader silently finding
+     * nothing — which is the failure this whole section exists to make loud.
+     */
+    absentRow(key: string, where: string) {
+      if (key in expectedAbsent) {
+        stillAbsent.add(key)
+        return
+      }
+      absent.push(`${key} [${where}]`)
+    },
+    /** How many cells this table actually compared, for the summary line. */
+    get compared() {
+      return compared
+    },
+    finish() {
+      fail(`${table}: rows the frame does not carry`, absent)
+      fail(
+        `${table}: CODE-vs-FRAME disagreements not declared (the code wins — the frame is stale)`,
+        diffs,
+      )
+      fail(
+        `${table}: declared stale but every breakpoint has CAUGHT UP — delete the declaration`,
+        Object.keys(declared).filter((k) => seen.has(k) && !stillStale.has(k)),
+      )
+      fail(
+        `${table}: declared stale but no breakpoint carries that cell — delete the declaration`,
+        Object.keys(declared).filter((k) => !seen.has(k)),
+      )
+      // The absence declaration, checked the way every other one here is: an
+      // entry that has stopped diverging fails. Nothing reported the row
+      // missing, so either every breakpoint now carries it — in which case the
+      // cells can be compared for real and the entry would go on excusing
+      // them — or the row is no longer emitted and the entry excuses a row
+      // that does not exist. Both readings end in deleting it, which is why
+      // one message can name both.
+      fail(
+        `${table}: declared absent from the frame but no breakpoint reported it ` +
+          `missing — either the page has caught up (delete the declaration and ` +
+          `let the cells compare) or the row is gone (delete it with the row)`,
+        frames.length
+          ? Object.keys(expectedAbsent).filter((k) => !stillAbsent.has(k))
+          : [],
+      )
+      if (frames.length && compared === 0) {
+        problems.push(
+          `${table}: reconciled ZERO cells — no breakpoint carried the group this ` +
+            `reads, so the table is guarded by nothing and reports clean either way`,
+        )
+      }
+    },
+  }
+}
+
+const planByLabel = new Map<string, Plan>(
+  PLANS.map((p) => [PLAN_LABELS[p], p] as const),
+)
+
+/**
+ * Which plan a mobile export is showing. The mobile compare grid and the
+ * mobile add-on table each render ONE selected plan rather than all eight, so
+ * every mobile cell has to be attributed to the plan the frame chose before it
+ * can be compared — reading it off the frame rather than assuming Pro, since
+ * the selected plan is a design choice that can change without telling us.
+ */
+const mobileSelectedPlan = (v: FrameView): Plan | null => {
+  const sel = records(v, 'Compare features', 'Selected plan')
+  const label = sel?.[0]?.cells[0]
+  return label ? planByLabel.get(label) ?? null : null
+}
+
+/*==========================================
+ * THE PLAN COLUMNS — header and price strip.
+ *
+ * `compare.columns` is the one place on the page where a plan's own monthly
+ * price is stated, which makes its eight cells the highest-consequence cells
+ * in the file: a wrong number here is a wrong number in the largest type on
+ * the page. The two records are found by their Figma layer name because that
+ * is all the extractor gives them — the header carries plan LABELS and the
+ * strip carries `priceLabel`s, neither of which is a feature spec, so they
+ * cannot be compared by the row loop above and have to be compared here.
+ *=========================================*/
+const COLUMNS_STALE: Record<string, Divergence> = {
+  'price · Agency': {
+    frame: '$799',
+    why: 'the repricing is decided in the code and NOT chargeable yet: Stripe prices are immutable, the live SKUs are `aglyn_agency_v2` at $799 and `_yearly` at $7,788, and $1,299 needs new price objects plus new `STRIPE_PRICE_AGENCY` / `STRIPE_PRICE_AGENCY_YEARLY` values (`apps/console/specs/published-pricing-table-parity.spec.ts`). Publishing it first would quote a price the checkout cannot take — which is the one direction of drift the frame must NOT be dragged in',
+  },
+}
+
+const columns = reconciler('plan columns', COLUMNS_STALE)
+const columnByPlan = new Map(compare.columns.map((c) => [c.plan, c] as const))
+
+for (const v of frames) {
+  const wide = records(v, 'Compare features', 'Feature table')
+  if (wide) {
+    const furniture = wide.filter(
+      (r) =>
+        r.cells[0] === FRAME_FURNITURE_LABEL && r.cells.length === FRAME_ROW_CELLS,
+    )
+    if (furniture.length !== 2) {
+      columns.absent(
+        `${furniture.length} header/price records named "${FRAME_FURNITURE_LABEL}", expected 2`,
+        v.name,
+      )
+      continue
+    }
+    // Order, not name: both records are called after the same Figma layer, and
+    // the header is drawn above the strip.
+    const [header, prices] = furniture
+    framePlanOrder.forEach((p, i) => {
+      const col = columnByPlan.get(p)!
+      columns.cell(`plan name · ${col.label}`, col.label, header.cells[i + 1], v.name)
+      columns.cell(`price · ${col.label}`, col.priceLabel, prices.cells[i + 1], v.name)
+    })
+    continue
+  }
+
+  const selector = records(v, 'Compare features', 'Plan selector')
+  if (selector?.[0]) {
+    framePlanOrder.forEach((p, i) => {
+      const col = columnByPlan.get(p)!
+      columns.cell(
+        `plan name · ${col.label}`,
+        col.label,
+        selector[0].cells[i],
+        v.name,
+      )
+    })
+  } else {
+    columns.absent('no plan header — neither a "Feature table" nor a "Plan selector"', v.name)
+  }
+  const selected = mobileSelectedPlan(v)
+  const price = records(v, 'Compare features', 'Selected plan')?.[1]?.cells[0]
+  if (selected && price !== undefined) {
+    const col = columnByPlan.get(selected)!
+    columns.cell(`price · ${col.label}`, col.priceLabel, price, v.name)
+  } else {
+    columns.absent('no selected-plan price', v.name)
+  }
+}
+
+columns.finish()
+
+/*==========================================
+ * THE "NEED MORE SCALE?" STRIP.
+ *
+ * Four cards of almost pure claim — a price, a positioning line and six spec
+ * tokens apiece, every token a figure read from `PLAN_ENTITLEMENTS`.
+ *
+ * The tokens are compared one at a time rather than as one joined line so a
+ * disagreement names the fact that moved, instead of reprinting sixty
+ * characters twice and leaving the reader to find the difference. The frame
+ * writes them as a single ` · `-joined string, which is why the count can
+ * disagree as well as the contents.
+ *=========================================*/
+const TIERS_STALE: Record<string, Divergence> = {
+  'Agency · price': {
+    frame: '$799 /mo',
+    why: 'the same unshipped repricing as `price · Agency` in the plan columns above, and stale for the same reason: the strip and the compare grid state one price twice, so they resolve together or the page contradicts itself',
+  },
+  'Agency · spec 6': {
+    frame: '20 POS registers',
+    why: 'AGL-1775 made `posRegisters` the PER-SITE cap, so an org running five locations needs five; the rename is ours and the frame still carries the org-wide phrasing, exactly as the compare table\'s `frameLabel` records for the same row',
+  },
+  'Enterprise · spec 5': {
+    frame: 'SLA & dedicated support',
+    why: 'AGL-2411 took the uptime-SLA claim off the live page and the page\'s own FAQ now denies one during public beta; dedicated support is real and stays, the SLA half is not and the frame is the last artifact still selling it',
+  },
+}
+
+const tierStrip = reconciler('scale strip', TIERS_STALE)
+const TIER_CARDS = [...tiers.rows, tiers.enterprise]
+const tierLabels = new Set(TIER_CARDS.map((t) => t.label))
+
+for (const v of frames) {
+  const strip = records(v, 'Plans', 'scale-strip')
+  if (!strip) {
+    tierStrip.absent('no "Plans / scale-strip" group', v.name)
+    continue
+  }
+  // The frame writes the heading and the lede into one text node.
+  if (strip[0]) {
+    tierStrip.cell('heading', `${tiers.heading} ${tiers.lede}`, strip[0].cells[0], v.name)
+  } else {
+    tierStrip.absent('no heading record', v.name)
+  }
+
+  /** label → the three records the frame draws for that card, in order. */
+  const cards = new Map<string, { price: string; blurb: string; specs: string; cta: string }>()
+  strip.forEach((rec, i) => {
+    if (rec.cells.length !== 2 || !tierLabels.has(rec.cells[0])) return
+    cards.set(rec.cells[0], {
+      price: rec.cells[1],
+      blurb: strip[i + 1]?.cells[0] ?? '',
+      specs: strip[i + 1]?.cells[1] ?? '',
+      cta: strip[i + 2]?.cells[0] ?? '',
+    })
+  })
+
+  for (const tier of TIER_CARDS) {
+    const card = cards.get(tier.label)
+    if (!card) {
+      tierStrip.absent(`the ${tier.label} card`, v.name)
+      continue
+    }
+    tierStrip.cell(`${tier.label} · price`, tier.priceLabel, card.price, v.name)
+    tierStrip.cell(`${tier.label} · blurb`, tier.blurb, card.blurb, v.name)
+    tierStrip.cell(`${tier.label} · CTA`, tier.cta, card.cta, v.name)
+    const theirs = card.specs.split(' · ')
+    tier.specs.forEach((spec, i) => {
+      tierStrip.cell(
+        `${tier.label} · spec ${i + 1}`,
+        spec,
+        theirs[i] ?? '(nothing)',
+        v.name,
+      )
+    })
+    if (theirs.length > tier.specs.length) {
+      tierStrip.absent(
+        `the ${tier.label} card carries ${theirs.length} spec tokens, we emit ${tier.specs.length}: ` +
+          theirs.slice(tier.specs.length).join(' · '),
+        v.name,
+      )
+    }
+  }
+}
+
+tierStrip.finish()
+
+/*==========================================
+ * THE ADD-ON CAPACITY TABLE.
+ *
+ * Seven rates across six paid plans, every one of them a price a customer is
+ * billed on their next invoice.
+ *
+ * The contacts row is why a rate and its band have to be checked together. An
+ * uncapped plan cannot have an "over", so a dash is the CORRECT cell beside an
+ * UNLIMITED band — `checkContactQuota` computes `Math.max(0, used - Infinity)`,
+ * which is 0 at every usage level, and a rate there advertises a fee that
+ * cannot be charged. Bound the band and the same rule runs in reverse: a
+ * finite band with no rate beside it is silently free past the band, so the
+ * bound achieves nothing. The pair is only ever right together, and this is
+ * what reads the half of it that lives on the page.
+ *=========================================*/
+const USAGE_STALE: Record<string, Divergence> = {}
+
+/**
+ * The two rates the product BILLS and the page has never stated.
+ *
+ * Not a design opinion and not a stale cell — there is no cell. Every
+ * breakpoint's add-on table runs Extra site → Contacts and stops, so both rows
+ * below are compared against nothing until the page carries them. Declared so
+ * the gap is a recorded fact with an owner rather than a red the next person
+ * silences, and so it fails the moment the page catches up, at which point the
+ * cells become comparable and this stops being the right way to describe them.
+ *
+ * What guards the rates MEANWHILE is `--check` diffing the committed
+ * `tables.json` against this generator: the figures now exist in a generated
+ * artifact, so moving `extraEmailSendsUsdPer1k` or
+ * `extraAssistCreditsUsdPer1k` without regenerating fails CI. That is strictly
+ * more than they had, which was nothing — but it is NOT a comparison against
+ * the page, and the distinction is the whole reason this map states its
+ * reasons instead of listing two labels.
+ */
+const USAGE_EXPECTED_ABSENT: Record<string, string> = {
+  'Email sends over included band':
+    'the page states an email ALLOWANCE ("Email sends / mo" in the compare grid) and no overage rate, while `priceEmailSendOverage` bills `extraEmailSendsUsdPer1k` on every paid tier — and the cap refuses campaigns only, so transactional mail carries an org past its band with nothing able to stop it. Resolves when `/pricing` carries the row',
+  'Assist credits over included band':
+    'the page states an assist CAPABILITY ("AI assist ✓" in the compare grid) and no overage rate, while `priceAssistCreditOverage` bills `extraAssistCreditsUsdPer1k` from Pro up. Resolves when `/pricing` carries the row',
+}
+
+const addOnRates = reconciler(
+  'add-on capacity',
+  USAGE_STALE,
+  USAGE_EXPECTED_ABSENT,
+)
+const usageByFrameLabel = new Map(USAGE_ROWS.map((r) => [r.frameLabel, r] as const))
+
+// A declaration keyed at a row we do not emit excuses nothing while reading as
+// a considered decision — the same both-directions rule `EXPECTED_MISSING` is
+// held to. Checked here rather than inside `finish()` because only this scope
+// knows which rows exist.
+fail(
+  'add-on capacity: declared absent but there is no such add-on row — delete the declaration',
+  Object.keys(USAGE_EXPECTED_ABSENT).filter(
+    (label) => !usageByFrameLabel.has(label),
+  ),
+)
+
+/*
+ * THE COMPLETENESS CHECK — a rate the code charges must have a row.
+ *
+ * Every guard above compares a row we emit against the page. None of them
+ * could see a rate with NO row, which is exactly what email sends and assist
+ * credits were: billed on real invoices, absent from all six tables, and
+ * therefore agreed with by every check in the repo. A reader that only
+ * validates what it was pointed at cannot report what it was never pointed at.
+ *
+ * So the keys are enumerated off `PLAN_PRICING` itself. A rate added to the
+ * code with no row here fails on the commit that adds it, rather than after
+ * somebody notices an invoice line with no published price.
+ */
+if (RATE_KEYS.length === 0) {
+  // The naming rule stopped matching — a rename would leave this checking an
+  // empty set against an empty set and reporting clean.
+  problems.push(
+    'the add-on rate completeness check enumerated ZERO `extra*` keys from ' +
+      'PLAN_PRICING — the naming rule no longer matches, so it is guarding nothing',
+  )
+}
+fail(
+  'rates PLAN_PRICING carries that the add-on capacity table does not publish ' +
+    '(the product charges them; the page would state them nowhere)',
+  UNPUBLISHED_RATES,
+)
+
+/** What a plan's cell should say, Enterprise's "Custom" included. */
+const usageCell = (row: UsageRow, p: Plan) =>
+  p === 'enterprise' ? CUSTOM_LABEL : rowFrameValue(row, p)
+
+for (const v of frames) {
+  const wide = records(v, 'Usage pricing', 'Metered table')
+  if (wide) {
+    // The header names the columns; read the plan order off it rather than
+    // assuming ours, so a frame that reordered its columns fails loudly
+    // instead of comparing Scale's rate against Advanced's.
+    const header = wide.find((r) => r.cells[0] === usage.rowLabel)
+    if (!header) {
+      addOnRates.absent(`no "${usage.rowLabel}" header row`, v.name)
+      continue
+    }
+    const order = header.cells.slice(1).map((l) => planByLabel.get(l) ?? null)
+    for (const row of USAGE_ROWS) {
+      const rec = wide.find((r) => r.cells[0] === row.frameLabel)
+      if (!rec) {
+        addOnRates.absentRow(row.frameLabel, v.name)
+        continue
+      }
+      order.forEach((p, i) => {
+        if (!p) {
+          addOnRates.absent(`an unrecognized column header "${header.cells[i + 1]}"`, v.name)
+          return
+        }
+        addOnRates.cell(
+          `${row.frameLabel} · ${PLAN_LABELS[p]}`,
+          usageCell(row, p),
+          rec.cells[i + 1],
+          v.name,
+        )
+      })
+    }
+    continue
+  }
+
+  // The mobile shape: one selected plan rendered as two-cell records rather
+  // than a full row. A reader written for the wide table finds nothing here
+  // and reports clean, which is why the zero-cells guard exists.
+  const narrow = records(v, 'Usage pricing', 'Add-on rates · selected plan')
+  if (!narrow) {
+    addOnRates.absent('no add-on rate table in either shape', v.name)
+    continue
+  }
+  const selected = planByLabel.get(narrow[0]?.cells[0] ?? '')
+  if (!selected) {
+    addOnRates.absent(`an unrecognized selected plan "${narrow[0]?.cells[0]}"`, v.name)
+    continue
+  }
+  const carried = new Set<string>()
+  for (const rec of narrow.slice(1)) {
+    const row = usageByFrameLabel.get(rec.cells[0])
+    if (!row) {
+      addOnRates.absent(`an add-on row we do not emit: "${rec.cells[0]}"`, v.name)
+      continue
+    }
+    carried.add(row.frameLabel)
+    addOnRates.cell(
+      `${row.frameLabel} · ${PLAN_LABELS[selected]}`,
+      usageCell(row, selected),
+      rec.cells[1],
+      v.name,
+    )
+  }
+  /*
+   * The other direction, which this branch never checked.
+   *
+   * It walks the FRAME's records and looks each one up, so it reported rows
+   * the frame carries and we do not — and was structurally blind to rows we
+   * publish and the frame does not, the exact half the wide branch above has
+   * always reported. A rate could therefore be missing from the mobile page
+   * and from this reconciler at the same time, and mobile is the breakpoint
+   * whose shape differs most, so it is the likeliest one to fall behind.
+   */
+  for (const row of USAGE_ROWS) {
+    if (!carried.has(row.frameLabel)) addOnRates.absentRow(row.frameLabel, v.name)
+  }
+}
+
+/**
+ * The pass-through strip closes with a sentence naming the dataset-storage
+ * retail rate — the same `extraDataGbMonthlyUsd` the row above publishes, and
+ * the same number `metered.note` generates. It is prose, which is precisely
+ * why it needs reading: a rate written inside a sentence looks like copy and
+ * gets edited like copy, while being every bit as much a published price as
+ * the cell above it. The rate is extracted and matched exactly; the sentence
+ * around it is design copy and may be rewritten freely.
+ */
+const datasetRate = `${money(PLAN_PRICING.pro.extraDataGbMonthlyUsd)} / GB-mo`
+for (const v of frames) {
+  const note = records(v, 'Usage pricing', 'pass-through')
+    ?.map((r) => r.cells[0])
+    .find((c) => c.includes('Dataset storage over your included amount'))
+  if (note === undefined) continue
+  const stated = /billed separately at (.+)\.\s*$/.exec(note)?.[1] ?? '(no rate stated)'
+  addOnRates.cell(
+    'Extra data storage · pass-through note',
+    datasetRate,
+    stated,
+    v.name,
+  )
+}
+
+addOnRates.finish()
+
+/*==========================================
+ * THE TRANSACTION-FEE LADDER.
+ *
+ * `fees` has no surface of its own on the page: the ladder it publishes IS
+ * the compare grid's two fee rows, which is where it is reconciled. Thin, but
+ * not vacuous — the compare rows apply the `commerce` gate and `fees` does
+ * not, so this is the only thing checking that the two agree on the six plans
+ * where both state a number, and the only thing that would notice `fees`
+ * being wired to the wrong entitlement.
+ *
+ * NOT reconciled, and deliberately: `fees.marketplace`. The take rate is 20%
+ * on every paid plan and 30% on Free, charged in `resolveMarketplaceFeePct`,
+ * and the page states it NOWHERE — grepping the frame for "20%", "take rate"
+ * and "revenue share" returns nothing. A comparison against a surface that
+ * does not exist is the one thing this file must not pretend to make, so it
+ * is named here as a gap instead. It closes the day the disclosure ships.
+ *=========================================*/
+const FEES_STALE: Record<string, Divergence> = {
+  'Digital transaction fee · Free': {
+    frame: NO,
+    why: 'the compare row gates the fee behind `features.commerce`, and Free cannot sell, so the frame publishes a dash where `fees` publishes the 0% the entitlement carries — a fee ladder with a hole in it reads as unknown rather than unavailable',
+  },
+  'Physical transaction fee · Free': {
+    frame: NO,
+    why: 'the same commerce gate as the digital row above',
+  },
+}
+
+const feeLadder = reconciler('transaction fees', FEES_STALE)
+const FEE_ROWS = [
+  { label: 'Digital transaction fee', value: (r: (typeof fees.rows)[number]) => r.digital },
+  { label: 'Physical transaction fee', value: (r: (typeof fees.rows)[number]) => r.physical },
+]
+
+for (const v of frames) {
+  const wide = records(v, 'Compare features', 'Feature table')
+  const narrow = records(v, 'Compare features', 'list')
+  const selected = wide ? null : mobileSelectedPlan(v)
+  // A selected-plan list whose selected plan cannot be read would otherwise
+  // compare all seven plans against the one column it renders, and agree on
+  // whichever plan happened to be showing.
+  if (!wide && !selected) {
+    feeLadder.absent('a fee ladder with no readable plan', v.name)
+    continue
+  }
+  for (const feeRow of FEE_ROWS) {
+    const rec = (wide ?? narrow)?.find((r) => r.cells[0] === feeRow.label)
+    if (!rec) {
+      feeLadder.absent(feeRow.label, v.name)
+      continue
+    }
+    for (const row of fees.rows) {
+      // The mobile list renders the selected plan only; every other column is
+      // simply not on that breakpoint's page to be compared.
+      if (selected && row.plan !== selected) continue
+      const i = framePlanOrder.indexOf(row.plan)
+      const theirs = wide ? rec.cells[i + 1] : rec.cells[1]
+      feeLadder.cell(
+        `${feeRow.label} · ${row.label}`,
+        feeRow.value(row),
+        theirs,
+        v.name,
+      )
+    }
+  }
+}
+
+feeLadder.finish()
+
+/*==========================================
+ * THE OPTIONAL ADD-ON CARDS.
+ *
+ * Two prices, and the frame writes each of them two ways: bare on the wide
+ * breakpoints, with the scope appended on mobile. Both renderings are
+ * assembled from the same two code values, so either is matched EXACTLY and
+ * neither can carry a stale figure — where a "starts with the price" rule
+ * would pass `$89 / mo · per organization` on a per-site add-on.
+ *
+ * NOT reconciled: `maxQuantity`, `scope` and the per-plan `included` counts.
+ * The frame states none of them. `POS_REGISTERS_ADDON_MAX` in particular is
+ * the ceiling `POST /api/billing/addons` enforces, and publishing it beside
+ * an $89/mo line is what would give it a surface to be checked against.
+ *=========================================*/
+const ADDONS_STALE: Record<string, Divergence> = {}
+
+const addonCards = reconciler('add-on cards', ADDONS_STALE)
+/**
+ * What each card is called on the frame. Two names for the register card
+ * because the breakpoints disagree with each other — "POS Pro register" on the
+ * wide frames, "Extra POS register" on mobile.
+ */
+const ADDON_FRAME_LABELS: Record<string, string[]> = {
+  'Event Calendar': ['Event Calendar (add-on)'],
+  'Extra POS register': ['POS Pro register', 'Extra POS register'],
+}
+
+for (const v of frames) {
+  const cards =
+    records(v, 'Usage pricing', 'cards') ??
+    records(v, 'Usage pricing', 'Optional add-ons')
+  if (!cards) {
+    addonCards.absent('no add-on cards in either shape', v.name)
+    continue
+  }
+  for (const row of addons.rows) {
+    const names = ADDON_FRAME_LABELS[row.label] ?? [row.label]
+    const rec = cards.find((r) => names.includes(r.cells[0]) && r.cells.length > 1)
+    if (!rec) {
+      addonCards.absent(`the ${row.label} card`, v.name)
+      continue
+    }
+    const bare = `$${row.priceUsd} / mo`
+    const scoped = `${bare} · per ${row.scope}`
+    addonCards.cell(
+      `${row.label} · price`,
+      rec.cells[1] === scoped ? scoped : bare,
+      rec.cells[1],
+      v.name,
+    )
+  }
+}
+
+addonCards.finish()
+
+/*==========================================
+ * WHAT IS STILL NOT RECONCILED, AND WHY.
+ *
+ * Stated here rather than left to be inferred from what the code happens to
+ * read: an uncovered surface should be a decision somebody made, not a gap
+ * nobody noticed. Each of these is uncheckable for a reason that would stop
+ * being true if the page changed, and the entry comes out when it does.
+ *
+ *   `fees.marketplace` — the take rate is stated NOWHERE on the page.
+ *     Grepping the extractions for "20%", "take rate" and "revenue share"
+ *     returns nothing, and `/product/plugins` is silent too. Comparing
+ *     against a surface that does not exist is the one thing this file must
+ *     not pretend to do; it is reconciled the day the disclosure ships.
+ *
+ *   The EMAIL-SEND and ASSIST overage rates, declared in
+ *     `USAGE_EXPECTED_ABSENT`. Both are emitted into the add-on capacity
+ *     table and both are billed today, and no breakpoint states either, so
+ *     there is no cell to compare against — the same "no surface exists"
+ *     shape as the marketplace take rate above, differing only in that these
+ *     two now HAVE a generated figure for the besigner edit to transcribe.
+ *     `--check` guards them against code drift meanwhile; it does not
+ *     compare them against the page, and will not until the rows ship.
+ *
+ *   `addons.rows[].maxQuantity`, `.scope`, `.included` — the cards publish a
+ *     price and a sentence. `POS_REGISTERS_ADDON_MAX` in particular is a
+ *     ceiling the checkout enforces and the page never mentions, so there is
+ *     nothing to disagree with.
+ *
+ *   `tiers.rows[].annualLabel` and `byInterval` — the strip is authored
+ *     OUTSIDE the Monthly/Annual tabs, so the frame carries one headline
+ *     price per card and no `interval` on the CTA. The generated cadence copy
+ *     is what the strip SHOULD publish, not a transcription of what it does.
+ *
+ *   The compare grid and the pass-through strip on breakpoints OTHER than the
+ *     one `--frame` names. Both read the primary export only. The tablet and
+ *     widescreen exports carry those two groups cell-identical to the desktop
+ *     one, so the practical exposure is the mobile export, whose compare grid
+ *     is a selected-plan list rendering booleans as "✓ Included" and whose
+ *     metered strip is three records per row. Its transaction-fee rows ARE
+ *     read, by the fee ladder above, which is how the shape is known to
+ *     differ.
+ *
+ *   The four plan CARDS in `Plans / row`. Their headline prices and feature
+ *     bullets are claims, but this file emits no table for them — the cards
+ *     are authored copy, and generating them is a larger change than giving
+ *     an existing generated table a reader.
+ *=========================================*/
+
 const literals = GROUPS.flatMap((g) =>
   g.rows.filter((r) => r.literal).map((r) => ({ label: r.label, why: r.literal })),
 )
@@ -1054,6 +1950,10 @@ fail(
 fail(
   'cells declared stale in FRAME_STALE_CELLS that the frame has CAUGHT UP on — delete the declaration',
   staleCellsResolved,
+)
+fail(
+  'declared in FRAME_STALE_CELLS but there is no such cell — delete the declaration',
+  Object.keys(FRAME_STALE_CELLS).filter((k) => !comparedCells.has(k)),
 )
 fail(
   'rows in our spec but NOT in the frame, and not declared in EXPECTED_MISSING',
@@ -1119,6 +2019,17 @@ console.log()
 console.log(`declared divergences from the frame: ` +
   `${Object.keys(EXPECTED_MISSING).length} ours-only, ` +
   `${Object.keys(EXPECTED_EXTRA).length} frame-only`)
+// Printed because a reconciler that silently matched NOTHING would report
+// exactly as clean as one that matched everything. A zero here is a failure
+// (`reconciled ZERO cells`), and a number that collapses is visible in a diff.
+console.log(
+  `breakpoints reconciled: ${frames.map((f) => f.name).join(', ') || '(none)'}`,
+)
+console.log(
+  `cells compared: ${comparedCells.size} compare · ${columns.compared} plan columns · ` +
+    `${tierStrip.compared} scale strip · ${addOnRates.compared} add-on capacity · ` +
+    `${feeLadder.compared} transaction fees · ${addonCards.compared} add-on cards`,
+)
 
 if (checkOnly) {
   let committed: string | null = null

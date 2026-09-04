@@ -70,6 +70,7 @@ import {
   emailSendRateVerdict,
   emailSendRateWindowStartMs,
   normalizeEmailSendRateConfig,
+  orgHourlyCampaignCeiling,
   setEmailSendGovernor,
 } from '@aglyn/shared-util-email'
 import { firebaseAdmin } from './firebase-admin'
@@ -273,6 +274,187 @@ export async function readEmailSendRateWindow(options?: {
     }
   } catch {
     return { windowStartMs, resetMs, used: 0 }
+  }
+}
+
+/** Id prefix for the per-org, per-hour campaign counters. */
+export const EMAIL_ORG_SEND_RATE_WINDOW_PREFIX = 'sendRateOrg_'
+
+/**
+ * The per-org counter document id for a window.
+ *
+ * A separate document per org rather than a map field on the platform window,
+ * so two orgs sending in the same hour contend on their own documents instead
+ * of serialising on one. The platform window is already a single hot document
+ * and adding N org fields to it would make every campaign in the hour a write
+ * conflict with every other.
+ */
+export function emailOrgSendRateWindowDocId(
+  windowStartMs: number,
+  orgId: string,
+): string {
+  return `${EMAIL_ORG_SEND_RATE_WINDOW_PREFIX}${windowStartMs}_${orgId}`
+}
+
+/** The current hour for one org. Read-only, for a usage surface. */
+export async function readOrgEmailSendWindow(options: {
+  orgId: string
+  firestore?: any
+  now?: number
+}): Promise<{ windowStartMs: number; resetMs: number; used: number }> {
+  const now = options.now ?? Date.now()
+  const windowStartMs = emailSendRateWindowStartMs(now)
+  const resetMs = windowStartMs + EMAIL_SEND_RATE_WINDOW_MS
+  if (!options.orgId) return { windowStartMs, resetMs, used: 0 }
+  try {
+    const firestore = options.firestore ?? firebaseAdmin.app().firestore()
+    const snapshot = await firestore
+      .collection(RATE_LIMIT_COLLECTION)
+      .doc(emailOrgSendRateWindowDocId(windowStartMs, options.orgId))
+      .get()
+    const used = Number((snapshot.exists ? snapshot.get('count') : 0) ?? 0)
+    return {
+      windowStartMs,
+      resetMs,
+      used: Number.isFinite(used) && used > 0 ? Math.floor(used) : 0,
+    }
+  } catch {
+    return { windowStartMs, resetMs, used: 0 }
+  }
+}
+
+/** The answer to a per-org hourly claim. Every field is a stated number. */
+export interface OrgEmailSendClaimResult {
+  allowed: boolean
+  /** Count in this org's window BEFORE this send. */
+  used: number
+  /** What this org may send in an hour. */
+  ceiling: number
+  /** Headroom after this send, floored at 0. */
+  remaining: number
+  /** When the window rolls and a deferred campaign may go. */
+  retryAtMs: number
+  /** True when the counter was unreachable and this failed open. */
+  degraded: boolean
+}
+
+/**
+ * THE PER-ORG SHARE OF THE PLATFORM HOUR.
+ *
+ * The platform governor bounds total volume; it does not bound how much of
+ * that total ONE tenant may take. Without this, a single org with a large
+ * audience occupies the whole hour and every other customer's campaigns are
+ * refused by a ceiling they did nothing to reach — one tenant denying service
+ * to the rest, on a limit they cannot see.
+ *
+ * The ceiling is derived, not configured: `orgHourlyCampaignCeiling` is a
+ * share of whatever the live platform ceiling currently is, so a staff ramp
+ * moves both together and the two can never drift into contradiction. See
+ * `send-ceilings.ts` for the arithmetic and the relations it maintains.
+ *
+ * **Campaigns only.** This function is not on `sendEmail`'s path and is called
+ * from the campaign sender alone. A transactional message can never reach it,
+ * which is the same boundary `emailSendRateVerdict` enforces one layer down
+ * and for the same reason: a password reset refused by a throttle converts a
+ * reputation risk into an outage on somebody else's business.
+ *
+ * ## Fails OPEN
+ *
+ * An unreachable counter grants the send, matching `consumeEmailSendBudget`.
+ * A refusal produced by a Firestore blip is a refused campaign for a paying
+ * customer, and the hour of pacing it buys back is not worth it.
+ *
+ * ## Claimed, not reconciled
+ *
+ * The claim is taken for the whole batch and never refunded, unlike the
+ * monthly reservation. The window is one hour and TTL-swept, so an
+ * undelivered remainder costs the org the rest of that hour and nothing
+ * after it — where an unreconciled MONTHLY claim would cost the rest of the
+ * month, which is why that one is reconciled and this one is not. The error
+ * is in the direction that can only ever pace mail more, never let more out.
+ */
+export async function claimOrgEmailSendBudget(options: {
+  orgId: string
+  /** Messages this campaign would send. */
+  count: number
+  /** The live platform ceiling; the org share is derived from it. */
+  platformPerHour: number
+  /** False parks the control, exactly as the platform governor's flag does. */
+  enabled?: boolean
+  now?: number
+  firestore?: any
+}): Promise<OrgEmailSendClaimResult> {
+  const now = options.now ?? Date.now()
+  const windowStartMs = emailSendRateWindowStartMs(now)
+  const retryAtMs = windowStartMs + EMAIL_SEND_RATE_WINDOW_MS
+  const ceiling = orgHourlyCampaignCeiling(options.platformPerHour)
+  const count = Math.max(0, Math.floor(Number(options.count) || 0))
+
+  const granted = (used: number, degraded: boolean): OrgEmailSendClaimResult => ({
+    allowed: true,
+    used,
+    ceiling,
+    remaining: Math.max(0, ceiling - (used + count)),
+    retryAtMs,
+    degraded,
+  })
+
+  // A parked control still reports the ceiling, so a surface reading this
+  // shows a real number rather than blanking while the control is off.
+  if (options.enabled === false) return granted(0, false)
+  // No org means the counter has nowhere to live. The monthly reservation
+  // refuses in this case because an unattributable campaign must not send
+  // unbounded; here the monthly claim has already made that decision, so
+  // failing open costs nothing it has not already been charged for.
+  if (!options.orgId) return granted(0, true)
+
+  try {
+    const firestore = options.firestore ?? firebaseAdmin.app().firestore()
+    const ref = firestore
+      .collection(RATE_LIMIT_COLLECTION)
+      .doc(emailOrgSendRateWindowDocId(windowStartMs, options.orgId))
+
+    return await firestore.runTransaction(async (tx: any) => {
+      const snapshot = await tx.get(ref)
+      const rawUsed = Number((snapshot.exists ? snapshot.get('count') : 0) ?? 0)
+      // A corrupt or negative counter must not read as headroom.
+      const used =
+        Number.isFinite(rawUsed) && rawUsed > 0 ? Math.floor(rawUsed) : 0
+      if (used + count > ceiling) {
+        // A refused claim writes NOTHING. A campaign that will be retried
+        // next hour must not have spent budget on being told no.
+        return {
+          allowed: false,
+          used,
+          ceiling,
+          remaining: Math.max(0, ceiling - used),
+          retryAtMs,
+          degraded: false,
+        }
+      }
+      // An absolute write from this transaction's own read, not
+      // `FieldValue.increment` — the read is the authority for the decision,
+      // and an increment would be atomic on the number while proving nothing
+      // about the value the decision was made from.
+      tx.set(
+        ref,
+        {
+          count: used + count,
+          windowStartMs,
+          orgId: options.orgId,
+          // NOT `lastAtMs` — the rate-limiter health probe queries this
+          // collection on that field and a per-hour document in its range
+          // would compete with the markers it exists to find.
+          sentAtMs: now,
+          expiresAt: new Date(retryAtMs + EMAIL_SEND_RATE_WINDOW_MS),
+        },
+        { merge: true },
+      )
+      return granted(used, false)
+    })
+  } catch (error) {
+    console.error('[send-rate] org window unavailable — allowing', error)
+    return granted(0, true)
   }
 }
 

@@ -17,6 +17,8 @@
 'use client'
 
 import { AppLink, CardDisplay, type HelpTipContent } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import {
   Alert,
   Button,
@@ -31,6 +33,7 @@ import { collection, limit, orderBy, query, where } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import {
+  ceilingedWindow,
   useFirestore,
   useFirestoreCollection,
 } from '@aglyn/tenant-feature-instance'
@@ -44,8 +47,6 @@ export interface HostActivityCardProps {
   hostId: string
   /** Show only entries for this target id (e.g. a screen detail page). */
   targetId?: string
-  /** Entries rendered after filtering/sorting. */
-  max?: number
   header?: string
   /** When set, a "View all activity" link renders under the list (AGL-249). */
   viewAllHref?: string
@@ -53,7 +54,13 @@ export interface HostActivityCardProps {
   help?: HelpTipContent
 }
 
-/** Rows fetched before the client-side sort/slice. */
+/**
+ * Rows fetched before the client-side sort and page slice.
+ *
+ * A CEILING, and the read asks for one document more than it so the card can
+ * say when the window was not the whole story — `length >= WINDOW` is wrong at
+ * exactly the collection size that equals the ceiling.
+ */
 const WINDOW = 200
 
 /**
@@ -105,12 +112,29 @@ const WINDOW = 200
  * snapshot arrived. A refused or failed listen now says so and offers a retry
  * (the `used-by-card` shape), because an audit feed that invents a confident
  * zero is worse than one that admits it is blind.
+ *
+ * ## Why the "Show N more" expander became the shared footer
+ *
+ * It was a FOURTH pagination grammar for the same act — beside the `DataGrid`
+ * footer, the shared `ListPagination`, and the "Load more" the DAM grid keeps —
+ * and it escaped the guard that exists to stop exactly that, on spelling: the
+ * check looks for the literal `'Load more'` and this button said
+ * `Show ${more} more`.
+ *
+ * On its own terms it was also the weakest of the four. It only ever grew, so
+ * a reader who opened forty rows could not get back to ten without remounting
+ * the card; it offered no size control, which made it one of the two grammars
+ * that never let a reader choose; it could not state a total even though every
+ * row was already in hand; and it said nothing when `WINDOW` bit, so a busy
+ * target read as though two hundred entries were all there were.
+ *
+ * The footer answers all four, and the rows stay a client SLICE — see `sorted`,
+ * where paging is free because the window is already fetched.
  */
 export function HostActivityCard(props: HostActivityCardProps) {
   const {
     hostId,
     targetId,
-    max = 20,
     header = 'Recent Activity',
     viewAllHref,
     help = pluginDocsHelp('consoleTour', {
@@ -130,9 +154,12 @@ export function HostActivityCard(props: HostActivityCardProps) {
       // instead, and report it as unreadable below — never as "no activity".
       if (!hostId) return null
       const base = collection(firestore, 'hosts', hostId, 'activity')
+      // `WINDOW + 1` on both: the extra document is the PROBE, and it is what
+      // turns "there may be more" into a fact the card can state. It is never
+      // rendered — `ceilingedWindow` drops it below.
       return targetId
-        ? query(base, where('target.id', '==', targetId), limit(WINDOW))
-        : query(base, orderBy('createdAt', 'desc'), limit(WINDOW))
+        ? query(base, where('target.id', '==', targetId), limit(WINDOW + 1))
+        : query(base, orderBy('createdAt', 'desc'), limit(WINDOW + 1))
     },
     [firestore, hostId, targetId, attempt],
     { idField: '$id' },
@@ -147,25 +174,34 @@ export function HostActivityCard(props: HostActivityCardProps) {
   /**
    * Paging is FREE here, which is why it is a slice and not a second query
    * (AGL-2486). The read above already fetches `WINDOW` rows and this then
-   * threw all but `max` of them away — 180 documents paid for and discarded
+   * threw all but a page of them away — 190 documents paid for and discarded
    * on every render of this card. Showing more of what is already in hand
    * costs nothing; only running past `WINDOW` would cost a read, and the
    * "View all" link exists for that.
+   *
+   * Sorting is safe here in a way it is not on a server-paged list: these rows
+   * are the whole window, not a slice of one.
    */
+  const { rows: windowRows, truncated } = ceilingedWindow<any>(entries, WINDOW)
   const sorted = useMemo(
     () =>
-      [...(entries ?? [])].sort(
+      [...windowRows].sort(
         (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0),
       ),
+    // `windowRows` is a fresh array each render; the snapshot behind it is not.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [entries],
   )
-  const [shown, setShown] = useState(max)
-  // Re-collapse when the card is pointed at a different target, or the page
-  // that mounts it asks for a different page size — otherwise a previous
-  // screen's "show more" silently sets the size for the next one.
-  useEffect(() => setShown(max), [max, targetId, hostId])
-  const items = useMemo(() => sorted.slice(0, shown), [sorted, shown])
-  const more = Math.min(sorted.length - shown, max)
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  // Back to the first page when the card is pointed at a different subject —
+  // otherwise a previous screen's page three opens the next one three pages
+  // in, over a history that may not have three.
+  useEffect(() => setPage(0), [targetId, hostId])
+  const items = useMemo(
+    () => sorted.slice(page * pageSize, page * pageSize + pageSize),
+    [sorted, page, pageSize],
+  )
   // Three states, not two: a read that never happened must not be reported as
   // an empty history.
   const unreadable = status === 'error' || !hostId
@@ -193,7 +229,12 @@ export function HostActivityCard(props: HostActivityCardProps) {
         <Typography variant="body2" color="text.secondary">
           {'Loading activity…'}
         </Typography>
-      ) : items.length === 0 ? (
+      ) : sorted.length === 0 ? (
+        /*
+         * The WINDOW's length, not the page's. A page past the end of a
+         * history that shrank while it was open holds no rows and is not an
+         * empty history, and this card must never confuse the two.
+         */
         <Typography variant="body2" color="text.secondary">
           {'No activity yet — changes made in the console appear here.'}
         </Typography>
@@ -235,14 +276,35 @@ export function HostActivityCard(props: HostActivityCardProps) {
             })}
           </List>
           {/* Free paging: these rows are already fetched — see `sorted`. */}
-          {more > 0 ? (
-            <Button
-              size="small"
-              onClick={() => setShown((count) => count + max)}
-              sx={{ alignSelf: 'flex-start', mt: 1 }}
-            >
-              {`Show ${more} more`}
-            </Button>
+          <ListPagination
+            page={page}
+            pageSize={pageSize}
+            rowCount={items.length}
+            // The window the card HOLDS, which it knows exactly. `truncated`
+            // below is what says the history is larger than that.
+            count={sorted.length}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+          {truncated ? (
+            <Typography variant="caption" color="text.secondary">
+              {/*
+               * Two different sentences because the two queries answer
+               * differently. The un-targeted one carries `orderBy('createdAt')`
+               * and its window really is the newest entries; the targeted one
+               * has no `orderBy` — deliberately, so it needs no composite
+               * index — so its window is a document-id SAMPLE of the target's
+               * history, and calling it "most recent" would be the same lie
+               * AGL-2292 was.
+               */}
+              {targetId
+                ? `Showing ${WINDOW} entries for this item. It has more — ` +
+                  'these are not necessarily the newest; open the full ' +
+                  'activity log for the ordered history.'
+                : `Showing this site’s ${WINDOW} most recent entries. There ` +
+                  'is more history than that — open the full activity log to ' +
+                  'read further back.'}
+            </Typography>
           ) : null}
         </>
       )}

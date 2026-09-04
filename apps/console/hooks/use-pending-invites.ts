@@ -18,6 +18,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
 export interface PendingInvite {
   $id: string
@@ -39,17 +40,11 @@ export function usePendingInvites() {
   const [loading, setLoading] = useState(true)
 
   const refresh = useCallback(async () => {
-    const idToken = await (user as any)?.getIdToken?.()
-    if (!idToken) {
-      setInvites([])
-      setLoading(false)
-      return
-    }
     try {
-      const response = await fetch('/api/orgs/invites?mine=1', {
-        headers: { Authorization: `Bearer ${idToken}` },
-      })
-      if (!response.ok) return
+      const response = await authorizedFetch(user, '/api/orgs/invites?mine=1')
+      // A refusal — the route's, or an unobtainable token — empties the list
+      // rather than leaving somebody else's invitations on screen.
+      if (!response.ok) return void setInvites([])
       const payload = await response.json()
       setInvites(
         (payload.invites ?? []).filter((invite: PendingInvite) => invite.orgId),

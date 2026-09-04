@@ -18,6 +18,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import {
+  decodeStoredNodes,
   normalizeScreenSlug,
   resolveNamedTokens,
   screenRoutePathToUrl,
@@ -100,8 +101,17 @@ export function UseTemplateDialog({
     if (!template || !name.trim()) return
     setBusy(true)
     try {
+      // BOTH stored forms (AGL-1151). Every surface that opens this dialog
+      // reads the template through a collection query or a converter-less
+      // `useFirestoreDoc`, so `nodes` arrives exactly as stored — msgpack for
+      // anything written since templates were compressed, a plain map for
+      // everything older. `decodeStoredNodes` returns a map unchanged.
+      //
+      // Reading it raw fails silently in the direction that costs the most:
+      // `resolveNamedTokens` over a `Bytes` finds no tokens and returns it,
+      // and the screen, layout or component created below is EMPTY.
       const nodes = resolveNamedTokens(
-        (template.nodes ?? {}) as any,
+        (decodeStoredNodes<any>(template.nodes) ?? {}) as any,
         placeholders.length ? values : null,
       )
 

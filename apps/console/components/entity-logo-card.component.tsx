@@ -63,23 +63,40 @@ export interface EntityLogoCardProps {
  * external logo URL is legitimate schema.org output, and a publisher whose
  * mark is hosted on their corporate site should keep pasting it.
  *
- * ## Why this one does NOT store a `media:` reference
+ * ## It stores a `media:` reference, like every other picker (AGL-2538)
  *
- * Every other picker in the console writes {@link Aglyn.mediaNodeSrc} — a
- * `media:` reference that `resolveMediaSrc` turns back into a site-relative
- * CDN path at render. That is right for anything a PAGE renders, and wrong
- * here, because nothing renders this: the tenant's `WebSite` and `Article`
- * JSON-LD copy `seo.entity.logo` into the document verbatim, with no
- * resolver in front of it. A reference would ship `media:org:…/…` to Google
- * as a logo URL, and a site-relative path would ship a URL with no origin —
- * the same out-of-band problem `og:image` has (AGL-1337), with the same
- * answer: resolve, then absolutize against the site's own public origin
- * ({@link Aglyn.absoluteMediaSrc}).
+ * It used to store an ABSOLUTE url, and the reason was sound when it was
+ * written: nothing resolved this value, because the tenant's `WebSite` and
+ * `Article` JSON-LD copied `seo.entity.logo` into the document verbatim, so a
+ * reference would have shipped `media:org:…/…` to Google as a logo URL.
  *
- * With no public origin to absolutize against — a host with neither a
- * subdomain nor a custom domain — the raw storage URL is used rather than
- * writing a relative one. Never interpolate an unknown origin, and never
- * emit a URL that is well-formed but wrong (AGL-1160).
+ * That stopped being true at AGL-2486, which introduced
+ * {@link Aglyn.hostSeoEntityImageJsonLd} — the value now goes through
+ * {@link Aglyn.absoluteMediaSrc} on its way into every publisher block, for
+ * exactly the reason that function records: the field has three stored
+ * generations and the site entity's was the last path still emitting whichever
+ * one it found.
+ *
+ * An absolute url is actively worse once a resolver exists, because it BAKES
+ * IN AN ORIGIN. Connect a custom domain, change one, or self-host, and the
+ * publisher mark still names the old host — in structured data, where nothing
+ * surfaces the breakage until a rich result quietly stops appearing. It also
+ * detaches the value from the library that manages the asset, and it fixes the
+ * CDN scope at pick time instead of resolving it for the site doing the
+ * rendering, which is what makes a site-restricted org asset serve.
+ *
+ * Every consumer resolves, checked rather than assumed: the publisher blocks
+ * through `absoluteMediaSrc`; `{{host.logo}}` on a page through the Image
+ * block's own `resolveMediaSrc`; `{{host.logo}}` in email through
+ * `safeLogoUrl`. `host.logoUrl` — the site logo one card up — has stored a
+ * reference all along and travels those same paths.
+ *
+ * No migration: `resolveMediaSrc` passes a non-reference straight through, so
+ * every absolute url already stored keeps working.
+ *
+ * The text field below STAYS, and is not made read-only: an external logo URL
+ * is legitimate schema.org output, and a publisher whose mark is hosted on
+ * their corporate site should keep pasting it.
  */
 export function EntityLogoCard(props: EntityLogoCardProps) {
   const { hostId, embedded } = props
@@ -261,15 +278,12 @@ export function EntityLogoCard(props: EntityLogoCardProps) {
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
         onPick={(media) => {
-          // ABSOLUTE, not a `media:` reference — see the note above. The
-          // reference is still what gets resolved, so the org's `mediaCdn`
-          // entitlement keeps deciding whether this is a CDN URL or the raw
-          // storage one; only the absolutizing is extra.
-          const src =
-            Aglyn.absoluteMediaSrc(Aglyn.mediaNodeSrc(media), {
-              hostId,
-              origin: Aglyn.hostPublicOrigin(data),
-            }) ?? media?.url
+          // A `media:` reference, the same writer every other picker uses —
+          // see the note above. `media.url` is the fallback for an asset with
+          // no `cdnPath` (a free-tier org), which is what `mediaNodeSrc`
+          // already returns in that case; the `??` covers a media row with
+          // neither.
+          const src = Aglyn.mediaNodeSrc(media) ?? media?.url
           if (!src) return
           void save(src, 'Entity logo saved')
         }}

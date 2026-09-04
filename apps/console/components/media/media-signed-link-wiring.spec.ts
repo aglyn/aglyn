@@ -61,8 +61,11 @@ describe('the private-asset link is reachable from the DAM', () => {
     expect(body).toContain('/api/media/sign')
     expect(body).toContain('JSON.stringify({ orgId, mediaId })')
     // Bearer, not a cookie: the route verifies an ID token and returns 401
-    // without one.
-    expect(body).toContain('Authorization: `Bearer ${idToken}`')
+    // without one — and through `authorizedFetch`, so the header is
+    // unconditional. Assembled as `...(idToken ? { Authorization } : {})`,
+    // an operator whose token could not be minted would have sent this
+    // request anonymously and read the route's 401 as a broken link.
+    expect(body).toContain("authorizedFetch(user, '/api/media/sign'")
   })
 
   it('the handler is wired onto the grid card, not merely declared', () => {

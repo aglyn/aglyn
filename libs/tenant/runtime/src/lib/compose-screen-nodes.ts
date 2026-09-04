@@ -19,6 +19,7 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import applyDuePublishSchedule from './apply-publish-schedule'
 import getComponents from './get-components'
 import getDatasets from './get-datasets'
+import getForms from './get-forms'
 import {
   getPublishedCollectionSource,
   type PublishedCollectionSource,
@@ -65,6 +66,21 @@ export interface ComposeCollectionContext {
    * category filter both in between — `entries.length` no longer tells them.
    */
   entriesReachedBound?: boolean
+  /**
+   * Whether {@link slug} is a cache KEY rather than an address (AGL-2524).
+   *
+   * The author page mixes collections, and the compose pipeline keys entry
+   * sources by collection slug — so it hands over a synthetic one
+   * (`AUTHOR_ENTRIES_SOURCE_SLUG`) with its entries already in hand. That is
+   * harmless for the entries block, whose every row carries its OWN
+   * `collectionSlug` and builds `entry.url` from it, and for the search box,
+   * whose index is built the same way.
+   *
+   * It is NOT harmless for anything that builds a URL from the source's slug
+   * itself. Set this and such a block resolves nothing rather than pointing
+   * readers at `/{synthetic}/…`.
+   */
+  routeless?: boolean
 }
 
 interface CollectionBlockScan {
@@ -240,7 +256,25 @@ async function expandCollectionEntryBlocks(
     ? Aglyn.expandCollectionCategories(
         expanded,
         sources,
-        collection?.slug,
+        /*
+          No DEFAULT collection for the pills on a routeless page (AGL-2524).
+
+          Category pills are the one block that builds its links from the
+          SOURCE's slug — `/{slug}/category/{x}` — because a category is a
+          filter on one collection's own listing. On the author page that slug
+          is synthetic, so an unbound pills block stamped links to a route that
+          does not exist.
+
+          Rendering nothing is the honest answer rather than a fallback. The
+          page spans every collection, and there is no
+          `/author/{slug}/category/{x}` for a pill to lead to; the only real
+          destination would be some collection's listing, which drops the
+          author the reader is looking at. A pills block that NAMES a
+          collection is unaffected and still resolves that collection's own
+          taxonomy — "browse the blog by category", which is a sensible thing
+          to put beside an archive.
+        */
+        collection?.routeless ? undefined : collection?.slug,
         collection?.categorySlug,
       )
     : expanded
@@ -265,7 +299,20 @@ async function expandCollectionEntryBlocks(
  */
 export async function composeNodesWithChrome(options: {
   hostId: string
-  layoutId?: string | null
+  /**
+   * The layout binding, or a PROMISE of it.
+   *
+   * The unresolved form exists for the same reason `screenNodes` accepts one
+   * (AGL-1428): the binding may live on the version document (key-present
+   * wins over the screen's), and awaiting the version before this call would
+   * put every host-scoped read back behind it. Only the layout-chain walk
+   * consumes the binding, so it alone waits; the rest of the chrome bundle
+   * still starts immediately.
+   */
+  layoutId?:
+    | string
+    | null
+    | Promise<string | null | undefined>
   /**
    * The screen's own nodes, or a PROMISE of them (AGL-1428).
    *
@@ -309,7 +356,8 @@ export async function composeNodesWithChrome(options: {
   const walkLayoutChain = async () => {
     const chain: Array<Record<string, any> | undefined> = []
     const seen = new Set<string>()
-    let currentLayoutId = layoutId ? String(layoutId) : undefined
+    const boundLayoutId = await layoutId
+    let currentLayoutId = boundLayoutId ? String(boundLayoutId) : undefined
     while (
       currentLayoutId &&
       !seen.has(currentLayoutId) &&
@@ -395,6 +443,15 @@ export async function composeNodesWithChrome(options: {
   const screenDatasetsPromise = Aglyn.hasRepeatableNodes(screenNodes)
     ? getDatasets({ hostId })
     : undefined
+  // Does the SCREEN itself place a form entity? Gated and re-asked exactly
+  // like the datasets read beside it (AGL-1440): most pages carry no form, and
+  // the ones that do usually say so on their own document, so the read goes
+  // out here alongside the chrome reads instead of as a serial tail. It is not
+  // the correctness gate — a placed form can arrive from a layout or a grafted
+  // component — so the composed tree is asked again below.
+  const screenFormsPromise = Aglyn.placesFormEntity(screenNodes)
+    ? getForms({ hostId })
+    : undefined
   // Issued HERE, beside the datasets read and before the chrome bundle is
   // awaited, so the collection read overlaps it instead of trailing it.
   const prefetchedSources = prefetchCollectionSources(
@@ -410,10 +467,42 @@ export async function composeNodesWithChrome(options: {
     layoutNodesChain as any,
     screenNodes as any,
   )
-  const grafted = Aglyn.composeReusableComponentNodes(
+  const graftedComponents = Aglyn.composeReusableComponentNodes(
     composedNodes as any,
     componentsRes.definitions as any,
   )
+  /*
+   * PLACED FORMS RESOLVE AGAINST THEIR ENTITY (`docs/specs/reusable-forms.md`).
+   *
+   * A form node bound to `hosts/{hostId}/forms/{formId}` renders that entity's
+   * published design, so a form is edited once and every page placing it
+   * follows. Without this the entity's tree was written on every publish and
+   * read by nothing: the fields had to be redrawn per page, and the two copies
+   * diverged the moment either was touched.
+   *
+   * The gate is the COMPONENT-grafted tree, not the screen's own nodes, for
+   * the reason the repeatables gate below states: a form placed inside a
+   * layout or a shared component does not exist in `screenNodes`, and a page
+   * that renders one would silently keep its stale inline copy.
+   *
+   * The second graft re-runs the component expansion deliberately. Instances
+   * already expanded are skipped by their own prefix, so the repeat costs a
+   * scan, and passing BOTH placement kinds is what expands a reusable
+   * component nested inside a form's design — which the first pass could not
+   * have seen, because that subtree was not in the tree yet.
+   */
+  const forms =
+    (await screenFormsPromise)?.forms ??
+    (Aglyn.placesFormEntity(graftedComponents as any)
+      ? (await getForms({ hostId })).forms
+      : undefined)
+  const grafted = forms
+    ? Aglyn.composeReusableComponentNodes(
+        graftedComponents as any,
+        componentsRes.definitions as any,
+        [Aglyn.placedFormPlacement(forms as any)],
+      )
+    : graftedComponents
   // Computed variables (AGL-129): workflow-backed values resolve once per
   // compose; failures keep each variable's stored fallback.
   const variables = Aglyn.resolveComputedVariables(
@@ -460,8 +549,15 @@ export async function composeNodesWithChrome(options: {
     options.collection?.entry,
     options.collection?.categories,
   )
-  const bound = Aglyn.resolveNodesBindings(
+  // Entry Author cards (AGL-2486): the same fill, one block over. Its values
+  // come off the author RECORD the routed entry resolved to, which the
+  // collection read has already attached, so this costs nothing either.
+  const withEntryAuthor = Aglyn.expandCollectionEntryAuthor(
     withEntryMeta as any,
+    options.collection?.entry,
+  )
+  const bound = Aglyn.resolveNodesBindings(
+    withEntryAuthor as any,
     variables,
     functions,
   )
@@ -483,7 +579,11 @@ export async function composeNodesWithChrome(options: {
   const nodes = Aglyn.attachPluginInstalls(withFunctions, pluginInstalls)
   // Entry-template tokens (AGL-105): {{entry.*}} from the rendered entry.
   const finalNodes = Aglyn.resolveNamedTokens(nodes as any, options.tokens)
-  return Aglyn.canvas.processNodesToDenormalized(finalNodes as any)
+  // The document's one `main` landmark (AGL-2486). LAST, so it reads the tree
+  // the page actually ships — a slot grafted from a layout chain, an element
+  // an author chose — rather than the screen as stored.
+  const withLandmark = Aglyn.stampDocumentLandmark(finalNodes as any)
+  return Aglyn.canvas.processNodesToDenormalized(withLandmark as any)
 }
 
 /**
@@ -557,7 +657,20 @@ export async function composeScreenNodes(options: {
    */
   const composed = composeNodesWithChrome({
     hostId,
-    layoutId: screen.layoutId as string | undefined,
+    // Version-first (key-present wins, null = explicitly no layout), screen
+    // fallback — resolved as a promise so only the layout-chain walk waits on
+    // the version read; the rest of the chrome bundle keeps the AGL-1428
+    // overlap. A failed version read falls back to the screen binding; the
+    // whole compose is discarded on that path anyway.
+    layoutId: versionPromise.then(
+      (res) =>
+        res.version && 'layoutId' in res.version
+          ? ((res.version as Aglyn.AglynScreenVersion).layoutId as
+              | string
+              | null)
+          : (screen.layoutId as string | undefined),
+      () => screen.layoutId as string | undefined,
+    ),
     screenNodes: versionPromise.then(
       (res) => (res.version?.nodes ?? {}) as any,
       () => ({}) as any,

@@ -145,3 +145,48 @@ export const FIELD_TEXT_CONTENT: AglynAttributeSchema = {
   component: FieldComponentType.TEXTAREA,
   label: 'Text',
 }
+
+/**
+ * Where a link opens, for the elements that render through `AppLink`.
+ *
+ * `'_self'` is a REAL SENTINEL, not a deletion, for the reason `renderAs`
+ * carries one: the attributes form strips `''` before save (AGL-1191), so an
+ * `{ value: '', label: 'Same tab' }` option could not persist and a link
+ * switched to a new tab would have no route in this dropdown back. It is
+ * safe to store because `linkTargetProps` resolves it to no attribute at
+ * all, which is exactly what an unset target already renders.
+ *
+ * Deliberately no separate "New window" option. `target="_blank"` asks for a
+ * new browsing context and the browser — not the page — decides whether that
+ * is a tab or a window, so a second label would be a second name for one
+ * behavior. Authors who need a specific named window pick Custom and name it.
+ */
+export const FIELD_LINK_TARGET: AglynAttributeSchema = {
+  name: 'target',
+  description:
+    'Where this opens. Same tab keeps the visitor on the site with their ' +
+    'history intact, which is what internal navigation should do; New tab ' +
+    'suits a download or an outside site you want them to come back from.',
+  component: FieldComponentType.SELECT,
+  label: 'Open link in',
+  options: [
+    { value: '_self', label: 'Same tab' },
+    { value: '_blank', label: 'New tab' },
+    { value: 'custom', label: 'Custom window name' },
+  ],
+}
+/**
+ * The name behind FIELD_LINK_TARGET's Custom choice. Shown only for that
+ * choice — on its own it is an advanced affordance, and offering a free-text
+ * box beside the dropdown would invite `_blank` being typed into it.
+ */
+export const FIELD_LINK_TARGET_NAME: AglynAttributeSchema = {
+  name: 'targetName',
+  description:
+    'Name of the window to open in. Every link sharing a name reuses that ' +
+    'one window instead of opening another, which is how a set of links ' +
+    'can drive a single companion window.',
+  component: FieldComponentType.TEXT_FIELD,
+  label: 'Window name',
+  condition: { when: 'target', is: 'custom' },
+}

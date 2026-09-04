@@ -113,8 +113,43 @@ describe('renderHostEmailWithTokens (AGL-1022)', () => {
     )
     expect(renderMock.mock.calls[0][1]).toBe('host-1')
     expect(renderMock.mock.calls[0][2]).toBe('booking-confirmed')
-    expect(renderMock.mock.calls[0][4]).toEqual({
+    expect(renderMock.mock.calls[0][4]).toMatchObject({
       origin: 'https://example.test',
     })
+  })
+
+  /**
+   * This function is where the HTML policy joins the send, for the same
+   * reason and by the same argument as the token map above it: the renderer
+   * requires a sanitizer, `scope:shared` cannot import one, and this lib
+   * already sits above both. Nine senders call through here without knowing
+   * they needed to ask, so nothing downstream proves the policy arrived —
+   * only this does.
+   */
+  it('supplies the HTML policy every sender behind it depends on', async () => {
+    await renderHostEmailWithTokens(
+      firestoreWith(site),
+      'host-1',
+      'booking-confirmed',
+    )
+    const options = renderMock.mock.calls[0][4] as {
+      sanitize?: (html: string) => string
+    }
+    expect(typeof options.sanitize).toBe('function')
+    // And it is a real policy: asserting the shape alone passes on `(h) => h`,
+    // which is exactly the thing a required sanitizer is there to prevent.
+    expect(options.sanitize?.('<p onclick="x()">hi</p>')).toBe('<p>hi</p>')
+  })
+
+  it('keeps the caller origin alongside the policy rather than replacing it', async () => {
+    await renderHostEmailWithTokens(
+      firestoreWith(site),
+      'host-1',
+      'booking-confirmed',
+      {},
+      { origin: 'https://example.test' },
+    )
+    const options = renderMock.mock.calls[0][4] as { origin?: string }
+    expect(options.origin).toBe('https://example.test')
   })
 })

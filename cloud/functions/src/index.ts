@@ -221,6 +221,30 @@ const CONSOLE_FAST_CRON_SCHEDULE = '*/15 * * * *'
 const CONSOLE_FAST_CRON_ROUTES: readonly string[] = [
   '/api/campaigns/process-scheduled',
   '/api/admin/finish-domain-attachments',
+  '/api/lists/materialize',
+  /*
+   * The sending-domain sweep belongs on a runner rather than on nothing.
+   *
+   * It is a console route because issuing a DKIM key needs a full-access
+   * mail-provider credential and writing the zone needs `VERCEL_TOKEN`,
+   * neither of which the tenant runtime may hold — so the platform job beat,
+   * which runs in the tenant app, cannot carry it. `CRON_SECRET` and this
+   * function are the console-side equivalent. (The credential's own name is
+   * deliberately absent here: `sending-domain-credential-isolation.spec.ts`
+   * refuses it outside the console app, mention included.)
+   *
+   * Frequent rather than daily for the same reason `finish-domain-attachments`
+   * is: a site's claim buys nothing until the vendor work behind it finishes,
+   * and this sweep is the only thing that does it.
+   *
+   * What waits is the site's REPUTATION rather than its mail. An unverified
+   * platform subdomain falls through to the shared pool, so receipts and
+   * password resets keep going the whole time; what does not go is marketing,
+   * which may not leave on the pool at all. So the cost of a slow beat is a
+   * paying merchant who cannot run a campaign yet, and fifteen minutes is what
+   * keeps that measured in minutes rather than in a day.
+   */
+  '/api/admin/provision-sending-domains',
 ]
 
 /** What one POST to a cron route settled as. */
@@ -460,6 +484,23 @@ const CONSOLE_DAILY_CRONS = {
     schedule: '0 8 * * *',
     route: '/api/billing/usage-alerts',
   },
+  /*
+   * AN HOUR AFTER `run-erasures`, and that ordering is the point.
+   *
+   * An erasure must never be held up by a mail provider or a DNS API, so it
+   * records what it could not release and moves on. This is what collects
+   * that debt — and what collects a site delete whose teardown the provider
+   * refused, which `teardownSendingDomain` leaves "for the next pass".
+   *
+   * Daily rather than on the fifteen-minute job, because nothing waits on it:
+   * a provider slot released four hours later costs nothing, while the
+   * provisioning sweep beside it is what makes a new site able to send at
+   * all. Daily also keeps a walk of every label claim to once a day.
+   */
+  'reap-sending-domains': {
+    schedule: '0 5 * * *',
+    route: '/api/admin/reap-sending-domains',
+  },
 } as const
 
 /**
@@ -500,6 +541,7 @@ export const consoleAuditArchive = consoleDailyCron('audit-archive')
 export const consoleRunErasures = consoleDailyCron('run-erasures')
 export const consoleReportUsageCurrent = consoleDailyCron('report-usage-current')
 export const consoleUsageAlerts = consoleDailyCron('usage-alerts')
+export const consoleReapSendingDomains = consoleDailyCron('reap-sending-domains')
 
 /*==============================================================
  * THE SIGNUPS LOCK, AT ACCOUNT CREATION (AGL-1531)

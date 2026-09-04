@@ -18,6 +18,7 @@
 
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { Alert, Button, Chip, Stack, Typography } from '@mui/material'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
@@ -164,15 +165,15 @@ export function UsedByCard({
     setStatus('loading')
     void (async () => {
       try {
-        const idToken = await (userRef.current as any)?.getIdToken?.()
-        const response = await fetch('/api/hosts/where-used', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        const response = await authorizedFetch(
+          userRef.current,
+          '/api/hosts/where-used',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ hostId, kind, id }),
           },
-          body: JSON.stringify({ hostId, kind, id }),
-        })
+        )
         if (!response.ok) throw new Error(`Scan failed (${response.status})`)
         const payload = await response.json()
         if (!active) return

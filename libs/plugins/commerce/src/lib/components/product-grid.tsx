@@ -813,12 +813,14 @@ export const schema: Aglyn.ComponentSchema<ProductGridProps> = {
       label: 'Columns',
       description: 'Desktop columns (1-6).',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
+      type: 'number',
     },
     {
       name: 'maxItems',
       label: 'Max items',
       description: 'Cap the number of cards.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
+      type: 'number',
     },
     {
       name: 'emptyText',
@@ -874,6 +876,7 @@ export const schema: Aglyn.ComponentSchema<ProductGridProps> = {
         'Products per page with a Load more button; blank loads once ' +
         '(capped by Max items).',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
+      type: 'number',
     },
   ],
 }

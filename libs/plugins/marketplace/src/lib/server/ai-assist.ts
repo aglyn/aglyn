@@ -28,6 +28,7 @@ import {
   rateLimitHeaders,
   recordAssistCost,
   releaseAssistMessage,
+  publicAssistQuota,
   reserveAssistMessage,
   type AssistReservation,
   type AssistTokenUsage,
@@ -238,7 +239,17 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
     // cannot all read the same "under the cap" and a client that drops the
     // connection has already been counted.
     try {
-      reservation = await reserveAssistMessage(firestore, orgId, entitled)
+      // `org` is the document `entitled` came from, and it is what makes
+      // the plan's own assist band bind rather than the operator backstop
+      // alone. Generative building is the dearest thing this route serves,
+      // so the band it spends against has to be the one that was sold.
+      reservation = await reserveAssistMessage(
+        firestore,
+        orgId,
+        entitled,
+        new Date(),
+        org,
+      )
     } catch (error) {
       // FAIL CLOSED. The reservation is the only global bound on what this
       // route can spend at Anthropic; if it cannot be taken there is no cap,
@@ -252,7 +263,8 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
       return res.status(429).json({
         error:
           'This workspace reached its AI assist limit for the month — contact support if you need a higher cap',
-        quota: reservation,
+        // CREDITS, never the reservation itself — see `publicAssistQuota`.
+        quota: publicAssistQuota(reservation),
       })
     }
 

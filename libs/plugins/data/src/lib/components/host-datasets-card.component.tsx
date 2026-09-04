@@ -83,7 +83,9 @@ import {
   useScopeTokens,
   useUser,
 } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { DatasetSchemaDialog } from './dataset-schema-dialog.component'
+import { DatasetRecordDialog } from './dataset-record-dialog.component'
 
 export interface HostDatasetsCardProps {
   /** Host context: resolves the owning org and logs host activity. */
@@ -171,13 +173,9 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   // legacy host scope (no org resolved) keeps the old client writes.
   const callDatasetApi = useCallback(
     async (payload: Record<string, unknown>) => {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/orgs/datasets', {
+      const response = await authorizedFetch(user, '/api/orgs/datasets', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orgId, ...payload }),
       })
       const result = await response.json().catch(() => ({}))
@@ -241,7 +239,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   // outright for a scoped collaborator, and a permanently denied listen is
   // reopened forever by the refusal loop.
   /**
-   * The records table PAGES (AGL-693). It used to be `limit(500)` with no
+   * The records table PAGES (AGL-2501). It used to be `limit(500)` with no
    * `orderBy`, every row rendered at once and no control anywhere.
    *
    * That was wrong twice. Five hundred documents were read and billed on
@@ -414,7 +412,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   // Pending, denied, or answered about the PREVIOUS selection, the loaded
   // rows stand in. They can only UNDERSTATE (same collections, capped),
   // never overstate, so nothing these figures gate fires on a count larger
-  // than the truth. Since AGL-693 the record fallback is one PAGE, so it
+  // than the truth. Since AGL-2501 the record fallback is one PAGE, so it
   // understates by more — which moves it further in the safe direction and
   // changes nothing about which way it can be wrong.
   const datasetCount = serverDatasetCount ?? datasets.length
@@ -424,7 +422,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       : records.length
   // Query layer (AGL-181): the same evaluator the renderer uses, applied in
   // memory over the rows in front of the reader. That window is now one PAGE
-  // rather than a 500-row sample (AGL-693), which is a smaller claim and a
+  // rather than a 500-row sample (AGL-2501), which is a smaller claim and a
   // true one — the helper text says which, because a filter box that looks
   // like it searches the collection and does not is worse than one that says
   // so.
@@ -589,13 +587,9 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     // `recursiveDelete`, so the delete goes through the erase route
     // (AGL-945). Single-record deletes below stay client-direct.
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/resources/erase', {
+      const response = await authorizedFetch(user, '/api/resources/erase', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           scope: dataScope[0],
           scopeId: dataScope[1],
@@ -691,17 +685,52 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       active = false
     }
   }, [model, datasets, firestore, dataScope])
+  /**
+   * One reference target's label, or `null` when this ID resolves to nothing.
+   *
+   * The distinction the grid cannot draw. `referenceLabel` below falls back to
+   * the raw ID, which is the only thing a cell has room for and is
+   * indistinguishable from a resolved label that happens to look like an ID.
+   * The record view has room to say which, so it asks the question that has a
+   * `null` answer.
+   *
+   * Unresolvable covers more than a deleted target: `refOptions` loads at most
+   * 200 rows per referenced collection, so a live target outside that window
+   * reports the same way. Either way the ID is shown and neither is claimed to
+   * be a working link.
+   */
+  const resolveReferenceLabel = useCallback(
+    (fieldId: string, id: string): string | null =>
+      refOptions[fieldId]?.find((option) => option.id === id)?.label ?? null,
+    [refOptions],
+  )
   const referenceLabel = useCallback(
     (fieldId: string, value: unknown): string => {
-      const options = refOptions[fieldId] ?? []
       const ids = Array.isArray(value) ? value : value != null ? [value] : []
       return ids
-        .map(
-          (id) => options.find((option) => option.id === id)?.label ?? String(id),
-        )
+        .map((id) => resolveReferenceLabel(fieldId, String(id)) ?? String(id))
         .join(', ')
     },
-    [refOptions],
+    [resolveReferenceLabel],
+  )
+  /**
+   * The record the viewer is showing, held as an ID and resolved against the
+   * page the table already has.
+   *
+   * Holding the ID rather than the row is what keeps the view live without
+   * costing a read: the same listener that draws the table re-resolves it, so
+   * an edit landing underneath updates the open dialog. When the row leaves
+   * the page — deleted, or paged past — this answers `null` and the dialog
+   * closes, which is the honest response to a record no longer in front of
+   * this reader. Nothing here queries: `records` is the page query's answer.
+   */
+  const [viewerId, setViewerId] = useState<string | null>(null)
+  const viewerRecord = useMemo(
+    () =>
+      viewerId
+        ? (records.find((record: any) => record.$id === viewerId) ?? null)
+        : null,
+    [viewerId, records],
   )
 
   // --- Document editor (null id = new; AGL-179 typed inputs) --------------
@@ -980,12 +1009,11 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       if (!selected?.$id || !orgId || exporting) return
       setExporting(format)
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch(
+        const response = await authorizedFetch(
+          user,
           `/api/orgs/datasets/export?orgId=${encodeURIComponent(orgId)}` +
             `&datasetId=${encodeURIComponent(selected.$id)}` +
             `&format=${format}`,
-          { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
         )
         if (!response.ok) {
           const failure = await response.json().catch(() => ({}))
@@ -1369,7 +1397,25 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             </TableHead>
             <TableBody>
               {visibleRecords.map((record: any) => (
-                <TableRow key={record.$id} hover>
+                /*
+                  The row OPENS the record, read-only. Reading a record and
+                  changing one used to be the same gesture: `Edit` was the only
+                  way to see a document's full contents, so every look opened a
+                  form whose primary button writes.
+
+                  The click is the mouse affordance and nothing else — a `<tr>`
+                  cannot be made into a real activatable control without
+                  overriding the `row` role a table depends on. The keyboard's
+                  affordance is the `View` button in the actions cluster: a
+                  genuine `<button>`, in the tab order, announced as one, with
+                  the theme's focus ring. Both reach the same handler.
+                */
+                <TableRow
+                  key={record.$id}
+                  hover
+                  onClick={() => setViewerId(record.$id)}
+                  sx={{ cursor: 'pointer' }}
+                >
                   {fields.map((fieldId) => (
                     <TableCell key={fieldId}>
                       {model.fields[fieldId]?.type === 'reference'
@@ -1383,7 +1429,25 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
                           : '--'}
                     </TableCell>
                   ))}
-                  <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
+                  <TableCell
+                    align="right"
+                    sx={{ whiteSpace: 'nowrap' }}
+                    /*
+                      Every control in this cell is its OWN action. Without
+                      this the row's handler fires too, so `Delete` would open
+                      the viewer behind its own destructive write and `Edit`
+                      would leave a read-only dialog stacked under the form —
+                      the kind of defect nobody reports and everybody works
+                      around.
+                    */
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <Button
+                      size="small"
+                      onClick={() => setViewerId(record.$id)}
+                    >
+                      {'View'}
+                    </Button>
                     <Button size="small" onClick={handleOpenRecord(record)}>
                       {'Edit'}
                     </Button>
@@ -1493,6 +1557,25 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
           </Button>
         </DialogActions>
       </Dialog>
+      {/*
+        ONE viewer for the table, not one per row. Its record is a prop out of
+        the page already in hand, so opening it reads nothing — and mounting
+        the table does not open a dialog per row to discover that.
+      */}
+      <DatasetRecordDialog
+        record={viewerRecord}
+        model={model}
+        resolveReference={resolveReferenceLabel}
+        onClose={() => setViewerId(null)}
+        // Explicitly separate, and a hand-off rather than a second editor:
+        // the viewer closes and the record opens in the dialog that has
+        // always owned writing.
+        onEdit={() => {
+          const record = viewerRecord
+          setViewerId(null)
+          if (record) handleOpenRecord(record)()
+        }}
+      />
       <Dialog
         open={Boolean(editor)}
         onClose={() => setEditor(null)}

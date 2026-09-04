@@ -18,6 +18,7 @@
 import {
   checkDiscountMargin,
   isLiveSubscriptionStatus,
+  isOrgWideMember,
   pluginRequestFromWeb,
 } from '@aglyn/aglyn/server'
 import { latestMeasuredCogsUsd } from '../../_lib/org-cogs'
@@ -130,9 +131,21 @@ async function handler(request: Request): Promise<Response> {
     }
     const isStaff = decoded['staff'] === true
     const actor = await resolveOrgMembership(decoded.uid, orgId)
+    /*
+     * ORG-WIDE, and then the permission.
+     *
+     * A permission answers WHAT KIND OF ACTION, never WHICH RESOURCES, and a
+     * site collaborator is an `orgs/{id}/members` document like any other — a
+     * custom role or a per-member override can carry `billing.manage` on a
+     * host-scoped document, which a bare permission check admits. Cancelling
+     * or discounting the ORGANIZATION's subscription is not something a
+     * collaborator on one of its sites has a claim on. Same guard as
+     * `email-ceiling` and `usage-budget`, for the same reason.
+     */
     if (
       !isStaff &&
-      !(await memberHasOrgPermission(orgId, actor?.member, 'billing.manage'))
+      (!isOrgWideMember(actor?.member) ||
+        !(await memberHasOrgPermission(orgId, actor?.member, 'billing.manage')))
     ) {
       return Response.json({ error: 'billing.manage required' }, { status: 403 })
     }
@@ -321,7 +334,21 @@ async function handler(request: Request): Promise<Response> {
             'would cover, so the winback offer is not available. Switching to ' +
             'a smaller plan is the better fit.',
           code: 'margin_floor',
-          rating: marginRating,
+          /*
+           * THE VERDICT, NOT THE WORKING.
+           *
+           * `DiscountMarginResult` carries `infraCogsUsd` — what this org
+           * costs US, with its Assist provider spend folded in by
+           * `latestMeasuredCogsUsd` — plus `marginPct` and `floorPct`, which
+           * are our margin and the floor we underwrite to. This response goes
+           * to the customer, so the whole object would publish all three
+           * inside the very message telling them they are unprofitable.
+           *
+           * The customer needs to know the offer is refused, which is the
+           * `code` and the message. Staff need the arithmetic, and have it on
+           * `/admin/margin-utilization` and the org detail page.
+           */
+          rating: marginRating.rating,
         },
         { status: 409 },
       )

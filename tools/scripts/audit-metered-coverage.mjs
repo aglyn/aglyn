@@ -46,6 +46,26 @@
 //                 state belongs in the same report as the population.
 //
 // Exits non-zero when anything is flagged, so it can run as a scheduled check.
+//
+// WHAT THIS AUDIT IS NOT FOR: CHASING THE HISTORICAL GAP
+//
+// The unmetered months that predate the metered prices have been written off.
+// Recoverable unbilled usage across the whole platform was $0.03, on a
+// subscription that is canceled — so it cannot be attached to or billed even
+// in principle. The number was itself an artifact of superseded arithmetic
+// that metered TOTAL usage instead of usage above the plan's included
+// allowance (AGL-1280 corrected that); the one org involved had used 0.25% of
+// its page-view allowance and, priced the way the product actually prices,
+// owes nothing.
+//
+// So: do not run a recovery pass, and do not switch STRIPE_METERED_BACKFILL to
+// `immediate` in order to sweep it up. The trade `immediate` makes — bill the
+// current period in full, history included — costs real customers a
+// retroactive charge to collect three cents nobody owes.
+//
+// This audit STAYS, and so does the backfill guard. They are about LIVE
+// subscriptions that bill no usage overage, which is an ongoing revenue leak
+// and a different thing entirely from the closed historical gap.
 
 const asJson = process.argv.includes('--json')
 const secretKey = process.env.STRIPE_SECRET_KEY

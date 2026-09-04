@@ -31,6 +31,17 @@ export type MarketplaceArtifactType =
   | 'layout'
   | 'datasetSchema'
   | 'emailTemplate'
+  /**
+   * A campaign email design, installed as a new `kind: 'email'` screen.
+   *
+   * Distinct from `emailTemplate`, which is a design FOR one entry in the
+   * fixed transactional catalog and can only ever land on that same key. A
+   * starter belongs to no key: it is a blank-page replacement for the composer,
+   * so it installs as a new document and the tenant may install ten of them.
+   * Folding the two together would give one install button two behaviors and
+   * would make the catalog key an absent-field discriminator.
+   */
+  | 'emailStarter'
   | 'theme'
 
 /**
@@ -72,6 +83,18 @@ export interface InstalledFrom {
   installedAt: unknown
   /** The publishing org (`listing.profileId`, org-owned since AGL-652). */
   publisherOrgId: string | null
+  /**
+   * What review said about THE VERSION INSTALLED, recorded at install time.
+   *
+   * Optional because six of the seven artifact types are auto-listed and have
+   * no verdict to record. Where it is written it is a fact about one version
+   * and is never recomputed from the listing afterwards: a listing that earns
+   * `reviewStatus: 'verified'` next month did not retroactively review the
+   * bytes installed today, and a surface that resolved assurance live would
+   * say it did. Stamping it is what keeps "unreviewed" from decaying into a
+   * silence a reader mistakes for approval.
+   */
+  assurance?: 'approved' | 'unreviewed' | 'rejected'
 }
 
 /**

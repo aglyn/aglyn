@@ -75,12 +75,38 @@
  * presence is not a credential — the same reasoning `plugin-api-rate-limit`
  * uses to refuse to exempt on `authorization` being present.
  *
- * A literal `Origin: null` is NOT allowed through. It is an opaque origin —
- * a sandboxed iframe, or a POST that arrived via a redirect — and it is
- * precisely the shape an attacker reaches for once a plain cross-origin POST
- * is refused. `null` is never same-origin with anything, so it fails the
+ * A literal `Origin: null` is NOT allowed through ON ITS OWN. It is an opaque
+ * origin — a sandboxed iframe, or a POST that arrived via a redirect — and it
+ * is precisely the shape an attacker reaches for once a plain cross-origin
+ * POST is refused. `null` is never same-origin with anything, so it fails the
  * comparison rather than needing a special case; the constant exists so the
  * intent is legible.
+ *
+ * ## ⚠️ `Sec-Fetch-Site`, and the same-origin form this rule used to refuse
+ *
+ * `Origin: null` is not only an attacker's shape. A page served with
+ * `Referrer-Policy: no-referrer` sends `Origin: null` on its OWN top-level
+ * form POST — the referrer policy governs the Origin header on a navigation,
+ * so a form submitting to the very page that rendered it arrives opaque.
+ *
+ * That is not a hypothetical. Every recipient-facing email page —
+ * `email/preferences`, `email/unsubscribe`, `email/resubscribe` — sets
+ * `no-referrer` deliberately, so a signed opt-out URL cannot leak through a
+ * `Referer` header. The result was that the preference centre's own "Save my
+ * preferences" button was refused 403 as cross-site, while a `fetch()` from
+ * the same document succeeded: a recipient could open the page, untick a
+ * topic, press Save, and be shown a JSON error while nothing was written.
+ * The privacy hardening had disabled the control it was protecting.
+ *
+ * `Sec-Fetch-Site` is the discriminator, and it is the right one because the
+ * BROWSER computes it and page script cannot set it. `same-origin` and
+ * `none` (a user typing the URL or opening a bookmark) are both statements
+ * that this did not come from another site, and they are trustworthy in a way
+ * the Origin header — deliberately blanked by our own policy — no longer is
+ * here. It is consulted only to ALLOW: a `cross-site` or `same-site` value
+ * falls through to the origin comparison exactly as before, so nothing an
+ * attacker can send gets a new way in. A caller that omits the header is
+ * unchanged too, which keeps the non-browser allowance above intact.
  */
 
 import { lockdownIntentForMethod } from './lockdown'
@@ -149,6 +175,17 @@ export function isCrossOriginPluginWrite(
   if (isMachinePluginApiPath(options?.path)) return false
 
   const headers = options?.request?.headers ?? {}
+
+  /*
+   * The browser's own statement about where this came from, trusted before
+   * the Origin header because our own `no-referrer` policy blanks that one.
+   * ALLOW-only: any other value falls through to the comparison below.
+   */
+  const site = String(headers?.get?.('sec-fetch-site') ?? '')
+    .trim()
+    .toLowerCase()
+  if (site === 'same-origin' || site === 'none') return false
+
   const origin = headers?.get?.('origin')
   // Absent Origin: a non-browser caller. See the module note — this is the
   // deliberate allowance, not an oversight.

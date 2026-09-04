@@ -10,6 +10,12 @@ Found something broken? Open the **account menu** in the top right and choose
 **Report an issue**. The dialog is available from every console page, and on
 every plan — including Free.
 
+It also has a direct link — [app.aglyn.com/manage/report-issue](https://app.aglyn.com/manage/report-issue)
+— which is the one to share with someone, or to bookmark. Opening it from the
+account menu is still the better route while you are looking at the problem:
+the report carries the page you were on, and that page is the most useful
+thing in it.
+
 ## Is it Aglyn, or your own site? {#is-it-us-or-your-site}
 
 This channel is for problems with **Aglyn itself** — the editor, the console,

@@ -36,7 +36,7 @@ const hover = (id: string): NodeInteraction => ({
   steps: [{ type: 'openMenu' } as never],
 })
 
-describe('collectNodeInteractions (AGL-1478)', () => {
+describe('collectNodeInteractions', () => {
   it('stamps the selector from the node that owns the interaction', () => {
     const nodes: InteractionNode[] = [
       { $id: 'trigger', interactions: [hover('a')] },
@@ -210,7 +210,7 @@ describe('walkInteractionNodes', () => {
   })
 })
 
-describe('the id says where the interaction lives (AGL-1478)', () => {
+describe('the id says where the interaction lives', () => {
   it('round-trips a node and an interaction id', () => {
     const id = nodeInteractionId('leaf-1', 'open')
     expect(parseNodeInteractionId(id)).toEqual({
@@ -245,5 +245,120 @@ describe('the id says where the interaction lives (AGL-1478)', () => {
     for (const selector of ['', '.promo', '[data-aglyn="leaf:"]', undefined]) {
       expect(nodeIdFromInteractionSelector(selector)).toBeUndefined()
     }
+  })
+})
+
+/**
+ * THE TWO WAYS A NODE INTERACTION USED TO REACH NOBODY.
+ *
+ * Both were silent: an empty automation list is exactly what a page with no
+ * interactions looks like, and a step selector naming an absent element fails
+ * the way a mis-authored one does.
+ */
+describe('a composed page keeps the interactions authored on it', () => {
+  const ixNode = (id: string, extra: Record<string, unknown> = {}) => ({
+    $id: id,
+    interactions: [
+      {
+        id: 'open',
+        enabled: true,
+        trigger: { event: 'elementHoverEnter', everyTime: true },
+        steps: [{ type: 'showElement', selector: '[data-aglyn="leaf:panel"]' }],
+      },
+    ],
+    ...extra,
+  })
+
+  it('walks the NORMALIZED map the tenant actually composes', () => {
+    // `composeScreenNodes` returns `{ [id]: node }` with children as id
+    // strings. Handed that, the old walker took the map itself for a node and
+    // yielded nothing — every interaction on every published page dropped.
+    const map = { trigger: ixNode('trigger'), panel: { $id: 'panel' } }
+    const walked = [...walkInteractionNodes(map as never)]
+    expect(walked.map((n) => n.$id).sort()).toEqual(['panel', 'trigger'])
+  })
+
+  it('THE CONTROL: a real denormalized tree still walks as before', () => {
+    // Without this, a walker that ONLY understood maps would pass the case
+    // above while breaking the canvas, which passes a tree.
+    const tree = { ...ixNode('root'), nodes: [{ $id: 'child' }] }
+    expect([...walkInteractionNodes(tree as never)].map((n) => n.$id)).toEqual([
+      'root',
+      'child',
+    ])
+  })
+
+  it('re-points a step at the id the graft stamped', () => {
+    const collected = collectNodeInteractions([
+      ixNode('cmp__inst__trigger'),
+      { $id: 'cmp__inst__panel' },
+    ] as never)
+    expect(collected[0].action.steps?.[0]).toMatchObject({
+      selector: '[data-aglyn="leaf:cmp__inst__panel"]',
+    })
+  })
+
+  it('re-points an attribute step too, because it uses `selector` (AGL-2546)', () => {
+    /*
+      The reason `setAttribute` reuses `selector` rather than taking a
+      targeting field of its own.
+
+      The regraft is generic over `step.selector`, so a step that spells its
+      target that way is rewritten for free when the interaction is authored
+      inside a reusable component. The menu steps chose `menuNodeId`, get no
+      regraft, and compensate at run time instead — and that divergence is
+      invisible until a component is grafted into a real layout in
+      production.
+
+      Asserting it on the attribute step specifically, not just trusting the
+      generic map: a later refactor that switched on `step.type` here would
+      keep every existing case green and silently drop this one.
+    */
+    const withAttributeStep = {
+      $id: 'cmp__inst__trigger',
+      interactions: [
+        {
+          id: 'announce',
+          enabled: true,
+          trigger: { event: 'elementHoverEnter', everyTime: true },
+          steps: [
+            {
+              type: 'setAttribute',
+              selector: '[data-aglyn="leaf:panel"]',
+              name: 'aria-expanded',
+              value: 'true',
+            },
+          ],
+        },
+      ],
+    }
+    const collected = collectNodeInteractions([
+      withAttributeStep,
+      { $id: 'cmp__inst__panel' },
+    ] as never)
+    expect(collected[0].action.steps?.[0]).toMatchObject({
+      type: 'setAttribute',
+      selector: '[data-aglyn="leaf:cmp__inst__panel"]',
+      name: 'aria-expanded',
+      value: 'true',
+    })
+  })
+
+  it('leaves a page-level target alone, and an unresolvable one untouched', () => {
+    // A component may legitimately drive an element outside itself, and a
+    // selector that resolves nowhere must not be pointed somewhere plausible.
+    const pageLevel = collectNodeInteractions([
+      ixNode('cmp__inst__trigger'),
+      { $id: 'panel' },
+    ] as never)
+    expect(pageLevel[0].action.steps?.[0]).toMatchObject({
+      selector: '[data-aglyn="leaf:panel"]',
+    })
+    const orphan = collectNodeInteractions([
+      ixNode('cmp__inst__trigger'),
+    ] as never)
+    expect(orphan[0].action.steps?.[0]).toMatchObject({
+      selector: '[data-aglyn="leaf:panel"]',
+    })
   })
 })

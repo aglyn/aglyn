@@ -46,6 +46,17 @@ export interface StaffEmailDeliveryRow {
   campaignId: string | null
 }
 
+/** One address the history was gathered from. */
+export interface StaffEmailAddress {
+  address: string
+  /** `primary` | `provider` | `stored` — why this address is listed. */
+  sources: string[]
+  /** Another account holds this address too. */
+  shared: boolean
+  /** A provider asserted it, but another account already held the claim. */
+  indexConflict: boolean
+}
+
 export interface StaffUserEmailHistoryCardProps {
   rows: StaffEmailDeliveryRow[]
   /**
@@ -53,8 +64,20 @@ export interface StaffUserEmailHistoryCardProps {
    * which is the whole reason the two are kept apart.
    */
   lookupFailed: boolean
-  /** The address the history is filed under, shown so a mismatch is visible. */
+  /** The account's current primary, shown so a mismatch is visible. */
   address: string | null
+  /**
+   * EVERY address the rows were gathered from.
+   *
+   * The log is keyed by `sha256(address)`, so a changed primary used to leave
+   * the history unreachable under the old hash and this card rendered a blank
+   * table for a person we demonstrably emailed.
+   */
+  addresses?: StaffEmailAddress[]
+  /** A source was unreadable, so the address list may be short. */
+  addressesIncomplete?: boolean
+  /** Addresses whose records were destroyed under an erasure request. */
+  erasures?: Record<string, { at: number; count: number }>
 }
 
 /**
@@ -126,6 +149,9 @@ export function StaffUserEmailHistoryCard({
   rows,
   lookupFailed,
   address,
+  addresses = [],
+  addressesIncomplete = false,
+  erasures = {},
 }: StaffUserEmailHistoryCardProps) {
   const [open, setOpen] = useState<StaffEmailDeliveryRow | null>(null)
 
@@ -169,7 +195,15 @@ export function StaffUserEmailHistoryCard({
         // the column, and the browser's own affordance costs nothing and
         // survives a row the grid virtualized away.
         renderCell: (params) => (
-          <Typography variant="body2" noWrap title={params.row.subject}>
+          // `width: '100%'` so `noWrap` has a box to truncate against: inside
+          // a flex cell the paragraph shrink-wraps its text and the ellipsis
+          // never appears.
+          <Typography
+            variant="body2"
+            noWrap
+            title={params.row.subject}
+            sx={{ width: '100%' }}
+          >
             {params.row.subject}
           </Typography>
         ),
@@ -178,29 +212,31 @@ export function StaffUserEmailHistoryCard({
         field: 'context',
         headerName: 'Sender',
         width: 170,
+        // An imported row carries no sender: the provider's history has no
+        // tags, so we know what was sent and not which of our senders produced
+        // it. Rendered by the grid as a plain value, which also keeps it
+        // sortable and filterable.
+        valueFormatter: (value: string | null) => value || '—',
         renderCell: (params) =>
           params.row.context ? (
             <Chip size="small" variant="outlined" label={params.row.context} />
           ) : (
-            // An imported row carries none: the provider's history has no
-            // tags, so we know what was sent and not which sender produced it.
-            <Typography variant="caption" color="text.secondary">
-              {'—'}
-            </Typography>
+            '—'
           ),
       },
       {
         field: 'sentAtMs',
         headerName: 'Sent',
         width: 190,
-        // A NUMBER in the row and a string only at render, so the column sorts
-        // chronologically rather than alphabetically — a formatted string
-        // would put "Aug" before "Dec" before "Jan".
-        renderCell: (params) => (
-          <Typography variant="body2" noWrap>
-            {formatWhen(params.row.sentAtMs)}
-          </Typography>
-        ),
+        // A NUMBER in the row and a string only at display, so the column
+        // sorts chronologically rather than alphabetically — a formatted
+        // string would put "Aug" before "Dec" before "Jan".
+        //
+        // `valueFormatter`, NOT `renderCell`: a formatter leaves the grid to
+        // draw the text, which is what makes it sit on the same line as every
+        // other plain cell. A custom node opts out of that and has to
+        // reproduce the centering itself.
+        valueFormatter: (value: number) => formatWhen(value),
       },
       {
         field: 'status',
@@ -250,6 +286,40 @@ export function StaffUserEmailHistoryCard({
       'rather than from the sending provider.',
   })
 
+  /*
+   * WHICH ADDRESSES THESE ROWS CAME FROM.
+   *
+   * Rendered above the table rather than folded into a column, because it is
+   * a statement about the QUERY and not about any one row: a staffer has to
+   * be able to see that mail sent to a former address is included, and that
+   * an address is one another account also holds.
+   */
+  /*
+   * FALL BACK TO THE PRIMARY when no list was supplied.
+   *
+   * A caller that passes only `address` is still describing an account with
+   * one address, and the empty state has to say "no delivery events recorded
+   * for <it>" rather than "this account has no email address" — the second is
+   * a different claim, and a false one.
+   */
+  const listed =
+    addresses.length > 0
+      ? addresses
+      : address
+        ? [
+            {
+              address,
+              sources: ['primary'],
+              shared: false,
+              indexConflict: false,
+            },
+          ]
+        : []
+  const secondary = listed.filter((entry) => entry.address !== address)
+  const sharedAddresses = listed.filter((entry) => entry.shared)
+  const conflicted = listed.filter((entry) => entry.indexConflict)
+  const erased = Object.entries(erasures)
+
   return (
     <CardDisplay
       header="Email delivery"
@@ -257,6 +327,52 @@ export function StaffUserEmailHistoryCard({
       contentGutterX
       contentGutterY
     >
+      <Stack spacing={1} sx={{ mb: 2 }}>
+        {secondary.length > 0 && (
+          <Typography variant="caption" color="text.secondary">
+            {`Includes mail to ${secondary
+              .map((entry) => entry.address)
+              .join(', ')} — ${
+              secondary.length === 1 ? 'an address' : 'addresses'
+            } this account also holds, but not its current primary.`}
+          </Typography>
+        )}
+        {addressesIncomplete && (
+          <Alert severity="warning">
+            {'One source of this account’s addresses could not be read, so ' +
+              'this list may be short. Mail to an address missing from it ' +
+              'would not appear here.'}
+          </Alert>
+        )}
+        {sharedAddresses.length > 0 && (
+          <Alert severity="info">
+            {`Another account also holds ${sharedAddresses
+              .map((entry) => entry.address)
+              .join(', ')}. The delivery log records that mail reached a ` +
+              'MAILBOX, so it cannot say which account a message was for — ' +
+              'these rows appear on both accounts and belong to neither ' +
+              'exclusively.'}
+          </Alert>
+        )}
+        {conflicted.length > 0 && (
+          <Alert severity="warning">
+            {`A sign-in provider asserts ${conflicted
+              .map((entry) => entry.address)
+              .join(', ')} for this account, but another account already ` +
+              'holds that address. The claim was refused and nothing was ' +
+              'reassigned — two accounts sharing one identity needs a human ' +
+              'decision.'}
+          </Alert>
+        )}
+        {erased.map(([erasedAddress, record]) => (
+          <Alert severity="info" key={erasedAddress}>
+            {`Delivery records for ${erasedAddress} were removed under an ` +
+              `erasure request on ${formatWhen(record.at)}. ` +
+              'The absence of rows below is that erasure, not evidence that ' +
+              'no mail was sent.'}
+          </Alert>
+        ))}
+      </Stack>
       {lookupFailed ? (
         <Alert severity="warning">
           {'The delivery log could not be read. This is NOT the same as "we ' +
@@ -266,8 +382,10 @@ export function StaffUserEmailHistoryCard({
       ) : rows.length === 0 ? (
         <Stack spacing={1}>
           <Typography variant="body2" color="text.secondary">
-            {address
-              ? `No delivery events recorded for ${address}.`
+            {listed.length
+              ? `No delivery events recorded for ${listed
+                  .map((entry) => entry.address)
+                  .join(', ')}.`
               : 'This account has no email address, so there is nothing to record.'}
           </Typography>
           <Typography variant="caption" color="text.secondary">
@@ -294,6 +412,25 @@ export function StaffUserEmailHistoryCard({
              */
             rowHeight={44}
             columnHeaderHeight={44}
+            /*
+             * CENTRE EVERY CELL'S CONTENT.
+             *
+             * The grid centres a plain value it renders itself, and does not
+             * centre a node returned from `renderCell` — it drops it in and
+             * leaves the alignment to the node. So a row mixing the two put
+             * its text on one line and its chips on another, by a few pixels,
+             * which is exactly the kind of misalignment that reads as broken
+             * without being nameable.
+             *
+             * Applied at the grid rather than per column so a column added
+             * later cannot reintroduce it.
+             */
+            sx={{
+              '& .MuiDataGrid-cell': {
+                display: 'flex',
+                alignItems: 'center',
+              },
+            }}
             onOpen={(_id, row) => setOpen(row.record as StaffEmailDeliveryRow)}
           />
           {/*

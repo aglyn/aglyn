@@ -18,6 +18,7 @@
 import type { AglynNodeSchema, NodeId } from '../foundation'
 import { NODE_ROOT_ID } from '../canvas-manager/canvas-manager'
 import { COMPONENT_NODE_ID_PREFIX } from './compose-reusable-components'
+import { mergeNodeSx } from './merge-node-sx'
 
 /** Persisted component id of the layout content outlet (plugins-mui). */
 export const LAYOUT_SLOT_COMPONENT_ID = 'layoutSlot'
@@ -189,9 +190,33 @@ export function composeLayoutAndScreenNodes<
     ? (composed[slotId].nodes as NodeId[])
     : []
 
+  // The screen root is DROPPED — its children reparent to the slot — so
+  // whatever was styled on it has to land somewhere or it is simply lost.
+  // It was: a background painted on the `Document` layer showed in the
+  // besigner (which renders the screen alone, root included) and never on the
+  // published page, where the layout root is the only root and the screen's
+  // was gone. The slot is where those children now live, so it is where the
+  // screen root's own styling belongs — the same node, one composition later.
+  //
+  // Slot first, screen root after: a screen may override the layout's own
+  // styling of the region it fills, which is the direction of intent
+  // everywhere else composition merges (a component instance over its
+  // definition, AGL-1306).
+  const mergedSlotSx = mergeNodeSx(composed[slotId]?.sx, screenRoot?.sx)
+  // `className` is on the canvas node, not on the structural type this
+  // function is generic over, so it is read through a narrow cast rather than
+  // by widening the signature.
+  const classNameOf = (node: N | undefined): string | undefined =>
+    (node as { className?: string } | undefined)?.className
+  const mergedSlotClassName =
+    [classNameOf(composed[slotId]), classNameOf(screenRoot)]
+      .filter(Boolean)
+      .join(' ') || undefined
   composed[slotId] = {
     ...composed[slotId],
     nodes: [...slotChildIds, ...screenRootChildIds],
+    ...(mergedSlotSx == null ? {} : { sx: mergedSlotSx as N['sx'] }),
+    ...(mergedSlotClassName ? { className: mergedSlotClassName } : {}),
   }
 
   for (const [id, node] of Object.entries(screenNodes)) {

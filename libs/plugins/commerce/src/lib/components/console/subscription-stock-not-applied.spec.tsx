@@ -115,6 +115,16 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   // AGL-1064 reason instead of the subscription-stock one under test.
   useOrgPlan: () => ({ org: { plan: 'business' }, ready: true }),
   useFirestore: () => ({}),
+  /*
+   * The product editor asks for its pickers through the shared builders, and
+   * skips them entirely while it is closed. Both carry the collection
+   * reference through unchanged.
+   */
+  collectionCeiling: (ref: unknown) => ref,
+  ceilingedWindow: (read: unknown[] | undefined, ceiling: number) => ({
+    rows: (read ?? []).slice(0, ceiling),
+    truncated: (read ?? []).length > ceiling,
+  }),
   useFirestoreCollection: (build: () => unknown) => ({
     data: collections[build() as string] ?? [],
     status: 'success',

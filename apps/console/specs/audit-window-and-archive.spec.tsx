@@ -325,7 +325,7 @@ beforeEach(() => {
   jest.clearAllMocks()
 })
 
-describe('the audit log pages on the shared footer (AGL-693, AGL-2324)', () => {
+describe('the audit log pages on the shared footer (AGL-2501, AGL-2324)', () => {
   it('THE CONTROL: the fixture can tell an ordered page from an id-ordered one', () => {
     // Both halves of this file's premise. If id order and date order agreed,
     // every ordering assertion below would pass on a page that named no

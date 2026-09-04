@@ -55,7 +55,7 @@ export interface ReversalRecoveryRow {
  * That writer's own comment named the queue —
  * `where('reversalFailedAt', '!=', null)` — and the query did not exist
  * anywhere in the repo. Every refusal was therefore recorded precisely so a
- * human could chase it, and unreachable by any human. `netPaidCents` in
+ * human could chase it, and unreachable by any human. `sentToStripeCents` in
  * `seller-ledger-totals.ts` deliberately does not count the owed amount
  * either (it sums the reversal that ACTUALLY happened, which is the honest
  * reading there), so the publisher panel could not surface it as a side

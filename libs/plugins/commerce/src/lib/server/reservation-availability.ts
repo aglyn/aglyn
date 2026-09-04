@@ -34,21 +34,66 @@ export const reservationAvailabilityHandler: PluginApiHandler = async (req, res)
   try {
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(hostId)
+    /*
+     * ONLY STAYS THAT HAVE NOT ENDED, NEAREST FIRST (AGL-2159).
+     *
+     * `.where('resourceId','==',resourceId).limit(500)` with no ordering
+     * returns 500 documents in `__name__` order — an arbitrary slice of the
+     * resource's ENTIRE booking history. Every stay it has ever had competes
+     * for those 500 places with the ones that are still ahead, so past a few
+     * hundred lifetime bookings the calendar starts leaving LIVE stays out of
+     * the greyed-out days and offering an occupied room to the next visitor.
+     *
+     * This is the same defect, on the same collection, that `reserve.ts`
+     * carries the fix for. That one guards the authoritative overlap check;
+     * this one draws the calendar the visitor picks from, and the two must
+     * agree — a calendar offering a day the booking path then refuses is the
+     * same bug wearing a friendlier face.
+     *
+     * `checkOutDayMs >= todayMs` removes the whole of the past: a stay that
+     * ended before today cannot block a day anyone can still book. Ordering
+     * on the same field puts the nearest stays inside the limit rather than
+     * whichever sort early by id. Uses the existing composite index
+     * `reservations (resourceId ASC, checkOutDayMs ASC)`.
+     *
+     * Every writer sets `checkOutDayMs` — it is required on the reservation
+     * model — which matters because an `orderBy` silently drops documents
+     * missing the field it sorts on.
+     */
+    const todayMs = Date.parse(
+      `${new Date().toISOString().slice(0, 10)}T00:00:00Z`,
+    )
     const [resourceSnapshot, reservationsSnapshot] = await Promise.all([
       hostRef.collection('resources').doc(resourceId).get(),
       hostRef
         .collection('reservations')
         .where('resourceId', '==', resourceId)
+        .where('checkOutDayMs', '>=', todayMs)
+        .orderBy('checkOutDayMs')
         .limit(500)
         .get(),
     ])
     const resource = resourceSnapshot.data() as CommerceModel.HostResource | undefined
     if (!resource) return res.status(404).json({ error: 'Unknown resource' })
 
-    const dead = new Set(['cancelled', 'no_show'])
+    // The SAME hold rule the booking door applies (`reserve.ts`), through the
+    // one predicate in the model. An inline dead-status set here knew nothing
+    // about the 30-minute lapse on an unpaid `pending`, and nothing ever
+    // clears such a row — so one guest abandoning the payment screen greyed
+    // those dates out on the date-picker forever, while `reserve.ts` would
+    // have sold them to the next guest who asked for them directly.
+    const nowMs = Date.now()
     const unavailable = reservationsSnapshot.docs
-      .filter(
-        (docSnapshot) => !dead.has(String(docSnapshot.get('status'))),
+      .filter((docSnapshot) =>
+        CommerceModel.reservationHoldsDates(
+          {
+            status: String(
+              docSnapshot.get('status'),
+            ) as CommerceModel.ReservationStatus,
+            createdAtMs: Number(docSnapshot.get('createdAtMs') ?? 0),
+          },
+          nowMs,
+        ),
       )
       .map((docSnapshot) => ({
         fromDayMs: Number(docSnapshot.get('checkInDayMs')),

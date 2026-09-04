@@ -27,6 +27,7 @@ import { fetchAllPages } from '../utils/fetch-all-pages'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import type { SystemEmailTemplateDefinition } from '@aglyn/shared-util-email'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Alert,
   Autocomplete,
@@ -116,10 +117,6 @@ export function SystemEmailTestDrawer(props: SystemEmailTestDrawerProps) {
     if (!open || !user) return undefined
     let active = true
     void (async () => {
-      const idToken = await (
-        user as { getIdToken?: () => Promise<string> }
-      )?.getIdToken?.()
-      const headers = idToken ? { Authorization: `Bearer ${idToken}` } : {}
       // Every one of these three routes paginates, and this drawer read
       // exactly one page of each (AGL-2083). `/api/admin/orgs` serves 25 per
       // page, so the organization picker listed the first 25 orgs on the
@@ -128,15 +125,25 @@ export function SystemEmailTestDrawer(props: SystemEmailTestDrawerProps) {
       // said they were short — an operator who could not find a host in this
       // picker had every reason to conclude it did not exist.
       const [orgs, hosts, userList] = await Promise.all([
-        fetchAllPages<any>({ path: '/api/admin/orgs', key: 'orgs', headers, active: () => active }),
-        fetchAllPages<any>({ path: '/api/admin/hosts', key: 'hosts', headers, active: () => active }),
+        fetchAllPages<any>({
+          path: '/api/admin/orgs',
+          key: 'orgs',
+          user,
+          active: () => active,
+        }),
+        fetchAllPages<any>({
+          path: '/api/admin/hosts',
+          key: 'hosts',
+          user,
+          active: () => active,
+        }),
         // GCIP names its cursor differently from the Firestore routes.
         fetchAllPages<any>({
           path: '/api/admin/users',
           key: 'users',
           cursorParam: 'nextPageToken',
           cursorField: 'nextPageToken',
-          headers,
+          user,
           active: () => active,
           // A SECOND kind of short list, narrower than the cursor: an SSO
           // tenant pool that outgrew its per-tenant cap inside a page.
@@ -247,15 +254,9 @@ export function SystemEmailTestDrawer(props: SystemEmailTestDrawerProps) {
     setSending(true)
     setResult(null)
     try {
-      const idToken = await (
-        user as { getIdToken?: () => Promise<string> }
-      )?.getIdToken?.()
-      const response = await fetch('/api/admin/emails/test', {
+      const response = await authorizedFetch(user, '/api/admin/emails/test', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           templateKey: definition.key,
           mergeValues: values,

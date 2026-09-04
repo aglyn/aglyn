@@ -31,6 +31,16 @@
 
 jest.mock('@aglyn/aglyn/server', () => ({
   createResourceUid: () => 'version-new',
+  // The REAL codecs (AGL-1151). This factory is a closed world, so an absent
+  // export is `undefined`, the handler throws past every assertion, and its
+  // own catch answers 500 — which reads exactly like the refund gate
+  // refusing an install it should have allowed. Real ones rather than stubs
+  // because the install writes a compressed tree and the assertions below
+  // read what it wrote.
+  decodeStoredNodes: jest.requireActual('@aglyn/aglyn/server')
+    .decodeStoredNodes,
+  encodeStoredNodes: jest.requireActual('@aglyn/aglyn/server')
+    .encodeStoredNodes,
 }))
 
 jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({

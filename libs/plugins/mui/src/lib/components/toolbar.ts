@@ -23,6 +23,11 @@ import MuiToolbar, { type ToolbarProps } from '@mui/material/Toolbar'
 import { createElement, forwardRef } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { FIELD_DISABLE_GUTTERS } from '../constants/field-presets'
+import {
+  applySemanticElement,
+  semanticElementAttribute,
+  semanticElementLabelAttribute,
+} from '../utils/element-picker'
 import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
 
@@ -41,7 +46,10 @@ import { generatePresetId } from '../utils/generate-preset-id'
  * `createElement` rather than JSX keeps this a `.ts` file.
  */
 const Toolbar = forwardRef<HTMLDivElement, ToolbarProps>((props, ref) =>
-  createElement(MuiToolbar, { ...dropClearedProps(props), ref }),
+  createElement(MuiToolbar, {
+    ...applySemanticElement(dropClearedProps(props) as Record<string, unknown>),
+    ref,
+  }),
 )
 Toolbar.displayName = 'AglynToolbar'
 
@@ -63,6 +71,8 @@ export const schema: Aglyn.ComponentSchema<ToolbarProps> = {
     { components: ['muiAppBar'], plugins: [BUNDLE_ID] },
   ],
   attributes: [
+    semanticElementAttribute('this row'),
+    semanticElementLabelAttribute(),
     FIELD_DISABLE_GUTTERS,
     {
       name: 'variant',

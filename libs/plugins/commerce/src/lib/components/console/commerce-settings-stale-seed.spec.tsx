@@ -127,6 +127,10 @@ const collections: Record<string, Array<Record<string, unknown>>> = {
   products: [],
 }
 
+/** How the signed-in account answers `getIdToken()` for the test at hand. */
+let mockTokenBehavior: 'mints' | 'signed-out' = 'mints'
+const mockGetIdToken = jest.fn(async () => 'token-owner')
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useFirestoreDoc: () => ({
@@ -155,16 +159,38 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
       hasMore: data.length > pageSize,
       loadMore: () => undefined,
       windowSize: pageSize,
+      // The footer's own state. Absent, `page` reached `ListPagination` as
+      // undefined and every card that reads it rendered a broken control.
+      page: 0,
+      setPage: () => undefined,
+      pageSize,
+      setPageSize: () => undefined,
       data,
       status: listener.status,
       fromCache: listener.fromCache,
     }
   },
-  useUser: () => ({ data: { uid: 'uid-owner', getIdToken: jest.fn() } }),
+  // A token that is actually minted. `jest.fn()` resolves `undefined`, which
+  // is a signed-out account: the route this card posts to answers 401
+  // without a bearer token, so the write would never be issued.
+  useUser: () => ({
+    data:
+      mockTokenBehavior === 'signed-out'
+        ? { uid: 'uid-owner' }
+        : { uid: 'uid-owner', getIdToken: mockGetIdToken },
+  }),
   // The REAL guard, not a stub. A stub would let the write through whatever
   // the card passed it, which is the one thing these specs disprove.
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
     .writeGuardedBySeed,
+  // The real builders (AGL-2501): the ordering and the ceiling belong to the
+  // cards, not to this double.
+  collectionCeiling: jest.requireActual('@aglyn/tenant-feature-instance')
+    .collectionCeiling,
+  ceilingedWindow: jest.requireActual('@aglyn/tenant-feature-instance')
+    .ceilingedWindow,
+  collectionPage: jest.requireActual('@aglyn/tenant-feature-instance')
+    .collectionPage,
 }))
 
 // Only the ref builders are stubbed; the real module rides along because
@@ -201,6 +227,8 @@ const fetchMock = jest.fn().mockResolvedValue({
 
 beforeEach(() => {
   jest.clearAllMocks()
+  mockTokenBehavior = 'mints'
+  mockGetIdToken.mockImplementation(async () => 'token-owner')
   listener.fromCache = false
   listener.status = 'success'
   confirm.mockResolvedValue(undefined)
@@ -469,6 +497,24 @@ describe('CatalogOrganizationCard (AGL-1358)', () => {
     )
   })
 
+  it('issues NOTHING when the account cannot be authorized', async () => {
+    /*
+     * The route answers 401 without a bearer token. Assembled as
+     * `...(idToken ? { Authorization } : {})`, a merchant whose token could
+     * not be minted sent this catalog write anonymously and was told the
+     * save failed rather than that they are signed out.
+     */
+    mockTokenBehavior = 'signed-out'
+    render(<CatalogOrganizationCard hostId="host-1" />)
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Edit' }).at(-1)!)
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(enqueueSnackbar).toHaveBeenCalled())
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(String(enqueueSnackbar.mock.calls[0][0])).toMatch(/signed out/i)
+  })
+
   it('POSTS the collection update once the server has confirmed the seed', async () => {
     render(<CatalogOrganizationCard hostId="host-1" />)
 
@@ -476,7 +522,11 @@ describe('CatalogOrganizationCard (AGL-1358)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
-    const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body)
+    const init = fetchMock.mock.calls[0][1] as any
+    // Authorized, and unconditionally so: a header assembled only when a
+    // token happened to exist would have sent this write anonymously.
+    expect(init.headers.Authorization).toBe('Bearer token-owner')
+    const body = JSON.parse(init.body)
     expect(body.action).toBe('update')
     // The whole membership rides in the payload.
     expect(body.data.productIds).toEqual(['prod-1', 'prod-2'])

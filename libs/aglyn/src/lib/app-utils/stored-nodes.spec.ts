@@ -21,7 +21,12 @@ import {
   REUSABLE_INSTANCE_COMPONENT_ID,
   nodesReferenceComponent,
 } from './compose-reusable-components'
-import { decodeStoredNodes } from './stored-nodes'
+import {
+  decodeStoredNodes,
+  encodeStoredNodes,
+  matchStoredNodesForm,
+  storedNodesForm,
+} from './stored-nodes'
 
 /** A node map that unambiguously references both a variable and a component. */
 const NODES = {
@@ -163,6 +168,133 @@ describe('decodeStoredNodes', () => {
       expect(spy).toHaveBeenCalled()
     } finally {
       spy.mockRestore()
+    }
+  })
+})
+
+describe('storedNodesForm', () => {
+  it('names the plain map', () => {
+    expect(storedNodesForm(NODES)).toBe('map')
+  })
+
+  it('names every form the decoder understands as bytes', () => {
+    const bytes = compress(NODES)
+    expect(storedNodesForm(pooledBuffer())).toBe('bytes')
+    expect(storedNodesForm(bytes)).toBe('bytes')
+    expect(storedNodesForm({ toUint8Array: () => bytes })).toBe('bytes')
+    expect(storedNodesForm(JSON.parse(JSON.stringify(pooledBuffer())))).toBe(
+      'bytes',
+    )
+  })
+
+  it('names an absent field', () => {
+    expect(storedNodesForm(undefined)).toBe('absent')
+    expect(storedNodesForm(null)).toBe('absent')
+  })
+
+  /**
+   * The property that makes this safe to use as a write-back decision: what
+   * the form says and what the decoder does are answers from the SAME
+   * predicates, so a document reported as `map` is exactly one the decoder
+   * passes through untouched.
+   */
+  it('agrees with the decoder about every form', () => {
+    for (const raw of [
+      NODES,
+      pooledBuffer(),
+      compress(NODES),
+      { toUint8Array: () => compress(NODES) },
+      JSON.parse(JSON.stringify(pooledBuffer())),
+    ]) {
+      const form = storedNodesForm(raw)
+      expect(decodeStoredNodes(raw)).toEqual(NODES)
+      expect(form === 'map' ? decodeStoredNodes(raw) === raw : true).toBe(true)
+    }
+  })
+})
+
+describe('encodeStoredNodes', () => {
+  it('encodes a plain map to bytes the decoder reads back', () => {
+    const packed = encodeStoredNodes(NODES)
+    expect(ArrayBuffer.isView(packed)).toBe(true)
+    expect(decodeStoredNodes(packed)).toEqual(NODES)
+  })
+
+  /**
+   * The hazard that makes this more than an alias for `compress` (AGL-1151).
+   *
+   * Every write path that COPIES a stored document — a version snapshot, a
+   * marketplace install from a published artifact — receives whichever form
+   * that document held. Encoding a Buffer again produces msgpack whose payload
+   * is msgpack, which decodes to a byte array rather than a node map: no
+   * reader throws, every reader walks numbers, and the document reads as empty.
+   */
+  it('passes already-encoded input through rather than encoding it twice', () => {
+    for (const already of [
+      pooledBuffer(),
+      compress(NODES),
+      { toUint8Array: () => compress(NODES) },
+      JSON.parse(JSON.stringify(pooledBuffer())),
+    ]) {
+      const packed = encodeStoredNodes(already)
+      // One decode, not two, is what proves it was not re-encoded.
+      expect(decodeStoredNodes(packed)).toEqual(NODES)
+    }
+  })
+
+  it('reads a pooled Buffer at its own offset, not the whole pool', () => {
+    const pooled = pooledBuffer()
+    expect(pooled.byteOffset).toBeGreaterThan(0)
+    const packed = encodeStoredNodes(pooled)
+    expect(packed?.byteLength).toBe(pooled.byteLength)
+    expect(decodeStoredNodes(packed)).toEqual(NODES)
+  })
+
+  /**
+   * So a caller can OMIT the key. Writing an empty map over a real tree is
+   * how a partial write destroys a document (AGL-1250), and a helper that
+   * returned bytes for `undefined` would hand every caller that bug.
+   */
+  it('reports an absent field as null', () => {
+    expect(encodeStoredNodes(undefined)).toBeNull()
+    expect(encodeStoredNodes(null)).toBeNull()
+  })
+
+  it('round-trips smaller than the plain map it replaces', () => {
+    const packed = encodeStoredNodes(NODES)
+    expect(packed!.byteLength).toBeLessThan(JSON.stringify(NODES).length)
+  })
+})
+
+describe('matchStoredNodesForm', () => {
+  /**
+   * The partial-update rule. A writer that merges one field into a document
+   * it did not fully read must not change how `nodes` is encoded — rewriting
+   * a compressed document as a plain map inflates it by roughly 1.4x, toward
+   * the very ceiling this is all about.
+   */
+  it('leaves a document that was a map a map', () => {
+    expect(matchStoredNodesForm(NODES, 'map')).toBe(NODES)
+  })
+
+  it('keeps a document that was bytes as bytes', () => {
+    const written = matchStoredNodesForm(NODES, 'bytes')
+    expect(ArrayBuffer.isView(written)).toBe(true)
+    expect(decodeStoredNodes(written)).toEqual(NODES)
+  })
+
+  it('encodes when the document had no stored form yet', () => {
+    const written = matchStoredNodesForm(NODES, 'absent')
+    expect(ArrayBuffer.isView(written)).toBe(true)
+    expect(decodeStoredNodes(written)).toEqual(NODES)
+  })
+
+  it('round-trips through the form read off a stored field', () => {
+    for (const raw of [NODES, pooledBuffer()]) {
+      const form = storedNodesForm(raw)
+      const written = matchStoredNodesForm(decodeStoredNodes(raw), form)
+      expect(storedNodesForm(written)).toBe(form)
+      expect(decodeStoredNodes(written)).toEqual(NODES)
     }
   })
 })

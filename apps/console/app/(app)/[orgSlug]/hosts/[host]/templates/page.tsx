@@ -23,7 +23,7 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import { Button, Stack } from '@mui/material'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
-import { doc, setDoc } from 'firebase/firestore'
+import { Bytes, doc, setDoc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useState } from 'react'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
@@ -81,13 +81,20 @@ const HostTemplates: NextPageWithLayout<Record<string, never>> = () => {
         description: values.description ?? '',
         // A canvas needs a ROOT node — `{}` renders as "Invalid node".
         rootId: Aglyn.CANVAS_ROOT_ELEMENT_ID,
-        nodes: {
-          [Aglyn.CANVAS_ROOT_ELEMENT_ID]: {
-            $id: Aglyn.CANVAS_ROOT_ELEMENT_ID,
-            componentId: 'div',
-            nodes: [],
-          },
-        },
+        // Compressed at rest (AGL-1151). This `setDoc` deliberately bypasses
+        // `useHostTemplateRef` — it is a create, and the converter stamps an
+        // `updatedAt` this write already carries — so the encoding has to be
+        // applied here or the document arrives in a form its own editor's
+        // converter would never write again.
+        nodes: Bytes.fromUint8Array(
+          Aglyn.encodeStoredNodes({
+            [Aglyn.CANVAS_ROOT_ELEMENT_ID]: {
+              $id: Aglyn.CANVAS_ROOT_ELEMENT_ID,
+              componentId: 'div',
+              nodes: [],
+            },
+          })!,
+        ),
         // Explicit rather than absent: an absent source reads as "unknown"
         // to the badge and the marketplace update path, not as "mine".
         source: { type: 'authored' },

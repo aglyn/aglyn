@@ -138,11 +138,16 @@ describe('AGL-2083 · paginated staff lists are walked, not sampled', () => {
   })
 })
 
+/** A signed-in account whose token the walk must carry on every page. */
+const ACCOUNT = { getIdToken: async () => 'token-abc' }
+
 /** Fake fetch returning `pages` pages, then stopping. */
 function stubFetch(pages: string[][], key = 'hosts') {
   const calls: string[] = []
-  const impl = jest.fn(async (url: string) => {
+  const auth: (string | undefined)[] = []
+  const impl = jest.fn(async (url: string, init?: any) => {
     calls.push(url)
+    auth.push(init?.headers?.Authorization)
     const index = /after=([^&]*)/.exec(url)
       ? Number(/after=p(\d+)/.exec(url)?.[1] ?? 0)
       : 0
@@ -157,7 +162,7 @@ function stubFetch(pages: string[][], key = 'hosts') {
       }),
     }
   })
-  return { impl, calls }
+  return { impl, calls, auth }
 }
 
 describe('fetchAllPages', () => {
@@ -169,6 +174,7 @@ describe('fetchAllPages', () => {
     const { impl, calls } = stubFetch([['a', 'b'], ['c'], ['d']])
     ;(globalThis as { fetch?: unknown }).fetch = impl
     const result = await fetchAllPages<string>({
+      user: ACCOUNT,
       path: '/api/admin/hosts',
       key: 'hosts',
     })
@@ -180,11 +186,50 @@ describe('fetchAllPages', () => {
     expect(calls[1]).toContain('after=p1')
   })
 
+  it('carries the account\u2019s token on every page, never none', async () => {
+    /*
+     * The walk is many requests, not one, and the token was resolved ONCE by
+     * the caller and passed in as a header it had assembled itself. A caller
+     * that could not resolve one passed `{}` and this helper walked a staff
+     * list unauthenticated — every page refused, and a refusal reads here as
+     * `truncated`, i.e. as a short list rather than as a failure to sign in.
+     */
+    const { impl, calls, auth } = stubFetch([['a'], ['b'], ['c']])
+    ;(globalThis as { fetch?: unknown }).fetch = impl
+    await fetchAllPages<string>({
+      user: ACCOUNT,
+      path: '/api/admin/hosts',
+      key: 'hosts',
+    })
+    expect(calls).toHaveLength(3)
+    expect(auth).toEqual([
+      'Bearer token-abc',
+      'Bearer token-abc',
+      'Bearer token-abc',
+    ])
+  })
+
+  it('issues nothing when the account cannot be authorized', async () => {
+    const { impl } = stubFetch([['a'], ['b']])
+    ;(globalThis as { fetch?: unknown }).fetch = impl
+    const result = await fetchAllPages<string>({
+      user: null,
+      path: '/api/admin/hosts',
+      key: 'hosts',
+    })
+    // No request, and the caller is told the list is short rather than
+    // handed an empty one it would render as "no sites".
+    expect(impl).not.toHaveBeenCalled()
+    expect(result.items).toEqual([])
+    expect(result.truncated).toBe(true)
+  })
+
   it('reports truncation when the ceiling stops it', async () => {
     const pages = Array.from({ length: 10 }, (_page, index) => [String(index)])
     const { impl } = stubFetch(pages)
     ;(globalThis as { fetch?: unknown }).fetch = impl
     const result = await fetchAllPages<string>({
+      user: ACCOUNT,
       path: '/api/admin/hosts',
       key: 'hosts',
       maxPages: 3,
@@ -204,6 +249,7 @@ describe('fetchAllPages', () => {
     }))
     ;(globalThis as { fetch?: unknown }).fetch = impl
     const result = await fetchAllPages<string>({
+      user: ACCOUNT,
       path: '/api/admin/hosts',
       key: 'hosts',
     })
@@ -226,6 +272,7 @@ describe('fetchAllPages', () => {
     })
     ;(globalThis as { fetch?: unknown }).fetch = impl
     const result = await fetchAllPages<string>({
+      user: ACCOUNT,
       path: '/api/admin/hosts',
       key: 'hosts',
     })
@@ -243,6 +290,7 @@ describe('fetchAllPages', () => {
     const { impl, calls } = stubFetch([['a'], ['b']])
     ;(globalThis as { fetch?: unknown }).fetch = impl
     await fetchAllPages<string>({
+      user: ACCOUNT,
       path: '/api/admin/hosts?orgId=abc',
       key: 'hosts',
     })
@@ -264,6 +312,7 @@ describe('fetchAllPages', () => {
     })
     ;(globalThis as { fetch?: unknown }).fetch = impl
     const result = await fetchAllPages<string>({
+      user: ACCOUNT,
       path: '/api/admin/users',
       key: 'users',
       cursorParam: 'nextPageToken',
@@ -278,6 +327,7 @@ describe('fetchAllPages', () => {
     ;(globalThis as { fetch?: unknown }).fetch = impl
     let alive = true
     const result = await fetchAllPages<string>({
+      user: ACCOUNT,
       path: '/api/admin/hosts',
       key: 'hosts',
       active: () => {
@@ -309,6 +359,7 @@ describe('fetchAllPages', () => {
     })
     ;(globalThis as { fetch?: unknown }).fetch = impl
     const result = await fetchAllPages<string>({
+      user: ACCOUNT,
       path: '/api/admin/users',
       key: 'users',
       cursorParam: 'nextPageToken',
@@ -325,6 +376,7 @@ describe('fetchAllPages', () => {
     const impl = jest.fn(async () => ({ ok: false, json: async () => ({}) }))
     ;(globalThis as { fetch?: unknown }).fetch = impl
     const result = await fetchAllPages<string>({
+      user: ACCOUNT,
       path: '/api/admin/users',
       key: 'users',
       accumulate: ['tenantTruncated'],

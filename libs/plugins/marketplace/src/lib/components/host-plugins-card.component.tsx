@@ -52,6 +52,7 @@ import {
   useHostOrgId,
   useUser,
 } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
 export interface HostPluginsCardProps {
   hostId: string
@@ -225,15 +226,15 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
     (install: any) => async () => {
       setBusy(install.$id)
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/marketplace/install-plugin', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        const response = await authorizedFetch(
+          user,
+          '/api/marketplace/install-plugin',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ hostId, listingId: install.$id }),
           },
-          body: JSON.stringify({ hostId, listingId: install.$id }),
-        })
+        )
         const payload = await response.json().catch(() => ({}))
         if (response.ok) {
           enqueueSnackbar(`Upgraded to ${payload.version}`, {
@@ -264,15 +265,15 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
 
   const requestPluginApi = useCallback(
     async (body: Record<string, unknown>) => {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/marketplace/install-plugin', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      const response = await authorizedFetch(
+        user,
+        '/api/marketplace/install-plugin',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hostId, ...body }),
         },
-        body: JSON.stringify({ hostId, ...body }),
-      })
+      )
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
         // Every install-class action in this card funnels through here

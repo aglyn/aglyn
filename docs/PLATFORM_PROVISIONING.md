@@ -60,6 +60,30 @@ Search also needs the composite indexes in `cloud/firebase-firestore.indexes.jso
 deployed — see [`docs/FIRESTORE_MANUAL_CONFIG.md`](FIRESTORE_MANUAL_CONFIG.md),
 which warns that an index deploy also reconciles `fieldOverrides`.
 
+## Reconstructing a site's activity log
+
+`hosts/{hostId}/activity` is appended by the console at the moment of the
+edit, so anything a mutation point failed to log is lost rather than derivable
+— there is no second record of it. AGL-118 is the instance: the three template
+surfaces created screens, layouts and components without logging, so a site
+built from a template read as a site nobody had touched.
+
+`node tools/scripts/backfill-reconstructed-activity.mjs` recovers what the
+surviving artifacts prove. Dry-run by default; `--commit` applies, `--host
+<id>` narrows. Entry ids are derived from the artifact, so a re-run overwrites
+rather than duplicates, and every row it writes carries `reconstructed: true`
+and `reconstructedFrom`.
+
+**It cannot restore attribution, and no future script will.** Screens,
+layouts, components, templates and versions carry no author field of any kind
+— only `media.uploadedBy` names a person. So a reconstructed row for anything
+but a media upload has `actorId: null`, and the per-account staff feed, which
+filters on `actorId`, will never show it. A site's own activity feed shows it
+fine. If attributing these actions later matters, the fix is upstream: stamp a
+creator on the resource when `/api/hosts/resources` writes it. Inferring the
+actor from org ownership is not a substitute — it would put a name on an
+action the record does not support.
+
 ## Runbooks
 
 - Stripe specifics: `docs/STRIPE_GO_LIVE.md`

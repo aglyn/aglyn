@@ -147,12 +147,6 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
       },
       { merge: true },
     )
-    if (chargesEnabled) {
-      return res
-        .status(200)
-        .json({ accountId, chargesEnabled: true, payoutsEnabled })
-    }
-
     const origin = req.headers.origin ?? `https://${req.headers.host}`
     // Stripe bakes these into the onboarding link, so they have to be real
     // console paths. They were `/{hostDocId}/products` — the pre-AGL-621/622
@@ -179,6 +173,63 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
             pluginSlug: 'products',
           })}`
         : origin
+    // A CONNECTED MERCHANT STILL NEEDS A DOOR INTO STRIPE.
+    //
+    // This route used to return here the moment `charges_enabled` was true,
+    // with a status and no link of any kind, and both console cards read the
+    // `chargesEnabled` flag before they ever looked for a url. So the one
+    // state that most needs Stripe — charges on, payouts NOT released, funds
+    // accumulating in a Connect account that cannot pay them out — offered a
+    // button labelled "Finish payout setup in Stripe" that raised a toast and
+    // went nowhere. An Express account has no password and no direct login, so
+    // a link minted here is the merchant's ONLY way in; without one the money
+    // is unreachable and no surface says why.
+    if (chargesEnabled) {
+      if (!payoutsEnabled) {
+        // The remediation flow, which is what Stripe points an account with
+        // outstanding requirements at. Failures are NOT swallowed: answering
+        // 200 with no link is precisely the dead end being closed here, so a
+        // mint that fails surfaces as the handler's 502 and the merchant is
+        // told to try again rather than left pressing a dead button.
+        const fix = await stripe(
+          'account_links',
+          new URLSearchParams({
+            account: accountId as string,
+            type: 'account_onboarding',
+            refresh_url: `${productsUrl}?connect=refresh`,
+            return_url: `${productsUrl}?connect=done`,
+          }),
+        )
+        return res.status(200).json({
+          accountId,
+          chargesEnabled: true,
+          payoutsEnabled,
+          url: fix.url,
+        })
+      }
+      // Payouts are flowing, so this is the VIEW: balance, payout schedule,
+      // and the reason a payout failed — none of which Aglyn records and none
+      // of which the merchant could otherwise reach. Best-effort on purpose:
+      // a login link is a convenience, and failing to mint one must never turn
+      // a working status check into an error.
+      let dashboardUrl: string | undefined
+      try {
+        const login = await stripe(
+          `accounts/${accountId}/login_links`,
+          new URLSearchParams(),
+        )
+        dashboardUrl = typeof login?.url === 'string' ? login.url : undefined
+      } catch (error) {
+        console.error('Stripe Express dashboard link failed', error)
+      }
+      return res.status(200).json({
+        accountId,
+        chargesEnabled: true,
+        payoutsEnabled,
+        ...(dashboardUrl ? { dashboardUrl } : {}),
+      })
+    }
+
     const link = await stripe(
       'account_links',
       new URLSearchParams({

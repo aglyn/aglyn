@@ -67,10 +67,16 @@ const USAGE_METERING_TS = 'apps/console/utils/usage-metering.ts'
  * ⚑ Do not edit to make a failing check pass. A disagreement here means the
  * code moved a charged price; the fix is to decide which is right, not to
  * re-pin. A price change moves this pin and the Decision Log together.
+ *
+ * Agency moved once since the lock — 799 → 1299 monthly, 649 → 1049 annual,
+ * recorded in "2026-08-31 — Agency is $1,299/mo and $1,049 annual". It is
+ * pinned here because the decision is written down, not because the check was
+ * red: a pin moved to silence a failure records nothing and can catch nothing
+ * afterwards. Every other column is where Sept 1 put it.
  */
 const LOCKED = {
-  monthly: { free: 0, starter: 25, pro: 56, business: 139, scale: 249, advanced: 399, agency: 799 },
-  annualPerMonth: { free: 0, starter: 16, pro: 39, business: 99, scale: 179, advanced: 299, agency: 649 },
+  monthly: { free: 0, starter: 25, pro: 56, business: 139, scale: 249, advanced: 399, agency: 1299 },
+  annualPerMonth: { free: 0, starter: 16, pro: 39, business: 99, scale: 179, advanced: 299, agency: 1049 },
   ladder: {
     free: { digital: 0, physical: 0 },
     starter: { digital: 5, physical: 2 },

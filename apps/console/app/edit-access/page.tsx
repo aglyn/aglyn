@@ -17,6 +17,7 @@
 'use client'
 
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useSearchParams } from 'next/navigation'
 import { Suspense, useEffect, useRef, useState } from 'react'
 
@@ -101,13 +102,9 @@ function EditAccessBody() {
     startedRef.current = true
     ;(async () => {
       try {
-        const idToken = await user.getIdToken()
-        const response = await fetch('/api/edit-access/token', {
+        const response = await authorizedFetch(user, '/api/edit-access/token', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${idToken}`,
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ hostId }),
         })
         if (response.status === 403) {

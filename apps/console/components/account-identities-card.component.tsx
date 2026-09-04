@@ -20,6 +20,7 @@ import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { Alert, Button, Chip, Stack, Typography } from '@mui/material'
 import { useCallback, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
 /** One row of `GET /api/auth/staff-self-check`'s `identities`. */
 interface IdentityRow {
@@ -81,10 +82,12 @@ export function AccountIdentitiesCard() {
       // answering from it would report the very absence being investigated.
       // `useUser`, never a bare `getAuth()`: this app is a NAMED Firebase
       // app, and the bare call resolves the default one.
-      const idToken = await user.getIdToken(true)
-      const response = await fetch('/api/auth/staff-self-check', {
-        headers: { authorization: `Bearer ${idToken}` },
-      })
+      const response = await authorizedFetch(
+        user,
+        '/api/auth/staff-self-check',
+        {},
+        { forceRefresh: true },
+      )
       if (!response.ok) throw new Error(`Check failed (${response.status})`)
       setResult((await response.json()) as SelfCheck)
     } catch (caught: any) {

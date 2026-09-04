@@ -20,6 +20,11 @@ import { mdiFileDocumentOutline } from '@aglyn/shared-data-mdi'
 import MuiPaper from '@mui/material/Paper'
 import { forwardRef, type ReactNode } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import {
+  applySemanticElement,
+  semanticElementAttribute,
+  semanticElementLabelAttribute,
+} from '../utils/element-picker'
 import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
 
@@ -73,7 +78,7 @@ const PaperElement = forwardRef<HTMLDivElement, PaperElementProps>(
         // silently ignored by MUI, so don't pretend otherwise.
         variant={variant === 'outlined' ? 'outlined' : 'elevation'}
         elevation={variant === 'outlined' ? undefined : resolved}
-        {...rest}
+        {...applySemanticElement(rest as Record<string, unknown>)}
       >
         {children}
       </MuiPaper>
@@ -93,6 +98,8 @@ export const schema: Aglyn.ComponentSchema<PaperElementProps> = {
   category: Aglyn.ComponentCategory.SURFACE,
   icon: { path: mdiFileDocumentOutline.path, sx: { color: '#2196f3' } },
   attributes: [
+    semanticElementAttribute('this surface'),
+    semanticElementLabelAttribute(),
     {
       name: 'variant',
       label: 'Variant',

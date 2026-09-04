@@ -10,7 +10,7 @@ description: Add forms to your site, collect submissions in an inbox, and write 
 Submissions land in your **inbox** and can flow straight into a [dataset](../datasets/overview.md)
 and your [contacts CRM](../contacts/overview.md).
 
-![The Inbox page in the Aglyn console, with Form Submissions, Site Members & Leads, Orders, and Email campaigns sections](/img/forms/inbox-page.png)
+![The Inbox page in the Aglyn console, with its Submissions, Members & leads, and Campaigns sections](/img/forms/inbox-page.png)
 
 :::info Plan availability
 **Free** for basic forms and the inbox. Higher tiers raise submission and dataset caps.
@@ -193,7 +193,7 @@ Combine an outcome with a [conditional automation](../../marketing-and-automatio
 
 1. Add a **Checkboxes** field named `subscribe` with one option, `Yes, keep me posted`.
 2. Set **After submit** to *Redirect the visitor* and pick your `/thanks` screen.
-3. On the Workflows page, add an action on **formSubmission** with the condition
+3. On **Automation → Actions**, add an action on **formSubmission** with the condition
    *"A field is not empty" → `subscribe`* and the step **Enroll in a list**,
    picking your email audience.
 
@@ -274,7 +274,81 @@ it's the record that didn't happen. In that case **no dataset chip appears at al
 rather than a chip pointing at a row that doesn't exist. A submission with only **Saved
 to Inbox** on a form you bound to a dataset is the signal to go and check the dataset.
 
+#### Replying to a submission {#replying-to-a-submission}
+
+Open a submission and, under the fields, there is a **Reply** composer. Write a message,
+press **Send reply**, and it goes by email to the address on the submission. The
+original message is quoted underneath yours, so the person can see which of their
+messages you are answering.
+
+Read this part before you use it, because it decides where the conversation continues:
+
+- **Answers arrive in your email, not in the Inbox.** The reply is sent with your
+  console account's address as its **Reply-To**, so when the recipient answers, their
+  answer lands in your own mailbox. Nothing on this platform receives mail, so the
+  Inbox will not show it. The Inbox is a record of what your site collected and what you
+  sent back — it is not a mailbox.
+- **The reply leaves on whatever this site sends as**, with your site's sending name in
+  front of it — a domain of the site's own if it has one, and the shared Aglyn address
+  if it does not. See
+  [which domain your mail leaves on](../../marketing-and-automation/email-campaigns/overview.md#sending-domains).
+  The Reply-To above is what makes the round trip work either way, because it is the
+  only part of the address that may point at a mailbox nobody here has verified.
+- **Replies sent** lists what you have already sent on this submission, so you can see
+  whether someone else on your team has answered.
+
+A reply is **transactional** mail: someone wrote to you and you are writing back. It is
+not marketing, it does not need a marketing opt-in, and it does not add anyone to a
+list. It still respects the addresses that can no longer be mailed — if the address has
+bounced, reported a message as spam, or unsubscribed from your site, the composer
+refuses and tells you which. Replies count toward your email costs but never toward the
+campaign allowance your plan limits, so answering customers cannot use up the quota that
+sends your newsletter.
+
+A submission whose form had no email field cannot be replied to, and says so instead of
+offering a Send that would fail.
+
 <!-- screenshot: forms/inbox-submission-reader.png per SCREENSHOT_PLAN.md -->
+
+### One form's own page {#one-forms-own-page}
+
+The Inbox answers "who is waiting for a reply" for the whole site. **Forms →** a form
+answers a different question: how this one form is doing. Open it from the Forms list.
+
+**What this form has collected** carries the counters:
+
+- **Views** — times the form was rendered on a live page. Not times it was *seen*: a
+  form below the fold that nobody scrolled to still counts, and a form in a popup counts
+  only when the popup opens. Views of the form in the besigner or in Preview are never
+  counted — that would put you in your own numbers.
+- **Submissions** — everything filed under this form's id.
+- **Lead captures** — submissions this form filed to **Members & leads**. One person is
+  one lead, so someone who submits twice is two captures and one lead.
+- **Views that became a submission**, **Started and never submitted**, and **Submissions
+  that became a lead** — each printed with the population it is over, so you can see what
+  is being divided by what.
+
+**Submissions by month** starts at the first month this form recorded anything and runs
+to the present. Months in between with nothing are drawn at zero; months *before* the
+counter existed are not drawn at all, because nothing was counting then and a zero would
+be a claim.
+
+Two things to know before you read the rates:
+
+- **Views and starts are counted in the visitor's browser; submissions are counted on
+  our servers.** A visitor whose browser blocks the measurement can still submit, so a
+  completion rate can read above 100%. We show what was measured rather than capping it
+  at a tidy number.
+- **Each rate covers only the months its denominator was being recorded**, which is why a
+  form with years of submissions may show a completion rate over a much shorter period.
+
+**Submissions to this form** is the same table the Inbox shows, narrowed to this form,
+and it loads when you press **Show submissions** rather than on every visit — reading
+messages is a query over everything the site has ever collected, and most visits to this
+page are about the form's settings.
+
+Submissions collected before a form became a form entity are filed under the name they
+were sent with rather than this form's id, so they stay in the Inbox under **All forms**.
 
 ## Related
 

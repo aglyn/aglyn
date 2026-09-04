@@ -22,6 +22,7 @@ import {
   describeInvalidLinealRelationship,
   type LinealItem,
 } from '../dnd-manager'
+import { localStore, parseMirrored, watchMirror } from './clipboard-mirror'
 
 /**
  * Besigner element clipboard (AGL-1202): copy an element — or a whole
@@ -65,15 +66,6 @@ interface ClipboardState {
 
 const state = observable<ClipboardState>({ entry: null, hydrated: false })
 
-const storage = (): Storage | null => {
-  try {
-    // SSR and privacy-mode both make this throw rather than return null.
-    return typeof window === 'undefined' ? null : window.localStorage
-  } catch {
-    return null
-  }
-}
-
 /**
  * A copied subtree keeps no tie to the canvas it came from: `$id` and
  * `parentId` are re-minted on paste, and carrying stale ones through
@@ -115,7 +107,7 @@ const withoutNestedDuplicates = (
 }
 
 const persist = (entry: ClipboardEntry | null): void => {
-  const store = storage()
+  const store = localStore()
   if (!store) return
   try {
     if (entry) store.setItem(CLIPBOARD_STORAGE_KEY, JSON.stringify(entry))
@@ -126,20 +118,35 @@ const persist = (entry: ClipboardEntry | null): void => {
   }
 }
 
+const parseEntry = (raw: string | null): ClipboardEntry | null => {
+  const parsed = parseMirrored<ClipboardEntry>(raw, CLIPBOARD_FORMAT_VERSION)
+  if (!parsed) return null
+  if (!Array.isArray(parsed.nodes) || !parsed.nodes.length) return null
+  return parsed
+}
+
 const readMirror = (): ClipboardEntry | null => {
-  const store = storage()
-  if (!store) return null
   try {
-    const raw = store.getItem(CLIPBOARD_STORAGE_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as ClipboardEntry
-    if (parsed?.version !== CLIPBOARD_FORMAT_VERSION) return null
-    if (!Array.isArray(parsed.nodes) || !parsed.nodes.length) return null
-    return parsed
+    return parseEntry(localStore()?.getItem(CLIPBOARD_STORAGE_KEY) ?? null)
   } catch {
     return null
   }
 }
+
+/**
+ * A copy made in another besigner tab replaces this document's entry the
+ * moment it happens, exactly as a copy made here would. Hydrating once on
+ * first read is what a navigation needs; a second tab needs this, or the
+ * document goes on pasting the clipping it read first (AGL-2507).
+ */
+watchMirror(CLIPBOARD_STORAGE_KEY, (raw) => {
+  const entry = parseEntry(raw)
+  runInAction(() => {
+    state.entry = entry
+    // The mirror has now been consulted, whatever it held.
+    state.hydrated = true
+  })
+})
 
 /**
  * The current entry, hydrating from the `localStorage` mirror the first

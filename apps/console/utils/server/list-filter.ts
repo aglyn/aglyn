@@ -24,7 +24,7 @@ import {
 import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
 
 /**
- * The query half of the list-filter contract (AGL-693).
+ * The query half of the list-filter contract (AGL-2501).
  *
  * The declaration and the operator menu live in
  * `@aglyn/shared-ui-jsx/const/list-filter`, which is client-safe; this file is

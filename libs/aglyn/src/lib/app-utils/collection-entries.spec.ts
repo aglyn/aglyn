@@ -33,6 +33,7 @@ import {
   collectionCategorySlug,
   collectionSourceIsBounded,
   collectionSourceReachedBound,
+  collectionEntryAuthorValues,
   collectionEntryMetaValues,
   collectionEntryTokens,
   collectionListUrl,
@@ -42,10 +43,12 @@ import {
   entryMatchesFilter,
   expandCollectionCategories,
   expandCollectionEntries,
+  expandCollectionEntryAuthor,
   expandCollectionEntryMeta,
   expandCollectionRelated,
   expandCollectionSearch,
   formatCollectionEntryDate,
+  buildCollectionSearchIndex,
   parseCollectionRoute,
   resolveCollectionAllLabel,
   resolveCollectionCategoryBySlug,
@@ -1872,6 +1875,82 @@ describe('expandCollectionRelated (AGL-582)', () => {
       { title: 'Match', url: '/blog/match', category: 'Guides' },
     ])
   })
+
+  /**
+   * AGL-2486. The rail stamped `formatCollectionEntryDate(publishedAt)` with
+   * no format at all, so every related card was pinned to the raw locale date
+   * — `7/19/2026` under a byline the same template could set to "Jul 19,
+   * 2026". The format is answered here for the reason the byline's is: by the
+   * time a date reaches the block it is a formatted string, and re-parsing
+   * one is ambiguous by construction.
+   */
+  describe('the card date reads in the authored format (AGL-2486)', () => {
+    const formatNodes = (dateFormat?: string) =>
+      ({
+        root: { $id: 'root', componentId: 'div', nodes: ['related'] },
+        related: {
+          $id: 'related',
+          componentId: 'collectionRelated',
+          parentId: 'root',
+          props: dateFormat ? { dateFormat } : {},
+        },
+      }) as any
+
+    const dateOf = (dateFormat?: string) => {
+      const nodes = expandCollectionRelated(
+        formatNodes(dateFormat),
+        source,
+        source.entries[0],
+      )
+      return (nodes['related'].props.entries as any[])[0].date
+    }
+
+    it('uses the locale date when nothing is chosen, as it always has', () => {
+      expect(dateOf()).toBe(
+        formatCollectionEntryDate({ seconds: 1_700_000_000 }),
+      )
+    })
+
+    it('uses the locale date for the explicit do-nothing choice', () => {
+      expect(dateOf('default')).toBe(dateOf())
+    })
+
+    it('honours each named format', () => {
+      for (const format of ['monthYear', 'mediumDate', 'longDate', 'iso']) {
+        expect(dateOf(format)).toBe(
+          formatCollectionEntryDate({ seconds: 1_700_000_000 }, format as any),
+        )
+      }
+    })
+
+    it('falls back rather than stamping a format nothing renders', () => {
+      expect(dateOf('not-a-format')).toBe(dateOf())
+    })
+
+    it('is read PER NODE, so two rails can date differently', () => {
+      const nodes = expandCollectionRelated(
+        {
+          root: { $id: 'root', componentId: 'div', nodes: ['a', 'b'] },
+          a: {
+            $id: 'a',
+            componentId: 'collectionRelated',
+            parentId: 'root',
+            props: { dateFormat: 'iso' },
+          },
+          b: {
+            $id: 'b',
+            componentId: 'collectionRelated',
+            parentId: 'root',
+            props: { dateFormat: 'longDate' },
+          },
+        } as any,
+        source,
+        source.entries[0],
+      )
+      expect((nodes['a'].props.entries as any[])[0].date).toBe('2023-11-14')
+      expect((nodes['b'].props.entries as any[])[0].date).not.toBe('2023-11-14')
+    })
+  })
 })
 
 describe('expandCollectionEntryMeta (AGL-1385)', () => {
@@ -1942,6 +2021,94 @@ describe('expandCollectionEntryMeta (AGL-1385)', () => {
     // Still the literal token: substitution runs later and must win.
     expect(nodes['meta'].props.category).toBe('{{entry.category}}')
     expect(nodes['meta'].props.tags).toBe('forms, datasets')
+  })
+
+  it("shows the author's own portrait instead of the template's mark", () => {
+    // The live blogEntryTmpl pins the SITE's brand mark on the block, chosen
+    // when a byline was a string and no portrait existed anywhere. Once the
+    // entry resolves to an author record with an image, the mark is the wrong
+    // face beside a named person.
+    const authored = metaNodes()
+    authored['meta'].props = {
+      ...authored['meta'].props,
+      avatarImage: 'media:org:jWmGooWE3L/brandMark',
+    }
+    const withAuthor = {
+      ...entry,
+      author: { name: 'Zach Gover', image: 'media:org:jWmGooWE3L/portrait' },
+    }
+
+    const nodes = expandCollectionEntryMeta(authored, withAuthor, categories)
+
+    expect(nodes['meta'].props.avatarImage).toBe('media:org:jWmGooWE3L/portrait')
+  })
+
+  it("keeps the template's mark when the author carries no portrait", () => {
+    // Narrow on purpose: a legacy string byline, or a record with no image,
+    // must leave the block exactly as authored.
+    const authored = metaNodes()
+    authored['meta'].props = {
+      ...authored['meta'].props,
+      avatarImage: 'media:org:jWmGooWE3L/brandMark',
+    }
+
+    const legacy = expandCollectionEntryMeta(
+      authored,
+      { ...entry, authorName: 'The Aglyn Team' },
+      categories,
+    )
+    expect(legacy['meta'].props.avatarImage).toBe(
+      'media:org:jWmGooWE3L/brandMark',
+    )
+
+    const imageless = expandCollectionEntryMeta(
+      authored,
+      { ...entry, author: { name: 'Zach Gover' } },
+      categories,
+    )
+    expect(imageless['meta'].props.avatarImage).toBe(
+      'media:org:jWmGooWE3L/brandMark',
+    )
+  })
+
+  it('leaves the tag row faceless — the avatar follows the byline', () => {
+    // The live blogEntryTmpl ends on a second Entry Meta block used purely
+    // for chips: author, date and category switched off, "Tagged" typed as a
+    // label beside it. Filling the portrait in there put the author's face
+    // among the tags, halfway down the page from the byline it belongs to —
+    // and the image is `alt=""` precisely because a name is supposed to sit
+    // next to it.
+    const chipsOnly = metaNodes()
+    chipsOnly['meta'].props = {
+      showTags: true,
+      showAuthor: false,
+      showDate: false,
+      showCategory: false,
+    }
+
+    const nodes = expandCollectionEntryMeta(
+      chipsOnly,
+      { ...entry, author: { name: 'Zach Gover', image: 'media:x/portrait' } },
+      categories,
+    )
+
+    expect(nodes['meta'].props.avatarImage).toBeUndefined()
+    expect(nodes['meta'].props.tags).toBe('forms, datasets')
+  })
+
+  it('leaves the avatar alone when the block hides it', () => {
+    // `showAvatar: false` is the author saying "no face here"; a portrait
+    // arriving later must not turn it back on.
+    const hidden = metaNodes()
+    hidden['meta'].props = { ...hidden['meta'].props, showAvatar: false }
+
+    const nodes = expandCollectionEntryMeta(
+      hidden,
+      { ...entry, author: { name: 'Zach Gover', image: 'media:x/portrait' } },
+      categories,
+    )
+
+    expect(nodes['meta'].props.avatarImage).toBeUndefined()
   })
 
   it('skips the per-entry clones a listing block produced', () => {
@@ -2228,5 +2395,480 @@ describe('expandCollectionEntryMeta honours author and date format (AGL-1459)', 
       categories,
     )
     expect(bound['meta'].props.date).toBe('{{entry.date}}')
+  })
+})
+
+/**
+ * AGL-2486, the card half. Custom authors made the byline a RECORD with a
+ * portrait, a bio and a url, and the only block that could show one printed
+ * the name alone. The live blogEntryTmpl closed every article with a card
+ * whose name and blurb were typed in as literal text — text that said "The
+ * Aglyn Team" under posts written by somebody else and that no edit to the
+ * author record could ever reach.
+ */
+describe('the author card fills itself from the record (AGL-2486)', () => {
+  const author = {
+    name: 'Zach Gover',
+    bio: 'Building the open web platform.',
+    image: 'media:org:jWmGooWE3L/portrait',
+    url: 'https://example.com/zach',
+  }
+  const entry = {
+    $id: 'fHkaaFRRWF',
+    title: 'From a form to a dataset in five minutes',
+    slug: 'from-a-form-to-a-dataset-in-five-minutes',
+    authorName: 'Zach Gover',
+    author,
+    publishedAt: { seconds: 1_754_714_956 },
+  }
+  const cardNodes = (props: Record<string, unknown> = {}) =>
+    ({
+      root: { $id: 'root', componentId: 'div', nodes: ['card'] },
+      card: {
+        $id: 'card',
+        componentId: 'collectionEntryAuthor',
+        parentId: 'root',
+        props,
+      },
+    }) as any
+
+  it('reads every field off the record', () => {
+    expect(collectionEntryAuthorValues(entry)).toEqual({
+      name: 'Zach Gover',
+      bio: 'Building the open web platform.',
+      image: 'media:org:jWmGooWE3L/portrait',
+      url: 'https://example.com/zach',
+      // Their page HERE, which is not their own site above it (AGL-2519).
+      pageUrl: '/author/zach-gover',
+      links: [],
+    })
+  })
+
+  it('falls back to the legacy byline string for an older entry', () => {
+    // An entry written before custom authors has one field, and a card with
+    // a name in it beats no card at all.
+    expect(
+      collectionEntryAuthorValues({ authorName: 'The Aglyn Team' }),
+    ).toEqual({
+      name: 'The Aglyn Team',
+      bio: '',
+      image: '',
+      url: '',
+      // A legacy byline still addresses a page, so a decade of posts by a
+      // name that was never a record still lead somewhere (AGL-2519).
+      pageUrl: '/author/the-aglyn-team',
+      links: [],
+    })
+  })
+
+  it('stamps the card, so nothing has to be typed as literal text', () => {
+    const nodes = expandCollectionEntryAuthor(cardNodes(), entry)
+
+    expect(nodes['card'].props).toEqual({
+      name: 'Zach Gover',
+      bio: 'Building the open web platform.',
+      image: 'media:org:jWmGooWE3L/portrait',
+      url: 'https://example.com/zach',
+      pageUrl: '/author/zach-gover',
+    })
+  })
+
+  it('never overwrites an authored value or a token awaiting substitution', () => {
+    const nodes = expandCollectionEntryAuthor(
+      cardNodes({ name: 'Guest writer', bio: '{{entry.authorBio}}' }),
+      entry,
+    )
+
+    expect(nodes['card'].props.name).toBe('Guest writer')
+    // Substitution runs later and must win.
+    expect(nodes['card'].props.bio).toBe('{{entry.authorBio}}')
+    expect(nodes['card'].props.image).toBe('media:org:jWmGooWE3L/portrait')
+  })
+
+  it('leaves the card empty when the entry names no author', () => {
+    // Rendered as nothing, never as an empty bordered box.
+    const nodes = expandCollectionEntryAuthor(cardNodes(), {
+      title: 'Anonymous',
+    })
+
+    expect(nodes['card'].props).toEqual({})
+  })
+
+  it('skips the per-entry clones a listing block produced', () => {
+    const cloned = cardNodes()
+    cloned[`${COLLECTION_ENTRIES_NODE_ID_PREFIX}list__0__card`] = {
+      ...cloned['card'],
+      $id: `${COLLECTION_ENTRIES_NODE_ID_PREFIX}list__0__card`,
+    }
+
+    const nodes = expandCollectionEntryAuthor(cloned, entry)
+
+    expect(
+      nodes[`${COLLECTION_ENTRIES_NODE_ID_PREFIX}list__0__card`].props,
+    ).toEqual({})
+  })
+
+  it('is bindable by hand for a card the designer laid out themselves', () => {
+    const tokens = collectionEntryTokens(entry, 'blog')
+
+    expect(tokens['entry.author']).toBe('Zach Gover')
+    expect(tokens['entry.authorBio']).toBe('Building the open web platform.')
+    expect(tokens['entry.authorImage']).toBe('media:org:jWmGooWE3L/portrait')
+    expect(tokens['entry.authorUrl']).toBe('https://example.com/zach')
+  })
+
+  it('reads the same whether it was bound or server-filled', () => {
+    // The reason `collectionEntryAuthorValues` exists: one entry has to read
+    // one way on both paths.
+    const stamped = expandCollectionEntryAuthor(cardNodes(), entry)
+    const tokens = collectionEntryTokens(entry, 'blog')
+
+    expect(stamped['card'].props.bio).toBe(tokens['entry.authorBio'])
+    expect(stamped['card'].props.image).toBe(tokens['entry.authorImage'])
+    expect(stamped['card'].props.url).toBe(tokens['entry.authorUrl'])
+  })
+
+  it('shows the record’s name in the byline even undenormalized', () => {
+    // The tenant copies `author.name` onto `authorName` before render, so the
+    // two normally agree. Reading the record first is what keeps that a
+    // convenience rather than the only thing holding the byline up.
+    expect(
+      collectionEntryMetaValues({ author: { name: 'Zach Gover' } }).author,
+    ).toBe('Zach Gover')
+  })
+})
+
+/**
+ * A CARD'S DATE FORMAT HAS TO MOVE THE CARD'S DATE (AGL-2486).
+ *
+ * The routed-entry passes skip clones on purpose — stamping the routed entry
+ * into a listing would date every card the same — so a cloned Entry Meta had
+ * only its `{{entry.date}}` binding, and a binding carries no format. The
+ * Date format picker sat on the card doing nothing, while the identical block
+ * on the article above it obeyed it. Measured on aglyn.com/blog: every card
+ * read `8/9/2026` where the article byline read `Aug 2026`.
+ */
+describe('entry blocks inside a listing fill from their own card (AGL-2486)', () => {
+  const entries = [
+    {
+      $id: 'a',
+      title: 'First',
+      slug: 'first',
+      authorName: 'Zach Gover',
+      categoryId: 'guides',
+      publishedAt: { seconds: 1_754_714_956 },
+    },
+    {
+      $id: 'b',
+      title: 'Second',
+      slug: 'second',
+      authorName: 'A Guest',
+      publishedAt: { seconds: 1_784_116_800 },
+    },
+  ]
+  const sources = {
+    blog: {
+      slug: 'blog',
+      entries,
+      categories: [{ id: 'guides', name: 'Guides' }],
+    },
+  } as any
+  const listNodes = (metaProps: Record<string, unknown>) =>
+    ({
+      root: { $id: 'root', componentId: 'div', nodes: ['list'] },
+      list: {
+        $id: 'list',
+        componentId: COLLECTION_ENTRIES_COMPONENT_ID,
+        parentId: 'root',
+        props: { collectionSlug: 'blog' },
+        nodes: ['card'],
+      },
+      card: {
+        $id: 'card',
+        componentId: 'muiStack',
+        parentId: 'list',
+        nodes: ['meta'],
+      },
+      meta: {
+        $id: 'meta',
+        componentId: 'collectionEntryMeta',
+        parentId: 'card',
+        props: metaProps,
+      },
+    }) as any
+  const cloneMeta = (nodes: any, index: number) =>
+    nodes[`${COLLECTION_ENTRIES_NODE_ID_PREFIX}list__${index}__meta`]?.props
+
+  it('applies the card’s Date format to each card’s own date', () => {
+    const nodes = expandCollectionEntries(
+      listNodes({ date: '{{entry.date}}', dateFormat: 'monthYear' }),
+      sources,
+    )
+    expect(cloneMeta(nodes, 0).date).toBe(
+      formatCollectionEntryDate(entries[0].publishedAt, 'monthYear'),
+    )
+    // The SECOND card dates itself, not the first — the whole reason the
+    // routed-entry pass skips clones.
+    expect(cloneMeta(nodes, 1).date).toBe(
+      formatCollectionEntryDate(entries[1].publishedAt, 'monthYear'),
+    )
+    expect(cloneMeta(nodes, 0).date).not.toBe(cloneMeta(nodes, 1).date)
+  })
+
+  it('CONTROL — the default format is the string it has always emitted', () => {
+    const nodes = expandCollectionEntries(
+      listNodes({ date: '{{entry.date}}' }),
+      sources,
+    )
+    expect(cloneMeta(nodes, 0).date).toBe(
+      formatCollectionEntryDate(entries[0].publishedAt),
+    )
+  })
+
+  it('fills a card block that binds nothing at all', () => {
+    // "Drop it on and it works" has to hold inside a card too.
+    const nodes = expandCollectionEntries(listNodes({}), sources)
+    expect(cloneMeta(nodes, 0).author).toBe('Zach Gover')
+    expect(cloneMeta(nodes, 1).author).toBe('A Guest')
+    expect(cloneMeta(nodes, 0).category).toBe('Guides')
+  })
+
+  it('never overwrites a value typed onto the card', () => {
+    const nodes = expandCollectionEntries(
+      listNodes({ author: 'The editors', dateFormat: 'monthYear' }),
+      sources,
+    )
+    expect(cloneMeta(nodes, 0).author).toBe('The editors')
+    expect(cloneMeta(nodes, 1).author).toBe('The editors')
+  })
+
+  it('fills an Entry Author card from the card’s own entry', () => {
+    const nodes = expandCollectionEntries(
+      {
+        root: { $id: 'root', componentId: 'div', nodes: ['list'] },
+        list: {
+          $id: 'list',
+          componentId: COLLECTION_ENTRIES_COMPONENT_ID,
+          parentId: 'root',
+          props: { collectionSlug: 'blog' },
+          nodes: ['author'],
+        },
+        author: {
+          $id: 'author',
+          componentId: 'collectionEntryAuthor',
+          parentId: 'list',
+          props: {},
+        },
+      } as any,
+      sources,
+    )
+    const name = (index: number) =>
+      nodes[`${COLLECTION_ENTRIES_NODE_ID_PREFIX}list__${index}__author`].props
+        .name
+    expect(name(0)).toBe('Zach Gover')
+    expect(name(1)).toBe('A Guest')
+  })
+})
+
+/**
+ * The author's profile links reach the card (AGL-2516).
+ *
+ * `sameAs` never did: it is a crawler field and nothing rendered it. These are
+ * the rows a reader clicks, so they travel the path the portrait and the bio
+ * already take — from the record, per entry, with the template retyping
+ * nothing.
+ */
+describe('the author card fills its links from the record (AGL-2516)', () => {
+  const authored = (links: unknown) =>
+    ({
+      $id: 'e1',
+      title: 'A post',
+      slug: 'a-post',
+      author: { name: 'Zach Gover', links },
+    }) as any
+
+  const cardOnly = () =>
+    ({
+      root: { $id: 'root', componentId: 'div', nodes: ['a'] },
+      a: {
+        $id: 'a',
+        componentId: 'collectionEntryAuthor',
+        parentId: 'root',
+        props: {},
+      },
+    }) as any
+
+  it('carries the record’s rows onto the card', () => {
+    expect(
+      collectionEntryAuthorValues(
+        authored([
+          { platform: 'x', url: 'https://x.com/aglyn' },
+          {
+            label: 'Newsletter',
+            icon: 'email-newsletter',
+            iconPath: 'M0 0',
+            url: 'https://e.com/n',
+          },
+        ]),
+      ).links,
+    ).toEqual([
+      { platform: 'x', url: 'https://x.com/aglyn' },
+      {
+        label: 'Newsletter',
+        icon: 'email-newsletter',
+        iconPath: 'M0 0',
+        url: 'https://e.com/n',
+      },
+    ])
+  })
+
+  it('normalizes at the boundary rather than trusting the store', () => {
+    // A hand-written document reaches props without ever passing the record
+    // normalizer, so an unsafe scheme has to die HERE too — not only where
+    // the console writes.
+    expect(
+      collectionEntryAuthorValues(
+        authored([
+          // eslint-disable-next-line no-script-url
+          { label: 'Bad', url: 'javascript:alert(1)' },
+          { platform: 'github', url: 'https://github.com/aglyn' },
+        ]),
+      ).links,
+    ).toEqual([{ platform: 'github', url: 'https://github.com/aglyn' }])
+  })
+
+  it('stamps them onto an Entry Author block', () => {
+    const out: any = expandCollectionEntryAuthor(
+      cardOnly(),
+      authored([{ platform: 'x', url: 'https://x.com/aglyn' }]),
+    )
+    expect(out['a'].props['links']).toEqual([
+      { platform: 'x', url: 'https://x.com/aglyn' },
+    ])
+  })
+
+  it('stamps nothing when the author has none', () => {
+    const out: any = expandCollectionEntryAuthor(cardOnly(), authored(undefined))
+    // Absent, not an empty array: the card's emptiness check and its
+    // `Show links` switch both read "no rows" from the same absence.
+    expect(out['a'].props['links']).toBeUndefined()
+  })
+})
+
+/**
+ * The two links a byline can offer, which are not the same link (AGL-2519).
+ */
+describe('linking to an author from an entry (AGL-2519)', () => {
+  it('offers their page here, beside their own site', () => {
+    const tokens = collectionEntryTokens(
+      {
+        $id: 'e1',
+        title: 'A post',
+        slug: 'a-post',
+        author: { $id: 'aB12', name: 'Zach Gover', url: 'https://zach.example' },
+      } as never,
+      'blog',
+    )
+    // Site-wide, and NAME-first rather than id-first: this is a public
+    // address on a marketing site, and `/author/ab12` is not one anybody can
+    // read. The id still resolves on the way back in.
+    expect(tokens['entry.authorPageUrl']).toBe('/author/zach-gover')
+    expect(tokens['entry.authorUrl']).toBe('https://zach.example')
+  })
+
+  it('prefers the author’s stored slug over their name', () => {
+    const tokens = collectionEntryTokens(
+      {
+        $id: 'e1',
+        title: 'A post',
+        slug: 'a-post',
+        author: { $id: 'aB12', name: 'Zach Gover', slug: 'zg' },
+      } as never,
+      'blog',
+    )
+    expect(tokens['entry.authorPageUrl']).toBe('/author/zg')
+  })
+
+  it('empties the token when nothing is addressable', () => {
+    const tokens = collectionEntryTokens(
+      { $id: 'e1', title: 'A post', slug: 'a-post' } as never,
+      'blog',
+    )
+    // A binding then renders no link at all, rather than one pointing at
+    // `/author/`.
+    expect(tokens['entry.authorPageUrl']).toBe('')
+  })
+
+  it('still resolves for a legacy byline with no record', () => {
+    const tokens = collectionEntryTokens(
+      {
+        $id: 'e1',
+        title: 'A post',
+        slug: 'a-post',
+        authorName: 'The Aglyn Team',
+      } as never,
+      'blog',
+    )
+    expect(tokens['entry.authorPageUrl']).toBe('/author/the-aglyn-team')
+  })
+
+  it('does not depend on which collection the entry came from', () => {
+    // The whole point of the reshape: one person, one page, whatever they
+    // wrote in. Two collections, one address.
+    const author = { $id: 'aB12', name: 'Zach Gover' }
+    const inBlog = collectionEntryTokens(
+      { $id: 'e1', title: 'A', slug: 'a', author } as never,
+      'blog',
+    )
+    const inChangelog = collectionEntryTokens(
+      { $id: 'e2', title: 'B', slug: 'b', author } as never,
+      'changelog',
+    )
+    expect(inBlog['entry.authorPageUrl']).toBe(
+      inChangelog['entry.authorPageUrl'],
+    )
+  })
+})
+
+/**
+ * A listing that MIXES collections has to say where each entry came from
+ * (AGL-2518) — the author page is the first one that does.
+ */
+describe('an entry that carries its own collection (AGL-2518)', () => {
+  const base = { $id: 'e1', title: 'A post', slug: 'a-post' }
+
+  it('builds the url from the entry’s own collection, not the routed one', () => {
+    const tokens = collectionEntryTokens(
+      { ...base, collectionSlug: 'changelog', collectionName: 'Changelog' } as never,
+      // The routed slug an author page would otherwise pass for every card.
+      '__author__',
+    )
+    expect(tokens['entry.url']).toBe('/changelog/a-post')
+    expect(tokens['entry.collection']).toBe('Changelog')
+    expect(tokens['entry.collectionSlug']).toBe('changelog')
+    expect(tokens['entry.collectionUrl']).toBe('/changelog')
+  })
+
+  it('changes nothing for a single-collection listing', () => {
+    // Every existing caller passes one slug and stamps nothing, so this is
+    // the case that must stay byte-identical.
+    const tokens = collectionEntryTokens(base as never, 'blog')
+    expect(tokens['entry.url']).toBe('/blog/a-post')
+    expect(tokens['entry.collection']).toBe('')
+    expect(tokens['entry.collectionSlug']).toBe('blog')
+  })
+
+  it('sends each search hit to its own collection', () => {
+    // The index is built from the same window the cards were, so a mixed
+    // listing whose search sent every hit to one collection would be a page
+    // of links to 404s.
+    const index = buildCollectionSearchIndex(
+      [
+        { ...base, collectionSlug: 'changelog' },
+        { $id: 'e2', title: 'B', slug: 'b' },
+      ] as never,
+      'blog',
+    )
+    expect(index.map((row) => row.url)).toEqual(['/changelog/a-post', '/blog/b'])
   })
 })

@@ -83,6 +83,36 @@ const collectionHandle = (path: string): any => ({
 })
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  /*
+   * The site's own sending identity, which every tenant send now resolves.
+   *
+   * A VERIFIED one, because these specs are about the mail their subject
+   * sends rather than about the identity boundary — a refusing stub would
+   * turn each of them into an assertion that no mail was sent, which is not
+   * what any of them was written to check. The boundary itself is proved in
+   * `platform-sending-domain.spec.ts`, `host-sending-domain.spec.ts` and
+   * `email-audience-coverage.spec.ts`.
+   *
+   * The domain is the SITE's, never `aglyn.com`, so an assertion on a From:
+   * address in this file cannot accidentally pass against a platform
+   * fallback.
+   */
+  hostSendingIdentity: async () => ({
+    from: 'hello@site.mail.aglyn.app',
+    source: 'custom',
+    domain: 'site.mail.aglyn.app',
+    summary: 'Sending as hello@site.mail.aglyn.app.',
+    refusal: null,
+  }),
+  /*
+   * The consent + topic gate, permissive. This file is about what a run
+   * RECORDS, and every `sendEmail` step now asks this one — an immediate step
+   * in the narrow `'immediate'` scope, a resumed one in full. A refusing stub
+   * here would turn each assertion about a recorded step into an assertion
+   * that the step was refused. `email-flow-gate.spec.ts` owns the rule and
+   * `run-event-actions-flow.spec.ts` owns which scope each path asks for.
+   */
+  flowEmailRefusal: async () => null,
   __esModule: true,
   firebaseAdmin: {
     app: () => ({
@@ -107,6 +137,11 @@ jest.mock('@aglyn/shared-util-email', () => ({
   // returns nothing turns every email step into a FAILED run and would
   // have made this file assert the opposite of what it means to.
   sendEmail: async () => ({ sent: true }),
+  // The REAL accessor. `strictNullChecks` is off, so the step branch reads
+  // the refusal through this rather than off the union; a double returning
+  // nothing would name every outcome "email delivery failed".
+  sendFailureReason: jest.requireActual('@aglyn/shared-util-email/send-email')
+    .sendFailureReason,
 }))
 
 import { runEventActions } from './run-event-actions'

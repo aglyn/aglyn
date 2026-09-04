@@ -294,7 +294,7 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
             flexGrow: 1
           }}>
           <AddControlsComponent />
-          {/* The document switcher is NOT here (AGL-1481). It belongs to the
+          {/* The document switcher is NOT here. It belongs to the
               primary app bar — `MainLayout`'s `centerPrefix`, where the
               screen and layout editors have always put it and where every
               other picker in the console lives. The component editor passed

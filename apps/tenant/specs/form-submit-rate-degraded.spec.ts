@@ -96,6 +96,13 @@ const mockCollectionHandle = (path: string) => ({
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
+  // The attribution seam the route resolves once per submission. Recorded
+  // rather than executed — `campaign-conversion-attribution.spec.ts` owns
+  // what the write does — and defined here at all because a mocked module
+  // answers `undefined` for a name it does not list, which would make the
+  // route throw rather than fail an assertion.
+  resolveCampaignTouch: async () => null,
+  attributeCampaignConversion: async () => null,
   firebaseAdmin: {
     app: () => ({
       firestore: () => ({ collection: (name: string) => mockCollectionHandle(name) }),

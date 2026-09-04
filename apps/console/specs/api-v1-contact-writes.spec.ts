@@ -113,7 +113,34 @@ function mockDocRef(path: string) {
     },
     update: async (data: Record<string, unknown>) => {
       const existing = mockDocs.get(path)
-      mockDocs.set(path, { ...(existing ?? {}), ...mockResolveWrite(existing, data) })
+      /*
+       * DOTTED KEYS ARE FIELD PATHS, which is what `update` does and `set`
+       * does not. A fake that stored `'a.b'` as a literal key would let a
+       * write into one holder's slot of a map look like it landed while the
+       * map it was meant for stayed empty — and every assertion about it
+       * would then be about the fake.
+       */
+      const next: Record<string, unknown> = { ...(existing ?? {}) }
+      for (const [key, value] of Object.entries(
+        mockResolveWrite(existing, data) as Record<string, unknown>,
+      )) {
+        if (!key.includes('.')) {
+          next[key] = value
+          continue
+        }
+        const segments = key.split('.')
+        let cursor = next
+        for (const segment of segments.slice(0, -1)) {
+          const child = cursor[segment]
+          cursor[segment] =
+            child && typeof child === 'object' && !Array.isArray(child)
+              ? { ...(child as Record<string, unknown>) }
+              : {}
+          cursor = cursor[segment] as Record<string, unknown>
+        }
+        cursor[segments[segments.length - 1]] = value
+      }
+      mockDocs.set(path, next)
     },
     delete: async () => {
       mockDocs.delete(path)
@@ -230,6 +257,11 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/contacts'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/scope-tokens'),
+  // The REAL consent model too. A fake that recorded a basis at the top of
+  // the document would make every assertion below a statement about the fake,
+  // and the per-controller grant is precisely what is under test.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/marketing-consent'),
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/consent-groups'),
   effectiveDatasetModel: () => ({ fields: [] }),
   coerceDocumentValues: (_model: unknown, values: Record<string, unknown>) => values,
   validateDocument: () => ({}),
@@ -355,7 +387,13 @@ beforeEach(() => {
   mockDocs.clear()
   mockUidSeq = 0
   mockScopes = ['contacts:read', 'contacts:write']
-  mockOrg = { plan: 'business', subscription: { status: 'active' } }
+  // `hosts` is what `orgOwnsHost` checks: an opt-in over the API names the
+  // site it was given to, and a site the org does not own is refused.
+  mockOrg = {
+    plan: 'business',
+    subscription: { status: 'active' },
+    hosts: { 'host-1': true },
+  }
 })
 
 describe('the premise', () => {
@@ -597,6 +635,9 @@ describe('the projection carries every field the resource accepts', () => {
       tags: ['b2b', 'vip'],
       notes: 'Renews in March.',
       marketingConsent: true,
+      // An opt-in over the API has to name the site it was given to: a key
+      // belongs to an ORGANIZATION, and an organization is not a controller.
+      consentSiteId: 'host-1',
     })
     expect(patched.status).toBe(200)
     const view = await patched.json()
@@ -608,12 +649,14 @@ describe('the projection carries every field the resource accepts', () => {
       tags: ['b2b', 'vip'],
       notes: 'Renews in March.',
       marketingConsent: true,
+      consentSites: ['host-1'],
       sources: ['api'],
     })
     // And a fresh GET agrees — the PATCH response is not a local echo.
     expect(await (await getContact('con_1')).json()).toMatchObject({
       notes: 'Renews in March.',
       marketingConsent: true,
+      consentSites: ['host-1'],
       tags: ['b2b', 'vip'],
     })
   })

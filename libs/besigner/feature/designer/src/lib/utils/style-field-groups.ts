@@ -26,6 +26,7 @@ import type {
   ThemeScaleOption,
 } from '@aglyn/shared-ui-jsx-forms'
 import { besignerDocsUrl } from './docs-help'
+import { numericTextValue } from './numeric-text-value'
 import { readSxValue, type SxBreakpoint, writeSxValue } from './responsive-sx'
 import type { StyleThemeScales } from './theme-scale-options'
 
@@ -1032,16 +1033,6 @@ function fieldSxScheme(
 }
 
 /**
- * A value that is ENTIRELY a number — the only shape stored as a number.
- *
- * Deliberately narrower than `Number()` would accept: no exponent form, no
- * `Infinity`, no hex. Those parse to a number and are not CSS anyway, so
- * converting them would only make the stored value harder to read back
- * than the text the author actually typed.
- */
-const NUMERIC_STYLE_VALUE = /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/
-
-/**
  * What a control's emitted value is STORED as (AGL-2486).
  *
  * The panel's free-text fields can only hand back a string, and for the
@@ -1054,12 +1045,12 @@ const NUMERIC_STYLE_VALUE = /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/
  * node carrying the theme default, retype the same number, and the value
  * is gone — with nothing anywhere to report it.
  *
- * The rule is the VALUE's shape, not a list of field names, and it is
- * enforced here rather than in each control: this is the merge every
- * control in the panel writes through, so a field added later cannot
- * arrive with the old behaviour. Anything carrying a non-numeric character
- * (`8px`, `50%`, `1rem`, `span 2`) is what the author wrote and stays a
- * string.
+ * The rule is the VALUE's shape ({@link numericTextValue}), not a list of
+ * field names, and it is enforced here rather than in each control: this is
+ * the merge every control in the panel writes through, so a field added
+ * later cannot arrive with the old behaviour. Anything carrying a
+ * non-numeric character (`8px`, `50%`, `1rem`, `span 2`) is what the author
+ * wrote and stays a string.
  *
  * Empty — including whitespace — clears. `0` does NOT: it is falsy and it
  * is a legitimate radius, opacity and flex-grow, and `strictNullChecks` is
@@ -1068,11 +1059,8 @@ const NUMERIC_STYLE_VALUE = /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/
  */
 function normalizeStyleValue(value: unknown): unknown {
   if (typeof value !== 'string') return value
-  const text = value.trim()
-  if (text === '') return undefined
-  if (!NUMERIC_STYLE_VALUE.test(text)) return value
-  const numeric = Number(text)
-  return Number.isFinite(numeric) ? numeric : value
+  if (value.trim() === '') return undefined
+  return numericTextValue(value)
 }
 
 /**

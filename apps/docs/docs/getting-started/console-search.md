@@ -28,7 +28,7 @@ your sites across the workspace:
 | Templates | A site template | The template page |
 | Content | A content collection | The Content page |
 | Authors | A content author | The Content page |
-| Workflows | A workflow | The Workflows page |
+| Workflows | A workflow | The Automation page |
 | Products | A product | The Products page |
 | Redirects | A redirect, matched on its source path | The Redirects page |
 | Services | A bookable service | The Bookings page |

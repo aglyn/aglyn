@@ -23,7 +23,7 @@ import {
   readOrgBilling,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
-import { describeMissingStripeCustomer } from '../../_lib/stripe-customer-mode-notice'
+import { describeStripeModeSplit } from '../../_lib/stripe-customer-mode-notice'
 import {
   describeStripePaymentMethod,
   selectSubscriptionPaymentMethod,
@@ -84,7 +84,7 @@ async function handler(request: Request): Promise<Response> {
           invoices: [],
           paymentMethod: null,
           hasCustomer: false,
-          ...(await describeMissingStripeCustomer(orgId)),
+          ...(await describeStripeModeSplit(orgId)),
         },
         { status: 200 },
       )
@@ -201,6 +201,13 @@ async function handler(request: Request): Promise<Response> {
       paymentMethodSource,
       hasCustomer: true,
       delinquent: customerPayload?.delinquent === true,
+      // The same explanation the no-customer branch gets, for the case that
+      // branch cannot see: an org that transacted live and was then opened in
+      // test has BOTH ids, so the customer is not missing — this mode's is
+      // simply empty while the other mode holds the history. Attached only on
+      // an EMPTY list; beside real invoices it would read as though they were
+      // the wrong ones.
+      ...(invoices.length === 0 ? await describeStripeModeSplit(orgId) : {}),
     }, { status: 200 })
   } catch (error) {
     // An unverifiable credential is a 401, not a fault of ours

@@ -33,12 +33,58 @@ const mockState: {
   store: Record<string, Record<string, unknown>>
   sent: Array<Record<string, any>>
   metered: Array<[string, number, string]>
-} = { store: {}, sent: [], metered: [] }
+  /** The site's sending-domain selection; null means the platform identity. */
+  sendingDomain: {
+    domain: string
+    status: string
+    localPart: string
+    missing?: string[]
+  } | null
+  /** The owning org's plan. What `getOrgForHost` answers, and the only
+   *  input that decides whether the campaign cap admits a send. */
+  plan: OrgPlan
+} = { store: {}, sent: [], metered: [], sendingDomain: null, plan: 'pro' }
 
 // The module graph behind `@aglyn/tenant-data-admin` reaches the admin SDK,
 // which does not load under the jest environment. Nothing real is needed:
 // `performCampaignSend` takes its firestore from `firebaseAdmin`.
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  // The literal three call sites compare against — the unsubscribe writes
+  // it, the resubscribe link refuses to reverse anything else, and the
+  // preference page reads it. A mock that omitted it would write `undefined`
+  // and every one of those comparisons would silently stop matching.
+  UNSUBSCRIBE_SUPPRESSION_REASON: 'unsubscribe',
+  /*
+   * The real resolution's shape: an org that declared no pooling resolves
+   * every site to a group of ONE. Faked rather than imported because this
+   * file mocks the whole module — but faked to the NARROW answer, which is
+   * the direction a wrong group may fail in.
+   */
+  consentGroupForSite: async (hostId: string) => ({
+    hostId,
+    groupId: hostId,
+    name: null,
+    hostIds: [hostId],
+    declared: false,
+  }),
+  /*
+   * The unsubscribe-link signer and URL builder are the REAL ones. They need
+   * nothing but `crypto`, and a double would let a spec assert on a URL shape
+   * the product does not actually mint — which is the whole failure mode of a
+   * stubbed policy module.
+   */
+  ...jest.requireActual(
+    '@aglyn/tenant-data-admin/server/email-unsubscribe-link',
+  ),
+  /*
+   * The marketing frequency window is a no-op here, and deliberately so: it
+   * is a durable counter whose behavior is proven against a Firestore double
+   * in `tenant-data-admin`, and the campaign sender's only contract with it
+   * is that it is called with the addresses that were reached and that it
+   * cannot fail a send.
+   */
+  recordMarketingSends: async (_hostId: string, emails: readonly string[]) =>
+    emails.length,
   firebaseAdmin: {
     app: () => ({ firestore: () => mockFirestore() }),
     firestore: {
@@ -46,11 +92,88 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         increment: (value: number) => ({ increment: value }),
         serverTimestamp: () => 'server-timestamp',
       },
+      FieldPath: { documentId: () => '__name__' },
     },
   },
-  // A plan whose emailSendsPerMonth is non-zero, or the cap refuses the send
-  // before any of this is reached. Free is 0 by design.
-  getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'starter' } }),
+  /*
+   * BOTH suppression lists, the shape the real helper has (D6). Written out
+   * rather than left permissive because a double that never suppresses
+   * anybody cannot tell a sender consulting one list from one consulting two.
+   */
+  // Nobody in these fixtures has left a topic, so the send's third filter is
+  // a pass-through. Modeled rather than omitted: an absent export reads as
+  // `undefined` and fails the send with a TypeError, which is a red that says
+  // nothing about the behavior under test.
+  filterTopicSendable: async (
+    _hostId: string,
+    _topicId: string,
+    emails: string[],
+  ) => emails,
+  filterSendableForHost: async (hostId: string, emails: string[]) =>
+    emails.filter((email) => {
+      // `require` inside the factory rather than the file's own import: a
+      // mock factory is hoisted above every import, so a top-level binding is
+      // still in its temporal dead zone when this object is built.
+      const key = require('crypto')
+        .createHash('sha256')
+        .update(email.trim().toLowerCase())
+        .digest('hex')
+      return (
+        !mockState.store[`emailSuppressions/${key}`] &&
+        !mockState.store[`hosts/${hostId}/suppressions/${key}`]
+      )
+    }),
+  // The owning org, whose plan decides the campaign cap. Defaulted to a plan
+  // whose `emailSendsPerMonth` is non-zero, or the cap refuses the send
+  // before any of this is reached — campaign email starts at Pro, and Free
+  // and Starter are both 0 by design. `mockState.plan` is what the tier tests
+  // at the bottom of this file move.
+  getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: mockState.plan } }),
+  /*
+   * The sending identity. The REAL `resolveSendingIdentity` runs — only the
+   * document reads behind it are faked — so these tests exercise the decision
+   * the product makes rather than a stand-in for it. `mockState.sendingDomain`
+   * is what a test sets to put a site on a custom domain.
+   */
+  resolveHostSendingIdentity: async (options: {
+    selectedDomain?: string
+    selectedLocalPart?: string
+    purpose?: string
+  }) => {
+    /*
+     * Mirrors the real store rather than short-circuiting it: the record is
+     * found only for the domain actually ASKED about, so a caller that reads
+     * the selection from the wrong place gets the wrong answer here too. A
+     * domain with no record refuses, exactly as `resolveHostSendingIdentity`
+     * does for a released or cross-org claim.
+     */
+    const claimed = mockState.sendingDomain
+    const asked = options?.selectedDomain
+    const selection = !asked
+      ? null
+      : claimed && claimed.domain === asked
+        ? { ...claimed, localPart: options.selectedLocalPart || claimed.localPart }
+        : { domain: asked, status: 'failed', localPart: '', missing: [] }
+    return jest
+      .requireActual('@aglyn/shared-util-email')
+      .resolveSendingIdentity({
+        selection,
+        // `isEmailConfigured` is mocked true below without the env being
+        // set, so the platform address is supplied here to match. In the
+        // product both read the same variable and cannot disagree.
+        platformFrom: process.env.USAGE_EMAIL_FROM || 'noreply@aglyn.com',
+        /*
+         * Both of these are what the REAL `resolveHostSendingIdentity` passes
+         * unconditionally, and a mock that omitted them would model a world
+         * the product does not have: a site selecting nothing would reach
+         * `USAGE_EMAIL_FROM`, which is the one address tenant mail may never
+         * leave on.
+         */
+        audience: 'tenant',
+        sharedFrom: 'notifications@shared1.mail.aglyn.app',
+        ...(options?.purpose ? { purpose: options.purpose } : {}),
+      })
+  },
   orgDataCollectionForHost: jest.fn(),
   orgDataQueryForHost: jest.fn(),
   // The meter (AGL-1438). Recorded rather than executed: `email-metering.spec`
@@ -116,6 +239,18 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     updatedByEmail: null,
     note: '',
   }),
+  claimOrgEmailSendBudget: async (options: any = {}) => {
+    const ceiling = Math.max(1, Math.floor((options.platformPerHour ?? 100_000) * 0.25))
+    const count = Math.max(0, Math.floor(Number(options.count) || 0))
+    return {
+      allowed: true,
+      used: 0,
+      ceiling,
+      remaining: Math.max(0, ceiling - count),
+      retryAtMs: 3_600_000,
+      degraded: false,
+    }
+  },
   readEmailSendRateWindow: async () => ({
     windowStartMs: 0,
     resetMs: 3_600_000,
@@ -136,6 +271,8 @@ jest.mock('@aglyn/shared-util-email', () => ({
 }))
 
 import { compress } from '@aglyn/aglyn/server'
+import { PLAN_ENTITLEMENTS } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import type { OrgPlan } from '@aglyn/aglyn'
 import { CampaignSendError, performCampaignSend } from './campaign-send'
 
 /** The id the besigner roots every stored node map at. */
@@ -216,19 +353,38 @@ function mockFirestore(): any {
     },
     collection: (name: string) => collectionRef(`${path}/${name}`),
   })
+  /**
+   * The ids directly under `path`, in `__name__` order — which is what the
+   * audience sweep asks for, and what the real Firestore returns for it.
+   */
+  const childIds = (path: string) =>
+    Object.keys(store)
+      .filter(
+        (key) =>
+          key.startsWith(`${path}/`) &&
+          !key.slice(path.length + 1).includes('/'),
+      )
+      .map((key) => key.slice(path.length + 1))
+      .sort()
+  /**
+   * `orderBy` / `startAfter` / `limit`, and `limit` HONORS its argument.
+   *
+   * A double whose `limit` returns everything cannot fail the way the real
+   * one does, so a paging bug would pass here and truncate in production.
+   */
+  const queryRef = (path: string, after?: string): any => ({
+    orderBy: () => queryRef(path, after),
+    startAfter: (cursor: any) => queryRef(path, cursor?.id ?? String(cursor)),
+    limit: (max: number) => ({
+      get: async () => {
+        const ids = childIds(path).filter((id) => !after || id > after)
+        return { docs: ids.slice(0, max).map((id) => snapshot(`${path}/${id}`)) }
+      },
+    }),
+  })
   const collectionRef = (path: string): any => ({
     doc: (id: string) => docRef(`${path}/${id}`),
-    limit: () => ({
-      get: async () => ({
-        docs: Object.keys(store)
-          .filter(
-            (key) =>
-              key.startsWith(`${path}/`) &&
-              !key.slice(path.length + 1).includes('/'),
-          )
-          .map(snapshot),
-      }),
-    }),
+    ...queryRef(path),
     get parent() {
       return docRef(path.split('/').slice(0, -1).join('/'))
     },
@@ -240,10 +396,18 @@ function mockFirestore(): any {
 function seed(nodes: unknown) {
   mockState.store = {
     'hosts/host-1': { subdomain: 'acme', memberRoles: {} },
-    // A `leads` audience so the merge tags have a real name to resolve.
+    // A `leads` audience so the merge tags have a real name to resolve, and a
+    // recorded opt-in so the consent join lets it through. The join runs ahead
+    // of the cap, the suppression filter and the meter and refuses an audience
+    // in which nobody carries a basis, so a lead seeded for any other purpose
+    // still has to declare one to reach the code under test.
     'hosts/host-1/leads/lead-1': {
       email: 'dana@example.com',
       name: 'Dana Reed',
+      // The basis belongs to the site sending, not to the org.
+      marketingConsentByHost: {
+        'host-1': { marketingConsent: true, marketingConsentAtMs: Date.UTC(2026, 7, 1) },
+      },
     },
     'hosts/host-1/screens/screen-1': {
       kind: 'email',
@@ -260,6 +424,21 @@ function seed(nodes: unknown) {
   }
   mockState.sent = []
   mockState.metered = []
+  mockState.sendingDomain = null
+  mockState.plan = 'pro'
+}
+
+/**
+ * Put a site on a custom sending domain: the org's RECORD, plus the host
+ * document's selection. Both, because the route reads the selection off the
+ * host and the store looks the record up from that.
+ */
+function selectSendingDomain(record: typeof mockState.sendingDomain) {
+  mockState.sendingDomain = record
+  ;(mockState.store['hosts/host-1'] as Record<string, unknown>).sendingDomain =
+    record?.domain
+  ;(mockState.store['hosts/host-1'] as Record<string, unknown>).sendingLocalPart =
+    record?.localPart
 }
 
 const send = () =>
@@ -438,6 +617,15 @@ describe('a designed campaign whose version is stored compressed (AGL-1394)', ()
  * instead of writing the counter itself.
  */
 describe('the campaign cap and the cost meter (AGL-1438)', () => {
+  /*
+   * The band the fixture org actually has, read from the entitlements
+   * rather than written as a literal. A cap test that hardcodes a number
+   * stops testing the cap the day the tier's band moves: it either seeds
+   * short of a raised band and sends, or past a lowered one and refuses
+   * for the wrong reason.
+   */
+  const CAP = PLAN_ENTITLEMENTS.pro.emailSendsPerMonth
+
   const recorded = () =>
     performCampaignSend({
       hostId: 'host-1',
@@ -475,9 +663,9 @@ describe('the campaign cap and the cost meter (AGL-1438)', () => {
   it('ignores transactional volume when deciding the cap', async () => {
     seed(NODES)
     const month = new Date().toISOString().slice(0, 7)
-    // Starter includes 500/mo. Nine thousand transactional sends is far past
-    // it, and must not matter at all.
-    mockState.store['hosts/host-1/counters/emailSends'] = { [month]: 9_000 }
+    // Transactional volume far past the plan's campaign band, which must not
+    // matter at all: the cap is measured against campaigns alone.
+    mockState.store['hosts/host-1/counters/emailSends'] = { [month]: CAP * 2 }
 
     await expect(recorded()).resolves.toMatchObject({ sent: 1 })
     expect(mockState.sent).toHaveLength(1)
@@ -487,7 +675,7 @@ describe('the campaign cap and the cost meter (AGL-1438)', () => {
     seed(NODES)
     const month = new Date().toISOString().slice(0, 7)
     mockState.store['orgs/org-1/counters/campaignEmailSends'] = {
-      [month]: 500,
+      [month]: CAP,
     }
 
     await expect(recorded()).rejects.toThrow(/campaign email limit/i)
@@ -507,7 +695,7 @@ describe('the campaign cap and the cost meter (AGL-1438)', () => {
     seed(NODES)
     const month = new Date().toISOString().slice(0, 7)
     mockState.store['hosts/host-1/counters/campaignEmailSends'] = {
-      [month]: 500,
+      [month]: CAP,
     }
 
     await expect(recorded()).resolves.toMatchObject({ sent: 1 })
@@ -527,12 +715,24 @@ describe('the campaign cap and the cost meter (AGL-1438)', () => {
   it('is ONE allowance across the org, not one per site (AGL-2267)', async () => {
     seed(NODES)
     const month = new Date().toISOString().slice(0, 7)
-    mockState.store['orgs/org-1/counters/campaignEmailSends'] = { [month]: 500 }
+    mockState.store['orgs/org-1/counters/campaignEmailSends'] = { [month]: CAP }
     // A DIFFERENT site of the same org, with no counter of its own.
     mockState.store['hosts/host-2'] = { subdomain: 'acme-two' }
     mockState.store['hosts/host-2/leads/lead-1'] = {
       email: 'lead@example.com',
       visibleTo: ['host-2'],
+      // Consented, so the send is refused by the org's exhausted allowance
+      // and not by the consent join sitting in front of it. Both refusals are
+      // a 400, so without a basis here this would pass on the wrong message.
+      // Recorded against `host-2`, which is the site sending: a basis under
+      // the sibling site would be withheld, and this test would then pass on
+      // the consent refusal rather than the allowance one it is about.
+      marketingConsentByHost: {
+        'host-2': {
+          marketingConsent: true,
+          marketingConsentAtMs: Date.UTC(2026, 7, 1),
+        },
+      },
     }
 
     await expect(
@@ -557,5 +757,424 @@ describe('the campaign cap and the cost meter (AGL-1438)', () => {
     expect(
       mockState.store['orgs/org-1/counters/campaignEmailSends']?.[month],
     ).toBe(1)
+  })
+})
+
+/**
+ * The VISIBLE refusal.
+ *
+ * `send-email.spec.ts` proves the send path will not put a message on the
+ * wire for an unverified identity. That is the backstop. This file proves the
+ * thing a person actually experiences: the campaign route says no, with a
+ * status, naming the domain — instead of returning `{sent: 0}` and leaving a
+ * merchant to guess.
+ *
+ * The distinction is the whole lesson of `USAGE_EMAIL_FROM` being empty in
+ * production for weeks. That outage sent nothing and reported nothing, because
+ * mail is best-effort at every call site. A refusal nobody is told about is
+ * the same defect with a different cause.
+ */
+describe('a campaign refuses an unverified sending domain, visibly', () => {
+  beforeEach(() => {
+    seed(pooledBuffer())
+    selectSendingDomain({
+      domain: 'acme.com',
+      status: 'records-issued',
+      localPart: 'hello',
+      missing: ['TXT:send.acme.com'],
+    })
+  })
+
+  const campaign = (extra: Record<string, unknown> = {}) =>
+    performCampaignSend({
+      hostId: 'host-1',
+      subject: 'Spring sale',
+      body: 'plain-text fallback',
+      audience: 'leads',
+      templateScreenId: 'screen-1',
+      recordCampaign: false,
+      senderUid: 'uid-1',
+      ...extra,
+    })
+
+  it('answers 409 and names the domain', async () => {
+    await expect(campaign()).rejects.toBeInstanceOf(CampaignSendError)
+    await campaign().catch((error: CampaignSendError) => {
+      // 409, not 501: the deployment is fine, the customer's DNS is not, and
+      // the two need opposite messages pointed at opposite people.
+      expect(error.status).toBe(409)
+      expect(error.message).toContain('acme.com')
+      // And the record they still have to publish, so the message is
+      // actionable rather than merely correct.
+      expect(error.message).toContain('TXT:send.acme.com')
+    })
+  })
+
+  it('sends nothing at all', async () => {
+    await campaign().catch(() => undefined)
+
+    expect(mockState.sent).toHaveLength(0)
+  })
+
+  it('does not fall back to the platform identity', async () => {
+    await campaign().catch(() => undefined)
+
+    // The platform address is configured and usable. Not one message left on
+    // it, which is the property the whole feature exists to hold: a tenant's
+    // reputation risk must not land back on the shared domain.
+    expect(mockState.sent.map((message) => message.from)).toEqual([])
+    expect(JSON.stringify(mockState.sent)).not.toContain('aglyn.com')
+  })
+
+  it('refuses the dry run too, so the composer learns before anyone writes copy', async () => {
+    // `preview` resolves the identity for the same reason a real send does.
+    // A preview that reported a healthy dry run for a campaign Send then
+    // refuses would be worse than no preview.
+    await expect(campaign({ dryRun: true })).rejects.toMatchObject({
+      status: 409,
+    })
+  })
+
+  it('writes no campaign document and no counter', async () => {
+    await campaign().catch(() => undefined)
+
+    const written = Object.keys(mockState.store).filter((path) =>
+      path.includes('/campaigns/'),
+    )
+    expect(written).toEqual([])
+    expect(mockState.metered).toEqual([])
+  })
+
+  it('refuses a domain a lookup has already failed', async () => {
+    selectSendingDomain({
+      domain: 'acme.com',
+      status: 'failed',
+      localPart: 'hello',
+      missing: ['MX:send.acme.com'],
+    })
+
+    await campaign().catch((error: CampaignSendError) => {
+      expect(error.status).toBe(409)
+      expect(error.message).toMatch(/checked the DNS/i)
+    })
+    expect(mockState.sent).toHaveLength(0)
+  })
+})
+
+describe('a campaign on a verified sending domain', () => {
+  beforeEach(() => {
+    seed(pooledBuffer())
+    selectSendingDomain({
+      domain: 'acme.com',
+      status: 'verified',
+      localPart: 'news',
+    })
+  })
+
+  const campaign = (extra: Record<string, unknown> = {}) =>
+    performCampaignSend({
+      hostId: 'host-1',
+      subject: 'Spring sale',
+      body: 'plain-text fallback',
+      audience: 'leads',
+      templateScreenId: 'screen-1',
+      recordCampaign: false,
+      senderUid: 'uid-1',
+      ...extra,
+    })
+
+  it('hands the send path the tenant’s own address, not the platform one', async () => {
+    await campaign()
+
+    // Asserted on the verdict the route passes down rather than on a rendered
+    // `from`, because `sendEmail` is stubbed here. Turning this verdict into
+    // the address on the wire is `send-email.spec.ts`'s job and is proved
+    // there; what this suite owns is that the route resolves the identity
+    // server-side and hands over the right one.
+    expect(mockState.sent).toHaveLength(1)
+    expect(mockState.sent[0].sendingIdentity).toMatchObject({
+      from: 'news@acme.com',
+      source: 'custom',
+      refusal: null,
+    })
+  })
+
+  it('tells the composer which identity is in use', async () => {
+    // The surface requirement. A merchant should never have to guess whether
+    // their campaign goes out as their brand or as the shared domain.
+    const preview = await campaign({ dryRun: true })
+
+    expect(preview.identitySource).toBe('custom')
+    expect(preview.identity).toContain('news@acme.com')
+  })
+
+  /**
+   * ⛔ THE CONTROL FOR POOLED CAMPAIGNS. A site that has bought no domain and
+   * asked for none can run a campaign, and it goes out on the pool member it
+   * is assigned — not refused, and not on the platform's own address.
+   */
+  it('sends on the pool when the site selects nothing', async () => {
+    selectSendingDomain(null)
+
+    const preview = await campaign({ dryRun: true })
+
+    expect(preview.identitySource).toBe('shared')
+    expect(preview.identity).toContain('notifications@shared1.mail.aglyn.app')
+    // Never `aglyn.com`. Admitting a campaign to the pool must not have
+    // opened a second route to the domain Aglyn's own invoices leave on.
+    expect(preview.identity).not.toContain('aglyn.com')
+  })
+
+  /**
+   * …and the merchant is told what the pool costs them, in the composer,
+   * before they press Send. Pooled reputation is a real trade and a surface
+   * that reported only the address would be reporting half of it.
+   */
+  it('tells a pooled composer that campaigns are graded more tightly', async () => {
+    selectSendingDomain(null)
+
+    const preview = await campaign({ dryRun: true })
+
+    expect(preview.identity).toMatch(/pooled/i)
+    expect(preview.identity).toMatch(/stricter/i)
+  })
+
+  it('ignores a sending domain named in the request', async () => {
+    /*
+     * The spoofing path, closed.
+     *
+     * `campaignSendHandler` builds its options from the request body, so a
+     * field read off `options` is a field an authenticated site editor can
+     * choose. Resolving the identity from anything but the host document
+     * would let them send as any domain they can name — including one this
+     * org never claimed and never proved.
+     *
+     * The site here has selected NOTHING, so the pool is the correct answer
+     * and a request-supplied domain is the only way the custom one could
+     * appear.
+     */
+    selectSendingDomain(null)
+
+    const preview = await campaign({
+      dryRun: true,
+      sendingDomain: 'acme.com',
+      sendingLocalPart: 'ceo',
+    })
+
+    expect(preview.identitySource).toBe('shared')
+    expect(preview.identity).not.toContain('acme.com')
+  })
+})
+
+/**
+ * The marketplace kill switch, reaching an email a site already installed.
+ *
+ * An installed email starter is a COPY in the site's own screens, so
+ * unpublishing the listing, taking it down and rejecting a version all stop at
+ * the storefront: none of them is felt by a tenant who installed last week and
+ * is sending today. The send is the only chokepoint left, which is why the
+ * check lives beside the load rather than beside the install.
+ *
+ * The refusal is of the SEND. The screen and its version stay exactly where
+ * they were — reaching into a customer's own documents to enforce a decision
+ * about somebody else's artifact would take the wrong thing away.
+ */
+describe('a killed marketplace email stops sending', () => {
+  /** Stamps marketplace provenance onto a seeded design, as the install does. */
+  const installedFrom = (version: string | null) => ({
+    listingId: 'listing-1',
+    version,
+    sha256: 'sha-of-content',
+    artifactType: 'emailStarter',
+    publisherOrgId: 'seller-org',
+    assurance: 'unreviewed',
+  })
+
+  const seedInstalled = (version: string | null = '3') => {
+    seed(pooledBuffer())
+    ;(
+      mockState.store['hosts/host-1/screens/screen-1/versions/v1'] as Record<
+        string,
+        unknown
+      >
+    )['installedFrom'] = installedFrom(version)
+  }
+
+  const kill = (versions: string[] | 'all', reason?: string) => {
+    mockState.store['revocations/listing-1'] = {
+      versions,
+      ...(reason ? { reason } : {}),
+    }
+  }
+
+  it('refuses the send and names why', async () => {
+    seedInstalled()
+    kill(['3'], 'Hidden tracking image')
+
+    await expect(send()).rejects.toThrow(/Hidden tracking image/)
+    expect(mockState.sent).toHaveLength(0)
+    expect(mockState.metered).toHaveLength(0)
+  })
+
+  it('leaves the design in place — the send is what is refused', async () => {
+    seedInstalled()
+    kill('all')
+
+    await expect(send()).rejects.toBeInstanceOf(CampaignSendError)
+    // Both documents still there, untouched, still openable in the besigner.
+    expect(mockState.store['hosts/host-1/screens/screen-1']).toBeDefined()
+    expect(
+      mockState.store['hosts/host-1/screens/screen-1/versions/v1'],
+    ).toBeDefined()
+  })
+
+  it('reaches an install whose provenance is on the SCREEN rather than the version', async () => {
+    seed(pooledBuffer())
+    ;(mockState.store['hosts/host-1/screens/screen-1'] as Record<string, unknown>)[
+      'installedFrom'
+    ] = installedFrom('3')
+    kill(['3'])
+
+    await expect(send()).rejects.toBeInstanceOf(CampaignSendError)
+  })
+
+  it('catches a version-less legacy install with a listing-wide kill', async () => {
+    seedInstalled(null)
+    kill('all')
+
+    await expect(send()).rejects.toBeInstanceOf(CampaignSendError)
+  })
+
+  it('does not stop a DIFFERENT version of the same listing', async () => {
+    seedInstalled('3')
+    kill(['1'])
+
+    await expect(send()).resolves.toMatchObject({ sent: 1 })
+  })
+
+  it('does not stop an email the site designed itself', async () => {
+    // No provenance at all, and the whole listing killed. Nothing to match on,
+    // so the kill is not this email's business.
+    seed(pooledBuffer())
+    kill('all')
+
+    await expect(send()).resolves.toMatchObject({ sent: 1 })
+  })
+
+  it('sends normally when nothing is revoked', async () => {
+    seedInstalled()
+
+    await expect(send()).resolves.toMatchObject({ sent: 1 })
+  })
+})
+
+/**
+ * WHICH TIERS MAY SEND A CAMPAIGN AT ALL.
+ *
+ * Campaign email begins at Pro. A site that may send needs its own verified
+ * provider sending domain, and provisioning one is a per-site operational
+ * cost, so the allowance is attached to the tiers that carry it rather than
+ * to every paid tier.
+ *
+ * ## Why this drives the SEND and not the entitlement
+ *
+ * `PLAN_ENTITLEMENTS.starter.emailSendsPerMonth === 0` is one line and it
+ * proves nothing about behavior: it would pass identically against a build
+ * where the cap was never read, or read against the wrong counter, or read
+ * and then ignored. So each case here runs the whole of
+ * `performCampaignSend` — audience resolution, the consent join, the
+ * suppression filters, the reservation — and asserts on what came out of the
+ * sender.
+ *
+ * The tier is the ONLY thing moved between cases: same site, same lead, same
+ * consent, same template. That is what makes the difference between them
+ * attributable to the plan.
+ */
+describe('campaign email begins at Pro', () => {
+  const attempt = (plan: OrgPlan) => {
+    seed(NODES)
+    mockState.plan = plan
+    return send()
+  }
+
+  it('refuses a STARTER org, and nothing goes out', async () => {
+    await expect(attempt('starter')).rejects.toThrow(/campaign email limit/i)
+    // The refusal is the point, not merely the rejection: no message was
+    // handed to the sender and no delivery was metered. A cap that threw
+    // after the batch had gone out would satisfy `rejects` alone.
+    expect(mockState.sent).toHaveLength(0)
+    expect(mockState.metered).toHaveLength(0)
+    // And no claim was written. `reserveCampaignEmailSends` writes NOTHING on
+    // a refusal, so a Starter org that tries every day does not accumulate a
+    // counter it could never spend.
+    const month = new Date().toISOString().slice(0, 7)
+    expect(
+      mockState.store['orgs/org-1/counters/campaignEmailSends']?.[month],
+    ).toBeUndefined()
+  })
+
+  it('refuses a FREE org the same way', async () => {
+    // Starter is now in exactly the shape Free has always been in, said in
+    // the only terms that matter: the same refusal, from the same gate, on
+    // the same audience.
+    await expect(attempt('free')).rejects.toThrow(/campaign email limit/i)
+    expect(mockState.sent).toHaveLength(0)
+  })
+
+  it('CONTROL: a PRO org still sends', async () => {
+    // Without this the cases above are satisfied by a build that refuses
+    // every campaign on every tier — which would pass every entitlement
+    // assertion in the repo while shipping a dead feature.
+    await expect(attempt('pro')).resolves.toMatchObject({ sent: 1 })
+    expect(mockState.sent).toHaveLength(1)
+    expect(mockState.metered).toEqual([['host-1', 1, 'campaign']])
+  })
+
+  it('CONTROL: every tier above Pro sends too', async () => {
+    // The control widened. One passing tier could still be a gate admitting
+    // exactly one plan; the claim is that the refusal is confined to the two
+    // tiers banded at zero.
+    for (const plan of ['business', 'scale', 'advanced', 'agency'] as const) {
+      await expect(attempt(plan)).resolves.toMatchObject({ sent: 1 })
+    }
+  })
+
+  it('refuses on the BAND, not on a list of plan names', async () => {
+    // The mutation that would make the block above pass for the wrong
+    // reason: a gate hard-coded to plan names rather than reading the
+    // entitlement. Every tier refused above has a band of 0 and every tier
+    // admitted has one above 0, read from the table the sender itself reads.
+    for (const plan of ['free', 'starter'] as const) {
+      expect(`${plan}: ${PLAN_ENTITLEMENTS[plan].emailSendsPerMonth}`).toBe(
+        `${plan}: 0`,
+      )
+    }
+    for (const plan of [
+      'pro',
+      'business',
+      'scale',
+      'advanced',
+      'agency',
+    ] as const) {
+      expect(`${plan}: ${PLAN_ENTITLEMENTS[plan].emailSendsPerMonth > 0}`).toBe(
+        `${plan}: true`,
+      )
+    }
+  })
+
+  it('names the band in the message, so the reason is legible', async () => {
+    // A merchant reading "limit reached (0)" is being told the plan includes
+    // none, which is the actual state — not that they have spent an
+    // allowance they had. The upgrade path is in the same sentence.
+    await expect(attempt('starter')).rejects.toThrow(
+      /Monthly campaign email limit reached \(0\)/,
+    )
+    await expect(attempt('starter')).rejects.toThrow(/upgrade in Billing/i)
+    // Transactional mail is excluded in the same breath, because a Starter
+    // store still confirms its orders and the refusal must not read as
+    // though it stopped that too.
+    await expect(attempt('starter')).rejects.toThrow(
+      /Transactional mail .* keeps sending/,
+    )
   })
 })

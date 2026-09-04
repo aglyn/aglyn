@@ -149,7 +149,7 @@ const dimOf = (container: HTMLElement) => (id: string) => {
   return element ? getComputedStyle(element).opacity : undefined
 }
 
-describe('hierarchy visibility toggle (AGL-1479)', () => {
+describe('hierarchy visibility toggle', () => {
   beforeEach(() => {
     for (const key of Object.keys(mockFlags)) delete mockFlags[key]
     seedCanvas()

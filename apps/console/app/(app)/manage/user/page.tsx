@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2024 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,28 +15,29 @@
  * limitations under the License.
  */
 
-'use client'
-
-import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
-import { useRouter } from 'next/navigation'
-import { useEffect } from 'react'
+import { redirect } from 'next/navigation'
 import { DEFAULT_ACCOUNT_SECTION_HREF } from '../../../../constants/account-sections'
+import {
+  sectionIndexTarget,
+  type SearchParams,
+} from '../../../../utils/section-index-redirect'
 
 /**
  * `/manage/user` is the section index and renders nothing of its own
- * (AGL-693).
+ * (AGL-2501).
  *
- * Every section is a route, so the index only has to send the reader to the
- * first one. `replace`, not `push`: a redirect nobody asked for must not
- * become a history entry their back button bounces off.
+ * A SERVER component. This index names no dynamic segment at all — the target
+ * is a constant — so as a client page it was paying a bundle, a hydration and
+ * a client navigation to arrive at a string that was known before the request
+ * was answered. The reader saw that as a blank main area.
+ *
+ * The incoming query is carried across: a redirect that drops it silently
+ * deletes whatever somebody else put in the URL.
  */
-const ManageUser: NextPageWithLayout<Record<string, never>> = () => {
-  const router = useRouter()
-  useEffect(() => {
-    router.replace(DEFAULT_ACCOUNT_SECTION_HREF)
-  }, [router])
-  return null
+export default async function ManageUserIndex({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>
+}): Promise<never> {
+  redirect(sectionIndexTarget(DEFAULT_ACCOUNT_SECTION_HREF, await searchParams))
 }
-ManageUser.displayName = 'Page:ManageUser'
-
-export default ManageUser

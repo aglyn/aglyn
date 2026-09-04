@@ -37,6 +37,7 @@ import {
   ADDON_KINDS,
   addonPriceId,
   addonQuantitiesFromItems,
+  addonMaxForBaseline,
   addonUnitUsd,
   findPlanItem,
   meteredPriceId,
@@ -47,9 +48,19 @@ import {
 } from '../../../../utils/server/billing-addons'
 import {
   buildTargetItems,
+  phaseItemsOf,
+  preservePhaseTerms,
   restateExistingPhase,
   subscriptionItemsAsPhaseItems,
+  writePhaseItems,
+  type PhaseItem,
 } from '../../../../utils/server/billing-schedule'
+import {
+  capacityReductionRefusal,
+  includedCapacity,
+  isCapacityAddonKind,
+  readCapacityCounts,
+} from '../../../../utils/server/capacity-in-use'
 
 // lockdown-423: exempt — self-serve billing surface. AGL-1501 keeps billing/maintenance-locked
 // sessions alive PRECISELY so members can reach billing and pay; a 423
@@ -203,33 +214,217 @@ async function refreshScheduleTargetPhase(options: {
 }
 
 /**
- * Max purchasable quantity per kind, from a purchases-free entitlement
- * resolution (plan defaults + staff overrides only) so the ceiling
- * doesn't drift as the org buys: seat/dataset kinds stop at the plan's
- * hard max, hosts/registers use flat ceilings, the Event Calendar is a
- * 0/1 toggle. POS registers additionally require the `pos` feature.
+ * Move an add-on DOWN at the period end instead of now.
+ *
+ * Capacity that has been paid for runs to the end of the period it was paid
+ * for, exactly as a cancelled plan does. Reducing an add-on therefore changes
+ * nothing today: the item keeps its quantity, the site keeps working, and the
+ * smaller quantity starts at the renewal.
+ *
+ * Nothing is credited, and that is the point rather than an omission. An
+ * immediate reduction under `always_invoice` would refund unused time for
+ * capacity the customer can still use for the rest of the period — paying them
+ * back for something they have not stopped having. Deferring the reduction and
+ * crediting nothing are two halves of one decision.
+ *
+ * `proration_behavior: 'none'` on the schedule is what keeps it that way. The
+ * phase boundary is a clean period start, so there is no partial period for
+ * Stripe to price on either side of it.
+ *
+ * Returns the period end the change lands on, or null when the subscription
+ * cannot carry a schedule.
  */
-function addonMax(
-  kind: AddonKind,
-  baseline: ReturnType<typeof resolveOrgEntitlements>,
-): number {
-  const bounded = (included: number, max: number) =>
-    Number.isFinite(max) ? Math.max(0, max - included) : EXTRA_HOSTS_ADDON_MAX
-  switch (kind) {
-    case 'managers':
-      return bounded(baseline.managersPerOrg, baseline.maxManagersPerOrg)
-    case 'members':
-      return bounded(baseline.membersPerHost, baseline.maxMembersPerHost)
-    case 'datasets':
-      return bounded(baseline.datasetsPerOrg, baseline.maxDatasetsPerOrg)
-    case 'hosts':
-      return baseline.hostLimit === UNLIMITED ? 0 : EXTRA_HOSTS_ADDON_MAX
-    case 'posRegisters':
-      return baseline.features.pos ? POS_REGISTERS_ADDON_MAX : 0
-    case 'eventCalendar':
-      return 1
+async function scheduleAddonReduction(options: {
+  secretKey: string
+  subscription: any
+  /** The subscription's items as they stand TODAY, unchanged. */
+  items: readonly any[]
+  /** The add-on price being reduced, at the plan the org is on TODAY. */
+  priceId: string
+  /**
+   * The add-on being reduced, as a kind rather than a price.
+   *
+   * A price id identifies "datasets ON STARTER", not "datasets". A phase
+   * belonging to a pending downgrade prices its add-ons at the TARGET plan, so
+   * the line to move there has a different id from the one the org holds now —
+   * and matching by id alone silently matches nothing, restating the phase
+   * verbatim while the response still promises the reduction.
+   */
+  kind: AddonKind
+  /** Its quantity from the period end; 0 removes the item entirely. */
+  quantity: number
+}): Promise<{ effectiveAt: string; scheduleId: string } | null> {
+  const { secretKey, subscription, items, priceId, kind, quantity } = options
+  /**
+   * One line moved on an otherwise untouched item list.
+   *
+   * Built from whichever list already describes the future, because a phase is
+   * an ABSOLUTE list: anything not written back is deleted at the flip, and
+   * that has already cost this codebase a customer's unclassified items once.
+   */
+  const withAddonMoved = (
+    base: readonly PhaseItem[],
+    matchPrice: string,
+  ): PhaseItem[] =>
+    base
+      .map((item) =>
+        item.price === matchPrice
+          ? quantity === 0
+            ? null
+            : { ...item, quantity }
+          : item,
+      )
+      .filter((item): item is PhaseItem => item !== null)
+
+  /**
+   * The id this add-on carries ON a given phase.
+   *
+   * Derived from the phase's own base price rather than from the subscription,
+   * because those disagree exactly when it matters: a pending downgrade's phase
+   * is already priced at the plan it moves to. Falls back to today's id when
+   * the phase names no plan this route sells — a phase it cannot classify is
+   * safer restated than rewritten against a guess.
+   */
+  const addonPriceOnPhase = (phase: any): string => {
+    const base = (phase?.items ?? [])
+      .map((item: any) =>
+        typeof item?.price === 'string' ? item.price : item?.price?.id,
+      )
+      .map((id: string) => planAndIntervalFromPriceId(id))
+      .find((match: unknown) => match) as
+      | ReturnType<typeof planAndIntervalFromPriceId>
+      | undefined
+    const phasePlan = (phase?.metadata?.plan ?? base?.plan) as
+      | Parameters<typeof addonPriceId>[1]
+      | undefined
+    if (!phasePlan) return priceId
+    return addonPriceId(kind, phasePlan, base?.interval ?? 'month') ?? priceId
+  }
+
+  const existingScheduleId =
+    typeof subscription?.schedule === 'string'
+      ? subscription.schedule
+      : subscription?.schedule?.id
+  const schedule = existingScheduleId
+    ? await stripeRequest(
+        secretKey,
+        'GET',
+        `subscription_schedules/${encodeURIComponent(String(existingScheduleId))}`,
+      )
+    : await stripeRequest(
+        secretKey,
+        'POST',
+        'subscription_schedules',
+        new URLSearchParams({ from_subscription: subscription.id }),
+      )
+  if (!schedule?.id) return null
+
+  const phases: any[] = Array.isArray(schedule?.phases) ? schedule.phases : []
+  if (!phases.length) return null
+  const params = new URLSearchParams({
+    end_behavior: String(schedule?.end_behavior ?? 'release'),
+    proration_behavior: 'none',
+  })
+  // A schedule freshly created `from_subscription` has ONE phase — the
+  // present. An existing one already carries a future phase, from a pending
+  // plan change, and that phase is the one to edit: two futures cannot both
+  // be the future, and appending a second would silently extend the
+  // subscription by a period.
+  if (phases.length === 1) {
+    // No future yet: the future is a copy of the present with the line moved.
+    restateExistingPhase(params, 0, phases[0])
+    preservePhaseTerms(params, 1, phases[0], { current: false })
+    writePhaseItems(
+      params,
+      1,
+      withAddonMoved(subscriptionItemsAsPhaseItems(items), priceId),
+    )
+    params.set('phases[1][iterations]', '1')
+    params.set('phases[1][automatic_tax][enabled]', 'true')
+    // Carried so the webhook's mirror still reads a plan at the flip; without
+    // it the phase replaces the subscription's metadata with nothing.
+    const plan = subscription?.metadata?.plan
+    const orgId = subscription?.metadata?.orgId
+    if (plan) params.set('phases[1][metadata][plan]', String(plan))
+    if (orgId) params.set('phases[1][metadata][orgId]', String(orgId))
+  } else {
+    /*
+     * A future phase already exists — a pending plan change — and it is the
+     * one to edit. Its OWN items are the base, never the live subscription's.
+     *
+     * That distinction is the whole correctness of this branch. A pending
+     * downgrade's target phase carries the TARGET plan's prices, while the
+     * live subscription still carries the current plan's. Rebuilding the phase
+     * from the live items would quietly replace the downgrade's prices with
+     * today's and leave `metadata[plan]` still naming the target — a phase
+     * that bills the old plan while telling the webhook to mirror the new one,
+     * with nothing on any screen disagreeing.
+     *
+     * Editing the phase in place also means the plan change keeps every term
+     * it was scheduled with; only the add-on line moves.
+     */
+    const targetIndex = phases.length - 1
+    phases.forEach((phase, index) => {
+      restateExistingPhase(
+        params,
+        index,
+        phase,
+        index === targetIndex
+          ? withAddonMoved(phaseItemsOf(phase), addonPriceOnPhase(phase))
+          : undefined,
+      )
+    })
+  }
+  const updated = await stripeRequest(
+    secretKey,
+    'POST',
+    `subscription_schedules/${encodeURIComponent(String(schedule.id))}`,
+    params,
+  )
+  const periodEnd = Number(subscription?.current_period_end ?? 0)
+  return {
+    scheduleId: String(updated?.id ?? schedule.id),
+    effectiveAt: periodEnd
+      ? new Date(periodEnd * 1000).toISOString()
+      : '',
   }
 }
+
+/**
+ * How many seats of a POOLED add-on are currently assigned to sites.
+ *
+ * `null` for kinds that are not pools — manager seats, datasets, extra sites
+ * and the Event Calendar are org-wide capacity with no per-site allocation, so
+ * there is nothing an assignment could contradict and no reduction to refuse.
+ * Returning `null` rather than `0` keeps "not a pool" distinct from "a pool
+ * with nothing assigned"; the second is a real state a reduction may proceed
+ * against.
+ */
+function allocatedSeatTotal(
+  kind: AddonKind,
+  org: Record<string, unknown> | null | undefined,
+): number | null {
+  const field =
+    kind === 'posRegisters'
+      ? 'registerAllocations'
+      : kind === 'members'
+        ? 'collaboratorAllocations'
+        : null
+  if (!field) return null
+  const map = (org?.[field] ?? {}) as Record<string, unknown>
+  return Object.values(map).reduce<number>((sum, value) => {
+    const seats = Number(value)
+    return sum + (Number.isFinite(seats) && seats > 0 ? Math.floor(seats) : 0)
+  }, 0)
+}
+
+/**
+ * The per-kind ceiling. Delegates to the shared definition so this route and
+ * `buildTargetItems` — which needs the same ceiling for the TARGET plan on a
+ * plan change — cannot answer differently.
+ */
+const addonMax = addonMaxForBaseline
+
 
 /**
  * Self-serve add-on management (AGL-526), billing.manage-gated. Add-ons
@@ -341,7 +536,7 @@ async function handler(request: Request): Promise<Response> {
       const quantities = addonQuantitiesFromItems(items)
       const catalog = Object.fromEntries(
         ADDON_KINDS.map((kind) => {
-          const unitUsd = addonUnitUsd(kind, plan)
+    const unitUsd = addonUnitUsd(kind, plan)
           const max = addonMax(kind, baseline)
           return [kind, {
             unitUsd,
@@ -380,6 +575,35 @@ async function handler(request: Request): Promise<Response> {
           : `Quantity must be between 0 and ${max}`,
         code: max <= 0 ? 'upgrade_required' : 'invalid_quantity',
       }, { status: max <= 0 ? 409 : 400 })
+    }
+    // REDUCING below what is already ASSIGNED is refused.
+    //
+    // `posRegisters` and `members` are org-level POOLS, and a separate
+    // allocation map says which site each seat sits on. The only check here
+    // was `0 <= quantity <= max`, so shrinking the pool below the assigned
+    // count was accepted silently — the map kept every row, and the pool
+    // arbiter then resolved the shortfall BY SORTED HOST ID. Capacity moved to
+    // a site the merchant did not choose, and re-buying re-granted from the
+    // stale map, so a merchant removing one seat could take a register off a
+    // different store.
+    //
+    // Refused rather than auto-released: which site loses a seat is a business
+    // decision with a consequence at that site, and picking one by id sort is
+    // exactly the arbitrary answer this replaces. The error names how many to
+    // free, so the next step is obvious.
+    const assigned = allocatedSeatTotal(kind, org)
+    if (assigned !== null && quantity < assigned) {
+      return Response.json(
+        {
+          error:
+            `${assigned} of these are assigned to sites. Unassign ` +
+            `${assigned - quantity} first, then reduce the total — otherwise ` +
+            'a site would lose capacity without anyone choosing which.',
+          code: 'assigned_seats_exceed_quantity',
+          assigned,
+        },
+        { status: 409 },
+      )
     }
     const unitUsd = addonUnitUsd(kind, plan)
     if (unitUsd === null) {
@@ -440,6 +664,40 @@ async function handler(request: Request): Promise<Response> {
       )
     }
 
+    // REDUCING below what the org-wide capacity is CARRYING is refused too.
+    //
+    // The pool gate above covers the two kinds with an allocation map. These
+    // three have none — extra sites, datasets and manager seats are org-wide,
+    // and each was checked at CREATE time and nowhere else. So "buy the seat,
+    // invite the person, drop the seat" cost nothing, and `hostLimit` is worse
+    // still: it is consulted at exactly one moment in a site's life, the
+    // transaction that mints it.
+    //
+    // Refused at the reduction rather than re-checked at use, for the reason
+    // `capacity-in-use.ts` sets out at length: use-time enforcement here means
+    // ejecting a teammate or locking a dataset, which lands on customers who
+    // merely downgraded. The clamp inside `capacityReductionRefusal` is what
+    // keeps an org that is over a cap for reasons it did not choose out of
+    // this branch entirely.
+    //
+    // Counted only on an actual reduction of a gated kind. Each count is an
+    // aggregation or a roster list, and this route is hit on every billing
+    // page load.
+    if (
+      isCapacityAddonKind(kind) &&
+      currentQuantity !== null &&
+      quantity < currentQuantity
+    ) {
+      const refusal = capacityReductionRefusal({
+        kind,
+        quantity,
+        currentQuantity,
+        included: includedCapacity(kind, baseline),
+        counts: await readCapacityCounts({ orgId, org, kinds: [kind] }),
+      })
+      if (refusal) return Response.json(refusal, { status: 409 })
+    }
+
     // One modified line item, shared by preview and set. Stripe treats
     // quantity 0 as an explicit deletion flag on updates.
     const itemParams: Array<[string, string]> = existing
@@ -447,6 +705,45 @@ async function handler(request: Request): Promise<Response> {
         ? [['id', String(existing.id)], ['deleted', 'true']]
         : [['id', String(existing.id)], ['quantity', String(quantity)]]
       : [['price', priceId], ['quantity', String(quantity)]]
+
+    /*
+     * A REDUCTION is quoted as what it is: nothing today.
+     *
+     * Answered here rather than by pricing it, because there is nothing to
+     * price. `invoices/upcoming` under `always_invoice` returns the credit a
+     * reduction WOULD raise if it applied now — and it no longer applies now,
+     * so that figure describes a refund the customer will never receive. A
+     * confirm quoting money back for a change that returns none is the same
+     * defect as a confirm quoting a discount that never reaches the charge;
+     * it just points the other way.
+     *
+     * Placed above the priced preview so the two can never disagree: there is
+     * one branch for reductions and it is this one.
+     */
+    if (
+      action === 'preview' &&
+      currentQuantity !== null &&
+      quantity < currentQuantity
+    ) {
+      const periodEnd = Number(subscription?.current_period_end ?? 0)
+      return Response.json(
+        {
+          amountDueCents: 0,
+          prorationCents: 0,
+          taxCents: 0,
+          chargedNowCents: 0,
+          taxComplete: true,
+          currency: String(subscription?.currency ?? 'usd'),
+          // What the caller needs to describe the change honestly: it happens,
+          // but later, and it costs nothing either way.
+          defersToPeriodEnd: true,
+          effectiveAt: periodEnd
+            ? new Date(periodEnd * 1000).toISOString()
+            : null,
+        },
+        { status: 200 },
+      )
+    }
 
     if (action === 'preview') {
       const query = itemParams
@@ -459,30 +756,117 @@ async function handler(request: Request): Promise<Response> {
         `invoices/upcoming?customer=${encodeURIComponent(String(customerId))}` +
           `&subscription=${encodeURIComponent(subscription.id)}` +
           query +
-          '&subscription_proration_behavior=create_prorations' +
+          // The SAME behaviour the set-action applies, so the quote and the
+          // charge are computed the same way. Under `always_invoice` the
+          // preview is the proration-only invoice that would be raised now,
+          // rather than the whole next renewal with the proration buried in
+          // it — which is what makes a tax-inclusive "charged now" figure
+          // readable off it at all.
+          '&subscription_proration_behavior=always_invoice' +
           // Preview under the same tax setting the set-action applies
           // (AGL-1537), so the quoted proration matches the invoice.
           '&automatic_tax[enabled]=true',
       )
-      // amount_due is the WHOLE next invoice (renewal included); the cost
-      // of this change is its proration lines — negative on removals
-      // (credit). Nothing is charged today with create_prorations
-      // (AGL-535).
+      // The cost of this change is its proration lines — negative on removals
+      // (credit).
       const prorationCents = (preview?.lines?.data ?? [])
         .filter((line: any) => line?.proration)
         .reduce(
           (sum: number, line: any) => sum + Number(line?.amount ?? 0),
           0,
         )
+      // What is actually taken today, tax included.
+      //
+      // Quoted separately from `prorationCents` rather than instead of it: the
+      // proration is the figure that explains WHY the amount is what it is
+      // (part of a period, or a credit), and the total is the figure that
+      // leaves the account. A confirm that showed only the pre-tax proration
+      // would name a number no invoice uses, which is the defect this same
+      // page carries on its plan card.
+      const taxCents = Number(preview?.tax ?? 0)
+      const chargedNowCents = Number(preview?.amount_due ?? 0)
       return Response.json({
-        amountDueCents: preview?.amount_due ?? 0,
+        amountDueCents: chargedNowCents,
         prorationCents,
+        taxCents,
+        chargedNowCents,
+        // Whether Stripe finished resolving tax for this address. A zero tax
+        // is legitimate in some jurisdictions and meaningless in others, and
+        // the caller cannot tell them apart without this.
+        taxComplete: preview?.automatic_tax?.status === 'complete',
         currency: preview?.currency ?? 'usd',
       }, { status: 200 })
     }
 
+    /*
+     * A REDUCTION waits for the period end. Nothing is charged, nothing is
+     * credited, and the capacity keeps working until then.
+     *
+     * Only an increase is immediate. The two directions are not symmetric and
+     * treating them alike is what made the earlier behaviour wrong in both:
+     * an addition the customer wants now was deferred a month, and a removal
+     * would refund unused time for a site they can still publish to.
+     *
+     * `seatAddons` is deliberately NOT written here. It mirrors what the
+     * subscription is carrying, and the subscription is still carrying the old
+     * quantity — the webhook rewrites it when the phase flips. Writing the
+     * smaller number today would tell every entitlement check the capacity was
+     * already gone, which is the opposite of what was just promised.
+     */
+    if (currentQuantity !== null && quantity < currentQuantity) {
+      const scheduled = await scheduleAddonReduction({
+        secretKey,
+        subscription,
+        items,
+        priceId,
+        kind,
+        quantity,
+      })
+      if (!scheduled) {
+        return Response.json(
+          {
+            error:
+              'We could not schedule that change. Nothing has changed and ' +
+              'nothing has been charged.',
+          },
+          { status: 502 },
+        )
+      }
+      return Response.json(
+        {
+          ok: true,
+          // The CURRENT map, unchanged: what the workspace may use until the
+          // period ends is what it has now.
+          quantities: addonQuantitiesFromItems(items),
+          pendingAddonChange: {
+            kind,
+            quantity,
+            effectiveAt: scheduled.effectiveAt,
+            scheduleId: scheduled.scheduleId,
+          },
+        },
+        { status: 200 },
+      )
+    }
+
     const params = new URLSearchParams({
-      proration_behavior: 'create_prorations',
+      /*
+       * Capacity bought now is INVOICED now.
+       *
+       * `create_prorations` files the proration as a pending invoice item and
+       * settles it on the next renewal, so a customer who bought a site at the
+       * start of a period waited a month to be charged for it and the console
+       * had nothing to show them in between. `always_invoice` draws the
+       * proration onto an invoice immediately and charges the default payment
+       * method, which is what "buy capacity" already implies to the person
+       * clicking it.
+       *
+       * The charge is what changes, not the proration arithmetic: the amount
+       * is the same figure either behaviour computes for the remainder of the
+       * period. `automatic_tax` below applies to that invoice, so the amount
+       * taken is tax-inclusive and the confirm has to quote it that way.
+       */
+      proration_behavior: 'always_invoice',
       // Stripe Tax (AGL-1537): an add-on purchase is a subscription update,
       // and updates are where subscriptions created before automatic tax
       // gain it — same rule as the plan-switch route. No-op when already on.
@@ -491,12 +875,27 @@ async function handler(request: Request): Promise<Response> {
     for (const [key, value] of itemParams) {
       params.set(`items[0][${key}]`, value)
     }
+    // The invoice `always_invoice` raises, expanded on the same call that
+    // causes it. Under `create_prorations` there was nothing to report — the
+    // proration sat as a pending item and no money moved — so `ok: true` was
+    // the whole truth. It is not any more: this request now charges a card,
+    // and a charge that fails has to reach the customer as a failure rather
+    // than as a purchase that quietly did not get paid for.
+    params.set('expand[]', 'latest_invoice.payment_intent')
     const updated = await stripeRequest(
       secretKey,
       'POST',
       `subscriptions/${subscription.id}`,
       params,
     )
+    const addonInvoice = updated?.latest_invoice ?? null
+    const addonIntent = addonInvoice?.payment_intent ?? null
+    // `paid` is the only affirmative. An invoice can be `open` because the
+    // card was declined, or because the issuer wants authentication — the
+    // second is recoverable from the browser and the first is not, so they are
+    // named apart rather than collapsed into "something went wrong".
+    const chargePaid = addonInvoice ? addonInvoice.status === 'paid' : true
+    const chargeRequiresAction = addonIntent?.status === 'requires_action'
     // A pending downgrade holds an item list snapshotted when it was
     // requested (AGL-2150) — refresh it, or the seats just bought and
     // prorated disappear at the period end.
@@ -529,7 +928,24 @@ async function handler(request: Request): Promise<Response> {
     const quantities = addonQuantitiesFromItems(updated?.items?.data ?? [])
     await orgSnapshot.ref.set({ seatAddons: quantities }, { merge: true })
     return Response.json(
-      { ok: true, quantities, ...(scheduleRefreshFailed ? { scheduleRefreshFailed: true } : {}) },
+      {
+        ok: true,
+        quantities,
+        // The capacity is granted either way — Stripe applied the item, and
+        // the webhook mirrors it — so this reports the CHARGE, not the change.
+        // A customer whose card failed still has the seats and now has an
+        // unpaid invoice, and the page has to be able to say so.
+        chargedNowCents: Number(addonInvoice?.amount_due ?? 0),
+        chargeCurrency: String(addonInvoice?.currency ?? 'usd'),
+        chargePaid,
+        ...(chargeRequiresAction && addonIntent?.client_secret
+          ? {
+              chargeRequiresAction: true,
+              chargeClientSecret: String(addonIntent.client_secret),
+            }
+          : {}),
+        ...(scheduleRefreshFailed ? { scheduleRefreshFailed: true } : {}),
+      },
       { status: 200 },
     )
   } catch (error) {

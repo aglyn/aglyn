@@ -926,6 +926,23 @@ export interface MarketplaceTaxReturnRowInput {
   /** Stripe's CUMULATIVE refund total on the charge, when one has happened. */
   refundedCents?: unknown
   createdAt?: unknown
+  /**
+   * The buyer's tax jurisdiction, as the marketplace webhook records it.
+   *
+   * The SAME field name and the same two fields both row shapes above
+   * declare, so one idiom reads a jurisdiction off all three collections.
+   * The written document carries exactly `country` and `state` — narrower
+   * than `StorefrontTaxRow`, which also keeps `city` and `postalCode` that
+   * nothing here has ever read.
+   *
+   * Absent on every row written before the webhook recorded it, and those
+   * rows are COUNTED in `attention.rowsMissingJurisdiction` rather than
+   * reconstructed. See {@link marketplaceTaxSummary}.
+   */
+  customerAddress?: {
+    country?: unknown
+    state?: unknown
+  } | null
 }
 
 export interface MarketplaceTaxSummary {
@@ -942,11 +959,27 @@ export interface MarketplaceTaxSummary {
   taxChargedCents: number
   /** Tax handed back with refunds. Never remitted. */
   taxRefundedCents: number
+  /**
+   * Keyed `COUNTRY-STATE` (e.g. `US-TX`), exactly as both siblings key
+   * theirs; rows that state no jurisdiction are under `unknown` — and
+   * counted in `attention.rowsMissingJurisdiction`.
+   *
+   * `taxabilityReasons` and `rates` are empty on every bucket here, by
+   * construction rather than by omission: a marketplace purchase records no
+   * per-rate breakdown, so there is no working paper to state and nothing
+   * claiming to reconcile to the tax. The figures are Stripe's own
+   * `amount_tax` on the platform's charge.
+   */
+  byJurisdiction: Record<string, TaxReturnJurisdiction>
   attention: {
     /**
-     * Rows with no stored buyer address, so no jurisdiction can be stated.
-     * `marketplacePurchases` records none today — see the module note in the
-     * route — so this is expected to equal `transactionCount` until it does.
+     * Rows that state no jurisdiction, so none can be attributed.
+     *
+     * Every row written before the marketplace webhook recorded one is in
+     * here permanently. That is the honest record and not a gap to close
+     * later: the address those sales were taxed from lives in Stripe, and
+     * copying it back onto a filed period would restate an attribution
+     * nobody made at the time.
      */
     rowsMissingJurisdiction: number
     rowsMissingCreatedAt: number
@@ -991,6 +1024,7 @@ export function marketplaceTaxSummary(
     taxCollectedCents: 0,
     taxChargedCents: 0,
     taxRefundedCents: 0,
+    byJurisdiction: {},
     attention: {
       rowsMissingJurisdiction: 0,
       rowsMissingCreatedAt: 0,
@@ -1011,17 +1045,46 @@ export function marketplaceTaxSummary(
       gross > 0 && refunded > 0
         ? Math.min(tax, Math.round((tax * Math.min(refunded, gross)) / gross))
         : 0
-    // No buyer address is stored on a purchase row, so no jurisdiction can be
-    // stated. Counted rather than guessed.
-    summary.attention.rowsMissingJurisdiction += 1
+    // The jurisdiction the row STATES, read exactly as `storefrontTaxSummary`
+    // reads its own — one derivation of `COUNTRY-STATE` for the whole return,
+    // so the three buckets can never key the same state differently.
+    //
+    // A row stating none is bucketed under `unknown` and counted, never
+    // guessed: `unknown` is a jurisdiction on this report only in the sense
+    // that it is somewhere the tax demonstrably cannot be placed.
+    const country = row.customerAddress?.country
+    const state = row.customerAddress?.state
+    const jurisdiction =
+      typeof country === 'string' && country
+        ? `${country}${typeof state === 'string' && state ? `-${state}` : ''}`
+        : 'unknown'
+    if (jurisdiction === 'unknown') {
+      summary.attention.rowsMissingJurisdiction += 1
+    }
     if (!asRowDate(row.createdAt)) summary.attention.rowsMissingCreatedAt += 1
 
+    const netTax = tax - refundedTax
+    const sales = Math.max(0, gross - tax)
     summary.transactionCount += 1
     summary.grossCents += gross
-    summary.taxableSalesCents += Math.max(0, gross - tax)
+    summary.taxableSalesCents += sales
     summary.taxChargedCents += tax
     summary.taxRefundedCents += refundedTax
-    summary.taxCollectedCents += tax - refundedTax
+    summary.taxCollectedCents += netTax
+
+    const bucket = (summary.byJurisdiction[jurisdiction] ??= emptyJurisdiction())
+    bucket.transactionCount += 1
+    // Sales and the taxable base are the same number on a marketplace row and
+    // that is not a copy-paste: the tax is added `exclusive` on top of the
+    // listing price, so the receipts excluding tax ARE the base the rate was
+    // applied to. Both are stated because the shared jurisdiction shape asks
+    // for both, and a reader comparing this bucket against a storefront one
+    // must not have to know which single field was populated.
+    bucket.totalSalesCents += sales
+    bucket.taxableSalesCents += sales
+    // NET of refunds, matching `taxCollectedCents` above — a state is owed
+    // what was kept, not what was charged.
+    bucket.taxCollectedCents += netTax
   }
   return summary
 }

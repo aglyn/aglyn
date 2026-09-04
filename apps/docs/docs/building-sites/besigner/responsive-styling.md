@@ -581,8 +581,8 @@ modes:
 ## Semantic sections & theme mode
 
 - The **Section** component groups children inside a real HTML element —
-  `section`, `article`, `aside`, `nav`, `header`, `footer`, `main`, or
-  `div` — keeping your page outline meaningful for SEO and assistive
+  `section`, `article`, `aside`, `nav`, `header`, `footer`, or `div`
+  — keeping your page outline meaningful for SEO and assistive
   tech.
 - The **Theme mode switcher** component gives visitors a light/dark/
   device-default override that persists across visits.

@@ -23,6 +23,7 @@ import {
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -30,6 +31,11 @@ import {
   Button,
   Checkbox,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
   FormControlLabel,
   MenuItem,
   Stack,
@@ -43,11 +49,15 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import StaffOnly from '../../../../components/staff-only.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
-import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
+import {
+  CONTENT_MAX_WIDTH,
+  TABLE_PAGE_SIZE_DEFAULT,
+} from '../../../../constants/shared'
 import { useIsStaff } from '../../../../hooks/use-is-staff'
 
 interface CouponRow {
@@ -89,6 +99,19 @@ const RATING_COLOR = {
 } as const
 
 /**
+ * The promotion code a staff member has asked to flip, held while the confirm
+ * dialog is open. `activate` is the direction being requested, not the state
+ * the code is in; `percentOff` comes from the owning coupon so the dialog can
+ * raise the same sign-off the creation form raises.
+ */
+interface PendingToggle {
+  id: string
+  code: string
+  activate: boolean
+  percentOff: number | null
+}
+
+/**
  * Staff coupon console (AGL-1105): create discount coupons and promotion
  * codes (percent or fixed, once/repeating/forever, optional code, redemption
  * cap and expiry), see the live net-margin rating before committing, and
@@ -100,6 +123,18 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
   const isStaff = useIsStaff()
 
   const [coupons, setCoupons] = useState<CouponRow[]>([])
+  /*
+   * The list PAGES (AGL-2501). Every Stripe coupon the platform has ever
+   * created rendered in one wall, and a coupon row is tall — a name, an id, a
+   * chip per promotion code — so a few dozen of them is a page a reader
+   * scrolls past rather than reads.
+   *
+   * The rows are already in memory (one `/api/admin/coupons` fetch), so the
+   * footer is handed a real total rather than the "more than 10" a cursor
+   * feed has to settle for.
+   */
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
 
@@ -116,14 +151,13 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
     confirmHighDiscount: false,
   })
 
+  const [pendingToggle, setPendingToggle] = useState<PendingToggle | null>(null)
+  const [toggleConfirmed, setToggleConfirmed] = useState(false)
+
   const refresh = useCallback(async () => {
-    const idToken = await (user as any)?.getIdToken?.()
-    if (!idToken) return
     setLoading(true)
     try {
-      const response = await fetch('/api/admin/coupons', {
-        headers: { Authorization: `Bearer ${idToken}` },
-      })
+      const response = await authorizedFetch(user, '/api/admin/coupons')
       if (response.status === 501) {
         setCoupons([])
         return
@@ -161,16 +195,11 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
     setForm((previous) => ({ ...previous, ...patch }))
 
   const create = async () => {
-    const idToken = await (user as any)?.getIdToken?.()
-    if (!idToken) return
     setBusy(true)
     try {
-      const response = await fetch('/api/admin/coupons', {
+      const response = await authorizedFetch(user, '/api/admin/coupons', {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${idToken}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: form.name.trim() || undefined,
           percentOff: form.kind === 'percent' ? Number(form.percentOff) : undefined,
@@ -201,6 +230,66 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
       setBusy(false)
     }
   }
+
+  /*
+   * Turning a code back on re-commits the discount, so it carries the same
+   * ≥`DISCOUNT_APPROVAL_THRESHOLD_PCT`% sign-off the creation form does. The
+   * server enforces it either way; the checkbox is what makes the commitment
+   * visible before the click rather than after the refusal.
+   */
+  const toggleNeedsApproval =
+    pendingToggle?.activate === true &&
+    pendingToggle.percentOff != null &&
+    pendingToggle.percentOff >= DISCOUNT_APPROVAL_THRESHOLD_PCT
+
+  const openToggle = (pending: PendingToggle) => {
+    setPendingToggle(pending)
+    setToggleConfirmed(false)
+  }
+
+  const toggleCode = async () => {
+    if (!pendingToggle) return
+    const { id, code, activate } = pendingToggle
+    setBusy(true)
+    try {
+      const response = await authorizedFetch(user, '/api/admin/coupons', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: activate ? 'activate' : 'deactivate',
+          promotionCodeId: id,
+          confirmHighDiscount: toggleConfirmed,
+        }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(payload.error ?? `Update failed (${response.status})`)
+      }
+      enqueueSnackbar(`${code} ${activate ? 'activated' : 'deactivated'}`, {
+        variant: 'success',
+      })
+      setPendingToggle(null)
+      await refresh()
+    } catch (error: any) {
+      console.error(error)
+      enqueueSnackbar(error?.message ?? 'Updating the code failed', {
+        variant: 'error',
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const pagedCoupons = useMemo(
+    () => coupons.slice(page * pageSize, page * pageSize + pageSize),
+    [coupons, page, pageSize],
+  )
+  // A refresh that returns fewer coupons can strand a reader past the last
+  // page, which MUI renders as an empty table with no explanation.
+  useEffect(() => {
+    const lastPage = Math.max(0, Math.ceil(coupons.length / pageSize) - 1)
+    if (page > lastPage) setPage(lastPage)
+  }, [coupons.length, page, pageSize])
 
   const discountLabel = (row: CouponRow) =>
     row.percentOff != null
@@ -452,6 +541,7 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
                   {'No coupons yet.'}
                 </Typography>
               ) : (
+                <>
                 <Table size="small">
                   <TableHead>
                     <TableRow>
@@ -464,7 +554,7 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {coupons.map((row) => (
+                    {pagedCoupons.map((row) => (
                       <TableRow key={row.id}>
                         <TableCell>
                           <Stack spacing={0.25}>
@@ -492,19 +582,40 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
                               {'—'}
                             </Typography>
                           ) : (
-                            <Stack
-                              direction="row"
-                              spacing={0.5}
-                              sx={{ flexWrap: 'wrap' }}
-                            >
+                            <Stack spacing={0.5}>
                               {row.codes.map((code) => (
-                                <Chip
+                                <Stack
                                   key={code.id}
-                                  size="small"
-                                  variant="outlined"
-                                  label={code.code}
-                                  color={code.active ? 'default' : 'error'}
-                                />
+                                  direction="row"
+                                  spacing={0.5}
+                                  sx={{ alignItems: 'center' }}
+                                >
+                                  <Chip
+                                    size="small"
+                                    variant="outlined"
+                                    label={code.code}
+                                    color={code.active ? 'default' : 'error'}
+                                  />
+                                  {/* An inactive code is not merely a badge:
+                                      checkout looks codes up with
+                                      `active=true`, so a customer typing it
+                                      is told it is not recognized. */}
+                                  <Button
+                                    size="small"
+                                    color={code.active ? 'error' : 'primary'}
+                                    disabled={busy}
+                                    onClick={() =>
+                                      openToggle({
+                                        id: code.id,
+                                        code: code.code,
+                                        activate: !code.active,
+                                        percentOff: row.percentOff,
+                                      })
+                                    }
+                                  >
+                                    {code.active ? 'Deactivate' : 'Activate'}
+                                  </Button>
+                                </Stack>
                               ))}
                             </Stack>
                           )}
@@ -525,8 +636,75 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
                     ))}
                   </TableBody>
                 </Table>
+                <ListPagination
+                  page={page}
+                  pageSize={pageSize}
+                  rowCount={pagedCoupons.length}
+                  count={coupons.length}
+                  onPageChange={setPage}
+                  onPageSizeChange={setPageSize}
+                />
+                </>
               )}
             </CardDisplay>
+
+            {/* Flipping a code is a revenue action in both directions — one
+                way a discount stops being redeemable mid-campaign, the other
+                way it becomes redeemable by anyone holding it — so it is
+                confirmed rather than fired straight off the row. */}
+            <Dialog
+              open={Boolean(pendingToggle)}
+              onClose={() => setPendingToggle(null)}
+              maxWidth="xs"
+              fullWidth
+            >
+              <DialogTitle>
+                {`${pendingToggle?.activate ? 'Activate' : 'Deactivate'} ${
+                  pendingToggle?.code ?? ''
+                }`}
+              </DialogTitle>
+              <DialogContent>
+                <DialogContentText variant="body2">
+                  {pendingToggle?.activate
+                    ? 'Customers will be able to redeem this code at checkout again.'
+                    : 'Customers typing this code at checkout will be told it is not recognized. Existing discounts already applied to a subscription are unaffected.'}
+                </DialogContentText>
+                {toggleNeedsApproval ? (
+                  <FormControlLabel
+                    sx={{ mt: 1 }}
+                    control={
+                      <Checkbox
+                        checked={toggleConfirmed}
+                        onChange={(event) =>
+                          setToggleConfirmed(event.target.checked)
+                        }
+                      />
+                    }
+                    label={
+                      `I confirm this ${pendingToggle?.percentOff}% code (≥` +
+                      `${DISCOUNT_APPROVAL_THRESHOLD_PCT}% needs sign-off)`
+                    }
+                  />
+                ) : null}
+              </DialogContent>
+              <DialogActions>
+                <Button onClick={() => setPendingToggle(null)}>
+                  {'Cancel'}
+                </Button>
+                <Button
+                  variant="contained"
+                  color={pendingToggle?.activate ? 'primary' : 'error'}
+                  disabled={busy || (toggleNeedsApproval && !toggleConfirmed)}
+                  onClick={() => void toggleCode()}
+                >
+                  {busy
+                    ? 'Saving…'
+                    : pendingToggle?.activate
+                      ? 'Activate'
+                      : 'Deactivate'}
+                </Button>
+              </DialogActions>
+            </Dialog>
           </Stack>
         </StaffOnly>
       </Container>

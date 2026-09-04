@@ -181,7 +181,10 @@ export const schema: Aglyn.ComponentSchema<RelatedProductsProps> = {
     {
       name: 'productId',
       label: 'Product id',
-      description: 'Blank follows the product page URL.',
+      description:
+        'The product to find relatives OF. Blank reads it from the URL, so ' +
+        'a product template shows each product’s own related items; naming ' +
+        'one pins the rail to that product’s relatives everywhere.',
       component: Aglyn.FieldComponentType.PRODUCT_SELECT,
     },
     {
@@ -195,6 +198,7 @@ export const schema: Aglyn.ComponentSchema<RelatedProductsProps> = {
       label: 'Max items',
       description: 'Cap the strip (default 6).',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
+      type: 'number',
     },
   ],
 }

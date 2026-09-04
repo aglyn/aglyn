@@ -25,7 +25,7 @@ import { join } from 'node:path'
 import { productSearchFields } from './commerce'
 
 /**
- * A product's search keys travel with its name (AGL-693).
+ * A product's search keys travel with its name (AGL-2501).
  *
  * The products hub filters by the QUERY now, over `nameTokens`, `nameLower`
  * and `skus`. Those are denormalizations, which means the catalog is only as

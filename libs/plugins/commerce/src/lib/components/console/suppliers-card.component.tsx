@@ -30,20 +30,15 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import {
-  collection,
-  deleteDoc,
-  doc,
-  limit,
-  query,
-  setDoc,
-} from 'firebase/firestore'
+import { collection, deleteDoc, doc, setDoc } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import {
-  useFirestoreCollection,
+  collectionPage,
+  usePagedCollection,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { EntitlementGatedCard } from './entitlement-gate.component'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 
@@ -71,7 +66,6 @@ export function SuppliersCard(props: SuppliersCardProps) {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const {
-    data: supplierDocs,
     status: suppliersStatus,
     /**
      * The list this dialog is seeded from is unconfirmed by the server
@@ -81,8 +75,38 @@ export function SuppliersCard(props: SuppliersCardProps) {
      * meant to retire, and nothing anywhere reports it.
      */
     fromCache: suppliersFromCache,
-  } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'suppliers'), limit(50)),
+    rows: suppliers,
+    hasMore,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+  } = usePagedCollection<any>(
+    /*
+     * SERVER-PAGED, and ordered (AGL-2501).
+     *
+     * `limit(50)` alone is answered in DOCUMENT-ID order, and suppliers are
+     * created with a generated id — so the fifty were a pseudo-random sample
+     * and the fifty-first was not merely unrendered, it was UNREACHABLE. A
+     * merchant with sixty fulfillment partners saw fifty of them and nothing
+     * said which.
+     *
+     * This one really can be paged by the query, unlike the cards that carry a
+     * duplicate-name check or a count over the whole set: nothing here is
+     * derived from rows off the page. Suppliers are assigned to products by
+     * document id in the product editor, and the empty state and the row list
+     * are the only consumers.
+     *
+     * `collectionPage` orders on the document NAME, which cannot be absent —
+     * `orderBy('name')` would HIDE every supplier saved without one rather
+     * than mis-sorting the list, and `/api/hosts/resources` validates no field
+     * for presence.
+     */
+    (pageLimit) =>
+      collectionPage(
+        collection(firestore, 'hosts', hostId, 'suppliers'),
+        pageLimit,
+      ),
     [firestore, hostId],
     { idField: '$id' },
   )
@@ -190,13 +214,13 @@ export function SuppliersCard(props: SuppliersCardProps) {
       contentGutterY
     >
       <Stack spacing={1}>
-        {(supplierDocs ?? []).length === 0 ? (
+        {suppliers.length === 0 && page === 0 ? (
           <Typography variant="body2" color="text.secondary">
             {'Route paid orders straight to a fulfillment partner: add a ' +
               'supplier, then assign it on products.'}
           </Typography>
         ) : (
-          (supplierDocs ?? []).map((supplier: any) => (
+          suppliers.map((supplier: any) => (
             <Stack
               key={supplier.$id}
               direction="row"
@@ -232,6 +256,18 @@ export function SuppliersCard(props: SuppliersCardProps) {
               </Button>
             </Stack>
           ))
+        )}
+        {suppliers.length === 0 && page === 0 ? null : (
+          <ListPagination
+            page={page}
+            pageSize={pageSize}
+            rowCount={suppliers.length}
+            // No `count`: this is a server window, and nobody knows the total
+            // without paying to read it. `hasMore` is the probe row's answer.
+            hasMore={hasMore}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         )}
         <Button
           size="small"

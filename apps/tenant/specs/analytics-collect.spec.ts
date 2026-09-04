@@ -1086,3 +1086,86 @@ describe('lockdown freezes the beacon (AGL-1627)', () => {
     expect(dayDoc()?.total).toBe(1)
   })
 })
+
+/**
+ * FORM VIEWS AND STARTS — the denominators a completion rate is taken over.
+ *
+ * A form document counted what ARRIVED and nothing about what was offered, so
+ * completion, abandonment and conversion were each a percentage over a
+ * population nobody had counted. These are the counters that end that, in the
+ * same shape and on the same beacon as the overlay counters one branch above.
+ */
+describe('form view and start counters', () => {
+  const FORM_PATH = `hosts/${HOST_ID}/forms/form-1`
+  const month = new Date().toISOString().slice(0, 7)
+  const form = () => mockStore[FORM_PATH]
+
+  beforeEach(() => {
+    mockStore[FORM_PATH] = { displayName: 'Contact' }
+  })
+
+  it('counts a view onto the form, lifetime and by month', async () => {
+    const route = loadRoute()
+    const response = await route.POST(
+      beacon({ hostId: HOST_ID, formId: 'form-1', form: 'view' }),
+    )
+    expect(response.status).toBe(204)
+    expect(form().stats.views).toBe(1)
+    expect(form().stats.periods[month].views).toBe(1)
+  })
+
+  it('counts a start under its own key, never as a second view', async () => {
+    const route = loadRoute()
+    await route.POST(beacon({ hostId: HOST_ID, formId: 'form-1', form: 'view' }))
+    await route.POST(
+      beacon({ hostId: HOST_ID, formId: 'form-1', form: 'start' }),
+    )
+    expect(form().stats.views).toBe(1)
+    expect(form().stats.starts).toBe(1)
+  })
+
+  it('is NOT a pageview', async () => {
+    // Folding it into the pageview branch would double the site's traffic
+    // count on every page that places a form — and that count is the meter
+    // `/api/billing/report-usage` invoices from.
+    const route = loadRoute()
+    await route.POST(beacon({ hostId: HOST_ID, formId: 'form-1', form: 'view' }))
+    expect(dayDoc()).toBeUndefined()
+    expect(mockEmitted).toEqual([])
+  })
+
+  it('does not resurrect a deleted form as a stats-only document', async () => {
+    // The `overlays` rule: a beacon from a page cached before the form was
+    // deleted must find nothing to update rather than minting a stray
+    // document that exists only to hold counters.
+    const route = loadRoute()
+    const response = await route.POST(
+      beacon({ hostId: HOST_ID, formId: 'gone', form: 'view' }),
+    )
+    expect(response.status).toBe(204)
+    expect(mockStore[`hosts/${HOST_ID}/forms/gone`]).toBeUndefined()
+  })
+
+  it('ignores an event name it does not know', async () => {
+    const route = loadRoute()
+    await route.POST(
+      beacon({ hostId: HOST_ID, formId: 'form-1', form: 'submit' }),
+    )
+    expect(form().stats).toBeUndefined()
+  })
+
+  it('writes nothing for a spoofed host', async () => {
+    const route = loadRoute()
+    await route.POST(
+      beacon({ hostId: 'no-such-host', formId: 'form-1', form: 'view' }),
+    )
+    expect(mockStore['hosts/no-such-host/forms/form-1']).toBeUndefined()
+  })
+
+  it('freezes under a FULL lockdown, like every other counter here', async () => {
+    mockLockdown = { mode: 'full', reason: 'security' }
+    const route = loadRoute()
+    await route.POST(beacon({ hostId: HOST_ID, formId: 'form-1', form: 'view' }))
+    expect(form().stats).toBeUndefined()
+  })
+})

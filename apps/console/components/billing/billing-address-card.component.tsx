@@ -28,6 +28,7 @@ import {
 } from '@mui/material'
 import { useEffect, useState } from 'react'
 import BillingProfileGateComponent from './billing-profile-gate.component'
+import { COMPACT_FIELD_WIDTH } from '../../constants/shared'
 import { COUNTRY_OPTIONS, countryOption, type CountryOption } from '../../utils/country-options'
 import type { BillingProfile } from './use-billing-profile'
 
@@ -128,104 +129,119 @@ export default function BillingAddressCardComponent({
       onRetry={reload}
       subject="billing address"
     >
-      {(loaded) =>
-        !loaded.customer ? (
-          <Typography variant="body2" color="text.secondary">
-            {'There is no billing address yet. Upgrade to a paid plan and the ' +
-              'address you check out with appears here, editable afterwards.'}
-          </Typography>
-        ) : (
-          <Stack spacing={2}>
+      {() => (
+        <Stack spacing={2}>
+          {/*
+            Editable before there is a subscription. A billing address is also
+            a TAX INPUT: setting it here means the upgrade computes tax from it
+            and never asks for it a second time, which is what stops a customer
+            wondering which of two addresses their invoice used.
+          */}
+          <TextField
+            label="Full name"
+            size="small"
+            fullWidth
+            value={fields.name}
+            disabled={!canManage || busy}
+            onChange={set('name')}
+            slotProps={{ htmlInput: { 'aria-label': 'Full name' } }}
+          />
+          <Autocomplete
+            size="small"
+            disabled={!canManage || busy}
+            options={COUNTRY_OPTIONS}
+            value={country}
+            onChange={(_event, next) => setCountry(next)}
+            getOptionLabel={(option) => option.label}
+            isOptionEqualToValue={(option, selected) =>
+              option.code === selected.code
+            }
+            filterOptions={(options, params) => {
+              const needle = params.inputValue.trim().toLowerCase()
+              if (!needle) return options
+              return options.filter((option) =>
+                option.searchText.includes(needle),
+              )
+            }}
+            renderInput={(params) => (
+              <TextField {...params} label="Country or region" />
+            )}
+          />
+          <TextField
+            label="Address line 1"
+            size="small"
+            fullWidth
+            value={fields.line1}
+            disabled={!canManage || busy}
+            onChange={set('line1')}
+            slotProps={{ htmlInput: { 'aria-label': 'Address line 1' } }}
+          />
+          <TextField
+            label="Address line 2"
+            size="small"
+            fullWidth
+            value={fields.line2}
+            disabled={!canManage || busy}
+            onChange={set('line2')}
+            slotProps={{ htmlInput: { 'aria-label': 'Address line 2' } }}
+          />
+          {/*
+            Three across, and allowed to WRAP.
+
+            `fullWidth` lets these shrink without overflowing, but shrinking is
+            its own failure: MUI sizes a TextField from its input, so at a
+            third of a narrow column "State or province" renders as a truncated
+            label on a control too small to type a value into. `useFlexGap` +
+            `flexWrap` with a floor per field means the row breaks onto a
+            second line instead — the column width is what varies between
+            breakpoints, so the row has to be the thing that gives.
+          */}
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={2}
+            useFlexGap
+            sx={{ flexWrap: 'wrap' }}
+          >
             <TextField
-              label="Full name"
+              label="City"
               size="small"
-              fullWidth
-              value={fields.name}
+              sx={{ minWidth: COMPACT_FIELD_WIDTH, flexGrow: 1 }}
+              value={fields.city}
               disabled={!canManage || busy}
-              onChange={set('name')}
-              slotProps={{ htmlInput: { 'aria-label': 'Full name' } }}
-            />
-            <Autocomplete
-              size="small"
-              disabled={!canManage || busy}
-              options={COUNTRY_OPTIONS}
-              value={country}
-              onChange={(_event, next) => setCountry(next)}
-              getOptionLabel={(option) => option.label}
-              isOptionEqualToValue={(option, selected) =>
-                option.code === selected.code
-              }
-              filterOptions={(options, params) => {
-                const needle = params.inputValue.trim().toLowerCase()
-                if (!needle) return options
-                return options.filter((option) =>
-                  option.searchText.includes(needle),
-                )
-              }}
-              renderInput={(params) => (
-                <TextField {...params} label="Country or region" />
-              )}
+              onChange={set('city')}
+              slotProps={{ htmlInput: { 'aria-label': 'City' } }}
             />
             <TextField
-              label="Address line 1"
+              label="State or province"
               size="small"
-              fullWidth
-              value={fields.line1}
+              sx={{ minWidth: COMPACT_FIELD_WIDTH, flexGrow: 1 }}
+              value={fields.state}
               disabled={!canManage || busy}
-              onChange={set('line1')}
-              slotProps={{ htmlInput: { 'aria-label': 'Address line 1' } }}
+              onChange={set('state')}
+              slotProps={{ htmlInput: { 'aria-label': 'State or province' } }}
             />
             <TextField
-              label="Address line 2"
+              label="Postal code"
               size="small"
-              fullWidth
-              value={fields.line2}
+              sx={{ minWidth: COMPACT_FIELD_WIDTH, flexGrow: 1 }}
+              value={fields.postalCode}
               disabled={!canManage || busy}
-              onChange={set('line2')}
-              slotProps={{ htmlInput: { 'aria-label': 'Address line 2' } }}
+              onChange={set('postalCode')}
+              slotProps={{ htmlInput: { 'aria-label': 'Postal code' } }}
             />
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-              <TextField
-                label="City"
-                size="small"
-                fullWidth
-                value={fields.city}
-                disabled={!canManage || busy}
-                onChange={set('city')}
-                slotProps={{ htmlInput: { 'aria-label': 'City' } }}
-              />
-              <TextField
-                label="State or province"
-                size="small"
-                fullWidth
-                value={fields.state}
-                disabled={!canManage || busy}
-                onChange={set('state')}
-                slotProps={{ htmlInput: { 'aria-label': 'State or province' } }}
-              />
-              <TextField
-                label="Postal code"
-                size="small"
-                fullWidth
-                value={fields.postalCode}
-                disabled={!canManage || busy}
-                onChange={set('postalCode')}
-                slotProps={{ htmlInput: { 'aria-label': 'Postal code' } }}
-              />
-            </Stack>
-            <Stack direction="row" spacing={1}>
-              <Button
-                variant="contained"
-                size="small"
-                disabled={!canManage || busy}
-                onClick={save}
-              >
-                {'Save'}
-              </Button>
-            </Stack>
           </Stack>
-        )
-      }
+          <Stack direction="row" spacing={1}>
+            <Button
+              variant="contained"
+              size="small"
+              disabled={!canManage || busy}
+              onClick={save}
+            >
+              {'Save'}
+            </Button>
+          </Stack>
+        </Stack>
+      )}
     </BillingProfileGateComponent>
   )
 }

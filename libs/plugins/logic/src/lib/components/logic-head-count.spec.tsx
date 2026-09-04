@@ -236,7 +236,21 @@ describe('the variables cap is a server aggregate (AGL-1716)', () => {
 
     // The cap was never the defect; fixing the count must not start
     // streaming 2,000 rows into this list.
-    expect(limitSpy).toHaveBeenCalledWith(100)
+    //
+    // 101, not 100: the ceiling asks for one document PAST itself so that
+    // "this site has more variables than the card read" is a fact rather than
+    // a guess from `length === 100` (AGL-2501). The probe row is never
+    // rendered, sorted or counted.
+    //
+    // Asserted as the FULL set of caps this card asks for, because a bare
+    // `toHaveBeenCalledWith(101)` would be satisfied by any capped query on
+    // the card and would go on passing if the list had stopped capping
+    // altogether. The set holds ONE value because the workflow picker's read
+    // waits for the editor to open: a closed card asks for one
+    // window, not two.
+    expect(
+      [...new Set(limitSpy.mock.calls.map(([value]) => value))].sort(),
+    ).toEqual([101])
     expect(countSpy).toHaveBeenCalledTimes(1)
     expect(countSpy).toHaveBeenCalledWith('variables')
   })
@@ -287,7 +301,12 @@ describe('the functions cap is a server aggregate (AGL-1716)', () => {
     render(<HostFunctionsCard hostId="host-1" org={ORG} />)
     await countAnswered('functions')
 
-    expect(limitSpy).toHaveBeenCalledWith(100)
+    // 101, not 100: the ceiling probes one document past itself (AGL-2501).
+    // This card reads only its own collection, so the cap it asks for is
+    // unambiguous — unlike the variables case above, which needed the whole
+    // set asserting to stop a sibling read satisfying it.
+    expect(limitSpy).toHaveBeenCalledWith(101)
+    expect(limitSpy).not.toHaveBeenCalledWith(100)
     expect(countSpy).toHaveBeenCalledTimes(1)
     expect(countSpy).toHaveBeenCalledWith('functions')
   })

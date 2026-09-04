@@ -166,7 +166,10 @@ export const schema: Aglyn.ComponentSchema<GateProps> = {
     {
       name: 'teaserText',
       label: 'Teaser text',
-      description: 'Shown to non-members.',
+      description:
+        'What a signed-out or non-member visitor sees in place of the ' +
+        'gated content. A line that says what is behind the gate converts ' +
+        'better than one that only says access is denied.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
     },
     {

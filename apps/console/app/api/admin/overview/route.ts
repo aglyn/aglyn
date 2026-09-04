@@ -243,7 +243,7 @@ async function handler(request: Request): Promise<Response> {
      * `owedCents` is projected from the document rather than recomputed here:
      * the webhook knew what it failed to reverse (`toReverseCents` at the
      * moment of the refusal) and the ledger cannot re-derive it afterwards,
-     * because `netPaidCents` deliberately subtracts only the reversal that
+     * because `sentToStripeCents` deliberately subtracts only the reversal that
      * ACTUALLY happened. Zero for a refusal whose amount was unknown — the
      * `no-charge-on-cause` and `no-transfer` branches settle without one —
      * and those rows still belong on the queue, because the reason is the

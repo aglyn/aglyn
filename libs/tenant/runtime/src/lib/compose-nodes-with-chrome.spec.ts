@@ -768,3 +768,65 @@ describe('composeNodesWithChrome overlaps the collection read (AGL-1152)', () =>
     })
   })
 })
+
+/**
+ * THE `main` LANDMARK IS PLACED BY COMPOSITION (AGL-2486).
+ *
+ * It used to be a wrapper in the tenant root layout, which put the site nav
+ * and the site footer inside the landmark — the one thing `main` is defined
+ * as excluding. Composition now puts it on the region it names, which is a
+ * property of the COMPOSED tree (a slot arrives from a layout chain, not from
+ * the screen), so it is asserted here rather than only in the unit spec.
+ */
+describe('composeNodesWithChrome places the `main` landmark (AGL-2486)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    setup()
+  })
+
+  /**
+   * Compose returns a DENORMALIZED tree, so a node may be a value in the top
+   * map or nested in another node's `nodes`. The walk covers both rather than
+   * assuming one — the shape is not what is under test here.
+   */
+  const findNode = (value: any, id: string): any => {
+    if (!value || typeof value !== 'object') return undefined
+    if (value.$id === id) return value
+    for (const child of Object.values(value)) {
+      const found = findNode(child, id)
+      if (found) return found
+    }
+    return undefined
+  }
+
+  it('lands on the layout slot, so the chrome sits outside it', async () => {
+    mockGetPublishedLayoutVersion.mockReset()
+    mockGetPublishedLayoutVersion.mockImplementation(
+      tracked('layout1', { version: { nodes: layoutWithRepeat() }, layout: {} }),
+    )
+
+    const composed = await composeNodesWithChrome({
+      hostId: 'h1',
+      layoutId: 'L1',
+      screenNodes: PLAIN_SCREEN_NODES,
+    })
+
+    expect(findNode(composed, 'layout__lSlot')?.props?.component).toBe('main')
+    expect(findNode(composed, ROOT)?.props?.component).toBeUndefined()
+  })
+
+  it('lands on the screen root when the screen has no layout', async () => {
+    const composed = await composeNodesWithChrome({
+      hostId: 'h1',
+      layoutId: null,
+      screenNodes: PLAIN_SCREEN_NODES,
+    })
+
+    expect(findNode(composed, ROOT)?.props?.component).toBe('main')
+  })
+
+  it('CONTROL — neither node carries it beforehand, so a pass is not vacuous', () => {
+    expect(JSON.stringify(PLAIN_SCREEN_NODES)).not.toContain('main')
+    expect(JSON.stringify(layoutWithRepeat())).not.toContain('main')
+  })
+})

@@ -216,6 +216,19 @@ const fakeFirestore: any = {
 }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  /*
+   * The real resolution's shape: an org that declared no pooling resolves
+   * every site to a group of ONE. Faked rather than imported because this
+   * file mocks the whole module — but faked to the NARROW answer, which is
+   * the direction a wrong group may fail in.
+   */
+  consentGroupForSite: async (hostId: string) => ({
+    hostId,
+    groupId: hostId,
+    name: null,
+    hostIds: [hostId],
+    declared: false,
+  }),
   firebaseAdmin: {
     app: () => ({
       firestore: () => fakeFirestore,
@@ -266,12 +279,18 @@ jest.mock('./restock-flag', () => ({ flagOrderRestock: async () => undefined }))
 // ---------------------------------------------------------------------------
 
 const stripeCalls: string[] = []
-const fetchMock = jest.fn(async (url: any): Promise<any> => {
+/** The `amount` on each refund POST — the money, as Stripe receives it. */
+const refundAmounts: string[] = []
+const fetchMock = jest.fn(async (url: any, init: any): Promise<any> => {
   const target = String(url)
   if (!target.includes('api.stripe.com')) {
     throw new Error(`Unexpected fetch to ${target}`)
   }
   stripeCalls.push(target)
+  if (target.includes('/refunds')) {
+    const amount = new URLSearchParams(String(init?.body ?? '')).get('amount')
+    if (amount != null) refundAmounts.push(amount)
+  }
   return { ok: true, json: async () => ({ id: 're_1', status: 'succeeded' }) }
 })
 
@@ -366,6 +385,7 @@ beforeAll(() => {
 beforeEach(() => {
   docs.clear()
   stripeCalls.length = 0
+  refundAmounts.length = 0
   autoIdCounter = 0
   fetchMock.mockClear()
 
@@ -673,5 +693,66 @@ describe('the reviews gate (AGL-2454)', () => {
       (review) => review.productId === 'ebook',
     )
     expect(ebookReview.verified).toBe(true)
+  })
+})
+
+/**
+ * A LINE REFUND ON A DISCOUNTED ORDER.
+ *
+ * The route handed back a line's LIST value — `unitAmountCents x quantity` —
+ * which on a discounted order is more than the buyer ever paid for it. Both
+ * halves of that cost the merchant: line one over-refunded, and the order then
+ * held less than line two was worth, so line two tripped the remaining-value
+ * cap and was refused outright, leaving a refund half-issued and unfinishable.
+ *
+ * Asserted on the amount sent to Stripe. The apportionment itself is pinned in
+ * `model/order-line-refund.spec.ts`, including that the split closes to the
+ * cent; what is proved HERE is that the route actually spends that number.
+ */
+describe('line refunds apportion the order discount', () => {
+  /** $30 + $70 of goods, $10 off. The buyer paid $90. */
+  function seedDiscount(discountCents: number) {
+    const order = docs.get('hosts/host-1/orders/order-1') as any
+    docs.set('hosts/host-1/orders/order-1', {
+      ...order,
+      totals: {
+        ...order.totals,
+        discountCents,
+        totalCents: 10000 - discountCents,
+      },
+    })
+  }
+
+  it('refunds the line at what the buyer paid, not at list', async () => {
+    seedDiscount(1000)
+
+    // The $70 line carries 70% of the $10 discount, so $70.00 - $7.00.
+    const result = await refund({ lineItemIds: [1] })
+
+    expect(result.status).toBe(200)
+    expect(refundAmounts).toEqual(['6300'])
+  })
+
+  it('CONTROL: the same line on an undiscounted order still refunds $70', async () => {
+    // Without this the change would look correct while quietly shrinking every
+    // ordinary line refund.
+    const result = await refund({ lineItemIds: [1] })
+
+    expect(result.status).toBe(200)
+    expect(refundAmounts).toEqual(['7000'])
+  })
+
+  it('lets the OTHER line be refunded too, summing to what was charged', async () => {
+    // The half that stranded merchants: over-refunding the $70 line at list
+    // left $20 against a $30 line, so this second call used to be refused.
+    seedDiscount(1000)
+
+    const first = await refund({ lineItemIds: [1] }, 'attempt-a')
+    const second = await refund({ lineItemIds: [0] }, 'attempt-b')
+
+    expect(first.status).toBe(200)
+    expect(second.status).toBe(200)
+    expect(refundAmounts).toEqual(['6300', '2700'])
+    expect(refundAmounts.reduce((sum, a) => sum + Number(a), 0)).toBe(9000)
   })
 })

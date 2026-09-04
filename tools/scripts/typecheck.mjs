@@ -90,6 +90,8 @@ import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 
 const run = promisify(execFile)
+
+import { parseShard, shardConfigs } from './lib/typecheck-shard.mjs'
 const root = join(fileURLToPath(import.meta.url), '..', '..', '..')
 
 const TSC = join(root, 'node_modules', '@typescript', 'native', 'bin', 'tsc')
@@ -219,6 +221,12 @@ if (changedIdx >= 0) {
   const filters = argv.filter((a) => !a.startsWith('--'))
   configs = allConfigs.filter((c) => filters.length === 0 || filters.some((f) => c.startsWith(f)))
   scopeLabel = filters.length ? `filtered to ${filters.join(', ')}` : 'whole workspace'
+}
+const shard = parseShard(argv)
+if (shard) {
+  const before = configs.length
+  configs = shardConfigs(configs, shard.index, shard.total)
+  scopeLabel += `, shard ${shard.index}/${shard.total} of ${before}`
 }
 console.log(`typecheck: ${configs.length}/${allConfigs.length} configs (${scopeLabel})`)
 

@@ -18,7 +18,7 @@ Starter plan — see Billing to upgrade."*
 
 ## Steps
 
-1. In the site's **Setup** page, open the **Custom Domain** tab. The card explains:
+1. In the site's **Admin** page, open the **Custom Domain** tab. The card explains:
    *"Point your domain at Aglyn, then verify. A subdomain like www uses a CNAME. A bare
    apex cannot carry a CNAME, so point it at the same hostname with an ALIAS — or use the
    A record if your registrar has no ALIAS. Any one of these verifies"*, and lists the

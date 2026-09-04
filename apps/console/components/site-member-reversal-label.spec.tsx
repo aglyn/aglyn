@@ -38,11 +38,21 @@ import SiteMemberDrawer from './site-member-drawer.component'
 /** Orders the mocked collection hook serves for the member's email. */
 let mockOrders: Array<Record<string, unknown>> = []
 
+/*
+ * The double has to answer every constraint the drawer builds, not the ones
+ * it built when this was written. A missing export here is not a soft
+ * failure: the factory replaces the whole module, so `documentId` came back
+ * `undefined` and the component threw on render — a mock that goes stale
+ * fails the surface it was meant to be testing, in a message about the
+ * fixture rather than about the code.
+ */
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...segments: string[]) => segments.join('/'),
   doc: (_db: unknown, ...segments: string[]) => segments.join('/'),
   query: (path: string) => ({ path }),
   where: () => undefined,
+  orderBy: () => undefined,
+  documentId: () => '__name__',
   limit: () => undefined,
   updateDoc: jest.fn(async () => undefined),
 }))
@@ -65,9 +75,19 @@ const mockUser = {
   data: { uid: 'uid-admin', getIdToken: async () => 'tok' },
 }
 
+/*
+ * The barrel is mocked for its HOOKS; `ceilingedWindow` is a pure function
+ * and is taken from the real module rather than stubbed. A hand-written
+ * stand-in would be free to slice differently from the thing that ships, and
+ * the rows these tests assert on are exactly what it returns — a double that
+ * disagrees with the implementation tests the double.
+ */
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => mockFirestore,
   useUser: () => mockUser,
+  ceilingedWindow: jest.requireActual(
+    '@aglyn/tenant-feature-instance/hooks/host-collection-queries',
+  ).ceilingedWindow,
 }))
 
 jest.mock('@aglyn/shared-ui-snackstack', () => ({

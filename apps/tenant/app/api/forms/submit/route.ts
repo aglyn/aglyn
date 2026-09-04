@@ -18,12 +18,15 @@
 import * as Aglyn from '@aglyn/aglyn/server'
 import { extractEmailFromFields } from '@aglyn/aglyn/server'
 import {
+  addHostLead,
+  attributeCampaignConversion,
   consumeRateLimit,
   dataStorageRefusal,
   firebaseAdmin,
   getOrgForHost,
   notifyHostManagers,
   orgDataCollectionForHost,
+  resolveCampaignTouch,
   upsertHostContact,
   visitorWriteRefusal,
 } from '@aglyn/tenant-data-admin'
@@ -178,6 +181,56 @@ async function recordHoneypotHit(hostId: unknown): Promise<void> {
 }
 
 /**
+ * The opt-in a form CARRIES, or `false`.
+ *
+ * `upsertHostContact` has accepted `marketingConsent` since AGL-301 and would
+ * stamp `marketingConsentAtMs` from it, and this route passed it zero times —
+ * so a subscribe checkbox a merchant put on their form was collected, stored
+ * as a submission field, and then dropped on the way to the contact. That is
+ * the missing INPUT for the send-time consent join
+ * (`docs/specs/email-overhaul.md` §1d): the join can only ever be as good as
+ * what the capture surfaces record.
+ *
+ * ⛔ THE FACT OF SUBMISSION IS NOT AN OPT-IN. Only a field whose VALUE is an
+ * affirmative checkbox state counts, and only under a name that means
+ * marketing consent. A form is submitted to ask a question, book a table or
+ * claim a refund, and treating any of those as a subscription is exactly the
+ * inference the consent arc refused to make.
+ *
+ * The name list is closed rather than a substring match on "consent": a
+ * merchant's field called `consentToTreatment` on a clinic intake form is a
+ * different instrument entirely, and matching it would manufacture a
+ * marketing basis out of a medical one.
+ */
+const MARKETING_CONSENT_FIELD_NAMES = new Set([
+  'marketingconsent',
+  'marketingoptin',
+  'emailoptin',
+  'newsletteroptin',
+  'subscribe',
+  'subscribetonewsletter',
+])
+
+/** Checkbox values a browser form actually posts for a ticked box. */
+const AFFIRMATIVE = new Set(['true', 'on', 'yes', '1', 'checked'])
+
+function readDeclaredMarketingConsent(
+  payload: Record<string, any>,
+  fields: Record<string, unknown>,
+): boolean {
+  // A first-class body field, for a caller that models the checkbox
+  // explicitly rather than as one more form field.
+  if (payload['marketingConsent'] === true) return true
+  for (const [key, value] of Object.entries(fields)) {
+    const name = String(key).toLowerCase().replace(/[^a-z]/g, '')
+    if (!MARKETING_CONSENT_FIELD_NAMES.has(name)) continue
+    if (value === true) return true
+    if (AFFIRMATIVE.has(String(value ?? '').trim().toLowerCase())) return true
+  }
+  return false
+}
+
+/**
  * Lead-capture submissions endpoint (AGL-76): validates the target host,
  * drops honeypot hits silently, applies the plan's monthly submission quota
  * via a per-month counter — a hard wall on free, a meter on plans that carry
@@ -192,8 +245,17 @@ async function recordHoneypotHit(hostId: unknown): Promise<void> {
  */
 export async function POST(request: Request): Promise<Response> {
   const payload = (await request.json().catch(() => ({}))) as Record<string, any>
-  const { hostId, formName, dataset, datasetId, fieldMap, path, fields, website } =
-    payload
+  const {
+    hostId,
+    formId,
+    formName,
+    dataset,
+    datasetId,
+    fieldMap,
+    path,
+    fields,
+    website,
+  } = payload
 
   // Honeypot filled → pretend success so bots learn nothing, counted so the
   // owner of the attestation decision learns something (AGL-1664).
@@ -329,8 +391,107 @@ export async function POST(request: Request): Promise<Response> {
     for (const [key, value] of Object.entries(fields)) {
       sanitizedFields[String(key).slice(0, 64)] = String(value).slice(0, 2000)
     }
+
+    /*
+     * The bound form entity (`docs/specs/reusable-forms.md` §2c).
+     *
+     * READ AND VERIFIED, never trusted. `formId` arrives in a public,
+     * unauthenticated body, so stamping it unchecked would let anyone file
+     * rows into any form's list on any site — the per-form list is the
+     * surface this id exists to make correct, and an unverified id would make
+     * it wrong in a way that looks right.
+     *
+     * One extra document read, and only when a form is bound. A form with no
+     * `formId` pays nothing, which is the same shape the dataset binding and
+     * `rateDegraded` already take.
+     */
+    const boundFormId = String(formId ?? '').trim().slice(0, 128)
+    const formSnapshot = boundFormId
+      ? await hostRef.collection('forms').doc(boundFormId).get()
+      : null
+    const form = formSnapshot?.exists ? formSnapshot : null
+    /*
+     * The caption follows the entity once one is bound.
+     *
+     * `formName` stays written either way: it is what the pre-entity `?form=`
+     * filter reads, and no phase of this work removes it. Resolving it from
+     * the form's own `displayName` keeps the Inbox's label from going stale
+     * the moment somebody renames a form.
+     *
+     * ⚠️ This does NOT make the legacy filter rename-safe, and it is not
+     * meant to — renaming still splits what `?form=` returns, exactly as it
+     * always did. `formId` is the filter that survives a rename; that is the
+     * whole reason it exists.
+     */
+    const resolvedFormName = form
+      ? String(form.get('displayName') ?? formName ?? 'Form').slice(0, 100)
+      : String(formName ?? 'Form').slice(0, 100)
+    /*
+     * Consent, from the field the FORM declares.
+     *
+     * ⛔ Still never inferred from the fact of submission. What the entity
+     * adds is a declared place to look: `consentFieldName` names the one
+     * field that IS the opt-in, so a merchant's checkbox called anything at
+     * all is readable, and a clinic intake form's `consentToTreatment` stays
+     * the different instrument it is.
+     *
+     * A bound form that declares NO consent field falls through to the closed
+     * name list below rather than recording nothing. Adoption must not be the
+     * moment a form that was capturing opt-ins stops — consent is carried
+     * forward, never dropped as a side effect of a migration.
+     */
+    const declaredMarketingConsent = form?.get('consentFieldName')
+      ? Aglyn.readFormDeclaredConsent(
+          { consentFieldName: String(form.get('consentFieldName')) },
+          sanitizedFields,
+        )
+      : readDeclaredMarketingConsent(payload, fields)
+    /*
+     * THE CAMPAIGNS THE FORM IS FILED UNDER.
+     *
+     * Off the form document this route has already read, so it costs nothing,
+     * and off the VERIFIED form for the same reason the id is: a membership
+     * taken from the request body would let anyone file people into any
+     * campaign on any site.
+     *
+     * ⚠️ NOT the campaign touch resolved below, and the two never write each
+     * other's field. The touch is where this visitor came FROM and is
+     * browser-supplied; this is which campaigns the merchant put the form in,
+     * and it is true of every person who fills that form in — including the
+     * one who arrived by typing the address. Recording only the touch is what
+     * left three forms assigned to a campaign producing contacts that belonged
+     * to none.
+     */
+    const formCampaignIds = form
+      ? Aglyn.readCampaignIds(form.data() as Record<string, unknown>)
+      : []
+    // One instant for the whole submission. The attribution window is
+    // measured against it in three places below, and three calls to
+    // `Date.now()` would let a slow write decide whether a touch was inside
+    // the window for the contact and outside it for the lead.
+    const submittedAtMs = Date.now()
     const submissionRef = await hostRef.collection('formSubmissions').add({
-      formName: String(formName ?? 'Form').slice(0, 100),
+      // Stamped only for a form that exists on THIS site. An unverified id
+      // never reaches the row, so the per-form list cannot be written into
+      // from outside.
+      ...(form ? { formId: form.id } : {}),
+      /*
+       * The form's campaign membership, copied onto the row.
+       *
+       * A STAMP of what the form said at the moment this arrived, not a live
+       * edge: nothing edits a submission's campaigns afterwards, and refiling
+       * the form later does not rewrite the submissions it already produced.
+       * That is why this collection is not in
+       * `CAMPAIGN_MEMBER_HOST_COLLECTIONS` — the deletion pass walks the
+       * collections a PICKER writes, and a campaign's removal must not rewrite
+       * an unbounded, billed history collection to tidy up a field that is
+       * only ever read alongside the campaigns a picker still offers.
+       *
+       * Written only when the form names one, so the field is absent on the
+       * rows that would carry an empty array forever.
+       */
+      ...(formCampaignIds.length ? { campaignIds: formCampaignIds } : {}),
+      formName: resolvedFormName,
       path: String(path ?? '').slice(0, 500),
       fields: sanitizedFields,
       read: false,
@@ -361,6 +522,51 @@ export async function POST(request: Request): Promise<Response> {
     // Contacts ingestion (AGL-197): forms don't guarantee an email field —
     // best-effort extraction; never blocks the submission.
     const contactEmail = extractEmailFromFields(sanitizedFields)
+    /*
+     * Whether this submission was filed to the site's Leads.
+     *
+     * A CAPTURE, not a person. `addHostLead` keys one person to one document,
+     * so a returning visitor's second submission updates the lead it created
+     * the first time — and both submissions did route. The counter this feeds
+     * is therefore "submissions this form filed as a lead", which is the
+     * numerator the form's own lead rate needs; how many distinct people are
+     * on the list is the Leads list's count and is a different number.
+     */
+    let leadStored = false
+    /*
+     * THE CAMPAIGN TOUCH, RESOLVED ONCE FOR THE WHOLE SUBMISSION.
+     *
+     * One visitor action lands in three collections here — the submission,
+     * the contact and (when the form declares itself a lead surface) the
+     * lead — and all three are the same person arriving from the same
+     * campaign. Resolving here and handing the result down is what keeps the
+     * email-channel lookup at ONE keyed document read per submission instead
+     * of three, and it is also what guarantees the three records cannot
+     * disagree about which campaign to credit.
+     *
+     * `campaignTouch` is a string the visitor's browser supplied, so it is
+     * re-parsed through the same allowlist a URL goes through and
+     * window-checked before it can name anything. A submission carrying none
+     * — direct traffic, or a visitor whose consent posture never let a touch
+     * be remembered — resolves to null and writes no attribution at all.
+     */
+    const campaignTouch = await resolveCampaignTouch({
+      hostId,
+      wire: payload['campaignTouch'],
+      email: contactEmail,
+      atMs: submittedAtMs,
+    })
+    // The submission itself is an outcome whether or not it named anybody:
+    // an anonymous enquiry from a campaign link is a conversion that campaign
+    // caused, and refusing to count it because no email field was filled in
+    // would under-report exactly the forms that ask for the least.
+    void attributeCampaignConversion({
+      hostId,
+      kind: 'form',
+      refId: submissionRef.id,
+      touch: campaignTouch,
+      convertedAtMs: submittedAtMs,
+    })
     if (contactEmail) {
       void upsertHostContact({
         hostId,
@@ -369,9 +575,87 @@ export async function POST(request: Request): Promise<Response> {
         source: 'form',
         interaction: {
           refId: submissionRef.id,
-          summary: `Submitted "${String(formName ?? 'Form').slice(0, 60)}"`,
+          summary: `Submitted "${resolvedFormName.slice(0, 60)}"`,
+          /*
+           * THE ENTRY POINT, on the contact's own timeline.
+           *
+           * Which form and which page a person came in through is a fact about
+           * this capture, so it rides the interaction the capture already
+           * writes rather than a second structure beside it. `sources` says
+           * only that SOME form produced this contact — every form sets the
+           * same flag — and answering "which one" by reading the submission
+           * back would be a document read per row of a timeline the console
+           * renders straight out of the contact.
+           *
+           * The id only for a VERIFIED form, matching the submission: an
+           * unverified id never reaches a stored row on this path.
+           */
+          ...(form ? { formId: form.id } : {}),
+          ...(typeof path === 'string' && path ? { path } : {}),
         },
+        ...(declaredMarketingConsent ? { marketingConsent: true } : {}),
+        ...(campaignTouch ? { campaignTouch } : {}),
+        // Filed under the form's campaigns, inside this site's own facet on a
+        // row the whole org shares. Membership is not consent, and this passes
+        // none: `marketingConsent` above is the only input that records one.
+        ...(formCampaignIds.length ? { campaignIds: formCampaignIds } : {}),
       })
+      /*
+       * A lead, when the FORM says it is one (`docs/specs/reusable-forms.md`
+       * §4a).
+       *
+       * The endpoint's own docblock has called itself a "lead-capture
+       * submissions endpoint" since AGL-76 and it had never created a lead:
+       * `addHostLead`'s three callers were the sign-up handler and the two
+       * bookings paths, and this route was not among them.
+       *
+       * `routing.lead` is an author's declaration, not a heuristic on the
+       * payload. That follows the existing split — the newsletter block
+       * enrolls, the sign-up handler creates a lead, the bookings handler
+       * creates a lead — each because the SURFACE is a lead surface, not
+       * because a rule inspected what the visitor typed.
+       *
+       * Through `addHostLead` rather than beside it: the ceiling cannot see a
+       * direct `collection('leads')` write, and the dedupe that stops one
+       * person becoming two records lives in there too.
+       *
+       * `void`, like the contact upsert above. A refused or failed lead must
+       * never fail the submission that produced it.
+       */
+      if (form?.get('routing')?.lead === true) {
+        /*
+         * AWAITED, unlike the contact upsert beside it, and only because the
+         * answer is counted.
+         *
+         * The form's `stats.leads` rides the SAME `update` the submission
+         * counters ride a few lines below — one write, not two — and that
+         * update has to know whether a lead was really filed. A `void` call
+         * with the counter chained onto its `then` would put the one figure
+         * on this page that is about routing on a promise the runtime is free
+         * to abandon once the response is sent, so the lead rate would
+         * under-report by however often that happened and would look like
+         * forms quietly failing to route.
+         *
+         * The posture is unchanged: `addHostLead` catches everything and
+         * answers `false`, so awaiting it cannot fail the submission any more
+         * than voiding it could.
+         */
+        leadStored = await addHostLead({
+          hostRef,
+          hostId,
+          lead: {
+            email: contactEmail,
+            ...(sanitizedFields['name']
+              ? { name: sanitizedFields['name'] }
+              : {}),
+            // Names the form, so a lead's provenance survives the form being
+            // renamed — the same reason the submission carries the id.
+            source: `form:${form.id}`,
+            ...(declaredMarketingConsent ? { marketingConsent: true } : {}),
+          },
+          ...(campaignTouch ? { touch: campaignTouch } : {}),
+        })
+      }
     }
     // Dataset binding (AGL-141/556): append a record into the bound
     // dataset — by id first (rename-safe), by human name for legacy nodes.
@@ -510,17 +794,61 @@ export async function POST(request: Request): Promise<Response> {
       }
     }
     await counterRef.set({ [monthKey]: FieldValue.increment(1) }, { merge: true })
+    /*
+     * Per-form counters (`docs/specs/reusable-forms.md` §5a).
+     *
+     * ⛔ The alternative — counting `formSubmissions` when a console surface
+     * renders — is the expensive-read defect this product has created
+     * repeatedly, on the one collection that grows without bound and the one
+     * the customer is billed on. An increment on a write that is already
+     * happening costs one field.
+     *
+     * `update`, never `set`: a submission from a stale cached page carrying a
+     * deleted form's id must not resurrect it as a stats-only stray document.
+     * That is the `overlays` stats rule, and a form needs it for the same
+     * reason. A missing document makes this throw, which the catch swallows —
+     * bookkeeping must not turn a stored submission into a 500.
+     *
+     * The PER-MONTH keys ride the same update and cost nothing extra: a
+     * document write is priced per write, not per field, so a lifetime total
+     * and a month series are the same one write. `monthKey` is the key the
+     * site-wide counter above was just incremented under, reused rather than
+     * re-derived — a per-form series keyed differently from the site's would
+     * put a submission in one month on one surface and the next month on the
+     * other.
+     *
+     * `stats.leads` is here rather than beside `addHostLead` for the same
+     * reason: a second write to say a lead was filed would be a second write
+     * per submission on the collection the customer is billed against.
+     */
+    if (form) {
+      try {
+        await form.ref.update({
+          'stats.submissions': FieldValue.increment(1),
+          'stats.lastSubmissionAtMs': Date.now(),
+          [`stats.periods.${monthKey}.submissions`]: FieldValue.increment(1),
+          ...(leadStored
+            ? {
+                'stats.leads': FieldValue.increment(1),
+                [`stats.periods.${monthKey}.leads`]: FieldValue.increment(1),
+              }
+            : {}),
+        })
+      } catch (error) {
+        console.error('form stats increment failed', error)
+      }
+    }
     // Event trigger (AGL-128/148): field values join the automation
     // scope; action-produced site alerts ride back to the visitor.
     // In-app notification to the site's managers (AGL-259).
     void notifyHostManagers(hostId, {
       type: 'content.formSubmission',
-      title: `New form submission${formName ? ` — ${formName}` : ''}`,
+      title: `New form submission — ${resolvedFormName}`,
       ...(typeof path === 'string' && path ? { body: `Page: ${path}` } : {}),
       link: `/${hostId}/inbox`,
     })
     const { alerts } = await emitHostEvent(hostId, 'formSubmission', {
-      formName: String(formName ?? 'Form').slice(0, 100),
+      formName: resolvedFormName,
       path: String(path ?? '').slice(0, 500),
       ...sanitizedFields,
     })

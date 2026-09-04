@@ -142,7 +142,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     }
   },
   /*
-   * The records table pages (AGL-693). Modelled the way the real hook works —
+   * The records table pages (AGL-2501). Modelled the way the real hook works —
    * a window over page 0..n plus a probe row — because a page is precisely
    * what the delete check must NOT be answered from: the whole contract below
    * is that the reference question is a query over the collection and not a

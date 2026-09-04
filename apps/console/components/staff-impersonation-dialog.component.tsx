@@ -17,6 +17,7 @@
 'use client'
 
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Button,
   Dialog,
@@ -90,15 +91,15 @@ export function useImpersonationReason(options: {
     if (!target) return
     setBusy(true)
     try {
-      const idToken = await (options.user as any)?.getIdToken?.()
-      const response = await fetch('/api/admin/impersonate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      const response = await authorizedFetch(
+        options.user,
+        '/api/admin/impersonate',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uid: target.uid, reason: reason.trim() }),
         },
-        body: JSON.stringify({ uid: target.uid, reason: reason.trim() }),
-      })
+      )
       const payload = await response.json().catch(() => ({}))
       if (!response.ok || !payload.token) {
         // The route's own message names the requirement, so it is surfaced

@@ -21,7 +21,7 @@ import type { ReactNode } from 'react'
 
 /**
  * The console's empty state — one illustration, one sentence, one way out
- * (AGL-693).
+ * (AGL-2501).
  *
  * Lifted out of `data-table.component.tsx`, where it had been living as the
  * grid's no-rows overlay. Every list built on that grid — screens, layouts,
@@ -67,7 +67,7 @@ const EmptyStateRoot = styled(Box, { name: 'AglynEmptyState' })(
       marginTop: theme.spacing(2),
     },
     // The five fills the artwork is built from, taken off the theme's grey
-    // ramp rather than written as hex (AGL-693). Still mode-aware — the flat
+    // ramp rather than written as hex (AGL-2501). Still mode-aware — the flat
     // light greys disappear entirely against a dark surface — but the ramp is
     // what decides the tone now, so a host that retunes its greys retunes the
     // illustration with them instead of leaving it behind.

@@ -27,6 +27,7 @@ import { Stack } from '@mui/material'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect } from 'react'
 import { useAuth, useSigninCheck } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { VisitorConsentPill } from '../visitor-consent.component'
 
 export interface AuthenticatingLayoutProps
@@ -100,11 +101,12 @@ function AuthenticatingLayout(props: AuthenticatingLayoutProps) {
           return
         }
         try {
-          const idToken = await user.getIdToken(true)
-          const response = await fetch('/api/auth/session', {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${idToken}` },
-          })
+          const response = await authorizedFetch(
+            user,
+            '/api/auth/session',
+            { method: 'POST' },
+            { forceRefresh: true },
+          )
           if (!response.ok) {
             console.error(
               '[auth] delegated mint failed before hand-off',

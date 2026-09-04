@@ -130,16 +130,28 @@ async function handler(request: Request): Promise<Response> {
       }
       const result = await eraseUser(uid)
       if (!result.ok) {
+        // Both refusals are 409, not 404: the account exists and nothing was
+        // erased, which is a conflict to resolve rather than a missing thing.
+        // `shared-address` means a second account holds one of this account's
+        // addresses, so erasing its mail would destroy that account's history
+        // too — a decision about two real customers, which `eraseUser` hands
+        // back rather than making.
+        const conflict =
+          result.skippedReason === 'owns-orgs' ||
+          result.skippedReason === 'shared-address'
         return Response.json(
           {
             error:
               result.skippedReason === 'owns-orgs'
                 ? 'This person owns workspaces — transfer ownership or delete them first'
-                : 'No such account',
+                : result.skippedReason === 'shared-address'
+                  ? 'Another account holds one of this person’s email addresses — erasing would delete their mail too'
+                  : 'No such account',
             skippedReason: result.skippedReason,
             blockers: result.blockers,
+            sharedAddresses: result.sharedAddresses,
           },
-          { status: result.skippedReason === 'owns-orgs' ? 409 : 404 },
+          { status: conflict ? 409 : 404 },
         )
       }
       await firebaseAdmin
@@ -200,6 +212,59 @@ async function handler(request: Request): Promise<Response> {
       }
       if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         return Response.json({ error: 'Enter a valid email' }, { status: 400 })
+      }
+      /*
+       * THE ADDRESS BEING REPLACED, KEPT — or the mail under it is lost.
+       *
+       * The delivery log and the suppression list are both keyed by
+       * `sha256(address)`. The moment this `updateUser` lands, the Auth record
+       * is the only place the OLD address existed, and after it there is no
+       * way to derive the hash its history is filed under. The staff card
+       * would then show an empty table for a person we demonstrably emailed,
+       * and erasure would walk straight past that history.
+       *
+       * Written into `users/{uid}/emails` — the store that already exists for
+       * this (AGL-2486) — rather than a new `previousEmail` field. It is
+       * bounded, it is already server-write-only, and `recursiveDelete` on
+       * erasure already clears it, so the retained address does not become a
+       * third place personal data outlives a deletion request.
+       *
+       * `verified: false` and NO index claim: this is a record that the
+       * account held the address, not a live identifier. Marking it verified
+       * would make a removed address match invitations.
+       *
+       * ⚠️ Only from here forward. Addresses changed before this existed left
+       * nothing behind and their history is not recoverable by inference —
+       * the old hash cannot be derived from an address nobody kept.
+       */
+      const replacing = email && email !== target.email ? target.email : null
+      if (replacing) {
+        await firebaseAdmin
+          .app()
+          .firestore()
+          .collection('users')
+          .doc(uid)
+          .collection('emails')
+          .doc(replacing)
+          .set(
+            {
+              address: replacing,
+              verified: false,
+              primary: false,
+              source: 'former-primary',
+              retainedAtMs: Date.now(),
+            },
+            { merge: true },
+          )
+          .catch((error: unknown) => {
+            // Best-effort: a staff identity edit must not fail because a
+            // bookkeeping write did. Loud, because what is lost is the only
+            // handle on that address's mail.
+            console.error(
+              '[admin/users/manage] retaining the replaced address failed',
+              error,
+            )
+          })
       }
       await targetAuth.updateUser(uid, {
         displayName: displayName || undefined,

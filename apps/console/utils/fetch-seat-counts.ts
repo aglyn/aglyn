@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+
 /** What the org roster totals to, counted server-side. */
 export interface SeatCounts {
   /**
@@ -63,11 +65,9 @@ export async function fetchSeatCounts(
 ): Promise<SeatCounts | null> {
   if (!orgId) return null
   try {
-    const idToken = await user?.getIdToken?.()
-    if (!idToken) return null
-    const response = await fetch(
+    const response = await authorizedFetch(
+      user,
       `/api/orgs/members?orgId=${encodeURIComponent(orgId)}&counts=1`,
-      { headers: { Authorization: `Bearer ${idToken}` } },
     )
     if (!response.ok) return null
     const payload = (await response.json().catch(() => null)) as {

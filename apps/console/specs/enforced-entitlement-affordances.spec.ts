@@ -143,7 +143,7 @@ describe('AGL-2081 · enforced entitlements have a console affordance', () => {
     // On ADMIN since AGL-1485, with the Custom domain section it belongs to:
     // the badge is a fact about the published site, so it sits beside the
     // domain it is published on.
-    // Moved with the Domain SECTION when site admin became routes (AGL-693) —
+    // Moved with the Domain SECTION when site admin became routes (AGL-2501) —
     // same invariant, same card, still beside the domain it is a fact about.
     const page = source(
       'app/(app)/[orgSlug]/hosts/[host]/admin/(sections)/domain/page.tsx',

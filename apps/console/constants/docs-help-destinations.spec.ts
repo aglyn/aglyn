@@ -60,8 +60,6 @@ const APP_ROOT = join(REPO_ROOT, 'apps/console/app')
  * topic was hard to choose.
  */
 const NO_HELP: Record<string, string> = {
-  'apps/console/app/(app)/(home)/page.tsx':
-    'Org jump page — a workspace picker with no subject of its own. Every destination it offers carries its own help.',
 }
 
 /**

@@ -279,7 +279,7 @@ describe('THE STATUS CHANGE IS WHAT THE QUEUE WRITES BACK', () => {
     expect(state.audit).toHaveLength(1)
     expect(state.audit[0]).toMatchObject({
       action: 'marketplace-report-status',
-      targetId: PHISHING,
+      target: `marketplaceReports/${PHISHING}`,
       actorEmail: 'staff@aglyn.com',
       before: { status: 'open' },
       after: {
@@ -366,5 +366,63 @@ describe('the reporter’s account is a super-tier fact', () => {
     const body = await (await get()).json()
     expect(body.actorRole).toBe('support')
     expect(body.identityVisible).toBe(false)
+  })
+})
+
+/**
+ * THE ROW HAS TO BE RETRIEVABLE BY WHAT IT ACTED ON.
+ *
+ * This writer recorded `targetType`/`targetId` and no `target`. Nothing reads
+ * either of those two, and `target` is what every reader of `adminAudit` looks
+ * up by — the audit log page filters and exports it, the org page matches it
+ * by substring. A moderation decision was therefore stored and unreachable by
+ * the thing it decided about, which is the same silence the queue itself was
+ * built to end.
+ */
+describe('the audit row can be found by what it acted on', () => {
+  it('targets the report document the route actually mutates', async () => {
+    await post({ id: PHISHING, status: 'actioned', resolution: 'Delisted.' })
+
+    expect(state.audit).toHaveLength(1)
+    expect(state.audit[0]).toMatchObject({
+      action: 'marketplace-report-status',
+      scope: 'marketplaceReport',
+      target: `marketplaceReports/${PHISHING}`,
+      // Kept beside it: a year later the report id alone says nothing about
+      // which listing was judged.
+      listingId: 'listing-1',
+    })
+    // Superseded, and actively misleading while they stood — `targetType`
+    // here said `marketplaceReport` while the same key on the report document
+    // says `listing` or `review`.
+    expect(state.audit[0]).not.toHaveProperty('targetType')
+    expect(state.audit[0]).not.toHaveProperty('targetId')
+  })
+
+  it('names the review author when a REVIEW was reported', async () => {
+    await post({ id: SPAM, status: 'actioned', resolution: 'Review removed.' })
+
+    // A review document is keyed by its author's uid, so this decision lands
+    // on a person — the same subject a takedown of that review records.
+    expect(state.audit[0]).toMatchObject({ subjectUid: 'user-3' })
+  })
+
+  it('names NOBODY when a LISTING was reported', async () => {
+    // CONTROL. A listing's publisher is an ORGANIZATION, not a person. There
+    // is no uid to name, and resolving one from the org roster would file a
+    // moderation decision under whichever member answered the lookup.
+    await post({ id: PHISHING, status: 'dismissed', resolution: 'No breach.' })
+
+    expect(state.audit[0]).not.toHaveProperty('subjectUid')
+  })
+
+  it('never writes the reporter into the audit row', async () => {
+    // CONTROL on the tier boundary. This route withholds `reporterUid` from
+    // staff below `super`, and `adminAudit` is readable by ANY staff role —
+    // so naming the reporter here would hand every support session the
+    // identity the queue above refuses them.
+    await post({ id: PHISHING, status: 'actioned', resolution: 'Delisted.' })
+
+    expect(JSON.stringify(state.audit[0])).not.toContain('user-7')
   })
 })

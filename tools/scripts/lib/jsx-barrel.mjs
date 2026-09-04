@@ -146,12 +146,26 @@ export function readBarrelSpecifiers(source) {
  * `createResolver`'s existing contract, and it is exactly the signal we
  * want, since an unresolvable bare specifier IS a third-party edge.
  *
+ * `staticOnly` narrows the walk to edges a module graph resolves BEFORE the
+ * entry can run: `import()` expressions are skipped, along with everything only
+ * they reach. The barrel pins leave it off, because a barrel that reaches a
+ * heavy package behind a lazy boundary has still put that package in the repo's
+ * dependency surface. A first-load WEIGHT measurement is the opposite question
+ * — a lazy chunk costs a visitor nothing until something asks for it — so
+ * `lib/tenant-page-weight.mjs` turns it on.
+ *
  * @param {object} io
  * @param {string} io.entry absolute path to the barrel
  * @param {(file: string) => string} io.read
  * @param {(specifier: string, fromFile: string) => string | null} io.resolve
+ * @param {boolean} [io.staticOnly] skip `import()` edges
  */
-export function collectBarrelGraph({ entry, read, resolve }) {
+export function collectBarrelGraph({
+  entry,
+  read,
+  resolve,
+  staticOnly = false,
+}) {
   const modules = new Set()
   /** package → the file that first pulled it in, for a blameable message. */
   const packages = new Map()
@@ -172,7 +186,8 @@ export function collectBarrelGraph({ entry, read, resolve }) {
       continue
     }
 
-    for (const { specifier } of readImports(source)) {
+    for (const { specifier, kind } of readImports(source)) {
+      if (staticOnly && kind === 'dynamic') continue
       const resolved = resolve(specifier, file)
       if (resolved) {
         if (!modules.has(resolved)) queue.push(resolved)

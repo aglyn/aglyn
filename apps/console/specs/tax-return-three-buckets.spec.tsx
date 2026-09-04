@@ -241,9 +241,13 @@ describe('the staff tax-return page renders all three buckets (AGL-2163)', () =>
     expect(text).toContain('$12.00') // tax refunded
     expect(text).toContain('$78.00') // net, the remittable figure
     expect(text).toMatch(/Tax collected, net/i)
-    // The reason it carries no jurisdiction, said on screen rather than left
-    // for someone to wonder about when it is missing from the table below.
-    expect(text).toMatch(/No buyer address is stored/i)
+    // Why part of it may carry no jurisdiction, said on screen rather than
+    // left for someone to wonder about when a period does not fully break
+    // down by state. This fixture is a pre-AGL-2137 payload — 11 rows, all
+    // of them unattributed and no `byJurisdiction` at all — so it also pins
+    // that the page still renders an older response without inventing one.
+    expect(text).toMatch(/carry no jurisdiction and are counted as such/i)
+    expect(text).toMatch(/Marketplace rows with no stated jurisdiction/i)
   })
 
   it("says plainly that neither bucket is in the Webfile figures", async () => {

@@ -30,6 +30,16 @@ export const ID: Aglyn.ComponentId = 'searchBox'
 
 export interface SearchBoxProps {
   placeholder?: string
+  /**
+   * What the field starts with (AGL-2513). The results page prefills the
+   * query it is showing, so a reader can refine it where they are rather
+   * than going back for the box they typed into.
+   *
+   * Uncontrolled on purpose: this component holds no state and issues no
+   * request, and a `value` would freeze the field the moment the reader
+   * typed into it.
+   */
+  defaultValue?: string
 }
 
 /**
@@ -40,13 +50,14 @@ export interface SearchBoxProps {
  */
 const SearchBox = forwardRef<HTMLFormElement, SearchBoxProps>(
   (props, ref) => {
-    const { placeholder, ...rest } = props
+    const { placeholder, defaultValue, ...rest } = props
     return (
       <form ref={ref} action="/search" method="get" role="search" {...rest}>
         <TextField
           name="q"
           size="small"
           placeholder={placeholder || 'Search…'}
+          defaultValue={defaultValue || ''}
           slotProps={{
             input: {
               endAdornment: (
@@ -80,6 +91,14 @@ export const schema: Aglyn.ComponentSchema<SearchBoxProps> = {
       description: 'Placeholder text inside the search field.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'Placeholder',
+    },
+    {
+      name: 'defaultValue',
+      description:
+        'Text the field starts with. The search results page fills in the ' +
+        'query it is showing.',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      label: 'Starting text',
     },
   ],
 }

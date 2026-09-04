@@ -248,3 +248,100 @@ describe('rateLimitedRetryAtMs', () => {
     expect(rateLimitedRetryAtMs({ sent: false, reason: 'rate-limited' })).toBe(0)
   })
 })
+
+/**
+ * THE PROVIDER'S OWN 429, WHICH IS NOT A REJECTION.
+ *
+ * The distinction is load-bearing rather than cosmetic. `rejected` is
+ * terminal per recipient — a batch settles that address and never addresses
+ * it again — and a 429 says nothing about the address at all. Classified as
+ * `rejected`, one rate-limited burst silently drops the rest of a campaign's
+ * audience while the campaign closes as complete and the `sent` figure stays
+ * honest, so no rate on the report can reveal it.
+ *
+ * The header read is exercised THROUGH `sendEmail` rather than only against
+ * the helper, because reading a `retry-after` correctly is worth nothing if
+ * the send path does not perform the read.
+ */
+describe('a 429 from the provider', () => {
+  const originalFetch = global.fetch
+  const originalEnv = { ...process.env }
+
+  /** A provider that refuses with `status` and only the headers named. */
+  function answerWith(status: number, headers: Record<string, string> = {}) {
+    global.fetch = (async () => ({
+      ok: false,
+      status,
+      headers: { get: (name: string) => headers[name.toLowerCase()] ?? null },
+      text: async () => JSON.stringify({ name: 'rate_limit_exceeded' }),
+      json: async () => ({}),
+    })) as unknown as typeof fetch
+  }
+
+  beforeEach(() => {
+    process.env.RESEND_API_KEY = 're_test_key_not_real'
+    process.env.USAGE_EMAIL_FROM = FROM
+    resetEmailSendGovernorForTests()
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    jest.spyOn(console, 'error').mockImplementation(() => undefined)
+  })
+
+  afterEach(() => {
+    global.fetch = originalFetch
+    process.env = { ...originalEnv }
+    resetEmailSendGovernorForTests()
+    jest.restoreAllMocks()
+  })
+
+  const send = () => sendEmail({ to: 'a@example.com', subject: 'Hi', text: 'x' })
+
+  it('reports as a deferral a caller can retry, not as a rejection', async () => {
+    answerWith(429, { 'retry-after': '2' })
+    const before = Date.now()
+    const result = await send()
+
+    expect(result.sent).toBe(false)
+    expect((result as any).reason).toBe('rate-limited')
+    // The status is kept so a log can tell the two sources of `rate-limited`
+    // apart — the governor refuses before the network and sets none.
+    expect((result as any).status).toBe(429)
+    expect(rateLimitedRetryAtMs(result)).toBeGreaterThanOrEqual(before + 2_000)
+  })
+
+  it('falls back to `ratelimit-reset` when no `retry-after` is sent', async () => {
+    answerWith(429, { 'ratelimit-reset': '5' })
+    const before = Date.now()
+    expect(rateLimitedRetryAtMs(await send())).toBeGreaterThanOrEqual(
+      before + 5_000,
+    )
+  })
+
+  it('waits one window when the response names neither header', async () => {
+    // `Number(null)` is 0, so a missing header read carelessly means "retry
+    // immediately" — and a caller would spin against the limit it just hit.
+    answerWith(429)
+    const before = Date.now()
+    expect(rateLimitedRetryAtMs(await send())).toBeGreaterThanOrEqual(
+      before + 1_000,
+    )
+  })
+
+  it('clamps a retry instant the provider asks an absurd wait for', async () => {
+    // Read off the network and handed to a scheduler: a header of one day
+    // would park a campaign for a day on one response nobody saw.
+    answerWith(429, { 'retry-after': '86400' })
+    const before = Date.now()
+    expect(rateLimitedRetryAtMs(await send())).toBeLessThanOrEqual(
+      before + 3_600_000 + 5_000,
+    )
+  })
+
+  it('leaves every OTHER refusal a rejection', async () => {
+    // The control on the branch above: widening it to all of `!response.ok`
+    // would make a malformed payload retryable forever.
+    answerWith(422)
+    const result = await send()
+    expect((result as any).reason).toBe('rejected')
+    expect(rateLimitedRetryAtMs(result)).toBeNull()
+  })
+})

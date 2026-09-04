@@ -198,6 +198,19 @@ export async function listAccountEmails(
       },
       { merge: true },
     )
+  /*
+   * CLEAR THE FLAG OFF WHATEVER USED TO HOLD IT.
+   *
+   * This branch runs when Auth's address is not among the stored rows — which
+   * is exactly what a staff email change produces, since it writes the Auth
+   * record directly. Setting the new row primary without clearing the old one
+   * left TWO rows flagged primary, and every reader that takes the first match
+   * then answers with whichever Firestore returned first.
+   *
+   * Only when there were pre-existing rows: a first-ever seed has nothing to
+   * reconcile and must not pay for a second read and a batch commit.
+   */
+  if (rows.length > 0) await reconcilePrimaryFlag(uid, primaryAddress)
   // Claim the index for it too, but never steal one: an address already
   // indexed to somebody else is a real conflict that a backfill must not
   // paper over. Best-effort — a failed claim must not stop someone reading
@@ -634,11 +647,147 @@ export async function findAccountByVerifiedAlias(
   return { uid, address }
 }
 
+/*==========================================
+ * PROVIDER-SUPPLIED ADDRESSES.
+ *
+ * A federated provider asserts its own address, and `providerData[].email`
+ * can differ from the primary. Until now nothing registered one: it was
+ * absent from `users/{uid}/emails`, held no `emailIdentityIndex` entry, and
+ * so lived entirely OUTSIDE the uniqueness guard — while remaining a real
+ * mailbox, a working sign-in identifier, and a recipient of real mail.
+ *
+ * The consequence is a collision the guard was built to prevent and could not
+ * see: one address that is one account's primary and another account's Google
+ * provider address. Anything mapping address → uid then answers confidently
+ * and wrongly.
+ *=========================================*/
+
+/** What one {@link registerProviderAddresses} pass did. */
+export interface ProviderAddressRegistration {
+  /** Addresses newly claimed for this account. */
+  claimed: string[]
+  /** Addresses another account already holds — recorded, never taken. */
+  conflicted: string[]
+}
+
+/**
+ * Providers whose asserted address counts as proven.
+ *
+ * `password` is excluded because its address is the primary, already handled,
+ * and its verification state lives on the Auth record rather than in the
+ * provider entry. Everything else here is a federated IdP that has itself
+ * established control of the mailbox — the same standard
+ * {@link confirmAccountEmail} applies, met by a different party.
+ */
+function isFederatedProvider(providerId: string | null | undefined): boolean {
+  const id = String(providerId ?? '')
+  return id !== '' && id !== 'password' && id !== 'phone' && id !== 'anonymous'
+}
+
+/**
+ * Register the addresses a federated provider asserts for this account.
+ *
+ * Called from the session mint — the one place every interactive sign-in
+ * passes through with a verified token — and BEST-EFFORT by contract.
+ *
+ * ## Three rules, in priority order
+ *
+ * 1. **Sign-in must not depend on this.** It is bookkeeping. A person locked
+ *    out because an index write failed is a worse outcome than the collision
+ *    it was preventing, so every failure here is swallowed and logged, and
+ *    the caller runs it off the critical path.
+ * 2. **A claim never takes an entry another account holds.**
+ *    {@link claimIndexEntry} already refuses; what was missing is that the
+ *    refusal went nowhere. A conflict now lands on the row as
+ *    `indexConflict`, which the staff account page reads — silently skipping
+ *    is exactly what produced the live collision.
+ * 3. **A conflicted address is stored UNVERIFIED.** This is the conservative
+ *    half and it matters: `verifiedAccountEmails` feeds invitation matching,
+ *    so marking a contested address verified on both accounts would make one
+ *    invitation match two people. Unverified, the row is a record that the
+ *    address exists on this account and grants nothing.
+ *
+ * ⛔ It does not merge, reassign or disable anything. Two real accounts
+ * sharing an address is a human decision — the row makes it visible and stops
+ * there.
+ *
+ * ⚠️ Registering here CANNOT reach SSO provisioning. `sso-jit` reads the
+ * address the IdP asserted at sign-in and never consults this store;
+ * `apps/console/specs/account-emails-never-reach-sso.spec.ts` fails if that
+ * stops being true. That guard is what makes this safe to write at all.
+ */
+export async function registerProviderAddresses(
+  uid: string,
+  record: {
+    email?: string | null
+    providerData?: readonly {
+      providerId?: string | null
+      email?: string | null
+    }[]
+  } | null,
+): Promise<ProviderAddressRegistration> {
+  const claimed: string[] = []
+  const conflicted: string[] = []
+  const primary = normalizeAccountEmail(record?.email ?? null)
+
+  const candidates = new Set<string>()
+  for (const provider of record?.providerData ?? []) {
+    if (!isFederatedProvider(provider?.providerId)) continue
+    const address = normalizeAccountEmail(provider?.email ?? null)
+    // The primary is registered by `listAccountEmails`' own backfill, on the
+    // Auth record's authority. Re-doing it here would race that seed.
+    if (address === null || address === primary) continue
+    candidates.add(address)
+  }
+
+  for (const address of candidates) {
+    try {
+      const won = await claimIndexEntry(address, uid)
+      if (won) claimed.push(address)
+      else conflicted.push(address)
+
+      await emailsRef(uid)
+        .doc(address)
+        .set(
+          {
+            address,
+            // Only when the claim was won — see rule 3.
+            verified: won,
+            primary: false,
+            source: 'provider',
+            ...(won
+              ? { verifiedAt: FieldValue.serverTimestamp(), indexConflict: false }
+              : { indexConflict: true, indexConflictAtMs: Date.now() }),
+            createdAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        )
+    } catch (error) {
+      // Rule 1. Never rethrow: the caller is a sign-in.
+      console.error('[account-emails] provider address registration failed', uid, error)
+    }
+  }
+
+  if (conflicted.length) {
+    // Loud, per rule 2 — a conflict that only ever landed in a document would
+    // be discovered by whoever happened to open the right page.
+    console.error(
+      '[account-emails] provider address already claimed by another account',
+      JSON.stringify({ uid, conflicted: conflicted.length }),
+    )
+  }
+  return { claimed, conflicted }
+}
+
 /**
  * Every VERIFIED address on an account, for matching an invitation.
  *
  * Bounded by {@link MAX_ACCOUNT_EMAILS}, which is what makes it safe to feed
  * straight into a Firestore `in` query (limit 30).
+ *
+ * ⛔ NOT the answer to "every address this account holds" — it is verified-only,
+ * subcollection-only and silently truncating, all correct here and all wrong
+ * there. `account-addresses.ts` is that resolver and explains why at length.
  */
 export async function verifiedAccountEmails(uid: string): Promise<string[]> {
   const snapshot = await emailsRef(uid).get()

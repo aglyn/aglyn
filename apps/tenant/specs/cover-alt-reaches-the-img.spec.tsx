@@ -39,6 +39,16 @@ import { act, render } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import CatchAllPage from '../app/[host]/[[...slug]]/catch-all-client'
 
+/**
+ * The plugin gate loads nothing. The cover `<img>` is plain JSX in
+ * `catch-all-client.tsx` and every render here passes `nodes={null}`, so no
+ * canvas node — and therefore no plugin-registered component — can supply the
+ * element this file reads `alt` off. See the stub for the measurement.
+ */
+jest.mock('../utils/site-plugin-loader', () =>
+  require('./site-plugin-loader-empty-manifest'),
+)
+
 /** See `tenant-media-refs.spec.tsx`: the first render suspends. */
 const renderSettled = async (element: ReactElement) => {
   let container!: HTMLElement

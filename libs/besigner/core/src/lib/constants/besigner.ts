@@ -31,7 +31,7 @@ export enum BesignerPanelTabFlag {
   ELEMENTS_TREE = 0x1,
   ELEMENT_BROWSE = 0x2,
   /**
-   * Retired (AGL-1486). The Info panel's two accordions — the component's own
+   * Retired. The Info panel's two accordions — the component's own
    * description, and the element/parent/component/plugin ids — moved to the
    * bottom of Attributes, where they are reference detail beside the fields
    * they describe rather than a tab of their own.

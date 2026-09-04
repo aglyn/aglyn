@@ -24,6 +24,7 @@ import {
   type Firestore,
 } from 'firebase/firestore'
 import fetchSeatCounts from './fetch-seat-counts'
+import { overLimitRows, overLimitSummaryLine } from './over-limit'
 
 /**
  * Roles that count as holding a site — the same set `use-org-hosts` filters
@@ -75,6 +76,12 @@ async function countOrgSites(
  * Both counts return null on failure and are REPORTED as unchecked rather than
  * omitted, so the summary can never read as a clean bill of health it did not
  * earn: the reassuring failure is the dangerous one here.
+ *
+ * The COUNTING is here; the COMPARISON is in `over-limit.ts`, shared with the
+ * server-side downgrade refusal. This surface tells the customer what a plan
+ * change would leave them over; `/api/billing/subscription` refuses the change
+ * while it would. A refusal that disagreed with the warning that preceded it
+ * would be worse than either alone, so there is one rule and two readers.
  */
 export async function overLimitSummary(options: {
   firestore: Firestore
@@ -88,8 +95,9 @@ export async function overLimitSummary(options: {
   siteCount?: number | null
 }): Promise<string[]> {
   const { firestore, user, orgId, targetPlan } = options
-  const target = PLAN_ENTITLEMENTS[targetPlan]
-  if (!target || !orgId) return []
+  // An unknown plan is refused BEFORE the counts, so a typo costs no reads.
+  // The comparison itself lives in `over-limit.ts`; this is existence only.
+  if (!PLAN_ENTITLEMENTS[targetPlan] || !orgId) return []
   const [seatCounts, datasetCount, siteCount] = await Promise.all([
     fetchSeatCounts(user, orgId),
     getCountFromServer(collection(firestore, 'orgs', orgId, 'datasets'))
@@ -99,39 +107,23 @@ export async function overLimitSummary(options: {
       ? countOrgSites(firestore, user?.uid, orgId)
       : Promise.resolve(options.siteCount),
   ])
-  const over: string[] = []
-  if (siteCount == null) {
-    over.push(
-      `sites — could not be checked (${targetPlan} includes ` +
-        `${target.hostLimit})`,
-    )
-  } else if (siteCount > target.hostLimit) {
-    over.push(`${siteCount} sites (${targetPlan} includes ${target.hostLimit})`)
-  }
-  // An unanswerable count is NOT "you are under the limit" — say so rather
-  // than omit the row, so the confirmation cannot read as a clean bill of
-  // health it never earned.
-  if (seatCounts == null) {
-    over.push(
-      `team seats — could not be checked (${targetPlan} includes ` +
-        `${target.managersPerOrg})`,
-    )
-  } else if (seatCounts.managerSeats > target.managersPerOrg) {
-    over.push(
-      `${seatCounts.managerSeats} team members (${targetPlan} includes ${target.managersPerOrg})`,
-    )
-  }
-  if (datasetCount == null) {
-    over.push(
-      `datasets — could not be checked (${targetPlan} includes ` +
-        `${target.maxDatasetsPerOrg})`,
-    )
-  } else if (datasetCount > target.maxDatasetsPerOrg) {
-    over.push(
-      `${datasetCount} datasets (${targetPlan} includes ${target.maxDatasetsPerOrg})`,
-    )
-  }
-  return over
+  // An unanswerable count is NOT "you are under the limit" — `overLimitRows`
+  // emits a row for it rather than omitting it, so the confirmation cannot
+  // read as a clean bill of health it never earned.
+  //
+  // Every row measures what the plan INCLUDES (`hostLimit`, `managersPerOrg`,
+  // `datasetsPerOrg`), never the purchase CEILING (`maxDatasetsPerOrg` and
+  // friends) — the two are far apart, Starter includes 3 datasets and sells up
+  // to 10, and measuring against the ceiling printed a number the word
+  // "includes" makes false while clearing an org that a plan change strands.
+  return overLimitRows(
+    {
+      siteCount,
+      managerSeats: seatCounts == null ? null : seatCounts.managerSeats,
+      datasetCount,
+    },
+    targetPlan,
+  ).map((row) => overLimitSummaryLine(row, targetPlan))
 }
 
 export default overLimitSummary

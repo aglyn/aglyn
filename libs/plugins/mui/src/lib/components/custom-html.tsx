@@ -212,6 +212,7 @@ export const schema: Aglyn.ComponentSchema<CustomHtmlProps> = {
       label: 'Embed height (px)',
       description: 'Iframe height in embed mode (default 320).',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
+      type: 'number',
     },
   ],
 }
