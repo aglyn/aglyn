@@ -53,8 +53,14 @@ import {
  * Aglyn's own deployment sets `NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL`
  * (`.env.example`), so its copy is unchanged. Dot notation is load-bearing:
  * Next substitutes `process.env.NAME` textually and never the bracket form.
+ *
+ * Used by every sentence that ends a person's journey: a disabled account,
+ * and the two failures they cannot act on at all — the generic fallback and
+ * an internal error. Those last two are the ones a stranger meets at the
+ * signup form, where a dead end with no address is indistinguishable from
+ * the product being broken on purpose.
  */
-const DISABLED_ACCOUNT_CONTACT: string =
+const OPERATOR_CONTACT: string =
   (typeof process !== 'undefined' &&
     process.env?.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL?.trim()) ||
   'your administrator'
@@ -120,8 +126,10 @@ export const AuthErrorNotice = {
 }
 
 export const AuthErrorMessage: Partial<Record<AuthCode, string>> = {
-  general:
-    'An error has occurred. If this issue persists please contact the system administrator.',
+  // "the system administrator" is nobody a person signing up can find. The
+  // fallback sentence is the last thing they read before giving up, so it
+  // names a reachable address and says the attempt is safe to repeat.
+  general: `An error has occurred. Please try again — if it keeps happening, contact ${OPERATOR_CONTACT}.`,
   [AuthErrorCodes.ADMIN_ONLY_OPERATION]:
     'You are not authorized to perform this action.',
   [AuthErrorCodes.ALREADY_INITIALIZED]:
@@ -145,7 +153,12 @@ export const AuthErrorMessage: Partial<Record<AuthCode, string>> = {
   [AuthErrorCodes.EXPIRED_POPUP_REQUEST]: 'Request timeout. Try again.',
   [AuthErrorCodes.INVALID_OOB_CODE]:
     'This link is invalid or has already been used. Request a new password reset link.',
-  [AuthErrorCodes.INTERNAL_ERROR]: 'An internal error occurred.',
+  // A server-side failure, and the only Auth code a person can do nothing
+  // about. It is also where a refusing `beforeUserCreated` blocking function
+  // surfaces, so this exact sentence is what a stranger sees when signup is
+  // broken platform-side. Say the fault is ours, that their details were not
+  // kept, and who to tell.
+  [AuthErrorCodes.INTERNAL_ERROR]: `Something went wrong on our end — no account was created and nothing you entered was saved. Please try again, and if it keeps happening contact ${OPERATOR_CONTACT}.`,
   [AuthErrorCodes.INVALID_API_KEY]: 'Invalid API key.',
   [AuthErrorCodes.INVALID_AUTH]:
     'Unable to perform action. Invalid authentication token.',
@@ -214,7 +227,7 @@ export const AuthErrorMessage: Partial<Record<AuthCode, string>> = {
   // this is the notice a locked-out person actually sees at sign-in. The
   // copy is the action, not the diagnosis — the reason lives with support.
   [AuthErrorCodes.USER_DISABLED]:
-    `This account is currently disabled. Contact ${DISABLED_ACCOUNT_CONTACT} to restore access.`,
+    `This account is currently disabled. Contact ${OPERATOR_CONTACT} to restore access.`,
   [AuthErrorCodes.USER_SIGNED_OUT]:
     'You have been signed out. Sign in again to continue.',
   [AuthErrorCodes.WEAK_PASSWORD]:

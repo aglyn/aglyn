@@ -77,8 +77,8 @@ const reRequire = (id: string): any =>
 
 const VAR = 'NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL'
 
-/** The `USER_DISABLED` copy as a fresh module load with `VAR` set to `value`. */
-function disabledCopyWith(value: string | undefined): string {
+/** One entry's copy as a fresh module load with `VAR` set to `value`. */
+function copyWith(code: string, value: string | undefined): string {
   const before = process.env[VAR]
   if (value === undefined) delete process.env[VAR]
   else process.env[VAR] = value
@@ -86,9 +86,7 @@ function disabledCopyWith(value: string | undefined): string {
   let copy = ''
   try {
     jest.isolateModules(() => {
-      copy = reRequire('@aglyn/shared-data-enums').AuthErrorMessage[
-        AuthErrorCodes.USER_DISABLED
-      ]
+      copy = reRequire('@aglyn/shared-data-enums').AuthErrorMessage[code]
     })
   } finally {
     if (before === undefined) delete process.env[VAR]
@@ -97,6 +95,10 @@ function disabledCopyWith(value: string | undefined): string {
   }
   return copy
 }
+
+/** The `USER_DISABLED` copy as a fresh module load with `VAR` set to `value`. */
+const disabledCopyWith = (value: string | undefined): string =>
+  copyWith(AuthErrorCodes.USER_DISABLED, value)
 
 describe('USER_DISABLED sign-in copy names the operator (AGL-2047)', () => {
   it('is registered at all — the map still carries the code', () => {
@@ -137,5 +139,74 @@ describe('USER_DISABLED sign-in copy names the operator (AGL-2047)', () => {
     const copy = disabledCopyWith('support@aglyn.com')
 
     expect(copy).toContain('support@aglyn.com')
+  })
+})
+
+/**
+ * The two dead ends a stranger meets at the signup form (AGL-2582).
+ *
+ * `INTERNAL_ERROR` is where a refusing `beforeUserCreated` blocking function
+ * surfaces, so it is the literal sentence shown while signup is broken
+ * platform-side — as it was from 2026-09-01, when a fail-closed lock read
+ * refused every account creation and the form said only "An internal error
+ * occurred." A person cannot tell that from "this product does not work",
+ * and there was nobody named to tell.
+ *
+ * `general` is the fallback for any code the map does not carry, so it has
+ * the same job. It used to name "the system administrator", which on a
+ * hosted signup form is nobody the reader can find.
+ *
+ * Both are asserted through the same fresh-module-load helper as the
+ * `USER_DISABLED` cases above, and for the same reason: the address is
+ * captured at import time.
+ */
+describe('the signup dead ends name a reachable contact (AGL-2582)', () => {
+  const DEAD_ENDS: Array<[label: string, code: string]> = [
+    ['the generic fallback', 'general'],
+    ['an internal error', AuthErrorCodes.INTERNAL_ERROR],
+  ]
+
+  it.each(DEAD_ENDS)('%s is registered at all', (_label, code) => {
+    expect(typeof AuthErrorMessage[code as never]).toBe('string')
+  })
+
+  it.each(DEAD_ENDS)('%s names the configured operator', (_label, code) => {
+    expect(copyWith(code, 'ops@acme.example')).toContain('ops@acme.example')
+  })
+
+  it.each(DEAD_ENDS)(
+    '%s names no address when none is configured',
+    (_label, code) => {
+      // Same rule as USER_DISABLED: no `@` rather than the wrong `@`.
+      expect(copyWith(code, undefined)).not.toContain('@')
+    },
+  )
+
+  it.each(DEAD_ENDS)(
+    '%s never says "system administrator"',
+    (_label, code) => {
+      // The phrase this replaced. It reads as an IT department the reader is
+      // assumed to have, which a person signing up for a hosted product does
+      // not.
+      expect(copyWith(code, 'ops@acme.example').toLowerCase()).not.toContain(
+        'system administrator',
+      )
+    },
+  )
+
+  it('an internal error says the attempt was not kept', () => {
+    // The specific thing the old sentence failed to say. Someone who has just
+    // typed a password needs to know no half-account exists before they will
+    // try again.
+    const copy = copyWith(AuthErrorCodes.INTERNAL_ERROR, 'ops@acme.example')
+
+    expect(copy).toMatch(/no account was created/i)
+    expect(copy).toMatch(/try again/i)
+  })
+
+  it('positive control — our own deployment prints its address', () => {
+    for (const [, code] of DEAD_ENDS) {
+      expect(copyWith(code, 'support@aglyn.com')).toContain('support@aglyn.com')
+    }
   })
 })
