@@ -1,0 +1,109 @@
+name: Funnel conversion alarm
+
+# The alarm that was missing on 2026-09-01 (AGL-2587).
+#
+# That day `/signup` was viewed 14 times by 5 people and `sign_up` fired zero
+# times, on the biggest traffic day of its period, because the signup path was
+# broken (AGL-2581). Both halves of that fact were sitting in GA4 the whole
+# time and nothing looked at the ratio between them. This looks at it.
+#
+# WHAT A RED MEANS: people reached a door and the door opened for nobody. That
+# is either a broken door or an event that stopped being emitted, and both are
+# incidents — but they are DIFFERENT incidents, so open the page in a browser
+# before concluding it is the instrumentation. `org_created` had never once
+# arrived in the property's whole history while nine workspaces existed, so
+# "the event is missing" is not the safe assumption here; it is a real
+# possibility with a precedent.
+#
+# WHAT A RED DOES NOT MEAN: that traffic is down. Views are the DENOMINATOR.
+# A quiet window is green by construction — see the floors in
+# `tools/scripts/lib/funnel-conversion-alarm.mjs`, which exist so a single
+# curious visitor never alarms and so the channel stays worth reading.
+#
+# ⚠️ THE WINDOW IS DELIBERATELY STALE. GA4's batch tables trail live traffic,
+# and a half-processed day is indistinguishable from an outage: views present,
+# conversions not yet counted. So the graded window ends two days back. This
+# alarm is late on purpose. Do not "fix" the lag by grading today — that is
+# the exact mistake this issue was written to avoid making twice.
+#
+# Runs on GitHub's runners rather than ours, for the same reason the uptime
+# probe does: a monitor hosted on the thing it monitors cannot observe its own
+# outage.
+
+on:
+  schedule:
+    # Once a day. The window is three days wide and slides, so a red persists
+    # across runs until the traffic that caused it ages out — which is the
+    # intended behaviour: an unconverted cohort does not stop mattering
+    # because a day passed.
+    - cron: '20 14 * * *'
+  workflow_dispatch:
+    inputs:
+      as_of:
+        description: 'Grade the window a past day would have graded (YYYY-MM-DD)'
+        required: false
+        type: string
+      test_notification:
+        description: 'Send a clearly-labelled TEST message to #ci and stop'
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: funnel-conversion-alarm
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  grade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      # No install step, matching the uptime probe: the check uses built-in
+      # fetch and node:crypto only, so it cannot be broken by a dependency, a
+      # lockfile or a registry outage. A monitor that fails for reasons
+      # unrelated to what it monitors trains people to ignore it.
+
+      # Proving the path without waiting for an incident (the AGL-2533
+      # posture). A notifier whose only test is a real outage is unverifiable
+      # until the day it matters.
+      - name: TEST the notification path
+        if: github.event_name == 'workflow_dispatch' && inputs.test_notification
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: node tools/scripts/check-funnel-conversions.mjs --test
+
+      - name: Grade the funnel
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.test_notification) }}
+        env:
+          # The admin service account. It needs Viewer ON THE GA4 PROPERTY and
+          # `analyticsdata.googleapis.com` enabled on `aglyn-main` — neither is
+          # implied by its Firebase access, and confusing the two has already
+          # cost one wrong conclusion. `docs/ANALYTICS.md` has the details.
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'aglyn-main' }}
+          FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -uo pipefail
+          node tools/scripts/check-funnel-conversions.mjs \
+            ${{ inputs.as_of && format('--as-of={0}', inputs.as_of) || '' }} \
+            | tee funnel.txt
+          verdict=${PIPESTATUS[0]}
+          {
+            echo "### funnel conversion alarm"
+            echo
+            echo '```'
+            cat funnel.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$verdict"

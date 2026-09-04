@@ -258,6 +258,14 @@ async function handler(request: Request): Promise<Response> {
         subdomain,
         orgId: orgMembership.orgId,
         orgSlug: org?.['slug'] ?? null,
+        // The third org-creation door reports itself (AGL-2587). This route
+        // auto-provisions a workspace for an account that holds none, and
+        // nothing counted those: `org_created` is a browser event and the
+        // creation happens here, on the server, where there is no gtag and no
+        // consent state to consult. So the fact travels back in the response
+        // and the caller emits it through the same consent-gated transport as
+        // every other event.
+        orgCreated: orgMembership.created === true,
       },
       { status: 200 },
     )

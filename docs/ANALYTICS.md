@@ -7,7 +7,8 @@ than a silently-missing metric.
 
 Written for AGL-1561. Related: AGL-1538 (the GA properties themselves),
 AGL-1498 (visitor consent), AGL-1550 (why the tenant mounts sit above the
-plugin gate), AGL-1559 (the property consolidation).
+plugin gate), AGL-1559 (the property consolidation), AGL-2587 (the audience
+inventory, the credentials a script needs, and the conversion alarm).
 
 ---
 
@@ -1793,6 +1794,140 @@ notice, and everything above is a demonstration of that.
 
 ---
 
+## The audience inventory
+
+Read from the Admin API on 2026-09-04 (AGL-2587). Until then no audience
+definition existed anywhere in the repo, so an audience that was **already
+detecting a production incident** could not be reviewed, reasoned about or
+alerted on by anyone reading this checkout — "Stalled after signup" was
+reporting 1 of 3 active users stalled all the way through the AGL-2581 outage
+and its definition lived only in the GA4 UI.
+
+Re-read them with `analyticsadmin.googleapis.com` (see the next section for
+what that needs). **Audiences are `v1alpha` only** — the `v1beta` path returns
+an HTML 404, which reads like a permissions problem and is not one.
+
+| audience | id | created | membership | what it is for |
+| --- | --- | --- | --- | --- |
+| All Users | 3230030363 | 2022-02-05 | 540 d | GA4's own default. Not ours, not removable. |
+| Purchasers | 3230030364 | 2022-02-05 | 540 d | GA4's own default: anyone with a `purchase`. |
+| Aglyn · Stalled after signup | 15453693552 | 2026-08-18 | 7 d | The drop-off worth intervening on. |
+| Aglyn · Activated | 15454517243 | 2026-08-18 | never expires | GTM §6 activation rate, as a share of signups. |
+| Aglyn · Checkout abandoners | 15454588334 | 2026-08-18 | 7 d | Revenue left on the table. |
+| Aglyn · Paying customers (by org_plan) | 15460975200 | 2026-08-19 | 30 d | Everyone on a paid tier, for suppression and lookalikes. |
+
+The four Aglyn audiences, as defined:
+
+- **Aglyn · Stalled after signup** — across all sessions: INCLUDE anyone who
+  fired `sign_up`, EXCLUDE anyone who fired `site_published`, exclusion
+  permanent. Membership 7 days, so it is a rolling "signed up this week and
+  has not shipped anything" list rather than a growing pile.
+- **Aglyn · Activated** — across all sessions: INCLUDE `site_published` whose
+  `first_publish` parameter contains `true`, at any point in time. Membership
+  never expires: activation is a state you reach once, not one you fall out
+  of. Depends on `first_publish` being a **registered custom dimension**, which
+  it is — an unregistered param is collected but cannot be filtered on, and the
+  audience would silently match nobody.
+- **Aglyn · Checkout abandoners** — across all sessions: INCLUDE
+  `begin_checkout`, EXCLUDE `purchase`, exclusion permanent, 7-day membership.
+- **Aglyn · Paying customers (by org_plan)** — the USER-scoped custom
+  dimension `org_plan` in `starter, pro, business, scale, advanced, agency,
+  enterprise`, at any point in time. User-scoped, so it follows the person
+  rather than one event; 30-day membership so a lapsed subscriber ages out.
+
+⚠️ **Every one of these is only as good as the event under it**, and that is
+not a theoretical caveat here. Three of the four rest on `sign_up`,
+`site_published` or `begin_checkout` — events that fire from a browser, behind
+the consent gate, at the end of async handlers that navigate. `org_created`
+sat in exactly that position and arrived **zero** times in the property's
+entire history. An audience cannot tell "nobody did this" from "nobody
+reported doing this", and it will read as a clean, plausible zero either way.
+
+### Key events, and the two that are not
+
+Marked as key events: `purchase` (2022-02-05, GA4's own), `sign_up`
+(2026-08-14), `select_content` (2026-08-18), `site_published` (2026-08-18),
+`generate_lead` (2026-08-24).
+
+⛔ **`login` and `org_created` are NOT key events**, deliberately. `login` is a
+returning customer, not an acquisition, and marking it would put every daily
+sign-in into the conversion column and into any Ads import that follows it.
+`org_created` is a candidate once it is trusted — it had never arrived when
+this was written, and marking an event as a key event is **not retroactive**,
+so there is nothing to gain by starring it before it is known to fire.
+
+## Reading the property from a script
+
+Three separate facts have to be true, none of them implied by the others.
+Getting this wrong already cost one wrong conclusion, so it is written down
+rather than rediscovered.
+
+1. **`analyticsdata.googleapis.com` enabled on `aglyn-main`.** The Data API —
+   `runReport`, `runRealtimeReport`. Enabled 2026-09-04. Before that no
+   automation could read the funnel even if one had wanted to.
+2. **`analyticsadmin.googleapis.com` enabled on `aglyn-main`.** A *different*
+   service, and the one that answers for audiences, key events, data streams
+   and custom dimensions. Enabled 2026-09-04 (AGL-2587). Having the Data API
+   on says nothing about this one, and its refusal is a `SERVICE_DISABLED`
+   403 that reads like a missing role.
+3. **The admin service account holds Viewer on the property.** GA4 → Admin →
+   Property access management, added by email. Firebase project access does
+   **not** imply property access; they are different systems that happen to
+   share a project number.
+
+⛔ **The property access list contains an entry reading "Firebase project
+543499566626 viewer". That is a DIFFERENT PRINCIPAL** — the identity the
+Firebase↔GA4 link uses for itself — and it is not the admin service account.
+Seeing it and concluding "the service account already has access" is the
+specific mistake that has been made here once. Check for the account's own
+email address, not for anything with "Firebase" in the name.
+
+Two mechanical notes that cost time otherwise:
+
+- **Mint the token by JWT-bearer with scope
+  `https://www.googleapis.com/auth/analytics.readonly`.** `firebase-admin`'s
+  credential hands back a Firebase-scoped token, which GA4 refuses; the
+  service account is the same, the scope is not.
+  `tools/scripts/check-funnel-conversions.mjs` has the working exchange.
+- **The property's timezone is `America/Chicago`, so a GA4 "date" is not a UTC
+  date.** A workspace whose Firestore `createTime` is `2026-08-14T00:13Z` is a
+  2026-08-13 row in every GA4 report. Correlating the two without this makes
+  events look like they fired the day after the thing they describe.
+
+## The views-to-conversions alarm (AGL-2587)
+
+`.github/workflows/funnel-conversion-alarm.yml`, daily, announcing in `#ci`
+through the same webhook Main Gate uses. It grades `/signup` views against
+`sign_up`, and `/signin` views against `login`, over a rolling three-day
+window. Thresholds and grading live in
+`tools/scripts/lib/funnel-conversion-alarm.mjs` and are unit-tested against
+the real numbers below.
+
+It exists because on **2026-09-01** `/signup` was viewed 14 times by 5 people
+and `sign_up` fired zero times, on the biggest traffic day of its period,
+while the signup path was broken (AGL-2581). Neither number alarms alone —
+zero signups is a correct reading of a quiet Tuesday and page views are not a
+health metric — and the ratio between them was sitting in the property the
+whole time with nothing looking at it.
+
+Two design points that are load-bearing rather than incidental:
+
+- **The graded window ends two days back.** GA4's batch tables trail live
+  traffic, and a half-processed day looks exactly like an outage: views
+  present, conversions not yet counted. Grading today would produce a false
+  alarm every single morning. This alarm is late by construction, and a
+  day-late true alarm beats a same-day false one. ⛔ Do not "fix" the staleness.
+- **A quiet window is green.** A door is graded only once it has taken at
+  least 8 views from at least 3 distinct people, so one curious visitor never
+  alarms and neither does one person reloading a form they are stuck on. Both
+  floors are cleared by the 2026-09-01 numbers and by none of the quiet days
+  around them. Backtest any window with
+  `node tools/scripts/check-funnel-conversions.mjs --dry-run --as-of=YYYY-MM-DD`.
+
+A red means people reached a door and it opened for nobody. That is either a
+broken door or an event that stopped being emitted — **different incidents**,
+so open the page in a browser before assuming the instrumentation.
+
 ## GA UI configuration
 
 Done 2026-08-14 (AGL-1559) on property 302497406:
@@ -2092,6 +2227,51 @@ property the September funnel is read from, MP hits cannot be deleted, and a
 rehearsal `purchase` becomes permanent revenue. Use GA4 **DebugView** with a
 `debug_mode` hit, or the `/debug/mp/collect` validation endpoint, which
 validates a payload and stores nothing.
+
+### 14. `org_created` was emitted at every door and arrived at none (AGL-2587)
+
+Nine workspaces exist in Firestore. `org_created` had arrived in the property
+**zero** times, ever, while `sign_up` and `login` arrived throughout.
+
+Not processing lag, and the single signup of 2026-09-04 settles it beyond
+argument. One person signed up at 17:15Z, which created `orgs/UwuXJ_H7LD`.
+Read back from the Data API once the hour had processed, that session had
+delivered **`sign_up` = 1 and `login` = 1 in hour 12, and `org_created` = 0**.
+Same browser, same consent state, same transport, same minute, two events
+through and one gone. Nothing about the tag, the property or the consent gate
+can explain a difference that narrow — only what happens immediately after the
+call.
+
+⚠️ That lag was real and nearly produced the wrong answer. The first read of
+the same day showed no `sign_up` either, which would have justified "signup
+tracking is broken too" and a fix to something that worked. **Re-read the hour
+before concluding**; GA4's batch tables are hours behind, and
+`runRealtimeReport` is the only same-minute view.
+
+The cause is the AGL-1580 mechanism, which this repo had already measured once
+for `begin_checkout`. The console's transport is Firebase `logEvent`, which
+awaits the SDK's initialization promise before it reaches gtag. The signup
+door emits `org_created` and then `hardNavigate`s — a full document teardown,
+deliberately, so the new workspace's chrome resolves against it — and on the
+first page of a brand-new signup session that promise is still pending, so the
+continuation was scheduled behind the teardown and never ran. The fix is the
+one that already existed: `await trackEventBeforeNavigation('org_created', …)`.
+
+There was also a **third org-creation door that emitted nothing at all**.
+`POST /api/hosts/create` calls `ensureOrgForUser`, which auto-provisions a
+workspace for an account that holds none, on the server — where there is no
+gtag and no consent state to consult, so the event cannot be sent from there.
+`ensureOrgForUser` now marks the resolution it created, the route hands
+`orgCreated` back in its response, and the browser reports it through the same
+consent-gated transport as everything else. That is the general shape for any
+server-side milestone: **carry the fact to a browser, never open a second
+sending path around the consent gate.**
+
+The lesson worth keeping is the diagnostic one. A missing event and an event
+nobody triggered are the same zero in every report, chart and audience GA4
+will draw. The only thing that separates them is a count of the real objects
+from the system of record — nine org documents — held against the count of
+events that claim to describe them.
 
 ### Still outstanding
 

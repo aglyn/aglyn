@@ -102,6 +102,12 @@ export function CreateHostDialog(props: CreateHostDialogProps) {
           allowDuplicate: true,
         })
       }
+      // The workspace this request had to create on its way to the site
+      // (AGL-2587), reported before the site itself so the two land in the
+      // order they happened. `orgCreated` is true only when the server
+      // actually provisioned one, so a site made in an existing workspace
+      // counts nothing.
+      if (payload.orgCreated === true) trackEvent('org_created', {})
       // Activation (AGL-1561) — the step between signing up and publishing.
       // After the `payload.hostId` guard, so a rejected subdomain is not
       // counted as a site.

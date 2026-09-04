@@ -536,6 +536,15 @@ export async function createOrganization(
 export interface OrgMembershipResolution {
   orgId: string
   member: AglynOrgMember
+  /**
+   * True only when THIS call provisioned the org, so a caller can report the
+   * activation (AGL-2587). `ensureOrgForUser` is the third org-creation door
+   * and the only server-side one, and it looked identical from outside to a
+   * resolution of an org that already existed — which is why `org_created`
+   * counted none of the workspaces it makes. Absent on `resolveOrgMembership`,
+   * which never creates anything.
+   */
+  created?: boolean
 }
 
 /**
@@ -601,7 +610,8 @@ export async function ensureOrgForUser(
       })
       const created = await resolveOrgMembership(uid, orgId)
       if (!created) throw new Error('Org membership missing after create')
-      return created
+      // Marked so the caller can count the activation (AGL-2587).
+      return { ...created, created: true }
     } catch (error) {
       if (!(error instanceof OrgSlugTakenError) || attempt >= 4) throw error
       slug = `${slug.slice(0, 26)}-${attempt + 2}`

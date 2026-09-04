@@ -86,6 +86,14 @@ jest.mock('firebase/firestore', () => ({
 // intercept it.
 jest.mock('@aglyn/aglyn/app-utils/analytics-events', () => ({
   trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
+  // The navigation-safe spelling lands in the SAME capture (AGL-2587). These
+  // specs assert that an event was emitted, not which door emitted it — the
+  // door choice is asserted at source level in
+  // `every-funnel-door-is-instrumented.spec.ts`, where the navigation that
+  // makes it necessary is visible. Routing both here keeps one assertion per
+  // event instead of one per spelling.
+  trackEventBeforeNavigation: async (...args: unknown[]) =>
+    mockTrackEvent(...args),
 }))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useAnalytics: () => ({}),

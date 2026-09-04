@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
+import { trackEventBeforeNavigation } from '@aglyn/aglyn/app-utils/analytics-events'
 import { generateOrgSlug } from '@aglyn/aglyn'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -111,7 +111,13 @@ export function CreateOrgDialog(props: CreateOrgDialogProps) {
       // Activation (AGL-1561). After the `payload.orgId` guard above, so a
       // 409 slug collision — where no org was created — is never counted.
       // The org name is deliberately NOT a param: it is customer identity.
-      trackEvent('org_created', {})
+      //
+      // Navigation-safe, like the signup door (AGL-2587): the `router.push`
+      // below is soft on the apex, but lands on the workspace's OWN
+      // SUBDOMAIN once workspace subdomains are live, and that is a full
+      // document navigation which tears down an async transport's pending
+      // hit. Costs an already-settled transport nothing.
+      await trackEventBeforeNavigation('org_created', {})
       enqueueSnackbar(`Created "${name.trim()}"`, { variant: 'success' })
       reset()
       onClose()

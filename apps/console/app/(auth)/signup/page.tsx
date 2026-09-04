@@ -26,7 +26,10 @@ import {
   parseOnboardingPlanIntent,
   PLATFORM_BRAND_NAME,
 } from '@aglyn/aglyn'
-import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
+import {
+  trackEvent,
+  trackEventBeforeNavigation,
+} from '@aglyn/aglyn/app-utils/analytics-events'
 import { reportPlatformAdConversion } from '@aglyn/aglyn/app-utils/platform-ad-conversions'
 import { platformAdvertisingAllowed } from '@aglyn/aglyn/app-utils/platform-visitor-consent'
 import type { AuthResultError } from '@aglyn/shared-data-enums'
@@ -241,7 +244,20 @@ async function provisionSignUpOrg(
     // real org creation and is counted like any other — the `response.ok`
     // guard above means a failed provision falls through to the picker
     // uncounted, which is what makes "orgs created" match reality.
-    trackEvent('org_created', {})
+    //
+    // Awaited, through the navigation-safe door (AGL-2587). The caller
+    // `hardNavigate`s the moment this resolves, and the console's transport is
+    // Firebase `logEvent`, which awaits the SDK's initialization promise
+    // before it reaches gtag — on the first page of a brand-new signup
+    // session that promise is still pending, so the continuation was scheduled
+    // behind a full document teardown and never ran. Measured, not inferred:
+    // nine workspaces exist in Firestore and `org_created` had arrived in the
+    // property zero times ever, while the one signup of 2026-09-04 delivered
+    // `sign_up` and `login` from this same page, in the same minute, through
+    // the same transport. Two events out and one gone is a difference no
+    // consent state or tag setting can produce — only the navigation can.
+    // Same mechanism, and same remedy, as the checkout redirect in AGL-1580.
+    await trackEventBeforeNavigation('org_created', {})
     return typeof payload?.slug === 'string' ? payload.slug : null
   } catch (error) {
     console.error('sign-up org create failed', error)
