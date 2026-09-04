@@ -14,9 +14,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-// Posts Main Gate's RED verdict into Linear (AGL-2533). The body, the marker
-// and the should-we-report decision live in `lib/main-gate-red-report.mjs`;
-// this file is the network half.
+// Posts Main Gate's RED verdict into Linear (AGL-2533). The body, the marker,
+// the should-we-report decision and the dedupe walk live in
+// `lib/main-gate-red-report.mjs`, where they are unit-tested; this file is the
+// network half and supplies the transport the walk pages through.
 //
 //   node tools/scripts/report-main-gate-red.mjs --fast=success --full=failure \
 //     --sha=<sha> --run-url=<url> --subject='...'
@@ -31,6 +32,7 @@ import {
   redMarker,
   shouldPingSlack,
   shouldReport,
+  sinkAlreadyCarries,
   slackPayload,
 } from './lib/main-gate-red-report.mjs'
 
@@ -122,27 +124,51 @@ let linearOutcome = 'unavailable'
 try {
   if (!key) throw new Error('LINEAR_API_KEY is not set')
   const marker = redMarker({ sha, results })
-  const found = await linear(
-    `query Sink($id: String!) {
-       issue(id: $id) { id identifier comments(first: 50) { nodes { body } } }
-     }`,
-    { id: SINK_ISSUE_ID },
-  )
-  const issue = found?.issue
+
+  let issue = null
+  /** One page of the sink's comments. The first call also resolves the issue. */
+  const commentPage = async (after) => {
+    const data = await linear(
+      `query Sink($id: String!, $after: String) {
+         issue(id: $id) {
+           id
+           identifier
+           comments(first: 100, after: $after) {
+             nodes { body }
+             pageInfo { hasNextPage endCursor }
+           }
+         }
+       }`,
+      { id: SINK_ISSUE_ID, after },
+    )
+    issue = data?.issue ?? issue
+    return data?.issue?.comments
+  }
+
+  const firstPage = await commentPage(null)
   if (!issue) {
     warn(`sink issue ${SINK_ISSUE_ID} not found - has it been deleted? This red reaches nobody.`)
     process.exit(0)
   }
-  const already = (issue.comments?.nodes ?? []).some((c) => (c.body ?? '').includes(marker))
+
+  /**
+   * A TEST posts a body that carries NO marker, so scanning for one here can
+   * only ever match a REAL red that happens to share this sha and failing set
+   * -- and the tip of `main` carrying a red is exactly when somebody reaches
+   * for this. The scan would then suppress the test message and report the run
+   * green, which is the one thing a notification test must never do: claim the
+   * path works on the strength of having sent nothing.
+   */
+  const already = TEST ? false : await sinkAlreadyCarries({ marker, firstPage, query: commentPage })
   if (already) {
     say(`${SINK_ISSUE_ID} already carries this exact red; not repeating it`)
     linearOutcome = 'duplicate'
   } else {
-    await linear(
+    const created = await linear(
       `mutation Comment($issueId: String!, $body: String!) {
          commentCreate(input: { issueId: $issueId, body: $body }) { success }
        }`,
-        {
+      {
         issueId: issue.id,
         body: TEST
           ? '**[TEST] Notification path check - nothing is wrong.**\n\n' +
@@ -151,6 +177,13 @@ try {
           : redCommentBody({ sha, results, runUrl, subject }),
       },
     )
+    // Linear answers a declined mutation with `success: false` and no GraphQL
+    // error, so the happy path has to read the flag. Reported as a Linear
+    // failure rather than a post, which also lets Slack fail open and carry
+    // the red instead.
+    if (!created?.commentCreate?.success) {
+      throw new Error('Linear declined the comment (commentCreate returned success: false)')
+    }
     say(`posted to ${SINK_ISSUE_ID}`)
     linearOutcome = 'posted'
   }

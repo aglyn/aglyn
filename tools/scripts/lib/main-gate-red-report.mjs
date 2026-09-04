@@ -85,6 +85,38 @@ export function redMarker({ sha, results }) {
 }
 
 /**
+ * Does the sink already carry this marker?
+ *
+ * The scan is what makes the marker mean anything, and it has to walk the
+ * WHOLE comment history rather than one page. This issue is append-only by
+ * design -- one comment per distinct red, kept forever as the chronological
+ * record -- so any fixed page size is a date after which the scan stops seeing
+ * the comments it exists to match. Past that date the sink fills with
+ * duplicates of one incident until everybody mutes it, which is the failure
+ * AGL-2533 is about, reached by a slower road. It is also silent: a
+ * double-post looks exactly like two reds.
+ *
+ * `query` is injected, so the walk is exercised in tests without a network. It
+ * takes a cursor and returns one `comments` connection.
+ *
+ * FAIL-OPEN in every uncertain case -- an unreadable page, an absent
+ * `pageInfo`, a history longer than `maxPages` -- because a duplicate comment
+ * is visible and merely annoying, while a swallowed red is silent.
+ */
+export async function sinkAlreadyCarries({ query, marker, firstPage, maxPages = 20 }) {
+  let page = firstPage ?? (await query(null))
+  for (let seen = 1; ; seen += 1) {
+    if ((page?.nodes ?? []).some((comment) => (comment?.body ?? '').includes(marker))) return true
+    const info = page?.pageInfo
+    if (!info?.hasNextPage || !info?.endCursor) return false
+    // Checked before fetching, so the last page the budget allows is one the
+    // walk actually reads rather than one it pays for and discards.
+    if (seen >= maxPages) return false
+    page = await query(info.endCursor)
+  }
+}
+
+/**
  * Whether to ping Slack, given what happened on the Linear side.
  *
  * Linear is the DEDUPE ORACLE, because Slack has no equivalent of "does this
