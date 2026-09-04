@@ -9,6 +9,38 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.68 — 2026-09-04
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.67...v1.0.0-beta.68)
+
+### Fixed
+
+- **publish:** every publish path tells the live site what changed ([AGL-2573](https://linear.app/aglyn/issue/AGL-2573))
+- **publish:** the cache drop survives one bad answer, and says when it worked ([AGL-2573](https://linear.app/aglyn/issue/AGL-2573))
+- **console:** the Screen Properties slug field commits on Done ([AGL-2570](https://linear.app/aglyn/issue/AGL-2570), [AGL-2571](https://linear.app/aglyn/issue/AGL-2571), [AGL-2572](https://linear.app/aglyn/issue/AGL-2572))
+- **mui:** a wide table scrolls instead of crushing, on both routes ([AGL-2568](https://linear.app/aglyn/issue/AGL-2568))
+- **legal:** the red reporter's GitHub egress is declared ([AGL-2537](https://linear.app/aglyn/issue/AGL-2537))
+- **mui:** a truncated collection search says so on a hit, not only on a miss ([AGL-2569](https://linear.app/aglyn/issue/AGL-2569), [AGL-88](https://linear.app/aglyn/issue/AGL-88))
+- **tenant:** the container already owns the listing's bottom gap ([AGL-2567](https://linear.app/aglyn/issue/AGL-2567))
+- **tenant:** the built-in collection list breathes, like an authored one ([AGL-2567](https://linear.app/aglyn/issue/AGL-2567), [AGL-2547](https://linear.app/aglyn/issue/AGL-2547), [AGL-1298](https://linear.app/aglyn/issue/AGL-1298))
+
+### Changed
+
+- **ci:** a red Main Gate dedupes on a commit status, not on Linear ([AGL-2537](https://linear.app/aglyn/issue/AGL-2537), [AGL-2533](https://linear.app/aglyn/issue/AGL-2533))
+
+### Documentation
+
+- **tenant:** the screen-version TTL is an hour, not 60s ([AGL-2540](https://linear.app/aglyn/issue/AGL-2540))
+
+<details>
+<summary>Also in this release: 3 chore</summary>
+
+- **tools:** the Linear ceiling reads AGL-2573, the workspace head ([AGL-2573](https://linear.app/aglyn/issue/AGL-2573))
+- **tools:** the Linear ceiling reads AGL-2572, the workspace head ([AGL-2572](https://linear.app/aglyn/issue/AGL-2572), [AGL-2570](https://linear.app/aglyn/issue/AGL-2570), [AGL-2571](https://linear.app/aglyn/issue/AGL-2571))
+- **tools:** the Linear ceiling reads AGL-2569, the workspace head ([AGL-2569](https://linear.app/aglyn/issue/AGL-2569))
+
+</details>
+
 ## v1.0.0-beta.67 — 2026-09-04
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.66...v1.0.0-beta.67)

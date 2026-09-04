@@ -128,6 +128,13 @@ jest.mock('@aglyn/aglyn', () => ({
   decodeStoredNodes: () => ({}),
   findScreenIdByRoutePath: () => undefined,
   normalizeScreenSlug: (value: string) => value,
+  // Real (AGL-2572): the slug field seeds itself through this, and it is a
+  // pure read of one path segment. Listed because this mock is a closed
+  // world — an export the page gained arrives here as `undefined is not a
+  // function`, from inside render, nowhere near the cause.
+  ownScreenSlugFromRoutePath: jest.requireActual(
+    '@aglyn/aglyn/app-utils/screen-route',
+  ).ownScreenSlugFromRoutePath,
   versionStamp: () => 'stamp-1',
   collectReferencedComponentIds: jest.requireActual(
     '../../../libs/aglyn/src/lib/app-utils/compose-reusable-components',

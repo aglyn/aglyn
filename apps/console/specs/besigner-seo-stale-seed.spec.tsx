@@ -156,6 +156,13 @@ jest.mock('@aglyn/aglyn', () => ({
   decodeStoredNodes: () => ({}),
   findScreenIdByRoutePath: () => undefined,
   normalizeScreenSlug: (value: string) => value,
+  // Real (AGL-2572): the slug field seeds itself through this, and it is a
+  // pure read of one path segment. Listed because this mock is a closed
+  // world — an export the page gained arrives here as `undefined is not a
+  // function`, from inside render, nowhere near the cause.
+  ownScreenSlugFromRoutePath: jest.requireActual(
+    '@aglyn/aglyn/app-utils/screen-route',
+  ).ownScreenSlugFromRoutePath,
   // The REAL rule, not a stub (AGL-2076). The besigner's Slug field refuses a
   // reserved address, and a double that answered a constant here would either
   // hide the refusal or invent one — an unfaithful fake fabricates false

@@ -49,6 +49,7 @@ import {
   nonPageScreenIds,
   readScreenSources,
 } from './count-billable-screens'
+import { announceLivePaths } from '../../../../utils/server/announce-live-paths'
 
 /**
  * Is a redirect destination an INTERNAL path? (AGL-1881.)
@@ -968,6 +969,37 @@ async function handler(request: Request): Promise<Response> {
           : {}),
       } satisfies HostActivityTarget,
     )
+    /**
+     * A REDIRECT IS LIVE THE MOMENT IT EXISTS (AGL-2573).
+     *
+     * Alone among the resources this route creates. Everything else is born
+     * unreferenced — a screen has no routing entry until something publishes
+     * one, an entry is created `status: 'draft'`, a layout or component is
+     * served only where a page places it — so their creation changes nothing
+     * a visitor can reach, and announcing would spend a tenant round trip per
+     * document created to drop nothing.
+     *
+     * A redirect is the opposite: it is a routing statement over the whole
+     * site the instant it is written, which is exactly why it needs the
+     * publish role above. The address it captures is already cached as the
+     * page that used to answer there, so without this the new rule sits
+     * behind the hour-long `tenant-data:{hostId}` backstop while the manager
+     * says redirects take about thirty seconds.
+     *
+     * The rule's own source is the one path worth naming — a prefix or regex
+     * rule matches more, and those catch up on their own windows. It is the
+     * same single-path choice `/api/screens/revalidate` makes for a redirect
+     * announced from the browser.
+     *
+     * Not awaited, and best effort: the create has already succeeded, and a
+     * cache hint must never turn it into a failure.
+     */
+    if (resourceKey === 'redirect' && typeof doc['source'] === 'string') {
+      const source = (doc['source'] as string).trim()
+      if (source.startsWith('/')) {
+        void announceLivePaths({ hostSnapshot, hostId, paths: [source] })
+      }
+    }
     return Response.json({ ok: true, id }, { status: 200 })
   } catch (error: any) {
     if (error?.code === 6 /* ALREADY_EXISTS */) {

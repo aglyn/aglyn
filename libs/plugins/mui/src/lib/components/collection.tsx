@@ -124,8 +124,9 @@ export interface CollectionEntriesProps extends StackProps {
    * Client-evaluated over the entries this block already holds — the page is
    * ISR-cached, so a keystroke never costs a Firestore read. That set is
    * whatever the expansion left the block holding, which paging, an
-   * `entriesLimit` or the 100-entry cap can each cut down; the empty state
-   * says so rather than pretending global search (AGL-1516).
+   * `entriesLimit` or the 100-entry cap can each cut down. A truncated block
+   * says so under its results either way — on a miss and on a hit
+   * (AGL-1516, AGL-2569) — rather than pretending global search.
    */
   search?: boolean
   /**
@@ -501,6 +502,55 @@ const SuggestSearchBox = ({
 }
 
 /**
+ * How much of the collection an entries block's search could actually see
+ * (AGL-1516, AGL-2569) — `truncated` says the rendered window is smaller
+ * than the set, `paginated` says the missing part lives on other pages of
+ * this same list rather than merely outside the block.
+ *
+ * The test is whether the window is SMALLER THAN THE SET, which only the
+ * server knows — `perPage` is the wrong proxy for it in both directions. A
+ * block truncated by `entriesLimit` or by the 100-entry cap has no `perPage`
+ * at all and would claim a global miss over 6 of 40 posts; a block whose
+ * `perPage` exceeds its entry count is a single complete page and would
+ * blame pages that do not exist. `searchTotal` is stamped with `searchIndex`,
+ * so the two are always in step.
+ *
+ * Absent — a page cached before that stamp shipped — falls back to the old
+ * `perPage` reading rather than guessing "complete": understating the scope
+ * of a search is the safe direction to be wrong in.
+ *
+ * `searchCapped` is the second way a block can fail to hold the set, and the
+ * invisible one: `searchTotal` counts the entries the server READ, and that
+ * read is bounded. Past the bound `shown === searchTotal` is satisfied by a
+ * block holding 100 of 400 posts, and the wording that claims to have looked
+ * everywhere is exactly the branch it would take.
+ *
+ * Both the miss and the hit disclose off this one answer, so the two can
+ * never disagree about the same block.
+ */
+const searchScope = ({
+  perPage,
+  shown,
+  searchTotal,
+  searchCapped,
+}: {
+  perPage?: CollectionEntriesProps['perPage']
+  /** Entries this block searched — the length of its stamped index. */
+  shown: number
+  searchTotal?: number
+  searchCapped?: boolean
+}): { paginated: boolean; truncated: boolean } => {
+  const paginated = (toCount(perPage, 0) ?? 0) > 0
+  return {
+    paginated,
+    truncated:
+      typeof searchTotal === 'number'
+        ? shown < searchTotal || Boolean(searchCapped)
+        : paginated || Boolean(searchCapped),
+  }
+}
+
+/**
  * Repeats its children once per published entry of a content collection
  * (AGL-551) — the collections sibling of the dataset repeatable. The tenant
  * expands it at compose time with `{{entry.*}}` tokens; in the besigner the
@@ -583,7 +633,12 @@ const CollectionEntries = forwardRef<HTMLDivElement, CollectionEntriesProps>(
       (mode === 'suggest' || groupSize > 0)
     const trimmed = query.trim()
     let visible: ReactNode[] | ReactNode = children
-    let emptyState: ReactNode = null
+    /**
+     * The one line under the results that says what the search covered —
+     * either a miss scoped to the set that came back empty, or a hit scoped
+     * to the window it was drawn from. Never both.
+     */
+    let scopeNote: ReactNode = null
     if (mode === 'suggest') {
       // The grid is deliberately untouched (Figma 496:1218): the panel is an
       // overlay on a page the reader is still reading, not a filter.
@@ -595,38 +650,19 @@ const CollectionEntries = forwardRef<HTMLDivElement, CollectionEntriesProps>(
       visible = childArray.filter((_, index) =>
         matched.has(Math.floor(index / groupSize)),
       )
+      // HONEST scope (AGL-1516, AGL-2569): this block holds whatever window
+      // the expansion gave it, and pretending the search was global would
+      // turn every miss into a false "this post does not exist" — and every
+      // hit into a result set that looks like the whole answer.
+      const shown = items?.length ?? 0
+      const { paginated, truncated } = searchScope({
+        perPage,
+        shown,
+        searchTotal,
+        searchCapped,
+      })
       if (!(visible as ReactNode[]).length) {
-        // HONEST scope (AGL-1516): this block holds whatever window the
-        // expansion gave it, and pretending the search was global would turn
-        // every miss into a false "this post does not exist".
-        //
-        // The test is whether the window is SMALLER THAN THE SET, which only
-        // the server knows — `perPage` was the wrong proxy for it in both
-        // directions. A block truncated by `entriesLimit` or by the
-        // 100-entry cap has no `perPage` at all and used to claim a global
-        // miss over 6 of 40 posts; a block whose `perPage` exceeds its entry
-        // count is a single complete page and used to blame pages that do
-        // not exist. `searchTotal` is stamped with `searchIndex`, so the two
-        // are always in step.
-        //
-        // Absent — a page cached before this shipped — falls back to the old
-        // `perPage` reading rather than guessing "complete": understating
-        // the scope of a search is the safe direction to be wrong in.
-        //
-        // `searchCapped` is the second way this block can fail to hold the
-        // set, and the invisible one: `searchTotal` counts the entries the
-        // server READ, and that read is bounded. Past the bound
-        // `searchIndex.length === searchTotal` is satisfied by a block
-        // holding 100 of 400 posts, and the bare `No matches.` — the one
-        // wording that claims to have looked everywhere — is exactly the
-        // branch it would take.
-        const paginated = (toCount(perPage, 0) ?? 0) > 0
-        const truncated =
-          typeof searchTotal === 'number'
-            ? (items?.length ?? 0) < searchTotal || Boolean(searchCapped)
-            : paginated || Boolean(searchCapped)
-        const shown = items?.length ?? 0
-        emptyState = (
+        scopeNote = (
           <Typography variant="body2" sx={{ color: 'text.secondary' }}>
             {!truncated
               ? `No matches for “${trimmed}”.`
@@ -635,6 +671,28 @@ const CollectionEntries = forwardRef<HTMLDivElement, CollectionEntriesProps>(
                   'are not searched.'
                 : `No matches for “${trimmed}” in the ${shown} entries ` +
                   'shown here — the rest of the collection is not searched.'}
+          </Typography>
+        )
+      } else if (truncated) {
+        // The hit half of the same honesty (AGL-2569). Matches are drawn from
+        // the same window the miss apologizes for, they carry no pager of
+        // their own, and nothing else on screen says the pages behind this
+        // one went unread — so a list that happens to be partial reads as
+        // complete. A block that holds the whole collection says nothing
+        // here: a disclaimer on a complete answer is noise, and every small
+        // site would carry it.
+        //
+        // No route out to `/search?q=` (AGL-88): the suggestion panel links
+        // there because it is the panel's only possible answer, but this
+        // mode has a working list under the field and that page does not
+        // exist yet. Trading a silent partial answer for a dead link is not
+        // the trade.
+        scopeNote = (
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            {paginated
+              ? 'Showing matches on this page — other pages are not searched.'
+              : `Showing matches in the ${shown} entries here — the rest of ` +
+                'the collection is not searched.'}
           </Typography>
         )
       }
@@ -674,7 +732,7 @@ const CollectionEntries = forwardRef<HTMLDivElement, CollectionEntriesProps>(
       <MuiStack ref={ref} spacing={4} {...props}>
         {field}
         {visible}
-        {emptyState}
+        {scopeNote}
       </MuiStack>
     )
   },

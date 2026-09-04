@@ -57,6 +57,7 @@ import {
   type BillableScreenSource,
   nonPageScreenIds,
 } from '../resources/count-billable-screens'
+import { revalidateEntireHost } from '../../../../utils/server/tenant-revalidate'
 
 /**
  * The document to store, built from a bundle item by ALLOW-list (AGL-1382).
@@ -1295,6 +1296,27 @@ async function handler(request: Request): Promise<Response> {
     await importCollections()
     await importDatasets()
     await commit()
+
+    /**
+     * A RESTORE REPLACES THE SITE, so every cached page of it is now wrong
+     * (AGL-2573).
+     *
+     * The whole-host drop rather than a path list, for the reason
+     * `revalidateEntireHost` exists: this route rewrites the routing map, the
+     * screen documents, their versions, the layouts, the components and the
+     * collections in one go, so "which pages changed" has no answer shorter
+     * than "all of them". Without it a restored site served its previous
+     * pages until each one's window lapsed — the worst version of this bug,
+     * because the operator is watching for the old site to disappear and it
+     * does not.
+     *
+     * Awaited, unlike the editor's fire-and-forget announcements: an import
+     * is a deliberate, already-slow administrative action whose whole point
+     * is that the site now reads differently, so it is worth the bounded 8s
+     * to have it done before the response says the restore finished. Best
+     * effort still — `revalidateEntireHost` never throws.
+     */
+    await revalidateEntireHost(firestore, hostId)
 
     await hostRef
       .collection('activity')

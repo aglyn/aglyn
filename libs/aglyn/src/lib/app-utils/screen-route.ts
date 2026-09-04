@@ -230,23 +230,57 @@ export function wouldCreateScreenCycle(
   )
 }
 
+/** How {@link buildScreenRouteEntries} treats a screen with no entry today. */
+export interface BuildScreenRouteEntriesOptions {
+  /**
+   * Is this call a PUBLISH, or only a move? (AGL-2571)
+   *
+   * An entry in the host's `screens` map is the whole of what makes a path
+   * reachable, so writing one IS publishing — there is no second switch. This
+   * function is used for both, and until now it could not tell them apart: it
+   * wrote a path for every screen in the subtree whose slug chain happened to
+   * resolve, whether or not anyone had asked for that screen to go live.
+   *
+   * What that produced on `aglyn-marketing`: assigning a parent to an
+   * unpublished screen that merely CARRIED a slug registered it in the map,
+   * and the besigner toolbar — which reads the map — then offered `Unpublish`
+   * and an enabled `Live` link for a screen nobody had published, with no
+   * `publishedAt` on the document and a 404 at the address.
+   *
+   * `false` therefore restricts the write to entries that ALREADY exist:
+   * paths are rewritten, broken ones are removed, and nothing new goes live.
+   * A move is not an activation.
+   *
+   * Defaults to `true`, which is what the publish buttons mean.
+   */
+  publish?: boolean
+}
+
 /**
  * Routing-map entries for a screen plus all its descendants under a
  * candidate screens map: a composed path sets the entry, `null` marks an
  * existing entry whose chain no longer resolves for removal. Callers apply
  * the result in one write so slug/parent changes cascade atomically.
+ *
+ * See {@link BuildScreenRouteEntriesOptions.publish} for the difference
+ * between publishing a screen and merely moving one.
  */
 export function buildScreenRouteEntries(
   screenId: ScreenUid,
   screensById: Record<ScreenUid, ScreenRouteNode | undefined>,
   routingMap: Record<ScreenUid, string> | null | undefined,
+  options: BuildScreenRouteEntriesOptions = {},
 ): Record<ScreenUid, string | null> {
+  const { publish = true } = options
   const entries: Record<ScreenUid, string | null> = {}
   const ids = [screenId, ...collectScreenDescendantIds(screenId, screensById)]
   for (const id of ids) {
+    const routed = routingMap?.[id] !== undefined
     const path = composeScreenRoutePath(id, screensById)
-    if (path) entries[id] = path
-    else if (routingMap?.[id] !== undefined) entries[id] = null
+    if (path) {
+      // A move rewrites what is live; it never puts something new there.
+      if (routed || publish) entries[id] = path
+    } else if (routed) entries[id] = null
   }
   return entries
 }
@@ -267,6 +301,32 @@ export function findScreenIdByRoutePath(
 /** Human-facing URL for a routing-map path (`'/'` stays `/`, `about` → `/about`). */
 export function screenRoutePathToUrl(path: string): string {
   return path === SCREEN_ROOT_PATH ? SCREEN_ROOT_PATH : `/${path}`
+}
+
+/**
+ * A screen's OWN slug segment, read back off its composed routing-map path
+ * (`company/about` → `about`) — the inverse of the one step
+ * {@link composeScreenRoutePath} adds for this screen (AGL-2572).
+ *
+ * The slug field holds one segment; the routing map holds the whole composed
+ * path. A field that seeds itself from the map therefore has to take the last
+ * segment, and the besigner's seeded the whole path instead. Its value then
+ * went through {@link normalizeScreenSlug}, which DELETES an interior `/`
+ * rather than separating on it, so `alternatives/webflow` came back as the
+ * glued `alternativeswebflow` and was stored as the screen's own slug —
+ * without anyone typing it. Two screens on `aglyn-marketing` carry a slug of
+ * that shape.
+ *
+ * Not a general path parser: it answers only "which segment is this screen's
+ * own", which is always the last one.
+ */
+export function ownScreenSlugFromRoutePath(
+  path: string | null | undefined,
+): string | undefined {
+  if (!path) return undefined
+  if (path === SCREEN_ROOT_PATH) return SCREEN_ROOT_PATH
+  const segments = path.split('/').filter(Boolean)
+  return segments[segments.length - 1]
 }
 
 /** What a screen is ACTUALLY served at, where that is not its own slug. */

@@ -56,6 +56,7 @@ import {
 import { AppLink, HelpTip, useLoading } from '@aglyn/shared-ui-jsx'
 import { LOADING_OVERLAY_ELEMENT } from '@aglyn/shared-ui-jsx/const/prebuilt-components'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
   getGoogleFontsUrl,
   HostThemeDocumentContext,
@@ -727,7 +728,16 @@ function BesignerPage(props) {
   const publishedPath = routingMap?.[screenId]
   const parentId = screenResult?.data?.parentId
   const [slugInput, setSlugInput] = useState<string | null>(null)
-  const slugValue = slugInput ?? screenResult?.data?.slug ?? publishedPath ?? ''
+  // The field holds ONE segment, so a screen with no stored slug falls back to
+  // its own segment of the routing path, not the whole composed path
+  // (AGL-2572). Seeding `alternatives/webflow` here fed a `/` to
+  // `normalizeScreenSlug`, which deletes it, and Publish then stored the glued
+  // `alternativeswebflow` as the screen's own slug.
+  const slugValue =
+    slugInput ??
+    screenResult?.data?.slug ??
+    Aglyn.ownScreenSlugFromRoutePath(publishedPath) ??
+    ''
   const normalizedSlug = Aglyn.normalizeScreenSlug(slugValue)
   // Candidate map with the pending slug applied, so the composed path and
   // conflict check reflect what Publish would write.
@@ -759,9 +769,13 @@ function BesignerPage(props) {
 
   // Routing entries for this screen plus all descendants under a candidate
   // screens map; null removes entries whose chain no longer resolves.
+  // `publish: false` restricts the write to entries that already exist, for a
+  // caller that is only MOVING a screen (AGL-2571).
   const buildRouteEntries = useCallback(
-    (byId: Record<string, Aglyn.ScreenRouteNode | undefined>) =>
-      Aglyn.buildScreenRouteEntries(screenId, byId, routingMap),
+    (
+      byId: Record<string, Aglyn.ScreenRouteNode | undefined>,
+      options?: Aglyn.BuildScreenRouteEntriesOptions,
+    ) => Aglyn.buildScreenRouteEntries(screenId, byId, routingMap, options),
     [screenId, routingMap],
   )
 
@@ -1016,12 +1030,21 @@ function BesignerPage(props) {
     const firstPublish = isFirstPublishedRoute(routingMap)
     const action =
       normalizedSlug && composedPath
-        ? updateScreenDoc({ slug: normalizedSlug } as any)
+        ? // `publishedAt` rides the same write the routing entry does
+          // (AGL-2571). It is what the screens list and the screen details
+          // page call "published", and only `publishScreenRoute` — a
+          // different publish path, which this editor does not use — was
+          // stamping it, so the two surfaces disagreed by construction.
+          updateScreenDoc({
+            slug: normalizedSlug,
+            publishedAt: Timestamp.now(),
+          } as any)
             .then(() =>
               syncScreenRouteEntries(
                 firestore,
                 hostId,
                 buildRouteEntries(candidateById),
+                { user },
               ),
             )
             .then(() => {
@@ -1041,7 +1064,11 @@ function BesignerPage(props) {
                 { variant: 'success', persist: false },
               )
             })
-        : updateScreenDoc({ slug: deleteField() } as any)
+        : updateScreenDoc({
+            slug: deleteField(),
+            // An unpublished screen never keeps a published date (AGL-2571).
+            publishedAt: deleteField(),
+          } as any)
             .then(() =>
               syncScreenRouteEntries(
                 firestore,
@@ -1054,6 +1081,7 @@ function BesignerPage(props) {
                     parentId,
                   },
                 }),
+                { user },
               ),
             )
             .then(() => {
@@ -1087,6 +1115,7 @@ function BesignerPage(props) {
     isCollectionTemplate,
     publishedPath,
     routesByScreenId,
+    user,
   ])
 
   // One-click publish from the app bar (AGL-452). Publish points the live
@@ -1108,7 +1137,12 @@ function BesignerPage(props) {
               parentId,
             },
           }),
+          { user },
         )
+        // The slug stays, so re-publishing is one click; the published date
+        // does not, or an unpublished screen reads as live everywhere the
+        // console shows that date (AGL-2571).
+        await updateScreenDoc({ publishedAt: deleteField() } as any)
         enqueueSnackbar('Screen unpublished', {
           variant: 'success',
           persist: false,
@@ -1138,11 +1172,18 @@ function BesignerPage(props) {
       // `handlePublish`: the live routing map grows this entry as soon as the
       // sync lands (AGL-1588).
       const firstPublish = isFirstPublishedRoute(routingMap)
-      await updateScreenDoc({ slug: normalizedSlug, versionId } as any)
+      await updateScreenDoc({
+        slug: normalizedSlug,
+        versionId,
+        // See `handlePublish` — the published date belongs to the same write
+        // as the routing entry (AGL-2571).
+        publishedAt: Timestamp.now(),
+      } as any)
       await syncScreenRouteEntries(
         firestore,
         hostId,
         buildRouteEntries(candidateById),
+        { user },
       )
       // The one-click publish (AGL-452) reaches the routing map through
       // `syncScreenRouteEntries` rather than `publishScreenRoute`, so it does
@@ -1184,6 +1225,106 @@ function BesignerPage(props) {
     enqueueSnackbar,
     isCollectionTemplate,
     routesByScreenId,
+    user,
+  ])
+
+  /** Is there a typed slug the screen document has not been told about? */
+  const slugEdited =
+    slugInput !== null && normalizedSlug !== screenResult?.data?.slug
+
+  /**
+   * COMMIT THE SLUG FIELD (AGL-2570).
+   *
+   * The Properties dialog holds two controls with two different commit
+   * rules: Parent screen writes on change, while the Slug field wrote only
+   * when the small Publish button beside it was pressed. `Done` saved the
+   * CANVAS — a different document entirely — and closed over the typed slug
+   * without a word, so a slug change made here was reported as saved
+   * ("Already saved", from the canvas) and was not.
+   *
+   * So `Done` commits the field. What it will NOT do is change whether the
+   * screen is on the live site, in either direction:
+   *
+   *  - already routed → the slug is stored and the routing map follows it,
+   *    which is a RENAME of a live path and exactly what the dialog's own
+   *    "Served at …" line has been promising.
+   *  - not routed → the slug is stored and nothing is published. Publishing
+   *    stays the Publish button's job, which is the whole of AGL-2571.
+   *  - field cleared → refused. Emptying the field means unpublish, and
+   *    `Done` is not the control for taking a page off the internet.
+   *
+   * Answers `false` when the dialog must stay open, i.e. the edit could not
+   * be committed and closing would discard it all over again.
+   */
+  const commitSlugEdit = useCallback(async (): Promise<boolean> => {
+    if (!slugEdited) {
+      // Typed and typed back: drop the local value so the field re-reads the
+      // document rather than holding a copy that can drift from it.
+      setSlugInput(null)
+      return true
+    }
+    if (slugConflict || unpublishedAncestor || reservedSegment) {
+      enqueueSnackbar(
+        slugConflict
+          ? 'Another screen is already published at this path'
+          : reservedSegment
+            ? Aglyn.reservedScreenRouteMessage(reservedSegment)
+            : 'Publish the parent screen first',
+        { variant: 'warning', persist: false },
+      )
+      return false
+    }
+    if (!normalizedSlug) {
+      enqueueSnackbar(
+        'Clearing the slug takes the screen off your site — press Unpublish ' +
+          'to do that',
+        { variant: 'warning', persist: false },
+      )
+      return false
+    }
+    try {
+      await updateScreenDoc({ slug: normalizedSlug } as any)
+      // A live screen keeps serving, at its new address. `publishedAt` is
+      // deliberately untouched: it records when the route went live, and a
+      // rename is not a new publication.
+      if (publishedPath) {
+        await syncScreenRouteEntries(
+          firestore,
+          hostId,
+          buildRouteEntries(candidateById, { publish: false }),
+          { user },
+        )
+      }
+      setSlugInput(null)
+      enqueueSnackbar(
+        publishedPath && composedPath
+          ? `Now served at ${Aglyn.screenRoutePathToUrl(composedPath)}`
+          : 'Slug saved — press Publish to put this screen on your site',
+        { variant: 'success', persist: false },
+      )
+      return true
+    } catch (e) {
+      enqueueSnackbar(`Error: ${JSON.stringify(e)}`, {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+      return false
+    }
+  }, [
+    slugEdited,
+    slugConflict,
+    unpublishedAncestor,
+    reservedSegment,
+    normalizedSlug,
+    composedPath,
+    publishedPath,
+    candidateById,
+    buildRouteEntries,
+    updateScreenDoc,
+    firestore,
+    hostId,
+    enqueueSnackbar,
+    user,
   ])
 
   const handleParentChange = useCallback(
@@ -1217,7 +1358,14 @@ function BesignerPage(props) {
           syncScreenRouteEntries(
             firestore,
             hostId,
-            buildRouteEntries(nextById),
+            // A MOVE, not a publish (AGL-2571): live paths are rewritten to
+            // follow the new parent, and a screen nobody has published stays
+            // out of the routing map. Without this, assigning a parent to an
+            // unpublished screen that merely carried a slug put it on the live
+            // site — and the toolbar, which reads that map, then offered
+            // `Unpublish` and a `Live` link for a page that 404s.
+            buildRouteEntries(nextById, { publish: false }),
+            { user },
           ),
         )
         .then(() => {
@@ -1242,6 +1390,7 @@ function BesignerPage(props) {
       firestore,
       hostId,
       enqueueSnackbar,
+      user,
     ],
   )
 
@@ -1696,9 +1845,19 @@ function BesignerPage(props) {
                   <PropertiesDialogComponent
                     open={screenDialog}
                     onClose={() => {
+                      // Dismissing without `Done` reverts the field, rather
+                      // than keeping a typed slug the document never received
+                      // — which is what let a phantom value survive into the
+                      // next time the dialog was opened (AGL-2570).
+                      setSlugInput(null)
                       setScreenDialog(false)
                     }}
                     onActionClick={async () => {
+                      // The slug first, and only then the canvas save whose
+                      // "Already saved" used to be mistaken for it (AGL-2570).
+                      // A refused edit holds the dialog open — closing over it
+                      // is how the value was lost in the first place.
+                      if (!(await commitSlugEdit())) return
                       await handleSave()
                       setScreenDialog(false)
                     }}
@@ -1767,11 +1926,24 @@ function BesignerPage(props) {
                                     ? templateRoutes
                                       ? `A collection template — renders ${templateRoutes}, not this path`
                                       : 'A collection template — not served at a path of its own'
-                                    : composedPath
+                                    : // PRESENT TENSE ONLY FOR WHAT IS LIVE
+                                      // (AGL-2570). This line read "Served at
+                                      // /x" the moment a character was typed,
+                                      // for a value no document had yet
+                                      // received and, on an unpublished
+                                      // screen, for an address that 404s — the
+                                      // dialog asserting a fact about the live
+                                      // site from a text field.
+                                      composedPath === publishedPath &&
+                                        composedPath
                                       ? `Served at ${Aglyn.screenRoutePathToUrl(composedPath)}`
-                                      : publishedPath
-                                        ? `Currently published at ${Aglyn.screenRoutePathToUrl(publishedPath)}`
-                                        : 'Not published'
+                                      : composedPath && publishedPath
+                                        ? `Served at ${Aglyn.screenRoutePathToUrl(publishedPath)} — Done moves it to ${Aglyn.screenRoutePathToUrl(composedPath)}`
+                                        : composedPath
+                                          ? `Not published — Publish puts this screen at ${Aglyn.screenRoutePathToUrl(composedPath)}`
+                                          : publishedPath
+                                            ? `Currently published at ${Aglyn.screenRoutePathToUrl(publishedPath)}`
+                                            : 'Not published'
                           }
                         />
                         <Button

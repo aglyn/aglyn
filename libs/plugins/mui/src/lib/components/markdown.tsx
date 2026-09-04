@@ -28,11 +28,25 @@ import { forwardRef, useContext, useMemo } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
+import {
+  scrollOverflowFadeKeyframes,
+  scrollOverflowFadeTimeline,
+  scrollRegionProps,
+  scrollableTableSx,
+  scrollableTableWrapperSx,
+} from '../utils/scroll-overflow'
 
 // Component ids are persisted in screen documents; never rename.
 export const MARKDOWN_ID: Aglyn.ComponentId = 'markdown'
 /** A compose-time token the tenant has not substituted — never a document. */
 const UNRESOLVED_TOKEN = /^\{\{[^}]+\}\}$/
+/**
+ * What a screen reader announces on reaching a table's scroll box.
+ *
+ * The plain word, not the table's own heading: the name has to come from
+ * something every document has, and a markdown table carries no caption.
+ */
+const TABLE_REGION_LABEL = 'Table'
 export const TABLE_OF_CONTENTS_ID: Aglyn.ComponentId = 'tableOfContents'
 
 /**
@@ -296,14 +310,18 @@ const Markdown = forwardRef<HTMLDivElement, MarkdownProps>((props, ref) => {
         }
         if (block.type === 'table') {
           return (
-            <Box key={index} sx={{ my: 2, overflowX: 'auto' }}>
+            <Box
+              key={index}
+              {...scrollRegionProps(TABLE_REGION_LABEL)}
+              sx={{ my: 2, ...scrollableTableWrapperSx }}
+            >
               <Box
                 component="table"
                 sx={{
                   ...BODY_SX,
                   fontSize: 16,
                   borderCollapse: 'collapse',
-                  width: '100%',
+                  ...scrollableTableSx,
                   '& th, & td': {
                     border: '1px solid',
                     borderColor: 'divider',
@@ -586,21 +604,9 @@ const TABLE_OF_CONTENTS_LIST_SX = (theme: Theme) => ({
       backgroundColor: theme.palette.text.disabled,
       borderRadius: '3px',
     },
-    '@supports (animation-timeline: scroll())': {
-      animation: 'aglyn-toc-overflow-fade linear',
-      animationTimeline: 'scroll(self block)',
-    },
+    ...scrollOverflowFadeTimeline('block'),
   },
-  // Held at the fade until the list is all but scrolled out, then dropped, so
-  // the final entry is never the one the affordance obscures. `none` does not
-  // interpolate with a gradient, so that last step is a clean switch.
-  '@keyframes aglyn-toc-overflow-fade': {
-    '0%, 92%': {
-      maskImage:
-        'linear-gradient(to bottom, #000 calc(100% - 28px), transparent)',
-    },
-    '100%': { maskImage: 'none' },
-  },
+  ...scrollOverflowFadeKeyframes('block'),
 })
 
 /**

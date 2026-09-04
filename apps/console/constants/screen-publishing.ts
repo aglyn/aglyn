@@ -20,6 +20,7 @@ import {
   isFirstPublishedRoute,
   trackEvent,
 } from '@aglyn/aglyn/app-utils/analytics-events'
+import { screenRoutePathToUrl } from '@aglyn/aglyn/app-utils/screen-route'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
   deleteField,
@@ -29,6 +30,103 @@ import {
   updateDoc,
   type Firestore,
 } from 'firebase/firestore'
+import revalidateLivePages from '../utils/revalidate-live-pages'
+
+/**
+ * The signed-in user, whose ID token authenticates the cache announcement.
+ *
+ * REQUIRED rather than optional, on every function here that writes the
+ * routing map. An optional token is a token a call site can leave out, and a
+ * call site that leaves it out announces nothing while still reporting a
+ * successful publish — which is the exact failure this is being added to
+ * remove. Making it part of the signature hands the job to the type checker:
+ * a new publish surface cannot compile without saying who is publishing.
+ */
+export interface PublishAnnouncer {
+  user: { getIdToken?: () => Promise<string> } | undefined | null
+}
+
+/**
+ * Read the routing map, for the addresses a write is about to change.
+ *
+ * Answers an empty map when the read fails. The announcement is best effort
+ * and the write is not: a host document that cannot be read must not stop a
+ * publish, it only costs the announcement its knowledge of the OLD address.
+ */
+async function readRouteMap(
+  firestore: Firestore,
+  hostId: HostUid,
+): Promise<Record<string, string>> {
+  try {
+    const snapshot = await getDoc(doc(firestore, 'hosts', hostId))
+    return (snapshot.get('screens') ?? {}) as Record<string, string>
+  } catch {
+    return {}
+  }
+}
+
+/**
+ * ANNOUNCE THE ADDRESSES A ROUTING-MAP WRITE CHANGED (AGL-2573).
+ *
+ * Fired here, at the routing-map write, for the same reason `trackEvent` is:
+ * registering or removing a path in the host's `screens` map IS what changes
+ * what the live site serves, so every surface that publishes passes through
+ * this file and no new publish button can quietly forget to announce. Before
+ * this, only two of the publish surfaces dropped any cache at all — the
+ * one-click Publish button, the screens list, screen delete, route
+ * publish/unpublish and every slug rename left the live page serving its old
+ * HTML until the ISR window lapsed on its own.
+ *
+ * ADDRESSES, not document ids, and that is the whole point of doing it here.
+ * `/api/screens/revalidate` resolves a `screenId` through the routing map,
+ * which is correct for a publish and empty for its opposite: an unpublish
+ * removes the entry first, so the route would look the screen up, find
+ * nothing, and answer `not-routed` — a reported success over a retired page
+ * that is still cached and still being served. The old path is read here
+ * BEFORE the write and named outright, so retiring a page drops it.
+ *
+ * Both sides of every change are sent: a rename has to drop the address it
+ * moved away from as well as the one it moved to, or the old URL keeps
+ * serving the page from cache while the map no longer points anywhere near
+ * it.
+ *
+ * BEST EFFORT, ALWAYS, and never awaited. The write has already landed by the
+ * time this runs — a cache hint that fails must never make a successful
+ * publish look failed.
+ *
+ * The rejection is caught HERE rather than relied on not to happen.
+ * `revalidateLivePages` swallows its own failures today, so this catch should
+ * be unreachable; an unawaited promise that rejects anyway is an unhandled
+ * rejection, which in a browser is a console error on a successful publish
+ * and under Node kills the process. A best-effort call whose "best effort"
+ * depends on another module never changing its mind is not best effort.
+ */
+function announceRouteChange(options: {
+  user: PublishAnnouncer['user']
+  hostId: HostUid
+  before: Record<string, string>
+  after: Record<string, string | null | undefined>
+}): void {
+  const { user, hostId, before, after } = options
+  const paths = new Set<string>()
+  for (const [screenId, next] of Object.entries(after)) {
+    const previous = before[screenId]
+    const nextPath = next ?? undefined
+    // An entry rewritten to the address it already had changes nothing a
+    // visitor can see. Skipped so a whole-map sync — which rewrites every
+    // descendant on a rename — announces the handful that moved rather than
+    // the whole site, which the tenant would cap anyway.
+    if (previous === nextPath) continue
+    if (previous) paths.add(screenRoutePathToUrl(previous))
+    if (nextPath) paths.add(screenRoutePathToUrl(nextPath))
+  }
+  if (!paths.size) return
+  void revalidateLivePages({ user, hostId, paths: [...paths] }).catch(
+    (error: unknown) => {
+      console.error('[screen-publishing] announce failed', error)
+    },
+  )
+}
 
 /**
  * Publishes a screen route: stores the screen's OWN slug segment on the
@@ -40,11 +138,11 @@ import {
  */
 export async function publishScreenRoute(
   firestore: Firestore,
-  ids: { hostId: HostUid; screenId: ScreenUid },
+  ids: { hostId: HostUid; screenId: ScreenUid } & PublishAnnouncer,
   slug: string,
   path: string = slug,
 ): Promise<void> {
-  const { hostId, screenId } = ids
+  const { hostId, screenId, user } = ids
   // Read the routing map BEFORE writing to it (AGL-1588). `first_publish`
   // asks what the map looked like a moment ago, and a moment later it can
   // never be empty. One extra document read on a rare, deliberate, already
@@ -56,8 +154,14 @@ export async function publishScreenRoute(
   // sanitizer drops undefined, and one hit with no breakdown value is better
   // than one asserting a `false` nobody checked.
   let firstPublish: boolean | undefined
+  // The same read answers what this screen's address was a moment ago, which
+  // is what a re-publish onto a DIFFERENT path has to drop alongside the new
+  // one (AGL-2573). One read, two questions, both of which can only be asked
+  // before the write.
+  let before: Record<string, string> = {}
   try {
     const hostSnapshot = await getDoc(doc(firestore, 'hosts', hostId))
+    before = (hostSnapshot.get('screens') ?? {}) as Record<string, string>
     firstPublish = isFirstPublishedRoute(
       hostSnapshot.get('screens') as Record<string, unknown> | undefined,
     )
@@ -100,6 +204,12 @@ export async function publishScreenRoute(
   // a publish that already happened cannot be re-reported as a first one.
   // See `isFirstPublishedRoute` for what all three publish paths mean by it.
   trackEvent('site_published', { first_publish: firstPublish })
+  announceRouteChange({
+    user,
+    hostId,
+    before,
+    after: { [screenId]: path },
+  })
 }
 
 /**
@@ -111,13 +221,19 @@ export async function syncScreenRouteEntries(
   firestore: Firestore,
   hostId: HostUid,
   entries: Record<ScreenUid, string | null>,
+  announcer: PublishAnnouncer,
 ): Promise<void> {
   if (!Object.keys(entries).length) return
+  // Read before the write: an entry being REMOVED carries `null`, so the
+  // address that is about to stop resolving exists nowhere else by the time
+  // the announcement is made (AGL-2573).
+  const before = await readRouteMap(firestore, hostId)
   const updates: Record<string, unknown> = {}
   for (const [screenId, path] of Object.entries(entries)) {
     updates[`screens.${screenId}`] = path ?? deleteField()
   }
   await updateDoc(doc(firestore, 'hosts', hostId), updates)
+  announceRouteChange({ user: announcer.user, hostId, before, after: entries })
 }
 
 /**
@@ -127,10 +243,15 @@ export async function syncScreenRouteEntries(
  */
 export async function unpublishScreenRoute(
   firestore: Firestore,
-  ids: { hostId: HostUid; screenId: ScreenUid },
+  ids: { hostId: HostUid; screenId: ScreenUid } & PublishAnnouncer,
   options?: { clearSlug?: boolean },
 ): Promise<void> {
-  const { hostId, screenId } = ids
+  const { hostId, screenId, user } = ids
+  // THE case the routing map cannot answer afterwards, and the one where
+  // staleness is worst: a page taken off the site keeps being served from
+  // cache, so the address the visitor sees is one the owner believes they
+  // retired (AGL-2573).
+  const before = await readRouteMap(firestore, hostId)
   await Promise.all([
     updateDoc(doc(firestore, 'hosts', hostId), {
       [`screens.${screenId}`]: deleteField(),
@@ -147,4 +268,5 @@ export async function unpublishScreenRoute(
       { merge: true },
     ),
   ])
+  announceRouteChange({ user, hostId, before, after: { [screenId]: null } })
 }

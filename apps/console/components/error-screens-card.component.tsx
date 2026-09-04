@@ -190,13 +190,13 @@ export function ErrorScreensCard(props: ErrorScreensCardProps) {
    */
   const handleUnpublish = useCallback(
     async (screenId: string) => {
-      await unpublishScreenRoute(firestore, { hostId, screenId })
+      await unpublishScreenRoute(firestore, { hostId, screenId, user })
       enqueueSnackbar(
         'Address removed — this screen no longer counts against your plan',
         { variant: 'success', persist: false },
       )
     },
-    [firestore, hostId, enqueueSnackbar],
+    [firestore, hostId, enqueueSnackbar, user],
   )
 
   const handleMaintenance = useCallback(

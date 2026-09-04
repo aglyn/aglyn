@@ -130,6 +130,47 @@ export function readDataTableAlignments(
   })
 }
 
+/** A row of a table the author pasted, and the alignments it carried. */
+export interface PastedDataTable {
+  rows: string[][]
+  alignments: DataTableAlignment[]
+}
+
+/** A pipe that breaks a column, as opposed to a `\|` inside a cell. */
+function hasUnescapedPipe(line: string): boolean {
+  return /(?<!\\)\|/.test(line)
+}
+
+/**
+ * The table a pasted string describes, or `null` when it is not one
+ * (AGL-2568).
+ *
+ * Reading it is the migration path off the Markdown workaround: the tables
+ * this element replaces are already authored as pipe syntax, and the
+ * alternative to importing them is retyping thirty cells of dated competitor
+ * pricing by hand, which is the content least safe to retype.
+ *
+ * `null` rather than a best effort is the important half. This runs on every
+ * paste into every cell, and an author pasting `Pro | Business` as a cell
+ * VALUE must get those characters, not a two-column table. So a paste is only
+ * read as a table when it could not sensibly be anything else: more than one
+ * line, every one of them carrying an unescaped pipe, and at least two
+ * columns once parsed. A single line never qualifies, however many pipes it
+ * has.
+ */
+export function readPastedDataTable(value: unknown): PastedDataTable | null {
+  const text = typeof value === 'string' ? value : ''
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+  if (lines.length < 2 || !lines.every(hasUnescapedPipe)) return null
+  const rows = parseDataTableRows(text)
+  const width = rows[0]?.length ?? 0
+  if (rows.length === 0 || width < 2) return null
+  return { rows, alignments: readDataTableAlignments(text, width) }
+}
+
 /** The markdown divider encoding one column's alignment. */
 function dividerCell(alignment: DataTableAlignment): string {
   if (alignment === 'center') return ':---:'

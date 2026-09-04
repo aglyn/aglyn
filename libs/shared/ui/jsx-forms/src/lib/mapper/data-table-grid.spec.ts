@@ -21,6 +21,7 @@ import {
   serializeDataTable,
   normalizeEmphasisColumn,
   parseDataTableRows,
+  readPastedDataTable,
   withCellSet,
   withColumnAdded,
   withColumnRemoved,
@@ -177,6 +178,81 @@ describe('the table grid (AGL-2543)', () => {
         ['h1', 'h2'],
         ['a', 'changed'],
       ])
+    })
+  })
+
+  /*
+    The import behind "paste a markdown table into any cell" (AGL-2568). The
+    help string promised it and nothing implemented it, so a paste flattened
+    an entire table into the one cell it landed in — and the alternative was
+    retyping thirty cells of dated competitor pricing by hand.
+  */
+  describe('reading a pasted table (AGL-2568)', () => {
+    it('imports a GitHub-flavored table, alignments and all', () => {
+      const pasted = readPastedDataTable(
+        [
+          '| Feature | Aglyn | Webflow |',
+          '| --- | :---: | ---: |',
+          '| Team seats | Band included | Core $19 per seat |',
+          '| Source available | Apache 2.0 | Proprietary |',
+        ].join('\n'),
+      )
+      expect(pasted?.rows).toEqual([
+        ['Feature', 'Aglyn', 'Webflow'],
+        ['Team seats', 'Band included', 'Core $19 per seat'],
+        ['Source available', 'Apache 2.0', 'Proprietary'],
+      ])
+      // The alignment travels with the table, so an imported one is not
+      // silently flattened to left.
+      expect(pasted?.alignments).toEqual(['left', 'center', 'right'])
+    })
+
+    it('reads a table with no leading or trailing pipes', () => {
+      // What a table authored in a Markdown element usually looks like, and
+      // what this element itself stores.
+      const pasted = readPastedDataTable(
+        ['Plan | Price', '--- | ---', 'Starter | $25/mo'].join('\n'),
+      )
+      expect(pasted?.rows).toEqual([
+        ['Plan', 'Price'],
+        ['Starter', '$25/mo'],
+      ])
+    })
+
+    it('keeps an escaped pipe as a character, not a column break', () => {
+      const pasted = readPastedDataTable(
+        ['Shell | Meaning', 'a \\| b | either a or b'].join('\n'),
+      )
+      expect(pasted?.rows).toEqual([
+        ['Shell', 'Meaning'],
+        ['a | b', 'either a or b'],
+      ])
+    })
+
+    it('pads a short row instead of importing a ragged grid', () => {
+      const pasted = readPastedDataTable('a | b | c\nd | e')
+      expect(pasted?.rows).toEqual([
+        ['a', 'b', 'c'],
+        ['d', 'e', ''],
+      ])
+    })
+
+    it('REFUSES a single line, however many pipes it has', () => {
+      // The case that decides the whole design: this runs on every paste into
+      // every cell, and an author pasting `Pro | Business` as a cell VALUE
+      // must get those characters. `null` hands the paste back to the
+      // browser, so the import can never cost anyone an ordinary paste.
+      expect(readPastedDataTable('Pro | Business | Scale')).toBeNull()
+    })
+
+    it('REFUSES prose, a single column, and nothing at all', () => {
+      expect(readPastedDataTable('Two lines\nof ordinary prose')).toBeNull()
+      // One line of a table, one line that is not: not a table.
+      expect(readPastedDataTable('a | b\njust prose')).toBeNull()
+      // Pipes, but only one column on either side of them.
+      expect(readPastedDataTable('a\nb')).toBeNull()
+      expect(readPastedDataTable('')).toBeNull()
+      expect(readPastedDataTable(undefined)).toBeNull()
     })
   })
 })

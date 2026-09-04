@@ -109,8 +109,73 @@ const RENDERABLE_COVER_URL = /^(?:https:\/\/|\/)/i
 const cssUrlValue = (url: string) =>
   url.replace(/["\\\n\r]/g, (char) => encodeURIComponent(char))
 
+/**
+ * Container width for the built-in entry article: the PROSE case of the
+ * Container standard (AGL-1298), not an arbitrary narrow default. A
+ * collection entry is an article body, and `xl` — the section default — runs
+ * a paragraph past 180 characters a line. Stock breakpoint, no bespoke
+ * number.
+ */
+const ENTRY_MAX_WIDTH = 'md'
+
+/**
+ * Container width for the built-in listing: the section default. A listing is
+ * a card grid rather than a reading column, so the entry's prose width is the
+ * wrong measure for it, and the authored list screens render at this same
+ * `xl` (AGL-2567). Still a stock breakpoint, so the AGL-1298 rule holds.
+ */
+const LIST_MAX_WIDTH = 'xl'
+
+/**
+ * Vertical rhythm between the built-in listing's sections, in MUI theme
+ * spacing units: `theme.spacing(6)` resolves to 48px, the same rhythm the
+ * authored list screens carry, so a generated listing and an authored one
+ * read as one product (AGL-2567).
+ *
+ * A theme token rather than a pixel string: a hand-written length here
+ * answers to no theme, and a length missing its unit is a valid-looking
+ * value the browser drops.
+ *
+ * @see https://mui.com/material-ui/customization/spacing/
+ */
+const LIST_SECTION_GAP = 6
+
+/** The page shell's width and the rhythm of the stack that holds sections. */
+interface ShellLayout {
+  /** Stock Container breakpoint (AGL-1298); never a bespoke pixel cap. */
+  maxWidth: typeof ENTRY_MAX_WIDTH | typeof LIST_MAX_WIDTH
+  /** Props for the content stack the page's sections slot into. */
+  stackProps: Record<string, unknown>
+}
+
+/** The entry article's shell: reading column, sections close together. */
+const entryShell = (): ShellLayout => ({
+  maxWidth: ENTRY_MAX_WIDTH,
+  stackProps: { spacing: 2 },
+})
+
+/**
+ * The listing's shell: full section width, sections on the 48px rhythm.
+ *
+ * The gap is declared on the stack's `sx` rather than left to the Stack's own
+ * `spacing`, which is the shape the authored list screens carry: one
+ * `row-gap` on the flex container, so every section is spaced by the same
+ * declaration instead of by margins that a section's own styling can collapse
+ * or override.
+ */
+const listShell = (): ShellLayout => ({
+  maxWidth: LIST_MAX_WIDTH,
+  stackProps: {
+    sx: {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: LIST_SECTION_GAP,
+    },
+  },
+})
+
 /** Root → centered container → content stack; children slot underneath. */
-function shell(childIds: string[]): NodesMap {
+function shell(childIds: string[], layout: ShellLayout): NodesMap {
   return {
     [Aglyn.NODE_ROOT_ID]: {
       $id: Aglyn.NODE_ROOT_ID,
@@ -122,11 +187,10 @@ function shell(childIds: string[]): NodesMap {
       componentId: 'muiContainer',
       pluginId: 'mui',
       parentId: Aglyn.NODE_ROOT_ID,
-      // `md` is the PROSE case of the Container standard (AGL-1298), not an
-      // arbitrary narrow default: a collection entry is
-      // an article body, and `xl` — the section default — runs a paragraph
-      // past 180 characters a line. Stock breakpoint, no bespoke number.
-      props: { maxWidth: 'md', sx: { paddingTop: 6, paddingBottom: 6 } },
+      props: {
+        maxWidth: layout.maxWidth,
+        sx: { paddingTop: 6, paddingBottom: 6 },
+      },
       nodes: [id('stack')],
     },
     [id('stack')]: {
@@ -134,7 +198,7 @@ function shell(childIds: string[]): NodesMap {
       componentId: 'muiStack',
       pluginId: 'mui',
       parentId: id('container'),
-      props: { spacing: 2 },
+      props: layout.stackProps,
       nodes: childIds,
     },
   }
@@ -280,7 +344,10 @@ export function buildCollectionEntryFallbackNodes(
     },
   ])
   return {
-    ...shell(entries.map(([entryId]) => entryId)),
+    ...shell(
+      entries.map(([entryId]) => entryId),
+      entryShell(),
+    ),
     ...Object.fromEntries(entries),
   }
 }
@@ -361,7 +428,7 @@ function paginationNodes(
     props: {
       direction: 'row',
       spacing: 3,
-      sx: { alignItems: 'center', justifyContent: 'center', paddingTop: 2 },
+      sx: { alignItems: 'center', justifyContent: 'center' },
     },
     nodes: children,
   }
@@ -402,7 +469,7 @@ export function buildCollectionListFallbackNodes(
         componentId: Aglyn.COLLECTION_CATEGORIES_COMPONENT_ID,
         pluginId: 'mui',
         parentId: id('stack'),
-        props: { allLabel: 'All', sx: { paddingBottom: 1 } },
+        props: { allLabel: 'All' },
       }
     : null
   const lead = pills ? [titleId, id('pills')] : [titleId]
@@ -415,7 +482,7 @@ export function buildCollectionListFallbackNodes(
       sx: { color: 'text.secondary' },
     })
     return {
-      ...shell([...lead, emptyId]),
+      ...shell([...lead, emptyId], listShell()),
       [titleId]: title,
       ...(pills ? { [id('pills')]: pills } : {}),
       [emptyId]: empty,
@@ -437,6 +504,7 @@ export function buildCollectionListFallbackNodes(
       pager
         ? [...lead, id('entries'), pager.childId]
         : [...lead, id('entries')],
+      listShell(),
     ),
     [titleId]: title,
     ...(pills ? { [id('pills')]: pills } : {}),

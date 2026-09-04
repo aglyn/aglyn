@@ -31,9 +31,17 @@ import TableRow from '@mui/material/TableRow'
 import { forwardRef } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
+import {
+  scrollRegionProps,
+  scrollableTableSx,
+  scrollableTableWrapperSx,
+} from '../utils/scroll-overflow'
 
 // Component ids are persisted in screen documents; never rename.
 export const DATA_TABLE_ID: Aglyn.ComponentId = 'dataTable'
+
+/** What a screen reader announces on reaching the grid's scroll box. */
+const TABLE_REGION_LABEL = 'Table'
 
 export interface DataTableProps {
   /**
@@ -64,9 +72,12 @@ export interface DataTableProps {
  *    row is special.
  *  - **A highlighted column** — the "ours" column on a comparison page is the
  *    entire point of the block, and markdown has no way to say it.
- *  - **Responsive behaviour.** A wide table on a phone is the obvious failure,
- *    and markdown gives the author no control over it. The grid scrolls inside
- *    its own container here, so the page never scrolls sideways with it.
+ *  - **A grid to edit**, rather than pipe syntax in a text box — see the
+ *    `DATA_TABLE` field this element's `rows` attribute asks for.
+ *
+ * Narrow-screen behaviour is NOT one of them (AGL-2568). Both routes draw the
+ * same block, so both take the same treatment from `scroll-overflow`: the
+ * grid scrolls inside its own box once it is too wide to read, and says so.
  */
 const DataTable = forwardRef<HTMLDivElement, DataTableProps>((props, ref) => {
   const { rows, headerRow = true, emphasizeColumn, ...rest } = props
@@ -113,13 +124,16 @@ const DataTable = forwardRef<HTMLDivElement, DataTableProps>((props, ref) => {
     <Box
       ref={ref}
       {...rest}
-      // The table scrolls, not the page (AGL-2543). `overflowX` on the
-      // wrapper is what keeps a 6-column matrix from pushing the whole
-      // document sideways on a phone, which is the failure the Markdown
-      // route had no answer for.
-      sx={[{ width: '100%', overflowX: 'auto' }, ...nodeSx]}
+      {...scrollRegionProps(TABLE_REGION_LABEL)}
+      // The wrapper scrolls the grid, and the grid is sized so that it can
+      // (AGL-2568). `overflowX` here is half of it: it does nothing at all
+      // while the table inside is `width: 100%`, because a table that cannot
+      // exceed this box never overflows it — it crushes its columns instead.
+      // The pair is what makes a wide matrix scrollable, and the fade is what
+      // makes an overlay-scrollbar platform admit that it did.
+      sx={[{ width: '100%', ...scrollableTableWrapperSx }, ...nodeSx]}
     >
-      <Table size="small">
+      <Table size="small" sx={scrollableTableSx}>
         {headerRow ? (
           <TableHead>
             <TableRow>
