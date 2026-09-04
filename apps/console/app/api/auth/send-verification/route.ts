@@ -122,8 +122,42 @@ async function handler(request: Request): Promise<Response> {
     return Response.json({ ok: true }, { status: 200 })
   } catch (error) {
     console.error('[auth/send-verification] failed', error)
+    // Identity Platform throttles link minting on its own, ahead of and
+    // independently of the per-uid budget above, and reports it as a 400
+    // `auth/internal-error` carrying TOO_MANY_ATTEMPTS_TRY_LATER. Reported as
+    // a 500 it read `Sending the email failed` — alarming, and wrong twice
+    // over: the previous mail had been sent, and the fix is to wait rather
+    // than to retry. This page mints a link on every mount, so returning here
+    // is what someone reopening the tab actually meets.
+    if (isTooManyAttempts(error)) {
+      return Response.json(
+        { error: 'Too many requests — wait a moment before requesting another link.' },
+        { status: 429 },
+      )
+    }
     return Response.json({ error: 'Sending the email failed' }, { status: 500 })
   }
+}
+
+/**
+ * Identity Platform's own throttle, which surfaces as a generic
+ * `auth/internal-error` whose upstream body names the real cause. Matched on
+ * the token rather than the code, because the code is shared with every other
+ * internal failure and only the body distinguishes them.
+ */
+function isTooManyAttempts(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const probe = error as {
+    code?: unknown
+    message?: unknown
+    cause?: { response?: { text?: unknown } }
+  }
+  if (probe.code !== 'auth/internal-error') return false
+  const body = probe.cause?.response?.text
+  const haystack = `${typeof body === 'string' ? body : ''} ${
+    typeof probe.message === 'string' ? probe.message : ''
+  }`
+  return haystack.includes('TOO_MANY_ATTEMPTS_TRY_LATER')
 }
 
 export const dynamic = 'force-dynamic'
