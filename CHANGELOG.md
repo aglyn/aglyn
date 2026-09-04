@@ -9,6 +9,31 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.67 — 2026-09-04
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.66...v1.0.0-beta.67)
+
+### Added
+
+- **besigner:** the inline run gets bold too, closing the textEditable set ([AGL-2557](https://linear.app/aglyn/issue/AGL-2557), [AGL-497](https://linear.app/aglyn/issue/AGL-497), [AGL-2556](https://linear.app/aglyn/issue/AGL-2556), [AGL-1624](https://linear.app/aglyn/issue/AGL-1624))
+
+### Fixed
+
+- **deps:** the toml override excludes the recursion advisory too ([AGL-2566](https://linear.app/aglyn/issue/AGL-2566))
+- **release:** the lockfile regen ignores scripts, and the lockfile is the verdict ([AGL-2565](https://linear.app/aglyn/issue/AGL-2565), [AGL-2108](https://linear.app/aglyn/issue/AGL-2108))
+- **gate:** a gate root holds one run at a time ([AGL-2561](https://linear.app/aglyn/issue/AGL-2561))
+- **deps:** the toml override lifts gray-matter off the vulnerable 2.x parser ([AGL-2566](https://linear.app/aglyn/issue/AGL-2566))
+- **ci:** the red sink's dedupe reads the whole history, not page one ([AGL-2537](https://linear.app/aglyn/issue/AGL-2537), [AGL-2533](https://linear.app/aglyn/issue/AGL-2533))
+- **tools:** the promotion verdict says when nobody ran the tests ([AGL-2564](https://linear.app/aglyn/issue/AGL-2564), [AGL-2534](https://linear.app/aglyn/issue/AGL-2534), [AGL-2552](https://linear.app/aglyn/issue/AGL-2552))
+
+<details>
+<summary>Also in this release: 2 chore</summary>
+
+- **tools:** the Linear ceiling reads AGL-2566, the workspace head ([AGL-2566](https://linear.app/aglyn/issue/AGL-2566))
+- **tools:** the Linear ceiling reads AGL-2565, the workspace head ([AGL-2565](https://linear.app/aglyn/issue/AGL-2565), [AGL-2564](https://linear.app/aglyn/issue/AGL-2564))
+
+</details>
+
 ## v1.0.0-beta.66 — 2026-09-04
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/f331e6e12...v1.0.0-beta.66)
