@@ -23,14 +23,22 @@ import {
 import { screenRoutePathToUrl } from '@aglyn/aglyn/app-utils/screen-route'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
+  collection,
+  deleteDoc,
   deleteField,
   doc,
   getDoc,
-  setDoc,
-  updateDoc,
+  serverTimestamp,
+  writeBatch,
+  type DocumentReference,
   type Firestore,
+  type WriteBatch,
 } from 'firebase/firestore'
 import revalidateLivePages from '../utils/revalidate-live-pages'
+import {
+  PUBLISH_OUTBOX_COLLECTION,
+  sanitizePublishOutboxPaths,
+} from './publish-outbox'
 
 /**
  * The signed-in user, whose ID token authenticates the cache announcement.
@@ -66,48 +74,25 @@ async function readRouteMap(
 }
 
 /**
- * ANNOUNCE THE ADDRESSES A ROUTING-MAP WRITE CHANGED (AGL-2573).
+ * The live addresses a routing-map write is about to change.
  *
- * Fired here, at the routing-map write, for the same reason `trackEvent` is:
- * registering or removing a path in the host's `screens` map IS what changes
- * what the live site serves, so every surface that publishes passes through
- * this file and no new publish button can quietly forget to announce. Before
- * this, only two of the publish surfaces dropped any cache at all — the
- * one-click Publish button, the screens list, screen delete, route
- * publish/unpublish and every slug rename left the live page serving its old
- * HTML until the ISR window lapsed on its own.
- *
- * ADDRESSES, not document ids, and that is the whole point of doing it here.
- * `/api/screens/revalidate` resolves a `screenId` through the routing map,
- * which is correct for a publish and empty for its opposite: an unpublish
- * removes the entry first, so the route would look the screen up, find
- * nothing, and answer `not-routed` — a reported success over a retired page
- * that is still cached and still being served. The old path is read here
+ * ADDRESSES, not document ids, and that is the whole point of computing them
+ * here. `/api/screens/revalidate` resolves a `screenId` through the routing
+ * map, which is correct for a publish and empty for its opposite: an
+ * unpublish removes the entry first, so the route would look the screen up,
+ * find nothing, and answer `not-routed` — a reported success over a retired
+ * page that is still cached and still being served. The old path is read
  * BEFORE the write and named outright, so retiring a page drops it.
  *
- * Both sides of every change are sent: a rename has to drop the address it
- * moved away from as well as the one it moved to, or the old URL keeps
+ * Both sides of every change are included: a rename has to drop the address
+ * it moved away from as well as the one it moved to, or the old URL keeps
  * serving the page from cache while the map no longer points anywhere near
  * it.
- *
- * BEST EFFORT, ALWAYS, and never awaited. The write has already landed by the
- * time this runs — a cache hint that fails must never make a successful
- * publish look failed.
- *
- * The rejection is caught HERE rather than relied on not to happen.
- * `revalidateLivePages` swallows its own failures today, so this catch should
- * be unreachable; an unawaited promise that rejects anyway is an unhandled
- * rejection, which in a browser is a console error on a successful publish
- * and under Node kills the process. A best-effort call whose "best effort"
- * depends on another module never changing its mind is not best effort.
  */
-function announceRouteChange(options: {
-  user: PublishAnnouncer['user']
-  hostId: HostUid
-  before: Record<string, string>
-  after: Record<string, string | null | undefined>
-}): void {
-  const { user, hostId, before, after } = options
+function changedPaths(
+  before: Record<string, string>,
+  after: Record<string, string | null | undefined>,
+): string[] {
   const paths = new Set<string>()
   for (const [screenId, next] of Object.entries(after)) {
     const previous = before[screenId]
@@ -120,12 +105,94 @@ function announceRouteChange(options: {
     if (previous) paths.add(screenRoutePathToUrl(previous))
     if (nextPath) paths.add(screenRoutePathToUrl(nextPath))
   }
-  if (!paths.size) return
-  void revalidateLivePages({ user, hostId, paths: [...paths] }).catch(
-    (error: unknown) => {
+  return sanitizePublishOutboxPaths([...paths])
+}
+
+/**
+ * ADD THE DURABLE COPY OF THE ANNOUNCE TO THE BATCH THAT PUBLISHES (AGL-2575).
+ *
+ * Staged into the caller's batch rather than written on its own, and that is
+ * the entire property. An outbox entry written after the routing map is an
+ * entry a closed tab can lose exactly like the fetch it replaces; an entry
+ * written before it is an entry that can order a cache drop for a publish
+ * that never happened. In the same batch it is neither: either both documents
+ * land or neither does, so a pending entry always describes a publish that
+ * really is live and a live publish always has something behind it.
+ *
+ * Returns the reference so the tab can delete it once its own announce has
+ * actually landed — the happy path leaves nothing for the drain to find, and
+ * the collection stays near-empty rather than becoming a log.
+ */
+function stagePublishOutboxEntry(
+  batch: WriteBatch,
+  firestore: Firestore,
+  options: { hostId: HostUid; paths: string[] },
+): DocumentReference | null {
+  const { hostId, paths } = options
+  if (!paths.length) return null
+  const ref = doc(collection(firestore, PUBLISH_OUTBOX_COLLECTION))
+  batch.set(ref, {
+    hostId,
+    paths,
+    // A SERVER timestamp, and the rules pin it to `request.time`. The drain
+    // orders by it and ages it, and both of those are meaningless against a
+    // browser clock — which is settable, and skewed on plenty of machines
+    // that are not being deliberately dishonest.
+    createdAt: serverTimestamp(),
+    attempts: 0,
+  })
+  return ref
+}
+
+/**
+ * ANNOUNCE THE ADDRESSES A ROUTING-MAP WRITE CHANGED (AGL-2573).
+ *
+ * Fired here, at the routing-map write, for the same reason `trackEvent` is:
+ * registering or removing a path in the host's `screens` map IS what changes
+ * what the live site serves, so every surface that publishes passes through
+ * this file and no new publish button can quietly forget to announce. Before
+ * this, only two of the publish surfaces dropped any cache at all — the
+ * one-click Publish button, the screens list, screen delete, route
+ * publish/unpublish and every slug rename left the live page serving its old
+ * HTML until the ISR window lapsed on its own.
+ *
+ * BEST EFFORT, ALWAYS, and never awaited. The write has already landed by the
+ * time this runs — a cache hint that fails must never make a successful
+ * publish look failed.
+ *
+ * THE OUTBOX ENTRY IS RELEASED ONLY ON A PLAIN `ok` (AGL-2575). Anything else
+ * — a refusing tenant, a network that went away, a reason this side does not
+ * recognize — leaves the entry pending for the drain, because the question
+ * the entry answers is whether the cache was actually dropped and every other
+ * answer is "not known to be". The cost of being wrong in this direction is
+ * one duplicate tag drop, which is a no-op; the cost of being wrong in the
+ * other is the stale page this whole mechanism exists to prevent.
+ *
+ * The rejection is caught HERE rather than relied on not to happen.
+ * `revalidateLivePages` swallows its own failures today, so this catch should
+ * be unreachable; an unawaited promise that rejects anyway is an unhandled
+ * rejection, which in a browser is a console error on a successful publish
+ * and under Node kills the process. A best-effort call whose "best effort"
+ * depends on another module never changing its mind is not best effort.
+ */
+function announceRouteChange(options: {
+  user: PublishAnnouncer['user']
+  hostId: HostUid
+  paths: string[]
+  outboxRef: DocumentReference | null
+}): void {
+  const { user, hostId, paths, outboxRef } = options
+  if (!paths.length) return
+  void revalidateLivePages({ user, hostId, paths })
+    .then(async (result) => {
+      if (!outboxRef || result?.reason !== 'ok') return
+      // Best effort in its own right: an entry that fails to delete is drained
+      // later and drops the same tag a second time, which is a no-op.
+      await deleteDoc(outboxRef).catch(() => undefined)
+    })
+    .catch((error: unknown) => {
       console.error('[screen-publishing] announce failed', error)
-    },
-  )
+    })
 }
 
 /**
@@ -168,18 +235,24 @@ export async function publishScreenRoute(
   } catch {
     firstPublish = undefined
   }
-  await Promise.all([
-    // `publishedAt` records when the route went live; it rides the same merge
-    // as the slug so publishing stamps it in one write (cleared on unpublish).
-    setDoc(
-      doc(firestore, 'hosts', hostId, 'screens', screenId),
-      { slug, publishedAt: Timestamp.now() },
-      { merge: true },
-    ),
-    updateDoc(doc(firestore, 'hosts', hostId), {
-      [`screens.${screenId}`]: path,
-    }),
-  ])
+  const paths = changedPaths(before, { [screenId]: path })
+  // ONE BATCH, and the outbox entry is in it (AGL-2575). Two independent
+  // writes could already half-land; adding a third document that has to be
+  // atomic with them is what makes the batch the right shape rather than a
+  // tidier `Promise.all`.
+  const batch = writeBatch(firestore)
+  // `publishedAt` records when the route went live; it rides the same merge
+  // as the slug so publishing stamps it in one write (cleared on unpublish).
+  batch.set(
+    doc(firestore, 'hosts', hostId, 'screens', screenId),
+    { slug, publishedAt: Timestamp.now() },
+    { merge: true },
+  )
+  batch.update(doc(firestore, 'hosts', hostId), {
+    [`screens.${screenId}`]: path,
+  })
+  const outboxRef = stagePublishOutboxEntry(batch, firestore, { hostId, paths })
+  await batch.commit()
   // "% who publish a site" — the GTM plan's headline activation metric
   // (AGL-1561). Fired HERE, at the routing-map write, rather than at each of
   // the five publish buttons: registering a path in the host's `screens` map
@@ -204,12 +277,7 @@ export async function publishScreenRoute(
   // a publish that already happened cannot be re-reported as a first one.
   // See `isFirstPublishedRoute` for what all three publish paths mean by it.
   trackEvent('site_published', { first_publish: firstPublish })
-  announceRouteChange({
-    user,
-    hostId,
-    before,
-    after: { [screenId]: path },
-  })
+  announceRouteChange({ user, hostId, paths, outboxRef })
 }
 
 /**
@@ -232,8 +300,12 @@ export async function syncScreenRouteEntries(
   for (const [screenId, path] of Object.entries(entries)) {
     updates[`screens.${screenId}`] = path ?? deleteField()
   }
-  await updateDoc(doc(firestore, 'hosts', hostId), updates)
-  announceRouteChange({ user: announcer.user, hostId, before, after: entries })
+  const paths = changedPaths(before, entries)
+  const batch = writeBatch(firestore)
+  batch.update(doc(firestore, 'hosts', hostId), updates)
+  const outboxRef = stagePublishOutboxEntry(batch, firestore, { hostId, paths })
+  await batch.commit()
+  announceRouteChange({ user: announcer.user, hostId, paths, outboxRef })
 }
 
 /**
@@ -252,21 +324,23 @@ export async function unpublishScreenRoute(
   // cache, so the address the visitor sees is one the owner believes they
   // retired (AGL-2573).
   const before = await readRouteMap(firestore, hostId)
-  await Promise.all([
-    updateDoc(doc(firestore, 'hosts', hostId), {
-      [`screens.${screenId}`]: deleteField(),
-    }),
-    // Drop `publishedAt` too (the route is no longer live), and the slug when
-    // asked. Always writes the screen doc now so an unpublished screen never
-    // keeps a stale published date.
-    setDoc(
-      doc(firestore, 'hosts', hostId, 'screens', screenId),
-      {
-        publishedAt: deleteField(),
-        ...(options?.clearSlug ? { slug: deleteField() } : {}),
-      },
-      { merge: true },
-    ),
-  ])
-  announceRouteChange({ user, hostId, before, after: { [screenId]: null } })
+  const paths = changedPaths(before, { [screenId]: null })
+  const batch = writeBatch(firestore)
+  batch.update(doc(firestore, 'hosts', hostId), {
+    [`screens.${screenId}`]: deleteField(),
+  })
+  // Drop `publishedAt` too (the route is no longer live), and the slug when
+  // asked. Always writes the screen doc now so an unpublished screen never
+  // keeps a stale published date.
+  batch.set(
+    doc(firestore, 'hosts', hostId, 'screens', screenId),
+    {
+      publishedAt: deleteField(),
+      ...(options?.clearSlug ? { slug: deleteField() } : {}),
+    },
+    { merge: true },
+  )
+  const outboxRef = stagePublishOutboxEntry(batch, firestore, { hostId, paths })
+  await batch.commit()
+  announceRouteChange({ user, hostId, paths, outboxRef })
 }

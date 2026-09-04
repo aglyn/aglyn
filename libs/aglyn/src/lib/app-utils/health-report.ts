@@ -2018,6 +2018,21 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
       'Turns a site’s sending-domain claim into a DKIM key and the DNS records that carry it. If it stops, every site that has ASKED for a domain of its own waits on a claim with no records to publish. Their mail keeps leaving on the shared pool throughout, which makes this a stall in reputation isolation rather than stopped mail — and it is invisible to the merchant, who sees only a domain that never finishes.',
   },
   {
+    id: 'drain-publish-outbox',
+    label: 'Publish outbox drain',
+    // The fifth route on the `consoleFastCrons` job. Fifteen minutes is the
+    // bound on how long a publish whose tab went away can stay invisible,
+    // and it is the schedule this shares rather than one chosen for it —
+    // buying a tighter one would mean a second Cloud Scheduler job against a
+    // free-tier allowance of three.
+    cron: '*/15 * * * *',
+    runner: 'cloud-scheduler',
+    target: 'consoleFastCrons \u2192 console /api/admin/drain-publish-outbox',
+    graceMinutes: 45,
+    drives:
+      'Fires the cache-drop announce for publishes whose tab closed before it landed (AGL-2575). Publishing is a client Firestore write, so the announce is a fetch from the browser and a closed tab strands it; this is the only thing that finishes one. If it stops, a stranded publish is invisible on the live site for the full hour-long document TTL, and the pending entry that records it is never read by anything.',
+  },
+  {
     id: 'plugin-jobs-beat',
     label: 'Plugin job beat',
     // Cloud Scheduler says `every 1 minutes`; the equivalent five-field

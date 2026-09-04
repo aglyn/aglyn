@@ -3010,6 +3010,78 @@ service cloud.firestore {
       }
     }
 
+    /**
+     * THE PUBLISH OUTBOX (AGL-2575) — a publish's cache-drop announce,
+     * written down so a closed tab cannot lose it.
+     *
+     * Publishing a screen is a client Firestore write: the browser registers
+     * the path in `hosts/{hostId}.screens` and moves the version pointer, so
+     * there is no server operation the announce can hang off and AGL-2573
+     * left it as a `fetch` from the same tab. An entry here is that announce,
+     * staged into the SAME batch as the routing-map write — either both land
+     * or neither does — and a scheduled console drain fires the ones no tab
+     * ever managed to.
+     *
+     * ## The forgery this has to refuse
+     *
+     * An entry is an instruction the platform later carries out with its own
+     * credentials: drop these addresses on this site. Nothing in the DOCUMENT
+     * PATH says which site, because the drain reads this collection top-level
+     * (a subcollection would make it a collection-group query, and automatic
+     * single-field indexes are COLLECTION scope only — AGL-2486). So `hostId`
+     * is a field, and the field is what is checked: the writer must be able
+     * to PUBLISH to the host they name, by the same `canPublishHostContent`
+     * the routing-map write itself asks. An `author` — the role sold as "edit
+     * content but not publish" — is refused here exactly as it is there, and
+     * a member of one site cannot name another site's id.
+     *
+     * A suspended site is frozen here too, and for a sharper reason than
+     * consistency: an outbox entry is a request for the platform to call out
+     * on the site's behalf, and a takedown its own editors could keep queuing
+     * work through would not be a takedown.
+     *
+     * ## Why the shape is pinned as tightly as the authorization
+     *
+     * `createdAt == request.time` is what makes the drain's ordering and its
+     * age reporting mean anything: a client-settable timestamp could put an
+     * entry at the head of the queue for ever, or make a stranded publish
+     * report as newly created and never age into the stalled count.
+     * `attempts == 0` keeps the retry ceiling out of the writer's hands, and
+     * `hasOnly` keeps a client from parking arbitrary state in a collection
+     * the platform reads back.
+     *
+     * UPDATE is denied outright. The drain uses the Admin SDK and bypasses
+     * these rules; nothing else has any business editing an entry in place.
+     * DELETE is open to the same role that may create one, because the
+     * publishing tab releases its own entry the moment its announce lands —
+     * that is what keeps this collection near-empty instead of a log.
+     */
+    match /publishOutbox/{entryId} {
+      // The client never reads its own entries: it holds the reference it
+      // just created and deletes through that. Staff read for support.
+      allow read: if isStaff();
+      allow create: if isStaff() ||
+        (request.resource.data.keys().hasOnly(
+           ['hostId', 'paths', 'createdAt', 'attempts']) &&
+         request.resource.data.keys().hasAll(
+           ['hostId', 'paths', 'createdAt', 'attempts']) &&
+         request.resource.data.hostId is string &&
+         request.resource.data.paths is list &&
+         request.resource.data.paths.size() > 0 &&
+         // The tenant's own MAX_PATHS. More would be dropped there anyway,
+         // and a client must not be able to make the drain assemble an
+         // unbounded body.
+         request.resource.data.paths.size() <= 250 &&
+         request.resource.data.attempts == 0 &&
+         request.resource.data.createdAt == request.time &&
+         canPublishHostContent(request.resource.data.hostId) &&
+         !hostWritesFrozen(request.resource.data.hostId));
+      allow update: if false;
+      allow delete: if isStaff() ||
+        (resource.data.hostId is string &&
+         canPublishHostContent(resource.data.hostId));
+    }
+
     // User profile docs (AGL-158): the console account page reads/writes
     // users/{uid}; the AGL-42 hardening dropped the blanket rule without
     // adding this match, which default-denied the collection.
