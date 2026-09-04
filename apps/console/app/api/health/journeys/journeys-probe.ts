@@ -79,6 +79,9 @@
  * `PROBE_TTL_MS`, because the endpoint is public and the memo is what bounds
  * what anyone can make it spend.
  */
+import { getApp } from 'firebase-admin/app'
+// Imported for its side effect too: guarantees the firebase-admin default app
+// is initialized before `getApp()` runs, exactly like the sibling health route.
 import { firebaseAdmin, getPlatformLockdown } from '@aglyn/tenant-data-admin'
 import { isLockdownActive, lockdownBlocks } from '@aglyn/aglyn/server'
 
@@ -187,12 +190,16 @@ const RULES_FETCH_TIMEOUT_MS = 5_000
  */
 export async function readLiveFirestoreRules(): Promise<string | null> {
   try {
-    const app = firebaseAdmin.app()
-    const token = (await app.options.credential?.getAccessToken())?.access_token
+    // `getApp()` rather than the `firebaseAdmin` facade: the facade exposes the
+    // four product handles and not `options`, and the credential is what mints
+    // the token. `void firebaseAdmin` below is what guarantees the default app
+    // exists by the time this runs — the same pairing `/api/health/signups`
+    // uses.
+    void firebaseAdmin
+    const options = getApp().options
+    const token = (await options.credential?.getAccessToken())?.access_token
     if (!token) return null
-    const projectId =
-      (app.options as { projectId?: string }).projectId ??
-      process.env['FIREBASE_PROJECT_ID']
+    const projectId = options.projectId ?? process.env['FIREBASE_PROJECT_ID']
     if (!projectId) return null
     const base = (
       process.env['FIREBASE_RULES_API_BASE'] ??
