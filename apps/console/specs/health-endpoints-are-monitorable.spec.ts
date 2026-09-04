@@ -78,9 +78,42 @@ function healthRoutes(): string[] {
   return found.sort()
 }
 
-const ROUTES = healthRoutes()
+const ALL_ROUTES = healthRoutes()
 const source = (relative: string) =>
   readFileSync(join(REPO_ROOT, relative), 'utf8')
+
+/**
+ * The route another health route's OLD path forwards to, or null (AGL-2583).
+ *
+ * A check renamed to what it measures leaves its old path behind, because
+ * every monitor already pointed at it — the GCP uptime check, the GitHub
+ * probe, whatever a self-hoster wired up. That old path is a file in this
+ * tree, so the sweep finds it, and it defines none of the handlers below: it
+ * re-exports them.
+ *
+ * It is still held to the properties an alias can break on its own — it must
+ * forward BOTH verbs, it must forward to a health route that exists, and it
+ * must declare its own uncacheable segment config, since Next reads that per
+ * file and cannot follow a re-export. Everything else it inherits by
+ * definition from the route it forwards to, which this sweep also checks.
+ */
+function aliasTargetOf(relative: string, text: string): string | null {
+  const match = text.match(/export \{ GET, HEAD \} from '(\.\.?\/[^']+)'/)
+  if (match === null) return null
+  const directory = relative.slice(0, relative.lastIndexOf('/'))
+  // The specifier names the module, extensionless, the way TypeScript writes
+  // it: `../signup-volume/route`.
+  return `${join(directory, match[1]).replace(/\.ts$/, '')}.ts`
+}
+
+const ALIASES = ALL_ROUTES.map(
+  (relative) => [relative, aliasTargetOf(relative, source(relative))] as const,
+).filter((entry): entry is readonly [string, string] => entry[1] !== null)
+
+/** The routes that IMPLEMENT a health check, which is most of them. */
+const ROUTES = ALL_ROUTES.filter(
+  (relative) => !ALIASES.some(([alias]) => alias === relative),
+)
 
 describe('the health endpoints an external monitor would watch', () => {
   it('discovers them rather than trusting a list', () => {
@@ -92,6 +125,12 @@ describe('the health endpoints an external monitor would watch', () => {
     // The one the fifty-one hours happened on.
     expect(ROUTES).toContain('apps/console/app/api/health/crons/route.ts')
     expect(ROUTES).toContain('apps/tenant/app/api/health/route.ts')
+    // And the sweep must not be able to EXCUSE a route by mistaking it for an
+    // alias: an alias is a handful of lines that forward, so anything the
+    // classifier removed has to be one.
+    for (const [alias] of ALIASES) {
+      expect(source(alias).split('\n').length).toBeLessThan(60)
+    }
   })
 
   describe.each(ROUTES)('%s', (relative) => {
@@ -141,6 +180,61 @@ describe('the health endpoints an external monitor would watch', () => {
      * A monitor cannot authenticate, so these must stay open — and the
      * lockdown sweep must know that is deliberate rather than an oversight.
      */
+    it('is exempt from lockdown, in writing', () => {
+      expect(text).toMatch(/lockdown-\d+: exempt/)
+    })
+  })
+})
+
+/**
+ * A renamed check's OLD path is a promise, and promises rot silently
+ * (AGL-2583).
+ *
+ * The reason this is a separate sweep rather than an exemption: an alias that
+ * forwards only GET answers a HEAD monitor with a 405 forever, and an alias
+ * that inherits its segment config from the route it points at is a cacheable
+ * health check — both are green in every test that only reads the target.
+ */
+describe('a health endpoint kept alive at its old path', () => {
+  it('finds the aliases rather than assuming there are none', () => {
+    // The positive control. If the classifier ever stopped recognising an
+    // alias, every case below would vanish and this suite would pass by
+    // checking nothing — while the alias itself had also been swept into the
+    // implementation checks and would have failed there. One of the two
+    // always reddens.
+    expect(ALIASES.length).toBeGreaterThanOrEqual(1)
+    expect(ALIASES.map(([alias]) => alias)).toContain(
+      'apps/console/app/api/health/signups/route.ts',
+    )
+  })
+
+  describe.each(ALIASES)('%s', (relative, target) => {
+    const text = source(relative)
+
+    it('forwards to a health route that actually exists', () => {
+      // A path typo here is a 500 on the exact URL every existing monitor is
+      // pointed at, and nothing else in the tree would notice.
+      expect(ROUTES).toContain(target)
+    })
+
+    it('forwards BOTH verbs, so a HEAD monitor is not left with a 405', () => {
+      expect(text).toMatch(/export \{ GET, HEAD \}/)
+    })
+
+    it('declares its own uncacheable segment config', () => {
+      // Next reads `dynamic` and `revalidate` per route file and cannot
+      // follow a re-export, so an alias that omitted these would be a
+      // CACHEABLE health check — the first way a health check learns to lie.
+      expect(text).toMatch(/export const dynamic = 'force-dynamic'/)
+      expect(text).toMatch(/export const revalidate = 0/)
+    })
+
+    it('is not a redirect', () => {
+      // This repo's own probe refuses to follow a `3xx` and reports it as an
+      // outage (AGL-786), so the old path has to answer the question itself.
+      expect(text).not.toMatch(/Response\.redirect|status:\s*30\d/)
+    })
+
     it('is exempt from lockdown, in writing', () => {
       expect(text).toMatch(/lockdown-\d+: exempt/)
     })

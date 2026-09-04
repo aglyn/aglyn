@@ -240,6 +240,26 @@ export interface AglynOrgInvite extends AglynDocument {
  */
 export interface OrgSlugReservation {
   orgId: OrgUid
+  /**
+   * Set when the previous holder renamed away — the tombstone that keeps old
+   * workspace URLs redirecting until somebody else wants the name.
+   */
+  movedTo?: string
+  /**
+   * Epoch millis at which a PENDING reservation lapses (AGL-2585).
+   *
+   * Present only on a workspace created by an owner whose email was not yet
+   * verified, which is every password signup: the address is held for them,
+   * not granted to them, and the hold ends unless they confirm the address.
+   * Absent means granted, and a grant never expires — so every workspace made
+   * by a verified owner, and every one that predates this field, is outside
+   * the rule entirely.
+   *
+   * Cleared by `reap-unverified-orgs` once the owner verifies. Public, like
+   * the rest of this document, which is why nothing identifying the owner is
+   * written beside it.
+   */
+  reservedUntil?: number
 }
 
 /**

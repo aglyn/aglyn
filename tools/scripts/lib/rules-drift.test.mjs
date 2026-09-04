@@ -737,6 +737,7 @@ describe('the checker is wired (workflow + package.json)', () => {
       'test:release-version', // AGL-2089
       'test:manifest-versions', // AGL-2108
       'check:manifest-versions', // AGL-2108
+      'test:funnel-alarm', // AGL-2587
       'test:pricing-tables', // AGL-1278
       'check:pricing-tables', // AGL-1278
       'test:marketing-containers', // AGL-1296
@@ -831,6 +832,7 @@ describe('the checker is wired (workflow + package.json)', () => {
       'test:release-version', // AGL-2089
       'test:manifest-versions', // AGL-2108
       'check:manifest-versions', // AGL-2108
+      'test:funnel-alarm', // AGL-2587
       'test:pricing-tables', // AGL-1278
       'check:pricing-tables', // AGL-1278
       'test:marketing-containers', // AGL-1296

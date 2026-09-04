@@ -59,6 +59,16 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 /*
+ * The LEAF module for the impersonation exemption too, and for a sharper
+ * version of the reason the notes below give: every spec that reaches this
+ * file mocks the `@aglyn/tenant-data-admin` barrel, and a factory that
+ * omitted this name would make the verification gate THROW rather than
+ * refuse. A control that fails by exception is one nobody can reason about.
+ * Resolved from the module itself, the real predicate runs under every
+ * harness.
+ */
+import { isImpersonationSession } from '@aglyn/tenant-data-admin/server/firebase-admin'
+/*
  * The LEAF module, not the barrel, for the reason `document-id` is imported
  * the same way: a barrel import resolves to whatever a spec's `jest.mock` of
  * `@aglyn/tenant-data-admin` happens to contain, and nearly every spec that
@@ -3434,6 +3444,38 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
 
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+    /*
+     * A VERIFIED ADDRESS IS A PRECONDITION OF SENDING MAIL (AGL-479/2589),
+     * and this is the door every send arrives at — broadcast, scheduled and
+     * test alike, since all three branches sit below this check.
+     *
+     * Stated here rather than inferred, which is the whole change. The role
+     * lookup on the next lines already refused an unverified account, but
+     * only as a side effect of provisioning: nothing can enter a host's
+     * `memberRoles` map without having verified, so the role resolved to
+     * undefined and the 403 came from the wrong sentence. That is a fact
+     * about how accounts are created, not a rule about who may send, and it
+     * has already moved once — signup provisions an ORG for an account that
+     * has not verified yet (AGL-2585). A comparable grace on host creation
+     * would have opened this surface with nothing else in the way, on a
+     * `p=reject` sending domain, and no test would have gone red.
+     *
+     * `campaign-send-verification.spec.ts` holds the property directly, so a
+     * future grace fails a test instead of leaking reputation.
+     *
+     * Impersonation is exempt on the AGL-480 reasoning the other ~135 gates
+     * use: staff have authenticated separately, the act is audited, and the
+     * account most likely to need support is the newest one.
+     */
+    if (!decoded.email_verified && !isImpersonationSession(decoded)) {
+      // The shape of `emailUnverifiedResponse()` (AGL-479), written out
+      // because that helper returns a fetch `Response` and this is a
+      // (req, res) plugin handler.
+      return res.status(403).json({
+        error: 'Verify your email to continue',
+        reason: 'email-unverified',
+      })
+    }
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(hostId)
     const hostSnapshot = await hostRef.get()

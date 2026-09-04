@@ -13,7 +13,7 @@
   "apps/console/components/staff-email-suppressions-card.component.tsx": 1,
   "apps/console/components/staff-reversal-recovery-card.component.tsx": 1,
   "apps/console/components/staff-taxable-purchases-card.component.tsx": 2,
-  "apps/console/constants/subprocessor-inventory.ts": 13,
+  "apps/console/constants/subprocessor-inventory.ts": 18,
   "apps/console/utils/tx-return-webfile.ts": 20,
   "apps/docs/docusaurus.config.ts": 6,
   "apps/docs/src/pages/status.tsx": 1,

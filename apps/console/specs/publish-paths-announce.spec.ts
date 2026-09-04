@@ -274,7 +274,16 @@ describe('every editor publish surface reaches the seam', () => {
     const source = readRepo(SCREENS_LIST)
     expect(source).toMatch(/\{ hostId, screenId: newId, user \}/)
     expect(source).toMatch(/unpublishScreenRoute\(firestore, \{ hostId, screenId: id, user \}\)/)
-    expect(source).toMatch(/publish: false,\s*\}\),\s*\{ user \},/)
+    // The move path, asserted by the CALL rather than by what sits next to
+    // it. This read `publish: false, }), { user },` — the entries object and
+    // the announce adjacent in the source — which held only while the
+    // composition was built inline at the call. AGL-2588 lifted it above the
+    // write batch so a reserved address can be refused before anything is
+    // written, and the assertion broke on formatting while the behaviour it
+    // names was untouched.
+    expect(source).toMatch(
+      /syncScreenRouteEntries\(\s*firestore,\s*hostId,\s*[A-Za-z]+,\s*\{\s*user,?\s*\}/,
+    )
   })
 
   it('the client helper forwards explicit paths', () => {

@@ -2,6 +2,98 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function isSignedIn() { return request.auth != null; }
+
+    // ------------------------------------------------------------------
+    // Email verification (AGL-479, brought to the rules layer by AGL-2589)
+    // ------------------------------------------------------------------
+    /**
+     * Has this session proved it receives mail at its own address?
+     *
+     * The gate itself is AGL-479 and predates this file's involvement: an
+     * email/password account must confirm its address before the console
+     * answers it, OAuth accounts arrive with `email_verified: true`, and
+     * roughly 135 route handlers spell the check out. What none of that
+     * reached is the client SDK, which talks to Firestore directly and past
+     * every one of those routes — the exact threat model these rules exist
+     * for, and the one AGL-497 already demonstrated for a host editor.
+     *
+     * ## WHY THIS IS A WRITE GATE AND NOT A MEMBERSHIP GATE
+     *
+     * Until AGL-2589 nothing stopped an unverified principal here. What
+     * stopped them in practice was incidental: an unverified account cannot
+     * get into an org's `members` collection or a host's `memberRoles` map,
+     * both Admin-SDK-only, so every helper below resolved to no role. That
+     * is a true statement about today's provisioning and not a rule anybody
+     * wrote down — and provisioning has already moved once in this
+     * direction, since signup now creates an org for an account that has not
+     * verified yet (AGL-2585). A comparable grace on host creation would
+     * open the campaign send surface, on a `p=reject` sending domain, with
+     * nothing else in the way. The property is worth stating rather than
+     * inheriting.
+     *
+     * ## WHY WRITES ONLY, AND WHICH ONES
+     *
+     * NOT every rule in this file, deliberately. A person who has not
+     * verified still has to be able to complete verification, and the flow
+     * that gets them there is made of reads and of writes to their own
+     * account document — `signup/page.tsx` writes `users/{uid}` client-side
+     * from the credential it just created, before any mail has been opened.
+     * A blanket `isVerified()` in `isSignedIn()` would lock people out of
+     * the one flow that would let them back in, which is a worse outcome
+     * than the hole it closes and the failure mode this note exists to
+     * prevent.
+     *
+     * So the boundary is: a client-direct WRITE to org-owned or site-owned
+     * data requires verification. Concretely, the four write chokepoints
+     * below carry it — `canWriteOrgData`, `canWriteOrgWideData`,
+     * `canWriteHostContent`, `canPublishHostContent` — plus the handful of
+     * write rules on those two subtrees that gate on a role directly instead
+     * of routing through one of them (the org doc's own update, both
+     * `pluginSettings` matches, the host delete, the webhook mutations and
+     * the audience-member delete). That covers the whole set a campaign send
+     * draws on: the audience (`contacts`, `lists`, `contactSegments`,
+     * `emailTopics`, `datasets`), the message (`screens` and the rest of the
+     * host content tree) and the site record that names who may send.
+     *
+     * Everything NOT carrying it is either a read, the account's own
+     * `users/{uid}` subtree, or already `allow write: if false`. The
+     * marketplace publisher surfaces are left alone on purpose: they are a
+     * different axis with their own staff review, and widening this into
+     * them without reading that flow would be a guess.
+     *
+     * ## SHAPE
+     *
+     * `.get()` rather than `request.auth.token.email_verified`, for the
+     * AGL-2479 reason argued under `isStaff()` — a claim-less token makes
+     * the direct read an ERROR that names this function as the cause of
+     * every unrelated denial. Fails closed: absent reads as unverified,
+     * which matches `verifyConsoleIdToken`'s own contract.
+     */
+    function isVerified() {
+      return isSignedIn() &&
+        (request.auth.token.get('email_verified', false) == true ||
+         isImpersonating());
+    }
+    /**
+     * Staff impersonation session (AGL-357/480): a custom token minted for
+     * the TARGET account by /api/admin/impersonate, carrying the staff uid
+     * in `impersonatedBy`. Exempt from verification for the reason the API
+     * layer already exempts it — staff have authenticated separately and the
+     * act is audited, and the account most likely to need support is the
+     * brand-new one that has not verified yet. Only the Admin SDK can set a
+     * custom claim, so this is not a bit a client can assert for itself.
+     *
+     * Mirrored from `isImpersonationSession` in firebase-admin.ts on purpose:
+     * a rules layer that exempted a different set than the routes do would
+     * reintroduce, in the other direction, exactly the divergence AGL-2589
+     * closed.
+     */
+    function isImpersonating() {
+      return isSignedIn() &&
+        request.auth.token.get('impersonatedBy', '') is string &&
+        request.auth.token.get('impersonatedBy', '') != '';
+    }
+
     // Staff access is a Firebase custom claim set via
     // tools/scripts/set-staff-claim.mjs (Aglyn Admin Console, AGL-42).
     //
@@ -404,7 +496,10 @@ service cloud.firestore {
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
              'suspendedEnforcement',
              'erasureRequestedAt'])) ||
-        (canManageOrg() && orgNotSuspended() &&
+        // `isVerified()` here rather than inside `canManageOrg()` (AGL-2589):
+        // that helper is a READ gate too — `billing/stripe` and the member
+        // roster ask it — and folding verification in would refuse those.
+        (canManageOrg() && isVerified() && orgNotSuspended() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['slug', 'ownerUid', 'createdByUid', 'hosts', 'plan',
              'entitlements', 'releaseFlags',
@@ -569,7 +664,11 @@ service cloud.firestore {
       // plugin, never break it.
       match /pluginSettings/{pluginId} {
         allow read: if isStaff() || isOrgMember();
-        allow write: if isStaff() || (canManageOrg() && orgNotSuspended());
+        // Verification on the write half only (AGL-2589): a plugin's org
+        // config includes the marketing plugin's own, so this is send-path
+        // adjacent, and the read is what the console needs to render at all.
+        allow write: if isStaff() ||
+          (canManageOrg() && isVerified() && orgNotSuspended());
       }
 
       // Org-shared data (AGL-237): datasets (records included), contacts
@@ -590,8 +689,11 @@ service cloud.firestore {
       // possible: resources carry `visibleTo` (['org'] or ['host:{id}', …])
       // and members carry a denormalized `scopeTokens`. The intersection is
       // the association that was missing.
+      // `isVerified()` (AGL-2589) is the first conjunct on every write helper
+      // in this file: the CRM, the audiences and the shared datasets are the
+      // audience half of a campaign send, and they are written client-direct.
       function canWriteOrgData() {
-        return isOrgMember() &&
+        return isOrgMember() && isVerified() &&
           orgMember().role in ['owner', 'admin', 'editor'] &&
           orgNotSuspended();
       }
@@ -693,7 +795,7 @@ service cloud.firestore {
        * stranger position than either allowing or denying both.
        */
       function canWriteOrgWideData() {
-        return isOrgWideMember() &&
+        return isOrgWideMember() && isVerified() &&
           orgMember().role in ['owner', 'admin', 'editor'] &&
           orgNotSuspended();
       }
@@ -1046,7 +1148,7 @@ service cloud.firestore {
           // list has no business taking them off it. Suspension belongs on
           // this half, which is the write.
           allow delete: if isStaff() ||
-            (isOrgWideAudienceManager() && orgNotSuspended());
+            (isOrgWideAudienceManager() && isVerified() && orgNotSuspended());
         }
       }
 
@@ -1417,9 +1519,14 @@ service cloud.firestore {
      * gate. An org-level permission key would have been on the wrong axis
      * entirely: rules cannot evaluate a custom role without a second
      * denormalized projection, and `memberRoles` is already read here.
+     *
+     * `isVerified()` rather than `isSignedIn()` since AGL-2589 — a strict
+     * narrowing, since verification implies a session. It is here rather than
+     * on the reads because a screen holds the BODY of a campaign email, and
+     * the send path resolves it from this tree.
      */
     function canWriteHostContent(hostId) {
-      return isSignedIn() &&
+      return isVerified() &&
         hostMemberRole(hostId) in ['admin', 'editor', 'author'];
     }
     /**
@@ -1455,9 +1562,13 @@ service cloud.firestore {
      * a soft-delete PAIRED with a routing-map removal. Letting an author do
      * half of that pair leaves a deleted screen still routed, which is a worse
      * outcome than refusing it.
+     *
+     * `isVerified()` rather than `isSignedIn()` since AGL-2589, on the same
+     * reasoning as the helper above and one step sharper: this one also gates
+     * `publishOutbox`, which is a client write that makes the PLATFORM act.
      */
     function canPublishHostContent(hostId) {
-      return isSignedIn() && hostMemberRole(hostId) in ['admin', 'editor'];
+      return isVerified() && hostMemberRole(hostId) in ['admin', 'editor'];
     }
     /**
      * May this member read the site's SENSITIVE documents — the `webhooks`
@@ -1832,7 +1943,8 @@ service cloud.firestore {
             !request.resource.data.diff(resource.data).affectedKeys()
               .hasAny(['screens'])));
       allow delete: if isStaff() ||
-        (hostMemberRole(hostId) == 'admin' && !hostWritesFrozen(hostId));
+        (hostMemberRole(hostId) == 'admin' && isVerified() &&
+          !hostWritesFrozen(hostId));
       // Screen/layout DOC creates are API-only (AGL-473): /api/hosts/
       // resources enforces screensPerHost / sharedLayoutsPerHost (and the
       // owning org's suspension) server-side. Their `versions` (and any
@@ -2204,8 +2316,12 @@ service cloud.firestore {
         // from the catch-all: a suspended site must not keep editing its
         // webhooks, and dropping it here would have been a quiet re-grant of
         // its own.
+        // `isVerified()` beside it rather than inside `canReadHostSensitive`
+        // (AGL-2589): that helper names a READ capability and gates the order
+        // book, so verification belongs on this use of it and not the others.
         allow update, delete: if isStaff() ||
-          (canReadHostSensitive(hostId) && !hostWritesFrozen(hostId));
+          (canReadHostSensitive(hostId) && isVerified() &&
+            !hostWritesFrozen(hostId));
       }
       // Order STATUS is server-owned (AGL-1827). Every transition goes
       // through an Admin-SDK route that re-asks ORDER_TRANSITIONS inside the
@@ -2287,7 +2403,8 @@ service cloud.firestore {
       match /pluginSettings/{pluginId} {
         allow read: if isStaff() || isHostMember(hostId);
         allow write: if isStaff() ||
-          (hostMemberRole(hostId) == 'admin' && !hostWritesFrozen(hostId));
+          (hostMemberRole(hostId) == 'admin' && isVerified() &&
+            !hostWritesFrozen(hostId));
       }
       // The extra {subcollection} segment matters: a bare {document=**}
       // matches ZERO or more segments in rules v2, i.e. the host doc

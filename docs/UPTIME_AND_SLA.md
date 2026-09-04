@@ -20,7 +20,12 @@ measure availability and will commit to a number once there is a quarter of it
 GET  https://app.aglyn.com/api/health          console
 GET  https://demo.aglyn.app/api/health         tenant runtime
 GET  https://app.aglyn.com/api/health/backups  Firestore backup state (AGL-1490)
-GET  https://app.aglyn.com/api/health/signups  org-creation volume (AGL-1536)
+GET  https://app.aglyn.com/api/health/signup-volume
+                                               org-creation VOLUME, refusals,
+                                               and the signup DROUGHT
+                                               (AGL-1536, AGL-1907, AGL-2583)
+GET  https://app.aglyn.com/api/health/signups  the OLD path for the line above,
+                                               still served (AGL-2583)
 GET  https://app.aglyn.com/api/health/rate-limits
                                                rate-limiter fallbacks (AGL-1693)
 GET  https://app.aglyn.com/api/health/billing  Stripe webhook delivery (AGL-1924)
@@ -35,8 +40,92 @@ GET  https://aglyn.com/api/health/render/marketing
                                                marketing home RENDERS (AGL-2486)
 GET  https://demo.aglyn.app/api/health/render/site
                                                a tenant site RENDERS (AGL-2486)
+GET  https://app.aglyn.com/api/health/auth-doors
+                                               can a person still get IN —
+                                               password SIGN-IN (AGL-2583),
+                                               password recovery, the
+                                               verification link, Google, SSO,
+                                               passkeys (AGL-2586)
+GET  https://app.aglyn.com/api/health/journeys
+                                               create + publish stay AUTHORIZED,
+                                               and published cache drops land
+                                               (AGL-2586)
+GET  https://aglyn.com/api/health/funnel       contact / sales / demo forms still
+                                               ACCEPT and ROUTE a lead (AGL-2586)
 HEAD <any>                                     the SAME probe and status as GET
 ```
+
+The last three are JOURNEY checks rather than component checks, and the
+distinction is the whole of AGL-2586: every endpoint above them can be green
+while nobody can get in, nobody can publish, and every lead the site collects
+is dropped on the floor. None writes anything — all three assert reachability
+and authorization without committing, so no synthetic account, org, site,
+screen or lead is ever created in production. What each one asserts, and what
+it deliberately does not, is in the docblocks:
+`apps/console/app/api/health/auth-doors/auth-doors-probe.ts`,
+`apps/console/app/api/health/journeys/journeys-probe.ts` and
+`apps/tenant/app/api/health/funnel/funnel-probe.ts`.
+
+### The doors — what `/api/health/auth-doors` asserts
+
+| Check | Green means | Goes red when |
+| --- | --- | --- |
+| `passwordSignIn` | Identity Platform refuses a sign-in for an address that cannot exist — so the endpoint is reachable, the public key and App Check are accepted, and the **password provider is still enabled**. With a probe identity configured, it also signs in for real | the password provider is switched off (`provider-not-configured`) — which locks out every customer who uses an email and a password — the key or App Check is rejected, nothing answers, the absent account is *admitted*, or the configured probe identity cannot sign in |
+| `passwordReset` | the reset link is built on an allowlisted console origin, email is configured, and the redemption endpoint refuses an invalid code | the console URL is malformed or non-TLS, the resolver starts honoring request-supplied origins, email transport is unconfigured, or `accounts:resetPassword` stops answering |
+| `emailVerification` | the link mint path answers, the AGL-1112 rewrite still lands on a console handler URL carrying the code, and redemption refuses an invalid code | the mint answers anything but `auth/user-not-found` for an unclaimable address, the rewrite drifts off our origin or drops the code, or `accounts:update` stops answering |
+| `googleOauth` | Identity Platform builds a Google authorization URL for the console origin, carrying a client id | the provider is disabled or its client id was removed (`OPERATION_NOT_ALLOWED`), the console origin fell off the authorized-domain list (`INVALID_CONTINUE_URI`), App Check refuses, or the web API key is rejected |
+| `sso` | the per-org GCIP tenant pools list, and a bounded sample still carries an enabled SAML or OIDC provider | the tenant manager stops answering — which locks out every enterprise customer at once — or a sampled pool's provider config was deleted or disabled |
+| `passkey` | the console origin resolves to a relying-party context and a discoverable-credential challenge can be issued | the deployment's workspace domain is wrong, which `400`s every registration and every sign-in and is otherwise invisible |
+
+Every probe is a question whose answer is a known refusal: the mint asks about
+an address at `.invalid`, a TLD RFC 2606 reserves so it can never be
+registered, and the redemption probes present a code that is not a code. A
+refusal is the *success*, the same trick the root check plays on Firestore. One
+sweep is memoized for five minutes per instance.
+
+**The body carries codes, never messages,** and that matters more here than on
+the siblings: the Identity Platform surfaces behind these probes return the
+OAuth **client secret** and the password-hash **signer key**, and a tenant id
+names a customer. Every verdict is computed from booleans and counts in
+`auth-doors-verdict.ts`, which cannot be handed a string a provider wrote.
+
+#### What it deliberately does NOT assert
+
+- **A real Google, SAML or passkey login.** We cannot hold a Google session, a
+  customer's IdP assertion, or an authenticator's private key. These assert
+  reachability and authorization — the step the browser takes first, answered
+  by the same configuration the real handshake depends on. That is how OAuth
+  actually breaks.
+- **That a password-reset mail leaves the building.** Firebase's
+  email-enumeration protection refuses to distinguish a missing account from a
+  present one — measured on the live project, `generatePasswordResetLink` for
+  an address that does not exist returns `auth/internal-error`, not
+  `auth/user-not-found` — so there is no negative case to probe with.
+- **A full round trip through a redeemed code.** Same reason: following a real
+  verification link end to end needs an account whose address we control.
+- **A customer's own identity provider.** Theirs, not ours to probe.
+
+**If a probe identity is ever added** it is a decision about production, not a
+side effect of adding a check, and it is not made here. It would need: a
+dedicated account on a domain we control, exempt from metering and from every
+funnel metric, reaped on a schedule; its address named by an environment
+variable in the repo with the value in the secret store, exactly as
+`AGLYN_PROBE_TOKEN` is handled; and its own line in the table above saying what
+the extra coverage buys.
+
+**A red now reaches a person.** The `Uptime probe` workflow watched every
+endpoint above for weeks and told nobody — its own header says *"the run
+history IS the record"*, which is exactly how `/api/health/crons` answered 503
+for fifty-one hours unread. It now posts a failing run to Slack `#ci`
+(`tools/scripts/report-uptime-red.mjs`, AGL-2586), the same channel Main Gate's
+red goes to. A journey failure leads with the journey rather than the endpoint,
+because a degraded subsystem and "nobody can publish" must not read the same in
+the first line. It does NOT dedupe: this probe grades a moment rather than a
+sha, so two consecutive failing runs are two samples of an outage that is still
+happening. A subsystem 404 while its target's root is up is a pending promotion
+and is never reported. Prove the path without an outage by dispatching the
+workflow with `test_notification` — the message labels itself as a test in every
+stream a reader can land on.
 
 :::caution `HEAD` is not a liveness shortcut any more
 It used to return a hardcoded `200` and "touch nothing", which made every one
@@ -68,7 +157,7 @@ Three properties these have to keep, each a way health checks routinely lie:
 | --- | --- |
 | Never cached | A cached check returns `200` from the edge while the origin is on fire, and the graph stays green through the outage. `force-dynamic` plus `no-store`. |
 | Checks a dependency | "The function booted" is a fact Vercel already knows. Firestore is what actually takes us down, so that is what gets touched. |
-| Bounded cost | Public and unauthenticated, so an unthrottled dependency check is a free amplifier. The probe result is memoised for 15s per instance. |
+| Bounded cost | Public and unauthenticated, so an unthrottled dependency check is a free amplifier. The probe result is memoized for 15s per instance. |
 
 The probe reads a document that deliberately does not exist. A missing document
 is a *successful* read: it proves credentials, network and the API all work,
@@ -477,7 +566,7 @@ Console: https://console.cloud.google.com/monitoring/uptime?project=aglyn-main
 | `marketing-home` | `aglyn.com/` → **repoint to** `/api/health/render/marketing` | 2xx and body contains `Aglyn` → `$.status == "ok"` | 5 min |
 | `customer-site` | `demo.aglyn.app/` → **repoint to** `/api/health/render/site` | 2xx and body contains `Aglyn Demo` → `$.status == "ok"` | 5 min |
 | `backup-state` | `app.aglyn.com/api/health/backups` | HTTP 2xx and `$.status == "ok"` | 15 min |
-| `signup-volume` | `app.aglyn.com/api/health/signups` | HTTP 2xx and `$.status == "ok"` | 5 min |
+| `signup-volume` | `app.aglyn.com/api/health/signups` → **repoint to** `/api/health/signup-volume` | HTTP 2xx and `$.status == "ok"` | 5 min |
 | `rate-limiter` | `app.aglyn.com/api/health/rate-limits` | HTTP 2xx and `$.status == "ok"` | 5 min |
 | `billing-webhook` | `app.aglyn.com/api/health/billing` | HTTP 2xx and `$.status == "ok"` | 5 min |
 | `beacon-heartbeat console` | `app.aglyn.com/api/health/error-beacon` | HTTP 2xx and `$.status == "ok"` | 15 min |
@@ -758,7 +847,7 @@ Notes that keep these honest:
   minutes they used to carry was GitHub's drift budget, bought with six
   missed sends of a feature `/product/marketing` sells.
   **Clearing event:** the next invocation of that job; nothing latches.
-  **⚠️ A SINGLE PROBE OF THIS ENDPOINT PROVES NOTHING.** It memoises its
+  **⚠️ A SINGLE PROBE OF THIS ENDPOINT PROVES NOTHING.** It memoizes its
   Firestore read for five minutes **per lambda instance**, and a burst lands
   on many. During the 2026-08-24 incident 36 probes split cleanly — ~19
   instances holding a pre-beat memo at `age 103–105m / 503`, ~17 fresh at
@@ -989,7 +1078,7 @@ new one behaves identically to the eleven that already work.
 
 ```bash
 # 1. The check. 900s to match the other subsystem checks; the endpoint
-#    memoises for 5 minutes, so anything tighter reads the same memo twice.
+#    memoizes for 5 minutes, so anything tighter reads the same memo twice.
 gcloud monitoring uptime create \
   'scheduled-jobs — app.aglyn.com/api/health/crons status=ok' \
   --project=aglyn-main \
@@ -1837,6 +1926,154 @@ already covers; the export cron's own grants are documented in
 Checks and policies were created via the Monitoring REST API; to inspect or
 edit, the console UI is fine, or
 `gcloud monitoring uptime list-configs --project=aglyn-main`.
+
+## Signup and sign-in: three monitors that could not see it (AGL-2583)
+
+**Read this before trusting a green next to the word "signup".** Account
+creation was refused for every visitor on the platform from Sep 1 (launch day)
+to Sep 4 — AGL-2581 — and no alert fired. Three checks existed and each
+measured an adjacent quantity:
+
+1. `/api/health/signups` asked whether org creation was running at WAVE
+   volume. **Zero signups is its healthiest possible reading**, so the monitor
+   named "signups" reported green precisely because nobody could sign up.
+2. The refusal check counted `signupRefused_` markers, whose only writer was
+   the rate limiter. `beforeSignupCreate` decides on the Identity Platform
+   path, in front of everything the limiter can see, and wrote no marker.
+3. The refusal's sole trace was a `logger.warn` on Cloud Run stderr, which
+   nothing alerts on.
+
+Four things changed.
+
+### The check is named for what it measures
+
+`/api/health/signups` → **`/api/health/signup-volume`**, with three checks in
+one body: `signupVolume` (the wave), `signupRefusals` (refusals, including the
+fail-closed ones) and `signupDrought` (below).
+
+**The old path still answers**, served by a thin alias — not a redirect, since
+this repo's own probe refuses to follow a `3xx` and would report one as an
+outage (AGL-786). So the GCP `signup-volume` uptime check, any self-hoster's
+monitor and anything else already pointed at `/api/health/signups` kept
+working with no reconfiguration. Repointing it at the new path is tidier and
+optional; the GitHub probe watches BOTH, so the compatibility path is
+continuously exercised rather than merely tolerated.
+
+### The drought: zero accounts WHILE people were arriving
+
+Zero is meaningless without a denominator — a quiet Tuesday night and a total
+outage produce the same number. `signupDrought` reds when the signup page was
+served at least `MIN_SIGNUP_TRAFFIC_FOR_DROUGHT` times (5) in the trailing hour
+and **not one account came out of it**.
+
+**Where the denominator comes from.** The signup page fetches
+`/api/lockdown-status?feature=signups` once per render to decide whether to
+show the paused notice, so that route is the one server touch every real
+arrival makes. It increments a `rateLimits/signupServed_{minute}` marker —
+coalesced in process to at most one write per instance per five seconds,
+carrying a count and a timestamp and nothing else. No visitor, no IP, no
+referrer; the health body that reads it is public.
+
+**Deliberately not GA4**, despite the numbers being there. Its API needs a
+service account and an OAuth round trip from a public health route, its data
+lands hours late, and a monitor that depends on an analytics vendor reports an
+outage every time that vendor has one.
+
+**The denominator under-counts, on purpose.** The lockdown answer is
+edge-cacheable for a minute, so a burst of arrivals behind one CDN node can
+land as a single origin hit. That direction is safe: under-counting can only
+make the alarm quieter, and it cannot invent traffic that did not happen, so it
+cannot invent an outage.
+
+Forced failure, to prove the alert path: set `SIGNUP_DROUGHT_MIN_TRAFFIC=0` in
+the console's Vercel env. Every hour with no creations then reports a drought,
+including a healthy quiet one → expect the email → unset. It breaks signup for
+nobody.
+
+### The blocking function's decisions are DATA now
+
+`beforeSignupCreate` writes the same `rateLimits/signupRefused_{minute}` marker
+the rate limiter writes. Two different events share the document and are
+counted in **separate fields**, because conflating them would make both numbers
+lie:
+
+- a **refusal** increments `refusals`, with its cause (`locked`, or `held` when
+  a failed read falls back on an earlier one that found the lever pulled) under
+  `byReason`;
+- an admission made **blind** — the lock could not be read at all and nothing
+  remembered said it was pulled — increments `unreadable`, and never
+  `refusals`, because it refused nobody.
+
+Both writes are **awaited** with a 1s budget: a Cloud Function may be frozen
+the moment its handler returns, so an unawaited promise is one that may never
+land, and a breadcrumb that lands only sometimes feeds an alarm a silently low
+count.
+
+`cloud/functions` is outside the nx workspace and cannot import the constants,
+so `apps/console/specs/signup-refusal-marker-wiring.spec.ts` compares the two
+ends and fails on any divergence.
+
+**`unreadable` is graded at zero tolerance**, separately from the 50/hour
+volume threshold, and reports code `signups-lock-unreadable`. It means the
+platform answered the signups question **without being able to consult it** —
+the lock is unenforceable and Firestore reads are failing on the
+account-creation path, which is precisely the read AGL-2581 was. Since that
+issue made the gate fail OPEN, this event refuses nobody, which is exactly why
+no refusal threshold can see it and why it needs its own rule. A deliberate
+`locked` refusal is not that, and pulling the signups lever does not page the
+person who pulled it.
+
+### The password door — nothing asserted it before
+
+The endpoints covered backups, billing, crons, the error beacon, rate limits,
+server errors and signup volume. **Nothing asserted that an existing customer
+can sign in**, which is the property every paying account depends on before any
+other. `/api/health/auth-doors` was built (AGL-2586) as the ways in that are
+*not* email and password, on the reading that the password door was already
+watched — it was not: the check named "signups" measures creation volume.
+
+So `passwordSignIn` joined that endpoint rather than becoming a seventh URL:
+same subject, same first responder, and the body's `checks` already says which
+door is shut. It asks Identity Platform to sign in an address in a reserved
+TLD, through the same public key and the same App Check precondition a real
+sign-in goes through. **The refusal is the success** — `EMAIL_NOT_FOUND`, or
+the enumeration-protected `INVALID_LOGIN_CREDENTIALS`, proves the endpoint is
+reachable, the key is accepted and the password provider is still enabled. It
+creates nothing and uses no account.
+
+**What a green does NOT prove**, stated so nobody reads more into it: a
+`beforeUserSignedIn` blocking function never runs for an account that does not
+exist (none is registered — see `beforeSignupCreate`), and the console's own
+session mint, which turns the provider's token into a cookie, is not
+exercised. The first is covered by the optional probe below; the second is a
+known gap.
+
+#### Setting up the optional probe identity
+
+Configured, the door is also opened for real: the check signs in and asserts a
+token comes back, which does exercise the account pool and any blocking
+function. It is optional because **the credential belongs in the deployment's
+secret store, never in this repository**, exactly as `AGLYN_PROBE_TOKEN` does;
+a deployment that has not set one is graded by the anonymous half rather than
+reported as an outage. Half a configuration (an address with no password) is
+treated as no configuration, because a typo is not an outage.
+
+To set it up — **an account owner action, not a code change**:
+
+1. Create ONE disposable account through the normal signup form, using an
+   address you control on a domain you own. Give it **no org, no entitlement
+   and no staff claim**: the probe asserts that sign-in works, and an identity
+   that owns something turns a monitor into a blast radius.
+2. Put the address in `AGLYN_SIGNIN_PROBE_EMAIL` and the password in
+   `AGLYN_SIGNIN_PROBE_PASSWORD` on the console Vercel project, marked
+   sensitive. Redeploy — they are read at runtime by the health probe only.
+3. Confirm `curl -s https://app.aglyn.com/api/health/auth-doors` reports
+   `checks.passwordSignIn.ok` true with an `asserts` line naming the probe
+   identity's end-to-end sign-in.
+4. Rotate it on the `docs/SECRET_ROTATION.md` cadence like any other
+   credential. If it is ever disabled or deleted, the door reds with
+   `probe-signin-failed` — which is correct, and is the signal to unset both
+   variables rather than to ignore the endpoint.
 
 ## Still missing
 

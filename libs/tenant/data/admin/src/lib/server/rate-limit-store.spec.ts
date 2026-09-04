@@ -21,13 +21,17 @@ import {
   currentRateLimitDegradation,
   DEGRADATION_DOC_PREFIX,
   pendingServerErrors,
+  pendingSignupServes,
   RATE_LIMIT_COLLECTION,
   recordServerError,
   recordSignupRefusal,
+  recordSignupServed,
   resetRateLimitDegradationForTests,
   resetServerErrorsForTests,
+  resetSignupServesForTests,
   SERVER_ERROR_DOC_PREFIX,
   SIGNUP_REFUSAL_DOC_PREFIX,
+  SIGNUP_SERVED_DOC_PREFIX,
 } from './rate-limit-store'
 
 /**
@@ -1059,5 +1063,178 @@ describe('AGL-2416 · the counter is an atomic increment, not a read-modify-writ
     const result = await consumeRateLimit('apiv1:key', opts(blind))
     expect(result.degraded).toBe(true)
     expect(result.contended).toBe(false)
+  })
+})
+
+/**
+ * AGL-2583 — the DENOMINATOR `/api/health/signup-volume` divides by.
+ *
+ * "No accounts created this hour" describes a quiet Tuesday night exactly as
+ * loudly as it describes the three days signup was refusing every visitor on
+ * the platform. What separates the two is traffic, and this is where traffic
+ * becomes a number an alarm can read.
+ *
+ * Everything asserted below is about that number being trustworthy in the
+ * direction that matters. It is safe for it to be LOW — under-counting only
+ * makes the drought alarm quieter, and it cannot invent an outage — but it
+ * must never be invented, never smear across minute buckets, never cost a
+ * write per visitor on the page that sells the product, and never be the
+ * reason that page fails.
+ */
+describe('recordSignupServed (AGL-2583)', () => {
+  const settle = async () => {
+    for (let i = 0; i < 10; i += 1) {
+      await new Promise((resolve) => setImmediate(resolve))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    }
+  }
+  const serveDocs = (firestore: ReturnType<typeof fakeFirestore>) =>
+    [...firestore.docs.entries()].filter(([path]) =>
+      path.startsWith(`${RATE_LIMIT_COLLECTION}/${SIGNUP_SERVED_DOC_PREFIX}`),
+    )
+
+  beforeEach(() => {
+    resetSignupServesForTests()
+  })
+
+  it('writes the FIRST serve of a bucket immediately', async () => {
+    // The denominator must never lag the numerator. If the first serve waited
+    // for the coalescing interval, an hour that saw traffic could read as an
+    // hour that saw none — which is the reading that mutes the alarm.
+    const firestore = fakeFirestore()
+    recordSignupServed({ firestore, now: 1_755_100_830_000 })
+    await settle()
+
+    const entries = serveDocs(firestore)
+    expect(entries).toHaveLength(1)
+    const [path, doc] = entries[0]
+    // Bucketed DOWN to the minute — 830_000ms lands in the 800_000 bucket.
+    expect(path).toBe(
+      `${RATE_LIMIT_COLLECTION}/${SIGNUP_SERVED_DOC_PREFIX}1755100800000`,
+    )
+    expect(doc['serves']).toBe(1)
+    expect(doc['servedAtMs']).toBe(1_755_100_830_000)
+  })
+
+  it('coalesces a rush into ONE write and loses none of the count', async () => {
+    // A launch-day campaign must not become a write per visitor onto a single
+    // document — that is the hot-document contention AGL-2404 was.
+    const firestore = fakeFirestore()
+    const base = 1_755_100_800_000
+    for (let i = 0; i < 200; i += 1) {
+      recordSignupServed({ firestore, now: base + i * 10 })
+    }
+    await settle()
+    expect(firestore.counts.writes).toBe(1)
+    expect(pendingSignupServes()).toBe(199)
+
+    // Past the interval, the held 199 land together with the 201st serve.
+    recordSignupServed({ firestore, now: base + 6_000 })
+    await settle()
+    expect(serveDocs(firestore)[0][1]['serves']).toBe(201)
+    expect(pendingSignupServes()).toBe(0)
+  })
+
+  it('a rollover flushes the OLD bucket before the new one starts', async () => {
+    // A minute's traffic smeared into the next would misdate a drought and
+    // could carry traffic past the trailing window's edge — turning a real
+    // outage hour into one that looks quiet.
+    const firestore = fakeFirestore()
+    recordSignupServed({ firestore, now: 1_755_100_800_000 })
+    await settle()
+    recordSignupServed({ firestore, now: 1_755_100_801_000 })
+    recordSignupServed({ firestore, now: 1_755_100_802_000 })
+    recordSignupServed({ firestore, now: 1_755_100_860_000 })
+    await settle()
+
+    const byPath = Object.fromEntries(serveDocs(firestore))
+    expect(
+      byPath[`${RATE_LIMIT_COLLECTION}/${SIGNUP_SERVED_DOC_PREFIX}1755100800000`][
+        'serves'
+      ],
+    ).toBe(3)
+    expect(
+      byPath[`${RATE_LIMIT_COLLECTION}/${SIGNUP_SERVED_DOC_PREFIX}1755100860000`][
+        'serves'
+      ],
+    ).toBe(1)
+  })
+
+  it('increments rather than transacting, so instances converge', async () => {
+    // Several serverless instances answer the signup page in the same minute.
+    // A read-modify-write would contend and retry on one hot document; a
+    // `FieldValue` increment is commutative server-side and needs neither.
+    const firestore = fakeFirestore()
+    recordSignupServed({ firestore, now: 1_755_100_800_000 })
+    await settle()
+    recordSignupServed({ firestore, now: 1_755_100_810_000 })
+    await settle()
+    // No read is spent: an increment needs no read-modify-write, so nothing
+    // contends and nothing retries.
+    expect(firestore.counts.reads).toBe(0)
+    // Two flushes into the same minute bucket ACCUMULATE.
+    expect(serveDocs(firestore)[0][1]['serves']).toBe(2)
+  })
+
+  it('stamps servedAtMs — never a field another signal ranges on', async () => {
+    // Four signals share this collection and each health probe range-queries
+    // its own field. A shared field would let one signal's flood fill
+    // another's read limit and blind it, silently.
+    const firestore = fakeFirestore()
+    recordSignupServed({ firestore, now: 1_755_100_800_000 })
+    await settle()
+    const doc = serveDocs(firestore)[0][1]
+    expect(Object.keys(doc).sort()).toEqual([
+      'expiresAt',
+      'servedAtMs',
+      'serves',
+    ])
+    expect(doc['lastAtMs']).toBeUndefined()
+    expect(doc['refusedAtMs']).toBeUndefined()
+    expect(doc['erroredAtMs']).toBeUndefined()
+  })
+
+  it('records a count and nothing else — no visitor, no IP, no referrer', async () => {
+    // The health body that reads these is public.
+    const firestore = fakeFirestore()
+    recordSignupServed({ firestore, now: 1_755_100_800_000 })
+    await settle()
+    const serialized = JSON.stringify(serveDocs(firestore)[0][1])
+    expect(serialized).not.toMatch(/ip|agent|referrer|campaign|email/i)
+  })
+
+  it('sets expiresAt so the TTL policy sweeps these like every sibling', async () => {
+    const firestore = fakeFirestore()
+    recordSignupServed({ firestore, now: 1_755_100_800_000 })
+    await settle()
+    const expiresAt = serveDocs(firestore)[0][1]['expiresAt'] as Date
+    expect(expiresAt.getTime()).toBeGreaterThan(1_755_100_800_000)
+  })
+
+  it('never throws when Firestore is unavailable — the page still serves', async () => {
+    // A monitoring breadcrumb must never be the reason the signup page
+    // breaks. This is the one failure direction that would be worse than
+    // having no denominator at all.
+    const exploding = {
+      collection: () => {
+        throw new Error('no admin app')
+      },
+    } as never
+    expect(() =>
+      recordSignupServed({ firestore: exploding, now: 1_755_100_800_000 }),
+    ).not.toThrow()
+    await settle()
+  })
+
+  it('never throws when the WRITE itself rejects', async () => {
+    const rejecting = {
+      collection: () => ({
+        doc: () => ({ set: () => Promise.reject(new Error('unavailable')) }),
+      }),
+    } as never
+    expect(() =>
+      recordSignupServed({ firestore: rejecting, now: 1_755_100_800_000 }),
+    ).not.toThrow()
+    await settle()
   })
 })

@@ -20,6 +20,8 @@ import * as Aglyn from '@aglyn/aglyn'
 import {
   decodeStoredNodes,
   normalizeScreenSlug,
+  reservedScreenRouteMessage,
+  reservedScreenRouteSegment,
   resolveNamedTokens,
   screenRoutePathToUrl,
   SCREEN_SLUG_PATH_SEPARATOR_MESSAGE,
@@ -83,6 +85,25 @@ export function UseTemplateDialog({
     () => (Array.isArray(template?.placeholders) ? template.placeholders : []),
     [template],
   )
+
+  /**
+   * The address this dialog actually publishes at, composed exactly as
+   * `resolveTemplateSlug` composes it: the typed slug, or — when that
+   * sanitizes away — the page name, or `page`. The reserved list is read over
+   * this value rather than the raw field, because a slug of `###` on a page
+   * named `Search` still lands on `search`.
+   */
+  const composedPath = useMemo(
+    () => normalizeScreenSlug(slug) ?? normalizeScreenSlug(name) ?? 'page',
+    [slug, name],
+  )
+  /**
+   * A handful of addresses the published site cannot answer, whatever the
+   * routing map says (AGL-2076). This dialog creates the screen AND publishes
+   * its route in one step, so a reserved segment here ships a page the console
+   * lists as live and the site answers with the framework's own 404.
+   */
+  const reservedSegment = reservedScreenRouteSegment(composedPath)
 
   useEffect(() => {
     if (!template) return
@@ -189,6 +210,15 @@ export function UseTemplateDialog({
         })
       }
 
+      // Refused BEFORE the routing map is read, since no amount of the host's
+      // own state changes the answer (AGL-2579).
+      if (reservedSegment) {
+        return enqueueSnackbar(reservedScreenRouteMessage(reservedSegment), {
+          variant: 'warning',
+          persist: false,
+        })
+      }
+
       // page — read the routing map fresh so the slug check reflects
       // anything published since this dialog opened.
       const hostSnapshot = await getDoc(doc(firestore, 'hosts', hostId))
@@ -234,6 +264,7 @@ export function UseTemplateDialog({
     template,
     name,
     slug,
+    reservedSegment,
     values,
     placeholders.length,
     kind,
@@ -283,7 +314,7 @@ export function UseTemplateDialog({
               value={slug}
               onChange={(event) => setSlug(event.target.value)}
               disabled={busy}
-              error={screenSlugHasPathSeparator(slug)}
+              error={screenSlugHasPathSeparator(slug) || Boolean(reservedSegment)}
               // Mirrors `resolveTemplateSlug`: an address that sanitizes away
               // falls back to the page name, and `/` IS an address — the site
               // root — rather than punctuation to be stripped (AGL-1575). A
@@ -292,11 +323,9 @@ export function UseTemplateDialog({
               helperText={
                 screenSlugHasPathSeparator(slug)
                   ? SCREEN_SLUG_PATH_SEPARATOR_MESSAGE
-                  : screenRoutePathToUrl(
-                      normalizeScreenSlug(slug) ??
-                        normalizeScreenSlug(name) ??
-                        'page',
-                    )
+                  : reservedSegment
+                    ? reservedScreenRouteMessage(reservedSegment)
+                    : screenRoutePathToUrl(composedPath)
               }
               fullWidth
             />

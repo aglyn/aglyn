@@ -20,7 +20,7 @@
  *
  * Five capabilities shipped as endpoints with no surface: `/api/health`,
  * `/api/health/backups` (AGL-1490/1843), `/api/health/rate-limits`
- * (AGL-1693), `/api/health/signups` (AGL-1536) and the staff-gated
+ * (AGL-1693), `/api/health/signup-volume` (AGL-1536) and the staff-gated
  * `/api/admin/email-health` (AGL-709). Each answers a question an operator
  * has on a bad day, and each answered it only to a curl. This module turns
  * their bodies into something a staff page can render.
@@ -122,14 +122,24 @@ export const HEALTH_PROBES: readonly HealthProbeDescriptor[] = [
       'A past episode clears itself as the window rolls forward. Several episodes means more than one instance saw it — check Firestore availability for that window.',
   },
   {
-    id: 'signups',
+    id: 'signupVolume',
     label: 'Signup volume',
-    path: '/api/health/signups',
+    path: '/api/health/signup-volume',
     auth: 'public',
     meaning:
-      'Organization creation is at normal volume. Degraded means a signup wave the per-uid and per-IP limits cannot see — a distributed farm holding every actor under both caps.',
+      'Three questions about account creation, and the second is the one that used to be missing. Too MANY orgs is a signup wave the per-uid and per-IP limits cannot see. ZERO orgs while the signup page was being served is a drought: people arrived and not one of them got an account, which is exactly what a broken signup looks like from outside. And a blind decision means the account-creation gate could not read the signups lock at all — the lock is unenforceable and Firestore is failing on that path, refusing nobody and therefore invisible to every refusal threshold.',
     remedy:
-      'The manual response is the signups feature lock on Staff → Lockdown.',
+      'signup-wave: the manual response is the signups feature lock on Staff → Lockdown. signup-drought: try the signup form yourself, then read the refusal split on the same body — the cause names which door closed. signups-lock-unreadable: check Firestore availability from the blocking function, and remember that while this reads non-zero the signups lever cannot be relied on to hold.',
+  },
+  {
+    id: 'authDoors',
+    label: 'Ways in',
+    path: '/api/health/auth-doors',
+    auth: 'public',
+    meaning:
+      'A person can still get IN, by any of the six doors: password sign-in, password recovery, the verification link, Google, SSO and passkeys. Each is asserted by asking the real provider a question whose correct answer is a refusal, so nothing is created and no account is used. This is the board row that was missing while signup was refusing every visitor on the platform with every component check green.',
+    remedy:
+      'Read which door the body names. provider-not-configured on passwordSignIn means email-and-password sign-in was switched off in the Identity Platform console and every customer using it is locked out. origin-not-authorized means the console origin fell off the authorized-domain list. api-key-rejected means the public web key was rotated or restricted. appcheck-rejected means the App Check precondition the browser also satisfies is failing. probe-signin-failed means the optional probe identity itself is disabled or its password changed — fix or unset it, never ignore the endpoint.',
   },
   {
     id: 'email',

@@ -41,6 +41,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material'
+import { trackEventBeforeNavigation } from '@aglyn/aglyn/app-utils/analytics-events'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
@@ -55,11 +56,12 @@ import { useOrgScope } from '../../../hooks/use-org-scope'
 import { useWorkspacePage } from '../../../hooks/use-workspace-page'
 import { readOutcome } from '../../../utils/read-outcome'
 import { usePendingInvites } from '../../../hooks/use-pending-invites'
-import {
-  consumeSignUpOrgFailure,
-  type SignUpOrgFailure,
-} from '../../../utils/signup-org-failure'
 import { consumeOnboardingPlanIntent } from '../../../utils/onboarding-plan-intent'
+import {
+  claimPendingSignUpWorkspace,
+  createSignUpWorkspace,
+} from '../../../utils/signup-workspace'
+import hardNavigate from '../../../utils/hard-navigate'
 
 /**
  * Org jump page (AGL-621) — the authenticated console root at `/`. Picks the
@@ -108,13 +110,20 @@ function OrgJump() {
   const searchParams = useSearchParams()
   const [creatingOrg, setCreatingOrg] = useState(false)
   const [creatingSite, setCreatingSite] = useState(false)
-  // A signup-time org creation that failed left a note for this page
-  // (AGL-1523): the person typed a workspace name into the signup form and
-  // got nothing — landing them here with no explanation made the field feel
-  // like a lie. Consumed once; the create dialog re-offers the typed name.
-  const [signupOrgFailure] = useState<SignUpOrgFailure | null>(() =>
-    typeof window === 'undefined' ? null : consumeSignUpOrgFailure(),
-  )
+  /**
+   * A workspace this page tried to create for a sign-up, and could not
+   * (AGL-1523).
+   *
+   * The person typed a name into the sign-up form and got nothing; landing
+   * them here with no explanation made the field feel like a lie. Raised in
+   * this page's own state because this is where the create now happens
+   * (AGL-2590) — it used to cross from /signup in sessionStorage, which is a
+   * carrier there is nothing left to carry.
+   */
+  const [signupOrgFailure, setSignupOrgFailure] = useState<{
+    name: string
+    error: string | null
+  } | null>(null)
 
   // The plan intent that survived the email-verification wall (AGL-1535).
   //
@@ -189,6 +198,93 @@ function OrgJump() {
     [intent],
   )
 
+  /**
+   * THE WORKSPACE THE SIGN-UP ASKED FOR, CREATED ON THE FIRST VERIFIED
+   * SESSION (AGL-2590).
+   *
+   * Sign-up used to create it seconds after the Firebase account. That
+   * workspace was unusable until the person verified — `/api/auth/session`
+   * refuses to mint a session cookie while `email_verified` is false, and
+   * every console route refuses the account behind it — so all eager creation
+   * bought was a permanent claim on a workspace address handed out before
+   * anyone had shown the address was theirs. The AGL-1115 landing it was for
+   * is delivered on the first USABLE session, and this page is where that
+   * session arrives.
+   *
+   * ## Why here rather than at the verification click
+   *
+   * `/verify-email` applies the code in whichever browser the mail client
+   * opened, which is routinely not the one that signed up, while the tab that
+   * did sign up sits polling for the same event. Both would provision. This
+   * page is reached once per session, holds the membership list the decision
+   * needs, and already asks the account for what else the sign-up remembered.
+   *
+   * ## What it costs
+   *
+   * One transaction against `users/{uid}`, and only for an account that has
+   * NO workspaces — a returning member never pays it. `confirmed` rather than
+   * `!loading`, for the reason the jump below states at length: the console's
+   * multi-tab cache answers first, and creating a workspace for someone whose
+   * memberships had merely not arrived yet is not a render you can correct.
+   */
+  const [provisionSettled, setProvisionSettled] = useState(false)
+  const provisionedForRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!user || !uid || loading || !confirmed || orgs.length !== 0) return
+    // The remembered plan decides where the new workspace LANDS, and it is
+    // read once and destructively — starting before it answers would drop it.
+    if (storedIntent === undefined) return
+    if (provisionedForRef.current === uid) return
+    provisionedForRef.current = uid
+    let active = true
+    void (async () => {
+      const pending = await claimPendingSignUpWorkspace(firestore, user)
+      if (!pending) {
+        if (active) setProvisionSettled(true)
+        return
+      }
+      const { slug, error } = await createSignUpWorkspace(user, pending.name)
+      if (slug) {
+        // Activation (AGL-1561), counted where the workspace is actually
+        // created. A refused create falls through to this page uncounted,
+        // which is what makes "orgs created" match reality.
+        //
+        // Through the navigation-safe door (AGL-2587): the hard navigation
+        // below tears this document down, and the console's transport awaits
+        // the Firebase SDK's initialization promise before it reaches gtag —
+        // so a continuation scheduled behind that teardown simply never runs.
+        // That is how `org_created` reached the property zero times while
+        // nine workspaces existed in Firestore.
+        await trackEventBeforeNavigation('org_created', {})
+        // Hard, not `router.replace`: the org is brand new, so the whole
+        // chrome (switcher, plan badge, nav) has to resolve against it rather
+        // than re-using a tree built for an account that had no workspaces.
+        // `provisionSettled` deliberately stays false — the page is leaving,
+        // and settling it would flash the empty state on the way out.
+        hardNavigate(enterOrg(slug))
+        return
+      }
+      if (!active) return
+      // Best-effort no longer means silent (AGL-1523). The name was typed
+      // into the sign-up form; say what happened to it and offer it back.
+      if (pending.nameWasTyped) {
+        setSignupOrgFailure({ name: pending.name, error })
+      }
+      setProvisionSettled(true)
+    })()
+    return () => void (active = false)
+  }, [confirmed, enterOrg, firestore, loading, orgs.length, storedIntent, uid, user])
+  /**
+   * Hold the zero-workspace surfaces until the account has answered.
+   *
+   * From the moment this page knows there are no workspaces until the claim
+   * above settles, "Create your first site" is a question that may be about to
+   * answer itself. A spinner for one document read is cheaper than showing
+   * someone an empty state and replacing it with their workspace.
+   */
+  const provisioning =
+    Boolean(uid) && !loading && confirmed && orgs.length === 0 && !provisionSettled
+
   // Single-org members never see a picker — go straight to their sites.
   //
   // Gated on `confirmed`, not merely `loading` (AGL-1149). The console runs a
@@ -250,7 +346,7 @@ function OrgJump() {
         ) : null
       }
     >
-      {loading || orgs.length === 1 ? (
+      {loading || provisioning || orgs.length === 1 ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
           <CircularProgress />
         </Box>

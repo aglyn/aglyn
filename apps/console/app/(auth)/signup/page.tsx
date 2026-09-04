@@ -26,7 +26,10 @@ import {
   parseOnboardingPlanIntent,
   PLATFORM_BRAND_NAME,
 } from '@aglyn/aglyn'
-import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
+import {
+  trackEvent,
+  trackEventBeforeNavigation,
+} from '@aglyn/aglyn/app-utils/analytics-events'
 import { reportPlatformAdConversion } from '@aglyn/aglyn/app-utils/platform-ad-conversions'
 import { platformAdvertisingAllowed } from '@aglyn/aglyn/app-utils/platform-visitor-consent'
 import type { AuthResultError } from '@aglyn/shared-data-enums'
@@ -71,7 +74,6 @@ import {
   useFirestore,
   useSigninCheck,
 } from '@aglyn/tenant-feature-instance'
-import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import AuthErrorAlertComponent from '../../../components/auth-error-alert.component'
 import AuthFormTemplateComponent from '../../../components/auth-form-template.component'
 import AuthFormComponent from '../../../components/auth-form.component'
@@ -90,7 +92,10 @@ import {
 } from '../../../utils/legal-consent'
 import hardNavigate from '../../../utils/hard-navigate'
 import { markInteractiveSignIn } from '../../../utils/interactive-signin'
-import { markSignUpOrgFailure } from '../../../utils/signup-org-failure'
+import {
+  createSignUpWorkspace,
+  rememberPendingSignUpWorkspace,
+} from '../../../utils/signup-workspace'
 import { rememberOnboardingPlanIntent } from '../../../utils/onboarding-plan-intent'
 import { rememberSignUpCampaign } from '../../../utils/signup-campaign'
 import isMobileBrowser from '../../../utils/is-mobile-browser'
@@ -187,7 +192,7 @@ async function persistSignUpProfile(
 }
 
 /**
- * Provision the workspace the user just named, and say where to land them
+ * Provision the workspace, for a door whose account can already use one
  * (AGL-1115 / AGL-1117).
  *
  * Best-effort by contract, like the profile write above it: the account
@@ -196,58 +201,44 @@ async function persistSignUpProfile(
  * back to the workspace picker — which is exactly where signup used to land
  * everyone, so the worst case is the old behaviour.
  *
- * Best-effort no longer means SILENT (AGL-1523): a failure leaves a marker
- * the picker reads, so the person is told what happened to the name they
- * typed and offered it back — instead of a `console.error` nobody sees and a
- * picker that pretends the field never existed.
+ * Silent on failure, deliberately (AGL-1942). Every door that still reaches
+ * this one collected no name and had one DERIVED for it, and the AGL-1523
+ * notice quotes the name back — "we couldn't create your workspace X" — which
+ * only reads as an answer when X is what somebody entered. Apologising for a
+ * workspace nobody asked for, by a name nobody chose, is worse than the
+ * picker. The door that DOES collect a name no longer provisions here at all
+ * (AGL-2590); its failures are raised on the workspace chooser, which is
+ * where its workspace is now created.
  */
 async function provisionSignUpOrg(
   credential: UserCredential,
   orgName: string,
-  // Whether the person TYPED this name (AGL-1942). The AGL-1523 picker notice
-  // quotes the name back — "we couldn't create your workspace X" — which only
-  // reads as an answer when X is what they entered. A derived name that fails
-  // falls through to the picker silently, as it always did, rather than
-  // apologising for a workspace nobody asked for by a name nobody chose.
-  nameWasTyped = true,
 ): Promise<string | null> {
   const name = orgName.trim()
   if (!name) return null
-  try {
-    const response = await authorizedFetch(
-      credential.user,
-      '/api/orgs/create',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
-      },
-    )
-    const payload = await response.json().catch(() => null)
-    // A 409 means the slug was taken — the org was NOT created, so falling
-    // through to the picker is right; inventing a suffix here would hand the
-    // user a workspace URL they never chose.
-    if (!response.ok) {
-      console.error('sign-up org create failed', payload?.error)
-      if (nameWasTyped) {
-        markSignUpOrgFailure({
-          name,
-          error: typeof payload?.error === 'string' ? payload.error : null,
-        })
-      }
-      return null
-    }
-    // Activation (AGL-1561). The workspace auto-provisioned at signup is a
-    // real org creation and is counted like any other — the `response.ok`
-    // guard above means a failed provision falls through to the picker
-    // uncounted, which is what makes "orgs created" match reality.
-    trackEvent('org_created', {})
-    return typeof payload?.slug === 'string' ? payload.slug : null
-  } catch (error) {
-    console.error('sign-up org create failed', error)
-    if (nameWasTyped) markSignUpOrgFailure({ name, error: null })
-    return null
-  }
+  const { slug } = await createSignUpWorkspace(credential.user, name)
+  if (!slug) return null
+  /*
+   * Activation (AGL-1561). The workspace auto-provisioned at signup is a
+   * real org creation and is counted like any other — a failed provision
+   * falls through to the picker uncounted, which is what makes "orgs
+   * created" match reality.
+   *
+   * Awaited, through the navigation-safe door (AGL-2587). The caller
+   * `hardNavigate`s the moment this resolves, and the console's transport is
+   * Firebase `logEvent`, which awaits the SDK's initialization promise
+   * before it reaches gtag — on the first page of a brand-new signup
+   * session that promise is still pending, so the continuation was scheduled
+   * behind a full document teardown and never ran. Measured, not inferred:
+   * nine workspaces exist in Firestore and `org_created` had arrived in the
+   * property zero times ever, while the one signup of 2026-09-04 delivered
+   * `sign_up` and `login` from this same page, in the same minute, through
+   * the same transport. Two events out and one gone is a difference no
+   * consent state or tag setting can produce — only the navigation can.
+   * Same mechanism, and same remedy, as the checkout redirect in AGL-1580.
+   */
+  await trackEventBeforeNavigation('org_created', {})
+  return slug
 }
 
 /**
@@ -277,6 +268,21 @@ function derivePersonalOrgName(user: UserCredential['user']): string {
  * the marketing site; ordinary Google sign-ups, and every mobile one, still
  * got the picker.
  *
+ * ## The verified fork (AGL-2590)
+ *
+ * The routine now asks whether the account can USE a workspace before it
+ * creates one. `/api/auth/session` refuses to mint a session cookie while
+ * `email_verified` is false, so a workspace made for an unverified account is
+ * one nobody can open — it exists only to hold a permanent claim on a
+ * workspace address that nobody has shown belongs to them. The AGL-1115
+ * landing is delivered on the first usable session, which is after
+ * verification either way, so nothing is lost by waiting.
+ *
+ * Google and SSO create accounts that are verified on arrival: there is
+ * nothing to wait for, and they provision here exactly as before. The
+ * password door holds its name with the account instead, and the workspace
+ * chooser applies it on the first verified session.
+ *
  * A hard navigation on purpose: the org is brand new, so the whole chrome
  * (switcher, plan badge, nav) has to resolve against it rather than re-using
  * the pre-signup tree. It also has to beat the auth layout, which pushes a
@@ -287,12 +293,20 @@ function derivePersonalOrgName(user: UserCredential['user']): string {
  * worst case is the old behaviour.
  */
 async function provisionAndLandSignUp(
+  firestore: Firestore,
   credential: UserCredential,
   orgName: string,
   planIntent: Parameters<typeof onboardingDestination>[1],
   nameWasTyped: boolean,
 ): Promise<void> {
-  const slug = await provisionSignUpOrg(credential, orgName, nameWasTyped)
+  if (!credential.user.emailVerified) {
+    await rememberPendingSignUpWorkspace(firestore, credential.user.uid, {
+      name: orgName,
+      nameWasTyped,
+    })
+    return
+  }
+  const slug = await provisionSignUpOrg(credential, orgName)
   if (slug) hardNavigate(onboardingDestination(slug, planIntent))
 }
 
@@ -405,6 +419,7 @@ function SignUp() {
       // (AGL-1731/AGL-1942).
       await rememberSignUpCampaign(firestore, credential.user.uid, campaign)
       await provisionAndLandSignUp(
+        firestore,
         credential,
         derivePersonalOrgName(credential.user),
         planIntent,
@@ -576,8 +591,11 @@ function SignUp() {
           // Google branches carry their name on the token, and the session
           // route seeds from that (AGL-1127).
           if (values) await persistSignUpProfile(firestore, credential, values)
-          // Provision the workspace and land in it — from EVERY door
-          // (AGL-1942), through the one routine.
+          // Settle the workspace — from EVERY door (AGL-1942), through the
+          // one routine. A verified account (Google, SSO) gets it created and
+          // lands in it; the password door's account cannot use one yet, so
+          // the routine holds the name against the account and the workspace
+          // chooser creates it on the first verified session (AGL-2590).
           //
           // The form door supplies the name it collected (AGL-1115). The
           // Google doors have no form, so the name is derived the way the
@@ -596,6 +614,7 @@ function SignUp() {
             : ''
           if (values || isNewAccount(credential)) {
             await provisionAndLandSignUp(
+              firestore,
               credential,
               typedName || derivePersonalOrgName(credential.user),
               planIntent,

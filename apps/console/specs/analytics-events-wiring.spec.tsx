@@ -40,11 +40,15 @@ const mockRedirect = jest.fn()
 const mockTrackEvent = jest.fn()
 let mockConsentParam = ''
 
-const credentialFor = (uid: string) => ({
+const credentialFor = (uid: string, emailVerified = true) => ({
   user: {
     uid,
     email: 'new@example.com',
     displayName: 'New Person',
+    // Which door this is, as far as provisioning is concerned (AGL-2590):
+    // Google verifies before it asserts, and a password account created
+    // seconds ago never has.
+    emailVerified,
     getIdToken: async () => `token-for-${uid}`,
   },
   providerId: 'google.com',
@@ -69,6 +73,14 @@ jest.mock('firebase/firestore', () => ({
 // would not intercept it.
 jest.mock('@aglyn/aglyn/app-utils/analytics-events', () => ({
   trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
+  // The navigation-safe spelling lands in the SAME capture (AGL-2587). These
+  // specs assert that an event was emitted, not which door emitted it — the
+  // door choice is asserted at source level in
+  // `every-funnel-door-is-instrumented.spec.ts`, where the navigation that
+  // makes it necessary is visible. Routing both here keeps one assertion per
+  // event instead of one per spelling.
+  trackEventBeforeNavigation: async (...args: unknown[]) =>
+    mockTrackEvent(...args),
 }))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useAuth: () => ({}),
@@ -195,7 +207,7 @@ describe('GA4 event wiring on the real signup path (AGL-1561)', () => {
     jest.clearAllMocks()
     window.sessionStorage.clear()
     mockConsentParam = ''
-    mockCreateUser.mockResolvedValue(credentialFor('uid-new'))
+    mockCreateUser.mockResolvedValue(credentialFor('uid-new', false))
     mockPopup.mockResolvedValue(credentialFor('uid-new'))
     mockRedirect.mockReturnValue(new Promise(() => undefined))
     globalThis.fetch = jest.fn(async () => ({
@@ -246,12 +258,28 @@ describe('GA4 event wiring on the real signup path (AGL-1561)', () => {
   })
 
   it('fires org_created when the signup workspace is actually provisioned', async () => {
+    // The Google door, because it is the one whose account arrives verified
+    // and can therefore have a workspace at sign-up time (AGL-2590).
+    render(<SignUp />)
+    tickConsent()
+    await act(async () => {
+      clickGoogle()
+    })
+    await waitFor(() => expect(eventsNamed('org_created')).toHaveLength(1))
+  })
+
+  it('counts NO org on the password door — none is created there', async () => {
+    // The activation metric used to count a workspace made three seconds
+    // before the verification email, for an account that could not open it
+    // and might never confirm an address. The workspace chooser fires this
+    // when the workspace is really created (AGL-2590).
     render(<SignUp />)
     tickConsent()
     await act(async () => {
       submitPasswordForm()
     })
-    await waitFor(() => expect(eventsNamed('org_created')).toHaveLength(1))
+    await waitFor(() => expect(eventsNamed('sign_up')).toHaveLength(1))
+    expect(eventsNamed('org_created')).toHaveLength(0)
   })
 
   it('does NOT count an org that failed to provision', async () => {
@@ -267,7 +295,7 @@ describe('GA4 event wiring on the real signup path (AGL-1561)', () => {
     render(<SignUp />)
     tickConsent()
     await act(async () => {
-      submitPasswordForm()
+      clickGoogle()
     })
     await waitFor(() => expect(eventsNamed('sign_up')).toHaveLength(1))
     expect(eventsNamed('org_created')).toHaveLength(0)

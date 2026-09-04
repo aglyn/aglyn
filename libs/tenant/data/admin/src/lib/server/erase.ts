@@ -511,7 +511,13 @@ async function eraseOrgIdempotencyKeys(
  *
  * The current slug is unioned in rather than assumed present: an org whose
  * reservation was lost to a legacy write would otherwise keep its workspace
- * subdomain attached to the project.
+ * subdomain attached to the project. ⛔ ONLY WHEN NOBODY HOLDS IT (AGL-2585).
+ * A workspace address taken by an unverified signup is a reservation that
+ * lapses, and a live workspace may since have claimed the name — at which
+ * point `orgSlugs/{slug}` names THAT org, and the erasure of this one would
+ * otherwise delete a working tenant's reservation and detach their subdomain.
+ * The `orgId` query above already refuses that document; this is the one line
+ * that used to add it back by assumption.
  *
  * Each name's `{slug}.aglyn.com` is detached too. `changeOrgSlug` deliberately
  * KEEPS the old subdomain attached so the tombstone's 308 has a hostname to
@@ -530,7 +536,17 @@ async function eraseOrgSlugs(
     .where('orgId', '==', orgId)
     .get()
   const slugs = new Set(held.docs.map((doc) => doc.id))
-  if (currentSlug) slugs.add(currentSlug)
+  if (currentSlug && !slugs.has(currentSlug)) {
+    // Absent means the reservation was lost and only the DNS attachment is
+    // left to clean up. Present but not matched by the query above means it
+    // belongs to another org now, and is not this erasure's to touch.
+    const reservation = await firestore
+      .collection('orgSlugs')
+      .doc(currentSlug)
+      .get()
+      .catch(() => null)
+    if (reservation && !reservation.exists) slugs.add(currentSlug)
+  }
   // `detachWorkspaceDomain` calls a live DNS API — never on a plan (AGL-1481).
   if (dryRun) return slugs.size
   for (const slug of slugs) {
@@ -849,6 +865,26 @@ export interface EraseOrgOptions {
    * Never consulted on a dry run: a plan touches no vendor.
    */
   tearDownSendingDomain?: TeardownSendingDomainDriver | null
+  /**
+   * Erase a workspace that carries NO erasure request at all (AGL-2585).
+   *
+   * ⛔ EXACTLY ONE CALLER, and the option exists so that caller has to say so
+   * out loud. `/api/admin/reap-unverified-orgs` collects workspaces created by
+   * a signup whose address was never confirmed — there is nobody to ask for an
+   * erasure, because nobody has been shown to exist. Every other path reaches
+   * this function through `erasureRequestedAt`, which is a person's decision
+   * with a seven-day hold on it, and none of them passes this.
+   *
+   * What it turns off is narrow and named: the `no-request` refusal and the
+   * hold, and nothing else. Every sweep, every audit row and `dryRun` behave
+   * identically — the caller supplies the proof that this workspace is
+   * nobody's, and this records WHAT that proof was on the audit row.
+   *
+   * It does not skip the request when one exists. An org somebody has already
+   * asked to erase is still that person's decision, and the reaper refuses
+   * such an org before it ever gets here.
+   */
+  withoutRequest?: { reason: string } | null
 }
 
 export interface EraseOrgResult {
@@ -1097,6 +1133,7 @@ export async function eraseOrg(
     dryRun = false,
     actorUid = 'cron:run-erasures',
     tearDownSendingDomain = null,
+    withoutRequest = null,
   } = options
   const firestore = firebaseAdmin.app().firestore()
   const orgRef = firestore.collection('orgs').doc(orgId)
@@ -1104,9 +1141,15 @@ export async function eraseOrg(
   if (!orgSnapshot.exists) return { ok: false, skippedReason: 'not-found' }
 
   const requestedMs = orgSnapshot.get('erasureRequestedAt')?.toMillis?.() ?? null
-  if (!requestedMs) return { ok: false, skippedReason: 'no-request' }
-  if (Date.now() - requestedMs < ERASURE_HOLD_MS) {
-    return { ok: false, skippedReason: 'hold-active' }
+  // The request and its hold, unless the caller carries its own proof
+  // (AGL-2585). Both refusals are skipped together: a workspace with no
+  // request has no stamp for a hold to run from, so keeping the second while
+  // dropping the first would be a hold measured against `null`.
+  if (!withoutRequest) {
+    if (!requestedMs) return { ok: false, skippedReason: 'no-request' }
+    if (Date.now() - requestedMs < ERASURE_HOLD_MS) {
+      return { ok: false, skippedReason: 'hold-active' }
+    }
   }
 
   const hosts = await firestore
@@ -1298,7 +1341,13 @@ export async function eraseOrg(
       action: 'org.erased',
       target: `orgs/${orgId}`,
       before,
-      after: { requestedAt: requestedMs, ...progress },
+      after: {
+        requestedAt: requestedMs,
+        // What stood in for a request, when nothing did (AGL-2585). Absent on
+        // every ordinary erasure, so its presence is the whole flag.
+        ...(withoutRequest ? { withoutRequest: withoutRequest.reason } : {}),
+        ...progress,
+      },
       at: FieldValue.serverTimestamp(),
     })
     .catch(() => undefined)

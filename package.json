@@ -1,7 +1,7 @@
 {
   "name": "aglyn",
   "description": "",
-  "version": "1.0.0-beta.70",
+  "version": "1.0.0-beta.71",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": "github:aglyn/aglyn",
@@ -85,6 +85,7 @@
     "test:erase-cli": "node --test tools/scripts/lib/erase-org-cli.test.mjs",
     "test:demo-brands": "node --test tools/scripts/lib/demo-brands.test.mjs",
     "test:uptime-targets": "node --test tools/scripts/lib/uptime-targets.test.mjs",
+    "test:uptime-red-report": "node --test tools/scripts/lib/uptime-red-report.test.mjs",
     "test:week-one-preflight": "node tools/scripts/check-week-one-preflight.mjs --self-test",
     "test:runbook-commands": "node tools/scripts/check-runbook-commands.mjs --self-test",
     "test:ci-test-digest": "node --test tools/scripts/lib/ci-test-digest.test.mjs",
@@ -94,6 +95,8 @@
     "test:sso-attestation": "node --test tools/scripts/lib/sso-domain-attestation.test.mjs",
     "test:rules-drift": "node --test tools/scripts/lib/rules-drift.test.mjs",
     "test:index-drift": "node --test tools/scripts/lib/index-drift.test.mjs",
+    "test:functions-drift": "node --test tools/scripts/lib/functions-drift.test.mjs",
+    "test:promotion-deploys": "node --test tools/scripts/lib/promotion-deploys.test.mjs",
     "test:upload-cors-drift": "node --test tools/scripts/lib/upload-cors-drift.test.mjs",
     "test:stripe-tax-code": "node --test tools/scripts/lib/stripe-tax-code.test.mjs",
     "test:backup-copies": "node --test tools/scripts/lib/backup-copies.test.mjs",
@@ -131,6 +134,8 @@
     "check:legal-drift": "node tools/scripts/legal-doc-diff.mjs",
     "check:legal-index-dates": "node tools/scripts/check-legal-index-dates.mjs",
     "check:index-drift": "node tools/scripts/check-index-drift.mjs",
+    "check:functions-drift": "node tools/scripts/check-functions-drift.mjs",
+    "check:promotion-deploys": "node tools/scripts/check-promotion-deploys.mjs",
     "check:backup-copies": "node tools/scripts/check-backup-copies.mjs",
     "check:authorized-domains": "node tools/scripts/check-authorized-domains.mjs",
     "check:app-check-debug-tokens": "node tools/scripts/check-app-check-debug-tokens.mjs",
@@ -213,7 +218,9 @@
     "report:main-gate-red": "node tools/scripts/report-main-gate-red.mjs",
     "test:main-gate-red": "node --test tools/scripts/lib/main-gate-red-report.test.mjs",
     "check:main-gate-full-sweep": "node tools/scripts/check-main-gate-full-sweep.mjs",
-    "test:main-gate-full-sweep": "node --test tools/scripts/lib/main-gate-full-sweep.test.mjs"
+    "test:main-gate-full-sweep": "node --test tools/scripts/lib/main-gate-full-sweep.test.mjs",
+    "check:funnel-conversions": "node tools/scripts/check-funnel-conversions.mjs",
+    "test:funnel-alarm": "node --test tools/scripts/lib/funnel-conversion-alarm.test.mjs"
   },
   "dependencies": {
     "@base-ui/react": "1.6.0",

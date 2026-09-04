@@ -35,7 +35,6 @@ import {
   meterOrgEmail,
   OrgSlugTakenError,
   recordSignupRefusal,
-  signupProvisioningGraceAllows,
 } from '@aglyn/tenant-data-admin'
 import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
 
@@ -79,17 +78,32 @@ async function handler(request: Request): Promise<Response> {
 
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+    /*
+     * NOBODY CLAIMS A WORKSPACE ADDRESS UNTIL THEY HAVE PROVED THE EMAIL
+     * (AGL-2590).
+     *
+     * An org's name becomes its address, `acme-inc.aglyn.com`, and this route
+     * used to admit an unverified caller through the AGL-1523 signup grace —
+     * because the sign-up form posted the name it had just collected seconds
+     * after `createUserWithEmailAndPassword`, when a password account is
+     * always unverified. That grace was the last way an unproven address
+     * could be claimed, and AGL-2585 had to reserve, expire and reap behind
+     * it: throwaway inboxes, and inboxes nobody could receive mail at, took
+     * names permanently — a competitor's and a customer's included.
+     *
+     * The sign-up form no longer posts here. It holds the typed name against
+     * the account and the workspace chooser creates the workspace on the
+     * first VERIFIED session, which is the first session that can open one at
+     * all: `/api/auth/session` refuses to mint a cookie for an unverified
+     * account, so the workspace the grace created was unusable for exactly as
+     * long as the grace was needed to create it.
+     *
+     * So the AGL-479 gate stands here with no exception. An impersonation
+     * session is a staff member acting for an owner who already exists, and
+     * passes as it does everywhere else.
+     */
     if (!decoded.email_verified && !isImpersonationSession(decoded)) {
-      // Signup-time provisioning (AGL-1523): a fresh password account is
-      // ALWAYS unverified when the signup form posts the org name it just
-      // collected, so a flat refusal here made that field dead weight on the
-      // primary self-serve door. A brand-new account owning nothing may
-      // create its ONE signup workspace; everyone else still needs the
-      // verified email (AGL-479 — which keeps gating console ACCESS for this
-      // account regardless: the session mint and app layout still refuse
-      // unverified). Fails closed inside the helper.
-      const graced = await signupProvisioningGraceAllows(decoded.uid)
-      if (!graced) return emailUnverifiedResponse()
+      return emailUnverifiedResponse()
     }
     // Lockdown verdict (AGL-1506): the org scope has no carrier before the
     // org exists — platform and user locks still refuse creation; distinct
@@ -102,10 +116,11 @@ async function handler(request: Request): Promise<Response> {
     if (locked) return locked
 
     // Rate limit (AGL-1534) — the always-on layer under the AGL-1510 signups
-    // feature-lock. The AGL-1523 grace above admits a brand-new unverified
-    // account, so scripted org minting is one account-creation away; the
-    // grace bounds each account to ONE org, this bounds the RATE. Same
-    // durable limiter as every other consequence endpoint (AGL-794), keyed
+    // feature-lock. The gate above now costs an attacker a working inbox per
+    // account (AGL-2590), which is a real price but not a rate: one verified
+    // account can still ask for workspaces as fast as it likes, and this is
+    // what bounds that. Same durable limiter as every other consequence
+    // endpoint (AGL-794), keyed
     // per uid (a scripted account, a stuck client) AND per IP (a bot farm
     // rotating accounts behind one address). Fails soft by design: a limiter
     // outage must not block signups. Deliberately AFTER the 451/423/403

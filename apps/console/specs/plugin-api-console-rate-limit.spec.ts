@@ -137,8 +137,17 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   const real = jest.requireActual(
     '../../../libs/tenant/data/admin/src/lib/server/console-api-rate-limit',
   )
+  // The email-verification trio the dispatcher gates on (AGL-2589), REAL: a
+  // stubbed predicate on a security control makes every request below pass
+  // for a reason this file is not testing.
+  const gate = jest.requireActual(
+    '../../../libs/tenant/data/admin/src/lib/server/firebase-admin',
+  )
   return {
     __esModule: true,
+    emailUnverifiedResponse: gate.emailUnverifiedResponse,
+    isEmailVerified: gate.isEmailVerified,
+    isImpersonationSession: gate.isImpersonationSession,
     filterEnabledPluginsByReleaseFlags: jest.fn(async (ids: string[]) => [
       ...ids,
     ]),
@@ -157,7 +166,10 @@ jest.mock('@aglyn/tenant-data-admin', () => {
           // dispatcher a second operator by changing one string.
           verifyIdToken: async (token: string) => {
             if (!token || token === 'bad') throw new Error('not a token')
-            return { uid: token, staff: false }
+            // Verified, because the operators this file counts requests for
+            // are — the verification gate (AGL-2589) sits ahead of the
+            // limiter and would otherwise refuse every one of them.
+            return { uid: token, staff: false, email_verified: true }
           },
         }),
       }),

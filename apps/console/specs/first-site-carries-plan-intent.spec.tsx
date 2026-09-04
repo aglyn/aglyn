@@ -128,6 +128,10 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
 }))
 jest.mock('@aglyn/aglyn/app-utils/analytics-events', () => ({
   trackEvent: jest.fn(),
+  // Emitting `org_created` before a navigation needs the awaitable spelling
+  // (AGL-2587); a mock that lacks it makes the call a TypeError inside the
+  // create handler, which reads here as the create having failed.
+  trackEventBeforeNavigation: jest.fn(async () => undefined),
 }))
 
 const OrgJump = require('../app/(app)/(home)/page').default

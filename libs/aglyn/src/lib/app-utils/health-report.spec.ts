@@ -34,9 +34,13 @@ import {
   RATE_LIMIT_DEGRADED_WINDOW_MINUTES,
   rateLimitsHealth,
   MAX_SIGNUP_REFUSALS_PER_WINDOW,
+  MAX_UNREADABLE_SIGNUP_DECISIONS_PER_WINDOW,
   SIGNUP_REFUSAL_WINDOW_MINUTES,
   signupRefusalsHealth,
   signupsHealth,
+  MIN_SIGNUP_TRAFFIC_FOR_DROUGHT,
+  SIGNUP_DROUGHT_WINDOW_MINUTES,
+  signupDroughtHealth,
   MAX_SERVER_ERRORS_PER_WINDOW,
   SERVER_ERROR_WINDOW_MINUTES,
   serverErrorsHealth,
@@ -1256,12 +1260,230 @@ describe('signupRefusalsHealth (AGL-1907)', () => {
   it('exposes counts only — no uid, no IP, no limiter key', () => {
     const check = signupRefusalsHealth([at(NOW, 2, { uid: 2 })], 7, NOW)
     expect(Object.keys(check).sort()).toEqual([
+      'lockUnreadable',
       'minutesSinceLast',
       'ms',
       'ok',
       'refusedByReason',
       'refusedSignups',
       'threshold',
+      'windowMinutes',
+    ])
+  })
+
+  /**
+   * AGL-2583 — a decision made without the lock, graded on its own.
+   *
+   * `unreadable` counts account creations the `beforeUserCreated` blocking
+   * function decided while the signups lock could not be read at all. It
+   * refuses nobody, which is exactly why the refusal thresholds cannot see
+   * it — and it says the lock is unenforceable and Firestore is failing on
+   * the account-creation path, which is the read AGL-2581 spent three days
+   * on. One is one too many, so this is the branch that must go RED where
+   * the volume threshold would not.
+   */
+  describe('a blind signups-lock decision is graded at zero tolerance', () => {
+    /** A marker as the blocking function writes it for a blind admission. */
+    const blind = (count: number) => ({
+      refusals: 0,
+      byReason: {},
+      unreadable: count,
+      refusedAtMs: NOW,
+    })
+
+    it('reds on ONE blind decision, with not a single refusal beside it', () => {
+      const check = signupRefusalsHealth([blind(1)], 7, NOW)
+      // The whole point: nobody was refused, so every refusal threshold on
+      // this check reads perfectly calm, and it is still an outage.
+      expect(check.refusedSignups).toBe(0)
+      expect(MAX_SIGNUP_REFUSALS_PER_WINDOW).toBeGreaterThan(1)
+      expect(check.ok).toBe(false)
+      expect(check.code).toBe('signups-lock-unreadable')
+      expect(check.lockUnreadable).toBe(1)
+    })
+
+    it('names the blind decision even when a refusal wave is also running', () => {
+      // Both conditions at once. The code has to name the one that changes
+      // what a responder does — a wave means leave the limiter alone and read
+      // the reasons, an unreadable lock means go find out why Firestore
+      // cannot be read from the account-creation path.
+      const check = signupRefusalsHealth(
+        [{ refusals: 200, byReason: { ip: 200 }, unreadable: 1, refusedAtMs: NOW }],
+        7,
+        NOW,
+      )
+      expect(check.ok).toBe(false)
+      expect(check.code).toBe('signups-lock-unreadable')
+    })
+
+    it('a deliberate staff lock is not a blind decision', () => {
+      // `locked` is somebody pulling the lever on purpose. It counts toward
+      // the volume threshold like any other refusal and must never be read as
+      // an unreadable lock, or pulling the lever would page whoever pulled it.
+      const check = signupRefusalsHealth([at(NOW, 3, { locked: 3 })], 7, NOW)
+      expect(check.ok).toBe(true)
+      expect(check.code).toBeUndefined()
+      expect(check.lockUnreadable).toBe(0)
+      expect(check.refusedByReason).toEqual({ locked: 3 })
+    })
+
+    it('a refusal HELD on an earlier read is not one either', () => {
+      // `held` is the lock still being honored from what a completed read
+      // established. The control is working; only the freshness of its input
+      // changed.
+      const check = signupRefusalsHealth([at(NOW, 2, { held: 2 })], 7, NOW)
+      expect(check.ok).toBe(true)
+      expect(check.lockUnreadable).toBe(0)
+    })
+
+    it('a corrupt count cannot become NaN and mute the alarm', () => {
+      const check = signupRefusalsHealth(
+        [{ ...blind(0), unreadable: 'lots' as unknown as number }, blind(4)],
+        7,
+        NOW,
+      )
+      expect(check.lockUnreadable).toBe(4)
+      expect(check.ok).toBe(false)
+    })
+
+    it('tolerates none by default, and the tolerance is overridable', () => {
+      expect(MAX_UNREADABLE_SIGNUP_DECISIONS_PER_WINDOW).toBe(0)
+      const muted = signupRefusalsHealth(
+        [blind(2)],
+        7,
+        NOW,
+        MAX_SIGNUP_REFUSALS_PER_WINDOW,
+        SIGNUP_REFUSAL_WINDOW_MINUTES,
+        5,
+      )
+      expect(muted.ok).toBe(true)
+      expect(muted.lockUnreadable).toBe(2)
+    })
+
+    it('an unavailable query reports null, never a comforting zero', () => {
+      const check = signupRefusalsHealth(null, 7, NOW)
+      expect(check.ok).toBe(false)
+      expect(check.lockUnreadable).toBeNull()
+    })
+  })
+})
+
+/**
+ * AGL-2583 — the DROUGHT verdict: traffic arrived and nobody got an account.
+ *
+ * This is the check whose absence let signup stay broken for three days from
+ * launch day. `signupsHealth` grades org creations for being too MANY, so its
+ * healthiest reading — zero — is what total failure looks like. The tests are
+ * ordered by which mistake costs most: reporting an outage as calm is the
+ * whole reason this exists, and paging on a quiet night is what would get it
+ * muted before it ever fired for real.
+ */
+describe('signupDroughtHealth (AGL-2583)', () => {
+  const NOW = 1_755_100_800_000
+  const served = (serves: number) => [{ serves, servedAtMs: NOW }]
+
+  it('REDS when the signup page was served and no account was created', () => {
+    // The AGL-2581 hour, exactly: people arrived, `beforeUserCreated` refused
+    // every one of them, and the org count stayed at zero.
+    const check = signupDroughtHealth(served(40), 0, 7)
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('signup-drought')
+    expect(check.signupPagesServed).toBe(40)
+    expect(check.orgCreations).toBe(0)
+  })
+
+  it('reds at exactly the traffic floor, not merely past it', () => {
+    const atFloor = signupDroughtHealth(
+      served(MIN_SIGNUP_TRAFFIC_FOR_DROUGHT),
+      0,
+      7,
+    )
+    expect(atFloor.ok).toBe(false)
+
+    const underFloor = signupDroughtHealth(
+      served(MIN_SIGNUP_TRAFFIC_FOR_DROUGHT - 1),
+      0,
+      7,
+    )
+    expect(underFloor.ok).toBe(true)
+  })
+
+  it('a quiet night is NOT an outage — zero traffic, zero accounts, green', () => {
+    // The false positive that would get this muted. Nobody came, nobody
+    // signed up, nothing is wrong.
+    const check = signupDroughtHealth([], 0, 7)
+    expect(check.ok).toBe(true)
+    expect(check.code).toBeUndefined()
+    expect(check.signupPagesServed).toBe(0)
+  })
+
+  it('one account created clears it, however much traffic there was', () => {
+    // The verdict is "not one of them", not a conversion rate. This check
+    // must never become a marketing metric that pages an engineer.
+    const check = signupDroughtHealth(served(5_000), 1, 7)
+    expect(check.ok).toBe(true)
+  })
+
+  it('sums serves across the minute buckets in the window', () => {
+    const check = signupDroughtHealth(
+      [
+        { serves: 2, servedAtMs: NOW },
+        { serves: 2, servedAtMs: NOW - 60_000 },
+        { serves: 1, servedAtMs: NOW - 120_000 },
+      ],
+      0,
+      7,
+    )
+    expect(check.signupPagesServed).toBe(5)
+    expect(check.ok).toBe(false)
+  })
+
+  it('a corrupt serve count cannot become NaN and mute the alarm', () => {
+    // NaN compares false against every threshold, which would report calm
+    // forever — the same trap the refusal verdict guards against.
+    const check = signupDroughtHealth(
+      [{ serves: 'lots' as unknown as number, servedAtMs: NOW }, { serves: 9 }],
+      0,
+      7,
+    )
+    expect(check.signupPagesServed).toBe(9)
+    expect(check.ok).toBe(false)
+  })
+
+  it('an unreadable denominator is degraded, never calm', () => {
+    const check = signupDroughtHealth(null, 0, 7)
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('traffic-unavailable')
+    expect(check.signupPagesServed).toBeNull()
+  })
+
+  it('an unreadable numerator is degraded too', () => {
+    const check = signupDroughtHealth(served(40), null, 7)
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('count-unavailable')
+    expect(check.orgCreations).toBeNull()
+  })
+
+  it('a floor of 0 forces the drought — the alert-path lever', () => {
+    // The documented synthetic failure. Every hour with no creations is a
+    // drought under a floor of zero, so the deployed alert can be proven
+    // without breaking signup for a single visitor.
+    const check = signupDroughtHealth([], 0, 7, 0)
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('signup-drought')
+    expect(check.minimumTraffic).toBe(0)
+  })
+
+  it('describes its own window, and exposes counts only', () => {
+    const check = signupDroughtHealth(served(6), 0, 7)
+    expect(check.windowMinutes).toBe(SIGNUP_DROUGHT_WINDOW_MINUTES)
+    expect(Object.keys(check).sort()).toEqual([
+      'code',
+      'minimumTraffic',
+      'ms',
+      'ok',
+      'orgCreations',
+      'signupPagesServed',
       'windowMinutes',
     ])
   })

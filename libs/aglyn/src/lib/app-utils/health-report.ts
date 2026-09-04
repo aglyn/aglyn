@@ -135,7 +135,7 @@ export function healthHttpStatus(status: 'ok' | 'degraded'): number {
  * ## The cost argument, which is why this is safe
  *
  * Delegating to GET means HEAD runs the dependency probe. Every route
- * memoises that probe (`memoizeWithTtl`, 15s on the root and 5 minutes on the
+ * memoizes that probe (`memoizeWithTtl`, 15s on the root and 5 minutes on the
  * subsystems) explicitly so a public unauthenticated endpoint cannot be made
  * to read in a loop — the same bound that already lets a fifteen-minute probe
  * hit seven endpoints for nearly nothing. HEAD now costs exactly what GET
@@ -564,8 +564,25 @@ export function signupsHealth(
 export interface SignupRefusalMarker {
   /** Refused attempts merged into this minute bucket. */
   refusals?: number
-  /** Split by which cap refused: `{ uid?: n, ip?: n }`. */
+  /**
+   * Split by what refused: `{ uid?: n, ip?: n, locked?: n, held?: n }`.
+   *
+   * `uid` and `ip` are the AGL-1534 rate limiter's two caps. `locked` and
+   * `held` come from the `beforeUserCreated` blocking function (AGL-2583) — a
+   * door the limiter never sees, because it decides account creation on the
+   * Identity Platform path before any Aglyn route runs.
+   */
   byReason?: Record<string, number>
+  /**
+   * Account creations the blocking function admitted BLIND: the signups lock
+   * could not be read and nothing this instance remembered said it was pulled
+   * (AGL-2583).
+   *
+   * Deliberately its own field rather than another `byReason` entry. Nobody
+   * was refused, so folding it into the refusal split would make both counts
+   * lie — and it is graded on its own terms below.
+   */
+  unreadable?: number
   /** When the most recent refusal in this bucket happened. */
   refusedAtMs?: number
 }
@@ -583,6 +600,15 @@ export interface SignupRefusalsCheck extends HealthCheck {
    * past three, which is the distributed shape. Null when the query failed.
    */
   refusedByReason: Record<string, number> | null
+  /**
+   * Account creations decided WITHOUT the signups lock being readable
+   * (AGL-2583). Graded on its own, at zero tolerance, because it is
+   * categorically different from every entry in `refusedByReason`: those are
+   * controls working as designed, this is the platform answering the signups
+   * question without being able to consult it, and one of those is one too
+   * many. Null when the query itself failed.
+   */
+  lockUnreadable: number | null
   /** Minutes since the most recent refusal, so the body dates itself. */
   minutesSinceLast: number | null
   /** The trailing window the count covers, so the body is self-describing. */
@@ -613,12 +639,40 @@ export const SIGNUP_REFUSAL_WINDOW_MINUTES = 60
  */
 export const MAX_SIGNUP_REFUSALS_PER_WINDOW = 50
 
+/**
+ * The marker field the blocking function counts blind decisions under
+ * (AGL-2583).
+ *
+ * `signupsCreationVerdict` answers `locked` when a completed read found the
+ * lever pulled, `held` when a failed read fell back on an earlier one that
+ * had, and — the case this names — admits the account when the read failed
+ * and nothing remembered said the lever was pulled. That last one refuses
+ * nobody, so it is not a `byReason` entry; it is the platform deciding the
+ * signups question without being able to consult it, which is the visible
+ * edge of a Firestore read outage on the account-creation path. AGL-2581 was
+ * three days of that same read failing, and its only trace was a
+ * `logger.warn` nothing alerts on.
+ */
+export const SIGNUP_LOCK_UNREADABLE_FIELD = 'unreadable'
+
+/**
+ * Blind signups-lock decisions tolerated per window: NONE.
+ *
+ * Deliberately not calibrated like `MAX_SIGNUP_REFUSALS_PER_WINDOW` above,
+ * which is a volume threshold over refusals that mean the system is working.
+ * A blind decision is never routine — a single one says the signups lock was
+ * unreadable at least once, and the lock is unenforceable for as long as that
+ * lasts. False positives here cost a glance at one endpoint.
+ */
+export const MAX_UNREADABLE_SIGNUP_DECISIONS_PER_WINDOW = 0
+
 export function signupRefusalsHealth(
   markers: SignupRefusalMarker[] | null,
   ms: number,
   now: number = Date.now(),
   threshold: number = MAX_SIGNUP_REFUSALS_PER_WINDOW,
   windowMinutes: number = SIGNUP_REFUSAL_WINDOW_MINUTES,
+  unreadableThreshold: number = MAX_UNREADABLE_SIGNUP_DECISIONS_PER_WINDOW,
 ): SignupRefusalsCheck {
   // A failed query is degraded, not ok — the same rule `signupsHealth` and
   // `rateLimitsHealth` follow. An alarm that cannot see the thing it watches
@@ -630,6 +684,7 @@ export function signupRefusalsHealth(
       code: 'refusals-unavailable',
       refusedSignups: null,
       refusedByReason: null,
+      lockUnreadable: null,
       minutesSinceLast: null,
       windowMinutes,
       threshold,
@@ -637,10 +692,15 @@ export function signupRefusalsHealth(
   }
 
   let refusedSignups = 0
+  let lockUnreadable = 0
   let newestAtMs: number | null = null
   const refusedByReason: Record<string, number> = {}
   for (const marker of markers) {
     refusedSignups += marker.refusals ?? 0
+    // `Number(...) || 0` for the reason the split below gives: a corrupt
+    // Firestore field must not turn this into NaN, which compares false
+    // against every threshold and would report calm forever.
+    lockUnreadable += Number(marker.unreadable) || 0
     for (const [reason, count] of Object.entries(marker.byReason ?? {})) {
       // `Number(...) || 0` rather than a bare add: these come out of Firestore
       // and a corrupt field must not turn the total into NaN, which compares
@@ -655,18 +715,157 @@ export function signupRefusalsHealth(
   }
 
   const over = refusedSignups > threshold
+  // The blind count is graded FIRST and reported over the volume code. A wave
+  // and an unreadable lock call for opposite responses — leave the limiter
+  // alone and go read the refusal reasons, versus go find out why Firestore
+  // is unreadable from the account-creation path — so the code has to name
+  // the one that is actually happening.
+  const blind = lockUnreadable > unreadableThreshold
+  const code = blind
+    ? 'signups-lock-unreadable'
+    : over
+      ? 'signup-refusal-wave'
+      : undefined
   return {
-    ok: !over,
+    ok: code === undefined,
     ms,
-    ...(over ? { code: 'signup-refusal-wave' } : {}),
+    ...(code === undefined ? {} : { code }),
     refusedSignups,
     refusedByReason,
+    lockUnreadable,
     minutesSinceLast:
       newestAtMs === null
         ? null
         : Math.max(0, Math.floor((now - newestAtMs) / 60_000)),
     windowMinutes,
     threshold,
+  }
+}
+
+/**
+ * NOBODY GOT AN ACCOUNT WHILE PEOPLE WERE TRYING (AGL-2583).
+ *
+ * `signupsHealth` watches for a FLOOD. Its healthiest possible reading —
+ * zero orgs created in the trailing hour — is also what total failure looks
+ * like, so the monitor named "signups" reports green precisely when nobody
+ * can sign up. That is not a hypothetical: account creation was refused for
+ * every visitor from Sep 1 to Sep 4 (AGL-2581) and the signup check was
+ * green through all of it, because zero is comfortably under ten.
+ *
+ * ## Zero is only a signal next to a denominator
+ *
+ * Alone, "no accounts this hour" describes a quiet Tuesday night as loudly as
+ * an outage, and an alarm that fires on quiet nights is an alarm everyone
+ * mutes. What makes zero mean something is TRAFFIC: people arrived at the
+ * signup page and none of them ended up with an account.
+ *
+ * The denominator is counted first-party, from `signupServed_` markers the
+ * console writes when the signup page asks `/api/lockdown-status?feature=
+ * signups` — the one server request every rendering of that page makes. Not
+ * GA4: its API needs a service account and an OAuth round trip from a public
+ * health route, its data lands with hours of latency, and a monitor that
+ * depends on an analytics vendor is a monitor that reports an outage every
+ * time that vendor has one. The markers are in the store this route family
+ * already reads, cost one increment per instance per five seconds, and are
+ * counted by exactly the same range query shape as its siblings.
+ *
+ * The denominator UNDER-counts on purpose and that is the safe direction:
+ * the lockdown answer is edge-cacheable for a minute, so a burst of visitors
+ * behind one CDN node can land as a single origin hit. Under-counting can
+ * only make this check quieter, never louder — it cannot invent traffic that
+ * did not happen, so it cannot invent an outage.
+ *
+ * Pure on purpose, like its siblings: the route counts, this decides.
+ */
+export interface SignupServedMarker {
+  /** Signup-page serves merged into this minute bucket. */
+  serves?: number
+  /** When the most recent serve in this bucket happened. */
+  servedAtMs?: number
+}
+
+export interface SignupDroughtCheck extends HealthCheck {
+  /**
+   * Signup pages served inside the trailing window — the denominator. A
+   * COUNT only; the markers carry no visitor, no IP and no referrer. Null
+   * when the query itself failed.
+   */
+  signupPagesServed: number | null
+  /** Accounts (orgs) actually created in the same window. The numerator. */
+  orgCreations: number | null
+  /** The trailing window both numbers cover, so the body is self-describing. */
+  windowMinutes: number
+  /** Serves below which zero creations is treated as a quiet hour, not an outage. */
+  minimumTraffic: number
+}
+
+/**
+ * Trailing window the drought verdict covers. One hour, matching the sibling
+ * checks so the three numbers on this endpoint are all read against the same
+ * clock — and long enough that a single slow afternoon does not page anyone.
+ */
+export const SIGNUP_DROUGHT_WINDOW_MINUTES = 60
+
+/**
+ * Serves in the window below which zero accounts means nothing.
+ *
+ * Five, not one. One person can open the signup page, think better of it and
+ * close the tab; five doing so in an hour with not one account created is the
+ * shape of a door that does not open. Calibrated against the under-counting
+ * above: with the lockdown answer cacheable for a minute, five origin hits is
+ * a genuine trickle of arrivals rather than a single refreshing visitor.
+ */
+export const MIN_SIGNUP_TRAFFIC_FOR_DROUGHT = 5
+
+export function signupDroughtHealth(
+  markers: SignupServedMarker[] | null,
+  orgCreations: number | null,
+  ms: number,
+  minimumTraffic: number = MIN_SIGNUP_TRAFFIC_FOR_DROUGHT,
+  windowMinutes: number = SIGNUP_DROUGHT_WINDOW_MINUTES,
+): SignupDroughtCheck {
+  // A failed traffic query is degraded, not ok — the same rule the siblings
+  // follow. Without the denominator this check has no opinion at all, and a
+  // check with no opinion must not spend it saying everything is fine.
+  if (markers === null) {
+    return {
+      ok: false,
+      ms,
+      code: 'traffic-unavailable',
+      signupPagesServed: null,
+      orgCreations,
+      windowMinutes,
+      minimumTraffic,
+    }
+  }
+  let signupPagesServed = 0
+  for (const marker of markers) {
+    // `Number(...) || 0` for the reason the sibling gives: a corrupt Firestore
+    // field must not turn the total into NaN, which compares false against
+    // every threshold and would report calm forever.
+    signupPagesServed += Number(marker.serves) || 0
+  }
+  if (orgCreations === null) {
+    return {
+      ok: false,
+      ms,
+      code: 'count-unavailable',
+      signupPagesServed,
+      orgCreations: null,
+      windowMinutes,
+      minimumTraffic,
+    }
+  }
+  // The whole verdict: traffic arrived and NOT ONE of them got an account.
+  const drought = signupPagesServed >= minimumTraffic && orgCreations === 0
+  return {
+    ok: !drought,
+    ms,
+    ...(drought ? { code: 'signup-drought' } : {}),
+    signupPagesServed,
+    orgCreations,
+    windowMinutes,
+    minimumTraffic,
   }
 }
 
@@ -731,7 +930,7 @@ export interface RateLimitsCheck extends HealthCheck {
 /**
  * Trailing window the degradation counts cover.
  *
- * Bounded from below by the alert path, not by taste. The probe memoises for
+ * Bounded from below by the alert path, not by taste. The probe memoizes for
  * 5 minutes, the uptime check runs every 5, and the alert policy wants ~10
  * minutes of sustained failure before it emails — so a window shorter than
  * ~20 minutes can go red and green again before anyone is told, which is a
@@ -900,7 +1099,7 @@ export interface ServerErrorsCheck extends HealthCheck {
  * Trailing window the error count covers.
  *
  * Bounded from below by the alert path, not by taste — the same arithmetic as
- * `RATE_LIMIT_DEGRADED_WINDOW_MINUTES`: the probe memoises for 5 minutes, the
+ * `RATE_LIMIT_DEGRADED_WINDOW_MINUTES`: the probe memoizes for 5 minutes, the
  * external checks run every 5, and an alert policy wants ~10 minutes of
  * sustained failure before it emails, so a window under ~20 minutes can go red
  * and green again before anyone is told. 30 leaves ten minutes of margin and
@@ -1342,7 +1541,7 @@ export interface BillingWebhookCheck extends HealthCheck {
  * Trailing window the delivery counts cover.
  *
  * Bounded from below by the alert path, not by taste, exactly like
- * `RATE_LIMIT_DEGRADED_WINDOW_MINUTES`: the probe memoises for 5 minutes, the
+ * `RATE_LIMIT_DEGRADED_WINDOW_MINUTES`: the probe memoizes for 5 minutes, the
  * uptime check runs every 5, and the policy wants ~10 minutes of sustained
  * failure before it emails — so a window under ~20 minutes can go red and
  * green again before anyone is told. Bounded from ABOVE by Stripe's retry
@@ -1803,7 +2002,7 @@ export interface ScheduledJob {
  *
  * Six GitHub Actions schedules (`.github/workflows/scheduled-crons.yml`) — the
  * weekly jobs plus the month-boundary usage-email sweep, for which an hour of
- * drift is nothing — and eleven rows driven by Cloud Scheduler out of
+ * drift is nothing — and twelve rows driven by Cloud Scheduler out of
  * `cloud/functions/src/index.ts`: `pluginJobsBeat` (every minute), the four
  * the `consoleFastCrons` job carries every fifteen (AGL-1617), and one
  * `consoleDailyCron` export per daily job.
@@ -1897,6 +2096,19 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     graceMinutes: 90,
     drives:
       'Releases the provider domain object and the zone records of every sending domain whose site or workspace is gone. If it stops, each deleted site keeps one of a bounded number of provider domain slots forever — until the ceiling is reached and a site that asks for a domain of its own is refused one, which leaves it on the shared pool rather than stopping its mail — and leaves a live DKIM key in our zone under a label a future site can claim and inherit a stranger’s signature from.',
+  },
+  {
+    id: 'reap-unverified-orgs',
+    label: 'Unverified signup reaper',
+    // 06:00, after `run-erasures` and the sending-domain sweep and before the
+    // billing pair. It calls `eraseOrg` itself, so it wants the erasure runner
+    // to have already finished with whatever it was holding.
+    cron: '0 6 * * *',
+    runner: 'cloud-scheduler',
+    target: '/api/admin/reap-unverified-orgs?dryRun=0',
+    graceMinutes: 90,
+    drives:
+      'Erases workspaces whose sole owner never confirmed an email address, releasing the workspace address they took, and promotes the held address of every owner who has since verified. If it stops, a name claimed with a throwaway inbox is held until its reservation expires — and, worse, a real customer who verified keeps a pending address that becomes claimable by anyone on day twenty-one.',
   },
   {
     id: 'usage-email',

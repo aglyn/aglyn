@@ -43,6 +43,7 @@ import {
   lockdownRetryAfterSeconds,
   parseLockdownRefusal,
   signupsCreationVerdict,
+  resetSignupsLockMemory,
   normalizeHostLockdown,
   normalizeLockdownDoc,
   normalizeOrgLockdown,
@@ -975,6 +976,14 @@ describe('AGL-1531 · the signups lock refuses account CREATION', () => {
     (value: { untilMs?: number } | null) =>
     async () =>
       value
+  const throws = async (): Promise<never> => {
+    throw new Error('firestore unavailable')
+  }
+
+  // The verdict remembers what its last completed read saw, for the life of
+  // the process. Without this every case would inherit the previous one's
+  // lock and the fail-open cases would read as refusals.
+  beforeEach(resetSignupsLockMemory)
 
   it('admits when the lock document is absent', async () => {
     await expect(signupsCreationVerdict(reads(null), NOW)).resolves.toEqual({
@@ -1022,21 +1031,96 @@ describe('AGL-1531 · the signups lock refuses account CREATION', () => {
     }
   })
 
-  it('FAILS CLOSED when the lock read throws', async () => {
-    await expect(
-      signupsCreationVerdict(async () => {
-        throw new Error('firestore unavailable')
-      }, NOW),
-    ).resolves.toEqual({ refused: true, cause: 'unreadable' })
+  /**
+   * AGL-2581. An unreadable lock means the platform does not KNOW whether
+   * the lever is pulled, and this is the only gate in front of account
+   * creation — so refusing on "do not know" turns away every stranger for
+   * as long as reads are slow, which on a cold, low-traffic instance is
+   * every attempt. The admission is marked so the caller can log it.
+   */
+  it('ADMITS, marked unreadable, when the lock read throws', async () => {
+    await expect(signupsCreationVerdict(throws, NOW)).resolves.toEqual({
+      refused: false,
+      unreadable: true,
+    })
   })
 
-  it('FAILS CLOSED when the lock read never answers', async () => {
-    // A hang is the failure mode fail-open would miss entirely: the promise
-    // does not reject, so a bare try/catch would sit on the account-creation
-    // critical path until Identity Platform's own timeout.
+  it('ADMITS, marked unreadable, when the lock read never answers', async () => {
+    // A hang is its own failure mode: the promise never settles, so without
+    // the race this would sit on the account-creation critical path until
+    // Identity Platform's own timeout refused it with no log at all.
     await expect(
       signupsCreationVerdict(() => new Promise(() => undefined), NOW, 10),
-    ).resolves.toEqual({ refused: true, cause: 'unreadable' })
+    ).resolves.toEqual({ refused: false, unreadable: true })
+  })
+
+  /**
+   * The half of the trade that keeps the lever a lever. Fail-open is the
+   * answer to NOT KNOWING; a lock this process has actually seen is a fact,
+   * and a later failed read must not be allowed to forget it — otherwise the
+   * bot wave that makes reads fail is the thing that releases the brake
+   * aimed at the wave.
+   */
+  it('KEEPS REFUSING after a seen lock when the next read fails', async () => {
+    await expect(signupsCreationVerdict(reads({}), NOW)).resolves.toEqual({
+      refused: true,
+      cause: 'locked',
+    })
+    await expect(signupsCreationVerdict(throws, NOW)).resolves.toEqual({
+      refused: true,
+      cause: 'held',
+    })
+    // Still holding on the third, fourth and fiftieth failure: the refusal
+    // rests on the read that succeeded, not on the one that just failed.
+    await expect(
+      signupsCreationVerdict(() => new Promise(() => undefined), NOW, 10),
+    ).resolves.toEqual({ refused: true, cause: 'held' })
+  })
+
+  it('holds a seen lock only until its own window closes', async () => {
+    // A dead-man expiry must not become un-liftable by being remembered:
+    // the held state is checked against the clock exactly as a fresh read
+    // would be.
+    await expect(
+      signupsCreationVerdict(reads({ untilMs: NOW + 1_000 }), NOW),
+    ).resolves.toEqual({ refused: true, cause: 'locked' })
+    await expect(signupsCreationVerdict(throws, NOW)).resolves.toEqual({
+      refused: true,
+      cause: 'held',
+    })
+    await expect(
+      signupsCreationVerdict(throws, NOW + 1_001),
+    ).resolves.toEqual({ refused: false, unreadable: true })
+  })
+
+  it('lets a LIFT take effect — one completed read replaces the memory', async () => {
+    await signupsCreationVerdict(reads({}), NOW)
+    await expect(signupsCreationVerdict(reads(null), NOW)).resolves.toEqual({
+      refused: false,
+    })
+    await expect(signupsCreationVerdict(throws, NOW)).resolves.toEqual({
+      refused: false,
+      unreadable: true,
+    })
+  })
+
+  it('holds nothing on a cold process that never completed a read', async () => {
+    // The gap this does NOT close, pinned so it is a stated limit rather
+    // than a surprise: a lever pulled during a total Firestore outage cannot
+    // reach an instance that has never read it.
+    await expect(signupsCreationVerdict(throws, NOW)).resolves.toEqual({
+      refused: false,
+      unreadable: true,
+    })
+  })
+
+  it('never marks a READ admission as unreadable', async () => {
+    // `unreadable` is the operator's only signal that the lever could not be
+    // consulted. An ordinary admission carrying it would drown that signal
+    // in the noise of every successful signup.
+    await expect(signupsCreationVerdict(reads(null), NOW)).resolves.toEqual({
+      refused: false,
+    })
   })
 
   it('does not refuse a slow-but-successful read', async () => {

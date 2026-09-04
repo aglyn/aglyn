@@ -106,56 +106,75 @@ function VerifyEmail() {
     hardNavigate(verifiedContinueTarget(continueUrl) ?? '/')
   }, [continueUrl, firebaseAuth])
 
-  const sendLink = useCallback(async () => {
-    const user = firebaseAuth.currentUser
-    if (!user || loading) return
-    setError(null)
-    const dequeueLoading = queueLoading()
-    try {
-      // Aglyn sends this now, not Firebase (AGL-1112) — same reason as the
-      // reset mail: the Firebase template is locked, so its subject still
-      // carries `[aglyn.io]` and its link lands on a firebaseapp.com host.
-      // The one-time code is still minted by Firebase.
-      const response = await authorizedFetch(
-        user,
-        '/api/auth/send-verification',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: '{}',
-        },
-      )
-      const payload = (await response.json().catch(() => ({}))) as {
-        error?: string
-        alreadyVerified?: boolean
-      }
-      if (response.status === 429) {
-        setError(
-          'Too many requests — wait a moment before requesting another link.',
+  /**
+   * `automatic` marks the send this page fires from a mount, as opposed to the
+   * one a person asks for with the resend link (AGL-2584).
+   *
+   * The route holds a short per-uid cooldown on the automatic kind and answers
+   * a suppressed one `alreadySent`, which lands on the same "we sent a link"
+   * state below: coming back to this tab is a request to know whether the
+   * first mail worked, not a request for another one. Identity Platform
+   * throttles link minting per account ahead of our own budget, so a mount
+   * that minted again is how a returning visitor was told a mail that HAD been
+   * sent had failed.
+   *
+   * The decision is the route's rather than this component's because the
+   * throttle it avoids is per account: a marker kept here would not see a link
+   * minted from a phone, a second browser, or a private window.
+   */
+  const sendLink = useCallback(
+    async ({ automatic = false }: { automatic?: boolean } = {}) => {
+      const user = firebaseAuth.currentUser
+      if (!user || loading) return
+      setError(null)
+      const dequeueLoading = queueLoading()
+      try {
+        // Aglyn sends this now, not Firebase (AGL-1112) — same reason as the
+        // reset mail: the Firebase template is locked, so its subject still
+        // carries `[aglyn.io]` and its link lands on a firebaseapp.com host.
+        // The one-time code is still minted by Firebase.
+        const response = await authorizedFetch(
+          user,
+          '/api/auth/send-verification',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ auto: automatic }),
+          },
         )
-        return
+        const payload = (await response.json().catch(() => ({}))) as {
+          error?: string
+          alreadyVerified?: boolean
+        }
+        if (response.status === 429) {
+          setError(
+            'Too many requests — wait a moment before requesting another link.',
+          )
+          return
+        }
+        if (!response.ok) {
+          setError(
+            payload.error ??
+              'We couldn’t send the verification email. Try again shortly.',
+          )
+          return
+        }
+        // Verified in another tab while this page sat open. Sending a mail
+        // whose link is already a no-op would read as the flow being stuck.
+        if (payload.alreadyVerified) {
+          await goToApp()
+          return
+        }
+        setSent(true)
+      } catch (e: any) {
+        console.error(e)
+        setError('We couldn’t send the verification email. Try again shortly.')
+      } finally {
+        dequeueLoading()
       }
-      if (!response.ok) {
-        setError(
-          payload.error ??
-            'We couldn’t send the verification email. Try again shortly.',
-        )
-        return
-      }
-      // Verified in another tab while this page sat open. Sending a mail
-      // whose link is already a no-op would read as the flow being stuck.
-      if (payload.alreadyVerified) {
-        await goToApp()
-        return
-      }
-      setSent(true)
-    } catch (e: any) {
-      console.error(e)
-      setError('We couldn’t send the verification email. Try again shortly.')
-    } finally {
-      dequeueLoading()
-    }
-  }, [firebaseAuth, goToApp, loading, queueLoading])
+    },
+    [firebaseAuth, goToApp, loading, queueLoading],
+  )
 
   // Re-check verification: reload the user, and if verified, head to the app.
   const checkNow = useCallback(async () => {
@@ -242,15 +261,17 @@ function VerifyEmail() {
   }, [applyState, sessionVerified, goToApp])
 
   // Auto-send one link on first mount for a signed-in unverified user, then
-  // poll for verification. Guarded so re-mounts / a returning tab don't spam.
-  // Held while a code is being applied, and never for a verified session —
-  // `sendLink` answers a verified caller with `alreadyVerified`, whose
-  // `goToApp` is one more hard navigation that must not race the apply.
+  // poll for verification. `sentOnceRef` covers this page load; the route's
+  // cooldown covers the reload and the returning tab, which is where the
+  // repeat sends actually came from (AGL-2584). Held while a code is being
+  // applied, and never for a verified session — `sendLink` answers a verified
+  // caller with `alreadyVerified`, whose `goToApp` is one more hard navigation
+  // that must not race the apply.
   useEffect(() => {
     if (applying || authLoading || !signedIn || sessionVerified) return
     if (!sentOnceRef.current) {
       sentOnceRef.current = true
-      void sendLink()
+      void sendLink({ automatic: true })
     }
     const timer = setInterval(() => void checkNow(), POLL_MS)
     return () => clearInterval(timer)

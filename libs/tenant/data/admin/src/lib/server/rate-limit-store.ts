@@ -261,8 +261,19 @@ const SIGNUP_REFUSAL_BUCKET_MS = 60_000
  */
 const SIGNUP_REFUSAL_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
 
-/** Which cap refused. Bounded on purpose — this is a public health body. */
-export type SignupRefusalReason = 'uid' | 'ip'
+/**
+ * What refused. Bounded on purpose — this is a public health body.
+ *
+ * `uid` and `ip` are this limiter's two caps. `locked` and `unreadable` are
+ * written by the `beforeUserCreated` blocking function in `cloud/functions`,
+ * which refuses on the Identity Platform path before any Aglyn route runs
+ * and therefore never reaches `consumeRateLimit` (AGL-2583). It cannot import
+ * this module — it is a plain npm package outside the workspace — so it
+ * writes the same document shape by hand and
+ * `apps/console/specs/signup-refusal-marker-wiring.spec.ts` fails if the two
+ * ever disagree about the collection, the prefix or the fields.
+ */
+export type SignupRefusalReason = 'uid' | 'ip' | 'locked' | 'unreadable'
 
 /**
  * Record one refused org-creation attempt.
@@ -547,6 +558,196 @@ export function pendingServerErrors(): number {
 /** Test seam: forget anything held. */
 export function resetServerErrorsForTests(): void {
   serverErrors = null
+}
+
+/**
+ * Document-id prefix for signup-page serve markers (AGL-2583).
+ *
+ * ## Why traffic is worth storing at all
+ *
+ * `/api/health/signups` counts orgs created in the trailing hour and goes red
+ * when there are TOO MANY. Zero — the reading that means nobody on earth can
+ * sign up — is its healthiest possible score, and that is how AGL-2581 refused
+ * every account creation for three days with the signup monitor green
+ * throughout. The missing half is a DENOMINATOR: zero accounts is an outage
+ * only if people were trying, and a quiet night otherwise.
+ *
+ * These markers are that denominator. Every render of the signup page fetches
+ * `/api/lockdown-status?feature=signups` to decide whether to show the paused
+ * notice, so that route is the one server touch a real arrival always makes,
+ * and counting it needs no new endpoint, no client beacon and no analytics
+ * vendor in the alerting path.
+ *
+ * Written into the SAME `rateLimits` collection as the counters and the three
+ * sibling marker kinds, for the reason they each gave: it inherits the
+ * deny-all security rule and the `expiresAt` TTL policy that already exist,
+ * instead of needing a new collection, a rules deploy and a second TTL policy.
+ * Minute bucketed so concurrent instances converge:
+ *
+ * ```
+ * rateLimits/signupServed_1755100800000
+ * ```
+ *
+ * **The timestamp field is `servedAtMs`**, deliberately none of `lastAtMs`
+ * (AGL-1679), `refusedAtMs` (AGL-1907) or `erroredAtMs` (AGL-1921), for the
+ * reason spelled out on `SIGNUP_REFUSAL_DOC_PREFIX`: each health probe
+ * range-queries its own field, and a shared field would let one signal's flood
+ * fill another's read limit and silently blind it. Four signals, four disjoint
+ * indexes.
+ */
+export const SIGNUP_SERVED_DOC_PREFIX = 'signupServed_'
+
+/** Marker id granularity. Matches every sibling marker kind. */
+const SIGNUP_SERVED_BUCKET_MS = 60_000
+
+/**
+ * How long a serve marker survives the TTL sweep. Seven days, matching the
+ * refusal and server-error markers: the question these answer ("were people
+ * arriving while nothing was being created") is asked during an incident and
+ * in the days after it, never a month later.
+ */
+const SIGNUP_SERVED_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
+
+/**
+ * Minimum spacing between marker writes from ONE instance.
+ *
+ * The same argument `SERVER_ERROR_FLUSH_INTERVAL_MS` makes, for the same
+ * reason: this counts a PUBLIC page's traffic, so an unbounded recorder turns
+ * a marketing campaign into a write-per-visitor on a single hot document —
+ * which is where Firestore's per-document ceiling lives and where AGL-2404's
+ * contention storm came from. Serves coalesce in process and land at most once
+ * every five seconds per instance.
+ *
+ * **The first serve of a bucket is written IMMEDIATELY** (`lastFlushAtMs`
+ * starts at 0), so the denominator is never behind the numerator: an hour that
+ * saw traffic says so within a second of the first arrival.
+ */
+const SIGNUP_SERVED_FLUSH_INTERVAL_MS = 5_000
+
+interface SignupServedAccumulator {
+  /** The minute bucket these pending serves belong to. */
+  bucketStart: number
+  /** Serves observed and not yet written. */
+  pending: number
+  /** When this instance last wrote, so the spacing above can be enforced. */
+  lastFlushAtMs: number
+  /** The newest serve in the bucket, which becomes `servedAtMs`. */
+  lastServedAtMs: number
+}
+
+/**
+ * The serves this instance is holding, or null when it is holding none.
+ * Module-scoped for the same reason its siblings are: a per-instance
+ * observation on its way to a durable place.
+ */
+let signupServes: SignupServedAccumulator | null = null
+
+/**
+ * Write what the accumulator is holding, and forget it.
+ *
+ * Fire-and-forget and best-effort: this runs on the signup page's own
+ * critical path, and a monitoring breadcrumb must never be the reason the
+ * page that sells the product gets slower or fails.
+ *
+ * `FieldValue.increment` with a merge, like the server-error marker: server
+ * side increments are commutative, so instances converging on one minute's
+ * document neither contend nor retry.
+ */
+function flushSignupServes(firestore: any, nowMs: number): void {
+  const held = signupServes
+  if (!held || held.pending <= 0) return
+  // Zeroed BEFORE the write so a concurrent flush cannot count them twice.
+  const serves = held.pending
+  const servedAtMs = held.lastServedAtMs
+  const bucketStart = held.bucketStart
+  held.pending = 0
+  held.lastFlushAtMs = nowMs
+
+  try {
+    const ref = firestore
+      .collection(RATE_LIMIT_COLLECTION)
+      .doc(`${SIGNUP_SERVED_DOC_PREFIX}${bucketStart}`)
+    void Promise.resolve(
+      ref.set(
+        {
+          serves: FieldValue.increment(serves),
+          // NOT `lastAtMs`, NOT `refusedAtMs`, NOT `erroredAtMs` — see the
+          // prefix doc above.
+          servedAtMs,
+          expiresAt: new Date(nowMs + SIGNUP_SERVED_RETENTION_MS),
+        },
+        { merge: true },
+      ),
+    ).catch(() => undefined)
+  } catch {
+    // A Firestore handle that throws SYNCHRONOUSLY — a half-initialized admin
+    // app, a stub in a test — must not escape onto the signup page's request.
+    // The serve is lost from the denominator, which can only make the drought
+    // alarm quieter, never louder.
+  }
+}
+
+/**
+ * Record one serving of the signup page, for `/api/health/signup-volume`.
+ *
+ * Nothing identifying is stored — a count and a timestamp. No IP, no user
+ * agent, no referrer, no campaign: this marker is read by an endpoint that is
+ * public, and the drought verdict needs a number, not an audience.
+ *
+ * Never throws, and callers must not await it.
+ */
+export function recordSignupServed(options?: {
+  now?: number
+  firestore?: any
+}): void {
+  const nowMs = options?.now ?? Date.now()
+  const bucketStart =
+    Math.floor(nowMs / SIGNUP_SERVED_BUCKET_MS) * SIGNUP_SERVED_BUCKET_MS
+  let firestore: any
+  try {
+    firestore = options?.firestore ?? firebaseAdmin.app().firestore()
+  } catch {
+    // No Admin app (a unit test, a misconfigured instance). The page still
+    // serves; only the denominator loses a tick, and a deployment that cannot
+    // reach Firestore at all is already red on `/api/health`.
+    return
+  }
+
+  // A rollover flushes what the OLD bucket was holding before anything is
+  // added to the new one, so a minute's count is never smeared into the next.
+  if (signupServes && signupServes.bucketStart !== bucketStart) {
+    flushSignupServes(firestore, nowMs)
+    signupServes = null
+  }
+  if (!signupServes) {
+    signupServes = {
+      bucketStart,
+      pending: 0,
+      // 0, so the first serve of a bucket is written immediately.
+      lastFlushAtMs: 0,
+      lastServedAtMs: nowMs,
+    }
+  }
+  signupServes.pending += 1
+  signupServes.lastServedAtMs = Math.max(signupServes.lastServedAtMs, nowMs)
+
+  if (nowMs - signupServes.lastFlushAtMs >= SIGNUP_SERVED_FLUSH_INTERVAL_MS) {
+    flushSignupServes(firestore, nowMs)
+  }
+}
+
+/**
+ * Serves this instance is holding but has not written yet. Exposed for tests
+ * and for anyone reasoning about the coalescing window; it only ever describes
+ * the instance that answers.
+ */
+export function pendingSignupServes(): number {
+  return signupServes?.pending ?? 0
+}
+
+/** Test seam: forget anything held. */
+export function resetSignupServesForTests(): void {
+  signupServes = null
 }
 
 /**

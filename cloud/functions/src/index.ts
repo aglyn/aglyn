@@ -15,7 +15,7 @@ import { HttpsError } from 'firebase-functions/https'
 import { defineSecret } from 'firebase-functions/params'
 import * as logger from 'firebase-functions/logger'
 import { getApps, initializeApp } from 'firebase-admin/app'
-import { getFirestore } from 'firebase-admin/firestore'
+import { FieldValue, getFirestore } from 'firebase-admin/firestore'
 import { signupsCreationVerdict } from './signups-lock'
 
 /**
@@ -516,6 +516,23 @@ const CONSOLE_DAILY_CRONS = {
     schedule: '0 5 * * *',
     route: '/api/admin/reap-sending-domains',
   },
+  /*
+   * ⛔ THE `?dryRun=0` IS WHAT ARMS IT (AGL-2585).
+   *
+   * `/api/admin/reap-unverified-orgs` erases whole workspaces, so unlike its
+   * five siblings it reports rather than acts unless a caller says otherwise —
+   * on a POST as much as on a GET. This is the one place that says otherwise,
+   * which makes putting the sweep back into preview a four-character edit here
+   * rather than a code change, and makes the fact that a scheduled job deletes
+   * workspaces legible at the schedule instead of only inside the route.
+   *
+   * An hour after `run-erasures`, for the same ordering reason the sweep above
+   * carries: it calls `eraseOrg`, and the erasure runner should be done first.
+   */
+  'reap-unverified-orgs': {
+    schedule: '0 6 * * *',
+    route: '/api/admin/reap-unverified-orgs?dryRun=0',
+  },
 } as const
 
 /**
@@ -557,6 +574,7 @@ export const consoleRunErasures = consoleDailyCron('run-erasures')
 export const consoleReportUsageCurrent = consoleDailyCron('report-usage-current')
 export const consoleUsageAlerts = consoleDailyCron('usage-alerts')
 export const consoleReapSendingDomains = consoleDailyCron('reap-sending-domains')
+export const consoleReapUnverifiedOrgs = consoleDailyCron('reap-unverified-orgs')
 
 /*==============================================================
  * THE SIGNUPS LOCK, AT ACCOUNT CREATION (AGL-1531)
@@ -587,6 +605,170 @@ const SIGNUPS_LOCK_COLLECTION = 'lockdowns'
 const SIGNUPS_LOCK_DOC = 'feature--signups'
 
 /**
+ * The lock read, as ONE function, so the warm-up below and the handler
+ * cannot end up reading different documents.
+ */
+async function readSignupsLock(): Promise<{ untilMs?: number } | null> {
+  const snapshot = await firestore()
+    .collection(SIGNUPS_LOCK_COLLECTION)
+    .doc(SIGNUPS_LOCK_DOC)
+    .get()
+  return snapshot.exists ? (snapshot.data() as { untilMs?: number }) : null
+}
+
+/**
+ * The entry point Cloud Run names in `FUNCTION_TARGET` for the container
+ * that serves the blocking function. Pinned to the export below by the
+ * wiring guard, because a rename that missed this string would leave a
+ * warm-up that silently never runs and a cold read back on the critical
+ * path.
+ */
+const SIGNUPS_LOCK_WARM_TARGET = 'beforeSignupCreate'
+
+/** Tells "the warm read failed" apart from "there is no lock document". */
+const WARM_READ_FAILED = Symbol('signups lock warm read failed')
+
+/**
+ * PAY THE COLD-START COST BEFORE THE REQUEST, NOT INSIDE ITS BUDGET
+ * (AGL-2581).
+ *
+ * The first Firestore read in a container is not one round trip: it is
+ * `initializeApp`, a metadata-server token fetch and a fresh gRPC channel,
+ * and on a cold instance that is most of what the read costs. Cloud Run
+ * starts the container and waits for it to listen before routing a request
+ * to it, so work started here runs in that gap rather than inside the
+ * handler's timeout.
+ *
+ * Gated on the target because this module is loaded by every function in
+ * this package and again by the deploy-time trigger scan: an ungated read
+ * would charge the every-minute job beat for a document it never uses, and
+ * would run against whatever credentials the deploying machine happens to
+ * carry.
+ *
+ * Consumed once. It answers the FIRST account creation this instance sees —
+ * the only one whose read is cold — and every later one reads live, so a
+ * lever pulled after the container started is still seen.
+ */
+let warmSignupsLock:
+  | Promise<{ untilMs?: number } | null | typeof WARM_READ_FAILED>
+  | undefined =
+  process.env.FUNCTION_TARGET === SIGNUPS_LOCK_WARM_TARGET
+    ? readSignupsLock().then(
+        (state) => state,
+        () => WARM_READ_FAILED,
+      )
+    : undefined
+
+/**
+ * THE SIGNUPS-LOCK EVENT MARKER (AGL-2583).
+ *
+ * Until this existed, everything this function decides left one trace: a
+ * `logger.warn` on Cloud Run stderr that nothing alerts on. AGL-2581 refused
+ * every account creation on the platform for three days from launch day and
+ * no monitor moved, because the one check whose literal subject is "signup
+ * refusals" reads `rateLimits/signupRefused_*` markers and the only writer of
+ * those was the rate limiter — a control this function decides in front of
+ * and never reaches. So the blocking function now writes the marker itself,
+ * in the same collection with the same fields, and the existing check covers
+ * this door for free.
+ *
+ * TWO EVENTS, ONE DOCUMENT, SEPARATE FIELDS. A refusal increments `refusals`
+ * and its cause under `byReason`. An admission made BLIND — the lock could
+ * not be read and nothing remembered said it was pulled — increments
+ * `unreadable` instead, and never `refusals`, because it did not refuse
+ * anybody and a count that conflated the two would misreport both. They share
+ * the document and the `refusedAtMs` stamp so one range query sees both.
+ *
+ * These literals are spelled out rather than imported because `cloud/
+ * functions` is a plain npm package outside the nx workspace and can resolve
+ * only firebase-admin and firebase-functions — the same constraint that gave
+ * `signups-lock.ts` its copied region.
+ * `apps/console/specs/signup-refusal-marker-wiring.spec.ts` compares these
+ * against `rate-limit-store.ts` and `health-report.ts` and fails on any
+ * divergence, because a marker written under a name nothing reads is
+ * indistinguishable from no marker at all — which is the exact failure this
+ * whole issue is about.
+ */
+const REFUSAL_COLLECTION = 'rateLimits'
+const REFUSAL_DOC_PREFIX = 'signupRefused_'
+const REFUSAL_BUCKET_MS = 60_000
+const REFUSAL_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
+
+/**
+ * How long the marker write may take before the decision proceeds without it.
+ *
+ * AWAITED, not fire-and-forget. A Cloud Function's process can be frozen the
+ * moment its handler returns, so a promise left running is a promise that may
+ * never reach Firestore — and a breadcrumb that only lands sometimes is worse
+ * than none, because the count it feeds an alarm would be silently low.
+ *
+ * Bounded tightly because the `unreadable` case means Firestore reads are
+ * already failing, so this write is the second thing likely to hang on the
+ * same outage — and on that path it is spent on a signup that SUCCEEDS.
+ * Identity Platform gives the blocking function a fixed window and the lock
+ * read may already have spent 2.5s of it; one more second keeps the total
+ * comfortably inside, and the decision stands either way.
+ */
+const REFUSAL_WRITE_TIMEOUT_MS = 1_000
+
+/**
+ * Record one signups-lock event where the health check can see it.
+ *
+ * `field` is `refusals` for a refusal and `unreadable` for an admission made
+ * blind; `cause` splits the refusals under `byReason` and is absent for the
+ * blind admission, which refused nobody and so belongs in no refusal split.
+ *
+ * `FieldValue.increment` with a merge, matching the AGL-1921 marker rather
+ * than the AGL-1907 read-modify-write transaction: increments are commutative
+ * server-side, so several instances deciding at once converge on one minute's
+ * document without contending — which matters precisely here, since what this
+ * counts arrives in waves.
+ *
+ * Nothing identifying is written. `cause` is `locked` or `held` and carries no
+ * email, no uid, no provider and no tenant — the same blindness the verdict
+ * itself has, and a requirement because the health body is public.
+ *
+ * Never throws: the decision below is the control, and failing to record it
+ * must not turn a clean outcome into a platform error.
+ */
+async function recordSignupsLockEvent(
+  field: 'refusals' | 'unreadable',
+  cause?: string,
+): Promise<void> {
+  const nowMs = Date.now()
+  const bucketStart = Math.floor(nowMs / REFUSAL_BUCKET_MS) * REFUSAL_BUCKET_MS
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    const write = firestore()
+      .collection(REFUSAL_COLLECTION)
+      .doc(`${REFUSAL_DOC_PREFIX}${bucketStart}`)
+      .set(
+        {
+          [field]: FieldValue.increment(1),
+          ...(cause ? { byReason: { [cause]: FieldValue.increment(1) } } : {}),
+          refusedAtMs: nowMs,
+          expiresAt: new Date(nowMs + REFUSAL_RETENTION_MS),
+        },
+        { merge: true },
+      )
+    await Promise.race([
+      write,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () => reject(new Error('signups lock marker write timed out')),
+          REFUSAL_WRITE_TIMEOUT_MS,
+        )
+      }),
+    ])
+  } catch {
+    // The decision still stands and the log line beside it still records it.
+    // Only the queryable copy is lost, and only for this one attempt.
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
+  }
+}
+
+/**
  * REFUSE ACCOUNT CREATION WHILE THE SIGNUPS LOCK IS ENGAGED (AGL-1531).
  *
  * The lock already refused the session mint, the legal-acceptance recorder
@@ -609,17 +791,17 @@ const SIGNUPS_LOCK_DOC = 'feature--signups'
  * CREATION ONLY. There is deliberately no `beforeUserSignedIn` sibling. That
  * one fires for EXISTING accounts, and registering it would put every
  * sign-in — including the permanent break-glass account of AGL-1888, whose
- * whole purpose is to be reachable when nothing else is — behind this read
- * and this fail-closed posture. The lock stops accounts being born; it never
- * stops one coming home.
+ * whole purpose is to be reachable when nothing else is — behind this read at
+ * all. The lock stops accounts being born; it never stops one coming home.
  *
  * NO STAFF BYPASS, which is not an omission: an account being created has no
  * claim yet, so a bypass here could only ever fire on a misattributed one.
  * `LOCKDOWN_FEATURE_STAFF_BYPASS.signups` has said `false` since AGL-1510
  * for exactly this reason.
  *
- * Cost while the lever is off: one Firestore `get` per account created,
- * ever — not per sign-in, not per request. Nothing here is on a hot path.
+ * Cost while the lever is off: one Firestore `get` per account created, plus
+ * one per cold start of this function for the warm-up above — not per
+ * sign-in, not per request. Nothing here is on a hot path.
  *
  * !!! DEPLOY: this only exists in production once `firebase deploy --only
  * functions` has run AND Identity Platform shows the `beforeCreate` trigger
@@ -629,32 +811,62 @@ const SIGNUPS_LOCK_DOC = 'feature--signups'
  */
 export const beforeSignupCreate = beforeUserCreated(async () => {
   const verdict = await signupsCreationVerdict(async () => {
-    const snapshot = await firestore()
-      .collection(SIGNUPS_LOCK_COLLECTION)
-      .doc(SIGNUPS_LOCK_DOC)
-      .get()
-    return snapshot.exists
-      ? (snapshot.data() as { untilMs?: number })
-      : null
+    // The warm-up answers at most one creation, and only if it succeeded;
+    // clearing it first means a second creation cannot be served a stale
+    // answer even if this one throws.
+    const warmed = warmSignupsLock
+    warmSignupsLock = undefined
+    if (warmed !== undefined) {
+      const state = await warmed
+      if (state !== WARM_READ_FAILED) return state
+    }
+    return readSignupsLock()
   }, Date.now())
 
-  if (!verdict.refused) return
+  if (!verdict.refused) {
+    // An admission made blind is the one outcome nothing else records: the
+    // account is created, the person sees nothing unusual, and this line is
+    // the only sign that the lever could not be consulted. Without it a
+    // Firestore read outage is indistinguishable from a quiet week.
+    if (verdict.unreadable) {
+      logger.warn('signups lock unreadable at creation, account admitted', {
+        cause: 'unreadable',
+      })
+      // And as DATA (AGL-2583). This is the reading a log line could never
+      // deliver: `/api/health/signup-volume` reds on a single one of these,
+      // because "the platform decided the signups question without being
+      // able to consult it" is never routine, and because it is the visible
+      // edge of a Firestore read outage on the account-creation path. It
+      // costs a bounded write on a signup that succeeded, which is the whole
+      // point — the alternative is a read outage that looks like a quiet
+      // week.
+      await recordSignupsLockEvent('unreadable')
+    }
+    return
+  }
 
   // Logged before the throw because a refusal is otherwise invisible: the
   // caller sees a generic Auth error and nothing on the Aglyn side records
   // that the brake bit. `cause` is the field that matters during an
-  // incident — `unreadable` means the lever may not even be pulled.
+  // incident — `held` means the refusal rests on an earlier read rather
+  // than on the one just made.
   logger.warn('signup refused at creation', { cause: verdict.cause })
+
+  // And again as DATA, where an alarm can reach it (AGL-2583). The line above
+  // is findable by someone who already suspects something; this one is
+  // counted by `/api/health/signup-volume`, which reds on a wave of refusals
+  // of any cause.
+  await recordSignupsLockEvent('refusals', verdict.cause)
 
   // THROWN, not returned. A returned value MODIFIES the user being created;
   // only a thrown error refuses the operation. A `return` here would be a
   // lock that runs, decides "refuse", and creates the account anyway.
-  // ONE sentence for both causes. `unreadable` is a fail-closed refusal and
-  // the operator needs to know that (the log line above says so), but the
-  // person at the signup form cannot act on the difference, and "our
-  // database is unreachable" is an operational detail that does not belong
-  // in an error handed to an anonymous caller. The wording matches the
-  // `signups` notice in the lockdown library so the two doors read alike.
+  // ONE sentence for both causes. `held` rests on an earlier read and the
+  // operator needs to know that (the log line above says so), but the person
+  // at the signup form cannot act on the difference, and the freshness of
+  // that reading is an operational detail that does not belong in an error
+  // handed to an anonymous caller. The wording matches the `signups` notice
+  // in the lockdown library so the two doors read alike.
   throw new HttpsError(
     'permission-denied',
     'New signups are temporarily paused. Existing accounts can sign in and ' +

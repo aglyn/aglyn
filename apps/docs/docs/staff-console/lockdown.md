@@ -415,17 +415,47 @@ Platform**, not in this repo. Two consequences:
   NOT refused"*, or *"UNKNOWN"*. **Unknown is never rendered as armed** — if
   the page cannot confirm the valve, treat the lock as sessions-only.
 
-**It fails CLOSED.** If the function cannot read `lockdowns/feature--signups`
-— Firestore unreachable, or the read exceeding its 2.5 s budget — the account
-is **refused**. This is deliberately the opposite of `getFeatureLockdown`,
-which fails open for signed-in traffic. The reasoning: an account created
-while Firestore is unreadable cannot finish signing up anyway (the profile,
-the acceptance record and the workspace all live in Firestore), so failing
-open buys an orphan Auth record rather than a working signup; a brake that
-releases itself under load is not a brake, and a bot wave is exactly the load
-that makes reads fail; and Identity Platform already fails closed one level up
-— if the function errors or times out it refuses the operation, and that is
-not configurable.
+**It fails OPEN when it cannot read the lever, and keeps holding one it has
+already seen.** If the function cannot read `lockdowns/feature--signups` —
+Firestore unreachable, or the read exceeding its 2.5 s budget — the account is
+**admitted**, and the function logs `signups lock unreadable at creation,
+account admitted`. The reasoning: an unreadable lock means the platform does
+not *know* whether the lever is pulled, and this is the only gate in front of
+account creation, so refusing on "don't know" turns away every signup for as
+long as reads are slow — which, where signup traffic is light enough that the
+instance is cold on most attempts, is every signup. The opposite error is
+bounded: an account created while Firestore is unreadable cannot finish
+signing up anyway (the profile, the acceptance record and the workspace all
+live in Firestore), so it buys a removable orphan Auth record rather than a
+working account.
+
+That covers *not knowing*. A lever the running instance has actually **seen**
+pulled is a different fact and survives a later failed read: every read that
+completes is recorded in the instance, and a read that then fails is answered
+from that record (logged with `cause: "held"`). So the obvious objection — a
+bot wave makes reads fail and thereby releases the brake aimed at the wave —
+needs the wave to land on an instance that has never once read the lock.
+Lifting the lever is itself a Firestore write, so nothing can lift it during
+that outage either, and a lock's own expiry is still honored, so a dead-man
+`untilMs` cannot become un-liftable by being remembered.
+
+This is **stricter** than the tenant takedown ledger below, which remembers
+only locks classified `takedown`: here *any* active lock is remembered,
+because holding one refuses new signups rather than keeping every visitor off
+a customer's whole site.
+
+**What it does not do**, stated rather than implied: an instance that has
+never completed a read has nothing to remember, so a lever pulled *during* a
+total Firestore outage does not reach a cold one. Closing that needs a carrier
+more available than Firestore.
+
+**The cold read is warmed.** The first Firestore read in a container is
+`initializeApp`, a token fetch and a fresh gRPC channel, and on a cold
+instance that is most of what the read costs. The function starts that read at
+module scope — gated on its own `FUNCTION_TARGET`, so the every-minute job
+beat and the deploy-time trigger scan do not pay for it — and the first
+account creation consumes the result instead of paying for it inside the
+2.5 s budget.
 
 **If it ever needs to be taken out of the path in a hurry:** unregister the
 `beforeCreate` trigger in the Identity Platform console. No deploy, no code
@@ -433,9 +463,8 @@ change, and it is the same console you are already in.
 
 **It never touches sign-in.** There is deliberately no `beforeUserSignedIn`
 sibling — that one fires for *existing* accounts and would put every sign-in,
-including the permanent break-glass account, behind this read and this
-fail-closed posture. The lock stops accounts being born; it never stops one
-coming home.
+including the permanent break-glass account, behind this read at all. The lock
+stops accounts being born; it never stops one coming home.
 
 **All three doors, both pools.** Email/password, Google and SSO all end at
 Firebase Auth account creation, and the handler reads no provider, no email

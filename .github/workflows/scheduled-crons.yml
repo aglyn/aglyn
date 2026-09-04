@@ -214,6 +214,14 @@ on:
           # scheduled POST acts. Safe to run by hand at any time — every
           # entry it touches is a cache drop, so a second run is a no-op.
           - /api/admin/drain-publish-outbox
+          # Erases workspaces whose sole owner never confirmed an email
+          # address, and promotes the held address of every owner who has
+          # (AGL-2585). ⛔ THIS ONE IS DIFFERENT: it reports unless the caller
+          # says `?dryRun=0`, on a POST as much as on a GET, because a
+          # mistaken run destroys workspaces. Run it WITHOUT the query string
+          # to read the plan; the scheduled Cloud Scheduler job carries it.
+          - /api/admin/reap-unverified-orgs
+          - /api/admin/reap-unverified-orgs?dryRun=0
       force:
         # Only /api/admin/reverify-plugin-versions reads this (AGL-1086). A
         # stored verdict is skipped while it is current, which is what makes

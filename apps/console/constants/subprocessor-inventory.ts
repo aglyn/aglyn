@@ -410,7 +410,7 @@ export const EGRESS_HOSTS: Record<string, EgressHost> = {
       'Primary application database, file storage, authentication, backups, and platform logging',
     publishedOn: '2026-08-05',
     reason:
-      'The security-rules control plane, reached only by the rules deploy and drift tooling.',
+      'The security-rules control plane, reached by the rules deploy and drift tooling and by the publish-journey health probe, which reads the live ruleset to confirm publishing is still authorized (AGL-2586).',
     dataReceived:
       'Rule source text. A control plane for the same store, carrying no customer data of its own — listed rather than exempted because the entity is the unit a reader cares about.',
   },
@@ -591,6 +591,20 @@ export const EGRESS_HOSTS: Record<string, EgressHost> = {
       'App Check `debugTokens.list`, called by the same operator CLI to prove no standing attestation bypass is registered on a live app. Same shape as the Management call above: Aglyn interrogating Aglyn\'s own project configuration, outside any request-serving path.',
     dataReceived:
       "Aglyn's own project and app ids, plus the operator's own access token. No customer data is in scope; the response carries debug-token metadata (`name`, `displayName`, `updateTime`) and, by API design, never a token value.",
+  },
+  'analyticsdata.googleapis.com': {
+    disposition: 'not-a-subprocessor',
+    reason:
+      "The GA4 Data API, read by the operator CLI `npm run check:funnel-conversions` to ask how many people reached the signup and sign-in pages against how many accounts and sessions actually resulted. It exists because the ratio is the only signal that would have caught the 2026-09-01 signup outage on its first day — fourteen visitors, zero accounts — and nothing was watching it. It is never imported by the console or tenant runtime, so no request-serving code path reaches it, and it authenticates as the operator's own service account against Aglyn's own property.",
+    dataReceived:
+      "Aglyn's own GA4 property id and a date range. What comes back is aggregate counts — page views, sessions and event totals for Aglyn's own marketing and console pages. No identifier for any person is sent, and none is requested: the query asks for totals by date and event name only.",
+  },
+  'cloudfunctions.googleapis.com': {
+    disposition: 'not-a-subprocessor',
+    reason:
+      'Cloud Functions `functions.list`, read by the operator CLI `npm run check:functions-drift` and by the promotion deploy guard to ask when each scheduled function was last deployed. `firebase deploy --only functions` ships outside the git pipeline, so this is the only way to tell a shipped function from a merged one. It is never imported by the console or tenant runtime — no request-serving code path reaches it — and it authenticates as the operator running it, using Application Default Credentials rather than the Firebase service account, which carries no permission on this API at all.',
+    dataReceived:
+      "Aglyn's own project id and the operator's own access token. No customer, member or visitor personal data exists anywhere in this path to send; what comes back is deployment metadata about Aglyn's own functions — resource name, region, state and `updateTime`.",
   },
 
   // MARK – Literals that are never fetched

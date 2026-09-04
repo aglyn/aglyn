@@ -110,6 +110,23 @@ describe('AGL-1531 · the blocking function is registered and reached', () => {
     expect(index).toMatch(/from '\.\/signups-lock'/)
   })
 
+  /**
+   * AGL-2581. The warm-up runs at module scope and is gated on the entry
+   * point Cloud Run names in `FUNCTION_TARGET`, so that the every-minute job
+   * beat and the deploy-time trigger scan — which load this same module — do
+   * not pay for a document they never read. A rename of the export that
+   * missed the string would leave a warm-up that silently never runs and put
+   * the cold read back inside the handler's budget, which is the whole
+   * defect this guards.
+   */
+  it('warms the lock read for its OWN entry point, named exactly', () => {
+    const target = /SIGNUPS_LOCK_WARM_TARGET = '(\w+)'/.exec(index)?.[1]
+    const exported = /export const (\w+) = beforeUserCreated\(/.exec(index)?.[1]
+    expect(target).toBeDefined()
+    expect(target).toBe(exported)
+    expect(index).toMatch(/process\.env\.FUNCTION_TARGET === SIGNUPS_LOCK_WARM_TARGET/)
+  })
+
   it('refuses by throwing, so Identity Platform aborts the creation', () => {
     // Returning a value from a blocking function MODIFIES the user being
     // created; only a thrown HttpsError refuses it. A `return` where a
@@ -125,6 +142,19 @@ describe('AGL-1531 · the blocking function is registered and reached', () => {
    * are not — behind this Firestore read and this fail-closed posture. The
    * lock must stop accounts being BORN, never stop them coming home.
    */
+  /**
+   * AGL-2581. An unreadable lock now ADMITS the account, which is the right
+   * trade but also the one outcome nothing else records: the person sees a
+   * normal signup and the lever was never consulted. The warn is the only
+   * trace, so the handler must log on BOTH outcomes — the refusal and the
+   * blind admission — not just the one that stops something.
+   */
+  it('warns on the blind admission as well as on the refusal', () => {
+    const handler = index.slice(index.indexOf('beforeUserCreated('))
+    expect(handler.match(/logger\.warn\(/g)).toHaveLength(2)
+    expect(handler).toMatch(/verdict\.unreadable/)
+  })
+
   it('registers no beforeUserSignedIn trigger — break-glass stays reachable', () => {
     // The CALL and the IMPORT, not the identifier: the handler's own comment
     // names the trigger to say why it is absent, and a guard that a comment

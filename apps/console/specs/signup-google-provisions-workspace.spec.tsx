@@ -16,7 +16,7 @@
  */
 
 /**
- * AGL-1942 — every sign-up door provisions a workspace, not just the form.
+ * AGL-1942 — every sign-up door settles a workspace, not just the form.
  *
  * AGL-1115 collected an organization name on the sign-up form so a new
  * account would land in a ready workspace instead of an empty chooser. Only
@@ -32,12 +32,17 @@
  * account that already existed is NOT handed a surprise second workspace, and
  * a failed derive-name provision does not accuse the person of typing a name
  * they never typed.
+ *
+ * AGL-2590 forked that routine on whether the credential is VERIFIED. Google
+ * arrives verified, so those doors are unchanged. The password door's account
+ * cannot open a workspace until it verifies, so its typed name is held against
+ * the account and the workspace chooser creates it on the first verified
+ * session — see `signup-workspace-claim.spec.ts`.
  */
 
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import SignUp from '../app/(auth)/signup/page'
-import { consumeSignUpOrgFailure } from '../utils/signup-org-failure'
 
 const mockPopup = jest.fn()
 const mockRedirect = jest.fn()
@@ -45,6 +50,7 @@ const mockCreateUser = jest.fn()
 const mockNavigate = jest.fn()
 const mockRemember = jest.fn(async (..._args: unknown[]) => undefined)
 const mockTrackEvent = jest.fn()
+const mockRememberWorkspace = jest.fn(async (..._args: unknown[]) => undefined)
 
 /** Flipped per test — `isNewAccount` is what tells a sign-up from a sign-in. */
 let mockIsNewAccount = true
@@ -60,6 +66,9 @@ const googleUser = (over: Record<string, unknown> = {}) => ({
     uid: 'u-google',
     email: 'ada@example.com',
     displayName: 'Ada Lovelace',
+    // Google verifies the address before it asserts one, and that is what
+    // licenses this door to provision immediately (AGL-2590).
+    emailVerified: true,
     getIdToken: async () => 'token-for-u-google',
     ...over,
   },
@@ -86,6 +95,14 @@ jest.mock('firebase/firestore', () => ({
 // intercept it.
 jest.mock('@aglyn/aglyn/app-utils/analytics-events', () => ({
   trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
+  // The navigation-safe spelling lands in the SAME capture (AGL-2587). These
+  // specs assert that an event was emitted, not which door emitted it — the
+  // door choice is asserted at source level in
+  // `every-funnel-door-is-instrumented.spec.ts`, where the navigation that
+  // makes it necessary is visible. Routing both here keeps one assertion per
+  // event instead of one per spelling.
+  trackEventBeforeNavigation: async (...args: unknown[]) =>
+    mockTrackEvent(...args),
 }))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useAnalytics: () => ({}),
@@ -217,6 +234,11 @@ jest.mock('../utils/oauth-providers', () => ({
 jest.mock('../utils/onboarding-plan-intent', () => ({
   rememberOnboardingPlanIntent: (...args: unknown[]) => mockRemember(...args),
 }))
+jest.mock('../utils/signup-workspace', () => ({
+  ...jest.requireActual('../utils/signup-workspace'),
+  rememberPendingSignUpWorkspace: (...args: unknown[]) =>
+    mockRememberWorkspace(...args),
+}))
 jest.mock('../utils/popup-loading-guard', () => ({
   __esModule: true,
   default: () => () => undefined,
@@ -269,7 +291,11 @@ beforeEach(() => {
   mockPlanIntent = null
   redirectOnCredential = undefined
   mockPopup.mockResolvedValue(googleUser())
-  mockCreateUser.mockResolvedValue(googleUser({ uid: 'u-password' }))
+  // The password door's account is ALWAYS unverified at this moment — the
+  // account was made seconds ago and the mail has not been opened.
+  mockCreateUser.mockResolvedValue(
+    googleUser({ uid: 'u-password', emailVerified: false }),
+  )
   global.fetch = okFetch()
 })
 
@@ -345,9 +371,10 @@ describe('AGL-1942 · a Google sign-up gets a ready workspace', () => {
   })
 
   it('does not accuse the person of typing a name they never typed', async () => {
-    // The AGL-1523 picker notice quotes the name back — which only makes
-    // sense for the form door. A derived name that fails falls through to
-    // the picker silently, exactly as it did before.
+    // The AGL-1523 notice quotes the name back — which only makes sense for
+    // the form door. A derived name that fails falls through to the picker
+    // silently, exactly as it did before, and the picker's own notice
+    // (`workspace-chooser-provisions-signup.spec.ts`) is never raised.
     mockPlanIntent = { plan: 'pro', interval: 'year' }
     global.fetch = jest.fn(async (url: string) =>
       String(url).includes('/api/orgs/create')
@@ -362,36 +389,45 @@ describe('AGL-1942 · a Google sign-up gets a ready workspace', () => {
     render(<SignUp />)
     await clickGoogle()
 
-    expect(consumeSignUpOrgFailure()).toBeNull()
     expect(mockNavigate).not.toHaveBeenCalled()
   })
 
-  it('still provisions the name the form door collected, unchanged', async () => {
+  it('HOLDS the name the form door collected instead of provisioning it', async () => {
     global.fetch = okFetch('typed-workspace')
     render(<SignUp />)
     await submitForm()
 
-    expect(orgCreateBodies()).toEqual([{ name: 'Typed Workspace' }])
-    expect(mockNavigate).toHaveBeenCalledWith('/typed-workspace')
+    // The account is unverified, so the workspace it would get is one it
+    // cannot open: `/api/auth/session` refuses to mint a cookie without
+    // `email_verified` (AGL-2590). Nothing is created and no address is
+    // claimed — the typed name waits with the account instead.
+    expect(orgCreateBodies()).toEqual([])
+    expect(mockNavigate).not.toHaveBeenCalled()
+    expect(mockRememberWorkspace).toHaveBeenCalledWith({}, 'u-password', {
+      name: 'Typed Workspace',
+      nameWasTyped: true,
+    })
   })
 
-  it('still quotes a TYPED name back when the form door fails to provision', async () => {
-    global.fetch = jest.fn(async (url: string) =>
-      String(url).includes('/api/orgs/create')
-        ? {
-            ok: false,
-            status: 409,
-            json: async () => ({ error: 'That workspace URL is taken' }),
-          }
-        : { ok: true, status: 200, json: async () => ({}) },
-    ) as unknown as typeof fetch
-
+  it('holds nothing on the Google doors — they have a workspace already', async () => {
     render(<SignUp />)
-    await submitForm()
+    await clickGoogle()
 
-    expect(consumeSignUpOrgFailure()).toEqual({
-      name: 'Typed Workspace',
-      error: 'That workspace URL is taken',
+    expect(mockRememberWorkspace).not.toHaveBeenCalled()
+  })
+
+  it('holds a DERIVED name too when a door somehow arrives unverified', async () => {
+    // Not a shape Google produces, and exactly why the fork asks the
+    // credential rather than the door: a provider that ever stopped asserting
+    // a verified address must not slip past into claiming an address.
+    mockPopup.mockResolvedValue(googleUser({ emailVerified: false }))
+    render(<SignUp />)
+    await clickGoogle()
+
+    expect(orgCreateBodies()).toEqual([])
+    expect(mockRememberWorkspace).toHaveBeenCalledWith({}, 'u-google', {
+      name: 'Ada Lovelace',
+      nameWasTyped: false,
     })
   })
 })

@@ -108,6 +108,12 @@ export const SUBSYSTEM_HEALTH = {
     '/api/health/crons',
     '/api/health/backups',
     '/api/health/billing',
+    // Signup volume, refusals and the DROUGHT (AGL-1536, AGL-1907,
+    // AGL-2583). `/api/health/signups` is the old path for the same handler,
+    // kept working when the check was renamed to what it measures — and
+    // probed here rather than merely tolerated, because a compatibility path
+    // nothing exercises is a compatibility path that quietly stops working.
+    '/api/health/signup-volume',
     '/api/health/signups',
     '/api/health/rate-limits',
     '/api/health/error-beacon',
@@ -117,6 +123,16 @@ export const SUBSYSTEM_HEALTH = {
     // documents and produce a second alert for one event. The body's
     // `byService` is what tells the two apart.
     '/api/health/server-errors',
+    // Can a person still get IN (AGL-2586)? The doors that are not email and
+    // password: password recovery, the verification link, Google, SSO and
+    // passkeys. `signups` above counts org creations; this asks the providers
+    // whether the handshake would still be accepted, which is the question no
+    // component check answers and no count can distinguish from quiet demand.
+    '/api/health/auth-doors',
+    // Can a customer create and publish (AGL-2586)? Component health was
+    // green through the twelve minutes on 2026-09-04 when late-shipping
+    // Firestore rules refused every publish batch on the platform.
+    '/api/health/journeys',
   ],
   // The tenant app ships the beacon and both render canaries; the rest are
   // console-side.
@@ -124,6 +140,10 @@ export const SUBSYSTEM_HEALTH = {
     '/api/health/error-beacon',
     '/api/health/render/site',
     '/api/health/render/marketing',
+    // Can a prospect still reach us (AGL-2586)? The contact, sales enquiry
+    // and demo forms all post to the tenant runtime, and a form that answers
+    // 200 while filing the lead nowhere reads exactly like no demand.
+    '/api/health/funnel',
   ],
 }
 

@@ -57,8 +57,35 @@ function source(file: string): string {
   return readFileSync(resolve(REPO_ROOT, file), 'utf8')
 }
 
+/**
+ * A route that FORWARDS to another health route rather than answering
+ * (AGL-2583).
+ *
+ * A check renamed to what it measures leaves its old path behind, because
+ * every monitor is already pointed at it. That file re-exports the handlers
+ * and builds no body, so it names neither resolver — and it answers with the
+ * version and the commit anyway, because the route it forwards to does.
+ *
+ * Held to the one rule it can break on its own: it must not have grown a
+ * body of its own that quietly stopped reporting them.
+ */
+const FORWARDS = /export \{ GET, HEAD \} from '\.\.?\//
+
 describe('health routes report the running build (AGL-2091)', () => {
-  const routes = healthRoutes()
+  const allRoutes = healthRoutes()
+  const aliases = allRoutes.filter((file) => FORWARDS.test(source(file)))
+  const routes = allRoutes.filter((file) => !aliases.includes(file))
+
+  it('an alias forwards and answers NOTHING of its own', () => {
+    // The positive control on the exclusion above, and the property that
+    // makes it safe: an alias that started composing a body would be
+    // answering without the version and the commit, and would be swept back
+    // into the assertions below by this failing first.
+    for (const file of aliases) {
+      expect(source(file)).not.toContain('healthBody(')
+      expect(source(file)).not.toContain('Response.json(')
+    }
+  })
 
   it('finds every health route', () => {
     // Vacuity guard. A glob that stops matching would make every assertion

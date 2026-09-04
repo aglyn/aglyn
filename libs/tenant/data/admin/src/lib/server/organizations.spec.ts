@@ -17,8 +17,7 @@
 
 import {
   isSlugReservationClaimable,
-  isWithinSignupProvisioningGrace,
-  SIGNUP_PROVISIONING_GRACE_MS,
+  isSlugReservationLapsed,
 } from './organizations'
 
 // AGL-585: a slug an org renamed AWAY from leaves a `movedTo` tombstone so
@@ -72,78 +71,76 @@ describe('isSlugReservationClaimable (AGL-585)', () => {
   })
 })
 
-// AGL-1523: the signup flow posts its collected org name seconds after
-// account creation — a moment at which a password account is ALWAYS
-// unverified. The grace admits exactly that shape (brand-new account, no org
-// yet) and nothing else; everything malformed fails CLOSED.
-describe('isWithinSignupProvisioningGrace (AGL-1523)', () => {
-  const NOW = Date.parse('2026-08-14T00:00:00Z')
-  const iso = (msAgo: number) => new Date(NOW - msAgo).toISOString()
+/*
+ * AGL-2585 — the address a signup takes is HELD, not granted.
+ *
+ * A workspace's name is its URL, and it used to be handed over before
+ * anything proved the email belonged to the person typing it. These hold the
+ * two halves of the rule that ends that: a reservation with an expiry lapses,
+ * and a reservation without one — every workspace made by a verified owner,
+ * and every workspace that predates the field — never does.
+ */
+describe('isSlugReservationLapsed (AGL-2585)', () => {
+  const NOW = Date.parse('2026-09-04T12:00:00Z')
 
-  it('admits a brand-new account with no org (the signup moment)', () => {
-    expect(
-      isWithinSignupProvisioningGrace({
-        creationTime: iso(30_000),
-        ownsAnyOrg: false,
-        now: NOW,
-      }),
-    ).toBe(true)
+  it('never lapses a GRANT', () => {
+    // The load-bearing case. Every existing reservation on the platform looks
+    // like this, and a rule that expired them would put every workspace URL
+    // in the product up for grabs.
+    expect(isSlugReservationLapsed({ orgId: 'org-a' }, NOW)).toBe(false)
+    expect(isSlugReservationLapsed(undefined, NOW)).toBe(false)
   })
 
-  it('tolerates slight clock skew (creation "in the future")', () => {
+  it('lapses a hold whose window has run out', () => {
     expect(
-      isWithinSignupProvisioningGrace({
-        creationTime: iso(-5_000),
-        ownsAnyOrg: false,
-        now: NOW,
-      }),
+      isSlugReservationLapsed({ reservedUntil: NOW - 1 }, NOW),
     ).toBe(true)
+    expect(isSlugReservationLapsed({ reservedUntil: NOW }, NOW)).toBe(true)
   })
 
-  it('denies once the account already owns an org — grace is ONE workspace', () => {
+  it('holds a reservation that is still inside its window', () => {
+    // The width is whatever the document in production says it is: nothing
+    // writes a new one since AGL-2590, so this rule reads a fixed population.
     expect(
-      isWithinSignupProvisioningGrace({
-        creationTime: iso(30_000),
-        ownsAnyOrg: true,
-        now: NOW,
-      }),
+      isSlugReservationLapsed(
+        { reservedUntil: NOW + 21 * 24 * 60 * 60 * 1000 },
+        NOW,
+      ),
     ).toBe(false)
   })
 
-  it('denies an old unverified account — the AGL-479 gate stands', () => {
-    expect(
-      isWithinSignupProvisioningGrace({
-        creationTime: iso(SIGNUP_PROVISIONING_GRACE_MS + 1),
-        ownsAnyOrg: false,
-        now: NOW,
-      }),
-    ).toBe(false)
+  it('never lapses on an expiry it cannot read', () => {
+    // A corrupt or half-written expiry is a reason to leave an address alone.
+    for (const reservedUntil of [
+      '1757000000000',
+      null,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      {},
+      true,
+    ]) {
+      expect(isSlugReservationLapsed({ reservedUntil }, NOW)).toBe(false)
+    }
   })
 
-  it('admits right up to the window edge', () => {
+  it('makes a lapsed hold claimable and an unexpired one not', () => {
     expect(
-      isWithinSignupProvisioningGrace({
-        creationTime: iso(SIGNUP_PROVISIONING_GRACE_MS),
-        ownsAnyOrg: false,
-        now: NOW,
-      }),
+      isSlugReservationClaimable(
+        { orgId: 'org-a', reservedUntil: NOW - 1 },
+        'org-b',
+        NOW,
+      ),
     ).toBe(true)
-  })
-
-  it('fails CLOSED on a missing or malformed creation time', () => {
     expect(
-      isWithinSignupProvisioningGrace({
-        creationTime: undefined,
-        ownsAnyOrg: false,
-        now: NOW,
-      }),
+      isSlugReservationClaimable(
+        { orgId: 'org-a', reservedUntil: NOW + 1 },
+        'org-b',
+        NOW,
+      ),
     ).toBe(false)
+    // And a grant is still refused, which is the whole of AGL-585 unchanged.
     expect(
-      isWithinSignupProvisioningGrace({
-        creationTime: 'not-a-date',
-        ownsAnyOrg: false,
-        now: NOW,
-      }),
+      isSlugReservationClaimable({ orgId: 'org-a' }, 'org-b', NOW),
     ).toBe(false)
   })
 })

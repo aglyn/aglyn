@@ -89,93 +89,124 @@ export class OrgSlugTakenError extends Error {
 }
 
 /**
+ * ⛔ NOTHING WRITES A NEW `reservedUntil` ANY MORE — AND THE RULES THAT READ
+ * ONE STAY (AGL-2590).
+ *
+ * AGL-2585 gave a workspace created by an UNVERIFIED owner a held address
+ * rather than a granted one, because a signup could create a workspace before
+ * anything proved the email belonged to the person typing it. That is no
+ * longer possible: `/api/orgs/create` refuses an unverified caller outright,
+ * the sign-up form holds its typed name against the account instead, and the
+ * workspace is created on the first verified session. There is no path left
+ * that can produce an unproven address, so `createOrganization` writes the
+ * plain grant this collection has always held and the twenty-one-day
+ * reservation window is gone with the code that set it.
+ *
+ * The READ side below is deliberately kept, and it is not dead weight:
+ * production holds `orgSlugs` documents that WERE written with an expiry,
+ * before this. Deleting the lapse rules would silently promote every one of
+ * those squats to a permanent grant — the exact outcome AGL-2585 existed to
+ * end. They stay until `reap-unverified-orgs` has erased or promoted the last
+ * of them.
+ *
+ * Has a PENDING address reservation run out?
+ *
+ * A reservation with no `reservedUntil` is a GRANT and never lapses, which is
+ * what keeps every workspace made by a verified owner — and every one that
+ * predates the field — untouchable by this rule.
+ *
+ * A `reservedUntil` that is not a finite number never lapses either: a
+ * corrupt or half-written expiry is a reason to leave an address alone, not a
+ * reason to hand it to the next caller.
+ */
+export function isSlugReservationLapsed(
+  // The whole `orgSlugs/{slug}` document, not just the field being read: every
+  // caller has one in hand, and a parameter narrowed to `reservedUntil` alone
+  // makes the ordinary case — a grant, which carries `orgId` and no expiry —
+  // an excess-property error at the call site.
+  reservation:
+    | { orgId?: unknown; movedTo?: unknown; reservedUntil?: unknown }
+    | undefined,
+  now: number = Date.now(),
+): boolean {
+  const until = reservation?.reservedUntil
+  if (typeof until !== 'number' || !Number.isFinite(until)) return false
+  return until <= now
+}
+
+/**
  * Whether an `orgSlugs/{slug}` reservation may be (re)claimed (AGL-585):
  * free when the doc is missing, when the claimant already owns it, or when
  * it is a tombstone (`movedTo` set) — a renamed-away slug keeps redirecting
  * old URLs only until someone wants it, it is never reserved forever.
  * Claiming writes a full-replace `{ orgId }`, which ends the redirect —
  * links to a reclaimed slug resolve to the new owner from then on.
+ *
+ * A LAPSED PENDING RESERVATION is claimable too (AGL-2585). The reservation
+ * an unverified signup takes is a hold, not a grant, and a hold that never
+ * expires is the squat this rule exists to end.
+ *
+ * ⚠️ Claimable here is NOT the whole answer for a lapsed reservation — see
+ * {@link lapsedReservationIsStillHeld}, which both call sites consult before
+ * they act on a `true` that came from the lapse branch. This function is pure
+ * and cannot ask whether the owner has verified since; treating its answer as
+ * final would let a customer who verified on day one lose their address on
+ * day twenty-one because a sweep was down.
  */
 export function isSlugReservationClaimable(
-  reservation: { orgId?: unknown; movedTo?: unknown } | undefined,
+  reservation:
+    | { orgId?: unknown; movedTo?: unknown; reservedUntil?: unknown }
+    | undefined,
   claimingOrgId: string | null,
+  now: number = Date.now(),
 ): boolean {
   if (!reservation) return true
   if (claimingOrgId !== null && reservation.orgId === claimingOrgId) return true
-  return Boolean(reservation.movedTo)
+  if (reservation.movedTo) return true
+  return isSlugReservationLapsed(reservation, now)
 }
 
 /**
- * How long after account creation the signup flow may still provision the
- * org it collected, without a verified email (AGL-1523). Generous relative
- * to the seconds the real flow needs, tight relative to abuse: outside this
- * window the AGL-479 verified-email gate stands in full.
- */
-export const SIGNUP_PROVISIONING_GRACE_MS = 15 * 60 * 1000
-
-/**
- * The pure decision for the signup-provisioning grace (AGL-1523).
+ * Is a LAPSED reservation nonetheless still its holder's? (AGL-2585)
  *
- * The signup form collects an organization name and posts it to
- * `/api/orgs/create` seconds after `createUserWithEmailAndPassword` — a
- * moment at which a password account is ALWAYS unverified, so the AGL-479
- * email gate refused every signup-time provisioning ever attempted on the
- * password door. The gate's purpose is to keep unverified accounts out of
- * the console, and it still does: creating the user's own first workspace
- * grants no console access (the session mint and the app layout both still
- * require verification). What the gate must stop refusing is the one
- * request that is part of account creation itself.
+ * The lapse rule above is pure, and the fact it cannot see is the only one
+ * that matters here: whether the owner verified their address after the
+ * workspace was made. `reap-unverified-orgs` clears `reservedUntil` on its
+ * next pass when they have, but "on its next pass" is a promise about a
+ * scheduled job, and a scheduled job can stop. Between a verification and the
+ * promotion that records it, the pure rule would say this address is free.
  *
- * Grace is granted only when BOTH hold:
- *  - the account is brand new (creation within the window — an unverified
- *    account cannot come back later and start minting workspaces), and
- *  - the account owns no org yet (grace provisions exactly ONE workspace;
- *    it is not a window of unlimited slug reservation).
+ * So the two paths that take a slug ask this before they take a lapsed one,
+ * and it answers from the auth record — the only source of truth for whether
+ * an address was ever confirmed.
  *
- * A malformed/missing creation time fails CLOSED.
+ * FAILS CLOSED, in every direction. A missing org, a missing owner, an auth
+ * lookup that throws: all of them return `true`, meaning the reservation
+ * stands and the claim is refused. Refusing to hand over an address costs the
+ * claimant one attempt at a name; granting one wrongly costs its holder the
+ * URL their customers use.
  */
-export function isWithinSignupProvisioningGrace(options: {
-  creationTime: string | undefined
-  ownsAnyOrg: boolean
-  now?: number
-}): boolean {
-  const { creationTime, ownsAnyOrg, now = Date.now() } = options
-  if (ownsAnyOrg) return false
-  const createdAt = Date.parse(creationTime ?? '')
-  if (!Number.isFinite(createdAt)) return false
-  // A slightly-future creation time is clock skew on a definitionally
-  // brand-new account — within grace. Only age beyond the window denies.
-  return now - createdAt <= SIGNUP_PROVISIONING_GRACE_MS
-}
-
-/**
- * Whether `uid` — an UNVERIFIED caller — may still create the org the signup
- * flow collected (AGL-1523). Reads the auth record's creation time and the
- * caller's owned-org count, then applies
- * {@link isWithinSignupProvisioningGrace}. Any lookup failure fails CLOSED:
- * the AGL-479 gate stands.
- */
-export async function signupProvisioningGraceAllows(
-  uid: string,
+async function lapsedReservationIsStillHeld(
+  reservation: { orgId?: unknown } | undefined,
 ): Promise<boolean> {
+  const holderOrgId =
+    typeof reservation?.orgId === 'string' ? reservation.orgId : null
+  if (!holderOrgId) return true
   try {
-    // Across pools (AGL-1122), not `auth().getUser` — a project-level lookup
-    // silently misses tenanted SSO accounts, and this helper failing closed
-    // would then wrongly 403 them.
-    const found = await findUserByUidAcrossPools(uid)
-    if (!found) return false
-    const owned = await firestore()
-      .collection('orgs')
-      .where('ownerUid', '==', uid)
-      .limit(1)
-      .get()
-    return isWithinSignupProvisioningGrace({
-      creationTime: found.record.metadata?.creationTime,
-      ownsAnyOrg: !owned.empty,
-    })
+    const holder = await firestore().collection('orgs').doc(holderOrgId).get()
+    if (!holder.exists) {
+      // The workspace is gone and only the reservation outlived it. Nothing
+      // is being taken from anyone.
+      return false
+    }
+    const ownerUid = holder.get('ownerUid')
+    if (typeof ownerUid !== 'string' || !ownerUid) return true
+    const found = await findUserByUidAcrossPools(ownerUid)
+    if (!found) return true
+    return found.record.emailVerified === true
   } catch (error) {
-    console.error('[orgs] signup provisioning grace check failed', error)
-    return false
+    console.error('[orgs] lapsed reservation check failed', error)
+    return true
   }
 }
 
@@ -220,14 +251,20 @@ export async function createOrganization(
     : await readFreeWorkspaceCapConfig()
   await db.runTransaction(async (tx) => {
     const reservation = await tx.get(db.collection('orgSlugs').doc(slug))
-    // Tombstones (renamed-away slugs) are claimable by new orgs (AGL-585).
+    const held = reservation.exists
+      ? (reservation.data() as {
+          orgId?: unknown
+          movedTo?: unknown
+          reservedUntil?: unknown
+        })
+      : undefined
+    // Tombstones (renamed-away slugs) are claimable by new orgs (AGL-585),
+    // and so is a reservation left by an unverified signup made before
+    // AGL-2590 that has since run out — but only once the auth record agrees
+    // it was never confirmed.
     if (
-      !isSlugReservationClaimable(
-        reservation.exists
-          ? (reservation.data() as { orgId?: unknown; movedTo?: unknown })
-          : undefined,
-        null,
-      )
+      !isSlugReservationClaimable(held, null) ||
+      (isSlugReservationLapsed(held) && (await lapsedReservationIsStillHeld(held)))
     ) {
       throw new OrgSlugTakenError(slug)
     }
@@ -244,6 +281,10 @@ export async function createOrganization(
         config: capConfig,
       })
     }
+    // The plain grant, always (AGL-2590): no caller can reach this with an
+    // unproven address any more. `orgSlugs` is world-readable — the console
+    // resolves a workspace subdomain client-side from it — so the id is all
+    // that goes in.
     tx.set(db.collection('orgSlugs').doc(slug), { orgId })
     /*
      * THE BILLING DOCUMENT EXISTS FROM BIRTH (AGL-1152).
@@ -391,6 +432,15 @@ export async function createOrganization(
 export interface OrgMembershipResolution {
   orgId: string
   member: AglynOrgMember
+  /**
+   * True only when THIS call provisioned the org, so a caller can report the
+   * activation (AGL-2587). `ensureOrgForUser` is the third org-creation door
+   * and the only server-side one, and it looked identical from outside to a
+   * resolution of an org that already existed — which is why `org_created`
+   * counted none of the workspaces it makes. Absent on `resolveOrgMembership`,
+   * which never creates anything.
+   */
+  created?: boolean
 }
 
 /**
@@ -456,7 +506,8 @@ export async function ensureOrgForUser(
       })
       const created = await resolveOrgMembership(uid, orgId)
       if (!created) throw new Error('Org membership missing after create')
-      return created
+      // Marked so the caller can count the activation (AGL-2587).
+      return { ...created, created: true }
     } catch (error) {
       if (!(error instanceof OrgSlugTakenError) || attempt >= 4) throw error
       slug = `${slug.slice(0, 26)}-${attempt + 2}`
@@ -489,16 +540,23 @@ export async function changeOrgSlug(
     previousSlug = (orgSnapshot.get('slug') as string | undefined) ?? null
     if (previousSlug === newSlug) return
     const reservation = await tx.get(db.collection('orgSlugs').doc(newSlug))
-    // Claimable when free, own (moving back), or a tombstone another org
-    // renamed away from (AGL-585) — abandoned slugs are never reserved
-    // forever. Only another org's ACTIVE slug blocks the change.
+    const held = reservation.exists
+      ? (reservation.data() as {
+          orgId?: unknown
+          movedTo?: unknown
+          reservedUntil?: unknown
+        })
+      : undefined
+    // Claimable when free, own (moving back), a tombstone another org renamed
+    // away from (AGL-585), or an unverified signup's reservation that ran out
+    // (AGL-2585) — abandoned slugs are never reserved forever. Only another
+    // org's ACTIVE slug blocks the change, and a lapsed reservation whose
+    // holder has since verified is still active, which the auth record decides.
     if (
-      !isSlugReservationClaimable(
-        reservation.exists
-          ? (reservation.data() as { orgId?: unknown; movedTo?: unknown })
-          : undefined,
-        orgId,
-      )
+      !isSlugReservationClaimable(held, orgId) ||
+      (held?.orgId !== orgId &&
+        isSlugReservationLapsed(held) &&
+        (await lapsedReservationIsStillHeld(held)))
     ) {
       throw new OrgSlugTakenError(newSlug)
     }
