@@ -592,6 +592,13 @@ export const EGRESS_HOSTS: Record<string, EgressHost> = {
     dataReceived:
       "Aglyn's own project and app ids, plus the operator's own access token. No customer data is in scope; the response carries debug-token metadata (`name`, `displayName`, `updateTime`) and, by API design, never a token value.",
   },
+  'cloudfunctions.googleapis.com': {
+    disposition: 'not-a-subprocessor',
+    reason:
+      'Cloud Functions `functions.list`, read by the operator CLI `npm run check:functions-drift` and by the promotion deploy guard to ask when each scheduled function was last deployed. `firebase deploy --only functions` ships outside the git pipeline, so this is the only way to tell a shipped function from a merged one. It is never imported by the console or tenant runtime — no request-serving code path reaches it — and it authenticates as the operator running it, using Application Default Credentials rather than the Firebase service account, which carries no permission on this API at all.',
+    dataReceived:
+      "Aglyn's own project id and the operator's own access token. No customer, member or visitor personal data exists anywhere in this path to send; what comes back is deployment metadata about Aglyn's own functions — resource name, region, state and `updateTime`.",
+  },
 
   // MARK – Literals that are never fetched
   //

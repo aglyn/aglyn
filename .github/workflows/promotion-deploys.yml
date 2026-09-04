@@ -1,0 +1,168 @@
+name: Promotion deploys
+
+# The gate the 2026-09-04 incidents were missing (AGL-2580).
+#
+# ---------------------------------------------------------------------------
+# WHAT IT ASKS
+# ---------------------------------------------------------------------------
+# A promotion merge deploys VERCEL APP CODE ONLY. Three other targets ship by
+# hand from a checkout at the promoted sha — the Firebase security rules, the
+# Cloud Functions, and the Firestore indexes — and each has its own script
+# somebody has to remember to run. The v1.0.0-beta.70 promotion touched all
+# three, one third of it shipped, the merge reported success, and two
+# production incidents followed inside fifteen minutes: publishing failed
+# outright because a denied `publishOutbox` create failed the whole atomic
+# batch, and a `SCHEDULED_JOBS` row production had already begun judging never
+# fired because `consoleFastCrons` was three days stale.
+#
+# rules-drift.yml, index-drift.yml and functions-drift.yml each answer "does
+# live match?" standing. This workflow asks the narrower question a promotion
+# actually poses — "does THIS range owe a deploy, and is it done?" — and that
+# is the version that can be a gate rather than an alarm. A range touching none
+# of those paths passes without a single network call.
+#
+# ---------------------------------------------------------------------------
+# WHY THE SAME CHECK IS A WARNING ON THE PR AND A FAILURE ON THE PUSH
+# ---------------------------------------------------------------------------
+# The deploys are owed AT the promotion, not before it. Rules ship from a
+# checkout pinned to the promoted sha, and RELEASING.md puts them at step 4 —
+# after the merge and the tag. So on the `pull_request` this is a LEDGER: it
+# prints what the range will owe, and warns rather than blocks. Blocking there
+# would demand a deploy that cannot correctly have happened yet, and a gate
+# that refuses for a reason unrelated to the code is a gate people learn to
+# override.
+#
+# On the push to `production` the same verdict is a FAILURE, because from that
+# moment every one of those deploys is due and the app code that assumes them
+# is already serving. Re-run the job after deploying to turn it green.
+#
+# ---------------------------------------------------------------------------
+# CREDENTIALS
+# ---------------------------------------------------------------------------
+# This workflow runs the three existing checkers as child processes, so their
+# credentials are its credentials: the Firebase service account for rules and
+# indexes, and — a DIFFERENT principal — a Cloud Functions reader, because that
+# service account has no `cloudfunctions.functions.list` and gets a 403. See
+# functions-drift.yml for the one-line IAM grant that makes the existing
+# secrets work for both. A target whose credential is missing grades CANNOT
+# CHECK, never clean.
+
+on:
+  pull_request:
+    branches:
+      - production
+  push:
+    branches:
+      - production
+  workflow_dispatch:
+
+concurrency:
+  group: promotion-deploys-${{ github.event_name == 'push' && github.sha || github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
+
+permissions:
+  contents: read
+
+jobs:
+  ledger:
+    name: Manual deploys this promotion owes
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # fetch-depth 0: the whole range is diffed, and the functions checker
+      # reads the history of `cloud/functions`. A shallow clone answers neither.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Fetch the promoted branch
+        run: |
+          git fetch --no-tags origin \
+            +refs/heads/production:refs/remotes/origin/production
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: 'npm'
+
+      - run: npm ci
+
+      # Guard the guard (AGL-1778): the whole workflow trusts this script's
+      # range-to-target mapping and its exit-code folding, and a mapping that
+      # has stopped matching `cloud/functions/` renders as a clean promotion.
+      - run: npm run test:promotion-deploys
+
+      - id: ledger
+        env:
+          # ⚑ `run:` executes under `bash -e`, and omitting `set -e` does not
+          # disable it. `|| code=$?` is immune — a command in an OR list is not
+          # an `-e` abort — which is what lets exit 2 be READ here rather than
+          # aborting the step before the verdict can be graded.
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'aglyn-main' }}
+          FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+          FIREBASE_STORAGE_BUCKET: ${{ vars.FIREBASE_STORAGE_BUCKET }}
+          FIREBASE_DATABASE_URL: ${{ vars.FIREBASE_DATABASE_URL }}
+          FUNCTIONS_CHECK_ACCESS_TOKEN: ${{ secrets.FUNCTIONS_CHECK_ACCESS_TOKEN }}
+        run: |
+          set -uo pipefail
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.event.pull_request.head.sha }}"
+          range="origin/production..HEAD"
+          if [ -n "$base" ] && [ -n "$head" ]; then
+            range="$base..$head"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            # On a push the range is what this push added to `production`.
+            # `before` is all-zeroes on a branch's first push, in which case
+            # the default range above still answers.
+            before="${{ github.event.before }}"
+            case "$before" in
+              ''|0000000000000000000000000000000000000000) ;;
+              *) range="$before..${{ github.sha }}" ;;
+            esac
+          fi
+          echo "range=$range"
+          code=0
+          node tools/scripts/check-promotion-deploys.mjs --range="$range" \
+            > "$RUNNER_TEMP/ledger.txt" 2>&1 || code=$?
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          cat "$RUNNER_TEMP/ledger.txt"
+          {
+            echo "### Manual deploys this promotion owes"
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/ledger.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+
+      - name: Grade the ledger — a warning before the merge, a failure after it
+        run: |
+          set -euo pipefail
+          blocking=false
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            blocking=true
+          fi
+          case "${{ steps.ledger.outputs.code }}" in
+            0)
+              echo "Every manual deploy this range owes has happened (or it owes none)."
+              ;;
+            1)
+              if [ "$blocking" = true ]; then
+                echo "::error::This range owes a manual deploy that has not happened. Production is already serving code that assumes it. See the job summary."
+                exit 1
+              fi
+              echo "::warning::This promotion will owe a manual deploy. Not blocking — the deploys are due AT the promotion, from a checkout at the promoted SHA. See the job summary for the ledger and run them straight after the merge."
+              ;;
+            2)
+              if [ "$blocking" = true ]; then
+                echo "::error::At least one manual deploy could not be verified. Unverified is not clean — see the job summary."
+                exit 1
+              fi
+              echo "::warning::At least one manual deploy could not be verified (missing credential, or the API could not be read). Not blocking on a PR; see the job summary."
+              ;;
+            *)
+              echo "::error::the ledger script exited unexpectedly (${{ steps.ledger.outputs.code }})."
+              exit 1
+              ;;
+          esac

@@ -1,0 +1,151 @@
+name: Functions drift
+
+# Fails when a DEPLOYED Cloud Function is older than the promoted commit that
+# changed `cloud/functions/**` (AGL-2580). The third sibling of
+# rules-drift.yml and index-drift.yml, and the one that did not exist on
+# 2026-09-04, which is why the second of that day's two incidents was
+# invisible until a customer-facing monitor went red.
+#
+# Cloud Functions deploy MANUALLY (`firebase deploy --only functions`), outside
+# the git -> Vercel pipeline, so a merged commit touching `cloud/functions` is
+# NOT evidence that anything is running. The failure is quieter than the rules
+# one: a missing rule denies a write loudly, while a stale function simply
+# keeps doing yesterday's job. The v1.0.0-beta.70 promotion added
+# `/api/admin/drain-publish-outbox` to `CONSOLE_FAST_CRON_ROUTES` and a
+# `drain-publish-outbox` row to `SCHEDULED_JOBS`. The console shipped the
+# declaration on merge; the deployed `consoleFastCrons` was three days old and
+# never learned the route, so `/api/health/crons` correctly returned
+# `job-never-reported`, 503'd within four minutes, and took the Scheduled jobs
+# monitor to 93.369%.
+#
+# THE BASELINE IS `origin/production`, for the same reason rules-drift.yml uses
+# it: the deploy is owed at the promotion, so between a functions commit
+# landing on `main` and that promotion the delta is a PENDING DEPLOY ledger,
+# not a fault. A check that is red for the whole promotion window is one people
+# mute, and a muted alarm misses the real drift.
+#
+# ⚠️ CREDENTIALS ARE NOT THE ONES THE OTHER TWO DRIFT WORKFLOWS USE.
+# `cloudfunctions.functions.list` is not carried by the Firebase service
+# account behind FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY; that principal
+# gets a 403 here, every time. Two ways to give this job an eye:
+#
+#   1. ONE IAM GRANT, NO NEW SECRET — give the service account the repo
+#      already holds the read role, and the existing secrets start working:
+#        gcloud projects add-iam-policy-binding aglyn-main \
+#          --member="serviceAccount:<the FIREBASE_CLIENT_EMAIL address>" \
+#          --role="roles/cloudfunctions.viewer"
+#   2. A DEDICATED TOKEN — set the FUNCTIONS_CHECK_ACCESS_TOKEN secret. Access
+#      tokens expire in an hour, so this is a local convenience, not a CI one.
+#
+# Until one of those exists the checker exits 2 (cannot-check) and this job
+# FAILS. That is deliberate and must not be softened into a skip: a check that
+# renders green while seeing nothing is the exact silent-drift failure mode the
+# whole family of drift workflows exists to prevent.
+#
+# ⚠️ Do NOT move these steps into nx-ci.yml. Measured 2026-08-19, its guard
+# steps ran in 26 of 72 runs — it is one sequential job behind `typecheck` and
+# `docs:typecheck`, so any type error anywhere withdraws every step after them.
+# A drift check has to answer on every push whether or not the tree typechecks.
+
+on:
+  push:
+    branches:
+      # Sept-1 freeze (decided): `main` is not a trigger. Many agents land on
+      # `main` continuously, and a drift check comparing LIVE against
+      # `origin/production` reads a pre-promotion deploy as drift there. It is
+      # a RELEASE gate until launch. RESTORE `main` AFTER LAUNCH.
+      - production
+    paths:
+      - cloud/functions/**
+      - tools/scripts/check-functions-drift.mjs
+      - tools/scripts/lib/functions-drift.mjs
+      - tools/scripts/lib/cloud-functions-api.mjs
+      - .github/workflows/functions-drift.yml
+  schedule:
+    # Daily, 07:53 UTC — off the top of the hour where GitHub's scheduler
+    # congestion is worst, and after index-drift.yml (07:41) so the three do
+    # not contend for the same npm cache warm-up.
+    - cron: '53 7 * * *'
+  workflow_dispatch:
+
+concurrency:
+  # A cancelled PUSH run leaves that commit unjudged and the surviving run is
+  # comparing a different tree, so a push is grouped by its own COMMIT and
+  # never cancelled; schedule and dispatch keep the ref-scoped group.
+  group: functions-drift-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # fetch-depth 0 is REQUIRED. The comparison IS a git history question —
+      # the last commit touching `cloud/functions` at the baseline — and a
+      # shallow clone does not merely fail, it lies: the graft commit has no
+      # parents, so `git log -1 -- <path>` answers with the graft itself. The
+      # checker refuses that case explicitly (exit 2) rather than grading a
+      # deployment against a timestamp it invented.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Fetch the promoted baseline
+        run: |
+          git fetch --no-tags origin \
+            +refs/heads/production:refs/remotes/origin/production
+
+      - name: Refuse to no-op without a Cloud Functions credential
+        env:
+          FUNCTIONS_TOKEN: ${{ secrets.FUNCTIONS_CHECK_ACCESS_TOKEN }}
+          CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+        run: |
+          if [ -z "$FUNCTIONS_TOKEN" ] && { [ -z "$CLIENT_EMAIL" ] || [ -z "$PRIVATE_KEY" ]; }; then
+            echo "No credential is available for the Cloud Functions API." >&2
+            echo "" >&2
+            echo "This job reads the DEPLOYED functions. Without a credential it" >&2
+            echo "cannot see them, and passing anyway would be the silent-drift" >&2
+            echo "failure mode it exists to prevent (AGL-2580)." >&2
+            echo "" >&2
+            echo "Cheapest fix, no new secret — grant the service account the repo" >&2
+            echo "already holds the Cloud Functions read role:" >&2
+            echo "  gcloud projects add-iam-policy-binding aglyn-main \\" >&2
+            echo "    --member=\"serviceAccount:<FIREBASE_CLIENT_EMAIL>\" \\" >&2
+            echo "    --role=\"roles/cloudfunctions.viewer\"" >&2
+            exit 2
+          fi
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: 'npm'
+
+      # firebase-admin mints the service-account token when no explicit
+      # FUNCTIONS_CHECK_ACCESS_TOKEN is set.
+      - run: npm ci
+
+      # Guard the guard (AGL-1778). Everything below trusts this comparator's
+      # verdict about the deployed functions, and a broken comparator that
+      # reports "no drift" is indistinguishable from convergence. Run it BEFORE
+      # the comparison, so a comparator that has stopped detecting fails the
+      # job before its verdict is printed rather than after.
+      - run: npm run test:functions-drift
+
+      # The promotion guard's suite, run here as its SECOND home for the
+      # AGL-1816 reason: asserted only from inside the workflow it guards,
+      # "the workflow runs the self-test" is circular — deleting the step
+      # deletes the check on the deletion.
+      - run: npm run test:promotion-deploys
+
+      - name: Compare the deployed functions against the promoted commit
+        env:
+          FUNCTIONS_DRIFT_BASELINE: origin/production
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'aglyn-main' }}
+          FUNCTIONS_CHECK_ACCESS_TOKEN: ${{ secrets.FUNCTIONS_CHECK_ACCESS_TOKEN }}
+          FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+        run: npm run check:functions-drift

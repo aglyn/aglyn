@@ -210,6 +210,24 @@ of the newest existing tag, and `CHANGELOG.md` there documents it. The second
 guard catches the commonest real mistake — promoting a batch that did not
 include the `chore(release)` commit.
 
+### 3.5 — Read the ledger of what this batch owes
+
+A promotion merge deploys **Vercel app code only**. Steps 4 and 5 below, plus
+the Firestore indexes, ship by hand — and on 2026-09-04 a promotion touched all
+three, one third of it shipped, the merge reported success, and two production
+incidents followed inside fifteen minutes. One command names what is owed:
+
+```bash
+npm run check:promotion-deploys -- --range=origin/production..HEAD
+```
+
+`--list` prints the ledger without verifying anything; without it, each owed
+target is verified against live by the checker that already knows how — exit 1
+means a deploy is genuinely missing, exit 2 means it could not be checked, and
+neither is clean. The same script runs in CI as `Promotion deploys`: a warning
+on the promotion PR, where the deploys are not yet due, and a failure on the
+push to `production`, where they are.
+
 ### 4 — Deploy the security rules the batch contains
 
 Rules do **not** ride the merge. They deploy from a checkout pinned to the
@@ -232,8 +250,17 @@ no workflow deploys, so a merged PR touching `cloud/functions/src/index.ts` is
 not evidence that anything is scheduled.
 
 ```bash
+npm run check:functions-drift -- --baseline=origin/production
 npm --prefix cloud/functions run deploy   # firebase deploy --only functions
 ```
+
+The check is the functions counterpart of `check:rules-drift`: it reads each
+deployed function's `updateTime` and goes red when the promoted commit that
+changed `cloud/functions` is newer. It needs **ADC**, not the Firebase service
+account — that principal has no `cloudfunctions.functions.list` and gets a 403.
+A live `gcloud auth login` session is picked up on its own; otherwise pass
+`FUNCTIONS_CHECK_ACCESS_TOKEN=$(gcloud auth print-access-token)`. It also runs
+daily and on every `production` push as the `Functions drift` workflow.
 
 **This step has a deadline the rules step does not.** `SCHEDULED_JOBS` in
 `libs/aglyn/src/lib/app-utils/health-report.ts` is the inventory
