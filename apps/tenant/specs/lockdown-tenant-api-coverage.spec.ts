@@ -251,6 +251,8 @@ const TENANT_EXEMPT_AUDIT: Record<string, string> = {
     'infrastructure liveness probe; unauthenticated by design so a monitor can reach it',
   'apps/tenant/app/api/health/error-beacon/route.ts':
     'infrastructure monitoring probe; no org-scoped action',
+  'apps/tenant/app/api/health/funnel/route.ts':
+    'infrastructure monitoring probe; no org-scoped action',
   'apps/tenant/app/api/health/render/site/route.ts':
     'infrastructure monitoring probe; no org-scoped action',
   'apps/tenant/app/api/health/render/marketing/route.ts':
