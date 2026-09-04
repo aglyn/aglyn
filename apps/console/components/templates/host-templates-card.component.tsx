@@ -84,6 +84,7 @@ import {
   hostArtifactQuery,
 } from '../../utils/host-artifact-queries'
 import createPageFromTemplate, {
+  templateScreenAddressRefusal,
   withBundleRootScreen,
 } from './create-page-from-template'
 import UseTemplateDialog from './use-template-dialog.component'
@@ -507,6 +508,9 @@ export function HostTemplatesCard({
       // is no transaction to roll back, and silently reporting only the
       // error would leave pages on the site the message never mentioned.
       let created = 0
+      // Screens whose address the site cannot serve, named after the run
+      // (AGL-2588) — see the same decision in the gallery's own applier.
+      const skipped: string[] = []
       try {
         // Read the routing map fresh so the slug check reflects anything
         // published since this page loaded.
@@ -545,6 +549,17 @@ export function HostTemplatesCard({
         // gives the root to its first page rather than leaving the site 404ing
         // at its own URL. A host that already has a home keeps it.
         for (const page of withBundleRootScreen(pages, used)) {
+          // Skip rather than abort or substitute: the rest of the bundle is
+          // still worth having, and an address nobody chose is what the slug
+          // guards exist to prevent (AGL-2588).
+          const refusal = templateScreenAddressRefusal({
+            slug: page.slug,
+            displayName: page.displayName ?? page.$id,
+          })
+          if (refusal) {
+            skipped.push(`"${page.displayName ?? page.$id}" — ${refusal}`)
+            continue
+          }
           // Same helper the single-template Use flow calls (AGL-672), so
           // create-screen → write-version → publish-route and its slug
           // de-confliction have one implementation.
@@ -565,10 +580,24 @@ export function HostTemplatesCard({
           )
           created += 1
         }
-        enqueueSnackbar(
-          `Added ${pages.length} screens from "${row.displayName}"`,
-          { variant: 'success', persist: false },
-        )
+        if (created) {
+          enqueueSnackbar(
+            `Added ${created} screen${created === 1 ? '' : 's'} from "${
+              row.displayName
+            }"`,
+            { variant: 'success', persist: false },
+          )
+        }
+        if (skipped.length) {
+          // Persistent: skipping is only honest if the person reads which
+          // screens were left out and why.
+          enqueueSnackbar(
+            `${skipped.length} screen${
+              skipped.length === 1 ? '' : 's'
+            } could not be added: ${skipped.join('; ')}`,
+            { variant: 'warning', persist: true },
+          )
+        }
       } catch (error) {
         console.error(error)
         const reason =

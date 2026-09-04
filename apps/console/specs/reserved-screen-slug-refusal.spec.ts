@@ -43,6 +43,14 @@
  * either of them without failing here — two lists is how this dialog stayed
  * outside the reserved rule while sitting inside the separator rule.
  *
+ * "Surface" outgrew "field" at AGL-2588: the last two writers take no typed
+ * input at all. A template BUNDLE applier copies a slug out of a template
+ * document, and a drag-to-reparent recomposes a live path out of a hierarchy
+ * nobody typed into. Both are covered below, the first through the shared
+ * refusal helper both appliers call, the second scoped to the drop handler —
+ * because its file already consults the rules for its create form, and a
+ * whole-file assertion there would pass while the drop stayed unguarded.
+ *
  * Source text rather than a rendered click, because what is being held down is
  * COVERAGE, and because two of the four are 1,000-line client pages whose
  * publish handlers need a Firestore, a snackbar provider and a canvas to
@@ -64,10 +72,37 @@ const SLUG_ENTRY_SURFACES: Record<string, string> = {
     'app/(editor)/[orgSlug]/hosts/[host]/screens/[screenId]/versions/[versionId]/besigner/page.tsx',
   'the Use template dialog':
     'components/templates/use-template-dialog.component.tsx',
+  'the template bundle refusal helper':
+    'components/templates/create-page-from-template.ts',
+}
+
+/** Bundle appliers, which delegate to the helper rather than ask directly. */
+const BUNDLE_APPLIERS: Record<string, string> = {
+  'the template gallery':
+    'components/templates/template-gallery-dialog.component.tsx',
+  'the host templates card':
+    'components/templates/host-templates-card.component.tsx',
 }
 
 const read = (relative: string) =>
   readFileSync(join(CONSOLE_ROOT, relative), 'utf8')
+
+/**
+ * The Screens page's drop handler on its own.
+ *
+ * Its file holds the create form too, which has consulted both rules since
+ * AGL-2076/AGL-2572 — so `read(file)` says nothing about the drop handler,
+ * and would have passed for every day this hole was open.
+ */
+const readMoveScreenHandler = () => {
+  const source = read(SLUG_ENTRY_SURFACES['the Screens page create form'])
+  const start = source.indexOf('const handleMoveScreen = useCallback(')
+  expect(start).toBeGreaterThan(-1)
+  // The next declaration at component scope ends the callback.
+  const end = source.indexOf('\n  const ', start + 1)
+  expect(end).toBeGreaterThan(start)
+  return source.slice(start, end)
+}
 
 describe('a reserved slug is refused everywhere a slug can be set', () => {
   it.each(Object.entries(SLUG_ENTRY_SURFACES))(
@@ -144,5 +179,70 @@ describe('a path-shaped slug is refused everywhere a slug can be set', () => {
       /disabled=\{Boolean\(\s*slugConflict \|\|[\s\S]{0,260}?\)\}/.exec(source)
     expect(disabled).not.toBeNull()
     expect(disabled?.[0]).toContain('slugPathSeparator')
+  })
+})
+
+/**
+ * THE LAST TWO WRITERS TAKE NO TYPED INPUT (AGL-2588).
+ *
+ * Both rules above are asked by a field, and both of these write an address
+ * without one — which is why they survived AGL-2572 and AGL-2579 with the
+ * lists above already green.
+ *
+ * A BUNDLE APPLIER copies `slug` off a template document. The set was closed
+ * only by the PROVENANCE of that document (code-defined starters, library
+ * slugs captured off already-guarded screens), and provenance is not a guard.
+ * The decision is to skip the offending screen and apply the rest: an abort
+ * part-way leaves a half-applied bundle, and a substituted slug puts a screen
+ * at an address nobody chose, which is the thing this whole arc is about.
+ * Both appliers ask `templateScreenAddressRefusal`, which is the one place
+ * that holds both rules — that is why the helper, not the appliers, is in the
+ * surface list above.
+ *
+ * DRAG-TO-REPARENT recomposes a live path. `reservedScreenRouteSegment` reads
+ * the first segment only, deliberately, so a screen published at
+ * `docs/search` is legal; dragging it to the top level makes that same
+ * screen's live path `search`. The refusal has to read the RECOMPOSED paths
+ * the drop would write, which is the whole case — asking about the slug would
+ * answer about a value the move never changed.
+ */
+describe('an address written with no field behind it is refused too', () => {
+  it.each(Object.entries(BUNDLE_APPLIERS))(
+    '%s asks the shared refusal before creating each screen',
+    (_label, relative) => {
+      expect(read(relative)).toContain('templateScreenAddressRefusal')
+    },
+  )
+
+  it.each(Object.entries(BUNDLE_APPLIERS))(
+    '%s tells the author which screens it skipped',
+    (_label, relative) => {
+      const source = read(relative)
+      expect(source).toContain('could not be added')
+      // The list of skips must outlive a glance, or skipping is just a
+      // quieter substitution.
+      expect(source).toMatch(/skipped\.length[\s\S]{0,400}?persist: true/)
+    },
+  )
+
+  it('the Screens page drop handler consults the reserved rule', () => {
+    const handler = readMoveScreenHandler()
+    expect(handler).toContain('reservedScreenRouteSegment')
+    expect(handler).toContain('reservedScreenRouteMessage')
+  })
+
+  it('asks it of the paths the move would WRITE, not of the slug', () => {
+    const handler = readMoveScreenHandler()
+    expect(handler.indexOf('buildScreenRouteEntries')).toBeGreaterThan(-1)
+    expect(handler.indexOf('buildScreenRouteEntries')).toBeLessThan(
+      handler.indexOf('reservedScreenRouteSegment'),
+    )
+  })
+
+  it('refuses the drop before any of its writes', () => {
+    const handler = readMoveScreenHandler()
+    expect(handler.indexOf('reservedScreenRouteMessage')).toBeLessThan(
+      handler.indexOf('batch.commit'),
+    )
   })
 })

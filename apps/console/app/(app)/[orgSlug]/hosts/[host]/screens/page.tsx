@@ -531,6 +531,54 @@ function Screens(props) {
         )
         return
       }
+      const parentChanged =
+        (screensById[screenId]?.parentId ?? undefined) !==
+        (nextParentId ?? undefined)
+      // The routing-map writes this drop would make, computed BEFORE the
+      // batch so a refusal costs no writes.
+      const nextRouteEntries = parentChanged
+        ? buildScreenRouteEntries(screenId, nextById, routingMap, {
+            publish: false,
+          })
+        : undefined
+      /*
+       * A move can recompose a live address onto a reserved segment with
+       * nobody typing anything (AGL-2588).
+       *
+       * `reservedScreenRouteSegment` reads the FIRST segment only, and that
+       * is deliberate — a screen published at `docs/search` is servable and
+       * legal. Dragging it to the top level recomposes that same screen's
+       * live path to `search`, which is not, and the drop is the one moment
+       * anybody can be told. So the question is asked of the RECOMPOSED
+       * paths this drop would write, not of the screen's slug, which never
+       * changed.
+       *
+       * Every path in the write, not just the moved screen's own: promoting
+       * a home screen out of a parent moves its children to the top level
+       * under their own slugs, so a descendant can reach a reserved segment
+       * the moved screen never touches. Nothing is asked of a screen the
+       * move leaves unrouted — a move is not an activation (AGL-2571), an
+       * entry that is never written is not an address, and publishing it
+       * later still meets the guard on the publish surfaces.
+       *
+       * The alternative — reserving `search` at EVERY depth — would make
+       * currently-legal nested addresses illegal on live customer sites.
+       * That is a migration, not a refusal, and is deliberately not done.
+       */
+      const reservedMove = Object.values(nextRouteEntries ?? {}).reduce<
+        string | undefined
+      >(
+        (found, path) =>
+          found ?? (path ? reservedScreenRouteSegment(path) : undefined),
+        undefined,
+      )
+      if (reservedMove) {
+        enqueueSnackbar(reservedScreenRouteMessage(reservedMove), {
+          variant: 'warning',
+          persist: false,
+        })
+        return
+      }
       const dequeueLoading = queueLoading()
       try {
         const rowById = new Map(screens.map((screen) => [screen.$id, screen]))
@@ -564,23 +612,17 @@ function Screens(props) {
           }
         })
         await batch.commit()
-        const parentChanged =
-          (screensById[screenId]?.parentId ?? undefined) !==
-          (nextParentId ?? undefined)
-        if (parentChanged) {
-          await syncScreenRouteEntries(
-            firestore,
-            hostId,
-            // Dragging a screen to a new parent MOVES it; it does not put it
-            // on the site (AGL-2571). Live paths follow the new parent, and a
-            // screen nobody published stays out of the routing map — the map
-            // is the only thing that makes a path reachable, so writing an
-            // entry here would publish by drag-and-drop.
-            buildScreenRouteEntries(screenId, nextById, routingMap, {
-              publish: false,
-            }),
-            { user },
-          )
+        if (nextRouteEntries) {
+          // Dragging a screen to a new parent MOVES it; it does not put it
+          // on the site (AGL-2571). Live paths follow the new parent, and a
+          // screen nobody published stays out of the routing map — the map
+          // is the only thing that makes a path reachable, so writing an
+          // entry here would publish by drag-and-drop. These are the same
+          // entries the reservation check above read, so what is refused and
+          // what is written are one composition.
+          await syncScreenRouteEntries(firestore, hostId, nextRouteEntries, {
+            user,
+          })
         }
         enqueueSnackbar(
           // "Now served at" only for a screen that IS served (AGL-2571) —

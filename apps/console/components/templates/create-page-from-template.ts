@@ -17,11 +17,52 @@
 import * as Aglyn from '@aglyn/aglyn'
 import {
   normalizeScreenSlug,
+  reservedScreenRouteMessage,
+  reservedScreenRouteSegment,
   resolveNamedTokens,
   SCREEN_ROOT_PATH,
+  SCREEN_SLUG_PATH_SEPARATOR_MESSAGE,
+  screenSlugHasPathSeparator,
 } from '@aglyn/aglyn'
 import type { Firestore } from 'firebase/firestore'
 import { publishScreenRoute } from '../../constants/screen-publishing'
+
+/**
+ * Why one template screen cannot be given the address it asks for, or
+ * `undefined` when it can (AGL-2588).
+ *
+ * The bundle appliers pass `slug` straight off a template document into
+ * {@link createPageFromTemplate}, so no field ever asks the two questions
+ * every typed slug field asks: is this ONE path segment (AGL-2572), and is
+ * the address one the published site can actually answer (AGL-2076)? The set
+ * of bundle slugs is safe today only because of where they come from —
+ * starter slugs are code-defined, and library-template slugs were captured
+ * off screens that already passed a guard. Provenance is not a guard, and it
+ * stops being true the first time a template carries an author-supplied slug.
+ *
+ * Answers over the address `resolveTemplateSlug` would REQUEST — the slug,
+ * or the display name when the slug sanitizes away, or `page` — because a
+ * screen whose slug is `###` and whose name is `Search` still lands on
+ * `search`. De-confliction only ever appends a numeric suffix, so it can
+ * neither create a reserved segment nor clear one.
+ *
+ * A refusal string rather than a boolean, so the caller can name to the
+ * author which rule the screen fell foul of.
+ */
+export function templateScreenAddressRefusal(input: {
+  slug?: string
+  displayName?: string
+}): string | undefined {
+  if (screenSlugHasPathSeparator(input.slug)) {
+    return SCREEN_SLUG_PATH_SEPARATOR_MESSAGE
+  }
+  const requested =
+    normalizeScreenSlug(input.slug) ??
+    normalizeScreenSlug(input.displayName) ??
+    'page'
+  const reserved = reservedScreenRouteSegment(requested)
+  return reserved ? reservedScreenRouteMessage(reserved) : undefined
+}
 
 /**
  * The address one template page claims (AGL-1575).

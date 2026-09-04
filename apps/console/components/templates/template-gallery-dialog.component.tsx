@@ -78,6 +78,7 @@ import {
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { STARTER_TEMPLATES } from '../../constants/starter-templates'
 import createPageFromTemplate, {
+  templateScreenAddressRefusal,
   withBundleRootScreen,
 } from './create-page-from-template'
 import UseTemplateDialog from './use-template-dialog.component'
@@ -545,11 +546,27 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
           })
         }
         const used = new Set(existingSlugs)
+        // A screen whose address the site cannot serve is left out and named
+        // afterwards (AGL-2588). The other two answers are both worse: an
+        // abort part-way leaves a half-applied bundle with pages on the site
+        // the message never mentions, and a substituted slug puts a screen at
+        // an address nobody chose — the exact silence the slug guards exist
+        // to end.
+        const skipped: string[] = []
+        let added = 0
         // A starter is a whole site, so it has to land ON the site's address:
         // if nothing in the bundle asks for the root and this host has no home
         // page yet, the first screen takes it (AGL-1575). Never moves a live
         // home page.
         for (const screen of withBundleRootScreen(template.screens, used)) {
+          const refusal = templateScreenAddressRefusal({
+            slug: screen.slug,
+            displayName: screen.displayName,
+          })
+          if (refusal) {
+            skipped.push(`"${screen.displayName ?? screen.slug}" — ${refusal}`)
+            continue
+          }
           // Same helper the library's Use flow calls (AGL-672) — one
           // implementation of create-screen → write-version → publish-route,
           // including the slug de-confliction that must not overwrite a
@@ -569,13 +586,27 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
               user,
             },
           )
+          added += 1
         }
-        enqueueSnackbar(
-          `Added ${template.screens.length} screen${
-            template.screens.length === 1 ? '' : 's'
-          } from "${template.displayName}"`,
-          { variant: 'success', persist: false },
-        )
+        if (added) {
+          enqueueSnackbar(
+            `Added ${added} screen${added === 1 ? '' : 's'} from "${
+              template.displayName
+            }"`,
+            { variant: 'success', persist: false },
+          )
+        }
+        if (skipped.length) {
+          // Persistent, because this is the whole point of skipping rather
+          // than substituting: a notice that fades is the silent surprise
+          // again, one step later.
+          enqueueSnackbar(
+            `${skipped.length} screen${
+              skipped.length === 1 ? '' : 's'
+            } could not be added: ${skipped.join('; ')}`,
+            { variant: 'warning', persist: true },
+          )
+        }
         onClose()
       } catch (error: any) {
         console.error(error)
