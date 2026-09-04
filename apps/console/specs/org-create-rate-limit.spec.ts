@@ -42,7 +42,6 @@
 const mockVerifyIdToken = jest.fn()
 const mockLockdownRefusal = jest.fn()
 const mockCreateOrganization = jest.fn()
-const mockGraceAllows = jest.fn()
 const mockEnforceSanctions = jest.fn()
 const mockConsumeRateLimit = jest.fn()
 const mockRecordSignupRefusal = jest.fn()
@@ -124,8 +123,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
           { status: 403 },
         )
       : null,
-  signupProvisioningGraceAllows: (...args: unknown[]) =>
-    mockGraceAllows(...args),
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({
@@ -199,14 +196,14 @@ beforeEach(() => {
   mockEnforceSanctions.mockReturnValue(null)
   mockLockdownRefusal.mockResolvedValue(null)
   mockCreateOrganization.mockResolvedValue('org-new')
-  mockGraceAllows.mockResolvedValue(true)
   mockConsumeRateLimit.mockResolvedValue(allowed(3))
-  // The scripted shape this issue is about: a token minted seconds after
-  // account creation, admitted through the AGL-1523 grace.
+  // The scripted shape this issue is about. Verified since AGL-2590 — an
+  // unverified caller is refused before the limiter is ever consulted, so an
+  // unverified token would prove nothing about the limiter.
   mockVerifyIdToken.mockResolvedValue({
     uid: 'u-fresh',
     email: 'new@example.com',
-    email_verified: false,
+    email_verified: true,
     auth_time: Math.floor(Date.now() / 1000),
   })
 })
@@ -294,8 +291,12 @@ describe('AGL-1534 · /api/orgs/create is rate limited', () => {
     expect(mockCreateOrganization).not.toHaveBeenCalled()
   })
 
-  it('the AGL-479/AGL-1523 email gate is unchanged: 403 outside grace, no token burnt', async () => {
-    mockGraceAllows.mockResolvedValue(false)
+  it('the AGL-479 email gate wins the order: 403, no token burnt', async () => {
+    mockVerifyIdToken.mockResolvedValue({
+      uid: 'u-unverified',
+      email: 'new@example.com',
+      email_verified: false,
+    })
     const response = await post()
     expect(response.status).toBe(403)
     expect(await response.json()).toMatchObject({ reason: 'email-unverified' })

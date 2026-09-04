@@ -22,25 +22,26 @@
  */
 
 /**
- * AGL-1523 — signup-time org provisioning must be able to succeed on the
- * password door.
+ * AGL-2590 — NOBODY CLAIMS A WORKSPACE ADDRESS WITHOUT A PROVEN EMAIL.
  *
- * The signup form posts its collected org name to `/api/orgs/create` seconds
- * after `createUserWithEmailAndPassword` — when a password account is ALWAYS
- * unverified — so the flat AGL-479 email gate refused every signup-time
- * provisioning ever attempted there. The first production signup proved it:
- * org name typed, no org created, no explanation.
+ * An org's name becomes its address, `acme-inc.aglyn.com`. AGL-1523 opened a
+ * grace here so the sign-up form could post the name it had just collected
+ * seconds after `createUserWithEmailAndPassword`, when a password account is
+ * always unverified — and that grace was the last way an unproven address
+ * could be taken. AGL-2585 then had to reserve, expire and reap behind it.
  *
- * The fix admits exactly the signup shape through a server-checked grace
- * (brand-new account, owns nothing) and keeps everything else: the verified
- * gate for older accounts, the AGL-1506 lockdown 423, and the AGL-1492
- * sanctions 451.
+ * The sign-up form no longer posts here at all: it holds the typed name
+ * against the account and the workspace chooser creates the workspace on the
+ * first VERIFIED session, which is the first session that could open one
+ * anyway. So this route's AGL-479 gate stands with no exception.
+ *
+ * These cases pin that, plus the refusals whose order they share: the
+ * AGL-1506 lockdown 423 and the AGL-1492 sanctions 451.
  */
 
 const mockVerifyIdToken = jest.fn()
 const mockLockdownRefusal = jest.fn()
 const mockCreateOrganization = jest.fn()
-const mockGraceAllows = jest.fn()
 const mockEnforceSanctions = jest.fn()
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
@@ -79,8 +80,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   lockdownRefusal: (...args: unknown[]) => mockLockdownRefusal(...args),
   meterOrgEmail: jest.fn(async () => undefined),
   OrgSlugTakenError: class OrgSlugTakenError extends Error {},
-  signupProvisioningGraceAllows: (...args: unknown[]) =>
-    mockGraceAllows(...args),
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({
@@ -131,7 +130,6 @@ beforeEach(() => {
   mockEnforceSanctions.mockReturnValue(null)
   mockLockdownRefusal.mockResolvedValue(null)
   mockCreateOrganization.mockResolvedValue('org-new')
-  mockGraceAllows.mockResolvedValue(false)
   // The signup moment: a token minted seconds after
   // createUserWithEmailAndPassword — email_verified is ALWAYS false here.
   mockVerifyIdToken.mockResolvedValue({
@@ -142,28 +140,29 @@ beforeEach(() => {
   })
 })
 
-describe('AGL-1523 · signup-time org creation on the password door', () => {
-  it('a brand-new unverified account within grace CREATES its org (the defect)', async () => {
-    mockGraceAllows.mockResolvedValue(true)
-    const response = await post()
-    // Red before the fix: 403 email-unverified on every password signup.
-    expect(response.status).toBe(200)
-    expect(await response.json()).toMatchObject({ orgId: 'org-new' })
-    expect(mockGraceAllows).toHaveBeenCalledWith('u-fresh')
-    expect(mockCreateOrganization).toHaveBeenCalledWith(
-      expect.objectContaining({ ownerUid: 'u-fresh', name: 'E2E Smoke Workspace' }),
-    )
-  })
-
-  it('outside the grace the AGL-479 gate stands: 403, no org', async () => {
-    mockGraceAllows.mockResolvedValue(false)
+describe('AGL-2590 · org creation requires a proven email address', () => {
+  it('refuses a brand-new unverified account: 403, no org, no address held', async () => {
+    // The signup moment the AGL-1523 grace used to admit. Red before this
+    // change, which is the point — a throwaway inbox took a name permanently.
     const response = await post()
     expect(response.status).toBe(403)
     expect(await response.json()).toMatchObject({ reason: 'email-unverified' })
     expect(mockCreateOrganization).not.toHaveBeenCalled()
   })
 
-  it('a verified caller never pays the grace lookups', async () => {
+  it('refuses an older unverified account for the same reason', async () => {
+    mockVerifyIdToken.mockResolvedValue({
+      uid: 'u-stale',
+      email: 'stale@example.com',
+      email_verified: false,
+      auth_time: Math.floor(Date.now() / 1000) - 86_400,
+    })
+    const response = await post()
+    expect(response.status).toBe(403)
+    expect(mockCreateOrganization).not.toHaveBeenCalled()
+  })
+
+  it('a verified caller creates, and takes a GRANTED address', async () => {
     mockVerifyIdToken.mockResolvedValue({
       uid: 'u-verified',
       email: 'ok@example.com',
@@ -171,11 +170,35 @@ describe('AGL-1523 · signup-time org creation on the password door', () => {
     })
     const response = await post()
     expect(response.status).toBe(200)
-    expect(mockGraceAllows).not.toHaveBeenCalled()
+    expect(await response.json()).toMatchObject({ orgId: 'org-new' })
+    // No expiry travels with it: the reservation window went with the grace,
+    // because nothing unverified can reach this call any more.
+    const options = mockCreateOrganization.mock.calls[0][0]
+    expect(options).toMatchObject({
+      ownerUid: 'u-verified',
+      name: 'E2E Smoke Workspace',
+    })
+    expect(options).not.toHaveProperty('reserveSlugUntilMs')
   })
 
-  it('lockdown (AGL-1506) still refuses a graced signup with its 423', async () => {
-    mockGraceAllows.mockResolvedValue(true)
+  it('a staff impersonation session still passes — the owner exists already', async () => {
+    mockVerifyIdToken.mockResolvedValue({
+      uid: 'u-owner',
+      email: 'owner@example.com',
+      email_verified: false,
+      impersonatedBy: 'staff-1',
+    })
+    const response = await post()
+    expect(response.status).toBe(200)
+    expect(mockCreateOrganization).toHaveBeenCalled()
+  })
+
+  it('lockdown (AGL-1506) refuses a verified caller with its 423', async () => {
+    mockVerifyIdToken.mockResolvedValue({
+      uid: 'u-verified',
+      email: 'ok@example.com',
+      email_verified: true,
+    })
     mockLockdownRefusal.mockResolvedValue(
       Response.json({ error: 'locked', scope: 'platform' }, { status: 423 }),
     )

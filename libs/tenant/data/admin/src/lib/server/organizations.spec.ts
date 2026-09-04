@@ -18,9 +18,6 @@
 import {
   isSlugReservationClaimable,
   isSlugReservationLapsed,
-  isWithinSignupProvisioningGrace,
-  SIGNUP_PROVISIONING_GRACE_MS,
-  SLUG_RESERVATION_MS,
 } from './organizations'
 
 // AGL-585: a slug an org renamed AWAY from leaves a `movedTo` tombstone so
@@ -102,9 +99,11 @@ describe('isSlugReservationLapsed (AGL-2585)', () => {
   })
 
   it('holds a reservation that is still inside its window', () => {
+    // The width is whatever the document in production says it is: nothing
+    // writes a new one since AGL-2590, so this rule reads a fixed population.
     expect(
       isSlugReservationLapsed(
-        { reservedUntil: NOW + SLUG_RESERVATION_MS },
+        { reservedUntil: NOW + 21 * 24 * 60 * 60 * 1000 },
         NOW,
       ),
     ).toBe(false)
@@ -142,90 +141,6 @@ describe('isSlugReservationLapsed (AGL-2585)', () => {
     // And a grant is still refused, which is the whole of AGL-585 unchanged.
     expect(
       isSlugReservationClaimable({ orgId: 'org-a' }, 'org-b', NOW),
-    ).toBe(false)
-  })
-
-  it('holds the address for longer than the reaper waits', () => {
-    // The ordering the two mechanisms depend on: the ordinary way an address
-    // comes back is the sweep erasing the workspace at seven days, and this
-    // window is the sweep's outage budget rather than a second deadline
-    // racing it.
-    expect(SLUG_RESERVATION_MS).toBeGreaterThan(7 * 24 * 60 * 60 * 1000)
-  })
-})
-
-// AGL-1523: the signup flow posts its collected org name seconds after
-// account creation — a moment at which a password account is ALWAYS
-// unverified. The grace admits exactly that shape (brand-new account, no org
-// yet) and nothing else; everything malformed fails CLOSED.
-describe('isWithinSignupProvisioningGrace (AGL-1523)', () => {
-  const NOW = Date.parse('2026-08-14T00:00:00Z')
-  const iso = (msAgo: number) => new Date(NOW - msAgo).toISOString()
-
-  it('admits a brand-new account with no org (the signup moment)', () => {
-    expect(
-      isWithinSignupProvisioningGrace({
-        creationTime: iso(30_000),
-        ownsAnyOrg: false,
-        now: NOW,
-      }),
-    ).toBe(true)
-  })
-
-  it('tolerates slight clock skew (creation "in the future")', () => {
-    expect(
-      isWithinSignupProvisioningGrace({
-        creationTime: iso(-5_000),
-        ownsAnyOrg: false,
-        now: NOW,
-      }),
-    ).toBe(true)
-  })
-
-  it('denies once the account already owns an org — grace is ONE workspace', () => {
-    expect(
-      isWithinSignupProvisioningGrace({
-        creationTime: iso(30_000),
-        ownsAnyOrg: true,
-        now: NOW,
-      }),
-    ).toBe(false)
-  })
-
-  it('denies an old unverified account — the AGL-479 gate stands', () => {
-    expect(
-      isWithinSignupProvisioningGrace({
-        creationTime: iso(SIGNUP_PROVISIONING_GRACE_MS + 1),
-        ownsAnyOrg: false,
-        now: NOW,
-      }),
-    ).toBe(false)
-  })
-
-  it('admits right up to the window edge', () => {
-    expect(
-      isWithinSignupProvisioningGrace({
-        creationTime: iso(SIGNUP_PROVISIONING_GRACE_MS),
-        ownsAnyOrg: false,
-        now: NOW,
-      }),
-    ).toBe(true)
-  })
-
-  it('fails CLOSED on a missing or malformed creation time', () => {
-    expect(
-      isWithinSignupProvisioningGrace({
-        creationTime: undefined,
-        ownsAnyOrg: false,
-        now: NOW,
-      }),
-    ).toBe(false)
-    expect(
-      isWithinSignupProvisioningGrace({
-        creationTime: 'not-a-date',
-        ownsAnyOrg: false,
-        now: NOW,
-      }),
     ).toBe(false)
   })
 })

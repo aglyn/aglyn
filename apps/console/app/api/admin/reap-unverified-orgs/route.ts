@@ -18,16 +18,36 @@
 /**
  * COLLECT THE WORKSPACES A SIGNUP MADE AND NOBODY EVER CLAIMED (AGL-2585).
  *
- * `provisionAndLandSignUp` creates the workspace seconds after the Firebase
- * account and three seconds before the verification email — deliberately, so
- * a new customer lands in a workspace rather than a picker (AGL-1115) — and
- * until this route existed nothing anywhere looked at the other end of it. A
- * workspace whose owner never confirmed an address stood forever, and so did
- * the name it took: an org's name is its address, `acme-inc.aglyn.com`, and
- * one throwaway inbox claimed any name permanently, a competitor's and a
- * customer's included.
+ * ## ⛔ THIS IS NO LONGER THE CONTROL — IT IS THE CLEAN-UP BEHIND ONE
  *
- * This is the sweep that ends both, and it does two things per pass:
+ * When this route was written, `provisionAndLandSignUp` created the workspace
+ * seconds after the Firebase account and three seconds before the
+ * verification email, so a sweep was the only thing that could ever undo an
+ * unclaimed one. AGL-2590 removed the cause: `/api/orgs/create` refuses an
+ * unverified caller outright, the sign-up form holds its typed name against
+ * the account, and the workspace is created on the first VERIFIED session —
+ * which is the first session that could open one anyway, since
+ * `/api/auth/session` will not mint a cookie without `email_verified`.
+ *
+ * So this sweep has two jobs now, and NEITHER of them is being the primary
+ * control:
+ *
+ *   1. **One-time cleanup.** Every workspace created by the old flow whose
+ *      owner never verified is still standing, still holding its address.
+ *      This is what erases them and releases those addresses. When the last
+ *      of them is gone, this route has nothing left to find.
+ *   2. **Defence in depth.** A future path that creates a workspace for an
+ *      unverified owner would be a bug, and this would notice it — but the
+ *      thing that must not regress is the gate on `/api/orgs/create`, not
+ *      this schedule. Anyone reading a clean report here and concluding the
+ *      platform is safe has read the wrong surface: a report of zero is what
+ *      this looks like whether the gate holds or the sweep has silently
+ *      stopped running. `/api/health/crons` is what answers the second
+ *      question.
+ *
+ * ## What it does per pass
+ *
+ * Two things:
  *
  *   - erases the workspaces {@link refuseUnverifiedOrgReap} can prove belong
  *     to nobody, which releases their address through `eraseOrgSlugs`; and
@@ -36,6 +56,10 @@
  *     written. That half is not optional bookkeeping: an address left pending
  *     becomes claimable when its reservation lapses, and doing that to a real
  *     customer is the worst outcome this whole change could produce.
+ *
+ * Nothing writes a NEW `reservedUntil` since AGL-2590, so the promotion half
+ * works through a fixed population and empties out; the erasure half stays as
+ * the defence above.
  *
  * ## ⛔ DRY RUN IS THE DEFAULT, ON EVERY METHOD
  *

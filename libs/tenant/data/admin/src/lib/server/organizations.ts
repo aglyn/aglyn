@@ -89,31 +89,31 @@ export class OrgSlugTakenError extends Error {
 }
 
 /**
- * How long a workspace address created by an UNVERIFIED owner is held for
- * that owner before anybody else may take it (AGL-2585).
+ * ⛔ NOTHING WRITES A NEW `reservedUntil` ANY MORE — AND THE RULES THAT READ
+ * ONE STAY (AGL-2590).
  *
- * The org's name becomes its address — `acme-inc.aglyn.com` — and until this
- * existed the address was GRANTED at the moment of signup, before anything
- * proved the email belonged to the person typing it. A throwaway inbox, or no
- * working inbox at all, therefore claimed a name permanently: nothing in the
- * platform released one.
+ * AGL-2585 gave a workspace created by an UNVERIFIED owner a held address
+ * rather than a granted one, because a signup could create a workspace before
+ * anything proved the email belonged to the person typing it. That is no
+ * longer possible: `/api/orgs/create` refuses an unverified caller outright,
+ * the sign-up form holds its typed name against the account instead, and the
+ * workspace is created on the first verified session. There is no path left
+ * that can produce an unproven address, so `createOrganization` writes the
+ * plain grant this collection has always held and the twenty-one-day
+ * reservation window is gone with the code that set it.
  *
- * Twenty-one days rather than the seven the reaper waits, and the gap is the
- * point. The ordinary path is that `reap-unverified-orgs` finds the workspace
- * at day seven and erases it, which releases the address through
- * `eraseOrgSlugs` — this window is what still ends the squat when that sweep
- * has stopped running, and its width is the sweep's own outage budget.
- */
-export const SLUG_RESERVATION_MS = 21 * 24 * 60 * 60 * 1000
-
-/**
- * Has a PENDING address reservation run out? (AGL-2585)
+ * The READ side below is deliberately kept, and it is not dead weight:
+ * production holds `orgSlugs` documents that WERE written with an expiry,
+ * before this. Deleting the lapse rules would silently promote every one of
+ * those squats to a permanent grant — the exact outcome AGL-2585 existed to
+ * end. They stay until `reap-unverified-orgs` has erased or promoted the last
+ * of them.
  *
- * `reservedUntil` is written only by {@link createOrganization}, and only
- * when the owner was unverified at the moment the workspace was made. A
- * reservation without it is a GRANT and never lapses, which is what keeps
- * every workspace made by a verified owner — and every one that predates this
- * field — untouchable by this rule.
+ * Has a PENDING address reservation run out?
+ *
+ * A reservation with no `reservedUntil` is a GRANT and never lapses, which is
+ * what keeps every workspace made by a verified owner — and every one that
+ * predates the field — untouchable by this rule.
  *
  * A `reservedUntil` that is not a finite number never lapses either: a
  * corrupt or half-written expiry is a reason to leave an address alone, not a
@@ -210,96 +210,6 @@ async function lapsedReservationIsStillHeld(
   }
 }
 
-/**
- * The `orgSlugs/{slug}` body a new workspace writes (AGL-2585).
- *
- * A verified owner gets `{ orgId }` — the grant this collection has always
- * held. An unverified one gets the same document with an expiry on it, and
- * nothing else: no uid, no email. `orgSlugs` is world-readable, because the
- * console resolves a workspace subdomain client-side from it, so everything
- * written here is published.
- */
-export function slugReservationDocument(
-  orgId: string,
-  reservedUntil: number | null,
-): { orgId: string; reservedUntil?: number } {
-  return reservedUntil === null ? { orgId } : { orgId, reservedUntil }
-}
-
-/**
- * How long after account creation the signup flow may still provision the
- * org it collected, without a verified email (AGL-1523). Generous relative
- * to the seconds the real flow needs, tight relative to abuse: outside this
- * window the AGL-479 verified-email gate stands in full.
- */
-export const SIGNUP_PROVISIONING_GRACE_MS = 15 * 60 * 1000
-
-/**
- * The pure decision for the signup-provisioning grace (AGL-1523).
- *
- * The signup form collects an organization name and posts it to
- * `/api/orgs/create` seconds after `createUserWithEmailAndPassword` — a
- * moment at which a password account is ALWAYS unverified, so the AGL-479
- * email gate refused every signup-time provisioning ever attempted on the
- * password door. The gate's purpose is to keep unverified accounts out of
- * the console, and it still does: creating the user's own first workspace
- * grants no console access (the session mint and the app layout both still
- * require verification). What the gate must stop refusing is the one
- * request that is part of account creation itself.
- *
- * Grace is granted only when BOTH hold:
- *  - the account is brand new (creation within the window — an unverified
- *    account cannot come back later and start minting workspaces), and
- *  - the account owns no org yet (grace provisions exactly ONE workspace;
- *    it is not a window of unlimited slug reservation).
- *
- * A malformed/missing creation time fails CLOSED.
- */
-export function isWithinSignupProvisioningGrace(options: {
-  creationTime: string | undefined
-  ownsAnyOrg: boolean
-  now?: number
-}): boolean {
-  const { creationTime, ownsAnyOrg, now = Date.now() } = options
-  if (ownsAnyOrg) return false
-  const createdAt = Date.parse(creationTime ?? '')
-  if (!Number.isFinite(createdAt)) return false
-  // A slightly-future creation time is clock skew on a definitionally
-  // brand-new account — within grace. Only age beyond the window denies.
-  return now - createdAt <= SIGNUP_PROVISIONING_GRACE_MS
-}
-
-/**
- * Whether `uid` — an UNVERIFIED caller — may still create the org the signup
- * flow collected (AGL-1523). Reads the auth record's creation time and the
- * caller's owned-org count, then applies
- * {@link isWithinSignupProvisioningGrace}. Any lookup failure fails CLOSED:
- * the AGL-479 gate stands.
- */
-export async function signupProvisioningGraceAllows(
-  uid: string,
-): Promise<boolean> {
-  try {
-    // Across pools (AGL-1122), not `auth().getUser` — a project-level lookup
-    // silently misses tenanted SSO accounts, and this helper failing closed
-    // would then wrongly 403 them.
-    const found = await findUserByUidAcrossPools(uid)
-    if (!found) return false
-    const owned = await firestore()
-      .collection('orgs')
-      .where('ownerUid', '==', uid)
-      .limit(1)
-      .get()
-    return isWithinSignupProvisioningGrace({
-      creationTime: found.record.metadata?.creationTime,
-      ownsAnyOrg: !owned.empty,
-    })
-  } catch (error) {
-    console.error('[orgs] signup provisioning grace check failed', error)
-    return false
-  }
-}
-
 export interface CreateOrganizationOptions {
   name: string
   slug: string
@@ -316,21 +226,6 @@ export interface CreateOrganizationOptions {
    * nothing else.
    */
   bypassFreeWorkspaceCap?: boolean
-  /**
-   * Hold the workspace address instead of granting it (AGL-2585).
-   *
-   * Set by `/api/orgs/create` when the caller's email was NOT verified — the
-   * AGL-1523 signup grace, which is every password signup, because a password
-   * account is always unverified at the moment the signup form posts. The
-   * reservation then carries an expiry, and an expiry is the difference
-   * between a name someone proved they can receive mail at and a name someone
-   * typed.
-   *
-   * Left unset everywhere else, which keeps `ensureOrgForUser`, the staff
-   * provisioning paths and the migration scripts writing the same grant they
-   * always have.
-   */
-  reserveSlugUntilMs?: number | null
 }
 
 /**
@@ -343,7 +238,6 @@ export async function createOrganization(
   options: CreateOrganizationOptions,
 ): Promise<string> {
   const { name, slug, ownerUid, ownerEmail, ownerDisplayName } = options
-  const reserveSlugUntilMs = options.reserveSlugUntilMs ?? null
   const db = firestore()
   const orgId = createResourceUid()
   // The free-workspace ceiling (AGL-2265). Read OUTSIDE the transaction —
@@ -365,8 +259,9 @@ export async function createOrganization(
         })
       : undefined
     // Tombstones (renamed-away slugs) are claimable by new orgs (AGL-585),
-    // and so is a signup reservation that ran out unverified (AGL-2585) —
-    // but only once the auth record agrees it was never confirmed.
+    // and so is a reservation left by an unverified signup made before
+    // AGL-2590 that has since run out — but only once the auth record agrees
+    // it was never confirmed.
     if (
       !isSlugReservationClaimable(held, null) ||
       (isSlugReservationLapsed(held) && (await lapsedReservationIsStillHeld(held)))
@@ -386,10 +281,11 @@ export async function createOrganization(
         config: capConfig,
       })
     }
-    tx.set(
-      db.collection('orgSlugs').doc(slug),
-      slugReservationDocument(orgId, reserveSlugUntilMs),
-    )
+    // The plain grant, always (AGL-2590): no caller can reach this with an
+    // unproven address any more. `orgSlugs` is world-readable — the console
+    // resolves a workspace subdomain client-side from it — so the id is all
+    // that goes in.
+    tx.set(db.collection('orgSlugs').doc(slug), { orgId })
     /*
      * THE BILLING DOCUMENT EXISTS FROM BIRTH (AGL-1152).
      *
