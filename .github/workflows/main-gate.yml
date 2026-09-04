@@ -30,14 +30,14 @@ name: Main Gate
 #     write` below for why it is not a tracking issue). A break is therefore a
 #     visible STATE rather than an email that scrolls away.
 #
-#     ⚠️ It is a state NOBODY IS NOTIFIED OF, and that is a real gap rather
-#     than a nuance (AGL-2533). A status sits on a sha the branch has already
-#     moved past, so a red is only ever found by someone who goes looking at
-#     that sha. Two reds went unread for hours on 2026-09-03 — a linear-id
-#     ceiling violation and a genuine 429-vs-200 assertion failure — and the
-#     second was misread as an already-explained flake because nothing
-#     surfaced it. Do not treat "Main Gate would have caught it" as meaning
-#     anyone would have SEEN it.
+#     ⚠️ A status ALONE is a state nobody is notified of, and that was
+#     a real gap rather than a nuance (AGL-2533). A status sits on a sha the
+#     branch has already moved past, so a red was only ever found by someone
+#     who went looking at that sha. Two reds went unread for hours on
+#     2026-09-03 — a linear-id ceiling violation and a genuine 429-vs-200
+#     assertion failure — and the second was misread as an already-explained
+#     flake because nothing surfaced it. The `report` job now ALERTS on a red:
+#     Slack `#ci` is the notification, and the status is the durable record.
 #
 # ---------------------------------------------------------------------------
 # WHY TWO JOBS
@@ -77,8 +77,9 @@ on:
   #
   # ⚑ This does NOT restore the noise that moved `nx-ci.yml`'s push trigger off
   # `main` for the Sept-1 freeze. That workflow notifies on every red, which is
-  # why continuous agent pushes made it noise; this one notifies nobody
-  # (AGL-2533) and writes a commit status instead. The `full` sweep is
+  # why continuous agent pushes made it noise; this one alerts once per DISTINCT
+  # red — the same sha failing the same way is recorded and never repeated
+  # (AGL-2537) — and writes a commit status besides. The `full` sweep is
   # deliberately NOT reachable from a push — see its `if:` — so a push costs
   # the `fast` job's few minutes, never the 90-minute sweep.
   push:
@@ -354,7 +355,7 @@ jobs:
       - run: npx nx run docs:build
 
   # -------------------------------------------------------------------------
-  # THE RED SINK
+  # THE VERDICT, AND THE ALERT THAT CARRIES IT
   # -------------------------------------------------------------------------
   # A failing workflow emails whoever is watching, and an email is exactly the
   # thing that scrolled away and let failures sit on main for hours. So the
@@ -403,22 +404,29 @@ jobs:
       # THE NOTIFICATION (AGL-2533). The commit status above is correct,
       # precise, and attached to a sha the branch has already moved past —
       # which is why two real reds went unread for hours on 2026-09-03 while
-      # four promotions went out. This posts the red into Linear, the channel
-      # this team actually reads, restoring the "ONE tracking issue" design the
-      # header used to claim: it was abandoned only because
-      # `gh api repos/aglyn/aglyn` returns has_issues:false.
+      # four promotions went out. This sends the red to Slack `#ci`, which is
+      # the only channel it goes to.
+      #
+      # It posted a Linear comment as well until 2026-09-04 (AGL-2537). One
+      # fact does not need two channels, and an issue accumulating a comment
+      # per red becomes a stream people are trained to scroll past — the
+      # silence of AGL-2533, reached by a slower road.
+      #
+      # `GITHUB_TOKEN` is what makes the alert idempotent: the reporter records
+      # each red it sends as a commit status on the graded sha and skips a red
+      # already recorded there. The job's `statuses: write` above covers both
+      # halves. Absent the token the reporter still alerts, because a duplicate
+      # is better than a miss.
       #
       # `if: always()` and the script's own exit-0 discipline are both
       # deliberate — a gate that failed BECAUSE it could not report would be
       # strictly worse than the silence it replaces. A green posts nothing; a
       # repeat of the same red posts nothing.
-      - name: red -> Linear
+      - name: red -> Slack
         if: always()
         env:
-          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
-          # Optional. Linear is the durable record; Slack is the immediate
-          # ping. Absent, the reporter says so and posts to Linear alone.
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -uo pipefail
           node tools/scripts/report-main-gate-red.mjs \
@@ -434,10 +442,13 @@ jobs:
       # until the day it matters, which is the shape this issue is about. This
       # sends a clearly-labelled message through the real secrets and the real
       # code, on demand.
+      # A TEST is deliberately given no token: it must never be deduped, and it
+      # must never leave a record, because that record is keyed on the sha and
+      # failing set it was invoked with and would afterwards swallow a REAL red
+      # matching them as a duplicate of a message that said nothing was wrong.
       - name: TEST the notification path
         if: github.event_name == 'workflow_dispatch' && inputs.test_notification
         env:
-          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
           set -uo pipefail
