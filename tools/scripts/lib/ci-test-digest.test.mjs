@@ -448,7 +448,7 @@ describe('the workflows actually USE the digest (AGL-1617)', () => {
   // delete the check on the deletion.
   const repoRoot = join(here, '..', '..', '..')
   // The artifact name is a PATTERN, not a literal: nx-ci.yml's test job is a
-  // four-way shard matrix since AGL-2505, and upload-artifact@v4 rejects a
+  // four-way shard matrix since AGL-2505, and upload-artifact rejects a
   // duplicate name within a run — so its name has to carry the shard index.
   const workflows = [
     ['main-gate.yml', /name: nx-test-log-main-gate-full\b/],
@@ -496,9 +496,13 @@ describe('the workflows actually USE the digest (AGL-1617)', () => {
         /if: failure\(\)\n\s*run: node tools\/scripts\/lib\/ci-test-digest\.mjs "\$RUNNER_TEMP\/nx-test\.log" --task-failed/,
         `${name} must print the digest on failure`,
       )
+      // Any major satisfies this: the property is that an upload step exists
+      // so the raw log survives a failed run, not which version pins it.
+      // Naming the major measured the adjacent quantity, and turned this red
+      // on every Dependabot bump of an action nobody here chose to change.
       assert.match(
         yaml,
-        /uses: actions\/upload-artifact@v4/,
+        /uses: actions\/upload-artifact@v\d+/,
         `${name} must upload the raw log`,
       )
       // Unique per job AND per shard, or two uploads in one run collide and
