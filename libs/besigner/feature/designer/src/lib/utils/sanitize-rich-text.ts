@@ -32,6 +32,29 @@ const ALLOWED_TAGS = new Set([
   'span',
 ])
 
+/**
+ * The subset a PHRASING-ONLY surface may persist (AGL-2557) — the label of a
+ * Button, a Screen Link or an Accordion Summary, which ships inside a
+ * `<button>` or an `<a>`.
+ *
+ * Neither element may contain a block or a second control. A `<div>` here is
+ * not merely untidy: the parser closes the control on that start tag and
+ * promotes the rest to a sibling, which reaches the browser as a React
+ * hydration mismatch on the published page. The renderer enforces the same
+ * narrowing on the way out (`INLINE_AUTHOR_HTML_ELEMENTS`); this end of the
+ * round trip means what is STORED is what will be drawn, so the Attributes
+ * panel and the plain-text fallback describe the same element as the canvas.
+ *
+ * `br` stays: it is phrasing content, and Shift+Enter is the one line break
+ * these surfaces still offer.
+ */
+const PHRASING_TAGS = new Set(['b', 'strong', 'i', 'em', 'u', 'br', 'span'])
+
+/** How much markup one commit may keep — see {@link PHRASING_TAGS}. */
+export interface SanitizeRichTextOptions {
+  phrasingOnly?: boolean
+}
+
 const SAFE_HREF = /^(https?:\/\/|mailto:|tel:|\/)/i
 
 /**
@@ -40,9 +63,16 @@ const SAFE_HREF = /^(https?:\/\/|mailto:|tel:|\/)/i
  * `rel="noopener noreferrer"`), and unwraps disallowed elements to their
  * text content (so nothing script-capable survives). Runs at commit time in
  * the editor (browser DOM available).
+ *
+ * `options.phrasingOnly` narrows the allowlist for a surface that ships
+ * inside a control (AGL-2557); omitted, every existing caller is unchanged.
  */
-export function sanitizeRichText(html: string): string {
+export function sanitizeRichText(
+  html: string,
+  options?: SanitizeRichTextOptions,
+): string {
   if (typeof document === 'undefined') return ''
+  const allowed = options?.phrasingOnly ? PHRASING_TAGS : ALLOWED_TAGS
   const template = document.createElement('template')
   template.innerHTML = html
 
@@ -54,7 +84,7 @@ export function sanitizeRichText(html: string): string {
     const element = node as Element
     const tag = element.tagName.toLowerCase()
     const inner = Array.from(element.childNodes).map(sanitizeNode).join('')
-    if (!ALLOWED_TAGS.has(tag)) return inner
+    if (!allowed.has(tag)) return inner
     // A bare `span` is INERT and is unwrapped (AGL-2486). Every attribute is
     // stripped here, so a surviving `<span>` carries no styling, no class and
     // no binding — it renders exactly as its own text. Keeping it would be

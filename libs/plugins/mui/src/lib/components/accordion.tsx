@@ -27,6 +27,10 @@ import type { SxProps } from '@mui/material/styles'
 import { forwardRef, isValidElement, type ReactNode } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { FIELD_TEXT_CONTENT } from '../constants/field-presets'
+import {
+  authorHtmlLabel,
+  withAuthorHtmlLabel,
+} from '../utils/author-html-label'
 import { generatePresetId } from '../utils/generate-preset-id'
 
 // Component ids are persisted in screen documents; never rename.
@@ -99,6 +103,12 @@ export interface AccordionSummaryElementProps {
    * merged rather than replaced (AGL-1240/1284).
    */
   sx?: SxProps
+  /**
+   * Sanitized emphasis markup for the label, written by the inline editor's
+   * rich mode (AGL-2557). `children` keeps the plain-text reading of it, and
+   * is what every surface that cannot render markup falls back to.
+   */
+  html?: string
   children?: ReactNode
 }
 
@@ -176,7 +186,7 @@ export const AccordionSummaryElement = forwardRef<
   HTMLDivElement,
   AccordionSummaryElementProps
 >((props, ref) => {
-  const { screenId, ...rest } = props
+  const { screenId, html, ...rest } = props
   // Resolution is the routing map's job, exactly as Screen Link does it;
   // an unpublished or deleted target yields no href.
   const { href, suppressNavigation } = Aglyn.useScreenLink(screenId)
@@ -186,7 +196,7 @@ export const AccordionSummaryElement = forwardRef<
       <MuiAccordionSummary
         ref={ref}
         expandIcon={<MdiIcon path={mdiChevronDown.path} />}
-        {...rest}
+        {...withAuthorHtmlLabel(rest, html)}
       />
     )
   }
@@ -204,12 +214,17 @@ export const AccordionSummaryElement = forwardRef<
   // so `children` is always an ARRAY holding an element. The string branch was
   // reachable only from a spec that handed the component a bare string, so
   // every published split summary named its chevron "Toggle section".
+  //
+  // Read from `children` rather than from the formatted label below, because
+  // a formatted one is markup handed to `dangerouslySetInnerHTML` and has no
+  // React children to walk. `children` carries the same words either way.
   const label = childText(children).trim()
+  const content = authorHtmlLabel(html) ?? children
   return (
     <Box ref={ref} {...rowRest} sx={[SUMMARY_ROW_SX, ...nodeSx]}>
       {href && !suppressNavigation ? (
         <AppLink href={href} underline="hover" sx={SUMMARY_LABEL_SX}>
-          {children}
+          {content}
         </AppLink>
       ) : (
         // Unresolved target, or a surface that must not navigate (canvas,
@@ -224,7 +239,7 @@ export const AccordionSummaryElement = forwardRef<
         // href is HTML's placeholder link, so the element is stable and the
         // row is still inert. Link Container settled on this shape first.
         <Link underline="none" color="inherit" sx={SUMMARY_LABEL_SX}>
-          {children}
+          {content}
         </Link>
       )}
       <MuiAccordionSummary
@@ -296,7 +311,15 @@ export const accordionSummarySchema: Aglyn.ComponentSchema = {
   description: 'The clickable header row of an accordion.',
   category: Aglyn.ComponentCategory.SURFACE,
   icon: { path: mdiUnfoldMoreHorizontal.path, sx: { color: '#2196f3' } },
-  flags: { textEditable: Aglyn.FEATURE_FLAG.ENABLED },
+  flags: {
+    textEditable: Aglyn.FEATURE_FLAG.ENABLED,
+    richTextEditable: Aglyn.FEATURE_FLAG.ENABLED,
+  },
+  // Emphasis only (AGL-2557). The row is a `<button>`, and a list or a link
+  // inside one is invalid markup the parser unnests and a control a keyboard
+  // cannot reach — the same constraint that made a LINKED header two sibling
+  // controls rather than an anchor inside the toggle (AGL-1232).
+  richTextCommands: [Aglyn.RICH_TEXT_COMMANDS.EMPHASIS],
   attributes: [
     FIELD_TEXT_CONTENT,
     {

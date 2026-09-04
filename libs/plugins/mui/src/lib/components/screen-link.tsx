@@ -30,6 +30,7 @@ import {
   FIELD_SIZE,
   FIELD_TEXT_CONTENT,
 } from '../constants/field-presets'
+import { withAuthorHtmlLabel } from '../utils/author-html-label'
 import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
 import {
@@ -70,6 +71,12 @@ export interface ScreenLinkProps extends ButtonProps {
   target?: LinkTargetChoice
   /** Window name used only when `target` is `'custom'`. */
   targetName?: string
+  /**
+   * Sanitized emphasis markup for the label, written by the inline editor's
+   * rich mode (AGL-2557). `children` keeps the plain-text reading of it, and
+   * is what every surface that cannot render markup falls back to.
+   */
+  html?: string
 }
 
 /**
@@ -112,6 +119,7 @@ const ScreenLink = forwardRef<any, ScreenLinkProps>((props, ref) => {
     renderAs,
     target,
     targetName,
+    html,
     ...spread
   } = props
   // A CLEARED attribute persists as null, and null is not "use the default"
@@ -120,7 +128,15 @@ const ScreenLink = forwardRef<any, ScreenLinkProps>((props, ref) => {
   // most-used element (70–77 nodes per page), so the guard runs BEFORE
   // `variant`/`size`/`fullWidth` are split out: they are forwarded as named
   // attributes, and guarding only the spread would leave those three exposed.
-  const { variant, size, fullWidth, ...rest } = dropClearedProps(spread)
+  //
+  // The formatted label (AGL-2557) is substituted for `children` in the same
+  // breath, so all five shapes below carry it without five more spreads —
+  // and an unformatted link, which is nearly all of them, gets the very
+  // object `dropClearedProps` returned.
+  const { variant, size, fullWidth, ...rest } = withAuthorHtmlLabel(
+    dropClearedProps(spread),
+    html,
+  )
   // Id-vs-URL precedence and the `javascript:`/`data:` guard live in
   // `useLinkTarget` (AGL-1335) — one copy for every linking element, and
   // the only place that knows a `screen:`-prefixed value is a reference.
@@ -239,7 +255,11 @@ export const schema: Aglyn.ComponentSchema<ScreenLinkProps> = {
   },
   flags: {
     textEditable: Aglyn.FEATURE_FLAG.ENABLED,
+    richTextEditable: Aglyn.FEATURE_FLAG.ENABLED,
   },
+  // Emphasis only (AGL-2557). Every mode of this element ships an anchor or
+  // a button, and neither may contain a list or a second control.
+  richTextCommands: [Aglyn.RICH_TEXT_COMMANDS.EMPHASIS],
   attributes: [
     FIELD_TEXT_CONTENT,
     {

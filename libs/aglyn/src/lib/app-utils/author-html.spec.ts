@@ -26,6 +26,7 @@ import {
   ALLOWED_AUTHOR_HTML_ELEMENTS,
   type AuthorHtmlRemoval,
   decodeCharacterReferences,
+  INLINE_AUTHOR_HTML_ELEMENTS,
   sanitizeAuthorHtml,
 } from './author-html'
 
@@ -387,5 +388,67 @@ describe('author markup cannot mint a second `main` landmark (AGL-2486)', () => 
     expect(out).toContain('<p>kept</p>')
     expect(out).toContain('<nav>')
     expect(out).toContain('<p>also</p>')
+  })
+})
+
+/**
+ * A CONTROL'S LABEL IS PHRASING CONTENT (AGL-2557).
+ *
+ * Rich text reached Button, Screen Link and Accordion Summary in AGL-2557,
+ * and every one of them renders its label inside a `<button>` or an `<a>`.
+ * The hazard is not that a `<ul>` in a button looks wrong: the parser CLOSES
+ * the control on a block start tag and promotes the remainder to a sibling,
+ * so the served string and the tree React described are different documents
+ * and hydration reports the mismatch on a published page. A nested anchor is
+ * the same shape, plus a control a keyboard cannot reach.
+ *
+ * The editor declines to offer those commands, which handles the author who
+ * is typing. This is the half that handles markup arriving any other way — a
+ * paste, or an `html` prop planted straight through the Firebase client SDK,
+ * which is the threat model AGL-497 named.
+ */
+describe('the inline allowlist keeps a label inside its control (AGL-2557)', () => {
+  const inline = { allowedElements: INLINE_AUTHOR_HTML_ELEMENTS }
+
+  it('keeps emphasis, which is what the toolbar can write', () => {
+    expect(sanitizeAuthorHtml('a <b>bold</b> <em>word</em>', undefined, inline)).toBe(
+      'a <b>bold</b> <em>word</em>',
+    )
+  })
+
+  it('UNWRAPS a block or a list rather than dropping the words', () => {
+    // Content loss would be the worse failure: an author who pasted a list
+    // into a button label should lose the bullets, never the label.
+    expect(
+      sanitizeAuthorHtml('<ul><li>one</li><li>two</li></ul>', undefined, inline),
+    ).toBe('onetwo')
+    expect(sanitizeAuthorHtml('<div>label</div>', undefined, inline)).toBe('label')
+    expect(sanitizeAuthorHtml('<h2>label</h2>', undefined, inline)).toBe('label')
+  })
+
+  it('unwraps a nested anchor, which no control may contain', () => {
+    expect(
+      sanitizeAuthorHtml('go <a href="/x">there</a>', undefined, inline),
+    ).toBe('go there')
+  })
+
+  it('still drops a script with its contents', () => {
+    // The narrowing must not become a second, weaker policy: the
+    // content-dropping set is decided before the allowlist is consulted.
+    expect(
+      sanitizeAuthorHtml('<script>alert(1)</script>ok', undefined, inline),
+    ).toBe('ok')
+  })
+
+  it('cannot WIDEN the policy, only narrow it', () => {
+    // The allowlist is intersected rather than substituted, so a caller
+    // passing a tag the module itself refuses gains nothing. `main` is the
+    // sharpest probe available: it is a deliberate subtraction above, so a
+    // substitution bug would hand it straight back.
+    expect(
+      sanitizeAuthorHtml('<main><p>x</p></main>', undefined, {
+        allowedElements: new Set(['main', 'p']),
+      }),
+    ).toBe('<p>x</p>')
   })
 })

@@ -71,6 +71,17 @@ import { forwardRef } from 'react'
  */
 export interface AglynTextProps {
   children?: any
+  /**
+   * Sanitized author markup, for a leaf whose text carries formatting
+   * (AGL-2557). Every caller passes the output of `sanitizeAuthorHtml`,
+   * re-sanitized on each render per AGL-497 — this element does no filtering
+   * of its own and must never be handed a raw stored value.
+   *
+   * It rides this element rather than a wrapper of its own so the formatted
+   * label and the plain one are the SAME edit target on the canvas, which is
+   * the element the besigner looks for (AGL-2556).
+   */
+  dangerouslySetInnerHTML?: { __html: string }
 }
 
 export const AglynText = forwardRef<HTMLElement, AglynTextProps>(
@@ -80,6 +91,11 @@ export const AglynText = forwardRef<HTMLElement, AglynTextProps>(
     // no `customElements.define` for it anywhere in the repo. React renders an
     // unknown lowercase tag as-is, which is all this needs to be.
     const Tag = 'aglyn-text' as any
+    // React refuses an element that carries both, and the JSX children slot
+    // counts as `children` even when the value in it is undefined on some
+    // toolchains — so the formatted branch is a separate element expression
+    // rather than a conditional inside one.
+    if (rest.dangerouslySetInnerHTML) return <Tag ref={ref} {...rest} />
     return (
       <Tag ref={ref} {...rest}>
         {children}

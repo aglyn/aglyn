@@ -147,3 +147,59 @@ describe('sanitizeRichText drops inert wrappers (AGL-2486)', () => {
     expect(sanitizeRichText('a <div>b</div>')).toBe('a <div>b</div>')
   })
 })
+
+/**
+ * WHAT IS STORED IS WHAT WILL BE DRAWN (AGL-2557).
+ *
+ * Rich text reached Button, Screen Link and Accordion Summary, whose labels
+ * ship inside a `<button>` or an `<a>` — elements that admit phrasing content
+ * and no nested control. The renderer narrows the markup on the way out, so
+ * without this half the commit would happily store a `<ul>` the page then
+ * refuses to draw: the canvas, the Attributes panel's plain fallback and the
+ * published element would each describe a different thing.
+ *
+ * The toolbar does not offer the block commands on these surfaces at all;
+ * this is the path a PASTE takes.
+ */
+describe('sanitizeRichText phrasing-only surfaces (AGL-2557)', () => {
+  const inline = { phrasingOnly: true }
+
+  it('keeps emphasis, which is all these surfaces offer', () => {
+    expect(sanitizeRichText('a <b>bold</b> <em>word</em>', inline)).toBe(
+      'a <b>bold</b> <em>word</em>',
+    )
+  })
+
+  it('keeps a `br`, the one line break Shift+Enter still writes', () => {
+    expect(sanitizeRichText('one<br>two', inline)).toBe('one<br>two')
+  })
+
+  it('unwraps a pasted list to its words rather than dropping them', () => {
+    expect(sanitizeRichText('<ul><li>one</li><li>two</li></ul>', inline)).toBe(
+      'onetwo',
+    )
+  })
+
+  it('unwraps the `div` fork a contentEditable produces', () => {
+    expect(sanitizeRichText('label<div>second</div>', inline)).toBe(
+      'labelsecond',
+    )
+  })
+
+  it('unwraps a link, which cannot nest inside a control', () => {
+    expect(
+      sanitizeRichText('go <a href="https://a.com">there</a>', inline),
+    ).toBe('go there')
+  })
+
+  it('leaves every other caller exactly as it was', () => {
+    // CONTROL: the option is opt-in, and Typography — every rich-text node in
+    // the corpus — passes nothing.
+    expect(sanitizeRichText('<ul><li>one</li></ul>')).toBe(
+      '<ul><li>one</li></ul>',
+    )
+    expect(sanitizeRichText('<a href="https://a.com">x</a>')).toBe(
+      '<a href="https://a.com" rel="noopener noreferrer">x</a>',
+    )
+  })
+})

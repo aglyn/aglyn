@@ -43,7 +43,11 @@ import type { ComponentClass, ComponentProps } from 'react'
 import type { NODE_ROOT_ID } from '../canvas-manager'
 import type { NodeInteraction } from '../app-utils/node-interactions'
 
-import type { FEATURE_FLAG, FieldComponentType } from '../foundation'
+import type {
+  FEATURE_FLAG,
+  FieldComponentType,
+  RICH_TEXT_COMMANDS,
+} from '../foundation'
 import type { PluginId } from '../plugin-manager'
 import type { ElementContentMap, Node, Props, Taxonomic } from './ast'
 import type { AglynDocument } from '../foundation'
@@ -587,6 +591,17 @@ export interface ComponentSchema<P = any> {
    * New version
    */
   attributes?: AttributeSchema[]
+
+  /**
+   * Which groups of formatting the inline rich-text toolbar offers for this
+   * component (AGL-2557). Read only where `flags.richTextEditable` is on.
+   *
+   * Omitted means every group, which is what leaves Typography exactly as it
+   * was. Naming a subset narrows the toolbar AND the commit: a surface that
+   * offers neither lists nor links is phrasing-only, and the sanitizer holds
+   * it to that whatever an author pastes in.
+   */
+  richTextCommands?: RICH_TEXT_COMMANDS[]
 
   /**
    * Feature flags

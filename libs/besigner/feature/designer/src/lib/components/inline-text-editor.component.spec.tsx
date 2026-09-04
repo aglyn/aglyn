@@ -672,3 +672,127 @@ describe('InlineTextEditorComponent: clicking away commits (AGL-2486)', () => {
     expect(inlineTextEdit.node?.$id).toBe(node.$id)
   })
 })
+
+/**
+ * A TOOLBAR OFFERS ONLY WHAT THE ELEMENT CAN HOLD (AGL-2557).
+ *
+ * `richTextEditable` used to be a yes/no, and the toolbar rendered its whole
+ * command list. That is why bold and italic were unreachable on every text
+ * element except Typography: Accordion Summary and Button render a
+ * `<button>`, which cannot contain a list or a nested control, so offering
+ * the whole list was not an option and offering none of it was what shipped.
+ *
+ * The commands are grouped now and a schema names the groups it supports.
+ * These cases pin both ends of that: a narrowed schema loses the tools its
+ * element cannot hold, and a schema that names nothing keeps all of them —
+ * which is every rich-text node authored before this.
+ */
+describe('rich toolbar honors the schema command set (AGL-2557)', () => {
+  const rect = { left: 10, top: 10, width: 120, height: 24 }
+  let updateNodeProps: jest.SpyInstance
+
+  beforeEach(() => {
+    updateNodeProps = jest
+      .spyOn(Aglyn.canvas, 'updateNodeProps')
+      .mockImplementation((() => undefined) as any)
+  })
+  afterEach(() => {
+    act(() => inlineTextEdit.close())
+    updateNodeProps.mockRestore()
+  })
+
+  const node = (richTextCommands?: Aglyn.RICH_TEXT_COMMANDS[]) =>
+    ({
+      $id: 'agl2557-inline',
+      type: 'node',
+      componentId: 'muiButton',
+      props: { children: 'Click Me' },
+      componentSchema: {
+        displayName: 'Button',
+        flags: { richTextEditable: Aglyn.FEATURE_FLAG.ENABLED },
+        ...(richTextCommands ? { richTextCommands } : {}),
+      },
+      nodes: [],
+    }) as any
+
+  const open = async (target: any) => {
+    render(<InlineTextEditorComponent />)
+    act(() => inlineTextEdit.open(target, rect))
+    const surface = await screen.findByRole('textbox', {
+      name: 'Edit rich text',
+    })
+    await waitFor(() =>
+      expect(surface.textContent && surface.textContent.length > 0).toBe(true),
+    )
+    return surface
+  }
+
+  // By TITLE, not by accessible name: these tools are icon buttons whose
+  // content is the glyph ("B", "•"), so the name a screen reader computes is
+  // that glyph and the title is the only thing that says which tool it is.
+  it('offers emphasis and nothing else on a phrasing-only element', async () => {
+    await open(node([Aglyn.RICH_TEXT_COMMANDS.EMPHASIS]))
+
+    expect(screen.getByTitle('Bold')).toBeTruthy()
+    expect(screen.getByTitle('Italic')).toBeTruthy()
+    expect(screen.getByTitle('Underline')).toBeTruthy()
+    expect(screen.queryByTitle('Bulleted list')).toBeNull()
+    expect(screen.queryByTitle('Numbered list')).toBeNull()
+    expect(screen.queryByTitle('Insert link')).toBeNull()
+    // The tools that are not about markup are unaffected.
+    expect(
+      screen.getByRole('button', { name: 'Insert data token' }),
+    ).toBeTruthy()
+  })
+
+  it('offers the whole set to a schema that names no groups', async () => {
+    await open(node())
+
+    for (const title of [
+      'Bold',
+      'Italic',
+      'Underline',
+      'Bulleted list',
+      'Numbered list',
+      'Insert link',
+    ]) {
+      expect(screen.getByTitle(title)).toBeTruthy()
+    }
+  })
+
+  it('commits Enter on a phrasing-only surface instead of forking a line', async () => {
+    // A label is one line. The rich surface normally lets Enter through so a
+    // browser can fork the contentEditable into `<div>`s — which is the exact
+    // markup a `<button>` may not hold, and which the commit would then have
+    // to throw away.
+    const target = node([Aglyn.RICH_TEXT_COMMANDS.EMPHASIS])
+    const surface = await open(target)
+    surface.innerHTML = 'Click <b>Me</b>'
+
+    fireEvent.keyDown(surface, { key: 'Enter' })
+
+    expect(updateNodeProps).toHaveBeenCalledWith(
+      target,
+      expect.objectContaining({ html: 'Click <b>Me</b>', children: 'Click Me' }),
+    )
+    expect(inlineTextEdit.node).toBeUndefined()
+  })
+
+  it('strips block markup a paste brought onto a phrasing-only surface', async () => {
+    const target = node([Aglyn.RICH_TEXT_COMMANDS.EMPHASIS])
+    const surface = await open(target)
+    // What a paste from a document leaves behind — the toolbar cannot write
+    // this, so the commit is the only place it can be caught.
+    surface.innerHTML = '<ul><li>one</li></ul>'
+
+    fireEvent.blur(surface)
+
+    const props = updateNodeProps.mock.calls.at(-1)?.[1] as Record<
+      string,
+      unknown
+    >
+    expect(props['children']).toBe('one')
+    // No markup left, so no `html` key at all — the same rule AGL-2486 set.
+    expect('html' in props).toBe(false)
+  })
+})

@@ -28,7 +28,7 @@ import type { SvgIconProps } from '@mui/material'
 import type { MuiStyledOptions } from '@mui/system/createStyled'
 import type { CANVAS_ROOT_ELEMENT_ID } from '../constants/canvas'
 import type { ComponentCategory } from '../constants/components'
-import type { FEATURE_FLAG } from '../constants/shared'
+import type { FEATURE_FLAG, RICH_TEXT_COMMANDS } from '../constants/shared'
 import type { AGLYN_OF, SYMBOL_TYPE } from '../constants/symbol'
 
 export enum LinealDirectiveFlag {
@@ -108,6 +108,17 @@ export interface AglynComponentSchema<P = any> {
    * New version
    */
   attributes?: AglynAttributeSchema[]
+
+  /**
+   * Which groups of formatting the inline rich-text toolbar offers for this
+   * component (AGL-2557). Read only where `flags.richTextEditable` is on.
+   *
+   * Omitted means every group, which is what leaves Typography exactly as it
+   * was. Naming a subset narrows the toolbar AND the commit: a surface that
+   * offers neither lists nor links is phrasing-only, and the sanitizer holds
+   * it to that whatever an author pastes in.
+   */
+  richTextCommands?: RICH_TEXT_COMMANDS[]
 
   /**
    * Feature flags

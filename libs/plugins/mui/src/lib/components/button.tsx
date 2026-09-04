@@ -22,6 +22,7 @@ import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 import Button, { type ButtonProps } from '@mui/material/Button'
 import { forwardRef } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import { withAuthorHtmlLabel } from '../utils/author-html-label'
 import { dropClearedProps } from '../utils/drop-cleared-props'
 import {
   FIELD_COLOR,
@@ -76,6 +77,12 @@ export interface LinkableButtonProps extends ButtonProps {
   target?: LinkTargetChoice
   /** Window name used only when `target` is `'custom'`. */
   targetName?: string
+  /**
+   * Sanitized emphasis markup for the label, written by the inline editor's
+   * rich mode (AGL-2557). `children` keeps the plain-text reading of it, and
+   * is what every surface that cannot render markup falls back to.
+   */
+  html?: string
 }
 
 /**
@@ -135,12 +142,17 @@ const LinkableButton = forwardRef<any, LinkableButtonProps>((props, ref) => {
     renderAs,
     target,
     targetName,
+    html,
     ...spread
   } = props
   // A CLEARED attribute persists as null, and null is not "use the default"
   // in React — `color={null}` reaches MUI, which capitalizes it and throws
   // error #7 during SSR, 500ing the page (AGL-1226).
-  const rest = dropClearedProps(spread)
+  //
+  // The formatted label (AGL-2557) is substituted for `children` here rather
+  // than at each return below, so the two branches keep one shape and an
+  // unformatted button renders the identical tree it always did.
+  const rest = withAuthorHtmlLabel(dropClearedProps(spread), html)
   const iconProps = {
     startIcon: iconFromId(startIconId, startIconPath),
     endIcon: iconFromId(endIconId, endIconPath),
@@ -205,7 +217,14 @@ export const schema: Aglyn.ComponentSchema<LinkableButtonProps> = {
   },
   flags: {
     textEditable: Aglyn.FEATURE_FLAG.ENABLED,
+    richTextEditable: Aglyn.FEATURE_FLAG.ENABLED,
   },
+  // Emphasis only (AGL-2557). With no link target this is a real `<button>`,
+  // whose content model admits no list and no nested control; with one it is
+  // an `<a>`, where a second anchor is the same invalid nesting. Both shapes
+  // land on the same answer, so the schema does not have to know which one
+  // an author picked.
+  richTextCommands: [Aglyn.RICH_TEXT_COMMANDS.EMPHASIS],
   attributes: [
     FIELD_TEXT_CONTENT,
     FIELD_COLOR,
