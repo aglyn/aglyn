@@ -20,6 +20,7 @@ import {
   HOST_ERROR_SCREEN_SLOTS,
   pluginRequestFromWeb,
   resolveOrgEntitlements,
+  screenRoutePathToUrl,
   SCREEN_KIND_EMAIL,
   SCREEN_KIND_ERROR,
   SCREEN_KIND_TEMPLATE,
@@ -36,6 +37,8 @@ import {
   billableScreenIds,
   type BillableScreenSource,
 } from '../resources/count-billable-screens'
+import { announceLivePaths } from '../../../../utils/server/announce-live-paths'
+import { revalidateEntireHost } from '../../../../utils/server/tenant-revalidate'
 
 /** Roles allowed to write host content — mirrors canWriteHostContent(). */
 const HOST_WRITER_ROLES = new Set(['admin', 'editor'])
@@ -438,16 +441,32 @@ async function handler(request: Request): Promise<Response> {
     }
 
     if (action === 'error-screen') {
-      return await assignErrorScreen({
+      const response = await assignErrorScreen({
         firestore,
         hostRef,
         slot,
         // An absent/empty id is the CLEAR, which is always allowed.
         screenId: screenId || null,
       })
+      /**
+       * AN ERROR SCREEN ANSWERS ADDRESSES THE ROUTING MAP HAS NEVER HEARD OF
+       * (AGL-2573).
+       *
+       * Which is why this one is a whole-host drop rather than a path: the
+       * pages that change are precisely the ones with no entry in `screens`,
+       * so there is no list to send. Assigning or clearing a 404 screen also
+       * changes the host document every page reads, so the routed pages need
+       * the tag busting too — and `revalidateEntireHost` does both.
+       *
+       * Announced only for a change that actually landed. A refusal returns
+       * 4xx above without writing, and dropping the whole site's cache
+       * because somebody was told "no" is a cost with nothing behind it.
+       */
+      if (response.ok) await revalidateEntireHost(firestore, hostId)
+      return response
     }
 
-    return await convertScreenKind({
+    const response = await convertScreenKind({
       firestore,
       hostRef,
       orgData,
@@ -455,6 +474,32 @@ async function handler(request: Request): Promise<Response> {
       kind: convertKind,
       isStaff,
     })
+    /**
+     * A `kind` PROMOTION CHANGES WHAT THE SCREEN'S OWN ADDRESS SERVES
+     * (AGL-2573).
+     *
+     * A page becoming a collection template stops being served at its own
+     * path and starts being rendered under the collection's addresses; the
+     * reverse restores it. Either way the address the routing map holds for
+     * it is now serving the wrong thing, and the tag bust that rides along
+     * carries the `kind` change itself to every other read.
+     *
+     * Read from the snapshot taken before the transaction, which is correct
+     * here: a `kind` change does not touch the routing map, so the path this
+     * screen answers to is the same before and after.
+     */
+    if (response.ok) {
+      const routes = (hostSnapshot.get('screens') ?? {}) as Record<string, string>
+      const path = routes[screenId]
+      if (path) {
+        await announceLivePaths({
+          hostSnapshot,
+          hostId,
+          paths: [screenRoutePathToUrl(path)],
+        })
+      }
+    }
+    return response
   } catch (error) {
     console.error(error)
     return Response.json({ error: 'Screen conversion failed' }, { status: 500 })

@@ -156,6 +156,13 @@ export async function createPageFromTemplate(
     usedSlugs: Set<string>
     /** Version label, e.g. "Installed from template". */
     versionLabel?: string
+    /**
+     * The signed-in user, so the route this publishes can announce itself to
+     * the live site (AGL-2573). Threaded through rather than looked up here:
+     * this module is called from three template surfaces and holds no auth
+     * context of its own.
+     */
+    user: { getIdToken?: () => Promise<string> } | undefined | null
   },
 ): Promise<{ screenId: string; slug: string; requestedSlug: string }> {
   const {
@@ -167,6 +174,7 @@ export async function createPageFromTemplate(
     placeholderValues,
     usedSlugs,
     versionLabel = 'Initial version',
+    user,
   } = input
 
   /*
@@ -223,7 +231,7 @@ export async function createPageFromTemplate(
       nodes: resolved,
     },
   })
-  await publishScreenRoute(firestore, { hostId, screenId }, slug)
+  await publishScreenRoute(firestore, { hostId, screenId, user }, slug)
   // No activity append here. `createHostResource` above is
   // /api/hosts/resources, which records the create server-side from a
   // verified uid (AGL-118) — so this path logs whether or not its caller

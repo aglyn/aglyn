@@ -1044,6 +1044,7 @@ function BesignerPage(props) {
                 firestore,
                 hostId,
                 buildRouteEntries(candidateById),
+                { user },
               ),
             )
             .then(() => {
@@ -1080,6 +1081,7 @@ function BesignerPage(props) {
                     parentId,
                   },
                 }),
+                { user },
               ),
             )
             .then(() => {
@@ -1113,6 +1115,7 @@ function BesignerPage(props) {
     isCollectionTemplate,
     publishedPath,
     routesByScreenId,
+    user,
   ])
 
   // One-click publish from the app bar (AGL-452). Publish points the live
@@ -1134,6 +1137,7 @@ function BesignerPage(props) {
               parentId,
             },
           }),
+          { user },
         )
         // The slug stays, so re-publishing is one click; the published date
         // does not, or an unpublished screen reads as live everywhere the
@@ -1179,6 +1183,7 @@ function BesignerPage(props) {
         firestore,
         hostId,
         buildRouteEntries(candidateById),
+        { user },
       )
       // The one-click publish (AGL-452) reaches the routing map through
       // `syncScreenRouteEntries` rather than `publishScreenRoute`, so it does
@@ -1220,6 +1225,7 @@ function BesignerPage(props) {
     enqueueSnackbar,
     isCollectionTemplate,
     routesByScreenId,
+    user,
   ])
 
   /** Is there a typed slug the screen document has not been told about? */
@@ -1286,6 +1292,7 @@ function BesignerPage(props) {
           firestore,
           hostId,
           buildRouteEntries(candidateById, { publish: false }),
+          { user },
         )
       }
       setSlugInput(null)
@@ -1317,6 +1324,7 @@ function BesignerPage(props) {
     firestore,
     hostId,
     enqueueSnackbar,
+    user,
   ])
 
   const handleParentChange = useCallback(
@@ -1357,6 +1365,7 @@ function BesignerPage(props) {
             // site — and the toolbar, which reads that map, then offered
             // `Unpublish` and a `Live` link for a page that 404s.
             buildRouteEntries(nextById, { publish: false }),
+            { user },
           ),
         )
         .then(() => {
@@ -1381,6 +1390,7 @@ function BesignerPage(props) {
       firestore,
       hostId,
       enqueueSnackbar,
+      user,
     ],
   )
 

@@ -226,12 +226,17 @@ describe('createPageFromTemplate', () => {
         nodes: {},
         slug: SCREEN_ROOT_PATH,
         usedSlugs: new Set(),
+        user: { getIdToken: async () => 'token' },
       },
     )
     expect(result.slug).toBe(SCREEN_ROOT_PATH)
     expect(mockPublishScreenRoute).toHaveBeenCalledWith(
       null,
-      { hostId: 'host', screenId: result.screenId },
+      {
+        hostId: 'host',
+        screenId: result.screenId,
+        user: expect.objectContaining({ getIdToken: expect.any(Function) }),
+      },
       SCREEN_ROOT_PATH,
     )
   })

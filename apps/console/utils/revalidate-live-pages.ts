@@ -91,6 +91,24 @@ export interface RevalidateLivePagesOptions {
    * rename, a collection setting — still has listings to drop.
    */
   entrySlugs?: string[]
+  /**
+   * Live addresses named OUTRIGHT, for the changes the routing map can no
+   * longer describe (AGL-2573).
+   *
+   * Every other field here names a document and lets the console route work
+   * out the URLs, by reading the host's `screens` map. That resolution is
+   * correct for a publish and useless for its opposite: an UNPUBLISH removes
+   * the entry first, so by the time the announcement arrives the route looks
+   * the screen up, finds nothing, and answers `not-routed` — a success, with
+   * the page it was supposed to retire still cached and still being served
+   * for the rest of its window. A rename has the same hole for the address it
+   * moved away from.
+   *
+   * So the surface that changed the map says which addresses changed, having
+   * read them before the write. URL-shaped and site-absolute (`/pricing`),
+   * the form `screenRoutePathToUrl` yields.
+   */
+  paths?: string[]
 }
 
 /**
@@ -187,10 +205,16 @@ export async function revalidateLivePages(
     formId,
     collectionId,
     entrySlugs,
+    paths,
   } = options
   if (
     !hostId ||
-    (!screenId && !layoutId && !componentId && !formId && !collectionId)
+    (!screenId &&
+      !layoutId &&
+      !componentId &&
+      !formId &&
+      !collectionId &&
+      !paths?.length)
   ) {
     return null
   }
@@ -206,6 +230,7 @@ export async function revalidateLivePages(
         ...(formId ? { formId } : {}),
         ...(collectionId ? { collectionId } : {}),
         ...(entrySlugs?.length ? { entrySlugs } : {}),
+        ...(paths?.length ? { paths } : {}),
       }),
     })
     if (!response.ok) return null
