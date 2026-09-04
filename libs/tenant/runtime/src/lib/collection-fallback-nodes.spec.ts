@@ -27,6 +27,9 @@
  * the URL** — or, for the negative cases, that it is absent.
  */
 
+import { createTheme } from '@mui/material/styles'
+import { unstable_styleFunctionSx as styleFunctionSx } from '@mui/system'
+
 import {
   buildCollectionEntryFallbackNodes,
   buildCollectionFallbackNodes,
@@ -173,7 +176,7 @@ describe('collection entry fallback cover (AGL-1407)', () => {
   })
 })
 
-describe('the fallback shell is the PROSE width (AGL-1298)', () => {
+describe('the entry article fallback shell is the PROSE width (AGL-1298)', () => {
   const CONTAINER_ID = 'cfb__container'
 
   it('an entry body renders at stock md, not the xl section default', () => {
@@ -182,15 +185,6 @@ describe('the fallback shell is the PROSE width (AGL-1298)', () => {
     // besigner authoring — decides its width.
     const nodes = build(undefined) as Record<string, any>
     expect(nodes[CONTAINER_ID].componentId).toBe('muiContainer')
-    expect(nodes[CONTAINER_ID].props.maxWidth).toBe('md')
-  })
-
-  it('a collection LIST renders at the same prose width', () => {
-    const nodes = buildCollectionFallbackNodes({
-      collection,
-      entries: [{ title: 'Hello world', slug: 'hello-world' }],
-      entry: null,
-    }) as Record<string, any>
     expect(nodes[CONTAINER_ID].props.maxWidth).toBe('md')
   })
 
@@ -203,5 +197,123 @@ describe('the fallback shell is the PROSE width (AGL-1298)', () => {
     expect(['xs', 'sm', 'md', 'lg', 'xl']).toContain(props.maxWidth)
     expect(props.sx?.maxWidth).toBeUndefined()
     expect(String(JSON.stringify(props))).not.toContain('1328')
+  })
+})
+
+/**
+ * The built-in listing's vertical rhythm (AGL-2567).
+ *
+ * This is the page EVERY tenant gets for a collection with no `listScreenId`,
+ * so it is the first impression of a listing on a new site — and unlike the
+ * authored screens AGL-2547 fixed by hand in the canvas, this one is code and
+ * can regress silently.
+ *
+ * The gaps are read through MUI's own `sx` resolver rather than asserted as
+ * bare props, so what is pinned is the CSS the browser receives: a test that
+ * only checked `gap === 6` would pass just as happily against a `6` that the
+ * theme resolved to nothing.
+ */
+describe('the built-in listing has a vertical rhythm (AGL-2567)', () => {
+  const CONTAINER_ID = 'cfb__container'
+  const PAGER_ID = 'cfb__pager'
+  const ENTRIES_ID = 'cfb__entries'
+  const EMPTY_ID = 'cfb__empty'
+
+  const theme = createTheme()
+
+  /** The CSS an `sx` object actually produces, resolved against the theme. */
+  const css = (sx: unknown): Record<string, unknown> =>
+    styleFunctionSx({ theme, sx } as any) as Record<string, unknown>
+
+  const list = (
+    options: {
+      entries?: number
+      pagination?: { page: number; perPage: number; totalPages: number }
+    } = {},
+  ): Record<string, any> =>
+    buildCollectionFallbackNodes({
+      collection,
+      entries: Array.from({ length: options.entries ?? 3 }, (_unused, i) => ({
+        title: `Post ${i}`,
+        slug: `post-${i}`,
+      })),
+      entry: null,
+      pagination: options.pagination ?? null,
+    }) as Record<string, any>
+
+  const paged = { page: 1, perPage: 10, totalPages: 3 }
+
+  it('spaces the sections 48px apart, measured through the theme', () => {
+    // One `row-gap` on the flex container is the whole rhythm: every
+    // section is separated by this single declaration, so no section can
+    // space itself differently from its neighbors.
+    const stack = list({ pagination: paged })[STACK_ID]
+    expect(css(stack.props.sx)).toMatchObject({
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '48px',
+    })
+  })
+
+  it('leaves 48px under the pager, which is what the footer meets', () => {
+    // The reported symptom: the pagination row sitting on the dark footer.
+    const pager = list({ pagination: paged })[PAGER_ID]
+    expect(pager).toBeDefined()
+    expect(css(pager.props.sx).paddingBottom).toBe('48px')
+  })
+
+  it('does NOT let the pager offset itself on top of the gap', () => {
+    // The stack's gap is the one owner of the space between sections. A
+    // pager that also offset itself would sit further from the entries than
+    // every other pair of sections, a section at a time.
+    const pager = list({ pagination: paged })[PAGER_ID]
+    expect(pager.props.sx.paddingTop).toBeUndefined()
+    expect(css(pager.props.sx).paddingTop).toBeUndefined()
+  })
+
+  it('pads the entries block instead when the listing has no pager', () => {
+    // A single-page listing ends on the entries, so that is the section the
+    // footer meets — naming the pager alone would leave this case flush.
+    const nodes = list()
+    expect(nodes[PAGER_ID]).toBeUndefined()
+    expect(css(nodes[ENTRIES_ID].props.sx).paddingBottom).toBe('48px')
+  })
+
+  it('pads the empty-state line on a listing with nothing published', () => {
+    const nodes = list({ entries: 0 })
+    expect(nodes[EMPTY_ID]).toBeDefined()
+    expect(css(nodes[EMPTY_ID].props.sx).paddingBottom).toBe('48px')
+    // The empty state keeps the color it already had; the padding merges into
+    // the existing `sx` rather than replacing it.
+    expect(nodes[EMPTY_ID].props.sx.color).toBe('text.secondary')
+  })
+
+  it('renders at the section width, not the entry article reading column', () => {
+    // A listing is a card grid. The prose `md` the entry article takes
+    // (AGL-1298) is the wrong measure for it, and the authored list screens
+    // render at `xl` — a built-in listing that disagreed would look like a
+    // different product from an authored one.
+    expect(list({ pagination: paged })[CONTAINER_ID].props.maxWidth).toBe('xl')
+  })
+
+  it('RED on purpose: the gap is a theme token, never a typed length', () => {
+    // A hand-written length answers to no theme, and one that lost its unit
+    // is a valid-looking value the browser drops.
+    const nodes = list({ pagination: paged })
+    expect(typeof nodes[STACK_ID].props.sx.gap).toBe('number')
+    expect(typeof nodes[PAGER_ID].props.sx.paddingBottom).toBe('number')
+    expect(JSON.stringify(nodes)).not.toMatch(/\d+(px|rem|em|vw|vh|lvw)/)
+  })
+
+  it('leaves the entry article rhythm alone', () => {
+    // The two pages share one shell builder, so a listing change is one edit
+    // away from silently rewriting the article body.
+    const article = buildCollectionEntryFallbackNodes(collection, {
+      title: 'Hello world',
+      body: '# Hi',
+    }) as Record<string, any>
+    expect(article[STACK_ID].props.spacing).toBe(2)
+    expect(article[STACK_ID].props.sx).toBeUndefined()
+    expect(article[CONTAINER_ID].props.maxWidth).toBe('md')
   })
 })
