@@ -668,6 +668,20 @@ export const EGRESS_HOSTS: Record<string, EgressHost> = {
       'Issue-URL construction in the release-notes tooling, so a changelog line links to its issue. The API host is the separate `api.linear.app` entry, which IS a subprocessor.',
     dataReceived: 'Nothing. The URL is written into a changelog.',
   },
+  // MARK – GitHub
+  //
+  // `api.github.com` arrived with AGL-2537, when Main Gate's red reporter
+  // stopped deduplicating against a Linear issue and started writing a commit
+  // status instead. It is CI tooling reaching the forge that already holds the
+  // repository, not a path any customer record travels.
+
+  'api.github.com': {
+    disposition: 'not-a-subprocessor',
+    reason:
+      "Main Gate's red reporter reads and writes a commit status on this repository, keyed on the graded sha, so the same red is not announced twice. It runs only inside GitHub Actions, against the repository GitHub already hosts, with the workflow's own GITHUB_TOKEN. No product code path reaches it and no Service request can trigger it.",
+    dataReceived:
+      'A commit sha from this repository, a status context naming the failing gate jobs, and a link to the Actions run. No personal data and no customer data exist on that path to send.',
+  },
   'github.com': {
     disposition: 'no-request',
     reason:
