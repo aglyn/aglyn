@@ -687,11 +687,11 @@ jobs:
         run: node tools/scripts/lib/ci-test-digest.mjs "$RUNNER_TEMP/nx-test.log" --task-failed
 
       # The raw bytes, named per SHARD as well as per job:
-      # actions/upload-artifact@v4 rejects a duplicate name within a run, so
+      # actions/upload-artifact rejects a duplicate name within a run, so
       # one shared name would fail three of the four uploads on exactly the
       # run where all four are worth reading.
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: nx-test-log-nx-ci-shard-${{ matrix.shard }}
           path: ${{ runner.temp }}/nx-test.log

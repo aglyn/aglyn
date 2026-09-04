@@ -223,6 +223,21 @@ const CONSOLE_FAST_CRON_ROUTES: readonly string[] = [
   '/api/admin/finish-domain-attachments',
   '/api/lists/materialize',
   /*
+   * The publish outbox drain (AGL-2575).
+   *
+   * Publishing a screen is a client Firestore write, so the cache-drop
+   * announce is a fetch from the publishing tab and a tab that closes
+   * mid-flight strands it — the page stays stale for the hour-long document
+   * TTL and nothing records that it happened. The publish now writes the
+   * announce down in the same batch as the routing map; this is what fires
+   * the ones no tab ever managed to.
+   *
+   * A console route rather than a job on the platform beat for the same
+   * reason its neighbours are: it holds `REVALIDATE_SECRET` and reaches the
+   * tenant deployment, which is the console's side of that call.
+   */
+  '/api/admin/drain-publish-outbox',
+  /*
    * The sending-domain sweep belongs on a runner rather than on nothing.
    *
    * It is a console route because issuing a DKIM key needs a full-access

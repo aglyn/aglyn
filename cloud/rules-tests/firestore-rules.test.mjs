@@ -43,6 +43,7 @@ import {
   orderBy,
   query,
   runTransaction,
+  serverTimestamp,
   setDoc,
   updateDoc,
   where,
@@ -8879,6 +8880,190 @@ describe('the CRM answers to data.manage, on both halves of the scope', () => {
     await mustDeny(
       'an outsider reading an org contact',
       getDoc(contact(OUTSIDER, 'shared-org')),
+    )
+  })
+})
+
+/**
+ * THE PUBLISH OUTBOX (AGL-2575).
+ *
+ * Publishing a screen is a client Firestore write, so the cache-drop announce
+ * is a `fetch` from the publishing tab and a tab that closes mid-flight
+ * strands it. The publish now stages that announce into the SAME batch as the
+ * routing-map write, and a scheduled console drain fires the ones no tab
+ * managed to.
+ *
+ * An entry is therefore an instruction the platform later carries out with
+ * its own credentials, addressed by a FIELD rather than by its document path —
+ * the drain reads the collection top-level, because a subcollection would
+ * make that a collection-group query and automatic single-field indexes are
+ * COLLECTION scope only (AGL-2486). Everything below is about that field
+ * being checked as carefully as a path would have been.
+ */
+describe('a publish outbox entry may only be written for a host you can publish to (AGL-2575)', () => {
+  const OUTBOX = 'publishOutbox'
+  /** An entry shaped exactly as `stagePublishOutboxEntry` writes one. */
+  const entry = (hostId = HOST) => ({
+    hostId,
+    paths: ['/home'],
+    createdAt: serverTimestamp(),
+    attempts: 0,
+  })
+  /** A host in nobody's `memberRoles` but the owner's, seeded per test. */
+  const FOREIGN_HOST = 'host-foreign'
+  const seedForeignHost = async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'hosts', FOREIGN_HOST), {
+        displayName: 'Someone else', orgId: OTHER_ORG,
+        memberRoles: { [OUTSIDER]: 'admin' },
+        screens: {},
+      })
+    })
+  }
+  /** An entry already on file, for the update and delete arms. */
+  const seedEntry = async (id, hostId = HOST, fields = {}) => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), OUTBOX, id), {
+        hostId, paths: ['/home'], createdAt: new Date(), attempts: 0, ...fields,
+      })
+    })
+  }
+
+  it('HALF ONE — the publish that writes it really lands', async () => {
+    // Asserted FIRST, and as the BATCH the publish seam actually commits.
+    // Every refusal below would pass just as well against a rule that denied
+    // the create outright, which would break publishing on every surface in
+    // the console — a worse outcome than the forgery being refused.
+    const db = authed(EDITOR)
+    const batch = writeBatch(db)
+    batch.update(doc(db, 'hosts', HOST), { 'screens.screen-2': '/pricing' })
+    batch.set(doc(db, OUTBOX, 'entry-editor'), entry())
+    await mustAllow('the editor publishing a page and staging its announce', batch.commit())
+    await mustAllow(
+      'the same seam on an UNPUBLISH, which names the address going away',
+      setDoc(doc(authed(OWNER), OUTBOX, 'entry-owner'), {
+        ...entry(), paths: ['/home'],
+      }),
+    )
+  })
+
+  it('refuses an entry naming a host the writer cannot publish to', async () => {
+    await seedForeignHost()
+    await mustDeny(
+      'an editor of one site ordering a cache drop on another',
+      setDoc(doc(authed(EDITOR), OUTBOX, 'forged'), entry(FOREIGN_HOST)),
+    )
+    await mustDeny(
+      'an outsider naming a site they have no role on at all',
+      setDoc(doc(authed(OUTSIDER), OUTBOX, 'forged-2'), entry(HOST)),
+    )
+    await mustDeny(
+      'an anonymous caller writing an entry',
+      setDoc(doc(anon(), OUTBOX, 'forged-3'), entry(HOST)),
+    )
+  })
+
+  it('refuses the AUTHOR, who may edit content and may not publish', async () => {
+    // The same role split the routing map itself enforces (AGL-2334). An
+    // author who could stage an announce could not publish anything — the
+    // batch would fail — but could still make the platform call the tenant on
+    // their site's behalf, which is not a permission they were given.
+    await mustDeny(
+      'the author staging a publish announce',
+      setDoc(doc(authed(AUTHOR), OUTBOX, 'author-entry'), entry(HOST)),
+    )
+    const db = authed(AUTHOR)
+    const batch = writeBatch(db)
+    batch.update(doc(db, 'hosts', HOST), { 'screens.screen-2': '/pricing' })
+    batch.set(doc(db, OUTBOX, 'author-batch'), entry(HOST))
+    await mustDeny(
+      'the author publishing and staging the announce together',
+      batch.commit(),
+    )
+  })
+
+  it('refuses a suspended site, whose editors may not queue platform work', async () => {
+    await mustDeny(
+      'an editor of a suspended site staging an announce',
+      setDoc(doc(authed(EDITOR), OUTBOX, 'suspended-entry'), entry(SUSPENDED_HOST)),
+    )
+  })
+
+  it('pins the shape, so the drain cannot be steered by what it reads back', async () => {
+    await mustDeny(
+      'a client-chosen createdAt — which would fix the head of the drain queue',
+      setDoc(doc(authed(EDITOR), OUTBOX, 'backdated'), {
+        ...entry(), createdAt: new Date(Date.now() - AN_HOUR),
+      }),
+    )
+    await mustDeny(
+      'an entry that starts with its attempts already spent',
+      setDoc(doc(authed(EDITOR), OUTBOX, 'pre-spent'), { ...entry(), attempts: 99 }),
+    )
+    await mustDeny(
+      'an entry carrying a key the platform never asked for',
+      setDoc(doc(authed(EDITOR), OUTBOX, 'extra-key'), {
+        ...entry(), lastReason: 'ok',
+      }),
+    )
+    await mustDeny(
+      'an entry with no addresses to drop',
+      setDoc(doc(authed(EDITOR), OUTBOX, 'empty'), { ...entry(), paths: [] }),
+    )
+    await mustDeny(
+      'an entry with no hostId at all',
+      setDoc(doc(authed(EDITOR), OUTBOX, 'hostless'), {
+        paths: ['/home'], createdAt: serverTimestamp(), attempts: 0,
+      }),
+    )
+  })
+
+  it('cannot be edited in place by anyone, including the publisher', async () => {
+    // The drain uses the Admin SDK and bypasses these rules. Nothing else has
+    // any business rewriting an entry — a client that could raise `attempts`
+    // could retire its own stranded publish from the stalled count, which is
+    // the one number that says a page never went live.
+    await seedEntry('editable')
+    await mustDeny(
+      'the editor raising the attempt count on their own entry',
+      updateDoc(doc(authed(EDITOR), OUTBOX, 'editable'), { attempts: 99 }),
+    )
+    await mustDeny(
+      'the editor rewriting the addresses of an entry on file',
+      updateDoc(doc(authed(EDITOR), OUTBOX, 'editable'), { paths: ['/'] }),
+    )
+  })
+
+  it('lets the publishing tab release its own entry, and nobody else theirs', async () => {
+    // The delete is what keeps this collection near-empty rather than a log:
+    // the tab drops it the moment its own announce lands.
+    await seedEntry('mine')
+    await mustAllow(
+      'the editor releasing an entry for their own site',
+      deleteDoc(doc(authed(EDITOR), OUTBOX, 'mine')),
+    )
+    await seedForeignHost()
+    await seedEntry('theirs', FOREIGN_HOST)
+    await mustDeny(
+      "an editor releasing another site's entry",
+      deleteDoc(doc(authed(EDITOR), OUTBOX, 'theirs')),
+    )
+    await seedEntry('not-the-authors')
+    await mustDeny(
+      'the author releasing an entry they could never have created',
+      deleteDoc(doc(authed(AUTHOR), OUTBOX, 'not-the-authors')),
+    )
+  })
+
+  it('is not readable from any client — the drain reads it, staff diagnose it', async () => {
+    await seedEntry('unreadable')
+    await mustDeny(
+      'the editor reading the outbox back',
+      getDoc(doc(authed(EDITOR), OUTBOX, 'unreadable')),
+    )
+    await mustAllow(
+      'staff reading it while diagnosing a publish that never went live',
+      getDoc(doc(authed(STAFF, { staff: true }), OUTBOX, 'unreadable')),
     )
   })
 })

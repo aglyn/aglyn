@@ -29,6 +29,8 @@ import {
   reservedScreenRouteMessage,
   reservedScreenRouteSegment,
   screenRoutePathToUrl,
+  SCREEN_SLUG_PATH_SEPARATOR_MESSAGE,
+  screenSlugHasPathSeparator,
   wouldCreateScreenCycle,
   type ScreenRouteNode,
   type ScreenUid,
@@ -320,6 +322,21 @@ function Screens(props) {
       const timestamp = Timestamp.now()
       const { slug: slugInput, ...fields } = values
 
+      // A `/` typed INSIDE the value (AGL-2572). `normalizeScreenSlug`
+      // reaches one segment by DELETING the separator, so a screen created
+      // with `alternatives/webflow` was stored and routed as the glued
+      // `alternativeswebflow` — an address nobody typed, with nothing said.
+      // Refused rather than read as a hierarchy. This form uses the value as
+      // both the stored slug and the whole routing-map path, so a `/` could
+      // mean a nested address here; a slug is ONE segment on every surface
+      // instead, and nesting is expressed by choosing a parent.
+      if (screenSlugHasPathSeparator(slugInput)) {
+        dequeueLoading()
+        return enqueueSnackbar(SCREEN_SLUG_PATH_SEPARATOR_MESSAGE, {
+          variant: 'warning',
+          persist: false,
+        })
+      }
       // Publishing is what makes the screen reachable: the org matches
       // request paths against the host's `screens` routing map, so the slug
       // must both live on the screen doc and be registered in that map.

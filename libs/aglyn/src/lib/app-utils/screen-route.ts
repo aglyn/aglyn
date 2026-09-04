@@ -136,6 +136,51 @@ export function reservedScreenRouteMessage(segment: string): string {
   return `"/${segment}" is a reserved address on every ${PLATFORM_BRAND_NAME} site — pick another slug`
 }
 
+/**
+ * Does a raw slug value carry a path separator the one segment it describes
+ * cannot hold (AGL-2572)?
+ *
+ * {@link normalizeScreenSlug} answers with a SINGLE segment, and it gets there
+ * by deleting every character outside `[a-z0-9-_]` — an interior `/` included.
+ * Whitespace becomes a `-`, but a `/` becomes nothing at all, so
+ * `alternatives/webflow` normalizes to `alternativeswebflow` and the two words
+ * are stored glued. Nothing about that is visible: the field accepts the
+ * keystroke, the composed path reads plausibly, and the screen ends up
+ * answering an address nobody typed. Two screens on `aglyn-marketing` carry a
+ * slug of that shape.
+ *
+ * So the separator is a question a slug field asks BEFORE normalizing, and the
+ * answer is a refusal rather than a silent repair — the caller cannot know
+ * which segment the author meant, and guessing is how the glue happened.
+ *
+ * LEADING and TRAILING slashes are not separators here. `normalizeScreenSlug`
+ * strips them deliberately (`/about/` → `about`), an author typing an address
+ * writes them without meaning a hierarchy, and refusing them would reject a
+ * value the normalizer has always handled correctly. `'/'` alone is the home
+ * page and is never a separator.
+ */
+export function screenSlugHasPathSeparator(
+  input: string | null | undefined,
+): boolean {
+  const trimmed = (input ?? '').trim()
+  if (!trimmed || trimmed === SCREEN_ROOT_PATH) return false
+  return trimmed.replace(/^\/+|\/+$/g, '').includes('/')
+}
+
+/**
+ * The refusal an author reads when {@link screenSlugHasPathSeparator} answers
+ * true. One sentence, in one place, for the same reason
+ * {@link reservedScreenRouteMessage} is: the Screens page, the version view
+ * and the besigner all take a slug, and a constraint worded three ways drifts
+ * into three different constraints.
+ *
+ * It names the alternative, because a `/` in this field almost always means
+ * "nest me" and the hierarchy is what actually composes the longer path.
+ */
+export const SCREEN_SLUG_PATH_SEPARATOR_MESSAGE =
+  'A slug is one path segment — remove the "/" and nest the screen under a ' +
+  'parent screen instead'
+
 /** Minimal screen shape the hierarchy helpers need. */
 export interface ScreenRouteNode {
   slug?: string

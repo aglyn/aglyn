@@ -55,14 +55,32 @@ jest.mock('../utils/revalidate-live-pages', () => ({
 }))
 
 const mockGetDoc = jest.fn()
-const mockSetDoc = jest.fn(async () => undefined)
-const mockUpdateDoc = jest.fn(async () => undefined)
+const mockDeleteDoc = jest.fn(async () => undefined)
+/*
+ * The publish is ONE BATCH since AGL-2575 — the routing-map write, the screen
+ * document and the outbox entry commit together or not at all — so the double
+ * is a batch rather than a pair of loose writes.
+ */
+const mockBatchSet = jest.fn()
+const mockBatchUpdate = jest.fn()
+const mockCommit = jest.fn(async () => undefined)
 jest.mock('firebase/firestore', () => ({
   __esModule: true,
-  doc: (...segments: unknown[]) => ({ path: segments.slice(1).join('/') }),
+  collection: (_db: unknown, name: string) => ({ collectionPath: name }),
+  // `doc(firestore, 'hosts', id)` addresses a known document; `doc(collection)`
+  // mints an auto id, which is how the outbox entry is created.
+  doc: (...segments: any[]) =>
+    segments.length === 1 && segments[0]?.collectionPath
+      ? { path: `${segments[0].collectionPath}/auto-id` }
+      : { path: segments.slice(1).join('/') },
   getDoc: (...args: unknown[]) => (mockGetDoc as any)(...args),
-  setDoc: (...args: unknown[]) => (mockSetDoc as any)(...args),
-  updateDoc: (...args: unknown[]) => (mockUpdateDoc as any)(...args),
+  deleteDoc: (...args: unknown[]) => (mockDeleteDoc as any)(...args),
+  serverTimestamp: () => '__server_time__',
+  writeBatch: () => ({
+    set: mockBatchSet,
+    update: mockBatchUpdate,
+    commit: mockCommit,
+  }),
   deleteField: () => '__deleted__',
 }))
 
@@ -121,7 +139,7 @@ describe('publishing a route announces the address it just created', () => {
       publishScreenRoute(firestore, { hostId: 'host', screenId: 's', user }, 'about'),
     ).resolves.toBeUndefined()
     // The write itself landed — the hint is the only thing that did not.
-    expect(mockUpdateDoc).toHaveBeenCalled()
+    expect(mockCommit).toHaveBeenCalled()
   })
 })
 
@@ -153,7 +171,7 @@ describe('unpublishing announces the address that is going away', () => {
     await expect(
       unpublishScreenRoute(firestore, { hostId: 'host', screenId: 's', user }),
     ).resolves.toBeUndefined()
-    expect(mockUpdateDoc).toHaveBeenCalled()
+    expect(mockCommit).toHaveBeenCalled()
   })
 })
 
@@ -204,7 +222,7 @@ describe('a routing-map sync announces both sides of every move', () => {
     await expect(
       syncScreenRouteEntries(firestore, 'host', { s: 'new' }, { user }),
     ).resolves.toBeUndefined()
-    expect(mockUpdateDoc).toHaveBeenCalled()
+    expect(mockCommit).toHaveBeenCalled()
   })
 
   it('publishes even when the routing map cannot be read', async () => {
@@ -214,7 +232,7 @@ describe('a routing-map sync announces both sides of every move', () => {
     await expect(
       syncScreenRouteEntries(firestore, 'host', { s: 'new' }, { user }),
     ).resolves.toBeUndefined()
-    expect(mockUpdateDoc).toHaveBeenCalled()
+    expect(mockCommit).toHaveBeenCalled()
     expect(announced()?.paths).toEqual(['/new'])
   })
 })

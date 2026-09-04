@@ -29,6 +29,8 @@ import {
   reservedScreenRouteMessage,
   reservedScreenRouteSegment,
   screenRoutePathToUrl,
+  SCREEN_SLUG_PATH_SEPARATOR_MESSAGE,
+  screenSlugHasPathSeparator,
   type ScreenRouteNode,
   type ScreenUid,
 } from '@aglyn/aglyn'
@@ -534,6 +536,17 @@ function ScreenDetails() {
   const slugValue = slugInput ?? screen?.slug ?? ''
   const handlePublishRoute = useCallback(async () => {
     if (loading) return
+    // A `/` typed INSIDE the value (AGL-2572). This field holds the screen's
+    // OWN segment — the composed path below adds the ancestors — and
+    // `normalizeScreenSlug` reaches one segment by deleting the separator, so
+    // `alternatives/webflow` would publish as `alternativeswebflow`. Asked
+    // before normalizing, because after it the `/` is gone.
+    if (screenSlugHasPathSeparator(slugValue)) {
+      return enqueueSnackbar(SCREEN_SLUG_PATH_SEPARATOR_MESSAGE, {
+        variant: 'warning',
+        persist: false,
+      })
+    }
     const slug = normalizeScreenSlug(slugValue)
     if (!slug && slugValue.trim() !== '/') {
       return enqueueSnackbar('Enter a slug ("/" for the home page)', {
