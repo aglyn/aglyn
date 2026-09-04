@@ -60,9 +60,11 @@ describe('the Table element (AGL-2543)', () => {
     expect(document.querySelectorAll('tbody tr')).toHaveLength(3)
   })
 
-  it('scrolls the TABLE, so a wide matrix never scrolls the page', () => {
-    // The failure the Markdown route had no answer for: a six-column matrix
-    // on a phone pushing the whole document sideways.
+  it('puts the grid in a scroll box of its own', () => {
+    // Half of what a wide matrix on a phone needs; the other half is the
+    // table's own sizing, and the pair is specced in `table-scroll.spec.tsx`
+    // against the Markdown route as well. This element shipped with only
+    // this half, which is why it crushed its columns instead (AGL-2568).
     const { container } = render(<DataTable rows={MATRIX} />)
     const wrapper = container.firstElementChild as HTMLElement
     expect(getComputedStyle(wrapper).overflowX).toBe('auto')

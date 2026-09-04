@@ -674,7 +674,7 @@ describe('the table of contents scrolls rather than clipping (AGL-2486)', () => 
     )
     const keyframes = squash(
       allCss().find((rule) =>
-        rule.startsWith('@keyframes aglyn-toc-overflow-fade'),
+        rule.startsWith('@keyframes aglyn-overflow-fade-block'),
       ) ?? '',
     )
     expect(keyframes).toContain(

@@ -19,6 +19,7 @@ import {
   type DataTableAlignment,
   parseDataTableRows,
   readDataTableAlignments,
+  readPastedDataTable,
   serializeDataTable,
   withCellSet,
   withColumnAdded,
@@ -41,6 +42,7 @@ import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import ToggleButton from '@mui/material/ToggleButton'
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
+import type { ClipboardEvent } from 'react'
 import { useCallback, useMemo } from 'react'
 import { useFieldApi } from '../vendor/data-driven-forms'
 import FormFieldGrid, { type FormFieldGridProps } from './form-field-grid'
@@ -115,6 +117,28 @@ export const DataTableField = (props: DataTableFieldProps) => {
     [input, alignments],
   )
 
+  /**
+   * Importing a markdown table by pasting it into a cell (AGL-2568).
+   *
+   * It replaces the whole grid rather than splicing at the cell, because what
+   * an author pastes is a table, not a range: the case this exists for is
+   * moving a comparison table off the Markdown workaround, where the grid it
+   * lands on is the two-row starter. Anything the paste is NOT a table —
+   * which includes every ordinary cell value — falls through to the browser
+   * and types itself into the cell, so this cannot cost anyone a paste.
+   */
+  const importPaste = useCallback(
+    (event: ClipboardEvent<HTMLElement>) => {
+      const pasted = readPastedDataTable(
+        event.clipboardData?.getData('text/plain'),
+      )
+      if (!pasted) return
+      event.preventDefault()
+      commit(pasted.rows, pasted.alignments)
+    },
+    [commit],
+  )
+
   const locked = isReadOnly || isDisabled
 
   // An empty value has no cell to click, so the grid cannot be typed into
@@ -143,8 +167,10 @@ export const DataTableField = (props: DataTableFieldProps) => {
           >
             {'Start a table'}
           </Button>
+          {/* "Then", not "or": the import runs on a cell's paste handler, and
+              an empty field has no cell to paste into. */}
           <Box sx={{ color: 'text.secondary', fontSize: 12 }}>
-            {'Or paste a markdown table into any cell.'}
+            {'Then paste a markdown table into any cell to import one.'}
           </Box>
         </Stack>
       </FormFieldGrid>
@@ -215,6 +241,7 @@ export const DataTableField = (props: DataTableFieldProps) => {
                 fullWidth
                 disabled={locked}
                 value={cell}
+                onPaste={importPaste}
                 slotProps={{
                   htmlInput: {
                     'aria-label': `Row ${rowIndex + 1} column ${
