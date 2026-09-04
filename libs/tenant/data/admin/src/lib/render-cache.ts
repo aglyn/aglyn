@@ -113,6 +113,42 @@ export const tenantDataTag = (hostId: string): string => `tenant-data:${hostId}`
 export const PUBLISHED_SITE_DATA_TTL_SECONDS = 3600
 
 /**
+ * The backstop for the one read a screen publish changes under an UNCHANGED
+ * cache key — the version pointer (AGL-2573).
+ *
+ * The hour above is argued on the premise that "everything that goes through
+ * the product announces itself". That premise held for eleven days in August
+ * and then did not: the tenant refused the announce and every publish on the
+ * platform fell back to this TTL. The announce is still the mechanism — no TTL
+ * can make a publish instant, because the page above these caches is ISR-held
+ * and does not re-run a loader to notice a fresher document — but a backstop
+ * only bounds a failure, and an hour is not a bound anyone would choose for
+ * "your published page is not the page you published".
+ *
+ * Applied to the POINTER alone, deliberately, because the pointer alone is
+ * what makes the hour expensive. `get-screen-version` is keyed by `versionId`,
+ * so the body of a newly published version misses on its own; the only thing
+ * standing between a visitor and it is the screen document that names which
+ * version is live. That document is one small read, and shortening it leaves
+ * the expensive reads — the compose bundle, the node trees — at the hour the
+ * cost review set.
+ *
+ * The number is the tenant catch-all's own ISR window
+ * (`apps/tenant/app/[host]/[[...slug]]/page.tsx`, `revalidate = 600`) and must
+ * move with it. That is the principle rather than a tuned figure: the pointer
+ * should never be staler than the HTML that reads it. Below the window it buys
+ * nothing, because a cached page does not re-render to observe it; above it,
+ * the page regenerates and faithfully rebuilds itself from a stale pointer,
+ * which is the failure being closed.
+ *
+ * The read cost this adds is one document per page REGENERATION rather than
+ * one per hour — regenerations are already bounded by the ISR window, so the
+ * ceiling is the render rate and not the request rate. That is the price of
+ * the bound, and it is the cheapest read on the path.
+ */
+export const PUBLISH_POINTER_TTL_SECONDS = 600
+
+/**
  * The alias→hostId resolution is tagged separately because it is the one
  * cache keyed BEFORE the hostId is known. It only changes on subdomain
  * rename or custom-domain (dis)connect, never on publish.

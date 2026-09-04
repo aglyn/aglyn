@@ -295,13 +295,17 @@ describe('custom-domain cache key (AGL-1152)', () => {
   it('a refused custom-domain drop does not fail the publish', async () => {
     // The subdomain drop already succeeded and the publish itself is done;
     // turning this into an error would invite an operator to republish.
+    // The custom-domain refusal is PERSISTENT rather than one-shot, because a
+    // 503 is now retried (AGL-2573): a single refusal followed by the default
+    // success would exercise the retry succeeding, not the refusal this case
+    // is about. Refusing every attempt is what still reaches the report below.
     fetchMock
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
         json: async () => ({ revalidated: ['/x'], truncated: 0 }),
       })
-      .mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({}) })
+      .mockResolvedValue({ ok: false, status: 503, json: async () => ({}) })
     const err = jest.spyOn(console, 'error').mockImplementation(() => undefined)
 
     const result = await postTenantRevalidate({

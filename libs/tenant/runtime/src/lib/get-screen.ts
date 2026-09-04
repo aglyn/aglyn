@@ -18,7 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn/server'
 import { firebaseAdmin, screenConverter } from '@aglyn/tenant-data-admin'
 import {
-  PUBLISHED_SITE_DATA_TTL_SECONDS,
+  PUBLISH_POINTER_TTL_SECONDS,
   tenantDataTag,
   withRenderCache,
 } from '@aglyn/tenant-data-admin/render-cache'
@@ -27,9 +27,16 @@ import {
  * Backstop TTL only (AGL-1302): a screen publish flips `versionId` on this
  * doc, and the publish path already busts `tenant-data:{hostId}` through the
  * tenant `/api/revalidate` route, so publishes stay as instant as AGL-1150
- * made them. 60s matches the page's own ISR window for everything else.
+ * made them.
+ *
+ * This is the ONE read whose data a screen publish changes without changing
+ * its cache key — the version body next door is keyed by `versionId` and
+ * misses on its own — so when the announce does not arrive, this document is
+ * the entire reason a published page keeps serving the old one. It is held to
+ * the page's own ISR window rather than the hour every other published read
+ * gets (AGL-2573); `PUBLISH_POINTER_TTL_SECONDS` carries that argument.
  */
-const SCREEN_DOC_TTL_SECONDS = PUBLISHED_SITE_DATA_TTL_SECONDS
+const SCREEN_DOC_TTL_SECONDS = PUBLISH_POINTER_TTL_SECONDS
 
 async function readScreenDoc(
   hostId: string,
