@@ -31,9 +31,15 @@
  * what version an install actually IS: an SBOM, a release-note generator, a
  * self-host image tag. Every one of them gets the wrong answer, silently.
  *
- * Pure so it can be tested without a filesystem. `check-manifest-versions.mjs`
- * supplies the real files.
+ * `evaluateManifestVersions` is pure so it can be tested without a
+ * filesystem. `readManifestPairs` below is the one seam that touches disk,
+ * shared by `check-manifest-versions.mjs` and `release-prepare.mjs` so both
+ * judge the same set of manifests.
  */
+
+import { execFileSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 
 /**
  * @typedef {object} ManifestPair
@@ -80,6 +86,30 @@ export function evaluateManifestVersions(pairs) {
   return { ok: drifts.length === 0, checked: (pairs ?? []).length, drifts }
 }
 
+/**
+ * Splits manifest drift into "the root lockfile a release just rewrote" and
+ * "everything else" (AGL-2565).
+ *
+ * `release:prepare` needs the distinction because the two answers lead to
+ * different actions. Root drift means the regeneration did not land and the
+ * commit must not claim a lockfile. Drift anywhere else was already there
+ * before the bump and is not that step's to repair — reporting it as a failed
+ * regeneration would send someone chasing the wrong file — but it still reds
+ * the promotion gate, so it is worth saying while someone is looking.
+ *
+ * @param {ManifestPair[]} pairs
+ * @returns {{ rootOk: boolean, rootDrifts: object[], otherDrifts: object[] }}
+ */
+export function lockfileVersionVerdict(pairs) {
+  const { drifts } = evaluateManifestVersions(pairs)
+  const rootDrifts = drifts.filter((drift) => drift.dir === '')
+  return {
+    rootOk: rootDrifts.length === 0,
+    rootDrifts,
+    otherDrifts: drifts.filter((drift) => drift.dir !== ''),
+  }
+}
+
 /** @param {ReturnType<typeof evaluateManifestVersions>} result */
 export function formatManifestVersionFailure(result) {
   const lines = [
@@ -96,9 +126,51 @@ export function formatManifestVersionFailure(result) {
   }
   lines.push(
     '',
-    '  Fix: run `npm install --package-lock-only` in that directory and commit',
-    '  the lockfile alongside package.json. `npm run release:prepare -- --write`',
-    '  now does this for the root automatically.',
+    '  Fix: run `npm install --package-lock-only --ignore-scripts` in that',
+    '  directory and commit the lockfile alongside package.json.',
+    '  `npm run release:prepare -- --write` now does this for the root',
+    '  automatically.',
+    '',
+    '  Keep --ignore-scripts. Without node_modules — a temp worktree, a fresh',
+    '  clone — the postinstall hook is missing, npm exits 127, and the install',
+    '  abandons the lockfile it was asked to repair (AGL-2565).',
   )
   return lines.join('\n')
+}
+
+/**
+ * Every tracked `package-lock.json` in the repo, paired with the
+ * `package.json` beside it — the filesystem seam that feeds the pure
+ * evaluator above.
+ *
+ * Ask git, not the filesystem: an UNTRACKED lockfile is somebody's local
+ * experiment and a nested node_modules is full of them — the same reasoning
+ * `check-standalone-installs.mjs` records. Derived rather than hard-coded so
+ * a fourth manifest is covered the day it lands.
+ *
+ * @param {string} repoRoot
+ * @returns {ManifestPair[]}
+ */
+export function readManifestPairs(repoRoot) {
+  const tracked = execFileSync(
+    'git',
+    ['ls-files', 'package-lock.json', '*/package-lock.json'],
+    { cwd: repoRoot, encoding: 'utf8' },
+  )
+  return tracked
+    .split('\n')
+    .filter(Boolean)
+    .map((file) =>
+      file.slice(0, -'package-lock.json'.length).replace(/\/$/, ''),
+    )
+    .filter((dir) => !dir.split('/').includes('node_modules'))
+    .map((dir) => ({
+      dir,
+      packageJson: JSON.parse(
+        readFileSync(join(repoRoot, dir, 'package.json'), 'utf8'),
+      ),
+      lockJson: JSON.parse(
+        readFileSync(join(repoRoot, dir, 'package-lock.json'), 'utf8'),
+      ),
+    }))
 }
