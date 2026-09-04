@@ -83,12 +83,31 @@ npm run release:prepare -- --write           # writes package.json + CHANGELOG.m
 Report-only is the default. Run it bare first to see what the batch contains
 before committing to a number.
 
+`--write` also regenerates `package-lock.json`, which carries the version in
+two fields of its own (AGL-2108). That step re-resolves the whole dependency
+graph and takes **two to five minutes** with nothing printed while it runs; it
+is not stuck. It passes `--ignore-scripts`, because a release is often cut from
+a temp worktree with no `node_modules`, where the `postinstall` hook is missing
+and npm would exit 127 and abandon the lockfile (AGL-2565).
+
+**The exit code of that install is not the verdict — the lockfile is.** The
+script re-reads `package-lock.json` afterwards and compares it against
+`package.json`, so a slow resolve that was signalled but had already written a
+correct lockfile reports success, and a failed one reports failure. Trust what
+it says over what the install printed. If it does report the lockfile stale,
+repair it by hand and keep the flag:
+
+```bash
+npm install --package-lock-only --ignore-scripts
+```
+
 Then commit with explicit paths — never `git add -A`, which sweeps up other
-agents' work:
+agents' work. **Commit the lockfile alongside `package.json`**: a bump whose
+lockfile was not regenerated reds the promotion gate.
 
 ```bash
 git add CHANGELOG.md    # first release only; --only cannot stage a new file
-git commit --only package.json CHANGELOG.md \
+git commit --only package.json package-lock.json CHANGELOG.md \
   -m 'chore(release): v1.0.0-beta.1 (AGL-2089)'
 git push origin main
 ```

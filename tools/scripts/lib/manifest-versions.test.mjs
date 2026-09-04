@@ -28,12 +28,18 @@
  */
 
 import { strict as assert } from 'node:assert'
+import { dirname, join } from 'node:path'
 import { describe, it } from 'node:test'
+import { fileURLToPath } from 'node:url'
 
 import {
   evaluateManifestVersions,
   formatManifestVersionFailure,
+  lockfileVersionVerdict,
+  readManifestPairs,
 } from './manifest-versions.mjs'
+
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
 
 const pair = (over = {}) => ({
   dir: '',
@@ -110,5 +116,65 @@ describe('evaluateManifestVersions', () => {
     assert.match(message, /1\.0\.0-beta\.1/)
     assert.match(message, /0\.0\.0/)
     assert.match(message, /--package-lock-only/)
+  })
+})
+
+/**
+ * The verdict `release:prepare` acts on after regenerating the lockfile
+ * (AGL-2565). It exists because the exit code of the regenerating install
+ * lies in both directions: a 127 from a missing lifecycle hook leaves the
+ * lockfile stale, while a resolve that outran a timeout and was signalled had
+ * already written a correct one.
+ */
+describe('lockfileVersionVerdict', () => {
+  it('a clean set of manifests passes with nothing to report', () => {
+    const verdict = lockfileVersionVerdict([pair(), pair({ dir: 'apps/docs' })])
+    assert.equal(verdict.rootOk, true)
+    assert.deepEqual(verdict.rootDrifts, [])
+    assert.deepEqual(verdict.otherDrifts, [])
+  })
+
+  it('a stale ROOT lockfile fails, so the commit cannot claim one', () => {
+    const verdict = lockfileVersionVerdict([
+      pair({ lockJson: { version: '1.0.0-beta.0', packages: {} } }),
+    ])
+    assert.equal(verdict.rootOk, false)
+    assert.equal(verdict.rootDrifts.length, 1)
+    assert.deepEqual(verdict.otherDrifts, [])
+  })
+
+  it('drift OUTSIDE the root leaves the root verdict green', () => {
+    // A release bump rewrites the root lockfile and nothing else, so drift in
+    // apps/docs must not read as a failed regeneration — that sends someone
+    // to repair a file the step never touched.
+    const verdict = lockfileVersionVerdict([
+      pair(),
+      pair({ dir: 'apps/docs', lockJson: { version: '0.0.0', packages: {} } }),
+    ])
+    assert.equal(verdict.rootOk, true)
+    assert.equal(verdict.otherDrifts.length, 1)
+    assert.equal(verdict.otherDrifts[0].dir, 'apps/docs')
+  })
+})
+
+describe('readManifestPairs', () => {
+  it('finds every tracked lockfile in this repo, root included', () => {
+    const pairs = readManifestPairs(repoRoot)
+    const dirs = pairs.map((entry) => entry.dir)
+    assert.ok(dirs.includes(''), `expected a root pair, got ${dirs.join()}`)
+    assert.ok(pairs.length >= 3, `expected 3+ manifests, got ${pairs.length}`)
+    for (const entry of pairs) {
+      assert.ok(entry.packageJson, `${entry.dir} has no package.json`)
+      assert.ok(entry.lockJson, `${entry.dir} has no lockfile`)
+    }
+  })
+
+  it('never reports a lockfile from inside node_modules', () => {
+    // An untracked lockfile is somebody's local experiment and a nested
+    // node_modules is full of them, so the set is derived from what is
+    // tracked rather than from a filesystem walk.
+    for (const entry of readManifestPairs(repoRoot)) {
+      assert.ok(!entry.dir.split('/').includes('node_modules'), entry.dir)
+    }
   })
 })

@@ -46,6 +46,10 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import {
+  lockfileVersionVerdict,
+  readManifestPairs,
+} from './lib/manifest-versions.mjs'
+import {
   assertForward,
   CHANGELOG_HEADER,
   formatVersion,
@@ -64,6 +68,27 @@ const changelogPath = join(repoRoot, 'CHANGELOG.md')
 
 const git = (...args) =>
   execFileSync('git', args, { cwd: repoRoot, encoding: 'utf8' }).trim()
+
+// Deliberately generous (AGL-2565). A `--package-lock-only` re-resolve of this
+// graph measures two to five minutes on a warm cache, and longer when the box
+// is busy running gates — the five-minute wait that read as a hang was a
+// resolve doing its job. A tight limit here would turn a slow-but-correct
+// regeneration into a failed release step, so this only bounds a genuinely
+// wedged process, and the lockfile check below decides the outcome either way.
+const LOCKFILE_INSTALL_TIMEOUT_MS = 15 * 60 * 1000
+
+/** Says how the lockfile install ended, in words that fit mid-sentence. */
+function describeInstallFailure(error) {
+  if (error?.signal) {
+    const minutes = Math.round(LOCKFILE_INSTALL_TIMEOUT_MS / 60000)
+    return `ran past ${minutes} minutes and was stopped with ${error.signal}`
+  }
+  const status = error?.status ?? 'a non-zero status'
+  const first = String(error?.stderr ?? error?.message ?? '')
+    .split('\n')
+    .find((line) => line.trim().length > 0)
+  return `exited ${status}${first ? ` (${first.trim()})` : ''}`
+}
 
 function parseArgs(argv) {
   const options = {
@@ -318,23 +343,89 @@ function main() {
   // on what version an install is — an SBOM, a self-host image tag — got the
   // wrong answer silently.
   //
-  // `--package-lock-only` touches no node_modules and runs offline: it
-  // rewrites the two `version` fields and nothing else on a version-only bump.
-  let lockfileWritten = true
+  // `--package-lock-only` touches no node_modules: it rewrites the two
+  // `version` fields and nothing else on a version-only bump.
+  //
+  // `--ignore-scripts` IS LOAD-BEARING (AGL-2565). npm runs the root
+  // project's lifecycle hooks even for `--package-lock-only`, and a release
+  // is routinely cut from a temp worktree — the documented answer when `main`
+  // has diverged — which has no node_modules. The `postinstall` hook's binary
+  // is then missing, `sh` exits 127, and npm takes the whole install down
+  // with it, leaving the lockfile stale. Regenerating a dependency graph has
+  // no use for lifecycle scripts, so it does not ask for them.
+  console.log(
+    '\n  Regenerating package-lock.json — npm re-resolves the whole\n' +
+      '  dependency graph, which on this repo measures two to five minutes.\n' +
+      '  Nothing prints until it finishes.\n',
+  )
+
+  let installError = null
   try {
-    execFileSync('npm', ['install', '--package-lock-only', '--silent'], {
-      cwd: repoRoot,
-      stdio: 'pipe',
-    })
+    execFileSync(
+      'npm',
+      ['install', '--package-lock-only', '--ignore-scripts', '--silent'],
+      { cwd: repoRoot, stdio: 'pipe', timeout: LOCKFILE_INSTALL_TIMEOUT_MS },
+    )
   } catch (error) {
+    installError = error
+  }
+
+  // THE EXIT CODE IS NOT THE VERDICT — the lockfile is (AGL-2565). The two
+  // ways this step misbehaves point in opposite directions: a 127 really
+  // does leave the lockfile stale, while a resolve that outran its timeout
+  // and was signalled had already written a correct one. Neither is
+  // distinguishable from the exit status, and this sits on the release path
+  // where the cost of guessing wrong is a hand-edited lockfile or a stalled
+  // promotion. So ask the question the gate will ask: does package-lock.json
+  // agree with package.json about the version?
+  let verdict
+  let unreadable = null
+  try {
+    verdict = lockfileVersionVerdict(readManifestPairs(repoRoot))
+  } catch (error) {
+    // An unparseable lockfile — a signal landing mid-write would do it — is
+    // not a passing check.
+    unreadable = String(error?.message ?? error).split('\n')[0]
+    verdict = { rootOk: false, rootDrifts: [], otherDrifts: [] }
+  }
+  const { otherDrifts } = verdict
+  const lockfileWritten = verdict.rootOk
+
+  if (!lockfileWritten) {
     // Not fatal — the version bump itself is correct and committable. Say so
     // loudly instead, because a silent skip here is the original bug.
-    lockfileWritten = false
     out.push('')
-    out.push('  !! npm install --package-lock-only FAILED — package-lock.json')
-    out.push('     still carries the OLD version. Run it by hand before')
-    out.push('     committing, or `npm run check:manifest-versions` will fail.')
-    out.push(`     ${String(error?.message ?? error).split('\n')[0]}`)
+    out.push('  !! package-lock.json still carries the OLD version. That is')
+    out.push('     read from the file, not inferred from an exit code.')
+    out.push('     Run this by hand before committing:')
+    out.push('')
+    out.push('       npm install --package-lock-only --ignore-scripts')
+    out.push('')
+    out.push('     Keep --ignore-scripts: without node_modules the postinstall')
+    out.push('     hook is missing and npm exits 127 (AGL-2565).')
+    if (installError) out.push(`     ${describeInstallFailure(installError)}`)
+    if (unreadable) out.push(`     lockfile unreadable: ${unreadable}`)
+  } else if (installError) {
+    out.push('')
+    out.push(
+      `  NOTE: the lockfile install ${describeInstallFailure(installError)},`,
+    )
+    out.push(
+      '  but package-lock.json is CORRECT — checked against package.json',
+    )
+    out.push('  rather than trusted from the exit code. Nothing to redo.')
+  }
+  if (otherDrifts.length > 0) {
+    out.push('')
+    out.push(
+      '  !! a lockfile OUTSIDE the root disagrees with its package.json —',
+    )
+    out.push(
+      '     pre-existing, not caused by this bump, and it reds the gate:',
+    )
+    for (const drift of otherDrifts) {
+      out.push(`       ${drift.dir}/package-lock.json  ${drift.field}`)
+    }
   }
 
   const existing = exists(changelogPath)
