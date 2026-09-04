@@ -324,8 +324,13 @@ if (verdict.drifted) {
       '',
       'Then confirm the scheduler agrees, which is the half a stale deploy does',
       'not change:',
-      '  gcloud scheduler jobs list --location=us-central1 --project=aglyn-main',
-      '  curl -s https://app.aglyn.com/api/health/crons',
+      // Both lines name the operator's OWN project and console through the
+      // variables the scripts already read, never a literal. A self-hosted
+      // deployment reading a hardcoded host would be told to curl a service it
+      // has no account on, and the answer it got would be about somebody
+      // else's crons.
+      '  gcloud scheduler jobs list --location=us-central1 --project="$GCLOUD_PROJECT"',
+      '  curl -s "$AGLYN_CONSOLE_URL/api/health/crons"',
     ].join('\n'),
   )
   process.exit(1)
