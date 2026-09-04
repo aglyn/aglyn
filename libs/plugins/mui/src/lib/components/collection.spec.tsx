@@ -341,6 +341,162 @@ describe('Collection entries search (AGL-1516)', () => {
     ).toBeTruthy()
   })
 
+  // ── A HIT discloses the same scope a miss does (AGL-2569) ──
+  //
+  // The empty state was the only place the reader was ever told the search
+  // covered one window. A query that matches something is the common case,
+  // and it used to render a partial list with nothing to say so.
+
+  it('discloses the page scope on a HIT, not only on a miss', () => {
+    render(
+      <CollectionEntries
+        search
+        searchIndex={index}
+        searchTotal={9}
+        perPage={2}
+        page={1}
+      >
+        {cards}
+      </CollectionEntries>,
+    )
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'platform' },
+    })
+    // A real hit — the list is genuinely filtered, not empty.
+    expect(screen.getByText('Second card')).toBeTruthy()
+    expect(screen.queryByText('First card')).toBeNull()
+    expect(
+      screen.getByText(
+        'Showing matches on this page — other pages are not searched.',
+      ),
+    ).toBeTruthy()
+  })
+
+  it('scopes a hit to the ENTRIES SHOWN when there are no other pages', () => {
+    // Truncated by `entriesLimit` or the 100-entry cap: the missing posts are
+    // not on a page the reader can turn to, so the line must not send them
+    // looking through pages that do not exist.
+    render(
+      <CollectionEntries search searchIndex={index} searchTotal={40}>
+        {cards}
+      </CollectionEntries>,
+    )
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'platform' },
+    })
+    expect(screen.getByText('Second card')).toBeTruthy()
+    expect(
+      screen.getByText(
+        'Showing matches in the 2 entries here — the rest of the ' +
+          'collection is not searched.',
+      ),
+    ).toBeTruthy()
+    expect(screen.queryByText(/other pages are not searched/)).toBeNull()
+  })
+
+  it('discloses a hit drawn from a CAPPED read', () => {
+    // The invisible truncation: `index.length === searchTotal` holds because
+    // `searchTotal` counts what the bounded read saw, not what the
+    // collection holds. Without the flag this block looks complete.
+    render(
+      <CollectionEntries search searchIndex={index} searchTotal={2} searchCapped>
+        {cards}
+      </CollectionEntries>,
+    )
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'platform' },
+    })
+    expect(screen.getByText(/^Showing matches/)).toBeTruthy()
+  })
+
+  it('says NOTHING on a hit when the block holds the whole collection', () => {
+    // A complete answer needs no disclaimer, and every small site — one page
+    // holding every post — would otherwise carry one on every query.
+    render(
+      <CollectionEntries
+        search
+        searchIndex={index}
+        searchTotal={2}
+        perPage={20}
+        page={1}
+      >
+        {cards}
+      </CollectionEntries>,
+    )
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'platform' },
+    })
+    expect(screen.getByText('Second card')).toBeTruthy()
+    expect(screen.queryByText(/^Showing matches/)).toBeNull()
+    expect(screen.queryByText(/is not searched/)).toBeNull()
+    expect(screen.queryByText(/are not searched/)).toBeNull()
+  })
+
+  it('says nothing on a hit over an untruncated, unpaginated block', () => {
+    render(
+      <CollectionEntries search searchIndex={index}>
+        {cards}
+      </CollectionEntries>,
+    )
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'platform' },
+    })
+    expect(screen.getByText('Second card')).toBeTruthy()
+    expect(screen.queryByText(/^Showing matches/)).toBeNull()
+  })
+
+  it('says nothing at all until there is a query', () => {
+    // The line is about a search, not about the block. An idle listing is
+    // not making a claim that needs qualifying.
+    render(
+      <CollectionEntries
+        search
+        searchIndex={index}
+        searchTotal={9}
+        perPage={2}
+        page={1}
+      >
+        {cards}
+      </CollectionEntries>,
+    )
+    expect(screen.getByText('First card')).toBeTruthy()
+    expect(screen.getByText('Second card')).toBeTruthy()
+    expect(screen.queryByText(/^Showing matches/)).toBeNull()
+    expect(screen.queryByText(/not searched/)).toBeNull()
+    // And it goes away again when the query is cleared.
+    const input = screen.getByRole('textbox')
+    fireEvent.change(input, { target: { value: 'platform' } })
+    expect(screen.getByText(/^Showing matches/)).toBeTruthy()
+    fireEvent.change(input, { target: { value: '' } })
+    expect(screen.queryByText(/^Showing matches/)).toBeNull()
+  })
+
+  it('renders the MISS wording alone on zero matches, never doubled', () => {
+    // Both lines are drawn from one truncation answer and share one slot, so
+    // a miss keeps exactly the wording AGL-1516 shipped.
+    render(
+      <CollectionEntries
+        search
+        searchIndex={index}
+        searchTotal={9}
+        perPage={2}
+        page={1}
+      >
+        {cards}
+      </CollectionEntries>,
+    )
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'zzzz' },
+    })
+    expect(
+      screen.getByText(
+        'No matches for “zzzz” on this page — other pages are not searched.',
+      ),
+    ).toBeTruthy()
+    expect(screen.queryByText(/^Showing matches/)).toBeNull()
+    expect(screen.getAllByText(/other pages are not searched/)).toHaveLength(1)
+  })
+
   it('keeps the search props off the DOM', () => {
     const { container } = render(
       <CollectionEntries
