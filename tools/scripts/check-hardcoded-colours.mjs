@@ -47,12 +47,25 @@ import {
 import { remedy } from './lib/ratchet-baseline.mjs'
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
-const BASELINE_PATH = join(
-  REPO_ROOT,
-  'tools',
-  'scripts',
-  'hardcoded-colours-baseline.json',
-)
+/**
+ * The baseline, overridable by `HARDCODED_COLOURS_BASELINE` (AGL-2560).
+ *
+ * The override exists so the SUITE can point this CLI at a deliberately
+ * tightened copy without touching the real file. It used to prove the forced
+ * red by overwriting `hardcoded-colours-baseline.json` in place for the
+ * duration of a run and restoring it after — which works alone and races
+ * horribly under `run-guards`, where `check:hardcoded-colours` runs
+ * concurrently and can read the tightened copy. The gate then reds on a file
+ * nobody touched, and the report names a real path, so it reads as a genuine
+ * finding rather than a flake.
+ *
+ * Nothing in CI sets this. A guard whose baseline can be repointed by an env
+ * var is only safe because the value is a PATH, not a verdict: the file it
+ * names is still compared against the real tree.
+ */
+const BASELINE_PATH =
+  process.env['HARDCODED_COLOURS_BASELINE']?.trim() ||
+  join(REPO_ROOT, 'tools', 'scripts', 'hardcoded-colours-baseline.json')
 
 /** Ships, or generates something that ships. Mirrors the census's sweep. */
 const SWEEP_ROOTS = ['apps', 'libs', 'tools', 'cloud']
