@@ -27,10 +27,12 @@ import {
  * The version doc is the LARGEST read of a render (the whole node tree), and
  * it is keyed by `versionId` — a publish points the screen doc at a NEW
  * version, so a re-publish lands under a new cache key on its own. The TTL
- * is still kept short rather than treating versions as immutable, because
- * the editor can save into an already-published version doc; 60s bounds
- * that exactly like the page's ISR window did, and the publish-path tag
- * bust covers the announced case (AGL-1302).
+ * is finite rather than treating versions as immutable, because the editor
+ * can save into an already-published version doc. It is
+ * `PUBLISHED_SITE_DATA_TTL_SECONDS`, an HOUR — long enough that a save into
+ * a live version is NOT what makes it visible; the publish-path
+ * `revalidateTag(tenantDataTag(hostId))` bust is (AGL-1302). A write that
+ * reaches Firestore without going through publish waits out the full TTL.
  */
 const SCREEN_VERSION_TTL_SECONDS = PUBLISHED_SITE_DATA_TTL_SECONDS
 
