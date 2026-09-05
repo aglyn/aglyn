@@ -31,11 +31,11 @@ import { useCallback } from 'react'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import { useOrgMemberOptions } from '../hooks/use-org-member-options'
 import { type CrmDetailPageProps, crmRoutes } from '../model/crm-routes'
-import CompanyActivityCard from './company-activity-card'
 import CompanyContactsCard from './company-contacts-card'
 import CompanyDealsCard from './company-deals-card'
+import { RecordActivityCard } from './record-activity-card'
+import { RecordTasksCard } from './record-tasks-card'
 import CompanyPropertiesCard from './company-properties-card'
-import CompanyTasksCard from './company-tasks-card'
 
 /**
  * `/crm/companies/{companyId}` — one organization (AGL-2597).
@@ -136,9 +136,15 @@ export function CompanyDetailPage(props: CrmDetailPageProps) {
           crmScope={crmScope}
           routes={routes}
         />
-        <CompanyDealsCard companyId={id} />
-        <CompanyTasksCard companyId={id} />
-        <CompanyActivityCard companyId={id} />
+        <CompanyDealsCard
+          hostId={hostId}
+          org={org}
+          basePath={basePath}
+          companyId={id}
+          companyName={String(company.name ?? '')}
+        />
+        <RecordTasksCard hostId={hostId} org={org} basePath={basePath} companyId={id} />
+        <RecordActivityCard hostId={hostId} org={org} companyId={id} />
       </Stack>
     </>
   )

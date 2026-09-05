@@ -61,6 +61,15 @@ const contactSnapshot = (index: number) => ({
   }),
 })
 
+/*
+ * The page composes the deals, tasks and activity cards beside the one under
+ * test. Each opens its own listeners against the scope; none is what this
+ * suite asks about, so they render nothing here and the deletion path is the
+ * only thing the Firestore double has to answer.
+ */
+jest.mock('./company-deals-card', () => ({ __esModule: true, default: () => null, CompanyDealsCard: () => null }))
+jest.mock('./record-tasks-card', () => ({ __esModule: true, default: () => null, RecordTasksCard: () => null }))
+jest.mock('./record-activity-card', () => ({ __esModule: true, default: () => null, RecordActivityCard: () => null }))
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
   doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),

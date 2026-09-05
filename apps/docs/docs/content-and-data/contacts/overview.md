@@ -72,7 +72,7 @@ older `…/contacts` address still open the hub.
 | **Contacts** | `/crm/contacts` | The people list above; a person's own page is `/crm/contacts/{id}`. |
 | **Leads** | `/crm/leads` | People a site has captured but not yet qualified — a status, an owner, and a conversion into a contact, a company and a deal. |
 | **Companies** | `/crm/companies` | The organizations your contacts belong to; a company's page is `/crm/companies/{id}`. See [Companies](./companies.md). |
-| **Deals** | `/crm/deals` | Your pipeline — open deals by stage, with amount, owner and expected close; a deal's page is `/crm/deals/{id}`. |
+| **Deals** | `/crm/deals` | Your [pipeline](./deals.md) — open deals by stage, with amount, owner and expected close; a deal's page is `/crm/deals/{id}`. |
 | **[Tasks](./tasks.md)** | `/crm/tasks` | Calls, emails, meetings and to-dos by due date, linked to the contact, company or deal they are for. |
 | **Reports** | `/crm/reports` | [New contacts over time, sources and the lifecycle funnel, the open pipeline and its forecast, won and lost, and the task load](./reports.md). |
 | **Fields** | `/crm/fields` | The custom fields on a contact — text, number, date, choice, checkbox or link. |

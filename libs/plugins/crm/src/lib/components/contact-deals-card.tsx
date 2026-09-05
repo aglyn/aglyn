@@ -19,31 +19,31 @@
 import type { CrmOrgDoc } from '../hooks/use-deal-scope'
 import { LinkedDealsCard } from './linked-deals-card'
 
-export interface CompanyDealsCardProps {
+export interface ContactDealsCardProps {
   hostId: string
   org: CrmOrgDoc
   basePath: string
-  companyId: string
+  contactId: string
   /** The name the drawer preselects with; the id is the link either way. */
-  companyName?: string
+  contactName?: string
 }
 
 /**
- * The deals with one company, on the company's page (AGL-2598) —
- * `orgs/{orgId}/deals` where `companyId ==` this organization, with a
- * "New deal" that starts one already linked to it.
+ * The deals a contact is party to, on the contact's page (AGL-2598) —
+ * `orgs/{orgId}/deals` where `contactId ==` this person, with a "New deal"
+ * that starts one already linked to them.
  */
-export function CompanyDealsCard(props: CompanyDealsCardProps) {
-  const { hostId, org, basePath, companyId, companyName } = props
+export function ContactDealsCard(props: ContactDealsCardProps) {
+  const { hostId, org, basePath, contactId, contactName } = props
   return (
     <LinkedDealsCard
       hostId={hostId}
       org={org}
       basePath={basePath}
-      link={{ companyId, companyName }}
+      link={{ contactId, contactName }}
     />
   )
 }
-CompanyDealsCard.displayName = 'CompanyDealsCard'
+ContactDealsCard.displayName = 'ContactDealsCard'
 
-export default CompanyDealsCard
+export default ContactDealsCard

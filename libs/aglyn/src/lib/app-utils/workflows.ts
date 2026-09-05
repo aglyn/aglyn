@@ -55,6 +55,9 @@ export const HOST_EVENT_TYPES = [
   'taskCompleted',
   'contactCreated',
   'contactStageChanged',
+  'dealStageChanged',
+  'dealWon',
+  'dealLost',
 ] as const
 
 export type HostEventType = (typeof HOST_EVENT_TYPES)[number]
@@ -81,6 +84,9 @@ export const HOST_EVENT_LABELS: Partial<Record<HostEventType, string>> = {
   contactCreated: 'Contact created',
   contactStageChanged: 'Contact changed stage',
   taskCompleted: 'CRM task completed',
+  dealStageChanged: 'Deal moved',
+  dealWon: 'Deal won',
+  dealLost: 'Deal lost',
 }
 
 /**
@@ -135,6 +141,40 @@ export const HOST_EVENT_PAYLOAD_KEYS: Partial<
     'companyId',
     'dealId',
     'taskHostId',
+  ],
+  dealStageChanged: [
+    'dealId',
+    'title',
+    'amountCents',
+    'currency',
+    'stageId',
+    'previousStageId',
+    'ownerUid',
+    'contactId',
+    'companyId',
+  ],
+  dealWon: [
+    'dealId',
+    'title',
+    'amountCents',
+    'currency',
+    'stageId',
+    'previousStageId',
+    'ownerUid',
+    'contactId',
+    'companyId',
+  ],
+  dealLost: [
+    'dealId',
+    'title',
+    'amountCents',
+    'currency',
+    'stageId',
+    'previousStageId',
+    'ownerUid',
+    'contactId',
+    'companyId',
+    'lostReason',
   ],
 }
 

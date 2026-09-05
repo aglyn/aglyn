@@ -40,6 +40,8 @@
  * automation; the task routes (AGL-2599) carry an assignee's notification and
  * the `taskCompleted` event; `crm/contacts-import` (AGL-2602) pushes one chunk
  * of a file through the same capture door every other server door uses.
+ * `crm/deal-stage` (AGL-2598) is the one writer of a deal's stage, won and lost,
+ * because a stage change is what automations listen for (`server-deal-stage.ts`).
  * Every other field stays client-direct under the rules.
  */
 
@@ -64,6 +66,7 @@ import { BUNDLE_ID } from './constants/bundle-common'
 import { CRM_TASK_ROUTES } from './model/task-routes'
 import { crmTaskCompleteHandler, crmTaskSaveHandler } from './server/task-routes'
 import { crmContactsImportHandler } from './server/contacts-import'
+import { crmDealStageHandler } from './server-deal-stage'
 
 /**
  * `GET /api/crm/ping` → `{ ok: true, plugin: 'crm' }`.
@@ -215,4 +218,8 @@ export function registerCrmConsoleApi(): void {
   // One chunk of a contact file (AGL-2602), judged and written through the
   // same door every capture uses.
   registerPluginApiRoute('crm/contacts-import', crmContactsImportHandler)
+  // The one writer of a deal's stage, won and lost (AGL-2598): the browser
+  // could write the field, but only a server can emit the event an
+  // automation listens for.
+  registerPluginApiRoute('crm/deal-stage', crmDealStageHandler)
 }
