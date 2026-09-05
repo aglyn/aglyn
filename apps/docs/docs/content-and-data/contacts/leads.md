@@ -26,7 +26,7 @@ Each row carries:
 | --- | --- |
 | **Lead** | The name the person gave, with their email beneath it — or the email alone. |
 | **Status** | New, Working, Qualified or Unqualified. Change it in place from the row. |
-| **Owner** | The team member working the lead, or *Unassigned*. |
+| **Owner** | The team member working the lead, or *Unassigned*. A lead inherits its [contact's owner](#who-owns-a-lead) when one is assigned on capture. |
 | **Source** | Every surface that captured this person: Sign-up, Booking, or the form they submitted. |
 | **Last seen** | When the person last did something on your site. |
 
@@ -49,6 +49,20 @@ listed in the Inbox and still reached by campaign audiences.
 
 Every change here is saved immediately; there is no separate save step.
 
+### Who owns a lead
+
+A lead starts unassigned unless the workspace decided otherwise. When the
+same capture creates a **contact** and the [assignment rules](./settings.md#assignment-rules)
+or the site's [default owner](./settings.md#default-owner) give that
+contact an owner, the lead is given the same owner, and the owner gets a
+console notification — **Lead assigned to you**, linking to the lead's page.
+A lead somebody already assigned by hand keeps that owner. An automation
+that [reassigns the contact](./automations.md#assigning-an-owner-or-rotating-one)
+moves the lead's owner with it.
+
+Assigning an owner from the row menu or the lead's page changes the lead
+alone; the contact, when there is one, is assigned from its own record.
+
 ## A lead's page
 
 Click a row to open the lead. The page has two cards.
@@ -70,10 +84,14 @@ there is one.
 When a lead is real, click **Convert**. The dialog asks three things:
 
 1. **Contact.** The lead becomes a contact at the **Sales qualified**
-   lifecycle stage, owned by whoever you pick (the lead's owner by default,
-   or you). If this email address is already a contact, the conversion joins
-   that contact rather than creating a second one — the address book stays
-   one row per person.
+   lifecycle stage, owned by whoever you pick — the lead's owner by default.
+   Pick nobody and the workspace's [assignment rules](./settings.md#assignment-rules)
+   and the site's [default owner](./settings.md#default-owner) decide, and
+   failing those the contact is yours. A colleague you pick is notified;
+   you are not told about a contact you kept. If this email address is
+   already a contact, the conversion joins that contact rather than creating
+   a second one — the address book stays one row per person — and a contact
+   that already has an owner keeps them.
 2. **Company.** *No company*, *Link an existing company*, or *Create a
    company*. The dialog proposes the company the lead's email domain implies:
    if your workspace already has a company at that domain, it is preselected;
@@ -105,6 +123,7 @@ also requires a role on the site the lead belongs to.
 ## Related
 
 - [CRM overview](./overview.md)
+- [CRM settings](./settings.md) — the default owner and assignment rules a lead inherits
 - [The contact record](./contact-record.md) — what a converted lead becomes
 - [Companies](./companies.md) and the [deals pipeline](./deals.md) — the other two records a conversion can open
 - [Forms & lead capture](../forms/overview.md)
