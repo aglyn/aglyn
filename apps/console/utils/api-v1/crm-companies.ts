@@ -143,7 +143,7 @@ function readCompanyInput(
     const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(website)
       ? website
       : `https://${website}`
-    let parsed: URL | null = null
+    let parsed: URL | null
     try {
       parsed = new URL(withScheme)
     } catch {

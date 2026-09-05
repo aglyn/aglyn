@@ -109,11 +109,8 @@ jest.mock('firebase-admin/firestore', () => {
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { consentGroupForHost } from '../../../libs/aglyn/src/lib/app-utils/consent-groups'
-import {
-  crmScopeTokens,
-  DEFAULT_DEAL_STAGES,
-} from '../../../libs/aglyn/src/lib/app-utils/crm'
+import { consentGroupForHost } from '@aglyn/aglyn/app-utils/consent-groups'
+import { crmScopeTokens, DEFAULT_DEAL_STAGES } from '@aglyn/aglyn/app-utils/crm'
 import { DELETE, GET, PATCH, POST } from '../app/api/v1/[[...route]]/route'
 import {
   childPaths,
@@ -190,10 +187,10 @@ describe('the premise (AGL-899)', () => {
     const scopes = readSource('libs/tenant/data/admin/src/lib/server/api-keys.ts')
     expect(scopes).toContain("'crm:read'")
     expect(scopes).toContain("'crm:write'")
-    for (const module of ['companies', 'pipelines', 'deals', 'tasks', 'activities']) {
-      const source = readSource(`apps/console/utils/api-v1/crm-${module}.ts`)
+    for (const resource of ['companies', 'pipelines', 'deals', 'tasks', 'activities']) {
+      const source = readSource(`apps/console/utils/api-v1/crm-${resource}.ts`)
       expect(source).toContain("requireScope(ctx, 'crm:read')")
-      if (module !== 'pipelines') {
+      if (resource !== 'pipelines') {
         expect(source).toContain("requireScope(ctx, 'crm:write')")
       }
     }
