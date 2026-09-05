@@ -262,9 +262,34 @@ export function listActionsColumn(
   }
 }
 
+/**
+ * Row selection, opted into by a list that has something to DO with a
+ * selection (AGL-2595).
+ *
+ * Controlled, and in the caller's vocabulary — an array of `$id`s in, an
+ * array out — rather than MUI's own model. The grid's model is a
+ * `{ type, ids: Set }` whose `exclude` form appears the moment the header
+ * checkbox is ticked, and a caller that had to fold "everything except
+ * these" back into "these" would do it wrong on the page boundary; the
+ * table holds the rows and does the fold once, here.
+ */
+export interface ListTableSelection {
+  /** The `$id`s currently selected; ids not in `rows` are ignored. */
+  selected: readonly string[]
+  /** Every change, as the full new selection. */
+  onChange: (ids: string[]) => void
+}
+
 export interface ListTableProps extends DataTableProps {
   /** Row click → the artifact's detail view. */
   onOpen?: (id: string, row: any) => void
+  /**
+   * Present → a checkbox column and a controlled selection. Absent → the
+   * navigation-only grid every list had before, checkbox column and all.
+   * The row click keeps opening the record either way: a checkbox is the
+   * only thing that selects, so the two gestures cannot collide.
+   */
+  selectable?: ListTableSelection
 }
 
 /**
@@ -275,7 +300,45 @@ export interface ListTableProps extends DataTableProps {
  * reader actually compares.
  */
 export function ListTable(props: ListTableProps) {
-  const { onOpen, sx, initialState, hideFooter, rows, ...rest } = props
+  const { onOpen, sx, initialState, hideFooter, rows, selectable, ...rest } =
+    props
+  /*==========================================
+   * SELECTION IS OPT-IN, AND NAVIGATION-ONLY IS THE DEFAULT.
+   *
+   * Without `selectable`, the three properties that make a row a NAVIGATION
+   * target rather than a selectable record: `disableRowSelectionOnClick`
+   * alone is not enough — it stops the click selecting, and leaves the
+   * checkbox column and the "n rows selected" footer behind.
+   *
+   * With it, the grid's model is built from the caller's id list on every
+   * render and folded back into one on every change. MUI's model since v8 is
+   * `{ type: 'include' | 'exclude', ids }`, and `exclude` is what the header
+   * checkbox produces — "everything but these" — so the fold has to consult
+   * the rows the grid was given, which is why it lives here and not in the
+   * caller. `disableRowSelectionOnClick` stays on in this branch too: a row
+   * click still opens the record, and only the checkbox selects.
+   *=========================================*/
+  const selection = selectable
+    ? {
+        rowSelection: true,
+        checkboxSelection: true,
+        rowSelectionModel: {
+          type: 'include' as const,
+          ids: new Set<string>(selectable.selected),
+        },
+        onRowSelectionModelChange: (model: {
+          type: 'include' | 'exclude'
+          ids: Set<unknown>
+        }) => {
+          const all = (rows ?? []).map((row: any) => String(row.$id))
+          selectable.onChange(
+            model.type === 'include'
+              ? all.filter((id) => model.ids.has(id))
+              : all.filter((id) => !model.ids.has(id)),
+          )
+        },
+      }
+    : { rowSelection: false, checkboxSelection: false }
   /*==========================================
    * A HIDDEN FOOTER STILL PAGED THE ROWS.
    *
@@ -314,12 +377,7 @@ export function ListTable(props: ListTableProps) {
   return (
     <DataTableComponent
       getRowId={(row: any) => row.$id}
-      // The three properties that make a row a NAVIGATION target rather than a
-      // selectable record. `disableRowSelectionOnClick` alone is not enough —
-      // it stops the click selecting, and leaves the checkbox column and the
-      // "n rows selected" footer behind.
-      rowSelection={false}
-      checkboxSelection={false}
+      {...selection}
       disableRowSelectionOnClick
       onRowClick={
         onOpen ? ({ id, row }) => onOpen(String(id), row) : undefined
