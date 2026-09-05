@@ -123,6 +123,7 @@ const PLUGIN_TOPICS = {
   catalog: '/commerce-and-bookings/commerce/catalog',
   commerce: '/commerce-and-bookings/commerce/overview',
   commerceEndToEnd: '/guides/commerce-end-to-end',
+  companies: '/content-and-data/contacts/companies',
   consoleTour: '/getting-started/console-tour',
   contacts: '/content-and-data/contacts/overview',
   datasets: '/content-and-data/datasets/overview',
