@@ -55,7 +55,7 @@ import {
   updateDoc,
 } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useId, useMemo, useState } from 'react'
 import { crmRoutes } from '../model/crm-routes'
 import {
   LEAD_FILTER_LABELS,
@@ -126,6 +126,9 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
   const window = useMemo(() => leadDocs.slice(0, LEADS_WINDOW), [leadDocs])
 
   const [filter, setFilter] = useState<LeadFilter>('open')
+  // The label's id, so the filter's combobox is named "Show" rather than
+  // after the option it shows — see `LeadOwnerSelect`.
+  const filterLabelId = useId()
   const rows = useMemo(
     () => window.filter((lead) => leadMatchesFilter(lead, filter)),
     [window, filter],
@@ -277,8 +280,9 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         help={Aglyn.pluginDocsHelp('contacts', { anchor: '#whats-in-the-crm-area' })}
         actions={
           <FormControl size="small" sx={{ minWidth: 160 }}>
-            <InputLabel>{'Show'}</InputLabel>
+            <InputLabel id={filterLabelId}>{'Show'}</InputLabel>
             <Select
+              labelId={filterLabelId}
               label="Show"
               value={filter}
               onChange={(event) => setFilter(event.target.value as LeadFilter)}

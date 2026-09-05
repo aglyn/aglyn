@@ -20,7 +20,7 @@ import type { AglynOrgMember } from '@aglyn/aglyn'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { FormControl, InputLabel, MenuItem, Select } from '@mui/material'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useState } from 'react'
 
 /** One team member as the owner picker lists them. */
 export interface OrgMemberOption {
@@ -159,10 +159,20 @@ export function LeadOwnerSelect(props: LeadOwnerSelectProps) {
   } = props
   const current = value ?? UNASSIGNED_OWNER
   const known = roster.options.some((option) => option.uid === current)
+  /*
+   * A bare `Select` names its combobox after the VALUE it shows, not after
+   * the label beside it — MUI builds `aria-labelledby` from `labelId` and the
+   * display element, and with no `labelId` only the display is left. A
+   * reader hears "Unassigned" and has to guess it is the owner; a test can
+   * only find the control by what it happens to say. The label's id is what
+   * makes "Owner" the control's name.
+   */
+  const labelId = useId()
   return (
     <FormControl size={size} fullWidth={fullWidth} disabled={disabled}>
-      <InputLabel>{label}</InputLabel>
+      <InputLabel id={labelId}>{label}</InputLabel>
       <Select
+        labelId={labelId}
         label={label}
         value={current}
         onChange={(event) => onChange(String(event.target.value))}

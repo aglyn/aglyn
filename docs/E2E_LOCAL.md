@@ -39,6 +39,30 @@ npm run serve:console:emulated     # port 4200
 npm run e2e:console                # E2E_BASE_URL overrides the target
 ```
 
+## The CRM specs (AGL-2610)
+
+Five browser-driven scripts under `tools/e2e/crm-*.e2e.mjs`, one per surface
+the v2 arc shipped, each signing in through `/signin`, driving the console
+as a person does, and asserting on the page AND on the document behind it
+through the emulator-side Admin SDK:
+
+```bash
+E2E_BASE_URL=http://localhost:4210 npm run e2e:crm          # all five, in order
+npm run e2e:crm:bulk-bar        # tick two rows → tag, stage, owner, audience, CSV, remove
+npm run e2e:crm:reports         # /crm/reports (dashes until read) + the two dashboard cards
+npm run e2e:crm:leads           # status, owner, convert, already-converted, unqualify, Inbox → CRM
+npm run e2e:crm:automation      # Contact created / Contact changed stage → tag on the facet, Runs
+npm run e2e:crm:contact-record  # custom field, audience, Properties save, phone search, delete
+```
+
+They share `tools/e2e/lib/console-session.mjs` (Chrome, the UI sign-in, the
+three-verdict tally, MUI gestures) and re-seed their own fixtures first, so
+each is re-runnable on its own. Set `E2E_SHOTS_DIR` to a directory and every
+script also drops staged captures of its surface there at 1840×1160 — the
+frame the docs and the press kit use — with the emulator banner, the dev
+indicator and the staff-only release-flag chrome stripped. Run them one at a
+time: they share one fixture and each resets it.
+
 ## Tenant production-mode smoke (AGL-595) — REQUIRED before deploying tenant changes
 
 ```bash
@@ -141,6 +165,15 @@ emulator-host env vars** so it can never touch production):
 - Host-scoped: root-level media (with `createdAt`), bookings (with
   `startsAtMs`), a service, a blog collection + entry, variables/functions/
   workflows/actions, an overlay, a sent campaign, a lead.
+- The CRM (AGL-2610), from `tools/scripts/lib/crm-fixtures.mjs`: a bakery's
+  wholesale book — six contacts under the `demo` facet (one with a phone
+  number, custom-field values, an order history), a company, a Sales
+  pipeline with an open deal and a won one, a task due yesterday and one due
+  next week, two logged activities, two custom fields, a dynamic audience,
+  and two unworked leads on the host. Written with plain `set` rather than
+  merge, because the CRM specs mutate these and re-seed them; the owner's
+  legal acceptance (`users/{uid}/legalAcceptances/v1`) is seeded beside them
+  so no page opens under the re-acceptance banner.
 
 ## Env knobs (all optional)
 
@@ -152,6 +185,7 @@ emulator-host env vars** so it can never touch production):
 | `E2E_CHROME_PATH`            | system Chrome           | Browser binary        |
 | `E2E_TIMEOUT_MS`             | `45000`                 | Per-assertion timeout |
 | `E2E_ARTIFACTS_DIR`          | `tmp/e2e-artifacts`     | Failure screenshots   |
+| `E2E_SHOTS_DIR`              | unset                   | Staged captures (CRM) |
 
 ## Tenant render + API checks
 
@@ -214,6 +248,15 @@ somebody had already got wrong:
 **Serve with `nx serve`, not `next dev`.** Only the nx target carries the cache prune
 (`docs/BUILD_PERFORMANCE.md`), and a bare `npx next dev` is how the last worktree quietly grew a
 6 GB cache nothing was ever going to clean. The script prints the right command when it finishes.
+
+When `nx serve` refuses a second instance (one is already serving the main checkout), the
+fallback is `npx next dev apps/console -p 4210` with the same emulator env vars
+`serve:console:emulated` sets — and **on turbopack, not `--webpack`**: the webpack build follows
+`instrumentation.ts`'s deferred import into the edge bundle and dies on `import 'crypto'`, so every
+page 500s with `Module not found: Can't resolve 'crypto'`. Turbopack, in turn, refuses a
+`node_modules` that is a symlink out of the project root (`Symlink [project]/node_modules is
+invalid`), which is the clone rule above with an error message attached. Delete the `.next` it
+grew when you are done.
 
 Tear down with `git worktree remove --force <path>` — worktrees are cheap to recreate and a
 stale one keeps a whole `node_modules` and `.next` on disk.

@@ -26,14 +26,14 @@
 //
 // Then:  node tools/e2e/console.e2e.mjs
 //
-// Auth is bootstrapped without the UI: REST signInWithPassword against
-// the auth emulator, then the session blob is injected into
-// localStorage (`firebase:authUser:<apiKey>:DEFAULT_AGLYN`) before any
-// page script runs, so the SDK restores the signed-in user on load.
+// A REST signInWithPassword against the auth emulator runs first, only to
+// fail fast when the seed has not; the session itself comes from the real
+// `/signin` UI below, for the reason given there.
 //
-// The specs are the five pages that historically rendered empty under
-// the emulator (seed/query-shape mismatch — see docs/E2E_LOCAL.md);
-// they are the regression canary for the whole authenticated read path.
+// The first rows are the pages that historically rendered empty under the
+// emulator (seed/query-shape mismatch — see docs/E2E_LOCAL.md); they are the
+// regression canary for the whole authenticated read path. The rest are the
+// feature-wave surfaces added since, one row per section of a hub.
 
 import { readFileSync, mkdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
@@ -45,6 +45,12 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const BASE_URL = process.env.E2E_BASE_URL ?? 'http://localhost:4200'
 const AUTH_EMULATOR = process.env.FIREBASE_AUTH_EMULATOR_HOST ?? 'localhost:9099'
 const HOST_ID = process.env.E2E_HOST ?? 'demo'
+// Org-scoped routing (AGL-825): every host page lives under
+// `/[orgSlug]/hosts/[host]` and every org page under `/[orgSlug]`; the bare
+// `/{hostId}` form these specs were written against now reads as an org slug
+// and lands on the workspace picker. Defaults match seed-e2e.mjs.
+const ORG_SLUG = process.env.E2E_ORG_SLUG ?? 'e2e-bakery'
+const HOST_BASE = `/${ORG_SLUG}/hosts/${HOST_ID}`
 const EMAIL = process.env.E2E_EMAIL ?? 'e2e@aglyn.test'
 const PASSWORD = process.env.E2E_PASSWORD ?? 'E2e-Password-1'
 const TIMEOUT_MS = Number(process.env.E2E_TIMEOUT_MS ?? 45_000)
@@ -117,64 +123,83 @@ function chromeExecutable() {
 
 // ── Specs: the historical "empty page" canaries + a dashboard sanity ───────
 const specs = [
-  { name: 'dashboard', path: `/${HOST_ID}`, expects: ['Demo Bakery'] },
+  { name: 'dashboard', path: HOST_BASE, expects: ['Demo Bakery'] },
   // The dataset name sits in a collapsed select; assert on a record row.
-  { name: 'data', path: `/${HOST_ID}/data`, expects: ['Avery Quinn'] },
-  { name: 'media', path: `/${HOST_ID}/media`, expects: ['hero.jpg'] },
-  { name: 'content', path: `/${HOST_ID}/content`, expects: ['Blog'] },
+  { name: 'data', path: `${HOST_BASE}/data`, expects: ['Avery Quinn'] },
+  { name: 'media', path: `${HOST_BASE}/media`, expects: ['hero.jpg'] },
+  { name: 'content', path: `${HOST_BASE}/content`, expects: ['Blog'] },
   {
     name: 'bookings',
-    path: `/${HOST_ID}/bookings`,
+    path: `${HOST_BASE}/bookings`,
     expects: ['Cake tasting', 'Grace Hopper'],
   },
   {
     name: 'contacts',
-    path: `/${HOST_ID}/contacts`,
+    path: `${HOST_BASE}/contacts`,
     expects: ['wholesale@example.com'],
   },
   // ── July 2026 feature-wave surfaces ──────────────────────────────────
+  // Marketing hub: at-a-glance rollup (v8), overlay engagement stats
+  // (AGL-271), merge-tag composer + scheduled campaign chip (AGL-272),
+  // experiments card (AGL-252/273). One row per SECTION since AGL-2501 made
+  // the hub's tabs routes: only the section being read is mounted, so a
+  // single row could no longer see all four.
   {
-    // Marketing hub: at-a-glance rollup (v8), overlay engagement stats
-    // (AGL-271), merge-tag composer + scheduled campaign chip (AGL-272),
-    // experiments card (AGL-252/273).
     name: 'marketing',
-    path: `/${HOST_ID}/marketing`,
-    expects: [
-      'At a glance',
-      'Overlay views',
-      'Welcome bar',
-      'Scheduled',
-      'Hero copy test',
-    ],
+    path: `${HOST_BASE}/marketing`,
+    expects: ['At a glance'],
+  },
+  {
+    name: 'overlays',
+    path: `${HOST_BASE}/marketing/overlays`,
+    // The seeded bar's engagement counters, read off its row.
+    expects: ['Announcement bars & popups', 'Welcome bar', '120 views'],
+  },
+  {
+    name: 'campaigns',
+    path: `${HOST_BASE}/marketing/campaigns`,
+    expects: ['Scheduled'],
+  },
+  {
+    name: 'experiments',
+    path: `${HOST_BASE}/marketing/experiments`,
+    expects: ['Hero copy test'],
   },
   {
     // Logic page: variables/functions plus the Reference health audit
     // (wave v7) — the seed's references all resolve.
     name: 'logic',
-    path: `/${HOST_ID}/logic`,
+    path: `${HOST_BASE}/logic`,
     expects: [
       'OrderTotal',
       'Reference health',
       'Every automation, workflow, and variable reference resolves.',
     ],
   },
+  // Automation hub: the workflow and action rows with their Runs logs
+  // (AGL-266 / wave v6), one row per section for the reason the marketing
+  // rows are split.
   {
-    // Automation page: the action + workflow rows with their Runs
-    // logs (AGL-266 / wave v6).
-    name: 'automation',
-    path: `/${HOST_ID}/automation`,
-    expects: ['DozenQuote', 'Form thank-you', 'Runs'],
+    name: 'workflows',
+    path: `${HOST_BASE}/automation/workflows`,
+    expects: ['DozenQuote', 'Runs'],
+  },
+  {
+    name: 'actions',
+    path: `${HOST_BASE}/automation/actions`,
+    expects: ['Form thank-you', 'Runs'],
   },
   {
     // Org billing: business plan card + Stripe Billing Portal link
     // (wave v5); active subscription shows the cancel flow (AGL-269).
     name: 'billing',
-    path: '/org/billing',
+    path: `/${ORG_SLUG}/billing`,
     expects: ['Manage payment methods', 'Cancel subscription'],
     // Annual toggle (AGL-532): flipping it swaps every plan card to the
-    // annual headline price (Starter $25/mo -> $16/mo billed yearly).
+    // annual headline price — the seeded org's Business plan reads $139/mo
+    // monthly and $99/mo billed yearly on the locked price table.
     interact: async (page) => {
-      await page.waitForSelector('text=$25', {
+      await page.waitForSelector('text=$139', {
         timeout: TIMEOUT_MS,
         state: 'attached',
       })
@@ -183,7 +208,7 @@ const specs = [
         timeout: TIMEOUT_MS,
         state: 'attached',
       })
-      await page.waitForSelector('text=$16', {
+      await page.waitForSelector('text=$99', {
         timeout: TIMEOUT_MS,
         state: 'attached',
       })
@@ -197,25 +222,37 @@ const specs = [
     expects: ["You're above 80%", 'Forms & bookings'],
   },
   {
-    // Plugins & add-ons hub (AGL-423): the first-party switchboard card
-    // + the marketplace plugin's installed add-ons section (widget slot).
+    // Plugins hub (AGL-423): the first-party switchboard card, with the
+    // CRM row it gates, + the marketplace plugin's installed section.
     name: 'org-plugins',
-    path: '/org/plugins',
-    expects: ['Save plugins', 'Marketplace add-ons', 'Installed plugins'],
+    path: `/${ORG_SLUG}/plugins`,
+    expects: ['Built in', 'Installed from the marketplace', 'CRM'],
   },
   {
     // Staff review queue (AGL-432): the seeded submitted listing + its
     // lifecycle actions.
     name: 'plugin-reviews',
     path: '/admin/plugin-reviews',
-    expects: ['Pending Review Plugin', 'Start review', 'Grant realm trust'],
+    expects: ['Pending Review Plugin', 'Awaiting review', 'Listed plugins'],
+    // The lifecycle actions moved onto the listing's own review page; the
+    // queue row is the way in.
+    interact: async (page) => {
+      await page.click('a:has-text("Pending Review Plugin")')
+      for (const text of ['Start review', 'Grant realm trust']) {
+        await page.waitForSelector(`text=${text}`, {
+          timeout: TIMEOUT_MS,
+          state: 'attached',
+        })
+      }
+    },
   },
   {
     // Listing detail v2 (AGL-430/431): publisher README rendered through
     // markdown-lite, changelog from the public versions API, links card.
     name: 'listing-detail',
-    path: `/${HOST_ID}/marketplace/realm-demo`,
-    expects: ['Realm demo', 'Versions & changelog', 'Source repository'],
+    // The marketplace is an org surface: `/[orgSlug]/marketplace/[listingId]`.
+    path: `/${ORG_SLUG}/marketplace/realm-demo`,
+    expects: ['Realm demo', 'Version history', 'Source repository'],
   },
 ]
 
@@ -234,6 +271,17 @@ for (const spec of specs) {
 
 const browser = await chromium.launch({ headless: true, ...chromeExecutable() })
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 } })
+// The notification pre-permission modal (AGL-663) lands over every page on
+// a fresh profile; a click an `interact` step makes would hit its backdrop.
+// Dismiss it the way the component persists a dismissal (key and value
+// mirror apps/console/components/notification-prompt).
+await context.addInitScript(() => {
+  try {
+    window.localStorage.setItem('aglyn:notification-prompt-dismissed', 'never')
+  } catch {
+    // Storage unavailable on this navigation; the assertions are `attached`.
+  }
+})
 
 // Sign in through the real UI once. Injecting a synthetic localStorage
 // session instead races the app's connectAuthEmulator call (the SDK

@@ -30,12 +30,14 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
   useHostActivityLogger,
+  useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { Button, Grid, MenuItem, Stack, TextField, Typography } from '@mui/material'
 import { deleteField, doc, updateDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
 import { type ContactRecord, parseContactTags } from '../model/contact-record'
+import { setContactStage } from '../model/crm-api'
 import {
   addressDraftFrom,
   ContactAddressFields,
@@ -83,6 +85,21 @@ export interface ContactPropertiesCardProps {
  * the company name are ALSO written to the top of the document, where a
  * query can hit them; see `HostContact.phone`.
  *
+ * ## A stage MOVE goes through the server
+ *
+ * The lifecycle stage is the one field an automation listens for:
+ * `contactStageChanged` (AGL-2605) is emitted by `crm/contact-stage` after it
+ * performs the write, and by nothing else. So when the stage the reader
+ * picked differs from the one the record holds, it is left OUT of the client
+ * write and sent to that route once the rest has landed — a facet write that
+ * carried the new stage first would leave the route reading "already there"
+ * and announcing nothing, which is the defect that made every action on
+ * *Contact changed stage* silent for a stage moved from this page. Clearing
+ * the stage stays client-direct: there is no event for "no stage", and the
+ * route refuses an empty one. A refusal from the route — a member without a
+ * role on this site — is reported on its own, with the route's sentence,
+ * after the fields that did save.
+ *
  * ## The name is an override
  *
  * The canonical name is shared by every site holding the person, so this
@@ -98,6 +115,7 @@ export interface ContactPropertiesCardProps {
 export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
   const { hostId, record, consentGroup, scope, seed, members } = props
   const firestore = useFirestore()
+  const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const logActivity = useHostActivityLogger(hostId)
 
@@ -155,6 +173,9 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
     }
     const storedAddress = normalizeAddress(address)
     const storedCompany = companyName.trim().slice(0, 120)
+    // A stage that differs from the record's and is not a clearing is a
+    // MOVE, and a move is the server's to write — see the note above.
+    const stageMoved = Boolean(lifecycleStage) && lifecycleStage !== record.lifecycleStage
     setSaving(true)
     try {
       const verdict = await writeGuardedBySeed(
@@ -173,7 +194,9 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
               [path('companyName')]: storedCompany || deleteField(),
               [path('address')]: storedAddress ?? deleteField(),
               [path('ownerUid')]: ownerUid || deleteField(),
-              [path('lifecycleStage')]: lifecycleStage || deleteField(),
+              ...(stageMoved
+                ? {}
+                : { [path('lifecycleStage')]: lifecycleStage || deleteField() }),
               [path('tags')]: parseContactTags(tags),
               [path('notes')]: notes.slice(0, 2000),
               // The search echoes — see `HostContact.phone`.
@@ -195,6 +218,20 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
         id: record.$id,
         name: record.name || record.email,
       })
+      if (stageMoved && lifecycleStage) {
+        try {
+          await setContactStage(user, hostId, record.$id, lifecycleStage)
+        } catch (error) {
+          // The rest of the profile is saved; only the move was refused, and
+          // the route's own sentence says why.
+          return void enqueueSnackbar(
+            `Saved, but the stage could not be changed: ${
+              error instanceof Error ? error.message : 'the request failed'
+            }`,
+            { variant: 'warning', persist: false },
+          )
+        }
+      }
       enqueueSnackbar('Contact saved', { variant: 'success', persist: false })
     } catch (error) {
       console.error(error)
@@ -211,6 +248,7 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
     consentGroup.groupId,
     enqueueSnackbar,
     firestore,
+    hostId,
     jobTitle,
     lifecycleStage,
     logActivity,
@@ -220,11 +258,13 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
     phone,
     record.$id,
     record.email,
+    record.lifecycleStage,
     record.name,
     scope,
     seed.fromCache,
     seed.status,
     tags,
+    user,
   ])
 
   /*
