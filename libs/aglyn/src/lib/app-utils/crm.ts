@@ -47,7 +47,7 @@
 
 import type { AglynPostalAddress } from '../foundation'
 import { type ConsentGroup, consentGroupScope } from './consent-groups'
-import type { ContactInteraction } from './contacts'
+import { type ContactInteraction, normalizeContactEmail } from './contacts'
 import { MAX_SCOPE_HOSTS, ORG_SCOPE_TOKEN, type ScopeToken } from './scope-tokens'
 
 /**
@@ -773,6 +773,104 @@ export function crmScopeTokens(
  */
 export function crmReadTokens(group: ConsentGroup): ScopeToken[] {
   return [ORG_SCOPE_TOKEN, ...consentGroupScope(group)].slice(0, MAX_SCOPE_HOSTS)
+}
+
+/*==========================================
+ * THE TEAM, AS A RECORD NAMES THEM (AGL-2614).
+ *
+ * An owner and an assignee are stored by uid — `orgs/{orgId}/members/{uid}`
+ * is keyed by it, and a uid outlives every address change. But the people
+ * who NAME an owner do not think in uids: an automation step is typed, a
+ * CSV column is an address, and a picker lists names. So a reference
+ * arrives as one of two things, and every reader that turns a reference
+ * into a person has to accept both or the roster splits into the members
+ * who can be named and the members who cannot.
+ *
+ * The member documents make the second case real. Two production paths
+ * create a member document WITHOUT its `email` — a host-access re-grant,
+ * and an add whose auth record carried none — and such a member was
+ * unnameable everywhere a surface asked for an address: an automation
+ * could not assign to them, and a roster mapper that dropped a row with no
+ * address could not even list them. A name they still have (the roster's
+ * `displayName`), and a uid they always have, so a label falls through to
+ * the uid rather than to nothing, and a reference is resolved by uid first
+ * and by address second.
+ *
+ * Roster-only, deliberately. The project's Auth records could resolve an
+ * address the roster cannot, and would resolve people who are not on this
+ * organization at all (AGL-1122); a reference that names nobody on the
+ * roster names nobody.
+ *=========================================*/
+
+/** One person on the team, as a picker lists them and a reference resolves to them. */
+export interface CrmMemberOption {
+  /** The account uid — what `ownerUid` and `assigneeUid` store. */
+  uid: string
+  /** The name a colleague recognizes: display name, else address, else the uid. */
+  label: string
+  /** The roster's address, when the member document carries one. */
+  email?: string
+}
+
+/**
+ * How a step or a column names somebody on the team: an address when the
+ * text is one, otherwise a uid. `null` for a blank, which every caller
+ * treats as "nobody named" rather than as a member called "".
+ */
+export type CrmMemberRef =
+  | { kind: 'uid'; uid: string }
+  | { kind: 'email'; email: string }
+
+export function parseCrmMemberRef(value: unknown): CrmMemberRef | null {
+  const text = String(value ?? '').trim()
+  if (!text) return null
+  if (text.includes('@')) {
+    const email = normalizeContactEmail(text)
+    return email ? { kind: 'email', email } : null
+  }
+  return { kind: 'uid', uid: text }
+}
+
+/**
+ * A roster row as every CRM picker and column shows it.
+ *
+ * One mapping rather than four, because four is what the CRM had — and one
+ * of them dropped a member whose document had neither a display name nor an
+ * address, which is precisely the member the uid fallback exists for.
+ */
+export function crmMemberOption(
+  member: Record<string, unknown>,
+): CrmMemberOption | null {
+  const uid = String(member['$id'] ?? member['uid'] ?? '').trim()
+  if (!uid) return null
+  const displayName = String(member['displayName'] ?? '').trim()
+  const email = String(member['email'] ?? '').trim()
+  return {
+    uid,
+    label: displayName || email || uid,
+    ...(email ? { email } : {}),
+  }
+}
+
+/**
+ * The member a stored reference names: by uid first — the stored shape —
+ * and by address second, so a record that carries an address where a uid
+ * belongs (an older import, a hand edit) still names the person the roster
+ * has under it. Undefined for nobody, which the caller renders honestly as
+ * "former member" or as the reference itself rather than as unassigned.
+ */
+export function findOrgMember<T extends { uid: string; email?: string | null }>(
+  members: readonly T[],
+  ref: string | null | undefined,
+): T | undefined {
+  const parsed = parseCrmMemberRef(ref)
+  if (!parsed) return undefined
+  if (parsed.kind === 'uid') {
+    return members.find((member) => member.uid === parsed.uid)
+  }
+  return members.find(
+    (member) => normalizeContactEmail(member.email) === parsed.email,
+  )
 }
 
 /*==========================================
