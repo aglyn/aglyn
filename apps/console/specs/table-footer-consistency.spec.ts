@@ -913,6 +913,16 @@ const NOT_A_LIST: Array<[string, string]> = [
       'the map is over a parsed prop, not over documents.',
   ],
   [
+    'libs/plugins/crm/src/lib/components/fields-section.tsx',
+    'The organization’s custom contact field DEFINITIONS (AGL-2601) — a ' +
+      'settings table, one row per field the merchant declared, bounded by ' +
+      '`CONTACT_FIELDS_MAX_PER_ORG` (100) at the read itself: the collection ' +
+      'has no index, is read whole under that `limit()`, and is ordered in ' +
+      'memory by the stored `order` the arrows on each row move. The bound ' +
+      'is what a profile form can carry, not how long the account has ' +
+      'existed, so there is no second page for a footer to turn to.',
+  ],
+  [
     'apps/console/app/(app)/admin/margin-utilization/page.tsx',
     'Two tables, and neither wants a footer. The first is one row per BAND — ' +
       'a fixed vocabulary, the same rows on every load, so a pager would ' +

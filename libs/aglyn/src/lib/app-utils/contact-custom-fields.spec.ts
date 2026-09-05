@@ -34,6 +34,7 @@ import {
   CONTACT_FIELDS_MAX_PER_ORG,
   readContactCustomInput,
   sortContactFieldDefinitions,
+  withContactFieldMapping,
 } from './contact-custom-fields'
 import type { ContactFieldDefinition } from './crm'
 import type { FormFieldDecl } from './forms'
@@ -188,6 +189,33 @@ describe('carryContactFieldMappings', () => {
     const next: FormFieldDecl[] = [{ fieldName: 'a', fieldType: 'text' }]
     expect(carryContactFieldMappings(undefined, next)).toEqual(next)
     expect(carryContactFieldMappings([], next)).toEqual(next)
+  })
+})
+
+describe('withContactFieldMapping', () => {
+  const decls: FormFieldDecl[] = [
+    { fieldName: 'email', fieldType: 'email' },
+    { fieldName: 'revenue', fieldType: 'text', label: 'Revenue', contactFieldKey: 'annual_revenue' },
+    { fieldName: 'plan', fieldType: 'select', options: ['Gold', 'Silver'] },
+  ]
+
+  it('maps the named field and leaves every other field as it was', () => {
+    const next = withContactFieldMapping(decls, 'plan', 'tier')
+    expect(next[2]).toEqual({
+      fieldName: 'plan',
+      fieldType: 'select',
+      options: ['Gold', 'Silver'],
+      contactFieldKey: 'tier',
+    })
+    expect(next[0]).toBe(decls[0])
+    expect(next[1]).toBe(decls[1])
+  })
+
+  it('unmapping removes the property outright — never an undefined an array write would refuse', () => {
+    const next = withContactFieldMapping(decls, 'revenue', null)
+    expect(next[1]).toEqual({ fieldName: 'revenue', fieldType: 'text', label: 'Revenue' })
+    expect(next[1]).not.toHaveProperty('contactFieldKey')
+    expect(decls[1].contactFieldKey).toBe('annual_revenue')
   })
 })
 

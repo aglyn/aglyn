@@ -121,6 +121,10 @@ jest.mock('./form-metrics-card.component', () => ({
   __esModule: true,
   default: () => null,
 }))
+jest.mock('./form-contact-fields-card', () => ({
+  __esModule: true,
+  default: () => null,
+}))
 jest.mock('./use-form-promote-api', () => ({
   __esModule: true,
   default: () => jest.fn(),

@@ -72,7 +72,7 @@ older `…/contacts` address still open the hub.
 | **Deals** | `/crm/deals` | Your pipeline — open deals by stage, with amount, owner and expected close; a deal's page is `/crm/deals/{id}`. |
 | **Tasks** | `/crm/tasks` | Calls, emails, meetings and to-dos by due date, linked to the contact, company or deal they are for. |
 | **Reports** | `/crm/reports` | Contacts by stage and source, the pipeline by stage, won and lost over time. |
-| **Fields** | `/crm/fields` | The custom fields on a contact — text, number, date, choice, checkbox or link. |
+| **Fields** | `/crm/fields` | The [custom fields](custom-fields.md) on a contact — text, number, date, choice, checkbox or link — which a form field can save into. |
 
 Opening `/contacts` lands on the first section. Every section follows the same
 per-site visibility as the contacts themselves, so a section can never show a

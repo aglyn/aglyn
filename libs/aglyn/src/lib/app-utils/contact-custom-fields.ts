@@ -264,6 +264,31 @@ export function carryContactFieldMappings(
   })
 }
 
+/**
+ * The declaration with ONE field's destination changed: `key` maps it onto
+ * that custom field, `null` unmaps it.
+ *
+ * Unmapping DELETES the property rather than setting it to `undefined`. The
+ * declaration is written back to the form document as one array, and an
+ * `undefined` inside an array is a value Firestore refuses outright — the
+ * save would fail on the field the author just cleared, which is the one
+ * they are least likely to suspect. Every other field, and every other
+ * property of this one, comes through untouched: the design is still the
+ * source of everything else on a declared field.
+ */
+export function withContactFieldMapping(
+  decls: readonly FormFieldDecl[],
+  fieldName: string,
+  key: string | null,
+): FormFieldDecl[] {
+  return decls.map((decl) => {
+    if (decl.fieldName !== fieldName) return decl
+    const next: FormFieldDecl = { ...decl }
+    delete next.contactFieldKey
+    return key ? { ...next, contactFieldKey: key } : next
+  })
+}
+
 /** What one coercion refusal tells an API caller, per type. */
 function customValueExpectation(
   definition: Pick<ContactFieldDefinition, 'type' | 'options'>,

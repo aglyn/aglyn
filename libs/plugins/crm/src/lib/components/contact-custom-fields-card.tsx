@@ -17,7 +17,7 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
-import type { ConsolePluginPageProps, ContactCustomValue } from '@aglyn/aglyn'
+import { type ConsolePluginPageProps, type ContactCustomValue, pluginDocsHelp } from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -268,7 +268,12 @@ export function ContactCustomFieldsCard(props: ContactCustomFieldsCardProps) {
   }
 
   return (
-    <CardDisplay header={'Custom fields'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Custom fields'}
+      help={pluginDocsHelp('contactFields', { anchor: '#where-values-show' })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={2}>
         {!ready ? null : active.length === 0 ? (
           <Typography variant="body2" color="text.secondary">

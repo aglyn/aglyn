@@ -376,7 +376,7 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
   return (
     <CardDisplay
       header={'Fields'}
-      help={pluginDocsHelp('contacts', { anchor: '#whats-in-the-crm-area' })}
+      help={pluginDocsHelp('contactFields', { anchor: '#define-a-field' })}
       contentGutterX
       contentGutterY
       contentBordered="all"
