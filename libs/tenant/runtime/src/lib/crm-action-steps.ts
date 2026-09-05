@@ -126,37 +126,48 @@ async function resolveEventContact(
 }
 
 /**
- * The uid an owner step names, resolved against the org's roster when it
- * names an address.
+ * The uid a step names for somebody on the team — an owner, an assignee —
+ * resolved against the org's roster when the step names an address.
  *
- * `orgs/{orgId}/members/{uid}` carries the member's address, and the
- * document id IS the uid, so an address resolves in one equality query. A
- * step authored through a picker carries the uid already and skips the
- * read. An address nobody on the roster has is an error, not a stored
- * string: `ownerUid` is a field every reader resolves as a member.
+ * `orgs/{orgId}/members/{uid}` is keyed by the uid, so a step authored with
+ * one skips the read. An address is tried two ways, because two production
+ * paths create a member document WITHOUT its `email` (a host-access re-grant,
+ * and an add whose auth record carried none): the roster's own `email` field
+ * first, then the project's Auth record for the address — accepted only when
+ * the uid it names has a member document, so an address that belongs to some
+ * account but not to this team resolves to nobody. An address that resolves
+ * neither way is an error, not a stored string: `ownerUid` and `assigneeUid`
+ * are fields every reader resolves as a member, and a stranger's uid in one
+ * is a task nobody on the team can find.
  */
-async function resolveOwnerUid(
+async function resolveMemberUid(
   orgId: string | null,
-  step: Extract<CrmActionStep, { type: 'assignContactOwner' }>,
+  named: { uid?: string; email?: string },
+  role: 'owner' | 'assignee',
 ): Promise<{ uid: string; detail: string } | { error: string }> {
-  const uid = step.ownerUid?.trim() ?? ''
+  const uid = named.uid?.trim() ?? ''
   if (uid) return { uid, detail: uid }
-  const email = normalizeContactEmail(step.ownerEmail)
-  if (!email) return { error: 'no owner named on the step' }
+  const email = normalizeContactEmail(named.email)
+  if (!email) return { error: `no ${role} named on the step` }
   if (!orgId) return { error: 'this site has no organization' }
-  const member = (
-    await firebaseAdmin
-      .app()
-      .firestore()
-      .collection('orgs')
-      .doc(orgId)
-      .collection('members')
-      .where('email', '==', email)
-      .limit(1)
-      .get()
-  ).docs[0]
-  if (!member) return { error: `no team member with the address ${email}` }
-  return { uid: member.id, detail: email }
+  const members = firebaseAdmin
+    .app()
+    .firestore()
+    .collection('orgs')
+    .doc(orgId)
+    .collection('members')
+  const byField = (await members.where('email', '==', email).limit(1).get())
+    .docs[0]
+  if (byField) return { uid: byField.id, detail: email }
+  const account = await firebaseAdmin
+    .app()
+    .auth()
+    .getUserByEmail(email)
+    .catch(() => null)
+  if (account && (await members.doc(account.uid).get()).exists) {
+    return { uid: account.uid, detail: email }
+  }
+  return { error: `no team member with the address ${email}` }
 }
 
 /**
@@ -238,7 +249,11 @@ export async function runCrmActionStep(
   }
 
   if (step.type === 'assignContactOwner') {
-    const owner = await resolveOwnerUid(env.orgId, step)
+    const owner = await resolveMemberUid(
+      env.orgId,
+      { uid: step.ownerUid, email: step.ownerEmail },
+      'owner',
+    )
     if ('error' in owner) return { error: owner.error }
     await contact.ref.update({
       [contactFacetPath(group.groupId, 'ownerUid')]: owner.uid,
@@ -277,9 +292,20 @@ export async function runCrmActionStep(
      * The assignee the step names, else the person who OWNS the contact,
      * else nobody. A follow-up task belongs to whoever holds the
      * relationship, and an automation that had to name one person for
-     * every contact it touches would assign the whole list to one rep.
+     * every contact it touches would assign the whole list to one rep. A
+     * named assignee who cannot be resolved is an error rather than a
+     * fallback to the owner: the author named somebody on purpose.
      */
-    const assignee = step.assigneeUid?.trim() || facet.ownerUid || ''
+    let assignee = facet.ownerUid ?? ''
+    if (step.assigneeUid?.trim() || step.assigneeEmail?.trim()) {
+      const named = await resolveMemberUid(
+        env.orgId,
+        { uid: step.assigneeUid, email: step.assigneeEmail },
+        'assignee',
+      )
+      if ('error' in named) return { error: named.error }
+      assignee = named.uid
+    }
     const task: CrmTask = {
       title,
       kind: step.kind,

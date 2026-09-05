@@ -47,6 +47,8 @@ let mockActions: { id: string; data: Record<string, any> }[] = []
 let mockContact: { id: string; data: Record<string, any> } | null = null
 /** `orgs/o1/members` — the roster an owner address resolves against. */
 let mockMembers: Record<string, Record<string, any>> = {}
+/** Auth accounts, uid → address, for the roster document that has none. */
+let mockAuthAccounts: Record<string, string> = {}
 /** The org's billing doc, as the run's gate read it. */
 let mockOrg: Record<string, any> = { plan: 'business' }
 /** Every `update()` the run made on the contact, in order. */
@@ -147,7 +149,9 @@ const collectionHandle = (path: string): any => {
       get: async () =>
         path.endsWith('contacts') && mockContact?.id === id
           ? docSnapshot(id, mockContact.data)
-          : missingSnapshot(id),
+          : path.endsWith('members') && mockMembers[id]
+            ? docSnapshot(id, mockMembers[id])
+            : missingSnapshot(id),
       set: async () => undefined,
       collection: (name: string) => collectionHandle(`${path}/${id}/${name}`),
     }),
@@ -164,6 +168,17 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: {
     app: () => ({
+      // The project's Auth pool, keyed uid → address: the fallback for a
+      // member document written without its `email`.
+      auth: () => ({
+        getUserByEmail: async (email: string) => {
+          const hit = Object.entries(mockAuthAccounts).find(
+            ([, address]) => address === email,
+          )
+          if (!hit) throw new Error('auth/user-not-found')
+          return { uid: hit[0], email }
+        },
+      }),
       firestore: () => ({
         collection: (name: string) => collectionHandle(name),
       }),
@@ -236,6 +251,7 @@ beforeEach(() => {
   added = {}
   emailLookups = 0
   mockMembers = { 'uid-sam': { email: 'sam@example.com', role: 'editor' } }
+  mockAuthAccounts = {}
   mockOrg = { plan: 'business' }
   mockContact = {
     id: 'contact-1',
@@ -346,6 +362,31 @@ describe('facet writes (claim 2)', () => {
     expect(mockActivity.at(-1)?.summary).toBe('assigned owner sam@example.com')
   })
 
+  it('resolves an owner whose member document has no address through the auth record', async () => {
+    // A host-access re-grant writes a member document with no `email`. The
+    // Auth record still carries the address, and the member document — by
+    // its existence alone — proves the account is on this team.
+    mockMembers = { 'uid-quiet': { role: 'editor' } }
+    mockAuthAccounts = { 'uid-quiet': 'quiet@example.com' }
+    mockActions = [acting({ type: 'assignContactOwner', ownerEmail: 'quiet@example.com' })]
+
+    await run({ email: 'ada@example.com' })
+
+    expect(contactUpdates[0][facetPath('ownerUid')]).toBe('uid-quiet')
+  })
+
+  it('refuses an auth account that is not on the roster', async () => {
+    mockMembers = {}
+    mockAuthAccounts = { 'uid-stranger': 'stranger@example.com' }
+    mockActions = [acting({ type: 'assignContactOwner', ownerEmail: 'stranger@example.com' })]
+
+    await run({ email: 'ada@example.com' })
+
+    expect(contactUpdates).toHaveLength(0)
+    expect(mockActivity[0].result).toBe('failed')
+    expect(mockActivity[0].action).toContain('no team member with the address')
+  })
+
   it('assigns an owner named by uid without a roster read', async () => {
     mockMembers = {}
     mockActions = [acting({ type: 'assignContactOwner', ownerUid: 'uid-direct' })]
@@ -411,6 +452,42 @@ describe('records beside the contact (claim 3)', () => {
     await run({ email: 'ada@example.com' })
 
     expect(added['crmTasks']?.[0].assigneeUid).toBe('uid-sam')
+  })
+
+  it('assigns the task to the assignee named by address', async () => {
+    mockActions = [
+      acting({
+        type: 'createCrmTask',
+        title: 'Send the deck',
+        kind: 'email',
+        dueInDays: 0,
+        assigneeEmail: 'Sam@Example.com',
+      }),
+    ]
+
+    await run({ email: 'ada@example.com' })
+
+    expect(added['crmTasks']?.[0].assigneeUid).toBe('uid-sam')
+  })
+
+  it('creates no task for an assignee address nobody on the team has', async () => {
+    // Named on purpose and unresolvable: an error, not a quiet fallback to
+    // the contact's owner.
+    mockActions = [
+      acting({
+        type: 'createCrmTask',
+        title: 'Send the deck',
+        kind: 'email',
+        dueInDays: 0,
+        assigneeEmail: 'ghost@example.com',
+      }),
+    ]
+
+    await run({ email: 'ada@example.com' })
+
+    expect(added['crmTasks']).toBeUndefined()
+    expect(mockActivity[0].result).toBe('failed')
+    expect(mockActivity[0].action).toContain('no team member with the address')
   })
 
   it('stamps the org-wide scope when the org chose it', async () => {

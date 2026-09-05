@@ -433,8 +433,13 @@ export type HostActionStep = (
       kind: CrmTaskKind
       /** Days from the run to the due date; `0` is due today. */
       dueInDays: number
-      /** Falls back to the contact's owner, then to nobody. */
+      /**
+       * Who gets it — by uid, or by an address the executor resolves against
+       * the roster the way the owner step's is. Neither named, the task goes
+       * to the contact's owner, then to nobody.
+       */
       assigneeUid?: string
+      assigneeEmail?: string
     }
   | { type: 'logCrmActivity'; kind: CrmActivityKind; body: string }
 ) & {
@@ -1132,6 +1137,12 @@ export function validateHostAction(action: HostAction): string | null {
         step.dueInDays > CRM_TASK_MAX_DUE_DAYS
       ) {
         return `${label}: due in 0–${CRM_TASK_MAX_DUE_DAYS} days`
+      }
+      // Optional — but an address that is not one would resolve to nobody at
+      // run time, and the task would land unassigned with no word why.
+      const assigneeEmail = step.assigneeEmail?.trim() ?? ''
+      if (assigneeEmail && !assigneeEmail.includes('@')) {
+        return `${label}: enter the assignee’s email address`
       }
     }
     if (step.type === 'logCrmActivity') {

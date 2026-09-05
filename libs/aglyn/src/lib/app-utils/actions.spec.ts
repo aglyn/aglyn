@@ -892,6 +892,18 @@ describe('CRM steps', () => {
     ).toMatch(/due in 0–/)
   })
 
+  it('refuses an assignee address that is not one, and needs none at all', () => {
+    const task = { type: 'createCrmTask', title: 'x', kind: 'call', dueInDays: 1 }
+    expect(
+      validateHostAction(withStep({ ...task, assigneeEmail: 'sam' })),
+    ).toMatch(/assignee’s email/)
+    expect(
+      validateHostAction(withStep({ ...task, assigneeEmail: 'sam@example.com' })),
+    ).toBeNull()
+    // Blank is "the contact's owner", not an error.
+    expect(validateHostAction(withStep({ ...task, assigneeEmail: '  ' }))).toBeNull()
+  })
+
   it('refuses an activity with an unknown kind or nothing to say', () => {
     expect(
       validateHostAction(
