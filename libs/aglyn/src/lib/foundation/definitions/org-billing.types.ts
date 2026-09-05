@@ -141,6 +141,26 @@ export interface OrgFeatureFlags {
   /** Appointment bookings (AGL-159). */
   bookings?: boolean
   /**
+   * The CRM SUITE (AGL-2611): leads, companies, the deals pipeline, tasks,
+   * reports and custom fields, the CRM automation steps, and the `crm:*`
+   * REST resources.
+   *
+   * NOT the Contacts section. Contacts are the capture projection of a
+   * site's audience — the list, tags, notes, export and segments that the
+   * email audiences read — and they ship on every plan including Free, banded
+   * by `contactsPerHost`. What this flag gates is everything a sales team
+   * builds ON that list, and it is the upgrade motive from Free to the first
+   * paid tier rather than a line on top of one: for the small-business buyer
+   * the CRM is the reason to pick a platform over a page builder.
+   *
+   * Read by the console shell through a section's or a widget's
+   * `featureFlag` (so the shell refuses the surface before it mounts), by
+   * the automation executor before a CRM step runs, and by the REST
+   * dispatcher in front of the five CRM resources. A per-org override on
+   * `entitlements.features.crm` works the way every other flag's does.
+   */
+  crm?: boolean
+  /**
    * Basic presentational interactions (AGL-577): menu/drawer open-close,
    * element show/hide, class toggles, sticky nav, navigation, site
    * alerts. Included on ALL plans — pure client-side DOM with no server
@@ -428,8 +448,37 @@ export interface OrgEntitlements {
   servicesPerHost?: number
   /** Redirect rules per host (AGL-154). */
   redirectsPerHost?: number
-  /** Contacts CRM cap (AGL-197): unified people records per host. */
+  /**
+   * The CRM RECORDS band (AGL-197, widened in AGL-2611): contacts, companies
+   * and deals, counted together across the org. The persisted key still says
+   * "contacts" because it is written on live org documents as a staff
+   * override and read back through this type; every customer surface says
+   * "CRM records". Paid tiers meter past it at `extraContactsUsdPer1k`; Free
+   * refuses the next record of any of the three kinds. Tasks and activities
+   * are not counted — see `CRM_ACTIVITIES_PER_RECORD_CEILING`.
+   */
   contactsPerHost?: number
+  /**
+   * One-to-one emails a workspace may send from CRM records per UTC day —
+   * the message a rep writes to one person from their contact page, as
+   * against a campaign (`emailSendsPerMonth`) or transactional mail.
+   *
+   * A HARD cap on every tier and a daily one, because it is the only send
+   * class a person can produce by hand at volume: a campaign is one act over
+   * a metered audience, and a receipt follows an order somebody paid for,
+   * but a rep with a template and a list can put a thousand messages onto
+   * the platform's sending reputation in an afternoon. The day boundary is
+   * what makes the cap a pace rather than a wall — tomorrow the count is
+   * zero again — and the number is sized so that every tier holds its
+   * margin with the whole day spent, which is the arithmetic the Drive
+   * pricing decision of 2026-09-05 records. `checkCrmEmailQuota` reads it;
+   * the counter it is enforced against is `orgs/{orgId}/crmEmailUsage/{day}`.
+   *
+   * Every send still counts on the org's `emailSends` cost meter, like any
+   * other message the provider charged for. 0 on Free, which has no CRM
+   * suite; `UNLIMITED` on Enterprise, whose contract prices its own volume.
+   */
+  crmEmailsPerDay?: number
   /**
    * CAMPAIGN emails sendable per calendar month (AGL-161), and campaign
    * emails only (AGL-1438).

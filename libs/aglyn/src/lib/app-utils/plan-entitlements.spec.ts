@@ -23,6 +23,9 @@ import {
   brandMergeTokens,
   checkApiRequestQuota,
   checkContactQuota,
+  checkCrmEmailQuota,
+  checkCrmRecordsQuota,
+  crmEmailUsageDayKey,
   checkDataStorageQuota,
   checkDatasetQuota,
   checkDiscountMargin,
@@ -449,7 +452,8 @@ describe('plan entitlements', () => {
     expect(checkDatasetQuota(org, 10_000).allowed).toBe(true)
     expect(checkDataStorageQuota(org, 10_000_000).allowed).toBe(true)
     expect(checkApiRequestQuota(org, 10_000_000).allowed).toBe(true)
-    expect(checkContactQuota(org, 10_000_000).allowed).toBe(true)
+    expect(checkCrmRecordsQuota(org, 10_000_000).allowed).toBe(true)
+    expect(checkCrmEmailQuota(org, 10_000_000).allowed).toBe(true)
     // And it reads as Enterprise everywhere the plan is shown, with no
     // custom price and no comped marker needed.
     expect(isEnterpriseOrg(org)).toBe(true)
@@ -717,6 +721,11 @@ describe('plan entitlements', () => {
     const table: Array<[OrgPlan, keyof typeof PLAN_ENTITLEMENTS.free.features, boolean]> = [
       ['free', 'workflows', false],
       ['free', 'dataStore', false],
+      // The CRM suite starts at Starter (AGL-2611); Free keeps the contacts
+      // list through the band, not through this flag.
+      ['free', 'crm', false],
+      ['starter', 'crm', true],
+      ['enterprise', 'crm', true],
       ['free', 'marketingOverlays', false],
       ['free', 'customDomain', false],
       ['starter', 'workflows', true],
@@ -824,47 +833,144 @@ describe('plan entitlements', () => {
     expect(pro.overageRateUsd).toBeNull()
   })
 
-  it('checkContactQuota meters audience overage on paid plans, hard-bands free (AGL-890)', () => {
-    // Starter includes 1,000 contacts; 3,500 used → 2,500 over at $1/1k.
-    const starter = checkContactQuota({ plan: 'starter' } as any, 3_500)
+  it('checkCrmRecordsQuota meters the records band on paid plans, hard-bands free (AGL-890/2611)', () => {
+    // Starter includes 1,000 records; 3,500 used → 2,500 over at $1/1k.
+    const starter = checkCrmRecordsQuota({ plan: 'starter' } as any, 3_500)
     expect(starter.allowed).toBe(true)
     expect(starter.included).toBe(1_000)
-    expect(starter.overageContacts).toBe(2_500)
+    expect(starter.overageRecords).toBe(2_500)
     expect(starter.overageMonthlyUsd).toBeCloseTo(2.5)
     expect(starter.overageRateUsd).toBe(1)
     // Pro: 10k included at $0.75/1k over. 12k → 2k over = $1.50.
-    const pro = checkContactQuota({ plan: 'pro' } as any, 12_000)
+    const pro = checkCrmRecordsQuota({ plan: 'pro' } as any, 12_000)
     expect(pro.allowed).toBe(true)
     expect(pro.overageMonthlyUsd).toBeCloseTo(1.5)
     // Within the band there is no overage; remaining is tracked.
-    const within = checkContactQuota({ plan: 'business' } as any, 40_000)
-    expect(within.overageContacts).toBe(0)
+    const within = checkCrmRecordsQuota({ plan: 'business' } as any, 40_000)
+    expect(within.overageRecords).toBe(0)
     expect(within.remaining).toBe(10_000)
     expect(within.allowed).toBe(true)
     // Agency METERS now that its band is finite — a rate is what makes the
     // bound bill rather than drop the CRM record, and the two only ever
     // moved together.
-    const agency = checkContactQuota(
+    const agency = checkCrmRecordsQuota(
       { plan: 'agency' } as any,
       PLAN_ENTITLEMENTS.agency.contactsPerHost + 2_000,
     )
     expect(agency.allowed).toBe(true)
-    expect(agency.overageContacts).toBe(2_000)
+    expect(agency.overageRecords).toBe(2_000)
     expect(agency.overageMonthlyUsd).toBeCloseTo(0.8)
     // Free hard-bands at 100 — no rate, blocked at the band.
-    const freeOver = checkContactQuota({ plan: 'free' } as any, 100)
+    const freeOver = checkCrmRecordsQuota({ plan: 'free' } as any, 100)
     expect(freeOver.allowed).toBe(false)
     expect(freeOver.overageRateUsd).toBeNull()
     expect(freeOver.overageMonthlyUsd).toBe(0)
-    const freeUnder = checkContactQuota({ plan: 'free' } as any, 40)
+    const freeUnder = checkCrmRecordsQuota({ plan: 'free' } as any, 40)
     expect(freeUnder.allowed).toBe(true)
     // A dead subscription downgrades to free's hard band (AGL-247).
-    const dead = checkContactQuota(
+    const dead = checkCrmRecordsQuota(
       { plan: 'pro', subscription: { status: 'canceled' } } as any,
       150,
     )
     expect(dead.allowed).toBe(false)
     expect(dead.included).toBe(100)
+  })
+
+  it('the band counts contacts, companies and deals as ONE number (AGL-2611)', () => {
+    // The gate takes the SUM and knows nothing about which collection a
+    // record came from — that is the whole design: three kinds, one band.
+    // 40 contacts + 30 companies + 30 deals is the 100th record on Free, so
+    // the NEXT create of any kind is refused …
+    const contacts = 40
+    const companies = 30
+    const deals = 30
+    const atBand = checkCrmRecordsQuota(
+      { plan: 'free' } as any,
+      contacts + companies + deals,
+    )
+    expect(atBand.included).toBe(100)
+    expect(atBand.allowed).toBe(false)
+    // … and one fewer of ANY kind still admits it. Both sides, so a gate
+    // that refused everything could not pass.
+    expect(
+      checkCrmRecordsQuota({ plan: 'free' } as any, contacts + companies + deals - 1)
+        .allowed,
+    ).toBe(true)
+    // Starter meters the 101st rather than refusing it: 1,001 records on a
+    // 1,000 band is one record of overage at $1/1k, still allowed.
+    const starterPast = checkCrmRecordsQuota({ plan: 'starter' } as any, 1_001)
+    expect(starterPast.allowed).toBe(true)
+    expect(starterPast.overageRecords).toBe(1)
+    expect(starterPast.overageMonthlyUsd).toBe(0)
+    expect(starterPast.overageRateUsd).toBe(1)
+  })
+
+  it('checkContactQuota is the SAME function under its old name (AGL-2611)', () => {
+    // An alias, not a copy: a caller still on the old name is measuring the
+    // records band and must be handed the summed count. Identity, so the
+    // two can never drift into different arithmetic.
+    expect(checkContactQuota).toBe(checkCrmRecordsQuota)
+  })
+
+  it('pins the one-to-one email caps per UTC day (AGL-2611)', () => {
+    // The numbers the Drive pricing decision of 2026-09-05 records: the
+    // count at which every tier holds an 80% CRM-axis margin at its annual
+    // price, not a usability figure.
+    const table: Record<OrgPlan, number> = {
+      free: 0,
+      starter: 50,
+      pro: 150,
+      business: 200,
+      scale: 300,
+      advanced: 500,
+      agency: 1_000,
+      enterprise: UNLIMITED,
+    }
+    for (const [plan, cap] of Object.entries(table)) {
+      expect([plan, PLAN_ENTITLEMENTS[plan as OrgPlan].crmEmailsPerDay]).toEqual([
+        plan,
+        cap,
+      ])
+    }
+  })
+
+  it('checkCrmEmailQuota hard-caps at the day band on every tier (AGL-2611)', () => {
+    const noon = new Date('2026-09-05T12:34:56Z')
+    // Starter: 50 a day. 49 sent → one more is allowed; 50 sent → refused.
+    const room = checkCrmEmailQuota({ plan: 'starter' } as any, 49, noon)
+    expect(room.allowed).toBe(true)
+    expect(room.included).toBe(50)
+    expect(room.remaining).toBe(1)
+    const full = checkCrmEmailQuota({ plan: 'starter' } as any, 50, noon)
+    expect(full.allowed).toBe(false)
+    expect(full.remaining).toBe(0)
+    // No overage rate exists for this band, so past it stays refused rather
+    // than metered — unlike the records band beside it.
+    expect(checkCrmEmailQuota({ plan: 'agency' } as any, 1_000, noon).allowed).toBe(false)
+    expect(checkCrmEmailQuota({ plan: 'agency' } as any, 999, noon).allowed).toBe(true)
+    // Free has no suite and no cap to spend: refused at zero.
+    const free = checkCrmEmailQuota({ plan: 'free' } as any, 0, noon)
+    expect(free.allowed).toBe(false)
+    expect(free.included).toBe(0)
+    // Enterprise is unbounded, and a per-org override raises any other tier.
+    expect(checkCrmEmailQuota({ plan: 'enterprise' } as any, 1_000_000, noon).allowed).toBe(true)
+    expect(
+      checkCrmEmailQuota(
+        { plan: 'starter', entitlements: { crmEmailsPerDay: 60 } } as any,
+        55,
+        noon,
+      ).allowed,
+    ).toBe(true)
+    // The counter rolls at the next UTC midnight, whatever the hour.
+    expect(full.resetsAt.toISOString()).toBe('2026-09-06T00:00:00.000Z')
+    // A malformed counter reads as zero spent, never as negative headroom.
+    expect(checkCrmEmailQuota({ plan: 'starter' } as any, Number.NaN, noon).used).toBe(0)
+    expect(checkCrmEmailQuota({ plan: 'starter' } as any, -5, noon).used).toBe(0)
+  })
+
+  it('keys the one-to-one email counter by UTC day (AGL-2611)', () => {
+    expect(crmEmailUsageDayKey(new Date('2026-09-05T23:59:59Z'))).toBe('2026-09-05')
+    expect(crmEmailUsageDayKey(new Date('2026-09-06T00:00:00Z'))).toBe('2026-09-06')
   })
 
   it('checkFormSubmissionQuota meters on paid plans, walls free (AGL-1280)', () => {
