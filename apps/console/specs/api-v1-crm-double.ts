@@ -80,10 +80,19 @@ class MockDelete {}
 class MockIncrement {
   constructor(public by: number) {}
 }
+/** The array transforms the contact–company link writes with (AGL-2613). */
+class MockArrayUnion {
+  constructor(public values: unknown[]) {}
+}
+class MockArrayRemove {
+  constructor(public values: unknown[]) {}
+}
 
 export const mockFieldValue = {
   delete: () => new MockDelete(),
   increment: (by: number) => new MockIncrement(by),
+  arrayUnion: (...values: unknown[]) => new MockArrayUnion(values),
+  arrayRemove: (...values: unknown[]) => new MockArrayRemove(values),
   serverTimestamp: () => MockTimestamp.now(),
 }
 
@@ -118,8 +127,17 @@ function resolveWrite(
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(data)) {
+    const stored: unknown[] = Array.isArray(existing?.[key])
+      ? (existing?.[key] as unknown[])
+      : []
     out[key] =
-      value instanceof MockIncrement ? Number(existing?.[key] ?? 0) + value.by : value
+      value instanceof MockIncrement
+        ? Number(existing?.[key] ?? 0) + value.by
+        : value instanceof MockArrayUnion
+          ? [...stored, ...value.values.filter((entry) => !stored.includes(entry))]
+          : value instanceof MockArrayRemove
+            ? stored.filter((entry) => !value.values.includes(entry))
+            : value
   }
   return out
 }

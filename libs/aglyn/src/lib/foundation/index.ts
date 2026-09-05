@@ -66,6 +66,7 @@ export type {
   AglynOrgBilling,
   OrgBandwidthCap,
   OrgBrandingProfile,
+  OrgCrmSettings,
   OrgDiscount,
   OrgEntitlements,
   OrgFeatureFlags,

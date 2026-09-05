@@ -54,10 +54,12 @@
 
 import {
   contactFacetPath,
+  type ContactCompanyLinkState,
   planContactDetach,
   type ContactLifecycleStage,
 } from '@aglyn/aglyn'
 import { arrayRemove, arrayUnion, deleteField } from 'firebase/firestore'
+import { type CompanyOption, contactCompanyLinkWrites } from './companies'
 
 /**
  * The Firestore batch cap is 500 writes; 400 leaves room for the sentinel
@@ -77,11 +79,25 @@ export interface ContactBulkRow {
   tags?: string[]
   /** The holder tokens — what `planContactDetach` counts. */
   visibleTo?: string[]
+  /** The link state the company planner reads — see `ContactRecord.companyLink`. */
+  companyLink?: ContactCompanyLinkState
 }
 
-/** One write to one contact document, named by the address it is about. */
+/**
+ * One write to one contact document, named by the address it is about.
+ *
+ * An update may carry `companyCounts`: the companies whose contacts count
+ * the write moves, as bare deltas. They are numbers rather than sentinels so
+ * a batch can SUM them — four hundred rows set to Acme are one `increment`
+ * of four hundred on Acme, not four hundred writes to one document — and a
+ * per-row fallback can apply the one row's share on its own.
+ */
 export type ContactBulkWrite = { id: string; email: string } & (
-  | { kind: 'update'; data: Record<string, unknown> }
+  | {
+      kind: 'update'
+      data: Record<string, unknown>
+      companyCounts?: Array<{ companyId: string; delta: 1 | -1 }>
+    }
   | { kind: 'delete' }
 )
 
@@ -212,6 +228,72 @@ export function planSetFacetField(
     })),
     skipped: [],
   }
+}
+
+/**
+ * File every row under one company — or under none, with `null` (AGL-2613).
+ *
+ * The properties card's own link write, per row: the facet's `companyId`,
+ * the shared mirror by the sentinel the planner chose, and the company's
+ * name echoed where the list column and the global search read it. A row
+ * already at that company is left alone silently, as a row already tagged
+ * is — the plan is `null` and a report saying so would be noise. A row the
+ * table could not project a link state for is skipped AND named: the plan
+ * cannot tell whether an old id may leave the mirror without one, and a
+ * guess would either strand a company in another holder's index or take
+ * their link away.
+ */
+export function planSetCompany(
+  rows: readonly ContactBulkRow[],
+  groupId: string,
+  company: CompanyOption | null,
+  nowMs: number,
+): ContactBulkPlan {
+  const writes: ContactBulkWrite[] = []
+  const skipped: ContactBulkSkip[] = []
+  for (const row of rows) {
+    if (!row.companyLink) {
+      skipped.push({ email: addressOf(row), reason: 'its company link could not be read' })
+      continue
+    }
+    const link = contactCompanyLinkWrites(
+      row.companyLink,
+      groupId,
+      company?.id ?? null,
+      company ? company.name : null,
+    )
+    if (!link) continue
+    writes.push({
+      id: row.$id,
+      email: addressOf(row),
+      kind: 'update',
+      data: { ...link.contact, updatedAt: new Date(nowMs) },
+      ...(link.counts.length ? { companyCounts: link.counts } : {}),
+    })
+  }
+  return { writes, skipped }
+}
+
+/**
+ * The count each company moves by across a set of writes, summed — what a
+ * batch applies as one `increment` per company. Companies whose moves cancel
+ * out are left off, so a batch that moved a person from Acme and another to
+ * Acme writes nothing to Acme at all.
+ */
+export function companyCountDeltas(
+  writes: readonly ContactBulkWrite[],
+): Map<string, number> {
+  const deltas = new Map<string, number>()
+  for (const write of writes) {
+    if (write.kind !== 'update') continue
+    for (const count of write.companyCounts ?? []) {
+      deltas.set(count.companyId, (deltas.get(count.companyId) ?? 0) + count.delta)
+    }
+  }
+  for (const [companyId, delta] of deltas) {
+    if (delta === 0) deltas.delete(companyId)
+  }
+  return deltas
 }
 
 /**

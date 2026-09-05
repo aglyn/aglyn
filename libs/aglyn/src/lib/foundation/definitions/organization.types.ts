@@ -25,6 +25,7 @@
 
 import type { ITimestamp } from '@aglyn/shared-util-timestamp'
 import type {
+  OrgCrmSettings,
   OrgEntitlements,
   OrgPlan,
   OrgSeatAddons,
@@ -161,6 +162,8 @@ export interface AglynOrganization extends AglynDocument {
    * either way.
    */
   defaultResourceScope?: 'org' | 'host'
+  /** The CRM's organization-wide settings (AGL-2613) — see `OrgCrmSettings`. */
+  crm?: OrgCrmSettings
 }
 
 /**

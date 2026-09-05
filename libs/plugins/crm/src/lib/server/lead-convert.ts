@@ -56,7 +56,6 @@
 
 import {
   consentGroupScope,
-  contactFacetPath,
   CRM_COLLECTIONS,
   type CrmDealStage,
   type CrmDealStatus,
@@ -75,6 +74,7 @@ import {
   firebaseAdmin,
   getOrgForHost,
   orgDataCollectionForHost,
+  writeContactCompanyLink,
 } from '@aglyn/tenant-data-admin'
 import { captureHostContact } from '@aglyn/tenant-runtime'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
@@ -396,15 +396,19 @@ export const leadConvertHandler: PluginApiHandler = async (req, res) => {
     }
     if (companyId) {
       /*
-       * BOTH shapes, kept in step: the queryable top-level array the
-       * company's contacts card filters on, and the holder's facet field the
-       * contact record reads. A dotted path on `update()` reaches one
-       * holder's facet and leaves every other holder's alone.
+       * The one link writer (AGL-2613): the holder's facet field the contact
+       * record reads, the queryable top-level mirror the company's contacts
+       * card filters on, and the company's contacts count — planned from
+       * the row as the capture left it, so a person the org already held
+       * under another company is MOVED rather than counted twice.
        */
-      await contactRef.update({
-        companyIds: FieldValue.arrayUnion(companyId),
-        [contactFacetPath(group.groupId, 'companyId')]: companyId,
-        updatedAt: FieldValue.serverTimestamp(),
+      await writeContactCompanyLink({
+        firestore,
+        contactRef,
+        contact: found.docs[0].data() as Record<string, unknown>,
+        companiesRef: orgRef.collection(CRM_COLLECTIONS.companies),
+        groupId: group.groupId,
+        companyId,
       })
     }
 

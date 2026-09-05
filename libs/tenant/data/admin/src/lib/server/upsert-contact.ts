@@ -48,15 +48,23 @@ import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
  * drifts. A direct path is real in every harness.
  */
 import {
+  CONTACT_COMPANY_IDS_FIELD,
   CONTACT_FIELD_KEY_PATTERN,
   type ContactCustomValue,
   contactLifecycleStageAfterPurchase,
+  CRM_COLLECTIONS,
   isContactLifecycleStage,
+  planContactCompanyLink,
+  readContactCompanyLink,
 } from '@aglyn/aglyn/app-utils/crm'
 import {
   normalizeAddress,
   normalizePhone,
 } from '@aglyn/aglyn/foundation/definitions/contact.types'
+import {
+  contactCompanyMirrorValue,
+  settleCompanyContactsCounts,
+} from './contact-company-link'
 import {
   consentGroupForSite,
   getOrgForHost,
@@ -178,6 +186,22 @@ function storableProfile(input: ContactProfileInput | undefined): {
     if (Object.keys(custom).length) out.custom = custom
   }
   return out
+}
+
+/**
+ * The org's companies collection, beside its contacts one.
+ *
+ * Reached through the contacts reference's parent — the org document —
+ * because that is the one handle this function holds on the org. `parent`
+ * is `null` only for a root collection, which an org subcollection never
+ * is; answered as `null` rather than thrown so a count that has nowhere to
+ * land is skipped, and never costs the capture.
+ */
+function companiesBeside(
+  contactsRef: FirebaseFirestore.CollectionReference,
+): FirebaseFirestore.CollectionReference | null {
+  const parent = contactsRef.parent
+  return parent ? parent.collection(CRM_COLLECTIONS.companies) : null
 }
 
 /**
@@ -509,6 +533,29 @@ export async function upsertHostContact(
           profile.lifecycleStage ?? facet.lifecycleStage,
         )
       }
+      /*
+       * THE COMPANY LINK, when the door carried one (AGL-2613).
+       *
+       * The facet's `companyId` is written with the rest of the profile
+       * below, but the facet is not the whole association: the top-level
+       * `companyIds` mirror is what the company page queries, and the
+       * company's `contactsCount` is what the companies list shows. The
+       * planner reads the row as it stands — this holder's previous link,
+       * the mirror, the other holders' ids — and says what the mirror
+       * becomes and which counts move; the mirror change rides in this same
+       * merge-set, and the counts settle after it.
+       */
+      const link =
+        profile.companyId !== undefined
+          ? planContactCompanyLink(
+              readContactCompanyLink(
+                docSnapshot.data() as Record<string, unknown>,
+                group.groupId,
+              ),
+              profile.companyId,
+            )
+          : null
+      const mirror = link ? contactCompanyMirrorValue(link) : undefined
       await docSnapshot.ref.set(
         {
           // The search keys travel WITH the name, and only when the name is
@@ -517,6 +564,7 @@ export async function upsertHostContact(
           ...(merged.name ? nameSearchFields(merged.name) : {}),
           // The search echo of the facet's phone — see `HostContact.phone`.
           ...(profile.phone ? { phone: profile.phone } : {}),
+          ...(mirror !== undefined ? { [CONTACT_COMPANY_IDS_FIELD]: mirror } : {}),
           /*
            * NESTED, not dot-pathed. This is a `set(…, { merge: true })`, and
            * a merge-set treats a key containing dots as a literal field name
@@ -614,6 +662,7 @@ export async function upsertHostContact(
         },
         { merge: true },
       )
+      await settleCompanyContactsCounts(companiesBeside(contactsRef), link)
       return { contactId: docSnapshot.id, created: false }
     }
 
@@ -681,6 +730,11 @@ export async function upsertHostContact(
       ...(options.name ? nameSearchFields(options.name.slice(0, 120)) : {}),
       // The search echo of the facet's phone — see `HostContact.phone`.
       ...(profile.phone ? { phone: profile.phone } : {}),
+      // The company mirror the company page queries (AGL-2613) — a create
+      // has nothing to union with, so the door's company is the whole list.
+      ...(profile.companyId
+        ? { [CONTACT_COMPANY_IDS_FIELD]: [profile.companyId] }
+        : {}),
       // The facet this capture creates. Everything a holder owns lives under
       // its own group id; the address and the canonical name above are the
       // only shared identity.
@@ -713,6 +767,18 @@ export async function upsertHostContact(
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     })
+    // The company the door named now has one more contact naming it
+    // (AGL-2613) — the fresh row's plan is the trivial one, nothing held
+    // before and nothing held elsewhere.
+    if (profile.companyId) {
+      await settleCompanyContactsCounts(
+        companiesBeside(contactsRef),
+        planContactCompanyLink(
+          { companyId: null, companyIds: [], heldElsewhere: [] },
+          profile.companyId,
+        ),
+      )
+    }
     /*
      * ATTRIBUTED ON CREATION ONLY, and therefore below the band gate rather
      * than above it — the opposite placement to the order join at the top of

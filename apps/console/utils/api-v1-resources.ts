@@ -34,8 +34,10 @@ import {
   datasetIntegrityUpdate,
   defaultScopeForNewResource,
   CAPTURED_BY_HOST_FIELD,
+  CONTACT_COMPANY_IDS_FIELD,
   CONTACT_FACETS_FIELD,
   CONTACT_LIFECYCLE_STAGES,
+  type ContactCompanyLinkPlan,
   contactFacetPath,
   type ContactLifecycleStage,
   CRM_COLLECTIONS,
@@ -57,6 +59,8 @@ import {
   normalizeContactEmail,
   normalizePhone,
   ORG_SCOPE_TOKEN,
+  planContactCompanyLink,
+  readContactCompanyLink,
   readContactCustomInput,
   readContactFacet,
   readImageDimensions,
@@ -71,6 +75,7 @@ import {
   apiJson,
   ApiErrors,
   consumeRateLimit,
+  contactCompanyMirrorValue,
   dataStorageRefusal,
   decodeCursor,
   encodeCursor,
@@ -79,6 +84,7 @@ import {
   getMediaQuarantine,
   listResponse,
   parseLimit,
+  settleCompanyContactsCounts,
 } from '@aglyn/tenant-data-admin'
 import { createHash, randomUUID } from 'crypto'
 import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore'
@@ -2755,42 +2761,35 @@ function contactCrmCreateFields(
  * `null` becomes a field delete, so a PATCH can clear.
  *
  * `companyIds` is the top-level twin of the facets' `companyId`s, kept so
- * `?companyId=` can be one indexed clause. A move from one company to
- * another is a remove and an add, and Firestore takes one transform per
- * field per write, so the array is rewritten from what is stored: the old id
- * leaves only when no OTHER holder still files the person under it, and an
- * id some other surface put there is left exactly where it was.
+ * `?companyId=` can be one indexed clause. Which ids it keeps is the CRM's
+ * one planner's decision (`planContactCompanyLink`, AGL-2613): the old id
+ * leaves only when no OTHER holder still files the person under it, an id
+ * some other surface put there is left exactly where it was, and the plan
+ * also names the companies whose contacts count the write moves — which the
+ * caller settles after the contact is written, because they are other
+ * documents.
  */
 function contactCrmUpdateFields(
   ctx: ApiV1Context,
   data: FirebaseFirestore.DocumentData,
   crm: ContactCrmInput,
   siteId: string,
-): Record<string, unknown> {
+): { update: Record<string, unknown>; link: ContactCompanyLinkPlan | null } {
   const update: Record<string, unknown> = {}
   const group = consentGroupForHost(ctx.org as Record<string, unknown>, siteId)
   for (const [field, value] of Object.entries(updatePayload(crm))) {
     update[contactFacetPath(group.groupId, field)] = value
   }
+  let link: ContactCompanyLinkPlan | null = null
   if (crm.companyId !== undefined) {
-    const previous = readContactFacet(data, group.groupId).companyId
-    const next = new Set<string>(
-      Array.isArray(data.companyIds)
-        ? data.companyIds.filter((id: unknown): id is string => typeof id === 'string')
-        : [],
+    link = planContactCompanyLink(
+      readContactCompanyLink(data, group.groupId),
+      crm.companyId,
     )
-    if (previous && previous !== crm.companyId) {
-      const heldElsewhere = contactFacetHolders(data).some(
-        (holder) =>
-          holder !== group.groupId &&
-          readContactFacet(data, holder).companyId === previous,
-      )
-      if (!heldElsewhere) next.delete(previous)
-    }
-    if (crm.companyId) next.add(crm.companyId)
-    update.companyIds = [...next]
+    const mirror = link ? contactCompanyMirrorValue(link) : undefined
+    if (mirror !== undefined) update[CONTACT_COMPANY_IDS_FIELD] = mirror
   }
-  return update
+  return { update, link }
 }
 
 /**
@@ -2823,6 +2822,10 @@ function contactViewGroup(
 
 const contactsCollection = (ctx: ApiV1Context) =>
   ctx.firestore.collection('orgs').doc(ctx.orgId).collection('contacts')
+
+/** The org's companies, beside its contacts — where a link's count lands (AGL-2613). */
+const companiesCollection = (ctx: ApiV1Context) =>
+  ctx.firestore.collection('orgs').doc(ctx.orgId).collection(CRM_COLLECTIONS.companies)
 
 /**
  * `POST /v1/contacts` (AGL-2276) — the call that lets an integration own the
@@ -3016,6 +3019,18 @@ async function createContact(
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
     })
+    // The company the body named has one more contact naming it (AGL-2613);
+    // a fresh row's plan is the trivial one, and `crmRefErrors` has already
+    // required the company to exist.
+    if (consentSiteId && crm.companyId) {
+      await settleCompanyContactsCounts(
+        companiesCollection(ctx),
+        planContactCompanyLink(
+          { companyId: null, companyIds: [], heldElsewhere: [] },
+          crm.companyId,
+        ),
+      )
+    }
     const view = contactView(await collection.doc(id).get())
     // Stored as 200 so a replay is distinguishable from the fresh 201.
     await claim.record(200, view)
@@ -3137,17 +3152,21 @@ async function updateContact(
   } else if (marketingConsent === false) {
     update.marketingConsent = false
   }
+  let link: ContactCompanyLinkPlan | null = null
   if (consentSiteId) {
-    Object.assign(
-      update,
-      contactCrmUpdateFields(ctx, snap.data() ?? {}, crm, consentSiteId),
-    )
+    const crmFields = contactCrmUpdateFields(ctx, snap.data() ?? {}, crm, consentSiteId)
+    Object.assign(update, crmFields.update)
+    link = crmFields.link
   }
   // An empty body is a no-op answered with the current contact, matching
   // `updateDataset`: a client re-sending an unchanged object should not have
   // to special-case it.
   if (Object.keys(update).length > 0) {
     await contactRef.update({ ...update, updatedAt: Timestamp.now() })
+    // The companies the link moved off or onto, counted after the contact
+    // is written (AGL-2613); `crmRefErrors` has already required the new
+    // company to exist.
+    await settleCompanyContactsCounts(companiesCollection(ctx), link)
   }
   // Read back through the site the write named, so what the client sees is
   // the profile it just wrote and not another holder's.

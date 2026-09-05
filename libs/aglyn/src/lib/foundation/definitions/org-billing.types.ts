@@ -922,8 +922,30 @@ export interface AglynOrgBilling extends AglynDocument {
    * tools/scripts/erase-tenant.mjs, which calls the same function (AGL-1481).
    */
   erasureRequestedAt?: ITimestamp | null
+  /**
+   * The CRM's organization-wide settings (AGL-2613), written from
+   * CRM → Settings by an owner or admin with the client SDK — see
+   * `ORG_CLIENT_WRITABLE_FIELDS`. One map rather than a key per setting, so
+   * the section can grow without a rules change each time.
+   */
+  crm?: OrgCrmSettings
   createdAt?: ITimestamp
   updatedAt?: ITimestamp
+}
+
+/**
+ * What the CRM lets an organization decide for every site at once
+ * (AGL-2613). Every key is optional and off when absent: a setting that
+ * has never been touched behaves as the product did before it existed.
+ */
+export interface OrgCrmSettings {
+  /**
+   * Create a company from a captured contact's work email domain when no
+   * company the capturing site can see carries that domain. Off by default:
+   * a company minted from every domain that ever submitted a form is a list
+   * nobody asked for. Public mailbox domains never qualify either way.
+   */
+  autoCreateCompanies?: boolean
 }
 
 /**
@@ -974,6 +996,14 @@ export const ORG_CLIENT_WRITABLE_FIELDS: Readonly<Record<string, string>> = {
     'Last-write stamp. Every client write that IS allowed sets it in the same ' +
     '`setDoc(..., { merge: true })` — the staff suspension, erasure-request ' +
     'and plan-override cards all do — so denying it would deny those writes.',
+  crm:
+    'The CRM settings map (AGL-2613): `autoCreateCompanies` and whatever the ' +
+    'CRM → Settings section adds beside it. Deliberately writable by an org ' +
+    'owner or admin — the section writes it client-direct by dotted path. No ' +
+    'entitlement, price, routing decision or staff judgement reads it; its ' +
+    'one reader is the contact capture door deciding whether to mint a ' +
+    'company record from an email domain, which is a choice about the ' +
+    "org's own data that the org's managers are the right people to make.",
 }
 
 /**

@@ -60,6 +60,14 @@ export interface ContactRecord {
   jobTitle: string
   companyName: string
   companyId: string
+  /**
+   * What linking this person to a company has to know — this holder's link,
+   * the shared mirror and the other holders' ids — so the properties card
+   * and the bulk bar can plan a link from the row without the document. Not
+   * a display field: the mirror is an index every reader of the document
+   * already holds, and nothing renders it.
+   */
+  companyLink: Aglyn.ContactCompanyLinkState
   address: AglynPostalAddress | null
   /** This holder's custom field values, keyed by definition key (AGL-2601). */
   custom?: Record<string, Aglyn.ContactCustomValue>
@@ -93,6 +101,7 @@ export function contactRecordFromDoc(
     jobTitle: facet.jobTitle ?? '',
     companyName: facet.companyName ?? '',
     companyId: facet.companyId ?? '',
+    companyLink: Aglyn.readContactCompanyLink(row, group.groupId),
     address: facet.address ?? null,
     custom: facet.custom ?? {},
     ownerUid: facet.ownerUid ?? '',
