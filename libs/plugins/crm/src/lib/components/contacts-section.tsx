@@ -49,6 +49,7 @@ import {
   CONTACT_LIST_FILTER_FIELDS,
   CONTACT_LIST_FILTER_HEADERS,
 } from '../constants/contact-filters'
+import { ContactImportButton } from './contact-import-drawer'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -851,6 +852,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                   : '∞'
               }`}
             </Typography>
+            <ContactImportButton hostId={hostId} org={org as Record<string, unknown>} />
             <Button
               size="small"
               onClick={handleExport}
