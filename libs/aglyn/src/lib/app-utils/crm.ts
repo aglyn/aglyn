@@ -498,3 +498,113 @@ export function crmScopeTokens(
     ? [ORG_SCOPE_TOKEN]
     : consentGroupScope(group)
 }
+
+/*==========================================
+ * LEADS (AGL-2608).
+ *
+ * A lead is NOT one of the six collections above. It lives at
+ * `hosts/{hostId}/leads/{personKey}`, written by `addHostLead` when a
+ * visitor signs up, books or submits a form, and it is host-scoped by PATH:
+ * no `visibleTo`, no facet map, private to the site that captured it. What
+ * the CRM adds is the working state a sales team keeps on such a capture —
+ * a status, an owner, notes — and the record of its conversion into the
+ * contact, company and deal that live in the org collections.
+ *
+ * These fields are typed here rather than beside `addHostLead` because the
+ * writer of the capture and the reader of the working state are different
+ * programs: the capture door stamps none of them, and a lead that predates
+ * this block carries none of them, which is why every field is optional and
+ * {@link crmLeadStatus} reads an absent status as `new`.
+ *=========================================*/
+
+/**
+ * Where a lead stands, in the order a person works one.
+ *
+ * `qualified` is the CONVERTED state — a lead becomes a contact by being
+ * qualified, and the conversion stamps `convertedContactId` beside it — and
+ * `unqualified` is the closed-without-conversion state with its reason. A
+ * fixed list rather than free text for the reason the lifecycle stages are:
+ * the section filters on it and a report counts by it.
+ */
+export const CRM_LEAD_STATUSES = [
+  'new',
+  'working',
+  'qualified',
+  'unqualified',
+] as const
+
+export type CrmLeadStatus = (typeof CRM_LEAD_STATUSES)[number]
+
+/** How a lead status reads on screen — typed so a status cannot ship unlabeled. */
+export const CRM_LEAD_STATUS_LABELS: Record<CrmLeadStatus, string> = {
+  new: 'New',
+  working: 'Working',
+  qualified: 'Qualified',
+  unqualified: 'Unqualified',
+}
+
+/**
+ * The statuses a lead still needs somebody's attention in — what the Leads
+ * section shows by default, so the list opens on the work rather than on
+ * the history.
+ */
+export const CRM_LEAD_OPEN_STATUSES: readonly CrmLeadStatus[] = ['new', 'working']
+
+export function isCrmLeadStatus(value: unknown): value is CrmLeadStatus {
+  return (
+    typeof value === 'string' &&
+    (CRM_LEAD_STATUSES as readonly string[]).includes(value)
+  )
+}
+
+/**
+ * The working state the CRM writes onto a lead document, beside what the
+ * capture door wrote (`email`, `name`, `sources`, `submissionCount`,
+ * `firstSeenAtMs`, `lastSeenAtMs`, the consent map).
+ *
+ * The four `converted*`/`dealId`/`companyId` fields are stamped ONLY by the
+ * `crm/lead-convert` server route, in one write after the contact exists, so
+ * a lead that carries `convertedContactId` names a contact that was really
+ * created and a lead without it was never converted, whatever its status
+ * says. `unqualifiedReason` travels with `status: 'unqualified'` and is the
+ * one free-text field a report will want to read back.
+ */
+export interface CrmLeadFields {
+  status?: CrmLeadStatus
+  /** The team member working the lead. */
+  ownerUid?: string
+  notes?: string
+  unqualifiedReason?: string
+  /** `orgs/{orgId}/contacts/{contactId}` — the person this lead became. */
+  convertedContactId?: string
+  convertedAtMs?: number
+  /** The deal the conversion opened, when the converter asked for one. */
+  dealId?: string
+  /** The company the conversion created or linked, when it named one. */
+  companyId?: string
+}
+
+/**
+ * A lead's status as the list and the filter should read it.
+ *
+ * `new` for a lead that carries no status at all — every lead captured
+ * before the CRM existed, and every lead the capture door writes today,
+ * because `addHostLead` stamps none. Reading the absence as `new` is what
+ * lets the section open on the leads a site already holds rather than on an
+ * empty list until each one has been touched once. A stored value the union
+ * does not name also reads as `new`: it is a document some other writer
+ * produced, and refusing to list it would hide a person.
+ */
+export function crmLeadStatus(
+  lead: Pick<CrmLeadFields, 'status'> | null | undefined,
+): CrmLeadStatus {
+  const status = lead?.status
+  return isCrmLeadStatus(status) ? status : 'new'
+}
+
+/** Whether a lead still needs working — see {@link CRM_LEAD_OPEN_STATUSES}. */
+export function isCrmLeadOpen(
+  lead: Pick<CrmLeadFields, 'status'> | null | undefined,
+): boolean {
+  return CRM_LEAD_OPEN_STATUSES.includes(crmLeadStatus(lead))
+}
