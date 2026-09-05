@@ -126,6 +126,18 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     fromCache: false,
   }),
   useFirestoreCollection: () => ({ data: [], status: 'success', fromCache: false }),
+  // The company's contacts card pages its window; nobody is linked here.
+  usePagedCollection: () => ({
+    data: [],
+    rows: [],
+    status: 'success',
+    fromCache: false,
+    hasMore: false,
+    page: 0,
+    setPage: jest.fn(),
+    pageSize: 10,
+    setPageSize: jest.fn(),
+  }),
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
     .writeGuardedBySeed,
 }))

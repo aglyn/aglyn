@@ -27,7 +27,8 @@ import {
 } from '@mui/material'
 import { getCountFromServer, query } from 'firebase/firestore'
 import { useMemo, useState } from 'react'
-import { useFirestore, useOrgDataScope } from '@aglyn/tenant-feature-instance'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useCrmScope } from '../hooks/use-crm-scope'
 import { crmRoutes } from '../model/crm-routes'
 import { ClosedDealsCard } from './reports/closed-deals-card'
 import { ContactsMixCard } from './reports/contacts-mix-card'
@@ -69,24 +70,12 @@ import { useAggregateRead } from './reports/use-aggregate-read'
 export function ContactsReportsSection(props: ConsolePluginPageProps) {
   const { hostId, org, basePath } = props
   const firestore = useFirestore()
-  // Org-shared data root (AGL-237): null until the org lookup settles, and
-  // the page reads nothing until it does.
-  const { scope: dataScope } = useOrgDataScope({ hostId })
-  // The controller this page is viewed as — the same resolution the contacts
-  // list makes, so the facet a stage is read from here is the facet the list
-  // edits it in.
-  const consentGroup = useMemo(
-    () => Aglyn.consentGroupForHost(org as Record<string, unknown>, hostId),
-    [org, hostId],
-  )
-  const tokens = useMemo(
-    () =>
-      [
-        Aglyn.ORG_SCOPE_TOKEN,
-        ...consentGroup.hostIds.map((id) => Aglyn.hostScopeToken(id)),
-      ].slice(0, Aglyn.MAX_SCOPE_HOSTS),
-    [consentGroup],
-  )
+  // The org data root — null until the org lookup settles, and the page
+  // reads nothing until it does — and the controller this page is viewed
+  // as, resolved the way every CRM surface resolves them so the facet a
+  // stage is read from here is the facet the contacts list edits it in.
+  const { scope: dataScope, consentGroup, visibleTo } = useCrmScope({ hostId, org })
+  const tokens = useMemo(() => [...visibleTo], [visibleTo])
   /*
    * The period AND the moment it was chosen, as one value: the range is
    * anchored when the reader picks, not re-derived from a moving `Date.now()`

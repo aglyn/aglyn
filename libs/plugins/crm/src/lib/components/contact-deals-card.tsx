@@ -16,7 +16,7 @@
  */
 'use client'
 
-import type { CrmOrgDoc } from '../hooks/use-deal-scope'
+import type { CrmOrgDoc } from '../hooks/use-crm-scope'
 import { LinkedDealsCard } from './linked-deals-card'
 
 export interface ContactDealsCardProps {

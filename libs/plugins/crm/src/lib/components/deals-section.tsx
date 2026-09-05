@@ -45,7 +45,7 @@ import {
 import type { GridColDef } from '@mui/x-data-grid'
 import { useRouter } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
-import { useDealScope } from '../hooks/use-deal-scope'
+import { useCrmScope } from '../hooks/use-crm-scope'
 import { useDealStageApi } from '../hooks/use-deal-stage-api'
 import {
   BOARD_CLOSED_LIMIT,
@@ -104,7 +104,7 @@ export function DealsSection(props: ConsolePluginPageProps) {
   const routes = crmRoutes(basePath ?? '')
   const router = useRouter()
   const { enqueueSnackbar } = useSnackbar()
-  const scope = useDealScope({ hostId, org })
+  const scope = useCrmScope({ hostId, org })
   const pipelineState = usePipeline(scope.orgId, {
     hostId,
     org: (org ?? null) as Record<string, unknown> | null,
@@ -122,18 +122,18 @@ export function DealsSection(props: ConsolePluginPageProps) {
   // above both views is computed from, and it is already bounded.
   const open = useDealsByStatus(
     scope.orgId,
-    scope.readTokens,
+    scope.visibleTo,
     pipeline?.$id ?? null,
     'open',
     BOARD_OPEN_LIMIT,
   )
   const closedPipelineId =
     view === 'board' && closedExpanded ? (pipeline?.$id ?? null) : null
-  const won = useDealsByStatus(scope.orgId, scope.readTokens, closedPipelineId, 'won', BOARD_CLOSED_LIMIT)
-  const lost = useDealsByStatus(scope.orgId, scope.readTokens, closedPipelineId, 'lost', BOARD_CLOSED_LIMIT)
+  const won = useDealsByStatus(scope.orgId, scope.visibleTo, closedPipelineId, 'won', BOARD_CLOSED_LIMIT)
+  const lost = useDealsByStatus(scope.orgId, scope.visibleTo, closedPipelineId, 'lost', BOARD_CLOSED_LIMIT)
   const paged = usePagedDeals(
     view === 'table' ? scope.orgId : null,
-    scope.readTokens,
+    scope.visibleTo,
     statusFilter,
   )
 
@@ -461,7 +461,7 @@ export function DealsSection(props: ConsolePluginPageProps) {
         pipeline={pipeline}
         fromCache={pipelineState.fromCache}
         unreadable={pipelineState.status === 'error'}
-        visibleToTokens={scope.readTokens}
+        visibleToTokens={scope.visibleTo}
       />
       <LostReasonDialog
         open={Boolean(losing)}

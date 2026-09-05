@@ -21,7 +21,7 @@ import { mdiPlus } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { Button, Chip, Stack, Typography } from '@mui/material'
 import { useMemo, useState } from 'react'
-import { type CrmOrgDoc, useDealScope } from '../hooks/use-deal-scope'
+import { type CrmOrgDoc, useCrmScope } from '../hooks/use-crm-scope'
 import { useLinkedDeals } from '../hooks/use-deals'
 import { usePipeline } from '../hooks/use-pipeline'
 import { crmRoutes } from '../model/crm-routes'
@@ -55,14 +55,14 @@ export interface LinkedDealsCardProps {
 export function LinkedDealsCard(props: LinkedDealsCardProps) {
   const { hostId, org, basePath, link } = props
   const routes = crmRoutes(basePath)
-  const scope = useDealScope({ hostId, org })
+  const scope = useCrmScope({ hostId, org })
   const pipelineState = usePipeline(scope.orgId, {
     hostId,
     org: (org ?? null) as Record<string, unknown> | null,
   })
   const { data: deals, status } = useLinkedDeals(
     scope.orgId,
-    scope.readTokens,
+    scope.visibleTo,
     'contactId' in link ? { contactId: link.contactId } : { companyId: link.companyId },
   )
   const [creating, setCreating] = useState(false)

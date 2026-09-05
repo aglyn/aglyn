@@ -52,7 +52,7 @@ import {
   where,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { type CrmOrgDoc, useDealScope } from '../hooks/use-deal-scope'
+import { type CrmOrgDoc, useCrmScope } from '../hooks/use-crm-scope'
 import { useOrgMemberDirectory } from '../hooks/use-org-member-directory'
 import {
   DEAL_CURRENCIES,
@@ -149,7 +149,7 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { data: user } = useUser()
-  const { orgId, consentGroup, readTokens, createTokens } = useDealScope({
+  const { orgId, consentGroup, visibleTo, createTokens } = useCrmScope({
     hostId,
     org,
   })
@@ -189,15 +189,15 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
    */
   const { data: contactRows } = useFirestoreCollection<Record<string, unknown>>(
     () =>
-      open && orgId && readTokens.length
+      open && orgId && visibleTo.length
         ? query(
             collection(firestore, 'orgs', orgId, 'contacts'),
-            where('visibleTo', 'array-contains-any', readTokens),
+            where('visibleTo', 'array-contains-any', visibleTo),
             orderBy('updatedAt', 'desc'),
             limit(CONTACT_WINDOW),
           )
         : null,
-    [firestore, open, orgId, readTokens],
+    [firestore, open, orgId, visibleTo],
     { idField: '$id' },
   )
   const [contactQuery, setContactQuery] = useState('')
@@ -222,14 +222,14 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
   const [companyQuery, setCompanyQuery] = useState('')
   const [companyChoices, setCompanyChoices] = useState<CompanyChoice[]>([])
   useEffect(() => {
-    if (!open || !orgId || !readTokens.length) return
+    if (!open || !orgId || !visibleTo.length) return
     const key = nameSearchKey(companyQuery)
     let active = true
     const timer = setTimeout(() => {
       void getDocs(
         query(
           collection(firestore, 'orgs', orgId, CRM_COLLECTIONS.companies),
-          where('visibleTo', 'array-contains-any', readTokens),
+          where('visibleTo', 'array-contains-any', visibleTo),
           orderBy('nameLower'),
           ...(key ? [startAt(key), endAt(`${key}\uf8ff`)] : []),
           limit(COMPANY_MATCHES),
@@ -252,7 +252,7 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
       active = false
       clearTimeout(timer)
     }
-  }, [firestore, open, orgId, readTokens, companyQuery])
+  }, [firestore, open, orgId, visibleTo, companyQuery])
   const companyValue: CompanyChoice | null = values.companyId
     ? { id: values.companyId, name: values.companyName }
     : null
@@ -288,7 +288,7 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
         const created = await addDoc(
           collection(firestore, 'orgs', orgId, CRM_COLLECTIONS.deals),
           dealDocumentFromForm(values, {
-            visibleTo: createTokens,
+            visibleTo: [...createTokens],
             hostId,
             uid: user.uid,
             nowMs,

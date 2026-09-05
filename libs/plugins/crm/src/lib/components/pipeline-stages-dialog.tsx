@@ -68,7 +68,7 @@ export interface PipelineStagesDialogProps {
   fromCache: boolean
   unreadable: boolean
   /** The scope tokens the deal count is filtered by — the viewer's own. */
-  visibleToTokens: string[]
+  visibleToTokens: readonly string[]
 }
 
 /**

@@ -27,8 +27,7 @@ import { mdiAccountPlusOutline, mdiLinkOff } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
-import { usePagedCollection } from '@aglyn/tenant-feature-instance/hooks/use-paged-collection'
+import { useFirestore, usePagedCollection } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
   Button,

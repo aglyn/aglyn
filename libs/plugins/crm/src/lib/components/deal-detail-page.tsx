@@ -30,7 +30,7 @@ import { Button, Stack, Typography } from '@mui/material'
 import { deleteDoc, doc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
-import { useDealScope } from '../hooks/use-deal-scope'
+import { useCrmScope } from '../hooks/use-crm-scope'
 import { useDealStageApi } from '../hooks/use-deal-stage-api'
 import { useDeal } from '../hooks/use-deals'
 import { useOrgMemberDirectory } from '../hooks/use-org-member-directory'
@@ -60,7 +60,7 @@ export function DealDetailPage(props: CrmDetailPageProps) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const scope = useDealScope({ hostId, org })
+  const scope = useCrmScope({ hostId, org })
   const { data: deal, status, fromCache } = useDeal(scope.orgId, id)
   const pipelineState = usePipeline(scope.orgId, {
     hostId,
