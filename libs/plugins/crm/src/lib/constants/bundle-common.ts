@@ -8,7 +8,8 @@
 
 /**
  * The persisted plugin id (AGL-2595). It was `contacts` while the surface was
- * one list; `LEGACY_PLUGIN_IDS` in the plugin manager reads that value as
- * this one, and `backfill-plugin-id-crm.mjs` rewrites the stored lists.
+ * one list; `backfill-plugin-id-crm.mjs` rewrote the stored lists, and the
+ * plugin manager's alias for the old value was retired once that backfill
+ * reported nothing left (AGL-2614).
  */
 export const BUNDLE_ID = 'crm'

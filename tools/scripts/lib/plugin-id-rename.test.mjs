@@ -87,21 +87,28 @@ describe('document plans', () => {
   })
 })
 
-describe('the rename table mirrors the runtime alias', () => {
-  it('names the same pairs as LEGACY_PLUGIN_IDS', () => {
-    const source = readFileSync(
-      join(REPO_ROOT, 'libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts'),
-      'utf8',
+describe('the rename has completed and the runtime alias is retired (AGL-2614)', () => {
+  const source = readFileSync(
+    join(REPO_ROOT, 'libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts'),
+    'utf8',
+  )
+
+  it('the runtime declares no alias table', () => {
+    // The alias was the half that made the deploy safe; once the backfill
+    // reported zero documents on the old id it became a second name nothing
+    // writes and every reader honors. A table returning here is a new rename
+    // in flight, and its pair belongs in `PLUGIN_ID_RENAMES` too.
+    assert.doesNotMatch(source, /LEGACY_PLUGIN_IDS/)
+  })
+
+  it('the seam reads an id as itself', () => {
+    assert.match(
+      source,
+      /export function canonicalPluginId\(pluginId: string\): string \{\s*return pluginId\s*\}/,
     )
-    const block = source.match(
-      /export const LEGACY_PLUGIN_IDS[^=]*=\s*\{([^}]*)\}/,
-    )
-    assert.ok(block, 'LEGACY_PLUGIN_IDS is declared in enabled-plugins.ts')
-    const runtime = Object.fromEntries(
-      [...block[1].matchAll(/['"]?([\w-]+)['"]?\s*:\s*['"]([\w-]+)['"]/g)].map(
-        (m) => [m[1], m[2]],
-      ),
-    )
-    assert.deepEqual(runtime, { ...PLUGIN_ID_RENAMES })
+  })
+
+  it('the table still records the rename this script performed', () => {
+    assert.deepEqual({ ...PLUGIN_ID_RENAMES }, { contacts: 'crm' })
   })
 })

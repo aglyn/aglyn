@@ -67,30 +67,34 @@ describe('resolveEnabledPlugins (AGL-416)', () => {
 })
 
 /**
- * AGL-2595: `contacts` became `crm`, and the old id is still in stored lists.
- * Each reader of a stored list must answer for the CURRENT id, or the rename
- * would switch the plugin off everywhere it had ever been listed.
+ * AGL-2595 renamed `contacts` to `crm` and read the old id through an alias
+ * while the backfill ran; AGL-2614 retired the alias once the backfill
+ * reported zero documents carrying the old id. The seam stays for the next
+ * rename, and today it aliases nothing: a stored `contacts` is a marketplace
+ * listing id like any other unknown string, not the CRM.
  */
-describe('legacy plugin ids (AGL-2595)', () => {
-  it('reads the retired id as the current one', () => {
-    expect(canonicalPluginId('contacts')).toBe('crm')
+describe('the plugin-id seam aliases nothing today (AGL-2614)', () => {
+  it('reads every id as itself', () => {
+    expect(canonicalPluginId('contacts')).toBe('contacts')
     expect(canonicalPluginId('crm')).toBe('crm')
     expect(canonicalPluginId('acme-widgets')).toBe('acme-widgets')
   })
 
-  it('an org that listed the old id still has the plugin enabled', () => {
+  it('an org that still listed the retired id does not have the CRM by it', () => {
+    // The backfill rewrote every such list; a stored `contacts` after it
+    // would be a document written by something other than the console, and
+    // it must not quietly switch a plugin on under an id nothing writes.
     const enabled = resolveEnabledPlugins({ enabledPlugins: ['contacts'] })
-    expect(enabled).toContain('crm')
-    expect(enabled).not.toContain('contacts')
-    expect(isPluginEnabled({ enabledPlugins: ['contacts'] }, 'crm')).toBe(true)
+    expect(enabled).not.toContain('crm')
+    expect(isPluginEnabled({ enabledPlugins: ['contacts'] }, 'crm')).toBe(false)
   })
 
-  it('a site that disabled the old id has the plugin off', () => {
+  it('a site that disabled the retired id has not disabled the CRM', () => {
     const enabled = resolveHostEnabledPlugins(
       { enabledPlugins: ['crm', 'bookings'] },
       { disabledPlugins: ['contacts'] },
     )
-    expect(enabled).not.toContain('crm')
+    expect(enabled).toContain('crm')
     expect(enabled).toContain('bookings')
   })
 
@@ -98,6 +102,7 @@ describe('legacy plugin ids (AGL-2595)', () => {
     for (const plugin of FIRST_PARTY_PLUGINS) {
       expect(canonicalPluginId(plugin.id)).toBe(plugin.id)
     }
+    expect(FIRST_PARTY_PLUGINS.map((plugin) => plugin.id)).not.toContain('contacts')
   })
 })
 
