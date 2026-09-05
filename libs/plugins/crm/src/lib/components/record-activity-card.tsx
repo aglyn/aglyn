@@ -106,7 +106,18 @@ export function RecordActivityCard(props: RecordActivityCardProps) {
             onEdit={openEdit}
             hasMore={activities.hasMore}
             onShowMore={activities.showMore}
-            emptyText="Nothing logged yet — a call, an email, a meeting or a note goes here."
+            emptyText="A call, an email, a meeting or a note about this record goes here."
+            emptyAction={
+              <Button
+                size="small"
+                variant="contained"
+                color="primary"
+                onClick={openNew}
+                disabled={!activities.ready}
+              >
+                {'Log activity'}
+              </Button>
+            }
           />
         )}
       </CardDisplay>

@@ -24,6 +24,7 @@ import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
@@ -315,10 +316,10 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
       >
         <Stack spacing={2}>
           {status === 'success' && window.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              {'No leads yet — sign-ups, bookings and form submissions on your ' +
-                'site become leads automatically.'}
-            </Typography>
+            <EmptyStateComponent
+              label={'No leads yet'}
+              description={'Sign-ups, bookings and form submissions on your site become leads on their own.'}
+            />
           ) : status === 'success' && rows.length === 0 ? (
             <Typography variant="body2" color="text.secondary">
               {`No ${LEAD_FILTER_LABELS[filter].toLowerCase()} leads among the ` +

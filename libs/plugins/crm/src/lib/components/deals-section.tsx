@@ -31,6 +31,7 @@ import {
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
@@ -384,9 +385,22 @@ export function DealsSection(props: ConsolePluginPageProps) {
           ) : view === 'board' && pipeline ? (
             <>
               {open.status === 'success' && open.data.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  {'No open deals yet. Create one, or drag a card here once you have.'}
-                </Typography>
+                <EmptyStateComponent
+                  compact
+                  label={'No open deals yet'}
+                  description={'A deal is a sale in progress, moved across the stages below as it advances.'}
+                  action={
+                    <Button
+                      size="small"
+                      variant="contained"
+                      startIcon={<MdiIcon path={mdiPlus.path} size={0.8} />}
+                      disabled={!pipeline || !scope.orgId}
+                      onClick={() => setCreating(true)}
+                    >
+                      {'New deal'}
+                    </Button>
+                  }
+                />
               ) : null}
               <DealBoard
                 pipeline={pipeline}
@@ -421,9 +435,27 @@ export function DealsSection(props: ConsolePluginPageProps) {
                 <ToggleButton value="lost">{'Lost'}</ToggleButton>
               </ToggleButtonGroup>
               {paged.status === 'success' && paged.rows.length === 0 && paged.page === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  {statusFilter === 'all' ? 'No deals yet.' : `No ${statusFilter} deals.`}
-                </Typography>
+                <EmptyStateComponent
+                  label={statusFilter === 'all' ? 'No deals yet' : `No ${statusFilter} deals`}
+                  description={
+                    statusFilter === 'all'
+                      ? 'A deal is a sale in progress, moved across the pipeline as it advances.'
+                      : undefined
+                  }
+                  action={
+                    statusFilter === 'all' ? (
+                      <Button
+                        size="small"
+                        variant="contained"
+                        startIcon={<MdiIcon path={mdiPlus.path} size={0.8} />}
+                        disabled={!pipeline || !scope.orgId}
+                        onClick={() => setCreating(true)}
+                      >
+                        {'New deal'}
+                      </Button>
+                    ) : undefined
+                  }
+                />
               ) : (
                 <>
                   <ListTable

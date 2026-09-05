@@ -319,7 +319,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
             scope={scope}
             seed={{ status, fromCache }}
           />
-          <ContactCustomFieldsCard hostId={hostId} org={org} contactId={id} />
+          <ContactCustomFieldsCard hostId={hostId} org={org} contactId={id} basePath={basePath} />
           <ContactTimelineCard hostId={hostId} org={org} contactId={id} contact={row} />
           <ContactDealsCard
             hostId={hostId}

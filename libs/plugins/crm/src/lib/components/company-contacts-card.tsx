@@ -26,6 +26,7 @@ import {
 import { mdiAccountPlusOutline, mdiLinkOff } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useFirestore, usePagedCollection } from '@aglyn/tenant-feature-instance'
 import {
@@ -402,11 +403,29 @@ export function CompanyContactsCard(props: CompanyContactsCardProps) {
               'narrowed to them — an organization administrator can see it.'}
           </Alert>
         ) : contacts.length === 0 && page === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            {status === 'loading'
-              ? 'Loading contacts…'
-              : 'Nobody is linked to this company yet.'}
-          </Typography>
+          <EmptyStateComponent
+            compact
+            label={status === 'loading' ? 'Loading contacts…' : 'Nobody is linked to this company yet'}
+            description={
+              status === 'loading'
+                ? undefined
+                : 'Find a contact by email address or name and link them here.'
+            }
+            action={
+              status === 'loading' || adding ? undefined : (
+                <Button
+                  size="small"
+                  variant="contained"
+                  color="primary"
+                  disabled={!scope}
+                  startIcon={<MdiIcon path={mdiAccountPlusOutline.path} size={0.8} />}
+                  onClick={() => setAdding(true)}
+                >
+                  {'Add contact'}
+                </Button>
+              )
+            }
+          />
         ) : (
           <Table size="small">
             <TableHead>

@@ -18,7 +18,8 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { type ConsolePluginPageProps, type ContactCustomValue, pluginDocsHelp } from '@aglyn/aglyn'
-import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
+import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
@@ -41,10 +42,13 @@ import {
   type ContactFieldDefinitionDoc,
   useContactFieldDefinitions,
 } from '../hooks/use-contact-field-definitions'
+import { crmRoutes } from '../model/crm-routes'
 
 export interface ContactCustomFieldsCardProps
   extends Pick<ConsolePluginPageProps, 'hostId' | 'org'> {
   contactId: string
+  /** The CRM surface's own path, for the link to the Fields section. */
+  basePath?: string
   /**
    * The contact document, facets and all, when the page already holds it.
    *
@@ -79,7 +83,7 @@ const isoToDateInput = (value: ContactCustomValue | undefined): string => {
  * key can still find the contact, and an export still shows the column.
  */
 export function ContactCustomFieldsCard(props: ContactCustomFieldsCardProps) {
-  const { hostId, org, contactId, contact } = props
+  const { hostId, org, contactId, contact, basePath } = props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { scope } = useOrgDataScope({ hostId })
@@ -276,9 +280,25 @@ export function ContactCustomFieldsCard(props: ContactCustomFieldsCardProps) {
     >
       <Stack spacing={2}>
         {!ready ? null : active.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            {'No custom fields yet. Define them under Fields and they appear on every contact.'}
-          </Typography>
+          <EmptyStateComponent
+            compact
+            label={'No custom fields yet'}
+            description={'A field defined under Fields is kept on every contact and shows here.'}
+            action={
+              basePath ? (
+                <Button
+                  component={AppLink as any}
+                  {...({ componentVariant: 'naked', nativeButton: false } as any)}
+                  href={crmRoutes(basePath).section('fields')}
+                  size="small"
+                  variant="contained"
+                  color="primary"
+                >
+                  {'New field'}
+                </Button>
+              ) : undefined
+            }
+          />
         ) : (
           <>
             {active.map(control)}

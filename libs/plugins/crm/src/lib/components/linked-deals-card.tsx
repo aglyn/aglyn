@@ -19,6 +19,7 @@
 import { dealStageById, pluginDocsHelp } from '@aglyn/aglyn'
 import { mdiPlus } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
+import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { Button, Chip, Stack, Typography } from '@mui/material'
 import { useMemo, useState } from 'react'
 import { type CrmOrgDoc, useCrmScope } from '../hooks/use-crm-scope'
@@ -93,9 +94,22 @@ export function LinkedDealsCard(props: LinkedDealsCardProps) {
         contentGutterY
       >
         {status === 'success' && deals.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            {'No deals yet.'}
-          </Typography>
+          <EmptyStateComponent
+            compact
+            label={'No deals yet'}
+            description={'A deal started here is linked to this record from the first save.'}
+            action={
+              <Button
+                size="small"
+                variant="contained"
+                startIcon={<MdiIcon path={mdiPlus.path} size={0.8} />}
+                disabled={!pipelineState.pipeline || !scope.orgId}
+                onClick={() => setCreating(true)}
+              >
+                {'New deal'}
+              </Button>
+            }
+          />
         ) : (
           <Stack spacing={1}>
             {deals.map((deal) => {

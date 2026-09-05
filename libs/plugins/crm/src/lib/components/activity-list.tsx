@@ -28,6 +28,7 @@ import {
   mdiPhoneOutline,
 } from '@aglyn/shared-data-mdi'
 import { MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser, useUserName } from '@aglyn/tenant-feature-instance'
 import {
@@ -259,6 +260,8 @@ export interface ActivityListProps {
   onEdit?: (activity: CrmActivityRow) => void
   /** What the list says when there is nothing in it. */
   emptyText?: string
+  /** The way out of an empty list — the record's "Log activity" button. */
+  emptyAction?: ReactNode
   /** A further page exists; `onShowMore` widens the window. */
   hasMore?: boolean
   onShowMore?: () => void
@@ -292,6 +295,7 @@ export function ActivityList(props: ActivityListProps) {
     scope,
     onEdit,
     emptyText = 'Nothing logged yet.',
+    emptyAction,
     hasMore,
     onShowMore,
     subjectFor,
@@ -300,9 +304,12 @@ export function ActivityList(props: ActivityListProps) {
   const canEdit = useCanEditActivity(scope.orgId, !readOnly)
   if (!rows.length) {
     return (
-      <Typography variant="body2" color="text.secondary">
-        {emptyText}
-      </Typography>
+      <EmptyStateComponent
+        compact
+        label={'Nothing logged yet'}
+        description={emptyText}
+        action={emptyAction}
+      />
     )
   }
   return (
