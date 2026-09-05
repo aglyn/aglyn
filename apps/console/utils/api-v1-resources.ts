@@ -22,41 +22,49 @@
  */
 import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import {
-  type AttemptClaim,
   checkApiRequestQuota,
   checkContactQuota,
   checkDataStorageQuota,
   checkDatasetQuota,
   checkEntitlement,
   checkQuota,
-  claimAttempt,
   coerceDocumentValues,
   createResourceUid,
   datasetIntegrityFields,
   datasetIntegrityUpdate,
   defaultScopeForNewResource,
   CAPTURED_BY_HOST_FIELD,
+  CONTACT_FACETS_FIELD,
+  CONTACT_LIFECYCLE_STAGES,
+  contactFacetPath,
+  type ContactLifecycleStage,
+  CRM_COLLECTIONS,
   effectiveDatasetModel,
   getOrderFulfilmentService,
   inspectUploadBytes,
+  isContactLifecycleStage,
   isHostPluginEnabled,
   consentGroupForHost,
   CONTACT_FIELDS_MAX_PER_ORG,
   type ContactCustomValue,
   type ContactFieldDefinition,
-  CRM_COLLECTIONS,
   isBlockedSubdomain,
   MARKETING_CONSENT_BY_HOST_FIELD,
   marketingConsentHostIds,
   marketingConsentFieldsForGroup,
   newResourceScopeFields,
+  normalizeAddress,
   normalizeContactEmail,
+  normalizePhone,
   ORG_SCOPE_TOKEN,
   readContactCustomInput,
+  readContactFacet,
   readImageDimensions,
+  type AglynPostalAddress,
   type OrderFulfilmentTarget,
   screenRoutePathToUrl,
   SUBDOMAIN_PATTERN,
+  UNLIMITED,
   validateDocument,
 } from '@aglyn/aglyn/server'
 import {
@@ -75,6 +83,29 @@ import {
 import { createHash, randomUUID } from 'crypto'
 import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { type ApiV1Context, apiUsageMonth, requireScope } from './api-v1'
+import { handleActivities } from './api-v1/crm-activities'
+import { handleCompanies } from './api-v1/crm-companies'
+import { handleDeals } from './api-v1/crm-deals'
+import { handlePipelines } from './api-v1/crm-pipelines'
+import { handleTasks } from './api-v1/crm-tasks'
+import {
+  CRM_ID_MAX,
+  CRM_LABEL_MAX,
+  createPayload,
+  crmRefErrors,
+  memberError,
+  readChoice,
+  readOptionalText,
+  readRefId,
+  updatePayload,
+} from './api-v1/crm-shared'
+import {
+  claimWrite,
+  orgOwnsHost,
+  paginate,
+  readJsonBody,
+  serialize,
+} from './api-v1/shared'
 import {
   directUploadMaxBytes,
   isAllowedUploadType,
@@ -95,163 +126,6 @@ import {
 } from './server/provision-host'
 import { postTenantRevalidate } from './server/tenant-revalidate'
 import { mediaStorageGate, scopeBillsStorageOverage } from './storage-overage'
-
-// ── Serialization ───────────────────────────────────────────────────────────
-
-/** Firestore values → JSON-safe values (Timestamps become ISO strings). */
-function serialize(value: unknown): unknown {
-  if (value instanceof Timestamp) return value.toDate().toISOString()
-  if (Array.isArray(value)) return value.map(serialize)
-  if (value && typeof value === 'object') {
-    const out: Record<string, unknown> = {}
-    for (const [k, v] of Object.entries(value)) out[k] = serialize(v)
-    return out
-  }
-  return value
-}
-
-// ── Cursor pagination over a Firestore collection ───────────────────────────
-
-interface Paginated {
-  docs: FirebaseFirestore.QueryDocumentSnapshot[]
-  nextCursor: string | null
-}
-
-async function paginate(
-  query: FirebaseFirestore.Query,
-  url: URL,
-): Promise<Paginated> {
-  const limit = parseLimit(url.searchParams.get('limit'))
-  const cursor = decodeCursor(url.searchParams.get('cursor'))
-  let q = query.orderBy(FieldPath.documentId()).limit(limit + 1)
-  if (cursor) q = q.startAfter(cursor)
-  const snap = await q.get()
-  const docs = snap.docs.slice(0, limit)
-  const nextCursor =
-    snap.docs.length > limit && docs.length > 0
-      ? encodeCursor(docs[docs.length - 1].id)
-      : null
-  return { docs, nextCursor }
-}
-
-async function readJsonBody(request: Request): Promise<Record<string, unknown>> {
-  try {
-    const body = await request.json()
-    return body && typeof body === 'object' ? body : {}
-  } catch {
-    return {}
-  }
-}
-
-// ── Idempotency ─────────────────────────────────────────────────────────────
-
-/**
- * Take an exclusive claim on one write attempt (AGL-1709), and translate the
- * transport-agnostic result into a v1 `Response`.
- *
- * The claim itself is the shared `claimAttempt` (AGL-1697, `220217133`) — an
- * unconditional `create()`, where Firestore's rejection on an existing document
- * IS the dedupe primitive. This resource used to run its own read-then-create,
- * which is the exact race the mechanism exists to prevent: two concurrent
- * requests carrying one key both read "no prior key", both fall through, both
- * create. Worse than no check at all in one respect, because it made the path
- * look protected. Adopting the shared claim rather than fixing the local copy
- * is the point — POS, refunds and the REST API now answer this question once.
- *
- * `scopeId` carries the ORG as well as the dataset. The helper hashes
- * `{kind}:{scopeId}:{key}` and its plugin callers pass a globally unique host
- * id, but a dataset id is only meaningful under its org — and the claim stores
- * the response body, so a cross-org digest collision would replay one tenant's
- * record to another. The org belongs in the digest, not just in the swept
- * field. Scoping by the DATASET is what `apps/docs/api/conventions.md` already
- * publishes ("replay is looked up within the dataset you're posting to"); the
- * old org-only digest only reached that outcome by accident, by reading a
- * `recordId` that did not exist in the other dataset and falling through — and
- * having fallen through, its key write failed and was swallowed, so the key
- * never deduped there at all.
- *
- * NOTE: the digest changes, so keys stored under the old `orgId:key` shape are
- * orphaned and a retry straddling this deploy creates a duplicate. Accepted —
- * the API is pre-beta and the alternative is carrying the race forever.
- *
- * `kind` separates the create's claims from the delete's (AGL-1710). The
- * helper hashes it into the digest for exactly this reason, and the two record
- * different response BODIES — a record view versus a `{ deleted: true }`
- * receipt. Sharing one namespace would let a key reused across both operations
- * replay the create's record to a delete, which a client parses as a success
- * and which no amount of documentation makes safe. `POST` keeps `records`
- * verbatim: changing its digest orphans keys in flight, and AGL-1709 already
- * paid that cost once.
- *
- * `scopeSuffix` is the object the key is scoped WITHIN — a dataset id for the
- * record operations and for `DELETE /v1/datasets/{id}`, the site for
- * `DELETE …/form-submissions/{id}`, and `*` — the ORGANIZATION — for
- * `POST /v1/datasets` (AGL-2126), where there is no dataset id yet because
- * the request is what creates one, and for both contact writes (AGL-2276),
- * where the organization genuinely IS the containing object: contacts are
- * org-scoped (AGL-237), so there is no site or parent collection to scope to
- * and pretending otherwise would invent a boundary the data does not have.
- * `*` cannot collide with a resource id: `createResourceUid()` never emits
- * one, and the `kind` is separate anyway. The suffix is not the whole story —
- * `kind` is hashed in too, which is what keeps a create's key from replaying
- * into a delete, and what keeps `contacts` and `contact-deletes` apart while
- * they share a suffix.
- *
- * This paragraph used to say `*` covered "the two that act on the dataset
- * collection itself", which the delete has never done — it passes
- * `datasetRef.id`. The published contract in `apps/docs/api/conventions.md` was
- * written from this comment and inherited the error (AGL-2218), which is the
- * argument for reading the call rather than the docblock above it.
- */
-async function claimWrite(
-  ctx: ApiV1Context,
-  scopeSuffix: string,
-  key: string | null,
-  kind:
-    | 'records'
-    | 'record-deletes'
-    | 'datasets'
-    | 'dataset-deletes'
-    | 'form-submission-deletes'
-    | 'contacts'
-    | 'contact-deletes'
-    | 'media'
-    | 'sites',
-): Promise<{ claim: AttemptClaim } | { replay: Response }> {
-  const result = await claimAttempt(ctx.firestore, {
-    kind,
-    scopeId: `${ctx.orgId}:${scopeSuffix}`,
-    // The field `eraseOrgIdempotencyKeys` sweeps on (AGL-1448).
-    orgId: ctx.orgId,
-    key: key ?? '',
-    busyMessage: 'A request with this Idempotency-Key is still in progress',
-  })
-  if ('claim' in result) return result
-  // The helper is transport-agnostic and answers `{ status, body }`; its
-  // plugin callers hand that straight to a pages-API `res.json()`. v1 publishes
-  // a `{ error: { type, message, code } }` envelope that clients branch on, so
-  // the refusal is rebuilt here rather than leaking the helper's bare
-  // `{ error: '<sentence>' }` onto a documented surface.
-  if (result.replay.status === 409) {
-    return {
-      replay: ApiErrors.conflict({
-        message: 'A request with this Idempotency-Key is still in progress',
-        code: 'idempotency_in_progress',
-        headers: ctx.headers,
-      }),
-    }
-  }
-  // Settled: replay the ORIGINAL response, from the stored body rather than a
-  // fresh read — which is what makes it survive a record since edited or
-  // deleted. The old lookup replayed only while the record still existed and
-  // fell through to a SECOND create otherwise.
-  return {
-    replay: apiJson(result.replay.body, {
-      status: result.replay.status,
-      headers: ctx.headers,
-    }),
-  }
-}
 
 // ── Datasets & records ──────────────────────────────────────────────────────
 
@@ -890,11 +764,6 @@ async function deleteRecord(
 }
 
 // ── Sites & form submissions ────────────────────────────────────────────────
-
-function orgOwnsHost(ctx: ApiV1Context, hostId: string): boolean {
-  const hosts = (ctx.org.hosts ?? {}) as Record<string, unknown>
-  return Boolean(hosts[hostId])
-}
 
 /**
  * The only fields a `site` resource is made of, and the projection every
@@ -2460,7 +2329,76 @@ async function handleScopedMedia(
  * provenance. `interactions` is not published at all; the console's timeline
  * is not part of the API contract.
  */
-function contactView(doc: FirebaseFirestore.DocumentSnapshot) {
+/**
+ * The CRM profile a contact carries (AGL-2606): the six fields a sales team
+ * keeps on a person, read from the FACETS because that is where the console
+ * keeps them — per holder, under `facets.{groupId}` (`ContactFacet`), so two
+ * unrelated businesses sharing one row never read each other's knowledge of
+ * the person.
+ *
+ * An API key is an organization credential, and every facet on the row is
+ * the organization's own; so with no site named the profile is the UNION of
+ * the holders — each field from the first holder, in stable id order, that
+ * has set it. That is the right read for the caller a key represents (an
+ * integration acting for the account) and the only one that does not force
+ * every read to name a site. Naming one (`?consentSiteId=`) reads that
+ * site's group alone, which is what a per-brand sync wants and what a PATCH
+ * that just wrote through that site reads back.
+ *
+ * `null` for every unset field rather than an absent key, so a client can
+ * tell "no phone" from "this API does not publish phones".
+ */
+const CONTACT_CRM_FIELDS = [
+  'phone',
+  'jobTitle',
+  'companyId',
+  'address',
+  'ownerUid',
+  'lifecycleStage',
+] as const
+
+type ContactCrmField = (typeof CONTACT_CRM_FIELDS)[number]
+
+/** The groups holding a facet on this row, in stable order. */
+function contactFacetHolders(data: FirebaseFirestore.DocumentData): string[] {
+  const facets = data[CONTACT_FACETS_FIELD]
+  return facets && typeof facets === 'object' && !Array.isArray(facets)
+    ? Object.keys(facets).sort()
+    : []
+}
+
+function contactCrmProfile(
+  data: FirebaseFirestore.DocumentData,
+  groupId: string | null,
+): Record<ContactCrmField, unknown> {
+  const profile: Record<ContactCrmField, unknown> = {
+    phone: null,
+    jobTitle: null,
+    companyId: null,
+    address: null,
+    ownerUid: null,
+    lifecycleStage: null,
+  }
+  for (const holder of groupId ? [groupId] : contactFacetHolders(data)) {
+    const facet = readContactFacet(data, holder)
+    for (const field of CONTACT_CRM_FIELDS) {
+      const value = facet[field]
+      if (profile[field] === null && value !== undefined && value !== null) {
+        profile[field] = value
+      }
+    }
+  }
+  return profile
+}
+
+/**
+ * @param groupId - the holder whose CRM profile to publish, or `null` for
+ *   the union — see {@link contactCrmProfile}.
+ */
+function contactView(
+  doc: FirebaseFirestore.DocumentSnapshot,
+  groupId: string | null = null,
+) {
   const data = doc.data() ?? {}
   return {
     id: doc.id,
@@ -2469,6 +2407,12 @@ function contactView(doc: FirebaseFirestore.DocumentSnapshot) {
     name: data.name ?? null,
     tags: data.tags ?? [],
     notes: data.notes ?? null,
+    ...contactCrmProfile(data, groupId),
+    // Every company any holder has filed the person under — the top-level
+    // twin of the facets' `companyId`, and what `?companyId=` queries.
+    companyIds: Array.isArray(data.companyIds)
+      ? data.companyIds.filter((id: unknown) => typeof id === 'string')
+      : [],
     /*
      * TRUE means "some site may mail this person", and `consentSites` says
      * which. A single boolean is what the org-wide model published, and it is
@@ -2547,6 +2491,20 @@ const CONTACT_WRITABLE = [
  * its own message on PATCH because sending it is the honest mistake an
  * integrator makes first — it is the field their own system keys on.
  */
+/**
+ * The CRM profile fields a contact write may carry (AGL-2606), each `null`
+ * to clear. A `type` rather than an `interface` so it is a
+ * `Record<string, unknown>` to the payload helpers without a cast.
+ */
+type ContactCrmInput = {
+  phone?: string | null
+  jobTitle?: string | null
+  companyId?: string | null
+  address?: AglynPostalAddress | null
+  ownerUid?: string | null
+  lifecycleStage?: ContactLifecycleStage | null
+}
+
 function readContactInput(
   body: Record<string, unknown>,
   { partial }: { partial: boolean },
@@ -2565,6 +2523,7 @@ function readContactInput(
          * the side holding a Firestore handle (AGL-2601).
          */
         custom?: Record<string, unknown>
+        crm: ContactCrmInput
       }
     }
   | { errors: Record<string, string> } {
@@ -2577,10 +2536,12 @@ function readContactInput(
     marketingConsent?: boolean
     consentSiteId?: string
     custom?: Record<string, unknown>
-  } = {}
+    crm: ContactCrmInput
+  } = { crm: {} }
 
   const allowed = new Set<string>([
     ...CONTACT_WRITABLE,
+    ...CONTACT_CRM_FIELDS,
     ...(partial ? [] : ['email']),
   ])
   for (const key of Object.keys(body)) {
@@ -2649,6 +2610,56 @@ function readContactInput(
   }
 
   /*
+   * The CRM profile (AGL-2606). Each value runs through the normalizer the
+   * console writes with — `normalizePhone`, `normalizeAddress`, the lifecycle
+   * list — so the API cannot store a phone the console would refuse, or an
+   * address of empty strings the console would read as "has an address". A
+   * value that does not survive names the field rather than storing the raw
+   * string: a half-normalized phone is the unusable number `normalizePhone`
+   * exists to end. The readers are `crm-shared`'s, so a contact and a company
+   * bound their text the same way. `ownerUid` and `companyId` are checked for
+   * existence by the caller, after this synchronous pass, so a body already
+   * refused never spends the reads.
+   */
+  const crm: ContactCrmInput = {}
+  const phone = readOptionalText(body, 'phone', CRM_LABEL_MAX, errors)
+  if (phone === null) {
+    crm.phone = null
+  } else if (phone !== undefined) {
+    const normalized = normalizePhone(phone)
+    if (normalized) crm.phone = normalized
+    else errors.phone = 'Must be a phone number with a country code, like +15125550123'
+  }
+  const jobTitle = readOptionalText(body, 'jobTitle', CONTACT_NAME_MAX, errors)
+  if (jobTitle !== undefined) crm.jobTitle = jobTitle
+  const companyId = readRefId(body, 'companyId', errors)
+  if (companyId !== undefined) crm.companyId = companyId
+  if (body.address !== undefined) {
+    if (body.address === null) {
+      crm.address = null
+    } else if (typeof body.address !== 'object' || Array.isArray(body.address)) {
+      errors.address = 'Must be an address object'
+    } else {
+      // A blank address normalizes to `null`, which clears.
+      crm.address = normalizeAddress(body.address as AglynPostalAddress)
+    }
+  }
+  const ownerUid = readOptionalText(body, 'ownerUid', CONTACT_NAME_MAX, errors)
+  if (ownerUid !== undefined) crm.ownerUid = ownerUid
+  if (body.lifecycleStage === null) {
+    crm.lifecycleStage = null
+  } else {
+    const stage = readChoice(body, 'lifecycleStage', CONTACT_LIFECYCLE_STAGES, errors)
+    if (stage) crm.lifecycleStage = stage
+  }
+  values.crm = crm
+  // Whether the body MEANT to write a profile — judged by the keys it sent,
+  // not by which of them parsed, so a body whose every profile value was
+  // refused is told about those values and not also that its site was
+  // unwelcome.
+  const writesCrm = CONTACT_CRM_FIELDS.some((field) => body[field] !== undefined)
+
+  /*
    * AN OPT-IN MUST NAME THE SITE IT WAS GIVEN TO; A REFUSAL MUST NOT.
    *
    * An API key belongs to an ORGANIZATION, and an organization is not a
@@ -2667,15 +2678,147 @@ function readContactInput(
     errors.consentSiteId =
       'Required with marketingConsent: true — name the site the person opted in to'
   }
-  if (values.marketingConsent === false && values.consentSiteId) {
+  /*
+   * A CRM PROFILE FIELD NAMES THE SITE TOO (AGL-2606), for the facet's
+   * reason: the profile is one holder's knowledge of the person and lives
+   * under that holder's group, so a write has to say whose. The same
+   * parameter, because it is the same question — which of the organization's
+   * sites is this write made on behalf of — and an integrator should not
+   * learn two names for it. Beside a refusal the site is accepted, since the
+   * refusal still applies to every site and the site now names the facet.
+   */
+  if (writesCrm && !values.consentSiteId) {
+    errors.consentSiteId =
+      'Required with a CRM profile field — name the site whose profile of this person to write'
+  }
+  if (values.marketingConsent === false && values.consentSiteId && !writesCrm) {
     errors.consentSiteId =
       'Not accepted with marketingConsent: false — a refusal applies to every site'
   }
-  if (values.consentSiteId && values.marketingConsent === undefined) {
-    errors.consentSiteId = 'Only accepted alongside marketingConsent'
+  if (values.consentSiteId && values.marketingConsent === undefined && !writesCrm) {
+    errors.consentSiteId =
+      'Only accepted alongside marketingConsent or a CRM profile field'
   }
 
   return Object.keys(errors).length ? { errors } : { values }
+}
+
+/**
+ * The two references a contact's CRM profile can carry, checked for
+ * existence — the SAME checks a deal or a task makes on its own `ownerUid`
+ * and `companyId`, so a contact cannot point at a company `/v1/deals` would
+ * refuse. Run after the synchronous grammar, so a body already refused never
+ * spends the reads.
+ */
+async function contactCrmRefErrors(
+  ctx: ApiV1Context,
+  crm: ContactCrmInput,
+): Promise<Record<string, string>> {
+  const [owner, refs] = await Promise.all([
+    memberError(ctx, 'ownerUid', crm.ownerUid),
+    crmRefErrors(ctx, { companyId: crm.companyId ?? undefined }),
+  ])
+  return { ...owner, ...refs }
+}
+
+/**
+ * The facet a create writes when the body carried a CRM profile field, under
+ * the group of the site the write named — filed as `upsertHostContact` files
+ * a capture — plus the top-level `companyIds` the company filter queries.
+ *
+ * A NESTED object rather than dotted paths, because this is a `create()` and
+ * there is no other holder's facet on the row to clobber yet.
+ * {@link contactCrmUpdateFields} writes the same fields as paths for the
+ * opposite reason.
+ */
+function contactCrmCreateFields(
+  ctx: ApiV1Context,
+  crm: ContactCrmInput,
+  siteId: string,
+): Record<string, unknown> {
+  const stored = createPayload(crm)
+  if (Object.keys(stored).length === 0) return {}
+  const group = consentGroupForHost(ctx.org as Record<string, unknown>, siteId)
+  return {
+    [CONTACT_FACETS_FIELD]: {
+      [group.groupId]: { sources: { api: true }, interactions: [], ...stored },
+    },
+    ...(crm.companyId ? { companyIds: [crm.companyId] } : {}),
+  }
+}
+
+/**
+ * The CRM profile as an `update()` payload: one dotted path per field sent,
+ * under the facet of the named site's group — `contactFacetPath`, never a
+ * nested object, because an `update` REPLACES a map it is handed whole and
+ * the nested form would delete every other holder's profile of the person.
+ * `null` becomes a field delete, so a PATCH can clear.
+ *
+ * `companyIds` is the top-level twin of the facets' `companyId`s, kept so
+ * `?companyId=` can be one indexed clause. A move from one company to
+ * another is a remove and an add, and Firestore takes one transform per
+ * field per write, so the array is rewritten from what is stored: the old id
+ * leaves only when no OTHER holder still files the person under it, and an
+ * id some other surface put there is left exactly where it was.
+ */
+function contactCrmUpdateFields(
+  ctx: ApiV1Context,
+  data: FirebaseFirestore.DocumentData,
+  crm: ContactCrmInput,
+  siteId: string,
+): Record<string, unknown> {
+  const update: Record<string, unknown> = {}
+  const group = consentGroupForHost(ctx.org as Record<string, unknown>, siteId)
+  for (const [field, value] of Object.entries(updatePayload(crm))) {
+    update[contactFacetPath(group.groupId, field)] = value
+  }
+  if (crm.companyId !== undefined) {
+    const previous = readContactFacet(data, group.groupId).companyId
+    const next = new Set<string>(
+      Array.isArray(data.companyIds)
+        ? data.companyIds.filter((id: unknown): id is string => typeof id === 'string')
+        : [],
+    )
+    if (previous && previous !== crm.companyId) {
+      const heldElsewhere = contactFacetHolders(data).some(
+        (holder) =>
+          holder !== group.groupId &&
+          readContactFacet(data, holder).companyId === previous,
+      )
+      if (!heldElsewhere) next.delete(previous)
+    }
+    if (crm.companyId) next.add(crm.companyId)
+    update.companyIds = [...next]
+  }
+  return update
+}
+
+/**
+ * The holder a contact READ is for, from `?consentSiteId=`: that site's
+ * consent group, or `null` for the union view. The parameter the writes take,
+ * validated the same way, so a client has one name for "which site" on every
+ * contact call.
+ */
+function contactViewGroup(
+  ctx: ApiV1Context,
+  url: URL,
+): { groupId: string | null } | { response: Response } {
+  const siteId = (url.searchParams.get('consentSiteId') ?? '').trim()
+  if (!siteId) return { groupId: null }
+  if (!orgOwnsHost(ctx, siteId)) {
+    return {
+      response: ApiErrors.badRequest({
+        message: 'Contact filter failed validation',
+        code: 'validation_failed',
+        fields: { consentSiteId: 'No such site in this organization' },
+        headers: ctx.headers,
+      }),
+    }
+  }
+  return {
+    groupId: consentGroupForHost(ctx.org as Record<string, unknown>, siteId)
+      .groupId,
+  }
 }
 
 const contactsCollection = (ctx: ApiV1Context) =>
@@ -2755,7 +2898,7 @@ async function createContact(
       headers: ctx.headers,
     })
   }
-  const { email, name, tags, notes, marketingConsent, consentSiteId } =
+  const { email, name, tags, notes, marketingConsent, consentSiteId, crm } =
     parsed.values
   if (consentSiteId && !orgOwnsHost(ctx, consentSiteId)) {
     return ApiErrors.badRequest({
@@ -2785,6 +2928,17 @@ async function createContact(
   // below is reached through a try block the narrowing above does not
   // survive; an empty map writes no `custom` key at all.
   const customValues = custom && 'values' in custom ? custom.values : {}
+  // Still validation, still above the claim: a dangling `companyId` is as
+  // deterministic a 400 as a malformed one, and must not burn the key.
+  const crmErrors = await contactCrmRefErrors(ctx, crm)
+  if (Object.keys(crmErrors).length) {
+    return ApiErrors.badRequest({
+      message: 'Contact failed validation',
+      code: 'validation_failed',
+      fields: crmErrors,
+      headers: ctx.headers,
+    })
+  }
 
   const collection = contactsCollection(ctx)
   const claimed = await claimWrite(
@@ -2849,6 +3003,9 @@ async function createContact(
       // A refusal carries no site: it stands against every brand in the
       // account — see `readMarketingBasis` for the asymmetry.
       ...(marketingConsent === false ? { marketingConsent: false } : {}),
+      // The CRM profile, when the body carried one — under the named site's
+      // facet, which `readContactInput` has already required it to name.
+      ...(consentSiteId ? contactCrmCreateFields(ctx, crm, consentSiteId) : {}),
       // `sources.api` — a first-class provenance value beside `form`,
       // `member`, `order` and `booking`, so a merchant reading the console
       // can see which people an integration put there.
@@ -2900,12 +3057,22 @@ async function updateContact(
     })
   }
 
-  const { name, tags, notes, marketingConsent, consentSiteId } = parsed.values
+  const { name, tags, notes, marketingConsent, consentSiteId, crm } =
+    parsed.values
   if (consentSiteId && !orgOwnsHost(ctx, consentSiteId)) {
     return ApiErrors.badRequest({
       message: 'Contact failed validation',
       code: 'validation_failed',
       fields: { consentSiteId: 'No such site in this organization' },
+      headers: ctx.headers,
+    })
+  }
+  const crmErrors = await contactCrmRefErrors(ctx, crm)
+  if (Object.keys(crmErrors).length) {
+    return ApiErrors.badRequest({
+      message: 'Contact failed validation',
+      code: 'validation_failed',
+      fields: crmErrors,
       headers: ctx.headers,
     })
   }
@@ -2970,13 +3137,27 @@ async function updateContact(
   } else if (marketingConsent === false) {
     update.marketingConsent = false
   }
+  if (consentSiteId) {
+    Object.assign(
+      update,
+      contactCrmUpdateFields(ctx, snap.data() ?? {}, crm, consentSiteId),
+    )
+  }
   // An empty body is a no-op answered with the current contact, matching
   // `updateDataset`: a client re-sending an unchanged object should not have
   // to special-case it.
   if (Object.keys(update).length > 0) {
     await contactRef.update({ ...update, updatedAt: Timestamp.now() })
   }
-  return apiJson(contactView(await contactRef.get()), { headers: ctx.headers })
+  // Read back through the site the write named, so what the client sees is
+  // the profile it just wrote and not another holder's.
+  const groupId = consentSiteId
+    ? consentGroupForHost(ctx.org as Record<string, unknown>, consentSiteId)
+        .groupId
+    : null
+  return apiJson(contactView(await contactRef.get(), groupId), {
+    headers: ctx.headers,
+  })
 }
 
 /**
@@ -3091,19 +3272,76 @@ async function listContacts(
   const tag =
     rawTag === null ? null : rawTag.trim().slice(0, CONTACT_TAG_MAX) || null
 
+  /*
+   * The CRM filters (AGL-2606). `companyId` can be a clause: it queries the
+   * top-level `companyIds` array, the twin every profile write keeps for
+   * exactly this. `lifecycleStage` and `ownerUid` cannot — they live on a
+   * facet, and a facet field is not queryable without the holder in the
+   * path, which the org-wide read does not have — so both are applied to the
+   * page, against the SAME profile the view publishes: the named site's, or
+   * the union. A filtered page can therefore come back short, as `?email=`
+   * with `?tag=` already does. A stage that is not one of the list is a
+   * `400`, because `?lifecycleStage=customers` matching nothing is the
+   * plausible empty page the conventions refuse to serve.
+   */
+  const rawStage = (url.searchParams.get('lifecycleStage') ?? '').trim()
+  if (rawStage && !isContactLifecycleStage(rawStage)) {
+    return ApiErrors.badRequest({
+      message: 'Contact filter failed validation',
+      code: 'validation_failed',
+      fields: {
+        lifecycleStage: `Must be one of: ${CONTACT_LIFECYCLE_STAGES.join(', ')}`,
+      },
+      headers: ctx.headers,
+    })
+  }
+  const lifecycleStage = rawStage || null
+  const ownerUid =
+    (url.searchParams.get('ownerUid') ?? '').trim().slice(0, CONTACT_NAME_MAX) ||
+    null
+  const companyId =
+    (url.searchParams.get('companyId') ?? '').trim().slice(0, CRM_ID_MAX) || null
+  const group = contactViewGroup(ctx, url)
+  if ('response' in group) return group.response
+
+  // ONE clause, the most selective that was given: the unique email, then
+  // the company, then the tag. Every other filter is checked on the page.
   let query: FirebaseFirestore.Query = collection
-  if (email) query = query.where('email', '==', email)
-  else if (tag) query = query.where('tags', 'array-contains', tag)
+  let clause: 'email' | 'companyId' | 'tag' | null = null
+  if (email) {
+    query = query.where('email', '==', email)
+    clause = 'email'
+  } else if (companyId) {
+    query = query.where('companyIds', 'array-contains', companyId)
+    clause = 'companyId'
+  } else if (tag) {
+    query = query.where('tags', 'array-contains', tag)
+    clause = 'tag'
+  }
 
   const { docs, nextCursor } = await paginate(query, url)
-  const matched =
-    email && tag
-      ? docs.filter((doc) => {
-          const tags = doc.get('tags')
-          return Array.isArray(tags) && tags.includes(tag)
-        })
-      : docs
-  return listResponse(matched.map(contactView), nextCursor, ctx.headers)
+  const matched = docs.filter((doc) => {
+    const data = doc.data()
+    if (tag && clause !== 'tag') {
+      if (!Array.isArray(data.tags) || !data.tags.includes(tag)) return false
+    }
+    if (companyId && clause !== 'companyId') {
+      if (!Array.isArray(data.companyIds) || !data.companyIds.includes(companyId)) {
+        return false
+      }
+    }
+    if (lifecycleStage || ownerUid) {
+      const profile = contactCrmProfile(data, group.groupId)
+      if (lifecycleStage && profile.lifecycleStage !== lifecycleStage) return false
+      if (ownerUid && profile.ownerUid !== ownerUid) return false
+    }
+    return true
+  })
+  return listResponse(
+    matched.map((doc) => contactView(doc, group.groupId)),
+    nextCursor,
+    ctx.headers,
+  )
 }
 
 async function handleContacts(
@@ -3136,11 +3374,13 @@ async function handleContacts(
   if (request.method === 'GET') {
     const denied = requireScope(ctx, 'contacts:read')
     if (denied) return denied
+    const group = contactViewGroup(ctx, url)
+    if ('response' in group) return group.response
     const snap = await contactRef.get()
     if (!snap.exists) {
       return ApiErrors.notFound({ message: 'No such contact', headers: ctx.headers })
     }
-    return apiJson(contactView(snap), { headers: ctx.headers })
+    return apiJson(contactView(snap, group.groupId), { headers: ctx.headers })
   }
   if (request.method === 'PATCH') {
     const denied = requireScope(ctx, 'contacts:write')
@@ -3228,17 +3468,32 @@ export async function handleUsage(
   }
   const orgRef = ctx.firestore.collection('orgs').doc(ctx.orgId)
   const month = apiUsageMonth()
-  const [apiSnap, storageSnap, contactsSnap, datasetsSnap, campaignEmailSnap] =
-    await Promise.all([
-      orgRef.collection('apiUsage').doc(month).get(),
-      orgRef.collection('usage').doc(month).get(),
-      orgRef.collection('contacts').count().get(),
-      orgRef.collection('datasets').count().get(),
-      // The ORG counter, which is what `reserveCampaignEmailSends` claims
-      // against. The per-site counter beside it is site history and answers a
-      // different question; reporting it here would disagree with the gate.
-      orgRef.collection('counters').doc('campaignEmailSends').get(),
-    ])
+  const [
+    apiSnap,
+    storageSnap,
+    contactsSnap,
+    datasetsSnap,
+    campaignEmailSnap,
+    companiesSnap,
+    dealsSnap,
+    tasksSnap,
+    activitiesSnap,
+  ] = await Promise.all([
+    orgRef.collection('apiUsage').doc(month).get(),
+    orgRef.collection('usage').doc(month).get(),
+    orgRef.collection('contacts').count().get(),
+    orgRef.collection('datasets').count().get(),
+    // The ORG counter, which is what `reserveCampaignEmailSends` claims
+    // against. The per-site counter beside it is site history and answers a
+    // different question; reporting it here would disagree with the gate.
+    orgRef.collection('counters').doc('campaignEmailSends').get(),
+    // The CRM collections (AGL-2606): sizes, not bands — see `crm` below.
+    // Aggregations, so an org with ten thousand deals pays ten reads.
+    orgRef.collection(CRM_COLLECTIONS.companies).count().get(),
+    orgRef.collection(CRM_COLLECTIONS.deals).count().get(),
+    orgRef.collection(CRM_COLLECTIONS.tasks).count().get(),
+    orgRef.collection(CRM_COLLECTIONS.activities).count().get(),
+  ])
 
   const apiQuota = checkApiRequestQuota(
     ctx.org as never,
@@ -3316,6 +3571,26 @@ export async function handleUsage(
         campaignEmailQuota.remaining,
         null,
       ),
+      /*
+       * The CRM collections (AGL-2606) — SIZES, in the band shape so a client
+       * reads them with the code it already has. No plan bands them: a
+       * company or a deal is not metered and is never refused, so `included`
+       * and `remaining` are `null` — the unlimited band the docs define —
+       * and `metered` is false because there is nothing to bill. What the
+       * numbers are for is sizing a sync: how many pages a full walk of
+       * `/v1/deals` will take, before taking it.
+       */
+      crm: {
+        companies: usageBand(companiesSnap.data().count, UNLIMITED, UNLIMITED, null),
+        deals: usageBand(dealsSnap.data().count, UNLIMITED, UNLIMITED, null),
+        tasks: usageBand(tasksSnap.data().count, UNLIMITED, UNLIMITED, null),
+        activities: usageBand(
+          activitiesSnap.data().count,
+          UNLIMITED,
+          UNLIMITED,
+          null,
+        ),
+      },
     },
     { headers: ctx.headers },
   )
@@ -3337,6 +3612,19 @@ export async function dispatchResource(
       return handleSites(request, ctx, segments, url)
     case 'contacts':
       return handleContacts(request, ctx, segments, url)
+    // The CRM resources (AGL-2606) live in modules of their own under
+    // `./api-v1/`, so this file — already the size it is — grows by the
+    // dispatch alone.
+    case 'companies':
+      return handleCompanies(request, ctx, segments, url)
+    case 'pipelines':
+      return handlePipelines(request, ctx, segments, url)
+    case 'deals':
+      return handleDeals(request, ctx, segments, url)
+    case 'tasks':
+      return handleTasks(request, ctx, segments, url)
+    case 'activities':
+      return handleActivities(request, ctx, segments, url)
     case 'media':
       // The ORGANIZATION library. A site's own files are the same resource
       // under `/v1/sites/{siteId}/media`.

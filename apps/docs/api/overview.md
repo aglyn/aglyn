@@ -2,19 +2,22 @@
 sidebar_position: 1
 slug: /
 title: Aglyn REST API
-description: A REST API for your organization's datasets, contacts, sites, form submissions, store orders, products and media — authenticated with API keys.
+description: A REST API for your organization's datasets, contacts, CRM, sites, form submissions, store orders, products and media — authenticated with API keys.
 ---
 
 # Aglyn REST API
 
 The Aglyn REST API gives you programmatic access to your organization's data —
-[datasets and records](resources/datasets.md), [contacts](resources/contacts.md),
+[datasets and records](resources/datasets.md), [contacts](resources/contacts.md) and
+the CRM around them — [companies](resources/companies.md),
+[pipelines](resources/pipelines.md), [deals](resources/deals.md),
+[tasks](resources/tasks.md) and [activities](resources/activities.md) —
 [sites](resources/sites.md) and their [form submissions](resources/form-submissions.md), your store's
 [orders](resources/orders.md) and [products](resources/products.md), and your
 [media library](resources/media.md). Use it to sync content from another system, push
 orders into accounting, record shipments from a 3PL or warehouse system, feed a
-catalog to a marketplace, sync a CRM's contacts in, back up records, or build an
-integration.
+catalog to a marketplace, sync a CRM's contacts and deals in either direction, log
+calls from a dialer, back up records, or build an integration.
 
 :::info Plan availability
 The REST API is included on the **Business** and **Advanced** plans. Create keys from
@@ -106,7 +109,7 @@ What this API is and what it serves.
   "name": "Aglyn REST API",
   "version": "v1",
   "documentation": "https://docs.aglyn.com/api",
-  "resources": ["datasets", "contacts", "sites", "media"]
+  "resources": ["datasets", "contacts", "companies", "pipelines", "deals", "tasks", "activities", "sites", "media"]
 }
 ```
 
@@ -115,7 +118,8 @@ and [products](resources/products.md) all live under a site
 (`/v1/sites/{siteId}/…`) and are deliberately absent, so a client that walks this list
 never builds a path that 404s. `media` is here because
 [`/v1/media`](resources/media.md) — the *organization* library — really is a top-level
-path; each site's own files are additionally at `/v1/sites/{siteId}/media`.
+path; each site's own files are additionally at `/v1/sites/{siteId}/media`. The five
+CRM resources are organization-level like contacts, and so are top-level here.
 
 ### `GET /v1/me`
 
@@ -133,8 +137,8 @@ for failing fast at startup with a clear message.
 ### `GET /v1/usage`
 
 Where you stand against every plan band this month — requests, contacts, datasets and
-dataset storage — and, for each, whether crossing it bills or refuses. See
-[Usage](usage.md).
+dataset storage — and, for each, whether crossing it bills or refuses; plus the size of
+each CRM collection, for sizing a sync. See [Usage](usage.md).
 
 ```json
 {
@@ -149,7 +153,12 @@ dataset storage — and, for each, whether crossing it bills or refuses. See
 | Resource | Description |
 | --- | --- |
 | [Datasets & records](resources/datasets.md) | Create, read, update, and delete datasets and the records inside them — the one resource the API can provision from nothing. |
-| [Contacts](resources/contacts.md) | Read your organization's contacts, add the people your own systems own, and edit their name, tags and notes. |
+| [Contacts](resources/contacts.md) | Read your organization's contacts, add the people your own systems own, and edit their name, tags, notes and CRM profile. |
+| [Companies](resources/companies.md) | The accounts your contacts work for — keyed by domain, with an owner and an address. |
+| [Pipelines](resources/pipelines.md) | The stages a deal moves through. Read-only; seeded by the first deal. |
+| [Deals](resources/deals.md) | Opportunities with a value, a stage and a status — create them, move them, close them. |
+| [Tasks](resources/tasks.md) | Calls, emails, meetings and to-dos with a due date, against a contact, company or deal. |
+| [Activities](resources/activities.md) | What happened — a write-once log of calls, meetings and notes. |
 | [Sites](resources/sites.md) | List sites and read their details. |
 | [Form submissions](resources/form-submissions.md) | Read a site's form submissions, mark them read as you process them, and delete them after export. |
 | [Orders](resources/orders.md) | Read a site's store orders — line items, totals, refunds, disputes — and record shipments against them. |

@@ -73,6 +73,16 @@ lacks returns `403` `insufficient_scope`. Grant the least a key needs.
 | `products:read` | Read a site's products, variants, prices and stock. |
 | `media:read` | List files in the organization library and in a site's media. |
 | `media:write` | Upload files to the organization library and to a site's media. Cannot replace, edit or delete an existing file. |
+| `crm:read` | List and read [companies](resources/companies.md), [pipelines](resources/pipelines.md), [deals](resources/deals.md), [tasks](resources/tasks.md) and [activities](resources/activities.md), across the organization. |
+| `crm:write` | Add, edit and delete companies, deals and tasks, and log or delete activities, each on behalf of a named site. Cannot edit a pipeline's stages, and cannot edit an activity once logged. |
+
+`crm:read` and `crm:write` are one pair for five resources rather than five pairs,
+because a key that needs any of them needs the set: a deal names a company and a
+contact, a task names a deal, an activity names all three, and a key that could read
+deals but not the pipelines whose stages they cite would hand back stage ids it cannot
+explain. A contact's own CRM profile — phone, job title, company, owner, lifecycle
+stage — stays under `contacts:read` / `contacts:write`, because it is a field of the
+[contact](resources/contacts.md#crm-profile) and reads with the contact.
 
 `forms:write` is deliberately narrow. It grants the `read` flag and the delete, and
 nothing that rewrites a submission's `fields` — a submission is a record of what a

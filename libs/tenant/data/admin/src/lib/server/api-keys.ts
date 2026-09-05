@@ -142,6 +142,26 @@ export const API_SCOPES = [
   // helper the console's four ingress routes use, and consumes the existing
   // per-GB storage dimension rather than inventing a per-upload one.
   'media:write',
+  // AGL-2606. The CRM v2 collections (AGL-2595) — companies, pipelines,
+  // deals, tasks and activities — sit beside `contacts` and were reachable
+  // only from the console, so the integration that owns the sales process
+  // upstream (a CRM sync, a dialer logging calls, a billing system closing
+  // deals) could read the people and nothing they were doing with them.
+  //
+  // ONE pair for the five resources rather than five, because a key that
+  // needs any of them needs the set: a deal names a company and a contact, a
+  // task names a deal, an activity names all three, and a key that could
+  // read deals but not the pipelines whose stages they cite would hand back
+  // stage ids it cannot explain. The contact's own CRM profile — phone, job
+  // title, company, owner, lifecycle stage — stays under `contacts:*`, since
+  // it is a field of the contact and reads with the contact.
+  //
+  // Reads are org-wide, as every read on this surface is: a key is an
+  // organization credential. Writes name the site they belong to and are
+  // stamped in that site's scope (`crmCreateStamp`), so an API-created deal
+  // lands exactly where a console-created one would, and never wider.
+  'crm:read',
+  'crm:write',
 ] as const
 
 export type ApiScope = (typeof API_SCOPES)[number]
