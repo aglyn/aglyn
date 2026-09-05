@@ -16,11 +16,14 @@
  */
 
 import {
+  type AglynPostalAddress,
   CAPTURED_BY_HOST_FIELD,
   checkContactQuota,
   consentGroupScope,
   CONTACT_FACETS_FIELD,
+  type ContactCustomValue,
   type ContactInteraction,
+  type ContactLifecycleStage,
   type ContactSource,
   marketingConsentFieldsForGroup,
   mergeContactInteraction,
@@ -37,11 +40,49 @@ import {
   type ResolvedCampaignTouch,
 } from './campaign-conversion-attribution'
 import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
+// The leaf module, like `name-search` above: the stage check is a pure
+// predicate over a constant list, and the leaf path is the one a spec that
+// fakes the server barrel still reaches.
+import { isContactLifecycleStage } from '@aglyn/aglyn/app-utils/crm'
 import {
   consentGroupForSite,
   getOrgForHost,
   orgDataCollectionForHost,
 } from './organizations'
+
+/**
+ * The CRM profile keys a door passed, and only those.
+ *
+ * `undefined` is dropped rather than written because Firestore rejects it
+ * outright inside a nested map, and because an absent key is the door saying
+ * "I do not know this", which must leave whatever an earlier door recorded.
+ * `address: null` IS written: it is the explicit "cleared" the console's
+ * address field produces, and the facet type allows it for that reason.
+ * `lifecycleStage` is checked against the union because it reaches this
+ * function from request bodies, and a stage the filter cannot name would sit
+ * on the row as an uncountable value.
+ */
+function facetProfileFields(
+  facet: Parameters<typeof upsertHostContact>[0]['facet'],
+): Record<string, unknown> {
+  if (!facet) return {}
+  const fields: Record<string, unknown> = {}
+  if (typeof facet.phone === 'string' && facet.phone) fields['phone'] = facet.phone
+  if (typeof facet.jobTitle === 'string' && facet.jobTitle) {
+    fields['jobTitle'] = facet.jobTitle.slice(0, 120)
+  }
+  if (facet.address !== undefined) fields['address'] = facet.address
+  if (typeof facet.ownerUid === 'string' && facet.ownerUid) {
+    fields['ownerUid'] = facet.ownerUid
+  }
+  if (isContactLifecycleStage(facet.lifecycleStage)) {
+    fields['lifecycleStage'] = facet.lifecycleStage
+  }
+  if (facet.custom && typeof facet.custom === 'object') {
+    fields['custom'] = facet.custom
+  }
+  return fields
+}
 
 /**
  * Contacts ingestion (AGL-197): upserts an org-scoped contact doc (AGL-237)
@@ -139,6 +180,31 @@ export async function upsertHostContact(options: {
    * input that records a basis.
    */
   campaignIds?: readonly string[]
+  /**
+   * The CRM profile this capture knows about the person (AGL-2608), written
+   * onto the capturing group's FACET beside the sources and the timeline.
+   *
+   * The capture doors pass none of this: a form knows an address and a name.
+   * The console doors do — a lead being converted carries the owner who
+   * worked it and lands as `sales-qualified`; an import row carries a phone
+   * and a job title — and they need the same dedupe-by-email this function
+   * is, so the profile rides in here rather than through a second write that
+   * would have to find the row all over again.
+   *
+   * Every key is optional and only a PRESENT key is written: a converter
+   * that names an owner and nothing else must not blank a phone number a
+   * previous door recorded. The shape is `ContactFacet`'s own CRM v2 block,
+   * and it stays per-holder for the reason every facet field is — one
+   * business's knowledge of a person is not another's.
+   */
+  facet?: {
+    phone?: string
+    jobTitle?: string
+    address?: AglynPostalAddress | null
+    ownerUid?: string
+    lifecycleStage?: ContactLifecycleStage
+    custom?: Record<string, ContactCustomValue>
+  }
 }): Promise<void> {
   try {
     const email = normalizeContactEmail(options.email)
@@ -310,6 +376,10 @@ export async function upsertHostContact(options: {
               ...(campaignIds.length
                 ? { campaignIds: FieldValue.arrayUnion(...campaignIds) }
                 : {}),
+              // The profile the door knows, key by key: a merge-set with a
+              // nested map writes the keys present and leaves the rest of the
+              // facet — and every other holder's facet — as it was.
+              ...facetProfileFields(options.facet),
               ...(options.purchaseCents
                 ? {
                     ltvCents: FieldValue.increment(options.purchaseCents),
@@ -435,6 +505,7 @@ export async function upsertHostContact(options: {
           ...(options.name
             ? { name: options.name.slice(0, 120) }
             : {}),
+          ...facetProfileFields(options.facet),
           ...(options.purchaseCents
             ? {
                 ltvCents: options.purchaseCents,
