@@ -42,12 +42,20 @@
  * of a file through the same capture door every other server door uses.
  * `crm/deal-stage` (AGL-2598) is the one writer of a deal's stage, won and lost,
  * because a stage change is what automations listen for (`server-deal-stage.ts`).
+ * `crm/contacts-create` (AGL-2596) is a person typed into the console by a
+ * member of the team — a server route because the dedupe against every
+ * holder's rows and the audience band are judgments the browser cannot make.
  * Every other field stays client-direct under the rules.
  */
 
 import {
   contactFacetPath,
   isContactLifecycleStage,
+  isOrgWideMember,
+  normalizeAddress,
+  normalizeContactEmail,
+  normalizePhone,
+  type AglynPostalAddress,
   type PluginApiHandler,
   type PluginApiRequest,
   readContactFacet,
@@ -57,9 +65,12 @@ import {
 import {
   consentGroupForSite,
   firebaseAdmin,
+  getOrgForHost,
+  memberHasOrgPermission,
   orgDataCollectionForHost,
+  resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
-import { emitHostEvent } from '@aglyn/tenant-runtime'
+import { captureHostContact, emitHostEvent } from '@aglyn/tenant-runtime'
 import { FieldValue } from 'firebase-admin/firestore'
 import { CRM_API_ROUTES } from './constants/api-routes'
 import { BUNDLE_ID } from './constants/bundle-common'
@@ -207,6 +218,225 @@ export const contactStageHandler: PluginApiHandler = async (req, res) => {
   }
 }
 
+/**
+ * What the create route says when the band refused (AGL-2596).
+ *
+ * The contacts list's own alert, in the past tense: the list says new
+ * visitors are "no longer captured", and this says the one contact the
+ * reader just tried to add was not. The remedy is the same sentence in both
+ * places, so a reader who sees one and then the other is told one thing.
+ */
+export const CONTACT_BAND_FULL_MESSAGE =
+  'Contact limit reached — this contact was not added. Upgrade in Billing ' +
+  'to keep collecting.'
+
+/** The most tags one create may attach, matching the record page's cap. */
+const CONTACT_TAGS_MAX = 20
+
+/** What one typed field may be, after the trim every string gets. */
+function typed(value: unknown, max: number): string {
+  return String(value ?? '')
+    .trim()
+    .slice(0, max)
+}
+
+/**
+ * Tags as the record page stores them: lower-cased, trimmed, deduplicated,
+ * capped — so a tag typed here and a tag typed on the page are the same tag
+ * to the segment filter that matches on them.
+ */
+function normalizeTags(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return [
+    ...new Set(
+      value
+        .map((tag) => typed(tag, 40).toLowerCase())
+        .filter(Boolean)
+        .slice(0, CONTACT_TAGS_MAX),
+    ),
+  ]
+}
+
+/**
+ * `POST /api/crm/contacts-create` — a person added by hand (AGL-2596).
+ *
+ * Body: `{ hostId, email, name?, phone?, jobTitle?, companyName?, address?,
+ * ownerUid?, lifecycleStage?, tags?, marketingConsent? }`. Answers
+ * `{ contactId, created }`: `created` is false when the address already
+ * belonged to somebody, in which case what was typed MERGES into the
+ * existing row — the dedupe the shared address book exists for, and the
+ * reason a second "create" of one person is not an error.
+ *
+ * ## Who may call it
+ *
+ * The caller's ID token, then `data.manage` on the site's org — the same key
+ * the console surface itself is gated on, resolved through the same
+ * three-layer permission read the members route uses. A scoped member is
+ * admitted only for a site they reach: the rules would refuse a browser
+ * write outside their tokens, and a server route that admitted it would be
+ * a way round the rules rather than a service in front of them.
+ *
+ * ## What it refuses, and how
+ *
+ * A malformed email or phone number is a 400 with a sentence the drawer can
+ * show under the field. The band is a 409 carrying the list's own wording:
+ * it is not a bad request and not a server fault, it is the plan saying no,
+ * and the drawer relays the sentence rather than inventing one.
+ *
+ * ## What it writes beyond the upsert
+ *
+ * `upsertHostContact` takes the profile — phone, title, address, owner,
+ * stage — and writes it into the capturing group's facet. The two things it
+ * does not take are written here by DOTTED path afterwards: the tags, which
+ * union into whatever the person already carried, and the company name,
+ * which is free text until the companies section supplies a picker. Dotted
+ * paths because this is an `update()`, and only an update reads a dot as a
+ * path — a nested object here would replace the facet map and take every
+ * other holder's records with it.
+ */
+export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', 'POST')
+    res.status(405).json({ error: 'Method not allowed' })
+    return
+  }
+
+  const body = (req.body ?? {}) as Record<string, unknown>
+  const hostId = typed(body['hostId'], 128)
+  if (!hostId) {
+    res.status(400).json({ error: 'Missing hostId' })
+    return
+  }
+  const email = normalizeContactEmail(body['email'])
+  if (!email) {
+    res.status(400).json({ error: 'Enter a valid email address.' })
+    return
+  }
+  const rawPhone = typed(body['phone'], 40)
+  const phone = rawPhone ? normalizePhone(rawPhone) : null
+  if (rawPhone && !phone) {
+    res.status(400).json({
+      error:
+        'That phone number could not be read. Enter it with its country ' +
+        'code, like +1 512 555 0107.',
+    })
+    return
+  }
+  const rawStage = typed(body['lifecycleStage'], 40)
+  if (rawStage && !isContactLifecycleStage(rawStage)) {
+    res.status(400).json({ error: 'Unknown lifecycle stage.' })
+    return
+  }
+  const name = typed(body['name'], 120)
+  const jobTitle = typed(body['jobTitle'], 120)
+  const companyName = typed(body['companyName'], 120)
+  const ownerUid = typed(body['ownerUid'], 128)
+  const address =
+    body['address'] && typeof body['address'] === 'object'
+      ? normalizeAddress(body['address'] as AglynPostalAddress)
+      : null
+  const tags = normalizeTags(body['tags'])
+  const marketingConsent = body['marketingConsent'] === true
+
+  const authorization = String(req.headers.authorization ?? '')
+  const idToken = authorization.startsWith('Bearer ')
+    ? authorization.slice('Bearer '.length)
+    : undefined
+  if (!idToken) {
+    res.status(401).json({ error: 'Unauthenticated' })
+    return
+  }
+
+  try {
+    const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+    const resolved = await getOrgForHost(hostId)
+    if (!resolved) {
+      res.status(404).json({ error: 'Unknown site' })
+      return
+    }
+    const isStaff = decoded['staff'] === true
+    if (!isStaff) {
+      const membership = await resolveOrgMembership(decoded.uid, resolved.orgId)
+      const member = membership?.member ?? null
+      const reaches =
+        isOrgWideMember(member) || Boolean(member?.hostAccess?.[hostId])
+      const allowed =
+        member &&
+        reaches &&
+        (await memberHasOrgPermission(resolved.orgId, member, 'data.manage'))
+      if (!allowed) {
+        res.status(403).json({
+          error: 'Adding contacts requires the data.manage permission on this site',
+        })
+        return
+      }
+    }
+
+    const result = await captureHostContact({
+      hostId,
+      email,
+      ...(name ? { name } : {}),
+      source: 'manual',
+      interaction: { summary: 'Added by hand' },
+      marketingConsent,
+      facet: {
+        ...(phone ? { phone } : {}),
+        ...(jobTitle ? { jobTitle } : {}),
+        ...(address ? { address } : {}),
+        ...(ownerUid ? { ownerUid } : {}),
+        ...(rawStage && isContactLifecycleStage(rawStage)
+          ? { lifecycleStage: rawStage }
+          : {}),
+      },
+    })
+
+    if ('refused' in result) {
+      if (result.refused === 'band') {
+        res.status(409).json({ error: CONTACT_BAND_FULL_MESSAGE, reason: 'band' })
+        return
+      }
+      if (result.refused === 'invalid-email') {
+        res.status(400).json({ error: 'Enter a valid email address.' })
+        return
+      }
+      res.status(500).json({ error: 'The contact could not be saved.' })
+      return
+    }
+
+    if (tags.length || companyName) {
+      const group = await consentGroupForSite(
+        hostId,
+        resolved.org as Record<string, unknown>,
+      )
+      const contacts = await orgDataCollectionForHost(hostId, 'contacts')
+      await contacts.doc(result.contactId).update({
+        ...(tags.length
+          ? {
+              [contactFacetPath(group.groupId, 'tags')]: FieldValue.arrayUnion(
+                ...tags,
+              ),
+            }
+          : {}),
+        ...(companyName
+          ? {
+              [contactFacetPath(group.groupId, 'companyName')]: companyName,
+              // The search echo — see `HostContact.companyName`.
+              companyName,
+            }
+          : {}),
+        updatedAt: FieldValue.serverTimestamp(),
+      })
+    }
+
+    res
+      .status(result.created ? 201 : 200)
+      .json({ contactId: result.contactId, created: result.created })
+  } catch (error) {
+    console.error('[crm] contact create failed', error)
+    res.status(500).json({ error: 'The contact could not be saved.' })
+  }
+}
+
 /** Console API registration, named in `plugins.config.json` as `consoleApi`. */
 export function registerCrmConsoleApi(): void {
   registerPluginApiRoute(CRM_API_ROUTES.ping, crmPingHandler)
@@ -222,4 +452,8 @@ export function registerCrmConsoleApi(): void {
   // could write the field, but only a server can emit the event an
   // automation listens for.
   registerPluginApiRoute('crm/deal-stage', crmDealStageHandler)
+  // A person typed into the console (AGL-2596): the capture doors' own
+  // function behind a session check, so the dedupe and the band are judged
+  // where every other door judges them.
+  registerPluginApiRoute('crm/contacts-create', crmContactsCreateHandler)
 }

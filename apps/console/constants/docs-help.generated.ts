@@ -198,6 +198,11 @@ export const DOCS_HELP_TOPICS = {
     title: 'The console tour',
     excerpt: 'Where things live in the Aglyn console app bar and navigation.',
   },
+  contactRecord: {
+    path: '/content-and-data/contacts/contact-record',
+    title: 'The contact record',
+    excerpt: 'Add a contact by hand, keep a profile on them — phone, company, title, address, owner and lifecycle stage — and open their own page in the CRM.',
+  },
   contacts: {
     path: '/content-and-data/contacts/overview',
     title: 'Contacts CRM',
@@ -774,6 +779,7 @@ export const DOCS_HELP_ANCHORS = {
   consoleAndSite: ['#add-a-console-page', '#add-a-widget-to-a-shell-zone', '#wrap-every-console-page-providers', '#add-a-canvas-component-besigner--published-sites', '#add-a-site-runtime', '#troubleshooting'],
   consoleSearch: ['#what-it-searches', '#how-matching-works', '#what-it-does-not-search', '#why-a-group-sometimes-says-it-was-only-partly-searched'],
   consoleTour: ['#the-app-bar', '#in-context-help', '#primary-navigation', '#editing-vs-managing', '#the-sites-list', '#the-status-pill', '#how-the-pill-is-decided', '#your-site-allowance', '#a-sites-dashboard', '#next', '#workspace-settings--notifications', '#alerts-on-this-device'],
+  contactRecord: ['#adding-a-contact-by-hand', '#the-record-page', '#what-each-site-keeps-to-itself', '#owner', '#lifecycle-stages', '#finding-a-contact', '#related'],
   contacts: ['#unified-ingestion', '#the-contacts-page', '#whats-in-the-crm-area', '#import-from-csv', '#segments', '#related'],
   content: ['#site-templates--starter-gallery', '#section--block-library', '#content-collections--blog', '#related'],
   cookieConsent: ['#how-it-works', '#what-needs-consent', '#privacy-choices--the-persistent-control', '#where-the-choice-is-kept', '#global-privacy-control', '#previewing-what-visitors-see', '#turn-the-banner-off'],

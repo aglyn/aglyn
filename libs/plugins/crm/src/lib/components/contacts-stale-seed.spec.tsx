@@ -16,29 +16,27 @@
  */
 
 /**
- * The contacts profile drawer must not write from a seed the server never
- * confirmed (AGL-1358).
+ * The contact record refuses a save over an unconfirmed read (AGL-1358),
+ * from the page a person is now edited on (AGL-2596).
  *
- * This payload is the narrowest in the issue and worth being precise about:
- * `email`, `sources` and `interactions` are NOT in it, so most of the contact
- * is genuinely safe. What makes it the same shape is that the two fields that
- * are in it — `tags` and `notes` — are BOTH written on every save and both
- * come off the listener seed. Editing the notes against a cached read carries
- * the tags back with them.
+ * The v1 drawer seeded its tags and notes from the LIST's listener; the
+ * record page seeds every field of the profile from its own one-document
+ * listener, and the guard is the same: a snapshot the server never confirmed
+ * — from the cache, or from a failed read — is not a seed a write may be
+ * built on. The shape that makes this the AGL-1358 defect is unchanged too:
+ * edit ONE field and every other field on the card goes back with it, so a
+ * cached seed rolls the tags back, and tags are what a saved segment sends
+ * to.
  *
- * That is not cosmetic: tags are what `contactMatchesSegment` runs on, and a
- * saved segment is a campaign audience. A rollback here silently changes who
- * gets emailed.
- *
- * Both directions asserted. The positive control matters most: this guard
- * stands in front of the ordinary save.
+ * Mounted DIRECTLY rather than through the hub, with the document listener
+ * doubled: this file is about the guard, and the hub's own switch has a spec
+ * of its own.
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { updateDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
-import CrmConsolePage from './crm-console-page'
-import { CRM_CONSOLE_SECTIONS } from './crm-console-sections'
+import ContactDetailPage from './contact-detail-page'
 
 /** Mutable so each spec picks the listener's verdict before rendering. */
 const listener = {
@@ -46,65 +44,59 @@ const listener = {
   status: 'success' as 'success' | 'error',
 }
 
-const contactDocs = [
-  {
-    $id: 'con-1',
-    email: 'ada@example.test',
-    name: 'Ada Lovelace',
-    // The HOLDER's own records. A contact row is shared by every site that
-    // captured the person; the notes, tags and timeline on it are not, so
-    // they sit under the viewing group's facet.
-    facets: {
-      'host-1': {
-        sources: ['inbox'],
-        interactions: [{ summary: 'Submitted the contact form', atMs: 1 }],
-        // The tags a stale seed would roll back — and with them, who a saved
-        // segment sends to.
-        tags: ['vip', 'newsletter'],
-        notes: 'Prefers email',
-      },
+const contactDoc = {
+  $id: 'con-1',
+  email: 'ada@example.test',
+  name: 'Ada Lovelace',
+  // The HOLDER's own records. A contact row is shared by every site that
+  // captured the person; the notes, tags and timeline on it are not, so
+  // they sit under the viewing group's facet.
+  facets: {
+    'host-1': {
+      sources: { inbox: true },
+      interactions: [{ type: 'inbox', summary: 'Submitted the contact form', atMs: 1 }],
+      // The tags a stale seed would roll back — and with them, who a saved
+      // segment sends to.
+      tags: ['vip', 'newsletter'],
+      notes: 'Prefers email',
+      phone: '+15125550107',
     },
-    visibleTo: ['host:host-1'],
   },
-]
-const collections: Record<string, Array<Record<string, unknown>>> = {
-  contacts: contactDocs,
-  contactSegments: [],
+  visibleTo: ['host:host-1'],
 }
 
 // The recent-activity feed under the list (AGL-2600) opens a listener of
 // its own and reads hooks the wholesale mock below does not provide. It is
 // not what this file asserts, so it is drawn away.
+/*
+ * The record page composes the timeline, deals and tasks cards and the
+ * add-to-list button beside the Properties card under test. Each opens its
+ * own listeners; none is what this suite asks about, so they render nothing
+ * here and the seed gate on Save is the only thing the doubles have to answer.
+ */
+jest.mock('./contact-timeline-card', () => ({ __esModule: true, default: () => null, ContactTimelineCard: () => null }))
+jest.mock('./contact-deals-card', () => ({ __esModule: true, default: () => null, ContactDealsCard: () => null }))
+jest.mock('./record-tasks-card', () => ({ __esModule: true, default: () => null, RecordTasksCard: () => null }))
+jest.mock('./add-to-list-button', () => ({ __esModule: true, default: () => null, AddToListButton: () => null }))
 jest.mock('./recent-activity-feed', () => ({
   __esModule: true,
   default: () => null,
   RecentActivityFeed: () => null,
 }))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
-  /*
-   * The real translator, not a stub. It is a pure function of the shared
-   * declaration, and returning `undefined` here made every render throw —
-   * a mock that omits a barrel export does not fail as "missing", it fails
-   * as the component being broken.
-   */
-  listFilterConstraints: jest.requireActual(
-    '@aglyn/tenant-feature-instance',
-  ).listFilterConstraints,
   useFirestore: () => ({}),
-  useOrgDataScope: () => ({ scope: ['orgs', 'org-1'] }),
-  // The site's campaigns, which fill the picker in the contact profile panel.
+  useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1' }),
+  // The site's campaigns, which fill the filing picker on the card beside
+  // the one under test.
   useHostCampaigns: () => ({ options: [], truncated: false, ready: true }),
-  useFirestoreCollection: (build: () => unknown) => ({
-    data: collections[build() as string] ?? [],
+  // The ONE document the page reads, carrying the listener's verdict.
+  useFirestoreDoc: () => ({
+    data: contactDoc,
     status: listener.status,
     fromCache: listener.fromCache,
   }),
-  // The dropped-contacts counter, displayed only.
-  useFirestoreDoc: () => ({
-    data: { total: 0 },
-    status: 'success',
-    fromCache: false,
-  }),
+  useUser: () => ({ data: { uid: 'user-1' } }),
+  useHostActivityLogger: () => jest.fn(),
   // The REAL guard, not a stub. A stub would let the write through whatever
   // the page passed it, which is the one thing this spec disproves.
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
@@ -113,18 +105,8 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 
 jest.mock('firebase/firestore', () => ({
   ...jest.requireActual('firebase/firestore'),
-  collection: (_db: unknown, ...segments: string[]) =>
-    segments[segments.length - 1],
-  query: (name: string) => name,
-  limit: () => undefined,
   doc: () => ({}),
-  // The page's audience head-count (AGL-1706). Nothing here turns on it —
-  // it is stubbed so the real SDK is not handed this file's string-shaped
-  // collection ref, which throws synchronously out of the effect.
-  getCountFromServer: jest.fn(async () => ({
-    data: () => ({ count: contactDocs.length }),
-  })),
-  addDoc: jest.fn().mockResolvedValue(undefined),
+  deleteField: () => ({ __deleteField: true }),
   deleteDoc: jest.fn().mockResolvedValue(undefined),
   updateDoc: jest.fn().mockResolvedValue(undefined),
 }))
@@ -134,11 +116,48 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar }),
 }))
 jest.mock('@aglyn/shared-ui-jsx', () => ({
-  CardDisplay: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  CardDisplay: ({
+    children,
+    HeaderProps,
+  }: {
+    children: ReactNode
+    HeaderProps?: { action?: ReactNode }
+  }) => (
+    <div>
+      {HeaderProps?.action}
+      {children}
+    </div>
+  ),
+  AppLink: ({ children }: { children: ReactNode }) => <a>{children}</a>,
   MdiIcon: () => null,
   useConfirmationContext: () => ({
     confirm: jest.fn().mockResolvedValue(undefined),
   }),
+}))
+jest.mock('@aglyn/shared-ui-jsx/components/row-actions-menu.component', () => ({
+  __esModule: true,
+  default: () => null,
+}))
+// The attribution and the campaign picker each open a listen of their own;
+// neither is what this file is about.
+jest.mock(
+  '@aglyn/plugins-marketing/components/conversion-attribution.component',
+  () => ({ __esModule: true, default: () => null }),
+)
+jest.mock(
+  '@aglyn/shared-ui-email-campaigns/components/campaign-picker.component',
+  () => ({ __esModule: true, default: () => null }),
+)
+// The roster, which the owner picker lists; nobody is needed here.
+jest.mock('./use-org-members', () => ({
+  useOrgMembers: () => ({
+    options: [],
+    ready: true,
+    memberName: (uid: string) => uid,
+  }),
+}))
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ push: jest.fn() }),
 }))
 
 beforeEach(() => {
@@ -147,49 +166,32 @@ beforeEach(() => {
   listener.status = 'success'
 })
 
-// Only the section the URL names renders (AGL-2595): the rail's own chrome is
-// drawn away and the section body passed through, so what the assertions read
-// is the people list the v1 page was.
-jest.mock('@aglyn/shared-ui-next', () => ({
-  HubSections: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-}))
-
-const BASE_PATH = '/acme/hosts/shop/contacts'
-
-/** The people section, as the shell mounts it: the resolved rail and the URL's section. */
-const hubProps = {
-  basePath: BASE_PATH,
-  sections: CRM_CONSOLE_SECTIONS.map((section) => ({
-    id: section.id,
-    label: section.label,
-    href: `${BASE_PATH}/${section.id}`,
-    visible: true,
-  })),
-  section: 'contacts',
-  segments: ['contacts'],
-}
-
 const renderPage = () =>
-  render(<CrmConsolePage hostId="host-1" entitled {...hubProps} />)
+  render(
+    <ContactDetailPage
+      hostId="host-1"
+      id="con-1"
+      basePath="/acme/hosts/shop/crm"
+    />,
+  )
 
 /**
- * Open the contact's drawer, edit only the NOTES, and save — the case that
- * makes this the AGL-1358 shape, because the tags ride along untouched.
+ * Edit only the NOTES, and save — the case that makes this the AGL-1358
+ * shape, because the tags ride along untouched.
  */
-function openContactEditNotesAndSave() {
-  fireEvent.click(screen.getByText('Ada Lovelace'))
-  fireEvent.change(screen.getByLabelText('Notes'), {
+function editNotesAndSave() {
+  fireEvent.change(screen.getByLabelText('About'), {
     target: { value: 'Prefers a phone call' },
   })
   fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 }
 
-describe('CrmConsolePage (AGL-1358)', () => {
+describe('ContactDetailPage (AGL-1358, AGL-2596)', () => {
   it('REFUSES to write a contact seeded from an unconfirmed read', async () => {
     listener.fromCache = true
     renderPage()
 
-    openContactEditNotesAndSave()
+    editNotesAndSave()
 
     // Settled, so this cannot pass merely by asserting too early.
     await waitFor(() => expect(enqueueSnackbar).toHaveBeenCalled())
@@ -197,8 +199,8 @@ describe('CrmConsolePage (AGL-1358)', () => {
     const [message] = enqueueSnackbar.mock.calls[0]
     expect(message).toEqual(expect.stringContaining('contact'))
     expect(message).toEqual(expect.stringMatching(/reload/i))
-    // The drawer keeps what was typed, so the refusal is not a silent no-op.
-    expect((screen.getByLabelText('Notes') as HTMLInputElement).value).toEqual(
+    // The card keeps what was typed, so the refusal is not a silent no-op.
+    expect((screen.getByLabelText('About') as HTMLInputElement).value).toEqual(
       'Prefers a phone call',
     )
   })
@@ -206,7 +208,7 @@ describe('CrmConsolePage (AGL-1358)', () => {
   it('SAVES normally once the server has confirmed the seed', async () => {
     renderPage()
 
-    openContactEditNotesAndSave()
+    editNotesAndSave()
 
     await waitFor(() => expect(updateDoc).toHaveBeenCalledTimes(1))
     const [, payload] = (updateDoc as jest.Mock).mock.calls[0]
@@ -215,13 +217,19 @@ describe('CrmConsolePage (AGL-1358)', () => {
     expect(payload['facets.host-1.notes']).toBe('Prefers a phone call')
     // The tags ride along untouched — which is exactly why the guard is here.
     expect(payload['facets.host-1.tags']).toEqual(['vip', 'newsletter'])
+    // The phone the record already had is re-written as it was, and echoed
+    // to the top of the document for the search.
+    expect(payload['facets.host-1.phone']).toBe('+15125550107')
+    expect(payload['phone']).toBe('+15125550107')
+    // Never a nested `facets` object: that would replace every holder's map.
+    expect(payload).not.toHaveProperty('facets')
   })
 
-  it('REFUSES when the contacts read failed, and says so differently', async () => {
+  it('REFUSES when the contact read failed, and says so differently', async () => {
     listener.status = 'error'
     renderPage()
 
-    openContactEditNotesAndSave()
+    editNotesAndSave()
 
     await waitFor(() => expect(enqueueSnackbar).toHaveBeenCalled())
     expect(updateDoc).not.toHaveBeenCalled()

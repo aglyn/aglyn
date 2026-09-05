@@ -93,6 +93,7 @@ export type GlobalSearchEntity =
   | 'sites'
   | 'screens'
   | 'emails'
+  | 'contacts'
   | 'components'
   | 'layouts'
   | 'templates'
@@ -113,7 +114,18 @@ export type GlobalSearchEntity =
  * top-level collection query, deliberately: a top-level query is the shape
  * that can leak, whatever it filters on.
  */
-export type GlobalSearchScopeKind = 'host' | 'org'
+/**
+ * Where a collection lives, which decides how it is read.
+ *
+ * `host` is `hosts/{hostId}/…`; `org` is the caller's OWN projection under
+ * `users/{uid}/…`, narrowed by `orgId`; `orgData` is the org-shared data root
+ * `orgs/{orgId}/…`, whose rules judge every document by its `visibleTo`
+ * tokens (AGL-2596) — so an `orgData` read carries the viewer's tokens as an
+ * `array-contains-any` filter, the same predicate the rules evaluate, and is
+ * refused outright when they are unknown rather than issued unfiltered and
+ * denied.
+ */
+export type GlobalSearchScopeKind = 'host' | 'org' | 'orgData'
 
 export interface GlobalSearchEntityDef {
   id: GlobalSearchEntity
@@ -134,6 +146,14 @@ export interface GlobalSearchEntityDef {
    * by a test against the real write path's allow-list.
    */
   nameField: string
+  /**
+   * The field the row is LABELLED by when `nameField` is empty.
+   *
+   * A contact captured by a checkout may carry no name at all, and a row
+   * labelled by its document id is a row nobody recognizes; the email is
+   * what the CRM shows for the same person.
+   */
+  fallbackNameField?: string
   /** Extra fields a reader may legitimately search by (slug, route). */
   extraFields?: string[]
   /**
@@ -179,6 +199,25 @@ export const GLOBAL_SEARCH_ENTITIES: GlobalSearchEntityDef[] = [
     scopeKind: 'host',
     collection: 'screens',
     nameField: 'displayName',
+  },
+  {
+    /*
+     * People, by name, email, phone number or company (AGL-2596). The phone
+     * and the company name are top-level echoes of the viewing holder's
+     * facet, written by every path that sets them, precisely so this read —
+     * which never resolves a facet — can hit them. Ungated by plan: every
+     * tier has an audience band. Gated by the CALLER instead: the dialog
+     * supplies `orgDataTokens` only when the Contacts surface is released
+     * for the viewer and they hold `data.manage`, which is the read rule.
+     */
+    id: 'contacts',
+    group: 'Contacts',
+    noun: 'contacts',
+    scopeKind: 'orgData',
+    collection: 'contacts',
+    nameField: 'name',
+    fallbackNameField: 'email',
+    extraFields: ['email', 'phone', 'companyName'],
   },
   {
     id: 'components',
@@ -301,6 +340,18 @@ export interface GlobalSearchContext {
   entitlements: Record<string, unknown> | null
   /** True once `entitlements` reflects a real answer rather than a default. */
   entitlementsReady: boolean
+  /**
+   * The viewer's scope tokens for the org-shared data root, or null when
+   * `orgData` groups must not be offered at all (AGL-2596).
+   *
+   * Null covers three situations the resolver cannot tell apart and does not
+   * need to: the tokens are still resolving, the viewer lacks the permission
+   * the rules read for, or the surface those groups belong to is not
+   * released for them. In every case the right answer is the same — no
+   * `orgData` group — and a read attempted anyway would be denied and render
+   * as a failure the reader cannot act on.
+   */
+  orgDataTokens?: readonly string[] | null
 }
 
 export interface GlobalSearchScope {
@@ -375,6 +426,15 @@ export function resolveGlobalSearchScope(
     // site, and only once the id is settled — a half-resolved host would
     // address `hosts//screens`.
     if (definition.scopeKind === 'host' && !onHost) continue
+    // Org data is read through the viewer's scope tokens, and without them
+    // the read cannot be filtered the way the rules require — so the group
+    // is withheld rather than offered and denied.
+    if (
+      definition.scopeKind === 'orgData' &&
+      (!context.orgId || !context.orgDataTokens?.length)
+    ) {
+      continue
+    }
     // An unresolved entitlement answers nothing: hold the gated groups until
     // it is real, rather than letting a loading default decide.
     if (
@@ -512,6 +572,13 @@ export function buildResultHref(
       return host ? buildRoute(Route.HOST_REDIRECTS, { orgSlug, host }) : null
     case 'services':
       return host ? buildRoute(Route.HOST_BOOKINGS, { orgSlug, host }) : null
+    case 'contacts':
+      // The CRM is a plugin hub, addressed through the generic plugin route;
+      // the record lives under its `contacts` section, and the id is encoded
+      // because a Firestore id is opaque.
+      return host
+        ? `${buildRoute(Route.HOST_PLUGIN, { orgSlug, host, pluginSlug: 'crm' })}/contacts/${encodeURIComponent(id)}`
+        : null
     default:
       return null
   }

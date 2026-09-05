@@ -252,10 +252,13 @@ describe('the profile and tags', () => {
       sources: { import: true },
     })
     // Nothing of the profile at the top of the shared row, where a sister
-    // brand would read it.
+    // brand would read it — except the phone, which is echoed there on
+    // purpose so the console's global search can hit it (`HostContact.phone`).
     for (const key of Object.keys(profile)) {
+      if (key === 'phone') continue
       expect(contacts['auto-1'][key]).toBeUndefined()
     }
+    expect(contacts['auto-1']['phone']).toBe(profile.phone)
     expect(contacts['auto-1']['tags']).toBeUndefined()
   })
 

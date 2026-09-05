@@ -82,6 +82,11 @@ export const PLUGIN_DOCS = {
     title: 'Activities & the timeline',
     excerpt: 'Log calls, emails, meetings and notes against a contact, a company or a deal, and read them in one timeline beside everything the platform captured.',
   },
+  contactRecord: {
+    path: '/content-and-data/contacts/contact-record',
+    title: 'The contact record',
+    excerpt: 'Add a contact by hand, keep a profile on them — phone, company, title, address, owner and lifecycle stage — and open their own page in the CRM.',
+  },
   contacts: {
     path: '/content-and-data/contacts/overview',
     title: 'Contacts CRM',
@@ -182,6 +187,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   companies: ['#the-companies-list', '#create-a-company', '#a-companys-page', '#contacts-at-a-company', '#deleting-a-company', '#who-can-see-a-company', '#related'],
   consoleTour: ['#the-app-bar', '#in-context-help', '#primary-navigation', '#editing-vs-managing', '#the-sites-list', '#the-status-pill', '#how-the-pill-is-decided', '#your-site-allowance', '#a-sites-dashboard', '#next', '#workspace-settings--notifications', '#alerts-on-this-device'],
   contactActivities: ['#two-kinds-of-history', '#logging-an-activity', '#where-an-activity-is-visible', '#the-recent-activity-feed', '#related'],
+  contactRecord: ['#adding-a-contact-by-hand', '#the-record-page', '#what-each-site-keeps-to-itself', '#owner', '#lifecycle-stages', '#finding-a-contact', '#related'],
   contacts: ['#unified-ingestion', '#the-contacts-page', '#whats-in-the-crm-area', '#import-from-csv', '#segments', '#related'],
   crmReports: ['#choosing-a-period', '#contacts', '#sources-and-lifecycle', '#pipeline', '#won-and-lost', '#tasks', '#crm-at-a-glance', '#how-the-numbers-are-counted'],
   crmTasks: ['#the-tasks-page', '#creating-a-task', '#assigning-a-task-to-someone-else', '#completing-and-reopening', '#tasks-on-a-contact-company-or-deal', '#the-dashboard-card', '#who-can-do-what', '#related'],
