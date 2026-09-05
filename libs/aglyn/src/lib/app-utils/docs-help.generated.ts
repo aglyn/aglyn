@@ -107,6 +107,11 @@ export const PLUGIN_DOCS = {
     title: 'Reports',
     excerpt: 'New contacts over time, where they came from and how far they have gone, the open pipeline and its forecast, deals won and lost, and the task load — counted on the server for the records your site can see.',
   },
+  crmSettings: {
+    path: '/content-and-data/contacts/settings',
+    title: 'CRM settings',
+    excerpt: 'The switches that decide what the CRM does on its own for every site in your workspace — starting with whether a company is created from a captured contact\'s work email domain.',
+  },
   crmTasks: {
     path: '/content-and-data/contacts/tasks',
     title: 'Tasks & follow-ups',
@@ -194,7 +199,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   catalog: ['#products-options-and-variants', '#billing-modes-and-subscriptions', '#categories-and-tags', '#collections', '#slugs', '#merchant-center-feed', '#related'],
   commerce: ['#products-hub', '#inventory', '#reserved-stock', '#stock-movements', '#gift-cards', '#recovery-and-alerts', '#orders', '#orders-screen', '#order-statuses', '#order-money-tiles', '#a-lost-dispute', '#shipping--taxes', '#lodging-tax-on-reservations', '#storefront-sales-tax', '#destination-coverage', '#dropshipping', '#related'],
   commerceEndToEnd: ['#1-connect-payments', '#2-create-products', '#3-design-the-storefront', '#catalog-search-filters-and-sort', '#category-pages', '#the-product-page-template', '#4-what-checkout-does', '#paying-without-leaving-your-site', '#5-run-orders-from-the-console', '#6-subscriptions--the-stripe-portal', '#related'],
-  companies: ['#the-companies-list', '#create-a-company', '#a-companys-page', '#contacts-at-a-company', '#deleting-a-company', '#who-can-see-a-company', '#related'],
+  companies: ['#the-companies-list', '#create-a-company', '#a-companys-page', '#contacts-at-a-company', '#linked-on-capture', '#deleting-a-company', '#who-can-see-a-company', '#related'],
   consoleTour: ['#the-app-bar', '#in-context-help', '#primary-navigation', '#editing-vs-managing', '#the-sites-list', '#the-status-pill', '#how-the-pill-is-decided', '#your-site-allowance', '#a-sites-dashboard', '#next', '#workspace-settings--notifications', '#alerts-on-this-device'],
   contactActivities: ['#two-kinds-of-history', '#logging-an-activity', '#where-an-activity-is-visible', '#the-recent-activity-feed', '#related'],
   contactFields: ['#define-a-field', '#where-values-show', '#save-a-form-field', '#over-the-api', '#retire-restore-delete', '#related'],
@@ -202,6 +207,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   contacts: ['#whats-in-the-crm-area', '#unified-ingestion', '#the-contacts-page', '#import-from-csv', '#segments', '#who-can-open-the-crm', '#related'],
   crmLeads: ['#the-leads-list', '#working-a-lead-from-the-row', '#a-leads-page', '#converting-a-lead', '#unqualifying-a-lead', '#who-can-do-this', '#related'],
   crmReports: ['#choosing-a-period', '#contacts', '#sources-and-lifecycle', '#pipeline', '#won-and-lost', '#tasks', '#crm-at-a-glance', '#how-the-numbers-are-counted', '#related'],
+  crmSettings: ['#companies', '#create-companies-from-work-email-domains', '#related'],
   crmTasks: ['#the-tasks-page', '#creating-a-task', '#assigning-a-task-to-someone-else', '#completing-and-reopening', '#tasks-on-a-contact-company-or-deal', '#the-dashboard-card', '#who-can-do-what', '#related'],
   datasets: ['#model-builder', '#typed-documents', '#relations', '#query-layer', '#repeatable-components', '#who-a-dataset-is-shared-with', '#import--export', '#related'],
   deals: ['#the-pipeline-and-its-stages', '#the-board-and-the-table', '#creating-a-deal', '#moving-winning-and-losing', '#a-deals-page', '#related'],

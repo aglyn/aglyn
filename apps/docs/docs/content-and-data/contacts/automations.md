@@ -1,5 +1,5 @@
 ---
-sidebar_position: 12
+sidebar_position: 13
 title: Automations for the CRM
 description: The CRM events an automation can start on — a contact created or changing stage, a deal moved, won or lost, a task completed — and the steps that set a stage, tag, assign an owner, create a task or log an activity.
 ---

@@ -1,7 +1,7 @@
 ---
 sidebar_position: 4
 title: Bulk actions
-description: Select contacts in the CRM table and tag them, set their owner or lifecycle stage, add them to an email audience, export them, or remove them from this site — all at once.
+description: Select contacts in the CRM table and tag them, set their owner, lifecycle stage or company, add them to an email audience, export them, or remove them from this site — all at once.
 ---
 
 # Bulk actions
@@ -18,14 +18,15 @@ table saying how many are selected, with one action for all of them.
 | **Remove tag** | Type a tag; it is removed from every selected contact that has it. Contacts without it are left alone. |
 | **Set owner** | Pick a team member. Every selected contact is assigned to them. Choose **Nobody** to clear the owner. |
 | **Set stage** | Pick a lifecycle stage — subscriber, lead, marketing qualified, sales qualified, opportunity, customer, evangelist or other. |
+| **Set company** | Pick a [company](./companies.md) — the same picker a contact's record has, with a **Create** row for a name nobody has filed yet. Every selected contact is linked to it, and its name is written to their records. Leave the picker empty to unlink the selection. A contact already at that company is left alone. |
 | **Add to list** | Put the selected contacts on an [email audience](../../marketing-and-automation/email-campaigns/overview.md#email-lists). This runs the same check the audience's own page runs — see below. |
 | **Export CSV** | Download the selected rows as `contacts-selected.csv`, with the same six columns the table's own **Export CSV** writes: email, name, sources, tags, last interaction, notes. |
 | **Remove from this site** | After a confirmation, the selected contacts leave this site's CRM. A person another site in your workspace also captured keeps that site's record; a person only this site held is deleted. This is not a privacy erasure: the person's form submissions, orders, bookings and membership records are separate and are deleted from their own pages — see [the record page](./contact-record.md#the-record-page). |
 | **Clear** | Deselect everything. |
 
-Every change lands on **this site's** record of the person. Tags, the owner and
-the stage are one site's knowledge of a contact, so a site sharing a workspace
-with yours never sees yours change.
+Every change lands on **this site's** record of the person. Tags, the owner,
+the stage and the company are one site's knowledge of a contact, so a site
+sharing a workspace with yours never sees yours change.
 
 ## When a contact cannot be changed
 

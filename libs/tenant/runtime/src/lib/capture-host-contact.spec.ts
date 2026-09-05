@@ -36,6 +36,9 @@ const upsertHostContact = jest.fn(
   },
 )
 const emitHostEvent = jest.fn(async () => ({ alerts: [] }))
+const associateCompanyByDomain = jest.fn(
+  async (): Promise<unknown> => ({ outcome: 'none', reason: 'no-domain' }),
+)
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
@@ -45,24 +48,32 @@ jest.mock('./emit-host-event', () => ({
   __esModule: true,
   emitHostEvent: (...args: unknown[]) => emitHostEvent(...(args as [])),
 }))
+jest.mock('./associate-company-by-domain', () => ({
+  __esModule: true,
+  associateCompanyByDomain: (...args: unknown[]) =>
+    associateCompanyByDomain(...(args as [])),
+}))
 
 import {
   captureHostContact,
   contactCreatedPayload,
 } from './capture-host-contact'
 
-const capture = () =>
+const capture = (facet?: { companyId?: string }) =>
   captureHostContact({
     hostId: 'site-1',
     email: 'Ada@Example.com',
     source: 'form',
     interaction: { refId: 's1' },
+    ...(facet ? { facet } : {}),
   })
 
 beforeEach(() => {
   mockCreated = null
   upsertHostContact.mockClear()
   emitHostEvent.mockClear()
+  associateCompanyByDomain.mockClear()
+  associateCompanyByDomain.mockResolvedValue({ outcome: 'none', reason: 'no-domain' })
 })
 
 describe('captureHostContact', () => {
@@ -101,6 +112,51 @@ describe('captureHostContact', () => {
   it('announces nothing when the capture was a repeat visit', async () => {
     await capture()
     expect(emitHostEvent).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * The company link on capture (AGL-2613): asked once, for a NEW person, and
+ * before the event goes out — so an automation reading the new contact
+ * finds them filed. Never when the door already named a company, and never
+ * for a repeat visit.
+ */
+describe('captureHostContact files a new person under their company', () => {
+  const created = {
+    contactId: 'contact-9',
+    hostId: 'site-1',
+    email: 'ada@acme.com',
+    source: 'form',
+    campaignIds: [],
+  }
+
+  it('associates by domain before announcing the contact', async () => {
+    mockCreated = created
+    await capture()
+    expect(associateCompanyByDomain).toHaveBeenCalledTimes(1)
+    expect(associateCompanyByDomain).toHaveBeenCalledWith(created)
+    expect(associateCompanyByDomain.mock.invocationCallOrder[0]).toBeLessThan(
+      emitHostEvent.mock.invocationCallOrder[0],
+    )
+  })
+
+  it('leaves a company the door named alone', async () => {
+    mockCreated = created
+    await capture({ companyId: 'co-picked' })
+    expect(associateCompanyByDomain).not.toHaveBeenCalled()
+    expect(emitHostEvent).toHaveBeenCalledTimes(1)
+  })
+
+  it('asks nothing for a repeat visit', async () => {
+    await capture()
+    expect(associateCompanyByDomain).not.toHaveBeenCalled()
+  })
+
+  it('still announces the contact when the association fails', async () => {
+    mockCreated = created
+    associateCompanyByDomain.mockRejectedValueOnce(new Error('index missing'))
+    await capture()
+    expect(emitHostEvent).toHaveBeenCalledTimes(1)
   })
 })
 
