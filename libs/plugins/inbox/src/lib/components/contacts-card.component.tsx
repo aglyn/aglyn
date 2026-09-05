@@ -22,7 +22,10 @@ import { normalizeContactEmail, pluginDocsHelp } from '@aglyn/aglyn'
 // plugin's SITE half, so a console card named there ships to every published
 // page. The component path reaches the same module without crossing it.
 import { default as ConversionAttribution } from '@aglyn/plugins-marketing/components/conversion-attribution.component'
-import { mdiBullhornOutline } from '@aglyn/shared-data-mdi'
+// The CRM's route builder by its leaf path, not the plugin barrel: the barrel
+// carries the plugin registration, and a link needs only the address grammar.
+import { crmRoutes } from '@aglyn/plugins-crm/model/crm-routes'
+import { mdiAccountArrowRight, mdiBullhornOutline } from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
@@ -57,6 +60,7 @@ import {
   query,
 } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
+import { useCrmHubPath } from './use-crm-hub-path'
 
 /**
  * How many members and how many leads the contacts table reads.
@@ -80,6 +84,9 @@ export function ContactsCard({ hostId }: { hostId: string }) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
+  // Where a lead is WORKED (AGL-2608). This card lists leads; the CRM's
+  // Leads section gives each one a status, an owner and a conversion.
+  const crmHubPath = useCrmHubPath()
 
   /*==========================================
    * SITE MEMBERS + LEADS (AGL-109): ORDERED AND CEILINGED, NOT PAGED BY QUERY.
@@ -309,6 +316,23 @@ export function ContactsCard({ hostId }: { hostId: string }) {
                       <RowActionsMenu
                         label={String(lead.email ?? lead.$id)}
                         items={[
+                          ...(crmHubPath
+                            ? [
+                                {
+                                  key: 'crm',
+                                  label: 'Open in CRM',
+                                  icon: (
+                                    <MdiIcon
+                                      path={mdiAccountArrowRight.path}
+                                      size={0.8}
+                                    />
+                                  ),
+                                  href: crmRoutes(crmHubPath).lead(
+                                    String(lead.$id),
+                                  ),
+                                },
+                              ]
+                            : []),
                           {
                             key: 'origin',
                             label: 'Where this came from',
