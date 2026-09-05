@@ -11,6 +11,13 @@ opportunity, moving through the stages your business sells in. Open it at
 `…/hosts/{site}/crm/deals`; a single deal has its own page at
 `…/crm/deals/{id}`.
 
+:::info Plan availability
+Deals are part of the **CRM suite**, included from **Starter**; on Free the section
+is shown locked. A deal is a **CRM record**, counted with contacts and companies
+against your plan's records band — see
+[CRM records](../../workspace-and-billing/billing-and-plans/overview.md#crm-records).
+:::
+
 ```mermaid
 flowchart LR
   Q[Qualified] --> C[Contact made] --> P[Proposal sent] --> N[Negotiation]

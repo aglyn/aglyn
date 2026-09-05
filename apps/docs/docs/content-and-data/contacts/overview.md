@@ -27,7 +27,7 @@ feature, so there's no CRM tab in your workspace and nothing to switch on under
 Capture is already running, though. Contacts are ingested from forms, member
 sign-ups, orders and bookings **today**, and you can read them over the
 [REST API](/api/resources/contacts) in the meantime — nothing is lost while you
-wait. Audience-band overage is **not billed** while the page is unavailable.
+wait. Records-band overage is **not billed** while the page is unavailable.
 :::
 
 ![The Contacts section of the CRM in the Aglyn console, with search, Source and Tags filters, and an Export CSV action](/img/contacts/contacts-page.png)
@@ -82,10 +82,26 @@ Duplicate signals from the same person are unified into one contact. A person
 your site has met but not yet qualified is also a [lead](./leads.md); converting
 the lead joins the same contact rather than making a second one.
 
-Every tier includes an **audience band** — a number of contacts. Only the Free tier's
-band is a hard limit; paid tiers never drop a record, and growth past the band meters
-as overage. That overage is **not billed while the Contacts page is unavailable**. See
-[Billing & plans](../../workspace-and-billing/billing-and-plans/overview.md).
+Every tier includes a **CRM records band** — one number for contacts, companies and
+deals together. Only the Free tier's band is a hard limit; paid tiers never drop a
+record, and growth past the band meters as overage. That overage is **not billed while
+the CRM is unavailable**. See
+[CRM records](../../workspace-and-billing/billing-and-plans/overview.md#crm-records)
+under Billing & plans.
+
+## What each plan includes {#what-each-plan-includes}
+
+| | Free | Starter and above |
+| --- | --- | --- |
+| **Contacts** — the list, tags, notes, segments, CSV import and export, bulk actions | Yes, banded at 100 records | Yes, banded by tier and metered past the band |
+| **The CRM suite** — Leads, Companies, Deals, Tasks, Reports and Fields; the two CRM dashboard cards; the CRM automation steps; the `crm:*` REST resources | Shown in the rail with a lock; opening a section names the plan that includes it | Yes |
+| **One-to-one email** from a record | None | A daily cap by tier — see [One-to-one email](../../workspace-and-billing/billing-and-plans/overview.md#one-to-one-email) |
+
+The contacts list is on every plan because it is the audience your email campaigns
+read; the suite is what a sales team builds on that list. A record's **activity log**
+is bounded on every plan at **5,000 logged activities per record** — a call a day for
+fourteen years — after which the log dialog, the automation step and the API refuse
+another entry on that record with a message saying so.
 
 ## The contacts page
 

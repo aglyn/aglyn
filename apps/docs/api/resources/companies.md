@@ -22,6 +22,16 @@ These endpoints are live. The console's **CRM** pages are still
 way to work with companies, deals and tasks.
 :::
 
+:::info Plan availability
+Companies, pipelines, deals, tasks and activities are the **CRM suite**, included from
+Starter; a plan without it answers `403 plan_required` with `code: "crm"` on every one
+of them, while [contacts](contacts.md) keep working. A company is also a **CRM
+record**: it counts with contacts and deals against the plan's records band, and on a
+plan that hard-bands (Free) a create past the band answers `403 plan_required` with
+`code: "crm_records_quota"` — the key is given back, so the same retry lands once the
+band is raised. Paid plans meter the excess instead.
+:::
+
 ## Scopes and sites {#scopes-and-sites}
 
 Every CRM resource uses the same two scopes — `crm:read` for `GET`, `crm:write` for
@@ -202,6 +212,7 @@ removed it, in which case the original receipt is replayed.
 | Status | `type` | When |
 | --- | --- | --- |
 | `400` | `bad_request` | `code: "validation_failed"` — a missing `name` or `consentSiteId` (or one naming a site the organization does not own), a `domain` or `phone` that does not normalize, a `website` that is not a web address, an `ownerUid` who is not a member, or a key that is not writable. On the list, a `?domain=` that is not a domain or a malformed `?updatedAfter=`. `fields` names each offending key. |
+| `403` | `plan_required` | `code: "crm"` — the plan doesn't include the CRM suite. `code: "crm_records_quota"` — the CRM records band is full on a plan that doesn't meter the overage. |
 | `403` | `insufficient_scope` | Key lacks `crm:read` / `crm:write`. Checked before the method. |
 | `404` | `not_found` | `"No such company"`. |
 | `405` | `method_not_allowed` | `Allow` lists what is: `GET, POST` on `/v1/companies`, `GET, PATCH, DELETE` on one company. |

@@ -22,9 +22,13 @@ entry says which it is:
 | **Logged** | A member of your team logged it — a call, an email, a meeting, a note, or something else. | Its author, or an org-wide member. |
 
 Captured history lives on the contact and is kept to the most recent fifty
-entries. Logged activity is a collection of its own and is never capped; the
-timeline reads it a hundred entries at a time and offers **Show more activity**
-while older entries remain.
+entries. Logged activity is a collection of its own, bounded at **5,000 entries
+per record** — a call a day for fourteen years, so nobody working a real
+relationship reaches it, and an automation logging on every event cannot fill
+one person's log without limit. At the ceiling, **Log activity**, the
+**Log a CRM activity** step and `POST /v1/activities` refuse another entry on
+that record and say so; the timeline reads it a hundred entries at a time and
+offers **Show more activity** while older entries remain.
 
 ## Logging an activity
 

@@ -166,7 +166,9 @@ each CRM collection, for sizing a sync. See [Usage](usage.md).
 | [Media](resources/media.md) | List files in the organization library and in each site's media. |
 
 Orders and products need a plan that includes **commerce**, in addition to their
-scope — see each page's plan note.
+scope — see each page's plan note. Companies, pipelines, deals, tasks and activities
+need a plan that includes the **CRM suite** (Starter and above); a plan without it
+answers `plan_required` with `code: "crm"` on all five, while contacts keep working.
 
 For event-driven integrations, see [Webhooks](integrations/webhooks.md) — push instead
 of poll.

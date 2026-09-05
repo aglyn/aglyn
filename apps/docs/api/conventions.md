@@ -195,7 +195,9 @@ apart:
 | `"dataset_quota"` | Datasets are included and **every included slot is used**. The message names the limit, and the add-on price when extra datasets are purchasable on this plan. | Buy extra datasets, or upgrade. |
 | `"record_quota"` | The dataset holds every record the plan includes. The message names the limit. | Upgrade. |
 | `"data_storage_quota"` | Dataset storage is exhausted, or the plan includes none. The message names the included size. | Upgrade. |
-| `"contact_quota"` | The **audience band** is full on a plan that doesn't meter contact overage. See [contacts](resources/contacts.md#plan-gates) — on plans that do meter it, this never happens and the extra contacts bill instead. | Upgrade. |
+| `"crm"` | The API works, but the plan doesn't include the **CRM suite**, so [companies](resources/companies.md), [pipelines](resources/pipelines.md), [deals](resources/deals.md), [tasks](resources/tasks.md) and [activities](resources/activities.md) are closed. Contacts keep working. | Move to a plan with the CRM suite. |
+| `"contact_quota"` | The **CRM records band** — contacts, companies and deals together — is full on a plan that doesn't meter the overage, and the record refused was a contact. See [contacts](resources/contacts.md#plan-gates) — on plans that do meter it, this never happens and the extra records bill instead. | Upgrade. |
+| `"crm_records_quota"` | The same band, full, and the record refused was a [company](resources/companies.md) or a [deal](resources/deals.md). | Upgrade. |
 
 Branch on `code`, not on the message. An integration that retries a plan failure
 forever is the failure mode here — none of them is transient, so back off and alert
