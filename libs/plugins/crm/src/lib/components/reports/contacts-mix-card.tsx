@@ -25,19 +25,16 @@ import {
 import { Alert, Stack, Typography } from '@mui/material'
 import { limit, orderBy, query } from 'firebase/firestore'
 import { useMemo } from 'react'
-import {
-  useFirestore,
-  useFirestoreCollection,
-} from '@aglyn/tenant-feature-instance'
-import { ceilingedWindow } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { ReportBreakdown } from './report-breakdown'
 import { plural } from './report-format'
 import {
   type CrmReportScope,
+  reportCacheKey,
   scopedCollection,
   visibleToClause,
 } from './report-scope'
-import { type AggregateRead } from './use-aggregate-read'
+import { type AggregateRead, useWindowRead } from './use-aggregate-read'
 
 /**
  * How many contacts the source mix and the funnel are read from.
@@ -73,12 +70,10 @@ export interface ContactsMixCardProps {
  */
 export function ContactsMixCard(props: ContactsMixCardProps) {
   const { report, totalContacts } = props
-  const { scope, tokens, groupId } = report
+  const { scope, tokens, groupId, nowMs } = report
   const firestore = useFirestore()
 
-  const { data: contactDocs, status } = useFirestoreCollection<
-    Record<string, unknown>
-  >(
+  const sample = useWindowRead<Record<string, unknown>>(
     () =>
       query(
         scopedCollection(firestore, scope, 'contacts'),
@@ -86,13 +81,11 @@ export function ContactsMixCard(props: ContactsMixCardProps) {
         orderBy('createdAt', 'desc'),
         limit(CONTACT_SAMPLE_CEILING + 1),
       ),
-    [firestore, scope, tokens],
-    { idField: '$id' },
+    CONTACT_SAMPLE_CEILING,
+    [firestore, scope, tokens, nowMs],
+    { cacheKey: reportCacheKey(report, 'contacts:sample') },
   )
-  const sample = useMemo(
-    () => ceilingedWindow(contactDocs ?? undefined, CONTACT_SAMPLE_CEILING),
-    [contactDocs],
-  )
+  const status = sample.status
 
   const mix = useMemo(() => {
     const facets = sample.rows.map((row) => Aglyn.readContactFacet(row, groupId))
@@ -120,7 +113,7 @@ export function ContactsMixCard(props: ContactsMixCardProps) {
     return { sources, funnel: Aglyn.funnelFromStages(stageCounts), unstaged }
   }, [sample, groupId])
 
-  // A sample only once the read has settled: while the listener is empty
+  // A sample only once the read has settled: while the window is empty
   // every org "exceeds" zero rows.
   const sampled =
     status === 'success' &&
