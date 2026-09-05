@@ -55,6 +55,8 @@ content on the marketing site and is written separately.
 ### Fixed
 
 - **console:** the docs flag registry reads the CRM's own name on the pages it watches ([AGL-2607](https://linear.app/aglyn/issue/AGL-2607))
+- **crm:** a stage moved on the contact page fires its event; the leads' selects are named ([AGL-2610](https://linear.app/aglyn/issue/AGL-2610))
+- **crm:** the convert dialog's Stage label no longer sits on its placeholder ([AGL-2610](https://linear.app/aglyn/issue/AGL-2610))
 - **crm,console,email,forms,runtime:** the consolidated CRM v2 tree clears every guard ([AGL-2595](https://linear.app/aglyn/issue/AGL-2595))
 - **console:** the GA4 Admin host the funnel alarm reads is in the outbound inventory ([AGL-2609](https://linear.app/aglyn/issue/AGL-2609))
 - **tools:** the plugin-id backfill finds settings rows by parent, not by collection group ([AGL-2595](https://linear.app/aglyn/issue/AGL-2595))
@@ -78,8 +80,11 @@ content on the marketing site and is written separately.
 - **contacts:** activities and the timeline, registries regenerated ([AGL-2600](https://linear.app/aglyn/issue/AGL-2600))
 
 <details>
-<summary>Also in this release: 4 test, 2 chore</summary>
+<summary>Also in this release: 6 test, 2 chore, 1 tools</summary>
 
+- **tools:** the e2e seed carries a CRM — a roaster's wholesale book, leads, an audience ([AGL-2610](https://linear.app/aglyn/issue/AGL-2610))
+- **tools:** five browser-driven e2e specs cover the CRM surfaces the v2 arc left bare ([AGL-2610](https://linear.app/aglyn/issue/AGL-2610))
+- **tools,docs:** the console e2e suite reads the org-scoped routes and sectioned hubs ([AGL-2610](https://linear.app/aglyn/issue/AGL-2610))
 - **bookings,commerce,tenant:** the runtime mocks stub the capture door every server path now uses ([AGL-2605](https://linear.app/aglyn/issue/AGL-2605))
 - **tools:** the Linear ceiling reads AGL-2629 for the CRM v2.1 arc ([AGL-2629](https://linear.app/aglyn/issue/AGL-2629), [AGL-2610](https://linear.app/aglyn/issue/AGL-2610))
 - **console:** the footer guard counts the Fields settings table as bounded ([AGL-2601](https://linear.app/aglyn/issue/AGL-2601))
