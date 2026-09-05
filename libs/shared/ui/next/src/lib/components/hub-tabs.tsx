@@ -16,7 +16,13 @@
  */
 'use client'
 
-import { AppLink, CardDisplay, GridItems } from '@aglyn/shared-ui-jsx'
+import {
+  AppLink,
+  CardDisplay,
+  GridItems,
+  MdiIcon,
+  mdiLockOutline,
+} from '@aglyn/shared-ui-jsx'
 import { TabContext, TabList, TabPanel } from '@mui/lab'
 import { Tab, Tabs, useMediaQuery, useTheme } from '@mui/material'
 import { usePathname } from 'next/navigation'
@@ -190,8 +196,15 @@ export interface HubSection {
   /** Route this section lives at. What the rail links to. */
   href: string
   label: string
-  /** Hidden entirely when false — an entitlement or a role gate. */
+  /** Hidden entirely when false — a release or a role gate. */
   visible?: boolean
+  /**
+   * Shown and linked, with a lock — an entitlement the org's plan does not
+   * carry (AGL-2611). Not hidden, deliberately: the page behind the link is
+   * the shell's upgrade notice, which is the way to buy it, and a rail that
+   * hid the section would hide the reason to upgrade.
+   */
+  locked?: boolean
 }
 
 export interface HubSectionsProps {
@@ -294,6 +307,18 @@ export function HubSections(props: HubSectionsProps) {
                     aria-current={
                       section.href === activeHref ? 'page' : undefined
                     }
+                    {...(section.locked
+                      ? {
+                          icon: (
+                            <MdiIcon
+                              path={mdiLockOutline.path}
+                              size={0.7}
+                              aria-label="Not included in your plan"
+                            />
+                          ),
+                          iconPosition: 'end' as const,
+                        }
+                      : {})}
                   />
                 ))}
               </Tabs>

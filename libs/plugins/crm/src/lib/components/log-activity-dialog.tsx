@@ -35,7 +35,10 @@ import {
   collection,
   deleteField,
   doc,
+  getCountFromServer,
+  query,
   updateDoc,
+  where,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
 import type { ActivityRecordLink, ActivityScope } from './activity-queries'
@@ -145,7 +148,7 @@ export interface LogActivityDialogProps {
  */
 export function LogActivityDialog(props: LogActivityDialogProps) {
   const { open, onClose, scope, link, activity } = props
-  const { firestore, dataScope, hostId, writeTokens } = scope
+  const { firestore, dataScope, hostId, readTokens, writeTokens } = scope
   const { data: user } = useUser()
   const authorName = useUserName()
   const { enqueueSnackbar } = useSnackbar()
@@ -216,6 +219,38 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
         )
         enqueueSnackbar('Activity updated', { variant: 'success', persist: false })
       } else {
+        /*
+         * THE PER-RECORD CEILING (AGL-2611): one aggregate on the record
+         * this dialog is filing under, before the write — the same count
+         * the automation step and the REST create take, on the same link.
+         * Scoped to the tokens this viewer may list, as every activity
+         * listener is, so the rules admit the aggregate for a scoped
+         * member exactly as they admit the timeline.
+         */
+        const lead = Aglyn.crmActivityCeilingLink(link)
+        if (lead) {
+          const logged = (
+            await getCountFromServer(
+              query(
+                collection(
+                  firestore,
+                  dataScope[0],
+                  dataScope[1],
+                  Aglyn.CRM_COLLECTIONS.activities,
+                ),
+                where('visibleTo', 'array-contains-any', readTokens),
+                where(lead.field, '==', lead.id),
+              ),
+            )
+          ).data().count
+          if (!Aglyn.crmActivityLogHasRoom(logged)) {
+            enqueueSnackbar(Aglyn.CRM_ACTIVITY_LOG_FULL_MESSAGE, {
+              variant: 'warning',
+              persist: false,
+            })
+            return
+          }
+        }
         await addDoc(
           collection(
             firestore,
@@ -270,6 +305,7 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
     firestore,
     enqueueSnackbar,
     link,
+    readTokens,
     writeTokens,
     hostId,
     authorName,

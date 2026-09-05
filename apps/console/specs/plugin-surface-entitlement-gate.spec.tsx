@@ -61,12 +61,26 @@ let mockFeatureFlag: string | undefined
  */
 let mockUpgradeNotice: Record<string, unknown> | undefined
 let mockExtensionExtras: Record<string, unknown>
+/**
+ * The nav item's declared sections and the one the URL names (AGL-2611) —
+ * absent by default, so every case written before sections existed still
+ * mounts a one-page surface.
+ */
+let mockSections: Array<{ id: string; label: string; featureFlag?: string }> | undefined
+let mockSectionId: string | undefined
+/** The widget's OWN flag, beside its extension's (AGL-2611). */
+let mockWidgetFlag: string | undefined
 /** Renders recorded per mount, so "did not render" is a positive assertion. */
 let pageRenders: number
 let widgetRenders: number
+/** The props the shell handed the page on its last render — the rail lives there. */
+let lastPageProps: ConsolePluginPageProps | undefined
+/** Every `router.replace` the shell issued — the bare-hub landing. */
+let mockReplaced: string[]
 
-function MockPluginPage(_props: ConsolePluginPageProps) {
+function MockPluginPage(props: ConsolePluginPageProps) {
   pageRenders += 1
+  lastPageProps = props
   return <div>{'plugin-page-body'}</div>
 }
 
@@ -92,12 +106,20 @@ jest.mock('@aglyn/aglyn', () => ({
       href: '/redirects',
       header: { title: 'Redirects' },
       Component: MockPluginPage,
+      ...(mockSections ? { sections: mockSections } : {}),
     },
+    section: mockSections?.find((section) => section.id === mockSectionId),
+    segments: mockSectionId ? [mockSectionId] : [],
   }),
   listConsoleWidgets: () => [
     {
       extension: { pluginId: 'demo', featureFlag: mockFeatureFlag },
-      widget: { slot: 'orgDashboard', widgetId: 'w1', Component: MockPluginWidget },
+      widget: {
+        slot: 'orgDashboard',
+        widgetId: 'w1',
+        featureFlag: mockWidgetFlag,
+        Component: MockPluginWidget,
+      },
     },
   ],
 }))
@@ -124,10 +146,15 @@ jest.mock('firebase/remote-config', () => ({
 jest.mock('next/navigation', () => ({
   useParams: () => ({ pluginSlug: ['redirects'] }),
   useSearchParams: () => new URLSearchParams(),
-  // The shell redirects a bare hub URL to its landing section (AGL-2501).
-  // Neither surface here declares sections, so it never fires — but the
-  // hook is called unconditionally, as hooks must be.
-  useRouter: () => ({ replace: () => undefined, push: () => undefined }),
+  // The shell redirects a bare hub URL to its landing section (AGL-2501),
+  // and the landing skips a section the plan does not carry (AGL-2611) —
+  // recorded, so a case can say where a bare URL went.
+  useRouter: () => ({
+    replace: (href: string) => {
+      mockReplaced.push(href)
+    },
+    push: () => undefined,
+  }),
   // The refusal notice carries a real `AppLink` to Billing, which reads the
   // pathname to decide whether it is the active route.
   usePathname: () => '/acme/hosts/acme-site/redirects',
@@ -189,8 +216,13 @@ beforeEach(() => {
   mockFeatureFlag = 'redirects'
   mockUpgradeNotice = undefined
   mockExtensionExtras = {}
+  mockSections = undefined
+  mockSectionId = undefined
+  mockWidgetFlag = undefined
   pageRenders = 0
   widgetRenders = 0
+  lastPageProps = undefined
+  mockReplaced = []
 })
 
 const mountPage = () =>
@@ -367,6 +399,101 @@ describe('extension-supplied refusal copy (AGL-2484)', () => {
   })
 })
 
+/**
+ * A SECTION may carry a flag its extension does not (AGL-2611).
+ *
+ * The case is the CRM: the contacts list ships on every plan, the sales
+ * suite built on it starts at Starter. An extension-level flag would lock
+ * the list with the rest, so the sections declare their own and the shell
+ * answers the extension's AND the section's. `redirects` stands in for
+ * `crm` here for the reason the file header gives — Free says no, Pro says
+ * yes — and the extension declares nothing, which is the CRM's shape.
+ */
+describe('a SECTION behind its own entitlement flag (AGL-2611)', () => {
+  const rail = () => [
+    { id: 'contacts', label: 'Contacts' },
+    { id: 'deals', label: 'Deals', featureFlag: 'redirects' },
+  ]
+
+  beforeEach(() => {
+    mockFeatureFlag = undefined
+    mockSections = rail()
+  })
+
+  it('refuses the flagged section on a plan without it, naming the section and the tier', async () => {
+    mockSectionId = 'deals'
+    mountPage()
+    await waitFor(() => expect(notice()).toBeTruthy())
+    expect(pageRenders).toBe(0)
+    expect(screen.queryByText('plugin-page-body')).toBeNull()
+    const text = notice()?.textContent ?? ''
+    // The section, not the surface: "Redirects is not included" would send
+    // the reader to buy the page they are already on.
+    expect(text).toMatch(/^Deals is not included in your current plan/)
+    expect(text).toContain('Included from Starter.')
+    // The upgrade path is attached, as it is for a refused surface.
+    const link = await screen.findByRole('button', { name: /view plans/i })
+    expect(link.getAttribute('href')).toBe('/acme/billing')
+  })
+
+  it('renders the unflagged section on the same plan, with the other drawn locked', async () => {
+    mockSectionId = 'contacts'
+    mountPage()
+    await waitFor(() =>
+      expect(screen.getByText('plugin-page-body')).toBeTruthy(),
+    )
+    expect(notice()).toBeNull()
+    // The rail the page is handed says which is which — locked, and still
+    // present, because the notice behind it is the way to buy it.
+    expect(
+      lastPageProps?.sections?.map((section) => [section.id, section.locked]),
+    ).toEqual([
+      ['contacts', false],
+      ['deals', true],
+    ])
+  })
+
+  it('CONTROL: renders the flagged section for a plan that carries it, unlocked', async () => {
+    mockOrg = { $id: ORG_ID, plan: 'pro' }
+    mockSectionId = 'deals'
+    mountPage()
+    await waitFor(() =>
+      expect(screen.getByText('plugin-page-body')).toBeTruthy(),
+    )
+    expect(notice()).toBeNull()
+    expect(lastPageProps?.sections?.every((section) => !section.locked)).toBe(true)
+  })
+
+  it('lands a bare hub URL on the first section the plan carries', async () => {
+    // Deals first in the rail, so the landing rule has something to skip.
+    mockSections = [rail()[1], rail()[0]]
+    mockSectionId = undefined
+    mountPage()
+    await waitFor(() => expect(mockReplaced.length).toBeGreaterThan(0))
+    expect(mockReplaced[0]).toMatch(/\/contacts$/)
+    expect(pageRenders).toBe(0)
+  })
+
+  it('makes no claim about a section while the org is unsettled', async () => {
+    mockOrgReady = false
+    mockOrg = undefined
+    mockSectionId = 'deals'
+    mountPage()
+    await waitFor(() => expect(pageRenders).toBe(0))
+    expect(notice()).toBeNull()
+  })
+
+  it('cannot widen: a section flag inside a refused extension is still refused', async () => {
+    // The extension says no; the section's own flag is one Free carries.
+    mockFeatureFlag = 'redirects'
+    mockSections = [{ id: 'contacts', label: 'Contacts', featureFlag: 'mediaCdn' }]
+    mockSectionId = 'contacts'
+    mountPage()
+    await waitFor(() => expect(notice()).toBeTruthy())
+    expect(pageRenders).toBe(0)
+  })
+})
+
 describe('a plugin WIDGET behind an entitlement flag (AGL-2484)', () => {
   it('is not rendered into a slot for an unentitled org', async () => {
     mountSlot()
@@ -395,5 +522,24 @@ describe('a plugin WIDGET behind an entitlement flag (AGL-2484)', () => {
     mockOrg = undefined
     mountSlot()
     await waitFor(() => expect(widgetRenders).toBe(0))
+  })
+
+  it('is not rendered when the WIDGET\'s own flag is one the plan lacks, whatever the extension says (AGL-2611)', async () => {
+    // The CRM's shape: an unflagged extension, a flagged card.
+    mockFeatureFlag = undefined
+    mockWidgetFlag = 'redirects'
+    mountSlot()
+    await waitFor(() => expect(widgetRenders).toBe(0))
+    expect(screen.queryByText('plugin-widget-body')).toBeNull()
+  })
+
+  it('CONTROL: the same card renders for a plan that carries its flag', async () => {
+    mockOrg = { $id: ORG_ID, plan: 'pro' }
+    mockFeatureFlag = undefined
+    mockWidgetFlag = 'redirects'
+    mountSlot()
+    await waitFor(() =>
+      expect(screen.getByText('plugin-widget-body')).toBeTruthy(),
+    )
   })
 })
