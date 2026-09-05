@@ -82,6 +82,14 @@ const counters: Record<string, Record<string, unknown>> = {
 const FIRESTORE = {}
 const DATA_SCOPE = { scope: ['orgs', 'org-1'] as const }
 
+// The recent-activity feed under the list (AGL-2600) opens a listener of
+// its own and reads hooks the wholesale mock below does not provide. It is
+// not what this file asserts, so it is drawn away.
+jest.mock('./recent-activity-feed', () => ({
+  __esModule: true,
+  default: () => null,
+  RecentActivityFeed: () => null,
+}))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   /*
    * The real translator, not a stub. It is a pure function of the shared
