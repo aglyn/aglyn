@@ -110,6 +110,10 @@ want it there.
 - Everything follows the same per-site visibility as the contacts themselves.
   A collaborator scoped to one site sees that site's totals, not the
   organization's.
+- The figures are remembered for a minute. Leaving the section to open a deal
+  it named and coming straight back costs no reads and shows the same numbers;
+  **Refresh** asks the database again at once, and a different period or a
+  different site is always its own read.
 
 ## Related
 
