@@ -1,0 +1,187 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+'use client'
+
+import type { AglynOrgMember } from '@aglyn/aglyn'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+import { useUser } from '@aglyn/tenant-feature-instance'
+import { FormControl, InputLabel, MenuItem, Select } from '@mui/material'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+
+/** One team member as the owner picker lists them. */
+export interface OrgMemberOption {
+  uid: string
+  label: string
+}
+
+/** The `value` an owner select carries for "nobody". */
+export const UNASSIGNED_OWNER = ''
+
+/**
+ * How a member reads in a picker: the name they set, else their address,
+ * else the id — never blank, because a blank option cannot be chosen on
+ * purpose.
+ */
+export function orgMemberLabel(
+  member: Pick<AglynOrgMember, '$id' | 'displayName' | 'email'>,
+): string {
+  return (
+    String(member.displayName ?? '').trim() ||
+    String(member.email ?? '').trim() ||
+    String(member.$id)
+  )
+}
+
+export interface OrgMemberOptions {
+  options: OrgMemberOption[]
+  loading: boolean
+  error: string | null
+  /** A uid as a name, `Unassigned` for none, and honest about a uid the roster no longer has. */
+  labelFor: (uid: string | null | undefined) => string
+}
+
+/**
+ * The org's roster, as owner options (AGL-2608).
+ *
+ * Read through `GET /api/orgs/members` rather than off Firestore, because the
+ * members collection's read rule cannot be satisfied by a LIST — it admits a
+ * member reading their own row and an org-wide member reading all of them,
+ * and the client cannot know which it is before asking. The route re-derives
+ * membership with the Admin SDK and answers the whole roster to any member,
+ * which is what a picker needs: every person a lead could be handed to.
+ *
+ * One request per org per mount. The list and the record page both read it,
+ * and the label column on the list needs it before anybody clicks, so it is
+ * paid on mount — bounded by the size of the team, not by the data.
+ */
+export function useOrgMemberOptions(
+  orgId: string | null | undefined,
+): OrgMemberOptions {
+  const { data: user } = useUser()
+  const [members, setMembers] = useState<OrgMemberOption[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!orgId || !user) return
+    let cancelled = false
+    setMembers(null)
+    setError(null)
+    void (async () => {
+      const response = await authorizedFetch(
+        user,
+        `/api/orgs/members?orgId=${encodeURIComponent(orgId)}`,
+      )
+      const body = (await response.json().catch(() => ({}))) as {
+        members?: unknown
+        error?: unknown
+      }
+      if (cancelled) return
+      if (!response.ok) {
+        setError(String(body?.error ?? 'The team could not be loaded.'))
+        setMembers([])
+        return
+      }
+      const list = (Array.isArray(body?.members) ? body.members : []) as AglynOrgMember[]
+      setMembers(
+        list
+          .map((member) => ({ uid: String(member.$id), label: orgMemberLabel(member) }))
+          .sort((a, b) => a.label.localeCompare(b.label)),
+      )
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [orgId, user])
+
+  const options = useMemo(() => members ?? [], [members])
+  const labelFor = useCallback(
+    (uid: string | null | undefined) => {
+      if (!uid) return 'Unassigned'
+      // A uid the roster does not carry is a member who has left; naming that
+      // is better than an id nobody recognizes or a blank that reads as
+      // unassigned.
+      return options.find((option) => option.uid === uid)?.label ?? 'Former member'
+    },
+    [options],
+  )
+  return useMemo(
+    () => ({
+      options,
+      loading: Boolean(orgId) && members === null && !error,
+      error,
+      labelFor,
+    }),
+    [options, orgId, members, error, labelFor],
+  )
+}
+
+export interface LeadOwnerSelectProps {
+  value: string | null | undefined
+  onChange: (uid: string) => void
+  roster: OrgMemberOptions
+  label?: string
+  size?: 'small' | 'medium'
+  disabled?: boolean
+  fullWidth?: boolean
+}
+
+/**
+ * The owner picker: Unassigned, then the roster by name.
+ *
+ * A value the roster does not hold is kept as its own option rather than
+ * dropped, because a controlled `Select` whose value is absent from its
+ * options renders empty — which would show a lead owned by somebody who left
+ * as owned by nobody, and a save from that state would make it true.
+ */
+export function LeadOwnerSelect(props: LeadOwnerSelectProps) {
+  const {
+    value,
+    onChange,
+    roster,
+    label = 'Owner',
+    size = 'small',
+    disabled,
+    fullWidth = true,
+  } = props
+  const current = value ?? UNASSIGNED_OWNER
+  const known = roster.options.some((option) => option.uid === current)
+  return (
+    <FormControl size={size} fullWidth={fullWidth} disabled={disabled}>
+      <InputLabel>{label}</InputLabel>
+      <Select
+        label={label}
+        value={current}
+        onChange={(event) => onChange(String(event.target.value))}
+      >
+        <MenuItem value={UNASSIGNED_OWNER}>
+          <em>{'Unassigned'}</em>
+        </MenuItem>
+        {current && !known ? (
+          <MenuItem value={current}>{roster.labelFor(current)}</MenuItem>
+        ) : null}
+        {roster.options.map((option) => (
+          <MenuItem key={option.uid} value={option.uid}>
+            {option.label}
+          </MenuItem>
+        ))}
+      </Select>
+    </FormControl>
+  )
+}
+LeadOwnerSelect.displayName = 'LeadOwnerSelect'
+
+export default LeadOwnerSelect

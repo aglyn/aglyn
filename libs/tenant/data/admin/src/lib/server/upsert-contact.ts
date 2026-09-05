@@ -16,12 +16,14 @@
  */
 
 import {
+  type AglynPostalAddress,
   CAPTURED_BY_HOST_FIELD,
   checkContactQuota,
   consentGroupScope,
   CONTACT_FACETS_FIELD,
   type ContactFacet,
   type ContactInteraction,
+  type ContactLifecycleStage,
   type ContactSource,
   marketingConsentFieldsForGroup,
   mergeContactInteraction,

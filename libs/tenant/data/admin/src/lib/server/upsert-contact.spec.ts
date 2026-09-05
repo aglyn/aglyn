@@ -631,3 +631,69 @@ describe('upsertHostContact onCreated', () => {
     }
   })
 })
+
+/**
+ * The CRM profile a console door passes (AGL-2608) lands on the capturing
+ * group's facet, key by key — and an absent key leaves what an earlier door
+ * recorded.
+ */
+describe('the CRM profile a door passes with a capture', () => {
+  beforeEach(() => {
+    for (const key of Object.keys(contacts)) delete contacts[key]
+    added = []
+    mockOrgDefaultScope = undefined
+  })
+
+  it('writes the profile onto a NEW contact\'s facet', async () => {
+    await upsertHostContact({
+      hostId: 'h1',
+      email: 'lead@example.com',
+      source: 'manual',
+      interaction: { summary: 'Converted from a lead' },
+      facet: { lifecycleStage: 'sales-qualified', ownerUid: 'uid-owner' },
+    })
+    expect(added).toHaveLength(1)
+    expect(added[0].facets.h1.lifecycleStage).toBe('sales-qualified')
+    expect(added[0].facets.h1.ownerUid).toBe('uid-owner')
+    // ⛔ Not at the top of the shared row, where every holder would read it.
+    expect(added[0].lifecycleStage).toBeUndefined()
+    expect(added[0].ownerUid).toBeUndefined()
+  })
+
+  it('merges only the keys present onto an EXISTING facet', async () => {
+    contacts['c1'] = {
+      email: 'lead@example.com',
+      facets: {
+        h1: {
+          sources: { form: true },
+          interactions: [],
+          phone: '+15555550100',
+          jobTitle: 'Buyer',
+        },
+      },
+    }
+    await upsertHostContact({
+      hostId: 'h1',
+      email: 'lead@example.com',
+      source: 'manual',
+      interaction: { summary: 'Converted from a lead' },
+      facet: { lifecycleStage: 'sales-qualified' },
+    })
+    expect(facet('c1').lifecycleStage).toBe('sales-qualified')
+    // What the door did not know stays as the earlier door left it.
+    expect(facet('c1').phone).toBe('+15555550100')
+    expect(facet('c1').jobTitle).toBe('Buyer')
+    expect(facet('c1', 'h2')).toEqual({})
+  })
+
+  it('refuses a stage the union does not name rather than storing it', async () => {
+    await upsertHostContact({
+      hostId: 'h1',
+      email: 'lead@example.com',
+      source: 'manual',
+      interaction: {},
+      facet: { lifecycleStage: 'vip' as never },
+    })
+    expect(added[0].facets.h1.lifecycleStage).toBeUndefined()
+  })
+})

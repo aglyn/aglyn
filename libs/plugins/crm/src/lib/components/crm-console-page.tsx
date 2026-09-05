@@ -73,7 +73,7 @@ function sectionBody(
       return record ? (
         <LeadDetailPage {...recordProps} id={record} />
       ) : (
-        <LeadsSection />
+        <LeadsSection {...props} />
       )
     case 'companies':
       return record ? (

@@ -78,6 +78,7 @@ import { CRM_TASK_ROUTES } from './model/task-routes'
 import { crmTaskCompleteHandler, crmTaskSaveHandler } from './server/task-routes'
 import { crmContactsImportHandler } from './server/contacts-import'
 import { crmDealStageHandler } from './server-deal-stage'
+import { leadConvertHandler } from './server/lead-convert'
 
 /**
  * `GET /api/crm/ping` → `{ ok: true, plugin: 'crm' }`.
@@ -456,4 +457,8 @@ export function registerCrmConsoleApi(): void {
   // function behind a session check, so the dedupe and the band are judged
   // where every other door judges them.
   registerPluginApiRoute('crm/contacts-create', crmContactsCreateHandler)
+  // A lead becomes a contact, a company and a deal (AGL-2608) — the one CRM
+  // write a browser cannot make alone, because only the server may create a
+  // contact through the dedupe-and-meter door.
+  registerPluginApiRoute('crm/lead-convert', leadConvertHandler)
 }

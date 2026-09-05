@@ -97,6 +97,11 @@ export const PLUGIN_DOCS = {
     title: 'Contacts CRM',
     excerpt: 'A unified contacts list ingested from forms, members, orders, and bookings — with tags, notes, and segments.',
   },
+  crmLeads: {
+    path: '/content-and-data/contacts/leads',
+    title: 'Leads',
+    excerpt: 'Work the people your site has captured — a status, an owner and notes on every lead — and convert one into a contact, a company and a deal.',
+  },
   crmReports: {
     path: '/content-and-data/contacts/reports',
     title: 'Reports',
@@ -195,6 +200,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   contactFields: ['#define-a-field', '#where-values-show', '#save-a-form-field', '#over-the-api', '#retire-restore-delete', '#related'],
   contactRecord: ['#adding-a-contact-by-hand', '#the-record-page', '#what-each-site-keeps-to-itself', '#owner', '#lifecycle-stages', '#finding-a-contact', '#related'],
   contacts: ['#unified-ingestion', '#the-contacts-page', '#whats-in-the-crm-area', '#import-from-csv', '#segments', '#related'],
+  crmLeads: ['#the-leads-list', '#working-a-lead-from-the-row', '#a-leads-page', '#converting-a-lead', '#unqualifying-a-lead', '#who-can-do-this', '#related'],
   crmReports: ['#choosing-a-period', '#contacts', '#sources-and-lifecycle', '#pipeline', '#won-and-lost', '#tasks', '#crm-at-a-glance', '#how-the-numbers-are-counted'],
   crmTasks: ['#the-tasks-page', '#creating-a-task', '#assigning-a-task-to-someone-else', '#completing-and-reopening', '#tasks-on-a-contact-company-or-deal', '#the-dashboard-card', '#who-can-do-what', '#related'],
   datasets: ['#model-builder', '#typed-documents', '#relations', '#query-layer', '#repeatable-components', '#who-a-dataset-is-shared-with', '#import--export', '#related'],
