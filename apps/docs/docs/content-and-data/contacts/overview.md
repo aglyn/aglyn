@@ -57,6 +57,8 @@ Once the page is switched on, it will let you:
 - Open a **profile drawer** to see a contact's details and history.
 - Add **tags** and **notes**.
 - **Export to CSV**.
+- **Import CSV** — bring a spreadsheet of people in; see
+  [Import contacts from CSV](./import.md).
 
 ## What's in the CRM area
 
