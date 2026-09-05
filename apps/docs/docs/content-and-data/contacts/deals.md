@@ -1,5 +1,5 @@
 ---
-sidebar_position: 3
+sidebar_position: 8
 title: Deals pipeline
 description: Every open deal by stage — with an amount, an owner and an expected close — as a board you drag across or a table you page through, and the won and lost history behind it.
 ---
@@ -66,7 +66,7 @@ optional:
 | **Expected close** | The date you expect to close it — what a forecast by month reads. |
 | **Owner** | The teammate responsible. Picked from your workspace's members. |
 | **Contact** | The person the deal is with, searched by name or email from your contacts. |
-| **Company** | The organization, searched by name from your [companies](./overview.md#whats-in-the-crm-area). |
+| **Company** | The organization, searched by name from your [companies](./companies.md). |
 | **Notes** | Anything the card cannot carry. |
 
 A deal is visible to the same sites as a contact captured on this site would
@@ -76,7 +76,8 @@ be, so a site that cannot see the person cannot see the deal.
 
 Stage changes go through the server rather than being written directly, so
 that automations can hear them. Three events fire, and each can trigger a
-[workflow or action](../../marketing-and-automation/workflows-and-actions/overview.md):
+[workflow or action](../../marketing-and-automation/workflows-and-actions/overview.md)
+— see [Automations for the CRM](./automations.md):
 
 | Event | When |
 | --- | --- |
@@ -104,5 +105,10 @@ with a **New deal** shortcut that starts a deal already linked to them.
 
 ## Related
 
-- [Contacts CRM](./overview.md)
+- [CRM overview](./overview.md)
+- [Companies](./companies.md) and [the contact record](./contact-record.md) — the two records a deal is with
+- [Tasks & follow-ups](./tasks.md) and [Activities & the timeline](./activities.md) — what is owed on a deal and what has happened on it
+- [Reports](./reports.md) — the open pipeline, its weighted forecast, and won against lost
+- [Automations for the CRM](./automations.md) — the three deal events
 - [Workflows & actions](../../marketing-and-automation/workflows-and-actions/overview.md)
+- [REST API — deals](/api/resources/deals) and [pipelines](/api/resources/pipelines)

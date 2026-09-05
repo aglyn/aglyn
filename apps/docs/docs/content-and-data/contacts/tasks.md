@@ -1,5 +1,5 @@
 ---
-sidebar_position: 5
+sidebar_position: 9
 title: Tasks & follow-ups
 description: Calls, emails, meetings and to-dos with a due date, an assignee and a link to the contact, company or deal they are for — with overdue and today read off the clock as you look.
 ---
@@ -100,5 +100,9 @@ sees that site's tasks and no others.
 
 ## Related
 
-- [Contacts CRM overview](./overview.md)
+- [CRM overview](./overview.md)
+- [Activities & the timeline](./activities.md) — what happened, as opposed to what is owed
+- [Reports](./reports.md) — open, overdue and due-today tasks by assignee
+- [Automations for the CRM](./automations.md) — the **Create a CRM task** step and the **CRM task completed** event
 - [Workflows & actions](../../marketing-and-automation/workflows-and-actions/overview.md)
+- [REST API — tasks](/api/resources/tasks)

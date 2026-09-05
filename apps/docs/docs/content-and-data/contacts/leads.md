@@ -1,5 +1,5 @@
 ---
-sidebar_position: 3
+sidebar_position: 6
 title: Leads
 description: Work the people your site has captured — a status, an owner and notes on every lead — and convert one into a contact, a company and a deal.
 ---
@@ -104,6 +104,8 @@ also requires a role on the site the lead belongs to.
 
 ## Related
 
-- [Contacts CRM overview](./overview.md)
+- [CRM overview](./overview.md)
+- [The contact record](./contact-record.md) — what a converted lead becomes
+- [Companies](./companies.md) and the [deals pipeline](./deals.md) — the other two records a conversion can open
 - [Forms & lead capture](../forms/overview.md)
 - [Email campaigns](../../marketing-and-automation/email-campaigns/overview.md)

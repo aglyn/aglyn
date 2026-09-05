@@ -10,8 +10,23 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## September 2026 — the CRM, over the API (newest)
+## September 2026 — the CRM (newest)
 
+- **[The CRM hub](content-and-data/contacts/overview.md)** *(rolling out)* — what was
+  the **Contacts** tab is now **CRM**: one tab, seven sections at `…/crm/<section>`.
+  [Contacts](content-and-data/contacts/contact-record.md) get their own record pages and
+  can be added by hand; [leads](content-and-data/contacts/leads.md) are worked and
+  converted into a contact, a [company](content-and-data/contacts/companies.md) and a
+  deal; the [deals pipeline](content-and-data/contacts/deals.md) is a board with a
+  weighted forecast; [tasks](content-and-data/contacts/tasks.md),
+  [reports](content-and-data/contacts/reports.md) and
+  [custom fields](content-and-data/contacts/custom-fields.md) each have a section. The
+  list gains [CSV import](content-and-data/contacts/import.md),
+  [bulk actions](content-and-data/contacts/bulk-actions.md) and a
+  [timeline](content-and-data/contacts/activities.md) of logged calls and meetings, and
+  automations gain [CRM events and steps](content-and-data/contacts/automations.md).
+  Links to the older `/contacts` address still open the hub. Still release-flagged: it
+  appears on its own once the rollout reaches your workspace.
 - **[Companies, pipelines, deals, tasks and activities over the REST API](/api/resources/companies)** —
   the CRM's records join contacts on `/v1`, under one pair of scopes, `crm:read` and
   `crm:write`. Create a [company](/api/resources/companies) keyed by its domain, open a
@@ -364,9 +379,9 @@ The newest round tightened every marketing, billing, and operations loop:
 
 - **[Forms & lead capture](content-and-data/forms/overview.md)** — form components, an inbox reader, and
   dataset-backed submissions.
-- **[Contacts CRM](content-and-data/contacts/overview.md)** *(rolling out)* — unified ingestion from forms,
+- **[CRM](content-and-data/contacts/overview.md)** *(rolling out)* — unified ingestion from forms,
   members, orders, and bookings, with tags, notes, CSV export, and **segments**. Capture
-  and the [REST API](/api/resources/contacts) are live; the console page is still on its
+  and the [REST API](/api/resources/contacts) are live; the console tab is still on its
   way.
 - **[Email campaigns](marketing-and-automation/email-campaigns/overview.md)** — audiences, tiered send caps, and
   unsubscribe handling.

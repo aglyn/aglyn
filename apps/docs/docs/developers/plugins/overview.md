@@ -201,7 +201,7 @@ different decisions:
 | --- | --- |
 | Registers site components (Commerce, Bookings, Email, Events Calendar, Marketing) | Elements **already placed on published pages stop rendering**. For a single site the dialog counts them. |
 | Serves routes (User Accounts, Redirects, Automation) | Published pages keep rendering, but the routes or rules it serves stop. |
-| Console-only (Contacts, Data, Inbox, Logic, Marketplace) | It leaves navigation and the editor. Published pages are unaffected. |
+| Console-only (CRM, Data, Inbox, Logic, Marketplace) | It leaves navigation and the editor. Published pages are unaffected. |
 
 Counts come from scanning the **published** version of each screen, layout and component,
 and are capped — where the scan hits its cap the dialog says "at least". Drafts are not

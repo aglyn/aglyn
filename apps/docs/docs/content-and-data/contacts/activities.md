@@ -1,5 +1,5 @@
 ---
-sidebar_position: 2
+sidebar_position: 5
 title: Activities & the timeline
 description: Log calls, emails, meetings and notes against a contact, a company or a deal, and read them in one timeline beside everything the platform captured.
 ---
@@ -57,7 +57,7 @@ record it belongs to.
 
 ## The recent activity feed
 
-The **Contacts** landing shows the newest activity logged across the CRM under
+The **Contacts** section shows the newest activity logged across the CRM under
 the list — the last few calls, emails, meetings and notes anyone on the team
 filed against any record — each linking to the record it is about. It is a
 glance at what the team has been doing; the record's own page is where the
@@ -65,5 +65,8 @@ whole log lives.
 
 ## Related
 
-- [Contacts CRM](./overview.md)
-- [Forms & lead capture](../forms/overview.md)
+- [CRM overview](./overview.md)
+- [The contact record](./contact-record.md) — the page a contact's timeline lives on
+- [Tasks & follow-ups](./tasks.md) — what is owed, as opposed to what happened
+- [Automations for the CRM](./automations.md) — the **Log a CRM activity** step
+- [REST API — activities](/api/resources/activities)

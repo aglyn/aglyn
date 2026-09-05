@@ -8,7 +8,7 @@ description: Add forms to your site, collect submissions in an inbox, and write 
 
 **Forms** let visitors send you information — contact requests, sign-ups, lead capture.
 Submissions land in your **inbox** and can flow straight into a [dataset](../datasets/overview.md)
-and your [contacts CRM](../contacts/overview.md).
+and your [CRM](../contacts/overview.md).
 
 ![The Inbox page in the Aglyn console, with its Submissions, Members & leads, and Campaigns sections](/img/forms/inbox-page.png)
 
@@ -363,5 +363,5 @@ were sent with rather than this form's id, so they stay in the Inbox under **All
 ## Related
 
 - [Datasets & dynamic content](../datasets/overview.md)
-- [Contacts CRM](../contacts/overview.md)
+- [CRM](../contacts/overview.md)
 - [Email campaigns](../../marketing-and-automation/email-campaigns/overview.md)

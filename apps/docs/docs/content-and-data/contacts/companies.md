@@ -1,5 +1,5 @@
 ---
-sidebar_position: 2
+sidebar_position: 7
 title: Companies
 description: Group your contacts under the businesses they belong to — one record per company, with its domain, owner, address and the people who work there.
 ---
@@ -37,8 +37,8 @@ The company is saved and its page opens.
 ## A company's page
 
 The page names the company in the heading and the trail, and holds its
-properties, its contacts, and — as the rest of the CRM fills in — its deals,
-its open tasks and the activity logged against it. **Edit** opens the same
+properties, its contacts, its [deals](./deals.md), its open [tasks](./tasks.md)
+and the [activity](./activities.md) logged against it. **Edit** opens the same
 form the company was created with.
 
 ## Contacts at a company
@@ -49,8 +49,10 @@ among the contacts your site may see and links them. A contact belongs to one
 company at a time from your site's point of view; linking them to a second
 company moves them.
 
-A contact captured with a company email address can be linked from their own
-page, where the company whose domain matches the address is suggested.
+A [lead](./leads.md#converting-a-lead) converted with a company email address is
+offered the company whose domain matches it, and a [CSV import](./import.md)
+that names a company links each row to it — matching an existing company by
+name, or creating one.
 
 ## Deleting a company
 
@@ -69,5 +71,8 @@ to a reader who could not open the contacts at it.
 
 ## Related
 
-- [Contacts CRM](./overview.md)
-- [Email campaigns](../../marketing-and-automation/email-campaigns/overview.md)
+- [CRM overview](./overview.md)
+- [The contact record](./contact-record.md) — the people a company is made of
+- [Deals pipeline](./deals.md) — every deal names the company it is with
+- [Email campaigns](../../marketing-and-automation/email-campaigns/overview.md) — audiences built from a rule can target a contact's company
+- [REST API — companies](/api/resources/companies)

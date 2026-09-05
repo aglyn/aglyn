@@ -1,5 +1,5 @@
 ---
-sidebar_position: 6
+sidebar_position: 10
 title: Reports
 description: New contacts over time, where they came from and how far they have gone, the open pipeline and its forecast, deals won and lost, and the task load — counted on the server for the records your site can see.
 ---
@@ -110,3 +110,10 @@ want it there.
 - Everything follows the same per-site visibility as the contacts themselves.
   A collaborator scoped to one site sees that site's totals, not the
   organization's.
+
+## Related
+
+- [CRM overview](./overview.md)
+- [Deals pipeline](./deals.md) — the stages and probabilities the pipeline and forecast figures read
+- [Tasks & follow-ups](./tasks.md) — the views the task counts mirror
+- [The contact record](./contact-record.md) — the lifecycle stages the funnel is built from

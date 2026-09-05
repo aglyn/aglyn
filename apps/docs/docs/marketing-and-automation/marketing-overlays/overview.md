@@ -111,5 +111,5 @@ you can segment sessions by overlay engagement.
 ## Related
 
 - [Email campaigns](../email-campaigns/overview.md)
-- [Contacts CRM](../../content-and-data/contacts/overview.md)
+- [CRM](../../content-and-data/contacts/overview.md)
 - [Billing & plans](../../workspace-and-billing/billing-and-plans/overview.md)

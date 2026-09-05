@@ -74,7 +74,7 @@ work needed:
 ![The built-in sign-in page on a published site with email and password fields](/img/guides/members-signin.png)
 
 New members automatically flow into your
-[Contacts CRM](../content-and-data/contacts/overview.md) and appear as leads;
+[CRM](../content-and-data/contacts/overview.md) and appear as leads;
 `memberSignUp` and `memberSignIn`
 [automation events](../marketing-and-automation/workflows-and-actions/overview.md)
 fire so you can trigger welcome actions.
@@ -202,5 +202,5 @@ both are recorded in the site's activity log — never the password itself.
 
 - [Members-only areas](../workspace-and-billing/teams-and-roles/members-only.md)
 - [Commerce end to end](commerce-end-to-end.md)
-- [Contacts CRM](../content-and-data/contacts/overview.md)
+- [CRM](../content-and-data/contacts/overview.md)
 - [Site protection & error screens](../building-sites/site-protection/overview.md)

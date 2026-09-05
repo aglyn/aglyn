@@ -48,9 +48,9 @@ for the same browser).
 
 ### CRM events {#crm-events}
 
-Two server events come from the [Contacts CRM](../../content-and-data/contacts/overview.md)
-and read in the trigger picker as **Contact created** and **Contact changed stage**. Pick
-one and the **Filter** field's helper text lists the keys below, so a filter such as
+Six server events come from the [CRM](../../content-and-data/contacts/overview.md) —
+two about contacts, three about deals and one about tasks. Pick one and the **Filter**
+field's helper text lists the keys below, so a filter such as
 `lifecycleStage == "customer"` or a condition such as *`source` equals `booking`* can be
 written without leaving the editor.
 
@@ -58,13 +58,18 @@ written without leaving the editor.
 | --- | --- | --- |
 | **Contact created** (`contactCreated`) | A capture on your site makes a **new** contact: a form submission, a member sign-up, a newsletter subscription, an order or a booking from an address your workspace did not already hold. A repeat visit by somebody already on the list is recorded as an interaction and does **not** fire it. | `contactId` · `email` · `name` (empty when the capture had none) · `source` (`form`, `member`, `newsletter`, `order` or `booking`) · `hostId` · `campaignIds` (comma-joined; present only when the capture came through a campaign) |
 | **Contact changed stage** (`contactStageChanged`) | A contact's **lifecycle stage** is moved — from the contact's page in the console, or by a **Set the contact's lifecycle stage** step in another automation. Setting the stage a contact already has fires nothing. | `contactId` · `email` · `lifecycleStage` (the new stage) · `previousStage` (empty when the contact had none) |
+| **Deal moved** (`dealStageChanged`) | A [deal](../../content-and-data/contacts/deals.md#moving-winning-and-losing) moves between open stages, or is reopened — from the board, the deal's page or the REST API. | `dealId` · `title` · `amountCents` · `currency` · `stageId` · `previousStageId` · `ownerUid` · `contactId` · `companyId` |
+| **Deal won** (`dealWon`) | A deal is marked won. | The same keys as **Deal moved**. |
+| **Deal lost** (`dealLost`) | A deal is marked lost. | The same keys as **Deal moved**, plus `lostReason`. |
+| **CRM task completed** (`taskCompleted`) | A [task](../../content-and-data/contacts/tasks.md#completing-and-reopening) is ticked done — from the Tasks list, a record's Tasks card or the dashboard card. Reopening fires nothing. | `taskId` · `title` · `kind` · `priority` · `dueAtMs` · `completedAtMs` · `completedByUid` · `assigneeUid` · `createdByUid` · `contactId` · `companyId` · `dealId` · `taskHostId` |
 
 :::note Events are announced by the server, not watched in the database
 An event fires because the server path that performed the write announced it; nothing
-watches the database for changes. Every capture door on your site and the console's
-stage control go through the server, so in ordinary use every new contact and every
-stage move is announced. Contacts **added by hand** in the console, **imported**, or
-created through the **REST API** are written without an announcement and fire nothing.
+watches the database for changes. Every capture door on your site, the console's
+stage control, a deal's stage moves and a task's completion all go through the server,
+so in ordinary use every one of these is announced. Contacts **added by hand** in the
+console, **imported**, or created through the **REST API** are written without an
+announcement and fire nothing.
 :::
 
 ### Only run when a field matches
@@ -140,9 +145,9 @@ its basic in-page steps — the Pro+ steps are simply skipped until you upgrade.
 
 ### CRM steps {#crm-steps}
 
-Five server steps act on the [Contacts CRM](../../content-and-data/contacts/overview.md).
+Five server steps act on the [CRM](../../content-and-data/contacts/overview.md).
 None of them asks *which* contact: each acts on the person the triggering event names —
-by `contactId` when the event carries one (the [CRM events](#crm-events) do), otherwise
+by `contactId` when the event carries one (every [CRM event](#crm-events) does), otherwise
 by the `email` in the event's data, which is what a form submission, a sign-up, a booking
 or a lead carries. When neither names a contact this site can see, the step writes
 nothing and the run is recorded as **Failed** with the reason (*"no contact this site can

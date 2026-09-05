@@ -88,7 +88,7 @@ and appear only where that plugin is enabled for your workspace (they're inserte
 **Analytics**). If a section these docs describe isn't in your tab strip, that's usually
 why — enable the plugin under **Organization → Plugins**.
 
-**Contacts** is the exception: it's a release-flagged feature still
+**CRM** is the exception: it's a release-flagged feature still
 [rolling out](../content-and-data/contacts/overview.md), so there is no switch for it
 under **Organization → Plugins** and looking for one is a dead end. It appears on its
 own once the rollout reaches your workspace.

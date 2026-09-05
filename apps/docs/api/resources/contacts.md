@@ -16,7 +16,7 @@ and a second create for an address already present is a conflict rather than a s
 row.
 
 :::note The API is ahead of the console
-These endpoints are live. The console **Contacts page** is still
+These endpoints are live. The console's **CRM** is still
 [rolling out](/content-and-data/contacts/overview), so until it opens this API is the
 way to work with the contacts your sites have already captured.
 :::
@@ -53,7 +53,7 @@ way to work with the contacts your sites have already captured.
 | `email` | string \| null | The identity a contact is unified on. **Read-only.** |
 | `name` | string \| null | Display name, when known. Writable. |
 | `tags` | string[] | Tags, the same ones the console's tag editor writes. Writable. |
-| `notes` | string \| null | Free-text notes, the same field the console's profile drawer writes. Writable. |
+| `notes` | string \| null | Free-text notes, the same field the console's contact record writes. Writable. |
 | `marketingConsent` | boolean | Whether **any** site may market to this person. `false` means a recorded refusal, which stands against every site. Writable — see `consentSiteId`. |
 | `consentSites` | string[] | The sites this person has opted in to. Consent runs to a brand, not to your organization, so a person who signed up on one of your sites is not reachable from another unless they opted in there too. **Read-only** — write through `consentSiteId`. |
 | `sources` | string[] | Where this person came from — `form`, `member`, `order`, `booking`, `newsletter`, or `api` for one added through this API. Multiple entries mean one person did several things. **Read-only.** |
@@ -361,7 +361,7 @@ See [Conventions → Errors](../conventions.md#errors) for the shared envelope.
 
 ## Related
 
-- [Contacts CRM](/content-and-data/contacts/overview) — how contacts are captured, and
+- [CRM](/content-and-data/contacts/overview) — how contacts are captured, and
   what the audience band means for your plan.
 - [Companies](companies.md), [deals](deals.md), [tasks](tasks.md) and
   [activities](activities.md) — the records that sit beside a contact, each pointing

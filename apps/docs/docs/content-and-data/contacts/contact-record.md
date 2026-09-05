@@ -8,8 +8,8 @@ description: Add a contact by hand, keep a profile on them — phone, company, t
 
 Every person in your CRM has a **record**: the email that identifies them, the
 profile your team keeps on them, where they came from, what they are filed
-under, and what the site recorded about them. Since Contacts CRM v2 you can
-add a person by hand and edit every part of that profile from their own page.
+under, and what the site recorded about them. You can add a person by hand,
+and edit every part of that profile from their own page.
 
 ## Adding a contact by hand
 
@@ -21,7 +21,7 @@ list — the list itself stays exactly where it was.
 | **Email** | Required. It is the one thing every site shares about a person and what makes two captures one record. |
 | **Name** | Optional. Your own name for the person; the record also keeps the name they gave on a form. |
 | **Phone** | Entered with its country code, like `+1 512 555 0107`. Stored in E.164 so the same number typed two ways is one number. |
-| **Job title**, **Company** | Free text. Company is a name for now — the Companies section adds a picker that links the record to a company. |
+| **Job title**, **Company** | Free text. Company is the name as you know it; the record is linked to a [company](./companies.md) from the company's own page, by [converting a lead](./leads.md#converting-a-lead), or by a [CSV import](./import.md) that names the company. |
 | **Lifecycle stage** | Where the person sits in your funnel; see [Lifecycle stages](#lifecycle-stages). |
 | **Owner** | The team member responsible for the relationship, picked from your workspace roster. |
 | **Tags** | Comma-separated. Tags are lower-cased and deduplicated, so `VIP` and `vip` are one tag. |
@@ -37,7 +37,9 @@ the list shows; upgrade in Billing to keep adding.
 
 Clicking a row in the list opens the person's own page at
 `…/crm/contacts/{id}` — an address you can paste and that every other CRM
-record links to. The page has three cards:
+record links to. The page opens with the person's name, their lifecycle stage,
+their owner and — for a buyer — how many orders they have placed and what they
+have spent. Under it, one card per aspect of the record:
 
 - **Properties** — the editable profile: name, phone, job title, company,
   lifecycle stage, owner, tags, address and an **About** box for your
@@ -49,8 +51,18 @@ record links to. The page has three cards:
   this site holds (opted in, opted out, or no record — the last is not a
   refusal), and the campaigns your team has **filed** the person under.
   Filing is your own bookkeeping; it never adds anyone to a send.
-- **Activity** — what the site recorded about the person, newest first: the
-  forms they submitted, the orders they placed, the bookings they made.
+- **Custom fields** — one control per field your organization has defined;
+  see [Custom fields](./custom-fields.md).
+- **Timeline** — what the site recorded about the person and what your team
+  has logged, newest first: the forms they submitted, the orders they placed,
+  the bookings they made, and the calls, emails, meetings and notes filed
+  against them, with **Log activity** to add one — see
+  [Activities & the timeline](./activities.md).
+- **Deals** — the deals the person is named on, with a **New deal** shortcut
+  that starts one already linked to them — see [Deals pipeline](./deals.md).
+- **Tasks** — the open tasks about this person, each with a checkbox to
+  complete it, and a **New task** shortcut — see
+  [Tasks & follow-ups](./tasks.md).
 
 The overflow menu on the page carries **Delete contact**. Deleting removes
 the person from *this site's* CRM — its notes, tags and timeline. Other sites
@@ -103,5 +115,9 @@ are always your own site's.
 
 ## Related
 
-- [Contacts CRM overview](./overview.md)
+- [CRM overview](./overview.md)
+- [Import contacts from CSV](./import.md) and [Bulk actions](./bulk-actions.md) — many records at once
+- [Companies](./companies.md) — the account a person works for
+- [Activities & the timeline](./activities.md) — the history on the record page
 - [Email campaigns](../../marketing-and-automation/email-campaigns/overview.md)
+- [REST API — contacts](/api/resources/contacts) — the same record, with its per-site profile, over the API

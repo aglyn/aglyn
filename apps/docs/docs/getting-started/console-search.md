@@ -32,10 +32,13 @@ your sites across the workspace:
 | Products | A product | The Products page |
 | Redirects | A redirect, matched on its source path | The Redirects page |
 | Services | A bookable service | The Bookings page |
+| Contacts | A person in the CRM, matched on their name, email, phone number or company name | The contact's own page in the CRM |
 
 A group only appears if your plan includes it. On the Free plan there are no
 workflows, products, services or redirects, so those groups are neither shown
-nor searched.
+nor searched. **Contacts** appear only while the [CRM](../content-and-data/contacts/overview.md)
+is available to you and your role can manage data — the same rule that opens
+the CRM itself — so a person you could not open never shows up as a result.
 
 ## How matching works
 
@@ -54,8 +57,8 @@ Accents are ignored, so `cafe` finds "Café".
 Being precise about this matters — an empty result should mean "you do not
 have one", not "search could not see it".
 
-- **Orders, bookings and contacts** are not searchable. They are found on
-  their own pages, which have their own filters.
+- **Orders and bookings** are not searchable. They are found on their own
+  pages, which have their own filters.
 - **Media** has its own, richer search on the Media page, including wildcards
   and searching by tag or custom field. See
   [the media library](../content-and-data/media/overview.md).

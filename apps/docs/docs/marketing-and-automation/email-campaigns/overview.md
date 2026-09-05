@@ -6,7 +6,7 @@ description: Campaigns to audiences built from your contacts. Campaign email sta
 
 # Email Campaigns
 
-**Email campaigns** let you reach the people in your [contacts CRM](../../content-and-data/contacts/overview.md).
+**Email campaigns** let you reach the people in your [CRM](../../content-and-data/contacts/overview.md).
 Build an audience, compose a send, and Aglyn handles delivery, caps, and unsubscribes.
 
 ```mermaid
@@ -74,8 +74,8 @@ You set it from the record itself, never from the campaign:
 
 - **A screen** — open it from Screens and pick its campaigns on the **Campaigns** card.
 - **A form** — open it from Forms and pick its campaigns under **Details**.
-- **A contact** — open the contact from Contacts and pick its campaigns in the profile
-  panel.
+- **A contact** — open the contact under **CRM → Contacts** and pick its campaigns on
+  the **Relationship** card of [their page](../../content-and-data/contacts/contact-record.md#the-record-page).
 
 Each of them can be in **more than one campaign**, because the same landing page and the
 same signup form are usually re-run for the next push. Clearing every campaign takes the
@@ -922,6 +922,6 @@ sending reputation, so the confirmation names the reason before you do it.
 
 ## Related
 
-- [Contacts CRM](../../content-and-data/contacts/overview.md)
+- [CRM](../../content-and-data/contacts/overview.md)
 - [Forms & lead capture](../../content-and-data/forms/overview.md)
 - [Marketing overlays](../marketing-overlays/overview.md) (email capture popups)

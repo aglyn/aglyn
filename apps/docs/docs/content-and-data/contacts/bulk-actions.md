@@ -1,5 +1,5 @@
 ---
-sidebar_position: 2
+sidebar_position: 4
 title: Bulk actions
 description: Select contacts in the CRM table and tag them, set their owner or lifecycle stage, add them to an email audience, export them, or remove them from this site — all at once.
 ---
@@ -18,9 +18,9 @@ table saying how many are selected, with one action for all of them.
 | **Remove tag** | Type a tag; it is removed from every selected contact that has it. Contacts without it are left alone. |
 | **Set owner** | Pick a team member. Every selected contact is assigned to them. Choose **Nobody** to clear the owner. |
 | **Set stage** | Pick a lifecycle stage — subscriber, lead, marketing qualified, sales qualified, opportunity, customer, evangelist or other. |
-| **Add to list** | Put the selected contacts on an [email audience](../../marketing-and-automation/email-campaigns/overview.md#lists). This runs the same check the audience's own page runs — see below. |
+| **Add to list** | Put the selected contacts on an [email audience](../../marketing-and-automation/email-campaigns/overview.md#email-lists). This runs the same check the audience's own page runs — see below. |
 | **Export CSV** | Download the selected rows as `contacts-selected.csv`, with the same six columns the table's own **Export CSV** writes: email, name, sources, tags, last interaction, notes. |
-| **Remove from this site** | After a confirmation, the selected contacts leave this site's CRM. A person another site in your workspace also captured keeps that site's record; a person only this site held is deleted. This is not a privacy erasure — see [the contact's own page](overview.md) for that. |
+| **Remove from this site** | After a confirmation, the selected contacts leave this site's CRM. A person another site in your workspace also captured keeps that site's record; a person only this site held is deleted. This is not a privacy erasure: the person's form submissions, orders, bookings and membership records are separate and are deleted from their own pages — see [the record page](./contact-record.md#the-record-page). |
 | **Clear** | Deselect everything. |
 
 Every change lands on **this site's** record of the person. Tags, the owner and
@@ -60,5 +60,6 @@ you see are for the whole selection. A person's own page in the CRM has the same
 
 ## Related
 
-- [Contacts CRM overview](overview.md)
-- [Email audiences](../../marketing-and-automation/email-campaigns/overview.md#lists) — including audiences built from a rule, which can now target a contact's owner, lifecycle stage, company and custom fields.
+- [CRM overview](./overview.md)
+- [The contact record](./contact-record.md) — the same tags, owner and stage, one person at a time
+- [Email audiences](../../marketing-and-automation/email-campaigns/overview.md#email-lists) — including audiences built from a rule, which can now target a contact's owner, lifecycle stage, company and custom fields.

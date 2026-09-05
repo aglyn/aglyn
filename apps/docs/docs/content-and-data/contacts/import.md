@@ -1,7 +1,7 @@
 ---
-sidebar_position: 2
+sidebar_position: 3
 title: Import contacts from CSV
-description: Bring a spreadsheet of people into the Contacts CRM — map its columns, preview the result, and import in batches with a report of what was added, updated and skipped.
+description: Bring a spreadsheet of people into the CRM — map its columns, preview the result, and import in batches with a report of what was added, updated and skipped.
 ---
 
 # Import contacts from CSV
@@ -72,5 +72,7 @@ it), not to every site in the account.
 
 ## Related
 
-- [Contacts CRM](./overview.md)
+- [CRM overview](./overview.md)
+- [The contact record](./contact-record.md) — the fields an imported row lands in
+- [Bulk actions](./bulk-actions.md) — tag, assign or stage the people you just imported, all at once
 - [Import a list into an email audience](../../marketing-and-automation/email-campaigns/overview.md#import-a-list) — for adding people to a mailing list rather than to the CRM

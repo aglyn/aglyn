@@ -103,7 +103,7 @@ names the workspace admin to ask instead of offering an upgrade they cannot buy.
 - **Member accounts are unlimited on every plan** — including Free. Signups are never
   metered, capped, or charged per account.
 - Gate screens as **members-only** so only signed-in members can view them.
-- New members flow into your [contacts CRM](../../content-and-data/contacts/overview.md).
+- New members flow into your [CRM](../../content-and-data/contacts/overview.md).
 
 ### The platform safety limit {#visitor-record-ceiling}
 

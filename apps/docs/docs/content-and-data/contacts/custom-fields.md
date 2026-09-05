@@ -1,5 +1,5 @@
 ---
-sidebar_position: 2
+sidebar_position: 11
 title: Custom fields
 description: Define your own contact properties — text, number, date, choice, checkbox or link — show them on every contact, and save form answers straight into them.
 ---
@@ -109,6 +109,8 @@ why the key of a retired field still counts as taken when you create one.
 
 ## Related
 
-- [Contacts CRM](overview.md)
+- [CRM overview](./overview.md)
+- [The contact record](./contact-record.md) — the fixed properties custom fields sit beside
+- [Import contacts from CSV](./import.md) — every custom field is an import target
 - [Forms & lead capture](../forms/overview.md)
 - [REST API — contacts](/api/resources/contacts)
