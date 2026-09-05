@@ -1432,7 +1432,14 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // sees is over a parsed prop rather than over documents, and there is no
     // query behind it for a footer to page. Bounded by what somebody typed
     // is the strongest form of the property this list records.
-    expect(NOT_A_LIST).toHaveLength(38)
+    //
+    // 39 since a contact gained custom fields (AGL-2601). The Fields section
+    // is one row per definition the merchant declared — a merchant's own
+    // vocabulary, like the topic catalog — and the read that fills it is
+    // ceilinged at `CONTACT_FIELDS_MAX_PER_ORG` (100) on a collection with no
+    // index, sorted in memory by a stored `order`. A pager under it would
+    // page a settings table whose whole population is already on screen.
+    expect(NOT_A_LIST).toHaveLength(39)
   })
 })
 
