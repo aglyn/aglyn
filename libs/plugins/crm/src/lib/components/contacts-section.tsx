@@ -852,7 +852,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                   : '∞'
               }`}
             </Typography>
-            <ContactImportButton hostId={hostId} org={org as Record<string, unknown>} />
+            <ContactImportButton hostId={hostId} org={org} />
             <Button
               size="small"
               onClick={handleExport}

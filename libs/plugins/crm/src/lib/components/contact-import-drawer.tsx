@@ -57,6 +57,7 @@ import {
   CONTACT_IMPORT_MAX_ROWS,
   CONTACT_IMPORT_PREVIEW_ROWS,
   CONTACT_IMPORT_SKIP_LABELS,
+  type ConsolePluginPageProps,
   type ContactFieldDefinition,
   type ContactImportChunkResult,
   type ContactImportMapping,
@@ -115,8 +116,12 @@ export interface ContactImportDrawerProps {
   open: boolean
   onClose: () => void
   hostId: string
-  /** The org document the shell passed, for the consent group's scope tokens. */
-  org?: Record<string, unknown> | null
+  /**
+   * The org document the shell passed, for the consent group's scope
+   * tokens. Typed as the page prop it is forwarded from, so the contacts
+   * list mounts the button with the value it already holds and no cast.
+   */
+  org?: ConsolePluginPageProps['org']
 }
 
 /** The value the mapping select shows for a column that is not imported. */
@@ -756,7 +761,7 @@ function ImportResultPanel(props: {
  */
 export function ContactImportButton(props: {
   hostId: string
-  org?: Record<string, unknown> | null
+  org?: ConsolePluginPageProps['org']
 }) {
   const { hostId, org } = props
   const [open, setOpen] = useState(false)
