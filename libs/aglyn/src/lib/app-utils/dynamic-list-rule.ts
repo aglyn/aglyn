@@ -48,6 +48,12 @@
 
 import { normalizeCampaignIds } from './campaign-membership'
 import { contactMatchesSegment, type ContactSource } from './contacts'
+import {
+  isContactLifecycleStage,
+  normalizeContactFieldKey,
+  type ContactCustomValue,
+  type ContactLifecycleStage,
+} from './crm'
 
 /** The silos a dynamic list may draw people from. */
 export type DynamicListSource =
@@ -128,6 +134,59 @@ export interface DynamicListEngagement {
 }
 
 /**
+ * How a custom-field clause compares the stored value to the one it names.
+ *
+ * Seven operators and no more, because each one has to be readable back as
+ * a sentence and each one has to state what it does with a BLANK value —
+ * see {@link customValueMatches} for the lean every operator takes.
+ */
+export const DYNAMIC_LIST_CUSTOM_OPS = [
+  'eq',
+  'neq',
+  'contains',
+  'gt',
+  'lt',
+  'set',
+  'unset',
+] as const
+
+export type DynamicListCustomOp = (typeof DYNAMIC_LIST_CUSTOM_OPS)[number]
+
+/** The operators that compare against a value the clause carries. */
+const VALUED_CUSTOM_OPS: ReadonlySet<DynamicListCustomOp> = new Set([
+  'eq',
+  'neq',
+  'contains',
+  'gt',
+  'lt',
+])
+
+/**
+ * One condition on one custom contact field (AGL-2603).
+ *
+ * `key` is the {@link ContactFieldDefinition.key} the value is stored under
+ * in the holder's facet, `op` says how to compare and `value` is what to
+ * compare with — absent for `set` and `unset`, which ask about presence
+ * rather than content. Scalars only, because that is all a custom field may
+ * hold.
+ */
+export interface DynamicListCustomClause {
+  key: string
+  op: DynamicListCustomOp
+  value?: string | number | boolean
+}
+
+/**
+ * The most custom-field clauses one block may carry.
+ *
+ * A bound on the predicate rather than on the audience — every clause is
+ * evaluated in memory against a candidate already read — kept small for the
+ * reason the branch cap is: the rule is merchant-authored and a stored array
+ * has no natural end.
+ */
+export const DYNAMIC_LIST_MAX_CUSTOM_CLAUSES = 20
+
+/**
  * One AND-block of filters.
  *
  * Everything except `sources` and `segmentId`, which stay on the rule itself
@@ -170,6 +229,30 @@ export interface DynamicListDimensions {
   inListIds?: string[]
   /** A member of none of these lists — the "not in list X" every rival has. */
   notInListIds?: string[]
+  /*
+   * THE CRM DIMENSIONS (AGL-2603) — contacts only, every one of them.
+   *
+   * All four read the holder's FACET on the shared contact row, beside the
+   * tags: an owner, a lifecycle stage, a company and a custom field are one
+   * business's knowledge of a person, and the materializer reads them under
+   * the sweeping site's own group so that no rule can select another
+   * holder's segmentation. A lead, a site member and a form submission carry
+   * none of them, so the dimensions are SKIPPED for those silos rather than
+   * failed — the same discipline `tags` follows, and the same caveat about a
+   * negated branch whose only filter is one of these.
+   *
+   * A contact with no value on the field does not match any of the first
+   * three: "owned by A" is not satisfied by nobody owning them. The custom
+   * operators each state their own lean — see {@link customValueMatches}.
+   */
+  /** Owned by any of these team members, by account uid. */
+  ownerUids?: string[]
+  /** In any of these lifecycle stages. */
+  lifecycleStages?: ContactLifecycleStage[]
+  /** At any of these companies, by `orgs/{orgId}/companies` id. */
+  companyIds?: string[]
+  /** Every clause must hold — AND within the dimension, unlike the lists above. */
+  custom?: DynamicListCustomClause[]
 }
 
 /** One OR branch: an AND-block that may be inverted. */
@@ -262,6 +345,17 @@ export interface DynamicListCandidate {
   lastClickedAtMs?: number | null
   /** Lists this person is already a member of, by list id. */
   listIds?: string[]
+  /*
+   * THE CRM FIELDS (AGL-2603) — contacts only, read out of the sweeping
+   * holder's facet the way `campaignIds` is. Absent means the facet holds no
+   * value, which the matcher reads as "does not match" for the first three
+   * and as "unset" for a custom clause.
+   */
+  ownerUid?: string
+  lifecycleStage?: ContactLifecycleStage
+  companyId?: string
+  /** The holder's custom values, keyed by field key. */
+  custom?: Record<string, ContactCustomValue>
 }
 
 /** A saved segment's filters, resolved by the caller from `segmentId`. */
@@ -311,11 +405,13 @@ const DYNAMIC_LIST_SOURCES: DynamicListSource[] = [
  * ⚠️ Set ABOVE what the console form can produce, and that is a correctness
  * requirement rather than headroom. The form's "any of these filters" mode
  * puts each control in a branch of its own, so a reader who fills in every
- * box authors fifteen — and dropping a branch NARROWS an OR, so a cap the
- * form could reach would silently select fewer people than the sentences
- * above the controls say.
+ * box authors nineteen, plus one branch per custom-field condition up to
+ * {@link DYNAMIC_LIST_MAX_CUSTOM_CLAUSES} — and dropping a branch NARROWS an
+ * OR, so a cap the form could reach would silently select fewer people than
+ * the sentences above the controls say. The rule editor's spec holds the sum
+ * under this number.
  */
-export const DYNAMIC_LIST_MAX_GROUPS = 20
+export const DYNAMIC_LIST_MAX_GROUPS = 40
 
 /**
  * The most lists one dimension may name.
@@ -326,6 +422,43 @@ export const DYNAMIC_LIST_MAX_GROUPS = 20
  * fan-out than either alone.
  */
 export const DYNAMIC_LIST_MAX_LIST_REFERENCES = 5
+
+/**
+ * Coerces a stored custom-field clause, or drops it.
+ *
+ * Dropped rather than tolerated for the reason a typo'd silo is: a clause
+ * with a key no definition uses, an operator the matcher does not know, or a
+ * missing value where one is compared against, is a filter no contact can
+ * satisfy — and a rule that quietly matches nobody reads exactly like a rule
+ * that has not run yet. The key goes through the definition's own normalizer
+ * so a clause written against a label (`Plan Name`) still reaches the stored
+ * key (`plan_name`), and a value is kept only as a scalar because that is all
+ * a custom field may hold.
+ */
+function normalizeCustomClause(raw: unknown): DynamicListCustomClause | null {
+  const entry = (raw ?? {}) as Record<string, unknown>
+  const key = normalizeContactFieldKey(entry['key'])
+  const op = entry['op']
+  if (
+    !key ||
+    typeof op !== 'string' ||
+    !(DYNAMIC_LIST_CUSTOM_OPS as readonly string[]).includes(op)
+  ) {
+    return null
+  }
+  const operator = op as DynamicListCustomOp
+  if (!VALUED_CUSTOM_OPS.has(operator)) return { key, op: operator }
+  const value = entry['value']
+  if (typeof value === 'string') {
+    const trimmed = value.trim().slice(0, 500)
+    return trimmed ? { key, op: operator, value: trimmed } : null
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? { key, op: operator, value } : null
+  }
+  if (typeof value === 'boolean') return { key, op: operator, value }
+  return null
+}
 
 /** Coerces the dimensions shared by the rule and each of its OR branches. */
 function normalizeDimensions(value: Record<string, unknown>): DynamicListDimensions {
@@ -381,6 +514,18 @@ function normalizeDimensions(value: Record<string, unknown>): DynamicListDimensi
     0,
     DYNAMIC_LIST_MAX_LIST_REFERENCES,
   )
+  const ownerUids = asStringArray(value['ownerUids'])
+  // A stage the model does not name is dropped, not kept: kept, it would be
+  // a filter no contact can satisfy, and the rule would read as the stages
+  // it does name while selecting nobody.
+  const lifecycleStages = asStringArray(value['lifecycleStages']).filter(
+    isContactLifecycleStage,
+  )
+  const companyIds = asStringArray(value['companyIds'])
+  const custom = (Array.isArray(value['custom']) ? value['custom'] : [])
+    .slice(0, DYNAMIC_LIST_MAX_CUSTOM_CLAUSES)
+    .map(normalizeCustomClause)
+    .filter((clause): clause is DynamicListCustomClause => clause !== null)
   return {
     ...(tags.length ? { tags } : {}),
     ...(captureSources.length ? { captureSources } : {}),
@@ -396,6 +541,10 @@ function normalizeDimensions(value: Record<string, unknown>): DynamicListDimensi
       : {}),
     ...(inListIds.length ? { inListIds } : {}),
     ...(notInListIds.length ? { notInListIds } : {}),
+    ...(ownerUids.length ? { ownerUids } : {}),
+    ...(lifecycleStages.length ? { lifecycleStages } : {}),
+    ...(companyIds.length ? { companyIds } : {}),
+    ...(custom.length ? { custom } : {}),
   }
 }
 
@@ -631,6 +780,42 @@ function matchesDimensions(
         }
       }
     }
+    /*
+     * THE CRM DIMENSIONS — OR within each, AND across them, like the tags.
+     *
+     * An absent value matches none of the first three. "Owned by A or B" is
+     * a positive claim about the relationship, and a contact nobody owns is
+     * not a contact A owns; the same for a stage never set and a company
+     * never linked. The lean is the dated-window one rather than the
+     * consent module's: admitting the unknown here would put people INTO an
+     * audience the merchant bounded on purpose.
+     */
+    if (rule.ownerUids?.length) {
+      if (!candidate.ownerUid || !rule.ownerUids.includes(candidate.ownerUid)) {
+        return false
+      }
+    }
+    if (rule.lifecycleStages?.length) {
+      if (
+        !candidate.lifecycleStage ||
+        !rule.lifecycleStages.includes(candidate.lifecycleStage)
+      ) {
+        return false
+      }
+    }
+    if (rule.companyIds?.length) {
+      if (!candidate.companyId || !rule.companyIds.includes(candidate.companyId)) {
+        return false
+      }
+    }
+    // Every clause must hold. A merchant adding a second condition on a
+    // custom field is narrowing, which is what a second box on a form means
+    // everywhere else in it — the OR is the `any` branches, not this list.
+    for (const clause of rule.custom ?? []) {
+      if (!customValueMatches(candidate.custom?.[clause.key], clause)) {
+        return false
+      }
+    }
   }
 
   /*
@@ -694,9 +879,107 @@ function matchesDimensions(
   return true
 }
 
+/** A value that is on the record: not absent, not `null`, not blank text. */
+const customValueIsSet = (value: ContactCustomValue | undefined): boolean =>
+  value !== undefined &&
+  value !== null &&
+  !(typeof value === 'string' && value.trim() === '')
+
+/** A value as text, for the comparisons that read it that way. */
+const customValueText = (value: string | number | boolean): string =>
+  String(value).trim().toLowerCase()
+
+/**
+ * Does one stored custom value satisfy one clause?
+ *
+ * Exported because the comparison is the whole meaning of the dimension and
+ * a surface that previews a value against a clause must not carry a second
+ * copy of it. The leans, per operator, because each has to be readable back
+ * as a sentence the merchant can check against their intent:
+ *
+ *  - `eq` — the same value. Text compares case-insensitively and trimmed,
+ *    because a `select` option typed as `Enterprise` and stored as
+ *    `enterprise` is one option; a number and a boolean compare as
+ *    themselves, and a number stored as text still equals the number.
+ *  - `neq` — a value that is set AND differs. A blank does NOT count: a
+ *    merchant excluding one plan is not asking for everyone whose plan was
+ *    never recorded, and `unset` exists for that question.
+ *  - `contains` — text containment, case-insensitive; a blank contains
+ *    nothing.
+ *  - `gt` / `lt` — numeric when both sides parse as numbers, text otherwise.
+ *    Text ordering is what a `date` field stores (ISO dates order as text),
+ *    and a blank is neither greater nor less than anything.
+ *  - `set` / `unset` — presence. `false` and `0` are set; `null`, absent and
+ *    blank text are not.
+ */
+export function customValueMatches(
+  value: ContactCustomValue | undefined,
+  clause: DynamicListCustomClause,
+): boolean {
+  const present = customValueIsSet(value)
+  switch (clause.op) {
+    case 'set':
+      return present
+    case 'unset':
+      return !present
+    default:
+      break
+  }
+  if (!present || clause.value === undefined) return false
+  const stored = value as string | number | boolean
+  const wanted = clause.value
+  switch (clause.op) {
+    case 'eq':
+      return customValueText(stored) === customValueText(wanted)
+    case 'neq':
+      return customValueText(stored) !== customValueText(wanted)
+    case 'contains':
+      return customValueText(stored).includes(customValueText(wanted))
+    case 'gt':
+    case 'lt': {
+      const left = Number(stored)
+      const right = Number(wanted)
+      const numeric =
+        typeof stored !== 'boolean' &&
+        typeof wanted !== 'boolean' &&
+        String(stored).trim() !== '' &&
+        String(wanted).trim() !== '' &&
+        Number.isFinite(left) &&
+        Number.isFinite(right)
+      if (numeric) return clause.op === 'gt' ? left > right : left < right
+      const a = customValueText(stored)
+      const b = customValueText(wanted)
+      return clause.op === 'gt' ? a > b : a < b
+    }
+    default:
+      return false
+  }
+}
+
 /** Every dimension block a rule carries: its own, then each OR branch. */
 function allDimensions(rule: DynamicListRule): DynamicListDimensions[] {
   return [rule, ...(rule.any ?? [])]
+}
+
+/**
+ * Does evaluating this rule need the sweeping holder's contact FACET?
+ *
+ * The campaign membership and the four CRM fields all live inside the facet,
+ * which is keyed by the consent group the materializer has to resolve with
+ * one org read. A rule that names none of them pays nothing — the same
+ * opt-in cost `dynamicListRuleNeedsCampaigns` already describes, widened to
+ * every dimension the facet holds so the materializer asks one question
+ * rather than five.
+ */
+export function dynamicListRuleNeedsContactFacet(rule: DynamicListRule): boolean {
+  return allDimensions(rule).some(
+    (dimensions) =>
+      (dimensions.campaignIds?.length ?? 0) > 0 ||
+      (dimensions.ownerUids?.length ?? 0) > 0 ||
+      (dimensions.lifecycleStages?.length ?? 0) > 0 ||
+      (dimensions.companyIds?.length ?? 0) > 0 ||
+      (dimensions.custom?.length ?? 0) > 0,
+  )
 }
 
 /**

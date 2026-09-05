@@ -38,7 +38,11 @@ import {
   EMPTY_RULE_DRAFT,
   type DynamicListRuleDraft,
 } from './dynamic-list-rule-fields'
-import type { DynamicListRule } from '@aglyn/aglyn'
+import {
+  DYNAMIC_LIST_MAX_CUSTOM_CLAUSES,
+  DYNAMIC_LIST_MAX_GROUPS,
+  type DynamicListRule,
+} from '@aglyn/aglyn'
 
 /** A rule that sets every dimension the model has. */
 const FULL_RULE: DynamicListRule = {
@@ -64,6 +68,14 @@ const FULL_RULE: DynamicListRule = {
   },
   inListIds: ['list_a'],
   notInListIds: ['list_b'],
+  ownerUids: ['uid-a'],
+  lifecycleStages: ['lead', 'customer'],
+  companyIds: ['co_acme'],
+  custom: [
+    { key: 'plan', op: 'eq', value: 'enterprise' },
+    { key: 'seats', op: 'gt', value: 10 },
+    { key: 'churned', op: 'unset' },
+  ],
 }
 
 /** Every dimension, named so a dropped one is reported BY NAME. */
@@ -80,6 +92,10 @@ const RULE_FIELDS = [
   'engagement',
   'inListIds',
   'notInListIds',
+  'ownerUids',
+  'lifecycleStages',
+  'companyIds',
+  'custom',
 ] as const
 
 const BEHAVIOR_FIELDS = [
@@ -109,7 +125,7 @@ describe('the rule editor reaches every field of the rule', () => {
     for (const field of ENGAGEMENT_FIELDS) {
       expect(FULL_RULE.engagement?.[field]).toBeDefined()
     }
-    expect(RULE_FIELDS).toHaveLength(12)
+    expect(RULE_FIELDS).toHaveLength(16)
     expect(BEHAVIOR_FIELDS).toHaveLength(4)
     expect(ENGAGEMENT_FIELDS).toHaveLength(4)
   })
@@ -359,8 +375,173 @@ describe('all, any and none', () => {
       notClickedForDays: '120',
       inListIds: ['a'],
       notInListIds: ['b'],
+      ownerUids: ['uid-a'],
+      lifecycleStages: ['lead'],
+      companyIds: ['co_acme'],
+      custom: [{ key: 'plan', op: 'eq', value: 'enterprise' }],
     }
-    expect(draftToRule(everything).any).toHaveLength(16)
+    expect(draftToRule(everything).any).toHaveLength(20)
+  })
+
+  /*
+   * The custom-field rows are the one control a reader can add MANY of, and
+   * each one is its own branch in any mode. The model's cap has to hold the
+   * fixed controls plus every clause the model itself will keep — or a form
+   * filled to the model's own limit would author branches the normalizer
+   * drops, narrowing the OR the sentences above the controls describe.
+   */
+  it('keeps every custom clause as a branch, up to the model’s own cap', () => {
+    const clauses = Array.from({ length: DYNAMIC_LIST_MAX_CUSTOM_CLAUSES }, (_, i) => ({
+      key: `field_${i}`,
+      op: 'set' as const,
+    }))
+    const rule = draftToRule({
+      ...EMPTY_RULE_DRAFT,
+      match: 'any',
+      tags: 'vip',
+      captureSources: ['form'],
+      formNames: 'Contact us',
+      campaignIds: ['camp_spring'],
+      createdAfter: '2026-01-01',
+      createdBefore: '2026-06-30',
+      ordersCountAtLeast: '3',
+      ltvAtLeast: '500',
+      lastPurchaseWithinDays: '90',
+      noPurchaseForDays: '30',
+      openedWithinDays: '30',
+      clickedWithinDays: '60',
+      notOpenedForDays: '90',
+      notClickedForDays: '120',
+      inListIds: ['a'],
+      notInListIds: ['b'],
+      ownerUids: ['uid-a'],
+      lifecycleStages: ['lead'],
+      companyIds: ['co_acme'],
+      custom: clauses,
+    })
+    expect(rule.any).toHaveLength(19 + DYNAMIC_LIST_MAX_CUSTOM_CLAUSES)
+    expect(19 + DYNAMIC_LIST_MAX_CUSTOM_CLAUSES).toBeLessThanOrEqual(
+      DYNAMIC_LIST_MAX_GROUPS,
+    )
+  })
+})
+
+/*==========================================
+ * THE CRM DIMENSIONS IN THE FORM (AGL-2603).
+ *
+ * Owner, lifecycle stage, company and custom field reach the draft, come
+ * back out of it unchanged, split per control in any mode, and read back as
+ * sentences that name a person, a stage and a company rather than an id —
+ * and that say, for the one operator whose lean is not obvious, what a blank
+ * value does.
+ *=========================================*/
+describe('the CRM dimensions in the form', () => {
+  it('gives each custom clause a branch of its own in any mode', () => {
+    expect(
+      draftToRule({
+        ...EMPTY_RULE_DRAFT,
+        match: 'any',
+        custom: [
+          { key: 'plan', op: 'eq', value: 'enterprise' },
+          { key: 'seats', op: 'gt', value: 10 },
+        ],
+      }).any,
+    ).toEqual([
+      { custom: [{ key: 'plan', op: 'eq', value: 'enterprise' }] },
+      { custom: [{ key: 'seats', op: 'gt', value: 10 }] },
+    ])
+  })
+
+  it('keeps every custom clause in one block for all mode', () => {
+    // The mirror of the split: a merge that kept only the last clause would
+    // silently drop the rest, the way a shallow `behavior` merge would.
+    expect(
+      draftToRule({
+        ...EMPTY_RULE_DRAFT,
+        custom: [
+          { key: 'plan', op: 'eq', value: 'enterprise' },
+          { key: 'seats', op: 'gt', value: 10 },
+        ],
+      }).custom,
+    ).toEqual([
+      { key: 'plan', op: 'eq', value: 'enterprise' },
+      { key: 'seats', op: 'gt', value: 10 },
+    ])
+  })
+
+  it('leaves an unfinished row out of the rule until it is filled', () => {
+    // A row the reader has added but not completed is not a filter yet; a
+    // rule that carried it would be one the matcher can never satisfy.
+    const rule = draftToRule({
+      ...EMPTY_RULE_DRAFT,
+      custom: [{ key: 'plan', op: 'eq', value: '' }],
+    })
+    expect(rule.custom).toBeUndefined()
+  })
+
+  it('writes no key at all when none of them is set', () => {
+    const rule = draftToRule(EMPTY_RULE_DRAFT)
+    expect(rule.ownerUids).toBeUndefined()
+    expect(rule.lifecycleStages).toBeUndefined()
+    expect(rule.companyIds).toBeUndefined()
+    expect(rule.custom).toBeUndefined()
+  })
+
+  describe('read back as sentences', () => {
+    const NAMES = {
+      members: { 'uid-a': 'Ada Lovelace' },
+      companies: { co_acme: 'Acme' },
+      fields: { plan: 'Plan', seats: 'Seats' },
+    }
+    const sentence = (dimensions: Record<string, unknown>) =>
+      describeDynamicListRule(
+        { sources: ['contacts'], ...dimensions } as never,
+        NAMES,
+      ).join(' ')
+
+    it('names a team member rather than printing a uid', () => {
+      expect(sentence({ ownerUids: ['uid-a'] })).toContain('Owned by: Ada Lovelace')
+      expect(sentence({ ownerUids: ['uid-zz'] })).toContain('Owned by: uid-zz')
+    })
+
+    it('names the stages as a person reads them', () => {
+      expect(sentence({ lifecycleStages: ['marketing-qualified', 'customer'] })).toContain(
+        'In stage: Marketing qualified, Customer',
+      )
+    })
+
+    it('names a company rather than printing its id', () => {
+      expect(sentence({ companyIds: ['co_acme'] })).toContain('At company: Acme')
+    })
+
+    it('reads each custom operator, with the field’s label', () => {
+      expect(sentence({ custom: [{ key: 'plan', op: 'eq', value: 'enterprise' }] })).toContain(
+        'Plan is enterprise',
+      )
+      expect(sentence({ custom: [{ key: 'seats', op: 'gt', value: 10 }] })).toContain(
+        'Seats is more than 10',
+      )
+      expect(sentence({ custom: [{ key: 'seats', op: 'lt', value: 10 }] })).toContain(
+        'Seats is less than 10',
+      )
+      expect(sentence({ custom: [{ key: 'plan', op: 'contains', value: 'ent' }] })).toContain(
+        'Plan contains ent',
+      )
+      expect(sentence({ custom: [{ key: 'plan', op: 'set' }] })).toContain('Plan is set')
+      expect(sentence({ custom: [{ key: 'plan', op: 'unset' }] })).toContain(
+        'Plan is not set',
+      )
+      // A key with no definition on hand is still named, as itself.
+      expect(sentence({ custom: [{ key: 'region', op: 'set' }] })).toContain('region is set')
+    })
+
+    it('says that a blank does not count as "is not"', () => {
+      // The one lean a reader cannot guess: excluding one plan does not
+      // select everyone whose plan was never recorded.
+      expect(sentence({ custom: [{ key: 'plan', op: 'neq', value: 'enterprise' }] })).toContain(
+        'Plan is not enterprise (a blank does not count)',
+      )
+    })
   })
 })
 
