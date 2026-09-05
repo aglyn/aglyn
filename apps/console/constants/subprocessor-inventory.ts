@@ -599,6 +599,13 @@ export const EGRESS_HOSTS: Record<string, EgressHost> = {
     dataReceived:
       "Aglyn's own GA4 property id and a date range. What comes back is aggregate counts — page views, sessions and event totals for Aglyn's own marketing and console pages. No identifier for any person is sent, and none is requested: the query asks for totals by date and event name only.",
   },
+  'stats.uptimerobot.com': {
+    disposition: 'not-a-subprocessor',
+    reason:
+      "The uptime vendor's public status-page API, read by the operator CLI `npm run check:uptime-monitors` to compare the monitor inventory documented in `docs/UPTIME_AND_SLA.md` with the monitors that actually exist, and to read each monitor's last recorded downtime — the answer to whether a check has ever been red. The endpoint is the same unauthenticated feed the public status page renders from; the request carries no credential and no header beyond a user agent. It is never imported by the console or tenant runtime, so no request-serving code path reaches it.",
+    dataReceived:
+      "Nothing about any person. The request names the public status page by its id; what comes back is the operator's own monitor list — monitor names, up/down state, creation time, last-downtime timestamps and uptime ratios.",
+  },
   'cloudfunctions.googleapis.com': {
     disposition: 'not-a-subprocessor',
     reason:
