@@ -20,6 +20,7 @@ import {
   companyDomainForEmail,
   CONTACT_LIFECYCLE_STAGES,
   CONTACT_LIFECYCLE_STAGE_LABELS,
+  contactLifecycleStageAfterPurchase,
   CRM_COLLECTIONS,
   crmScopeTokens,
   DEFAULT_DEAL_STAGES,
@@ -58,6 +59,24 @@ describe('lifecycle stages', () => {
     expect(isContactLifecycleStage('')).toBe(false)
     expect(isContactLifecycleStage(null)).toBe(false)
     expect(isContactLifecycleStage(3)).toBe(false)
+  })
+})
+
+describe('contactLifecycleStageAfterPurchase', () => {
+  it('makes a customer of somebody with no stage, or a stage before it', () => {
+    expect(contactLifecycleStageAfterPurchase(undefined)).toBe('customer')
+    expect(contactLifecycleStageAfterPurchase('')).toBe('customer')
+    expect(contactLifecycleStageAfterPurchase('not-a-stage')).toBe('customer')
+    expect(contactLifecycleStageAfterPurchase('subscriber')).toBe('customer')
+    expect(contactLifecycleStageAfterPurchase('lead')).toBe('customer')
+    expect(contactLifecycleStageAfterPurchase('opportunity')).toBe('customer')
+  })
+
+  it('never downgrades: a later stage survives a purchase', () => {
+    expect(contactLifecycleStageAfterPurchase('customer')).toBe('customer')
+    expect(contactLifecycleStageAfterPurchase('evangelist')).toBe('evangelist')
+    // The deliberate escape hatch is a choice a sale must not undo.
+    expect(contactLifecycleStageAfterPurchase('other')).toBe('other')
   })
 })
 

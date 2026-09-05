@@ -42,6 +42,15 @@ import { resolvePluginApiRoute } from '@aglyn/aglyn/server'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { registerCrmConsoleApi } from './server'
 
+/*
+ * The admin SDK barrel is a dependency of the create route (AGL-2596), not
+ * of the ping, and loading it for real drags Next's server runtime into a
+ * jsdom worker. An inert double keeps this file about the WIRING; the route
+ * has its own spec with a faithful one.
+ */
+jest.mock('@aglyn/tenant-data-admin', () => ({}))
+jest.mock('firebase-admin/firestore', () => ({ FieldValue: {} }))
+
 const REPO_ROOT = join(__dirname, '../../../../..')
 
 /** Drives one registered handler and returns what it answered. */

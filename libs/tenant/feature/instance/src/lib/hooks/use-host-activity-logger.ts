@@ -39,6 +39,10 @@ export interface HostActivityTarget {
     // so their saves belong in the same log as screens and layouts.
     | 'component'
     | 'template'
+    // A person on the CRM record page (AGL-2596): added by hand, edited, or
+    // removed from the site. The record is org-shared, but the act happened
+    // in THIS site's console and belongs in this site's feed.
+    | 'contact'
   id?: string
   name?: string
   /**

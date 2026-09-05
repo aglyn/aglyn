@@ -20,6 +20,7 @@ import {
   checkContactQuota,
   consentGroupScope,
   CONTACT_FACETS_FIELD,
+  type ContactFacet,
   type ContactInteraction,
   type ContactSource,
   marketingConsentFieldsForGroup,
@@ -37,11 +38,90 @@ import {
   type ResolvedCampaignTouch,
 } from './campaign-conversion-attribution'
 import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
+/*
+ * The module paths, like `name-search` above, rather than the barrel: the
+ * pure helpers this door leans on are exactly the ones a spec of the door
+ * substitutes a fixture barrel for, and a fixture that has to re-export the
+ * whole of `@aglyn/aglyn` to keep a normalizer reachable is a fixture that
+ * drifts. A direct path is real in every harness.
+ */
+import {
+  contactLifecycleStageAfterPurchase,
+  isContactLifecycleStage,
+} from '@aglyn/aglyn/app-utils/crm'
+import {
+  normalizeAddress,
+  normalizePhone,
+} from '@aglyn/aglyn/foundation/definitions/contact.types'
 import {
   consentGroupForSite,
   getOrgForHost,
   orgDataCollectionForHost,
 } from './organizations'
+
+/**
+ * The profile fields a door may hand this function (AGL-2596): the parts of
+ * a person's record that no capture surface collects — the console's create
+ * drawer and the import do, and the order door adds the stage.
+ */
+export type ContactProfileInput = Partial<
+  Pick<
+    ContactFacet,
+    'phone' | 'jobTitle' | 'address' | 'ownerUid' | 'lifecycleStage'
+  >
+>
+
+/**
+ * What one call did, so a door that has to ANSWER — the console's create
+ * route, which owes the browser an id and a status code — can.
+ *
+ * The capture doors ignore this and always did: a form submission must not
+ * fail because the CRM record had a problem, which is why the function never
+ * throws. `failed` is the swallowed error made visible to a caller that wants
+ * to see it; `refused` is the two deliberate no-writes — an address that is
+ * not one, and a free plan at its band.
+ */
+export type UpsertHostContactResult =
+  | { outcome: 'created' | 'merged'; contactId: string }
+  | { outcome: 'refused'; reason: 'email' | 'band' }
+  | { outcome: 'failed' }
+
+/**
+ * The profile as it may be STORED: every value normalized, every unusable
+ * one dropped, and nothing present that was not given.
+ *
+ * Only the keys given come back, which is what lets a merge write this
+ * straight into the facet: a door that knows the phone number and nothing
+ * else leaves the title, the owner and the stage exactly as another door
+ * left them. An address given as `null` is a deliberate clearing and is kept
+ * as `null`; one that normalizes to nothing is the same thing.
+ */
+function storableProfile(input: ContactProfileInput | undefined): {
+  phone?: string
+  jobTitle?: string
+  address?: ReturnType<typeof normalizeAddress>
+  ownerUid?: string
+  lifecycleStage?: ContactFacet['lifecycleStage']
+} {
+  if (!input) return {}
+  const out: ReturnType<typeof storableProfile> = {}
+  if (input.phone !== undefined) {
+    const phone = normalizePhone(input.phone)
+    if (phone) out.phone = phone
+  }
+  if (typeof input.jobTitle === 'string') {
+    const jobTitle = input.jobTitle.trim().slice(0, 120)
+    if (jobTitle) out.jobTitle = jobTitle
+  }
+  if (input.address !== undefined) out.address = normalizeAddress(input.address)
+  if (typeof input.ownerUid === 'string' && input.ownerUid.trim()) {
+    out.ownerUid = input.ownerUid.trim().slice(0, 128)
+  }
+  if (isContactLifecycleStage(input.lifecycleStage)) {
+    out.lifecycleStage = input.lifecycleStage
+  }
+  return out
+}
 
 /**
  * Contacts ingestion (AGL-197): upserts an org-scoped contact doc (AGL-237)
@@ -139,10 +219,31 @@ export async function upsertHostContact(options: {
    * input that records a basis.
    */
   campaignIds?: readonly string[]
-}): Promise<void> {
+  /**
+   * THE PROFILE this door knows (AGL-2596): a phone number, a job title, a
+   * postal address, the team member who owns the relationship, and where in
+   * the funnel the person sits — the fields no capture surface ever asked
+   * for, which is why they arrive here from the console's create drawer and
+   * the import rather than from a form.
+   *
+   * Written into the capturing group's FACET, on create and on merge alike,
+   * because they are one holder's knowledge of the person and the facet is
+   * where that lives. A merge writes the keys given and leaves the rest, so a
+   * door that knows only the phone number does not blank the title another
+   * door wrote; an address on a merge deep-merges into the stored one, which
+   * is the shape a merge-set allows, and the record page's own save is the
+   * path that replaces one outright. Every value is normalized here rather
+   * than trusted — the console route validates and refuses first, but a door
+   * is a door, and a phone number that is not E.164 is worse than none.
+   *
+   * `phone` is ALSO echoed to the top of the document, where the console's
+   * global search can hit it — see `HostContact.phone`.
+   */
+  facet?: ContactProfileInput
+}): Promise<UpsertHostContactResult> {
   try {
     const email = normalizeContactEmail(options.email)
-    if (!email) return
+    if (!email) return { outcome: 'refused', reason: 'email' }
 
     /*==========================================
      * THE PURCHASE DOOR, AND THEREFORE THE ATTRIBUTION DOOR.
@@ -272,12 +373,30 @@ export async function upsertHostContact(options: {
         },
         { source: options.source, interaction, name: options.name },
       )
+      /*
+       * THE PROFILE, as this door knows it (AGL-2596).
+       *
+       * Given keys only, so the merge below leaves untouched whatever another
+       * door wrote. The stage is the one field with a rule of its own: a
+       * purchase makes a customer of anybody who was not yet one and never
+       * moves anybody back — `contactLifecycleStageAfterPurchase` is that
+       * rule, applied to the stage this door asked for or, failing that, the
+       * one already stored.
+       */
+      const profile = storableProfile(options.facet)
+      if (options.source === 'order') {
+        profile.lifecycleStage = contactLifecycleStageAfterPurchase(
+          profile.lifecycleStage ?? facet.lifecycleStage,
+        )
+      }
       await docSnapshot.ref.set(
         {
           // The search keys travel WITH the name, and only when the name is
           // written: stamping an empty key over a real one would make the
           // contact unfindable by the name it still displays.
           ...(merged.name ? nameSearchFields(merged.name) : {}),
+          // The search echo of the facet's phone — see `HostContact.phone`.
+          ...(profile.phone ? { phone: profile.phone } : {}),
           /*
            * NESTED, not dot-pathed. This is a `set(…, { merge: true })`, and
            * a merge-set treats a key containing dots as a literal field name
@@ -310,6 +429,7 @@ export async function upsertHostContact(options: {
               ...(campaignIds.length
                 ? { campaignIds: FieldValue.arrayUnion(...campaignIds) }
                 : {}),
+              ...profile,
               ...(options.purchaseCents
                 ? {
                     ltvCents: FieldValue.increment(options.purchaseCents),
@@ -369,7 +489,7 @@ export async function upsertHostContact(options: {
         },
         { merge: true },
       )
-      return
+      return { outcome: 'merged', contactId: docSnapshot.id }
     }
 
     // New contact: audience-band check via the aggregate count (cheap; no
@@ -386,8 +506,21 @@ export async function upsertHostContact(options: {
         .collection('counters')
         .doc('contactsDropped')
         .set({ total: FieldValue.increment(1) }, { merge: true })
-      return
+      return { outcome: 'refused', reason: 'band' }
     }
+
+    /*
+     * The profile on a create, with the order door's rule applied the same
+     * way as on a merge. A `null` address is dropped rather than written:
+     * there is nothing on a new document for it to clear.
+     */
+    const profile = storableProfile(options.facet)
+    if (options.source === 'order') {
+      profile.lifecycleStage = contactLifecycleStageAfterPurchase(
+        profile.lifecycleStage,
+      )
+    }
+    if (profile.address === null) delete profile.address
 
     const created = await contactsRef.add({
       hostId: options.hostId,
@@ -421,6 +554,8 @@ export async function upsertHostContact(options: {
           : consentGroupScope(group),
       email,
       ...(options.name ? nameSearchFields(options.name.slice(0, 120)) : {}),
+      // The search echo of the facet's phone — see `HostContact.phone`.
+      ...(profile.phone ? { phone: profile.phone } : {}),
       // The facet this capture creates. Everything a holder owns lives under
       // its own group id; the address and the canonical name above are the
       // only shared identity.
@@ -435,6 +570,7 @@ export async function upsertHostContact(options: {
           ...(options.name
             ? { name: options.name.slice(0, 120) }
             : {}),
+          ...profile,
           ...(options.purchaseCents
             ? {
                 ltvCents: options.purchaseCents,
@@ -477,7 +613,9 @@ export async function upsertHostContact(options: {
         convertedAtMs: interaction.atMs,
       })
     }
+    return { outcome: 'created', contactId: created.id }
   } catch (error) {
     console.error('upsertHostContact failed', error)
+    return { outcome: 'failed' }
   }
 }
