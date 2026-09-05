@@ -20,6 +20,15 @@ import {
   sanitizeEventParams,
 } from './analytics-events'
 import { type AuthorHtmlRemoval, sanitizeAuthorHtml } from './author-html'
+import {
+  type ContactLifecycleStage,
+  CRM_TASK_MAX_DUE_DAYS,
+  type CrmActivityKind,
+  type CrmTaskKind,
+  isContactLifecycleStage,
+  isCrmActivityKind,
+  isCrmTaskKind,
+} from './crm'
 import { HOST_EVENT_TYPES } from './workflows'
 
 /**
@@ -395,6 +404,39 @@ export type HostActionStep = (
     }
   /** Ends the enrollment here. Paired with a `when`, this is the exit branch. */
   | { type: 'exitFlow' }
+  /*
+   * THE CRM STEPS (AGL-2605).
+   *
+   * Server steps, every one, because each writes a record only the Admin
+   * SDK may write on a visitor's behalf. Each acts on ONE person — the
+   * contact the event names, resolved by `contactId` when the payload
+   * carries one and by `email` otherwise — and each writes inside the
+   * site's own facet or stamps the site's own scope, for the reason
+   * `assignCampaign` gives: a contact row is shared by every site in the
+   * org, and a stage or a tag is one holder's business record. A step whose
+   * event names nobody the site can see does nothing and says so in the run.
+   *
+   * None of them carries a doc-id reference for the reference audit to
+   * check: a stage and a kind are fixed vocabularies, a tag is free text,
+   * and an owner is a member who is resolved at run time.
+   */
+  | { type: 'setContactStage'; lifecycleStage: ContactLifecycleStage }
+  | { type: 'addContactTag'; tag: string }
+  /**
+   * The owner by uid when a picker wrote the step, by email when a person
+   * typed it; the executor resolves the email against the org's members.
+   */
+  | { type: 'assignContactOwner'; ownerUid?: string; ownerEmail?: string }
+  | {
+      type: 'createCrmTask'
+      title: string
+      kind: CrmTaskKind
+      /** Days from the run to the due date; `0` is due today. */
+      dueInDays: number
+      /** Falls back to the contact's owner, then to nobody. */
+      assigneeUid?: string
+    }
+  | { type: 'logCrmActivity'; kind: CrmActivityKind; body: string }
 ) & {
   /** See {@link HostActionStepGuard}. Absent means the step always runs. */
   when?: HostActionStepGuard | null
@@ -444,6 +486,40 @@ export const FLOW_SUSPENDING_STEP_TYPES: ReadonlySet<HostActionStepType> =
 export function isFlowSuspendingStep(step: HostActionStep): boolean {
   return FLOW_SUSPENDING_STEP_TYPES.has(step.type)
 }
+
+/**
+ * The steps that act on the CRM (AGL-2605) — named as a set because the
+ * executor dispatches all five to one module and the docs list them as one
+ * group, and a step added to the union but not here would be a server step
+ * the executor silently skipped.
+ */
+export const CRM_ACTION_STEP_TYPES: ReadonlySet<HostActionStepType> = new Set([
+  'setContactStage',
+  'addContactTag',
+  'assignContactOwner',
+  'createCrmTask',
+  'logCrmActivity',
+] as const)
+
+/** The CRM steps, as the type the executor narrows to. */
+export type CrmActionStep = Extract<
+  HostActionStep,
+  {
+    type:
+      | 'setContactStage'
+      | 'addContactTag'
+      | 'assignContactOwner'
+      | 'createCrmTask'
+      | 'logCrmActivity'
+  }
+>
+
+export function isCrmActionStep(step: HostActionStep): step is CrmActionStep {
+  return CRM_ACTION_STEP_TYPES.has(step.type)
+}
+
+/** Longest tag an automation may write — the console's own tag field cap. */
+export const CONTACT_TAG_MAX_LENGTH = 60
 
 /**
  * The step list as the visitor's browser may see it.
@@ -650,6 +726,11 @@ export const HOST_ACTION_STEP_LABELS: Record<HostActionStepType, string> = {
   wait: 'Wait',
   waitForEvent: 'Wait for something to happen',
   exitFlow: 'End the flow here',
+  setContactStage: 'Set the contact’s lifecycle stage',
+  addContactTag: 'Tag the contact',
+  assignContactOwner: 'Assign the contact an owner',
+  createCrmTask: 'Create a CRM task',
+  logCrmActivity: 'Log a CRM activity',
 }
 
 /**
@@ -683,6 +764,11 @@ export const HOST_ACTION_STEP_OUTCOMES: Partial<
   wait: 'waiting',
   waitForEvent: 'waiting for',
   exitFlow: 'ended the flow',
+  setContactStage: 'set stage',
+  addContactTag: 'tagged',
+  assignContactOwner: 'assigned owner',
+  createCrmTask: 'created task',
+  logCrmActivity: 'logged activity',
 }
 
 /**
@@ -1013,6 +1099,46 @@ export function validateHostAction(action: HostAction): string | null {
       !step.campaignName?.trim()
     ) {
       return `${label}: pick a campaign`
+    }
+    // CRM steps (AGL-2605). A stage or a kind outside its vocabulary is
+    // refused here rather than stored: the executor treats the value as
+    // trusted and would write it into a facet every stage report counts.
+    if (
+      step.type === 'setContactStage' &&
+      !isContactLifecycleStage(step.lifecycleStage)
+    ) {
+      return `${label}: pick a lifecycle stage`
+    }
+    if (step.type === 'addContactTag') {
+      const tag = step.tag?.trim() ?? ''
+      if (!tag) return `${label}: enter the tag`
+      if (tag.length > CONTACT_TAG_MAX_LENGTH) {
+        return `${label}: tags are at most ${CONTACT_TAG_MAX_LENGTH} characters`
+      }
+    }
+    if (
+      step.type === 'assignContactOwner' &&
+      !step.ownerUid?.trim() &&
+      !step.ownerEmail?.trim().includes('@')
+    ) {
+      return `${label}: enter the owner’s email address`
+    }
+    if (step.type === 'createCrmTask') {
+      if (!step.title?.trim()) return `${label}: give the task a title`
+      if (!isCrmTaskKind(step.kind)) return `${label}: pick the kind of task`
+      if (
+        !Number.isInteger(step.dueInDays) ||
+        step.dueInDays < 0 ||
+        step.dueInDays > CRM_TASK_MAX_DUE_DAYS
+      ) {
+        return `${label}: due in 0–${CRM_TASK_MAX_DUE_DAYS} days`
+      }
+    }
+    if (step.type === 'logCrmActivity') {
+      if (!isCrmActivityKind(step.kind)) {
+        return `${label}: pick the kind of activity`
+      }
+      if (!step.body?.trim()) return `${label}: write what happened`
     }
   }
   return null

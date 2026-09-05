@@ -24,7 +24,6 @@ import {
   meterHostEmail,
   notifyHostManagers,
   notifyStaff,
-  upsertHostContact,
   renderHostEmailWithTokens,
   clearConnectPayoutFailure,
   recordConnectPayoutFailure,
@@ -32,6 +31,7 @@ import {
   updateExisting,
   hostSendingIdentity,
 } from '@aglyn/tenant-data-admin'
+import { captureHostContact } from '@aglyn/tenant-runtime'
 import { createHmac } from 'crypto'
 import {
   isEmailConfigured,
@@ -2257,7 +2257,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         // touches only our own Firestore, which is the whole line AGL-2473
         // drew: Aglyn's own storage is awaited, a stranger's server is queued.
         // `refund.ts` already awaited its sibling for exactly this reason.
-        await upsertHostContact({
+        await captureHostContact({
           hostId: String(hostId),
           email: object?.customer_details?.email,
           name: object?.customer_details?.name ?? undefined,
@@ -2874,7 +2874,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           // counting only the first charge ranks them as a one-purchase
           // customer forever. Keyed to the invoice so the guard above is what
           // stops a redelivery inflating it.
-          await upsertHostContact({
+          await captureHostContact({
             hostId: invoiceHostId,
             email: renewalEmail,
             ...(soldSnapshot.get('customerName')
@@ -3057,7 +3057,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           const guestContactEmail =
             object?.customer_details?.email ?? reservation['guestEmail'] ?? null
           if (guestContactEmail) {
-            await upsertHostContact({
+            await captureHostContact({
               hostId: String(hostId),
               email: guestContactEmail,
               name:
@@ -3521,7 +3521,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             : {}),
           link: `/${hostId}/products`,
         })
-        await upsertHostContact({
+        await captureHostContact({
           hostId: String(hostId),
           email: object?.customer_details?.email,
           name: object?.customer_details?.name ?? undefined,
@@ -4025,7 +4025,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             const chargedCents =
               Number(object?.amount_total ?? 0) ||
               Number(order.totals?.totalCents ?? 0)
-            await upsertHostContact({
+            await captureHostContact({
               hostId: String(hostId),
               email: draftEmail,
               name: object?.customer_details?.name ?? undefined,
@@ -4400,7 +4400,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           }
         })()
         // Contacts ingestion (AGL-197): buyers become contacts.
-        await upsertHostContact({
+        await captureHostContact({
           hostId: String(hostId),
           email: object?.customer_details?.email,
           name: object?.customer_details?.name ?? undefined,
