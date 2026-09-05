@@ -425,8 +425,19 @@ export type HostActionStep = (
   /**
    * The owner by uid when a picker wrote the step, by email when a person
    * typed it; the executor resolves the email against the org's members.
+   * Or `roundRobin`, and the owner is the next member of the pool the CRM's
+   * settings keep (AGL-2618) — a step that names nobody and hands the
+   * choice to the rotation, so a stage change can spread its follow-ups
+   * across a team rather than pile them on one rep. The two are exclusive:
+   * a rotation step carries no member, and the validator refuses one that
+   * names both.
    */
-  | { type: 'assignContactOwner'; ownerUid?: string; ownerEmail?: string }
+  | {
+      type: 'assignContactOwner'
+      ownerUid?: string
+      ownerEmail?: string
+      roundRobin?: boolean
+    }
   | {
       type: 'createCrmTask'
       title: string
@@ -1121,12 +1132,18 @@ export function validateHostAction(action: HostAction): string | null {
         return `${label}: tags are at most ${CONTACT_TAG_MAX_LENGTH} characters`
       }
     }
-    if (
-      step.type === 'assignContactOwner' &&
-      !step.ownerUid?.trim() &&
-      !step.ownerEmail?.trim().includes('@')
-    ) {
-      return `${label}: enter the owner’s email address`
+    if (step.type === 'assignContactOwner') {
+      const named = Boolean(step.ownerUid?.trim() || step.ownerEmail?.trim())
+      if (step.roundRobin === true && named) {
+        return `${label}: pick round robin or a member, not both`
+      }
+      if (
+        step.roundRobin !== true &&
+        !step.ownerUid?.trim() &&
+        !step.ownerEmail?.trim().includes('@')
+      ) {
+        return `${label}: enter the owner’s email address`
+      }
     }
     if (step.type === 'createCrmTask') {
       if (!step.title?.trim()) return `${label}: give the task a title`

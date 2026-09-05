@@ -859,6 +859,21 @@ describe('CRM steps', () => {
     ).toMatch(/owner’s email/)
   })
 
+  it('accepts a round-robin owner step naming nobody, and refuses one naming both (AGL-2618)', () => {
+    expect(
+      validateHostAction(withStep({ type: 'assignContactOwner', roundRobin: true })),
+    ).toBeNull()
+    expect(
+      validateHostAction(
+        withStep({ type: 'assignContactOwner', roundRobin: true, ownerEmail: 'sam@example.com' }),
+      ),
+    ).toMatch(/not both/)
+    // `roundRobin: false` is not a mode; the step still has to name somebody.
+    expect(
+      validateHostAction(withStep({ type: 'assignContactOwner', roundRobin: false })),
+    ).toMatch(/owner’s email/)
+  })
+
   it('refuses a task with no title, an unknown kind, or a due date off the band', () => {
     expect(
       validateHostAction(

@@ -51,6 +51,17 @@ export type AglynNotificationType =
   // (`system.`). Someone who has muted the operational stream has said they
   // do not want to be told about work as it arrives, and a task is work.
   | 'content.taskAssigned'
+  // A contact, or a lead, became the recipient's to work (AGL-2618): a
+  // capture the assignment rules or the site's default owner routed to
+  // them, a lead somebody converted and handed to them, or an automation's
+  // "assign an owner" step — every server path that writes `ownerUid`
+  // except the recipient assigning themselves. Two types rather than one
+  // because the record the person opens differs: a lead is the site's own
+  // working record and a contact is the org's, and the link goes to the
+  // one they will actually work. `content.`, beside `taskAssigned`, for the
+  // same reason: work arriving, not standing changing.
+  | 'content.contactAssigned'
+  | 'content.leadAssigned'
   // Marketplace review verdicts (AGL-432/653).
   | 'marketplace.review'
   // Support desk, staff audience (AGL-850): a subscriber opened or replied to
@@ -197,6 +208,8 @@ export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> =
     'content.order': 'New order',
     'content.lowStock': 'Low stock',
     'content.taskAssigned': 'Task assigned to you',
+    'content.contactAssigned': 'Contact assigned to you',
+    'content.leadAssigned': 'Lead assigned to you',
     'marketplace.review': 'Listing review',
 
     'support.ticketOpened': 'New support ticket',
