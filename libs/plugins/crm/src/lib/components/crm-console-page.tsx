@@ -90,7 +90,10 @@ function sectionBody(
     case 'tasks':
       return <TasksSection />
     case 'reports':
-      return <ReportsSection />
+      // The shell's props whole, like the contacts list: the reports resolve
+      // the org scope from `hostId`, the consent group from `org`, and their
+      // drill-down links from `basePath` (AGL-2604).
+      return <ReportsSection {...props} />
     case 'fields':
       return <FieldsSection />
     default:

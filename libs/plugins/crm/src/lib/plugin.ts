@@ -19,6 +19,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import { mdiCardAccountDetailsOutline } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 import { CRM_CONSOLE_SECTIONS } from './components/crm-console-sections'
+import { CrmGlanceCard } from './components/crm-glance-card'
 import { BUNDLE_ID } from './constants/bundle-common'
 
 /** Code-split: the CRM hub only loads when opened. */
@@ -78,6 +79,23 @@ export function registerCrmConsole(): void {
      * shipped capability rather than close a hole.
      */
     permission: 'data.manage',
+    /*
+     * The site dashboard's CRM card (AGL-2604): four server-counted figures
+     * on the front page, each a link into the hub. Registered here rather
+     * than imported by the dashboard so the shell's enablement and
+     * entitlement gate decides whether a site that never turned the CRM on
+     * sees it — the rule every card on that row follows. The extension's
+     * `permission` above gates it too: a reader who may not open the CRM is
+     * not shown its totals.
+     */
+    widgets: [
+      {
+        slot: Aglyn.CONSOLE_WIDGET_SLOTS.hostDashboard,
+        widgetId: 'crm-glance',
+        title: 'CRM at a glance',
+        Component: CrmGlanceCard,
+      },
+    ],
     navItems: [
       {
         label: 'CRM',
