@@ -305,6 +305,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
         <>
           <ContactPropertiesCard
             hostId={hostId}
+            org={org}
             record={record}
             consentGroup={consentGroup}
             scope={scope}
