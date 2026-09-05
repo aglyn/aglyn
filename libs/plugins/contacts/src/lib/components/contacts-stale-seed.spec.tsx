@@ -38,6 +38,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { updateDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
 import ContactsConsolePage from './contacts-console-page'
+import { CONTACTS_CONSOLE_SECTIONS } from './contacts-console-sections'
 
 /** Mutable so each spec picks the listener's verdict before rendering. */
 const listener = {
@@ -138,8 +139,30 @@ beforeEach(() => {
   listener.status = 'success'
 })
 
+// Only the section the URL names renders (AGL-2595): the rail's own chrome is
+// drawn away and the section body passed through, so what the assertions read
+// is the people list the v1 page was.
+jest.mock('@aglyn/shared-ui-next', () => ({
+  HubSections: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+}))
+
+const BASE_PATH = '/acme/hosts/shop/contacts'
+
+/** The people section, as the shell mounts it: the resolved rail and the URL's section. */
+const hubProps = {
+  basePath: BASE_PATH,
+  sections: CONTACTS_CONSOLE_SECTIONS.map((section) => ({
+    id: section.id,
+    label: section.label,
+    href: `${BASE_PATH}/${section.id}`,
+    visible: true,
+  })),
+  section: 'people',
+  segments: ['people'],
+}
+
 const renderPage = () =>
-  render(<ContactsConsolePage hostId="host-1" entitled />)
+  render(<ContactsConsolePage hostId="host-1" entitled {...hubProps} />)
 
 /**
  * Open the contact's drawer, edit only the NOTES, and save — the case that

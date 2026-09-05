@@ -18,6 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiCardAccountDetailsOutline } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
+import { CONTACTS_CONSOLE_SECTIONS } from './components/contacts-console-sections'
 import { BUNDLE_ID } from './constants/bundle-common'
 
 /** Code-split: the Contacts console page only loads when opened. */
@@ -74,6 +75,11 @@ export function registerContactsConsole(): void {
       {
         label: 'Contacts',
         href: '/contacts',
+        // Sections as ROUTES (AGL-2595): each is a real URL the shell
+        // resolves and gates, so the page mounts the one being read and a
+        // bare `/contacts` lands on the first. Every section inherits this
+        // item's `release_contacts` gate.
+        sections: CONTACTS_CONSOLE_SECTIONS,
         navTabId: 'nav-tab-contacts',
         icon: { path: mdiCardAccountDetailsOutline.path },
         header: {

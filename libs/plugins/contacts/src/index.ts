@@ -17,3 +17,8 @@
 
 export * from './lib/constants/bundle-common'
 export * from './lib/plugin'
+// The hub's section ids and the one way to link into it (AGL-2595), so a
+// surface outside this plugin — a campaign naming a contact, an order
+// naming a company — builds the same address the hub resolves.
+export * from './lib/components/contacts-console-sections'
+export * from './lib/model/crm-routes'

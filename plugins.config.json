@@ -59,8 +59,12 @@
       "id": "contacts",
       "package": "@aglyn/plugins-contacts",
       "register": {
-        "console": "registerContactsConsole"
-      }
+        "console": "registerContactsConsole",
+        "consoleApi": "registerContactsConsoleApi"
+      },
+      "apiPrefixes": [
+        "contacts"
+      ]
     },
     {
       "id": "data",

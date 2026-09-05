@@ -108,7 +108,11 @@ describe('AGL-1478 · every creator of a scoped collection stamps the scope', ()
       // and the rules gate it on `isOrgWideMember()` — which is precisely
       // why it went unnoticed. It becomes AGL-1466 the first time anyone
       // adds a scoped read.
-      file: 'libs/plugins/contacts/src/lib/components/contacts-console-page.tsx',
+      //
+      // The v1 page body, which owns this creator, is the `people` section
+      // of the Contacts hub since AGL-2595; `contacts-console-page.tsx` is
+      // the rail and the switch and writes nothing.
+      file: 'libs/plugins/contacts/src/lib/components/people-section.tsx',
       mustContain: ['newResourceScopeFields'],
       why: 'saving a contact filter as a segment',
     },

@@ -42,6 +42,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
   },
   {
     id: 'contacts',
+    apiPrefixes: ["contacts"],
     register: {"console":"registerContactsConsole"},
     load: () => import('@aglyn/plugins-contacts'),
   },

@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { CONTACTS_CONSOLE_SECTIONS } from './components/contacts-console-sections'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { registerContactsConsole } from './plugin'
 
@@ -63,5 +64,31 @@ describe('contacts plugin', () => {
     expect(Aglyn.DEFAULT_ROLE_PERMISSIONS.admin[permission]).toBe(true)
     expect(Aglyn.DEFAULT_ROLE_PERMISSIONS.editor[permission]).toBe(true)
     expect(Aglyn.DEFAULT_ROLE_PERMISSIONS.viewer[permission]).toBe(false)
+  })
+
+  /**
+   * The hub's sections are declared ON the nav item, from the one list the
+   * page also switches on (AGL-2595). A registration that forgot them would
+   * leave `/contacts/deals` a 404 while the page still had a Deals branch;
+   * a second list would let the two drift apart.
+   */
+  it('declares the six CRM sections on the nav item, people first', () => {
+    registerContactsConsole()
+    const sections = registered()?.navItems?.[0]?.sections
+    expect(sections).toBe(CONTACTS_CONSOLE_SECTIONS)
+    expect(sections?.map((section) => section.id)).toEqual([
+      'people',
+      'companies',
+      'deals',
+      'tasks',
+      'reports',
+      'fields',
+    ])
+    // The bare `/contacts` lands on the first section, so the people list
+    // has to be first: it is the v1 page every existing link points at.
+    expect(sections?.[0]?.label).toBe('Contacts')
+    // No section declares its own flag — all six ship with the surface and
+    // inherit `release_contacts` from the nav item.
+    expect(sections?.every((section) => !section.navTabId)).toBe(true)
   })
 })
