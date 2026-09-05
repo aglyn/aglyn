@@ -79,7 +79,11 @@ function sectionBody(
       return record ? (
         <CompanyDetailPage {...recordProps} id={record} />
       ) : (
-        <CompaniesSection />
+        <CompaniesSection
+          hostId={props.hostId}
+          org={props.org}
+          basePath={basePath}
+        />
       )
     case 'deals':
       return record ? (

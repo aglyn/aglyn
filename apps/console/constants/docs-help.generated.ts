@@ -153,6 +153,11 @@ export const DOCS_HELP_TOPICS = {
     title: 'Commerce end to end',
     excerpt: 'Create products with billing modes, design the storefront with Commerce blocks, take Stripe checkout for one-time and subscription sales, and run orders from the console.',
   },
+  companies: {
+    path: '/content-and-data/contacts/companies',
+    title: 'Companies',
+    excerpt: 'Group your contacts under the businesses they belong to — one record per company, with its domain, owner, address and the people who work there.',
+  },
   components: {
     path: '/building-sites/besigner/reusable-components',
     title: 'Reusable components',
@@ -725,6 +730,7 @@ export const DOCS_HELP_ANCHORS = {
   comingSoonLaunch: ['#1-build-the-coming-soon-page', '#the-notify-me-form', '#2-make-it-the-home-page', '#3-keep-everything-else-out-of-search', '#while-nothing-is-ready-the-site-wide-switch', '#once-youre-launching-page-by-page-per-screen-visibility', '#4-collect-the-signups', '#5-launch-day-reverse-every-step', '#6-verify-it-actually-worked', '#related'],
   commerce: ['#products-hub', '#inventory', '#reserved-stock', '#stock-movements', '#gift-cards', '#recovery-and-alerts', '#orders', '#orders-screen', '#order-statuses', '#order-money-tiles', '#a-lost-dispute', '#shipping--taxes', '#lodging-tax-on-reservations', '#storefront-sales-tax', '#destination-coverage', '#dropshipping', '#related'],
   commerceEndToEnd: ['#1-connect-payments', '#2-create-products', '#3-design-the-storefront', '#catalog-search-filters-and-sort', '#category-pages', '#the-product-page-template', '#4-what-checkout-does', '#paying-without-leaving-your-site', '#5-run-orders-from-the-console', '#6-subscriptions--the-stripe-portal', '#related'],
+  companies: ['#the-companies-list', '#create-a-company', '#a-companys-page', '#contacts-at-a-company', '#deleting-a-company', '#who-can-see-a-company', '#related'],
   components: ['#promote', '#insert-instances', '#properties', '#declare-them', '#use-them', '#save-then-publish', '#fill-them-in-per-page', '#restyle-one-instance', '#override-an-attribute-on-one-instance', '#retrofit-duplicated-sections', '#detach', '#nesting', '#used-by', '#manage', '#copy--paste-vs-reusable-components', '#tips', '#related'],
   connectADomain: ['#steps', '#after-it-connects', '#your-aglyn-subdomain-afterwards', '#registrar-quick-reference', '#one-domain-per-site', '#disconnect', '#related'],
   consoleAndSite: ['#add-a-console-page', '#add-a-widget-to-a-shell-zone', '#wrap-every-console-page-providers', '#add-a-canvas-component-besigner--published-sites', '#add-a-site-runtime', '#troubleshooting'],

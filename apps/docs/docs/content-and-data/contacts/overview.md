@@ -68,7 +68,7 @@ older `…/contacts` address still open the hub.
 | --- | --- | --- |
 | **Contacts** | `/crm/contacts` | The people list above; a person's own page is `/crm/contacts/{id}`. |
 | **Leads** | `/crm/leads` | People a site has captured but not yet qualified — a status, an owner, and a conversion into a contact, a company and a deal. |
-| **Companies** | `/crm/companies` | The organizations your contacts belong to; a company's page is `/crm/companies/{id}`. |
+| **Companies** | `/crm/companies` | The organizations your contacts belong to; a company's page is `/crm/companies/{id}`. See [Companies](./companies.md). |
 | **Deals** | `/crm/deals` | Your pipeline — open deals by stage, with amount, owner and expected close; a deal's page is `/crm/deals/{id}`. |
 | **Tasks** | `/crm/tasks` | Calls, emails, meetings and to-dos by due date, linked to the contact, company or deal they are for. |
 | **Reports** | `/crm/reports` | Contacts by stage and source, the pipeline by stage, won and lost over time. |
@@ -85,5 +85,6 @@ Group contacts into **segments** — reusable audiences you can target directly 
 
 ## Related
 
+- [Companies](./companies.md)
 - [Email campaigns](../../marketing-and-automation/email-campaigns/overview.md)
 - [Forms & lead capture](../forms/overview.md)
