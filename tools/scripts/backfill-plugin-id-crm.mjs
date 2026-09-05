@@ -25,8 +25,11 @@
 // lets that alias be retired, and it says how many documents still carry the
 // old id so the retirement can be dated.
 //
-//   node tools/scripts/backfill-plugin-id-crm.mjs            # dry run, counts
-//   node tools/scripts/backfill-plugin-id-crm.mjs --apply    # write
+//   GOOGLE_CLOUD_PROJECT=aglyn-main node tools/scripts/backfill-plugin-id-crm.mjs          # dry run
+//   GOOGLE_CLOUD_PROJECT=aglyn-main node tools/scripts/backfill-plugin-id-crm.mjs --apply  # write
+//
+// Application-default credentials, like the other backfills; the project id
+// is not in the ADC file, so it is named on the command line.
 //
 // Idempotent: a document already on the new id is skipped, and a settings
 // document that already exists under the new id is never overwritten — the
@@ -103,26 +106,31 @@ async function run(db) {
     }
   }
   /*
-   * The settings documents, wherever a `pluginSettings` collection sits — the
-   * org and the host both carry one. A collection-group read on the document
-   * id finds every one without walking each parent.
+   * The settings documents: `pluginSettings/contacts` beneath every org and
+   * every host. Not a collection-group read — a collection group cannot be
+   * filtered on a bare document id — but one `getAll` per page of parents,
+   * which is the same number of round trips as the pages above.
    */
-  const settings = await db
-    .collectionGroup('pluginSettings')
-    .where(FieldPath.documentId(), '>=', 'contacts')
-    .where(FieldPath.documentId(), '<=', 'contacts')
-    .get()
-  for (const snapshot of settings.docs) {
-    const target = pluginSettingsTarget(snapshot.id)
-    if (!target) continue
-    const targetRef = snapshot.ref.parent.doc(target)
-    const existing = await targetRef.get()
-    if (existing.exists) report.settingsMerged += 1
-    else report.settingsMoved += 1
-    writes.push({
-      move: { from: snapshot.ref, to: targetRef, data: snapshot.data() },
-      label: `${snapshot.ref.path} → ${targetRef.path}`,
-    })
+  for (const collectionName of ['orgs', 'hosts']) {
+    for await (const docs of pages(db, collectionName)) {
+      const refs = docs.map((snapshot) =>
+        snapshot.ref.collection('pluginSettings').doc('contacts'),
+      )
+      const found = (await db.getAll(...refs)).filter((snapshot) => snapshot.exists)
+      if (!found.length) continue
+      const targets = found.map((snapshot) =>
+        snapshot.ref.parent.doc(pluginSettingsTarget(snapshot.id)),
+      )
+      const existing = await db.getAll(...targets)
+      found.forEach((snapshot, index) => {
+        if (existing[index].exists) report.settingsMerged += 1
+        else report.settingsMoved += 1
+        writes.push({
+          move: { from: snapshot.ref, to: targets[index], data: snapshot.data() },
+          label: `${snapshot.ref.path} → ${targets[index].path}`,
+        })
+      })
+    }
   }
 
   for (const write of writes) console.log(`  ${apply ? 'writing' : 'would write'}  ${write.label}`)
