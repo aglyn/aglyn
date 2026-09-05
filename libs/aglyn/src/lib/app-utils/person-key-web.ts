@@ -37,13 +37,20 @@ import { normalizeContactEmail } from './contacts'
  * The digest is spelled here rather than borrowed from the plugin manager's
  * `sha256Hex`: that module imports this layer, and a helper reached back up
  * through it would be a cycle for four lines.
+ *
+ * And `null`, rather than a throw, where there is no WebCrypto to run it —
+ * an insecure origin, a test DOM. A lookup that cannot be keyed is a lookup
+ * that finds nothing, which is the same answer the caller gets for an
+ * address that is not one, and the one it already handles.
  */
 export async function personKeyInBrowser(
   email: unknown,
 ): Promise<string | null> {
   const normalized = normalizeContactEmail(email)
   if (!normalized) return null
-  const digest = await globalThis.crypto.subtle.digest(
+  const subtle = globalThis.crypto?.subtle
+  if (!subtle) return null
+  const digest = await subtle.digest(
     'SHA-256',
     new TextEncoder().encode(normalized),
   )

@@ -40,4 +40,17 @@ describe('personKeyInBrowser', () => {
       expect(await personKeyInBrowser(input)).toBeNull()
     }
   })
+
+  it('answers null, not a throw, where there is no WebCrypto', async () => {
+    const held = Object.getOwnPropertyDescriptor(globalThis, 'crypto')
+    Object.defineProperty(globalThis, 'crypto', {
+      value: {},
+      configurable: true,
+    })
+    try {
+      await expect(personKeyInBrowser('ada@example.com')).resolves.toBeNull()
+    } finally {
+      if (held) Object.defineProperty(globalThis, 'crypto', held)
+    }
+  })
 })

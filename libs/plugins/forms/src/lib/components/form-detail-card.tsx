@@ -19,11 +19,17 @@
 import * as Aglyn from '@aglyn/aglyn'
 import {
   buildRoute,
+  formFieldsCanYieldAnEmail,
   PageHeaderActions,
   PageHeaderRecord,
   pluginDocsHelp,
   Route,
 } from '@aglyn/aglyn'
+// The CRM's route builder by its leaf path, not the plugin barrel: the barrel
+// is the entry point the tenant's loader imports to activate the plugin's
+// site half, and a console page named there would ship to every published
+// page. The same import the Inbox makes for the same reason.
+import { crmRoutes } from '@aglyn/plugins-crm/model/crm-routes'
 import { ICON_VARIANT_BESIGNER } from '@aglyn/shared-data-enums'
 import { AppLink, CardDisplay, GridItems, MdiIcon, useLoading } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -197,6 +203,24 @@ export function FormDetailCard(props: FormDetailCardProps) {
 
   const effectiveLead = lead ?? form?.routing?.lead === true
   const effectiveConsent = consentField ?? String(form?.consentFieldName ?? '')
+  /*
+   * Whether lead routing COULD work on this design — the same precondition
+   * `checkFormContract` applies at publish, asked here so the switch says so
+   * before it is flipped rather than after (AGL-2612).
+   */
+  const canRouteLeads = formFieldsCanYieldAnEmail(declaredFields)
+  /*
+   * Where this form's people are: the Contacts list, narrowed to source
+   * `form` and this form's id. Built from the resolved org slug and
+   * subdomain the besigner link already waits on, so the link appears when
+   * they land and never points at a half-built address.
+   */
+  const contactsHref =
+    orgSlug && host
+      ? crmRoutes(
+          buildRoute(Route.HOST_PLUGIN, { orgSlug, host, pluginSlug: 'crm' }),
+        ).contactsByForm(formId)
+      : null
   /*
    * WHICH CAMPAIGNS THIS FORM IS PART OF.
    *
@@ -528,26 +552,51 @@ export function FormDetailCard(props: FormDetailCardProps) {
           size: { xs: 12, lg: 7 },
           children: (
             <CardDisplay
-              header="Where submissions go"
+              header="CRM routing"
               help={pluginDocsHelp('forms', {
                 anchor: '#where-submissions-go',
                 excerpt:
-                  'Every submission reaches the Inbox. Lead routing and ' +
-                  'the consent field decide what else happens to it.',
+                  'Every submission reaches the Inbox and updates the ' +
+                  'contact. Lead routing and the consent field decide ' +
+                  'what else happens to it.',
               })}
               contentGutterX
               contentGutterY
             >
               <Stack spacing={2}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={effectiveLead}
-                      onChange={(event) => setLead(event.target.checked)}
-                    />
-                  }
-                  label="Create a lead from the address someone gives this form"
-                />
+                {/*
+                  THE PART THAT IS NOT A SWITCH (AGL-2612). Every capture
+                  lands in Contacts whatever is set below; the switch decides
+                  only whether a LEAD is filed beside the contact. Said
+                  first, because the switch on its own read as the only way
+                  a submission reached the CRM.
+                */}
+                <Typography variant="body2">
+                  {'Every submission with an email address updates the person ' +
+                    'in Contacts at stage Lead — a new contact when the ' +
+                    'address is new, an interaction on their timeline when it ' +
+                    'is not. A customer stays a customer.'}
+                </Typography>
+                <Stack spacing={0.5}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={effectiveLead}
+                        onChange={(event) => setLead(event.target.checked)}
+                      />
+                    }
+                    label="Also create a lead from the address someone gives this form"
+                  />
+                  <Typography variant="caption" color="text.secondary">
+                    {canRouteLeads
+                      ? 'Files a lead in CRM → Leads for the sales team to work. ' +
+                        'A consent field below is what makes that lead mailable; ' +
+                        'without one the lead exists and cannot be emailed.'
+                      : 'Needs an email field in the published design — a ' +
+                        'submission without an address cannot key a lead, and ' +
+                        'publishing with this on would be refused until one exists.'}
+                  </Typography>
+                </Stack>
                 <TextField
                   select
                   label="Marketing consent field"
@@ -583,6 +632,18 @@ export function FormDetailCard(props: FormDetailCardProps) {
                       ))}
                     </Stack>
                   </Alert>
+                ) : null}
+                {/*
+                  The people this form captured, on the list that holds them.
+                  Withheld until the site's address resolves, for the reason
+                  the besigner button is.
+                */}
+                {contactsHref ? (
+                  <Typography variant="body2">
+                    <AppLink href={contactsHref}>
+                      {'See the contacts this form captured in the CRM'}
+                    </AppLink>
+                  </Typography>
                 ) : null}
               </Stack>
             </CardDisplay>
