@@ -26,12 +26,16 @@
  * auto-association of contacts to companies by domain. Each of those lands
  * as a `contacts/<route>` handler registered here.
  *
- * `contacts/ping` is the one route that exists today, and it exists so the
- * wiring is PROVEN rather than assumed: `plugins.config.json` names this
- * module's register function and the `contacts` API prefix, the generated
- * server manifest loads this file, and the console's `/api/[...pluginApi]`
- * dispatcher reaches the handler. A plugin whose first real route also had
- * to be its first wiring test would have two things to debug at once.
+ * `crm/ping` exists so the wiring is PROVEN rather than assumed:
+ * `plugins.config.json` names this module's register function and the `crm`
+ * API prefix, the generated server manifest loads this file, and the
+ * console's `/api/[...pluginApi]` dispatcher reaches the handler. A plugin
+ * whose first real route also had to be its first wiring test would have two
+ * things to debug at once.
+ *
+ * `crm/deal-stage` is the first real route: the one writer of a deal's stage,
+ * won and lost, because a stage change is what automations listen for and
+ * only a server can emit the event (`server-deal-stage.ts`).
  */
 
 import {
@@ -39,6 +43,7 @@ import {
   registerPluginApiRoute,
 } from '@aglyn/aglyn/server'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { crmDealStageHandler } from './server-deal-stage'
 
 /**
  * `GET /api/contacts/ping` → `{ ok: true, plugin: 'contacts' }`.
@@ -60,4 +65,8 @@ export const crmPingHandler: PluginApiHandler = (req, res) => {
 /** Console API registration, named in `plugins.config.json` as `consoleApi`. */
 export function registerCrmConsoleApi(): void {
   registerPluginApiRoute('crm/ping', crmPingHandler)
+  // The one writer of a deal's stage, won and lost (AGL-2598): the browser
+  // could write the field, but only a server can emit the event an
+  // automation listens for.
+  registerPluginApiRoute('crm/deal-stage', crmDealStageHandler)
 }
