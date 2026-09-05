@@ -47,7 +47,8 @@
 
 import type { AglynPostalAddress } from '../foundation'
 import { type ConsentGroup, consentGroupScope } from './consent-groups'
-import { ORG_SCOPE_TOKEN, type ScopeToken } from './scope-tokens'
+import type { ContactInteraction } from './contacts'
+import { MAX_SCOPE_HOSTS, ORG_SCOPE_TOKEN, type ScopeToken } from './scope-tokens'
 
 /**
  * The CRM's collections, every one under `orgs/{orgId}/`.
@@ -246,7 +247,48 @@ export interface CrmTask extends CrmScoped {
   dealId?: string
 }
 
-export type CrmActivityKind = 'call' | 'email' | 'meeting' | 'note' | 'other'
+/**
+ * What a person can log, in the order the picker offers them (AGL-2600).
+ *
+ * A fixed list rather than free text for the reason the lifecycle stages are
+ * one: a report counts calls per week and a filter selects meetings, and
+ * neither can be done over a string somebody typed. `note` is the plain
+ * entry — something worth writing down that was not a conversation — and
+ * `other` the escape hatch for the kind none of these name.
+ */
+export const CRM_ACTIVITY_KINDS = ['call', 'email', 'meeting', 'note', 'other'] as const
+
+export type CrmActivityKind = (typeof CRM_ACTIVITY_KINDS)[number]
+
+/** How an activity kind reads on screen — typed so a kind cannot ship unlabeled. */
+export const CRM_ACTIVITY_KIND_LABELS: Record<CrmActivityKind, string> = {
+  call: 'Call',
+  email: 'Email',
+  meeting: 'Meeting',
+  note: 'Note',
+  other: 'Other',
+}
+
+export function isCrmActivityKind(value: unknown): value is CrmActivityKind {
+  return (
+    typeof value === 'string' &&
+    (CRM_ACTIVITY_KINDS as readonly string[]).includes(value)
+  )
+}
+
+/**
+ * Whether a kind takes an outcome and a duration.
+ *
+ * A call and a meeting are conversations: they end somewhere ("left a
+ * voicemail", "agreed to a trial") and they take a measurable amount of
+ * time, and both are what a manager reading the log wants to know. An email
+ * has neither in any useful sense, a note is not an event at all, and
+ * `other` is unknowable — so the dialog hides the two fields for those
+ * rather than offering boxes that mean nothing.
+ */
+export function activityKindHasOutcome(kind: CrmActivityKind): boolean {
+  return kind === 'call' || kind === 'meeting'
+}
 
 /**
  * `orgs/{orgId}/crmActivities/{activityId}` — one thing that happened.
@@ -262,11 +304,152 @@ export interface CrmActivity extends CrmScoped {
   /** When it happened, which is not when it was logged. */
   atMs: number
   byUid: string
+  /**
+   * The author's display name as it read when the activity was logged.
+   *
+   * Denormalized because there is no lookup that could answer it later: a
+   * member document is readable by its own subject and by org-wide members
+   * only, so a scoped editor reading a colleague's call log could not
+   * resolve the `byUid` beside it into a name. Stamped from the signed-in
+   * user's resolved name at log time and never rewritten, so it can drift
+   * from a later rename — the way a signed letter keeps the name it was
+   * signed with.
+   */
+  byName?: string
   contactId?: string
   companyId?: string
   dealId?: string
   outcome?: string
   durationMinutes?: number
+}
+
+/** An activity as a listener hands it back: the document plus its id. */
+export type CrmActivityRow = CrmActivity & { $id: string }
+
+/**
+ * One entry of a contact's timeline (AGL-2600): something the platform
+ * CAPTURED on the contact's facet, or something a person LOGGED beside it.
+ *
+ * A tagged union rather than a flattened row, because the two are different
+ * facts with different affordances — a captured interaction is read-only and
+ * names the door it came through, a logged activity has an author who may
+ * edit it — and a surface drawing the stream has to say which is which.
+ */
+export type ContactTimelineEntry =
+  | {
+      kind: 'captured'
+      /** Distinct across the merged list, for a React key. */
+      key: string
+      atMs: number
+      interaction: ContactInteraction
+    }
+  | {
+      kind: 'logged'
+      key: string
+      atMs: number
+      activity: CrmActivityRow
+    }
+
+/** A time that can be sorted on; anything that is not one sinks to the bottom. */
+const sortableMs = (value: unknown): number =>
+  typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : Number.NEGATIVE_INFINITY
+
+/**
+ * ONE newest-first stream from a contact's two histories.
+ *
+ * The captured interactions live on the contact's facet and the logged
+ * activities in their own collection, and a page showing them as two lists
+ * asks the reader to do the interleaving in their head — "did the call come
+ * before or after the order?" is the question a timeline exists to answer.
+ *
+ * STABLE on purpose. The sort is on `atMs` alone, and at a tie the captured
+ * entries keep their place ahead of the logged ones, each in the order it
+ * arrived: a facet's interactions are already newest-first and a listener's
+ * rows are already ordered, so the merge must not reshuffle what its inputs
+ * settled. An entry with no usable time goes LAST, never first — a row that
+ * cannot say when it happened must not read as the most recent thing.
+ *
+ * The key is what a list renders by. A captured interaction has no id of its
+ * own, so its key is built from what it does carry; a logged activity's is
+ * its document id.
+ */
+export function mergeContactTimeline(
+  interactions: readonly ContactInteraction[] | null | undefined,
+  activities: readonly CrmActivityRow[] | null | undefined,
+): ContactTimelineEntry[] {
+  const entries: ContactTimelineEntry[] = [
+    ...(interactions ?? []).map(
+      (interaction, index): ContactTimelineEntry => ({
+        kind: 'captured',
+        key: `captured:${interaction.type}:${interaction.refId ?? index}:${interaction.atMs}:${index}`,
+        atMs: interaction.atMs,
+        interaction,
+      }),
+    ),
+    ...(activities ?? []).map(
+      (activity): ContactTimelineEntry => ({
+        kind: 'logged',
+        key: `logged:${activity.$id}`,
+        atMs: activity.atMs,
+        activity,
+      }),
+    ),
+  ]
+  // `Array.prototype.sort` is stable, which is what keeps the tie rule above
+  // true without a secondary comparison on the entry's kind or position.
+  return entries.sort((a, b) => sortableMs(b.atMs) - sortableMs(a.atMs))
+}
+
+/**
+ * Which record an activity is ABOUT, for a surface that links to it, or
+ * `null` when it was filed against nothing.
+ *
+ * A contact outranks a deal outranks a company. An activity can name all
+ * three — a call with a person about a deal at their company — and the
+ * contact is the one a reader means when they ask "who was this with"; the
+ * deal is next because it is the thing with a clock on it; the company is
+ * the widest and so the last resort.
+ */
+export function crmActivityRecordLink(
+  activity: Pick<CrmActivity, 'contactId' | 'companyId' | 'dealId'>,
+): { record: 'contact' | 'deal' | 'company'; id: string } | null {
+  if (activity.contactId) return { record: 'contact', id: activity.contactId }
+  if (activity.dealId) return { record: 'deal', id: activity.dealId }
+  if (activity.companyId) return { record: 'company', id: activity.companyId }
+  return null
+}
+
+const MINUTE_MS = 60_000
+const HOUR_MS = 60 * MINUTE_MS
+const DAY_MS = 24 * HOUR_MS
+
+/**
+ * How long ago something happened, in the words a list row uses.
+ *
+ * Coarse on purpose. A row reads "3 days ago" and carries the full timestamp
+ * in its tooltip; the sentence exists so that a reader scanning a log can
+ * tell this week from last month without parsing dates. Past a week the
+ * relative form stops helping — "412 days ago" is a date the reader has to
+ * compute — so it becomes one. A time AHEAD of now is a date too: a call
+ * logged for tomorrow is a scheduling mistake the page should show plainly
+ * rather than dress as "in 14 hours". An unusable time reads as nothing.
+ *
+ * English rather than `Intl.RelativeTimeFormat` because the console is
+ * English-only, and the thresholds are what the spec pins.
+ */
+export function activityTimeLabel(atMs: number, nowMs: number): string {
+  if (!Number.isFinite(atMs) || !Number.isFinite(nowMs)) return ''
+  const elapsed = nowMs - atMs
+  if (elapsed < -MINUTE_MS || elapsed >= 7 * DAY_MS) {
+    return new Date(atMs).toLocaleDateString()
+  }
+  if (elapsed < MINUTE_MS) return 'just now'
+  if (elapsed < HOUR_MS) return `${Math.floor(elapsed / MINUTE_MS)} min ago`
+  if (elapsed < DAY_MS) return `${Math.floor(elapsed / HOUR_MS)} h ago`
+  if (elapsed < 2 * DAY_MS) return 'yesterday'
+  return `${Math.floor(elapsed / DAY_MS)} days ago`
 }
 
 export type ContactFieldType =
@@ -497,4 +680,25 @@ export function crmScopeTokens(
   return (org ?? {})['defaultResourceScope'] === 'org'
     ? [ORG_SCOPE_TOKEN]
     : consentGroupScope(group)
+}
+
+/**
+ * The `visibleTo` tokens a reader of this group may LIST, for the
+ * `array-contains-any` every CRM listener filters by.
+ *
+ * The other half of {@link crmScopeTokens}: that is what a creator stamps,
+ * this is what a reader asks for, and the two differ by exactly one token.
+ * `'org'` leads because an org-wide record is visible to every site — an org
+ * that widened its default deliberately still sees its own rows — and the
+ * group's sites follow. The contacts list computes this inline; every other
+ * CRM reader takes it from here so that none of them can drop the org token
+ * and lose the org-wide rows, or forget the cap and have Firestore refuse
+ * the query outright.
+ *
+ * Capped at {@link MAX_SCOPE_HOSTS}: a group wider than the operator's limit
+ * is listed as far as the limit reaches, which is the contacts list's
+ * behavior and the only one short of an error.
+ */
+export function crmReadTokens(group: ConsentGroup): ScopeToken[] {
+  return [ORG_SCOPE_TOKEN, ...consentGroupScope(group)].slice(0, MAX_SCOPE_HOSTS)
 }
