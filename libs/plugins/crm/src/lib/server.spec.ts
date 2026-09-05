@@ -37,12 +37,15 @@
  */
 
 /*
- * The task routes (AGL-2599) pull the Admin SDK and the workflow runner into
- * this module's import graph. Neither loads under jsdom — `next/cache`
- * extends a `Request` the environment does not define — and neither is what
- * this suite is about, so both are stubbed to the shape the routes import.
- * The routes' own behavior is `server/task-routes.spec.ts`; what is proven
- * here is that the register function reaches them.
+ * The task routes (AGL-2599) and the import route (AGL-2602) pull the Admin
+ * SDK, the workflow runner and the admin barrel into this module's import
+ * graph. None loads under jsdom — `next/cache` extends a `Request` the
+ * environment does not define — and none is what this suite is about, so
+ * each is stubbed to the shape the routes import. Every assertion here is
+ * about the WIRING: a route resolves and refuses the wrong method before it
+ * reads a token, a body or a document, so nothing ever calls into a stub.
+ * The routes' own behavior is `server/task-routes.spec.ts` and
+ * `server/contacts-import.spec.ts`, each with a double shaped for it.
  */
 jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
@@ -159,5 +162,19 @@ describe('the CRM server entry', () => {
       taskId: 't-1',
     })
     expect(status).toBe(401)
+  })
+
+  /**
+   * The import route is REACHABLE through the same registration (AGL-2602).
+   *
+   * A GET is the cheapest request that proves the handler answered: it is
+   * refused before the route reads a body or a token, so the assertion is
+   * about the wiring and not about the import.
+   */
+  it('registers crm/contacts-import, which answers POST only', async () => {
+    registerCrmConsoleApi()
+    const { status, headers } = await call('crm/contacts-import', 'GET')
+    expect(status).toBe(405)
+    expect(headers['Allow']).toBe('POST')
   })
 })

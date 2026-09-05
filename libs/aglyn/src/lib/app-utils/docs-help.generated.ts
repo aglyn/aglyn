@@ -177,7 +177,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   companies: ['#the-companies-list', '#create-a-company', '#a-companys-page', '#contacts-at-a-company', '#deleting-a-company', '#who-can-see-a-company', '#related'],
   consoleTour: ['#the-app-bar', '#in-context-help', '#primary-navigation', '#editing-vs-managing', '#the-sites-list', '#the-status-pill', '#how-the-pill-is-decided', '#your-site-allowance', '#a-sites-dashboard', '#next', '#workspace-settings--notifications', '#alerts-on-this-device'],
   contactActivities: ['#two-kinds-of-history', '#logging-an-activity', '#where-an-activity-is-visible', '#the-recent-activity-feed', '#related'],
-  contacts: ['#unified-ingestion', '#the-contacts-page', '#whats-in-the-crm-area', '#segments', '#related'],
+  contacts: ['#unified-ingestion', '#the-contacts-page', '#whats-in-the-crm-area', '#import-from-csv', '#segments', '#related'],
   crmReports: ['#choosing-a-period', '#contacts', '#sources-and-lifecycle', '#pipeline', '#won-and-lost', '#tasks', '#crm-at-a-glance', '#how-the-numbers-are-counted'],
   crmTasks: ['#the-tasks-page', '#creating-a-task', '#assigning-a-task-to-someone-else', '#completing-and-reopening', '#tasks-on-a-contact-company-or-deal', '#the-dashboard-card', '#who-can-do-what', '#related'],
   datasets: ['#model-builder', '#typed-documents', '#relations', '#query-layer', '#repeatable-components', '#who-a-dataset-is-shared-with', '#import--export', '#related'],

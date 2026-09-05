@@ -51,6 +51,11 @@ export * from './crm'
 // and beside it because it reads the stage list and the deal weighting from
 // there rather than restating either.
 export * from './crm-reports'
+// Reading a spreadsheet of people INTO the CRM (AGL-2602): the column
+// mapping, the per-row normalizer and the chunk-result arithmetic the
+// console drawer and the `crm/contacts-import` route both read. Pure, and
+// beside `crm` because it composes its stage list and field definitions.
+export * from './crm-import'
 // The consent JOIN (`docs/specs/email-overhaul.md` §3f). Pure, and it composes
 // `contacts` for the normalizer, so it sits directly beside it. No Node
 // builtin, which is what keeps it out of the `/server`-only group `person-key`

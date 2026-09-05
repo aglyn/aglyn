@@ -58,6 +58,8 @@ Once the page is switched on, it will let you:
 - Add **tags** and **notes**.
 - Log **calls, emails, meetings and notes** against a person, and read them in one timeline with everything the platform captured — see [Activities & the timeline](./activities.md).
 - **Export to CSV**.
+- **Import CSV** — bring a spreadsheet of people in; see
+  [Import contacts from CSV](./import.md).
 
 ## What's in the CRM area
 
@@ -78,6 +80,12 @@ older `…/contacts` address still open the hub.
 Opening `/contacts` lands on the first section. Every section follows the same
 per-site visibility as the contacts themselves, so a section can never show a
 record the reader could not open as a contact.
+
+## Import from CSV
+
+**Import CSV** on the Contacts section brings a spreadsheet of people in — map its
+columns to contact fields, preview the first rows, and import in batches with a report
+of what was added, updated and skipped. See [Import contacts from CSV](./import.md).
 
 ## Segments
 

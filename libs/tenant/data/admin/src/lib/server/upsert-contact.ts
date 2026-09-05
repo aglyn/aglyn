@@ -20,6 +20,7 @@ import {
   checkContactQuota,
   consentGroupScope,
   CONTACT_FACETS_FIELD,
+  type ContactFacet,
   type ContactInteraction,
   type ContactSource,
   marketingConsentFieldsForGroup,
@@ -42,6 +43,86 @@ import {
   getOrgForHost,
   orgDataCollectionForHost,
 } from './organizations'
+
+/**
+ * What an upsert did, for the callers that need to know (AGL-2602).
+ *
+ * The capture doors never look: a form submission or an order must succeed
+ * whatever happened to the CRM record, which is why this function swallows
+ * its own errors and why every existing caller `await`s it for its side
+ * effect alone. An IMPORT is the caller that has to know, row by row —
+ * "created" and "merged" are its two headline numbers, and a row the
+ * audience band refused has to be handed back to the operator as a row
+ * rather than becoming one more tick on a counter nobody reconciles against
+ * a file. A verdict is returned rather than thrown so the swallowing stays:
+ * `refused: 'error'` is the same silence the doors have always had, now with
+ * a name.
+ */
+export type UpsertHostContactVerdict =
+  | {
+      contactId: string
+      /** True when this call created the row; false when it merged into one. */
+      created: boolean
+    }
+  | { refused: 'invalid-email' | 'band' | 'error' }
+
+/**
+ * The per-holder profile fields a door may write alongside the identity.
+ *
+ * `Pick`ed from the facet rather than typed afresh so the two cannot drift:
+ * a field the facet grows is a field this option may carry the moment the
+ * pick names it, and one it does not name is refused at compile time.
+ */
+export type UpsertHostContactFacet = Partial<
+  Pick<
+    ContactFacet,
+    | 'phone'
+    | 'jobTitle'
+    | 'companyId'
+    | 'address'
+    | 'ownerUid'
+    | 'lifecycleStage'
+    | 'custom'
+  >
+>
+
+/** The profile fields to write, with every `undefined` left out — Firestore refuses them. */
+function definedFacetFields(
+  facet: UpsertHostContactFacet | undefined,
+): Record<string, unknown> {
+  const fields: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(facet ?? {})) {
+    if (value === undefined) continue
+    // A custom map is written key by key, and a merge-set deep-merges it, so
+    // an import that carries three fields leaves a fourth one alone.
+    if (key === 'custom') {
+      const custom: Record<string, unknown> = {}
+      for (const [customKey, customValue] of Object.entries(
+        (value ?? {}) as Record<string, unknown>,
+      )) {
+        if (customValue !== undefined) custom[customKey] = customValue
+      }
+      if (Object.keys(custom).length) fields[key] = custom
+      continue
+    }
+    fields[key] = value
+  }
+  return fields
+}
+
+/**
+ * Tags as the profile drawer stores them: trimmed, lowercased, deduplicated
+ * and capped at twenty — so an imported `VIP` and a typed `vip` are one tag.
+ */
+function normalizeTags(tags: readonly string[] | undefined): string[] {
+  return [
+    ...new Set(
+      (tags ?? [])
+        .map((tag) => String(tag ?? '').trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  ].slice(0, 20)
+}
 
 /**
  * Contacts ingestion (AGL-197): upserts an org-scoped contact doc (AGL-237)
@@ -139,10 +220,26 @@ export async function upsertHostContact(options: {
    * input that records a basis.
    */
   campaignIds?: readonly string[]
-}): Promise<void> {
+  /**
+   * Tags to put on THIS holder's facet (AGL-2602).
+   *
+   * Added to, never replaced, on a merge: a person the merchant tagged by
+   * hand and later imported keeps the hand-written tag beside the file's.
+   */
+  tags?: readonly string[]
+  /**
+   * The profile a door knows about the person — phone, title, company,
+   * address, owner, stage, custom values — written into THIS holder's facet
+   * (AGL-2602). Only the keys present are written, so a door that knows the
+   * phone and nothing else does not blank the title somebody typed.
+   */
+  facet?: UpsertHostContactFacet
+}): Promise<UpsertHostContactVerdict> {
   try {
     const email = normalizeContactEmail(options.email)
-    if (!email) return
+    if (!email) return { refused: 'invalid-email' }
+    const tags = normalizeTags(options.tags)
+    const facetFields = definedFacetFields(options.facet)
 
     /*==========================================
      * THE PURCHASE DOOR, AND THEREFORE THE ATTRIBUTION DOOR.
@@ -310,6 +407,12 @@ export async function upsertHostContact(options: {
               ...(campaignIds.length
                 ? { campaignIds: FieldValue.arrayUnion(...campaignIds) }
                 : {}),
+              // The same union rule as the campaigns above it, for the same
+              // reason: a tag the merchant put on by hand survives the file.
+              ...(tags.length ? { tags: FieldValue.arrayUnion(...tags) } : {}),
+              // Present keys only, deep-merged by the merge-set — so the
+              // fields this door did not carry keep whatever they held.
+              ...facetFields,
               ...(options.purchaseCents
                 ? {
                     ltvCents: FieldValue.increment(options.purchaseCents),
@@ -369,7 +472,7 @@ export async function upsertHostContact(options: {
         },
         { merge: true },
       )
-      return
+      return { contactId: docSnapshot.id, created: false }
     }
 
     // New contact: audience-band check via the aggregate count (cheap; no
@@ -386,7 +489,7 @@ export async function upsertHostContact(options: {
         .collection('counters')
         .doc('contactsDropped')
         .set({ total: FieldValue.increment(1) }, { merge: true })
-      return
+      return { refused: 'band' }
     }
 
     const created = await contactsRef.add({
@@ -428,7 +531,8 @@ export async function upsertHostContact(options: {
         [group.groupId]: {
           sources: { [options.source]: true },
           interactions: [interaction],
-          tags: [],
+          tags,
+          ...facetFields,
           // A create has nothing to union with, so the normalized list is the
           // whole membership.
           ...(campaignIds.length ? { campaignIds } : {}),
@@ -477,7 +581,9 @@ export async function upsertHostContact(options: {
         convertedAtMs: interaction.atMs,
       })
     }
+    return { contactId: created.id, created: true }
   } catch (error) {
     console.error('upsertHostContact failed', error)
+    return { refused: 'error' }
   }
 }
