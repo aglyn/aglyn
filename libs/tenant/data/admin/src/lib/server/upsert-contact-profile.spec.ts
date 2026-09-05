@@ -257,6 +257,34 @@ describe('the profile on a create', () => {
     expect(written).not.toHaveProperty('phone')
   })
 
+  it('keeps only the custom values a field definition could hold', async () => {
+    await upsertHostContact({
+      hostId: 'h1',
+      email: 'new@example.com',
+      source: 'import',
+      interaction: { summary: 'Imported' },
+      facet: {
+        custom: {
+          annual_revenue: 120000,
+          region: 'EMEA',
+          renewed: true,
+          churn_reason: null,
+          // Not a key a definition can have: a dot reads as a path.
+          'bad.key': 'x',
+          // Not a value a field type holds.
+          nested: { deep: true } as never,
+        },
+      },
+    })
+
+    expect(added[0].data.facets.h1.custom).toEqual({
+      annual_revenue: 120000,
+      region: 'EMEA',
+      renewed: true,
+      churn_reason: null,
+    })
+  })
+
   it('sets no stage at all on a capture that carries none', async () => {
     await upsertHostContact({
       hostId: 'h1',
