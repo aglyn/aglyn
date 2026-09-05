@@ -9,6 +9,17 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.72 — 2026-09-05
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/a4861d2d0...v1.0.0-beta.72)
+
+<details>
+<summary>Also in this release: 1 test</summary>
+
+- **console,docs:** the error-beacon door has a spec that drives it red ([AGL-2586](https://linear.app/aglyn/issue/AGL-2586))
+
+</details>
+
 ## v1.0.0-beta.71 — 2026-09-04
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.70...v1.0.0-beta.71)
