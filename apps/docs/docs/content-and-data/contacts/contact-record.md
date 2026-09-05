@@ -90,16 +90,33 @@ owner beside the heading and lets you reassign.
 The **Stage** says where a person is in your funnel. The list has a Stage
 column and a Stage filter; the record page lets you set it.
 
+Every capture on your site sets the earliest stage that describes what
+happened, and never moves anyone back: a form submission makes a **Lead**, a
+newsletter opt-in or a member sign-up makes a **Subscriber**, a booking makes
+a **Lead** — a **Customer** once it is paid — and an order makes a
+**Customer**. A subscriber who then submits a form becomes a lead; a customer
+who submits one stays a customer. A contact you add by hand, import, or
+create over the API gets the stage you give it, or none, and a contact
+captured before this rule carries no stage until something sets one.
+
 | Stage | Meaning |
 | --- | --- |
-| **Subscriber** | Signed up to hear from you and nothing more yet. |
-| **Lead** | Showed interest — filled in a form, asked a question. |
+| **Subscriber** | Signed up to hear from you and nothing more yet. Set by a newsletter opt-in or a member sign-up. |
+| **Lead** | Showed interest — filled in a form, asked a question. Set by a form submission or a booking request. |
 | **Marketing qualified** | Engaged enough for marketing to hand over. |
 | **Sales qualified** | A real prospect somebody is working. |
 | **Opportunity** | There is a deal on the table. |
 | **Customer** | Has bought. A purchase on your site sets this automatically for anyone at an earlier stage, and never moves anyone back. |
 | **Evangelist** | A customer who sends others your way. |
 | **Other** | A step of your own that none of the names fit. A sale never overwrites it. |
+
+### Where the person's lead is
+
+The **Relationship** card shows **Lead on this site** when this site holds a
+[lead](./leads.md) for the address — a sign-up, a booking, or a submission to
+a form with lead routing on. It opens the lead. A contact that came in through
+an order, an import or a form without lead routing has no lead, and the link
+is simply not there.
 
 ## Finding a contact
 

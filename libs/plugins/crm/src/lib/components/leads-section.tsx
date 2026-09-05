@@ -73,6 +73,7 @@ import {
   useOrgMemberOptions,
 } from './lead-owner-select'
 import { LeadStatusChip } from './lead-status-chip'
+import LeadSurfacesNote from './lead-surfaces-note'
 import { LeadUnqualifyDialog } from './lead-unqualify-dialog'
 
 /**
@@ -315,6 +316,8 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         contentGutterY
       >
         <Stack spacing={2}>
+          {/* Which surfaces file a lead on this site, by name (AGL-2612). */}
+          <LeadSurfacesNote hostId={hostId} />
           {status === 'success' && window.length === 0 ? (
             <EmptyStateComponent
               label={'No leads yet'}

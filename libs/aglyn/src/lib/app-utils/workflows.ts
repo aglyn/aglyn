@@ -124,6 +124,7 @@ export const HOST_EVENT_PAYLOAD_KEYS: Partial<
     'name',
     'source',
     'hostId',
+    'lifecycleStage',
     'campaignIds',
   ],
   contactStageChanged: ['contactId', 'email', 'lifecycleStage', 'previousStage'],

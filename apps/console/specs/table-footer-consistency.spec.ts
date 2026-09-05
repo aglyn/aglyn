@@ -1221,6 +1221,15 @@ const NOT_A_LIST: Array<[string, string]> = [
       'offers.',
   ],
   [
+    'libs/plugins/crm/src/lib/components/lead-surfaces-note.tsx',
+    'The Leads section’s CAPTION naming which surfaces file a lead ' +
+      '(AGL-2612): the site’s forms read one past `LEAD_SURFACE_FORMS_WINDOW` ' +
+      'and rendered as a sentence of links with a switch beside the ones ' +
+      'that could route, "and possibly more" when the window is full. A ' +
+      'sentence is not a table; the paged list of forms is the Forms ' +
+      'plugin’s own.',
+  ],
+  [
     'libs/plugins/crm/src/lib/components/crm-tasks-due-card.tsx',
     'The dashboard GLANCE at the reader’s own tasks (AGL-2599): two ' +
       'counts and the next `NEXT_UP` due, read under `MY_TASKS_WINDOW` ' +
@@ -1524,7 +1533,13 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // contact list's drawer, whose interaction timeline was the row this list
     // once classified, is gone — the record page holds the timeline now, on
     // the load-more allowlist above.
-    expect(NOT_A_LIST).toHaveLength(46)
+    //
+    // 47 since the Leads section says what creates a lead (AGL-2612): a
+    // caption naming the site's lead-routed forms as links, read one past
+    // `LEAD_SURFACE_FORMS_WINDOW` and owning up to the window in prose. A
+    // sentence of links is not a view of a collection; the Forms plugin's
+    // own list is the paged one.
+    expect(NOT_A_LIST).toHaveLength(47)
   })
 })
 

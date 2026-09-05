@@ -25,6 +25,7 @@ import {
   parseCrmMemberRef,
   CONTACT_LIFECYCLE_STAGES,
   CONTACT_LIFECYCLE_STAGE_LABELS,
+  advanceContactLifecycleStage,
   contactLifecycleStageAfterPurchase,
   crmMemberOption,
   CRM_ACTIVITY_KIND_LABELS,
@@ -100,6 +101,32 @@ describe('task and activity kinds', () => {
     expect(isCrmActivityKind('other')).toBe(true)
     expect(isCrmActivityKind('todo')).toBe(false)
     expect(isCrmActivityKind(4)).toBe(false)
+  })
+})
+
+describe('advanceContactLifecycleStage', () => {
+  it('fills an empty or unusable stage with the floor', () => {
+    expect(advanceContactLifecycleStage(undefined, 'lead')).toBe('lead')
+    expect(advanceContactLifecycleStage('', 'subscriber')).toBe('subscriber')
+    expect(advanceContactLifecycleStage('vip', 'lead')).toBe('lead')
+  })
+
+  it('advances an earlier stage and keeps a later one', () => {
+    expect(advanceContactLifecycleStage('subscriber', 'lead')).toBe('lead')
+    expect(advanceContactLifecycleStage('lead', 'customer')).toBe('customer')
+    expect(advanceContactLifecycleStage('customer', 'lead')).toBe('customer')
+    expect(advanceContactLifecycleStage('sales-qualified', 'subscriber')).toBe(
+      'sales-qualified',
+    )
+    expect(advanceContactLifecycleStage('evangelist', 'customer')).toBe('evangelist')
+    // The deliberate escape hatch sits after every capture stage on purpose.
+    expect(advanceContactLifecycleStage('other', 'customer')).toBe('other')
+  })
+
+  it('with no floor answers the stage as held, or nothing', () => {
+    expect(advanceContactLifecycleStage('lead', undefined)).toBe('lead')
+    expect(advanceContactLifecycleStage(undefined, undefined)).toBeUndefined()
+    expect(advanceContactLifecycleStage('vip', undefined)).toBeUndefined()
   })
 })
 

@@ -76,8 +76,10 @@ export async function captureHostContact(
  * editor whose operators compare strings. So `campaignIds` rides as one
  * comma-joined string — `contains` still finds a campaign in it — and is
  * present only when the capture had campaigns, so `notEmpty` on it reads
- * as "came in through a campaign form". `name` is always present, empty
- * when the door had none, so a condition on it never sees a missing key.
+ * as "came in through a campaign form". `name` and `lifecycleStage` are
+ * always present, empty when the door had none, so a condition on either
+ * never sees a missing key: `lifecycleStage == "lead"` is the filter that
+ * picks the form captures out of the sign-ups (AGL-2612).
  */
 export function contactCreatedPayload(
   created: HostContactCreated,
@@ -88,6 +90,7 @@ export function contactCreatedPayload(
     name: created.name ?? '',
     source: created.source,
     hostId: created.hostId,
+    lifecycleStage: created.lifecycleStage ?? '',
     ...(created.campaignIds.length
       ? { campaignIds: created.campaignIds.join(',') }
       : {}),

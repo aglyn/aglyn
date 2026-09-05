@@ -114,24 +114,47 @@ export function isContactLifecycleStage(
 }
 
 /**
+ * The stage a person is in once a capture has happened that implies at least
+ * `floor` (AGL-2612).
+ *
+ * The one ordering rule every capture door shares: a door names the EARLIEST
+ * stage that describes what just happened — a form submission is a lead, a
+ * newsletter opt-in is a subscriber, a purchase is a customer — and the
+ * result is that stage for a person who had none or an earlier one, and the
+ * stage they already had otherwise. "Never downgrades" is the whole contract:
+ * a customer who fills in a contact form is still a customer, and `other` —
+ * the deliberate stage a business picked for a funnel step none of the names
+ * fit — sits after `customer` in the list precisely so no capture can
+ * overwrite it. A stored value that is not a stage at all reads as absent,
+ * because a capture door is not the place to preserve a typo.
+ *
+ * With no floor the answer is the current stage as it stands, or `undefined`
+ * for one that is absent or unusable — so a writer can apply this
+ * unconditionally and write only what comes back.
+ */
+export function advanceContactLifecycleStage(
+  current: unknown,
+  floor: ContactLifecycleStage | undefined,
+): ContactLifecycleStage | undefined {
+  const held = isContactLifecycleStage(current) ? current : undefined
+  if (!floor) return held
+  if (!held) return floor
+  const order: readonly string[] = CONTACT_LIFECYCLE_STAGES
+  return order.indexOf(held) < order.indexOf(floor) ? floor : held
+}
+
+/**
  * The stage a person is in once they have BOUGHT something (AGL-2596).
  *
  * `customer` when they had no stage or an earlier one; whatever they already
- * had otherwise. The order door asks this on every purchase, and "never
- * downgrades" is the whole contract: an `evangelist` who buys again is still
- * an evangelist, and `other` — the deliberate stage a business picked for a
- * funnel step none of the names fit — sits after `customer` in the list
- * precisely so a sale cannot overwrite it. A value that is not a stage at all
- * reads as absent, because a checkout is not the place to preserve a typo.
+ * had otherwise — {@link advanceContactLifecycleStage} with `customer` as the
+ * floor, kept under its own name because "after a purchase" is the question
+ * the order paths and the reports ask.
  */
 export function contactLifecycleStageAfterPurchase(
   current: unknown,
 ): ContactLifecycleStage {
-  if (!isContactLifecycleStage(current)) return 'customer'
-  const order: readonly string[] = CONTACT_LIFECYCLE_STAGES
-  return order.indexOf(current) < order.indexOf('customer')
-    ? 'customer'
-    : current
+  return advanceContactLifecycleStage(current, 'customer') ?? 'customer'
 }
 
 /**

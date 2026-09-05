@@ -7,14 +7,40 @@ description: Work the people your site has captured — a status, an owner and n
 # Leads
 
 A **lead** is somebody your site has met but you have not yet qualified: a
-visitor who signed up, booked, or submitted a form. Every capture on your site
-creates one lead per person, and the **Leads** section of the CRM is where the
-team works them — decides who owns each one, keeps notes, and either converts
-the lead into a contact or closes it with a reason.
+visitor who signed up, booked, or submitted a form that routes leads. The
+**Leads** section of the CRM is where the team works them — decides who owns
+each one, keeps notes, and either converts the lead into a contact or closes
+it with a reason.
 
 Leads live under the site that captured them, so each site's list is its own.
 Open **CRM → Leads** in the console, or use **Open in CRM** on a lead row in
 the Inbox's **Site Members & Leads** section.
+
+## What makes a lead
+
+Every capture lands in [Contacts](./contact-record.md) — one row per person,
+at the earliest [lifecycle stage](./contact-record.md#lifecycle-stages) that
+describes what happened. A **lead** is created in addition, and only by a
+**lead surface**:
+
+- a **member sign-up**;
+- a **booking**;
+- a **form** whose own page has **Also create a lead from the address someone
+  gives this form** switched on. A form without it still updates the contact
+  at stage Lead; it just files nothing here.
+
+So Contacts is the address book and Leads is the working list. The Leads
+section opens with which surfaces create leads on this site — sign-ups,
+bookings, and the lead-routed forms by name, each linking to the form's page
+— and offers **Turn on lead routing** beside a form that could route. A form
+with no email field cannot key a lead and the control says so instead of
+switching; a form without a consent field switches on, and the tooltip says
+the lead will not be mailable until the form names one. One person is one
+lead: a second submission updates the lead the first one created.
+
+The contact's own page links back: **Lead on this site** on the
+[Relationship card](./contact-record.md#where-the-persons-lead-is) opens the
+lead when this site holds one for the address.
 
 ## The Leads list
 

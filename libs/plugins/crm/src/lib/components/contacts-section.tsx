@@ -39,6 +39,7 @@ import {
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { CONTACT_LIST_FILTER_FIELDS } from '../constants/contact-filters'
 import { type ContactRecord, contactRecordFromDoc } from '../model/contact-record'
+import { contactsListSeed } from '../model/contacts-list-seed'
 import { crmRoutes } from '../model/crm-routes'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
@@ -76,8 +77,9 @@ import {
   query,
   where,
 } from 'firebase/firestore'
-import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { GridFilterModel } from '@mui/x-data-grid'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import RecentActivityFeed from './recent-activity-feed'
 import { CONTACT_FILTER_COLUMNS, contactListColumns } from './contact-list-columns'
 import NewContactDrawer, { type NewContactValues } from './new-contact-drawer'
@@ -196,10 +198,50 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
   const logActivity = useHostActivityLogger(hostId)
 
   /*
+   * WHAT THE LIST WAS OPENED FOR (AGL-2612).
+   *
+   * Two surfaces address this list with a question rather than a record: a
+   * form's own page ("who came in through this form") and an Inbox
+   * submission row ("open the person with this address"). Both arrive as
+   * query keys, parsed once into the same filter the grid's panel would
+   * produce, so the seeded query IS a typed query and nothing here is a
+   * second predicate.
+   */
+  const searchParams = useSearchParams()
+  const seed = useMemo(() => contactsListSeed(searchParams), [searchParams])
+  /*
    * The column filter, declared BEFORE the listener that reads it — the query
    * is rebuilt from it, so it cannot be state introduced further down.
+   *
+   * The grid's model is CONTROLLED, beside the request the query reads, so
+   * a seeded filter shows in the panel exactly as a typed one would and the
+   * chip that clears it below clears both — an `initialState` alone would
+   * leave the panel claiming a filter the query had already dropped.
    */
-  const [filter, setFilter] = useState<ListFilterRequest | null>(null)
+  const [filter, setFilter] = useState<ListFilterRequest | null>(seed.filter)
+  const [gridFilter, setGridFilter] = useState<GridFilterModel>(() => ({
+    items: seed.filter
+      ? [
+          {
+            id: 'seed',
+            field: seed.filter.field,
+            operator: seed.filter.op,
+            value: seed.filter.value,
+          },
+        ]
+      : [],
+  }))
+  /**
+   * The one filter that cannot carry the scope clause.
+   *
+   * `formIds` is an `array-contains` on the mirror, and Firestore takes one
+   * array clause per query — so this listener drops its `visibleTo`
+   * predicate for it, exactly as the company contacts card does for
+   * `companyIds`, and the rules then admit the read to an org-wide member
+   * only. A scoped member's listener errors instead of listing, and the
+   * alert below says so rather than showing an empty form.
+   */
+  const byForm = filter?.field === 'formIds'
   /**
    * The scope tokens this viewer may read, capped at what
    * `array-contains-any` accepts.
@@ -270,14 +312,39 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
        */
       return query(
         collection(firestore, dataScope[0], dataScope[1], 'contacts'),
-        where('visibleTo', 'array-contains-any', visibleToTokens),
+        // Dropped for the form mirror alone — see `byForm`.
+        ...(byForm
+          ? []
+          : [where('visibleTo', 'array-contains-any', visibleToTokens)]),
         ...(constraints ?? [orderBy('updatedAt', 'desc')]),
         limit(1000),
       )
     },
-    [firestore, dataScope, filter, visibleToTokens],
+    [firestore, dataScope, filter, byForm, visibleToTokens],
     { idField: '$id' },
   )
+  /*
+   * OPENED FOR ONE ADDRESS: move straight on to the record (AGL-2612).
+   *
+   * The Inbox links here with an email because a contact's id is minted at
+   * capture and nothing outside the CRM holds it; the list is the lookup.
+   * Once the seeded `email equals` query has answered with exactly one row,
+   * that row is the person and the list is a detour — `replace`, so Back
+   * returns to the Inbox rather than to this redirect. Nothing else
+   * navigates: no match leaves the filtered list on screen, which is the
+   * honest answer for a submission whose contact the band dropped, and a
+   * filter the reader has since changed is theirs.
+   */
+  const openedByEmail = useRef(false)
+  useEffect(() => {
+    if (openedByEmail.current || !seed.openEmail) return
+    if (contactsStatus !== 'success') return
+    if (filter?.field !== 'email' || filter.value !== seed.openEmail) return
+    const only = (contactDocs ?? []).length === 1 ? contactDocs?.[0] : null
+    if (!only) return
+    openedByEmail.current = true
+    router.replace(routes.contact(String(only.$id)))
+  }, [seed.openEmail, contactsStatus, filter, contactDocs, router, routes])
   /**
    * Every row, flattened through THIS group's facet.
    *
@@ -412,7 +479,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
     String(a.name ?? '').localeCompare(String(b.name ?? '')),
   )
 
-  const [sourceFilter, setSourceFilter] = useState<'' | ContactSource>('')
+  const [sourceFilter, setSourceFilter] = useState<'' | ContactSource>(seed.source)
   const [tagFilter, setTagFilter] = useState('')
   /*
    * Stage and owner narrow the loaded window the way the segment controls
@@ -860,7 +927,38 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
               }. The money moved; the customer's timeline does not show it.`}
             </Alert>
           ) : null}
-          {contacts.length === 0 ? (
+          {/*
+            The form the list was opened for, as a chip that clears it — the
+            panel holds the same filter, so the two clear together.
+          */}
+          {byForm && filter ? (
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+              <Chip
+                size="small"
+                color="primary"
+                variant="outlined"
+                label={`Captured through form ${filter.value}`}
+                onDelete={() => {
+                  setFilter(null)
+                  setGridFilter({ items: [] })
+                }}
+              />
+            </Stack>
+          ) : null}
+          {byForm && contactsStatus === 'error' ? (
+            <Alert severity="info">
+              {'The contacts this form captured could not be listed. Your ' +
+                'access is limited to specific sites, and a form filter ' +
+                'cannot be narrowed to them — an organization administrator ' +
+                'can see it.'}
+            </Alert>
+          ) : contacts.length === 0 && filter ? (
+            <Typography variant="body2" color="text.secondary">
+              {contactsStatus === 'loading'
+                ? 'Loading…'
+                : 'No contacts match this filter.'}
+            </Typography>
+          ) : contacts.length === 0 ? (
             <EmptyStateComponent
               label={contactsStatus === 'loading' ? 'Loading contacts…' : 'No contacts yet'}
               description={
@@ -911,9 +1009,11 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                  * client pass could only drop rows the query already matched.
                  */
                 filterMode="server"
-                onFilterModelChange={(model) =>
+                filterModel={gridFilter}
+                onFilterModelChange={(model) => {
+                  setGridFilter(model)
                   setFilter(gridFilterRequest(model))
-                }
+                }}
                 initialState={{
                   columns: {
                     columnVisibilityModel: hiddenFilterVisibility(

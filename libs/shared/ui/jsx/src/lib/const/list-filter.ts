@@ -94,6 +94,17 @@ export interface ListFilterField {
   /** Word-prefix token array, for `contains`. */
   tokensPath?: string
   /**
+   * The token array holds OPAQUE IDS, matched byte for byte.
+   *
+   * A word token array is lower-cased by its writer, so a `contains` folds
+   * the typed value the same way before it looks. An id array — the forms a
+   * contact came in through, the companies they are linked to — is not: the
+   * ids are minted with mixed case, and folding one would look up an id
+   * nothing wrote. A field that says so is matched on the value exactly as
+   * given, in the query and in memory alike.
+   */
+  verbatimTokens?: boolean
+  /**
    * What a `contains` orders by. Defaults to `lowerPath`, then `path`.
    *
    * A field whose `tokensPath` IS its own value — a real tag array, matched
@@ -405,6 +416,10 @@ export function matchListFilter(
     }
   }
 
+  // An id array is matched whole and case-sensitively — see `verbatimTokens`.
+  if (field.verbatimTokens && op === 'contains') {
+    return Array.isArray(value) ? value.includes(raw) : value === raw
+  }
   const held = value == null ? '' : String(value).toLowerCase()
   const asked = raw.toLowerCase()
   switch (op) {
