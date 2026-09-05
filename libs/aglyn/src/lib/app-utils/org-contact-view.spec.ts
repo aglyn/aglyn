@@ -57,6 +57,16 @@ const twoHostContact = () => ({
       ],
       ltvCents: 999_99,
       ordersCount: 7,
+      // The CRM v2 profile (AGL-2595), every field seeded so the allow-list
+      // is proven against the fields that were added AFTER it was written —
+      // which is the case a subtraction-shaped projection would miss.
+      phone: `+1555${FACET_SECRET}`,
+      jobTitle: `${FACET_SECRET}-title-a`,
+      companyId: `${FACET_SECRET}-company-a`,
+      address: { line1: `${FACET_SECRET}-street-a`, country: 'US' },
+      ownerUid: `${FACET_SECRET}-owner-a`,
+      lifecycleStage: 'customer',
+      custom: { budget: `${FACET_SECRET}-custom-a` },
     },
     'host-b': {
       notes: `${FACET_SECRET}-notes-b`,
@@ -161,6 +171,14 @@ describe('the org view carries NO per-host facet content', () => {
       'ordersCount',
       'lastPurchaseAtMs',
       'refundedCents',
+      // The CRM v2 profile fields (AGL-2595).
+      'phone',
+      'jobTitle',
+      'companyId',
+      'address',
+      'ownerUid',
+      'lifecycleStage',
+      'custom',
     ]) {
       expect(row[forbidden]).toBeUndefined()
     }

@@ -23,7 +23,9 @@
  * client-side under the host-admin rules.
  */
 
+import type { AglynPostalAddress } from '../foundation'
 import { consentGroupForHost } from './consent-groups'
+import type { ContactCustomValue, ContactLifecycleStage } from './crm'
 import {
   CAPTURED_BY_HOST_FIELD,
   MARKETING_CONSENT_BY_HOST_FIELD,
@@ -45,6 +47,14 @@ export type ContactSource =
   // the union is what makes `SOURCE_LABELS` and the filter cover it — a raw
   // string written past the type would render as `api` and match no filter.
   | 'api'
+  // CRM v2 (AGL-2595): the two doors that are not a capture at all. A person
+  // typed into the console by a member of the team, and a person who arrived
+  // in a file. Both are first-class for the reason `api` is — a merchant
+  // asking "who did we add ourselves" and "who came from the spreadsheet" is
+  // asking the source filter, and a source the union does not name is one it
+  // cannot answer for.
+  | 'manual'
+  | 'import'
 
 /**
  * How a capture source reads on screen.
@@ -62,6 +72,8 @@ export const CONTACT_SOURCE_LABELS: Record<ContactSource, string> = {
   booking: 'Booking',
   newsletter: 'Newsletter',
   api: 'API',
+  manual: 'Added by hand',
+  import: 'Import',
 }
 
 export interface ContactInteraction {
@@ -276,6 +288,33 @@ export interface ContactFacet {
   refundedCents?: number
   refundedOrdersCount?: number
   lastRefundAtMs?: number
+  /*
+   * CRM v2 (AGL-2595): the profile a sales team keeps on a person.
+   *
+   * Per-holder like everything above them, and for the same reason: a phone
+   * number, a job title, an owner and a lifecycle stage are one business's
+   * knowledge of a person, and two unrelated businesses sharing the row must
+   * not read each other's. `companyId` points at a company document in the
+   * same scope, never at the org's whole company list. `custom` is keyed by
+   * `ContactFieldDefinition.key`, so a holder's field definitions and a
+   * holder's values live under the same group and cannot be joined across
+   * one.
+   *
+   * ⛔ None of these reach the org view. `ORG_CONTACT_FIELDS` is an
+   * allow-list, and the org-view spec seeds every one of these with a
+   * sentinel and proves it never surfaces.
+   */
+  /** E.164 — `normalizePhone` before writing. */
+  phone?: string
+  jobTitle?: string
+  /** `orgs/{orgId}/companies/{companyId}`, in this holder's scope. */
+  companyId?: string
+  address?: AglynPostalAddress | null
+  /** The team member responsible for the relationship. */
+  ownerUid?: string
+  lifecycleStage?: ContactLifecycleStage
+  /** Custom field values, keyed by `ContactFieldDefinition.key`. */
+  custom?: Record<string, ContactCustomValue>
 }
 
 /** The map field holding the facets: `{ [groupId]: ContactFacet }`. */
