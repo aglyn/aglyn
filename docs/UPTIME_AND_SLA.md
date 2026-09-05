@@ -324,6 +324,22 @@ curl -s https://stats.uptimerobot.com/api/getMonitorList/7NGEl81zvD |
     console.log(j.psp.totalMonitors); for (const m of j.psp.monitors) console.log(m.name)'
 ```
 
+**The table above is checked, not merely written** (AGL-2593).
+`npm run check:uptime-monitors` parses this section's table for the expected
+names, fetches that same public list, and is red when a documented monitor is
+missing from the account, when the account holds a monitor this table does not
+name, or when any monitor's `statusClass` is not `success`. It prints every
+monitor with its 30-day ratio and last downtime, so a run's output is also the
+answer to whether any of them has been red. An unreachable list is exit 2,
+never a pass. It runs every morning in the `External facts` workflow beside
+`check:external-facts`, and its parser and comparator
+(`tools/scripts/lib/uptime-monitors.mjs`) have a `node --test` suite in
+`tools-guards.yml` that also pins the checked-in fixture
+(`tools/scripts/fixtures/uptime-monitor-list.json`) to this table. So rename,
+add or remove a monitor in the dashboard and edit this table in the same
+sitting — either side alone goes red — and refresh the fixture from the
+`curl` above when the set changes, or the guard reds on the next push.
+
 The same payload also carries `createdAt`, `statusClass` (`success` = up),
 `lastDowntime` (`{date, duration, reason}`) and 30/90-day ratios per monitor —
 which is the whole unauthenticated health check, and the only place a past

@@ -1,0 +1,392 @@
+{
+  "status": "ok",
+  "psp": {
+    "monitors": [
+      {
+        "monitorId": 803815805,
+        "createdAt": "2026-08-24 09:12:16",
+        "statusClass": "success",
+        "name": "Backups",
+        "url": null,
+        "type": "Keyword",
+        "groupId": 0,
+        "groupName": "Monitors (default)",
+        "30dRatio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "90dRatio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "ratio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "hasIncidentComments": false,
+        "lastDowntime": null
+      },
+      {
+        "monitorId": 803815441,
+        "createdAt": "2026-08-24 08:14:58",
+        "statusClass": "success",
+        "name": "Billing",
+        "url": null,
+        "type": "Keyword",
+        "groupId": 0,
+        "groupName": "Monitors (default)",
+        "30dRatio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "90dRatio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "ratio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "hasIncidentComments": false,
+        "lastDowntime": null
+      },
+      {
+        "monitorId": 803815417,
+        "createdAt": "2026-08-24 08:10:31",
+        "statusClass": "success",
+        "name": "Console",
+        "url": null,
+        "type": "Keyword",
+        "groupId": 0,
+        "groupName": "Monitors (default)",
+        "30dRatio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "90dRatio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "ratio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "hasIncidentComments": false,
+        "lastDowntime": null
+      },
+      {
+        "monitorId": 803815971,
+        "createdAt": "2026-08-24 09:33:57",
+        "statusClass": "success",
+        "name": "Error beacon (console)",
+        "url": null,
+        "type": "Keyword",
+        "groupId": 0,
+        "groupName": "Monitors (default)",
+        "30dRatio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "90dRatio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "ratio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "hasIncidentComments": false,
+        "lastDowntime": null
+      },
+      {
+        "monitorId": 803916936,
+        "createdAt": "2026-09-04 23:07:58",
+        "statusClass": "success",
+        "name": "First-run journeys",
+        "url": null,
+        "type": "Keyword",
+        "groupId": 0,
+        "groupName": "Monitors (default)",
+        "30dRatio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "90dRatio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "ratio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "hasIncidentComments": false,
+        "lastDowntime": null
+      },
+      {
+        "monitorId": 803916942,
+        "createdAt": "2026-09-04 23:09:21",
+        "statusClass": "success",
+        "name": "Lead forms",
+        "url": null,
+        "type": "Keyword",
+        "groupId": 0,
+        "groupName": "Monitors (default)",
+        "30dRatio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "90dRatio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "ratio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "hasIncidentComments": false,
+        "lastDowntime": null
+      },
+      {
+        "monitorId": 803815424,
+        "createdAt": "2026-08-24 08:11:45",
+        "statusClass": "success",
+        "name": "Marketing site",
+        "url": null,
+        "type": "Keyword",
+        "groupId": 0,
+        "groupName": "Monitors (default)",
+        "30dRatio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "90dRatio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "ratio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "hasIncidentComments": false,
+        "lastDowntime": null
+      },
+      {
+        "monitorId": 803815430,
+        "createdAt": "2026-08-24 08:13:19",
+        "statusClass": "success",
+        "name": "Published sites",
+        "url": null,
+        "type": "Keyword",
+        "groupId": 0,
+        "groupName": "Monitors (default)",
+        "30dRatio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "90dRatio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "ratio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "hasIncidentComments": false,
+        "lastDowntime": null
+      },
+      {
+        "monitorId": 803815966,
+        "createdAt": "2026-08-24 09:32:47",
+        "statusClass": "success",
+        "name": "Rate limiting",
+        "url": null,
+        "type": "Keyword",
+        "groupId": 0,
+        "groupName": "Monitors (default)",
+        "30dRatio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "90dRatio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "ratio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "hasIncidentComments": false,
+        "lastDowntime": null
+      },
+      {
+        "monitorId": 803815445,
+        "createdAt": "2026-08-24 08:16:15",
+        "statusClass": "success",
+        "name": "Scheduled jobs",
+        "url": null,
+        "type": "Keyword",
+        "groupId": 0,
+        "groupName": "Monitors (default)",
+        "30dRatio": {
+          "ratio": "93.072",
+          "label": "poor",
+          "color": "red"
+        },
+        "90dRatio": {
+          "ratio": "93.072",
+          "label": "poor",
+          "color": "red"
+        },
+        "ratio": {
+          "ratio": "93.072",
+          "label": "poor",
+          "color": "red"
+        },
+        "hasIncidentComments": false,
+        "lastDowntime": {
+          "date": "2026-09-04 22:16:33",
+          "duration": 611,
+          "reason": "Incident detected"
+        }
+      },
+      {
+        "monitorId": 803828903,
+        "createdAt": "2026-08-25 15:00:46",
+        "statusClass": "success",
+        "name": "Server errors",
+        "url": null,
+        "type": "Keyword",
+        "groupId": 0,
+        "groupName": "Monitors (default)",
+        "30dRatio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "90dRatio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "ratio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "hasIncidentComments": false,
+        "lastDowntime": null
+      },
+      {
+        "monitorId": 803916897,
+        "createdAt": "2026-09-04 22:55:39",
+        "statusClass": "success",
+        "name": "Sign-in doors",
+        "url": null,
+        "type": "Keyword",
+        "groupId": 0,
+        "groupName": "Monitors (default)",
+        "30dRatio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "90dRatio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "ratio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "hasIncidentComments": false,
+        "lastDowntime": null
+      },
+      {
+        "monitorId": 803815959,
+        "createdAt": "2026-08-24 09:31:01",
+        "statusClass": "success",
+        "name": "Signups",
+        "url": null,
+        "type": "Keyword",
+        "groupId": 0,
+        "groupName": "Monitors (default)",
+        "30dRatio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "90dRatio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "ratio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "hasIncidentComments": false,
+        "lastDowntime": null
+      },
+      {
+        "monitorId": 803815787,
+        "createdAt": "2026-08-24 09:10:23",
+        "statusClass": "success",
+        "name": "Tenant runtime",
+        "url": null,
+        "type": "Keyword",
+        "groupId": 0,
+        "groupName": "Monitors (default)",
+        "30dRatio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "90dRatio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "ratio": {
+          "ratio": "100.000",
+          "label": "excellent",
+          "color": "green"
+        },
+        "hasIncidentComments": false,
+        "lastDowntime": null
+      }
+    ],
+    "totalMonitors": 14,
+    "perPage": 30,
+    "timezone": "-10:00"
+  }
+}
