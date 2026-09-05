@@ -27,10 +27,9 @@ import {
   notifyHostManagers,
   orgDataCollectionForHost,
   resolveCampaignTouch,
-  upsertHostContact,
   visitorWriteRefusal,
 } from '@aglyn/tenant-data-admin'
-import { emitHostEvent, resolveDatasetDoc } from '@aglyn/tenant-runtime'
+import { captureHostContact, emitHostEvent, resolveDatasetDoc } from '@aglyn/tenant-runtime'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
   NO_CLIENT_ADDRESS_BUCKET,
@@ -568,7 +567,7 @@ export async function POST(request: Request): Promise<Response> {
       convertedAtMs: submittedAtMs,
     })
     if (contactEmail) {
-      void upsertHostContact({
+      void captureHostContact({
         hostId,
         email: contactEmail,
         name: sanitizedFields['name'] ?? sanitizedFields['fullName'],

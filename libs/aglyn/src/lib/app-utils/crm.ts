@@ -226,7 +226,39 @@ export interface CrmDeal extends CrmScoped {
   createdByUid?: string
 }
 
-export type CrmTaskKind = 'call' | 'email' | 'meeting' | 'todo'
+/**
+ * What a task is, as a fixed list.
+ *
+ * A const array rather than a bare union because two surfaces have to
+ * enumerate it — the task form's picker and the automation step that creates
+ * a task without a form — and a union cannot be iterated at run time.
+ */
+export const CRM_TASK_KINDS = ['call', 'email', 'meeting', 'todo'] as const
+export type CrmTaskKind = (typeof CRM_TASK_KINDS)[number]
+
+export const CRM_TASK_KIND_LABELS: Record<CrmTaskKind, string> = {
+  call: 'Call',
+  email: 'Email',
+  meeting: 'Meeting',
+  todo: 'To-do',
+}
+
+export function isCrmTaskKind(value: unknown): value is CrmTaskKind {
+  return (
+    typeof value === 'string' &&
+    (CRM_TASK_KINDS as readonly string[]).includes(value)
+  )
+}
+
+/**
+ * How far ahead an automation may date a task, in days.
+ *
+ * A year, because the longest follow-up anybody schedules from a trigger is
+ * an annual renewal check, and a task dated further out than that is one
+ * nobody will find on the list when it comes due.
+ */
+export const CRM_TASK_MAX_DUE_DAYS = 365
+
 export type CrmTaskPriority = 'low' | 'normal' | 'high'
 export type CrmTaskStatus = 'open' | 'done'
 
@@ -240,13 +272,46 @@ export interface CrmTask extends CrmScoped {
   dueAtMs?: number | null
   completedAtMs?: number | null
   assigneeUid?: string
+  /**
+   * The person who made it, or `''` when no person did.
+   *
+   * An automation has no uid, and inventing one — the action's id, a
+   * sentinel — would put a value into a field every reader resolves as a
+   * member. The empty string says "nobody", and {@link sourceActionId}
+   * beside it says what.
+   */
   createdByUid: string
+  /** The automation that created it (AGL-2605), when a person did not. */
+  sourceActionId?: string
   contactId?: string
   companyId?: string
   dealId?: string
 }
 
-export type CrmActivityKind = 'call' | 'email' | 'meeting' | 'note' | 'other'
+/** What was done, as a fixed list — see {@link CRM_TASK_KINDS} for why a list. */
+export const CRM_ACTIVITY_KINDS = [
+  'call',
+  'email',
+  'meeting',
+  'note',
+  'other',
+] as const
+export type CrmActivityKind = (typeof CRM_ACTIVITY_KINDS)[number]
+
+export const CRM_ACTIVITY_KIND_LABELS: Record<CrmActivityKind, string> = {
+  call: 'Call',
+  email: 'Email',
+  meeting: 'Meeting',
+  note: 'Note',
+  other: 'Other',
+}
+
+export function isCrmActivityKind(value: unknown): value is CrmActivityKind {
+  return (
+    typeof value === 'string' &&
+    (CRM_ACTIVITY_KINDS as readonly string[]).includes(value)
+  )
+}
 
 /**
  * `orgs/{orgId}/crmActivities/{activityId}` — one thing that happened.
@@ -261,7 +326,10 @@ export interface CrmActivity extends CrmScoped {
   body: string
   /** When it happened, which is not when it was logged. */
   atMs: number
+  /** Who logged it, or `''` for an automation — see `CrmTask.createdByUid`. */
   byUid: string
+  /** The automation that logged it (AGL-2605), when a person did not. */
+  sourceActionId?: string
   contactId?: string
   companyId?: string
   dealId?: string
