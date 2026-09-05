@@ -20,6 +20,7 @@ import {
   checkContactQuota,
   consentGroupScope,
   CONTACT_FACETS_FIELD,
+  type ContactCustomValue,
   type ContactInteraction,
   type ContactSource,
   marketingConsentFieldsForGroup,
@@ -139,6 +140,24 @@ export async function upsertHostContact(options: {
    * input that records a basis.
    */
   campaignIds?: readonly string[]
+  /**
+   * Profile fields the door already resolved for THIS holder's facet.
+   *
+   * `custom` (AGL-2601) is what a form wrote under the org's custom field
+   * definitions, keyed by `ContactFieldDefinition.key` and already coerced by
+   * type — `collectMappedContactCustom` is the only thing that should build
+   * it, so a value arrives here in the shape the console and the API store.
+   * On an existing contact the keys are MERGED into the facet's `custom` and
+   * every key not named is kept: a form that maps two fields must not blank
+   * the ten a merchant filled in by hand.
+   *
+   * One optional object rather than a flat option per field, so a door that
+   * resolves the phone, the title and a custom value hands them over as one
+   * facet fragment and each lands beside the other under the same group.
+   */
+  facet?: {
+    custom?: Record<string, ContactCustomValue>
+  }
 }): Promise<void> {
   try {
     const email = normalizeContactEmail(options.email)
@@ -227,6 +246,20 @@ export async function upsertHostContact(options: {
      * array goes through the same coercion.
      */
     const campaignIds = normalizeCampaignIds(options.campaignIds ?? [])
+    /*
+     * THE CUSTOM FIELD VALUES THIS CAPTURE CARRIES, as one nested map.
+     *
+     * Only the keys the door resolved. Written in the NESTED form because both
+     * writes below are merge-sets, which deep-merge a map one key at a time:
+     * `custom: { tier: 'Gold' }` lands beside an existing `custom.vip` and
+     * leaves it standing. A dotted `facets.h1.custom.tier` path would be a
+     * literal field name to a `set`, and a `custom` written whole would take
+     * every other key with it.
+     */
+    const customEntries = Object.entries(options.facet?.custom ?? {})
+    const customFacet = customEntries.length
+      ? { custom: Object.fromEntries(customEntries) }
+      : {}
 
     /*==========================================
      * THE DEDUPE LOOKUP IS UNSCOPED, AND HAS TO BE.
@@ -310,6 +343,8 @@ export async function upsertHostContact(options: {
               ...(campaignIds.length
                 ? { campaignIds: FieldValue.arrayUnion(...campaignIds) }
                 : {}),
+              // Merged key by key — see `customFacet` above.
+              ...customFacet,
               ...(options.purchaseCents
                 ? {
                     ltvCents: FieldValue.increment(options.purchaseCents),
@@ -432,6 +467,7 @@ export async function upsertHostContact(options: {
           // A create has nothing to union with, so the normalized list is the
           // whole membership.
           ...(campaignIds.length ? { campaignIds } : {}),
+          ...customFacet,
           ...(options.name
             ? { name: options.name.slice(0, 120) }
             : {}),

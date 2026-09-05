@@ -446,10 +446,17 @@ function FormBesignerPage() {
        *
        * `checkFormContract` reports `form-node-missing` when there is no form
        * node, so reaching here means this id resolved.
+       *
+       * Where each field saves to is edited on the form's page, not drawn
+       * here, so it is carried from the stored declaration by field name —
+       * the same carry the server promote route applies (AGL-2601).
        */
-      const fields = Aglyn.formFieldDeclsFromNodes(
-        definition.nodes,
-        formNodeId as Aglyn.NodeId,
+      const fields = Aglyn.carryContactFieldMappings(
+        formDoc?.fields,
+        Aglyn.formFieldDeclsFromNodes(
+          definition.nodes,
+          formNodeId as Aglyn.NodeId,
+        ),
       )
       await updateDoc(doc(firestore, 'hosts', hostId, 'forms', formId), {
         // Compressed at rest (AGL-1151), like the version this promotes from
