@@ -80,7 +80,7 @@ export function RecordActivityCard(props: RecordActivityCardProps) {
     <>
       <CardDisplay
         header={'Activity'}
-        help={pluginDocsHelp('contacts', { anchor: '#the-contacts-page' })}
+        help={pluginDocsHelp('contactActivities', { anchor: '#logging-an-activity' })}
         actions={
           <Button
             size="small"

@@ -124,6 +124,7 @@ const PLUGIN_TOPICS = {
   commerce: '/commerce-and-bookings/commerce/overview',
   commerceEndToEnd: '/guides/commerce-end-to-end',
   consoleTour: '/getting-started/console-tour',
+  contactActivities: '/content-and-data/contacts/activities',
   contacts: '/content-and-data/contacts/overview',
   datasets: '/content-and-data/datasets/overview',
   designedEmails: '/marketing-and-automation/email-campaigns/designed-emails',

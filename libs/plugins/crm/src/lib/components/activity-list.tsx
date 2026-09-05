@@ -112,11 +112,12 @@ export interface ActivityRowProps {
   /** The clock the relative time is read against; `Date.now()` when absent. */
   nowMs?: number
   /**
-   * No controls at all, whoever is reading. A feed that spans records is a
-   * place to see what happened, not to rewrite it — the record's own page
-   * is where an activity is corrected, beside everything else about it.
+   * Whether THIS reader may edit and delete the row — the author, or an
+   * org-wide member. Decided by whoever draws the rows, through
+   * `useCanEditActivity`, once for the whole list: a row that asked for
+   * itself would read the member document once per row.
    */
-  readOnly?: boolean
+  editable?: boolean
 }
 
 /**
@@ -124,16 +125,15 @@ export interface ActivityRowProps {
  * went, who logged it and how long ago — with edit and delete for whoever
  * may (AGL-2600).
  *
- * Edit and delete appear only for the author or an org-wide member. That is
- * the console's verdict and not the rules' — see `useCanEditActivity` for
- * why the rules admit more — so the controls are hidden rather than
- * disabled: a disabled button asks "why not?", and the honest answer would
- * be "you could, through the API".
+ * Edit and delete appear only when `editable` says this reader may — the
+ * author or an org-wide member. That is the console's verdict and not the
+ * rules' — see `useCanEditActivity` for why the rules admit more — so the
+ * controls are hidden rather than disabled: a disabled button asks "why
+ * not?", and the honest answer would be "you could, through the API".
  */
 export function ActivityRow(props: ActivityRowProps) {
-  const { activity, scope, onEdit, subject, nowMs, readOnly } = props
-  const { firestore, dataScope, orgId } = scope
-  const canEdit = useCanEditActivity(orgId)
+  const { activity, scope, onEdit, subject, nowMs, editable } = props
+  const { firestore, dataScope } = scope
   const authorName = useActivityAuthorName()
   const { confirm } = useConfirmationContext()
   const { enqueueSnackbar } = useSnackbar()
@@ -174,7 +174,6 @@ export function ActivityRow(props: ActivityRowProps) {
     }
   }, [dataScope, confirm, activity, firestore, enqueueSnackbar])
 
-  const editable = !readOnly && canEdit(activity)
   const label =
     Aglyn.CRM_ACTIVITY_KIND_LABELS[
       Aglyn.isCrmActivityKind(activity.kind) ? activity.kind : 'other'
@@ -265,7 +264,12 @@ export interface ActivityListProps {
   onShowMore?: () => void
   /** The record each row is about, for a list that spans records. */
   subjectFor?: (activity: CrmActivityRow) => ReactNode
-  /** No edit or delete on any row — see `ActivityRowProps.readOnly`. */
+  /**
+   * No controls on any row, whoever is reading — and no member read to
+   * decide them. A feed that spans records is a place to see what happened,
+   * not to rewrite it; the record's own page is where an activity is
+   * corrected, beside everything else about it.
+   */
   readOnly?: boolean
 }
 
@@ -277,6 +281,10 @@ export interface ActivityListProps {
  * list does not sort them again; a second sort here is a second place for
  * the order to be defined. The foot appears only while the probe row says
  * more exists, so it never leads nowhere.
+ *
+ * Who may edit is decided here, once, and handed to every row: the verdict
+ * reads the member document, and the list is the one place that can ask
+ * for it a single time however many rows it draws.
  */
 export function ActivityList(props: ActivityListProps) {
   const {
@@ -289,6 +297,7 @@ export function ActivityList(props: ActivityListProps) {
     subjectFor,
     readOnly,
   } = props
+  const canEdit = useCanEditActivity(scope.orgId, !readOnly)
   if (!rows.length) {
     return (
       <Typography variant="body2" color="text.secondary">
@@ -305,7 +314,7 @@ export function ActivityList(props: ActivityListProps) {
           scope={scope}
           onEdit={onEdit}
           subject={subjectFor?.(activity)}
-          readOnly={readOnly}
+          editable={canEdit(activity)}
         />
       ))}
       {hasMore && onShowMore ? (

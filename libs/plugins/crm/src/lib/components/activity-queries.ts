@@ -123,18 +123,28 @@ export type ActivityScope = ReturnType<typeof useActivityScope>
  * `useScopeTokens` answers org-wide while it loads, so the verdict for a
  * NON-author waits for `loaded` — a scoped colleague must not see edit
  * controls flash on for one paint and then vanish.
+ *
+ * Called ONCE by the list that draws the rows, never by a row. The verdict
+ * costs a read of the member document, and a hundred rows each asking would
+ * be a hundred reads of one document on every mount — the shape of cost the
+ * console pays nowhere else. `enabled` is for a surface that offers no
+ * controls at all, the feed: `useScopeTokens` opens nothing for an undefined
+ * org, so a disabled verdict reads nothing and answers no.
  */
-export function useCanEditActivity(orgId: string | undefined) {
+export function useCanEditActivity(
+  orgId: string | undefined,
+  enabled = true,
+) {
   const { data: user } = useUser()
   const uid = user?.uid
-  const membership = useScopeTokens(orgId)
+  const membership = useScopeTokens(enabled ? orgId : undefined)
   return useCallback(
     (activity: Pick<CrmActivityRow, 'byUid'>): boolean => {
-      if (!uid) return false
+      if (!enabled || !uid) return false
       if (activity.byUid === uid) return true
       return membership.loaded && membership.orgWide
     },
-    [uid, membership.loaded, membership.orgWide],
+    [enabled, uid, membership.loaded, membership.orgWide],
   )
 }
 

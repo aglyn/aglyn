@@ -236,7 +236,10 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
             visibleTo: writeTokens,
             hostId,
             byUid: user.uid,
-            byName: authorName,
+            // Absent rather than blank while the profile is still resolving:
+            // the row reads a stored name over anything else, and an empty
+            // string would be a name.
+            ...(authorName ? { byName: authorName } : {}),
             createdAt: new Date(),
             updatedAt: new Date(),
           },
