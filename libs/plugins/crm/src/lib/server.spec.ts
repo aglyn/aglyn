@@ -36,6 +36,22 @@
  * from a plugin spec would pull the whole estate into one jest worker.
  */
 
+/*
+ * The admin barrel is stubbed EMPTY, not modeled (AGL-2602).
+ *
+ * `server.ts` now reaches `@aglyn/tenant-data-admin` through the import
+ * route, and that barrel's tenancy half loads `next/cache`, which has no
+ * `Request` class to extend under jest's node environment and fails at
+ * module evaluation. Every assertion in this file is about the WIRING —
+ * a route resolves and refuses the wrong method before it reads a token,
+ * a body or a document — so nothing here ever calls into the barrel, and a
+ * stub that exports nothing is the honest double: a route that did reach
+ * it would throw on the missing export rather than pass by accident. The
+ * import route's own behavior is `server/contacts-import.spec.ts`'s
+ * question, with a barrel double shaped for it.
+ */
+jest.mock('@aglyn/tenant-data-admin', () => ({ __esModule: true }))
+
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { resolvePluginApiRoute } from '@aglyn/aglyn/server'
@@ -108,5 +124,19 @@ describe('the CRM server entry', () => {
     const { status, headers } = await call('crm/ping', 'POST')
     expect(status).toBe(405)
     expect(headers['Allow']).toBe('GET')
+  })
+
+  /**
+   * The import route is REACHABLE through the same registration (AGL-2602).
+   *
+   * A GET is the cheapest request that proves the handler answered: it is
+   * refused before the route reads a body or a token, so the assertion is
+   * about the wiring and not about the import.
+   */
+  it('registers crm/contacts-import, which answers POST only', async () => {
+    registerCrmConsoleApi()
+    const { status, headers } = await call('crm/contacts-import', 'GET')
+    expect(status).toBe(405)
+    expect(headers['Allow']).toBe('POST')
   })
 })

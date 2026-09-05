@@ -26,8 +26,9 @@
  * auto-association of contacts to companies by domain. Each of those lands
  * as a `contacts/<route>` handler registered here.
  *
- * `contacts/ping` is the one route that exists today, and it exists so the
- * wiring is PROVEN rather than assumed: `plugins.config.json` names this
+ * `crm/ping` is the route that exists so the wiring is PROVEN rather than
+ * assumed, and `crm/contacts-import` (AGL-2602) is the first one that does
+ * work — see `server/contacts-import.ts`. `plugins.config.json` names this
  * module's register function and the `contacts` API prefix, the generated
  * server manifest loads this file, and the console's `/api/[...pluginApi]`
  * dispatcher reaches the handler. A plugin whose first real route also had
@@ -39,6 +40,7 @@ import {
   registerPluginApiRoute,
 } from '@aglyn/aglyn/server'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { crmContactsImportHandler } from './server/contacts-import'
 
 /**
  * `GET /api/contacts/ping` → `{ ok: true, plugin: 'contacts' }`.
@@ -60,4 +62,7 @@ export const crmPingHandler: PluginApiHandler = (req, res) => {
 /** Console API registration, named in `plugins.config.json` as `consoleApi`. */
 export function registerCrmConsoleApi(): void {
   registerPluginApiRoute('crm/ping', crmPingHandler)
+  // The first real route (AGL-2602): one chunk of a contact file, judged and
+  // written through the same door every capture uses.
+  registerPluginApiRoute('crm/contacts-import', crmContactsImportHandler)
 }
