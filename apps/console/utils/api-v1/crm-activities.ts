@@ -167,7 +167,11 @@ async function createActivity(request: Request, ctx: ApiV1Context): Promise<Resp
   if ('response' in site) return site.response
   const [by, refs] = await Promise.all([
     memberError(ctx, 'byUid', parsed.values.byUid),
-    crmRefErrors(ctx, parsed.values),
+    crmRefErrors(ctx, {
+      contactId: parsed.values.contactId,
+      companyId: parsed.values.companyId,
+      dealId: parsed.values.dealId,
+    }),
   ])
   const refErrors = { ...by, ...refs }
   if (Object.keys(refErrors).length) {
@@ -187,12 +191,15 @@ async function createActivity(request: Request, ctx: ApiV1Context): Promise<Resp
   try {
     const { kind, atMs, byUid, ...rest } = parsed.values
     const id = createResourceUid()
+    const stamp = crmCreateStamp(ctx, site.siteId)
     await collection.doc(id).create({
       kind: kind ?? 'note',
-      atMs: atMs ?? Date.now(),
+      // The instant the record was created, from the same clock as its
+      // `createdAt`, so an activity logged as it happened reads as one moment.
+      atMs: atMs ?? stamp.createdAt.toMillis(),
       byUid: byUid ?? 'api',
       ...createPayload(rest),
-      ...crmCreateStamp(ctx, site.siteId),
+      ...stamp,
     })
     const view = activityView(await collection.doc(id).get())
     await claim.record(200, view)

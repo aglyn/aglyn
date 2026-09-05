@@ -200,14 +200,17 @@ async function createTask(request: Request, ctx: ApiV1Context): Promise<Response
   try {
     const { title, kind, priority, status, ...rest } = parsed.values
     const id = createResourceUid()
+    const stamp = crmCreateStamp(ctx, site.siteId)
     await collection.doc(id).create({
       title,
       kind: kind ?? 'todo',
       priority: priority ?? 'normal',
       status: status ?? 'open',
-      ...(status === 'done' ? { completedAtMs: Date.now() } : {}),
+      // A task created done was completed the instant it was created — the
+      // same instant its `createdAt` carries.
+      ...(status === 'done' ? { completedAtMs: stamp.createdAt.toMillis() } : {}),
       ...createPayload(rest),
-      ...crmCreateStamp(ctx, site.siteId),
+      ...stamp,
     })
     const view = taskView(await collection.doc(id).get())
     await claim.record(200, view)
@@ -235,12 +238,14 @@ async function updateTask(
 
   const { status, ...rest } = parsed.values
   const update: Record<string, unknown> = updatePayload(rest)
+  // One instant for the write: a task completed at T reads updated at T.
+  const now = Timestamp.now()
   if (status !== undefined && status !== snap.get('status')) {
     update.status = status
-    update.completedAtMs = status === 'done' ? Date.now() : null
+    update.completedAtMs = status === 'done' ? now.toMillis() : null
   }
   if (Object.keys(update).length > 0) {
-    await ref.update({ ...update, updatedAt: Timestamp.now() })
+    await ref.update({ ...update, updatedAt: now })
   }
   return apiJson(taskView(await ref.get()), { headers: ctx.headers })
 }

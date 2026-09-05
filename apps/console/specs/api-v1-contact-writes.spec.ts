@@ -262,6 +262,10 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // and the per-controller grant is precisely what is under test.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/marketing-consent'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/consent-groups'),
+  // The CRM model (AGL-2606): a contact write checks its `companyId` against
+  // the companies collection and reads its profile from the facets, so the
+  // handler reaches these on every create.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/crm'),
   effectiveDatasetModel: () => ({ fields: [] }),
   coerceDocumentValues: (_model: unknown, values: Record<string, unknown>) => values,
   validateDocument: () => ({}),

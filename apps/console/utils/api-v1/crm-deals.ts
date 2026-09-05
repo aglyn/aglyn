@@ -321,12 +321,15 @@ async function createDeal(request: Request, ctx: ApiV1Context): Promise<Response
       })
     }
     const id = createResourceUid()
+    // One clock: the stage move is stamped with the instant the record's own
+    // `createdAt` carries, so a deal created won closed the moment it began.
+    const stamp = crmCreateStamp(ctx, site.siteId)
     await collection.doc(id).create({
       title,
       titleLower: (title ?? '').toLowerCase(),
       pipelineId: resolved.id,
-      ...createPayload({ ...rest, ...stageMove(stage, Date.now()) }),
-      ...crmCreateStamp(ctx, site.siteId),
+      ...createPayload({ ...rest, ...stageMove(stage, stamp.createdAt.toMillis()) }),
+      ...stamp,
     })
     const view = dealView(await collection.doc(id).get())
     await claim.record(200, view)
@@ -357,6 +360,9 @@ async function updateDeal(
     ...(title !== undefined ? { title, titleLower: title.toLowerCase() } : {}),
     ...updatePayload(rest),
   }
+  // The write's one instant: `updatedAt`, and the stage move if there is one,
+  // so a deal closed at T reads updated at T.
+  const now = Timestamp.now()
   if (stageId !== undefined || status !== undefined) {
     const current = snap.data() as CrmDeal
     const resolved = await resolvePipeline(ctx, current.hostId, current.pipelineId)
@@ -368,11 +374,11 @@ async function updateDeal(
     const placed = resolveStage(resolved.pipeline, { stageId, status })
     if ('errors' in placed) return crmValidationFailed(ctx, 'deal', placed.errors)
     if (placed.stage && placed.stage.id !== current.stageId) {
-      Object.assign(update, stageMove(placed.stage, Date.now()))
+      Object.assign(update, stageMove(placed.stage, now.toMillis()))
     }
   }
   if (Object.keys(update).length > 0) {
-    await ref.update({ ...update, updatedAt: Timestamp.now() })
+    await ref.update({ ...update, updatedAt: now })
   }
   return apiJson(dealView(await ref.get()), { headers: ctx.headers })
 }

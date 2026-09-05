@@ -231,17 +231,20 @@ export async function crmRefErrors(
   refs: CrmRefs,
 ): Promise<Record<string, string>> {
   const errors: Record<string, string> = {}
+  const given = (['contactId', 'companyId', 'dealId'] as const).filter(
+    (field) => refs[field],
+  )
+  if (given.length === 0) return errors
   const orgRef = ctx.firestore.collection('orgs').doc(ctx.orgId)
-  const checks: Array<[keyof CrmRefs, string, string]> = [
-    ['contactId', 'contacts', 'contact'],
-    ['companyId', CRM_COLLECTIONS.companies, 'company'],
-    ['dealId', CRM_COLLECTIONS.deals, 'deal'],
-  ]
+  const collections: Record<keyof CrmRefs, [string, string]> = {
+    contactId: ['contacts', 'contact'],
+    companyId: [CRM_COLLECTIONS.companies, 'company'],
+    dealId: [CRM_COLLECTIONS.deals, 'deal'],
+  }
   await Promise.all(
-    checks.map(async ([field, collection, noun]) => {
-      const id = refs[field]
-      if (!id) return
-      const snap = await orgRef.collection(collection).doc(id).get()
+    given.map(async (field) => {
+      const [collection, noun] = collections[field]
+      const snap = await orgRef.collection(collection).doc(refs[field] as string).get()
       if (!snap.exists) errors[field] = `No such ${noun} in this organization`
     }),
   )
