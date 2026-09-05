@@ -2510,6 +2510,52 @@ describe('an uncapped band never carries an overage rate (AGL-2482)', () => {
       expect(PLAN_PRICING[plan].extraContactsUsdPer1k).not.toBeNull()
     }
   })
+
+  it('a band with NO rate is unlimited or HARD — never finite and silently passable (AGL-2611)', () => {
+    // The rule from the third side. The two cases above pair a finite band
+    // with a rate; this one says what a band with no rate must be: either
+    // `UNLIMITED`, so there is nothing to exceed, or refused AT the line by
+    // its own gate. Both gates are exercised at the band itself, where a
+    // gate that metered instead of refusing answers `allowed: true` — so a
+    // plan given a finite band and no rate goes red here rather than
+    // handing out records past a bound that bills nothing.
+    const plans = Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]
+    const noRate = plans.filter(
+      (plan) => PLAN_PRICING[plan].extraContactsUsdPer1k === null,
+    )
+    // The premise: a finite band with no rate really exists (Free).
+    expect(noRate).toContain('free')
+    expect(Number.isFinite(PLAN_ENTITLEMENTS.free.contactsPerHost)).toBe(true)
+    for (const plan of noRate) {
+      const band = PLAN_ENTITLEMENTS[plan].contactsPerHost
+      const verdict =
+        band === UNLIMITED
+          ? checkCrmRecordsQuota({ plan } as any, 10_000_000).allowed
+            ? 'unlimited'
+            : 'refuses on an unlimited band'
+          : checkCrmRecordsQuota({ plan } as any, band).allowed
+            ? 'passable'
+            : 'hard'
+      expect(`${plan}: ${verdict}`).toMatch(new RegExp(`^${plan}: (unlimited|hard)$`))
+    }
+    // The one-to-one email cap carries no rate on ANY tier, so every finite
+    // cap must be hard, and the only unbounded one is the negotiated plan.
+    for (const plan of plans) {
+      const cap = PLAN_ENTITLEMENTS[plan].crmEmailsPerDay
+      if (cap === UNLIMITED) {
+        expect(plan).toBe('enterprise')
+        continue
+      }
+      expect(
+        `${plan}: ${checkCrmEmailQuota({ plan } as any, cap).allowed ? 'passable' : 'hard'}`,
+      ).toBe(`${plan}: hard`)
+      // …and one under the cap is admitted wherever a cap is sold at all,
+      // so "hard" above is a gate at the line and not a gate closed always.
+      expect(checkCrmEmailQuota({ plan } as any, Math.max(0, cap - 1)).allowed).toBe(
+        cap > 0,
+      )
+    }
+  })
 })
 
 describe('a first payment that never completed is not a paid workspace', () => {

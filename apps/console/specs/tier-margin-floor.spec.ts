@@ -1026,6 +1026,150 @@ describe('an unbounded band FAILS the model rather than scoring zero', () => {
 })
 
 // ---------------------------------------------------------------------------
+// The CRM axis on its own, at full utilization, at the ANNUAL price
+// (AGL-2611).
+// ---------------------------------------------------------------------------
+describe('the CRM axis holds an 80% margin at 100%, at the annual price (AGL-2611)', () => {
+  /**
+   * What one org member costs to serve for a month of CRM use — about
+   * 60,000 reads and 10,000 writes at nam5 list prices, ≈$0.054, carried as
+   * $0.06. NOT in `ORG_COGS_UNIT_RATES_USD`, deliberately: the rollup has no
+   * seat-months meter for the model to multiply it by, and a rate in that
+   * table that no axis of `orgMonthlyCogsUsd` reads would fail `declares
+   * exactly the axes the platform cost model prices` above. It is a decision
+   * input — the Drive pricing decision log of 2026-09-05 records the basis
+   * — and this spec is where the repo holds it.
+   */
+  const CRM_SEAT_COGS_USD_PER_MONTH = 0.06
+  /** The share of the ANNUAL monthly price the CRM axis may consume at 100%. */
+  const CRM_AXIS_COST_SHARE = 0.2
+
+  /**
+   * The three terms of the axis — the records band, the seats that can work
+   * it, and a whole day at the one-to-one email cap thirty times over — each
+   * a rate times a band read off the tables by key, so a stub, a rename or a
+   * collapsed table zeroes a term and the control below names it.
+   *
+   * `membersPerHost` UNEXPANDED, unlike the two per-host bands in
+   * `bandCostTerms`: it is the population that can hold `data.manage` on a
+   * site, and the decision costs the CRM on that population as it is sold.
+   */
+  function crmAxisTerms(plan: OrgPlan): Record<string, number> {
+    const entitlements = PLAN_ENTITLEMENTS[plan]
+    const rates = ORG_COGS_UNIT_RATES_USD
+    return {
+      records: entitlements.contactsPerHost * rates.perContactMonth,
+      seats: entitlements.membersPerHost * CRM_SEAT_COGS_USD_PER_MONTH,
+      email: entitlements.crmEmailsPerDay * 30 * rates.perEmailSend,
+    }
+  }
+  const crmAxisCostUsd = (plan: OrgPlan) =>
+    Object.values(crmAxisTerms(plan)).reduce((a, b) => a + b, 0)
+  const annualPriceUsd = (plan: OrgPlan) =>
+    PLAN_PRICING[plan].basePriceAnnualMonthlyUsd
+  const marginPct = (plan: OrgPlan) =>
+    Number(((1 - crmAxisCostUsd(plan) / annualPriceUsd(plan)) * 100).toFixed(1))
+
+  it('CONTROL: every term is finite and non-zero on every paid tier', () => {
+    // A term that reads 0 or `undefined` is a band or a rate that stopped
+    // being read, and a margin computed over it is 100% on no evidence.
+    for (const plan of PAID) {
+      for (const [term, cost] of Object.entries(crmAxisTerms(plan))) {
+        expect(
+          `${plan}.${term}: ${Number.isFinite(cost) && cost > 0 ? 'priced' : String(cost)}`,
+        ).toBe(`${plan}.${term}: priced`)
+      }
+      expect(annualPriceUsd(plan)).toBeGreaterThan(0)
+    }
+  })
+
+  it('takes the share of the ANNUAL price, the cheaper of the two', () => {
+    // The guardrail is stated against the lower price so that it holds on
+    // the higher one for free; a spec that read `basePriceMonthlyUsd` would
+    // pass a cap the annual customer loses money on.
+    for (const plan of PAID) {
+      expect(annualPriceUsd(plan)).toBeLessThan(
+        PLAN_PRICING[plan].basePriceMonthlyUsd,
+      )
+    }
+  })
+
+  it('costs exactly what the decision log tabled, per tier per month', () => {
+    // A pin as well as a floor: any change to a band, a cap or a rate moves
+    // one of these, and has to come here and say so.
+    expect(
+      Object.fromEntries(
+        PAID.map((plan) => [plan, Number(crmAxisCostUsd(plan).toFixed(2))]),
+      ),
+    ).toEqual({
+      starter: 1.73,
+      pro: 6.65,
+      business: 18.4,
+      scale: 32.6,
+      advanced: 49.5,
+      agency: 142,
+    })
+  })
+
+  it('stays at or under 20% of the annual monthly price on every paid tier', () => {
+    const offenders = Object.fromEntries(
+      PAID.filter(
+        (plan) =>
+          crmAxisCostUsd(plan) > CRM_AXIS_COST_SHARE * annualPriceUsd(plan),
+      ).map((plan) => [
+        plan,
+        `$${crmAxisCostUsd(plan).toFixed(2)} of a $${annualPriceUsd(plan)} annual price`,
+      ]),
+    )
+    expect(offenders).toEqual({})
+  })
+
+  it('holds these margins at the annual price, as numbers', () => {
+    expect(
+      Object.fromEntries(PAID.map((plan) => [plan, marginPct(plan)])),
+    ).toEqual({
+      starter: 89.2,
+      pro: 82.9,
+      business: 81.4,
+      scale: 81.8,
+      advanced: 83.4,
+      agency: 86.5,
+    })
+    // Every one at or above the 80% the decision names.
+    for (const plan of PAID) expect(marginPct(plan)).toBeGreaterThanOrEqual(80)
+  })
+
+  it('CONTROL: the share is not so generous that nothing could fail it', () => {
+    // Starter at PRO's one-to-one cap spends $4.43 of a $3.20 share: the cap
+    // was chosen AT the line, which is what makes the line worth asserting.
+    const starter = crmAxisTerms('starter')
+    const atProCap =
+      starter['records'] +
+      starter['seats'] +
+      PLAN_ENTITLEMENTS.pro.crmEmailsPerDay * 30 * ORG_COGS_UNIT_RATES_USD.perEmailSend
+    expect(atProCap).toBeGreaterThan(CRM_AXIS_COST_SHARE * annualPriceUsd('starter'))
+    // And the real cap is inside it, so the two sides of the line are both
+    // exercised on the same tier.
+    expect(crmAxisCostUsd('starter')).toBeLessThanOrEqual(
+      CRM_AXIS_COST_SHARE * annualPriceUsd('starter'),
+    )
+  })
+
+  it('reads the email cap through the entitlement, proved by perturbation', () => {
+    // The newest term is the one most likely to be silently dropped. Its
+    // cost must MOVE with the cap — an axis that priced email from a literal
+    // would pass every pin above until the cap changed.
+    const real = crmAxisTerms('agency')['email']
+    const perturbed =
+      (PLAN_ENTITLEMENTS.agency.crmEmailsPerDay + 100) *
+      30 *
+      ORG_COGS_UNIT_RATES_USD.perEmailSend
+    expect(perturbed - real).toBeCloseTo(100 * 30 * 0.0009, 10)
+    expect(real).toBeCloseTo(27, 10)
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Free, and the two protections that hang off its band.
 // ---------------------------------------------------------------------------
 describe("Free's bandwidth band, and everything derived from it", () => {
