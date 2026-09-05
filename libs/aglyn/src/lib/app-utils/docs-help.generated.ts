@@ -77,6 +77,11 @@ export const PLUGIN_DOCS = {
     title: 'The console tour',
     excerpt: 'Where things live in the Aglyn console app bar and navigation.',
   },
+  contactActivities: {
+    path: '/content-and-data/contacts/activities',
+    title: 'Activities & the timeline',
+    excerpt: 'Log calls, emails, meetings and notes against a contact, a company or a deal, and read them in one timeline beside everything the platform captured.',
+  },
   contacts: {
     path: '/content-and-data/contacts/overview',
     title: 'Contacts CRM',
@@ -161,6 +166,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   commerceEndToEnd: ['#1-connect-payments', '#2-create-products', '#3-design-the-storefront', '#catalog-search-filters-and-sort', '#category-pages', '#the-product-page-template', '#4-what-checkout-does', '#paying-without-leaving-your-site', '#5-run-orders-from-the-console', '#6-subscriptions--the-stripe-portal', '#related'],
   companies: ['#the-companies-list', '#create-a-company', '#a-companys-page', '#contacts-at-a-company', '#deleting-a-company', '#who-can-see-a-company', '#related'],
   consoleTour: ['#the-app-bar', '#in-context-help', '#primary-navigation', '#editing-vs-managing', '#the-sites-list', '#the-status-pill', '#how-the-pill-is-decided', '#your-site-allowance', '#a-sites-dashboard', '#next', '#workspace-settings--notifications', '#alerts-on-this-device'],
+  contactActivities: ['#two-kinds-of-history', '#logging-an-activity', '#where-an-activity-is-visible', '#the-recent-activity-feed', '#related'],
   contacts: ['#unified-ingestion', '#the-contacts-page', '#whats-in-the-crm-area', '#segments', '#related'],
   datasets: ['#model-builder', '#typed-documents', '#relations', '#query-layer', '#repeatable-components', '#who-a-dataset-is-shared-with', '#import--export', '#related'],
   designedEmails: ['#create-a-template', '#styling-email-blocks', '#merge-tokens', '#send-it', '#the-plain-text-version'],
