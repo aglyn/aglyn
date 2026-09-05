@@ -328,6 +328,11 @@ export const DOCS_HELP_TOPICS = {
     title: 'Google Analytics events',
     excerpt: 'Every event your site sends to your own GA4 property, with the exact parameters each one carries — so you can build a report against it before you have any data.',
   },
+  import: {
+    path: '/content-and-data/contacts/import',
+    title: 'Import contacts from CSV',
+    excerpt: 'Bring a spreadsheet of people into the Contacts CRM — map its columns, preview the result, and import in batches with a report of what was added, updated and skipped.',
+  },
   importExport: {
     path: '/content-and-data/datasets/import-export',
     title: 'Import & export',
@@ -730,7 +735,7 @@ export const DOCS_HELP_ANCHORS = {
   consoleAndSite: ['#add-a-console-page', '#add-a-widget-to-a-shell-zone', '#wrap-every-console-page-providers', '#add-a-canvas-component-besigner--published-sites', '#add-a-site-runtime', '#troubleshooting'],
   consoleSearch: ['#what-it-searches', '#how-matching-works', '#what-it-does-not-search', '#why-a-group-sometimes-says-it-was-only-partly-searched'],
   consoleTour: ['#the-app-bar', '#in-context-help', '#primary-navigation', '#editing-vs-managing', '#the-sites-list', '#the-status-pill', '#how-the-pill-is-decided', '#your-site-allowance', '#a-sites-dashboard', '#next', '#workspace-settings--notifications', '#alerts-on-this-device'],
-  contacts: ['#unified-ingestion', '#the-contacts-page', '#whats-in-the-crm-area', '#segments', '#related'],
+  contacts: ['#unified-ingestion', '#the-contacts-page', '#whats-in-the-crm-area', '#import-from-csv', '#segments', '#related'],
   content: ['#site-templates--starter-gallery', '#section--block-library', '#content-collections--blog', '#related'],
   cookieConsent: ['#how-it-works', '#what-needs-consent', '#privacy-choices--the-persistent-control', '#where-the-choice-is-kept', '#global-privacy-control', '#previewing-what-visitors-see', '#turn-the-banner-off'],
   copyAssist: ['#use-it', '#tips', '#related'],
@@ -758,6 +763,7 @@ export const DOCS_HELP_ANCHORS = {
   gettingStarted: ['#create-your-first-site', '#what-a-site-contains', '#switching-between-sites', '#next'],
   glossary: ['#the-hierarchy', '#organization-org', '#workspace', '#tenant', '#tenant-vs-host--not-the-same-thing', '#quick-reference'],
   googleAnalytics: ['#setup', '#consent', '#automatic', '#engagement', '#commerce', '#web-vitals', '#authored-events', '#never-sent', '#related'],
+  import: ['#three-steps', '#what-each-column-can-hold', '#what-is-skipped-and-why', '#related'],
   importExport: ['#export', '#export-contents', '#large-exports', '#import', '#upsert-on-a-key-field', '#tips', '#related'],
   injectionZones: ['#widgetid-is-a-persisted-identifier'],
   installYourFirstPlugin: ['#before-you-start', '#step-1-open', '#step-2-browse', '#step-3-reviews', '#step-4-targeting', '#step-5-install', '#step-6-use', '#step-7-off', '#what-to-do-next', '#related'],

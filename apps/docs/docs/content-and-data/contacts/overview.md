@@ -78,6 +78,12 @@ Opening `/contacts` lands on the first section. Every section follows the same
 per-site visibility as the contacts themselves, so a section can never show a
 record the reader could not open as a contact.
 
+## Import from CSV
+
+**Import CSV** on the Contacts section brings a spreadsheet of people in — map its
+columns to contact fields, preview the first rows, and import in batches with a report
+of what was added, updated and skipped. See [Import contacts from CSV](./import.md).
+
 ## Segments
 
 Group contacts into **segments** — reusable audiences you can target directly in
