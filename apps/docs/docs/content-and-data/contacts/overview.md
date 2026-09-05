@@ -56,6 +56,7 @@ Once the page is switched on, it will let you:
 - Browse the **list** of contacts.
 - Open a **profile drawer** to see a contact's details and history.
 - Add **tags** and **notes**.
+- Log **calls, emails, meetings and notes** against a person, and read them in one timeline with everything the platform captured — see [Activities & the timeline](./activities.md).
 - **Export to CSV**.
 
 ## What's in the CRM area
