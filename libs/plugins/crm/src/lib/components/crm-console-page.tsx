@@ -30,6 +30,7 @@ import LeadDetailPage from './lead-detail-page'
 import LeadsSection from './leads-section'
 import ContactsSection from './contacts-section'
 import ReportsSection from './reports-section'
+import CrmSettingsSection from './settings-section'
 import TasksSection from './tasks-section'
 
 /**
@@ -100,6 +101,10 @@ function sectionBody(
       return <ReportsSection {...props} />
     case 'fields':
       return <FieldsSection hostId={props.hostId} org={props.org} />
+    case 'settings':
+      // The org-wide switches (AGL-2613): what the CRM does on its own for
+      // every site in the workspace, written to the org document.
+      return <CrmSettingsSection hostId={props.hostId} org={props.org} />
     default:
       return null
   }

@@ -47,6 +47,7 @@ const row = (overrides: Partial<ContactRecord> = {}): ContactRecord => ({
   jobTitle: '',
   companyName: '',
   companyId: '',
+  companyLink: { companyId: null, companyIds: [], heldElsewhere: [] },
   address: null,
   ownerUid: '',
   lifecycleStage: '',

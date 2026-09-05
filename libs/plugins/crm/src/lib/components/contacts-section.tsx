@@ -620,6 +620,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
           ...(values.phone ? { phone: values.phone } : {}),
           ...(values.jobTitle ? { jobTitle: values.jobTitle } : {}),
           ...(values.companyName ? { companyName: values.companyName } : {}),
+          ...(values.companyId ? { companyId: values.companyId } : {}),
           ...(values.address ? { address: values.address } : {}),
           ...(values.ownerUid ? { ownerUid: values.ownerUid } : {}),
           ...(values.lifecycleStage
@@ -998,7 +999,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                     'window. Search and the column filters reach every contact.'}
                 </Typography>
               ) : null}
-              <ContactsBulkBar hostId={hostId} scope={dataScope} consentGroup={consentGroup} rows={visible} selected={selectedIds} onSelectedChange={setSelectedIds} />
+              <ContactsBulkBar hostId={hostId} org={org} scope={dataScope} consentGroup={consentGroup} rows={visible} selected={selectedIds} onSelectedChange={setSelectedIds} />
               <ListTable
                 rows={visible}
                 columns={contactColumns}
@@ -1036,6 +1037,8 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
         <NewContactDrawer
           open
           onClose={() => setCreateOpen(false)}
+          hostId={hostId}
+          org={org}
           busy={createBusy}
           error={createError}
           consentGroup={consentGroup}

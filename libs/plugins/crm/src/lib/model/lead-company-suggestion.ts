@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { companyDomainForEmail } from '@aglyn/aglyn'
+import { companyDomainForEmail, companyNameForDomain } from '@aglyn/aglyn'
 
 /** What the convert dialog should propose for the company step. */
 export type CompanySuggestion =
@@ -37,9 +37,12 @@ export type CompanySuggestion =
  * land under one company, and the dialog's job is to make that the default
  * click rather than a lookup the converter has to remember to do.
  *
- * The proposed name is the domain's first label with a capital — `acme.com`
- * → `Acme` — which is a starting point the converter edits, not a claim
- * about what the business is called.
+ * The proposed name is `companyNameForDomain`'s — the domain's first label
+ * with a capital, `acme.com` → `Acme` — the same name the capture door gives
+ * a company it mints on its own, so a company proposed here and one created
+ * by a capture at the same domain start out called the same thing. A
+ * starting point the converter edits, not a claim about what the business
+ * is called.
  */
 export function suggestCompanyForLead(
   email: unknown,
@@ -51,12 +54,7 @@ export function suggestCompanyForLead(
     (company) => String(company.domain ?? '').toLowerCase() === domain,
   )
   if (existing) return { mode: 'existing', companyId: existing.$id }
-  const label = domain.split('.')[0] ?? domain
-  return {
-    mode: 'new',
-    name: label.charAt(0).toUpperCase() + label.slice(1),
-    domain,
-  }
+  return { mode: 'new', name: companyNameForDomain(domain), domain }
 }
 
 /**

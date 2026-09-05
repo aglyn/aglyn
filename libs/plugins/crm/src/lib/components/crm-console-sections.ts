@@ -25,6 +25,7 @@ export type CrmConsoleSectionId =
   | 'tasks'
   | 'reports'
   | 'fields'
+  | 'settings'
 
 /**
  * The CRM hub's sections, in rail order (AGL-2595).
@@ -45,7 +46,9 @@ export type CrmConsoleSectionId =
  *
  * Rail ORDER decides where a bare `/crm` lands: the shell redirects it to
  * the first section this reader may open. There is deliberately no separate
- * default constant.
+ * default constant. Settings is LAST (AGL-2613): it is the section a reader
+ * visits once and the records are what the rail is for, so it sits where a
+ * settings entry sits in every hub — after the work, before nothing.
  */
 export const CRM_CONSOLE_SECTIONS: readonly ConsoleNavSection[] = [
   { id: 'contacts', label: 'Contacts' },
@@ -55,4 +58,5 @@ export const CRM_CONSOLE_SECTIONS: readonly ConsoleNavSection[] = [
   { id: 'tasks', label: 'Tasks' },
   { id: 'reports', label: 'Reports' },
   { id: 'fields', label: 'Fields' },
+  { id: 'settings', label: 'Settings' },
 ]

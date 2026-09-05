@@ -50,6 +50,8 @@
 
 import {
   contactFacetPath,
+  CRM_COLLECTIONS,
+  crmReadTokens,
   isContactLifecycleStage,
   isOrgWideMember,
   normalizeAddress,
@@ -261,12 +263,13 @@ function normalizeTags(value: unknown): string[] {
 /**
  * `POST /api/crm/contacts-create` — a person added by hand (AGL-2596).
  *
- * Body: `{ hostId, email, name?, phone?, jobTitle?, companyName?, address?,
- * ownerUid?, lifecycleStage?, tags?, marketingConsent? }`. Answers
- * `{ contactId, created }`: `created` is false when the address already
- * belonged to somebody, in which case what was typed MERGES into the
- * existing row — the dedupe the shared address book exists for, and the
- * reason a second "create" of one person is not an error.
+ * Body: `{ hostId, email, name?, phone?, jobTitle?, companyName?,
+ * companyId?, address?, ownerUid?, lifecycleStage?, tags?,
+ * marketingConsent? }`. Answers `{ contactId, created }`: `created` is
+ * false when the address already belonged to somebody, in which case what
+ * was typed MERGES into the existing row — the dedupe the shared address
+ * book exists for, and the reason a second "create" of one person is not
+ * an error.
  *
  * ## Who may call it
  *
@@ -284,16 +287,29 @@ function normalizeTags(value: unknown): string[] {
  * it is not a bad request and not a server fault, it is the plan saying no,
  * and the drawer relays the sentence rather than inventing one.
  *
+ * ## The company (AGL-2613)
+ *
+ * `companyId` is the picker's choice, and it is checked before anything is
+ * written: the company has to exist and be visible to the capturing site's
+ * scope, or a caller could file a person under a record they cannot open —
+ * the same refusal the lead conversion makes. It reaches the upsert as
+ * `facet.companyId`, which is where the link is kept in step with its mirror
+ * and the company's contacts count; a merge onto somebody already at another
+ * company is a MOVE there, not a second link. The stored company's own name
+ * is what is echoed, over whatever the client sent, because the name on the
+ * record is the company's and not the form's.
+ *
  * ## What it writes beyond the upsert
  *
  * `upsertHostContact` takes the profile — phone, title, address, owner,
- * stage — and writes it into the capturing group's facet. The two things it
- * does not take are written here by DOTTED path afterwards: the tags, which
- * union into whatever the person already carried, and the company name,
- * which is free text until the companies section supplies a picker. Dotted
- * paths because this is an `update()`, and only an update reads a dot as a
- * path — a nested object here would replace the facet map and take every
- * other holder's records with it.
+ * stage, company — and writes it into the capturing group's facet. The two
+ * things it does not take are written here by DOTTED path afterwards: the
+ * tags, which union into whatever the person already carried, and the
+ * company name — the picked company's, or free text for a person filed
+ * under a name no company record carries yet. Dotted paths because this is
+ * an `update()`, and only an update reads a dot as a path — a nested object
+ * here would replace the facet map and take every other holder's records
+ * with it.
  */
 export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
@@ -330,7 +346,8 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
   }
   const name = typed(body['name'], 120)
   const jobTitle = typed(body['jobTitle'], 120)
-  const companyName = typed(body['companyName'], 120)
+  let companyName = typed(body['companyName'], 120)
+  const companyId = typed(body['companyId'], 128)
   const ownerUid = typed(body['ownerUid'], 128)
   const address =
     body['address'] && typeof body['address'] === 'object'
@@ -373,6 +390,32 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
       }
     }
 
+    if (companyId) {
+      const group = await consentGroupForSite(
+        hostId,
+        resolved.org as Record<string, unknown>,
+      )
+      const readable = new Set<string>(crmReadTokens(group))
+      const companySnapshot = await firebaseAdmin
+        .app()
+        .firestore()
+        .collection('orgs')
+        .doc(resolved.orgId)
+        .collection(CRM_COLLECTIONS.companies)
+        .doc(companyId)
+        .get()
+      const tokens: unknown = companySnapshot.exists
+        ? companySnapshot.get('visibleTo')
+        : undefined
+      const visible =
+        Array.isArray(tokens) && tokens.some((token) => readable.has(String(token)))
+      if (!visible) {
+        res.status(404).json({ error: 'Unknown company' })
+        return
+      }
+      companyName = typed(companySnapshot.get('name'), 120) || companyName
+    }
+
     const result = await captureHostContact({
       hostId,
       email,
@@ -383,6 +426,7 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
       facet: {
         ...(phone ? { phone } : {}),
         ...(jobTitle ? { jobTitle } : {}),
+        ...(companyId ? { companyId } : {}),
         ...(address ? { address } : {}),
         ...(ownerUid ? { ownerUid } : {}),
         ...(rawStage && isContactLifecycleStage(rawStage)

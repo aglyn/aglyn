@@ -21,7 +21,8 @@ list — the list itself stays exactly where it was.
 | **Email** | Required. It is the one thing every site shares about a person and what makes two captures one record. |
 | **Name** | Optional. Your own name for the person; the record also keeps the name they gave on a form. |
 | **Phone** | Entered with its country code, like `+1 512 555 0107`. Stored in E.164 so the same number typed two ways is one number. |
-| **Job title**, **Company** | Free text. Company is the name as you know it; the record is linked to a [company](./companies.md) from the company's own page, by [converting a lead](./leads.md#converting-a-lead), or by a [CSV import](./import.md) that names the company. |
+| **Job title** | Free text. |
+| **Company** | A picker over the [companies](./companies.md) your site may see. Type to search by name or domain; a name nobody has filed yet gets a **Create** row that makes the company and selects it. Once the email is typed, a company whose domain matches it is suggested beneath the field — offered, never applied. Leave it empty for no company. |
 | **Lifecycle stage** | Where the person sits in your funnel; see [Lifecycle stages](#lifecycle-stages). |
 | **Owner** | The team member responsible for the relationship, picked from your workspace roster. |
 | **Tags** | Comma-separated. Tags are lower-cased and deduplicated, so `VIP` and `vip` are one tag. |
@@ -44,7 +45,14 @@ have spent. Under it, one card per aspect of the record:
 - **Properties** — the editable profile: name, phone, job title, company,
   lifecycle stage, owner, tags, address and an **About** box for your
   team's notes. One **Save** writes everything at once. The email is shown
-  but cannot be edited here, because it is the shared identity.
+  but cannot be edited here, because it is the shared identity. The
+  **Company** field is the same picker the New contact drawer has: search
+  the companies your site may see, create one by typing its name, or clear
+  the field to unlink the person. A record that carries a company name with
+  no link — an import, or a save from before the picker — shows the name as
+  a note beneath the field, with one click to link the company of that name
+  or create it. Changing the company here moves the count on the
+  [companies list](./companies.md#the-companies-list) with it.
 - **Relationship** — the **sources** that created the record (a form, a
   checkout, a booking, an import, or by hand), the **campaign attribution**
   recorded from the link the person followed, the **marketing email** basis

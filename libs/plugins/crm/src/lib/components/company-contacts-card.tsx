@@ -18,9 +18,11 @@
 
 import {
   contactDisplayName,
+  CRM_COLLECTIONS,
   nameSearchKey,
   normalizeContactEmail,
   pluginDocsHelp,
+  readContactCompanyLink,
   readContactFacet,
 } from '@aglyn/aglyn'
 import { mdiAccountPlusOutline, mdiLinkOff } from '@aglyn/shared-data-mdi'
@@ -53,14 +55,14 @@ import {
   orderBy,
   query,
   startAt,
-  updateDoc,
   where,
+  writeBatch,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
 import type { CrmScope } from '../hooks/use-crm-scope'
 import {
   CONTACT_COMPANY_IDS_FIELD,
-  contactCompanyLinkUpdate,
+  contactCompanyLinkWrites,
 } from '../model/companies'
 import type { CrmRoutes } from '../model/crm-routes'
 
@@ -260,17 +262,33 @@ export function CompanyContactsCard(props: CompanyContactsCardProps) {
   const setLink = useCallback(
     async (row: ContactRow, companyIdOrNull: string | null) => {
       if (!scope) return
-      const update = contactCompanyLinkUpdate(
-        row.data,
+      /*
+       * The name rides with the link, so the person reads as "at Acme" in
+       * the contact list and the global search the moment they are linked
+       * here — and stops reading so when unlinked. The count on each company
+       * the link moves lands in the same commit, so the figure above this
+       * table and the one on the companies list cannot disagree.
+       */
+      const link = contactCompanyLinkWrites(
+        readContactCompanyLink(row.data, consentGroup.groupId),
         consentGroup.groupId,
         companyIdOrNull,
+        companyIdOrNull ? companyName : null,
       )
-      if (!update) return
+      if (!link) return
       try {
-        await updateDoc(
+        const batch = writeBatch(firestore)
+        batch.update(
           doc(firestore, scope[0], scope[1], 'contacts', row.$id),
-          update,
+          link.contact,
         )
+        for (const company of link.companies) {
+          batch.update(
+            doc(firestore, scope[0], scope[1], CRM_COLLECTIONS.companies, company.id),
+            company.update,
+          )
+        }
+        await batch.commit()
         bumpMembership()
         enqueueSnackbar(
           companyIdOrNull
