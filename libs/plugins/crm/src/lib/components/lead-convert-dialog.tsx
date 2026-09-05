@@ -54,7 +54,7 @@ import {
   where,
 } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
   dollarsToCents,
   suggestCompanyForLead,
@@ -179,6 +179,10 @@ export function LeadConvertDialog(props: LeadConvertDialogProps) {
   const [dealStageId, setDealStageId] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // The labels' ids, so the two comboboxes are named "Company" and "Stage"
+  // rather than after whatever they show — see `LeadOwnerSelect`.
+  const companyLabelId = useId()
+  const stageLabelId = useId()
 
   /*
    * Reset on every open, and seed the company step ONCE per open when the
@@ -318,8 +322,9 @@ export function LeadConvertDialog(props: LeadConvertDialogProps) {
             </RadioGroup>
             {companyMode === 'existing' ? (
               <FormControl size="small" fullWidth>
-                <InputLabel>{'Company'}</InputLabel>
+                <InputLabel id={companyLabelId}>{'Company'}</InputLabel>
                 <Select
+                  labelId={companyLabelId}
                   label="Company"
                   value={companyId}
                   onChange={(event) => setCompanyId(String(event.target.value))}
@@ -405,8 +410,9 @@ export function LeadConvertDialog(props: LeadConvertDialogProps) {
                   />
                 </Stack>
                 <FormControl size="small" fullWidth>
-                  <InputLabel>{'Stage'}</InputLabel>
+                  <InputLabel id={stageLabelId}>{'Stage'}</InputLabel>
                   <Select
+                    labelId={stageLabelId}
                     label="Stage"
                     value={dealStageId}
                     onChange={(event) => setDealStageId(String(event.target.value))}

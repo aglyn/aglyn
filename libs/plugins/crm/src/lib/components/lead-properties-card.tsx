@@ -37,7 +37,7 @@ import {
   Typography,
 } from '@mui/material'
 import { deleteField, doc, serverTimestamp, updateDoc } from 'firebase/firestore'
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { crmRoutes } from '../model/crm-routes'
 import { LeadOwnerSelect, type OrgMemberOptions } from './lead-owner-select'
 import { LeadStatusChip } from './lead-status-chip'
@@ -106,6 +106,9 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
   const open = Aglyn.isCrmLeadOpen(lead) && !converted
 
   const [notes, setNotes] = useState(String(lead.notes ?? ''))
+  // The label's id, so the status combobox is named "Status" rather than
+  // after the status it shows — see `LeadOwnerSelect`.
+  const statusLabelId = useId()
   const [notesDirty, setNotesDirty] = useState(false)
   const [savingNotes, setSavingNotes] = useState(false)
   // A newer note from the server replaces an UNEDITED draft; an edited one is
@@ -202,8 +205,9 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
             </Fact>
           ) : (
             <FormControl size="small" sx={{ minWidth: 200 }}>
-              <InputLabel>{'Status'}</InputLabel>
+              <InputLabel id={statusLabelId}>{'Status'}</InputLabel>
               <Select
+                labelId={statusLabelId}
                 label="Status"
                 value={status === 'unqualified' ? 'unqualified' : status}
                 onChange={(event) => {
