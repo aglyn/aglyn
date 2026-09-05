@@ -137,7 +137,26 @@ function normalizeTags(tags: readonly string[] | undefined): string[] {
  * surfaced as a console alert (AGL-891). Interactions on existing
  * contacts always append regardless of plan.
  */
-export async function upsertHostContact(options: {
+/**
+ * What a capture door learns when its capture made a NEW person.
+ *
+ * Handed to {@link UpsertHostContactOptions.onCreated} once, on the create
+ * branch only. The merge branch is a visit by somebody the org already held,
+ * which is another interaction and not a new contact — the same line
+ * `campaignTouch` draws for attribution. Scalars and one string array, so
+ * the runtime can flatten it into an event payload without inventing keys.
+ */
+export interface HostContactCreated {
+  contactId: string
+  hostId: string
+  email: string
+  name?: string
+  source: ContactSource
+  /** The capture surface's campaigns, normalized — `[]` when it had none. */
+  campaignIds: string[]
+}
+
+export interface UpsertHostContactOptions {
   hostId: string
   email: unknown
   name?: string
@@ -234,7 +253,29 @@ export async function upsertHostContact(options: {
    * phone and nothing else does not blank the title somebody typed.
    */
   facet?: UpsertHostContactFacet
-}): Promise<UpsertHostContactVerdict> {
+  /**
+   * Told when this capture created a contact (AGL-2605).
+   *
+   * A HOOK rather than an event emitted from here, and the reason is the
+   * dependency direction: the event fan-out lives in `libs/tenant/runtime`,
+   * which imports THIS library for its Firestore handle and its org helpers.
+   * An import back up from here would be a cycle, and the module boundaries
+   * (`scope:data` may depend on data and util only) refuse it besides. So
+   * this module reports the fact and the runtime's `captureHostContact`
+   * turns it into `contactCreated` — every server door goes through that
+   * wrapper, and a door that calls this function directly has chosen to
+   * create contacts nothing can react to.
+   *
+   * Awaited with its own catch, like the order join above: the least
+   * important write on the path, and a failure in it must not cost the
+   * capture that already happened.
+   */
+  onCreated?: (created: HostContactCreated) => void | Promise<void>
+}
+
+export async function upsertHostContact(
+  options: UpsertHostContactOptions,
+): Promise<UpsertHostContactVerdict> {
   try {
     const email = normalizeContactEmail(options.email)
     if (!email) return { refused: 'invalid-email' }
@@ -579,6 +620,27 @@ export async function upsertHostContact(options: {
         refId: created.id,
         touch: options.campaignTouch,
         convertedAtMs: interaction.atMs,
+      })
+    }
+    /*
+     * REPORTED ON CREATION ONLY, below the band gate for the reason the
+     * attribution above is: a contact the band dropped does not exist, and
+     * an automation told about it would act on a person the console cannot
+     * show. The merge branch returned long before this line, so a repeat
+     * visit by somebody already held is never announced as a new contact.
+     */
+    if (options.onCreated) {
+      await Promise.resolve(
+        options.onCreated({
+          contactId: created.id,
+          hostId: options.hostId,
+          email,
+          ...(options.name ? { name: options.name.slice(0, 120) } : {}),
+          source: options.source,
+          campaignIds,
+        }),
+      ).catch((error) => {
+        console.error('upsertHostContact onCreated failed', error)
       })
     }
     return { contactId: created.id, created: true }

@@ -27,6 +27,7 @@
 // `@aglyn/aglyn/app-utils/activity-presenter`.
 
 import { Route, buildRoute } from './console-routes'
+import { hostEventLabel } from './workflows'
 
 /** The stored `target` sub-object, read defensively (any field may be absent). */
 export interface ActivityTargetLike {
@@ -215,29 +216,16 @@ export interface ActionRunEntryLike extends ActivityEntryLike {
   summary?: string
 }
 
-/** Human names for the trigger events an action can start on. */
-const EVENT_LABELS: Record<string, string> = {
-  formSubmission: 'Form submitted',
-  pageView: 'Page viewed',
-  memberSignUp: 'Member signed up',
-  memberSignIn: 'Member signed in',
-  memberSignOut: 'Member signed out',
-  lead: 'New lead',
-  booking: 'New booking',
-  taskCompleted: 'CRM task completed',
-}
-
 /**
  * `formSubmission` → `Form submitted`.
  *
  * The console rendered the raw camelCase identifier in the trigger select
- * and in every run row. A custom event keeps its own name — the author
- * chose it and it is already the word they think in.
+ * and in every run row. The words are `HOST_EVENT_LABELS` in `workflows.ts`
+ * — one map, so the picker an author chose from and the run row they read
+ * afterwards cannot name the same event differently.
  */
 export function actionTriggerLabel(event: string | undefined): string {
-  const key = String(event ?? '').trim()
-  if (!key) return 'Event'
-  return EVENT_LABELS[key] ?? key
+  return hostEventLabel(event)
 }
 
 /**

@@ -548,3 +548,86 @@ describe('an interaction records the door the person came in through', () => {
     expect(entry).not.toHaveProperty('path')
   })
 })
+
+/**
+ * The create hook (AGL-2605): the one fact a capture door cannot learn any
+ * other way — that its capture made a NEW person, and which document — so
+ * the runtime can announce `contactCreated`. A merge is a repeat visit and
+ * is never reported; a hook that throws costs nothing the capture already
+ * did.
+ */
+describe('upsertHostContact onCreated', () => {
+  beforeEach(() => {
+    for (const key of Object.keys(contacts)) delete contacts[key]
+    added = []
+    mockOrgDefaultScope = undefined
+  })
+
+  it('reports a NEW contact once, with its id, address, source and campaigns', async () => {
+    const reported: unknown[] = []
+    await upsertHostContact({
+      hostId: 'h1',
+      email: 'New@Example.com',
+      name: 'Ada Lovelace',
+      source: 'form',
+      interaction: { refId: 's1', summary: 'Submitted "Contact"' },
+      campaignIds: ['spring-2026', 'spring-2026', ' '],
+      onCreated: (created) => {
+        reported.push(created)
+      },
+    })
+    expect(added).toHaveLength(1)
+    expect(reported).toEqual([
+      {
+        contactId: 'auto-1',
+        hostId: 'h1',
+        // Normalized, so a filter on the address matches what the row holds.
+        email: 'new@example.com',
+        name: 'Ada Lovelace',
+        source: 'form',
+        // Deduped and trimmed by the same coercion the document stores.
+        campaignIds: ['spring-2026'],
+      },
+    ])
+  })
+
+  it('says nothing on a merge — a repeat visit is not a new contact', async () => {
+    contacts['c1'] = { email: 'held@example.com', sources: { form: true }, interactions: [] }
+    const onCreated = jest.fn()
+    await upsertHostContact({
+      hostId: 'h1',
+      email: 'held@example.com',
+      source: 'booking',
+      interaction: { refId: 'b1', summary: 'Booked' },
+      onCreated,
+    })
+    expect(added).toHaveLength(0)
+    expect(onCreated).not.toHaveBeenCalled()
+  })
+
+  it('survives a hook that throws, and the contact is still created', async () => {
+    const errors = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      await expect(
+        upsertHostContact({
+          hostId: 'h1',
+          email: 'hook@example.com',
+          source: 'form',
+          interaction: { refId: 's2' },
+          onCreated: async () => {
+            throw new Error('emit failed')
+          },
+        }),
+      ).resolves.toEqual({ contactId: expect.any(String), created: true })
+      expect(added).toHaveLength(1)
+      // Its own catch, so the failure is named as the hook's — not as the
+      // capture's, which succeeded.
+      expect(errors).toHaveBeenCalledWith(
+        'upsertHostContact onCreated failed',
+        expect.any(Error),
+      )
+    } finally {
+      errors.mockRestore()
+    }
+  })
+})

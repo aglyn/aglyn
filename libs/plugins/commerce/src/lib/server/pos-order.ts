@@ -21,8 +21,8 @@ import {
   firebaseAdmin,
   getOrgForHost,
   getPluginConfig,
-  upsertHostContact,
 } from '@aglyn/tenant-data-admin'
+import { captureHostContact } from '@aglyn/tenant-runtime'
 import { connectLinkageIsReady } from '@aglyn/tenant-data-admin/server/stripe-account-mode'
 import {
   buildRoute,
@@ -1166,7 +1166,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
       // again on the same key. A duplicate paid order is a far larger defect
       // than a missing contact row. So the failure is logged and dropped
       // here, and the sale still returns 200.
-      await upsertHostContact({
+      await captureHostContact({
         hostId,
         email: contactEmail,
         ...(contactName ? { name: contactName } : {}),

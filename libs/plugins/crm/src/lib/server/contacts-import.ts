@@ -28,9 +28,11 @@
  *
  * ## Every row goes through the door every capture goes through
  *
- * `upsertHostContact` is the one writer of the contacts collection for
- * every door that is not the v1 API — forms, checkout, bookings, the
- * newsletter box — and it is the writer here. That is what makes an import
+ * `captureHostContact` — the runtime's wrapper over `upsertHostContact`,
+ * the one writer of the contacts collection for every door that is not the
+ * v1 API: forms, checkout, bookings, the newsletter box — is the writer
+ * here too, so a row this file creates raises `contactCreated` like any
+ * other capture (AGL-2605). That is what makes an import
  * dedupe on the address the way a second form submission does, land in the
  * capturing group's facet the way a form capture does, record consent
  * against the capturing site, and stop at the free band where a form
@@ -86,8 +88,8 @@ import {
   listOrgMembers,
   memberHasOrgPermission,
   resolveOrgMembership,
-  upsertHostContact,
 } from '@aglyn/tenant-data-admin'
+import { captureHostContact } from '@aglyn/tenant-runtime'
 import { FieldValue } from 'firebase-admin/firestore'
 
 /** The one sentence every imported contact's timeline opens with. */
@@ -389,7 +391,7 @@ export const crmContactsImportHandler: PluginApiHandler = async (req, res) => {
       const companyId = row.companyName
         ? await resolveCompanyId(context, row.companyName, companies, companyTally)
         : undefined
-      const verdict = await upsertHostContact({
+      const verdict = await captureHostContact({
         hostId: context.hostId,
         email: row.email,
         ...(row.name ? { name: row.name } : {}),

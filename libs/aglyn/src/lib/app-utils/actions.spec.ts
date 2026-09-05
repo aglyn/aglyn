@@ -23,7 +23,11 @@ import {
   evaluateTriggerConditions,
   type HostAction,
   type HostActionStep,
+  CONTACT_TAG_MAX_LENGTH,
+  CRM_ACTION_STEP_TYPES,
   HOST_ACTION_STEP_LABELS,
+  HOST_ACTION_STEP_OUTCOMES,
+  isCrmActionStep,
   isBasicClientActionStep,
   isClientStepEntitled,
   isCustomEventName,
@@ -33,6 +37,7 @@ import {
   validateHostAction,
   WEBHOOK_URL_PATTERN,
 } from './actions'
+import { CRM_TASK_MAX_DUE_DAYS } from './crm'
 
 const base: HostAction = {
   name: 'Welcome',
@@ -751,6 +756,165 @@ describe('basic-interaction tiering (AGL-577)', () => {
     for (const type of ['sendEmail', 'notifyAdmins', 'enrollList', 'assignCampaign']) {
       expect(isClientStepEntitled(step(type), BUSINESS)).toBe(false)
     }
+  })
+})
+
+/**
+ * The CRM steps (AGL-2605): server steps with a fixed vocabulary, refused
+ * at the editor rather than stored, because the executor trusts the value
+ * and writes it into a facet every stage report counts.
+ */
+describe('CRM steps', () => {
+  const step = (type: string): HostActionStep => ({ type } as HostActionStep)
+  const BUSINESS = { actionsEntitled: true, allowJs: true }
+  const withStep = (crmStep: Record<string, unknown>): HostAction => ({
+    ...base,
+    steps: [crmStep as unknown as HostActionStep],
+  })
+
+  it('are server steps with labels and outcomes, and are classified as CRM', () => {
+    for (const type of [
+      'setContactStage',
+      'addContactTag',
+      'assignContactOwner',
+      'createCrmTask',
+      'logCrmActivity',
+    ] as const) {
+      expect(CRM_ACTION_STEP_TYPES.has(type)).toBe(true)
+      expect(isCrmActionStep(step(type))).toBe(true)
+      expect(CLIENT_ACTION_STEP_TYPES.has(type)).toBe(false)
+      expect(isClientStepEntitled(step(type), BUSINESS)).toBe(false)
+      expect(HOST_ACTION_STEP_LABELS[type]).toBeTruthy()
+      expect(HOST_ACTION_STEP_OUTCOMES[type]).toBeTruthy()
+    }
+    expect(isCrmActionStep(step('sendEmail'))).toBe(false)
+  })
+
+  it('accepts a well-formed step of each kind', () => {
+    expect(
+      validateHostAction(
+        withStep({ type: 'setContactStage', lifecycleStage: 'customer' }),
+      ),
+    ).toBeNull()
+    expect(
+      validateHostAction(withStep({ type: 'addContactTag', tag: 'vip' })),
+    ).toBeNull()
+    expect(
+      validateHostAction(
+        withStep({ type: 'assignContactOwner', ownerEmail: 'sam@example.com' }),
+      ),
+    ).toBeNull()
+    expect(
+      validateHostAction(
+        withStep({ type: 'assignContactOwner', ownerUid: 'uid-1' }),
+      ),
+    ).toBeNull()
+    expect(
+      validateHostAction(
+        withStep({
+          type: 'createCrmTask',
+          title: 'Call them back',
+          kind: 'call',
+          dueInDays: 2,
+        }),
+      ),
+    ).toBeNull()
+    expect(
+      validateHostAction(
+        withStep({ type: 'logCrmActivity', kind: 'note', body: 'Signed up' }),
+      ),
+    ).toBeNull()
+  })
+
+  it('refuses a stage outside the lifecycle vocabulary', () => {
+    expect(
+      validateHostAction(
+        withStep({ type: 'setContactStage', lifecycleStage: 'Customer' }),
+      ),
+    ).toMatch(/pick a lifecycle stage/)
+    expect(
+      validateHostAction(withStep({ type: 'setContactStage' })),
+    ).toMatch(/pick a lifecycle stage/)
+  })
+
+  it('refuses an empty or oversized tag', () => {
+    expect(
+      validateHostAction(withStep({ type: 'addContactTag', tag: '  ' })),
+    ).toMatch(/enter the tag/)
+    expect(
+      validateHostAction(
+        withStep({ type: 'addContactTag', tag: 'x'.repeat(CONTACT_TAG_MAX_LENGTH + 1) }),
+      ),
+    ).toMatch(/at most/)
+  })
+
+  it('refuses an owner named by neither uid nor address', () => {
+    expect(
+      validateHostAction(withStep({ type: 'assignContactOwner' })),
+    ).toMatch(/owner’s email/)
+    expect(
+      validateHostAction(
+        withStep({ type: 'assignContactOwner', ownerEmail: 'not-an-address' }),
+      ),
+    ).toMatch(/owner’s email/)
+  })
+
+  it('refuses a task with no title, an unknown kind, or a due date off the band', () => {
+    expect(
+      validateHostAction(
+        withStep({ type: 'createCrmTask', title: '', kind: 'call', dueInDays: 1 }),
+      ),
+    ).toMatch(/title/)
+    expect(
+      validateHostAction(
+        withStep({ type: 'createCrmTask', title: 'x', kind: 'note', dueInDays: 1 }),
+      ),
+    ).toMatch(/kind of task/)
+    expect(
+      validateHostAction(
+        withStep({ type: 'createCrmTask', title: 'x', kind: 'call', dueInDays: -1 }),
+      ),
+    ).toMatch(/due in 0–/)
+    expect(
+      validateHostAction(
+        withStep({ type: 'createCrmTask', title: 'x', kind: 'call', dueInDays: 1.5 }),
+      ),
+    ).toMatch(/due in 0–/)
+    expect(
+      validateHostAction(
+        withStep({
+          type: 'createCrmTask',
+          title: 'x',
+          kind: 'call',
+          dueInDays: CRM_TASK_MAX_DUE_DAYS + 1,
+        }),
+      ),
+    ).toMatch(/due in 0–/)
+  })
+
+  it('refuses an assignee address that is not one, and needs none at all', () => {
+    const task = { type: 'createCrmTask', title: 'x', kind: 'call', dueInDays: 1 }
+    expect(
+      validateHostAction(withStep({ ...task, assigneeEmail: 'sam' })),
+    ).toMatch(/assignee’s email/)
+    expect(
+      validateHostAction(withStep({ ...task, assigneeEmail: 'sam@example.com' })),
+    ).toBeNull()
+    // Blank is "the contact's owner", not an error.
+    expect(validateHostAction(withStep({ ...task, assigneeEmail: '  ' }))).toBeNull()
+  })
+
+  it('refuses an activity with an unknown kind or nothing to say', () => {
+    expect(
+      validateHostAction(
+        withStep({ type: 'logCrmActivity', kind: 'todo', body: 'x' }),
+      ),
+    ).toMatch(/kind of activity/)
+    expect(
+      validateHostAction(
+        withStep({ type: 'logCrmActivity', kind: 'note', body: ' ' }),
+      ),
+    ).toMatch(/what happened/)
   })
 })
 /**

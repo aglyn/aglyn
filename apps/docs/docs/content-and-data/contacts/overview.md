@@ -99,3 +99,4 @@ Group contacts into **segments** — reusable audiences you can target directly 
 - [Companies](./companies.md)
 - [Email campaigns](../../marketing-and-automation/email-campaigns/overview.md)
 - [Forms & lead capture](../forms/overview.md)
+- [Automations for contacts](automations.md)

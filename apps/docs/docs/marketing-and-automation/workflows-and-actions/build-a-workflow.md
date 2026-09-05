@@ -23,7 +23,9 @@ describes the outcome (e.g. "Welcome new member").
 ## 2. Choose a trigger
 
 Pick the **site event** that starts the workflow — for example a form submission, a new
-member, or an order. The event's data is available to every step that follows.
+member, an order, or a [CRM event](actions-builder.md#crm-events) such as **Contact
+created**. The event's data is available to every step that follows, and the **Filter**
+field's helper text names the keys the chosen event puts in scope.
 
 ## 3. Add steps
 
