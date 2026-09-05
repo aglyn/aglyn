@@ -4016,6 +4016,12 @@ describe('site collaborators are scoped out of the org (AGL-1026)', () => {
       await setDoc(doc(db, 'orgs', ORG, 'lists', 'l1', 'members', 'm1'), { email: 'x@y.z' })
       await setDoc(doc(db, 'orgs', ORG, 'usage', '2026-07'), { pageviews: 1 })
       await setDoc(doc(db, 'orgs', ORG, 'apiUsage', '2026-07'), { requests: 1 })
+      // What `recordCrmEmailSend` writes on a delivered one-to-one email: a
+      // per-UTC-day counter the billing meter reads (AGL-2611).
+      await setDoc(doc(db, 'orgs', ORG, 'crmEmailUsage', '2026-07-02'), {
+        count: 3,
+        day: '2026-07-02',
+      })
       // Exactly what `serve-media-cdn.ts` writes on an origin serve of an
       // ORG-library asset: a day-doc whose `media` map is keyed by asset id.
       await setDoc(doc(db, 'orgs', ORG, 'analytics', '2026-07-02'), {
@@ -4060,6 +4066,24 @@ describe('site collaborators are scoped out of the org (AGL-1026)', () => {
     await assertFails(getDoc(doc(authed(EDITOR), 'orgs', ORG, 'apiUsage', '2026-07')))
     await assertFails(getDoc(doc(authed(EDITOR), 'orgs', ORG, 'activity', 'a1')))
     await assertSucceeds(getDoc(doc(authed(VIEWER), 'orgs', ORG, 'usage', '2026-07')))
+  })
+
+  /**
+   * The one-to-one email counter is a billing meter (AGL-2611): the same
+   * three verdicts as `apiUsage` beside it. The org-wide viewer's read is
+   * the positive control — the Billing page meter is what the rule exists
+   * for, so a rule that denied everyone would pass the two denials and still
+   * leave a rep learning the cap by being refused.
+   */
+  it('the one-to-one email counter reads like apiUsage — org-wide only, never written', async () => {
+    const counter = (ctx) => doc(ctx, 'orgs', ORG, 'crmEmailUsage', '2026-07-02')
+    await assertFails(getDoc(counter(authed(EDITOR))))
+    await assertSucceeds(getDoc(counter(authed(VIEWER))))
+    await assertSucceeds(getDoc(counter(authed(OWNER))))
+    // Server-written only: the cap is enforced against this number, so a
+    // client that could lower it could lift its own cap.
+    await assertFails(setDoc(counter(authed(OWNER)), { count: 0 }))
+    await assertFails(deleteDoc(counter(authed(OWNER))))
   })
 
   /**

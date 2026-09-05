@@ -627,6 +627,18 @@ service cloud.firestore {
         allow read: if isStaff() || isOrgWideMember();
         allow write: if false;
       }
+      // The one-to-one CRM email counter (AGL-2611): one document per UTC
+      // day, `{ count, day, updatedAt }`, the figure `checkCrmEmailQuota`
+      // refuses against and the Billing page's "One-to-one emails (today)"
+      // meter reads — so a rep learns the cap from a meter, never by being
+      // refused. Org-wide and server-written only, for `apiUsage`'s reasons:
+      // how much mail the workspace sends is not a fact about the one site a
+      // collaborator was invited to, and a client that could write the count
+      // could lift its own cap.
+      match /crmEmailUsage/{day} {
+        allow read: if isStaff() || isOrgWideMember();
+        allow write: if false;
+      }
 
       // Per-asset media delivery counters for the ORG library (AGL-176),
       // added here because they were never granted at all (AGL-1143).
