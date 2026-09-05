@@ -9,6 +9,20 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.73 — 2026-09-05
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.72...v1.0.0-beta.73)
+
+<details>
+<summary>Also in this release: 2 test, 2 chore</summary>
+
+- **tools,docs:** release:tag notices when main lacks the shipped version ([AGL-2594](https://linear.app/aglyn/issue/AGL-2594))
+- **console,tenant:** every health door has a spec that drives it red ([AGL-2591](https://linear.app/aglyn/issue/AGL-2591))
+- **console,tenant:** the two health roots and the tenant error-beacon can go red ([AGL-2592](https://linear.app/aglyn/issue/AGL-2592), [AGL-2594](https://linear.app/aglyn/issue/AGL-2594))
+- **tools,docs:** the uptime monitor inventory is a checked fact ([AGL-2593](https://linear.app/aglyn/issue/AGL-2593), [AGL-2594](https://linear.app/aglyn/issue/AGL-2594))
+
+</details>
+
 ## v1.0.0-beta.72 — 2026-09-05
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/a4861d2d0...v1.0.0-beta.72)
