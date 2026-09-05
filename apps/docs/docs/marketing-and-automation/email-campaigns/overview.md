@@ -589,9 +589,24 @@ minutes. Pick **From a rule** when you create the list, then say who it draws fr
 - **Tagged** — one or more contact tags, comma separated. Contacts only.
 - **Submitted form** — one or more form names, comma separated. Form submissions only.
 - **Created after** — only people whose record was created on or after that date.
+- **Owned by**, **Lifecycle stage**, **At company** — the CRM fields on a contact's
+  record for your site: any of the team members picked, any of the stages picked,
+  any of the companies found by typing a name. Contacts only; a contact with no
+  owner, stage or company on record does not match. A lead, a site member or a
+  form submission carries none of these, so the filters are simply not applied to
+  them.
+- **Field conditions** — one row per custom contact field, each a field, a
+  condition and a value: *is*, *is not*, *contains*, *is more than*, *is less
+  than*, *is set* or *is not set*. Every row must hold. A number field compares
+  numbers, a choice field offers its own options, and *is not* requires a value
+  that differs — a blank does not count, so excluding one plan does not select
+  everyone whose plan was never recorded (use *is not set* for that).
 
-So "everyone who submitted our Contact us form", "contacts tagged `vip`", and "site
-members who joined since March" are each one rule.
+So "everyone who submitted our Contact us form", "contacts tagged `vip`", "site
+members who joined since March", and "customers at Acme on the Enterprise plan"
+are each one rule. The paragraph above the filters reads the rule back in
+sentences — naming people, stages and companies rather than ids — so you can
+check it against what you meant.
 
 The list row shows when the rule last ran. If it says **not yet evaluated**, the next
 sweep has not reached it — a list created a moment ago is normal; hours is not.

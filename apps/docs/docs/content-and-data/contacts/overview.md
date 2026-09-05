@@ -78,6 +78,8 @@ Opening `/contacts` lands on the first section. Every section follows the same
 per-site visibility as the contacts themselves, so a section can never show a
 record the reader could not open as a contact.
 
+- [Bulk actions](bulk-actions.md) — tick contacts in the table to tag them, set their owner or stage, add them to an email audience, export them, or remove them from this site at once.
+
 ## Segments
 
 Group contacts into **segments** — reusable audiences you can target directly in
