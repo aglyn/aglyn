@@ -86,6 +86,8 @@ import {
   where,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
+import { customFieldColumns } from './contact-custom-columns'
 
 /**
  * The shared labels, under the name this file has always called them.
@@ -175,6 +177,8 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
   // path this used to fall back to is gone (AGL-1050), so the CRM lists
   // nothing rather than listing somewhere else.
   const { scope: dataScope } = useOrgDataScope({ hostId })
+  // The org's custom fields, for the optional columns below (AGL-2601).
+  const customFields = useContactFieldDefinitions(dataScope?.[1] ?? null)
   /*==========================================
    * THE CONTROLLER THIS PAGE IS SHOWING.
    *
@@ -313,6 +317,8 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
           // is this holder's own filing, and a read off the top of the
           // document would be somebody else's.
           campaignIds: Aglyn.readContactCampaignIds(row, consentGroup.groupId),
+          // This holder's custom field values, for the optional columns.
+          custom: facet.custom ?? {},
         }
       }),
     [contactDocs, consentGroup],
@@ -546,13 +552,14 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
           </Typography>
         ),
       },
+      ...customFieldColumns(customFields.active),
       ...hiddenFilterColumns(
         CONTACT_LIST_FILTER_FIELDS,
         CONTACT_FILTER_COLUMNS,
         CONTACT_LIST_FILTER_HEADERS,
       ),
     ],
-    [],
+    [customFields.active],
   )
 
   const [segmentName, setSegmentName] = useState('')

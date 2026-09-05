@@ -46,6 +46,10 @@ export * from './contacts'
 // it because `ContactFacet` names its lifecycle stage and custom-value types;
 // the scope stamp every CRM creator writes lives here too.
 export * from './crm'
+// What a VALUE under a custom contact field may be, and the coercion every
+// door applies to one (AGL-2601): a mapped form field, an API `custom` body,
+// and the carry-over that keeps a mapping across a publish. Pure like `crm`.
+export * from './contact-custom-fields'
 // The consent JOIN (`docs/specs/email-overhaul.md` §3f). Pure, and it composes
 // `contacts` for the normalizer, so it sits directly beside it. No Node
 // builtin, which is what keeps it out of the `/server`-only group `person-key`

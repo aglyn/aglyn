@@ -92,7 +92,7 @@ function sectionBody(
     case 'reports':
       return <ReportsSection />
     case 'fields':
-      return <FieldsSection />
+      return <FieldsSection hostId={props.hostId} org={props.org} />
     default:
       return null
   }

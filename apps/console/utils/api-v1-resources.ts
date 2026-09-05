@@ -41,6 +41,10 @@ import {
   inspectUploadBytes,
   isHostPluginEnabled,
   consentGroupForHost,
+  CONTACT_FIELDS_MAX_PER_ORG,
+  type ContactCustomValue,
+  type ContactFieldDefinition,
+  CRM_COLLECTIONS,
   isBlockedSubdomain,
   MARKETING_CONSENT_BY_HOST_FIELD,
   marketingConsentHostIds,
@@ -48,6 +52,7 @@ import {
   newResourceScopeFields,
   normalizeContactEmail,
   ORG_SCOPE_TOKEN,
+  readContactCustomInput,
   readImageDimensions,
   type OrderFulfilmentTarget,
   screenRoutePathToUrl,
@@ -2477,9 +2482,42 @@ function contactView(doc: FirebaseFirestore.DocumentSnapshot) {
         : marketingConsentHostIds(data).length > 0,
     consentSites: marketingConsentHostIds(data),
     sources: data.sources ? Object.keys(data.sources) : [],
+    /*
+     * The org's custom field values, keyed by field key (AGL-2601). The same
+     * top-level map `tags` and `notes` beside it are read from — this resource
+     * is the ORGANIZATION's view, and its writes land there. An empty object
+     * rather than `null`, so a client can index it without a guard.
+     */
+    custom:
+      data.custom && typeof data.custom === 'object' && !Array.isArray(data.custom)
+        ? (data.custom as Record<string, ContactCustomValue>)
+        : {},
     created: serialize(data.createdAt) ?? null,
     updated: serialize(data.updatedAt) ?? null,
   }
+}
+
+/**
+ * The org's custom field definitions, retired ones included, for the API's
+ * `custom` validation (AGL-2601).
+ *
+ * One bounded read of a small collection, paid only when a body carries
+ * `custom` — the reader is called from the two writers, never from the view.
+ * Retired definitions come back too because `readContactCustomInput` refuses
+ * a write under one BY NAME, which is a better answer than "no such field"
+ * for a key the integration wrote last month.
+ */
+async function readOrgContactFieldDefinitions(
+  ctx: ApiV1Context,
+): Promise<ContactFieldDefinition[]> {
+  const snapshot = await ctx.firestore
+    .collection('orgs')
+    .doc(ctx.orgId)
+    .collection(CRM_COLLECTIONS.contactFields)
+    .orderBy(FieldPath.documentId())
+    .limit(CONTACT_FIELDS_MAX_PER_ORG)
+    .get()
+  return snapshot.docs.map((doc) => doc.data() as ContactFieldDefinition)
 }
 
 const CONTACT_NAME_MAX = 120
@@ -2494,6 +2532,7 @@ const CONTACT_WRITABLE = [
   'notes',
   'marketingConsent',
   'consentSiteId',
+  'custom',
 ] as const
 
 /**
@@ -2520,6 +2559,12 @@ function readContactInput(
         notes?: string
         marketingConsent?: boolean
         consentSiteId?: string
+        /**
+         * The `custom` map as SENT, shape-checked only. Its keys and values
+         * are judged against the org's definitions by the writer, which is
+         * the side holding a Firestore handle (AGL-2601).
+         */
+        custom?: Record<string, unknown>
       }
     }
   | { errors: Record<string, string> } {
@@ -2531,6 +2576,7 @@ function readContactInput(
     notes?: string
     marketingConsent?: boolean
     consentSiteId?: string
+    custom?: Record<string, unknown>
   } = {}
 
   const allowed = new Set<string>([
@@ -2591,6 +2637,14 @@ function readContactInput(
       errors.marketingConsent = 'Must be true or false'
     } else {
       values.marketingConsent = body.marketingConsent
+    }
+  }
+
+  if (body.custom !== undefined) {
+    if (!body.custom || typeof body.custom !== 'object' || Array.isArray(body.custom)) {
+      errors.custom = 'Must be an object of field values keyed by field key'
+    } else {
+      values.custom = body.custom as Record<string, unknown>
     }
   }
 
@@ -2711,6 +2765,26 @@ async function createContact(
       headers: ctx.headers,
     })
   }
+  // Judged against the org's definitions, above the claim like every other
+  // deterministic 400: an unknown key is named, never dropped (AGL-2601).
+  const custom = parsed.values.custom
+    ? readContactCustomInput(
+        parsed.values.custom,
+        await readOrgContactFieldDefinitions(ctx),
+      )
+    : null
+  if (custom && 'errors' in custom) {
+    return ApiErrors.badRequest({
+      message: 'Contact failed validation',
+      code: 'validation_failed',
+      fields: custom.errors,
+      headers: ctx.headers,
+    })
+  }
+  // Resolved to the map itself here, above the claim, because the create
+  // below is reached through a try block the narrowing above does not
+  // survive; an empty map writes no `custom` key at all.
+  const customValues = custom && 'values' in custom ? custom.values : {}
 
   const collection = contactsCollection(ctx)
   const claimed = await claimWrite(
@@ -2760,6 +2834,7 @@ async function createContact(
       ...(name ? nameSearchFields(name) : {}),
       tags: tags ?? [],
       ...(notes ? { notes } : {}),
+      ...(Object.keys(customValues).length ? { custom: customValues } : {}),
       ...(marketingConsent && consentSiteId
         ? {
             // The declared controller the named site belongs to, so an API
@@ -2840,6 +2915,30 @@ async function updateContact(
   if (name !== undefined) Object.assign(update, nameSearchFields(name))
   if (tags !== undefined) update.tags = tags
   if (notes !== undefined) update.notes = notes
+  if (parsed.values.custom !== undefined) {
+    const custom = readContactCustomInput(
+      parsed.values.custom,
+      await readOrgContactFieldDefinitions(ctx),
+    )
+    if ('errors' in custom) {
+      return ApiErrors.badRequest({
+        message: 'Contact failed validation',
+        code: 'validation_failed',
+        fields: custom.errors,
+        headers: ctx.headers,
+      })
+    }
+    /*
+     * One dotted path per key, because this is an `update` and an `update`
+     * REPLACES a map it is handed whole. `custom` on a PATCH means "these
+     * keys", the way the console's own save writes only the keys that
+     * changed; an integration correcting one value must not have to resend
+     * the other nine to keep them (AGL-2601).
+     */
+    for (const [key, value] of Object.entries(custom.values)) {
+      update[`custom.${key}`] = value
+    }
+  }
   if (marketingConsent === true && consentSiteId) {
     /*
      * A dotted path rather than a nested object, because this is an `update`

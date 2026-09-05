@@ -19,6 +19,7 @@
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Button, Typography } from '@mui/material'
 import { type CrmDetailPageProps, crmRoutes } from '../model/crm-routes'
+import ContactCustomFieldsCard from './contact-custom-fields-card'
 
 /**
  * `/contacts/people/{contactId}` — one person (AGL-2595).
@@ -53,6 +54,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
       <Typography variant="body2" color="text.secondary">
         {"This contact's page is not built yet."}
       </Typography>
+      <ContactCustomFieldsCard hostId={props.hostId} org={props.org} contactId={id} />
     </CardDisplay>
   )
 }
