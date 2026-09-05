@@ -158,7 +158,9 @@ jest.mock('@aglyn/shared-ui-next', () => ({
 
 // A row is a link to the record page (AGL-2596); nothing here follows one.
 jest.mock('next/navigation', () => ({
-  useRouter: () => ({ push: jest.fn() }),
+  useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
+  // The list reads its own address for a seeded filter (AGL-2612); none here.
+  useSearchParams: () => new URLSearchParams(),
 }))
 
 const BASE_PATH = '/acme/hosts/shop/contacts'

@@ -110,6 +110,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 
 jest.mock('@aglyn/tenant-runtime', () => ({
   __esModule: true,
+  // The route captures through the runtime wrapper (AGL-2605), which binds
+  // the create hook and hands the options to the data library; the data
+  // library's double above is what this file records, so the wrapper is the
+  // pass-through it is in production.
+  captureHostContact: (options: unknown) =>
+    jest.requireMock('@aglyn/tenant-data-admin').upsertHostContact(options),
   emitHostEvent: async () => ({ alerts: [] }),
   resolveDatasetDoc: async () => null,
 }))
