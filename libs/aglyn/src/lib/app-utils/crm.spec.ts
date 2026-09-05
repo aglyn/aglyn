@@ -16,12 +16,22 @@
  */
 
 import { consentGroupForHost, soloConsentGroup } from './consent-groups'
+import type { ContactInteraction } from './contacts'
 import {
+  activityKindHasOutcome,
+  activityTimeLabel,
   companyDomainForEmail,
   CONTACT_LIFECYCLE_STAGES,
   CONTACT_LIFECYCLE_STAGE_LABELS,
+  CRM_ACTIVITY_KIND_LABELS,
+  CRM_ACTIVITY_KINDS,
   CRM_COLLECTIONS,
+  crmActivityRecordLink,
+  type CrmActivityRow,
+  crmReadTokens,
   crmScopeTokens,
+  isCrmActivityKind,
+  mergeContactTimeline,
   DEFAULT_DEAL_STAGES,
   dealStageById,
   isContactLifecycleStage,
@@ -238,5 +248,191 @@ describe('crmScopeTokens', () => {
     expect(crmScopeTokens({ defaultResourceScope: 'org' }, soloConsentGroup('host-a'))).toEqual(['org'])
     // The other value of the same field is the narrow answer, not a third.
     expect(crmScopeTokens({ defaultResourceScope: 'host' }, soloConsentGroup('host-a'))).toEqual(['host:host-a'])
+  })
+})
+
+/**
+ * What a person logs (AGL-2600): the kinds, their labels, and which of them
+ * carry an outcome — the dialog's picker and the list's chip both read from
+ * here, so the two cannot disagree about what a `meeting` is called.
+ */
+describe('activity kinds', () => {
+  it('labels every kind, in picker order', () => {
+    expect(CRM_ACTIVITY_KINDS).toEqual(['call', 'email', 'meeting', 'note', 'other'])
+    for (const kind of CRM_ACTIVITY_KINDS) {
+      expect(CRM_ACTIVITY_KIND_LABELS[kind]).toBeTruthy()
+    }
+  })
+
+  it('recognizes a kind and refuses anything else', () => {
+    expect(isCrmActivityKind('call')).toBe(true)
+    expect(isCrmActivityKind('note')).toBe(true)
+    expect(isCrmActivityKind('Call')).toBe(false)
+    expect(isCrmActivityKind('todo')).toBe(false)
+    expect(isCrmActivityKind(null)).toBe(false)
+  })
+
+  it('gives a call and a meeting an outcome, and nothing else one', () => {
+    expect(activityKindHasOutcome('call')).toBe(true)
+    expect(activityKindHasOutcome('meeting')).toBe(true)
+    expect(activityKindHasOutcome('email')).toBe(false)
+    expect(activityKindHasOutcome('note')).toBe(false)
+    expect(activityKindHasOutcome('other')).toBe(false)
+  })
+})
+
+/**
+ * The read set a CRM listener filters by: the org token, then the group's
+ * sites — the contacts list's own expression, capped where
+ * `array-contains-any` caps.
+ */
+describe('crmReadTokens', () => {
+  it('leads with the org token and follows with every site of the group', () => {
+    expect(crmReadTokens(soloConsentGroup('host-a'))).toEqual(['org', 'host:host-a'])
+    const org = {
+      consentGroups: { brand: { name: 'Brand', hostIds: ['host-b', 'host-a'] } },
+    }
+    expect(crmReadTokens(consentGroupForHost(org, 'host-a'))).toEqual([
+      'org',
+      'host:host-a',
+      'host:host-b',
+    ])
+  })
+
+  it('caps at what array-contains-any accepts', () => {
+    // The widest group the resolver admits is exactly the operator's cap, so
+    // the org token in front of it is the one token over — built directly,
+    // because `consentGroupForHost` refuses a declaration any wider.
+    const hostIds = Array.from({ length: 30 }, (_, index) => `host-${index}`)
+    const group = { hostId: 'host-0', groupId: 'wide', name: 'Wide', hostIds, declared: true }
+    const tokens = crmReadTokens(group)
+    expect(tokens).toHaveLength(30)
+    expect(tokens[0]).toBe('org')
+  })
+})
+
+const activity = (overrides: Partial<CrmActivityRow> & { $id: string }): CrmActivityRow => ({
+  kind: 'call',
+  body: 'Called about the renewal',
+  atMs: 0,
+  byUid: 'u-1',
+  hostId: 'host-a',
+  visibleTo: ['host:host-a'],
+  ...overrides,
+})
+
+/**
+ * ONE stream from two histories (AGL-2600): what the platform captured on
+ * the contact's facet, and what a person logged beside it.
+ */
+describe('mergeContactTimeline', () => {
+  const captured: ContactInteraction[] = [
+    { type: 'form', atMs: 3_000, summary: 'Submitted the contact form', path: '/pricing' },
+    { type: 'order', atMs: 1_000, summary: 'Placed order #12', refId: 'ord-12' },
+  ]
+
+  it('interleaves both kinds newest-first and says which is which', () => {
+    const merged = mergeContactTimeline(captured, [
+      activity({ $id: 'a-1', atMs: 2_000 }),
+      activity({ $id: 'a-2', atMs: 4_000, kind: 'note' }),
+    ])
+    expect(merged.map((entry) => [entry.kind, entry.atMs])).toEqual([
+      ['logged', 4_000],
+      ['captured', 3_000],
+      ['logged', 2_000],
+      ['captured', 1_000],
+    ])
+    const [first] = merged
+    if (first.kind !== 'logged') throw new Error('expected the logged note first')
+    expect(first.activity.$id).toBe('a-2')
+    const second = merged[1]
+    if (second.kind !== 'captured') throw new Error('expected the captured form second')
+    expect(second.interaction.path).toBe('/pricing')
+  })
+
+  it('is stable: a tie keeps the captured entry before the logged one, and input order within a kind', () => {
+    const merged = mergeContactTimeline(
+      [
+        { type: 'form', atMs: 5_000, summary: 'first' },
+        { type: 'form', atMs: 5_000, summary: 'second' },
+      ],
+      [activity({ $id: 'a-1', atMs: 5_000 }), activity({ $id: 'a-2', atMs: 5_000 })],
+    )
+    expect(
+      merged.map((entry) =>
+        entry.kind === 'captured' ? entry.interaction.summary : entry.activity.$id,
+      ),
+    ).toEqual(['first', 'second', 'a-1', 'a-2'])
+  })
+
+  it('gives every entry a distinct key and copes with either side absent', () => {
+    const merged = mergeContactTimeline(captured, [activity({ $id: 'a-1', atMs: 3_000 })])
+    expect(new Set(merged.map((entry) => entry.key)).size).toBe(merged.length)
+    expect(mergeContactTimeline(undefined, undefined)).toEqual([])
+    expect(mergeContactTimeline(captured, null)).toHaveLength(2)
+    expect(mergeContactTimeline(null, [activity({ $id: 'a-1' })])).toHaveLength(1)
+  })
+
+  it('sinks an entry with no usable time to the bottom rather than the top', () => {
+    const merged = mergeContactTimeline(
+      [{ type: 'form', atMs: Number.NaN, summary: 'undated' }],
+      [activity({ $id: 'a-1', atMs: 1_000 })],
+    )
+    expect(merged.map((entry) => entry.kind)).toEqual(['logged', 'captured'])
+  })
+})
+
+/**
+ * Which record a logged activity is about, for the feed that links to it.
+ * A contact outranks a deal outranks a company: an activity filed against
+ * all three is a conversation with a person.
+ */
+describe('crmActivityRecordLink', () => {
+  it('prefers the contact, then the deal, then the company', () => {
+    expect(
+      crmActivityRecordLink({ contactId: 'c', dealId: 'd', companyId: 'o' }),
+    ).toEqual({ record: 'contact', id: 'c' })
+    expect(crmActivityRecordLink({ dealId: 'd', companyId: 'o' })).toEqual({
+      record: 'deal',
+      id: 'd',
+    })
+    expect(crmActivityRecordLink({ companyId: 'o' })).toEqual({ record: 'company', id: 'o' })
+  })
+
+  it('answers null for an activity filed against nothing', () => {
+    expect(crmActivityRecordLink({})).toBeNull()
+    expect(crmActivityRecordLink({ contactId: '' })).toBeNull()
+  })
+})
+
+/**
+ * How long ago something happened, in the words a list row uses. The
+ * thresholds are the assertions; the far past is a date, not "412 days ago".
+ */
+describe('activityTimeLabel', () => {
+  const now = Date.UTC(2026, 8, 5, 12, 0, 0)
+  const minutes = (count: number) => count * 60_000
+  const hours = (count: number) => count * 3_600_000
+  const days = (count: number) => count * 86_400_000
+
+  it('reads the recent past in minutes, hours and days', () => {
+    expect(activityTimeLabel(now - 10_000, now)).toBe('just now')
+    expect(activityTimeLabel(now - minutes(1), now)).toBe('1 min ago')
+    expect(activityTimeLabel(now - minutes(45), now)).toBe('45 min ago')
+    expect(activityTimeLabel(now - hours(1), now)).toBe('1 h ago')
+    expect(activityTimeLabel(now - hours(23), now)).toBe('23 h ago')
+    expect(activityTimeLabel(now - hours(30), now)).toBe('yesterday')
+    expect(activityTimeLabel(now - days(3), now)).toBe('3 days ago')
+  })
+
+  it('falls back to a date past a week, and for a time in the future', () => {
+    const old = now - days(30)
+    expect(activityTimeLabel(old, now)).toBe(new Date(old).toLocaleDateString())
+    const ahead = now + hours(2)
+    expect(activityTimeLabel(ahead, now)).toBe(new Date(ahead).toLocaleDateString())
+  })
+
+  it('says nothing for a time that is not one', () => {
+    expect(activityTimeLabel(Number.NaN, now)).toBe('')
   })
 })
