@@ -139,7 +139,8 @@ export function listFilterConstraints(
 
   if (field.kind === 'text') {
     if (op === 'contains' && field.tokensPath) {
-      const token = key(raw).split(' ')[0]
+      // An id array is matched as typed — see `verbatimTokens`.
+      const token = field.verbatimTokens ? raw : key(raw).split(' ')[0]
       if (!token) return null
       const sortBy = field.containsOrderBy ?? options.containsOrderBy ?? field.lowerPath ?? field.path
       return [
