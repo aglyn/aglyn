@@ -26,12 +26,15 @@
  * auto-association of contacts to companies by domain. Each of those lands
  * as a `contacts/<route>` handler registered here.
  *
- * `contacts/ping` is the one route that exists today, and it exists so the
- * wiring is PROVEN rather than assumed: `plugins.config.json` names this
+ * `contacts/ping` was the first route, and it exists so the wiring is PROVEN
+ * rather than assumed: `plugins.config.json` names this
  * module's register function and the `contacts` API prefix, the generated
  * server manifest loads this file, and the console's `/api/[...pluginApi]`
  * dispatcher reaches the handler. A plugin whose first real route also had
  * to be its first wiring test would have two things to debug at once.
+ *
+ * The task routes (AGL-2599) are the first real ones; they live in
+ * `server/task-routes.ts` and are registered here.
  */
 
 import {
@@ -39,6 +42,8 @@ import {
   registerPluginApiRoute,
 } from '@aglyn/aglyn/server'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { CRM_TASK_ROUTES } from './model/task-routes'
+import { crmTaskCompleteHandler, crmTaskSaveHandler } from './server/task-routes'
 
 /**
  * `GET /api/contacts/ping` → `{ ok: true, plugin: 'contacts' }`.
@@ -60,4 +65,8 @@ export const crmPingHandler: PluginApiHandler = (req, res) => {
 /** Console API registration, named in `plugins.config.json` as `consoleApi`. */
 export function registerCrmConsoleApi(): void {
   registerPluginApiRoute('crm/ping', crmPingHandler)
+  // Tasks (AGL-2599): the two writes with a side effect outside the document
+  // — an assignee's notification, and the `taskCompleted` host event.
+  registerPluginApiRoute(CRM_TASK_ROUTES.save, crmTaskSaveHandler)
+  registerPluginApiRoute(CRM_TASK_ROUTES.complete, crmTaskCompleteHandler)
 }

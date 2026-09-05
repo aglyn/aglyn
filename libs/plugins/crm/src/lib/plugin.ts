@@ -25,6 +25,10 @@ import { BUNDLE_ID } from './constants/bundle-common'
 const CrmConsolePage = lazy(
   () => import('./components/crm-console-page'),
 )
+/** The dashboard glance, split the same way: it loads where the slot mounts it. */
+const CrmTasksDueCard = lazy(
+  () => import('./components/crm-tasks-due-card'),
+)
 
 /**
  * CRM feature plugin (AGL-395, the hub since AGL-2595). Console-only — its
@@ -78,6 +82,21 @@ export function registerCrmConsole(): void {
      * shipped capability rather than close a hole.
      */
     permission: 'data.manage',
+    /*
+     * Dashboard cards (AGL-2599): the site dashboard's `hostDashboard` slot
+     * composes this extension's permission over each, so a card appears only
+     * where the CRM is enabled and only for a reader who may open it. The
+     * tasks card is a glance at the reader's own overdue and due-today work;
+     * it renders nothing on a workspace that has never made a task.
+     */
+    widgets: [
+      {
+        slot: Aglyn.CONSOLE_WIDGET_SLOTS.hostDashboard,
+        widgetId: 'crm-tasks-due',
+        title: 'Tasks due',
+        Component: CrmTasksDueCard,
+      },
+    ],
     navItems: [
       {
         label: 'CRM',

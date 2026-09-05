@@ -88,7 +88,7 @@ function sectionBody(
         <DealsSection />
       )
     case 'tasks':
-      return <TasksSection />
+      return <TasksSection {...props} />
     case 'reports':
       return <ReportsSection />
     case 'fields':

@@ -44,6 +44,13 @@ export type AglynNotificationType =
   | 'content.booking'
   | 'content.order'
   | 'content.lowStock'
+  // A CRM task was assigned to the recipient by somebody else (AGL-2599).
+  // `content.` because it is the same kind of message as a form submission
+  // or a booking: a thing on the site that now needs this person's hands,
+  // not a change to their standing (`team.`) and not a platform notice
+  // (`system.`). Someone who has muted the operational stream has said they
+  // do not want to be told about work as it arrives, and a task is work.
+  | 'content.taskAssigned'
   // Marketplace review verdicts (AGL-432/653).
   | 'marketplace.review'
   // Support desk, staff audience (AGL-850): a subscriber opened or replied to
@@ -189,6 +196,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> =
     'content.booking': 'New booking',
     'content.order': 'New order',
     'content.lowStock': 'Low stock',
+    'content.taskAssigned': 'Task assigned to you',
     'marketplace.review': 'Listing review',
 
     'support.ticketOpened': 'New support ticket',

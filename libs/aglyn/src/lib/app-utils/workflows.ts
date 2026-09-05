@@ -42,6 +42,10 @@ export const HOST_EVENT_TYPES = [
   'memberSignOut',
   'lead',
   'booking',
+  // A CRM task was marked done (AGL-2599). Emitted by the console's
+  // `crm/task-complete` route rather than by a Firestore trigger, so the
+  // payload names who completed it and what it hung off.
+  'taskCompleted',
 ] as const
 
 export type HostEventType = (typeof HOST_EVENT_TYPES)[number]
