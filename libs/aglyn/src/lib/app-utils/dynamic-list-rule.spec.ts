@@ -23,6 +23,8 @@
 
 import {
   candidateMatchesDynamicListRule,
+  dynamicListDimensionsForCrmView,
+  dynamicListPlanningRule,
   dynamicListRuleIsEmpty,
   dynamicListRuleListIds,
   dynamicListRuleNeedsCampaigns,
@@ -847,5 +849,102 @@ describe('what the CRM dimensions make the materializer pay for', () => {
         ),
       ).toBe(true)
     }
+  })
+})
+
+/**
+ * A saved Contacts VIEW as an audience (AGL-2617): its list clauses become
+ * the dimensions this language already has, every clause it cannot carry
+ * is named rather than dropped, and the resolved block is ANDed with the
+ * rule the way a segment is.
+ */
+describe('a saved view is translated whole or not at all', () => {
+  it('turns each list clause into the dimension that means the same thing', () => {
+    const { dimensions, unsupported } = dynamicListDimensionsForCrmView([
+      { field: 'tags', op: 'isAnyOf', value: 'VIP, wholesale' },
+      { field: 'source', op: 'equals', value: 'form' },
+      { field: 'ownerUid', op: 'equals', value: 'uid-a', label: 'Dana' },
+      { field: 'lifecycleStage', op: 'isAnyOf', value: 'lead,customer' },
+      { field: 'companyId', op: 'equals', value: 'co_acme' },
+      { field: 'createdAt', op: 'onOrAfter', value: '2026-01-01' },
+      { field: 'createdAt', op: 'before', value: '2026-07-01' },
+      { field: 'ordersCount', op: '>', value: '2' },
+      { field: 'ltvCents', op: '>=', value: '50000' },
+      { field: 'custom_plan', op: 'equals', value: 'enterprise' },
+      { field: 'custom_seats', op: '>', value: '10' },
+      { field: 'custom_churned', op: 'isEmpty', value: '' },
+    ])
+    expect(unsupported).toEqual([])
+    expect(dimensions).toEqual({
+      tags: ['vip', 'wholesale'],
+      captureSources: ['form'],
+      ownerUids: ['uid-a'],
+      lifecycleStages: ['lead', 'customer'],
+      companyIds: ['co_acme'],
+      createdAfterMs: Date.parse('2026-01-01'),
+      createdBeforeMs: Date.parse('2026-07-01'),
+      // `over 2` is a floor of three; the language has floors only.
+      behavior: { ordersCountAtLeast: 3, ltvCentsAtLeast: 50_000 },
+      custom: [
+        { key: 'plan', op: 'eq', value: 'enterprise' },
+        { key: 'seats', op: 'gt', value: '10' },
+        { key: 'churned', op: 'unset' },
+      ],
+    })
+  })
+
+  it('names every clause it has no dimension for, and carries the rest', () => {
+    const { dimensions, unsupported } = dynamicListDimensionsForCrmView([
+      { field: 'name', op: 'startsWith', value: 'a' },
+      { field: 'tags', op: 'contains', value: 'vip' },
+      { field: 'updatedAt', op: 'after', value: '2026-01-01' },
+      // A ceiling on purchases, which the behavior dimension cannot hold.
+      { field: 'ordersCount', op: '<', value: '5' },
+      // A stage the model does not name is not silently a different stage.
+      { field: 'lifecycleStage', op: 'equals', value: 'vip' },
+      { field: 'custom_plan', op: 'startsWith', value: 'ent' },
+    ])
+    expect(dimensions).toEqual({ tags: ['vip'] })
+    expect(unsupported.map((clause) => `${clause.field} ${clause.op}`)).toEqual([
+      'name startsWith',
+      'updatedAt after',
+      'ordersCount <',
+      'lifecycleStage equals',
+      'custom_plan startsWith',
+    ])
+  })
+
+  it('is ANDed with the rule, and inverted with it', () => {
+    const rule = normalizeDynamicListRule({ sources: ['contacts'], tags: ['vip'] })
+    const view = dynamicListDimensionsForCrmView([
+      { field: 'ownerUid', op: 'equals', value: 'uid-a' },
+    ]).dimensions
+    const match = (candidate: Partial<DynamicListCandidate>, negate = false) =>
+      candidateMatchesDynamicListRule(
+        { silo: 'contacts', email: 'dana@example.com', ...candidate } as DynamicListCandidate,
+        negate ? { ...rule, negate: true } : rule,
+        { view, nowMs: NOW },
+      )
+    expect(match({ tags: ['vip'], ownerUid: 'uid-a' })).toBe(true)
+    // The view is a constraint of its own, not another tag to OR with.
+    expect(match({ tags: ['vip'], ownerUid: 'uid-b' })).toBe(false)
+    expect(match({ tags: ['other'], ownerUid: 'uid-a' })).toBe(false)
+    // "Nobody matching all of these" counts the view among them.
+    expect(match({ tags: ['vip'], ownerUid: 'uid-a' }, true)).toBe(false)
+    expect(match({ tags: ['vip'], ownerUid: 'uid-b' }, true)).toBe(true)
+  })
+
+  it('lets the planners see the view, without making it a branch for matching', () => {
+    const rule = normalizeDynamicListRule({ sources: ['contacts'], viewId: 'view-1' })
+    expect(rule.viewId).toBe('view-1')
+    expect(dynamicListRuleNeedsContactFacet(rule)).toBe(false)
+    const view = { ownerUids: ['uid-a'] }
+    const planning = dynamicListPlanningRule(rule, view)
+    expect(dynamicListRuleNeedsContactFacet(planning)).toBe(true)
+    // The rule handed back is untouched — the sweep matches with the original.
+    expect(rule.any).toBeUndefined()
+    // An empty view plans nothing extra.
+    expect(dynamicListPlanningRule(rule, {})).toBe(rule)
+    expect(dynamicListPlanningRule(rule, null)).toBe(rule)
   })
 })
