@@ -16,14 +16,9 @@
  */
 'use client'
 
-import { CRM_COLLECTIONS, PageHeaderRecord, pluginDocsHelp } from '@aglyn/aglyn'
+import { CRM_COLLECTIONS, dealStageById, pluginDocsHelp } from '@aglyn/aglyn'
 import { mdiDeleteOutline, mdiPencilOutline } from '@aglyn/shared-data-mdi'
-import {
-  AppLink,
-  CardDisplay,
-  MdiIcon,
-  useConfirmationContext,
-} from '@aglyn/shared-ui-jsx'
+import { MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { Button, Stack, Typography } from '@mui/material'
@@ -36,6 +31,8 @@ import { useDeal } from '../hooks/use-deals'
 import { useOrgMemberDirectory } from '../hooks/use-org-member-directory'
 import { usePipeline } from '../hooks/use-pipeline'
 import { type CrmDetailPageProps, crmRoutes } from '../model/crm-routes'
+import { DEAL_STATUS_LABELS, formatMoney } from '../model/deal-board-model'
+import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
 import { RecordActivityCard } from './record-activity-card'
 import { DealEditDrawer } from './deal-edit-drawer'
 import { DealPropertiesCard } from './deal-properties-card'
@@ -100,53 +97,78 @@ export function DealDetailPage(props: CrmDetailPageProps) {
     }
   }, [deal, scope.orgId, confirm, firestore, enqueueSnackbar, router, routes])
 
+  const stage = deal ? dealStageById(pipeline, deal.stageId) : undefined
+
   return (
     <>
-      <PageHeaderRecord title={deal?.title} />
       <Stack spacing={2}>
-        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
-          <Button
-            component={AppLink as any}
-            {...({ componentVariant: 'naked', nativeButton: false } as any)}
-            href={routes.section('deals')}
-            size="small"
-            color="primary"
-          >
-            {'Back to deals'}
-          </Button>
-          {deal ? (
-            <>
+        <CrmRecordHeader
+          kind="Deal"
+          title={deal?.title}
+          subtitle={
+            deal
+              ? [pipeline?.name, stage?.name ?? deal.stageId].filter(Boolean).join(' · ')
+              : undefined
+          }
+          help={pluginDocsHelp('deals', { anchor: '#a-deals-page' })}
+          backHref={routes.section('deals')}
+          backLabel="Back to deals"
+          loading={!deal && !notFound}
+          actions={
+            deal ? (
               <Button
                 size="small"
+                variant="outlined"
                 startIcon={<MdiIcon path={mdiPencilOutline.path} size={0.8} />}
                 onClick={() => setEditing(true)}
               >
                 {'Edit'}
               </Button>
-              <Button
-                size="small"
-                color="error"
-                disabled={deleting}
-                startIcon={<MdiIcon path={mdiDeleteOutline.path} size={0.8} />}
-                onClick={() => void handleDelete()}
-              >
-                {'Delete'}
-              </Button>
-            </>
-          ) : null}
-        </Stack>
-        {notFound ? (
-          <CardDisplay
-            header={'Deal'}
-            help={pluginDocsHelp('deals', { anchor: '#a-deals-page' })}
-            contentGutterX
-            contentGutterY
-          >
+            ) : null
+          }
+          menuItems={
+            deal
+              ? [
+                  {
+                    key: 'delete',
+                    label: 'Delete deal',
+                    icon: <MdiIcon path={mdiDeleteOutline.path} size={0.8} />,
+                    destructive: true,
+                    disabled: deleting,
+                    disabledReason: 'The deal is being deleted',
+                    onClick: () => void handleDelete(),
+                  },
+                ]
+              : undefined
+          }
+          chips={
+            deal ? (
+              <>
+                <CrmRecordChip
+                  label="Status"
+                  value={DEAL_STATUS_LABELS[deal.status] ?? deal.status}
+                  color={deal.status === 'won' ? 'success' : deal.status === 'lost' ? 'default' : 'primary'}
+                />
+                <CrmRecordChip
+                  label="Amount"
+                  value={
+                    typeof deal.amountCents === 'number'
+                      ? formatMoney(deal.amountCents, deal.currency)
+                      : undefined
+                  }
+                />
+                <CrmRecordChip label="Owner" value={roster.nameOf(deal.ownerUid) || undefined} />
+              </>
+            ) : null
+          }
+        >
+          {notFound ? (
             <Typography variant="body2" color="text.secondary">
               {'This deal does not exist, or is not visible to this site.'}
             </Typography>
-          </CardDisplay>
-        ) : deal ? (
+          ) : null}
+        </CrmRecordHeader>
+        {deal ? (
           <>
             <DealStageCard deal={deal} pipeline={pipeline} api={api} nowMs={nowMs} />
             <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ alignItems: 'stretch' }}>
@@ -156,7 +178,6 @@ export function DealDetailPage(props: CrmDetailPageProps) {
                   pipeline={pipeline}
                   ownerLabel={roster.nameOf(deal.ownerUid)}
                   routes={routes}
-                  onEdit={() => setEditing(true)}
                 />
               </Stack>
               <Stack sx={{ flex: 1, minWidth: 0 }}>

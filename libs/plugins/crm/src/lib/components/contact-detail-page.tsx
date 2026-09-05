@@ -17,21 +17,10 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
-import {
-  CONTACT_LIFECYCLE_STAGE_LABELS,
-  PageHeaderRecord,
-  pluginDocsHelp,
-} from '@aglyn/aglyn'
+import { CONTACT_LIFECYCLE_STAGE_LABELS, pluginDocsHelp } from '@aglyn/aglyn'
 import { mdiDeleteOutline } from '@aglyn/shared-data-mdi'
-import {
-  AppLink,
-  CardDisplay,
-  MdiIcon,
-  useConfirmationContext,
-} from '@aglyn/shared-ui-jsx'
-import RowActionsMenu, {
-  type RowActionsMenuItem,
-} from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import { MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
@@ -39,7 +28,7 @@ import {
   useHostActivityLogger,
   useOrgDataScope,
 } from '@aglyn/tenant-feature-instance'
-import { Button, Chip, Stack, Typography } from '@mui/material'
+import { Stack, Typography } from '@mui/material'
 import {
   arrayRemove,
   deleteDoc,
@@ -57,6 +46,7 @@ import ContactPropertiesCard from './contact-properties-card'
 import ContactTimelineCard from './contact-timeline-card'
 import { AddToListButton } from './add-to-list-button'
 import { ContactDealsCard } from './contact-deals-card'
+import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
 import { RecordTasksCard } from './record-tasks-card'
 import { useOrgMembers } from './use-org-members'
 
@@ -219,32 +209,14 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
     },
   ]
 
-  const headerActions = (
-    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-      <Button
-        component={AppLink as any}
-        {...({ componentVariant: 'naked', nativeButton: false } as any)}
-        href={routes.section('contacts')}
-        size="small"
-        color="primary"
-      >
-        {'Back to contacts'}
-      </Button>
-      {record ? (
-        <AddToListButton hostId={hostId} org={org} contactId={id} email={record.email} />
-      ) : null}
-      <RowActionsMenu label={record?.name || record?.email || 'Contact'} items={overflowItems} />
-    </Stack>
-  )
-
   if (notFound) {
     return (
-      <CardDisplay
-        header={'Contact'}
+      <CrmRecordHeader
+        kind="Contact"
+        title={undefined}
         help={contactDocsHelp}
-        contentGutterX
-        contentGutterY
-        HeaderProps={{ action: headerActions }}
+        backHref={routes.section('contacts')}
+        backLabel="Back to contacts"
       >
         {/*
          * Not "no data". A contact that cannot be read is a different
@@ -255,52 +227,53 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
         <Typography variant="body2" color="text.secondary">
           {'This contact could not be loaded. It may have been removed from this site.'}
         </Typography>
-      </CardDisplay>
+      </CrmRecordHeader>
     )
   }
 
   return (
     <Stack spacing={3}>
-      {/* The page heading and the trail name the person; the card is then
-          free to say what it holds rather than repeating the title. */}
-      <PageHeaderRecord
+      <CrmRecordHeader
+        kind="Contact"
         title={record ? record.name || record.email : undefined}
-      />
-      <CardDisplay
-        header={'Contact'}
-        subheader={record?.email}
+        subtitle={record?.email}
         help={contactDocsHelp}
-        contentGutterX
-        contentGutterY
-        HeaderProps={{ action: headerActions }}
-      >
-        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
-          {record?.lifecycleStage ? (
-            <Chip
-              size="small"
-              variant="outlined"
-              label={CONTACT_LIFECYCLE_STAGE_LABELS[record.lifecycleStage]}
-            />
-          ) : null}
-          {record?.ownerUid ? (
-            <Typography variant="body2" color="text.secondary">
-              {`Owner: ${members.memberName(record.ownerUid)}`}
-            </Typography>
-          ) : null}
-          {record && record.ordersCount > 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              {`${record.ordersCount.toLocaleString()} order${
-                record.ordersCount === 1 ? '' : 's'
-              } · $${(record.ltvCents / 100).toFixed(2)} lifetime`}
-            </Typography>
-          ) : null}
-          {!record ? (
-            <Typography variant="body2" color="text.secondary">
-              {'Loading…'}
-            </Typography>
-          ) : null}
-        </Stack>
-      </CardDisplay>
+        backHref={routes.section('contacts')}
+        backLabel="Back to contacts"
+        actions={
+          record ? (
+            <AddToListButton hostId={hostId} org={org} contactId={id} email={record.email} />
+          ) : null
+        }
+        menuItems={overflowItems}
+        loading={!record}
+        chips={
+          record ? (
+            <>
+              <CrmRecordChip
+                label="Stage"
+                value={
+                  record.lifecycleStage
+                    ? CONTACT_LIFECYCLE_STAGE_LABELS[record.lifecycleStage]
+                    : undefined
+                }
+              />
+              <CrmRecordChip
+                label="Owner"
+                value={record.ownerUid ? members.memberName(record.ownerUid) : undefined}
+              />
+              <CrmRecordChip
+                label="Orders"
+                value={
+                  record.ordersCount > 0
+                    ? `${record.ordersCount.toLocaleString()} · $${(record.ltvCents / 100).toFixed(2)} lifetime`
+                    : undefined
+                }
+              />
+            </>
+          ) : null
+        }
+      />
       {record && row && scope ? (
         <>
           <ContactPropertiesCard

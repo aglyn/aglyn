@@ -16,15 +16,9 @@
  */
 'use client'
 
-import {
-  CRM_COLLECTIONS,
-  type CrmCompany,
-  PageHeaderRecord,
-  pluginDocsHelp,
-} from '@aglyn/aglyn'
-import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
+import { CRM_COLLECTIONS, type CrmCompany, pluginDocsHelp } from '@aglyn/aglyn'
 import { useFirestore, useFirestoreDoc } from '@aglyn/tenant-feature-instance'
-import { Button, Stack, Typography } from '@mui/material'
+import { Stack, Typography } from '@mui/material'
 import { doc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback } from 'react'
@@ -33,6 +27,7 @@ import { useOrgMemberOptions } from '../hooks/use-org-member-options'
 import { type CrmDetailPageProps, crmRoutes } from '../model/crm-routes'
 import CompanyContactsCard from './company-contacts-card'
 import CompanyDealsCard from './company-deals-card'
+import { CrmRecordHeader } from './crm-record-header'
 import { RecordActivityCard } from './record-activity-card'
 import { RecordTasksCard } from './record-tasks-card'
 import CompanyPropertiesCard from './company-properties-card'
@@ -77,18 +72,6 @@ export function CompanyDetailPage(props: CrmDetailPageProps) {
     [router, routes],
   )
 
-  const backButton = (
-    <Button
-      component={AppLink as any}
-      {...({ componentVariant: 'naked', nativeButton: false } as any)}
-      href={routes.section('companies')}
-      size="small"
-      color="primary"
-    >
-      {'All companies'}
-    </Button>
-  )
-
   if (!company) {
     /*
      * Loading and MISSING are different answers. A company that cannot be
@@ -98,27 +81,28 @@ export function CompanyDetailPage(props: CrmDetailPageProps) {
      */
     const settled = Boolean(scope) && status !== 'loading'
     return (
-      <CardDisplay
-        header={'Company'}
+      <CrmRecordHeader
+        kind="Company"
+        title={undefined}
         help={pluginDocsHelp('companies', { anchor: '#a-companys-page' })}
-        contentGutterX
-        contentGutterY
-        HeaderProps={{ action: backButton }}
+        backHref={routes.section('companies')}
+        backLabel="Back to companies"
+        loading={!settled}
       >
-        <Typography variant="body2" color="text.secondary">
-          {settled
-            ? 'This company could not be loaded. It may have been deleted.'
-            : 'Loading this company…'}
-        </Typography>
-      </CardDisplay>
+        {settled ? (
+          <Typography variant="body2" color="text.secondary">
+            {'This company could not be loaded. It may have been deleted.'}
+          </Typography>
+        ) : null}
+      </CrmRecordHeader>
     )
   }
 
   return (
     <>
-      {/* The page heading and the trail name the company; the cards are then
-          free to say what they hold rather than repeating the title. */}
-      <PageHeaderRecord title={String(company.name || id)} />
+      {/* The properties card is the record's lead card: it publishes the
+          page heading and the trail, so the cards under it say what they
+          hold rather than repeating the name. */}
       <Stack spacing={2}>
         <CompanyPropertiesCard
           company={{ ...company, $id: id }}

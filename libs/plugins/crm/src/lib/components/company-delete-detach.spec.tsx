@@ -194,9 +194,17 @@ const mount = () =>
     />,
   )
 
+/**
+ * Delete lives behind the record header's overflow menu, never beside Edit
+ * — a destructive act one mis-click from the button next to it is the
+ * arrangement the shared header exists to end — so the menu opens first.
+ */
 const clickDelete = async () => {
   await act(async () => {
-    fireEvent.click(screen.getByText('Delete'))
+    fireEvent.click(screen.getByRole('button', { name: /More actions/ }))
+  })
+  await act(async () => {
+    fireEvent.click(screen.getByText('Delete company'))
   })
 }
 
