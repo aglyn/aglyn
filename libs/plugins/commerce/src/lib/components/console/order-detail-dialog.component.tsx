@@ -18,7 +18,12 @@
 
 import * as CommerceModel from '../../model'
 import { escapeHtml } from '../../utils/escape-html'
-import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
+// The CRM's route builder and hub hook by their leaf paths, not the plugin
+// barrel: the barrel is the CRM's site entry point, and a console dialog
+// named there would ship to every published page.
+import { useCrmHubPathFromRoute } from '@aglyn/plugins-crm/hooks/use-crm-hub-path'
+import { crmRoutes } from '@aglyn/plugins-crm/model/crm-routes'
+import { AppLink, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Button,
@@ -96,6 +101,19 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
 
   const order = rawOrder ? CommerceModel.liftLegacyOrder(rawOrder) : null
   const orderId = rawOrder?.$id
+  /*
+   * Where the buyer's CONTACT is (AGL-2622). A checkout that carried an
+   * address updated a person in the CRM — a customer, with this order on
+   * their timeline — and the dialog links there by the address, because
+   * the contact's id is minted at capture and nothing on the order holds
+   * it. The Contacts list is the lookup and opens the record on one match.
+   * A guest checkout with no address updated nobody, so there is no link.
+   */
+  const crmHubPath = useCrmHubPathFromRoute()
+  const customerCrmHref =
+    crmHubPath && order?.customerEmail
+      ? crmRoutes(crmHubPath).contactByEmail(String(order.customerEmail))
+      : null
 
   /**
    * The one client write left in this dialog, and it is timeline-only ON
@@ -915,6 +933,15 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
         ) : null}
       </DialogContent>
       <DialogActions>
+        {customerCrmHref ? (
+          <Button
+            component={AppLink as any}
+            {...({ componentVariant: 'naked', nativeButton: false } as any)}
+            href={customerCrmHref}
+          >
+            {'View customer in CRM'}
+          </Button>
+        ) : null}
         <Button onClick={handlePackingSlip}>{'Packing slip'}</Button>
         {can('cancelled') ? (
           <Button color="error" disabled={busy} onClick={handleCancel}>

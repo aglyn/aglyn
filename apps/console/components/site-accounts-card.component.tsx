@@ -16,9 +16,12 @@
  */
 'use client'
 
-import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { crmContactByEmailHref } from '@aglyn/aglyn/app-utils/console-record-links'
+import { mdiAccountArrowRight } from '@aglyn/shared-data-mdi'
+import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import {
   gridFilterRequest,
   hiddenFilterColumns,
@@ -26,7 +29,7 @@ import {
   listFilterColumn,
   type ListFilterRequest,
 } from '@aglyn/shared-ui-jsx/const/list-filter'
-import { Chip, Stack, Typography } from '@mui/material'
+import { Box, Chip, Stack, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import { collection, limit, orderBy, query } from 'firebase/firestore'
 import { useMemo, useState } from 'react'
@@ -36,6 +39,10 @@ import {
   usePagedCollection,
 } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../constants/docs-links'
+import { useOrgPermissions } from '../hooks/use-org-permissions'
+import { useOrgSlug } from '../hooks/use-org-scope'
+import { useReleaseFlag } from '../hooks/use-release-flags'
+import { useHostSubdomain } from './host-id-provider'
 import {
   SITE_MEMBER_LIST_FILTER_FIELDS,
   SITE_MEMBER_LIST_FILTER_HEADERS,
@@ -110,6 +117,27 @@ export function SiteAccountsCard(props: { hostId: string }) {
 
   const visible = memberDocs
 
+  /*
+   * Where an account's CONTACT is (AGL-2622). A sign-up updated a person in
+   * the CRM by the account's address, and the row links there by that
+   * address; the Contacts list holds the id nothing here does and opens the
+   * record on one match. Offered under the CRM's own gate — released for
+   * the viewer, and with the permission its rules read for — because a row
+   * action that lands on a hub the shell refuses is a link to a 404. The
+   * app may not import the plugin, so the address comes from the shared
+   * builder the plugin's own routes are pinned against.
+   */
+  const orgSlug = useOrgSlug()
+  const host = useHostSubdomain()
+  const contactsFlag = useReleaseFlag('release_contacts')
+  const permissions = useOrgPermissions()
+  const crmReachable =
+    Boolean(orgSlug && host) &&
+    contactsFlag.ready &&
+    contactsFlag.visible &&
+    permissions.loaded &&
+    permissions.can('data.manage')
+
   /* One row grammar, the console's (AGL-2501) — the same table everywhere. */
   const memberColumns: GridColDef[] = useMemo(
     () => [
@@ -169,13 +197,54 @@ export function SiteAccountsCard(props: { hostId: string }) {
             <Chip label="Active" size="small" variant="outlined" />
           ),
       },
+      ...(crmReachable
+        ? [
+            {
+              field: 'actions',
+              headerName: '',
+              width: 56,
+              sortable: false,
+              filterable: false,
+              disableColumnMenu: true,
+              renderCell: ({ row }: any) => (
+                <Box
+                  onClick={(event) => event.stopPropagation()}
+                  sx={{ display: 'flex', alignItems: 'center', height: '100%' }}
+                >
+                  <RowActionsMenu
+                    label={String(row.email ?? row.$id)}
+                    items={[
+                      {
+                        key: 'crm',
+                        label: 'Open in CRM',
+                        icon: <MdiIcon path={mdiAccountArrowRight.path} size={0.8} />,
+                        ...(row.email
+                          ? {
+                              href: crmContactByEmailHref(
+                                { orgSlug, host: String(host) },
+                                String(row.email),
+                              ),
+                            }
+                          : {
+                              disabled: true,
+                              disabledReason:
+                                'This account has no email address, so no contact was updated.',
+                            }),
+                      },
+                    ]}
+                  />
+                </Box>
+              ),
+            } satisfies GridColDef,
+          ]
+        : []),
       ...hiddenFilterColumns(
         SITE_MEMBER_LIST_FILTER_FIELDS,
         MEMBER_FILTER_COLUMNS,
         SITE_MEMBER_LIST_FILTER_HEADERS,
       ),
     ],
-    [],
+    [crmReachable, orgSlug, host],
   )
 
   // Resolved from the live docs so the drawer reflects rule-side updates.

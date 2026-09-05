@@ -37,3 +37,23 @@ export function useCrmHubPath(basePath?: string | null): string {
   const host = String(params?.host ?? '')
   return `${buildRoute(Route.HOST_DASHBOARD, { orgSlug, host })}/crm`
 }
+
+/**
+ * The CRM hub's address for a surface OUTSIDE the CRM — an order's dialog,
+ * a booking's row — or `null` until the route params settle (AGL-2622).
+ *
+ * The shape the Inbox's own copy of this hook has: a sibling plugin is
+ * handed its own `basePath`, not the CRM's, and it must not render a link
+ * to `/hosts//crm` while the params are still empty. Built from the URL
+ * for the reason `useCrmHubPath` is, and from `Route.HOST_PLUGIN` with the
+ * CRM's slug because that is the address the shell resolves — `crmRoutes`
+ * then names the record. One export here rather than a copy per plugin, so
+ * a surface that moves the hub has one place to change.
+ */
+export function useCrmHubPathFromRoute(): string | null {
+  const params = useParams<{ orgSlug?: string; host?: string }>()
+  const orgSlug = params?.orgSlug
+  const host = params?.host
+  if (!orgSlug || !host) return null
+  return buildRoute(Route.HOST_PLUGIN, { orgSlug, host, pluginSlug: 'crm' })
+}

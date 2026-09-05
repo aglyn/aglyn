@@ -20,7 +20,12 @@ import { checkQuota, pluginDocsHelp } from '@aglyn/aglyn'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
 import { type HostBookingService, isBookingReminderDue } from '../model'
-import { CardDisplay, HelpTip, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+// The CRM's route builder and hub hook by their leaf paths, not the plugin
+// barrel: the barrel is the CRM's site entry point, and a console page
+// named there would ship to every published page.
+import { useCrmHubPathFromRoute } from '@aglyn/plugins-crm/hooks/use-crm-hub-path'
+import { crmRoutes } from '@aglyn/plugins-crm/model/crm-routes'
+import { AppLink, CardDisplay, HelpTip, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
@@ -105,6 +110,14 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
   const { confirm } = useConfirmationContext()
   // The id token the refund route authenticates with (AGL-2315).
   const { data: user } = useUser()
+  /*
+   * Where a booker's CONTACT is (AGL-2622). A booking updated a person in
+   * the CRM by the address it carried, and the row links there by that
+   * address — the Contacts list holds the id nothing here does and opens
+   * the record on one match. `null` until the route params settle, so no
+   * row renders a link to nowhere.
+   */
+  const crmHubPath = useCrmHubPathFromRoute()
 
   const {
     data: serviceDocs,
@@ -535,6 +548,16 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
                     }`}
                   </Typography>
                 </Stack>
+                {crmHubPath && booking.email ? (
+                  <Button
+                    component={AppLink as any}
+                    {...({ componentVariant: 'naked', nativeButton: false } as any)}
+                    href={crmRoutes(crmHubPath).contactByEmail(String(booking.email))}
+                    size="small"
+                  >
+                    {'View in CRM'}
+                  </Button>
+                ) : null}
                 {booking.status !== 'canceled' ? (
                   <Button
                     size="small"
