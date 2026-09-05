@@ -71,8 +71,19 @@ async function dispatch(
         // read this list (AGL-898). Orders and products (AGL-1928) are
         // site-scoped for the same reason and stay out for the same reason;
         // `media` earns its place because `/v1/media` — the ORGANIZATION
-        // library — really is a top-level path.
-        resources: ['datasets', 'contacts', 'sites', 'media'],
+        // library — really is a top-level path. The five CRM collections
+        // (AGL-2606) are org-level like contacts, and so are top-level here.
+        resources: [
+          'datasets',
+          'contacts',
+          'companies',
+          'pipelines',
+          'deals',
+          'tasks',
+          'activities',
+          'sites',
+          'media',
+        ],
       },
       { headers },
     )

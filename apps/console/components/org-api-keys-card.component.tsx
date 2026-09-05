@@ -69,6 +69,8 @@ const SCOPE_OPTIONS: Array<{ scope: string; label: string; description: string }
   { scope: 'products:read', label: 'Products — read', description: 'Read a site’s products, variants, prices and stock.' },
   { scope: 'media:read', label: 'Media — read', description: 'List files in the organization library and a site’s media.' },
   { scope: 'media:write', label: 'Media — upload', description: 'Add files to the organization library and a site’s media. Counts against your storage allowance. Cannot replace or delete an existing file.' },
+  { scope: 'crm:read', label: 'CRM — read', description: 'List and read companies, pipelines, deals, tasks and activities across the organization.' },
+  { scope: 'crm:write', label: 'CRM — write', description: 'Add, edit and delete companies, deals and tasks, and log activities, on behalf of a named site. Cannot edit a pipeline’s stages.' },
 ]
 
 interface PublicApiKey {
