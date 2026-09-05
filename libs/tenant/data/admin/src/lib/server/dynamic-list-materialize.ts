@@ -63,14 +63,17 @@ import {
   dynamicListRuleIsEmpty,
   dynamicListRuleListIds,
   dynamicListRuleWithoutListReference,
-  dynamicListRuleNeedsCampaigns,
+  dynamicListRuleNeedsContactFacet,
   dynamicListRuleNeedsEngagement,
   extractEmailFromFields,
+  isContactLifecycleStage,
   normalizeContactEmail,
   normalizeDynamicListRule,
   personKey,
   readCampaignIds,
   readContactCampaignIds,
+  readContactFacet,
+  type ContactCustomValue,
   type DynamicListCandidate,
   type DynamicListRule,
   type DynamicListSource,
@@ -211,13 +214,52 @@ const millis = (value: unknown): number | null => {
 }
 
 /**
+ * The CRM fields a rule may read, out of ONE holder's facet (AGL-2603).
+ *
+ * The owner, the stage, the company and the custom values are this holder's
+ * business records on a shared row. They are read through `readContactFacet`
+ * for the group the sweep runs as — never off the top of the document, where
+ * a pre-facet row could still carry somebody's fields, and never out of
+ * another group's facet. A field the facet does not carry is left ABSENT on
+ * the candidate, which the matcher reads as "does not match" for the first
+ * three and as "unset" for a custom clause; a stage the model does not name
+ * is dropped for the reason the normalizer drops one from a rule.
+ */
+function crmFieldsFromFacet(
+  data: Record<string, unknown>,
+  groupId: string,
+): Pick<
+  DynamicListCandidate,
+  'ownerUid' | 'lifecycleStage' | 'companyId' | 'custom'
+> {
+  const facet = readContactFacet(data, groupId)
+  const custom =
+    facet.custom && typeof facet.custom === 'object' && !Array.isArray(facet.custom)
+      ? (facet.custom as Record<string, ContactCustomValue>)
+      : undefined
+  return {
+    ...(typeof facet.ownerUid === 'string' && facet.ownerUid
+      ? { ownerUid: facet.ownerUid }
+      : {}),
+    ...(isContactLifecycleStage(facet.lifecycleStage)
+      ? { lifecycleStage: facet.lifecycleStage }
+      : {}),
+    ...(typeof facet.companyId === 'string' && facet.companyId
+      ? { companyId: facet.companyId }
+      : {}),
+    ...(custom ? { custom } : {}),
+  }
+}
+
+/**
  * Reads one silo document into the shape the rule matcher understands.
  *
  * @param groupId the consent group whose contact facet the campaign membership
- *   is read from, or `null` when the rule names no campaign and none was
- *   resolved. A contact row is shared by every site in the org and its
- *   membership lives inside one holder's facet, so there is no expression here
- *   that returns another holder's filing.
+ *   and the CRM fields are read from, or `null` when the rule names none of
+ *   them and no group was resolved. A contact row is shared by every site in
+ *   the org and its membership, its owner, its stage, its company and its
+ *   custom values all live inside one holder's facet, so there is no
+ *   expression here that returns another holder's filing.
  */
 function toCandidate(
   source: DynamicListSource,
@@ -252,10 +294,13 @@ function toCandidate(
           ltvCents: Number(data['ltvCents'] ?? 0),
           lastPurchaseAtMs: millis(data['lastPurchaseAtMs']),
           // Inside the holder's facet, never the top of the document. A rule
-          // with no campaign clause resolves no group and reads nothing here,
+          // with no facet clause resolves no group and reads nothing here,
           // which is what keeps the group lookup an opt-in cost.
           ...(groupId
-            ? { campaignIds: readContactCampaignIds(data, groupId) }
+            ? {
+                campaignIds: readContactCampaignIds(data, groupId),
+                ...crmFieldsFromFacet(data, groupId),
+              }
             : {}),
         }
       : {}),
@@ -468,16 +513,17 @@ export async function collectDynamicListCandidates(options: {
   const enrichment = await planEnrichment(rule, options.hostId)
 
   /*
-   * THE HOLDER whose contact facet a campaign clause is read from.
+   * THE HOLDER whose contact facet a campaign or CRM clause is read from.
    *
    * The same group the writers use — the sites declared to be one sender, or
    * this site alone — because a facet written under one group id and read
    * under another is a membership that silently matches nobody. Resolved once,
-   * and only for a rule that names a campaign: a rule with no campaign clause
+   * and only for a rule that names something the facet holds: a campaign, an
+   * owner, a stage, a company or a custom field. A rule naming none of them
    * pays no org read at all, which is the shape the engagement and list
    * lookups already take.
    */
-  const campaignGroupId = dynamicListRuleNeedsCampaigns(rule)
+  const facetGroupId = dynamicListRuleNeedsContactFacet(rule)
     ? (await consentGroupForSite(options.hostId)).groupId
     : null
 
@@ -530,7 +576,7 @@ export async function collectDynamicListCandidates(options: {
       for (const doc of snapshot.docs) {
         read += 1
         after = doc.id
-        const candidate = toCandidate(source, doc, campaignGroupId)
+        const candidate = toCandidate(source, doc, facetGroupId)
         if (candidate) pageCandidates.push(candidate)
       }
       read += await enrichCandidates(pageCandidates, enrichment)
