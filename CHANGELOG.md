@@ -78,8 +78,9 @@ content on the marketing site and is written separately.
 - **contacts:** activities and the timeline, registries regenerated ([AGL-2600](https://linear.app/aglyn/issue/AGL-2600))
 
 <details>
-<summary>Also in this release: 3 test, 2 chore</summary>
+<summary>Also in this release: 4 test, 2 chore</summary>
 
+- **bookings,commerce,tenant:** the runtime mocks stub the capture door every server path now uses ([AGL-2605](https://linear.app/aglyn/issue/AGL-2605))
 - **tools:** the Linear ceiling reads AGL-2629 for the CRM v2.1 arc ([AGL-2629](https://linear.app/aglyn/issue/AGL-2629), [AGL-2610](https://linear.app/aglyn/issue/AGL-2610))
 - **console:** the footer guard counts the Fields settings table as bounded ([AGL-2601](https://linear.app/aglyn/issue/AGL-2601))
 - **console:** the org contacts bridge links into the CRM hub, not the retired route ([AGL-2595](https://linear.app/aglyn/issue/AGL-2595))
