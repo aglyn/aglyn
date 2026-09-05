@@ -113,6 +113,27 @@ export function isContactLifecycleStage(
 }
 
 /**
+ * The stage a person is in once they have BOUGHT something (AGL-2596).
+ *
+ * `customer` when they had no stage or an earlier one; whatever they already
+ * had otherwise. The order door asks this on every purchase, and "never
+ * downgrades" is the whole contract: an `evangelist` who buys again is still
+ * an evangelist, and `other` — the deliberate stage a business picked for a
+ * funnel step none of the names fit — sits after `customer` in the list
+ * precisely so a sale cannot overwrite it. A value that is not a stage at all
+ * reads as absent, because a checkout is not the place to preserve a typo.
+ */
+export function contactLifecycleStageAfterPurchase(
+  current: unknown,
+): ContactLifecycleStage {
+  if (!isContactLifecycleStage(current)) return 'customer'
+  const order: readonly string[] = CONTACT_LIFECYCLE_STAGES
+  return order.indexOf(current) < order.indexOf('customer')
+    ? 'customer'
+    : current
+}
+
+/**
  * What a custom contact field may hold.
  *
  * Scalars only. A field is something a merchant filters and exports on, and
