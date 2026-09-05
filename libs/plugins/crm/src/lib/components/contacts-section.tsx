@@ -37,6 +37,7 @@ import {
   type ListFilterRequest,
 } from '@aglyn/shared-ui-jsx/const/list-filter'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import ContactsBulkBar from './contacts-bulk-bar'
 /*
  * The component path and NOT the marketing barrel: that barrel is the entry
  * point the tenant's loader imports to activate the plugin's SITE half, so a
@@ -610,6 +611,8 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
     enqueueSnackbar,
   ])
 
+  /** The rows ticked for a bulk action (AGL-2603); the bar above the table acts on them. */
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
   // Profile drawer with editable tags/notes.
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const selected = contacts.find((contact) => contact.$id === selectedId)
@@ -1027,9 +1030,11 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                     'column filters reach every contact.'}
                 </Typography>
               ) : null}
+              <ContactsBulkBar hostId={hostId} scope={dataScope} consentGroup={consentGroup} rows={visible} selected={selectedIds} onSelectedChange={setSelectedIds} />
               <ListTable
                 rows={visible}
                 columns={contactColumns}
+                selectable={{ selected: selectedIds, onChange: setSelectedIds }}
                 onOpen={(id) => {
                   const found = visible.find((row) => row.$id === id)
                   if (found) openContact(found)

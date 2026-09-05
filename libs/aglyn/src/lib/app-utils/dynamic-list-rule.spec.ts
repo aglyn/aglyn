@@ -27,7 +27,9 @@ import {
   dynamicListRuleListIds,
   dynamicListRuleNeedsCampaigns,
   dynamicListRuleNeedsEngagement,
+  dynamicListRuleNeedsContactFacet,
   dynamicListRuleWithoutListReference,
+  customValueMatches,
   normalizeDynamicListRule,
   type DynamicListCandidate,
 } from './dynamic-list-rule'
@@ -643,5 +645,207 @@ describe('what a rule makes the materializer pay for', () => {
         }),
       ).sort(),
     ).toEqual(['a', 'b', 'c'])
+  })
+})
+
+/*==========================================
+ * THE CRM DIMENSIONS (AGL-2603).
+ *
+ * An audience could be cut by tag, source and purchase history and by nothing
+ * a sales team keeps: not the owner of the relationship, not where the person
+ * sits in the funnel, not the company they work for, not a custom field. All
+ * four live on the holder's facet beside the tags, so they are contacts-only
+ * dimensions with the same skip rule the tags have — and the custom-field
+ * operators carry their own lean on a blank value, which the sentences read
+ * back and the assertions below pin.
+ *=========================================*/
+describe('who owns the relationship', () => {
+  it('matches a contact owned by any of the named team members', () => {
+    const rule = { sources: ['contacts'], ownerUids: ['uid-a', 'uid-b'] }
+    expect(match({ ownerUid: 'uid-b' }, rule)).toBe(true)
+    expect(match({ ownerUid: 'uid-c' }, rule)).toBe(false)
+  })
+
+  it('excludes a contact nobody owns', () => {
+    expect(match({}, { sources: ['contacts'], ownerUids: ['uid-a'] })).toBe(
+      false,
+    )
+  })
+
+  it('is skipped for a silo that carries no owner', () => {
+    expect(
+      match(
+        { silo: 'leads' },
+        { sources: ['contacts', 'leads'], ownerUids: ['uid-a'] },
+      ),
+    ).toBe(true)
+  })
+})
+
+describe('where the person sits in the funnel', () => {
+  it('matches any of the named stages', () => {
+    const rule = {
+      sources: ['contacts'],
+      lifecycleStages: ['lead', 'customer'],
+    }
+    expect(match({ lifecycleStage: 'customer' }, rule)).toBe(true)
+    expect(match({ lifecycleStage: 'evangelist' }, rule)).toBe(false)
+    expect(match({}, rule)).toBe(false)
+  })
+
+  it('drops a stage the model does not name rather than matching nobody', () => {
+    // A typo'd stage that survived would be a filter no contact can satisfy;
+    // dropped, the rule reads as the stages it does name.
+    expect(
+      normalizeDynamicListRule({
+        sources: ['contacts'],
+        lifecycleStages: ['lead', 'hot'],
+      }),
+    ).toMatchObject({ lifecycleStages: ['lead'] })
+    expect(
+      normalizeDynamicListRule({ sources: ['contacts'], lifecycleStages: ['hot'] })
+        .lifecycleStages,
+    ).toBeUndefined()
+  })
+})
+
+describe('which company the person belongs to', () => {
+  it('matches a contact at any of the named companies', () => {
+    const rule = { sources: ['contacts'], companyIds: ['co-1', 'co-2'] }
+    expect(match({ companyId: 'co-2' }, rule)).toBe(true)
+    expect(match({ companyId: 'co-9' }, rule)).toBe(false)
+    expect(match({}, rule)).toBe(false)
+  })
+})
+
+describe('a custom field', () => {
+  const custom = (key: string, op: string, value?: unknown) => ({
+    sources: ['contacts'],
+    custom: [{ key, op, ...(value === undefined ? {} : { value }) }],
+  })
+
+  it('is equal to, case-insensitively for text', () => {
+    expect(
+      match({ custom: { plan: 'Enterprise' } }, custom('plan', 'eq', 'enterprise')),
+    ).toBe(true)
+    expect(
+      match({ custom: { plan: 'starter' } }, custom('plan', 'eq', 'enterprise')),
+    ).toBe(false)
+    expect(match({ custom: { seats: 10 } }, custom('seats', 'eq', 10))).toBe(true)
+    expect(match({ custom: { vip: true } }, custom('vip', 'eq', true))).toBe(true)
+  })
+
+  /**
+   * "Is not" requires a VALUE that differs. A blank does not count, because
+   * a merchant excluding one plan is not asking for everyone whose plan was
+   * never recorded — the `unset` operator is the way to ask for those.
+   */
+  it('is not equal to — a blank does not count', () => {
+    expect(
+      match({ custom: { plan: 'starter' } }, custom('plan', 'neq', 'enterprise')),
+    ).toBe(true)
+    expect(
+      match({ custom: { plan: 'enterprise' } }, custom('plan', 'neq', 'enterprise')),
+    ).toBe(false)
+    expect(match({ custom: {} }, custom('plan', 'neq', 'enterprise'))).toBe(false)
+    expect(
+      match({ custom: { plan: null } }, custom('plan', 'neq', 'enterprise')),
+    ).toBe(false)
+  })
+
+  it('contains, case-insensitively', () => {
+    expect(
+      match(
+        { custom: { notes: 'Met at Expo 2026' } },
+        custom('notes', 'contains', 'expo'),
+      ),
+    ).toBe(true)
+    expect(
+      match({ custom: { notes: 'Cold call' } }, custom('notes', 'contains', 'expo')),
+    ).toBe(false)
+    expect(match({}, custom('notes', 'contains', 'expo'))).toBe(false)
+  })
+
+  it('compares numbers as numbers, and everything else as text', () => {
+    expect(match({ custom: { seats: 12 } }, custom('seats', 'gt', 10))).toBe(true)
+    expect(match({ custom: { seats: 9 } }, custom('seats', 'gt', 10))).toBe(false)
+    expect(match({ custom: { seats: '9' } }, custom('seats', 'lt', 10))).toBe(true)
+    // ISO dates order as text, which is what a date field stores.
+    expect(
+      match(
+        { custom: { renews: '2026-12-01' } },
+        custom('renews', 'gt', '2026-06-30'),
+      ),
+    ).toBe(true)
+    expect(match({}, custom('seats', 'gt', 10))).toBe(false)
+  })
+
+  it('is set, and is not set', () => {
+    expect(match({ custom: { plan: 'starter' } }, custom('plan', 'set'))).toBe(true)
+    expect(match({ custom: { plan: '' } }, custom('plan', 'set'))).toBe(false)
+    expect(match({ custom: { plan: null } }, custom('plan', 'unset'))).toBe(true)
+    expect(match({}, custom('plan', 'unset'))).toBe(true)
+    expect(match({ custom: { plan: false } }, custom('plan', 'set'))).toBe(true)
+  })
+
+  it('ANDs several clauses, like every other dimension', () => {
+    const rule = {
+      sources: ['contacts'],
+      custom: [
+        { key: 'plan', op: 'eq', value: 'enterprise' },
+        { key: 'seats', op: 'gt', value: 10 },
+      ],
+    }
+    expect(match({ custom: { plan: 'enterprise', seats: 50 } }, rule)).toBe(true)
+    expect(match({ custom: { plan: 'enterprise', seats: 5 } }, rule)).toBe(false)
+  })
+
+  it('drops a clause with a bad key, an unknown operator, or a missing value', () => {
+    const rule = normalizeDynamicListRule({
+      sources: ['contacts'],
+      custom: [
+        { key: 'Plan Name', op: 'eq', value: 'x' },
+        { key: 'plan', op: 'between', value: 'x' },
+        { key: 'plan', op: 'eq' },
+        { key: 'plan', op: 'unset', value: 'ignored' },
+        { key: 'plan', op: 'eq', value: { nested: true } },
+      ],
+    })
+    expect(rule.custom).toEqual([
+      // The key is normalized the way a definition's key is, so a clause
+      // typed against the label still reaches the stored key.
+      { key: 'plan_name', op: 'eq', value: 'x' },
+      { key: 'plan', op: 'unset' },
+    ])
+  })
+
+  it('exposes the comparison on its own, for a surface that previews a value', () => {
+    expect(
+      customValueMatches('Enterprise', { key: 'plan', op: 'eq', value: 'enterprise' }),
+    ).toBe(true)
+    expect(customValueMatches(undefined, { key: 'plan', op: 'unset' })).toBe(true)
+  })
+})
+
+describe('what the CRM dimensions make the materializer pay for', () => {
+  it('reports a facet read for a rule that names any of them, wherever it names it', () => {
+    expect(
+      dynamicListRuleNeedsContactFacet(
+        normalizeDynamicListRule({ sources: ['contacts'], tags: ['vip'] }),
+      ),
+    ).toBe(false)
+    for (const clause of [
+      { ownerUids: ['uid-a'] },
+      { lifecycleStages: ['lead'] },
+      { companyIds: ['co-1'] },
+      { custom: [{ key: 'plan', op: 'set' }] },
+      { campaignIds: ['camp_spring'] },
+    ]) {
+      expect(
+        dynamicListRuleNeedsContactFacet(
+          normalizeDynamicListRule({ sources: ['contacts'], any: [clause] }),
+        ),
+      ).toBe(true)
+    }
   })
 })

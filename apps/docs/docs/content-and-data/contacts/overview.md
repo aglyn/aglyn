@@ -87,6 +87,8 @@ record the reader could not open as a contact.
 columns to contact fields, preview the first rows, and import in batches with a report
 of what was added, updated and skipped. See [Import contacts from CSV](./import.md).
 
+- [Bulk actions](bulk-actions.md) — tick contacts in the table to tag them, set their owner or stage, add them to an email audience, export them, or remove them from this site at once.
+
 ## Segments
 
 Group contacts into **segments** — reusable audiences you can target directly in
