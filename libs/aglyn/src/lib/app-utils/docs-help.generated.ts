@@ -87,6 +87,11 @@ export const PLUGIN_DOCS = {
     title: 'Contacts CRM',
     excerpt: 'A unified contacts list ingested from forms, members, orders, and bookings — with tags, notes, and segments.',
   },
+  crmReports: {
+    path: '/content-and-data/contacts/reports',
+    title: 'Reports',
+    excerpt: 'New contacts over time, where they came from and how far they have gone, the open pipeline and its forecast, deals won and lost, and the task load — counted on the server for the records your site can see.',
+  },
   crmTasks: {
     path: '/content-and-data/contacts/tasks',
     title: 'Tasks & follow-ups',
@@ -173,6 +178,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   consoleTour: ['#the-app-bar', '#in-context-help', '#primary-navigation', '#editing-vs-managing', '#the-sites-list', '#the-status-pill', '#how-the-pill-is-decided', '#your-site-allowance', '#a-sites-dashboard', '#next', '#workspace-settings--notifications', '#alerts-on-this-device'],
   contactActivities: ['#two-kinds-of-history', '#logging-an-activity', '#where-an-activity-is-visible', '#the-recent-activity-feed', '#related'],
   contacts: ['#unified-ingestion', '#the-contacts-page', '#whats-in-the-crm-area', '#segments', '#related'],
+  crmReports: ['#choosing-a-period', '#contacts', '#sources-and-lifecycle', '#pipeline', '#won-and-lost', '#tasks', '#crm-at-a-glance', '#how-the-numbers-are-counted'],
   crmTasks: ['#the-tasks-page', '#creating-a-task', '#assigning-a-task-to-someone-else', '#completing-and-reopening', '#tasks-on-a-contact-company-or-deal', '#the-dashboard-card', '#who-can-do-what', '#related'],
   datasets: ['#model-builder', '#typed-documents', '#relations', '#query-layer', '#repeatable-components', '#who-a-dataset-is-shared-with', '#import--export', '#related'],
   designedEmails: ['#create-a-template', '#styling-email-blocks', '#merge-tokens', '#send-it', '#the-plain-text-version'],

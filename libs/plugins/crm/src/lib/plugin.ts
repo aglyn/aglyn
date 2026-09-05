@@ -19,6 +19,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import { mdiCardAccountDetailsOutline } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 import { CRM_CONSOLE_SECTIONS } from './components/crm-console-sections'
+import { CrmGlanceCard } from './components/crm-glance-card'
 import { BUNDLE_ID } from './constants/bundle-common'
 
 /** Code-split: the CRM hub only loads when opened. */
@@ -83,11 +84,15 @@ export function registerCrmConsole(): void {
      */
     permission: 'data.manage',
     /*
-     * Dashboard cards (AGL-2599): the site dashboard's `hostDashboard` slot
-     * composes this extension's permission over each, so a card appears only
-     * where the CRM is enabled and only for a reader who may open it. The
-     * tasks card is a glance at the reader's own overdue and due-today work;
-     * it renders nothing on a workspace that has never made a task.
+     * Dashboard cards (AGL-2599, AGL-2604): the site dashboard's `hostDashboard`
+     * slot composes this extension's permission over each, so a card appears
+     * only where the CRM is enabled and only for a reader who may open it —
+     * registered here rather than imported by the dashboard so the shell's
+     * enablement and entitlement gate decides whether a site that never turned
+     * the CRM on sees them, the rule every card on that row follows. The tasks
+     * card is a glance at the reader's own overdue and due-today work and
+     * renders nothing on a workspace that has never made a task; the glance
+     * card is four server-counted figures, each a link into the hub.
      */
     widgets: [
       {
@@ -95,6 +100,12 @@ export function registerCrmConsole(): void {
         widgetId: 'crm-tasks-due',
         title: 'Tasks due',
         Component: CrmTasksDueCard,
+      },
+      {
+        slot: Aglyn.CONSOLE_WIDGET_SLOTS.hostDashboard,
+        widgetId: 'crm-glance',
+        title: 'CRM at a glance',
+        Component: CrmGlanceCard,
       },
     ],
     navItems: [
