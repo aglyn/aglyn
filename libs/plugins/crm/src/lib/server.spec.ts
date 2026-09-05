@@ -18,7 +18,7 @@
 /**
  * The Contacts plugin's server half is WIRED, not merely written (AGL-2595).
  *
- * Three things have to agree for `/api/contacts/<route>` to reach a handler
+ * Three things have to agree for `/api/crm/<route>` to reach a handler
  * in this plugin, and each is a file nothing else reads back:
  *
  *  1. `plugins.config.json` names the register function under `consoleApi`
@@ -40,7 +40,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { resolvePluginApiRoute } from '@aglyn/aglyn/server'
 import { BUNDLE_ID } from './constants/bundle-common'
-import { registerContactsConsoleApi } from './server'
+import { registerCrmConsoleApi } from './server'
 
 const REPO_ROOT = join(__dirname, '../../../../..')
 
@@ -75,14 +75,14 @@ async function call(path: string, method: string) {
   return { status, body, headers }
 }
 
-describe('the contacts server entry', () => {
+describe('the CRM server entry', () => {
   it('is named in plugins.config.json with the contacts API prefix', () => {
     const config = JSON.parse(
       readFileSync(join(REPO_ROOT, 'plugins.config.json'), 'utf8'),
     ) as { plugins: Array<{ id: string; register: Record<string, string>; apiPrefixes?: string[] }> }
     const entry = config.plugins.find((plugin) => plugin.id === BUNDLE_ID)
-    expect(entry?.register['consoleApi']).toBe('registerContactsConsoleApi')
-    expect(entry?.apiPrefixes).toEqual(['contacts'])
+    expect(entry?.register['consoleApi']).toBe('registerCrmConsoleApi')
+    expect(entry?.apiPrefixes).toEqual(['crm'])
   })
 
   it('is carried by the generated console server manifest', () => {
@@ -90,22 +90,22 @@ describe('the contacts server entry', () => {
       join(REPO_ROOT, 'apps/console/constants/plugins.server.generated.ts'),
       'utf8',
     )
-    expect(manifest).toContain("id: 'contacts'")
-    expect(manifest).toContain('apiPrefixes: ["contacts"]')
-    expect(manifest).toContain('registerContactsConsoleApi')
-    expect(manifest).toContain("import('@aglyn/plugins-contacts/server')")
+    expect(manifest).toContain("id: 'crm'")
+    expect(manifest).toContain('apiPrefixes: ["crm"]')
+    expect(manifest).toContain('registerCrmConsoleApi')
+    expect(manifest).toContain("import('@aglyn/plugins-crm/server')")
   })
 
-  it('registers contacts/ping, which answers a GET', async () => {
-    registerContactsConsoleApi()
-    const { status, body } = await call('contacts/ping', 'GET')
+  it('registers crm/ping, which answers a GET', async () => {
+    registerCrmConsoleApi()
+    const { status, body } = await call('crm/ping', 'GET')
     expect(status).toBe(200)
-    expect(body).toEqual({ ok: true, plugin: 'contacts' })
+    expect(body).toEqual({ ok: true, plugin: 'crm' })
   })
 
   it('refuses any other method on the ping', async () => {
-    registerContactsConsoleApi()
-    const { status, headers } = await call('contacts/ping', 'POST')
+    registerCrmConsoleApi()
+    const { status, headers } = await call('crm/ping', 'POST')
     expect(status).toBe(405)
     expect(headers['Allow']).toBe('GET')
   })

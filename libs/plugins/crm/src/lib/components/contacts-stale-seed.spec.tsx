@@ -37,8 +37,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { updateDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
-import ContactsConsolePage from './contacts-console-page'
-import { CONTACTS_CONSOLE_SECTIONS } from './contacts-console-sections'
+import CrmConsolePage from './crm-console-page'
+import { CRM_CONSOLE_SECTIONS } from './crm-console-sections'
 
 /** Mutable so each spec picks the listener's verdict before rendering. */
 const listener = {
@@ -151,18 +151,18 @@ const BASE_PATH = '/acme/hosts/shop/contacts'
 /** The people section, as the shell mounts it: the resolved rail and the URL's section. */
 const hubProps = {
   basePath: BASE_PATH,
-  sections: CONTACTS_CONSOLE_SECTIONS.map((section) => ({
+  sections: CRM_CONSOLE_SECTIONS.map((section) => ({
     id: section.id,
     label: section.label,
     href: `${BASE_PATH}/${section.id}`,
     visible: true,
   })),
-  section: 'people',
-  segments: ['people'],
+  section: 'contacts',
+  segments: ['contacts'],
 }
 
 const renderPage = () =>
-  render(<ContactsConsolePage hostId="host-1" entitled {...hubProps} />)
+  render(<CrmConsolePage hostId="host-1" entitled {...hubProps} />)
 
 /**
  * Open the contact's drawer, edit only the NOTES, and save — the case that
@@ -176,7 +176,7 @@ function openContactEditNotesAndSave() {
   fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 }
 
-describe('ContactsConsolePage (AGL-1358)', () => {
+describe('CrmConsolePage (AGL-1358)', () => {
   it('REFUSES to write a contact seeded from an unconfirmed read', async () => {
     listener.fromCache = true
     renderPage()

@@ -433,7 +433,7 @@ register converts so little work into so much product.
 > The description below is the state it was written in.
 
 **What it is.** There is no CSV import for contacts or lists anywhere in the product.
-`contacts-console-page.tsx` exports; nothing imports. Members reach a list only through
+`crm-console-page.tsx` exports; nothing imports. Members reach a list only through
 newsletter capture, the `enrollList` automation step, or a dynamic rule.
 
 **Who has it.** All six.

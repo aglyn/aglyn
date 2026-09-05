@@ -16,7 +16,7 @@
  */
 
 import type { ConsolePluginPageProps } from '@aglyn/aglyn'
-import type { ContactsConsoleSectionId } from '../components/contacts-console-sections'
+import type { CrmConsoleSectionId } from '../components/crm-console-sections'
 
 /**
  * Every address inside the Contacts surface, built from the one string the
@@ -35,10 +35,11 @@ import type { ContactsConsoleSectionId } from '../components/contacts-console-se
  * otherwise read as a further segment.
  */
 export function crmRoutes(basePath: string) {
-  const section = (id: ContactsConsoleSectionId) => `${basePath}/${id}`
+  const section = (id: CrmConsoleSectionId) => `${basePath}/${id}`
   return {
     section,
-    contact: (id: string) => `${section('people')}/${encodeURIComponent(id)}`,
+    contact: (id: string) => `${section('contacts')}/${encodeURIComponent(id)}`,
+    lead: (id: string) => `${section('leads')}/${encodeURIComponent(id)}`,
     company: (id: string) => `${section('companies')}/${encodeURIComponent(id)}`,
     deal: (id: string) => `${section('deals')}/${encodeURIComponent(id)}`,
   }

@@ -1,7 +1,7 @@
 {
-  "name": "plugins-contacts",
+  "name": "plugins-crm",
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "libs/plugins/contacts/src",
+  "sourceRoot": "libs/plugins/crm/src",
   "projectType": "library",
   "tags": ["aglyn:addons"],
   "targets": {
@@ -9,10 +9,10 @@
       "executor": "@nx/js:swc",
       "outputs": ["{options.outputPath}"],
       "options": {
-        "outputPath": "dist/libs/plugins/contacts",
-        "main": "libs/plugins/contacts/src/index.ts",
-        "tsConfig": "libs/plugins/contacts/tsconfig.lib.json",
-        "assets": ["libs/plugins/contacts/*.md"]
+        "outputPath": "dist/libs/plugins/crm",
+        "main": "libs/plugins/crm/src/index.ts",
+        "tsConfig": "libs/plugins/crm/tsconfig.lib.json",
+        "assets": ["libs/plugins/crm/*.md"]
       }
     },
     "lint": {
@@ -21,9 +21,9 @@
     },
     "test": {
       "executor": "@nx/jest:jest",
-      "outputs": ["{workspaceRoot}/coverage/libs/plugins/contacts"],
+      "outputs": ["{workspaceRoot}/coverage/libs/plugins/crm"],
       "options": {
-        "jestConfig": "libs/plugins/contacts/jest.config.ts"
+        "jestConfig": "libs/plugins/crm/jest.config.ts"
       }
     }
   }

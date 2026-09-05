@@ -352,6 +352,18 @@ export interface ConsoleNavItem {
    */
   ownsSubtree?: boolean
   /**
+   * Hrefs this nav item answered to before it moved (AGL-2595).
+   *
+   * A console path is something people keep — a bookmark, a docs link, an
+   * email from the console itself — and a nav item that changes its `href`
+   * would otherwise turn every one of them into the shell's "not available"
+   * notice. Matching here is identical to matching on `href` (the same
+   * sections, the same subtree rule), and the resolved page carries
+   * `legacy: true` so the shell can replace the address with the current one
+   * rather than leave a moved page living at two.
+   */
+  legacyHrefs?: readonly string[]
+  /**
    * Dashboard header for the plugin page (title + icon), and the docs topic
    * its help `?` explains.
    *
@@ -658,6 +670,11 @@ export interface ResolvedConsolePluginPage {
   section?: ConsoleNavSection
   /** Path segments beneath `navItem.href`; `[]` on the nav item's own href. */
   segments: readonly string[]
+  /**
+   * The href was one of the nav item's `legacyHrefs`, not its current one.
+   * The shell redirects to `navItem.href` plus the same section and segments.
+   */
+  legacy?: boolean
 }
 
 /**
@@ -673,12 +690,26 @@ export interface ResolvedConsolePluginPage {
 function matchNavItem(
   navItem: ConsoleNavItem,
   href: string,
+): { section?: ConsoleNavSection; segments: readonly string[]; legacy?: boolean } | undefined {
+  const current = matchNavItemHref(navItem, navItem.href, href)
+  if (current) return current
+  for (const legacyHref of navItem.legacyHrefs ?? []) {
+    const match = matchNavItemHref(navItem, legacyHref, href)
+    if (match) return { ...match, legacy: true }
+  }
+  return undefined
+}
+
+function matchNavItemHref(
+  navItem: ConsoleNavItem,
+  itemHref: string,
+  href: string,
 ): { section?: ConsoleNavSection; segments: readonly string[] } | undefined {
-  if (navItem.href === href) return { segments: [] }
+  if (itemHref === href) return { segments: [] }
   if (!navItem.sections?.length && !navItem.ownsSubtree) return undefined
   // On a separator boundary, so `/products` cannot claim `/products-archive`.
-  if (!href.startsWith(`${navItem.href}/`)) return undefined
-  const segments = href.slice(navItem.href.length + 1).split('/').filter(Boolean)
+  if (!href.startsWith(`${itemHref}/`)) return undefined
+  const segments = href.slice(itemHref.length + 1).split('/').filter(Boolean)
   const section = navItem.sections?.find((item) => item.id === segments[0])
   if (section) return { section, segments }
   // An id the nav item never declared is NOT this page — unless the surface

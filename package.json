@@ -109,6 +109,7 @@
     "test:standalone-installs": "node --test tools/scripts/lib/standalone-installs.test.mjs",
     "test:test-wiring": "node --test tools/scripts/lib/test-wiring.test.mjs",
     "test:backfill-core": "node --test tools/scripts/backfills/lib/backfill-core.test.mjs",
+    "test:plugin-id-rename": "node --test tools/scripts/lib/plugin-id-rename.test.mjs",
     "test:pricing-drift": "node --test tools/scripts/lib/pricing-drift.test.mjs",
     "test:decision-log": "node --test tools/scripts/lib/decision-log.test.mjs",
     "test:legal-drift": "node --test tools/scripts/lib/legal-doc-diff.test.mjs",

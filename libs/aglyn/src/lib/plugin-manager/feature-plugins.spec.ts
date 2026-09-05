@@ -160,6 +160,47 @@ describe('console extension registry', () => {
   })
 
   /**
+   * AGL-2595: a nav item that moved keeps answering to its old address, and
+   * says so, so the shell can put the current one in the bar.
+   */
+  it('resolves a legacy href to the same page, flagged legacy', () => {
+    const Page = (): null => null
+    registerConsoleExtension({
+      pluginId: 'events-calendar',
+      displayName: 'Events',
+      featureFlag: 'eventCalendar',
+      navItems: [
+        {
+          label: 'CRM',
+          href: '/crm',
+          legacyHrefs: ['/contacts'],
+          sections: [
+            { id: 'contacts', label: 'Contacts' },
+            { id: 'deals', label: 'Deals' },
+          ],
+          Component: Page,
+        },
+      ],
+    })
+    const current = resolveConsolePluginPage('/crm/deals/d1')
+    expect(current?.legacy).toBeUndefined()
+    expect(current?.section?.id).toBe('deals')
+
+    const bare = resolveConsolePluginPage('/contacts')
+    expect(bare?.navItem.href).toBe('/crm')
+    expect(bare?.legacy).toBe(true)
+    expect(bare?.segments).toEqual([])
+
+    const deep = resolveConsolePluginPage('/contacts/deals/d1')
+    expect(deep?.legacy).toBe(true)
+    expect(deep?.section?.id).toBe('deals')
+    expect(deep?.segments).toEqual(['deals', 'd1'])
+
+    // A separator boundary, as for the current href.
+    expect(resolveConsolePluginPage('/contacts-archive')).toBeUndefined()
+  })
+
+  /**
    * AGL-758: the registry only ever grows within a session, so after
    * visiting two workspaces it holds the union of both plugin sets. Every
    * read takes the caller's effective enabled ids so one workspace never

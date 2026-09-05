@@ -58,19 +58,21 @@ Once the page is switched on, it will let you:
 - Add **tags** and **notes**.
 - **Export to CSV**.
 
-## What's in the Contacts area
+## What's in the CRM area
 
-The Contacts area is a hub of six sections, each with its own address under
-`…/contacts/` so you can link straight to it:
+In the console the surface is called **CRM**, and it is a hub of seven sections,
+each with its own address under your site (`…/hosts/{site}/crm/…`). Links to the
+older `…/contacts` address still open the hub.
 
 | Section | Address | What lives there |
 | --- | --- | --- |
-| **Contacts** | `/contacts/people` | The people list above; a person's own page is `/contacts/people/{id}`. |
-| **Companies** | `/contacts/companies` | The organizations your contacts belong to; a company's page is `/contacts/companies/{id}`. |
-| **Deals** | `/contacts/deals` | Your pipeline — open deals by stage, with amount, owner and expected close; a deal's page is `/contacts/deals/{id}`. |
-| **Tasks** | `/contacts/tasks` | Calls, emails, meetings and to-dos by due date, linked to the contact, company or deal they are for. |
-| **Reports** | `/contacts/reports` | Contacts by stage and source, the pipeline by stage, won and lost over time. |
-| **Fields** | `/contacts/fields` | The custom fields on a contact — text, number, date, choice, checkbox or link. |
+| **Contacts** | `/crm/contacts` | The people list above; a person's own page is `/crm/contacts/{id}`. |
+| **Leads** | `/crm/leads` | People a site has captured but not yet qualified — a status, an owner, and a conversion into a contact, a company and a deal. |
+| **Companies** | `/crm/companies` | The organizations your contacts belong to; a company's page is `/crm/companies/{id}`. |
+| **Deals** | `/crm/deals` | Your pipeline — open deals by stage, with amount, owner and expected close; a deal's page is `/crm/deals/{id}`. |
+| **Tasks** | `/crm/tasks` | Calls, emails, meetings and to-dos by due date, linked to the contact, company or deal they are for. |
+| **Reports** | `/crm/reports` | Contacts by stage and source, the pipeline by stage, won and lost over time. |
+| **Fields** | `/crm/fields` | The custom fields on a contact — text, number, date, choice, checkbox or link. |
 
 Opening `/contacts` lands on the first section. Every section follows the same
 per-site visibility as the contacts themselves, so a section can never show a

@@ -17,8 +17,9 @@
 
 import type { ConsoleNavSection } from '@aglyn/aglyn'
 
-export type ContactsConsoleSectionId =
-  | 'people'
+export type CrmConsoleSectionId =
+  | 'contacts'
+  | 'leads'
   | 'companies'
   | 'deals'
   | 'tasks'
@@ -26,7 +27,7 @@ export type ContactsConsoleSectionId =
   | 'fields'
 
 /**
- * The Contacts console's sections, in rail order (AGL-2595).
+ * The CRM hub's sections, in rail order (AGL-2595).
  *
  * One list, read twice and never copied: `plugin.ts` registers it on the nav
  * item so the shell can route and gate each section, and the hub page
@@ -34,22 +35,21 @@ export type ContactsConsoleSectionId =
  * section comes to be routable under one id and drawn under another.
  *
  * Ids appear in links people keep, so they are persisted vocabulary. The
- * first is `people` rather than `contacts` because the surface is already
- * called Contacts: `/contacts/contacts` would name the same thing twice, and
- * a rail entry reading "Contacts" under a header reading "Contacts" would
- * say nothing. The LABEL still reads "Contacts", because that is what the
- * list is.
+ * surface is called CRM and its first section Contacts, the way Salesforce
+ * and HubSpot lay the same objects out — Leads, Contacts, Companies, Deals —
+ * so `/crm/contacts` names the list and reads as one.
  *
  * Every section here ships with the surface and inherits the nav item's
  * `release_contacts` gate — no `navTabId` on any of them. A section that
  * later needs its own schedule declares one, which can only narrow.
  *
- * Rail ORDER decides where a bare `/contacts` lands: the shell redirects it to
+ * Rail ORDER decides where a bare `/crm` lands: the shell redirects it to
  * the first section this reader may open. There is deliberately no separate
  * default constant.
  */
-export const CONTACTS_CONSOLE_SECTIONS: readonly ConsoleNavSection[] = [
-  { id: 'people', label: 'Contacts' },
+export const CRM_CONSOLE_SECTIONS: readonly ConsoleNavSection[] = [
+  { id: 'contacts', label: 'Contacts' },
+  { id: 'leads', label: 'Leads' },
   { id: 'companies', label: 'Companies' },
   { id: 'deals', label: 'Deals' },
   { id: 'tasks', label: 'Tasks' },

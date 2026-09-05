@@ -110,9 +110,9 @@ describe('AGL-1478 · every creator of a scoped collection stamps the scope', ()
       // adds a scoped read.
       //
       // The v1 page body, which owns this creator, is the `people` section
-      // of the Contacts hub since AGL-2595; `contacts-console-page.tsx` is
+      // of the Contacts hub since AGL-2595; `crm-console-page.tsx` is
       // the rail and the switch and writes nothing.
-      file: 'libs/plugins/contacts/src/lib/components/people-section.tsx',
+      file: 'libs/plugins/crm/src/lib/components/contacts-section.tsx',
       mustContain: ['newResourceScopeFields'],
       why: 'saving a contact filter as a segment',
     },

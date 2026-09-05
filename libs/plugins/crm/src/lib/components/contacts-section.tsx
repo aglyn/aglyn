@@ -137,7 +137,7 @@ const csvEscape = (value: unknown) => {
  * `contactsPerHost` quota check.
  *
  * Since AGL-2595 this is the `people` SECTION of the Contacts hub rather
- * than the whole page: `contacts-console-page.tsx` routes to it, and the
+ * than the whole page: `crm-console-page.tsx` routes to it, and the
  * companies, deals, tasks, reports and fields sections sit beside it. The
  * body is the v1 page unchanged, and it takes the shell's full prop bag so
  * nothing the v1 page read has to be threaded through the hub by name.

@@ -56,14 +56,14 @@
       ]
     },
     {
-      "id": "contacts",
-      "package": "@aglyn/plugins-contacts",
+      "id": "crm",
+      "package": "@aglyn/plugins-crm",
       "register": {
-        "console": "registerContactsConsole",
-        "consoleApi": "registerContactsConsoleApi"
+        "console": "registerCrmConsole",
+        "consoleApi": "registerCrmConsoleApi"
       },
       "apiPrefixes": [
-        "contacts"
+        "crm"
       ]
     },
     {

@@ -38,6 +38,8 @@
  */
 export const PLUGIN_TITLES: Readonly<Record<string, string>> = {
   pos: 'POS',
+  // The same reason: three letters nobody reads as a word.
+  crm: 'CRM',
 }
 
 /** `email-campaigns` -> `Email Campaigns`. Wrong for acronyms, by design. */
@@ -97,6 +99,7 @@ export const PLUGIN_SECTIONS: Readonly<Record<string, readonly string[]>> = {
   ],
   automation: ['workflows', 'actions', 'webhooks'],
   inbox: ['submissions', 'contacts', 'campaigns'],
+  crm: ['contacts', 'leads', 'companies', 'deals', 'tasks', 'reports', 'fields'],
 }
 
 /**

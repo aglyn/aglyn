@@ -40,7 +40,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
         <Button
           component={AppLink as any}
           {...({ componentVariant: 'naked', nativeButton: false } as any)}
-          href={routes.section('people')}
+          href={routes.section('contacts')}
           size="small"
           color="primary"
         >

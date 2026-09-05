@@ -24,7 +24,7 @@
  * The shell hands a plugin page the flag verdict WITHOUT the staff bypass
  * (AGL-1662).
  *
- * `libs/plugins/contacts/.../contacts-console-page.tsx` quotes a dollar
+ * `libs/plugins/crm/.../contacts-section.tsx` quotes a dollar
  * figure for audience overage, and AGL-1604 stopped the usage cron billing
  * that figure while `release_contacts` is off for the org. The page cannot
  * ask the flag for itself — the release-flag hooks are `scope:app` and a

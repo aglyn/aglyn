@@ -1,5 +1,5 @@
 {
-  "name": "@aglyn/plugins-contacts",
+  "name": "@aglyn/plugins-crm",
   "version": "0.0.1",
   "type": "module",
   "dependencies": {

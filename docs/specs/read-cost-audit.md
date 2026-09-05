@@ -314,7 +314,7 @@ Ranked, and accurate as of this pass. Nothing here is fixed.
    documents through an allow-list that omits it, so imported folders would
    vanish from the rail. Order on `documentId()`.
 4. **`besigner-versions.component.tsx`** holds three `limit(1000)` reads and
-   **`contacts-console-page.tsx`** two more — the largest windows in the repo,
+   **`crm-console-page.tsx`** two more — the largest windows in the repo,
    though both sit off the listener path.
 5. **The commerce aggregates still have a ceiling.** Time-bounding fixed the
    common case and disclosure made the uncommon case honest, but a store above
@@ -508,8 +508,8 @@ names one; **none** is the arbitrary-sample defect described in §2.
 | `apps/console/components/besigner-versions.component.tsx`:277 | 1000 | **none** | unordered |
 | `apps/console/components/besigner-versions.component.tsx`:297 | 1000 | **none** | unordered |
 | `apps/console/components/besigner-versions.component.tsx`:305 | 1000 | **none** | unordered |
-| `libs/plugins/contacts/src/lib/components/contacts-console-page.tsx`:209 | 1000 | ordered |  |
-| `libs/plugins/contacts/src/lib/components/contacts-console-page.tsx`:663 | 1000 | **none** | unordered |
+| `libs/plugins/crm/src/lib/components/crm-console-page.tsx`:209 | 1000 | ordered |  |
+| `libs/plugins/crm/src/lib/components/crm-console-page.tsx`:663 | 1000 | **none** | unordered |
 | `libs/plugins/data/src/lib/components/host-datasets-card.component.tsx`:676 | 200 | **none** | unordered |
 | `apps/console/app/(app)/[orgSlug]/plugins/page.tsx`:116 | 100 | **none** | unordered |
 | `libs/plugins/workflows/src/lib/components/host-workflows-card.component.tsx`:543 | 100 | **none** | **Fixed** — picker reads gated on the editor + ordered; mount 200 docs to 0 |

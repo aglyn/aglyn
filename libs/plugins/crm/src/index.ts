@@ -1,7 +1,6 @@
-/* eslint-disable */
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,18 +15,10 @@
  * limitations under the License.
  */
 
-export default {
-  displayName: 'plugins-contacts',
-  preset: '../../../jest.preset.js',
-  testEnvironment: 'jsdom',
-  transform: {
-    '^.+\\.[tj]sx?$': [
-      '@swc/jest',
-      // swcrc: false keeps the build-oriented .swcrc (which excludes spec
-      // files) from being applied to the jest transform.
-      { swcrc: false, jsc: { transform: { react: { runtime: 'automatic' } } } },
-    ],
-  },
-  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],
-  coverageDirectory: '../../../coverage/libs/plugins/contacts',
-}
+export * from './lib/constants/bundle-common'
+export * from './lib/plugin'
+// The hub's section ids and the one way to link into it (AGL-2595), so a
+// surface outside this plugin — a campaign naming a contact, an order
+// naming a company — builds the same address the hub resolves.
+export * from './lib/components/crm-console-sections'
+export * from './lib/model/crm-routes'

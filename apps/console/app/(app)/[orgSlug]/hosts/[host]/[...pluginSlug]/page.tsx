@@ -248,10 +248,26 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
    * The nav strip therefore links straight to the landing section (see
    * `hostNavTabItems`), leaving this for typed and bookmarked bare URLs.
    */
-  const sectionRedirect =
-    resolved && !resolved.section && resolvedSections?.length
-      ? resolvedSections.find((section) => section.visible)?.href
+  /*
+   * A LEGACY address is replaced, not served (AGL-2595). The registry matched
+   * the page through one of the nav item's `legacyHrefs`, so the URL in the
+   * bar names a place the surface no longer lives; `basePath` above is built
+   * from the CURRENT href, and the section and segments carry over unchanged.
+   * A bare legacy href goes straight to the landing section rather than to
+   * the bare current one, which would only redirect again.
+   */
+  const legacyRedirect =
+    resolved?.legacy && basePath
+      ? resolved.segments.length
+        ? `${basePath}/${resolved.segments.join('/')}`
+        : (resolvedSections?.find((section) => section.visible)?.href ??
+          basePath)
       : undefined
+  const sectionRedirect =
+    legacyRedirect ??
+    (resolved && !resolved.section && resolvedSections?.length
+      ? resolvedSections.find((section) => section.visible)?.href
+      : undefined)
 
   useEffect(() => {
     if (sectionRedirect) router.replace(sectionRedirect)

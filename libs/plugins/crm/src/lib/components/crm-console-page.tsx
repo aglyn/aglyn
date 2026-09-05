@@ -22,11 +22,13 @@ import type { ReactNode } from 'react'
 import CompaniesSection from './companies-section'
 import CompanyDetailPage from './company-detail-page'
 import ContactDetailPage from './contact-detail-page'
-import type { ContactsConsoleSectionId } from './contacts-console-sections'
+import type { CrmConsoleSectionId } from './crm-console-sections'
 import DealDetailPage from './deal-detail-page'
 import DealsSection from './deals-section'
 import FieldsSection from './fields-section'
-import PeopleSection from './people-section'
+import LeadDetailPage from './lead-detail-page'
+import LeadsSection from './leads-section'
+import ContactsSection from './contacts-section'
 import ReportsSection from './reports-section'
 import TasksSection from './tasks-section'
 
@@ -45,7 +47,7 @@ import TasksSection from './tasks-section'
  * already 404'd anything it could not resolve to this surface.
  */
 function sectionBody(
-  section: ContactsConsoleSectionId,
+  section: CrmConsoleSectionId,
   props: ConsolePluginPageProps,
   /** The section's OWN segments — `segments[1]` onward. */
   detail: readonly string[],
@@ -61,11 +63,17 @@ function sectionBody(
     basePath,
   }
   switch (section) {
-    case 'people':
+    case 'contacts':
       return record ? (
         <ContactDetailPage {...recordProps} id={record} />
       ) : (
-        <PeopleSection {...props} />
+        <ContactsSection {...props} />
+      )
+    case 'leads':
+      return record ? (
+        <LeadDetailPage {...recordProps} id={record} />
+      ) : (
+        <LeadsSection />
       )
     case 'companies':
       return record ? (
@@ -100,10 +108,10 @@ function sectionBody(
  * Sections are ROUTES, following the hubs that migrated before it (AGL-2501):
  * `/contacts/people` is the v1 list, and every other section is a URL of its
  * own, so the page builds one section's body and the others do not exist to
- * subscribe. The v1 body moved to `people-section.tsx` untouched; what this
+ * subscribe. The v1 body moved to `contacts-section.tsx` untouched; what this
  * file adds is the rail and the switch.
  */
-export function ContactsConsolePage(props: ConsolePluginPageProps) {
+export function CrmConsolePage(props: ConsolePluginPageProps) {
   const { section, sections, basePath, segments } = props
 
   /*
@@ -117,7 +125,7 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
   return (
     <HubSections sections={sections}>
       {sectionBody(
-        section as ContactsConsoleSectionId,
+        section as CrmConsoleSectionId,
         props,
         // `segments[0]` IS the section — the shell resolved it into `section`
         // already — so what a section owns is everything after it.
@@ -127,6 +135,6 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
     </HubSections>
   )
 }
-ContactsConsolePage.displayName = 'ContactsConsolePage'
+CrmConsolePage.displayName = 'CrmConsolePage'
 
-export default ContactsConsolePage
+export default CrmConsolePage

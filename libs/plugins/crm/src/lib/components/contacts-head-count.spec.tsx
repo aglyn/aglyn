@@ -60,8 +60,8 @@
 
 import { render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import ContactsConsolePage from './contacts-console-page'
-import { CONTACTS_CONSOLE_SECTIONS } from './contacts-console-sections'
+import CrmConsolePage from './crm-console-page'
+import { CRM_CONSOLE_SECTIONS } from './crm-console-sections'
 
 /**
  * Stock `pro`, no per-org entitlement override — the whole point being that
@@ -186,14 +186,14 @@ const BASE_PATH = '/acme/hosts/shop/contacts'
 /** The people section, as the shell mounts it: the resolved rail and the URL's section. */
 const hubProps = {
   basePath: BASE_PATH,
-  sections: CONTACTS_CONSOLE_SECTIONS.map((section) => ({
+  sections: CRM_CONSOLE_SECTIONS.map((section) => ({
     id: section.id,
     label: section.label,
     href: `${BASE_PATH}/${section.id}`,
     visible: true,
   })),
-  section: 'people',
-  segments: ['people'],
+  section: 'contacts',
+  segments: ['contacts'],
 }
 
 beforeEach(() => {
@@ -204,7 +204,7 @@ beforeEach(() => {
 /** The org whose flag is ON, so the alert quotes the figure (AGL-1662). */
 const mount = (org: any = ORG) =>
   render(
-    <ContactsConsolePage
+    <CrmConsolePage
       hostId="host-1"
       entitled
       org={org}

@@ -16,18 +16,19 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { CONTACTS_CONSOLE_SECTIONS } from './components/contacts-console-sections'
+import { CRM_CONSOLE_SECTIONS } from './components/crm-console-sections'
 import { BUNDLE_ID } from './constants/bundle-common'
-import { registerContactsConsole } from './plugin'
+import { registerCrmConsole } from './plugin'
 
 const registered = () =>
   Aglyn.listConsoleExtensions().find((entry) => entry.pluginId === BUNDLE_ID)
 
-describe('contacts plugin', () => {
+describe('crm plugin', () => {
   it('registers a console-only Contacts page gated by the nav tab', () => {
-    registerContactsConsole()
+    registerCrmConsole()
     const extension = registered()
-    expect(extension?.navItems?.[0]?.href).toBe('/contacts')
+    expect(extension?.navItems?.[0]?.href).toBe('/crm')
+    expect(extension?.navItems?.[0]?.legacyHrefs).toEqual(['/contacts'])
     expect(extension?.navItems?.[0]?.navTabId).toBe('nav-tab-contacts')
     expect(extension?.navItems?.[0]?.Component).toBeDefined()
     expect(Aglyn.plugins.getDependency(BUNDLE_ID)).toBeUndefined()
@@ -43,7 +44,7 @@ describe('contacts plugin', () => {
    * membership of the organization was the whole gate.
    */
   it('declares the permission the shell enforces before mounting it', () => {
-    registerContactsConsole()
+    registerCrmConsole()
     expect(registered()?.permission).toBe('data.manage')
   })
 
@@ -54,7 +55,7 @@ describe('contacts plugin', () => {
    * everybody — and a key nobody can grant is not a permission.
    */
   it('names a key the permission catalog carries', () => {
-    registerContactsConsole()
+    registerCrmConsole()
     const permission = registered()?.permission as Aglyn.OrgPermission
     expect(Aglyn.ORG_PERMISSION_KEYS).toContain(permission)
     // The population it admits: the tiers the Firestore rules already let
@@ -72,12 +73,13 @@ describe('contacts plugin', () => {
    * leave `/contacts/deals` a 404 while the page still had a Deals branch;
    * a second list would let the two drift apart.
    */
-  it('declares the six CRM sections on the nav item, people first', () => {
-    registerContactsConsole()
+  it('declares the seven CRM sections on the nav item, contacts first', () => {
+    registerCrmConsole()
     const sections = registered()?.navItems?.[0]?.sections
-    expect(sections).toBe(CONTACTS_CONSOLE_SECTIONS)
+    expect(sections).toBe(CRM_CONSOLE_SECTIONS)
     expect(sections?.map((section) => section.id)).toEqual([
-      'people',
+      'contacts',
+      'leads',
       'companies',
       'deals',
       'tasks',

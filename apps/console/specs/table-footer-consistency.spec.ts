@@ -1169,7 +1169,7 @@ const NOT_A_LIST: Array<[string, string]> = [
       'the console’s screen tree and starter bundles.',
   ],
   [
-    'libs/plugins/contacts/src/lib/components/contacts-console-page.tsx',
+    'libs/plugins/crm/src/lib/components/contacts-section.tsx',
     'MISCLASSIFIED as the contact roster, which is not what the detector ' +
       'found here: the roster renders `ListTable` and has had a footer and a ' +
       'server-side filter since AGL-2292. The rows this matches are one ' +

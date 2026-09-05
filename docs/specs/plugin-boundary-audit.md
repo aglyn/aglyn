@@ -360,7 +360,7 @@ Six existing plugins are console shells whose domain models stayed in
 
 | plugin | model still in core |
 | --- | --- |
-| `contacts` | `contacts.ts` — `HostContact`, `contactMatchesSegment`, `checkContactQuota`, `CONTACT_SOURCE_LABELS`, all imported from `@aglyn/aglyn` by `contacts-console-page.tsx` |
+| `contacts` | `contacts.ts` — `HostContact`, `contactMatchesSegment`, `checkContactQuota`, `CONTACT_SOURCE_LABELS`, all imported from `@aglyn/aglyn` by `crm-console-page.tsx` |
 | `workflows` | `workflows.ts`, `actions.ts`, `webhook-delivery.ts`, `run-history-shape.spec.ts` — `HostWorkflow`, `runWorkflow`, `HOST_EVENT_TYPES` imported by `host-workflows-card.component.tsx` |
 | `data` | `datasets.ts`, `dataset-models.ts`, `dataset-query.ts`, `dataset-record-view.ts`, `dataset-csv.ts` — while the plugin holds only `model/dataset-io.ts` |
 | `logic` | `functions.ts`, `variables.ts` |

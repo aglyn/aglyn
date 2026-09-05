@@ -457,7 +457,7 @@ function OrgContacts() {
                     href: buildRoute(Route.HOST_PLUGIN, {
                       orgSlug,
                       host,
-                      pluginSlug: 'contacts',
+                      pluginSlug: 'crm/contacts',
                     }),
                   }
                 : {
@@ -720,7 +720,7 @@ function OrgContactDrawer(props: {
                           ? buildRoute(Route.HOST_PLUGIN, {
                               orgSlug,
                               host,
-                              pluginSlug: 'contacts',
+                              pluginSlug: 'crm/contacts',
                             })
                           : undefined
                       }

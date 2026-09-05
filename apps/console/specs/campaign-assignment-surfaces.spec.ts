@@ -60,7 +60,7 @@ const ASSIGNMENT_SURFACES: Record<string, string> = {
     'apps/console/app/(editor)/[orgSlug]/hosts/[host]/screens/[screenId]/versions/[versionId]/view/page.tsx',
   forms: 'libs/plugins/forms/src/lib/components/form-detail-card.tsx',
   contacts:
-    'libs/plugins/contacts/src/lib/components/contacts-console-page.tsx',
+    'libs/plugins/crm/src/lib/components/contacts-section.tsx',
 }
 
 /** The one place a campaign's removal walks its members. */

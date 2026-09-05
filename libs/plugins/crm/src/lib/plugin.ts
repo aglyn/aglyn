@@ -18,25 +18,32 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiCardAccountDetailsOutline } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
-import { CONTACTS_CONSOLE_SECTIONS } from './components/contacts-console-sections'
+import { CRM_CONSOLE_SECTIONS } from './components/crm-console-sections'
 import { BUNDLE_ID } from './constants/bundle-common'
 
-/** Code-split: the Contacts console page only loads when opened. */
-const ContactsConsolePage = lazy(
-  () => import('./components/contacts-console-page'),
+/** Code-split: the CRM hub only loads when opened. */
+const CrmConsolePage = lazy(
+  () => import('./components/crm-console-page'),
 )
 
 /**
- * Contacts CRM feature plugin (AGL-395). Console-only — contacts and
- * segments live in Firestore and have no canvas element, so there is no UI
- * bundle. The console half declares the Contacts nav + page through the
+ * CRM feature plugin (AGL-395, the hub since AGL-2595). Console-only — its
+ * records live in Firestore and have no canvas element, so there is no UI
+ * bundle. The console half declares the CRM nav + hub through the
  * ConsoleExtension registry (release_contacts gate via the nav tab); the
- * page reads the `contactsPerHost` quota off the shell-passed `org`.
+ * contacts section reads the `contactsPerHost` quota off the shell-passed
+ * `org`.
+ *
+ * The plugin id is `crm` (AGL-2595). It was `contacts` while the surface was
+ * one list; the id is persisted in every org's `enabledPlugins` and every
+ * host's `disabledPlugins`, so `LEGACY_PLUGIN_IDS` in `enabled-plugins.ts`
+ * reads the old value as this one and `backfill-plugin-id-crm.mjs` rewrites
+ * the documents.
  */
-export function registerContactsConsole(): void {
+export function registerCrmConsole(): void {
   Aglyn.registerConsoleExtension({
     pluginId: BUNDLE_ID,
-    displayName: 'Contacts',
+    displayName: 'CRM',
     /*
      * WHO may open the CRM, declared so the shell enforces it.
      *
@@ -73,21 +80,25 @@ export function registerContactsConsole(): void {
     permission: 'data.manage',
     navItems: [
       {
-        label: 'Contacts',
-        href: '/contacts',
+        label: 'CRM',
+        href: '/crm',
+        // The address the surface had while it was one list. A link kept
+        // from then — a bookmark, a docs page, an email — still opens the
+        // hub rather than the shell's "not available" notice.
+        legacyHrefs: ['/contacts'],
         // Sections as ROUTES (AGL-2595): each is a real URL the shell
         // resolves and gates, so the page mounts the one being read and a
-        // bare `/contacts` lands on the first. Every section inherits this
+        // bare `/crm` lands on the first. Every section inherits this
         // item's `release_contacts` gate.
-        sections: CONTACTS_CONSOLE_SECTIONS,
+        sections: CRM_CONSOLE_SECTIONS,
         navTabId: 'nav-tab-contacts',
         icon: { path: mdiCardAccountDetailsOutline.path },
         header: {
-          title: 'Contacts',
+          title: 'CRM',
           icon: { path: mdiCardAccountDetailsOutline.path },
           docsTopic: 'contacts',
         },
-        Component: ContactsConsolePage,
+        Component: CrmConsolePage,
       },
     ],
   })

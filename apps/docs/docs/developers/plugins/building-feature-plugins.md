@@ -507,7 +507,7 @@ Conventions the scaffold already applies:
   shared tooling — the where-used dialog and its fetch util, plus the
   variable/function cards — which the app's workflows surface and besigner
   ƒx button import from `@aglyn/plugins-logic`. Always-on (not release-flagged).
-- **Contacts** (`libs/plugins/contacts`) — console-only (AGL-395): the unified
+- **Contacts** (`libs/plugins/crm`) — console-only (AGL-395): the unified
   contacts list, segments, and profile drawer. A whole self-contained page
   relocated with just the layout wrapper + inline `FeatureGate` stripped (the
   shell supplies both); reads the `contactsPerHost` quota off the `org` prop.

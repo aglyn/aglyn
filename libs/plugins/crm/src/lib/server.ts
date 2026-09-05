@@ -48,7 +48,7 @@ import { BUNDLE_ID } from './constants/bundle-common'
  * and not about any org. Anything that reads a document goes behind the
  * same session and role checks the other plugins' console routes use.
  */
-export const contactsPingHandler: PluginApiHandler = (req, res) => {
+export const crmPingHandler: PluginApiHandler = (req, res) => {
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET')
     res.status(405).json({ error: 'Method not allowed' })
@@ -58,6 +58,6 @@ export const contactsPingHandler: PluginApiHandler = (req, res) => {
 }
 
 /** Console API registration, named in `plugins.config.json` as `consoleApi`. */
-export function registerContactsConsoleApi(): void {
-  registerPluginApiRoute('contacts/ping', contactsPingHandler)
+export function registerCrmConsoleApi(): void {
+  registerPluginApiRoute('crm/ping', crmPingHandler)
 }
