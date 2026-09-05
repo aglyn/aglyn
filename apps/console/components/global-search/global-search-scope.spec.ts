@@ -132,6 +132,35 @@ describe('where the caller is standing', () => {
       ids(scopeAt({ entitlements: FREE, orgDataTokens: ['org', 'host:host-1'] })),
     ).toContain('contacts')
   })
+
+  /**
+   * Companies and deals are org data under the same predicate as contacts,
+   * and leads are host data whose rows open in the CRM (AGL-2622). All three
+   * follow the contacts gate: offered with the tokens, withheld without them,
+   * whatever the plan says.
+   */
+  it('offers leads, companies and deals under the same gate as contacts', () => {
+    const withTokens = ids(scopeAt({ orgDataTokens: ['org', 'host:host-1'] }))
+    expect(withTokens).toContain('leads')
+    expect(withTokens).toContain('companies')
+    expect(withTokens).toContain('deals')
+    for (const context of [{}, { orgDataTokens: null }, { orgDataTokens: [] }]) {
+      const offered = ids(scopeAt(context))
+      expect(offered).not.toContain('leads')
+      expect(offered).not.toContain('companies')
+      expect(offered).not.toContain('deals')
+    }
+    const free = ids(scopeAt({ entitlements: FREE, orgDataTokens: ['org', 'host:host-1'] }))
+    expect(free).toContain('leads')
+    expect(free).toContain('companies')
+    expect(free).toContain('deals')
+  })
+
+  it('withholds leads off a site even with tokens — they are host data', () => {
+    expect(
+      ids(scopeAt({ hostId: null, hostReady: false, orgDataTokens: ['org'] })),
+    ).not.toContain('leads')
+  })
 })
 
 describe('entitlement gating, which is a cost control as well as a correctness one', () => {
@@ -220,6 +249,17 @@ describe('the registry', () => {
       GLOBAL_SEARCH_ENTITIES.find((entity) => entity.id === 'contacts')
         ?.fallbackNameField,
     ).toBe('email')
+    // A lead is labelled the way the Leads list labels it; a company by its
+    // name and found by its domain; a deal by its title (AGL-2622).
+    expect(nameFieldOf('leads')).toBe('name')
+    expect(
+      GLOBAL_SEARCH_ENTITIES.find((entity) => entity.id === 'leads')?.fallbackNameField,
+    ).toBe('email')
+    expect(nameFieldOf('companies')).toBe('name')
+    expect(
+      GLOBAL_SEARCH_ENTITIES.find((entity) => entity.id === 'companies')?.extraFields,
+    ).toContain('domain')
+    expect(nameFieldOf('deals')).toBe('title')
   })
 
   it('reads pages and emails out of the SAME collection', () => {
@@ -243,13 +283,20 @@ describe('the registry', () => {
         (entity) => entity.collection,
       ),
     ).toEqual(['hostMemberships'])
-    // The org data root is read through `visibleTo`, and only contacts are
-    // read that way — a new entry here needs the rules' predicate too.
+    // The org data root is read through `visibleTo`, and only the CRM's
+    // collections are read that way — a new entry here needs the rules'
+    // predicate too.
     expect(
       GLOBAL_SEARCH_ENTITIES.filter((entity) => entity.scopeKind === 'orgData').map(
         (entity) => entity.collection,
       ),
-    ).toEqual(['contacts'])
+    ).toEqual(['contacts', 'companies', 'deals'])
+    // Leads are host data whose rows open in the CRM, and the flag is what
+    // ties the group to the hub's gate rather than the site's membership.
+    const leads = GLOBAL_SEARCH_ENTITIES.find((entity) => entity.id === 'leads')
+    expect(leads?.scopeKind).toBe('host')
+    expect(leads?.collection).toBe('leads')
+    expect(leads?.surface).toBe('crm')
   })
 })
 
@@ -342,10 +389,16 @@ describe('where a result row goes', () => {
     expect(href('products', { $id: 'p1' })).toBe('/acme/hosts/demo/products')
     expect(href('redirects', { $id: 'r1' })).toBe('/acme/hosts/demo/redirects')
     expect(href('services', { $id: 'sv1' })).toBe('/acme/hosts/demo/bookings')
-    // A person's own page, under the CRM hub's contacts section.
+    // A person's own page, under the CRM hub's contacts section — and a
+    // lead's, a company's and a deal's under theirs (AGL-2622).
     expect(href('contacts', { $id: 'c 1' })).toBe(
       '/acme/hosts/demo/crm/contacts/c%201',
     )
+    expect(href('leads', { $id: 'l1' })).toBe('/acme/hosts/demo/crm/leads/l1')
+    expect(href('companies', { $id: 'co1' })).toBe(
+      '/acme/hosts/demo/crm/companies/co1',
+    )
+    expect(href('deals', { $id: 'd/1' })).toBe('/acme/hosts/demo/crm/deals/d%2F1')
   })
 
   /**
@@ -369,14 +422,16 @@ describe('where a result row goes', () => {
         ((r: any) => String(r)) as any,
       ),
     ).toBeNull()
-    expect(
-      buildResultHref(
-        'contacts',
-        { $id: 'c1' },
-        { orgSlug: 'acme', hostSubdomain: null },
-        ((r: any) => String(r)) as any,
-      ),
-    ).toBeNull()
+    for (const entity of ['contacts', 'leads', 'companies', 'deals'] as const) {
+      expect(
+        buildResultHref(
+          entity,
+          { $id: 'c1' },
+          { orgSlug: 'acme', hostSubdomain: null },
+          ((r: any) => String(r)) as any,
+        ),
+      ).toBeNull()
+    }
     // And without a workspace slug nothing in the console is addressable.
     expect(
       buildResultHref(

@@ -87,6 +87,10 @@
  */
 
 import { Route } from '@aglyn/aglyn/app-utils/console-routes'
+import {
+  crmRecordHref,
+  type CrmRecordKind,
+} from '@aglyn/aglyn/app-utils/console-record-links'
 
 /** A class of thing console search can look through. */
 export type GlobalSearchEntity =
@@ -94,6 +98,9 @@ export type GlobalSearchEntity =
   | 'screens'
   | 'emails'
   | 'contacts'
+  | 'leads'
+  | 'companies'
+  | 'deals'
   | 'components'
   | 'layouts'
   | 'templates'
@@ -165,6 +172,19 @@ export interface GlobalSearchEntityDef {
    */
   entitlementKey?: string
   featureKey?: string
+  /**
+   * The console surface this group's rows open on, when that surface is
+   * gated apart from the collection's own scope (AGL-2622).
+   *
+   * Leads are host data by path — any member of the site may read them —
+   * but their rows open in the CRM, and the CRM is offered to a viewer only
+   * when the contacts group is: released for them, and with the permission
+   * its rules read for. A leads row shown to somebody the hub refuses is a
+   * link to a 404, so the group follows the CRM's gate rather than the
+   * collection's. The org-data groups carry the same gate through their
+   * scope kind and need no flag.
+   */
+  surface?: 'crm'
 }
 
 /**
@@ -218,6 +238,47 @@ export const GLOBAL_SEARCH_ENTITIES: GlobalSearchEntityDef[] = [
     nameField: 'name',
     fallbackNameField: 'email',
     extraFields: ['email', 'phone', 'companyName'],
+  },
+  {
+    /*
+     * The site's own leads (AGL-2622): people captured here and not yet
+     * qualified, by name or address. Host data by path, so the read is the
+     * plain host window; offered only where the CRM is, because that is
+     * where the row opens.
+     */
+    id: 'leads',
+    group: 'Leads',
+    noun: 'leads',
+    scopeKind: 'host',
+    collection: 'leads',
+    nameField: 'name',
+    fallbackNameField: 'email',
+    extraFields: ['email'],
+    surface: 'crm',
+  },
+  {
+    /*
+     * Companies and deals are org data judged by `visibleTo`, exactly as
+     * contacts are (AGL-2622): the same tokens, the same predicate, the
+     * same gate. A company is found by its name or its domain; a deal by
+     * its title. `nameTokens` and `titleLower` are the list filters' keys
+     * and are not read here — the window matcher folds the name itself.
+     */
+    id: 'companies',
+    group: 'Companies',
+    noun: 'companies',
+    scopeKind: 'orgData',
+    collection: 'companies',
+    nameField: 'name',
+    extraFields: ['domain'],
+  },
+  {
+    id: 'deals',
+    group: 'Deals',
+    noun: 'deals',
+    scopeKind: 'orgData',
+    collection: 'deals',
+    nameField: 'title',
   },
   {
     id: 'components',
@@ -435,6 +496,12 @@ export function resolveGlobalSearchScope(
     ) {
       continue
     }
+    // A group whose rows open in the CRM follows the CRM's gate: the same
+    // tokens that admit the org-data groups, whatever the collection's own
+    // scope. Without them the hub is not offered, so neither is the group.
+    if (definition.surface === 'crm' && !context.orgDataTokens?.length) {
+      continue
+    }
     // An unresolved entitlement answers nothing: hold the gated groups until
     // it is real, rather than letting a loading default decide.
     if (
@@ -500,6 +567,19 @@ export function globalSearchScopeMessage(
 export interface GlobalSearchLinkContext {
   orgSlug: string | null
   hostSubdomain: string | null
+}
+
+/** The record kind each CRM search group opens, for the shared builder. */
+const CRM_RECORD_KIND: Partial<Record<GlobalSearchEntity, CrmRecordKind>> & {
+  contacts: CrmRecordKind
+  leads: CrmRecordKind
+  companies: CrmRecordKind
+  deals: CrmRecordKind
+} = {
+  contacts: 'contact',
+  leads: 'lead',
+  companies: 'company',
+  deals: 'deal',
 }
 
 /**
@@ -573,11 +653,14 @@ export function buildResultHref(
     case 'services':
       return host ? buildRoute(Route.HOST_BOOKINGS, { orgSlug, host }) : null
     case 'contacts':
-      // The CRM is a plugin hub, addressed through the generic plugin route;
-      // the record lives under its `contacts` section, and the id is encoded
-      // because a Firestore id is opaque.
+    case 'leads':
+    case 'companies':
+    case 'deals':
+      // The CRM is a plugin hub, which the console app may not import, so
+      // its record pages are addressed through the shared builder the
+      // plugin's own `crmRoutes` is pinned against (AGL-2622).
       return host
-        ? `${buildRoute(Route.HOST_PLUGIN, { orgSlug, host, pluginSlug: 'crm' })}/contacts/${encodeURIComponent(id)}`
+        ? crmRecordHref({ orgSlug, host }, CRM_RECORD_KIND[entity], id)
         : null
     default:
       return null
