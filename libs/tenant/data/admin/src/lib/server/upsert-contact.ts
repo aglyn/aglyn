@@ -21,6 +21,8 @@ import {
   checkContactQuota,
   consentGroupScope,
   CONTACT_FACETS_FIELD,
+  CONTACT_FORM_IDS_CAP,
+  CONTACT_FORM_IDS_FIELD,
   type ContactFacet,
   type ContactInteraction,
   type ContactLifecycleStage,
@@ -48,9 +50,9 @@ import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
  * drifts. A direct path is real in every harness.
  */
 import {
+  advanceContactLifecycleStage,
   CONTACT_FIELD_KEY_PATTERN,
   type ContactCustomValue,
-  contactLifecycleStageAfterPurchase,
   isContactLifecycleStage,
 } from '@aglyn/aglyn/app-utils/crm'
 import {
@@ -224,6 +226,13 @@ export interface HostContactCreated {
   source: ContactSource
   /** The capture surface's campaigns, normalized — `[]` when it had none. */
   campaignIds: string[]
+  /**
+   * The stage the create wrote onto the capturing facet — the door's
+   * {@link UpsertHostContactOptions.initialLifecycleStage}, or the profile's
+   * own — and absent when the capture named none, so an automation can
+   * filter `lifecycleStage == "lead"` on the day the person appears.
+   */
+  lifecycleStage?: ContactLifecycleStage
 }
 
 export interface UpsertHostContactOptions {
@@ -323,6 +332,28 @@ export interface UpsertHostContactOptions {
    * phone and nothing else does not blank the title somebody typed.
    */
   facet?: UpsertHostContactFacet
+  /**
+   * The EARLIEST stage that describes what this capture was (AGL-2612).
+   *
+   * Every door names one: a form submission is a `lead`, a newsletter opt-in
+   * or a member sign-up is a `subscriber`, a purchase — an order, a paid
+   * booking — is a `customer`. The rule applied to it is
+   * `advanceContactLifecycleStage`: it fills an empty stage and advances an
+   * earlier one, and never moves anybody back, so a customer who fills in
+   * the contact form is still a customer and a subscriber who then submits
+   * a form becomes a lead. Applied on top of `facet.lifecycleStage` when a
+   * door carries both — the caller's stage is the base and this is its
+   * floor.
+   *
+   * A FLOOR and not a value, which is why it is not the facet field: the
+   * facet's `lifecycleStage` is a SET, the shape the console's create
+   * drawer and the import need — the merchant typed a stage and that is the
+   * stage — and a capture door writing a set would put every returning
+   * customer back to `lead` on their next enquiry. Omitted by the doors
+   * that carry the caller's own stage or none (manual, import, API, a lead
+   * conversion), whose contacts read as "no stage", which is true.
+   */
+  initialLifecycleStage?: ContactLifecycleStage
   /**
    * Told when this capture created a contact (AGL-2605).
    *
@@ -497,18 +528,41 @@ export async function upsertHostContact(
        * THE PROFILE, as this door knows it (AGL-2596).
        *
        * Given keys only, so the merge below leaves untouched whatever another
-       * door wrote. The stage is the one field with a rule of its own: a
-       * purchase makes a customer of anybody who was not yet one and never
-       * moves anybody back — `contactLifecycleStageAfterPurchase` is that
-       * rule, applied to the stage this door asked for or, failing that, the
-       * one already stored.
+       * door wrote. The stage is the one field with a rule of its own: the
+       * door's `initialLifecycleStage` fills an empty stage and advances an
+       * earlier one, and never moves anybody back —
+       * `advanceContactLifecycleStage` is that rule, applied to the stage
+       * this door asked for outright or, failing that, the one already
+       * stored. Written only when it comes back with something: a door that
+       * named no stage and found none leaves the key absent, which reads as
+       * "no stage" rather than as a stage somebody picked.
        */
       const profile = storableProfile(options.facet)
-      if (options.source === 'order') {
-        profile.lifecycleStage = contactLifecycleStageAfterPurchase(
-          profile.lifecycleStage ?? facet.lifecycleStage,
-        )
-      }
+      const advanced = advanceContactLifecycleStage(
+        profile.lifecycleStage ?? facet.lifecycleStage,
+        options.initialLifecycleStage,
+      )
+      if (advanced) profile.lifecycleStage = advanced
+      /*
+       * THE FORM MIRROR, bounded (see `HostContact.formIds`).
+       *
+       * Read off the document the lookup already fetched, so the bound costs
+       * no extra read: a person who has come in through twenty forms keeps
+       * the twenty, and this capture's form stays on the interaction alone.
+       * `arrayUnion` for the add, so a concurrent capture on a sibling site
+       * cannot drop this one's id.
+       */
+      const heldFormIds: unknown[] = Array.isArray(
+        docSnapshot.get(CONTACT_FORM_IDS_FIELD),
+      )
+        ? docSnapshot.get(CONTACT_FORM_IDS_FIELD)
+        : []
+      const formIdToAdd =
+        interaction.formId &&
+        !heldFormIds.includes(interaction.formId) &&
+        heldFormIds.length < CONTACT_FORM_IDS_CAP
+          ? interaction.formId
+          : null
       await docSnapshot.ref.set(
         {
           // The search keys travel WITH the name, and only when the name is
@@ -583,6 +637,9 @@ export async function upsertHostContact(
            * or C" answers with the sites that actually met this person.
            */
           [CAPTURED_BY_HOST_FIELD]: FieldValue.arrayUnion(options.hostId),
+          ...(formIdToAdd
+            ? { [CONTACT_FORM_IDS_FIELD]: FieldValue.arrayUnion(formIdToAdd) }
+            : {}),
           /*
            * AND SO DOES VISIBILITY — by the capture, never by the lookup.
            *
@@ -635,16 +692,17 @@ export async function upsertHostContact(
     }
 
     /*
-     * The profile on a create, with the order door's rule applied the same
-     * way as on a merge. A `null` address is dropped rather than written:
-     * there is nothing on a new document for it to clear.
+     * The profile on a create, with the door's stage floor applied the same
+     * way as on a merge — there is no stored stage yet, so the floor is what
+     * a door that named one writes. A `null` address is dropped rather than
+     * written: there is nothing on a new document for it to clear.
      */
     const profile = storableProfile(options.facet)
-    if (options.source === 'order') {
-      profile.lifecycleStage = contactLifecycleStageAfterPurchase(
-        profile.lifecycleStage,
-      )
-    }
+    const advanced = advanceContactLifecycleStage(
+      profile.lifecycleStage,
+      options.initialLifecycleStage,
+    )
+    if (advanced) profile.lifecycleStage = advanced
     if (profile.address === null) delete profile.address
 
     const created = await contactsRef.add({
@@ -658,6 +716,11 @@ export async function upsertHostContact(
        * one that grows and the one an audience query can filter on.
        */
       [CAPTURED_BY_HOST_FIELD]: [options.hostId],
+      // The form mirror's first entry, when this capture came through one —
+      // see `HostContact.formIds`. Absent otherwise, like the campaigns.
+      ...(interaction.formId
+        ? { [CONTACT_FORM_IDS_FIELD]: [interaction.formId] }
+        : {}),
       /*
        * THE CAPTURING GROUP, not the whole org.
        *
@@ -755,6 +818,9 @@ export async function upsertHostContact(
           ...(options.name ? { name: options.name.slice(0, 120) } : {}),
           source: options.source,
           campaignIds,
+          ...(profile.lifecycleStage
+            ? { lifecycleStage: profile.lifecycleStage }
+            : {}),
         }),
       ).catch((error) => {
         console.error('upsertHostContact onCreated failed', error)

@@ -152,6 +152,26 @@ export interface HostContact {
    * beside it could never do.
    */
   capturedByHostIds?: string[]
+  /**
+   * Every form this person has come in through, in no order (AGL-2612).
+   *
+   * The entry point proper is `interactions[].formId` inside the capturing
+   * holder's facet, and that stays the record: which form produced which
+   * visit is one holder's business. But Firestore cannot select documents
+   * by a field of an array ELEMENT, and a facet path is per group, so
+   * "everyone who filled in this form" — the question the form's own page
+   * asks of the Contacts list — has to be a top-level array an
+   * `array-contains` can hit, exactly as `capturedByHostIds` is for sites
+   * and `companyIds` is for companies. A form id is minted under one site,
+   * so a query on it is one site's captures by construction.
+   *
+   * Grows by `arrayUnion` on every form capture, create or merge, bounded at
+   * {@link CONTACT_FORM_IDS_CAP}: a person who has filled in more forms than
+   * that keeps the first twenty and the timeline keeps the rest. The facet is
+   * the truth and this is its index — a reader answering "which form" reads
+   * the interaction; only a QUERY reads this.
+   */
+  formIds?: string[]
   /*
    * SEARCH KEYS (AGL-2596), and nothing more.
    *
@@ -177,6 +197,21 @@ export interface HostContact {
 
 /** Timeline cap: keeps the doc small; older interactions age out. */
 export const CONTACT_INTERACTIONS_CAP = 50
+
+/** The top-level field naming every form a contact came in through — see `HostContact.formIds`. */
+export const CONTACT_FORM_IDS_FIELD = 'formIds'
+
+/**
+ * How many forms the {@link CONTACT_FORM_IDS_FIELD} mirror holds.
+ *
+ * The same figure as the tag cap: enough that no real person reaches it,
+ * small enough that the array never becomes the document. Past it the
+ * capture stops adding rather than dropping the oldest, because the mirror
+ * is an index of the facet's timeline and an index that silently forgets an
+ * entry the timeline still holds would answer a form's contact list wrongly
+ * in the one direction nobody would notice.
+ */
+export const CONTACT_FORM_IDS_CAP = 20
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 

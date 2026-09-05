@@ -324,6 +324,9 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
             email: booking['email'],
             ...(booking['name'] ? { name: String(booking['name']) } : {}),
             source: 'booking',
+            // Paid, so a customer (AGL-2612) — the request-time capture
+            // said `lead`, and this is the door that has seen the money.
+            initialLifecycleStage: 'customer',
             // The SERVICE, not the charge (AGL-2028). `amount_total` now
             // includes the merchant's service tax where they set one, and
             // tax is collected for an authority rather than earned — booking

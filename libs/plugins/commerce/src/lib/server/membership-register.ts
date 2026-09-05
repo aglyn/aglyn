@@ -231,6 +231,10 @@ export const membershipRegisterHandler: PluginApiHandler = async (req, res) => {
       email,
       name: displayName || undefined,
       source: 'member',
+      // An account is a subscription to the site, not an enquiry (AGL-2612):
+      // the lead this sign-up also files is the sales record, and the stage
+      // on the contact says only that the person asked to be kept.
+      initialLifecycleStage: 'subscriber',
       interaction: { refId: memberRef.id, summary: 'Joined as a member' },
       ...(marketingConsent ? { marketingConsent: true } : {}),
       ...(campaignTouch ? { campaignTouch } : {}),
