@@ -47,6 +47,12 @@ jest.mock('./contacts-section', () => ({
   __esModule: true,
   default: () => <div>{'PEOPLE LIST'}</div>,
 }))
+// The deals section opens Firestore listeners on mount (AGL-2598); the
+// routing under test is the hub's, so the section is a marker here.
+jest.mock('./deals-section', () => ({
+  __esModule: true,
+  default: () => <div>{'Deals'}</div>,
+}))
 
 const BASE_PATH = '/acme/hosts/shop/crm'
 

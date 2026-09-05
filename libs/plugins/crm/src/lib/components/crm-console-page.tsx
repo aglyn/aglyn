@@ -85,7 +85,7 @@ function sectionBody(
       return record ? (
         <DealDetailPage {...recordProps} id={record} />
       ) : (
-        <DealsSection />
+        <DealsSection {...props} />
       )
     case 'tasks':
       return <TasksSection />

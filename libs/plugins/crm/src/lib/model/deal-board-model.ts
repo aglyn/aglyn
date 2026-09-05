@@ -22,13 +22,17 @@
  * worth" and "which stage edits are legal".
  */
 
+// The module itself and never the `@aglyn/aglyn` barrel: this file is
+// reached from the server entry through the deal-stage route, and the barrel
+// carries client-only context modules the App Router graph refuses on a
+// server path (AGL-405/1349).
 import {
   type CrmDeal,
   type CrmDealStage,
   type CrmPipeline,
   dealStageById,
   weightedDealAmountCents,
-} from '@aglyn/aglyn'
+} from '@aglyn/aglyn/app-utils/crm'
 
 /** A deal as the console reads it: the model plus its document id. */
 export type DealDoc = CrmDeal & {

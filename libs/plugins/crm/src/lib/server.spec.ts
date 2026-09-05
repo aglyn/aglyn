@@ -39,6 +39,14 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { resolvePluginApiRoute } from '@aglyn/aglyn/server'
+
+// The deal-stage route pulls the Admin SDK and the tenant runtime into the
+// server entry (AGL-2598); this spec proves the WIRING of the entry, and
+// that route has its own spec with those modules doubled. Stubbed here so
+// the wiring test loads what it tests and nothing heavier.
+jest.mock('./server-deal-stage', () => ({
+  crmDealStageHandler: jest.fn(),
+}))
 import { BUNDLE_ID } from './constants/bundle-common'
 import { registerCrmConsoleApi } from './server'
 
