@@ -75,6 +75,7 @@ const contactDoc = {
  * here and the seed gate on Save is the only thing the doubles have to answer.
  */
 jest.mock('./contact-timeline-card', () => ({ __esModule: true, default: () => null, ContactTimelineCard: () => null }))
+jest.mock('./contact-custom-fields-card', () => ({ __esModule: true, default: () => null, ContactCustomFieldsCard: () => null }))
 jest.mock('./contact-deals-card', () => ({ __esModule: true, default: () => null, ContactDealsCard: () => null }))
 jest.mock('./record-tasks-card', () => ({ __esModule: true, default: () => null, RecordTasksCard: () => null }))
 jest.mock('./add-to-list-button', () => ({ __esModule: true, default: () => null, AddToListButton: () => null }))

@@ -215,7 +215,9 @@ either of two topic boxes is ticked.
   [chips saying where it went](#where-this-one-went) — including saying nothing about a
   dataset when the record wasn't created.
 - **Contacts** — form submissions are one of the [ingestion sources](../contacts/overview.md)
-  that build your contacts list.
+  that build your contacts list. A field can also save its answer into one of your
+  [custom contact fields](../contacts/custom-fields.md#save-a-form-field) — pick the
+  field under **Saves to contact fields** on the form's own page.
 
 ### The inbox
 
@@ -346,6 +348,14 @@ Two things to know before you read the rates:
 and it loads when you press **Show submissions** rather than on every visit — reading
 messages is a query over everything the site has ever collected, and most visits to this
 page are about the form's settings.
+
+**Saves to contact fields** lists every field the published design declares, with a
+choice beside each of your [custom contact fields](../contacts/custom-fields.md#save-a-form-field).
+Pick one and every submission's answer is stored under it on the contact the submission
+creates or updates, converted by that field's type. The mapping is kept by field name, so
+publishing a new design does not lose it; a field renamed on the canvas starts unmapped.
+The sender's name and email are recognized from the field name (see
+[who a submission is from](#who-a-submission-is-from)) and never need mapping.
 
 Submissions collected before a form became a form entity are filed under the name they
 were sent with rather than this form's id, so they stay in the Inbox under **All forms**.

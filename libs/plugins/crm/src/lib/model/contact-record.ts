@@ -61,6 +61,8 @@ export interface ContactRecord {
   companyName: string
   companyId: string
   address: AglynPostalAddress | null
+  /** This holder's custom field values, keyed by definition key (AGL-2601). */
+  custom?: Record<string, Aglyn.ContactCustomValue>
   ownerUid: string
   /** Empty when the holder has not placed the person in the funnel. */
   lifecycleStage: ContactLifecycleStage | ''
@@ -92,6 +94,7 @@ export function contactRecordFromDoc(
     companyName: facet.companyName ?? '',
     companyId: facet.companyId ?? '',
     address: facet.address ?? null,
+    custom: facet.custom ?? {},
     ownerUid: facet.ownerUid ?? '',
     lifecycleStage: Aglyn.isContactLifecycleStage(facet.lifecycleStage)
       ? facet.lifecycleStage

@@ -238,6 +238,11 @@ export const DOCS_HELP_TOPICS = {
     title: 'Custom Domains',
     excerpt: 'Connect your own domain — subdomain or bare apex — with one-click DNS verification.',
   },
+  customFields: {
+    path: '/content-and-data/contacts/custom-fields',
+    title: 'Custom fields',
+    excerpt: 'Define your own contact properties — text, number, date, choice, checkbox or link — show them on every contact, and save form answers straight into them.',
+  },
   customRoles: {
     path: '/workspace-and-billing/teams-and-roles/custom-roles',
     title: 'Custom roles & permissions',
@@ -787,6 +792,7 @@ export const DOCS_HELP_ANCHORS = {
   copyPaste: ['#copy', '#paste', '#between-documents', '#copy--paste-vs-duplicate-vs-reusable-components', '#shortcuts', '#related'],
   createARedirect: ['#add-a-rule', '#read-hit-metrics', '#related'],
   customDomains: ['#connect-a-domain', '#related'],
+  customFields: ['#define-a-field', '#where-values-show', '#save-a-form-field', '#over-the-api', '#retire-restore-delete', '#related'],
   customRoles: ['#create-a-custom-role', '#effective-permissions', '#per-member-overrides', '#tips', '#related'],
   datasets: ['#model-builder', '#typed-documents', '#relations', '#query-layer', '#repeatable-components', '#who-a-dataset-is-shared-with', '#import--export', '#related'],
   datasetsAndSchema: ['#display-names-vs-field-ids', '#naming--describing-fields', '#the-typed-model', '#record-quotas-per-plan', '#import--export', '#repeatables', '#everything-that-writes-records', '#deleting-a-dataset', '#related'],

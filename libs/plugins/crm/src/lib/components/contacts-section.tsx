@@ -82,6 +82,8 @@ import { CONTACT_FILTER_COLUMNS, contactListColumns } from './contact-list-colum
 import NewContactDrawer, { type NewContactValues } from './new-contact-drawer'
 import { useCrmApi } from './use-crm-api'
 import { useOrgMembers } from './use-org-members'
+import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
+import { customFieldColumns } from './contact-custom-columns'
 
 /**
  * The shared labels, under the name this file has always called them.
@@ -166,6 +168,8 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
   // path this used to fall back to is gone (AGL-1050), so the CRM lists
   // nothing rather than listing somewhere else.
   const { scope: dataScope, orgId } = useOrgDataScope({ hostId })
+  // The org's custom fields, for the optional columns below (AGL-2601).
+  const customFields = useContactFieldDefinitions(dataScope?.[1] ?? null)
   /*==========================================
    * THE CONTROLLER THIS PAGE IS SHOWING.
    *
@@ -460,8 +464,12 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
 
   /* One row grammar, the console's (AGL-2501) — the same table everywhere. */
   const contactColumns = useMemo(
-    () => contactListColumns({ memberName: members.memberName }),
-    [members.memberName],
+    () => [
+      ...contactListColumns({ memberName: members.memberName }),
+      // The org's custom fields as optional columns (AGL-2601).
+      ...customFieldColumns(customFields.active),
+    ],
+    [members.memberName, customFields.active],
   )
 
   const [segmentName, setSegmentName] = useState('')

@@ -262,6 +262,11 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // and the per-controller grant is precisely what is under test.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/marketing-consent'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/consent-groups'),
+  // The REAL field-definition model and the REAL `custom` reader (AGL-2601):
+  // the coercion against the org's definitions is what the custom-field
+  // block below is about, and a fake would make it a statement about the fake.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/crm'),
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/contact-custom-fields'),
   effectiveDatasetModel: () => ({ fields: [] }),
   coerceDocumentValues: (_model: unknown, values: Record<string, unknown>) => values,
   validateDocument: () => ({}),
@@ -741,5 +746,116 @@ describe('scope', () => {
     const response = await GET(request('contacts', 'GET'), routeContext(['contacts']))
     expect(response.status).toBe(200)
     expect((await response.json()).data).toHaveLength(1)
+  })
+})
+
+/**
+ * Custom contact fields over the API (AGL-2601).
+ *
+ * The org defines the fields; the API stores values under them. What has to
+ * hold: a known key is coerced by its type and read back, an unknown key is
+ * NAMED in `fields` and nothing is written, and a PATCH touches only the keys
+ * it sends — an `update` handed a whole map would replace it, and the
+ * integration correcting one value would lose the other nine.
+ */
+describe('custom fields on /v1/contacts', () => {
+  const FIELDS_PATH = 'orgs/org-1/contactFields'
+  const seedDefinitions = () => {
+    mockDocs.set(`${FIELDS_PATH}/f1`, {
+      key: 'annual_revenue',
+      label: 'Annual revenue',
+      type: 'number',
+      order: 0,
+      visibleTo: ['org'],
+      hostId: 'host-1',
+    })
+    mockDocs.set(`${FIELDS_PATH}/f2`, {
+      key: 'tier',
+      label: 'Tier',
+      type: 'select',
+      options: ['Gold', 'Silver'],
+      order: 1,
+      visibleTo: ['org'],
+      hostId: 'host-1',
+    })
+    mockDocs.set(`${FIELDS_PATH}/f3`, {
+      key: 'legacy',
+      label: 'Legacy',
+      type: 'text',
+      order: 2,
+      retiredAt: 1,
+      visibleTo: ['org'],
+      hostId: 'host-1',
+    })
+  }
+
+  it('stores a create’s custom values coerced by type, and the view carries them', async () => {
+    seedDefinitions()
+    const created = await postContact({
+      email: 'custom@example.com',
+      custom: { annual_revenue: '1200', tier: 'Gold' },
+    })
+    expect(created.status).toBe(201)
+    expect((await created.json()).custom).toEqual({ annual_revenue: 1200, tier: 'Gold' })
+    expect(mockDocs.get(`${CONTACTS_PATH}/con_1`)?.custom).toEqual({
+      annual_revenue: 1200,
+      tier: 'Gold',
+    })
+  })
+
+  it('names an unknown key in `fields` and writes nothing', async () => {
+    seedDefinitions()
+    const response = await postContact({
+      email: 'typo@example.com',
+      custom: { annual_revenue: 5, anual_revenue: 5 },
+    })
+    expect(response.status).toBe(400)
+    const body = await response.json()
+    expect(body.error.code).toBe('validation_failed')
+    expect(body.error.fields['custom.anual_revenue']).toBe('No such contact field')
+    expect(body.error.fields['custom.annual_revenue']).toBeUndefined()
+    expect(contactCount()).toBe(0)
+  })
+
+  it('refuses a value the field’s type cannot hold, and a retired field, saying which', async () => {
+    seedDefinitions()
+    await postContact({ email: 'typed@example.com' })
+    const response = await patchContact('con_1', {
+      custom: { tier: 'Bronze', legacy: 'x' },
+    })
+    expect(response.status).toBe(400)
+    const fields = (await response.json()).error.fields
+    expect(fields['custom.tier']).toBe('Must be one of: Gold, Silver')
+    expect(fields['custom.legacy']).toContain('Retired')
+    expect(mockDocs.get(`${CONTACTS_PATH}/con_1`)?.custom).toBeUndefined()
+  })
+
+  it('a PATCH merges the keys it sends and keeps the rest; null clears one', async () => {
+    seedDefinitions()
+    await postContact({
+      email: 'merge@example.com',
+      custom: { annual_revenue: 10, tier: 'Silver' },
+    })
+    const patched = await patchContact('con_1', { custom: { tier: 'Gold' } })
+    expect(patched.status).toBe(200)
+    expect((await patched.json()).custom).toEqual({ annual_revenue: 10, tier: 'Gold' })
+    const cleared = await patchContact('con_1', { custom: { annual_revenue: null } })
+    expect((await cleared.json()).custom).toEqual({ annual_revenue: null, tier: 'Gold' })
+    // A fresh GET agrees — the PATCH response is not a local echo.
+    expect((await (await getContact('con_1')).json()).custom).toEqual({
+      annual_revenue: null,
+      tier: 'Gold',
+    })
+  })
+
+  it('reads an empty map on a contact that has none, so a client can index it', async () => {
+    await postContact({ email: 'plain@example.com' })
+    expect((await (await getContact('con_1')).json()).custom).toEqual({})
+  })
+
+  it('refuses a `custom` that is not an object', async () => {
+    const response = await postContact({ email: 'shape@example.com', custom: ['x'] })
+    expect(response.status).toBe(400)
+    expect((await response.json()).error.fields.custom).toContain('object')
   })
 })

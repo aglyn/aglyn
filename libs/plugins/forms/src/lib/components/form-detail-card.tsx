@@ -57,6 +57,7 @@ import CampaignPicker from '@aglyn/shared-ui-email-campaigns/components/campaign
 import { collection, doc, limit, query, updateDoc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
+import FormContactFieldsCard from './form-contact-fields-card'
 import FormDesignPreview from './form-design-preview.component'
 import FormMetricsCard from './form-metrics-card.component'
 import FormSubmissionsCard from './form-submissions-card.component'
@@ -585,6 +586,17 @@ export function FormDetailCard(props: FormDetailCardProps) {
                 ) : null}
               </Stack>
             </CardDisplay>
+          ),
+        },
+        {
+          size: { xs: 12 },
+          children: (
+            <FormContactFieldsCard
+              hostId={hostId}
+              formId={formId}
+              fields={declaredFields}
+              loading={status === 'loading'}
+            />
           ),
         },
         {

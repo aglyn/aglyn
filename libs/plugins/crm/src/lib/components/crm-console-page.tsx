@@ -99,7 +99,7 @@ function sectionBody(
       // drill-down links from `basePath` (AGL-2604).
       return <ReportsSection {...props} />
     case 'fields':
-      return <FieldsSection />
+      return <FieldsSection hostId={props.hostId} org={props.org} />
     default:
       return null
   }

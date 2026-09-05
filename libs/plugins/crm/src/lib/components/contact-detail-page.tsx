@@ -52,6 +52,7 @@ import { useCallback, useMemo } from 'react'
 import { contactRecordFromDoc } from '../model/contact-record'
 import { type CrmDetailPageProps, crmRoutes } from '../model/crm-routes'
 import ContactAssociationsCard from './contact-associations-card'
+import ContactCustomFieldsCard from './contact-custom-fields-card'
 import ContactPropertiesCard from './contact-properties-card'
 import ContactTimelineCard from './contact-timeline-card'
 import { AddToListButton } from './add-to-list-button'
@@ -318,6 +319,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
             scope={scope}
             seed={{ status, fromCache }}
           />
+          <ContactCustomFieldsCard hostId={hostId} org={org} contactId={id} />
           <ContactTimelineCard hostId={hostId} org={org} contactId={id} contact={row} />
           <ContactDealsCard
             hostId={hostId}

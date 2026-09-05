@@ -432,6 +432,20 @@ export async function upsertHostContact(
      * array goes through the same coercion.
      */
     const campaignIds = normalizeCampaignIds(options.campaignIds ?? [])
+    /*
+     * THE CUSTOM FIELD VALUES THIS CAPTURE CARRIES, as one nested map.
+     *
+     * Only the keys the door resolved. Written in the NESTED form because both
+     * writes below are merge-sets, which deep-merge a map one key at a time:
+     * `custom: { tier: 'Gold' }` lands beside an existing `custom.vip` and
+     * leaves it standing. A dotted `facets.h1.custom.tier` path would be a
+     * literal field name to a `set`, and a `custom` written whole would take
+     * every other key with it.
+     */
+    const customEntries = Object.entries(options.facet?.custom ?? {})
+    const customFacet = customEntries.length
+      ? { custom: Object.fromEntries(customEntries) }
+      : {}
 
     /*==========================================
      * THE DEDUPE LOOKUP IS UNSCOPED, AND HAS TO BE.
@@ -676,6 +690,7 @@ export async function upsertHostContact(
           // A create has nothing to union with, so the normalized list is the
           // whole membership.
           ...(campaignIds.length ? { campaignIds } : {}),
+          ...customFacet,
           ...(options.name
             ? { name: options.name.slice(0, 120) }
             : {}),
