@@ -65,7 +65,7 @@ timeline; see [Activities & the timeline](./activities.md). **Automations**
 can start on what happens in the CRM and act on it; see
 [Automations for the CRM](./automations.md).
 
-Every record here is also on the [REST API](/api/overview): contacts under
+Every record here is also on the [REST API](/api/): contacts under
 `/v1/contacts`, and companies, pipelines, deals, tasks and activities under one
 pair of scopes, `crm:read` and `crm:write`.
 
