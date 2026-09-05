@@ -410,10 +410,17 @@ export function LeadConvertDialog(props: LeadConvertDialogProps) {
                   />
                 </Stack>
                 <FormControl size="small" fullWidth>
-                  <InputLabel id={stageLabelId}>{'Stage'}</InputLabel>
+                  {/* `shrink`, because `displayEmpty` below draws the "First
+                      stage" placeholder where an empty value would leave the
+                      field blank — and a label that has not shrunk sits on
+                      top of it. */}
+                  <InputLabel id={stageLabelId} shrink>
+                    {'Stage'}
+                  </InputLabel>
                   <Select
                     labelId={stageLabelId}
                     label="Stage"
+                    notched
                     value={dealStageId}
                     onChange={(event) => setDealStageId(String(event.target.value))}
                     displayEmpty
