@@ -53,8 +53,11 @@ as overage. That overage is **not billed while the Contacts page is unavailable*
 
 Once the page is switched on, it will let you:
 
-- Browse the **list** of contacts.
-- Open a **profile drawer** to see a contact's details and history.
+- Browse the **list** of contacts, with Owner and Stage columns, a stage
+  filter and an **Assigned to me** toggle.
+- Add a contact **by hand** with **New contact**.
+- Open a contact's **own page** to see their profile, where they came from and
+  their history — see [The contact record](./contact-record.md).
 - Add **tags** and **notes**.
 - **Export to CSV**.
 
@@ -66,7 +69,7 @@ older `…/contacts` address still open the hub.
 
 | Section | Address | What lives there |
 | --- | --- | --- |
-| **Contacts** | `/crm/contacts` | The people list above; a person's own page is `/crm/contacts/{id}`. |
+| **Contacts** | `/crm/contacts` | The people list above; a person's own page is `/crm/contacts/{id}` — see [The contact record](./contact-record.md) for adding a contact by hand and the fields on the record. |
 | **Leads** | `/crm/leads` | People a site has captured but not yet qualified — a status, an owner, and a conversion into a contact, a company and a deal. |
 | **Companies** | `/crm/companies` | The organizations your contacts belong to; a company's page is `/crm/companies/{id}`. |
 | **Deals** | `/crm/deals` | Your pipeline — open deals by stage, with amount, owner and expected close; a deal's page is `/crm/deals/{id}`. |
