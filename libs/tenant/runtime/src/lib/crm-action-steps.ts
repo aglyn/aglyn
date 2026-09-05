@@ -159,14 +159,10 @@ async function resolveMemberUid(
   const byField = (await members.where('email', '==', email).limit(1).get())
     .docs[0]
   if (byField) return { uid: byField.id, detail: email }
-  const account = await firebaseAdmin
-    .app()
-    .auth()
-    .getUserByEmail(email)
-    .catch(() => null)
-  if (account && (await members.doc(account.uid).get()).exists) {
-    return { uid: account.uid, detail: email }
-  }
+  // The roster is the only directory consulted. A project-level Auth lookup
+  // by address would resolve people who are not on this organization at all
+  // (AGL-1122), so a member document that carries no `email` cannot be named
+  // by address here; the step reports the miss and the author names the uid.
   return { error: `no team member with the address ${email}` }
 }
 

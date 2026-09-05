@@ -42,18 +42,18 @@ from the first run are reported as updated.
 | --- | --- |
 | **Email** | Required. Trimmed and lowercased; a row whose email is not a valid address is skipped. |
 | **Name** | The display name. |
-| **Phone** | Stored in international format (`+15125550123`). A ten-digit number is read as US/Canada; anything else needs its country code. A number that cannot be read is left off and reported. Importing a phone number never sends anything to it. |
+| **Phone** | Stored in international format (`+15125550123`). A ten-digit number is read as US/Canada; anything else needs its country code. A number that cannot be read is dropped and reported. Importing a phone number never sends anything to it. |
 | **Job title** | Free text. |
-| **Company name** | Matched to an existing company of yours by name, or a new company is created — the result says how many. |
-| **Address line 1, line 2, city, state or region, postal code, country** | The postal address. Country must be a two-letter code (`US`, `GB`); a spelled-out country name is left off and reported. |
+| **Company name** | Matched to an existing company of yours by name, or a new company is created — the result counts the new ones. |
+| **Address line 1, line 2, city, state or region, postal code, country** | The postal address. Country must be a two-letter code (`US`, `GB`); a spelled-out country name is dropped and reported. |
 | **Tags** | Separated by `,` or `\|`, lowercased. Added to any tags the contact already has. |
 | **Owner** | The email address of a member of your organization. An address that matches nobody on the team leaves the contact without an owner, and the result names those addresses. |
 | **Lifecycle stage** | One of `subscriber`, `lead`, `marketing-qualified`, `sales-qualified`, `opportunity`, `customer`, `evangelist`, `other` — by id or by label. |
 | **Marketing consent** | `yes`, `true` or `1` records a marketing opt-in for this site, dated today. Anything else records nothing. This is your statement that the person agreed; it is not a substitute for their own opt-in. |
-| **Custom fields** | Every custom field you have defined under **Fields** is offered as a target. A value that does not fit the field's type — a word in a number field, a choice a dropdown does not offer — is left off and reported. |
+| **Custom fields** | Every custom field you have defined under **Fields** is offered as a target. A value that does not fit the field's type — a word in a number field, a choice a dropdown does not offer — is dropped and reported. |
 
 A value that cannot be read never stops the row: the person is imported without
-it, and the result lists how many values were left off, by field.
+it, and the result names the values it could not keep, by field.
 
 ## What is skipped, and why
 

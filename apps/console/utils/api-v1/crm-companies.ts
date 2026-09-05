@@ -19,7 +19,7 @@
  * `/v1/companies` (AGL-2606) — the organizations behind the people.
  *
  * A company is keyed, in practice, by its domain: two contacts at
- * `acme.com` work for one company, and the console's auto-association
+ * `example.com` work for one company, and the console's auto-association
  * (`companyDomainForEmail`) files them under it by that string. So the
  * domain is normalized exactly as the console stores it, a second company on
  * a domain already held is a `409 company_exists` naming the first — the
@@ -131,14 +131,14 @@ function readCompanyInput(
   if (domain) {
     const normalized = normalizeCompanyDomain(domain)
     if (normalized) values.domain = normalized
-    else errors.domain = 'Must be a domain name, like acme.com'
+    else errors.domain = 'Must be a domain name, like example.com'
   } else if (domain === null) {
     values.domain = null
   }
 
   const website = readOptionalText(body, 'website', CRM_TITLE_MAX * 4, errors)
   if (website) {
-    // A bare `acme.com` is what people paste; stored with the scheme so the
+    // A bare `example.com` is what people paste; stored with the scheme so the
     // console can render it as a link without guessing one.
     const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(website)
       ? website
@@ -152,7 +152,7 @@ function readCompanyInput(
     if (parsed && /^https?:$/.test(parsed.protocol) && normalizeCompanyDomain(parsed.hostname)) {
       values.website = parsed.toString()
     } else {
-      errors.website = 'Must be a web address, like https://acme.com'
+      errors.website = 'Must be a web address, like https://example.com'
     }
   } else if (website === null) {
     values.website = null
@@ -323,7 +323,7 @@ async function deleteCompany(
 
 /**
  * `GET /v1/companies` filters. `domain` is normalized exactly as the write
- * stores it, so `?domain=https://www.Acme.com/about` finds `acme.com`; a
+ * stores it, so `?domain=https://www.Example.com/about` finds `example.com`; a
  * value that is not a domain at all is a `400`, not an empty page, for the
  * reason `listContacts` gives about `?email=`.
  */
@@ -338,7 +338,7 @@ async function listCompanies(
     const domain = normalizeCompanyDomain(rawDomain)
     if (!domain) {
       return crmValidationFailed(ctx, 'company filter', {
-        domain: 'Must be a domain name, like acme.com',
+        domain: 'Must be a domain name, like example.com',
       })
     }
     // The domain is unique, so it is the clause that goes to Firestore.
