@@ -70,9 +70,12 @@ import type {
  *
  * ## No new index, and that is checked rather than hoped
  *
- * Every read here is either `orderBy(documentId())` on a collection, or one
- * equality plus `orderBy(documentId())`. Firestore's automatic single-field
- * indexes cover both at COLLECTION scope, which is why this adds nothing to
+ * Every read here is either `orderBy(documentId())` on a collection, one
+ * equality plus `orderBy(documentId())`, or one `array-contains-any` plus
+ * `orderBy(documentId())` (the org-data read, AGL-2596). Firestore's
+ * automatic single-field indexes cover all three at COLLECTION scope — an
+ * array field's single-field index is an array-contains index, and every
+ * single-field index ends in `__name__` — which is why this adds nothing to
  * `cloud/firebase-firestore.indexes.json`. Nothing here is a collection-GROUP
  * query, which would get no free index at all. The escalation adds a
  * `startAfter` cursor and nothing else — a cursor is a position within an
@@ -230,7 +233,11 @@ function scoreRow(
   row: Record<string, any>,
   text: string,
 ): { score: number; label: string } | null {
-  const label = String(row[definition.nameField] ?? '').trim()
+  const label =
+    String(row[definition.nameField] ?? '').trim() ||
+    (definition.fallbackNameField
+      ? String(row[definition.fallbackNameField] ?? '').trim()
+      : '')
   const score = scoreMatch(
     {
       name: label,
@@ -266,9 +273,14 @@ function windowKey(
   orgId: string | null,
   hostId: string | null,
 ): string {
-  return definition.scopeKind === 'org'
-    ? `org:${orgId}:${definition.collection}`
-    : `host:${hostId}:${definition.collection}`
+  switch (definition.scopeKind) {
+    case 'org':
+      return `org:${orgId}:${definition.collection}`
+    case 'orgData':
+      return `orgData:${orgId}:${definition.collection}`
+    default:
+      return `host:${hostId}:${definition.collection}`
+  }
 }
 
 export interface UseGlobalSearchOptions {
@@ -277,6 +289,14 @@ export interface UseGlobalSearchOptions {
   uid: string | null
   orgId: string | null
   hostId: string | null
+  /**
+   * The viewer's scope tokens for `orgData` reads, or null when none may be
+   * issued (AGL-2596). The scope resolver already withholds those groups
+   * without tokens; this is the second layer, the way the `orgId` check on
+   * the sites read is, and a read attempted without them is recorded as a
+   * refusal rather than sent unfiltered.
+   */
+  orgDataTokens?: readonly string[] | null
   /** Raw text from the field. */
   text: string
 }
@@ -285,6 +305,7 @@ export function useGlobalSearch(
   options: UseGlobalSearchOptions,
 ): UseGlobalSearchResult {
   const { firestore, entities, uid, orgId, hostId, text } = options
+  const orgDataTokens = options.orgDataTokens ?? null
   const active = isSearchableQuery(text)
 
   // The whole cost control: one entry per collection, for the life of the
@@ -298,7 +319,12 @@ export function useGlobalSearch(
 
   // A scope change invalidates everything: rows from site A must never be
   // matched against and rendered while standing on site B.
-  const scopeSignature = `${uid ?? ''}|${orgId ?? ''}|${hostId ?? ''}`
+  // The tokens are part of the scope: a viewer whose reach widens — a site
+  // added to their group — must not keep matching against the narrower
+  // window.
+  const scopeSignature = `${uid ?? ''}|${orgId ?? ''}|${hostId ?? ''}|${(
+    orgDataTokens ?? []
+  ).join(',')}`
   const lastScopeRef = useRef(scopeSignature)
   if (lastScopeRef.current !== scopeSignature) {
     lastScopeRef.current = scopeSignature
@@ -324,7 +350,9 @@ export function useGlobalSearch(
       const path =
         definition.scopeKind === 'org'
           ? ['users', uid ?? '', definition.collection]
-          : ['hosts', hostId ?? '', definition.collection]
+          : definition.scopeKind === 'orgData'
+            ? ['orgs', orgId ?? '', definition.collection]
+            : ['hosts', hostId ?? '', definition.collection]
       // A momentarily empty path segment would address `hosts//screens`.
       // Holding is the same discipline `skip` enforces for the `where` case
       // below, where an unresolved id widens the query instead of breaking it.
@@ -341,16 +369,31 @@ export function useGlobalSearch(
         // refuses to offer this entity without an org; this is the second
         // layer, and it is deliberate duplication.
         const size = previous ? SEARCH_ESCALATION_WINDOW : SEARCH_WINDOW
+        // The org-data read carries the viewer's tokens as the SAME predicate
+        // the rules evaluate (`visibleTo hasAny`), so a filtered query is
+        // provable per document and an unfiltered one would be denied
+        // outright rather than quietly returning the collection.
         const constraints: any[] =
           definition.scopeKind === 'org'
             ? [where('orgId', '==', orgId), orderBy(documentId())]
-            : [orderBy(documentId())]
+            : definition.scopeKind === 'orgData'
+              ? [
+                  where('visibleTo', 'array-contains-any', orgDataTokens ?? []),
+                  orderBy(documentId()),
+                ]
+              : [orderBy(documentId())]
         // The cursor goes between the ordering and the limit, which is the
         // only position Firestore accepts it in.
         if (previous?.lastDoc) constraints.push(startAfter(previous.lastDoc))
         constraints.push(limit(size))
         if (definition.scopeKind === 'org' && !orgId) {
           throw new Error('refusing an unscoped site read')
+        }
+        if (
+          definition.scopeKind === 'orgData' &&
+          (!orgId || !orgDataTokens?.length)
+        ) {
+          throw new Error('refusing an unscoped org-data read')
         }
         const snapshot = await getDocs(query(reference, ...constraints))
         readCountRef.current += Math.max(snapshot.docs.length, 1)
@@ -390,7 +433,7 @@ export function useGlobalSearch(
         if (inFlightRef.current.size === 0) setLoading(false)
       }
     },
-    [firestore, orgId, hostId, uid],
+    [firestore, orgId, hostId, uid, orgDataTokens],
   )
 
   // Reads are triggered by the query becoming worth running, not by opening

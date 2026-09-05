@@ -107,6 +107,31 @@ describe('where the caller is standing', () => {
     expect(offered).toContain('collections')
     expect(offered).toContain('authors')
   })
+
+  /**
+   * Contacts are org data judged by `visibleTo` (AGL-2596): the group exists
+   * only when the caller can say which tokens the viewer reads with. Absent,
+   * empty and unresolved all mean the same thing — no group — because a read
+   * without the filter is denied and would render as a failure.
+   */
+  it('offers contacts only with the viewer\'s scope tokens', () => {
+    expect(ids(scopeAt({ orgDataTokens: ['org', 'host:host-1'] }))).toContain(
+      'contacts',
+    )
+    expect(ids(scopeAt())).not.toContain('contacts')
+    expect(ids(scopeAt({ orgDataTokens: null }))).not.toContain('contacts')
+    expect(ids(scopeAt({ orgDataTokens: [] }))).not.toContain('contacts')
+    // Tokens without a workspace address `orgs//contacts`.
+    expect(
+      ids(scopeAt({ orgId: null, orgDataTokens: ['org', 'host:host-1'] })),
+    ).not.toContain('contacts')
+  })
+
+  it('offers contacts whatever the plan — every tier has an audience band', () => {
+    expect(
+      ids(scopeAt({ entitlements: FREE, orgDataTokens: ['org', 'host:host-1'] })),
+    ).toContain('contacts')
+  })
 })
 
 describe('entitlement gating, which is a cost control as well as a correctness one', () => {
@@ -188,6 +213,13 @@ describe('the registry', () => {
     expect(nameFieldOf('products')).toBe('name')
     expect(nameFieldOf('services')).toBe('name')
     expect(nameFieldOf('redirects')).toBe('source')
+    // A contact's canonical name, with the email standing in for a person a
+    // checkout captured without one.
+    expect(nameFieldOf('contacts')).toBe('name')
+    expect(
+      GLOBAL_SEARCH_ENTITIES.find((entity) => entity.id === 'contacts')
+        ?.fallbackNameField,
+    ).toBe('email')
   })
 
   it('reads pages and emails out of the SAME collection', () => {
@@ -202,15 +234,22 @@ describe('the registry', () => {
    * can leak, whatever it filters on. Sites come from the caller's own
    * projection, everything else from the site already open.
    */
-  it('scopes every group under a user or a host, never the root', () => {
+  it('scopes every group under a user, a host or the org data root, never the root', () => {
     for (const entity of GLOBAL_SEARCH_ENTITIES) {
-      expect(['org', 'host']).toContain(entity.scopeKind)
+      expect(['org', 'host', 'orgData']).toContain(entity.scopeKind)
     }
     expect(
       GLOBAL_SEARCH_ENTITIES.filter((entity) => entity.scopeKind === 'org').map(
         (entity) => entity.collection,
       ),
     ).toEqual(['hostMemberships'])
+    // The org data root is read through `visibleTo`, and only contacts are
+    // read that way — a new entry here needs the rules' predicate too.
+    expect(
+      GLOBAL_SEARCH_ENTITIES.filter((entity) => entity.scopeKind === 'orgData').map(
+        (entity) => entity.collection,
+      ),
+    ).toEqual(['contacts'])
   })
 })
 
@@ -303,6 +342,10 @@ describe('where a result row goes', () => {
     expect(href('products', { $id: 'p1' })).toBe('/acme/hosts/demo/products')
     expect(href('redirects', { $id: 'r1' })).toBe('/acme/hosts/demo/redirects')
     expect(href('services', { $id: 'sv1' })).toBe('/acme/hosts/demo/bookings')
+    // A person's own page, under the CRM hub's contacts section.
+    expect(href('contacts', { $id: 'c 1' })).toBe(
+      '/acme/hosts/demo/crm/contacts/c%201',
+    )
   })
 
   /**
@@ -322,6 +365,14 @@ describe('where a result row goes', () => {
       buildResultHref(
         'layouts',
         { $id: 'l1' },
+        { orgSlug: 'acme', hostSubdomain: null },
+        ((r: any) => String(r)) as any,
+      ),
+    ).toBeNull()
+    expect(
+      buildResultHref(
+        'contacts',
+        { $id: 'c1' },
         { orgSlug: 'acme', hostSubdomain: null },
         ((r: any) => String(r)) as any,
       ),

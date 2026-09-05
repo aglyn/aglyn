@@ -256,6 +256,75 @@ describe('how the reads are scoped', () => {
     ).toBe(0)
   })
 
+  /**
+   * Contacts live under the org's data root and are judged per document by
+   * `visibleTo` (AGL-2596), so the read carries the viewer's tokens as the
+   * rules' own predicate — and is refused, not issued unfiltered, when they
+   * are unknown.
+   */
+  it("reads contacts under the org's data root, filtered by the viewer's tokens", async () => {
+    mockRowsByCollection.contacts = [
+      { $id: 'c1', email: 'ada@example.test', name: 'Ada Lovelace' },
+    ]
+    renderHook(() =>
+      useGlobalSearch({
+        ...base,
+        entities: [entity('contacts')],
+        orgDataTokens: ['org', 'host:host-1'],
+        text: 'ada',
+      }),
+    )
+    await waitFor(() => expect(readsFor('contacts')).toHaveLength(1))
+    expect(readsFor('contacts')[0].path).toBe('orgs/org-1/contacts')
+    expect(readsFor('contacts')[0].constraints).toContainEqual({
+      type: 'where',
+      field: 'visibleTo',
+      op: 'array-contains-any',
+      value: ['org', 'host:host-1'],
+    })
+  })
+
+  it('refuses the contacts read outright when the tokens are unknown', async () => {
+    mockRowsByCollection.contacts = [{ $id: 'c1', name: 'Ada Lovelace' }]
+    const { result } = renderHook(() =>
+      useGlobalSearch({
+        ...base,
+        entities: [entity('contacts')],
+        orgDataTokens: null,
+        text: 'ada',
+      }),
+    )
+    await waitFor(() => expect(result.current.groups.length).toBe(1))
+    expect(result.current.groups[0].failed).toBe(true)
+    expect(readsFor('contacts')).toHaveLength(0)
+  })
+
+  it('finds a contact by phone or company, and labels a nameless one by email', async () => {
+    mockRowsByCollection.contacts = [
+      {
+        $id: 'c1',
+        email: 'ada@example.test',
+        phone: '+15125550107',
+        companyName: 'Analytical Engines',
+      },
+    ]
+    const contacts = entity('contacts')
+    expect(matchesIn(contacts, mockRowsByCollection.contacts, '5550107')).toBe(true)
+    expect(matchesIn(contacts, mockRowsByCollection.contacts, 'analytical')).toBe(true)
+    expect(matchesIn(contacts, mockRowsByCollection.contacts, 'babbage')).toBe(false)
+
+    const { result } = renderHook(() =>
+      useGlobalSearch({
+        ...base,
+        entities: [contacts],
+        orgDataTokens: ['org', 'host:host-1'],
+        text: 'analytical',
+      }),
+    )
+    await waitFor(() => expect(result.current.groups[0]?.rows).toHaveLength(1))
+    expect(result.current.groups[0].rows[0].$label).toBe('ada@example.test')
+  })
+
   it('holds a host read while the host id is still empty', async () => {
     renderHook(() =>
       useGlobalSearch({
