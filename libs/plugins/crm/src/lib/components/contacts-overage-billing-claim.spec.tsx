@@ -119,6 +119,10 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   }),
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
     .writeGuardedBySeed,
+  // The signed-in reader, for the "Assigned to me" toggle; nobody here owns
+  // anything, so it narrows nothing.
+  useUser: () => ({ data: { uid: 'user-1' } }),
+  useHostActivityLogger: () => jest.fn(),
 }))
 
 jest.mock('firebase/firestore', () => ({
@@ -156,6 +160,11 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 // is the people list the v1 page was.
 jest.mock('@aglyn/shared-ui-next', () => ({
   HubSections: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+}))
+
+// A row is a link to the record page (AGL-2596); nothing here follows one.
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ push: jest.fn() }),
 }))
 
 const BASE_PATH = '/acme/hosts/shop/contacts'

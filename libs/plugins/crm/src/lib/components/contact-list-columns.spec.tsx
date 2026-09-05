@@ -1,0 +1,102 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/**
+ * The contacts list's Owner and Stage columns (AGL-2596).
+ *
+ * Both read off the flattened row and resolve to something a reader can
+ * sort and export by — the owner's NAME rather than a uid, the stage's LABEL
+ * rather than its key — and both are `filterable: false`, because the grid's
+ * filter panel becomes a Firestore query over top-level fields and a facet
+ * path is not one. The rest of the grammar (name, sources, tags, updatedAt,
+ * the hidden filter columns) is the v1 list's, moved here unchanged.
+ */
+
+import type { GridColDef } from '@mui/x-data-grid'
+import { CONTACT_FILTER_COLUMNS, contactListColumns } from './contact-list-columns'
+import type { ContactRecord } from '../model/contact-record'
+
+const row = (overrides: Partial<ContactRecord> = {}): ContactRecord => ({
+  $id: 'con-1',
+  email: 'jo@example.com',
+  name: 'Jo',
+  canonicalName: 'Jo',
+  nameOverride: '',
+  sources: { form: true },
+  interactions: [],
+  tags: [],
+  notes: '',
+  campaignIds: [],
+  ltvCents: 0,
+  ordersCount: 0,
+  phone: '',
+  jobTitle: '',
+  companyName: '',
+  companyId: '',
+  address: null,
+  ownerUid: '',
+  lifecycleStage: '',
+  ...overrides,
+})
+
+const columns = contactListColumns({
+  memberName: (uid) => (uid === 'owner-1' ? 'Grace Hopper' : uid),
+})
+const column = (field: string) =>
+  columns.find((definition) => definition.field === field) as GridColDef
+const value = (field: string, record: ContactRecord) =>
+  (column(field).valueGetter as any)(undefined, record)
+
+describe('contactListColumns', () => {
+  it('keeps the v1 grammar and adds Owner and Stage between Contact and Sources', () => {
+    // The shown columns lead; the hidden filter-only columns follow them.
+    expect(columns.slice(0, 6).map((definition) => definition.field)).toEqual([
+      'name',
+      'ownerUid',
+      'lifecycleStage',
+      'sources',
+      'tags',
+      'updatedAt',
+    ])
+    for (const field of CONTACT_FILTER_COLUMNS) {
+      expect(column(field)).toBeDefined()
+    }
+  })
+
+  it('names the owner through the roster, and never offers the column as a query', () => {
+    expect(value('ownerUid', row({ ownerUid: 'owner-1' }))).toBe('Grace Hopper')
+    // Somebody the roster no longer lists is still identified, by uid.
+    expect(value('ownerUid', row({ ownerUid: 'gone' }))).toBe('gone')
+    expect(value('ownerUid', row())).toBe('')
+    expect(column('ownerUid').filterable).toBe(false)
+  })
+
+  it('labels the stage, and reads no stage as empty', () => {
+    expect(value('lifecycleStage', row({ lifecycleStage: 'sales-qualified' }))).toBe(
+      'Sales qualified',
+    )
+    expect(value('lifecycleStage', row())).toBe('')
+    expect(column('lifecycleStage').filterable).toBe(false)
+  })
+
+  it('still lets the name column reach the query grammar', () => {
+    expect(column('name').filterable).not.toBe(false)
+    expect(value('name', row({ name: '', email: 'jo@example.com' }))).toBe(
+      'jo@example.com',
+    )
+  })
+})

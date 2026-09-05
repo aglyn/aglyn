@@ -46,6 +46,8 @@ import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
  * drifts. A direct path is real in every harness.
  */
 import {
+  CONTACT_FIELD_KEY_PATTERN,
+  type ContactCustomValue,
   contactLifecycleStageAfterPurchase,
   isContactLifecycleStage,
 } from '@aglyn/aglyn/app-utils/crm'
@@ -62,12 +64,15 @@ import {
 /**
  * The profile fields a door may hand this function (AGL-2596): the parts of
  * a person's record that no capture surface collects — the console's create
- * drawer and the import do, and the order door adds the stage.
+ * drawer and the import do, and the order door adds the stage. `custom` is
+ * the holder's own field values, keyed by `ContactFieldDefinition.key`; the
+ * import maps spreadsheet columns onto them, and the definitions live under
+ * the same group the values are written to.
  */
 export type ContactProfileInput = Partial<
   Pick<
     ContactFacet,
-    'phone' | 'jobTitle' | 'address' | 'ownerUid' | 'lifecycleStage'
+    'phone' | 'jobTitle' | 'address' | 'ownerUid' | 'lifecycleStage' | 'custom'
   >
 >
 
@@ -102,6 +107,7 @@ function storableProfile(input: ContactProfileInput | undefined): {
   address?: ReturnType<typeof normalizeAddress>
   ownerUid?: string
   lifecycleStage?: ContactFacet['lifecycleStage']
+  custom?: Record<string, ContactCustomValue>
 } {
   if (!input) return {}
   const out: ReturnType<typeof storableProfile> = {}
@@ -119,6 +125,29 @@ function storableProfile(input: ContactProfileInput | undefined): {
   }
   if (isContactLifecycleStage(input.lifecycleStage)) {
     out.lifecycleStage = input.lifecycleStage
+  }
+  if (input.custom && typeof input.custom === 'object') {
+    /*
+     * Only a key a field definition could have, and only a value the field
+     * types can hold. A nested object here is a map the merge below would
+     * write as a subtree nobody can render; a key with a dot in it would be
+     * read as a PATH by the next dotted update to touch the facet. Nothing is
+     * coerced — a door that has a number should send one — and an empty map
+     * is left off rather than written as `{}` over a holder's values.
+     */
+    const custom: Record<string, ContactCustomValue> = {}
+    for (const [key, value] of Object.entries(input.custom)) {
+      if (!CONTACT_FIELD_KEY_PATTERN.test(key)) continue
+      if (
+        value === null ||
+        typeof value === 'string' ||
+        typeof value === 'number' ||
+        typeof value === 'boolean'
+      ) {
+        custom[key] = typeof value === 'string' ? value.slice(0, 2000) : value
+      }
+    }
+    if (Object.keys(custom).length) out.custom = custom
   }
   return out
 }
@@ -221,10 +250,10 @@ export async function upsertHostContact(options: {
   campaignIds?: readonly string[]
   /**
    * THE PROFILE this door knows (AGL-2596): a phone number, a job title, a
-   * postal address, the team member who owns the relationship, and where in
-   * the funnel the person sits — the fields no capture surface ever asked
-   * for, which is why they arrive here from the console's create drawer and
-   * the import rather than from a form.
+   * postal address, the team member who owns the relationship, where in the
+   * funnel the person sits, and the holder's custom field values — the
+   * fields no capture surface ever asked for, which is why they arrive here
+   * from the console's create drawer and the import rather than from a form.
    *
    * Written into the capturing group's FACET, on create and on merge alike,
    * because they are one holder's knowledge of the person and the facet is
