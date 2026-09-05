@@ -86,6 +86,7 @@ import {
   where,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import RecentActivityFeed from './recent-activity-feed'
 
 /**
  * The shared labels, under the name this file has always called them.
@@ -1050,6 +1051,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
               />
             </>
           )}
+          <RecentActivityFeed hostId={hostId} org={org} basePath={props.basePath} />
         </Stack>
       </CardDisplay>
       <Drawer
