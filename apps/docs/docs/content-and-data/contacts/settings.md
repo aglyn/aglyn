@@ -1,7 +1,7 @@
 ---
 sidebar_position: 12
 title: CRM settings
-description: The switches that decide what the CRM does on its own for every site in your workspace — starting with whether a company is created from a captured contact's work email domain.
+description: What the CRM does on its own for every site in your workspace — whether a company is created from a captured contact's work email domain, and who a new contact is assigned to, by default, by rule, or in turn.
 ---
 
 # CRM settings
@@ -53,9 +53,85 @@ the address book — is not linked again. A contact added [by hand](./contact-re
 with a company picked, or [imported](./import.md) with a company column, keeps
 the company you chose; the domain is not consulted.
 
+## Default owner
+
+Who gets the contacts captured on **this site** when no
+[assignment rule](#assignment-rules) claims them. Pick a member of the
+workspace, or **Nobody — leave unassigned**, which is the default and is
+what the CRM did before the setting existed.
+
+The default is per site — an agency workspace gives each client's site its
+own rep — but it is stored on the workspace with the other CRM settings and
+changed from any site's Settings section for that site.
+
+A contact captured on the site — a form submission, a sign-up, a booking,
+an order, a newsletter capture — that no rule claims is handed to the
+default owner the moment the contact is created, and they get a console
+notification (**Contact assigned to you**, or **Lead assigned to you** when
+the site filed a lead for the same person, linking to the record they will
+work). Only a **new** contact is assigned: a repeat visit by somebody the
+workspace already holds changes nothing, and a contact
+[added by hand](./contact-record.md#adding-a-contact-by-hand),
+[imported](./import.md) with an owner column, or
+[converted from a lead](./leads.md#converting-a-lead) with an owner picked
+keeps the owner you chose.
+
+A default owner who later leaves the workspace is shown as a former member
+and assigns nobody until you pick somebody else.
+
+## Assignment rules
+
+An ordered list of rules tried, top to bottom, for every new contact captured
+on **any** site in the workspace. The first rule whose every condition holds
+assigns the owner; a contact no rule claims goes to the capturing site's
+[default owner](#default-owner), or stays unassigned. Rules are what a
+sales team sets up first — bookings to one rep, a partner's domain to
+another, everything else in turn.
+
+**Add rule** opens a drawer with four optional conditions and a target:
+
+| Condition | Matches when |
+| --- | --- |
+| **Source** | The contact came in through that door — Form, Booking, Customer (an order), Member (a sign-up), Newsletter, API, Import, or Added by hand. Any source when blank. |
+| **Form** | The capture came through the form with that id (from the form's address in Forms). Any form when blank. |
+| **Email domain** | The captured address is at that domain — `acme.com`, typed with or without the `@`. Unlike the company link, a public mailbox such as `gmail.com` counts here, so a rule can route consumer sign-ups to one rep. |
+| **Tag** | The capture carries the tag, or the contact already has it. Case does not matter. |
+
+A rule with every condition blank matches everything, which is how a
+catch-all is written — put it last. The target is **a team member**, picked
+from the workspace roster by name, or **Round robin**, the next member of the
+[pool](#round-robin) in turn.
+
+A rule naming a member who has since left the workspace is skipped, as is a
+round-robin rule while the pool is empty; the next rule down is tried. Use
+the arrows to reorder, and the row menu to delete. A workspace keeps at most
+50 rules.
+
+Rules run for every capture door on every site, including a lead that is
+[converted](./leads.md#converting-a-lead) without an owner picked, and only
+on a contact that has no owner yet. To **reassign** a contact that already
+has one, use an [automation](./automations.md#the-steps) — the **Assign the
+contact an owner** step, which can also rotate through the pool.
+
+## Round robin
+
+The members handed contacts in turn by a round-robin rule, or by an
+automation set to round robin. Tick the members to include; the order they
+were ticked is the rotation order, shown beneath the list with who is **next
+up**.
+
+Each new record goes to the member after the one who got the last record,
+wrapping round to the first. The pointer is moved by the server in the same
+write that assigns the owner, so two contacts captured at the same moment go
+to two different people, and editing the pool — adding, removing or
+reordering a member — never skips or repeats anybody: the next record goes
+to whoever follows the last recipient in the pool as it now stands. A member
+who leaves the workspace is skipped. A pool can hold up to 50 members.
+
 ## Related
 
 - [CRM overview](./overview.md)
 - [Companies](./companies.md) — the records these settings create and link
-- [The contact record](./contact-record.md) — picking a company by hand
-- [Automations for the CRM](./automations.md) — acting on a contact after it is created
+- [The contact record](./contact-record.md) — picking a company or an owner by hand
+- [Leads](./leads.md) — a lead follows its contact's owner
+- [Automations for the CRM](./automations.md) — reassigning, and rotating, after a contact is created

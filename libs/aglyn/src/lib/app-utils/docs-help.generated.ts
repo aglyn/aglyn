@@ -110,7 +110,7 @@ export const PLUGIN_DOCS = {
   crmSettings: {
     path: '/content-and-data/contacts/settings',
     title: 'CRM settings',
-    excerpt: 'The switches that decide what the CRM does on its own for every site in your workspace — starting with whether a company is created from a captured contact\'s work email domain.',
+    excerpt: 'What the CRM does on its own for every site in your workspace — whether a company is created from a captured contact\'s work email domain, and who a new contact is assigned to, by default, by rule, or in turn.',
   },
   crmTasks: {
     path: '/content-and-data/contacts/tasks',
@@ -207,7 +207,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   contacts: ['#whats-in-the-crm-area', '#unified-ingestion', '#the-contacts-page', '#import-from-csv', '#segments', '#who-can-open-the-crm', '#related'],
   crmLeads: ['#the-leads-list', '#working-a-lead-from-the-row', '#a-leads-page', '#converting-a-lead', '#unqualifying-a-lead', '#who-can-do-this', '#related'],
   crmReports: ['#choosing-a-period', '#contacts', '#sources-and-lifecycle', '#pipeline', '#won-and-lost', '#tasks', '#crm-at-a-glance', '#how-the-numbers-are-counted', '#related'],
-  crmSettings: ['#companies', '#create-companies-from-work-email-domains', '#related'],
+  crmSettings: ['#companies', '#create-companies-from-work-email-domains', '#default-owner', '#assignment-rules', '#round-robin', '#related'],
   crmTasks: ['#the-tasks-page', '#creating-a-task', '#assigning-a-task-to-someone-else', '#completing-and-reopening', '#tasks-on-a-contact-company-or-deal', '#the-dashboard-card', '#who-can-do-what', '#related'],
   datasets: ['#model-builder', '#typed-documents', '#relations', '#query-layer', '#repeatable-components', '#who-a-dataset-is-shared-with', '#import--export', '#related'],
   deals: ['#the-pipeline-and-its-stages', '#the-board-and-the-table', '#creating-a-deal', '#moving-winning-and-losing', '#a-deals-page', '#related'],
