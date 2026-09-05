@@ -224,6 +224,7 @@ const EVENT_LABELS: Record<string, string> = {
   memberSignOut: 'Member signed out',
   lead: 'New lead',
   booking: 'New booking',
+  taskCompleted: 'CRM task completed',
 }
 
 /**

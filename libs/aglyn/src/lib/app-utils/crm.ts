@@ -240,6 +240,12 @@ export interface CrmTask extends CrmScoped {
   status: CrmTaskStatus
   dueAtMs?: number | null
   completedAtMs?: number | null
+  /**
+   * Who ticked it off, which is not always the assignee: a manager closing
+   * out a departed teammate's list completes tasks that were never theirs.
+   * Stamped by the `crm/task-complete` route beside `completedAtMs`.
+   */
+  completedByUid?: string
   assigneeUid?: string
   createdByUid: string
   contactId?: string

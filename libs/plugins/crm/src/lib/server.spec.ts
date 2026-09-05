@@ -36,16 +36,42 @@
  * from a plugin spec would pull the whole estate into one jest worker.
  */
 
+/*
+ * The task routes (AGL-2599) pull the Admin SDK and the workflow runner into
+ * this module's import graph. Neither loads under jsdom — `next/cache`
+ * extends a `Request` the environment does not define — and neither is what
+ * this suite is about, so both are stubbed to the shape the routes import.
+ * The routes' own behavior is `server/task-routes.spec.ts`; what is proven
+ * here is that the register function reaches them.
+ */
+jest.mock('firebase-admin/firestore', () => ({
+  __esModule: true,
+  FieldValue: { serverTimestamp: () => '__serverTimestamp', delete: () => '__delete' },
+}))
+jest.mock('@aglyn/tenant-runtime', () => ({
+  __esModule: true,
+  emitHostEvent: jest.fn(),
+}))
+jest.mock('@aglyn/tenant-data-admin', () => ({
+  __esModule: true,
+  firebaseAdmin: { app: () => ({}) },
+  getOrgForHost: jest.fn(),
+  resolveOrgMembership: jest.fn(),
+  memberHasOrgPermission: jest.fn(),
+  notifyUsers: jest.fn(),
+}))
+
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { resolvePluginApiRoute } from '@aglyn/aglyn/server'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { CRM_TASK_ROUTES } from './model/task-routes'
 import { registerCrmConsoleApi } from './server'
 
 const REPO_ROOT = join(__dirname, '../../../../..')
 
 /** Drives one registered handler and returns what it answered. */
-async function call(path: string, method: string) {
+async function call(path: string, method: string, requestBody?: unknown) {
   const handler = resolvePluginApiRoute(path)
   expect(handler).toBeDefined()
   let status = 0
@@ -69,7 +95,7 @@ async function call(path: string, method: string) {
     end: () => undefined,
   }
   await handler?.(
-    { method, query: {}, body: undefined, headers: {}, cookies: {}, socket: {} },
+    { method, query: {}, body: requestBody, headers: {}, cookies: {}, socket: {} },
     res,
   )
   return { status, body, headers }
@@ -108,5 +134,30 @@ describe('the CRM server entry', () => {
     const { status, headers } = await call('crm/ping', 'POST')
     expect(status).toBe(405)
     expect(headers['Allow']).toBe('GET')
+  })
+
+  /**
+   * The task routes (AGL-2599) are registered under the addresses the
+   * browser module calls, and each is a POST. A route the drawer calls that
+   * the register function forgot resolves to nothing, which the dispatcher
+   * answers as a 404 indistinguishable from a typo in the URL.
+   */
+  it.each([CRM_TASK_ROUTES.save, CRM_TASK_ROUTES.complete])(
+    'registers %s, which accepts only POST',
+    async (route) => {
+      registerCrmConsoleApi()
+      const { status, headers } = await call(route, 'GET')
+      expect(status).toBe(405)
+      expect(headers['Allow']).toBe('POST')
+    },
+  )
+
+  it('refuses an unauthenticated POST to a task route before reading any document', async () => {
+    registerCrmConsoleApi()
+    const { status } = await call(CRM_TASK_ROUTES.complete, 'POST', {
+      hostId: 'site-1',
+      taskId: 't-1',
+    })
+    expect(status).toBe(401)
   })
 })

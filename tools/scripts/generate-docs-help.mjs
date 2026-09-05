@@ -127,6 +127,7 @@ const PLUGIN_TOPICS = {
   consoleTour: '/getting-started/console-tour',
   contactActivities: '/content-and-data/contacts/activities',
   contacts: '/content-and-data/contacts/overview',
+  crmTasks: '/content-and-data/contacts/tasks',
   datasets: '/content-and-data/datasets/overview',
   designedEmails: '/marketing-and-automation/email-campaigns/designed-emails',
   emailCampaigns: '/marketing-and-automation/email-campaigns/overview',
