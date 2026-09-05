@@ -19,7 +19,9 @@ import {
   CONTACT_LIFECYCLE_STAGE_LABELS,
   CONTACT_TAG_MAX_LENGTH,
   contactFacetPath,
+  CRM_ACTIVITY_LOG_FULL_MESSAGE,
   CRM_COLLECTIONS,
+  crmActivityLogHasRoom,
   type CrmActionStep,
   type CrmActivity,
   type CrmTask,
@@ -30,6 +32,7 @@ import {
 } from '@aglyn/aglyn/server'
 import {
   consentGroupForSite,
+  countCrmActivitiesForRecord,
   firebaseAdmin,
   orgDataQueryForHost,
 } from '@aglyn/tenant-data-admin'
@@ -326,6 +329,17 @@ export async function runCrmActionStep(
       .trim()
       .slice(0, 2000)
     if (!body) return { error: 'the activity has no body' }
+    /*
+     * The per-record ceiling (AGL-2611), and this step is the writer it
+     * exists for: a flow that logs on every page view fills one person's
+     * log in an afternoon. Refused into the run history as an error, the
+     * way an unresolvable assignee is, so the merchant reads why the flow
+     * stopped writing rather than finding a log that silently stopped.
+     */
+    const logged = await countCrmActivitiesForRecord(orgRef, links)
+    if (!crmActivityLogHasRoom(logged)) {
+      return { error: CRM_ACTIVITY_LOG_FULL_MESSAGE }
+    }
     const activity: CrmActivity = {
       kind: step.kind,
       body,

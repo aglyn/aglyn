@@ -83,6 +83,7 @@ import {
 } from '@aglyn/aglyn/server'
 import {
   consentGroupForSite,
+  crmRecordsQuotaForOrg,
   firebaseAdmin,
   getOrgForHost,
   listOrgMembers,
@@ -246,12 +247,12 @@ async function resolveCompanyId(
   const fields = nameSearchFields(name)
   const cached = cache.get(fields.nameLower)
   if (cached) return cached
-  const companies = firebaseAdmin
+  const orgRef = firebaseAdmin
     .app()
     .firestore()
     .collection('orgs')
     .doc(context.orgId)
-    .collection(CRM_COLLECTIONS.companies)
+  const companies = orgRef.collection(CRM_COLLECTIONS.companies)
   const matches = await companies
     .where('nameLower', '==', fields.nameLower)
     .limit(10)
@@ -263,6 +264,17 @@ async function resolveCompanyId(
     cache.set(fields.nameLower, seen.id)
     return seen.id
   }
+  /*
+   * THE RECORDS BAND (AGL-2611). A company is a record of the same band
+   * the contact behind this row will meet at its own door, so on a Free
+   * org at its hundred the row gets no company rather than a company it
+   * was not allowed to hold. Nothing is reported here: the contact is
+   * refused `audience-band` a few lines on and the row is listed skipped,
+   * which is the one message the operator needs. A paid org never reaches
+   * this branch — a rate is what makes the band meter instead of refuse.
+   */
+  const room = await crmRecordsQuotaForOrg(context.org as never, orgRef)
+  if (!room.allowed) return ''
   const created = await companies.add({
     ...fields,
     hostId: context.hostId,

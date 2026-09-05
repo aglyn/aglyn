@@ -58,6 +58,7 @@ import {
   consentGroupScope,
   contactFacetPath,
   CRM_COLLECTIONS,
+  CRM_RECORDS_BAND_FULL_MESSAGE,
   type CrmDealStage,
   type CrmDealStatus,
   type CrmLeadFields,
@@ -72,6 +73,7 @@ import {
 } from '@aglyn/aglyn/server'
 import {
   consentGroupForSite,
+  crmRecordsQuotaForOrg,
   firebaseAdmin,
   getOrgForHost,
   orgDataCollectionForHost,
@@ -343,6 +345,23 @@ export const leadConvertHandler: PluginApiHandler = async (req, res) => {
     const contactRef = found.docs[0].ref
     const contactId = found.docs[0].id
     const orgRef = firestore.collection('orgs').doc(orgId)
+    /*
+     * THE RECORDS BAND (AGL-2611), asked before each record this conversion
+     * CREATES. The contact went through the capture door, which refuses at
+     * the band on its own; a company and a deal are records of the same
+     * band, and on a Free org at its hundred the honest answer is the one
+     * the drawers give — refuse, write nothing more, and leave the lead
+     * unconverted so a retry after the upgrade finds it where it was. The
+     * contact step 1 captured stays: it is one person's record, and a second
+     * conversion merges onto it rather than making another. Measured fresh
+     * each time because the company created in step 2 is itself a record.
+     */
+    const bandRefused = async () => {
+      const room = await crmRecordsQuotaForOrg(org as never, orgRef)
+      if (room.allowed) return false
+      res.status(409).json({ error: CRM_RECORDS_BAND_FULL_MESSAGE, reason: 'band' })
+      return true
+    }
 
     /*==========================================
      * 2. THE COMPANY — linked, found by domain, or created.
@@ -381,6 +400,7 @@ export const leadConvertHandler: PluginApiHandler = async (req, res) => {
         if (visible) companyId = visible.id
       }
       if (!companyId) {
+        if (await bandRefused()) return
         const created = await orgRef.collection(CRM_COLLECTIONS.companies).add({
           ...nameSearchFields(createCompany.name),
           ...(createCompany.domain ? { domain: createCompany.domain } : {}),
@@ -465,6 +485,7 @@ export const leadConvertHandler: PluginApiHandler = async (req, res) => {
         })
         return
       }
+      if (await bandRefused()) return
       const created = await orgRef.collection(CRM_COLLECTIONS.deals).add({
         title: deal.title,
         titleLower: deal.title.toLowerCase(),

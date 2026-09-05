@@ -18,7 +18,7 @@
 import {
   type AglynPostalAddress,
   CAPTURED_BY_HOST_FIELD,
-  checkContactQuota,
+  checkCrmRecordsQuota,
   consentGroupScope,
   CONTACT_FACETS_FIELD,
   type ContactFacet,
@@ -34,6 +34,7 @@ import {
 } from '@aglyn/aglyn/server'
 import { FieldValue } from 'firebase-admin/firestore'
 import { firebaseAdmin } from './firebase-admin'
+import { countCrmRecords } from './crm-records'
 import { attributeOrderToEmail } from './email-revenue-attribution'
 import {
   attributeCampaignConversion,
@@ -617,15 +618,28 @@ export async function upsertHostContact(
       return { contactId: docSnapshot.id, created: false }
     }
 
-    // New contact: audience-band check via the aggregate count (cheap; no
+    // New contact: records-band check via the aggregate counts (cheap; no
     // doc reads) against the owning org's entitlements (AGL-238/890).
     // Metered plans always pass (overage bills via the report-usage
     // cron); only free's hard band drops the CRM record — visibly, via
     // the counter and the console alert (AGL-891). The signup/order that
     // triggered the capture always succeeds either way.
+    //
+    // THE RECORDS BAND, not the contacts headcount (AGL-2611): companies
+    // and deals share this band, so a capture is refused on a Free org
+    // whose hundred records are ninety companies and ten people — the same
+    // verdict the company drawer would give the ninety-first company.
+    // `contactsRef` is handed in so the contacts aggregate is the one this
+    // door already reads; the org reference is its parent.
     const orgBilling = await getOrgForHost(options.hostId)
-    const count = (await contactsRef.count().get()).data().count
-    const quota = checkContactQuota((orgBilling?.org as any) ?? null, count)
+    const orgRef =
+      contactsRef.parent ??
+      firestore.collection('orgs').doc(String(orgBilling?.orgId ?? ''))
+    const { crmRecordsCount } = await countCrmRecords(orgRef, contactsRef)
+    const quota = checkCrmRecordsQuota(
+      (orgBilling?.org as any) ?? null,
+      crmRecordsCount,
+    )
     if (!quota.allowed) {
       await hostRef
         .collection('counters')

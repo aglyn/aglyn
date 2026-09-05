@@ -809,7 +809,7 @@ describe('no self-serve tier loses money at full utilization', () => {
       PLAN_ENTITLEMENTS.pro.contactsPerHost + 2_000,
     )
     expect(past.allowed).toBe(true)
-    expect(past.overageContacts).toBe(2_000)
+    expect(past.overageRecords).toBe(2_000)
     expect(past.overageMonthlyUsd).toBe(1.5)
   })
 
@@ -987,7 +987,7 @@ describe('an unbounded band FAILS the model rather than scoring zero', () => {
       PLAN_ENTITLEMENTS.agency.contactsPerHost + 1_000,
     )
     expect(past.allowed).toBe(true)
-    expect(past.overageContacts).toBe(1_000)
+    expect(past.overageRecords).toBe(1_000)
     expect(past.overageMonthlyUsd).toBe(0.4)
   })
 

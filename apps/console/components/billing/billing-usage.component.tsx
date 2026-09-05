@@ -727,7 +727,7 @@ export function BillingUsageComponent(props: BillingUsageProps) {
         used={contactsCount}
         limit={entitlements.contactsPerHost}
       />
-      {contactQuota.overageContacts > 0 &&
+      {contactQuota.overageRecords > 0 &&
       contactQuota.overageRateUsd != null &&
       releaseFlagsReady ? (
         <Typography
@@ -743,7 +743,7 @@ export function BillingUsageComponent(props: BillingUsageProps) {
               // month closes. So this total is a projection of a figure that is
               // not fixed until the month is, and a bare "this month" claimed a
               // certainty the meter cannot have on the 3rd.
-              `Audience overage: ${contactQuota.overageContacts.toLocaleString()} ` +
+              `Audience overage: ${contactQuota.overageRecords.toLocaleString()} ` +
               `over the included band at $${contactQuota.overageRateUsd}/1,000 ` +
               `— ≈$${contactQuota.overageMonthlyUsd.toFixed(2)} if your audience ` +
               `ends the month at this size.`
@@ -755,7 +755,7 @@ export function BillingUsageComponent(props: BillingUsageProps) {
               // ingestion has captured, and it is why the band matters — while
               // the monthly dollar total goes, because that total is the part
               // no invoice will carry.
-              `Audience overage: ${contactQuota.overageContacts.toLocaleString()} ` +
+              `Audience overage: ${contactQuota.overageRecords.toLocaleString()} ` +
               `over the included band — not billed while the Contacts page is ` +
               `unavailable. The $${contactQuota.overageRateUsd}/1,000 rate ` +
               `applies once Contacts opens.`}

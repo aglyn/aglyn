@@ -796,7 +796,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                   : '') +
                 '. Upgrade in Billing to keep collecting.'}
             </Alert>
-          ) : quota.overageContacts > 0 &&
+          ) : quota.overageRecords > 0 &&
             quota.overageRateUsd != null &&
             // No claim about money until the verdict that decides it has
             // settled (AGL-1662). `release_contacts` is default-off before
@@ -812,7 +812,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                   // and customer must not read different sentences about the
                   // same org's money — that applies to WHEN it is measured as
                   // much as to how much.
-                  `${quota.overageContacts.toLocaleString()} contacts over ` +
+                  `${quota.overageRecords.toLocaleString()} contacts over ` +
                   `your plan's included ${quota.included.toLocaleString()} — ` +
                   `metered at $${quota.overageRateUsd}/1,000 per month ` +
                   `(≈$${quota.overageMonthlyUsd.toFixed(2)} if your list ends ` +
@@ -829,7 +829,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                   // about money. The upgrade nudge goes with the total, since
                   // it prompts a purchase premised on a charge that is not
                   // happening.
-                  `${quota.overageContacts.toLocaleString()} contacts over ` +
+                  `${quota.overageRecords.toLocaleString()} contacts over ` +
                   `your plan's included ${quota.included.toLocaleString()} — ` +
                   'not billed while the Contacts page is unavailable. ' +
                   `The $${quota.overageRateUsd}/1,000 rate applies once ` +

@@ -120,6 +120,52 @@ export const CRM_RECORDS_BAND_FULL_MESSAGE =
 export const CRM_ACTIVITIES_PER_RECORD_CEILING = 5_000
 
 /**
+ * What every writer says when a record's log is full — the console's log
+ * dialog, the automation step's run history and `POST /v1/activities`.
+ */
+export const CRM_ACTIVITY_LOG_FULL_MESSAGE =
+  `This record already has ${CRM_ACTIVITIES_PER_RECORD_CEILING.toLocaleString(
+    'en-US',
+  )} activities, which is the most one record can carry.`
+
+/** The record an activity is filed under: its links, of which one leads. */
+export interface CrmActivityLink {
+  contactId?: string | null
+  companyId?: string | null
+  dealId?: string | null
+}
+
+/**
+ * The field the per-record activity ceiling is counted on, or `null` for an
+ * activity that names no record at all.
+ *
+ * The contact leads, then the company, then the deal: an activity logged
+ * from a contact's page carries the company beside it (the automation step
+ * copies the facet's `companyId` onto every record it creates), and a
+ * ceiling counted on the company would let one busy account exhaust every
+ * contact filed under it. The record whose PAGE the log is read on is the
+ * one whose log has the limit. Shared by the client dialog and the two
+ * server writers so they count the same thing.
+ */
+export function crmActivityCeilingLink(
+  link: CrmActivityLink,
+): { field: 'contactId' | 'companyId' | 'dealId'; id: string } | null {
+  if (link.contactId) return { field: 'contactId', id: String(link.contactId) }
+  if (link.companyId) return { field: 'companyId', id: String(link.companyId) }
+  if (link.dealId) return { field: 'dealId', id: String(link.dealId) }
+  return null
+}
+
+/**
+ * Whether ONE MORE activity fits under `CRM_ACTIVITIES_PER_RECORD_CEILING`.
+ * Both halves of the boundary live here so no writer re-derives `>=`.
+ */
+export function crmActivityLogHasRoom(existing: number): boolean {
+  const count = Number(existing)
+  return !(Number.isFinite(count) && count >= CRM_ACTIVITIES_PER_RECORD_CEILING)
+}
+
+/**
  * Where a person sits in the relationship, as one of a fixed list.
  *
  * A fixed list rather than free text so that a report can count people per

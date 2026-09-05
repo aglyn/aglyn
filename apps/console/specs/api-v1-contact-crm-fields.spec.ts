@@ -48,6 +48,11 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   return {
     __esModule: true,
     ...apiHttp,
+    // The REAL records-band measurement (AGL-2611), over the same double
+    // the creates write to.
+    ...jest.requireActual(
+      '../../../libs/tenant/data/admin/src/lib/server/crm-records',
+    ),
     verifyApiKey: async () => ({
       orgId: 'org-1',
       keyId: 'key-1',
