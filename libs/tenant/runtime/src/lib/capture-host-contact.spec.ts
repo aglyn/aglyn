@@ -39,6 +39,9 @@ const emitHostEvent = jest.fn(async () => ({ alerts: [] }))
 const associateCompanyByDomain = jest.fn(
   async (): Promise<unknown> => ({ outcome: 'none', reason: 'no-domain' }),
 )
+const assignOwnerForCapture = jest.fn(
+  async (): Promise<unknown> => ({ outcome: 'none', reason: 'no-rule' }),
+)
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
@@ -53,18 +56,27 @@ jest.mock('./associate-company-by-domain', () => ({
   associateCompanyByDomain: (...args: unknown[]) =>
     associateCompanyByDomain(...(args as [])),
 }))
+jest.mock('./assign-contact-owner', () => ({
+  __esModule: true,
+  assignOwnerForCapture: (...args: unknown[]) =>
+    assignOwnerForCapture(...(args as [])),
+}))
 
 import {
   captureHostContact,
   contactCreatedPayload,
 } from './capture-host-contact'
 
-const capture = (facet?: { companyId?: string }) =>
+const capture = (
+  facet?: { companyId?: string; ownerUid?: string },
+  extra: { formId?: string; tags?: string[] } = {},
+) =>
   captureHostContact({
     hostId: 'site-1',
     email: 'Ada@Example.com',
     source: 'form',
-    interaction: { refId: 's1' },
+    interaction: { refId: 's1', ...(extra.formId ? { formId: extra.formId } : {}) },
+    ...(extra.tags ? { tags: extra.tags } : {}),
     ...(facet ? { facet } : {}),
   })
 
@@ -74,6 +86,8 @@ beforeEach(() => {
   emitHostEvent.mockClear()
   associateCompanyByDomain.mockClear()
   associateCompanyByDomain.mockResolvedValue({ outcome: 'none', reason: 'no-domain' })
+  assignOwnerForCapture.mockClear()
+  assignOwnerForCapture.mockResolvedValue({ outcome: 'none', reason: 'no-rule' })
 })
 
 describe('captureHostContact', () => {
@@ -156,6 +170,64 @@ describe('captureHostContact files a new person under their company', () => {
     mockCreated = created
     associateCompanyByDomain.mockRejectedValueOnce(new Error('index missing'))
     await capture()
+    expect(emitHostEvent).toHaveBeenCalledTimes(1)
+  })
+})
+
+/**
+ * The owner on capture (AGL-2618): the same terms as the company — once,
+ * for a NEW person, after the company is filed and before the event goes
+ * out — and never over an owner the door named. The pass is handed the
+ * form and the tags off the door's own options, which the created-report
+ * does not carry.
+ */
+describe('captureHostContact decides who follows a new person up', () => {
+  const created = {
+    contactId: 'contact-9',
+    hostId: 'site-1',
+    email: 'ada@acme.com',
+    source: 'form',
+    campaignIds: [],
+  }
+
+  it('runs the assignment pass after the company link and before the announcement', async () => {
+    mockCreated = created
+    await capture(undefined, { formId: 'form-1', tags: ['website'] })
+    expect(assignOwnerForCapture).toHaveBeenCalledTimes(1)
+    expect(assignOwnerForCapture).toHaveBeenCalledWith({
+      hostId: 'site-1',
+      contactId: 'contact-9',
+      email: 'ada@acme.com',
+      source: 'form',
+      formId: 'form-1',
+      tags: ['website'],
+    })
+    expect(assignOwnerForCapture.mock.invocationCallOrder[0]).toBeGreaterThan(
+      associateCompanyByDomain.mock.invocationCallOrder[0],
+    )
+    expect(assignOwnerForCapture.mock.invocationCallOrder[0]).toBeLessThan(
+      emitHostEvent.mock.invocationCallOrder[0],
+    )
+  })
+
+  it('leaves an owner the door named alone', async () => {
+    mockCreated = created
+    await capture({ ownerUid: 'uid-picked' })
+    expect(assignOwnerForCapture).not.toHaveBeenCalled()
+    expect(emitHostEvent).toHaveBeenCalledTimes(1)
+  })
+
+  it('asks nothing for a repeat visit', async () => {
+    await capture()
+    expect(assignOwnerForCapture).not.toHaveBeenCalled()
+  })
+
+  it('still announces the contact when the pass rejects', async () => {
+    mockCreated = created
+    assignOwnerForCapture.mockRejectedValueOnce(new Error('UNAVAILABLE'))
+    const error = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    await capture()
+    error.mockRestore()
     expect(emitHostEvent).toHaveBeenCalledTimes(1)
   })
 })

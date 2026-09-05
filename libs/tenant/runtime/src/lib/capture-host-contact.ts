@@ -21,6 +21,7 @@ import {
   type UpsertHostContactOptions,
   type UpsertHostContactVerdict,
 } from '@aglyn/tenant-data-admin'
+import { assignOwnerForCapture } from './assign-contact-owner'
 import { associateCompanyByDomain } from './associate-company-by-domain'
 import { emitHostEvent } from './emit-host-event'
 import type { HostEventPayload } from './run-event-workflows'
@@ -64,6 +65,18 @@ import type { HostEventPayload } from './run-event-workflows'
  * carried one have written it into the facet, and the capture must not
  * second-guess a person's choice with a domain match. The association never
  * rejects, and its own catch keeps a failed lookup from costing the event.
+ *
+ * ## The owner, on the same terms (AGL-2618)
+ *
+ * Then the org's assignment rules and the site's default owner decide who
+ * follows the new person up — again before `contactCreated`, so an
+ * automation's "create a task for the owner" finds one — and again only
+ * when the door named none: a drawer, an import column or a conversion
+ * that picked an owner has said whose the record is. The pass reads the
+ * form and the tags off the same options the data library was handed,
+ * because the created-report carries the identity and not the routing.
+ * It never rejects either; a record it could not assign is one somebody
+ * assigns by hand, which is what every record was before this existed.
  */
 export async function captureHostContact(
   options: Omit<UpsertHostContactOptions, 'onCreated'>,
@@ -74,6 +87,18 @@ export async function captureHostContact(
       if (!options.facet?.companyId) {
         await associateCompanyByDomain(created).catch((error: unknown) => {
           console.error('captureHostContact company association failed', error)
+        })
+      }
+      if (!options.facet?.ownerUid) {
+        await assignOwnerForCapture({
+          hostId: created.hostId,
+          contactId: created.contactId,
+          email: created.email,
+          source: created.source,
+          formId: options.interaction.formId ?? null,
+          tags: options.tags,
+        }).catch((error: unknown) => {
+          console.error('captureHostContact owner assignment failed', error)
         })
       }
       await emitHostEvent(
