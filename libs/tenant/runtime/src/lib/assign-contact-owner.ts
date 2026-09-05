@@ -191,12 +191,44 @@ interface Decision {
  * CRM's task notification uses; the hub's own route builder lives in the
  * plugin, which this layer cannot import.
  */
-function recordLink(
-  hostId: string,
-  record: { kind: 'contact'; id: string } | { kind: 'lead'; id: string },
-): string {
+function recordLink(hostId: string, record: AssignedRecord): string {
   const section = record.kind === 'contact' ? 'contacts' : 'leads'
   return `/${hostId}/crm/${section}/${encodeURIComponent(record.id)}`
+}
+
+/** The record an assignment notification opens. */
+export type AssignedRecord =
+  | { kind: 'contact'; id: string }
+  | { kind: 'lead'; id: string }
+
+/**
+ * Tells a member a record is now theirs — one console notification, typed
+ * by the record it opens — unless the member handed it to themselves.
+ * Shared by the pass above and by the routes where a person picks the
+ * owner outright (a lead conversion naming a colleague), so every server
+ * path that writes `ownerUid` says so in the same words. Never throws;
+ * the fan-out swallows its own failures.
+ */
+export async function notifyRecordAssigned(input: {
+  hostId: string
+  orgId: string
+  ownerUid: string
+  actorUid?: string | null
+  record: AssignedRecord
+  /** How the person reads in the message: their name, else their address. */
+  who: string
+}): Promise<boolean> {
+  if (!input.ownerUid || input.ownerUid === (input.actorUid ?? '')) return false
+  const lead = input.record.kind === 'lead'
+  await notifyUsers([input.ownerUid], {
+    type: lead ? 'content.leadAssigned' : 'content.contactAssigned',
+    title: lead ? 'Lead assigned to you' : 'Contact assigned to you',
+    body: input.who,
+    link: recordLink(input.hostId, input.record),
+    orgId: input.orgId,
+    hostId: input.hostId,
+  })
+  return true
 }
 
 async function assignOwner(policy: Policy): Promise<OwnerAssignment> {
@@ -363,23 +395,17 @@ async function assignOwner(policy: Policy): Promise<OwnerAssignment> {
       void mirrorOwnerOntoLeadLater(leadRef, verdict.ownerUid)
     }
 
-    const notified = verdict.ownerUid !== (input.actorUid ?? '')
-    if (notified) {
-      const who = contactName || input.email
-      await notifyUsers([verdict.ownerUid], {
-        type: verdict.leadMirrored ? 'content.leadAssigned' : 'content.contactAssigned',
-        title: verdict.leadMirrored ? 'Lead assigned to you' : 'Contact assigned to you',
-        body: who,
-        link: recordLink(
-          input.hostId,
-          verdict.leadMirrored && leadKey
-            ? { kind: 'lead', id: leadKey }
-            : { kind: 'contact', id: input.contactId },
-        ),
-        orgId,
-        hostId: input.hostId,
-      })
-    }
+    const notified = await notifyRecordAssigned({
+      hostId: input.hostId,
+      orgId,
+      ownerUid: verdict.ownerUid,
+      actorUid: input.actorUid,
+      record:
+        verdict.leadMirrored && leadKey
+          ? { kind: 'lead', id: leadKey }
+          : { kind: 'contact', id: input.contactId },
+      who: contactName || input.email,
+    })
     return { ...verdict, notified }
   } catch (error) {
     console.error(
