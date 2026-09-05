@@ -152,6 +152,27 @@ export interface HostContact {
    * beside it could never do.
    */
   capturedByHostIds?: string[]
+  /*
+   * SEARCH KEYS (AGL-2596), and nothing more.
+   *
+   * The console's global search reads a window of contact documents and
+   * matches over their top-level fields; it never resolves a holder's facet,
+   * because it is one search over a dozen collections and a facet read is a
+   * contacts-only idea. So the two profile values a person is looked up BY —
+   * their phone number and the company they work for — are mirrored here by
+   * every writer that sets them on a facet, as plain values a query can hit.
+   *
+   * The FACET is the record. These are a last-writer-wins echo of it: two
+   * holders who keep different numbers for one person each overwrite the
+   * echo and each keep their own facet value, and nothing renders these to a
+   * reader — the list, the record page and the export all read through the
+   * viewing group's facet. `ORG_CONTACT_FIELDS` below is an allow-list, so
+   * neither reaches the org view either.
+   */
+  /** E.164, mirrored from the last facet write that set one. */
+  phone?: string
+  /** The company name as typed, mirrored the same way. */
+  companyName?: string
 }
 
 /** Timeline cap: keeps the doc small; older interactions age out. */
@@ -309,6 +330,16 @@ export interface ContactFacet {
   jobTitle?: string
   /** `orgs/{orgId}/companies/{companyId}`, in this holder's scope. */
   companyId?: string
+  /**
+   * The company's name as this holder knows it.
+   *
+   * Free text, so a person can be filed under a company before one exists
+   * as a record; the company picker that later sets `companyId` writes the
+   * picked company's name here too, so the row reads the same whether the
+   * link was made or the name typed. The top-level `companyName` on the
+   * document is the search echo of this value — see `HostContact`.
+   */
+  companyName?: string
   address?: AglynPostalAddress | null
   /** The team member responsible for the relationship. */
   ownerUid?: string

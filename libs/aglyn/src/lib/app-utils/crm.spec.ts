@@ -23,14 +23,18 @@ import {
   companyDomainForEmail,
   CONTACT_LIFECYCLE_STAGES,
   CONTACT_LIFECYCLE_STAGE_LABELS,
+  contactLifecycleStageAfterPurchase,
   CRM_ACTIVITY_KIND_LABELS,
   CRM_ACTIVITY_KINDS,
   CRM_COLLECTIONS,
+  CRM_TASK_KIND_LABELS,
+  CRM_TASK_KINDS,
   crmActivityRecordLink,
   type CrmActivityRow,
   crmReadTokens,
   crmScopeTokens,
   isCrmActivityKind,
+  isCrmTaskKind,
   mergeContactTimeline,
   DEFAULT_DEAL_STAGES,
   dealStageById,
@@ -68,6 +72,49 @@ describe('lifecycle stages', () => {
     expect(isContactLifecycleStage('')).toBe(false)
     expect(isContactLifecycleStage(null)).toBe(false)
     expect(isContactLifecycleStage(3)).toBe(false)
+  })
+})
+
+describe('task and activity kinds', () => {
+  it('labels every kind, so a picker cannot show a bare identifier', () => {
+    for (const kind of CRM_TASK_KINDS) {
+      expect(CRM_TASK_KIND_LABELS[kind]).toBeTruthy()
+    }
+    for (const kind of CRM_ACTIVITY_KINDS) {
+      expect(CRM_ACTIVITY_KIND_LABELS[kind]).toBeTruthy()
+    }
+  })
+
+  it('recognizes a kind and refuses anything else', () => {
+    expect(isCrmTaskKind('call')).toBe(true)
+    expect(isCrmTaskKind('todo')).toBe(true)
+    // `note` is an activity kind, not a task kind: the two lists overlap
+    // and are not the same list.
+    expect(isCrmTaskKind('note')).toBe(false)
+    expect(isCrmTaskKind('')).toBe(false)
+    expect(isCrmTaskKind(undefined)).toBe(false)
+    expect(isCrmActivityKind('note')).toBe(true)
+    expect(isCrmActivityKind('other')).toBe(true)
+    expect(isCrmActivityKind('todo')).toBe(false)
+    expect(isCrmActivityKind(4)).toBe(false)
+  })
+})
+
+describe('contactLifecycleStageAfterPurchase', () => {
+  it('makes a customer of somebody with no stage, or a stage before it', () => {
+    expect(contactLifecycleStageAfterPurchase(undefined)).toBe('customer')
+    expect(contactLifecycleStageAfterPurchase('')).toBe('customer')
+    expect(contactLifecycleStageAfterPurchase('not-a-stage')).toBe('customer')
+    expect(contactLifecycleStageAfterPurchase('subscriber')).toBe('customer')
+    expect(contactLifecycleStageAfterPurchase('lead')).toBe('customer')
+    expect(contactLifecycleStageAfterPurchase('opportunity')).toBe('customer')
+  })
+
+  it('never downgrades: a later stage survives a purchase', () => {
+    expect(contactLifecycleStageAfterPurchase('customer')).toBe('customer')
+    expect(contactLifecycleStageAfterPurchase('evangelist')).toBe('evangelist')
+    // The deliberate escape hatch is a choice a sale must not undo.
+    expect(contactLifecycleStageAfterPurchase('other')).toBe('other')
   })
 })
 

@@ -46,6 +46,27 @@ Page triggers can be limited to certain paths (`/pricing`, `/blog/*`), and a
 **once per visitor**, or **with a cooldown** (a minimum number of minutes between fires
 for the same browser).
 
+### CRM events {#crm-events}
+
+Two server events come from the [Contacts CRM](../../content-and-data/contacts/overview.md)
+and read in the trigger picker as **Contact created** and **Contact changed stage**. Pick
+one and the **Filter** field's helper text lists the keys below, so a filter such as
+`lifecycleStage == "customer"` or a condition such as *`source` equals `booking`* can be
+written without leaving the editor.
+
+| Event | Fires when | Keys in scope for filters and conditions |
+| --- | --- | --- |
+| **Contact created** (`contactCreated`) | A capture on your site makes a **new** contact: a form submission, a member sign-up, a newsletter subscription, an order or a booking from an address your workspace did not already hold. A repeat visit by somebody already on the list is recorded as an interaction and does **not** fire it. | `contactId` · `email` · `name` (empty when the capture had none) · `source` (`form`, `member`, `newsletter`, `order` or `booking`) · `hostId` · `campaignIds` (comma-joined; present only when the capture came through a campaign) |
+| **Contact changed stage** (`contactStageChanged`) | A contact's **lifecycle stage** is moved — from the contact's page in the console, or by a **Set the contact's lifecycle stage** step in another automation. Setting the stage a contact already has fires nothing. | `contactId` · `email` · `lifecycleStage` (the new stage) · `previousStage` (empty when the contact had none) |
+
+:::note Events are announced by the server, not watched in the database
+An event fires because the server path that performed the write announced it; nothing
+watches the database for changes. Every capture door on your site and the console's
+stage control go through the server, so in ordinary use every new contact and every
+stage move is announced. Contacts **added by hand** in the console, **imported**, or
+created through the **REST API** are written without an announcement and fire nothing.
+:::
+
 ### Only run when a field matches
 
 Every action can carry a **condition** over the event's payload — for form submissions,
@@ -109,11 +130,35 @@ Steps run in order and mix **in-page effects** with **server-side work**:
 - **On the server (Pro+)**: run a workflow, write to or update a dataset, send a webhook
   (Business), send an email, notify site admins, enroll the contact in a list, assign a
   campaign, fire a custom event to chain more actions.
+- **In the CRM (Pro+)**: set the contact's lifecycle stage, tag the contact, assign the
+  contact an owner, create a CRM task, log a CRM activity. See [CRM steps](#crm-steps).
 - **Flow steps (Pro+)**: **Wait**, **Wait for something to happen**, and **End the flow
   here**. See [Sequences](#sequences) below.
 
 On plans without the automations entitlement, an automation that mixes tiers still runs
 its basic in-page steps — the Pro+ steps are simply skipped until you upgrade.
+
+### CRM steps {#crm-steps}
+
+Five server steps act on the [Contacts CRM](../../content-and-data/contacts/overview.md).
+None of them asks *which* contact: each acts on the person the triggering event names —
+by `contactId` when the event carries one (the [CRM events](#crm-events) do), otherwise
+by the `email` in the event's data, which is what a form submission, a sign-up, a booking
+or a lead carries. When neither names a contact this site can see, the step writes
+nothing and the run is recorded as **Failed** with the reason (*"no contact this site can
+see for …"*), in the same [run history](#run-history) every other step reports to.
+
+| Step | Fields | What it writes |
+| --- | --- | --- |
+| **Set the contact's lifecycle stage** | Stage | The stage on **this site's** view of the contact. A stage the contact already has is left alone and announces nothing; a real change announces **Contact changed stage**, so an automation listening for it runs — under the same nesting limit a custom event has. |
+| **Tag the contact** | Tag (up to 60 characters) | Adds the tag to this site's tags on the contact; a tag already there is not duplicated. |
+| **Assign the contact an owner** | Owner's email | Sets the owner to the team member with that address, matched when the automation runs. An address nobody on your team has is a failed step, not a stored string. |
+| **Create a CRM task** | Title, Kind (Call, Email, Meeting, To-do), Due in (0–365 days), Assignee's email (optional) | A new open task on the CRM's **Tasks** list, linked to the contact (and to the contact's company when it has one), due that many days from the run. Leave the assignee blank to give it to the contact's owner. |
+| **Log a CRM activity** | Kind (Call, Email, Meeting, Note, Other), What happened | An activity on the contact's timeline, stamped as made by the automation rather than by a person. |
+
+Tasks and activities an automation creates are visible to exactly the sites a record a
+person made on this site would be — the same per-site visibility the contacts themselves
+follow.
 
 ### Only run this step {#step-conditions}
 

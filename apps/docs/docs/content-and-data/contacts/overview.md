@@ -53,10 +53,16 @@ as overage. That overage is **not billed while the Contacts page is unavailable*
 
 Once the page is switched on, it will let you:
 
-- Browse the **list** of contacts.
-- Open a **profile drawer** to see a contact's details and history.
+- Browse the **list** of contacts, with Owner and Stage columns, a stage
+  filter and an **Assigned to me** toggle.
+- Add a contact **by hand** with **New contact**.
+- Open a contact's **own page** to see their profile, where they came from and
+  their history — see [The contact record](./contact-record.md).
 - Add **tags** and **notes**.
+- Log **calls, emails, meetings and notes** against a person, and read them in one timeline with everything the platform captured — see [Activities & the timeline](./activities.md).
 - **Export to CSV**.
+- **Import CSV** — bring a spreadsheet of people in; see
+  [Import contacts from CSV](./import.md).
 
 ## What's in the CRM area
 
@@ -66,17 +72,25 @@ older `…/contacts` address still open the hub.
 
 | Section | Address | What lives there |
 | --- | --- | --- |
-| **Contacts** | `/crm/contacts` | The people list above; a person's own page is `/crm/contacts/{id}`. |
-| **Leads** | `/crm/leads` | People a site has captured but not yet qualified — a status, an owner, and a conversion into a contact, a company and a deal. |
+| **Contacts** | `/crm/contacts` | The people list above; a person's own page is `/crm/contacts/{id}` — see [The contact record](./contact-record.md) for adding a contact by hand and the fields on the record. |
+| **[Leads](./leads.md)** | `/crm/leads` | People a site has captured but not yet qualified — a status, an owner, and a conversion into a contact, a company and a deal. |
 | **Companies** | `/crm/companies` | The organizations your contacts belong to; a company's page is `/crm/companies/{id}`. See [Companies](./companies.md). |
-| **Deals** | `/crm/deals` | Your pipeline — open deals by stage, with amount, owner and expected close; a deal's page is `/crm/deals/{id}`. |
-| **Tasks** | `/crm/tasks` | Calls, emails, meetings and to-dos by due date, linked to the contact, company or deal they are for. |
-| **Reports** | `/crm/reports` | Contacts by stage and source, the pipeline by stage, won and lost over time. |
-| **Fields** | `/crm/fields` | The custom fields on a contact — text, number, date, choice, checkbox or link. |
+| **Deals** | `/crm/deals` | Your [pipeline](./deals.md) — open deals by stage, with amount, owner and expected close; a deal's page is `/crm/deals/{id}`. |
+| **[Tasks](./tasks.md)** | `/crm/tasks` | Calls, emails, meetings and to-dos by due date, linked to the contact, company or deal they are for. |
+| **Reports** | `/crm/reports` | [New contacts over time, sources and the lifecycle funnel, the open pipeline and its forecast, won and lost, and the task load](./reports.md). |
+| **Fields** | `/crm/fields` | The [custom fields](custom-fields.md) on a contact — text, number, date, choice, checkbox or link — which a form field can save into. |
 
 Opening `/contacts` lands on the first section. Every section follows the same
 per-site visibility as the contacts themselves, so a section can never show a
 record the reader could not open as a contact.
+
+## Import from CSV
+
+**Import CSV** on the Contacts section brings a spreadsheet of people in — map its
+columns to contact fields, preview the first rows, and import in batches with a report
+of what was added, updated and skipped. See [Import contacts from CSV](./import.md).
+
+- [Bulk actions](bulk-actions.md) — tick contacts in the table to tag them, set their owner or stage, add them to an email audience, export them, or remove them from this site at once.
 
 ## Segments
 
@@ -88,3 +102,4 @@ Group contacts into **segments** — reusable audiences you can target directly 
 - [Companies](./companies.md)
 - [Email campaigns](../../marketing-and-automation/email-campaigns/overview.md)
 - [Forms & lead capture](../forms/overview.md)
+- [Automations for contacts](automations.md)

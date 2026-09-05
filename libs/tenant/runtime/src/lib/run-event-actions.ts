@@ -29,6 +29,7 @@ import {
   flowEmailTopicId,
   hostPublicOrigin,
   isClientActionStep,
+  isCrmActionStep,
   isFlowSuspendingStep,
   type HostAction,
   type HostActionAlert,
@@ -81,8 +82,12 @@ import {
   type FlowSweepResult,
   sweepDueFlowEnrollments,
 } from './flow-enrollments'
+import { runCrmActionStep } from './crm-action-steps'
 import { resolveDatasetDoc } from './resolve-dataset'
-import type { HostEventPayload } from './run-event-workflows'
+import {
+  type HostEventPayload,
+  runEventWorkflows,
+} from './run-event-workflows'
 
 /** Bounded fan-out per event, mirroring the workflow runner. */
 const MAX_TRIGGERED_ACTIONS = 10
@@ -790,6 +795,39 @@ async function executeAction(
           ),
           updatedAt: FieldValue.serverTimestamp(),
         })
+      } else if (isCrmActionStep(step)) {
+        // The five CRM steps (AGL-2605) share a resolver and a scope, so
+        // they share a module; see `crm-action-steps.ts`.
+        const outcome = await runCrmActionStep(
+          { hostId, org: env.org, orgId: env.orgId },
+          actionId,
+          step,
+          payload,
+        )
+        if (outcome.error) {
+          stepErrors.push(outcome.error)
+          continue
+        }
+        detail = outcome.detail
+        /*
+         * A stage set by an automation IS a stage change, and whatever
+         * listens for one must hear it — fanned out here, under the same
+         * depth guard a `customEvent` chain runs under, rather than through
+         * `emitHostEvent`, which starts every chain at depth zero and would
+         * let an action that sets the stage it listens for run forever.
+         */
+        if (outcome.emit) {
+          const [, nested] = await Promise.all([
+            runEventWorkflows(hostId, outcome.emit.event, outcome.emit.payload),
+            runEventActions(
+              hostId,
+              outcome.emit.event,
+              outcome.emit.payload,
+              depth + 1,
+            ),
+          ])
+          alerts.push(...nested)
+        }
       }
     } catch (error) {
       stepErrors.push((error as Error).message)

@@ -33,6 +33,13 @@ import type { HostVariable } from './variables'
 /**
  * Host events a workflow can trigger on (AGL-128). The tenant emits these
  * server-side: form submit API, analytics collector, membership APIs.
+ *
+ * SERVER DOORS ONLY. An event exists because a request handler that already
+ * performed the write called `emitHostEvent` beside it; nothing watches the
+ * database. So a contact created by a console user's client-direct Firestore
+ * write fires nothing, and a CRM event (AGL-2605) is only as complete as the
+ * set of server paths that emit it — the capture doors for `contactCreated`,
+ * the `crm/contact-stage` route for `contactStageChanged`.
  */
 export const HOST_EVENT_TYPES = [
   'formSubmission',
@@ -42,9 +49,147 @@ export const HOST_EVENT_TYPES = [
   'memberSignOut',
   'lead',
   'booking',
+  // A CRM task was marked done (AGL-2599). Emitted by the console's
+  // `crm/task-complete` route rather than by a Firestore trigger, so the
+  // payload names who completed it and what it hung off.
+  'taskCompleted',
+  'contactCreated',
+  'contactStageChanged',
+  'dealStageChanged',
+  'dealWon',
+  'dealLost',
 ] as const
 
 export type HostEventType = (typeof HOST_EVENT_TYPES)[number]
+
+/**
+ * How a built-in event reads in a trigger picker and a run history row.
+ *
+ * `Partial`, deliberately. The event list grows a line at a time from
+ * several hands, and an exhaustive record would make every addition a
+ * compile error until its label landed in the same change — which is the
+ * right pressure on a stage picker and the wrong one here, where two
+ * branches adding events beside each other must merge cleanly. An unlabeled
+ * event falls back to its identifier through {@link hostEventLabel}, which
+ * is what every picker rendered for every event until AGL-2605.
+ */
+export const HOST_EVENT_LABELS: Partial<Record<HostEventType, string>> = {
+  formSubmission: 'Form submitted',
+  pageView: 'Page viewed',
+  memberSignUp: 'Member signed up',
+  memberSignIn: 'Member signed in',
+  memberSignOut: 'Member signed out',
+  lead: 'New lead',
+  booking: 'New booking',
+  contactCreated: 'Contact created',
+  contactStageChanged: 'Contact changed stage',
+  taskCompleted: 'CRM task completed',
+  dealStageChanged: 'Deal moved',
+  dealWon: 'Deal won',
+  dealLost: 'Deal lost',
+}
+
+/**
+ * `formSubmission` → `Form submitted`; a custom event keeps its own name,
+ * because the author chose it and it is already the word they think in.
+ */
+export function hostEventLabel(event: string | undefined | null): string {
+  const key = String(event ?? '').trim()
+  if (!key) return 'Event'
+  return HOST_EVENT_LABELS[key as HostEventType] ?? key
+}
+
+/**
+ * The payload keys each built-in event puts in scope, for the filter
+ * expression and the step conditions — the thing an author has to know to
+ * write `lifecycleStage == "customer"` and had nowhere to read.
+ *
+ * Documented from the emitters, not from a schema, because the payload is
+ * whatever the emitting door passed: `formSubmission` carries every
+ * submitted field under its own name on top of the two fixed keys, which
+ * no fixed list can enumerate. `Partial` for the same reason as the labels.
+ */
+export const HOST_EVENT_PAYLOAD_KEYS: Partial<
+  Record<HostEventType, readonly string[]>
+> = {
+  formSubmission: ['formName', 'path', 'and every submitted field by name'],
+  pageView: ['path'],
+  memberSignUp: ['email'],
+  memberSignIn: ['email'],
+  lead: ['email', 'source'],
+  booking: ['serviceName', 'email', 'startsAtMs'],
+  contactCreated: [
+    'contactId',
+    'email',
+    'name',
+    'source',
+    'hostId',
+    'campaignIds',
+  ],
+  contactStageChanged: ['contactId', 'email', 'lifecycleStage', 'previousStage'],
+  taskCompleted: [
+    'taskId',
+    'title',
+    'kind',
+    'priority',
+    'dueAtMs',
+    'completedAtMs',
+    'completedByUid',
+    'assigneeUid',
+    'createdByUid',
+    'contactId',
+    'companyId',
+    'dealId',
+    'taskHostId',
+  ],
+  dealStageChanged: [
+    'dealId',
+    'title',
+    'amountCents',
+    'currency',
+    'stageId',
+    'previousStageId',
+    'ownerUid',
+    'contactId',
+    'companyId',
+  ],
+  dealWon: [
+    'dealId',
+    'title',
+    'amountCents',
+    'currency',
+    'stageId',
+    'previousStageId',
+    'ownerUid',
+    'contactId',
+    'companyId',
+  ],
+  dealLost: [
+    'dealId',
+    'title',
+    'amountCents',
+    'currency',
+    'stageId',
+    'previousStageId',
+    'ownerUid',
+    'contactId',
+    'companyId',
+    'lostReason',
+  ],
+}
+
+/**
+ * One sentence naming what a trigger's filter and conditions can read, or
+ * `null` for an event whose payload is not documented — a custom event, or
+ * a built-in one nobody has written down yet.
+ */
+export function hostEventPayloadHint(
+  event: string | undefined | null,
+): string | null {
+  const keys = HOST_EVENT_PAYLOAD_KEYS[String(event ?? '') as HostEventType]
+  if (!keys?.length) return null
+  return `In scope: ${keys.join(', ')}.`
+}
 
 export interface HostWorkflowTrigger {
   event: HostEventType

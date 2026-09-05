@@ -299,14 +299,14 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
           <TextField
             size="small"
             label="Domain"
-            placeholder="acme.com"
+            placeholder="example.com"
             value={draft.domain}
             onChange={(event) => patch('domain', event.target.value)}
           />
           <TextField
             size="small"
             label="Website"
-            placeholder="https://www.acme.com"
+            placeholder="https://www.example.com"
             value={draft.website}
             onChange={(event) => patch('website', event.target.value)}
           />

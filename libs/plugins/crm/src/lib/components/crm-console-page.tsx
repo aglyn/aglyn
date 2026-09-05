@@ -73,7 +73,7 @@ function sectionBody(
       return record ? (
         <LeadDetailPage {...recordProps} id={record} />
       ) : (
-        <LeadsSection />
+        <LeadsSection {...props} />
       )
     case 'companies':
       return record ? (
@@ -89,14 +89,17 @@ function sectionBody(
       return record ? (
         <DealDetailPage {...recordProps} id={record} />
       ) : (
-        <DealsSection />
+        <DealsSection {...props} />
       )
     case 'tasks':
-      return <TasksSection />
+      return <TasksSection {...props} />
     case 'reports':
-      return <ReportsSection />
+      // The shell's props whole, like the contacts list: the reports resolve
+      // the org scope from `hostId`, the consent group from `org`, and their
+      // drill-down links from `basePath` (AGL-2604).
+      return <ReportsSection {...props} />
     case 'fields':
-      return <FieldsSection />
+      return <FieldsSection hostId={props.hostId} org={props.org} />
     default:
       return null
   }

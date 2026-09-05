@@ -30,9 +30,8 @@ import {
   firebaseAdmin,
   recordVisitorRecordCeilingTrip,
   resolveCampaignTouch,
-  upsertHostContact,
 } from '@aglyn/tenant-data-admin'
-import { emitHostEvent } from '@aglyn/tenant-runtime'
+import { captureHostContact, emitHostEvent } from '@aglyn/tenant-runtime'
 import {
   hashMemberPassword,
   mintMemberSession,
@@ -227,7 +226,7 @@ export const membershipRegisterHandler: PluginApiHandler = async (req, res) => {
       ...(campaignTouch ? { touch: campaignTouch } : {}),
     })
     // Contacts ingestion (AGL-197).
-    void upsertHostContact({
+    void captureHostContact({
       hostId,
       email,
       name: displayName || undefined,

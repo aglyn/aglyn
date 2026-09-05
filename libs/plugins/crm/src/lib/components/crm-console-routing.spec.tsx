@@ -28,8 +28,9 @@
  *  2. `/crm/deals` resolves to the `deals` section and the page renders
  *     the Deals section, not the contacts list.
  *
- * The people list is stubbed: it opens Firestore listens on mount and has
- * four specs of its own. What this file asserts is the switch.
+ * The people list and the contact record are stubbed: both open Firestore
+ * listens on mount and have specs of their own. What this file asserts is
+ * the switch — which body the hub builds, and with which id.
  */
 
 import { registerCrmConsole } from '../plugin'
@@ -46,6 +47,22 @@ jest.mock('@aglyn/shared-ui-next', () => ({
 jest.mock('./contacts-section', () => ({
   __esModule: true,
   default: () => <div>{'PEOPLE LIST'}</div>,
+}))
+// The deals section opens Firestore listeners on mount (AGL-2598); the
+// routing under test is the hub's, so the section is a marker here.
+jest.mock('./deals-section', () => ({
+  __esModule: true,
+  default: () => <div>{'Deals'}</div>,
+}))
+
+jest.mock('./contact-detail-page', () => ({
+  __esModule: true,
+  default: ({ id, basePath }: { id: string; basePath: string }) => (
+    <div>
+      {`Contact ${id}`}
+      <a href={`${basePath}/contacts`}>{'Back to contacts'}</a>
+    </div>
+  ),
 }))
 
 const BASE_PATH = '/acme/hosts/shop/crm'
@@ -80,17 +97,17 @@ function mountAt(href: string) {
 }
 
 describe('the CRM hub routes sections and records (AGL-2595)', () => {
-  it('reaches the contact record stub for /crm/contacts/abc, with that id', () => {
+  it('reaches the contact record for /crm/contacts/abc, with that id', () => {
     const resolved = mountAt('/crm/contacts/abc')
 
     expect(resolved?.section?.id).toBe('contacts')
     expect(resolved?.segments).toEqual(['contacts', 'abc'])
     expect(screen.getByText('Contact abc')).toBeTruthy()
-    expect(screen.getByText("This contact's page is not built yet.")).toBeTruthy()
     // The record, not the list — and not some other record.
     expect(screen.queryByText('PEOPLE LIST')).toBeNull()
     expect(screen.queryByText(/^Company /)).toBeNull()
-    // The way back is the section, built by the one route helper.
+    // The record page is handed the hub's own base path, so its way back is
+    // the section the one route helper builds.
     expect(
       screen.getByText('Back to contacts').closest('a')?.getAttribute('href'),
     ).toBe(crmRoutes(BASE_PATH).section('contacts'))

@@ -42,6 +42,7 @@ import {
   type CrmOrg,
   useActivityScope,
   useActivityWindow,
+  useCanEditActivity,
 } from './activity-queries'
 import { LogActivityDialog } from './log-activity-dialog'
 
@@ -171,6 +172,8 @@ export function ContactTimelineCard(props: ContactTimelineCardProps) {
   }, [contact, consentGroup])
   const link = useMemo<ActivityRecordLink>(() => ({ contactId }), [contactId])
   const activities = useActivityWindow(scope, link)
+  // One member read for the whole stream, however many rows it has.
+  const canEdit = useCanEditActivity(scope.orgId)
   const entries = useMemo(
     () => Aglyn.mergeContactTimeline(interactions, activities.rows),
     [interactions, activities.rows],
@@ -201,7 +204,7 @@ export function ContactTimelineCard(props: ContactTimelineCardProps) {
     <>
       <CardDisplay
         header={'Timeline'}
-        help={pluginDocsHelp('contacts', { anchor: '#the-contacts-page' })}
+        help={pluginDocsHelp('contactActivities', { anchor: '#two-kinds-of-history' })}
         actions={
           <Button
             size="small"
@@ -242,6 +245,7 @@ export function ContactTimelineCard(props: ContactTimelineCardProps) {
                   onEdit={openEdit}
                   subject={loggedChip}
                   nowMs={nowMs}
+                  editable={canEdit(entry.activity)}
                 />
               ),
             )

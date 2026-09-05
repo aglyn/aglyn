@@ -38,6 +38,8 @@ import { useHostId, useHostReady, useHostSubdomain } from '../host-id-provider'
 import { useOrgSlug } from '../../hooks/use-org-scope'
 import { useUrlNamedOrg } from '../../hooks/use-url-names-org'
 import useCurrentOrg from '../../hooks/use-current-org'
+import { useOrgPermissions } from '../../hooks/use-org-permissions'
+import { useReleaseFlag } from '../../hooks/use-release-flags'
 import DocsHelpTip from '../docs-help-tip.component'
 import {
   buildResultHref,
@@ -45,7 +47,13 @@ import {
   resolveGlobalSearchScope,
 } from './global-search-scope'
 import useGlobalSearch, { SEARCH_MAX_ITEMS } from './use-global-search'
-import { MIN_QUERY_LENGTH } from '@aglyn/aglyn'
+import {
+  consentGroupForHost,
+  hostScopeToken,
+  MAX_SCOPE_HOSTS,
+  MIN_QUERY_LENGTH,
+  ORG_SCOPE_TOKEN,
+} from '@aglyn/aglyn'
 
 export interface GlobalSearchDialogProps {
   open: boolean
@@ -114,6 +122,36 @@ export function GlobalSearchDialogComponent(props: GlobalSearchDialogProps) {
     return { ...resolved, ...(resolved as any).features } as Record<string, unknown>
   }, [org, orgReady])
 
+  /*
+   * The viewer's scope tokens for the org-shared CONTACTS (AGL-2596), or
+   * null when contacts must not be offered.
+   *
+   * Three gates, all read from what the console already holds. The Contacts
+   * surface is release-flagged, so its rows are offered only where its nav
+   * tab would be — searching a surface the reader cannot open is a link to a
+   * 404. The rules read contacts for `data.manage` holders only, so a viewer
+   * without it is withheld the group rather than shown "could not be read".
+   * And the tokens themselves are the site's consent group — the same set
+   * the contacts list filters by — resolved from the org document, so this
+   * costs no read and cannot disagree with the list about who a person is
+   * visible to. Off a site there is no group to resolve, so no contacts.
+   */
+  const contactsFlag = useReleaseFlag('release_contacts')
+  const permissions = useOrgPermissions()
+  // Primitives, so the memo below — and the query effect that depends on
+  // its result — settle once rather than once per render of the provider.
+  const contactsVisible = contactsFlag.ready && contactsFlag.visible
+  const canManageData = permissions.loaded && permissions.can('data.manage')
+  const orgDataTokens = useMemo(() => {
+    if (!orgReady || !org || !hostId || !hostReady) return null
+    if (!contactsVisible || !canManageData) return null
+    const group = consentGroupForHost(org as Record<string, unknown>, hostId)
+    return [ORG_SCOPE_TOKEN, ...group.hostIds.map(hostScopeToken)].slice(
+      0,
+      MAX_SCOPE_HOSTS,
+    )
+  }, [org, orgReady, hostId, hostReady, contactsVisible, canManageData])
+
   const scope = useMemo(
     () =>
       resolveGlobalSearchScope({
@@ -122,8 +160,9 @@ export function GlobalSearchDialogComponent(props: GlobalSearchDialogProps) {
         hostReady,
         entitlements,
         entitlementsReady: orgReady,
+        orgDataTokens,
       }),
-    [orgId, hostId, hostReady, entitlements, orgReady],
+    [orgId, hostId, hostReady, entitlements, orgReady, orgDataTokens],
   )
 
   // Reset between openings so a stale query never renders against a scope it
@@ -138,6 +177,7 @@ export function GlobalSearchDialogComponent(props: GlobalSearchDialogProps) {
     uid,
     orgId,
     hostId,
+    orgDataTokens,
     text,
   })
 

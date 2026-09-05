@@ -548,3 +548,152 @@ describe('an interaction records the door the person came in through', () => {
     expect(entry).not.toHaveProperty('path')
   })
 })
+
+/**
+ * The create hook (AGL-2605): the one fact a capture door cannot learn any
+ * other way — that its capture made a NEW person, and which document — so
+ * the runtime can announce `contactCreated`. A merge is a repeat visit and
+ * is never reported; a hook that throws costs nothing the capture already
+ * did.
+ */
+describe('upsertHostContact onCreated', () => {
+  beforeEach(() => {
+    for (const key of Object.keys(contacts)) delete contacts[key]
+    added = []
+    mockOrgDefaultScope = undefined
+  })
+
+  it('reports a NEW contact once, with its id, address, source and campaigns', async () => {
+    const reported: unknown[] = []
+    await upsertHostContact({
+      hostId: 'h1',
+      email: 'New@Example.com',
+      name: 'Ada Lovelace',
+      source: 'form',
+      interaction: { refId: 's1', summary: 'Submitted "Contact"' },
+      campaignIds: ['spring-2026', 'spring-2026', ' '],
+      onCreated: (created) => {
+        reported.push(created)
+      },
+    })
+    expect(added).toHaveLength(1)
+    expect(reported).toEqual([
+      {
+        contactId: 'auto-1',
+        hostId: 'h1',
+        // Normalized, so a filter on the address matches what the row holds.
+        email: 'new@example.com',
+        name: 'Ada Lovelace',
+        source: 'form',
+        // Deduped and trimmed by the same coercion the document stores.
+        campaignIds: ['spring-2026'],
+      },
+    ])
+  })
+
+  it('says nothing on a merge — a repeat visit is not a new contact', async () => {
+    contacts['c1'] = { email: 'held@example.com', sources: { form: true }, interactions: [] }
+    const onCreated = jest.fn()
+    await upsertHostContact({
+      hostId: 'h1',
+      email: 'held@example.com',
+      source: 'booking',
+      interaction: { refId: 'b1', summary: 'Booked' },
+      onCreated,
+    })
+    expect(added).toHaveLength(0)
+    expect(onCreated).not.toHaveBeenCalled()
+  })
+
+  it('survives a hook that throws, and the contact is still created', async () => {
+    const errors = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      await expect(
+        upsertHostContact({
+          hostId: 'h1',
+          email: 'hook@example.com',
+          source: 'form',
+          interaction: { refId: 's2' },
+          onCreated: async () => {
+            throw new Error('emit failed')
+          },
+        }),
+      ).resolves.toEqual({ contactId: expect.any(String), created: true })
+      expect(added).toHaveLength(1)
+      // Its own catch, so the failure is named as the hook's — not as the
+      // capture's, which succeeded.
+      expect(errors).toHaveBeenCalledWith(
+        'upsertHostContact onCreated failed',
+        expect.any(Error),
+      )
+    } finally {
+      errors.mockRestore()
+    }
+  })
+})
+
+/**
+ * The CRM profile a console door passes (AGL-2608) lands on the capturing
+ * group's facet, key by key — and an absent key leaves what an earlier door
+ * recorded.
+ */
+describe('the CRM profile a door passes with a capture', () => {
+  beforeEach(() => {
+    for (const key of Object.keys(contacts)) delete contacts[key]
+    added = []
+    mockOrgDefaultScope = undefined
+  })
+
+  it('writes the profile onto a NEW contact\'s facet', async () => {
+    await upsertHostContact({
+      hostId: 'h1',
+      email: 'lead@example.com',
+      source: 'manual',
+      interaction: { summary: 'Converted from a lead' },
+      facet: { lifecycleStage: 'sales-qualified', ownerUid: 'uid-owner' },
+    })
+    expect(added).toHaveLength(1)
+    expect(added[0].facets.h1.lifecycleStage).toBe('sales-qualified')
+    expect(added[0].facets.h1.ownerUid).toBe('uid-owner')
+    // ⛔ Not at the top of the shared row, where every holder would read it.
+    expect(added[0].lifecycleStage).toBeUndefined()
+    expect(added[0].ownerUid).toBeUndefined()
+  })
+
+  it('merges only the keys present onto an EXISTING facet', async () => {
+    contacts['c1'] = {
+      email: 'lead@example.com',
+      facets: {
+        h1: {
+          sources: { form: true },
+          interactions: [],
+          phone: '+15555550100',
+          jobTitle: 'Buyer',
+        },
+      },
+    }
+    await upsertHostContact({
+      hostId: 'h1',
+      email: 'lead@example.com',
+      source: 'manual',
+      interaction: { summary: 'Converted from a lead' },
+      facet: { lifecycleStage: 'sales-qualified' },
+    })
+    expect(facet('c1').lifecycleStage).toBe('sales-qualified')
+    // What the door did not know stays as the earlier door left it.
+    expect(facet('c1').phone).toBe('+15555550100')
+    expect(facet('c1').jobTitle).toBe('Buyer')
+    expect(facet('c1', 'h2')).toEqual({})
+  })
+
+  it('refuses a stage the union does not name rather than storing it', async () => {
+    await upsertHostContact({
+      hostId: 'h1',
+      email: 'lead@example.com',
+      source: 'manual',
+      interaction: {},
+      facet: { lifecycleStage: 'vip' as never },
+    })
+    expect(added[0].facets.h1.lifecycleStage).toBeUndefined()
+  })
+})

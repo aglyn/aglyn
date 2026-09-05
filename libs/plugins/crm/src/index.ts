@@ -22,3 +22,8 @@ export * from './lib/plugin'
 // naming a company — builds the same address the hub resolves.
 export * from './lib/components/crm-console-sections'
 export * from './lib/model/crm-routes'
+// The org's custom contact field definitions, read once and shared
+// (AGL-2601): the contact list's columns, the profile card, the form editor's
+// mapping picker, an import's target list and an audience filter all ask the
+// same question of the same small collection.
+export * from './lib/hooks/use-contact-field-definitions'

@@ -59,15 +59,23 @@
  */
 
 import {
+  CONTACT_LIFECYCLE_STAGES,
+  CONTACT_LIFECYCLE_STAGE_LABELS,
   CONTACT_SOURCE_LABELS,
+  DYNAMIC_LIST_CUSTOM_OPS,
   normalizeDynamicListRule,
+  type ContactLifecycleStage,
   type ContactSource,
+  type DynamicListCustomClause,
+  type DynamicListCustomOp,
   type DynamicListDimensions,
   type DynamicListRule,
   type DynamicListSource,
 } from '@aglyn/aglyn'
 import {
+  Autocomplete,
   Box,
+  Button,
   Divider,
   MenuItem,
   Stack,
@@ -75,8 +83,13 @@ import {
   Typography,
 } from '@mui/material'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useHostCampaigns } from '@aglyn/tenant-feature-instance'
+import {
+  useHostCampaigns,
+  useOrgMemberOptions,
+} from '@aglyn/tenant-feature-instance'
 import CampaignPicker from '@aglyn/shared-ui-email-campaigns/components/campaign-picker.component'
+import { useOrgCompanyOptions } from '../hooks/use-org-company-options'
+import { useOrgContactFields } from '../hooks/use-org-contact-fields'
 import { useOrgContactSegments } from '../hooks/use-org-contact-segments'
 import { useOrgLists } from '../hooks/use-org-lists'
 
@@ -117,11 +130,52 @@ export interface DynamicListRuleNames {
   segments?: Record<string, string>
   /** Campaign id → its name. */
   campaigns?: Record<string, string>
+  /** Team member uid → how they read on the roster. */
+  members?: Record<string, string>
+  /** Company id → its name. */
+  companies?: Record<string, string>
+  /** Custom field key → the definition's label. */
+  fields?: Record<string, string>
 }
 
 /** An id, as its name when one is known and as itself when none is. */
 const named = (id: string, names: Record<string, string> | undefined): string =>
   names?.[id] || id
+
+/**
+ * How each custom-field operator reads, as the verb of a clause.
+ *
+ * `neq` carries its lean in the sentence: the matcher requires a VALUE that
+ * differs, so a merchant excluding one plan does not sweep in everyone whose
+ * plan was never recorded — and a reader checking a paragraph against their
+ * intent cannot be expected to know that from the word "not".
+ */
+const CUSTOM_OP_LABELS: Record<DynamicListCustomOp, string> = {
+  eq: 'is',
+  neq: 'is not',
+  contains: 'contains',
+  gt: 'is more than',
+  lt: 'is less than',
+  set: 'is set',
+  unset: 'is not set',
+}
+
+/** The operators that take no value — the clause is about presence. */
+const PRESENCE_OPS: ReadonlySet<DynamicListCustomOp> = new Set(['set', 'unset'])
+
+/** One custom clause as a sentence fragment: `Plan is enterprise`. */
+const describeCustomClause = (
+  clause: DynamicListCustomClause,
+  names?: DynamicListRuleNames,
+): string => {
+  const field = named(clause.key, names?.fields)
+  const verb = CUSTOM_OP_LABELS[clause.op]
+  if (clause.op === 'set' || clause.op === 'unset') return `${field} ${verb}`
+  const value = String(clause.value ?? '')
+  return clause.op === 'neq'
+    ? `${field} ${verb} ${value} (a blank does not count)`
+    : `${field} ${verb} ${value}`
+}
 
 /** One AND-block, as clauses. The rule's own block and each branch share it. */
 function describeDimensions(
@@ -223,6 +277,37 @@ function describeDimensions(
         .join(', ')}.`,
     )
   }
+  /*
+   * THE CRM DIMENSIONS (AGL-2603). Each names people, stages and companies
+   * the way the pickers show them, never by id: a clause reading `uid-8f2a`
+   * is a clause nobody can check against their intent. The custom clauses
+   * are one sentence each, because each is its own condition and a reader
+   * adding a second one has narrowed the audience by exactly one sentence.
+   */
+  if (rule.ownerUids?.length) {
+    clauses.push(
+      `Owned by: ${rule.ownerUids
+        .map((uid) => named(uid, names?.members))
+        .join(', ')}.`,
+    )
+  }
+  if (rule.lifecycleStages?.length) {
+    clauses.push(
+      `In stage: ${rule.lifecycleStages
+        .map((stage) => CONTACT_LIFECYCLE_STAGE_LABELS[stage] ?? stage)
+        .join(', ')}.`,
+    )
+  }
+  if (rule.companyIds?.length) {
+    clauses.push(
+      `At company: ${rule.companyIds
+        .map((id) => named(id, names?.companies))
+        .join(', ')}.`,
+    )
+  }
+  for (const clause of rule.custom ?? []) {
+    clauses.push(`${describeCustomClause(clause, names)}.`)
+  }
   return clauses
 }
 
@@ -321,6 +406,20 @@ export interface DynamicListRuleDraft {
   notClickedForDays: string
   inListIds: string[]
   notInListIds: string[]
+  /*
+   * THE CRM DIMENSIONS (AGL-2603), held as the rule holds them.
+   *
+   * These are picked, not typed — a uid from the roster, a stage from the
+   * fixed list, a company from a search — so there is no free-text
+   * intermediate state to preserve and the draft carries the ids. The custom
+   * clauses carry the TYPED value: a number field's control hands back a
+   * number and a checkbox's a boolean, so the value the sentences describe
+   * and the value the matcher compares are the same value.
+   */
+  ownerUids: string[]
+  lifecycleStages: ContactLifecycleStage[]
+  companyIds: string[]
+  custom: DynamicListCustomClause[]
 }
 
 export const EMPTY_RULE_DRAFT: DynamicListRuleDraft = {
@@ -343,6 +442,10 @@ export const EMPTY_RULE_DRAFT: DynamicListRuleDraft = {
   notClickedForDays: '',
   inListIds: [],
   notInListIds: [],
+  ownerUids: [],
+  lifecycleStages: [],
+  companyIds: [],
+  custom: [],
 }
 
 /** Comma-separated free text → the trimmed, non-empty values. */
@@ -417,6 +520,23 @@ export function ruleToDraft(rule: DynamicListRule): DynamicListRuleDraft {
     notClickedForDays: number((block) => block.engagement?.notClickedForDays),
     inListIds: list((block) => block.inListIds),
     notInListIds: list((block) => block.notInListIds),
+    ownerUids: list((block) => block.ownerUids),
+    lifecycleStages: list(
+      (block) => block.lifecycleStages,
+    ) as ContactLifecycleStage[],
+    companyIds: list((block) => block.companyIds),
+    // Clauses are objects, so the string-set dedupe above cannot hold them;
+    // two blocks carrying the same clause are one condition, keyed on its
+    // whole shape.
+    custom: (() => {
+      const seen = new Map<string, DynamicListCustomClause>()
+      for (const block of blocks) {
+        for (const clause of block.custom ?? []) {
+          seen.set(JSON.stringify(clause), clause)
+        }
+      }
+      return [...seen.values()]
+    })(),
   }
 }
 
@@ -504,6 +624,17 @@ function draftDimensions(draft: DynamicListRuleDraft): Record<string, unknown>[]
   if (draft.notInListIds.length) {
     blocks.push({ notInListIds: draft.notInListIds })
   }
+  if (draft.ownerUids.length) blocks.push({ ownerUids: draft.ownerUids })
+  if (draft.lifecycleStages.length) {
+    blocks.push({ lifecycleStages: draft.lifecycleStages })
+  }
+  if (draft.companyIds.length) blocks.push({ companyIds: draft.companyIds })
+  // One block PER CLAUSE, so that "any one of the filters below" reads each
+  // condition row as a filter of its own — the same grain the purchase
+  // figures get. `mergeDimensions` folds them back into one list for `all`.
+  // An unfinished row (no value where one is compared) is dropped by the
+  // normalizer at the end, so it is never a condition until it is one.
+  for (const clause of draft.custom) blocks.push({ custom: [clause] })
   return blocks
 }
 
@@ -516,11 +647,14 @@ function mergeDimensions(
     for (const [key, value] of Object.entries(block)) {
       // `behavior` and `engagement` arrive one leaf at a time, so they are
       // merged at depth. A shallow assign would keep only the last leaf of
-      // each and silently drop the other three.
+      // each and silently drop the other three. `custom` arrives one clause
+      // at a time for the same reason and is concatenated for the same one.
       merged[key] =
         key === 'behavior' || key === 'engagement'
           ? { ...((merged[key] as object) ?? {}), ...(value as object) }
-          : value
+          : key === 'custom'
+            ? [...((merged[key] as unknown[]) ?? []), ...(value as unknown[])]
+            : value
     }
   }
   return merged
@@ -590,6 +724,23 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
    * listen opens this one.
    */
   const siteCampaigns = useHostCampaigns(hostId, { enabled: true })
+  /*
+   * THE CRM PICKERS' OPTIONS (AGL-2603), read because this form is on screen
+   * — the same bargain the segments and the campaigns get, one section up.
+   *
+   * The team comes through the members route rather than the collection, so
+   * a collaborator scoped to one site can still assign an owner; the field
+   * definitions are one bounded read; the companies are a SEARCH and read
+   * nothing until something is typed.
+   */
+  const team = useOrgMemberOptions(scope[1], { enabled: true })
+  const fieldDefinitions = useOrgContactFields(scope)
+  const [companySearch, setCompanySearch] = useState('')
+  const companies = useOrgCompanyOptions({
+    scope,
+    search: companySearch,
+    selectedIds: draft.companyIds,
+  })
 
   /*
    * The saved segment the rule already names, even when the picker's window
@@ -626,14 +777,93 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
       campaigns: Object.fromEntries(
         siteCampaigns.options.map((option) => [option.value, option.label]),
       ),
+      members: Object.fromEntries(
+        team.options.map((option) => [option.uid, option.label]),
+      ),
+      companies: companies.names,
+      fields: Object.fromEntries(
+        fieldDefinitions.fields.map((field) => [field.key, field.label]),
+      ),
     }),
-    [listDocs, segments, siteCampaigns.options],
+    [
+      listDocs,
+      segments,
+      siteCampaigns.options,
+      team.options,
+      companies.names,
+      fieldDefinitions.fields,
+    ],
   )
+
+  /*
+   * A stored owner the roster no longer lists, and a stored field key no
+   * definition names, are offered as their own option — the segment picker's
+   * discipline, for the same reason: a `Select` whose value is not among its
+   * options renders empty, and a rule saved from that screen would lose the
+   * clause it was opened with. A team member who left still owns the
+   * contacts they were assigned until somebody reassigns them, and a retired
+   * field still holds every value written under it.
+   */
+  const ownerOptions = useMemo(() => {
+    const known = new Set(team.options.map((option) => option.uid))
+    return [
+      ...draft.ownerUids
+        .filter((uid) => !known.has(uid))
+        .map((uid) => ({ uid, label: uid })),
+      ...team.options,
+    ]
+  }, [team.options, draft.ownerUids])
+  const fieldOptions = useMemo(() => {
+    const known = new Set(fieldDefinitions.fields.map((field) => field.key))
+    return [
+      ...draft.custom
+        .filter((clause) => !known.has(clause.key))
+        .map((clause) => ({ key: clause.key, label: clause.key }))
+        .filter(
+          (entry, index, all) =>
+            all.findIndex((other) => other.key === entry.key) === index,
+        ),
+      ...fieldDefinitions.fields.map(({ key, label }) => ({ key, label })),
+    ]
+  }, [fieldDefinitions.fields, draft.custom])
+  /** The definition a clause's key names, when the org still has one. */
+  const definitionFor = (key: string) =>
+    fieldDefinitions.fields.find((field) => field.key === key)
 
   const set = <K extends keyof DynamicListRuleDraft>(
     key: K,
     value: DynamicListRuleDraft[K],
   ) => onChange({ ...draft, [key]: value })
+
+  /*
+   * THE CUSTOM-FIELD ROWS. A new row names the first definition with an
+   * empty value, so it is on screen and NOT yet a filter — `draftDimensions`
+   * hands it to the normalizer, which drops a valued operator with no value
+   * until the reader types one. Changing the field clears the value, because
+   * a value typed for a number field is not a value for the select that
+   * replaced it; changing the operator to a presence test removes it, so the
+   * stored clause carries no value the sentence does not read.
+   */
+  const addClause = () => {
+    const first = fieldOptions[0]
+    if (!first) return
+    set('custom', [...draft.custom, { key: first.key, op: 'eq', value: '' }])
+  }
+  const updateClause = (index: number, patch: Partial<DynamicListCustomClause>) =>
+    set(
+      'custom',
+      draft.custom.map((clause, at) => {
+        if (at !== index) return clause
+        const next = { ...clause, ...patch }
+        if (PRESENCE_OPS.has(next.op)) delete next.value
+        return next
+      }),
+    )
+  const removeClause = (index: number) =>
+    set(
+      'custom',
+      draft.custom.filter((_, at) => at !== index),
+    )
 
   /** A multi-select hands back a string when only one option is chosen. */
   const asArray = <T extends string,>(value: unknown): T[] =>
@@ -820,6 +1050,267 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
           ))}
         </TextField>
       </Stack>
+      {/*
+        THE CRM DIMENSIONS (AGL-2603), under Contacts because that is the only
+        silo that carries them. Each is PICKED rather than typed — a person
+        from the roster, a stage from the fixed list, a company from a search
+        — so the rule stores ids and the sentences above read them back as
+        names. An absent value matches none of them: "owned by Ada" is not
+        satisfied by a contact nobody owns, and the helper text says so where
+        a reader would otherwise assume the blank was included.
+       */}
+      <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+        <TextField
+          select
+          size="small"
+          label="Owned by"
+          value={draft.ownerUids}
+          onChange={(event) => set('ownerUids', asArray<string>(event.target.value))}
+          slotProps={{
+            select: {
+              multiple: true,
+              renderValue: (selected) =>
+                (selected as string[])
+                  .map((uid) => named(uid, names.members))
+                  .join(', '),
+            },
+          }}
+          error={Boolean(team.error)}
+          helperText={team.error ?? 'Any of these team members. Unowned contacts are left out.'}
+          sx={{ minWidth: 220 }}
+        >
+          {ownerOptions.map((option) => (
+            <MenuItem key={option.uid} value={option.uid}>
+              {option.label}
+            </MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          select
+          size="small"
+          label="Lifecycle stage"
+          value={draft.lifecycleStages}
+          onChange={(event) =>
+            set(
+              'lifecycleStages',
+              asArray<ContactLifecycleStage>(event.target.value),
+            )
+          }
+          slotProps={{
+            select: {
+              multiple: true,
+              renderValue: (selected) =>
+                (selected as ContactLifecycleStage[])
+                  .map((stage) => CONTACT_LIFECYCLE_STAGE_LABELS[stage] ?? stage)
+                  .join(', '),
+            },
+          }}
+          helperText="Any of these stages"
+          sx={{ minWidth: 200 }}
+        >
+          {CONTACT_LIFECYCLE_STAGES.map((stage) => (
+            <MenuItem key={stage} value={stage}>
+              {CONTACT_LIFECYCLE_STAGE_LABELS[stage]}
+            </MenuItem>
+          ))}
+        </TextField>
+        {/*
+          A SEARCH, not a list: the org's companies are the collection that
+          outgrows any dropdown, so nothing is read until something is typed
+          and the hook answers one screen of prefix matches. The chips keep
+          their names through the hook's own memory of every id it has seen,
+          which is what lets a rule reopened months later still say "Acme".
+         */}
+        <Autocomplete
+          multiple
+          size="small"
+          options={companies.hits}
+          value={draft.companyIds.map((id) => ({
+            id,
+            label: companies.names[id] ?? id,
+          }))}
+          getOptionLabel={(option) => option.label}
+          isOptionEqualToValue={(option, chosen) => option.id === chosen.id}
+          // The query already narrowed the hits; a second, client-side
+          // filter on the label would hide a match whose stored name differs
+          // from its search key.
+          filterOptions={(options) => options}
+          inputValue={companySearch}
+          onInputChange={(_event, value, reason) => {
+            if (reason !== 'reset') setCompanySearch(value)
+          }}
+          onChange={(_event, value) =>
+            set(
+              'companyIds',
+              value.map((option) => option.id),
+            )
+          }
+          loading={companies.searching}
+          noOptionsText={
+            companySearch ? 'No company by that name' : 'Type to search companies'
+          }
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label="At company"
+              helperText="Any of these companies"
+            />
+          )}
+          sx={{ minWidth: 260, flexGrow: 1, maxWidth: 420 }}
+        />
+      </Stack>
+      {/*
+        One row per condition, and every row must hold — a second condition
+        NARROWS, which is what a second box means everywhere else on this
+        form; the OR is the "any one of the filters" mode above, where each
+        row becomes a branch of its own. The value control is typed by the
+        field's definition, so a number field hands the matcher a number and
+        a choice field offers its own options, and a presence test asks for
+        no value at all.
+       */}
+      {draft.custom.map((clause, index) => {
+        const definition = definitionFor(clause.key)
+        const valueText = String(clause.value ?? '')
+        return (
+          <Stack
+            key={index}
+            direction="row"
+            spacing={1}
+            useFlexGap
+            sx={{ flexWrap: 'wrap', alignItems: 'flex-start' }}
+          >
+            <TextField
+              select
+              size="small"
+              label="Field"
+              value={clause.key}
+              onChange={(event) =>
+                updateClause(index, { key: event.target.value, value: '' })
+              }
+              sx={{ minWidth: 180 }}
+            >
+              {fieldOptions.map((option) => (
+                <MenuItem key={option.key} value={option.key}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              select
+              size="small"
+              label="Condition"
+              value={clause.op}
+              onChange={(event) =>
+                updateClause(index, {
+                  op: event.target.value as DynamicListCustomOp,
+                })
+              }
+              sx={{ minWidth: 160 }}
+            >
+              {DYNAMIC_LIST_CUSTOM_OPS.map((op) => (
+                <MenuItem key={op} value={op}>
+                  {CUSTOM_OP_LABELS[op]}
+                </MenuItem>
+              ))}
+            </TextField>
+            {PRESENCE_OPS.has(clause.op) ? null : definition?.type === 'select' ? (
+              <TextField
+                select
+                size="small"
+                label="Value"
+                value={valueText}
+                onChange={(event) =>
+                  updateClause(index, { value: event.target.value })
+                }
+                sx={{ minWidth: 180 }}
+              >
+                {(definition.options ?? []).map((option) => (
+                  <MenuItem key={option} value={option}>
+                    {option}
+                  </MenuItem>
+                ))}
+              </TextField>
+            ) : definition?.type === 'checkbox' ? (
+              <TextField
+                select
+                size="small"
+                label="Value"
+                value={
+                  clause.value === true
+                    ? 'true'
+                    : clause.value === false
+                      ? 'false'
+                      : ''
+                }
+                onChange={(event) =>
+                  updateClause(index, { value: event.target.value === 'true' })
+                }
+                sx={{ minWidth: 140 }}
+              >
+                <MenuItem value="true">{'Checked'}</MenuItem>
+                <MenuItem value="false">{'Not checked'}</MenuItem>
+              </TextField>
+            ) : definition?.type === 'number' ? (
+              <TextField
+                type="number"
+                size="small"
+                label="Value"
+                value={valueText}
+                onChange={(event) => {
+                  // A number field stores a NUMBER, so the matcher compares
+                  // 10 with 9 and not "10" with "9"; half-typed text stays
+                  // text until it parses, rather than becoming NaN.
+                  const text = event.target.value
+                  const parsed = Number(text)
+                  updateClause(index, {
+                    value: text.trim() !== '' && Number.isFinite(parsed) ? parsed : text,
+                  })
+                }}
+                sx={{ minWidth: 140 }}
+              />
+            ) : (
+              <TextField
+                type={definition?.type === 'date' ? 'date' : 'text'}
+                size="small"
+                label="Value"
+                value={valueText}
+                onChange={(event) =>
+                  updateClause(index, { value: event.target.value })
+                }
+                slotProps={
+                  definition?.type === 'date'
+                    ? { inputLabel: { shrink: true } }
+                    : undefined
+                }
+                sx={{ minWidth: 180 }}
+              />
+            )}
+            <Button size="small" onClick={() => removeClause(index)}>
+              {'Remove'}
+            </Button>
+          </Stack>
+        )
+      })}
+      <Box>
+        <Button
+          size="small"
+          variant="outlined"
+          disabled={!fieldOptions.length}
+          onClick={addClause}
+        >
+          {'Add a field condition'}
+        </Button>
+        {fieldDefinitions.ready && !fieldDefinitions.fields.length ? (
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ display: 'block', mt: 0.5 }}
+          >
+            {'This workspace has no custom contact fields yet. Define them ' +
+              'under CRM → Fields to filter on them here.'}
+          </Typography>
+        ) : null}
+      </Box>
 
       <Typography variant="overline" color="text.secondary">
         {'Purchase history'}

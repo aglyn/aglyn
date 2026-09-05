@@ -30,8 +30,8 @@ import {
   meterHostEmail,
   renderHostEmailWithTokens,
   sendGa4Purchase,
-  upsertHostContact,
 } from '@aglyn/tenant-data-admin'
+import { captureHostContact } from '@aglyn/tenant-runtime'
 import {
   bookingPlatformNetCents,
   shouldSendBookingPlatformPurchase,
@@ -319,7 +319,7 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
         // The amount is `amount_total`, the money that moved, per AGL-1698 and
         // AGL-1711 — the booking document stores no price to re-derive it from.
         if (booking['email']) {
-          void upsertHostContact({
+          void captureHostContact({
             hostId: String(hostId),
             email: booking['email'],
             ...(booking['name'] ? { name: String(booking['name']) } : {}),

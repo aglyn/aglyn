@@ -114,6 +114,27 @@ export function isContactLifecycleStage(
 }
 
 /**
+ * The stage a person is in once they have BOUGHT something (AGL-2596).
+ *
+ * `customer` when they had no stage or an earlier one; whatever they already
+ * had otherwise. The order door asks this on every purchase, and "never
+ * downgrades" is the whole contract: an `evangelist` who buys again is still
+ * an evangelist, and `other` — the deliberate stage a business picked for a
+ * funnel step none of the names fit — sits after `customer` in the list
+ * precisely so a sale cannot overwrite it. A value that is not a stage at all
+ * reads as absent, because a checkout is not the place to preserve a typo.
+ */
+export function contactLifecycleStageAfterPurchase(
+  current: unknown,
+): ContactLifecycleStage {
+  if (!isContactLifecycleStage(current)) return 'customer'
+  const order: readonly string[] = CONTACT_LIFECYCLE_STAGES
+  return order.indexOf(current) < order.indexOf('customer')
+    ? 'customer'
+    : current
+}
+
+/**
  * What a custom contact field may hold.
  *
  * Scalars only. A field is something a merchant filters and exports on, and
@@ -227,7 +248,39 @@ export interface CrmDeal extends CrmScoped {
   createdByUid?: string
 }
 
-export type CrmTaskKind = 'call' | 'email' | 'meeting' | 'todo'
+/**
+ * What a task is, as a fixed list.
+ *
+ * A const array rather than a bare union because two surfaces have to
+ * enumerate it — the task form's picker and the automation step that creates
+ * a task without a form — and a union cannot be iterated at run time.
+ */
+export const CRM_TASK_KINDS = ['call', 'email', 'meeting', 'todo'] as const
+export type CrmTaskKind = (typeof CRM_TASK_KINDS)[number]
+
+export const CRM_TASK_KIND_LABELS: Record<CrmTaskKind, string> = {
+  call: 'Call',
+  email: 'Email',
+  meeting: 'Meeting',
+  todo: 'To-do',
+}
+
+export function isCrmTaskKind(value: unknown): value is CrmTaskKind {
+  return (
+    typeof value === 'string' &&
+    (CRM_TASK_KINDS as readonly string[]).includes(value)
+  )
+}
+
+/**
+ * How far ahead an automation may date a task, in days.
+ *
+ * A year, because the longest follow-up anybody schedules from a trigger is
+ * an annual renewal check, and a task dated further out than that is one
+ * nobody will find on the list when it comes due.
+ */
+export const CRM_TASK_MAX_DUE_DAYS = 365
+
 export type CrmTaskPriority = 'low' | 'normal' | 'high'
 export type CrmTaskStatus = 'open' | 'done'
 
@@ -240,8 +293,24 @@ export interface CrmTask extends CrmScoped {
   status: CrmTaskStatus
   dueAtMs?: number | null
   completedAtMs?: number | null
+  /**
+   * Who ticked it off, which is not always the assignee: a manager closing
+   * out a departed teammate's list completes tasks that were never theirs.
+   * Stamped by the `crm/task-complete` route beside `completedAtMs`.
+   */
+  completedByUid?: string
   assigneeUid?: string
+  /**
+   * The person who made it, or `''` when no person did.
+   *
+   * An automation has no uid, and inventing one — the action's id, a
+   * sentinel — would put a value into a field every reader resolves as a
+   * member. The empty string says "nobody", and {@link sourceActionId}
+   * beside it says what.
+   */
   createdByUid: string
+  /** The automation that created it (AGL-2605), when a person did not. */
+  sourceActionId?: string
   contactId?: string
   companyId?: string
   dealId?: string
@@ -303,6 +372,7 @@ export interface CrmActivity extends CrmScoped {
   body: string
   /** When it happened, which is not when it was logged. */
   atMs: number
+  /** Who logged it, or `''` for an automation — see `CrmTask.createdByUid`. */
   byUid: string
   /**
    * The author's display name as it read when the activity was logged.
@@ -316,6 +386,8 @@ export interface CrmActivity extends CrmScoped {
    * signed with.
    */
   byName?: string
+  /** The automation that logged it (AGL-2605), when a person did not. */
+  sourceActionId?: string
   contactId?: string
   companyId?: string
   dealId?: string
@@ -701,4 +773,114 @@ export function crmScopeTokens(
  */
 export function crmReadTokens(group: ConsentGroup): ScopeToken[] {
   return [ORG_SCOPE_TOKEN, ...consentGroupScope(group)].slice(0, MAX_SCOPE_HOSTS)
+}
+
+/*==========================================
+ * LEADS (AGL-2608).
+ *
+ * A lead is NOT one of the six collections above. It lives at
+ * `hosts/{hostId}/leads/{personKey}`, written by `addHostLead` when a
+ * visitor signs up, books or submits a form, and it is host-scoped by PATH:
+ * no `visibleTo`, no facet map, private to the site that captured it. What
+ * the CRM adds is the working state a sales team keeps on such a capture —
+ * a status, an owner, notes — and the record of its conversion into the
+ * contact, company and deal that live in the org collections.
+ *
+ * These fields are typed here rather than beside `addHostLead` because the
+ * writer of the capture and the reader of the working state are different
+ * programs: the capture door stamps none of them, and a lead that predates
+ * this block carries none of them, which is why every field is optional and
+ * {@link crmLeadStatus} reads an absent status as `new`.
+ *=========================================*/
+
+/**
+ * Where a lead stands, in the order a person works one.
+ *
+ * `qualified` is the CONVERTED state — a lead becomes a contact by being
+ * qualified, and the conversion stamps `convertedContactId` beside it — and
+ * `unqualified` is the closed-without-conversion state with its reason. A
+ * fixed list rather than free text for the reason the lifecycle stages are:
+ * the section filters on it and a report counts by it.
+ */
+export const CRM_LEAD_STATUSES = [
+  'new',
+  'working',
+  'qualified',
+  'unqualified',
+] as const
+
+export type CrmLeadStatus = (typeof CRM_LEAD_STATUSES)[number]
+
+/** How a lead status reads on screen — typed so a status cannot ship unlabeled. */
+export const CRM_LEAD_STATUS_LABELS: Record<CrmLeadStatus, string> = {
+  new: 'New',
+  working: 'Working',
+  qualified: 'Qualified',
+  unqualified: 'Unqualified',
+}
+
+/**
+ * The statuses a lead still needs somebody's attention in — what the Leads
+ * section shows by default, so the list opens on the work rather than on
+ * the history.
+ */
+export const CRM_LEAD_OPEN_STATUSES: readonly CrmLeadStatus[] = ['new', 'working']
+
+export function isCrmLeadStatus(value: unknown): value is CrmLeadStatus {
+  return (
+    typeof value === 'string' &&
+    (CRM_LEAD_STATUSES as readonly string[]).includes(value)
+  )
+}
+
+/**
+ * The working state the CRM writes onto a lead document, beside what the
+ * capture door wrote (`email`, `name`, `sources`, `submissionCount`,
+ * `firstSeenAtMs`, `lastSeenAtMs`, the consent map).
+ *
+ * The four `converted*`/`dealId`/`companyId` fields are stamped ONLY by the
+ * `crm/lead-convert` server route, in one write after the contact exists, so
+ * a lead that carries `convertedContactId` names a contact that was really
+ * created and a lead without it was never converted, whatever its status
+ * says. `unqualifiedReason` travels with `status: 'unqualified'` and is the
+ * one free-text field a report will want to read back.
+ */
+export interface CrmLeadFields {
+  status?: CrmLeadStatus
+  /** The team member working the lead. */
+  ownerUid?: string
+  notes?: string
+  unqualifiedReason?: string
+  /** `orgs/{orgId}/contacts/{contactId}` — the person this lead became. */
+  convertedContactId?: string
+  convertedAtMs?: number
+  /** The deal the conversion opened, when the converter asked for one. */
+  dealId?: string
+  /** The company the conversion created or linked, when it named one. */
+  companyId?: string
+}
+
+/**
+ * A lead's status as the list and the filter should read it.
+ *
+ * `new` for a lead that carries no status at all — every lead captured
+ * before the CRM existed, and every lead the capture door writes today,
+ * because `addHostLead` stamps none. Reading the absence as `new` is what
+ * lets the section open on the leads a site already holds rather than on an
+ * empty list until each one has been touched once. A stored value the union
+ * does not name also reads as `new`: it is a document some other writer
+ * produced, and refusing to list it would hide a person.
+ */
+export function crmLeadStatus(
+  lead: Pick<CrmLeadFields, 'status'> | null | undefined,
+): CrmLeadStatus {
+  const status = lead?.status
+  return isCrmLeadStatus(status) ? status : 'new'
+}
+
+/** Whether a lead still needs working — see {@link CRM_LEAD_OPEN_STATUSES}. */
+export function isCrmLeadOpen(
+  lead: Pick<CrmLeadFields, 'status'> | null | undefined,
+): boolean {
+  return CRM_LEAD_OPEN_STATUSES.includes(crmLeadStatus(lead))
 }

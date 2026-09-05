@@ -21,13 +21,26 @@ import {
   ACTION_MAX_STEPS,
   type AglynOrgBilling,
   checkEntitlement,
+  CONTACT_LIFECYCLE_STAGE_LABELS,
+  CONTACT_LIFECYCLE_STAGES,
+  CONTACT_TAG_MAX_LENGTH,
+  type ContactLifecycleStage,
   createResourceUid,
+  CRM_ACTIVITY_KIND_LABELS,
+  CRM_ACTIVITY_KINDS,
+  CRM_TASK_KIND_LABELS,
+  CRM_TASK_KINDS,
+  CRM_TASK_MAX_DUE_DAYS,
+  type CrmActivityKind,
+  type CrmTaskKind,
   ELEMENT_SCOPED_SITE_EVENTS,
   HOST_ACTION_STEP_LABELS,
   HOST_EVENT_TYPES,
   type HostAction,
   type HostActionStep,
   type HostActionStepType,
+  hostEventLabel,
+  hostEventPayloadHint,
   isSiteEventType,
   normalizeTriggerConditions,
   pluginDocsHelp,
@@ -198,6 +211,20 @@ function defaultStep(type: HostActionStepType): HostActionStep {
       return { type, datasetId: '' }
     case 'assignCampaign':
       return { type, campaignId: '' }
+    // The CRM steps (AGL-2605). A stage and a kind start on a real entry of
+    // their vocabulary rather than blank, so the select never shows a value
+    // the validator would refuse; the free-text fields start empty because
+    // there is nothing sensible to guess for them.
+    case 'setContactStage':
+      return { type, lifecycleStage: 'lead' }
+    case 'addContactTag':
+      return { type, tag: '' }
+    case 'assignContactOwner':
+      return { type, ownerEmail: '' }
+    case 'createCrmTask':
+      return { type, title: '', kind: 'call', dueInDays: 1 }
+    case 'logCrmActivity':
+      return { type, kind: 'note', body: '' }
     // A day, because a new wait is almost always part of a series measured in
     // days and a default of one minute reads as a placeholder rather than a
     // choice. Both are inside the validated band, so neither can be saved
@@ -809,7 +836,7 @@ export function HostActionsCard(props: {
                 {action.name}
               </Typography>
               <Typography variant="caption" color="text.secondary" noWrap>
-                {`on ${action.trigger?.event}` +
+                {`on ${hostEventLabel(action.trigger?.event)}` +
                   ` · ${(action.steps ?? [])
                     .map(
                       (step: any) =>
@@ -981,7 +1008,7 @@ export function HostActionsCard(props: {
             >
               {HOST_EVENT_TYPES.map((eventType) => (
                 <MenuItem key={eventType} value={eventType}>
-                  {eventType}
+                  {hostEventLabel(eventType)}
                 </MenuItem>
               ))}
               {SITE_EVENT_TYPES.map((eventType) => (
@@ -1008,6 +1035,10 @@ export function HostActionsCard(props: {
               <TextField
                 label="Filter (optional)"
                 placeholder={'path == "/pricing"'}
+                // What the expression — and the conditions below — can name
+                // for this event; nothing for an event whose payload is not
+                // written down, rather than a guess.
+                helperText={hostEventPayloadHint(draft?.trigger.event) ?? undefined}
                 value={draft?.trigger.filter ?? ''}
                 onChange={(event) =>
                   patch((previous) => ({
@@ -1858,6 +1889,213 @@ export function HostActionsCard(props: {
                       </MenuItem>
                     ))}
                   </TextField>
+                ) : step.type === 'setContactStage' ? (
+                  // The CRM steps (AGL-2605). Each acts on the contact the
+                  // event names — by id when the door knew it, by the email
+                  // in the payload otherwise — so none of them asks who.
+                  <TextField
+                    select
+                    label="Stage"
+                    value={(step as any).lifecycleStage ?? ''}
+                    onChange={(event) =>
+                      patch((previous) => ({
+                        ...previous,
+                        steps: previous.steps.map((s, index2) =>
+                          index2 === index && s.type === 'setContactStage'
+                            ? {
+                                ...s,
+                                lifecycleStage: event.target
+                                  .value as ContactLifecycleStage,
+                              }
+                            : s,
+                        ),
+                      }))
+                    }
+                    size="small"
+                    sx={{ minWidth: 200 }}
+                  >
+                    {CONTACT_LIFECYCLE_STAGES.map((stage) => (
+                      <MenuItem key={stage} value={stage}>
+                        {CONTACT_LIFECYCLE_STAGE_LABELS[stage]}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                ) : step.type === 'addContactTag' ? (
+                  <TextField
+                    label="Tag"
+                    value={(step as any).tag ?? ''}
+                    onChange={(event) =>
+                      patch((previous) => ({
+                        ...previous,
+                        steps: previous.steps.map((s, index2) =>
+                          index2 === index
+                            ? {
+                                ...s,
+                                tag: event.target.value.slice(
+                                  0,
+                                  CONTACT_TAG_MAX_LENGTH,
+                                ),
+                              }
+                            : s,
+                        ),
+                      }))
+                    }
+                    size="small"
+                    sx={{ flex: 1 }}
+                  />
+                ) : step.type === 'assignContactOwner' ? (
+                  <>
+                    <TextField
+                      label="Owner’s email"
+                      type="email"
+                      value={(step as any).ownerEmail ?? ''}
+                      onChange={(event) =>
+                        patch((previous) => ({
+                          ...previous,
+                          steps: previous.steps.map((s, index2) =>
+                            index2 === index
+                              ? { ...s, ownerEmail: event.target.value }
+                              : s,
+                          ),
+                        }))
+                      }
+                      size="small"
+                      sx={{ flex: 1 }}
+                    />
+                    <Typography variant="caption" color="text.secondary">
+                      {'Somebody on your team; matched when the automation runs.'}
+                    </Typography>
+                  </>
+                ) : step.type === 'createCrmTask' ? (
+                  <>
+                    <TextField
+                      label="Title"
+                      value={(step as any).title ?? ''}
+                      onChange={(event) =>
+                        patch((previous) => ({
+                          ...previous,
+                          steps: previous.steps.map((s, index2) =>
+                            index2 === index
+                              ? { ...s, title: event.target.value }
+                              : s,
+                          ),
+                        }))
+                      }
+                      size="small"
+                      sx={{ flex: 1 }}
+                    />
+                    <TextField
+                      select
+                      label="Kind"
+                      value={(step as any).kind ?? ''}
+                      onChange={(event) =>
+                        patch((previous) => ({
+                          ...previous,
+                          steps: previous.steps.map((s, index2) =>
+                            index2 === index && s.type === 'createCrmTask'
+                              ? { ...s, kind: event.target.value as CrmTaskKind }
+                              : s,
+                          ),
+                        }))
+                      }
+                      size="small"
+                      sx={{ minWidth: 120 }}
+                    >
+                      {CRM_TASK_KINDS.map((kind) => (
+                        <MenuItem key={kind} value={kind}>
+                          {CRM_TASK_KIND_LABELS[kind]}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                    <TextField
+                      type="number"
+                      label="Due in (days)"
+                      value={(step as any).dueInDays ?? ''}
+                      onChange={(event) =>
+                        patch((previous) => ({
+                          ...previous,
+                          steps: previous.steps.map((s, index2) =>
+                            index2 === index
+                              ? {
+                                  ...s,
+                                  dueInDays: Math.min(
+                                    CRM_TASK_MAX_DUE_DAYS,
+                                    Math.max(0, Number(event.target.value)),
+                                  ),
+                                }
+                              : s,
+                          ),
+                        }))
+                      }
+                      size="small"
+                      sx={{ width: 130 }}
+                    />
+                    <TextField
+                      label="Assignee’s email (optional)"
+                      type="email"
+                      value={(step as any).assigneeEmail ?? ''}
+                      onChange={(event) =>
+                        patch((previous) => ({
+                          ...previous,
+                          steps: previous.steps.map((s, index2) =>
+                            index2 === index
+                              ? { ...s, assigneeEmail: event.target.value }
+                              : s,
+                          ),
+                        }))
+                      }
+                      size="small"
+                      sx={{ flex: 1 }}
+                      helperText="Blank gives it to the contact’s owner."
+                    />
+                  </>
+                ) : step.type === 'logCrmActivity' ? (
+                  <>
+                    <TextField
+                      select
+                      label="Kind"
+                      value={(step as any).kind ?? ''}
+                      onChange={(event) =>
+                        patch((previous) => ({
+                          ...previous,
+                          steps: previous.steps.map((s, index2) =>
+                            index2 === index && s.type === 'logCrmActivity'
+                              ? {
+                                  ...s,
+                                  kind: event.target.value as CrmActivityKind,
+                                }
+                              : s,
+                          ),
+                        }))
+                      }
+                      size="small"
+                      sx={{ minWidth: 120 }}
+                    >
+                      {CRM_ACTIVITY_KINDS.map((kind) => (
+                        <MenuItem key={kind} value={kind}>
+                          {CRM_ACTIVITY_KIND_LABELS[kind]}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                    <TextField
+                      label="What happened"
+                      value={(step as any).body ?? ''}
+                      onChange={(event) =>
+                        patch((previous) => ({
+                          ...previous,
+                          steps: previous.steps.map((s, index2) =>
+                            index2 === index
+                              ? { ...s, body: event.target.value }
+                              : s,
+                          ),
+                        }))
+                      }
+                      size="small"
+                      multiline
+                      maxRows={3}
+                      sx={{ flex: 1 }}
+                    />
+                  </>
                 ) : step.type === 'wait' || step.type === 'waitForEvent' ? (
                   <>
                     {step.type === 'waitForEvent' ? (
@@ -1880,7 +2118,7 @@ export function HostActionsCard(props: {
                       >
                         {HOST_EVENT_TYPES.map((option) => (
                           <MenuItem key={option} value={option}>
-                            {option}
+                            {hostEventLabel(option)}
                           </MenuItem>
                         ))}
                       </TextField>

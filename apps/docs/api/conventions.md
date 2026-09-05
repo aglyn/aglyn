@@ -58,12 +58,13 @@ back with 60 rows — or with none — and `has_more: true`. The full list:
 | [Orders](resources/orders.md) `?channel=online` | `online` is the default rather than a stored value, so older orders carry no `channel` field to match. |
 | [Contacts](resources/contacts.md#combined-filter) `?email=` **with** `?tag=` | `email` narrows the query; `tag` is checked on the result. |
 | [Form submissions](resources/form-submissions.md#read-filter) `?form=` or `?formId=` **with** `?read=` | The form filter narrows the query; `read` is checked on the result. |
+| [Contacts](resources/contacts.md#crm-filters) `?lifecycleStage=` or `?ownerUid=` | Both live on a per-site profile that cannot be queried organization-wide, so they are always checked on the result. |
+| Every CRM list — [companies](resources/companies.md), [deals](resources/deals.md), [tasks](resources/tasks.md), [activities](resources/activities.md) — with **two or more** filters, or **any** filter beside `?updatedAfter=` | The first filter in the resource page's order narrows the query; the rest are checked on the result. |
 
-The last two share one cause, and it is worth knowing because it predicts the next
-one: **only one filter can narrow the query itself.** Every list here is ordered by
-record id, so a second filter would need a composite index built specifically for that
-pair. Used alone, each of those filters narrows the query directly and pages come back
-full.
+These share one cause, and it is worth knowing because it predicts the next one:
+**only one filter can narrow the query itself.** Every list here is ordered by record
+id, so a second filter would need a composite index built specifically for that pair.
+Used alone, each of those filters narrows the query directly and pages come back full.
 
 The loop that gets this right is the one that stops on the cursor, not on the count:
 
@@ -112,10 +113,30 @@ This is the single most surprising thing about the API, so plan for it:
 
 - Paging start-to-finish gives you every item exactly once. That's what cursors
   guarantee, and it's what a full sync needs.
-- Page 1 is **not** "the 25 newest". There is no `sort` or `order` param, and no
-  filter on `created`/`updated`.
+- Page 1 is **not** "the 25 newest". There is no `sort` or `order` param, and — on
+  every list but the CRM ones — no filter on `created`/`updated`.
 - To find recent changes, page everything and compare `updated` yourself. To keep a
-  copy in sync, store the ids you've seen.
+  copy in sync, store the ids you've seen. The CRM lists are the exception, below.
+
+#### The CRM lists can be walked by `updated` {#updated-after}
+
+[Companies](resources/companies.md), [pipelines](resources/pipelines.md),
+[deals](resources/deals.md), [tasks](resources/tasks.md) and
+[activities](resources/activities.md) take `?updatedAfter=`, an ISO 8601 instant with
+an offset (`2026-09-01T00:00:00Z`; a bare date is a `400`, because midnight in whose
+zone is not a question we can answer). It changes two things at once:
+
+- **The list is ordered by `updated`, ascending** — oldest change first — then by id
+  for rows updated in the same instant. Page 1 is the earliest change since your
+  mark, and the last row of the last page is the new mark.
+- **Every other filter is checked on the page**, not in the query. A range on one
+  field beside an equality on another is the composite index above, so a filtered
+  sync can return [short pages](#short-pages); the cursor is still the only
+  termination signal.
+
+Records are stamped with `updated` when created, so a sweep that started before a
+create still picks the new record up. The cursor carries the timestamp; pass it back
+verbatim and do not mix pages with and without `updatedAfter`.
 
 ## Errors
 
@@ -136,7 +157,7 @@ errors add a `code` with the specific detail.
 | `403` | `insufficient_scope` | The key lacks the required scope (`code` is the scope). |
 | `404` | `not_found` | No such resource — or no such endpoint. |
 | `405` | `method_not_allowed` | Method not supported on that path; the `Allow` header lists what is. |
-| `409` | `conflict` | The request conflicts with current state. `code: "idempotency_in_progress"` — an earlier request with the same [`Idempotency-Key`](#idempotency) is still running. `code: "dataset_not_empty"` — the dataset you asked us to delete still holds records. `code: "contact_exists"` — that email is already a [contact](resources/contacts.md#contact-exists), and the message names its id. `code: "order_transition"` — the [order](resources/orders.md#which-moves-are-allowed) cannot move to the status you asked for from the one it is in, and the message names that status. |
+| `409` | `conflict` | The request conflicts with current state. `code: "idempotency_in_progress"` — an earlier request with the same [`Idempotency-Key`](#idempotency) is still running. `code: "dataset_not_empty"` — the dataset you asked us to delete still holds records. `code: "contact_exists"` — that email is already a [contact](resources/contacts.md#contact-exists), and the message names its id. `code: "company_exists"` — that domain is already a [company](resources/companies.md#company-exists), likewise naming its id. `code: "order_transition"` — the [order](resources/orders.md#which-moves-are-allowed) cannot move to the status you asked for from the one it is in, and the message names that status. |
 | `429` | `rate_limited` | [Rate limit](rate-limits.md) exceeded. |
 | `500` | `internal_error` | Something went wrong on our side. Safe to retry. |
 
@@ -188,7 +209,7 @@ site id for an hour; naming the plan is the answer they can act on.
 
 ## Idempotency
 
-Ten operations accept an **`Idempotency-Key`** header:
+Eighteen operations accept an **`Idempotency-Key`** header:
 
 | Operation | Key scoped to |
 | --- | --- |
@@ -202,16 +223,22 @@ Ten operations accept an **`Idempotency-Key`** header:
 | `DELETE /v1/contacts/{contactId}` | the organization |
 | `POST /v1/media` | the organization |
 | `POST /v1/sites/{siteId}/media` | that site |
+| `POST /v1/companies`, `DELETE /v1/companies/{companyId}` | the organization |
+| `POST /v1/deals`, `DELETE /v1/deals/{dealId}` | the organization |
+| `POST /v1/tasks`, `DELETE /v1/tasks/{taskId}` | the organization |
+| `POST /v1/activities`, `DELETE /v1/activities/{activityId}` | the organization |
 
-Five rows are organization-scoped. `POST /v1/sites` and `POST /v1/datasets` are
+Thirteen rows are organization-scoped. `POST /v1/sites` and `POST /v1/datasets` are
 because neither has an object to scope to yet — the site or dataset they create is
-the object. Both contact operations are because
-**contacts are organization-wide**: one list is shared by every site, so there is no
-narrower object to scope a key to. `POST /v1/media` is the same case — it writes the
-organization library, which every site shares; its site-scoped twin
-`POST /v1/sites/{siteId}/media` writes one site's own library and scopes to that site.
-Every other row is scoped to the object named in its own path — including
-`DELETE /v1/datasets/{datasetId}`, where the dataset being removed is still the scope.
+the object. Both contact operations, and every CRM operation, are because
+**contacts and the CRM are organization-wide**: one list is shared by every site, so
+there is no narrower object to scope a key to — a CRM create names a site, but the
+site is where the record will be *visible*, not a container the key lives in.
+`POST /v1/media` is the same case — it writes the organization library, which every
+site shares; its site-scoped twin `POST /v1/sites/{siteId}/media` writes one site's
+own library and scopes to that site. Every other row is scoped to the object named in
+its own path — including `DELETE /v1/datasets/{datasetId}`, where the dataset being
+removed is still the scope.
 
 Send the same key to retry safely — if the original succeeded, the same response
 comes back instead of a duplicate or a `404`:
@@ -253,8 +280,9 @@ curl -X POST https://app.aglyn.com/api/v1/datasets/ds_1/records \
   [`POST /v1/datasets`](resources/datasets.md#plan-gates) or
   [`POST /v1/contacts`](resources/contacts.md#plan-gates) goes away when someone
   upgrades, a `409 dataset_not_empty` goes away when the records are deleted, and a
-  `409 contact_exists` goes away when the duplicate is removed. A key burned on any of
-  them would mean the retry that should finally succeed replays the refusal forever.
+  `409 contact_exists` or [`409 company_exists`](resources/companies.md#company-exists)
+  goes away when the duplicate is removed. A key burned on any of them would mean the
+  retry that should finally succeed replays the refusal forever.
 - The mirror of that rule matters just as much: a create that **succeeds** is
   remembered, so a retry replays it *even when that create consumed the last slot in a
   plan's band*. This holds on every create that takes a key — datasets, records, and
@@ -295,7 +323,10 @@ response has to be distinguishable from a wrong id.
 `DELETE /v1/contacts/{contactId}` behaves the same way, scoped to the organization.
 Send a key on it as a matter of course: contact deletions are usually erasure requests
 running from a script, and "already erased" and "wrong id" prescribe very different
-next steps.
+next steps. The four CRM deletes — [companies](resources/companies.md),
+[deals](resources/deals.md), [tasks](resources/tasks.md),
+[activities](resources/activities.md) — behave the same way, scoped to the
+organization.
 
 `PATCH` doesn't take the header and doesn't need it. It merges the supplied `values`
 over the stored ones, so the same body twice lands the same state *and* returns the

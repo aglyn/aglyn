@@ -20,10 +20,12 @@ import * as Aglyn from '@aglyn/aglyn'
 import {
   checkContactQuota,
   contactMatchesSegment,
+  CONTACT_LIFECYCLE_STAGE_LABELS,
+  CONTACT_LIFECYCLE_STAGES,
   CONTACT_SOURCE_LABELS,
+  type ContactLifecycleStage,
   type ContactSegment,
   type ContactSource,
-  type HostContact,
   newResourceScopeFields,
   ORG_SCOPE_TOKEN,
   pluginDocsHelp,
@@ -31,62 +33,57 @@ import {
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
 import {
   gridFilterRequest,
-  hiddenFilterColumns,
   hiddenFilterVisibility,
-  listFilterColumn,
   type ListFilterRequest,
 } from '@aglyn/shared-ui-jsx/const/list-filter'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
-/*
- * The component path and NOT the marketing barrel: that barrel is the entry
- * point the tenant's loader imports to activate the plugin's SITE half, so a
- * console card named there ships to every published page. The Inbox reaches
- * the same module the same way.
- */
-import { default as ConversionAttribution } from '@aglyn/plugins-marketing/components/conversion-attribution.component'
-import type { GridColDef } from '@mui/x-data-grid'
-import {
-  CONTACT_LIST_FILTER_FIELDS,
-  CONTACT_LIST_FILTER_HEADERS,
-} from '../constants/contact-filters'
-import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { CONTACT_LIST_FILTER_FIELDS } from '../constants/contact-filters'
+import { type ContactRecord, contactRecordFromDoc } from '../model/contact-record'
+import { crmRoutes } from '../model/crm-routes'
+import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import ContactsBulkBar from './contacts-bulk-bar'
+import { ContactImportButton } from './contact-import-drawer'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   listFilterConstraints,
   useFirestore,
   useFirestoreCollection,
   useFirestoreDoc,
-  useHostCampaigns,
+  useHostActivityLogger,
   useOrgDataScope,
-  writeGuardedBySeed,
+  useUser,
 } from '@aglyn/tenant-feature-instance'
-import CampaignPicker from '@aglyn/shared-ui-email-campaigns/components/campaign-picker.component'
 import {
   Alert,
   Button,
   Chip,
+  FormControlLabel,
   MenuItem,
-  Drawer,
   Stack,
+  Switch,
   TextField,
   Typography,
 } from '@mui/material'
 import {
   addDoc,
-  arrayRemove,
   collection,
   deleteDoc,
-  deleteField,
   doc,
   getCountFromServer,
   limit,
   orderBy,
   query,
-  updateDoc,
   where,
 } from 'firebase/firestore'
+import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import RecentActivityFeed from './recent-activity-feed'
+import { CONTACT_FILTER_COLUMNS, contactListColumns } from './contact-list-columns'
+import NewContactDrawer, { type NewContactValues } from './new-contact-drawer'
+import { useCrmApi } from './use-crm-api'
+import { useOrgMembers } from './use-org-members'
+import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
+import { customFieldColumns } from './contact-custom-columns'
 
 /**
  * The shared labels, under the name this file has always called them.
@@ -95,14 +92,6 @@ import RecentActivityFeed from './recent-activity-feed'
  * editor and this filter cannot disagree about what `order` is called.
  */
 const SOURCE_LABELS = CONTACT_SOURCE_LABELS
-
-type ContactDoc = HostContact & {
-  $id: string
-  createdAt?: any
-  updatedAt?: any
-  /** The campaigns THIS holder has filed the person under. */
-  campaignIds?: string[]
-}
 
 /**
  * Why a refund found no contact to record itself against (AGL-2329).
@@ -143,14 +132,17 @@ const csvEscape = (value: unknown) => {
  * body is the v1 page unchanged, and it takes the shell's full prop bag so
  * nothing the v1 page read has to be threaded through the hub by name.
  */
-/**
- * The filterable fields that get a column. The rest of
- * `CONTACT_LIST_FILTER_FIELDS` still reaches the filter panel, hidden.
- */
-const CONTACT_FILTER_COLUMNS = ['name', 'sources', 'tags', 'updatedAt']
-
 export function ContactsPeopleSection(props: ConsolePluginPageProps) {
-  const { hostId, org, releaseFlag } = props
+  const { hostId, org, releaseFlag, basePath } = props
+  /*
+   * A row is a LINK now (AGL-2596): opening a person navigates to their own
+   * page rather than a drawer over the list, so the address can be pasted
+   * and every other CRM record can point at it. `basePath` is what the hub
+   * hands every section; the empty fallback only exists for a direct mount
+   * without the shell, where there is nowhere to navigate to anyway.
+   */
+  const routes = crmRoutes(basePath ?? '')
+  const router = useRouter()
   // Whether the audience overage on this page is actually INVOICED
   // (AGL-1662), and whether that question has been answered yet.
   //
@@ -175,7 +167,9 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
   // (AGL-1061), and for a host with no owning org — the pre-migration host
   // path this used to fall back to is gone (AGL-1050), so the CRM lists
   // nothing rather than listing somewhere else.
-  const { scope: dataScope } = useOrgDataScope({ hostId })
+  const { scope: dataScope, orgId } = useOrgDataScope({ hostId })
+  // The org's custom fields, for the optional columns below (AGL-2601).
+  const customFields = useContactFieldDefinitions(dataScope?.[1] ?? null)
   /*==========================================
    * THE CONTROLLER THIS PAGE IS SHOWING.
    *
@@ -197,7 +191,8 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
   )
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
-  const { confirm } = useConfirmationContext()
+  const { data: user } = useUser()
+  const logActivity = useHostActivityLogger(hostId)
 
   /*
    * The column filter, declared BEFORE the listener that reads it — the query
@@ -294,30 +289,20 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
    * own override wins, so one business renaming a person cannot change what
    * an unrelated business sees.
    */
-  const contacts: ContactDoc[] = useMemo(
+  const contacts: ContactRecord[] = useMemo(
     () =>
-      (contactDocs ?? []).map((row) => {
-        const facet = Aglyn.readContactFacet(row, consentGroup.groupId)
-        return {
-          ...row,
-          name: Aglyn.contactDisplayName(row, consentGroup.groupId),
-          sources: facet.sources,
-          tags: facet.tags ?? [],
-          notes: facet.notes ?? '',
-          interactions: Aglyn.interactionsForGroup(
-            facet.interactions,
-            consentGroup.hostIds,
-          ),
-          ltvCents: facet.ltvCents ?? 0,
-          ordersCount: facet.ordersCount ?? 0,
-          // Through the facet like every field beside it: campaign membership
-          // is this holder's own filing, and a read off the top of the
-          // document would be somebody else's.
-          campaignIds: Aglyn.readContactCampaignIds(row, consentGroup.groupId),
-        }
-      }),
+      (contactDocs ?? []).map((row) => contactRecordFromDoc(row, consentGroup)),
     [contactDocs, consentGroup],
   )
+  /*
+   * The roster, for the Owner column — read only once a loaded row actually
+   * carries an owner. A list of people nobody has assigned never pays for
+   * the team list, and the create drawer asks for it in its own right.
+   */
+  const [createOpen, setCreateOpen] = useState(false)
+  const members = useOrgMembers(orgId, {
+    enabled: createOpen || contacts.some((contact) => Boolean(contact.ownerUid)),
+  })
   /**
    * The HEAD-COUNT, read as a server-side aggregate (AGL-1706).
    *
@@ -428,6 +413,16 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
 
   const [sourceFilter, setSourceFilter] = useState<'' | ContactSource>('')
   const [tagFilter, setTagFilter] = useState('')
+  /*
+   * Stage and owner narrow the loaded window the way the segment controls
+   * do, and for the same reason one layer down: both live on the viewing
+   * group's FACET, and a facet path is per group, so neither is a field the
+   * query grammar can reach without an index per group. Ordinary orgs load
+   * their whole list into the window anyway; the caption below says what
+   * these narrow for the ones that do not.
+   */
+  const [stageFilter, setStageFilter] = useState<'' | ContactLifecycleStage>('')
+  const [assignedToMe, setAssignedToMe] = useState(false)
   const filterSegment: Pick<ContactSegment, 'tags' | 'sources'> = useMemo(
     () => ({
       tags: tagFilter
@@ -441,6 +436,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
   const filterActive = Boolean(
     filterSegment.tags?.length || filterSegment.sources?.length,
   )
+  const windowNarrowed = filterActive || Boolean(stageFilter) || assignedToMe
   /*
    * The SEGMENT controls still narrow in the browser, and say so below.
    *
@@ -454,106 +450,26 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
    * caption states rather than leaving to be discovered. The free-text search
    * that used to sit beside it is the grid's now, and reaches everything.
    */
+  const uid = user?.uid ?? ''
   const visible = useMemo(
     () =>
-      contacts.filter((contact) =>
-        contactMatchesSegment(contact, filterSegment),
+      contacts.filter(
+        (contact) =>
+          contactMatchesSegment(contact, filterSegment) &&
+          (!stageFilter || contact.lifecycleStage === stageFilter) &&
+          (!assignedToMe || (Boolean(uid) && contact.ownerUid === uid)),
       ),
-    [contacts, filterSegment],
+    [contacts, filterSegment, stageFilter, assignedToMe, uid],
   )
 
   /* One row grammar, the console's (AGL-2501) — the same table everywhere. */
-  const contactColumns: GridColDef[] = useMemo(
+  const contactColumns = useMemo(
     () => [
-      {
-        field: 'name',
-        headerName: 'Contact',
-        flex: 1.6,
-        minWidth: 240,
-        ...listFilterColumn(CONTACT_LIST_FILTER_FIELDS, 'name'),
-        valueGetter: (_value, row: any) => String(row.name || row.email || ''),
-        renderCell: ({ row }: any) => (
-          <Stack sx={{ justifyContent: 'center', height: '100%', lineHeight: 1.25 }}>
-            <Typography variant="body2" sx={{ lineHeight: 1.25 }}>
-              {row.name || row.email}
-            </Typography>
-            {row.name ? (
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                sx={{ lineHeight: 1.25 }}
-                noWrap
-              >
-                {row.email}
-              </Typography>
-            ) : null}
-          </Stack>
-        ),
-      },
-      {
-        field: 'sources',
-        headerName: 'Sources',
-        flex: 1,
-        minWidth: 160,
-        // A map of provenance flags, not a scalar — `sources.form == true` is
-        // queryable one key at a time, which is a menu of its own rather than
-        // a filter on this column.
-        filterable: false,
-        sortable: false,
-        valueGetter: (_value, row: any) =>
-          Object.keys(row.sources ?? {}).join(', '),
-        renderCell: ({ row }: any) => (
-          <Stack
-            direction="row"
-            spacing={0.5}
-            sx={{ alignItems: 'center', height: '100%' }}
-          >
-            {Object.keys(row.sources ?? {}).map((source) => (
-              <Chip
-                key={source}
-                label={SOURCE_LABELS[source as ContactSource] ?? source}
-                size="small"
-              />
-            ))}
-          </Stack>
-        ),
-      },
-      {
-        field: 'tags',
-        headerName: 'Tags',
-        flex: 1,
-        minWidth: 150,
-        ...listFilterColumn(CONTACT_LIST_FILTER_FIELDS, 'tags'),
-        sortable: false,
-        valueGetter: (_value, row: any) => (row.tags ?? []).join(', '),
-        renderCell: ({ row }: any) => (row.tags ?? []).slice(0, 3).join(', '),
-      },
-      {
-        field: 'updatedAt',
-        headerName: 'Last activity',
-        flex: 0.8,
-        minWidth: 150,
-        // `type: 'date'` is what gives the panel a date PICKER rather than a
-        // free-text box for a value the query reads as a day.
-        type: 'date',
-        ...listFilterColumn(CONTACT_LIST_FILTER_FIELDS, 'updatedAt'),
-        valueGetter: (_value, row: any) =>
-          row.updatedAt?.seconds ? new Date(row.updatedAt.seconds * 1000) : null,
-        renderCell: ({ row }: any) => (
-          <Typography variant="caption" color="text.secondary">
-            {row.interactions?.[0]
-              ? new Date(row.interactions[0].atMs).toLocaleDateString()
-              : '—'}
-          </Typography>
-        ),
-      },
-      ...hiddenFilterColumns(
-        CONTACT_LIST_FILTER_FIELDS,
-        CONTACT_FILTER_COLUMNS,
-        CONTACT_LIST_FILTER_HEADERS,
-      ),
+      ...contactListColumns({ memberName: members.memberName }),
+      // The org's custom fields as optional columns (AGL-2601).
+      ...customFieldColumns(customFields.active),
     ],
-    [],
+    [members.memberName, customFields.active],
   )
 
   const [segmentName, setSegmentName] = useState('')
@@ -609,208 +525,99 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
     enqueueSnackbar,
   ])
 
-  // Profile drawer with editable tags/notes.
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const selected = contacts.find((contact) => contact.$id === selectedId)
-  const [tagsDraft, setTagsDraft] = useState('')
-  const [notesDraft, setNotesDraft] = useState('')
-  /**
-   * The campaigns picked in the drawer.
+  /** The rows ticked for a bulk action (AGL-2603); the bar above the table acts on them. */
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  /*==========================================
+   * ADDING ONE PERSON BY HAND (AGL-2596).
    *
-   * Seeded on open like the tags and the notes beside it, and edited as a
-   * plain array rather than as text: a campaign is chosen from a list of the
-   * site's own, so there is no free-typed value to normalize.
-   */
-  const [campaignsDraft, setCampaignsDraft] = useState<string[]>([])
-  const openContact = useCallback((contact: ContactDoc) => {
-    setSelectedId(contact.$id)
-    setTagsDraft((contact.tags ?? []).join(', '))
-    setNotesDraft(contact.notes ?? '')
-    setCampaignsDraft(contact.campaignIds ?? [])
-  }, [])
-  /*
-   * The site's campaigns, read only while a contact is OPEN.
-   *
-   * One picker in one drawer, drawn nowhere in the table — so a merchant who
-   * came to look at their address book must not pay for the campaign list.
-   * The same bargain the topic catalog gets on the campaigns card.
-   */
-  const siteCampaigns = useHostCampaigns(hostId, {
-    enabled: Boolean(selectedId),
-  })
-  // Right-to-erasure (AGL-209): hard-deletes the contact doc. Source
-  // records (inbox, orders, bookings, members) live in their own managers.
-  const handleDeleteContact = useCallback(async () => {
-    if (!selectedId || !dataScope) return
-    const contact = contacts.find((item) => item.$id === selectedId)
-    const confirmed = await confirm({
-      title: 'Delete this contact?',
-      description:
-        `"${contact?.email ?? selectedId}" is removed from this site's ` +
-        'Contacts, along with its notes, tags and timeline. Other sites ' +
-        'that captured the same person keep their own records. Their form ' +
-        'submissions, orders, bookings, and membership records are ' +
-        'separate — delete those from their own pages if the request ' +
-        'covers them.',
-      confirmationText: 'Delete contact',
-      confirmationButtonProps: { color: 'error' },
-    })
-      .then(() => true)
-      .catch(() => false)
-    if (!confirmed) return
-    try {
-      /*==========================================
-       * DELETE IS A DETACH.
-       *
-       * The row is shared by every site that has captured this person. One
-       * holder removing them from their own CRM must not destroy another
-       * holder's relationship: their notes, their order history and their
-       * consent are theirs, and this holder never had a claim on any of it.
-       *
-       * So this drops THIS group's facet, its consent entries, its capture
-       * attribution and its scope tokens, and deletes the document only when
-       * nobody else is left holding it. `planContactDetach` does the counting
-       * off `visibleTo`, which is what both enforcement layers evaluate.
-       *
-       * The rules refuse a delete by a caller who is not the sole holder, so
-       * a stale row here cannot destroy somebody else's records — it is
-       * refused and reported instead.
-       *
-       * ⛔ NOT the erasure path. A privacy erasure removes the person
-       * regardless of who else holds them and never consults this counting;
-       * see `planContactDetach`.
-       *=========================================*/
-      const ref = doc(
-        firestore,
-        dataScope[0],
-        dataScope[1],
-        'contacts',
-        selectedId,
-      )
-      const plan = Aglyn.planContactDetach(
-        contactDocs?.find((row) => row['$id'] === selectedId) ?? null,
-        consentGroup,
-      )
-      if (plan.action === 'delete') {
-        await deleteDoc(ref)
-      } else {
-        await updateDoc(ref, {
-          ...Object.fromEntries(plan.remove.map((path) => [path, deleteField()])),
-          visibleTo: arrayRemove(...plan.removeTokens),
-          capturedByHostIds: arrayRemove(...plan.removeHostIds),
-          updatedAt: new Date(),
+   * Through the plugin's server route rather than a client write, because
+   * creating a contact is the one act on this surface the rules cannot fully
+   * judge: the dedupe against every holder's rows is a lookup the capturing
+   * site may not read, and the audience band is a count the browser cannot
+   * take. The route answers `{ contactId, created }`; a merge onto somebody
+   * already in the address book is not an error, and the page says which
+   * happened before it opens the record.
+   *=========================================*/
+  const crmApi = useCrmApi(hostId)
+  const [createBusy, setCreateBusy] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
+  const handleCreate = useCallback(
+    async (values: NewContactValues) => {
+      setCreateBusy(true)
+      setCreateError(null)
+      try {
+        const { response, payload } = await crmApi('contacts-create', {
+          email: values.email,
+          ...(values.name ? { name: values.name } : {}),
+          ...(values.phone ? { phone: values.phone } : {}),
+          ...(values.jobTitle ? { jobTitle: values.jobTitle } : {}),
+          ...(values.companyName ? { companyName: values.companyName } : {}),
+          ...(values.address ? { address: values.address } : {}),
+          ...(values.ownerUid ? { ownerUid: values.ownerUid } : {}),
+          ...(values.lifecycleStage
+            ? { lifecycleStage: values.lifecycleStage }
+            : {}),
+          ...(values.tags.length ? { tags: values.tags } : {}),
+          marketingConsent: values.marketingConsent,
         })
-      }
-      setSelectedId(null)
-      enqueueSnackbar(
-        plan.action === 'delete'
-          ? 'Contact deleted'
-          : 'Contact removed from this site',
-        { variant: 'success', persist: false },
-      )
-    } catch (error) {
-      console.error(error)
-      enqueueSnackbar('An error has occurred', {
-        variant: 'error',
-        allowDuplicate: true,
-      })
-    }
-  }, [
-    selectedId,
-    contacts,
-    contactDocs,
-    consentGroup,
-    confirm,
-    firestore,
-    dataScope,
-    enqueueSnackbar,
-  ])
-
-  const handleProfileSave = useCallback(async () => {
-    if (!selectedId || !dataScope) return
-    const tags = [
-      ...new Set(
-        tagsDraft
-          .split(',')
-          .map((tag) => tag.trim().toLowerCase())
-          .filter(Boolean)
-          .slice(0, 20),
-      ),
-    ]
-    try {
-      /**
-       * Refuse a save whose seed the server never confirmed (AGL-1358).
-       *
-       * There is no create path to reach here — a new contact is written by
-       * the capture endpoints, and the only create on this page,
-       * `handleSaveSegment`, is a separate function building an `addDoc` out
-       * of the filter UI rather than a listener row.
-       *
-       * The guard WRAPS the write — an early return is a shape you can keep
-       * while losing the protection.
-       */
-      const verdict = await writeGuardedBySeed(
-        {
-          subject: 'contact',
-          unreadable: contactsStatus === 'error',
-          fromCache: contactsFromCache,
-        },
-        async () => {
-          await updateDoc(
-            doc(firestore, dataScope[0], dataScope[1], 'contacts', selectedId),
-            {
-              // DOTTED paths into this holder's facet. A nested object would
-              // REPLACE the whole map and take every other holder's notes,
-              // tags and order history with it.
-              [Aglyn.contactFacetPath(consentGroup.groupId, 'tags')]: tags,
-              [Aglyn.contactFacetPath(consentGroup.groupId, 'notes')]:
-                notesDraft.slice(0, 2000),
-              // An empty selection is written as an empty array rather than
-              // removed, so "filed under no campaign" has one shape here and
-              // in the pass that detaches a deleted campaign.
-              [Aglyn.contactCampaignFieldPath(consentGroup.groupId)]:
-                Aglyn.campaignMembershipValue(campaignsDraft),
-              updatedAt: new Date(),
-            },
+        if (!response.ok) {
+          // The route's own sentence, shown above the form unchanged: the
+          // band refusal is the list's wording, and a field refusal names
+          // the field.
+          setCreateError(
+            String(payload['error'] ?? 'The contact could not be added.'),
           )
-        },
-      )
-      // The drawer is never closed by this handler, so a refusal leaves the
-      // typed tags and notes exactly where they are — but it still has to
-      // say so, or it reads as a save that worked.
-      if (!verdict.ok) {
-        return void enqueueSnackbar(verdict.message, {
-          variant: 'warning',
-          persist: false,
+          return
+        }
+        const contactId = String(payload['contactId'] ?? '')
+        logActivity('Added contact', {
+          type: 'contact',
+          id: contactId,
+          name: values.name || values.email,
         })
+        enqueueSnackbar(
+          payload['created']
+            ? 'Contact added'
+            : 'Already a contact — what you entered was merged into their record',
+          { variant: 'success', persist: false },
+        )
+        setCreateOpen(false)
+        if (contactId) router.push(routes.contact(contactId))
+      } catch (error) {
+        console.error(error)
+        setCreateError('The contact could not be added.')
+      } finally {
+        setCreateBusy(false)
       }
-      enqueueSnackbar('Contact saved', { variant: 'success', persist: false })
-    } catch (error) {
-      console.error(error)
-      enqueueSnackbar('An error has occurred', {
-        variant: 'error',
-        allowDuplicate: true,
-      })
-    }
-  }, [
-    selectedId,
-    tagsDraft,
-    notesDraft,
-    campaignsDraft,
-    consentGroup,
-    firestore,
-    dataScope,
-    enqueueSnackbar,
-    contactsStatus,
-    contactsFromCache,
-  ])
+    },
+    [crmApi, enqueueSnackbar, logActivity, router, routes],
+  )
 
   const handleExport = useCallback(() => {
     const rows = [
-      ['email', 'name', 'sources', 'tags', 'lastInteraction', 'notes'],
+      [
+        'email',
+        'name',
+        'phone',
+        'company',
+        'jobTitle',
+        'owner',
+        'stage',
+        'sources',
+        'tags',
+        'lastInteraction',
+        'notes',
+      ],
       ...visible.map((contact) => [
         contact.email,
         contact.name ?? '',
+        contact.phone,
+        contact.companyName,
+        contact.jobTitle,
+        contact.ownerUid ? members.memberName(contact.ownerUid) : '',
+        contact.lifecycleStage
+          ? CONTACT_LIFECYCLE_STAGE_LABELS[contact.lifecycleStage]
+          : '',
         Object.keys(contact.sources ?? {}).join('|'),
         (contact.tags ?? []).join('|'),
         contact.interactions?.[0]
@@ -826,7 +633,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
     anchor.download = 'contacts.csv'
     anchor.click()
     URL.revokeObjectURL(url)
-  }, [visible])
+  }, [visible, members])
 
   return (
     <>
@@ -852,12 +659,29 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                   : '∞'
               }`}
             </Typography>
+            <ContactImportButton hostId={hostId} org={org} />
             <Button
               size="small"
               onClick={handleExport}
               disabled={!visible.length}
             >
               {'Export CSV'}
+            </Button>
+            {/* A button that opens a drawer — never a create form above the
+                list. Disabled until the org has resolved, because the route
+                resolves the org from the site and a click before that has
+                nowhere to write. */}
+            <Button
+              size="small"
+              variant="contained"
+              color="primary"
+              disabled={!dataScope}
+              onClick={() => {
+                setCreateError(null)
+                setCreateOpen(true)
+              }}
+            >
+              {'New contact'}
             </Button>
           </Stack>
           <Stack
@@ -887,6 +711,33 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
               value={tagFilter}
               onChange={(event) => setTagFilter(event.target.value)}
               sx={{ minWidth: 160 }}
+            />
+            <TextField
+              select
+              size="small"
+              label="Stage"
+              value={stageFilter}
+              onChange={(event) =>
+                setStageFilter(event.target.value as '' | ContactLifecycleStage)
+              }
+              sx={{ minWidth: 150 }}
+            >
+              <MenuItem value="">{'Any stage'}</MenuItem>
+              {CONTACT_LIFECYCLE_STAGES.map((stage) => (
+                <MenuItem key={stage} value={stage}>
+                  {CONTACT_LIFECYCLE_STAGE_LABELS[stage]}
+                </MenuItem>
+              ))}
+            </TextField>
+            <FormControlLabel
+              control={
+                <Switch
+                  size="small"
+                  checked={assignedToMe}
+                  onChange={(event) => setAssignedToMe(event.target.checked)}
+                />
+              }
+              label="Assigned to me"
             />
             {filterActive ? (
               <>
@@ -1019,19 +870,18 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                   and the column filters reach the whole collection. Said out
                   loud, because a control that narrows less than it looks like
                   it does is the thing this page has been fixing. */}
-              {filterActive ? (
+              {windowNarrowed ? (
                 <Typography variant="caption" color="text.secondary">
-                  {'Source and tag narrow the loaded window. Search and the ' +
-                    'column filters reach every contact.'}
+                  {'Source, tag, stage and "Assigned to me" narrow the loaded ' +
+                    'window. Search and the column filters reach every contact.'}
                 </Typography>
               ) : null}
+              <ContactsBulkBar hostId={hostId} scope={dataScope} consentGroup={consentGroup} rows={visible} selected={selectedIds} onSelectedChange={setSelectedIds} />
               <ListTable
                 rows={visible}
                 columns={contactColumns}
-                onOpen={(id) => {
-                  const found = visible.find((row) => row.$id === id)
-                  if (found) openContact(found)
-                }}
+                selectable={{ selected: selectedIds, onChange: setSelectedIds }}
+                onOpen={(id) => router.push(routes.contact(id))}
                 /*
                  * The grid must NOT also filter. The query answers it, so a
                  * client pass could only drop rows the query already matched.
@@ -1054,135 +904,22 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
           <RecentActivityFeed hostId={hostId} org={org} basePath={props.basePath} />
         </Stack>
       </CardDisplay>
-      <Drawer
-        anchor="right"
-        open={Boolean(selected)}
-        onClose={() => setSelectedId(null)}
-      >
-        {selected ? (
-          <Stack spacing={2} sx={{ width: 360, p: 3 }}>
-            <Typography variant="h6" noWrap>
-              {selected.name || selected.email}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {selected.email}
-            </Typography>
-            <Stack direction="row" spacing={0.5}>
-              {Object.keys(selected.sources ?? {}).map((source) => (
-                <Chip
-                  key={source}
-                  label={SOURCE_LABELS[source as ContactSource] ?? source}
-                  size="small"
-                />
-              ))}
-            </Stack>
-            {/*
-              WHERE THIS CONTACT CAME FROM.
-
-              `sources` above says which mechanism created them — a form, a
-              checkout, an import — and this says which campaign led to it,
-              which is a different question and the one the marketing side is
-              asking. One keyed read: the attribution is `contact:{id}` under
-              the HOST, even though the contact itself is org-scoped, because
-              a campaign belongs to one site while a contact is shared across
-              the org.
-
-              Paid on opening a contact rather than per row, and a contact
-              credited to nobody says so rather than showing an empty campaign.
-             */}
-            <ConversionAttribution
-              hostId={hostId}
-              kind="contact"
-              refId={String(selected.$id)}
-            />
-            <TextField
-              size="small"
-              label="Tags"
-              helperText="Comma-separated"
-              value={tagsDraft}
-              onChange={(event) => setTagsDraft(event.target.value)}
-            />
-            <TextField
-              size="small"
-              label="Notes"
-              value={notesDraft}
-              onChange={(event) => setNotesDraft(event.target.value)}
-              multiline
-              minRows={3}
-            />
-            {/*
-              WHICH CAMPAIGNS THIS PERSON IS FILED UNDER — and it is not the
-              question the attribution above answers.
-
-              The attribution says which campaign the person ARRIVED from,
-              recorded from the link they followed and never editable. This
-              says which campaigns the merchant has PUT them in, which is a
-              working set they keep by hand. Both are true at once and they
-              disagree often — somebody who came in from the spring push can
-              be filed under the summer one — so they sit apart with their own
-              words rather than as one "campaign" line.
-
-              It adds nobody to a send. A campaign's audience is its lists and
-              each email's own picker; nothing on the send path reads this
-              field, and the helper says so where somebody would otherwise
-              assume the opposite.
-             */}
-            <CampaignPicker
-              options={siteCampaigns.options}
-              value={campaignsDraft}
-              onChange={setCampaignsDraft}
-              label="Filed under campaigns"
-              helperText="Your own filing. It never adds anyone to a send — a campaign mails its lists."
-              empty={siteCampaigns.ready && !siteCampaigns.options.length}
-              emptyText="This site has no campaigns yet."
-            />
-            <Stack direction="row" spacing={1}>
-              <Button
-                variant="contained"
-                color="primary"
-                onClick={handleProfileSave}
-              >
-                {'Save'}
-              </Button>
-              <Button color="error" onClick={handleDeleteContact}>
-                {'Delete contact'}
-              </Button>
-            </Stack>
-            <Typography variant="subtitle2">{'Activity'}</Typography>
-            <Stack spacing={1}>
-              {(selected.interactions ?? []).map((interaction, index) => (
-                <Stack key={index}>
-                  <Typography variant="body2">
-                    {interaction.summary ??
-                      SOURCE_LABELS[interaction.type] ??
-                      interaction.type}
-                  </Typography>
-                  {/*
-                    The entry point, beside the timestamp rather than in the
-                    summary above it. The summary is the sentence the door
-                    wrote; the page is a fact the door recorded, and appending
-                    it to the sentence would put the two on one line where a
-                    long path pushes out the thing the row is about.
-
-                    Only the PAGE. The form is already named in the summary
-                    the capture wrote, and the id it stores is not a caption.
-                   */}
-                  <Typography variant="caption" color="text.secondary">
-                    {interaction.path
-                      ? `${new Date(interaction.atMs).toLocaleString()} · ${interaction.path}`
-                      : new Date(interaction.atMs).toLocaleString()}
-                  </Typography>
-                </Stack>
-              ))}
-              {!(selected.interactions ?? []).length ? (
-                <Typography variant="body2" color="text.secondary">
-                  {'No recorded activity.'}
-                </Typography>
-              ) : null}
-            </Stack>
-          </Stack>
-        ) : null}
-      </Drawer>
+      {/*
+        Mounted only while open, so a page that never reaches for it never
+        renders a drawer's chrome, and every opening starts from a blank form.
+       */}
+      {createOpen ? (
+        <NewContactDrawer
+          open
+          onClose={() => setCreateOpen(false)}
+          busy={createBusy}
+          error={createError}
+          consentGroup={consentGroup}
+          owners={members.options}
+          ownersReady={members.ready}
+          onSubmit={(values) => void handleCreate(values)}
+        />
+      ) : null}
     </>
   )
 }

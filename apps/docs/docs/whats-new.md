@@ -10,7 +10,19 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## August 2026 — the canvas, up close (newest)
+## September 2026 — the CRM, over the API (newest)
+
+- **[Companies, pipelines, deals, tasks and activities over the REST API](/api/resources/companies)** —
+  the CRM's records join contacts on `/v1`, under one pair of scopes, `crm:read` and
+  `crm:write`. Create a [company](/api/resources/companies) keyed by its domain, open a
+  [deal](/api/resources/deals) and move it through its [pipeline](/api/resources/pipelines)
+  by stage or by status, assign a [task](/api/resources/tasks) with a due date, and
+  [log a call](/api/resources/activities) as it ends. Every list takes `?updatedAfter=`
+  for a sync that walks only what changed. A [contact](/api/resources/contacts#crm-profile)
+  gains its CRM profile — phone, job title, company, owner, lifecycle stage — written per
+  site and readable as one, and `/v1/usage` reports the size of each collection.
+
+## August 2026 — the canvas, up close
 
 - **[Style hover, focus and the other states](building-sites/besigner/responsive-styling.md#interaction-states)** —
   a row of chips under the breakpoint chip: **Default**, **Hover**, **Active**,
