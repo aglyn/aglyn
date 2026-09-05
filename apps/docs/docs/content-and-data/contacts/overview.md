@@ -71,7 +71,7 @@ older `…/contacts` address still open the hub.
 | **Companies** | `/crm/companies` | The organizations your contacts belong to; a company's page is `/crm/companies/{id}`. |
 | **Deals** | `/crm/deals` | Your pipeline — open deals by stage, with amount, owner and expected close; a deal's page is `/crm/deals/{id}`. |
 | **Tasks** | `/crm/tasks` | Calls, emails, meetings and to-dos by due date, linked to the contact, company or deal they are for. |
-| **Reports** | `/crm/reports` | Contacts by stage and source, the pipeline by stage, won and lost over time. |
+| **Reports** | `/crm/reports` | [New contacts over time, sources and the lifecycle funnel, the open pipeline and its forecast, won and lost, and the task load](./reports.md). |
 | **Fields** | `/crm/fields` | The custom fields on a contact — text, number, date, choice, checkbox or link. |
 
 Opening `/contacts` lands on the first section. Every section follows the same
