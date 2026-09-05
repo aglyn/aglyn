@@ -121,7 +121,9 @@ const QUOTA_LABELS: Readonly<Record<string, string>> = {
   workflowRunsPerMonth: 'Workflow runs / mo',
   servicesPerHost: 'Booking services',
   redirectsPerHost: 'Redirects',
-  contactsPerHost: 'Contacts',
+  // Contacts + companies + deals (AGL-2611); the key keeps its persisted name.
+  contactsPerHost: 'CRM records',
+  crmEmailsPerDay: 'One-to-one emails / day',
   // Campaign sends only (AGL-1438); transactional mail is uncapped.
   emailSendsPerMonth: 'Campaign email sends / mo',
   actionRunsPerMonth: 'Action runs / mo',
