@@ -1944,27 +1944,63 @@ export function HostActionsCard(props: {
                     sx={{ flex: 1 }}
                   />
                 ) : step.type === 'assignContactOwner' ? (
+                  // Two modes (AGL-2618): a member the author names, or the
+                  // next member of the round-robin pool the CRM's Settings
+                  // keep. Switching to the rotation drops the named member,
+                  // because the validator refuses a step that says both.
                   <>
                     <TextField
-                      label="Owner’s email"
-                      type="email"
-                      value={(step as any).ownerEmail ?? ''}
+                      select
+                      label="Assign to"
+                      value={(step as any).roundRobin === true ? 'roundRobin' : 'member'}
                       onChange={(event) =>
                         patch((previous) => ({
                           ...previous,
                           steps: previous.steps.map((s, index2) =>
-                            index2 === index
-                              ? { ...s, ownerEmail: event.target.value }
+                            index2 === index && s.type === 'assignContactOwner'
+                              ? event.target.value === 'roundRobin'
+                                ? { type: s.type, roundRobin: true }
+                                : { type: s.type, ownerEmail: '' }
                               : s,
                           ),
                         }))
                       }
                       size="small"
-                      sx={{ flex: 1 }}
-                    />
-                    <Typography variant="caption" color="text.secondary">
-                      {'Somebody on your team; matched when the automation runs.'}
-                    </Typography>
+                      sx={{ minWidth: 200 }}
+                    >
+                      <MenuItem value="member">{'A team member'}</MenuItem>
+                      <MenuItem value="roundRobin">
+                        {'Round robin — the next member of the CRM’s pool'}
+                      </MenuItem>
+                    </TextField>
+                    {(step as any).roundRobin === true ? (
+                      <Typography variant="caption" color="text.secondary">
+                        {'The pool is set under CRM → Settings; an empty pool is a failed step.'}
+                      </Typography>
+                    ) : (
+                      <>
+                        <TextField
+                          label="Owner’s email"
+                          type="email"
+                          value={(step as any).ownerEmail ?? ''}
+                          onChange={(event) =>
+                            patch((previous) => ({
+                              ...previous,
+                              steps: previous.steps.map((s, index2) =>
+                                index2 === index
+                                  ? { ...s, ownerEmail: event.target.value }
+                                  : s,
+                              ),
+                            }))
+                          }
+                          size="small"
+                          sx={{ flex: 1 }}
+                        />
+                        <Typography variant="caption" color="text.secondary">
+                          {'Somebody on your team; matched when the automation runs.'}
+                        </Typography>
+                      </>
+                    )}
                   </>
                 ) : step.type === 'createCrmTask' ? (
                   <>
