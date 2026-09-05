@@ -333,6 +333,96 @@ export function versionForTag(tag) {
 }
 
 // ---------------------------------------------------------------------------
+// Does `main` carry the version being tagged?
+// ---------------------------------------------------------------------------
+
+/**
+ * The verdict release:tag prints about `origin/main` (AGL-2594).
+ *
+ * The tag names a commit on `production`, so nothing about `main` can make
+ * the tag wrong. But the bump is supposed to reach `main` too, and when it is
+ * cut on a pinned release branch that merges straight to `production`, it
+ * does not: on 2026-09-04 `v1.0.0-beta.71` was tagged while `main` still read
+ * `1.0.0-beta.70`. Nothing said so, and two things broke over the next forty
+ * minutes — the monotonic guard went red on every local run on `main`, and
+ * the next promotion PR opened un-mergeable because `production` carried a
+ * change to `package.json` that `main` did not have.
+ *
+ * `mainVersion` is the `package.json` version at `origin/main`, or null when
+ * that ref is not fetched. `tagVersion` is the version being tagged. Strings
+ * in, lines out, so the whole thing is provable without a repository.
+ *
+ * Returns `{ state, lines }`. `state` is one of:
+ *   'ok'      — main is at or ahead of the tagged version; `lines` is empty
+ *   'unknown' — origin/main is not here; `lines` says so, briefly
+ *   'behind'  — main lacks the version; `lines` is the full warning
+ */
+export function mainVersionVerdict({ tagVersion, mainVersion }) {
+  const tag = tagForVersion(tagVersion)
+
+  if (mainVersion === null || mainVersion === undefined) {
+    return {
+      state: 'unknown',
+      lines: [
+        `  NOTE: origin/main is not fetched here, so whether main carries ${tag}`,
+        '  could not be checked. Run `git fetch origin main` and re-run the',
+        '  report before pushing the tag.',
+      ],
+    }
+  }
+
+  if (compareVersions(mainVersion, tagVersion) >= 0) {
+    return { state: 'ok', lines: [] }
+  }
+
+  const bar = '  !!' + '!'.repeat(68)
+  return {
+    state: 'behind',
+    lines: [
+      bar,
+      `  !!  WARNING: origin/main does NOT carry ${tag}.`,
+      '  !!',
+      `  !!  origin/main reads ${formatVersion(parseVersion(mainVersion))}; the commit being tagged reads`,
+      `  !!  ${formatVersion(parseVersion(tagVersion))}. The bump was cut somewhere main never received it,`,
+      '  !!  usually a pinned release branch that merged straight to production.',
+      '  !!',
+      '  !!  The tag is still created: it names what production serves, and that',
+      '  !!  is true whatever main says. But main is now wrong in two ways that',
+      '  !!  each cost real time on 2026-09-04 (AGL-2594):',
+      '  !!',
+      '  !!    1. test:version-monotonic goes RED on every local guard run on',
+      `  !!       main ("package.json is ${mainVersion} but production runs`,
+      `  !!       ${tagVersion}"). CI stays green only because its checkout lacks`,
+      '  !!       origin/production and the guard skips.',
+      '  !!    2. The NEXT promotion PR opens UN-MERGEABLE (GitHub: DIRTY).',
+      '  !!       production changed package.json and CHANGELOG.md on a commit',
+      '  !!       main does not have, and the next bump on main touches the same',
+      '  !!       lines. A conflicted PR runs no pull_request workflows at all.',
+      '  !!       Cherry-picking the bump onto main does NOT avoid this; it',
+      '  !!       makes the conflict certain.',
+      '  !!',
+      '  !!  Fix it now with a MERGE of production back into main, so the bump',
+      '  !!  commit becomes an ancestor of main and the next PR is a clean',
+      '  !!  fast-forward. From a temp worktree — the shared checkout is never',
+      '  !!  reset or rebased:',
+      '  !!',
+      '  !!    git fetch origin main production',
+      '  !!    git worktree add --detach /private/tmp/aglyn-backmerge origin/main',
+      '  !!    git -C /private/tmp/aglyn-backmerge merge --no-edit origin/production',
+      '  !!    git -C /private/tmp/aglyn-backmerge push origin HEAD:main',
+      '  !!    git worktree remove /private/tmp/aglyn-backmerge',
+      '  !!',
+      '  !!  If the merge stops on package.json or CHANGELOG.md, keep the HIGHER',
+      '  !!  version and BOTH changelog sections (newest first), `git add` those',
+      '  !!  two files by name, then `git commit --no-edit` and push as above.',
+      '  !!',
+      '  !!  docs/RELEASING.md — "Cutting the bump on a pinned release branch".',
+      bar,
+    ],
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Changelog
 // ---------------------------------------------------------------------------
 

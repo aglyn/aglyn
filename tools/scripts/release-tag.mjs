@@ -40,12 +40,19 @@
 // RUN IT ONLY AFTER THE DEPLOY IS VERIFIED — `node tools/deploy/verify-production-aliases.mjs`
 // (Vercel prints to stderr). This script cannot check that for you; it checks
 // the things it CAN prove, listed in the guards below.
+//
+// It also looks the other way, at `origin/main` (AGL-2594). The bump is meant
+// to reach `main` as well as `production`, and when it is cut on a pinned
+// release branch it reaches only `production`. That never makes the tag
+// wrong, so it is a warning and not a refusal — but a loud one, because
+// `main` left behind reds the monotonic guard and conflicts the next PR.
 
 import { execFileSync } from 'node:child_process'
 
 import {
   compareVersions,
   formatVersion,
+  mainVersionVerdict,
   parseVersion,
   tagForVersion,
   versionForTag,
@@ -163,6 +170,26 @@ function main() {
   )
   out.push('')
 
+  // Not a guard: nothing about `main` can make a tag on `production` wrong.
+  // Read the same way as the tagged version — from the tree at the ref, never
+  // the working copy — and the verdict goes LAST in both paths below, so the
+  // final lines on screen are the warning rather than "PUSHED".
+  const mainRaw = gitQuiet('show', 'origin/main:package.json')
+  const main = mainVersionVerdict({
+    tagVersion: version,
+    mainVersion: mainRaw === null ? null : JSON.parse(mainRaw).version,
+  })
+  out.push(
+    `  origin/main     ${
+      main.state === 'ok'
+        ? 'carries this version'
+        : main.state === 'unknown'
+          ? 'not fetched'
+          : `BEHIND — ${JSON.parse(mainRaw).version}`
+    }`,
+  )
+  out.push('')
+
   if (!options.write) {
     out.push('  ' + '-'.repeat(60))
     out.push(
@@ -175,6 +202,8 @@ function main() {
     out.push('')
     out.push('    node tools/deploy/verify-production-aliases.mjs')
     out.push('')
+    out.push(...main.lines)
+    if (main.lines.length > 0) out.push('')
     console.log(out.join('\n'))
     return
   }
@@ -199,6 +228,8 @@ function main() {
     out.push(`    git push origin ${tag}`)
   }
   out.push('')
+  out.push(...main.lines)
+  if (main.lines.length > 0) out.push('')
   console.log(out.join('\n'))
 }
 

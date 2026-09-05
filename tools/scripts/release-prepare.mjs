@@ -469,6 +469,36 @@ function main() {
   )
   out.push('  promotion is merged and the deploy is verified.')
   out.push('')
+  // A bump cut on a pinned release branch merges to production and nowhere
+  // else. main left without it reds the monotonic guard on every local run
+  // and conflicts the next promotion PR (AGL-2594), so the branch flow has
+  // one more step than the main flow, and it is said here where the bump is
+  // made rather than discovered at the tag.
+  out.push(
+    '  If this bump was cut on a PINNED RELEASE BRANCH rather than on main,',
+  )
+  out.push('  main still has to receive it (AGL-2594):')
+  out.push('')
+  out.push(
+    '    main has NOT moved since the branch was cut  →  push the bump now:',
+  )
+  out.push(
+    '      git push origin HEAD:main      # fast-forwards; a moved main rejects it',
+  )
+  out.push('')
+  out.push(
+    '    main HAS moved  →  after the promotion merges and the tag is pushed,',
+  )
+  out.push('      merge origin/production back into main from a temp worktree.')
+  out.push(
+    '      release:tag prints the exact commands; so does docs/RELEASING.md',
+  )
+  out.push('      under "Cutting the bump on a pinned release branch".')
+  out.push('')
+  out.push(
+    '    Never cherry-pick the bump onto main: that guarantees the conflict.',
+  )
+  out.push('')
   console.log(out.join('\n'))
 }
 
