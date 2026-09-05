@@ -946,6 +946,69 @@ export interface OrgCrmSettings {
    * nobody asked for. Public mailbox domains never qualify either way.
    */
   autoCreateCompanies?: boolean
+  /**
+   * Per-site settings, keyed by host id (AGL-2618). On the ORG document
+   * rather than on each host document because the reader is the org-level
+   * assignment pass — one read of one document answers every site's default
+   * — and because the writer is the same owner-or-admin the rest of this
+   * map admits, through the same client branch. A host document would need
+   * its own rules clause for a key only the CRM reads.
+   */
+  hosts?: Record<string, OrgCrmHostSettings>
+  /**
+   * The assignment rules, in the order they are tried (AGL-2618). The first
+   * rule whose every condition holds names the owner; the site's default
+   * owner is the fallback when none does. Bounded by
+   * `CRM_ASSIGNMENT_RULES_MAX` in the section that writes it.
+   */
+  assignmentRules?: OrgCrmAssignmentRule[]
+  /** The round-robin pool and its pointer — see `OrgCrmRoundRobin`. */
+  roundRobin?: OrgCrmRoundRobin
+}
+
+/** What one site decides for records captured on it (AGL-2618). */
+export interface OrgCrmHostSettings {
+  /**
+   * The member every record captured on this site is handed to when no
+   * assignment rule claimed it. Absent: the record stays unassigned, which
+   * is what the product did before the setting existed.
+   */
+  defaultOwnerUid?: string
+}
+
+/**
+ * One assignment rule (AGL-2618): `when` every named condition holds for a
+ * capture, `assign` the record this way. A condition left out is not a
+ * condition — a rule naming only a source matches every capture from that
+ * source — and a rule naming nothing matches every capture, which is how a
+ * catch-all is written. `source` is a `ContactSource`, typed as a string
+ * here because the foundation cannot import the capture vocabulary; the CRM
+ * module narrows it.
+ */
+export interface OrgCrmAssignmentRule {
+  id: string
+  when: {
+    source?: string
+    formId?: string
+    emailDomain?: string
+    tag?: string
+  }
+  assign: { memberUid: string } | { roundRobin: true }
+}
+
+/**
+ * The round-robin pool (AGL-2618): the members handed records in turn, and
+ * WHO GOT THE LAST ONE. The pointer is a uid rather than an index so that
+ * editing the pool — a member added, removed or moved — never skips or
+ * repeats anybody: the next record goes to whoever follows the last
+ * recipient in the pool as it stands, and to the first member when the last
+ * recipient is no longer in it. Advanced only by the server, inside the
+ * transaction that writes the owner, so two captures landing together take
+ * two different members.
+ */
+export interface OrgCrmRoundRobin {
+  memberUids?: string[]
+  lastAssignedUid?: string
 }
 
 /**
@@ -997,13 +1060,18 @@ export const ORG_CLIENT_WRITABLE_FIELDS: Readonly<Record<string, string>> = {
     '`setDoc(..., { merge: true })` — the staff suspension, erasure-request ' +
     'and plan-override cards all do — so denying it would deny those writes.',
   crm:
-    'The CRM settings map (AGL-2613): `autoCreateCompanies` and whatever the ' +
-    'CRM → Settings section adds beside it. Deliberately writable by an org ' +
-    'owner or admin — the section writes it client-direct by dotted path. No ' +
-    'entitlement, price, routing decision or staff judgement reads it; its ' +
-    'one reader is the contact capture door deciding whether to mint a ' +
-    'company record from an email domain, which is a choice about the ' +
-    "org's own data that the org's managers are the right people to make.",
+    'The CRM settings map (AGL-2613): `autoCreateCompanies`, the per-site ' +
+    'default owner, the assignment rules and the round-robin pool ' +
+    '(AGL-2618), and whatever the CRM → Settings section adds beside them. ' +
+    'Deliberately writable by an org owner or admin — the section writes it ' +
+    'client-direct by dotted path. No entitlement, price, routing decision ' +
+    'or staff judgement reads it; its readers are the contact capture door ' +
+    'deciding whether to mint a company record from an email domain and ' +
+    'whom to hand a new record to, which are choices about the org\'s own ' +
+    "data that the org's managers are the right people to make. The pool's " +
+    'pointer (`crm.roundRobin.lastAssignedUid`) is advanced by the server ' +
+    'inside the assigning transaction; a client that moved it would only ' +
+    'change who is next, never what anybody may see.',
 }
 
 /**
