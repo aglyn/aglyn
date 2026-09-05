@@ -44,6 +44,29 @@ import { registerCrmConsoleApi } from './server'
 
 const REPO_ROOT = join(__dirname, '../../../../..')
 
+/*
+ * The lead-convert route (AGL-2608) reaches the Admin SDK and the org
+ * permission resolver, and the real `@aglyn/tenant-data-admin` barrel pulls
+ * `next/server` into a jsdom worker, where its request class has nothing to
+ * extend. This file proves the WIRING — that a registered path resolves and
+ * answers — so those boundaries are stubs; the route's own behavior is
+ * proved in `server/lead-convert.spec.ts` against an in-memory Firestore.
+ */
+jest.mock('@aglyn/tenant-data-admin', () => ({
+  firebaseAdmin: { app: () => ({}) },
+  getOrgForHost: async () => null,
+  consentGroupForSite: async () => null,
+  orgDataCollectionForHost: async () => null,
+  upsertHostContact: async () => undefined,
+}))
+jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
+  resolveOrgPermissions: async () => null,
+}))
+jest.mock('firebase-admin/firestore', () => ({
+  FieldValue: { serverTimestamp: () => null, arrayUnion: () => null },
+  FieldPath: { documentId: () => '__name__' },
+}))
+
 /** Drives one registered handler and returns what it answered. */
 async function call(path: string, method: string) {
   const handler = resolvePluginApiRoute(path)

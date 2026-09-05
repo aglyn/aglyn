@@ -39,6 +39,7 @@ import {
   registerPluginApiRoute,
 } from '@aglyn/aglyn/server'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { leadConvertHandler } from './server/lead-convert'
 
 /**
  * `GET /api/contacts/ping` → `{ ok: true, plugin: 'contacts' }`.
@@ -60,4 +61,8 @@ export const crmPingHandler: PluginApiHandler = (req, res) => {
 /** Console API registration, named in `plugins.config.json` as `consoleApi`. */
 export function registerCrmConsoleApi(): void {
   registerPluginApiRoute('crm/ping', crmPingHandler)
+  // A lead becomes a contact, a company and a deal (AGL-2608) — the one CRM
+  // write a browser cannot make alone, because only the server may create a
+  // contact through the dedupe-and-meter door.
+  registerPluginApiRoute('crm/lead-convert', leadConvertHandler)
 }
