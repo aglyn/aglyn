@@ -103,6 +103,19 @@ jobs:
       # the job BEFORE its verdict is printed and believed.
       - run: npm run test:external-facts
 
+      # AGL-2593. The UptimeRobot monitor inventory, on the same cadence and
+      # for the same reason: `docs/UPTIME_AND_SLA.md` names the monitors and
+      # nothing compared that table with the account. The status page's
+      # monitor list is public, so this needs no secret and runs BEFORE the
+      # credential gate below — an unset LINEAR_API_KEY must not also hide a
+      # monitor that went missing. Exit 1 = the table and the account
+      # disagree, or a monitor is down; exit 2 = the list could not be read.
+      # Both fail the run, on purpose.
+      - name: Compare the monitor inventory with the docs table
+        run: |
+          npm run test:uptime-monitors
+          npm run check:uptime-monitors
+
       # Refuse to no-op. A missing credential must FAIL the job, never skip
       # the step (rules-drift.yml / legal-drift.yml precedent).
       - name: Refuse to no-op without credentials

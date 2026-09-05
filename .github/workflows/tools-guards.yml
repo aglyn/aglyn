@@ -905,6 +905,17 @@ jobs:
       # `expect-absent` assertion vacuously, silently, on the happy path.
       - run: npm run test:external-facts
 
+      # AGL-2593. The UptimeRobot monitor inventory. `docs/UPTIME_AND_SLA.md`
+      # tabulates the external keyword monitors by NAME, and the status page's
+      # public monitor-list API exposes exactly the names — nothing else about
+      # a monitor is readable from outside the account (`url` is null). The
+      # live comparison runs daily in external-facts.yml beside
+      # `check:external-facts`; what runs here is the parser and comparator
+      # against a checked-in fixture, plus the assertion that the fixture and
+      # the docs table name the same monitors — so a hand edit to the table
+      # alone is red before the morning run ever fetches anything.
+      - run: npm run test:uptime-monitors
+
       # AGL-2500. The third member of that family, and the only one whose
       # CHECK can run here rather than just its self-test — which is the whole
       # design. Both guards above are gated on LINEAR_API_KEY and so run

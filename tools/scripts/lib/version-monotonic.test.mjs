@@ -43,6 +43,16 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, it } from 'node:test'
 
+// One comparator for every version question in the release tooling.
+// release:tag asks "does main carry the version I am tagging?" with the same
+// function (AGL-2594), so this guard and that warning cannot disagree about
+// what "behind" means.
+import {
+  compareVersions,
+  parseVersion,
+  versionForTag,
+} from './release-version.mjs'
+
 const root = join(import.meta.dirname, '..', '..', '..')
 
 const read = (source) => JSON.parse(source).version
@@ -62,35 +72,11 @@ function versionAt(ref) {
   }
 }
 
-/** [major, minor, patch, prereleaseNumber] — enough for `1.0.0-beta.N`. */
-function parts(version) {
-  const match = /^(\d+)\.(\d+)\.(\d+)(?:-([a-z]+)\.(\d+))?$/.exec(version)
-  assert.ok(match, `version is not a shape this guard understands: ${version}`)
-  return [
-    Number(match[1]),
-    Number(match[2]),
-    Number(match[3]),
-    // A release outranks any prerelease of the same numbers.
-    match[5] === undefined ? Number.POSITIVE_INFINITY : Number(match[5]),
-  ]
-}
-
-/** -1, 0 or 1. Exported shape kept trivial so the assertion reads plainly. */
-export function compareVersions(a, b) {
-  const left = parts(a)
-  const right = parts(b)
-  for (let i = 0; i < left.length; i += 1) {
-    if (left[i] < right[i]) return -1
-    if (left[i] > right[i]) return 1
-  }
-  return 0
-}
-
 describe('the workspace version never decreases (AGL-2486)', () => {
   const current = read(readFileSync(join(root, 'package.json'), 'utf8'))
 
   it('reads a version this guard can compare', () => {
-    assert.ok(parts(current).length === 4)
+    assert.doesNotThrow(() => parseVersion(current))
   })
 
   it('is not behind what production is running', () => {
@@ -122,14 +108,7 @@ describe('the workspace version never decreases (AGL-2486)', () => {
     } catch {
       return
     }
-    const newest = tags.map((tag) => tag.slice(1)).find((version) => {
-      try {
-        parts(version)
-        return true
-      } catch {
-        return false
-      }
-    })
+    const newest = tags.map(versionForTag).find((version) => version !== null)
     if (!newest) return
     assert.ok(
       compareVersions(current, newest) >= 0,

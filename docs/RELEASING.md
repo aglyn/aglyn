@@ -115,6 +115,63 @@ git push origin main
 `chore(release): v<version>` is the one commit subject that carries no issue of
 its own beyond AGL-2089.
 
+#### Cutting the bump on a pinned release branch
+
+`main` does not hold still while a batch is promoted. With many agents landing
+on it, a bump pushed to `main` and a PR opened a few minutes later can ship
+commits nobody graded. The way around that is to pin the batch: cut the release
+on a branch, bump there, and open the PR from the branch.
+
+```bash
+git fetch origin main production
+git worktree add --detach /private/tmp/aglyn-release origin/main
+git -C /private/tmp/aglyn-release switch -c release/v1.0.0-beta.71
+npm --prefix /private/tmp/aglyn-release run release:prepare -- --write
+git -C /private/tmp/aglyn-release commit --only package.json package-lock.json CHANGELOG.md \
+  -m 'chore(release): v1.0.0-beta.71 (AGL-2089)'
+git -C /private/tmp/aglyn-release push -u origin release/v1.0.0-beta.71
+```
+
+Open the PR from that branch into `production`. Later pushes to `main` do not
+ride along, and the PR's range is exactly what `release:prepare` documented.
+
+**The bump is now on a branch `main` has never seen.** Merging the PR puts it
+on `production`; nothing puts it on `main`, and a `main` left that way is wrong
+in two ways (AGL-2594). `test:version-monotonic` goes red on every local guard
+run — "package.json is 1.0.0-beta.70 but production runs 1.0.0-beta.71" — while
+CI stays green only because its checkout lacks the ref the guard compares
+against. And the next promotion PR opens un-mergeable: `production` changed
+`package.json` and `CHANGELOG.md` on a commit `main` does not have, the next
+bump on `main` touches the same lines, and GitHub runs no `pull_request`
+workflows on a conflicted PR at all. Cherry-picking the bump onto `main` does
+not avoid that; it guarantees it.
+
+So after the merge and the tag, **merge `production` back into `main`** — a
+merge, so the bump commit becomes an ancestor of `main` and the next PR is a
+clean fast-forward. From a temp worktree; the shared checkout is never reset or
+rebased:
+
+```bash
+git fetch origin main production
+git worktree add --detach /private/tmp/aglyn-backmerge origin/main
+git -C /private/tmp/aglyn-backmerge merge --no-edit origin/production
+git -C /private/tmp/aglyn-backmerge push origin HEAD:main
+git worktree remove /private/tmp/aglyn-backmerge
+```
+
+If the merge stops on `package.json` or `CHANGELOG.md`, keep the higher version
+and both changelog sections, newest first, `git add` those two files by name,
+then `git commit --no-edit` and push.
+
+There is a shorter path when `main` has not moved since the branch was cut:
+push the bump commit straight to `main` before opening the PR
+(`git push origin HEAD:main` from the release branch). It fast-forwards, and a
+`main` that has moved rejects it, so it is safe to try.
+
+`release:tag` checks for this and prints the commands above whenever
+`origin/main` is behind the version it is tagging. It still tags: the tag
+asserts what `production` serves, and that is true whatever `main` says.
+
 ### 2 — Promote, as usual
 
 Open the `main` → `production` PR, real merge commit, never squash, no

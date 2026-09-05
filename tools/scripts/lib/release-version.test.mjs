@@ -39,6 +39,7 @@ import {
   extractLinearIds,
   formatVersion,
   insertRelease,
+  mainVersionVerdict,
   maxBump,
   nextVersion,
   parseCommit,
@@ -276,6 +277,92 @@ describe('assertForward', () => {
     assert.throws(() => assertForward('1.0.0', '1.0.0-beta.9'), /not ahead of/)
     assert.doesNotThrow(() => assertForward('1.0.0-beta.9', '1.0.0'))
     assert.doesNotThrow(() => assertForward('1.0.0-alpha.0', '1.0.0-beta.1'))
+  })
+})
+
+describe('mainVersionVerdict (AGL-2594)', () => {
+  // The 2026-09-04 shape exactly: v1.0.0-beta.71 tagged on production while
+  // main still read beta.70, because the bump was cut on a pinned release
+  // branch. Versions are injected — no git, no network — the same way the
+  // monotonic guard's control cases are.
+  it('warns, and names both failure modes, when main is behind the tag', () => {
+    const verdict = mainVersionVerdict({
+      tagVersion: '1.0.0-beta.71',
+      mainVersion: '1.0.0-beta.70',
+    })
+    assert.equal(verdict.state, 'behind')
+    const text = verdict.lines.join('\n')
+    assert.match(text, /WARNING: origin\/main does NOT carry v1\.0\.0-beta\.71/)
+    assert.match(text, /test:version-monotonic goes RED/)
+    assert.match(text, /UN-MERGEABLE \(GitHub: DIRTY\)/)
+    // The remediation is a merge from a temp worktree, never a reset or a
+    // rebase of the shared checkout, and never a cherry-pick.
+    assert.match(text, /merge --no-edit origin\/production/)
+    assert.match(text, /worktree add --detach/)
+    assert.match(text, /push origin HEAD:main/)
+    assert.match(text, /Cherry-picking the bump onto main does NOT avoid this/)
+    assert.doesNotMatch(text, /git (reset|rebase|cherry-pick)/)
+  })
+
+  it('is quiet when main carries the version', () => {
+    assert.deepEqual(
+      mainVersionVerdict({
+        tagVersion: '1.0.0-beta.71',
+        mainVersion: '1.0.0-beta.71',
+      }),
+      { state: 'ok', lines: [] },
+    )
+  })
+
+  it('is quiet when main has already moved past the version', () => {
+    // The ordinary case a few minutes after a promotion: main already holds
+    // the next bump. Ahead is not behind.
+    assert.equal(
+      mainVersionVerdict({
+        tagVersion: '1.0.0-beta.71',
+        mainVersion: '1.0.0-beta.72',
+      }).state,
+      'ok',
+    )
+    assert.equal(
+      mainVersionVerdict({ tagVersion: '1.0.0-beta.9', mainVersion: '1.0.0' })
+        .state,
+      'ok',
+    )
+  })
+
+  it('compares as semver, not as text', () => {
+    // A text comparison would call beta.10 behind beta.9 and warn falsely,
+    // or call beta.9 ahead of beta.10 and stay silent falsely.
+    assert.equal(
+      mainVersionVerdict({
+        tagVersion: '1.0.0-beta.9',
+        mainVersion: '1.0.0-beta.10',
+      }).state,
+      'ok',
+    )
+    assert.equal(
+      mainVersionVerdict({
+        tagVersion: '1.0.0-beta.10',
+        mainVersion: '1.0.0-beta.9',
+      }).state,
+      'behind',
+    )
+    assert.equal(
+      mainVersionVerdict({ tagVersion: '1.0.0', mainVersion: '1.0.0-beta.99' })
+        .state,
+      'behind',
+    )
+  })
+
+  it('says so, without warning, when origin/main is not fetched', () => {
+    const verdict = mainVersionVerdict({
+      tagVersion: '1.0.0-beta.71',
+      mainVersion: null,
+    })
+    assert.equal(verdict.state, 'unknown')
+    assert.match(verdict.lines.join('\n'), /git fetch origin main/)
+    assert.doesNotMatch(verdict.lines.join('\n'), /WARNING/)
   })
 })
 
