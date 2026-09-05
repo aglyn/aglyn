@@ -67,7 +67,7 @@ older `…/contacts` address still open the hub.
 | Section | Address | What lives there |
 | --- | --- | --- |
 | **Contacts** | `/crm/contacts` | The people list above; a person's own page is `/crm/contacts/{id}`. |
-| **Leads** | `/crm/leads` | People a site has captured but not yet qualified — a status, an owner, and a conversion into a contact, a company and a deal. |
+| **[Leads](./leads.md)** | `/crm/leads` | People a site has captured but not yet qualified — a status, an owner, and a conversion into a contact, a company and a deal. |
 | **Companies** | `/crm/companies` | The organizations your contacts belong to; a company's page is `/crm/companies/{id}`. |
 | **Deals** | `/crm/deals` | Your pipeline — open deals by stage, with amount, owner and expected close; a deal's page is `/crm/deals/{id}`. |
 | **Tasks** | `/crm/tasks` | Calls, emails, meetings and to-dos by due date, linked to the contact, company or deal they are for. |
