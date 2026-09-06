@@ -96,6 +96,7 @@ import {
 } from '../model/contacts-bulk-writes'
 import { contactsCsv, downloadTextFile } from '../model/contacts-csv'
 import AddToListDialog from './add-to-list-dialog'
+import { useCrmScope } from '../hooks/use-crm-scope'
 import {
   CompanyPicker,
   type CompanyOption,
@@ -104,13 +105,19 @@ import {
 } from './company-picker'
 
 export interface ContactsBulkBarProps {
-  hostId: string
+  /** The site the list is read under, or `null` at the organization level. */
+  hostId: string | null
   /** The org document the shell passed, for the company picker's scope. */
   org?: Partial<AglynOrgBilling> | null
   /** `['orgs', orgId]`, or `null` while the org is unresolved. */
   scope: readonly [string, string] | null
-  /** The holder these rows are being read AS — whose facet the writes land in. */
-  consentGroup: ConsentGroup
+  /**
+   * The holder these rows are being read AS — whose facet the writes land
+   * in. `null` at the organization level (AGL-2630), where each row's own
+   * holder (`groupId`) takes the write instead, and "Remove from this site"
+   * is not offered because there is no site to remove from.
+   */
+  consentGroup: ConsentGroup | null
   /** The table's rows, already projected through the holder's facet. */
   rows: readonly (ContactBulkRow & {
     name?: string
@@ -201,6 +208,9 @@ function ContactsBulkBarBody(props: ContactsBulkBarProps) {
     enabled: pending === 'company',
   })
   const createCompany = useCreateCompany({ hostId, org })
+  // The site the audiences API is asked from: the mounted one, or at the
+  // organization level the one the reader picked (AGL-2630).
+  const { createHostId } = useCrmScope({ hostId, org })
 
   const openAction = (action: PendingAction) => {
     setValue('')
@@ -301,34 +311,63 @@ function ContactsBulkBarBody(props: ContactsBulkBarProps) {
   const handleApply = useCallback(async () => {
     if (!pending || !scope) return
     const nowMs = Date.now()
-    const groupId = consentGroup.groupId
-    let plan: ContactBulkPlan | null = null
-    if (pending === 'add-tag' || pending === 'remove-tag') {
-      const tag = normalizeBulkTag(value)
-      if (!tag) return
-      plan =
-        pending === 'add-tag'
-          ? planAddTag(selectedRows, groupId, tag, nowMs)
-          : planRemoveTag(selectedRows, groupId, tag, nowMs)
-    } else if (pending === 'owner') {
-      plan = planSetFacetField(selectedRows, groupId, 'ownerUid', value || null, nowMs)
-    } else if (pending === 'stage') {
-      if (!value) return
-      plan = planSetFacetField(
-        selectedRows,
-        groupId,
-        'lifecycleStage',
-        value as ContactLifecycleStage,
-        nowMs,
-      )
-    } else if (pending === 'company') {
-      plan = planSetCompany(selectedRows, groupId, company, nowMs)
+    /*
+     * ONE PLAN PER HOLDER. Under a site every selected row is written into
+     * the viewing group's facet. At the organization level (AGL-2630) the
+     * rows were each flattened through their own primary holder, and the
+     * write goes back to the same facet — so the selection is partitioned
+     * by holder, planned once per holder, and the plans are merged. A row
+     * nobody holds yet has no facet to write, and says so.
+     */
+    const byGroup = new Map<string, typeof selectedRows>()
+    const unheld: ContactBulkSkip[] = []
+    for (const row of selectedRows) {
+      const groupId = consentGroup?.groupId ?? row.groupId ?? ''
+      if (!groupId) {
+        unheld.push({
+          email: String(row.email || row.$id),
+          reason: 'no site holds this contact yet',
+        })
+        continue
+      }
+      byGroup.set(groupId, [...(byGroup.get(groupId) ?? []), row])
     }
-    if (!plan) return
+    const planFor = (rows: typeof selectedRows, groupId: string): ContactBulkPlan | null => {
+      if (pending === 'add-tag' || pending === 'remove-tag') {
+        const tag = normalizeBulkTag(value)
+        if (!tag) return null
+        return pending === 'add-tag'
+          ? planAddTag(rows, groupId, tag, nowMs)
+          : planRemoveTag(rows, groupId, tag, nowMs)
+      }
+      if (pending === 'owner') {
+        return planSetFacetField(rows, groupId, 'ownerUid', value || null, nowMs)
+      }
+      if (pending === 'stage') {
+        if (!value) return null
+        return planSetFacetField(
+          rows,
+          groupId,
+          'lifecycleStage',
+          value as ContactLifecycleStage,
+          nowMs,
+        )
+      }
+      if (pending === 'company') return planSetCompany(rows, groupId, company, nowMs)
+      return null
+    }
+    const plan: ContactBulkPlan = { writes: [], skipped: [...unheld] }
+    for (const [groupId, rows] of byGroup) {
+      const part = planFor(rows, groupId)
+      if (!part) return
+      plan.writes.push(...part.writes)
+      plan.skipped.push(...part.skipped)
+    }
+    if (!byGroup.size && !unheld.length) return
     const action = pending
     setPending(null)
     await apply(action, plan)
-  }, [pending, scope, consentGroup.groupId, value, company, selectedRows, apply])
+  }, [pending, scope, consentGroup, value, company, selectedRows, apply])
 
   const handleExport = useCallback(() => {
     downloadTextFile(
@@ -339,7 +378,7 @@ function ContactsBulkBarBody(props: ContactsBulkBarProps) {
   }, [selectedRows])
 
   const handleDetach = useCallback(async () => {
-    if (!scope || !selectedRows.length) return
+    if (!scope || !selectedRows.length || !consentGroup) return
     const count = selectedRows.length
     const confirmed = await confirm({
       title: count === 1 ? 'Remove this contact?' : `Remove ${count} contacts?`,
@@ -415,7 +454,7 @@ function ContactsBulkBarBody(props: ContactsBulkBarProps) {
         </Button>
         <Button
           size="small"
-          disabled={busy || !scope || !emails.length}
+          disabled={busy || !scope || !emails.length || !createHostId}
           onClick={() => setListOpen(true)}
         >
           {'Add to list'}
@@ -423,14 +462,22 @@ function ContactsBulkBarBody(props: ContactsBulkBarProps) {
         <Button size="small" disabled={busy} onClick={handleExport}>
           {'Export CSV'}
         </Button>
-        <Button
-          size="small"
-          color="error"
-          disabled={busy || !scope}
-          onClick={() => void handleDetach()}
-        >
-          {'Remove from this site'}
-        </Button>
+        {/*
+          Only under a site. The act is a DETACH from the viewing site's
+          CRM, and at the organization level there is no viewing site — an
+          org-wide member removes a person from a site by opening the record
+          under that site.
+        */}
+        {consentGroup ? (
+          <Button
+            size="small"
+            color="error"
+            disabled={busy || !scope}
+            onClick={() => void handleDetach()}
+          >
+            {'Remove from this site'}
+          </Button>
+        ) : null}
         <Button size="small" disabled={busy} onClick={() => onSelectedChange([])}>
           {'Clear'}
         </Button>
@@ -545,7 +592,7 @@ function ContactsBulkBarBody(props: ContactsBulkBarProps) {
         <AddToListDialog
           open
           onClose={() => setListOpen(false)}
-          hostId={hostId}
+          hostId={createHostId}
           scope={scope}
           emails={emails}
         />

@@ -42,7 +42,12 @@ import {
   contactCustomFilterFields,
   contactCustomFilterHeaders,
 } from '../constants/contact-filters'
-import { type ContactRecord, contactRecordFromDoc } from '../model/contact-record'
+import {
+  type ContactRecord,
+  contactPrimaryGroup,
+  contactRecordFromDoc,
+} from '../model/contact-record'
+import { crmVisibleToClause, useCrmScope } from '../hooks/use-crm-scope'
 import { contactsListSeed } from '../model/contacts-list-seed'
 import { crmRoutes } from '../model/crm-routes'
 import { useCrmRecordsQuota } from '../hooks/use-crm-records-quota'
@@ -56,7 +61,6 @@ import {
   useFirestore,
   useFirestoreCollection,
   useFirestoreDoc,
-  useOrgDataScope,
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import {
@@ -191,8 +195,12 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
   // Org-shared data root (AGL-237). Null until the org lookup settles
   // (AGL-1061), and for a host with no owning org — the pre-migration host
   // path this used to fall back to is gone (AGL-1050), so the CRM lists
-  // nothing rather than listing somewhere else.
-  const { scope: dataScope, orgId } = useOrgDataScope({ hostId })
+  // nothing rather than listing somewhere else. Resolved by the one scope
+  // hook (AGL-2614), which also answers for the organization-level mount
+  // (AGL-2630): there `hostId` is null, the org comes from the hub's mount,
+  // and the viewing group and the scope clause are both `null`.
+  const crmScope = useCrmScope({ hostId, org })
+  const { scope: dataScope, orgId, consentGroup, visibleTo: visibleToTokens } = crmScope
   // The org's custom fields, for the optional columns below (AGL-2601).
   const customFields = useContactFieldDefinitions(dataScope?.[1] ?? null)
   /*==========================================
@@ -208,12 +216,12 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
    * So the page resolves the group it is being viewed as — the sites declared
    * to be one sender, or this site alone — and reads that group's facet.
    * Pure, from the org document the shell already passed, so it costs no
-   * read.
+   * read. `consentGroup` above is that group; at the ORGANIZATION level it
+   * is `null`, and each row is flattened through the person's own primary
+   * holder instead (`contactPrimaryGroup`), so an org-wide member reads the
+   * profile the first capturing site keeps — and the "Known by" column says
+   * which other sites hold one.
    *=========================================*/
-  const consentGroup = useMemo(
-    () => Aglyn.consentGroupForHost(org as Record<string, unknown>, hostId),
-    [org, hostId],
-  )
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { data: user } = useUser()
@@ -298,21 +306,6 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
    * alert below says so rather than showing an empty form.
    */
   const byForm = filter?.field === 'formIds'
-  /**
-   * The scope tokens this viewer may read, capped at what
-   * `array-contains-any` accepts.
-   *
-   * `'org'` is included because an org-wide contact is visible to every site
-   * — an org that widened its default deliberately still sees its own rows.
-   */
-  const visibleToTokens = useMemo(
-    () =>
-      [
-        Aglyn.ORG_SCOPE_TOKEN,
-        ...consentGroup.hostIds.map((id) => Aglyn.hostScopeToken(id)),
-      ].slice(0, Aglyn.MAX_SCOPE_HOSTS),
-    [consentGroup],
-  )
   const {
     data: contactDocs,
     status: contactsStatus,
@@ -365,10 +358,9 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
        */
       return query(
         collection(firestore, dataScope[0], dataScope[1], 'contacts'),
-        // Dropped for the form mirror alone — see `byForm`.
-        ...(byForm
-          ? []
-          : [where('visibleTo', 'array-contains-any', visibleToTokens)]),
+        // Dropped for the form mirror alone — see `byForm` — and absent at
+        // the organization level, where the tokens are `null` (AGL-2630).
+        ...(byForm ? [] : crmVisibleToClause(visibleToTokens)),
         ...(constraints ?? [orderBy('updatedAt', 'desc')]),
         limit(1000),
       )
@@ -412,8 +404,13 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
    */
   const contacts: ContactRecord[] = useMemo(
     () =>
-      (contactDocs ?? []).map((row) => contactRecordFromDoc(row, consentGroup)),
-    [contactDocs, consentGroup],
+      (contactDocs ?? []).map((row) =>
+        contactRecordFromDoc(
+          row,
+          consentGroup ?? contactPrimaryGroup(row, org as Record<string, unknown>),
+        ),
+      ),
+    [contactDocs, consentGroup, org],
   )
   /*
    * The roster, for the Owner column — read only once a loaded row actually
@@ -485,8 +482,11 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
   const quota = records.quota
   // Signups whose CRM record was dropped at the free band (AGL-891) —
   // written by upsert-contact, host-scoped.
+  // Host-scoped, so absent at the organization level (AGL-2630): the
+  // counter is a fact about one site's capture, and summing thirty of them
+  // would be a figure about nothing in particular.
   const { data: droppedCounter } = useFirestoreDoc<any>(
-    () => doc(firestore, 'hosts', hostId, 'counters', 'contactsDropped'),
+    () => (hostId ? doc(firestore, 'hosts', hostId, 'counters', 'contactsDropped') : null),
     [firestore, hostId],
   )
   const droppedTotal = Number(droppedCounter?.['total'] ?? 0)
@@ -508,7 +508,10 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
    * and an operator reconciling their contact list needs both or neither.
    *=========================================*/
   const { data: unmatchedRefundCounter } = useFirestoreDoc<any>(
-    () => doc(firestore, 'hosts', hostId, 'counters', 'contactRefundsUnmatched'),
+    () =>
+      hostId
+        ? doc(firestore, 'hosts', hostId, 'counters', 'contactRefundsUnmatched')
+        : null,
     [firestore, hostId],
   )
   const unmatchedRefundTotal = Number(unmatchedRefundCounter?.['total'] ?? 0)
@@ -738,7 +741,10 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
    * already in the address book is not an error, and the page says which
    * happened before it opens the record.
    *=========================================*/
-  const crmApi = useCrmApi(hostId)
+  // The site the route resolves the org from and stamps the record with: the
+  // mounted site, or at the organization level the one the drawer's picker
+  // named (AGL-2630) — the drawer holds its submit until it is known.
+  const crmApi = useCrmApi(crmScope.createHostId)
   const [createBusy, setCreateBusy] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const handleCreate = useCallback(
@@ -1124,7 +1130,6 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
           org={org}
           busy={createBusy}
           error={createError}
-          consentGroup={consentGroup}
           owners={members.options}
           ownersReady={members.ready}
           onSubmit={(values) => void handleCreate(values)}

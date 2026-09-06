@@ -20,7 +20,6 @@ import * as Aglyn from '@aglyn/aglyn'
 import type { AglynOrgBilling, CrmActivityRow } from '@aglyn/aglyn'
 import {
   useFirestore,
-  useOrgDataScope,
   usePagedCollection,
   useScopeTokens,
   useUser,
@@ -34,6 +33,7 @@ import {
   type QueryConstraint,
 } from 'firebase/firestore'
 import { useCallback, useMemo } from 'react'
+import { crmVisibleToClause, useCrmScope } from '../hooks/use-crm-scope'
 
 /** The org document as the shell passes it: partial, and possibly absent. */
 export type CrmOrg = Partial<AglynOrgBilling> | null | undefined
@@ -64,41 +64,39 @@ export interface ActivityRecordLink {
  * loaded, so the group and the tokens cost nothing, and the data scope is
  * the memoized `['orgs', orgId]` tuple every host-scoped card builds.
  */
-export function useActivityScope(hostId: string, org: CrmOrg) {
+export function useActivityScope(hostId: string | null, org: CrmOrg) {
   const firestore = useFirestore()
-  const { scope: dataScope, orgId } = useOrgDataScope({ hostId })
   /*
    * The controller this surface is showing — the sites declared to be one
    * sender, or this site alone — read from the org document the shell
-   * passed. The contacts list resolves its group the same way, so an
+   * passed, by the one hook every CRM surface resolves its scope through
+   * (AGL-2614). The contacts list resolves its group the same way, so an
    * activity logged from a contact's page lands in the scope that contact
-   * is read under.
+   * is read under. At the organization level (AGL-2630) there is no viewing
+   * site: `consentGroup` and `readTokens` are `null` — the listener carries
+   * no scope clause — and a new activity is stamped with the picked site's
+   * tokens and provenance.
    */
-  const consentGroup = useMemo(
-    () => Aglyn.consentGroupForHost(org as Record<string, unknown>, hostId),
-    [org, hostId],
-  )
-  /** The tokens a listener asks for — `'org'` first, then the group's sites. */
-  const readTokens = useMemo(
-    () => Aglyn.crmReadTokens(consentGroup),
-    [consentGroup],
-  )
-  /** The tokens a creator stamps — the contact create path's own expression. */
-  const writeTokens = useMemo(
-    () => Aglyn.crmScopeTokens(org as Record<string, unknown>, consentGroup),
-    [org, consentGroup],
-  )
+  const {
+    scope: dataScope,
+    orgId,
+    consentGroup,
+    visibleTo: readTokens,
+    createHostId,
+    createTokens: writeTokens,
+  } = useCrmScope({ hostId, org })
   return useMemo(
     () => ({
       firestore,
       dataScope,
       orgId,
-      hostId,
+      /** The site a NEW activity names as provenance — the mounted site, or the picked one. */
+      hostId: createHostId,
       consentGroup,
       readTokens,
       writeTokens,
     }),
-    [firestore, dataScope, orgId, hostId, consentGroup, readTokens, writeTokens],
+    [firestore, dataScope, orgId, createHostId, consentGroup, readTokens, writeTokens],
   )
 }
 
@@ -195,7 +193,7 @@ export function useActivityWindow(
           dataScope[1],
           Aglyn.CRM_COLLECTIONS.activities,
         ),
-        where('visibleTo', 'array-contains-any', readTokens),
+        ...crmVisibleToClause(readTokens),
         ...record,
         orderBy('atMs', 'desc'),
         limit(pageLimit),

@@ -26,6 +26,7 @@ import {
 import { useFirestore, useFirestoreCollection } from '@aglyn/tenant-feature-instance'
 import { collection, limit, orderBy, query, where } from 'firebase/firestore'
 import { useMemo } from 'react'
+import { crmScopeListable, crmVisibleToClause } from './use-crm-scope'
 
 /** One saved view as the menu lists it: the document, held to shape, with its id. */
 export interface CrmSavedViewRow extends CrmSavedView {
@@ -61,7 +62,8 @@ export const CRM_VIEWS_LIMIT = 100
  */
 export function useCrmViews(options: {
   scope: readonly ['orgs', string] | null
-  visibleTo: readonly string[]
+  /** The reader's tokens, or `null` at the organization level — no clause (AGL-2630). */
+  visibleTo: readonly string[] | null
   section: CrmViewSection
   uid: string | null | undefined
 }): { views: CrmSavedViewRow[]; ready: boolean } {
@@ -69,10 +71,10 @@ export function useCrmViews(options: {
   const firestore = useFirestore()
   const { data, status } = useFirestoreCollection<Record<string, unknown>>(
     () =>
-      scope && visibleTo.length
+      scope && crmScopeListable(visibleTo)
         ? query(
             collection(firestore, scope[0], scope[1], CRM_COLLECTIONS.views),
-            where('visibleTo', 'array-contains-any', visibleTo),
+            ...crmVisibleToClause(visibleTo),
             where('section', '==', section),
             orderBy('name'),
             limit(CRM_VIEWS_LIMIT),

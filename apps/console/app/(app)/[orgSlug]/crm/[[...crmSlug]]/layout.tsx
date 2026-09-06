@@ -17,13 +17,36 @@
 
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
+import { entityPageTitle } from '../../../../entity-page-title'
+import { pluginPageTitle, pluginSectionTitle } from '../../../../plugin-page-title'
 
 // Title-only shell (AGL-1059): the page is a client component, and a client
 // component cannot export `metadata` — so its title lives here, in the
 // nearest server layout. The suffix comes from the root title template.
-export const metadata: Metadata = { title: 'Organization contacts' }
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ orgSlug: string; crmSlug?: string[] }>
+}): Promise<Metadata> {
+  const { orgSlug, crmSlug } = await params
+  /*
+   * `section · CRM · org` (AGL-2184/AGL-2486), the console's own title
+   * vocabulary — the site hub's layout builds the same string with the site
+   * as the scope. The surface slug is fixed: this route serves one hub, and
+   * the section is the first segment beneath it. A record id in the second
+   * segment is dropped, as it is on the site route.
+   */
+  const [sectionSlug = ''] = crmSlug ?? []
+  return {
+    title: entityPageTitle({
+      subject: pluginSectionTitle('crm', sectionSlug),
+      noun: pluginPageTitle('crm'),
+      scope: orgSlug,
+    }),
+  }
+}
 
-export default function OrgContactsTitleLayout({
+export default function OrgCrmTitleLayout({
   children,
 }: {
   children: ReactNode
