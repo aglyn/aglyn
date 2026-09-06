@@ -132,7 +132,7 @@ await step(tally, page, 'the table lists the pipeline with the won deal marked',
   await page.getByRole('button', { name: 'Table', exact: true }).click()
   const row = page.locator('[role="row"]', { hasText: F.dealTitle }).first()
   await row.waitFor({ timeout: TIMEOUT_MS })
-  await row.getByText('Won', { exact: true }).waitFor({ timeout: TIMEOUT_MS })
+  await row.getByText('Won', { exact: true }).first().waitFor({ timeout: TIMEOUT_MS })
   // Every row is a Sales deal: the Renewals deal is not on this table.
   const renewalRows = await page.locator('[role="row"]', { hasText: F.renewalDealTitle }).count()
   tally.check('the table lists the pipeline with the won deal marked', renewalRows === 0, `${renewalRows} Renewals rows on the Sales table`)
@@ -190,6 +190,9 @@ await step(tally, page, 'an empty pipeline archives and leaves the active list',
 })
 
 await step(tally, page, 'the switcher shows the other pipeline\'s board', async () => {
+  // The board is this step's own precondition: a failed table step above
+  // would otherwise leave the section on the table, where no card exists.
+  await page.getByRole('button', { name: 'Board', exact: true }).click()
   await pickSelect(page, 'Pipeline', F.renewalsPipelineName)
   await card(F.renewalDealTitle).waitFor({ timeout: TIMEOUT_MS })
   const salesCards = await waitFor(() => card(F.boardDeals.voss.title).count(), (n) => n === 0)
@@ -276,7 +279,8 @@ await step(tally, page, 'the forecast lays the open pipeline out by close month'
   await table.waitFor({ timeout: TIMEOUT_MS })
   const headers = await table.getByRole('columnheader').allTextContents()
   const undatedRow = table.locator('[data-forecast-row="undated"]')
-  await undatedRow.getByText(money(undated), { exact: true }).waitFor({ timeout: TIMEOUT_MS })
+  // The row repeats the figure in the "All pipelines" cell when one pipeline holds every undated deal.
+  await undatedRow.getByText(money(undated), { exact: true }).first().waitFor({ timeout: TIMEOUT_MS })
   const lastRow = table.getByRole('row').last()
   const totals = await lastRow.allTextContents()
   tally.check(
