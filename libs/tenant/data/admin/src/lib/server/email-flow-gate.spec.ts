@@ -33,6 +33,8 @@ let silosRead: string[] = []
 let topicsLeft: Record<string, any> = {}
 /** Make the topic lookup throw, for the fail-open case. */
 let topicLookupThrows = false
+/** `orgs/{org}/emailIndex/{personKey}` → `{ email, contactId }` (AGL-2625). */
+let emailIndex: Record<string, Record<string, any>> = {}
 
 const singleDocQuery = (
   row: Record<string, any> | null,
@@ -49,6 +51,54 @@ const singleDocQuery = (
     }
   },
 })
+
+/**
+ * The contact as the org's collection holds it. A row the scoped query
+ * used to answer was visible to the site by construction; the lookup now
+ * checks `visibleTo` itself, so the default here is the org-wide stamp and
+ * a case that wants a sibling site's row says so.
+ */
+const contactRow = () =>
+  contact === null ? null : { visibleTo: ['org'], ...contact }
+
+const contactSnapshot = (row: Record<string, any> | null) => ({
+  id: 'contact-1',
+  exists: row !== null,
+  data: () => row ?? undefined,
+  get: (f: string) => row?.[f],
+})
+
+const emailIndexRef: any = {
+  doc: (key: string) => ({
+    get: async () => ({
+      exists: Boolean(emailIndex[key]),
+      get: (f: string) => emailIndex[key]?.[f],
+    }),
+    set: async (value: Record<string, any>) => {
+      emailIndex[key] = { ...(emailIndex[key] ?? {}), ...value }
+    },
+  }),
+}
+
+/** The org's contacts collection: matched on the address, as the real query is. */
+const contactsRef: any = {
+  parent: {
+    collection: (name: string) => (name === 'emailIndex' ? emailIndexRef : contactsRef),
+  },
+  doc: (id: string) => ({
+    get: async () => contactSnapshot(id === 'contact-1' ? contactRow() : null),
+  }),
+  where: (field: string, _op: string, value: unknown) => ({
+    limit: () => ({
+      get: async () => {
+        silosRead.push('contacts')
+        const row = contactRow()
+        const hit = row !== null && row[field] === value ? row : null
+        return { empty: hit === null, docs: hit === null ? [] : [contactSnapshot(hit)] }
+      },
+    }),
+  }),
+}
 
 const firestore: any = {
   collection: (name: string) => ({
@@ -78,11 +128,12 @@ jest.mock('./firebase-admin', () => ({
 jest.mock('./organizations', () => ({
   __esModule: true,
   orgDataQueryForHost: async () => ({
-    ref: {},
+    ref: contactsRef,
     query: singleDocQuery(contact, 'contacts'),
   }),
 }))
 
+import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import { marketingConsentFieldsForHost } from '@aglyn/aglyn/server'
 import { flowEmailRefusal } from './email-flow-gate'
 
@@ -112,6 +163,7 @@ beforeEach(() => {
   silosRead = []
   topicsLeft = {}
   topicLookupThrows = false
+  emailIndex = {}
 })
 
 describe('the consent split, applied to one person', () => {
@@ -268,6 +320,38 @@ describe('the consent split, applied to one person', () => {
         firestore,
         scope: 'scheduled',
       }),
+    ).toBe('consent-withheld')
+  })
+
+  it('finds the basis on the survivor when the address is one a merge folded in (AGL-2633)', async () => {
+    // The person consented under the personal address, then the two
+    // records were merged with the work address kept. The index is what
+    // still connects the personal address to the surviving record.
+    contact = {
+      email: 'buyer@work.example.com',
+      alternateEmails: [EMAIL],
+      ...grantedTo(HOST),
+    }
+    emailIndex[personKey(EMAIL)!] = { email: EMAIL, contactId: 'contact-1' }
+
+    expect(
+      await flowEmailRefusal({ hostId: HOST, email: EMAIL, org: STRICT, firestore }),
+    ).toBeNull()
+    // The index answered; neither the contacts query nor the lead silo ran.
+    expect(silosRead).toEqual([])
+  })
+
+  it('REFUSES when the survivor an alternate names belongs to a sibling site', async () => {
+    contact = {
+      email: 'buyer@work.example.com',
+      alternateEmails: [EMAIL],
+      visibleTo: ['host:site-2'],
+      ...grantedTo(HOST),
+    }
+    emailIndex[personKey(EMAIL)!] = { email: EMAIL, contactId: 'contact-1' }
+
+    expect(
+      await flowEmailRefusal({ hostId: HOST, email: EMAIL, org: STRICT, firestore }),
     ).toBe('consent-withheld')
   })
 
