@@ -1195,15 +1195,6 @@ const NOT_A_LIST: Array<[string, string]> = [
       'page the choices a person has to scan anyway.',
   ],
   [
-    'libs/plugins/crm/src/lib/components/company-picker.tsx',
-    'The company OPTIONS behind a contact’s company field (AGL-2597): ' +
-      'an autocomplete fed by one read capped at `COMPANY_OPTIONS_LIMIT` ' +
-      'and sliced to it, with a `truncated` flag the field surfaces as ' +
-      'text when the org has more. A picker narrows by typing; a footer ' +
-      'under an autocomplete would page what the query box already ' +
-      'filters.',
-  ],
-  [
     'libs/plugins/crm/src/lib/components/company-properties-card.tsx',
     'The detach PROBE behind Delete company (AGL-2597), not a rendered ' +
       'list: the contacts linked to the company are read one past ' +
@@ -1539,7 +1530,13 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // `LEAD_SURFACE_FORMS_WINDOW` and owning up to the window in prose. A
     // sentence of links is not a view of a collection; the Forms plugin's
     // own list is the paged one.
-    expect(NOT_A_LIST).toHaveLength(47)
+    //
+    // 46 since the company picker became an `Autocomplete` (AGL-2613): its
+    // options are still one capped read, but they reach the field as the
+    // control's own option list rather than as mapped row elements, so the
+    // detector no longer sees a table there — the classification retires
+    // with the surface it described, the way this guard is meant to shrink.
+    expect(NOT_A_LIST).toHaveLength(46)
   })
 })
 
