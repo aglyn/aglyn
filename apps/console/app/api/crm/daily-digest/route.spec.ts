@@ -547,10 +547,16 @@ describe('POST /api/crm/daily-digest (AGL-2619)', () => {
   })
 
   it('reads the zone from the environment and refuses one Intl does not know', () => {
-    expect(digestTimeZone({})).toBe('America/Chicago')
-    expect(digestTimeZone({ CRM_DIGEST_TIME_ZONE: 'Europe/London' })).toBe('Europe/London')
+    // The literals stand in for the environment, whose console typing
+    // declares `NODE_ENV`; the zone is the only variable the reader consults.
+    expect(digestTimeZone({ NODE_ENV: 'test' })).toBe('America/Chicago')
+    expect(digestTimeZone({ NODE_ENV: 'test', CRM_DIGEST_TIME_ZONE: 'Europe/London' })).toBe(
+      'Europe/London',
+    )
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
-    expect(digestTimeZone({ CRM_DIGEST_TIME_ZONE: 'Mars/Olympus' })).toBe('America/Chicago')
+    expect(digestTimeZone({ NODE_ENV: 'test', CRM_DIGEST_TIME_ZONE: 'Mars/Olympus' })).toBe(
+      'America/Chicago',
+    )
     expect(warn).toHaveBeenCalled()
   })
 })
