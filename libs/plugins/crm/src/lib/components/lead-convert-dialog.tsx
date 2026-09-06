@@ -61,7 +61,8 @@ import {
 } from '../model/lead-company-suggestion'
 import { crmRoutes } from '../model/crm-routes'
 import type { LeadConvertRequest, LeadConvertResponse } from '../server/lead-convert'
-import { LeadOwnerSelect, type OrgMemberOptions } from './lead-owner-select'
+import type { OrgMemberOptions } from '../hooks/use-org-member-options'
+import { LeadOwnerSelect } from './lead-owner-select'
 
 /**
  * How many companies the picker loads. Ordered by name, so a bigger org sees

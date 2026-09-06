@@ -108,6 +108,7 @@ const members = {
   labelFor: (ref: string | null | undefined) => (ref === 'uid-a' ? 'Ada Lovelace' : String(ref ?? '')),
   emailFor: (ref: string | null | undefined) => (ref === 'uid-a' ? 'ada@example.com' : String(ref ?? '')),
   ready: true,
+  loading: false,
   error: null,
 }
 const rows = [

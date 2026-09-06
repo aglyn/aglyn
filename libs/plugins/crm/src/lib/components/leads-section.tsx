@@ -22,6 +22,10 @@ import { mdiAccountArrowRight, mdiAccountCancelOutline, mdiAccountTieOutline } f
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import {
+  type OrgMemberOptions,
+  useOrgMemberOptions,
+} from '../hooks/use-org-member-options'
 import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
 import { useCrmSavedView } from '../hooks/use-crm-saved-view'
 import { useCrmScope } from '../hooks/use-crm-scope'
@@ -72,11 +76,7 @@ import {
   leadMatchesFilter,
 } from '../model/lead-filters'
 import { leadSourceLabel, leadSources, leadTimeLabel } from './lead-history-card'
-import {
-  LeadOwnerSelect,
-  type OrgMemberOptions,
-  useOrgMemberOptions,
-} from './lead-owner-select'
+import { LeadOwnerSelect } from './lead-owner-select'
 import { LeadStatusChip } from './lead-status-chip'
 import LeadSurfacesNote from './lead-surfaces-note'
 import { LeadUnqualifyDialog } from './lead-unqualify-dialog'
@@ -295,7 +295,8 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         headerName: 'Owner',
         flex: 1,
         minWidth: 140,
-        valueGetter: (_value, row: LeadRow) => roster.labelFor(row.ownerUid),
+        valueGetter: (_value, row: LeadRow) =>
+          row.ownerUid ? roster.labelFor(row.ownerUid) : 'Unassigned',
       },
       // Only at the organization level, where a row can be any site's.
       ...(hostId

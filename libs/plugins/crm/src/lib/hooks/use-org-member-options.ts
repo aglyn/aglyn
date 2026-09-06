@@ -39,6 +39,8 @@ export interface OrgMemberOptions {
   emailFor: (ref: string | null | undefined) => string
   /** The roster has answered — with people, or with a refusal. */
   ready: boolean
+  /** An org is named and the roster has not answered for it yet. */
+  loading: boolean
   /** The roster was refused or unreachable; `options` is then empty. */
   error: string | null
 }
@@ -154,9 +156,10 @@ export function useOrgMemberOptions(
       labelFor,
       emailFor,
       ready: current !== null,
+      loading: Boolean(orgId) && current === null,
       error: current?.error ?? null,
     }),
-    [options, labelFor, emailFor, current],
+    [options, labelFor, emailFor, current, orgId],
   )
 }
 

@@ -42,7 +42,8 @@ import { useEffect, useId, useState } from 'react'
 import { crmRoutes } from '../model/crm-routes'
 import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
 import { CrmSendEmailButton } from './crm-send-email-button'
-import { LeadOwnerSelect, type OrgMemberOptions } from './lead-owner-select'
+import type { OrgMemberOptions } from '../hooks/use-org-member-options'
+import { LeadOwnerSelect } from './lead-owner-select'
 import { LeadStatusChip } from './lead-status-chip'
 
 const NOTES_MAX = 4000
