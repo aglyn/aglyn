@@ -22,8 +22,11 @@ import { mdiAccountArrowRight, mdiAccountCancelOutline, mdiAccountTieOutline } f
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
 import { useCrmSavedView } from '../hooks/use-crm-saved-view'
+import { useCrmScope } from '../hooks/use-crm-scope'
 import { useCrmViewGrid } from '../hooks/use-crm-view-grid'
+import { useOrgLeads } from '../hooks/use-org-leads'
 import CrmViewsControl from './crm-views-control'
 import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
@@ -32,7 +35,6 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
   useFirestoreCollection,
-  useOrgDataScope,
 } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
@@ -103,7 +105,15 @@ import { LeadUnqualifyDialog } from './lead-unqualify-dialog'
  */
 const LEADS_WINDOW = 200
 
-type LeadRow = Record<string, unknown> & CrmLeadFields & { $id: string }
+/**
+ * One row of the list. `$id` keys the grid — the document id under a site,
+ * `{hostId}/{leadId}` at the organization level, where a lead's id is a
+ * person key the same on every site that met the person — and `leadId`
+ * and `hostId` say which document, under which site, a write or a link
+ * names.
+ */
+type LeadRow = Record<string, unknown> &
+  CrmLeadFields & { $id: string; leadId: string; hostId: string }
 
 /**
  * `/crm/leads` — the people a site has met but not yet qualified (AGL-2608).
@@ -115,27 +125,55 @@ type LeadRow = Record<string, unknown> & CrmLeadFields & { $id: string }
  * no `visibleTo` filter; the Firestore rules admit any member of the site to
  * read it and an admin, editor or author to update it, which is what makes
  * the inline status and owner changes client-direct writes.
+ *
+ * At the ORGANIZATION level (AGL-2630) there is no one site to read: the
+ * section opens the same query under every site the org has (`useOrgLeads`)
+ * and lists the merged window with a Site column, every row naming the site
+ * its writes and its link go to. The per-site notes — which of a site's
+ * forms file a lead — belong to a site's own hub and are not drawn here.
  */
 export function CrmLeadsSection(props: ConsolePluginPageProps) {
-  const { hostId, basePath } = props
+  const { hostId, org, basePath } = props
   const firestore = useFirestore()
   const router = useRouter()
   const { enqueueSnackbar } = useSnackbar()
-  const { orgId } = useOrgDataScope({ hostId })
+  const { orgId } = useCrmScope({ hostId, org })
+  const mount = useCrmOrgMount()
   const roster = useOrgMemberOptions(orgId)
   const routes = crmRoutes(basePath ?? '')
 
-  const { data: leadDocs, status } = useFirestoreCollection<LeadRow>(
+  // Under a site: the site's own window, rows keyed by document id.
+  const site = useFirestoreCollection<Record<string, unknown> & CrmLeadFields & { $id: string }>(
     () =>
-      query(
-        collection(firestore, 'hosts', hostId, 'leads'),
-        orderBy('lastSeenAtMs', 'desc'),
-        limit(LEADS_WINDOW + 1),
-      ),
+      hostId
+        ? query(
+            collection(firestore, 'hosts', hostId, 'leads'),
+            orderBy('lastSeenAtMs', 'desc'),
+            limit(LEADS_WINDOW + 1),
+          )
+        : null,
     [firestore, hostId],
     { idField: '$id' },
   )
-  const truncated = leadDocs.length > LEADS_WINDOW
+  // At the organization level: every site's window, merged.
+  const orgHostIds = useMemo(
+    () => (hostId ? [] : (mount?.hosts ?? []).map((host) => host.id)),
+    [hostId, mount?.hosts],
+  )
+  const orgLeads = useOrgLeads({ hostIds: orgHostIds, windowSize: LEADS_WINDOW })
+  const leadDocs = useMemo<LeadRow[]>(
+    () =>
+      hostId
+        ? site.data.map((row) => ({ ...row, leadId: row.$id, hostId }))
+        : orgLeads.data,
+    [hostId, site.data, orgLeads.data],
+  )
+  const status = hostId
+    ? site.status
+    : mount?.hostsReady && !orgHostIds.length
+      ? 'success'
+      : orgLeads.status
+  const truncated = hostId ? leadDocs.length > LEADS_WINDOW : orgLeads.truncated
   const window = useMemo(() => leadDocs.slice(0, LEADS_WINDOW), [leadDocs])
 
   /*
@@ -186,9 +224,9 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
   const [unqualifying, setUnqualifying] = useState<LeadRow | null>(null)
 
   const writeLead = useCallback(
-    async (leadId: string, fields: Record<string, unknown>, done: string) => {
+    async (lead: LeadRow, fields: Record<string, unknown>, done: string) => {
       try {
-        await updateDoc(doc(firestore, 'hosts', hostId, 'leads', leadId), {
+        await updateDoc(doc(firestore, 'hosts', lead.hostId, 'leads', lead.leadId), {
           ...fields,
           updatedAt: serverTimestamp(),
         })
@@ -200,7 +238,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         )
       }
     },
-    [firestore, hostId, enqueueSnackbar],
+    [firestore, enqueueSnackbar],
   )
 
   const columns = useMemo<GridColDef[]>(
@@ -239,7 +277,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
                 return
               }
               void writeLead(
-                row.$id,
+                row,
                 {
                   status: next,
                   ...(Aglyn.crmLeadStatus(row) === 'unqualified'
@@ -259,6 +297,19 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         minWidth: 140,
         valueGetter: (_value, row: LeadRow) => roster.labelFor(row.ownerUid),
       },
+      // Only at the organization level, where a row can be any site's.
+      ...(hostId
+        ? []
+        : [
+            {
+              field: 'hostId',
+              headerName: 'Site',
+              flex: 0.9,
+              minWidth: 140,
+              valueGetter: (_value: unknown, row: LeadRow) =>
+                mount?.siteName(row.hostId) ?? row.hostId,
+            } satisfies GridColDef,
+          ]),
       {
         field: 'sources',
         headerName: 'Source',
@@ -294,7 +345,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
                   key: 'open',
                   label: 'Open lead',
                   icon: <MdiIcon path={mdiAccountArrowRight.path} size={0.8} />,
-                  href: routes.lead(row.$id),
+                  href: routes.lead(row.leadId, hostId ? null : row.hostId),
                 },
                 {
                   key: 'assign',
@@ -318,7 +369,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         ),
       },
     ],
-    [roster, routes, writeLead],
+    [roster, routes, writeLead, hostId, mount],
   )
   /* The column and sort models are the view's (AGL-2617). */
   const grid = useCrmViewGrid(views, columns)
@@ -353,8 +404,8 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         contentGutterY
       >
         <Stack spacing={2}>
-          {/* Which surfaces file a lead on this site, by name (AGL-2612). */}
-          <LeadSurfacesNote hostId={hostId} />
+          {/* Which surfaces file a lead on this site, by name (AGL-2612) — a site's own note. */}
+          {hostId ? <LeadSurfacesNote hostId={hostId} /> : null}
           {status === 'success' && window.length === 0 ? (
             <EmptyStateComponent
               label={'No leads yet'}
@@ -371,7 +422,9 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
                 rows={pageRows}
                 columns={columns}
                 loading={status === 'loading'}
-                onOpen={(id) => router.push(routes.lead(id))}
+                onOpen={(_id, row: LeadRow) =>
+                  router.push(routes.lead(row.leadId, hostId ? null : row.hostId))
+                }
                 // Columns and sort are the view's, controlled (AGL-2617).
                 columnVisibilityModel={grid.columnVisibilityModel}
                 onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}
@@ -406,7 +459,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         onAssign={(uid) => {
           if (!assigning) return
           void writeLead(
-            assigning.$id,
+            assigning,
             { ownerUid: uid || deleteField() },
             uid ? 'Owner assigned' : 'Owner cleared',
           )
@@ -416,8 +469,8 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
       <LeadUnqualifyDialog
         open={Boolean(unqualifying)}
         onClose={() => setUnqualifying(null)}
-        hostId={hostId}
-        leadId={unqualifying?.$id ?? ''}
+        hostId={unqualifying?.hostId ?? hostId ?? ''}
+        leadId={unqualifying?.leadId ?? ''}
         leadLabel={String(unqualifying?.['name'] || unqualifying?.['email'] || '')}
       />
     </>

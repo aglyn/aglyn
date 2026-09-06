@@ -72,8 +72,20 @@ function sectionBody(
         <ContactsSection {...props} />
       )
     case 'leads':
+      /*
+       * A lead lives under its site, so at the organization level the
+       * address names the site before the id — `leads/{hostId}/{leadId}`
+       * (AGL-2630) — and the record page is mounted UNDER that site: every
+       * read and write it makes is host-scoped by path, exactly as on the
+       * site's own hub. Under a site the id is the one segment it always
+       * was.
+       */
       return record ? (
-        <LeadDetailPage {...recordProps} id={record} />
+        !props.hostId && detail.length >= 2 ? (
+          <LeadDetailPage {...recordProps} hostId={record} id={detail[1]} />
+        ) : (
+          <LeadDetailPage {...recordProps} id={record} />
+        )
       ) : (
         <LeadsSection {...props} />
       )
