@@ -117,6 +117,11 @@ export interface LeadConvertActor {
    * does. `api`: a key, which cannot own a record — see the header.
    */
   kind: 'member' | 'api'
+  /**
+   * For an `api` actor, the key's name — what the audit line attributes the
+   * conversion to, since a key has no address to be named by.
+   */
+  apiKeyName?: string | null
 }
 
 /** What a conversion is asked to do. Validated by the door before it gets here. */
@@ -168,6 +173,13 @@ export type ConvertHostLeadRefusal =
    * drops a creation past a Free org's audience band. Nothing was written.
    */
   | 'contact-not-created'
+  /**
+   * The site holds an erasure for the lead's address (AGL-2623): the person
+   * asked to be forgotten, and the capture door refuses to rebuild a record
+   * for them — by a conversion as by a form. Nothing was written, and the
+   * lead stays as it was; the erasure removes it when it runs.
+   */
+  | 'erased'
   /** The CRM records band is full (AGL-2611); the contact stands, nothing more was opened. */
   | 'band-full'
   /** `companyId` names no company in this organization. The contact stands. */
@@ -284,7 +296,7 @@ export async function convertHostLead(
    * carries the stage and the owner, which is what makes this a sales
    * record rather than another form capture.
    *=========================================*/
-  await captureHostContact({
+  const captured = await captureHostContact({
     hostId,
     email,
     ...(leadName ? { name: leadName } : {}),
@@ -295,6 +307,18 @@ export async function convertHostLead(
       ...(chosenOwner ? { ownerUid: chosenOwner } : {}),
     },
   })
+  /*
+   * The one verdict of the door's that is named here. Its other refusals —
+   * the band, an address it will not take, its own swallowed error — all
+   * read the same from this side: no row to find below, answered as
+   * `contact-not-created`. An erasure is different in kind: not a limit the
+   * org can lift or a fault in the request but a decision the workspace made
+   * about this person, and a caller told "the band may be full" would retry
+   * against it forever.
+   */
+  if (captured && 'refused' in captured && captured.refused === 'erased') {
+    return { ok: false, reason: 'erased' }
+  }
   const contactsRef = await orgDataCollectionForHost(hostId, 'contacts')
   /*
    * The same resolution the capture door just made (AGL-2625): the
@@ -523,7 +547,11 @@ export async function convertHostLead(
    */
   await logHostActivity(
     hostId,
-    { uid: actor.uid, email: actor.email ?? null },
+    {
+      uid: actor.uid,
+      email: actor.email ?? null,
+      ...(actor.apiKeyName ? { apiKeyName: actor.apiKeyName } : {}),
+    },
     'Converted lead',
     { type: 'lead', id: leadId, name: String(lead['name'] ?? '') || email },
   )

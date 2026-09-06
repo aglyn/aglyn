@@ -52,6 +52,27 @@ export interface ActivityEntryLike {
   // than nested under `target` — tolerate both so no entry renders blank.
   type?: string
   targetId?: string
+  /** The address the actor had when the entry was written; null for a key. */
+  actorEmail?: string | null
+  /** The name of the API key that wrote the entry, when a key did (AGL-2632). */
+  apiKeyName?: string | null
+}
+
+/**
+ * Who a host activity entry is attributed to — the writer's half of the
+ * contract whose reader is {@link activityActorLabel}.
+ *
+ * A person is their verified uid and the address they had at the time. An
+ * integration is the literal uid `'api'`, no address, and the name the
+ * organization gave its key — carried because a feed that says "Someone"
+ * about every write a key made is an audit trail with a hole in it: three
+ * Zapier zaps and a nightly import all read as the same nobody.
+ */
+export interface HostActivityActor {
+  uid: string
+  email?: string | null
+  /** The API key's name, for an entry an integration wrote. */
+  apiKeyName?: string | null
 }
 
 /**
@@ -123,6 +144,22 @@ export function activityPrimaryText(entry: ActivityEntryLike): string {
   if (action && name) return `${action} — ${name}`
   if (action) return action
   return activityTargetLabel(entry.target)
+}
+
+/** How an integration's key is named wherever an actor is: `API key Zapier`. */
+export function apiKeyActorLabel(name: string): string {
+  return `API key ${name}`
+}
+
+/**
+ * The "who" line for an entry: the actor's address, else the key that wrote
+ * it by name, else `Someone` — for an entry that recorded neither, which
+ * every key-written entry was before the name was carried.
+ */
+export function activityActorLabel(entry: ActivityEntryLike): string {
+  if (entry.actorEmail) return entry.actorEmail
+  if (entry.apiKeyName) return apiKeyActorLabel(entry.apiKeyName)
+  return 'Someone'
 }
 
 /**

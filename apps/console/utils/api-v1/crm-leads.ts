@@ -479,8 +479,9 @@ async function convertLead(
       org: ctx.org as Record<string, unknown>,
       leadId,
       // A key has no uid; `'api'` is the attribution every REST create
-      // stamps, and a key owns nothing — see the runtime's header.
-      actor: { uid: 'api', email: null, kind: 'api' },
+      // stamps, and a key owns nothing — see the runtime's header. Its name
+      // is what the site's activity feed shows for the conversion.
+      actor: { uid: 'api', email: null, kind: 'api', apiKeyName: ctx.keyName },
       ...(ownerUid ? { ownerUid } : {}),
       ...parsed.plan,
     })
@@ -546,6 +547,14 @@ function convertRefusal(
           'The contact could not be created — the audience band may be full. ' +
           'Nothing was changed.',
         code: 'contact_not_created',
+        headers: ctx.headers,
+      })
+    case 'erased':
+      return ApiErrors.conflict({
+        message:
+          'This person was erased from the organization at their request, so ' +
+          'a contact cannot be created for this address. Nothing was changed.',
+        code: 'person_erased',
         headers: ctx.headers,
       })
     case 'no-stages':

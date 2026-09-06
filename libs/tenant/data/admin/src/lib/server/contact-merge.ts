@@ -54,6 +54,7 @@ import {
   CONTACT_EMAIL_INDEX_COLLECTION,
   contactEmails,
 } from '@aglyn/aglyn/app-utils/contacts'
+import type { HostActivityActor } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { planContactMerge } from '@aglyn/aglyn/app-utils/contact-merge'
 import { CRM_COLLECTIONS } from '@aglyn/aglyn/app-utils/crm'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
@@ -74,7 +75,7 @@ export interface MergeContactsOptions {
   survivorId: string
   /** The record folded in and deleted. */
   mergedId: string
-  actor: { uid: string; email?: string | null }
+  actor: HostActivityActor
   /**
    * The site whose console did the work: where the activity feed entry
    * lands, and the site a timeline note is filed under. `null` for a door

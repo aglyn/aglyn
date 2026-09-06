@@ -135,6 +135,17 @@ export interface PersonErasureRequest {
 export const PERSON_ERASURE_SUPPRESSION_REASON = 'erasure'
 
 /**
+ * What a door says when it refuses to create a record for an erased address
+ * — the contact create route and both lead-convert doors alike. The person
+ * asked to be removed and a workspace admin filed it; a record cannot be
+ * re-created by hand any more than by a form, and the sentence says where
+ * the decision lives rather than implying the address is malformed.
+ */
+export const CONTACT_ERASED_MESSAGE =
+  'This person was erased from your workspace at their request, so a ' +
+  'record cannot be created for this address.'
+
+/**
  * What one request removes across the workspace — the dialog's list and the
  * docs' list, from one source so the two cannot drift. Each line names a
  * thing a reader recognizes from the console, not a collection.

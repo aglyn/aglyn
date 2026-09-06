@@ -36,6 +36,7 @@
  */
 
 import {
+  CONTACT_ERASED_MESSAGE,
   CRM_RECORDS_BAND_FULL_MESSAGE,
   normalizeCompanyDomain,
   type PluginApiHandler,
@@ -117,6 +118,13 @@ const REFUSALS: Record<
   'band-full': {
     status: 409,
     body: { error: CRM_RECORDS_BAND_FULL_MESSAGE, reason: 'band' },
+  },
+  // The contact create route's own answer for an erased address (AGL-2623),
+  // so the convert dialog and the add-contact drawer say one thing about
+  // one person.
+  erased: {
+    status: 409,
+    body: { error: CONTACT_ERASED_MESSAGE, reason: 'erased' },
   },
   'unknown-company': { status: 404, body: { error: 'Unknown company' } },
   'no-stages': {
