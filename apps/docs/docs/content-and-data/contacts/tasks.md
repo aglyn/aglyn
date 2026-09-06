@@ -154,6 +154,13 @@ all** opens the Tasks section. The card appears only on a workspace that has at 
 one open task, and only for readers who can open the CRM; a workspace that has never
 made a task sees no card at all.
 
+The same card sits at the top of the organization's **Sites** page (**Organization →
+Sites**), above the site grid, for an organization owner, admin or editor. There it
+counts your open tasks **across every site** in the organization, and **View all**
+opens the Tasks section of the [organization-level hub](./overview.md#at-the-organization-level).
+A collaborator added to particular sites does not see the row — it reads across every
+site, which is the one thing a site-scoped membership cannot do.
+
 ## Who can do what
 
 Tasks share the CRM's permission: anyone whose role can **manage data** (owners,

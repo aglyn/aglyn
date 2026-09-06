@@ -282,8 +282,9 @@ template + the catalog entry).
 - **Widgets** — `ConsoleExtension.widgets` render into named shell slots
   via the app's `PluginWidgetSlot`. The guaranteed zones (and the props
   each receives) are the exported `CONSOLE_WIDGET_SLOTS` catalog
-  (AGL-433): `hostActivity`, `hostDashboard`, `commerceGlance`, `orgData`,
-  `besignerFunctions`, `marketplaceListing`, `orgAddons`,
+  (AGL-433): `hostActivity`, `hostDashboard`, `orgDashboard` (the
+  organization's Sites page, handed the org mount and no site), `commerceGlance`,
+  `orgData`, `besignerFunctions`, `marketplaceListing`, `orgAddons`,
   `dashboardFooter`, `orgSettings`, `hostSettings`, and the staff-only
   `adminOrgDetail`.
 - **Providers** — `ConsoleExtension.providers` mount around every console

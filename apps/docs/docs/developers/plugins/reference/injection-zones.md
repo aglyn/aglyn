@@ -15,6 +15,7 @@ The guaranteed zones are the exported `CONSOLE_WIDGET_SLOTS` catalog —
 | --- | --- | --- |
 | `hostActivity` | Host dashboard + screen-view activity column | `hostId`, `targetId?`, `header?`, `viewAllHref?` |
 | `hostDashboard` | Host dashboard glance row, one card per capability | `hostId` |
+| `orgDashboard` | The organization's Sites page, above the site grid — the org-level twin of `hostDashboard`, rendered only for an org-wide member who may open the org-level CRM | `hostId` (always `null`), `orgMount`, `basePath` (the org-level hub's path) |
 | `commerceGlance` | Host dashboard commerce summary | `hostId` |
 | `orgData` | Organization → Data page body | `orgId`, `org` |
 | `besignerFunctions` | Besigner ƒx panel | `hostId` |
