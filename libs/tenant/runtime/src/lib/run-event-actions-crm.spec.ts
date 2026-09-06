@@ -60,6 +60,8 @@ let added: Record<string, Record<string, any>[]> = {}
 let mockActivity: Record<string, any>[] = []
 /** How many times the contacts query ran (the email lookup). */
 let emailLookups = 0
+/** `orgs/{org}/emailIndex/{personKey}` → `{ email, contactId }` (AGL-2625). */
+let mockEmailIndex: Record<string, Record<string, any>> = {}
 /** Every owner assignment handed to the runtime helper (AGL-2618), in order. */
 let assignments: Record<string, any>[] = []
 /** What the helper answers the next assignment with. */
@@ -176,6 +178,14 @@ const collectionHandle = (path: string): any => {
   })
   return {
     ...query([]),
+    // The org document a subcollection hangs off, so the address lookup can
+    // find `emailIndex` beside `contacts` the way it does in production.
+    get parent() {
+      const parentPath = path.slice(0, path.lastIndexOf('/'))
+      return parentPath
+        ? { collection: (name: string) => collectionHandle(`${parentPath}/${name}`) }
+        : null
+    },
     // Minted when no id is given, as the SDK mints one — the email row's id
     // is allocated before the send so it can ride the message (AGL-2615).
     doc: (given?: string) => {
@@ -187,8 +197,14 @@ const collectionHandle = (path: string): any => {
             ? docSnapshot(id, mockContact.data)
             : path.endsWith('members') && mockMembers[id]
               ? docSnapshot(id, mockMembers[id])
-              : missingSnapshot(id),
+              : path.endsWith('emailIndex') && mockEmailIndex[id]
+                ? docSnapshot(id, mockEmailIndex[id])
+                : missingSnapshot(id),
         set: async (data: Record<string, any>) => {
+          if (path.endsWith('emailIndex')) {
+            mockEmailIndex[id] = { ...(mockEmailIndex[id] ?? {}), ...data }
+            return
+          }
           const key = path.split('/').at(-1) ?? path
           ;(added[key] ??= []).push({ ...data, $id: id })
         },
@@ -278,6 +294,7 @@ import {
   CRM_ACTIVITIES_PER_RECORD_CEILING,
   CRM_ACTIVITY_LOG_FULL_MESSAGE,
 } from '@aglyn/aglyn/app-utils/crm'
+import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import { runEventActions } from './run-event-actions'
 
 /** An action on `formSubmission` carrying one CRM step. */
@@ -302,6 +319,7 @@ beforeEach(() => {
   contactUpdates = []
   added = {}
   emailLookups = 0
+  mockEmailIndex = {}
   assignments = []
   mockAssignment = {
     outcome: 'assigned',
@@ -341,6 +359,39 @@ describe('finding the person (claim 1)', () => {
 
     expect(emailLookups).toBe(0)
     expect(contactUpdates).toHaveLength(1)
+  })
+
+  it('resolves an alternate address through the email index to the survivor (AGL-2633)', async () => {
+    // Two records merged: the survivor's `email` is the work address, and
+    // the personal one lives only in the index and `alternateEmails`.
+    mockContact!.data['alternateEmails'] = ['ada@gmail.com']
+    mockEmailIndex[personKey('ada@gmail.com')!] = {
+      email: 'ada@gmail.com',
+      contactId: 'contact-1',
+    }
+    mockActions = [acting({ type: 'addContactTag', tag: 'vip' })]
+
+    await run({ email: 'ada@gmail.com' })
+
+    // The index answered; the `email ==` query, which could not have, never ran.
+    expect(emailLookups).toBe(0)
+    expect(contactUpdates).toHaveLength(1)
+  })
+
+  it('treats an alternate whose survivor this site cannot see as absent', async () => {
+    mockContact!.data['visibleTo'] = ['host:other-site']
+    mockContact!.data['alternateEmails'] = ['ada@gmail.com']
+    mockEmailIndex[personKey('ada@gmail.com')!] = {
+      email: 'ada@gmail.com',
+      contactId: 'contact-1',
+    }
+    mockActions = [acting({ type: 'addContactTag', tag: 'vip' })]
+
+    await run({ email: 'ada@gmail.com' })
+
+    expect(contactUpdates).toHaveLength(0)
+    expect(mockActivity[0].result).toBe('failed')
+    expect(mockActivity[0].action).toContain('no contact this site can see for ada@gmail.com')
   })
 
   it('falls back to the email when the id names nothing this site can see', async () => {

@@ -42,6 +42,9 @@ import {
   orgDataQueryForHost,
   writeCrmEmailActivity,
 } from '@aglyn/tenant-data-admin'
+// The leaf, not the barrel: this library's specs substitute the barrel
+// wholesale, and the lookup must reach the real index logic under them.
+import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
   OWNER_ASSIGNMENT_REFUSALS,
@@ -114,17 +117,16 @@ interface ResolvedContact {
  *
  * Id first, because a CRM event carries the document the door just wrote
  * and a lookup by id is a read, not a query. The address second, through
- * the SCOPED query, for every event that predates the CRM and knows only
- * who filled in the form.
+ * the org's address index narrowed to this site (AGL-2633), for every
+ * event that predates the CRM and knows only who filled in the form — so
+ * an address a merge folded into another record still reaches the person
+ * who now holds it.
  */
 async function resolveEventContact(
   hostId: string,
   payload: HostEventPayload,
 ): Promise<ResolvedContact | null> {
-  const { ref: contactsRef, query } = await orgDataQueryForHost(
-    hostId,
-    'contacts',
-  )
+  const { ref: contactsRef } = await orgDataQueryForHost(hostId, 'contacts')
   const contactId = String(payload['contactId'] ?? '').trim()
   if (contactId) {
     const doc = await contactsRef.doc(contactId).get()
@@ -132,9 +134,7 @@ async function resolveEventContact(
       return { id: doc.id, ref: doc.ref, data: doc.data() ?? {} }
     }
   }
-  const email = normalizeContactEmail(payload['email'])
-  if (!email) return null
-  const hit = (await query.where('email', '==', email).limit(1).get()).docs[0]
+  const hit = await findContactByEmail(contactsRef, payload['email'], { hostId })
   return hit ? { id: hit.id, ref: hit.ref, data: hit.data() ?? {} } : null
 }
 
