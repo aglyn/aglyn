@@ -15,42 +15,35 @@
  * limitations under the License.
  */
 
-import { crmTaskReadTokens } from './task-scope'
+import { CRM_ORG_TASK_SCOPE, isOrgTask } from './task-scope'
 
 /**
- * The tokens every task listener filters on (AGL-2599). A listener without
- * this clause is refused by the rules outright, and one with the wrong set
- * either misses a sibling site's tasks or is refused for asking too widely —
- * so the set is pinned for the three shapes an org comes in.
+ * The scope an ORGANIZATION task carries (AGL-2637). A creator that spelled
+ * it as `[]` would file a task no listener can match, and one that added a
+ * site's token would make it a site's task the org had widened — so the set
+ * is pinned to the org token alone, and pinned as shared and frozen.
  */
-describe('crmTaskReadTokens', () => {
-  it('is the org token plus the site itself when the site is in no group', () => {
-    expect(crmTaskReadTokens(null, 'site-1')).toEqual(['org', 'host:site-1'])
-    expect(crmTaskReadTokens({}, 'site-1')).toEqual(['org', 'host:site-1'])
+describe('CRM_ORG_TASK_SCOPE', () => {
+  it('is the org token alone', () => {
+    expect([...CRM_ORG_TASK_SCOPE]).toEqual(['org'])
   })
 
-  it('carries every sibling in a declared consent group', () => {
-    const org = {
-      consentGroups: {
-        brand: { name: 'Brand', hostIds: ['site-1', 'site-2', 'site-3'] },
-      },
-    }
-    expect(crmTaskReadTokens(org, 'site-2')).toEqual([
-      'org',
-      'host:site-1',
-      'host:site-2',
-      'host:site-3',
-    ])
-    // A site outside the group is still the group of one.
-    expect(crmTaskReadTokens(org, 'site-9')).toEqual(['org', 'host:site-9'])
+  it('cannot be widened by a caller', () => {
+    expect(Object.isFrozen(CRM_ORG_TASK_SCOPE)).toBe(true)
+  })
+})
+
+/**
+ * The site is the one fact that tells an organization task from a site's
+ * task the org has widened: both carry the org token.
+ */
+describe('isOrgTask', () => {
+  it('is true for a task filed with no site', () => {
+    expect(isOrgTask({ hostId: null })).toBe(true)
+    expect(isOrgTask({})).toBe(true)
   })
 
-  it('reads the same set whatever the org chose as its creation default', () => {
-    // `defaultResourceScope: 'org'` changes what a CREATE stamps, not what a
-    // read asks for: the org token is in every read set already.
-    expect(crmTaskReadTokens({ defaultResourceScope: 'org' }, 'site-1')).toEqual([
-      'org',
-      'host:site-1',
-    ])
+  it('is false for a site task, however widely it is scoped', () => {
+    expect(isOrgTask({ hostId: 'site-1' })).toBe(false)
   })
 })

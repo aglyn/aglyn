@@ -46,13 +46,14 @@ const hostAddress = (
 import { Container, GridItems } from '@aglyn/shared-ui-jsx'
 import { AppLink } from '@aglyn/shared-ui-jsx'
 import { Button, Chip, Stack, Tooltip, Typography } from '@mui/material'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import CreateHostDialog from '../../../../components/create-host-dialog.component'
 import EmptyState from '../../../../components/empty-state.component'
 import HostIcon from '../../../../components/host-icon.component'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
+import OrgDashboardWidgets from '../../../../components/org-dashboard-widgets.component'
 import OrgInvitesBanner from '../../../../components/org-invites-banner.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
@@ -62,6 +63,7 @@ import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import useBranding from '../../../../hooks/use-branding'
 import useCurrentOrg from '../../../../hooks/use-current-org'
 import { useOrgHosts } from '../../../../hooks/use-org-hosts'
+import { resolveOrgMount } from '../../../../utils/org-mount'
 import { readOutcome } from '../../../../utils/read-outcome'
 import {
   describeHostStatus,
@@ -170,6 +172,23 @@ function HostsContent() {
   // path to their first org — so the zero-state steps aside to avoid two
   // competing calls to action (AGL-234).
   const { invites } = usePendingInvites()
+  /**
+   * The organization-level mount for the dashboard row (AGL-2636), from the
+   * site list this page already holds — the same shape the org CRM hub hands
+   * its plugin page, so a card on the row totals the organization the way
+   * the hub does, and costs no second read of the sites.
+   */
+  const orgId = currentOrg?.$id
+  const orgMount = useMemo(
+    () =>
+      resolveOrgMount({
+        orgId,
+        orgSlug,
+        hosts: data ?? [],
+        hostsReady,
+      }),
+    [orgId, orgSlug, data, hostsReady],
+  )
 
   return (
     <DashboardLayout
@@ -239,6 +258,15 @@ function HostsContent() {
             }
           />
         ) : (
+        <>
+          {/* The organization's dashboard row (AGL-2636): the plugin cards
+              that total every site, above the sites they total. Gated on the
+              org CRM hub's own access verdict and absent — no row, no gap —
+              for a reader it refuses or when no card survives the gates. */}
+          <OrgDashboardWidgets
+            orgMount={orgMount}
+            basePath={buildRoute(Route.ORG_CRM, { orgSlug })}
+          />
         <GridItems
           spacing={3}
           items={[
@@ -368,6 +396,7 @@ function HostsContent() {
             })),
           ]}
         />
+        </>
         )}
       </Container>
       <CreateHostDialog open={creating} onClose={() => setCreating(false)} />

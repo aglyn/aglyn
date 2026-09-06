@@ -492,6 +492,22 @@ export const CONSOLE_WIDGET_SLOTS = {
    * here and the shell's entitlement + enablement gate decides.
    */
   hostDashboard: 'hostDashboard',
+  /**
+   * The organization's sites page, above the site grid (AGL-2636): the
+   * org-level twin of `hostDashboard`, for a card that totals the
+   * organization rather than one site. Props: `hostId` (always `null`),
+   * `orgMount` (the org and its sites — the {@link ConsolePluginOrgMount}
+   * the org-level hub page hands its plugin page), `basePath` (that hub's
+   * own path, `/[orgSlug]/crm`, for the links a widget builds when there is
+   * no site to derive them from).
+   *
+   * Every widget here reads ACROSS the host boundary — an org-wide total
+   * carries no scope clause — which is the one read a site collaborator may
+   * never make, so the page gates the whole row on the org hub's own access
+   * verdict before any widget mounts, and renders nothing at all (no empty
+   * row, no heading) when no widget survives the gates.
+   */
+  orgDashboard: 'orgDashboard',
   /** Host dashboard commerce summary. Props: hostId, org. */
   commerceGlance: 'commerceGlance',
   /** Org Data page body. Props: orgId, org. */
@@ -529,7 +545,10 @@ export type ConsoleWidgetSlot =
 export interface ConsoleWidget {
   slot: string
   /**
-   * Stable identity for this widget, unique within the plugin.
+   * Stable identity for this widget, unique within the plugin per slot.
+   * The id names the CARD, not its placement: the same card registered on
+   * a second slot — the CRM's glance on the host dashboard and again on the
+   * org's sites page — carries one id on both.
    *
    * A PERSISTED IDENTIFIER wherever the shell lets someone arrange the
    * surface it lands on — the console stores dashboard cards a reader has
