@@ -21,7 +21,21 @@ import { ORG_CLIENT_WRITABLE_FIELDS } from '../foundation'
 import {
   activityKindHasOutcome,
   activityTimeLabel,
+  assignmentEmailDomain,
+  assignmentRuleMatches,
   companyDomainForEmail,
+  CRM_ASSIGNMENT_RULES_MAX,
+  CRM_ASSIGNMENT_RULES_PATH,
+  CRM_ROUND_ROBIN_LAST_ASSIGNED_PATH,
+  CRM_ROUND_ROBIN_POOL_MAX,
+  CRM_ROUND_ROBIN_POOL_PATH,
+  crmHostDefaultOwner,
+  crmHostDefaultOwnerSegments,
+  describeAssignmentRule,
+  newAssignmentRuleId,
+  readCrmAssignmentRule,
+  readCrmAssignmentSettings,
+  roundRobinOrder,
   companyNameForDomain,
   findOrgMember,
   parseCrmMemberRef,
@@ -724,5 +738,196 @@ describe('findOrgMember', () => {
     expect(findOrgMember(roster, 'u9')).toBeUndefined()
     expect(findOrgMember(roster, '')).toBeUndefined()
     expect(findOrgMember(roster, 'ghost@example.com')).toBeUndefined()
+  })
+})
+
+/*==========================================
+ * WHO A NEW RECORD BELONGS TO (AGL-2618).
+ *
+ * The settings are read tolerantly off the raw org document, a rule matches
+ * only when every condition it names holds, the pool is tried from the
+ * member after the last recipient, and every path the section writes is
+ * under the one key the org's client branch admits.
+ *=========================================*/
+describe('crm assignment settings', () => {
+  it('reads nothing from an org that has set nothing', () => {
+    for (const org of [null, undefined, {}, { crm: {} }, { crm: 'no' }]) {
+      expect(readCrmAssignmentSettings(org as never)).toEqual({
+        rules: [],
+        pool: { memberUids: [], lastAssignedUid: null },
+        hostDefaultOwners: {},
+      })
+    }
+  })
+
+  it('reads the rules in order, dropping the ones that cannot assign', () => {
+    const { rules } = readCrmAssignmentSettings({
+      crm: {
+        assignmentRules: [
+          { id: 'a', when: { source: 'form' }, assign: { memberUid: ' uid-1 ' } },
+          // No id: nothing could reorder or delete it.
+          { when: {}, assign: { memberUid: 'uid-2' } },
+          // Names nobody and no pool.
+          { id: 'c', when: {}, assign: {} },
+          // A source outside the capture vocabulary is not a condition.
+          { id: 'd', when: { source: 'carrier-pigeon', tag: ' VIP ' }, assign: { roundRobin: true } },
+          'not a rule',
+          null,
+          { id: 'f', when: { emailDomain: '@Acme.COM', formId: 'form-1' }, assign: { memberUid: 'uid-3' } },
+        ],
+      },
+    })
+    expect(rules).toEqual([
+      { id: 'a', when: { source: 'form' }, assign: { memberUid: 'uid-1' } },
+      { id: 'd', when: { tag: 'vip' }, assign: { roundRobin: true } },
+      { id: 'f', when: { emailDomain: 'acme.com', formId: 'form-1' }, assign: { memberUid: 'uid-3' } },
+    ])
+  })
+
+  it('caps the rules and the pool at the section’s ceilings, and dedupes the pool', () => {
+    const rules = Array.from({ length: CRM_ASSIGNMENT_RULES_MAX + 5 }, (_, index) => ({
+      id: `r${index}`,
+      when: {},
+      assign: { memberUid: 'uid' },
+    }))
+    const memberUids = [
+      ...Array.from({ length: CRM_ROUND_ROBIN_POOL_MAX + 5 }, (_, index) => `m${index}`),
+      'm0',
+    ]
+    const settings = readCrmAssignmentSettings({
+      crm: { assignmentRules: rules, roundRobin: { memberUids, lastAssignedUid: 'm3' } },
+    })
+    expect(settings.rules).toHaveLength(CRM_ASSIGNMENT_RULES_MAX)
+    expect(settings.pool.memberUids).toHaveLength(CRM_ROUND_ROBIN_POOL_MAX)
+    expect(new Set(settings.pool.memberUids).size).toBe(CRM_ROUND_ROBIN_POOL_MAX)
+    expect(settings.pool.lastAssignedUid).toBe('m3')
+  })
+
+  it('reads a site’s default owner and ignores a site that set none', () => {
+    const org = {
+      crm: { hosts: { 'site-1': { defaultOwnerUid: 'uid-lead' }, 'site-2': {}, 'site-3': 'x' } },
+    }
+    expect(readCrmAssignmentSettings(org).hostDefaultOwners).toEqual({ 'site-1': 'uid-lead' })
+    expect(crmHostDefaultOwner(org, 'site-1')).toBe('uid-lead')
+    expect(crmHostDefaultOwner(org, 'site-2')).toBeNull()
+    expect(crmHostDefaultOwner(null, 'site-1')).toBeNull()
+  })
+
+  it('reads one rule on its own, the way the drawer validates it', () => {
+    expect(readCrmAssignmentRule({ id: 'x', when: {}, assign: { roundRobin: true } })).toEqual({
+      id: 'x',
+      when: {},
+      assign: { roundRobin: true },
+    })
+    expect(readCrmAssignmentRule({ id: 'x', when: {}, assign: { roundRobin: 'yes' } })).toBeNull()
+    expect(readCrmAssignmentRule({ id: '', when: {}, assign: { memberUid: 'u' } })).toBeNull()
+    expect(readCrmAssignmentRule([])).toBeNull()
+  })
+
+  it('writes by paths under the one key the client may write', () => {
+    for (const path of [
+      CRM_ASSIGNMENT_RULES_PATH,
+      CRM_ROUND_ROBIN_POOL_PATH,
+      CRM_ROUND_ROBIN_LAST_ASSIGNED_PATH,
+    ]) {
+      expect(path.startsWith(`${ORG_CRM_SETTINGS_FIELD}.`)).toBe(true)
+    }
+    expect(crmHostDefaultOwnerSegments('site.with.dots')).toEqual([
+      ORG_CRM_SETTINGS_FIELD,
+      'hosts',
+      'site.with.dots',
+      'defaultOwnerUid',
+    ])
+    expect(() => crmHostDefaultOwnerSegments('')).toThrow()
+    expect(Object.keys(ORG_CLIENT_WRITABLE_FIELDS)).toContain(ORG_CRM_SETTINGS_FIELD)
+  })
+})
+
+describe('assignmentRuleMatches', () => {
+  const capture = {
+    source: 'form' as const,
+    email: 'Jo@Acme.com',
+    formId: 'form-1',
+    tags: ['VIP', 'newsletter'],
+  }
+
+  it('matches every capture when it names no condition', () => {
+    expect(assignmentRuleMatches({}, capture)).toBe(true)
+    expect(assignmentRuleMatches({}, { source: 'order', email: 'x@y.z' })).toBe(true)
+  })
+
+  it('holds every condition it names, and fails on the first that does not', () => {
+    expect(assignmentRuleMatches({ source: 'form', formId: 'form-1' }, capture)).toBe(true)
+    expect(assignmentRuleMatches({ source: 'booking' }, capture)).toBe(false)
+    expect(assignmentRuleMatches({ formId: 'form-2' }, capture)).toBe(false)
+    expect(assignmentRuleMatches({ formId: 'form-1' }, { ...capture, formId: null })).toBe(false)
+  })
+
+  it('compares the address’s own domain, public mailboxes included', () => {
+    expect(assignmentRuleMatches({ emailDomain: 'acme.com' }, capture)).toBe(true)
+    expect(assignmentRuleMatches({ emailDomain: 'acme.co' }, capture)).toBe(false)
+    expect(
+      assignmentRuleMatches({ emailDomain: 'gmail.com' }, { source: 'form', email: 'a@Gmail.com' }),
+    ).toBe(true)
+    expect(assignmentEmailDomain('a@Gmail.com')).toBe('gmail.com')
+    expect(assignmentEmailDomain('no-at-sign')).toBeNull()
+    // Where the company link answers null for a consumer domain, a rule may
+    // still name it: the two questions are different.
+    expect(companyDomainForEmail('a@gmail.com')).toBeNull()
+  })
+
+  it('matches a tag regardless of case, against the capture’s and the contact’s', () => {
+    expect(assignmentRuleMatches({ tag: 'vip' }, capture)).toBe(true)
+    expect(assignmentRuleMatches({ tag: 'partner' }, capture)).toBe(false)
+    expect(assignmentRuleMatches({ tag: 'vip' }, { ...capture, tags: undefined })).toBe(false)
+  })
+})
+
+describe('roundRobinOrder', () => {
+  it('starts after the last recipient and wraps round to them', () => {
+    expect(roundRobinOrder(['a', 'b', 'c'], 'a')).toEqual(['b', 'c', 'a'])
+    expect(roundRobinOrder(['a', 'b', 'c'], 'c')).toEqual(['a', 'b', 'c'])
+  })
+
+  it('starts from the top for no pointer, or a pointer no longer in the pool', () => {
+    expect(roundRobinOrder(['a', 'b'], null)).toEqual(['a', 'b'])
+    expect(roundRobinOrder(['a', 'b'], 'gone')).toEqual(['a', 'b'])
+  })
+
+  it('assigns a pool of one to that one, and an empty pool to nobody', () => {
+    expect(roundRobinOrder(['a'], 'a')).toEqual(['a'])
+    expect(roundRobinOrder([], 'a')).toEqual([])
+  })
+})
+
+describe('describeAssignmentRule', () => {
+  const name = (uid: string) => (uid === 'uid-1' ? 'Sam' : uid)
+
+  it('reads the conditions in words and the target by name', () => {
+    expect(
+      describeAssignmentRule(
+        {
+          id: 'r',
+          when: { source: 'form', formId: 'f1', emailDomain: 'acme.com', tag: 'vip' },
+          assign: { memberUid: 'uid-1' },
+        },
+        name,
+      ),
+    ).toEqual({
+      when: 'source is Form and form is f1 and email domain is acme.com and tagged vip',
+      assign: 'Sam',
+    })
+    expect(
+      describeAssignmentRule({ id: 'r', when: {}, assign: { roundRobin: true } }, name),
+    ).toEqual({ when: 'Every capture', assign: 'Round robin' })
+  })
+})
+
+describe('newAssignmentRuleId', () => {
+  it('mints an id the org does not already hold', () => {
+    const first = newAssignmentRuleId([])
+    expect(first).toMatch(/^rule-/)
+    const second = newAssignmentRuleId([first])
+    expect(second).not.toBe(first)
   })
 })

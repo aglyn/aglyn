@@ -73,3 +73,14 @@ describe('the verifier-regression alert is not mutable as marketplace noise (AGL
     expect(notificationMuted({ system: false }, REGRESSION)).toBe(true)
   })
 })
+
+describe('an assigned record is work arriving (AGL-2618)', () => {
+  it('files a contact or lead assignment beside the task assignment', () => {
+    for (const type of ['content.contactAssigned', 'content.leadAssigned'] as const) {
+      expect(notificationCategory(type)).toBe(notificationCategory('content.taskAssigned'))
+      expect(NOTIFICATION_TYPE_LABELS[type]).toMatch(/assigned to you$/)
+    }
+    expect(notificationMuted({ content: false }, 'content.contactAssigned')).toBe(true)
+    expect(notificationMuted({ team: false }, 'content.leadAssigned')).toBe(false)
+  })
+})

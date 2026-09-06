@@ -60,6 +60,32 @@ let added: Record<string, Record<string, any>[]> = {}
 let mockActivity: Record<string, any>[] = []
 /** How many times the contacts query ran (the email lookup). */
 let emailLookups = 0
+/** Every owner assignment handed to the runtime helper (AGL-2618), in order. */
+let assignments: Record<string, any>[] = []
+/** What the helper answers the next assignment with. */
+let mockAssignment: Record<string, any> = {
+  outcome: 'assigned',
+  ownerUid: 'uid-sam',
+  by: 'member',
+  leadMirrored: false,
+  notified: true,
+}
+
+jest.mock('./assign-contact-owner', () => ({
+  __esModule: true,
+  OWNER_ASSIGNMENT_REFUSALS: {
+    'no-org': 'this site has no organization',
+    'no-contact': 'the contact no longer exists',
+    'no-rule': 'no assignment rule matched and the site has no default owner',
+    'empty-pool': 'the round-robin pool has nobody on the roster in it',
+    'not-a-member': 'the owner named is not on the team',
+    failed: 'the owner could not be assigned',
+  },
+  reassignContactOwner: async (input: Record<string, any>) => {
+    assignments.push(input)
+    return mockAssignment
+  },
+}))
 
 jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
@@ -248,6 +274,14 @@ beforeEach(() => {
   contactUpdates = []
   added = {}
   emailLookups = 0
+  assignments = []
+  mockAssignment = {
+    outcome: 'assigned',
+    ownerUid: 'uid-sam',
+    by: 'member',
+    leadMirrored: false,
+    notified: true,
+  }
   mockMembers = { 'uid-sam': { email: 'sam@example.com', role: 'editor' } }
   mockOrg = { plan: 'business' }
   mockActivityCount = 0
@@ -351,12 +385,21 @@ describe('facet writes (claim 2)', () => {
     expect(mockActivity.at(-1)?.summary).toBe('tagged vip')
   })
 
-  it('assigns an owner named by address, resolved to the member’s uid', async () => {
+  /*
+   * The owner is written by the runtime's one assignment (AGL-2618), which
+   * moves the pool's pointer, mirrors the lead and tells the owner; what
+   * this step owes it is the resolved member, or the rotation, for the
+   * person the event names.
+   */
+  it('assigns an owner named by address, resolved to the member’s uid, through the assignment', async () => {
     mockActions = [acting({ type: 'assignContactOwner', ownerEmail: 'Sam@Example.com' })]
 
     await run({ email: 'ada@example.com' })
 
-    expect(contactUpdates[0][facetPath('ownerUid')]).toBe('uid-sam')
+    expect(assignments).toEqual([
+      { hostId: HOST_ID, contactId: 'contact-1', email: 'ada@example.com', assign: { memberUid: 'uid-sam' } },
+    ])
+    expect(contactUpdates).toHaveLength(0)
     expect(mockActivity.at(-1)?.summary).toBe('assigned owner sam@example.com')
   })
 
@@ -368,16 +411,16 @@ describe('facet writes (claim 2)', () => {
 
     await run({ email: 'ada@example.com' })
 
-    expect(contactUpdates[0][facetPath('ownerUid')]).toBe('uid-direct')
+    expect(assignments[0].assign).toEqual({ memberUid: 'uid-direct' })
   })
 
-  it('refuses a uid nobody on the roster has, and stores nothing', async () => {
+  it('refuses a uid nobody on the roster has, and asks for no assignment', async () => {
     mockMembers = {}
     mockActions = [acting({ type: 'assignContactOwner', ownerUid: 'uid-stranger' })]
 
     await run({ email: 'ada@example.com' })
 
-    expect(contactUpdates).toHaveLength(0)
+    expect(assignments).toHaveLength(0)
     expect(mockActivity[0].result).toBe('failed')
     expect(mockActivity[0].action).toContain('no team member with the id')
   })
@@ -388,17 +431,48 @@ describe('facet writes (claim 2)', () => {
 
     await run({ email: 'ada@example.com' })
 
-    expect(contactUpdates[0][facetPath('ownerUid')]).toBe('uid-direct')
+    expect(assignments[0].assign).toEqual({ memberUid: 'uid-direct' })
   })
 
-  it('refuses an address nobody on the roster has, and stores nothing', async () => {
+  it('refuses an address nobody on the roster has, and asks for no assignment', async () => {
     mockActions = [acting({ type: 'assignContactOwner', ownerEmail: 'ghost@example.com' })]
 
     await run({ email: 'ada@example.com' })
 
-    expect(contactUpdates).toHaveLength(0)
+    expect(assignments).toHaveLength(0)
     expect(mockActivity[0].result).toBe('failed')
     expect(mockActivity[0].action).toContain('no team member with the address')
+  })
+
+  it('rotates through the pool when the step says round robin, and records who got it', async () => {
+    mockActions = [acting({ type: 'assignContactOwner', roundRobin: true })]
+    mockAssignment = { outcome: 'assigned', ownerUid: 'uid-kim', by: 'roundRobin', leadMirrored: false, notified: true }
+
+    await run({ email: 'ada@example.com' })
+
+    expect(assignments).toEqual([
+      { hostId: HOST_ID, contactId: 'contact-1', email: 'ada@example.com', assign: { roundRobin: true } },
+    ])
+    expect(mockActivity.at(-1)?.summary).toBe('assigned owner round robin → uid-kim')
+  })
+
+  it('records the assignment’s refusal as the step’s failure', async () => {
+    mockActions = [acting({ type: 'assignContactOwner', roundRobin: true })]
+    mockAssignment = { outcome: 'none', reason: 'empty-pool' }
+
+    await run({ email: 'ada@example.com' })
+
+    expect(mockActivity[0].result).toBe('failed')
+    expect(mockActivity[0].action).toContain('the round-robin pool has nobody')
+  })
+
+  it('reports an owner the contact already had as already', async () => {
+    mockActions = [acting({ type: 'assignContactOwner', ownerEmail: 'sam@example.com' })]
+    mockAssignment = { outcome: 'unchanged', ownerUid: 'uid-sam' }
+
+    await run({ email: 'ada@example.com' })
+
+    expect(mockActivity.at(-1)?.summary).toBe('assigned owner sam@example.com (already)')
   })
 })
 

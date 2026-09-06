@@ -48,6 +48,26 @@ data — and does nothing, with the reason in the run history, when the event
 names nobody this site can see. Fields and behavior are in
 [CRM steps](../../marketing-and-automation/workflows-and-actions/actions-builder.md#crm-steps).
 
+### Assigning an owner, or rotating one
+
+**Assign the contact an owner** has two modes. **A team member** names one
+person by email address, matched against the workspace roster when the
+automation runs. **Round robin** hands the contact to the next member of the
+pool kept under [CRM → Settings](./settings.md#round-robin), moving the
+rotation on — the same pool an assignment rule's round robin draws from, so
+a rule and an automation share one rotation.
+
+Either mode **reassigns**: an automation that assigns an owner means to, so
+a contact that already has one is handed over, and the site's lead for the
+same person follows. Naming the owner the contact already has changes
+nothing. The new owner gets a console notification, **Contact assigned to
+you**, linking to the contact.
+
+This is the deliberate counterpart of the [assignment rules](./settings.md#assignment-rules),
+which run on capture and only for a contact with no owner. Use a rule to
+decide who gets a new contact; use this step to move a contact when
+something happens to them — a stage change, a won deal.
+
 ## Example: tag every new contact from a form
 
 1. Open **Automation → Actions** and choose **Add action**.
@@ -60,6 +80,16 @@ names nobody this site can see. Fields and behavior are in
 A stage set by an automation is a stage change like any other, so a second action on
 **Contact changed stage** with the condition *`lifecycleStage` equals `customer`* can
 create the follow-up task.
+
+## Example: spread qualified leads across the team
+
+1. Trigger event: **Contact changed stage**, with the condition
+   *`lifecycleStage` equals `sales-qualified`*.
+2. Do: **Assign the contact an owner**, set to **Round robin**.
+3. Under **CRM → Settings → Round robin**, tick the members who work
+   qualified leads.
+4. Save. Each contact that reaches Sales qualified goes to the next member in
+   turn, who is notified, and the rotation shows who is next up.
 
 ## Example: follow up on a won deal
 
@@ -74,5 +104,6 @@ create the follow-up task.
 
 - [Actions builder](../../marketing-and-automation/workflows-and-actions/actions-builder.md)
 - [Build a workflow](../../marketing-and-automation/workflows-and-actions/build-a-workflow.md)
+- [CRM settings](./settings.md) — the default owner, assignment rules and the round-robin pool
 - [CRM overview](./overview.md)
 - [Deals pipeline](./deals.md) · [Tasks & follow-ups](./tasks.md) · [Activities & the timeline](./activities.md)

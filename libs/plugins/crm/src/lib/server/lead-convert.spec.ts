@@ -231,11 +231,18 @@ jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
     (mockResolveOrgPermissions as any)(...args),
 }))
 
+/** What the org's assignment pass answers for a contact with no owner (AGL-2618). */
+let mockAssignment: Record<string, any> = { outcome: 'none', reason: 'no-rule' }
+const mockAssignOwnerForCapture = jest.fn(async () => mockAssignment)
+const mockNotifyRecordAssigned = jest.fn(async () => true)
+
 jest.mock('@aglyn/tenant-runtime', () => ({
   __esModule: true,
   // The route captures through the runtime wrapper so `contactCreated` fires
   // (AGL-2605); the double answers what the case under test needs.
   captureHostContact: (...args: unknown[]) => (mockUpsertHostContact as any)(...args),
+  assignOwnerForCapture: (...args: unknown[]) => (mockAssignOwnerForCapture as any)(...args),
+  notifyRecordAssigned: (...args: unknown[]) => (mockNotifyRecordAssigned as any)(...args),
 }))
 jest.mock('@aglyn/tenant-data-admin', () => ({
   firebaseAdmin: {
@@ -326,6 +333,9 @@ beforeEach(() => {
   mockOrg = {}
   mockUpsertPlants = true
   mockUpsertHostContact.mockClear()
+  mockAssignment = { outcome: 'none', reason: 'no-rule' }
+  mockAssignOwnerForCapture.mockClear()
+  mockNotifyRecordAssigned.mockClear()
   mockVerifyIdToken.mockClear()
   mockResolveOrgPermissions.mockClear()
   mockResolveOrgPermissions.mockResolvedValue({
@@ -400,7 +410,7 @@ describe('converting a lead', () => {
       name: 'Ann Lee',
       source: 'manual',
       interaction: { summary: 'Converted from a lead', refId: 'lead-1' },
-      facet: { lifecycleStage: 'sales-qualified', ownerUid: CALLER },
+      facet: { lifecycleStage: 'sales-qualified' },
     })
     const [contact] = all(`orgs/${ORG}/contacts`)
     expect(body).toEqual({
@@ -412,7 +422,10 @@ describe('converting a lead', () => {
     expect(lead?.status).toBe('qualified')
     expect(lead?.convertedContactId).toBe(contact.id)
     expect(lead?.convertedAtMs).toEqual(expect.any(Number))
+    // Nobody chose and no rule assigned, so the converter owns what they made.
     expect(lead?.ownerUid).toBe(CALLER)
+    expect(contact.facets[HOST].ownerUid).toBe(CALLER)
+    expect(mockNotifyRecordAssigned).not.toHaveBeenCalled()
     expect(lead?.dealId).toBeUndefined()
     expect(lead?.companyId).toBeUndefined()
     // What the capture door wrote is still there — the stamp is an update.
@@ -428,6 +441,62 @@ describe('converting a lead', () => {
     await call({ hostId: HOST, leadId: 'lead-2', ownerUid: 'uid-manager' })
     expect(mockUpsertHostContact.mock.calls[1][0].facet.ownerUid).toBe('uid-manager')
     expect(docs.get(leadPath('lead-2'))?.ownerUid).toBe('uid-manager')
+    // A person chose, so the rules were not asked.
+    expect(mockAssignOwnerForCapture).not.toHaveBeenCalled()
+  })
+
+  it('tells a colleague the converter picked, and not the lead’s own owner or the caller (AGL-2618)', async () => {
+    docs.set(leadPath('lead-1'), { ...docs.get(leadPath('lead-1')), ownerUid: 'uid-rep' })
+    await call({ hostId: HOST, leadId: 'lead-1' })
+    expect(mockNotifyRecordAssigned).not.toHaveBeenCalled()
+
+    docs.set(leadPath('lead-2'), { email: 'bo@acme.com', name: 'Bo' })
+    await call({ hostId: HOST, leadId: 'lead-2', ownerUid: 'uid-manager' })
+    expect(mockNotifyRecordAssigned).toHaveBeenCalledTimes(1)
+    const [contact] = all(`orgs/${ORG}/contacts`).filter((c) => c['email'] === 'bo@acme.com')
+    expect(mockNotifyRecordAssigned).toHaveBeenCalledWith({
+      hostId: HOST,
+      orgId: ORG,
+      ownerUid: 'uid-manager',
+      actorUid: CALLER,
+      record: { kind: 'contact', id: contact.id },
+      who: 'Bo',
+    })
+
+    // The converter naming themselves is the helper's self case: it is
+    // handed the actor and declines, which is the one place that rule lives.
+    docs.set(leadPath('lead-3'), { email: 'cy@acme.com' })
+    await call({ hostId: HOST, leadId: 'lead-3', ownerUid: CALLER })
+    expect(mockNotifyRecordAssigned).toHaveBeenLastCalledWith(
+      expect.objectContaining({ ownerUid: CALLER, actorUid: CALLER }),
+    )
+  })
+
+  it('lets the org’s assignment rules own a contact nobody chose an owner for (AGL-2618)', async () => {
+    mockAssignment = { outcome: 'assigned', ownerUid: 'uid-rules', by: 'rule', leadMirrored: true, notified: true }
+    const { body } = await call({ hostId: HOST, leadId: 'lead-1', deal: { title: 'Acme' } })
+    expect(mockAssignOwnerForCapture).toHaveBeenCalledWith({
+      hostId: HOST,
+      contactId: body.contactId,
+      email: 'ann@acme.com',
+      source: 'manual',
+      actorUid: CALLER,
+    })
+    expect(docs.get(leadPath('lead-1'))?.ownerUid).toBe('uid-rules')
+    expect(all(`orgs/${ORG}/deals`)[0]['ownerUid']).toBe('uid-rules')
+    // The pass told the owner itself; the route does not tell them twice.
+    expect(mockNotifyRecordAssigned).not.toHaveBeenCalled()
+  })
+
+  it('keeps the owner a contact the org already held (AGL-2618)', async () => {
+    await collectionRef(`orgs/${ORG}/contacts`).add({
+      email: 'ann@acme.com',
+      visibleTo: [`host:${HOST}`],
+      facets: { [HOST]: { ownerUid: 'uid-held' } },
+    })
+    await call({ hostId: HOST, leadId: 'lead-1' })
+    expect(mockAssignOwnerForCapture).not.toHaveBeenCalled()
+    expect(docs.get(leadPath('lead-1'))?.ownerUid).toBe('uid-held')
   })
 
   it('creates the company and the deal, seeding the Sales pipeline when the org has none', async () => {

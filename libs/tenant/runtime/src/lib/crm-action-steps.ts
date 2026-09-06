@@ -38,6 +38,10 @@ import {
   orgDataQueryForHost,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
+import {
+  OWNER_ASSIGNMENT_REFUSALS,
+  reassignContactOwner,
+} from './assign-contact-owner'
 import type { HostEventPayload } from './run-event-workflows'
 
 /**
@@ -257,17 +261,46 @@ export async function runCrmActionStep(
   }
 
   if (step.type === 'assignContactOwner') {
-    const owner = await resolveMemberUid(
-      env.orgId,
-      { uid: step.ownerUid, email: step.ownerEmail },
-      'owner',
-    )
-    if ('error' in owner) return { error: owner.error }
-    await contact.ref.update({
-      [contactFacetPath(group.groupId, 'ownerUid')]: owner.uid,
-      updatedAt: FieldValue.serverTimestamp(),
+    /*
+     * Through the one server assignment (AGL-2618), in both of the step's
+     * modes, rather than a facet write of its own: the helper is what
+     * moves the round-robin pointer inside the transaction that writes the
+     * owner, mirrors the owner onto the site's lead, and tells the new
+     * owner. A member named on the step is still resolved here — by
+     * address against the roster, as before — and handed over by uid; the
+     * helper checks the roster document again, which is one read and the
+     * same answer.
+     */
+    let assign: { memberUid: string } | { roundRobin: true }
+    let named = 'round robin'
+    if (step.roundRobin === true) {
+      assign = { roundRobin: true }
+    } else {
+      const owner = await resolveMemberUid(
+        env.orgId,
+        { uid: step.ownerUid, email: step.ownerEmail },
+        'owner',
+      )
+      if ('error' in owner) return { error: owner.error }
+      assign = { memberUid: owner.uid }
+      named = owner.detail
+    }
+    const verdict = await reassignContactOwner({
+      hostId,
+      contactId: contact.id,
+      email,
+      assign,
     })
-    return { detail: owner.detail }
+    if (verdict.outcome === 'none') {
+      return { error: OWNER_ASSIGNMENT_REFUSALS[verdict.reason] }
+    }
+    if (verdict.outcome === 'unchanged') {
+      return { detail: `${named} (already)` }
+    }
+    return {
+      detail:
+        step.roundRobin === true ? `round robin → ${verdict.ownerUid}` : named,
+    }
   }
 
   // The two record creators: a task and an activity are documents of

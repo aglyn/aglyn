@@ -66,9 +66,11 @@ import {
   DEFAULT_DEAL_STAGES,
   nameSearchFields,
   normalizeCompanyDomain,
+  contactFacetPath,
   normalizeContactEmail,
   ORG_SCOPE_TOKEN,
   type PluginApiHandler,
+  readContactFacet,
 } from '@aglyn/aglyn/server'
 import {
   consentGroupForSite,
@@ -78,7 +80,11 @@ import {
   orgDataCollectionForHost,
   writeContactCompanyLink,
 } from '@aglyn/tenant-data-admin'
-import { captureHostContact } from '@aglyn/tenant-runtime'
+import {
+  assignOwnerForCapture,
+  captureHostContact,
+  notifyRecordAssigned,
+} from '@aglyn/tenant-runtime'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { FieldPath, FieldValue } from 'firebase-admin/firestore'
 
@@ -89,8 +95,10 @@ export interface LeadConvertRequest {
   leadId: string
   /**
    * Who owns the resulting contact (and deal). Defaults to the lead's own
-   * owner, and failing that to the caller — somebody converted this person,
-   * and a record with no owner is one nobody follows up.
+   * owner; failing that the org's assignment rules and the site's default
+   * owner decide (AGL-2618), and failing those the caller — somebody
+   * converted this person, and a record with no owner is one nobody
+   * follows up.
    */
   ownerUid?: string
   /** Link an existing `orgs/{orgId}/companies/{companyId}`. */
@@ -301,10 +309,17 @@ export const leadConvertHandler: PluginApiHandler = async (req, res) => {
       ORG_SCOPE_TOKEN,
       ...consentGroupScope(group),
     ])
-    const ownerUid =
-      String(body.ownerUid ?? '').trim() ||
-      (typeof lead.ownerUid === 'string' ? lead.ownerUid : '') ||
-      decoded.uid
+    /*
+     * THE OWNER A PERSON CHOSE, when one did: the converter's pick, else
+     * whoever was already working the lead. Handed to the capture as the
+     * facet's owner, which is what tells the capture's own assignment pass
+     * to stand down — a person's choice outranks a rule. When nobody chose,
+     * the facet names no owner and the pass runs the org's rules and the
+     * site's default for a contact it creates (AGL-2618).
+     */
+    const pickedOwner = String(body.ownerUid ?? '').trim()
+    const chosenOwner =
+      pickedOwner || (typeof lead.ownerUid === 'string' ? lead.ownerUid : '')
     const now = Date.now()
     const leadName = typeof lead['name'] === 'string' ? lead['name'] : undefined
 
@@ -323,7 +338,10 @@ export const leadConvertHandler: PluginApiHandler = async (req, res) => {
       ...(leadName ? { name: leadName } : {}),
       source: 'manual',
       interaction: { summary: 'Converted from a lead', refId: leadId },
-      facet: { lifecycleStage: 'sales-qualified', ownerUid },
+      facet: {
+        lifecycleStage: 'sales-qualified',
+        ...(chosenOwner ? { ownerUid: chosenOwner } : {}),
+      },
     })
     const contactsRef = await orgDataCollectionForHost(hostId, 'contacts')
     const found = await contactsRef.where('email', '==', email).limit(1).get()
@@ -361,6 +379,48 @@ export const leadConvertHandler: PluginApiHandler = async (req, res) => {
       if (room.allowed) return false
       res.status(409).json({ error: CRM_RECORDS_BAND_FULL_MESSAGE, reason: 'band' })
       return true
+    }
+
+    /*
+     * WHOSE THE CONTACT IS, now that it exists. The capture wrote the chosen
+     * owner, or its pass assigned one to a contact it created; a contact
+     * the org already held with no owner has had neither, so the same pass
+     * is asked once more — it touches only a record with no owner and
+     * answers `unchanged` for one that has — and the caller is the last
+     * resort. The caller's own uid is written directly, not through the
+     * deliberate reassignment: they may be staff converting on a
+     * workspace's behalf, and a roster check would refuse the one person
+     * who is actually here. A colleague the converter picked is told; the
+     * lead's existing owner and the caller are not, having chosen for
+     * themselves.
+     */
+    let ownerUid =
+      readContactFacet(found.docs[0].data(), group.groupId).ownerUid ?? ''
+    if (!ownerUid) {
+      const assigned = await assignOwnerForCapture({
+        hostId,
+        contactId,
+        email,
+        source: 'manual',
+        actorUid: decoded.uid,
+      })
+      if (assigned.outcome !== 'none') ownerUid = assigned.ownerUid
+    }
+    if (!ownerUid) {
+      ownerUid = decoded.uid
+      await contactRef.update({
+        [contactFacetPath(group.groupId, 'ownerUid')]: ownerUid,
+        updatedAt: FieldValue.serverTimestamp(),
+      })
+    } else if (pickedOwner && pickedOwner === ownerUid) {
+      await notifyRecordAssigned({
+        hostId,
+        orgId,
+        ownerUid,
+        actorUid: decoded.uid,
+        record: { kind: 'contact', id: contactId },
+        who: leadName || email,
+      })
     }
 
     /*==========================================

@@ -45,11 +45,13 @@
  * would otherwise write for itself. No Firestore, no React.
  */
 
-import type { AglynPostalAddress } from '../foundation'
+import type { AglynPostalAddress, OrgCrmAssignmentRule } from '../foundation'
 import { type ConsentGroup, consentGroupScope } from './consent-groups'
 import {
   CONTACT_FACETS_FIELD,
+  CONTACT_SOURCE_LABELS,
   type ContactInteraction,
+  type ContactSource,
   normalizeContactEmail,
   readContactFacet,
 } from './contacts'
@@ -1070,6 +1072,312 @@ export function orgAutoCreatesCompanies(
       !Array.isArray(settings) &&
       (settings as Record<string, unknown>)['autoCreateCompanies'] === true,
   )
+}
+
+/*==========================================
+ * WHO A NEW RECORD BELONGS TO (AGL-2618).
+ *
+ * Salesforce calls these assignment rules and HubSpot rotates to an owner;
+ * either way they are the first thing a sales team configures, because a
+ * record with no owner is one nobody follows up. The shape here is what the
+ * CRM → Settings section writes onto the org document under `crm`, what the
+ * capture door's assignment pass reads, and what the `assignContactOwner`
+ * automation step's round-robin mode reads — one vocabulary, three readers.
+ *
+ * ## The order of decision
+ *
+ * The rules are tried in their stored order and the FIRST match assigns; a
+ * rule that names a member the roster no longer has, or a round-robin rule
+ * over an empty pool, is passed over rather than stopping the pass. When no
+ * rule claims the capture, the capturing site's default owner does; when
+ * the site has none, the record stays unassigned, which is what the product
+ * did before any of this existed and is the honest answer to "nobody has
+ * said".
+ *
+ * ## Only a record with no owner
+ *
+ * The capture pass runs when a record is CREATED and never overwrites an
+ * owner: a door that named one (the console's drawer, an import column, a
+ * conversion with a picked owner) has expressed a person's choice, and a
+ * returning visitor's contact already belongs to somebody. The automation
+ * step is the deliberate exception — an author who put "assign an owner"
+ * on a stage change means to reassign.
+ *
+ * ## Why the pointer is a uid, and why the server moves it
+ *
+ * See `OrgCrmRoundRobin`. The pool is edited in the console and the pointer
+ * is advanced by the Admin SDK inside the transaction that writes the owner,
+ * so concurrent captures take distinct turns and an edit to the pool never
+ * skips or repeats a member.
+ *=========================================*/
+
+/** Where the ordered rules live on the org document. */
+export const CRM_ASSIGNMENT_RULES_PATH = `${ORG_CRM_SETTINGS_FIELD}.assignmentRules`
+
+/** The round-robin pool's member list, in rotation order. */
+export const CRM_ROUND_ROBIN_POOL_PATH = `${ORG_CRM_SETTINGS_FIELD}.roundRobin.memberUids`
+
+/** The member handed the most recent round-robin record. */
+export const CRM_ROUND_ROBIN_LAST_ASSIGNED_PATH = `${ORG_CRM_SETTINGS_FIELD}.roundRobin.lastAssignedUid`
+
+/**
+ * The most rules an org may keep. A first-match list longer than this is
+ * one nobody can reason about, and the section refuses the fifty-first
+ * rather than letting the document grow unbounded.
+ */
+export const CRM_ASSIGNMENT_RULES_MAX = 50
+
+/** The most members a round-robin pool may hold. */
+export const CRM_ROUND_ROBIN_POOL_MAX = 50
+
+/**
+ * The field-path SEGMENTS of a site's default owner on the org document.
+ *
+ * Segments rather than a dotted string, because the host id is a document
+ * id and a document id may contain a dot; joined with dots it would be read
+ * as two path elements and the write would land beside the setting rather
+ * than in it. A caller builds a `FieldPath` from these on either SDK.
+ */
+export function crmHostDefaultOwnerSegments(hostId: string): string[] {
+  if (!hostId) throw new Error('a site default owner must name a site')
+  return [ORG_CRM_SETTINGS_FIELD, 'hosts', hostId, 'defaultOwnerUid']
+}
+
+/** The conditions a rule may name — every one present must hold. */
+export interface CrmAssignmentRuleWhen {
+  /** The capture door: `form`, `booking`, `order`, `manual`… */
+  source?: ContactSource
+  /** The form the capture came through, by its document id. */
+  formId?: string
+  /** The captured address's domain, lowercased, without a leading `@`. */
+  emailDomain?: string
+  /** A tag the capture carries or the contact already wears. */
+  tag?: string
+}
+
+/** How a matching rule assigns: one member, or the next in the pool. */
+export type CrmAssignmentTarget = { memberUid: string } | { roundRobin: true }
+
+/**
+ * One rule as the CRM reads it — `OrgCrmAssignmentRule` with the source
+ * narrowed to the capture vocabulary.
+ */
+export interface CrmAssignmentRule extends OrgCrmAssignmentRule {
+  when: CrmAssignmentRuleWhen
+  assign: CrmAssignmentTarget
+}
+
+/** The pool as the CRM reads it: never absent, possibly empty. */
+export interface CrmRoundRobinPool {
+  memberUids: string[]
+  lastAssignedUid: string | null
+}
+
+/**
+ * The org's assignment settings, read tolerantly off the raw document.
+ *
+ * Every field is optional on the document and the section writes each on
+ * its own, so a reader that trusted the shape would throw on the first org
+ * that has set the pool but never a rule. Malformed entries are dropped
+ * rather than refused wholesale: one hand-edited rule must not stop the
+ * others from assigning.
+ */
+export interface CrmAssignmentSettings {
+  rules: CrmAssignmentRule[]
+  pool: CrmRoundRobinPool
+  /** Site id → default owner uid, for the sites that set one. */
+  hostDefaultOwners: Record<string, string>
+}
+
+function isContactSourceValue(value: unknown): value is ContactSource {
+  return typeof value === 'string' && value in CONTACT_SOURCE_LABELS
+}
+
+function cleanText(value: unknown, max: number): string | undefined {
+  const text = typeof value === 'string' ? value.trim().slice(0, max) : ''
+  return text || undefined
+}
+
+/** A rule as the document holds it, or `null` for one that cannot assign. */
+export function readCrmAssignmentRule(raw: unknown): CrmAssignmentRule | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const entry = raw as Record<string, unknown>
+  const id = cleanText(entry['id'], 64)
+  if (!id) return null
+  const whenRaw =
+    entry['when'] && typeof entry['when'] === 'object' && !Array.isArray(entry['when'])
+      ? (entry['when'] as Record<string, unknown>)
+      : {}
+  const when: CrmAssignmentRuleWhen = {}
+  if (isContactSourceValue(whenRaw['source'])) when.source = whenRaw['source']
+  const formId = cleanText(whenRaw['formId'], 128)
+  if (formId) when.formId = formId
+  // A person types a domain the way they see one in an address — `@acme.com`
+  // — so the `@` is what the field means, not part of the domain.
+  const emailDomain = normalizeCompanyDomain(
+    String(whenRaw['emailDomain'] ?? '')
+      .trim()
+      .replace(/^@/, ''),
+  )
+  if (emailDomain) when.emailDomain = emailDomain
+  const tag = cleanText(whenRaw['tag'], 60)?.toLowerCase()
+  if (tag) when.tag = tag
+  const assignRaw =
+    entry['assign'] &&
+    typeof entry['assign'] === 'object' &&
+    !Array.isArray(entry['assign'])
+      ? (entry['assign'] as Record<string, unknown>)
+      : null
+  if (!assignRaw) return null
+  if (assignRaw['roundRobin'] === true) {
+    return { id, when, assign: { roundRobin: true } }
+  }
+  const memberUid = cleanText(assignRaw['memberUid'], 128)
+  return memberUid ? { id, when, assign: { memberUid } } : null
+}
+
+export function readCrmAssignmentSettings(
+  orgDocument: Record<string, unknown> | null | undefined,
+): CrmAssignmentSettings {
+  const settings = (orgDocument ?? {})[ORG_CRM_SETTINGS_FIELD]
+  const crm =
+    settings && typeof settings === 'object' && !Array.isArray(settings)
+      ? (settings as Record<string, unknown>)
+      : {}
+  const rules = (Array.isArray(crm['assignmentRules']) ? crm['assignmentRules'] : [])
+    .map(readCrmAssignmentRule)
+    .filter((rule): rule is CrmAssignmentRule => rule !== null)
+    .slice(0, CRM_ASSIGNMENT_RULES_MAX)
+  const roundRobin =
+    crm['roundRobin'] && typeof crm['roundRobin'] === 'object'
+      ? (crm['roundRobin'] as Record<string, unknown>)
+      : {}
+  const memberUids = [
+    ...new Set(
+      (Array.isArray(roundRobin['memberUids']) ? roundRobin['memberUids'] : [])
+        .map((uid) => cleanText(uid, 128))
+        .filter((uid): uid is string => Boolean(uid)),
+    ),
+  ].slice(0, CRM_ROUND_ROBIN_POOL_MAX)
+  const hosts =
+    crm['hosts'] && typeof crm['hosts'] === 'object' && !Array.isArray(crm['hosts'])
+      ? (crm['hosts'] as Record<string, unknown>)
+      : {}
+  const hostDefaultOwners: Record<string, string> = {}
+  for (const [hostId, value] of Object.entries(hosts)) {
+    const owner =
+      value && typeof value === 'object'
+        ? cleanText((value as Record<string, unknown>)['defaultOwnerUid'], 128)
+        : undefined
+    if (owner) hostDefaultOwners[hostId] = owner
+  }
+  return {
+    rules,
+    pool: {
+      memberUids,
+      lastAssignedUid: cleanText(roundRobin['lastAssignedUid'], 128) ?? null,
+    },
+    hostDefaultOwners,
+  }
+}
+
+/** The member a site hands unclaimed captures to, or `null` for nobody. */
+export function crmHostDefaultOwner(
+  orgDocument: Record<string, unknown> | null | undefined,
+  hostId: string,
+): string | null {
+  return readCrmAssignmentSettings(orgDocument).hostDefaultOwners[hostId] ?? null
+}
+
+/** What a rule is matched against: the capture, as its door described it. */
+export interface CrmAssignmentCapture {
+  source: ContactSource
+  email: string
+  formId?: string | null
+  /** The capture's own tags and whatever the contact already wears. */
+  tags?: readonly string[]
+}
+
+/**
+ * The domain a rule's `emailDomain` is compared with — the address's own,
+ * lowercased. Not `companyDomainForEmail`, which answers `null` for a public
+ * mailbox: a team may well route every `gmail.com` sign-up to one rep, and
+ * a rule that could not name a consumer domain could not say so.
+ */
+export function assignmentEmailDomain(email: string): string | null {
+  const at = email.lastIndexOf('@')
+  if (at < 0) return null
+  return normalizeCompanyDomain(email.slice(at + 1))
+}
+
+/**
+ * Whether every condition the rule names holds for this capture. A rule
+ * with no condition matches every capture — the catch-all.
+ */
+export function assignmentRuleMatches(
+  when: CrmAssignmentRuleWhen,
+  capture: CrmAssignmentCapture,
+): boolean {
+  if (when.source && when.source !== capture.source) return false
+  if (when.formId && when.formId !== (capture.formId ?? '')) return false
+  if (when.emailDomain && when.emailDomain !== assignmentEmailDomain(capture.email)) {
+    return false
+  }
+  if (when.tag) {
+    const worn = (capture.tags ?? []).map((tag) => String(tag).trim().toLowerCase())
+    if (!worn.includes(when.tag)) return false
+  }
+  return true
+}
+
+/**
+ * The pool in the order the next record should try it: the member after
+ * the last recipient first, wrapping round, and the last recipient
+ * themselves at the end — so a pool of one still assigns, and a pointer
+ * naming somebody no longer in the pool starts from the top.
+ */
+export function roundRobinOrder(
+  memberUids: readonly string[],
+  lastAssignedUid: string | null | undefined,
+): string[] {
+  if (!memberUids.length) return []
+  const at = lastAssignedUid ? memberUids.indexOf(lastAssignedUid) : -1
+  if (at < 0) return [...memberUids]
+  return [...memberUids.slice(at + 1), ...memberUids.slice(0, at + 1)]
+}
+
+/**
+ * How a rule reads in the settings list — its conditions in words and
+ * where it sends the record — so a reader can tell two rules apart without
+ * opening either. `memberLabel` turns a uid into a name; the section passes
+ * the roster's.
+ */
+export function describeAssignmentRule(
+  rule: CrmAssignmentRule,
+  memberLabel: (uid: string) => string,
+): { when: string; assign: string } {
+  const parts: string[] = []
+  if (rule.when.source) parts.push(`source is ${CONTACT_SOURCE_LABELS[rule.when.source]}`)
+  if (rule.when.formId) parts.push(`form is ${rule.when.formId}`)
+  if (rule.when.emailDomain) parts.push(`email domain is ${rule.when.emailDomain}`)
+  if (rule.when.tag) parts.push(`tagged ${rule.when.tag}`)
+  return {
+    when: parts.length ? parts.join(' and ') : 'Every capture',
+    assign:
+      'roundRobin' in rule.assign ? 'Round robin' : memberLabel(rule.assign.memberUid),
+  }
+}
+
+/**
+ * A fresh rule id, unique among the ones the org already holds. Time and
+ * entropy rather than a counter, so two admins adding a rule in two tabs
+ * do not mint the same id and have one reorder clobber the other's rule.
+ */
+export function newAssignmentRuleId(existing: readonly string[]): string {
+  for (;;) {
+    const id = `rule-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+    if (!existing.includes(id)) return id
+  }
 }
 
 /**

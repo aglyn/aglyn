@@ -1967,36 +1967,72 @@ export function HostActionsCard(props: {
                     sx={{ flex: 1 }}
                   />
                 ) : step.type === 'assignContactOwner' ? (
+                  // Two modes (AGL-2618): a member the author names, or the
+                  // next member of the round-robin pool the CRM's Settings
+                  // keep. Switching to the rotation drops the named member,
+                  // because the validator refuses a step that says both.
                   <>
-                    {/*
-                      One field for either way of naming a teammate. An
-                      address is stored as `ownerEmail` and matched on the
-                      roster when the automation runs; anything else is
-                      stored as `ownerUid`, which is how a member whose
-                      account carries no address — an SSO re-grant — is
-                      named at all. The split happens here so the stored
-                      step keeps the two fields the validator and the
-                      executor already read.
-                     */}
                     <TextField
-                      label="Owner (email address or member id)"
-                      value={(step as any).ownerEmail || (step as any).ownerUid || ''}
+                      select
+                      label="Assign to"
+                      value={(step as any).roundRobin === true ? 'roundRobin' : 'member'}
                       onChange={(event) =>
                         patch((previous) => ({
                           ...previous,
                           steps: previous.steps.map((s, index2) =>
-                            index2 === index
-                              ? { ...s, ...memberRefFields('owner', event.target.value) }
+                            index2 === index && s.type === 'assignContactOwner'
+                              ? event.target.value === 'roundRobin'
+                                ? { type: s.type, roundRobin: true }
+                                : { type: s.type, ownerEmail: '' }
                               : s,
                           ),
                         }))
                       }
                       size="small"
-                      sx={{ flex: 1 }}
-                    />
-                    <Typography variant="caption" color="text.secondary">
-                      {'Somebody on your team, matched against the roster when the automation runs.'}
-                    </Typography>
+                      sx={{ minWidth: 200 }}
+                    >
+                      <MenuItem value="member">{'A team member'}</MenuItem>
+                      <MenuItem value="roundRobin">
+                        {'Round robin — the next member of the CRM’s pool'}
+                      </MenuItem>
+                    </TextField>
+                    {(step as any).roundRobin === true ? (
+                      <Typography variant="caption" color="text.secondary">
+                        {'The pool is set under CRM → Settings; an empty pool is a failed step.'}
+                      </Typography>
+                    ) : (
+                      <>
+                        {/*
+                          One field for either way of naming a teammate. An
+                          address is stored as `ownerEmail` and matched on the
+                          roster when the automation runs; anything else is
+                          stored as `ownerUid`, which is how a member whose
+                          account carries no address — an SSO re-grant — is
+                          named at all. The split happens here so the stored
+                          step keeps the two fields the validator and the
+                          executor already read.
+                         */}
+                        <TextField
+                          label="Owner (email address or member id)"
+                          value={(step as any).ownerEmail || (step as any).ownerUid || ''}
+                          onChange={(event) =>
+                            patch((previous) => ({
+                              ...previous,
+                              steps: previous.steps.map((s, index2) =>
+                                index2 === index
+                                  ? { ...s, ...memberRefFields('owner', event.target.value) }
+                                  : s,
+                              ),
+                            }))
+                          }
+                          size="small"
+                          sx={{ flex: 1 }}
+                        />
+                        <Typography variant="caption" color="text.secondary">
+                          {'Somebody on your team, matched against the roster when the automation runs.'}
+                        </Typography>
+                      </>
+                    )}
                   </>
                 ) : step.type === 'createCrmTask' ? (
                   <>
