@@ -443,6 +443,25 @@ jest.mock('@aglyn/tenant-data-admin/server/organizations', () => ({
   }),
 }))
 
+/**
+ * The one-to-one email's timeline write (AGL-2615), doubled at its leaf.
+ *
+ * The writer's own rules — forward-only, transactional, never throwing —
+ * are proven against a Firestore double in `tenant-data-admin`. What only
+ * this file can prove is what the WEBHOOK hands it: which events reach it,
+ * from which tags, in the log's vocabulary rather than the provider's. The
+ * event-to-state mapping is the real one, so a spec here cannot pass on a
+ * vocabulary the writer does not speak.
+ */
+const recordedCrmDeliveries: Array<Record<string, unknown>> = []
+jest.mock('@aglyn/tenant-data-admin/server/crm-email-activity', () => ({
+  ...jest.requireActual('@aglyn/tenant-data-admin/server/crm-email-activity'),
+  recordCrmEmailDelivery: async (_firestore: unknown, input: Record<string, unknown>) => {
+    recordedCrmDeliveries.push(input)
+    return 'advanced'
+  },
+}))
+
 import { emailEventsHandler } from './email-events'
 // The REAL cap, not a local copy: a spec that retyped it would go on passing
 // after the value it asserts moved. (`suppressionId` is imported further
@@ -596,6 +615,7 @@ beforeEach(() => {
   recordedDeliveryEvents.length = 0
   recordedEngagement.length = 0
   recordedTouches.length = 0
+  recordedCrmDeliveries.length = 0
   fixtureMessageCounter = 0
   mockFirstOfType = true
   updateFailure = null
@@ -1944,5 +1964,89 @@ describe('the person rollup', () => {
 
     expect(result.body).toMatchObject({ ok: true })
     expect((docs.get(CAMPAIGN_PATH) as any).stats.opens).toBe(3)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// A one-to-one CRM email's delivery state (AGL-2615)
+// ---------------------------------------------------------------------------
+
+describe('a one-to-one CRM email', () => {
+  const ORG = 'org-9'
+  const ACTIVITY = 'act-42'
+  const CRM_TAGS = { context: 'crm', hostId: HOST, orgId: ORG, activityId: ACTIVITY }
+  const withMessage = (type: string, tags: Record<string, string>) => ({
+    type,
+    data: {
+      email_id: `email_${(fixtureMessageCounter += 1)}`,
+      to: [RECIPIENT],
+      created_at: '2027-01-01T00:00:00.000Z',
+      tags,
+    },
+  })
+
+  it('moves the activity to delivered, and still needs no campaign', async () => {
+    const result = await deliver(withMessage('email.delivered', CRM_TAGS))
+
+    expect(result.status).toBe(200)
+    expect(recordedCrmDeliveries).toEqual([
+      { orgId: ORG, activityId: ACTIVITY, state: 'delivered', atMs: expect.any(Number) },
+    ])
+    // Not a campaign: the campaign denominator is untouched and nothing
+    // was re-created under the host.
+    expect(writtenPaths()).toEqual([])
+  })
+
+  it('moves it to opened and clicked from the engagement events', async () => {
+    await deliver(withMessage('email.opened', CRM_TAGS))
+    await deliver(withMessage('email.clicked', CRM_TAGS))
+
+    expect(recordedCrmDeliveries.map((one) => one['state'])).toEqual(['opened', 'clicked'])
+    expect(errors).toEqual([])
+  })
+
+  it('moves it to bounced and still suppresses the address', async () => {
+    // A message id, because the state is read off the NORMALIZED event and
+    // the adapter files nothing it cannot key by message.
+    await deliver(
+      failure(
+        'email.bounced',
+        {
+          email_id: 'email_bounced_1',
+          bounce: { type: 'Permanent', subType: 'General', message: 'no such user' },
+        },
+        CRM_TAGS,
+      ),
+    )
+
+    expect(recordedCrmDeliveries).toEqual([
+      { orgId: ORG, activityId: ACTIVITY, state: 'bounced', atMs: expect.any(Number) },
+    ])
+    expect(docs.get(SUPPRESSION_PATH)?.reason).toBe('bounce')
+  })
+
+  it('moves it to complained', async () => {
+    await deliver(failure('email.complained', { email_id: 'email_complained_1' }, CRM_TAGS))
+    expect(recordedCrmDeliveries[0]).toMatchObject({ state: 'complained' })
+  })
+
+  it('writes nothing for a message that names no activity', async () => {
+    await deliver(withMessage('email.delivered', { context: 'invite', hostId: HOST }))
+    expect(recordedCrmDeliveries).toEqual([])
+  })
+
+  it('writes nothing for an id that names a path rather than a document', async () => {
+    await deliver(
+      withMessage('email.delivered', { ...CRM_TAGS, activityId: 'a/b' }),
+    )
+    await deliver(withMessage('email.delivered', { ...CRM_TAGS, orgId: '__x__' }))
+    expect(recordedCrmDeliveries).toEqual([])
+  })
+
+  it('leaves an event with no state of its own alone', async () => {
+    // `email.sent` is gated out above the campaign counters; a CRM row
+    // starts at `sent` when it is written, so nothing is owed here.
+    await deliver(withMessage('email.sent', CRM_TAGS))
+    expect(recordedCrmDeliveries).toEqual([])
   })
 })
