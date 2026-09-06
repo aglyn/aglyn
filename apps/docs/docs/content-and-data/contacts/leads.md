@@ -153,6 +153,7 @@ also requires a role on the site the lead belongs to.
 
 - [CRM overview](./overview.md)
 - [CRM settings](./settings.md) — the default owner and assignment rules a lead inherits
+- [Reports](./reports.md#lead-funnel) — the lead funnel: where a period's leads stand, and why the unqualified ones were closed
 - [The contact record](./contact-record.md) — what a converted lead becomes
 - [Companies](./companies.md) and the [deals pipeline](./deals.md) — the other two records a conversion can open
 - [Forms & lead capture](../forms/overview.md)
