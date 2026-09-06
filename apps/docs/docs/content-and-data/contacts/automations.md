@@ -1,7 +1,7 @@
 ---
 sidebar_position: 14
 title: Automations for the CRM
-description: The CRM events an automation can start on — a contact created or changing stage, a deal moved, won or lost, a task completed — and the steps that set a stage, tag, assign an owner, create a task or log an activity.
+description: The CRM events an automation can start on — a contact created or changing stage, a deal moved, won or lost, a task completed — the steps that set a stage, tag, assign an owner, create a task or log an activity, and the recipes that build the common automations in one click.
 ---
 
 # Automations for the CRM
@@ -18,7 +18,7 @@ announces nothing; what each event carries is in
 
 | In the trigger picker | Fires when | Read more |
 | --- | --- | --- |
-| **Contact created** | A capture on your site made a **new** contact. A repeat visit by somebody already on the list is an interaction, not a new contact. The event carries the `lifecycleStage` the capture set — `lead` for a form or a booking request, `subscriber` for a sign-up or a newsletter opt-in, `customer` for an order — so a filter can pick the form captures out of the sign-ups. | [CRM events](../../marketing-and-automation/workflows-and-actions/actions-builder.md#crm-events) |
+| **Contact created** | A capture on your site made a **new** contact. A repeat visit by somebody already on the list is an interaction, not a new contact. The event carries the `lifecycleStage` the capture set — `lead` for a form or a booking request, `subscriber` for a sign-up or a newsletter opt-in, `customer` for an order — so a filter can pick the form captures out of the sign-ups — and `formId` when the capture came through a form, so a condition can pick one form's people out of every other door's. | [CRM events](../../marketing-and-automation/workflows-and-actions/actions-builder.md#crm-events) |
 | **Contact changed stage** | A contact's lifecycle stage was moved — from the contact's page, or by another automation. Setting the stage a contact already has fires nothing. | [Lifecycle stages](./contact-record.md#lifecycle-stages) |
 | **Deal moved** | A deal moved between open stages, or was reopened. | [Moving, winning and losing](./deals.md#moving-winning-and-losing) |
 | **Deal won** | A deal was marked won. | [Moving, winning and losing](./deals.md#moving-winning-and-losing) |
@@ -84,6 +84,25 @@ and a record already at the activity ceiling gets the email without the entry.
 Automated email is metered as usage and is not counted against the
 [one-to-one email](../../workspace-and-billing/billing-and-plans/overview.md#one-to-one-email)
 allowance, which is for what people send by hand.
+
+## Recipes {#recipes}
+
+The common CRM automations do not have to be built from scratch. Beside **Add action**
+on **Automation → Actions**, the **Recipes** menu lists four ready-to-edit actions.
+Choosing one opens the action editor already filled in — name, trigger, conditions and
+steps — with a line saying which recipe it started from. Change anything, then save;
+**nothing is saved until you do**, and a recipe closed without saving leaves no trace.
+
+| Recipe | Starts on | What it builds |
+| --- | --- | --- |
+| **Welcome a new lead** | **Contact created**, with the condition *`source` equals `form`* | **Assign the contact an owner** on **Round robin** (the pool under [CRM → Settings](./settings.md#round-robin); with no pool the step fails, the run carries on, and the run history says so), then **Create a CRM task** — a call, due in 1 day, assignee blank so it goes to the owner just chosen — then **Send an email** thanking them (sent from your workspace's identity to the address the event carries, as an immediate reply rather than marketing, and [logged on the contact's timeline](#an-automated-email-on-the-timeline)), then **Tag the contact** `website`. |
+| **Follow up a won deal** | **Deal won** | **Set the contact's lifecycle stage** to **Customer**, then **Create a CRM task** — a call, due in 7 days, to the contact's owner. |
+| **Re-engage a stale lead** | **Contact changed stage**, with the condition *`lifecycleStage` equals `lead`* | **Wait for something to happen** — the next **Contact changed stage** for this person, giving up after a week — then **Create a CRM task** (a call, due in 1 day) with the step condition *`_waitTimedOut` is not empty*, so the call is booked only when the week ran out. A lead whose stage moved on in the meantime skips it. |
+| **Tag by form** | **Contact created**, with the condition *`formId` equals* the form you pick | **Tag the contact** with the form's name. This recipe asks for one of the site's forms first — the picker offers the site's live forms, not archived ones — because the form is what the trigger is keyed on. Change the tag in the editor if the form's name is not the tag you want. |
+
+Recipes are definitions, the same on every site; only the form picker is the site's
+own. A recipe that reaches the CRM needs the plan the [CRM steps](#the-steps) need, and
+choosing one on a plan without the actions builder is refused the way **Add action** is.
 
 ## Example: tag every new contact from a form
 

@@ -29,6 +29,16 @@ place; steps that need a higher plan are labeled in the editor.
 That's it — no multi-step logic to manage. Reach for a [workflow](build-a-workflow.md) when
 you need several steps, branching, or composition.
 
+### Start from a recipe {#recipes}
+
+Beside **Add action**, the **Recipes** menu lists four ready-to-edit CRM automations:
+**Welcome a new lead**, **Follow up a won deal**, **Re-engage a stale lead** and **Tag by
+form**. Choosing one opens the same editor already filled in — trigger, conditions and
+steps — with a line saying which recipe it started from; change anything, then save.
+Nothing is saved until you do. **Tag by form** asks for one of this site's forms first,
+because the trigger is keyed on it. What each recipe builds, step by step, is in
+[Automations for the CRM → Recipes](../../content-and-data/contacts/automations.md#recipes).
+
 ## Triggers
 
 Beyond server events (form submissions, page views, sign-ins, leads, bookings), actions
@@ -56,7 +66,7 @@ written without leaving the editor.
 
 | Event | Fires when | Keys in scope for filters and conditions |
 | --- | --- | --- |
-| **Contact created** (`contactCreated`) | A capture on your site makes a **new** contact: a form submission, a member sign-up, a newsletter subscription, an order or a booking from an address your workspace did not already hold. A repeat visit by somebody already on the list is recorded as an interaction and does **not** fire it. | `contactId` · `email` · `name` (empty when the capture had none) · `source` (`form`, `member`, `newsletter`, `order` or `booking`) · `hostId` · `lifecycleStage` (the stage the capture set — `lead`, `subscriber` or `customer`; empty when it set none) · `campaignIds` (comma-joined; present only when the capture came through a campaign) |
+| **Contact created** (`contactCreated`) | A capture on your site makes a **new** contact: a form submission, a member sign-up, a newsletter subscription, an order or a booking from an address your workspace did not already hold. A repeat visit by somebody already on the list is recorded as an interaction and does **not** fire it. | `contactId` · `email` · `name` (empty when the capture had none) · `source` (`form`, `member`, `newsletter`, `order` or `booking`) · `hostId` · `lifecycleStage` (the stage the capture set — `lead`, `subscriber` or `customer`; empty when it set none) · `campaignIds` (comma-joined; present only when the capture came through a campaign) · `formId` (present only when the capture came through a form — the key **Tag by form** conditions on) |
 | **Contact changed stage** (`contactStageChanged`) | A contact's **lifecycle stage** is moved — from the contact's page in the console, or by a **Set the contact's lifecycle stage** step in another automation. Setting the stage a contact already has fires nothing. | `contactId` · `email` · `lifecycleStage` (the new stage) · `previousStage` (empty when the contact had none) |
 | **Deal moved** (`dealStageChanged`) | A [deal](../../content-and-data/contacts/deals.md#moving-winning-and-losing) moves between open stages, or is reopened — from the board, the deal's page or the REST API. | `dealId` · `title` · `amountCents` · `currency` · `stageId` · `previousStageId` · `ownerUid` · `contactId` · `companyId` |
 | **Deal won** (`dealWon`) | A deal is marked won. | The same keys as **Deal moved**. |
