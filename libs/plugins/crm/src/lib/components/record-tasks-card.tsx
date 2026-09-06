@@ -35,6 +35,7 @@ import { crmRoutes } from '../model/crm-routes'
 import { completeCrmTask } from '../model/task-api'
 import { TaskDueText, TaskKindCell, TaskPriorityChip } from './task-cells'
 import TaskEditDrawer from './task-edit-drawer'
+import TaskSnoozeMenu from './task-snooze-menu'
 
 export interface RecordTasksCardProps extends CrmRecordRef {
   hostId: string
@@ -211,6 +212,13 @@ export function RecordTasksCard(props: RecordTasksCardProps) {
                       <Typography variant="caption" color="text.secondary" noWrap>
                         {`· ${directory.nameOf(task.assigneeUid)}`}
                       </Typography>
+                    ) : null}
+                    {scope ? (
+                      <TaskSnoozeMenu
+                        dueAtMs={task.dueAtMs}
+                        target={{ write: { scope, taskId: task.$id } }}
+                        disabled={busyId === task.$id}
+                      />
                     ) : null}
                   </Stack>
                 </Stack>

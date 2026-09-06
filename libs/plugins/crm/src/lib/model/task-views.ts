@@ -257,6 +257,54 @@ export function localInputToDueAt(value: string): number | null {
 }
 
 /**
+ * The two snoozes a row and the drawer offer by name (AGL-2619), in the
+ * order a person reaches for them; "Pick a date" is the third and takes a
+ * date rather than an option.
+ */
+export type CrmTaskSnoozeOption = 'tomorrow' | 'nextWeek'
+
+export const CRM_TASK_SNOOZE_OPTIONS: ReadonlyArray<{
+  id: CrmTaskSnoozeOption
+  label: string
+}> = [
+  { id: 'tomorrow', label: 'Tomorrow' },
+  { id: 'nextWeek', label: 'Next week' },
+]
+
+/** The hour a snoozed task lands on when it had no time of day of its own. */
+export const CRM_TASK_SNOOZE_DEFAULT_HOUR = 9
+
+/**
+ * Where a snoozed task is due next.
+ *
+ * Counted from NOW, not from the old due date: a task a week overdue
+ * snoozed to "tomorrow" is due tomorrow, which is what the word means to the
+ * person pressing it, and not due six days ago. The time of day is kept —
+ * a nine o'clock call stays a nine o'clock call — and a task that had no
+ * time lands at {@link CRM_TASK_SNOOZE_DEFAULT_HOUR}, a working hour rather
+ * than midnight. Built from the calendar for the reason
+ * {@link startOfNextLocalDay} gives.
+ */
+export function snoozeDueAt(
+  option: CrmTaskSnoozeOption,
+  dueAtMs: number | null | undefined,
+  nowMs: number,
+): number {
+  const had = typeof dueAtMs === 'number' && Number.isFinite(dueAtMs) ? new Date(dueAtMs) : null
+  const hours = had ? had.getHours() : CRM_TASK_SNOOZE_DEFAULT_HOUR
+  const minutes = had ? had.getMinutes() : 0
+  const now = new Date(nowMs)
+  const days = option === 'tomorrow' ? 1 : 7
+  return new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate() + days,
+    hours,
+    minutes,
+  ).getTime()
+}
+
+/**
  * The record a task hangs off, as a link into the hub — or `null` for a
  * task that is nobody's in particular.
  *
