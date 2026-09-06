@@ -100,6 +100,7 @@ const facetPath = (field: string) => `facets.${GROUP.groupId}.${field}`
 const record: ContactRecord = {
   $id: 'c1',
   email: 'maya@littlefoxcafe.com',
+  alternateEmails: [],
   name: 'Maya Delgado',
   canonicalName: 'Maya Delgado',
   nameOverride: '',
