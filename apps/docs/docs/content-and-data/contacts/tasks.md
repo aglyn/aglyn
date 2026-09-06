@@ -11,11 +11,13 @@ return, an email to send, a meeting to hold, or a plain to-do. Every task has a 
 kind, a priority, an optional due date and time, an optional assignee, notes, and a link
 to the **contact**, **company** or **deal** it is about.
 
-Tasks live in the CRM hub at `…/hosts/{site}/crm/tasks`, and every record page carries
-its own short list of them. They follow the same per-site visibility as the contacts
-themselves: a task made from one site's console is seen from that site (and the sites it
-shares an audience with), and an organization that has widened its default sharing sees
-every task everywhere.
+Tasks live in the CRM hub at `…/hosts/{site}/crm/tasks` and, over every site at once, at
+`…/{organization}/crm/tasks`; every record page carries its own short list of them. They
+follow the same per-site visibility as the contacts themselves: a task made from one
+site's console is seen from that site (and the sites it shares an audience with), and an
+organization that has widened its default sharing sees every task everywhere. A task is
+also the one CRM record that can belong to **no site at all** — see
+[Organization tasks](#organization-tasks).
 
 ## The tasks page
 
@@ -99,13 +101,37 @@ what is due today and what is already late.
 Tick the checkbox to complete a task. Completing is the one task action with a side
 effect beyond the task itself: it fires the **`taskCompleted`** event on the site, which a
 [workflow](../../marketing-and-automation/workflows-and-actions/overview.md) can trigger
-on. Ticking a done task in the Done view reopens it; reopening fires nothing.
+on. From a site's hub the event fires on that site; from the organization's hub it fires
+on the site the task was created from, and an [organization task](#organization-tasks)
+fires none. Ticking a done task in the Done view reopens it; reopening fires nothing.
 
 The `taskCompleted` payload carries `taskId`, `title`, `kind`, `priority`, `dueAtMs`,
 `completedAtMs`, `completedByUid`, `assigneeUid`, `createdByUid`, `contactId`,
 `companyId`, `dealId` and `taskHostId` (the site the task was created on). Every optional
 field is present as an empty string rather than absent, so a filter such as
 `contactId != ""` works without knowing whether the key exists.
+
+## Organization tasks
+
+Every other CRM record is captured *by* a site — a contact, a company, a deal is a fact
+about a person some site met. A task need not be: renewing the agency's own insurance or
+chasing the organization's own invoice is owed by nobody's brand. So on the organization's
+hub the **New task** drawer's **Site** picker offers **This organization (no site)** beside
+your sites — and shows even when the organization has only one site, because there is a
+choice to make. Under a site's hub the picker never appears; a task made there belongs to
+that site, as it always has.
+
+An organization task records no site. It is listed from the organization's hub, and —
+like any record shared with the whole organization — from every site's tasks list and
+dashboard card too: sharing with the organization *is* sharing with its sites. What sets
+it apart is that no site created it, so completing one fires no `taskCompleted` event
+(there is no site whose automations could hear it), the assignee's notification opens the
+organization's hub rather than a site's, and the [REST API](/api/resources/tasks) reports
+its `siteId` as `null`. Opening an organization task at the org level says so under its
+title — *Filed with the organization — no site* — where a site's task names its site.
+
+A task made from a record's page on the organization's hub defaults to the record's own
+site, as before; **This organization** is a choice you make, never a default.
 
 ## Tasks on a contact, company or deal
 
@@ -159,7 +185,9 @@ made a task sees no card at all.
 Tasks share the CRM's permission: anyone whose role can **manage data** (owners,
 admins and editors by default, or a custom role granting it) can read, create, edit,
 complete and delete tasks on the sites they can reach. A collaborator scoped to one site
-sees that site's tasks and no others.
+sees that site's tasks — and the organization's, which every site shares — and no other
+site's. Filing or completing a task from the organization's hub takes what the hub itself
+takes: a member of the whole organization holding *manage data*.
 
 ## Related
 

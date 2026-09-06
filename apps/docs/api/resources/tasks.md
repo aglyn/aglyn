@@ -50,7 +50,7 @@ Scopes and the site rule are shared with every CRM resource — see
 | `completedAt` | string \| null | When the task was marked done. **Read-only.** |
 | `assigneeUid` | string \| null | Who owes it. Must be a member of your organization. Writable. |
 | `contactId`, `companyId`, `dealId` | string \| null | What the task is for. Each must exist. All optional. Writable. |
-| `siteId` | string | The site the task was created from. **Read-only.** |
+| `siteId` | string \| null | The site the task was created from, or `null` for an **organization task** — one filed from the organization's console with no site, owed by the organization itself rather than by any of its sites. **Read-only.** A task created over the API always names a site. |
 | `created` / `updated` | string \| null | ISO 8601. |
 
 ## Endpoints

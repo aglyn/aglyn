@@ -36,7 +36,9 @@
  * effect outside the document — a deal's stage, a task's completion, an
  * assignment that notifies — goes through its ROUTE, one request per row, and
  * {@link runCrmBulkCalls} is the same tally over those: each refusal is named
- * by the row and carries the route's own sentence.
+ * by the row and carries the route's own sentence. A route that takes the
+ * whole selection at once and answers per row — the organization-level task
+ * routes (AGL-2637) — is tallied by {@link runCrmBulkBatch} from its answers.
  *
  * Pure apart from the Firestore SDK the writer factory binds: the runners
  * take their writers as ports, so a spec wires a ledger in.
@@ -167,6 +169,53 @@ export async function runCrmBulkCalls<T>(
       outcome.done += 1
     } catch (error) {
       outcome.refused.push({ label: labelOf(item), error: bulkRefusalReason(error) })
+    }
+  }
+  return outcome
+}
+
+/** What a batch route answers for one row: written, or refused with a sentence. */
+export interface CrmBulkAnswer {
+  id: string
+  ok: boolean
+  error?: string
+}
+
+/**
+ * One request for the whole selection, answered per row (AGL-2637).
+ *
+ * The tally is read off the answers rather than off N calls, in the rows'
+ * own order. A row the answer does not mention was not written — a route
+ * that dropped it silently would otherwise read as success — and is refused
+ * by name. A request refused WHOLE (no session, no reach over the org) is
+ * every row refused with the route's one sentence, which is what the same
+ * selection through {@link runCrmBulkCalls} would have said N times.
+ */
+export async function runCrmBulkBatch<T>(
+  items: readonly T[],
+  idOf: (item: T) => string,
+  labelOf: (item: T) => string,
+  call: (items: readonly T[]) => Promise<readonly CrmBulkAnswer[]>,
+): Promise<CrmBulkOutcome> {
+  const outcome: CrmBulkOutcome = { done: 0, refused: [] }
+  if (!items.length) return outcome
+  let answers: readonly CrmBulkAnswer[]
+  try {
+    answers = await call(items)
+  } catch (error) {
+    const reason = bulkRefusalReason(error)
+    for (const item of items) outcome.refused.push({ label: labelOf(item), error: reason })
+    return outcome
+  }
+  const byId = new Map(answers.map((answer) => [answer.id, answer]))
+  for (const item of items) {
+    const answer = byId.get(idOf(item))
+    if (answer?.ok) outcome.done += 1
+    else {
+      outcome.refused.push({
+        label: labelOf(item),
+        error: answer?.error || 'the write failed',
+      })
     }
   }
   return outcome

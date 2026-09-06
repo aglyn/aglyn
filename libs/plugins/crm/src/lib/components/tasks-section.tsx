@@ -49,6 +49,7 @@ import { useOrgMemberDirectory } from '../hooks/use-org-member-directory'
 import { downloadTextFile } from '../model/contacts-csv'
 import { crmRoutes } from '../model/crm-routes'
 import { completeCrmTask } from '../model/task-api'
+import { crmTaskCallScope } from '../model/task-routes'
 import { type TaskCsvOptions, tasksCsv } from '../model/tasks-csv'
 import {
   CRM_TASK_VIEW_LIMIT,
@@ -210,9 +211,12 @@ export function TasksSection(props: ConsolePluginPageProps) {
           )
           enqueueSnackbar('Task reopened', { variant: 'success' })
         } else {
-          // The route resolves the org and emits the event for a site: the
-          // mounted one, or at the organization level the task's own.
-          await completeCrmTask(user, { hostId: hostId ?? task.hostId, taskId: task.$id })
+          // The route runs as the mounted site, which hears the event, or
+          // at the organization level as the org — the org variant, which
+          // emits on the task's own site, or nowhere for an org task.
+          const callScope = crmTaskCallScope(hostId, orgId)
+          if (!callScope) return
+          await completeCrmTask(user, { ...callScope, taskId: task.$id })
           enqueueSnackbar('Task completed', { variant: 'success' })
         }
       } catch (cause) {
@@ -224,7 +228,7 @@ export function TasksSection(props: ConsolePluginPageProps) {
         setBusyId(null)
       }
     },
-    [scope, busyId, firestore, user, hostId, enqueueSnackbar],
+    [scope, busyId, firestore, user, hostId, orgId, enqueueSnackbar],
   )
 
   const columns: GridColDef[] = useMemo(
