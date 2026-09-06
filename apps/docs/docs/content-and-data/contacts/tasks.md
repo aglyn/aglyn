@@ -1,7 +1,7 @@
 ---
 sidebar_position: 9
 title: Tasks & follow-ups
-description: Calls, emails, meetings and to-dos with a due date, an assignee and a link to the contact, company or deal they are for — with overdue and today read off the clock as you look.
+description: Calls, emails, meetings and to-dos with a due date, an assignee and a link to the contact, company or deal they are for — with overdue and today read off the clock as you look, a snooze, and a morning digest of what is owed.
 ---
 
 # Tasks & follow-ups
@@ -37,8 +37,21 @@ overdue on its own.
 
 Each row shows a checkbox, the title (with the first line of notes under it), the kind,
 the priority, the due date colored by where it stands — red when overdue, amber when due
-today — the assignee, and the record it is for, as a link into that record's page. A view
-shows at most 200 rows and says so when it is full; narrow the view to see the rest.
+today — with a snooze beside it, the assignee, and the record it is for, as a link into
+that record's page. A view shows at most 200 rows and says so when it is full; narrow the
+view to see the rest.
+
+### Snoozing a task
+
+The alarm icon beside an open task's due date offers **Tomorrow**, **Next week** and
+**Pick a date…**. Each moves the due date and changes nothing else — one write, no
+notification to the assignee, and no trip through the edit drawer. The same three
+choices sit beside the **Due** field in the drawer.
+
+Tomorrow and next week count from **today**, not from the old due date: a task a week
+overdue snoozed to "tomorrow" is due tomorrow. The task keeps its time of day, so a
+9:00 call stays a 9:00 call; a task that had no due date lands at 9:00 in the morning.
+The same snooze is on each record page's Tasks card.
 
 ### Creating a task
 
@@ -63,6 +76,11 @@ category in their account settings.
 The assignee must be a member of your organization; the picker offers the current
 roster.
 
+That notification is also the reminder for work due soon: assigning a task due within the
+next day tells the assignee once, with the due time in the message. There is no separate
+per-task alarm — the [daily digest](#the-daily-digest) below is what says, each morning,
+what is due today and what is already late.
+
 ### Completing and reopening
 
 Tick the checkbox to complete a task. Completing is the one task action with a side
@@ -82,6 +100,38 @@ Each record's page has a **Tasks** card listing that record's open tasks, soones
 first, with the same checkbox to complete one inline; the card's heading counts how many
 are open and how many are done. **New task** on the card opens the drawer with the record
 already linked, and **All tasks** jumps to the section.
+
+## The daily digest
+
+Because overdue and today are read off the clock, nothing on a task ever fires on its
+own. What does is the **daily CRM digest**: once a morning, at 8:00 (America/Chicago),
+every member with open work gets **one** console notification and **one** email saying
+what they owe — for example, "3 tasks due today, 2 overdue, 1 unworked lead".
+
+It counts, per organization:
+
+- **Overdue** and **due today** — your open tasks, by the same day boundaries the Tasks
+  page paints with, read in the digest's time zone rather than yours.
+- **Unworked leads** — leads on the sites you can reach that are still **New** after two
+  days and have no owner, plus any lead whose owner is you. A lead with an owner is only
+  on that owner's list.
+
+The notification opens the Tasks section of the site the first task belongs to (or the
+Leads section when only leads are owed). The email lists each section — up to ten items
+apiece, with a count of the rest — and links to the same pages. Members who have nothing
+due, nothing late and no unworked lead get nothing; a digest is sent at most once per
+member per day, so a re-run on the same day reaches only whoever the first run missed.
+
+The digest goes only to members who can open the CRM (the same **manage data**
+permission as everything else here), and only in organizations whose plan includes it.
+
+### Turning it off
+
+**Daily CRM digest** is a switch under Account settings → **Notifications**, on by
+default. Off, it stops both the notification and the email, on every workspace you
+belong to. Muting the **Forms & bookings** category on that same page silences the
+console notification only — the email still arrives while the digest is on. See
+[Workspace settings & notifications](../../getting-started/console-tour.md#workspace-settings--notifications).
 
 ## The dashboard card
 
