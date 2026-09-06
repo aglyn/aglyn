@@ -99,7 +99,7 @@ export function SourceConversionCard(props: SourceConversionCardProps) {
   const capturedInPeriod = () =>
     query(
       scopedCollection(firestore, scope, 'contacts'),
-      visibleToClause(tokens),
+      ...visibleToClause(tokens),
       where('createdAt', '>=', Timestamp.fromMillis(range.from)),
       where('createdAt', '<', Timestamp.fromMillis(range.to)),
     )

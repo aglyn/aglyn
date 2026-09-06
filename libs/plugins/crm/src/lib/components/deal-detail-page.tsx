@@ -59,10 +59,12 @@ export function DealDetailPage(props: CrmDetailPageProps) {
   const router = useRouter()
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
-  const logActivity = useHostActivityLogger(hostId)
   const { confirm } = useConfirmationContext()
   const scope = useCrmScope({ hostId, org })
   const { data: deal, status, fromCache } = useDeal(scope.orgId, id)
+  // The site whose feed the act is logged in: the mounted one, or at the
+  // organization level the deal's own (AGL-2630).
+  const logActivity = useHostActivityLogger(hostId ?? deal?.hostId ?? undefined)
   const pipelineState = usePipeline(scope.orgId, {
     hostId,
     org: (org ?? null) as Record<string, unknown> | null,
@@ -133,7 +135,7 @@ export function DealDetailPage(props: CrmDetailPageProps) {
                   {'Edit'}
                 </Button>
                 <CrmSendEmailButton
-                  hostId={hostId}
+                  hostId={hostId ?? deal.hostId ?? null}
                   org={org}
                   dealId={deal.$id}
                   contactId={deal.contactId}
@@ -204,7 +206,7 @@ export function DealDetailPage(props: CrmDetailPageProps) {
               <DealProductsCard
                 deal={deal}
                 orgId={scope.orgId}
-                hostId={hostId}
+                hostId={hostId ?? deal.hostId ?? null}
                 org={org}
                 fromCache={fromCache}
                 unreadable={status === 'error'}

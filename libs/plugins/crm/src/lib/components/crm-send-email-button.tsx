@@ -22,8 +22,13 @@ import { useState } from 'react'
 import CrmSendEmailDialog from './crm-send-email-dialog'
 
 export interface CrmSendEmailButtonProps {
-  /** The site the message leaves from — passed in, never read off the URL. */
-  hostId: string
+  /**
+   * The site the message leaves from — passed in, never read off the URL.
+   * At the organization level the record's own capturing site (AGL-2630);
+   * `null` for a record no site has captured, which cannot be written to
+   * from here.
+   */
+  hostId: string | null
   org?: Partial<AglynOrgBilling> | null
   contactId?: string
   leadId?: string
@@ -51,9 +56,11 @@ export function CrmSendEmailButton(props: CrmSendEmailButtonProps) {
   // nothing; a lead carries its own.
   const reachable = Boolean(hostId) && (Boolean(address) || Boolean(contactId))
   const reason = !reachable
-    ? dealId && !contactId
-      ? 'This deal names no contact to email'
-      : 'This record has no email address'
+    ? !hostId
+      ? 'No site has captured this record to send from'
+      : dealId && !contactId
+        ? 'This deal names no contact to email'
+        : 'This record has no email address'
     : ''
   const button = (
     <Button

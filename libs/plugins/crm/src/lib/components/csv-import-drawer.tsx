@@ -92,7 +92,9 @@ import {
   useRef,
   useState,
 } from 'react'
+import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
 import { downloadTextFile } from '../model/contacts-csv'
+import { CrmSitePicker } from './crm-site-picker'
 
 /** A column's target: a standard field, or a custom one as `custom:<key>`. */
 export type CsvImportTarget<F extends string> = F | `custom:${string}`
@@ -118,6 +120,11 @@ export interface CsvImportVocabulary<
   /** The drawer's title — "Import contacts from CSV". */
   title: string
   help: ComponentProps<typeof HelpTip>
+  /**
+   * What the site picker's answer decides, said under it at the
+   * organization level (AGL-2630). Absent, the picker's own sentence.
+   */
+  sitePickerHelperText?: string
   /** The paragraph under the title. */
   intro: string
   /** The standard targets, in the order the mapping menu lists them. */
@@ -168,7 +175,13 @@ export interface CsvImportDrawerProps<
 > {
   open: boolean
   onClose: () => void
-  hostId: string
+  /**
+   * The site the file is imported INTO — what the route files every row
+   * under — or `null` at the organization level (AGL-2630), where the
+   * drawer asks which site with a picker and holds the import until one is
+   * named.
+   */
+  hostId: string | null
   vocabulary: CsvImportVocabulary<F, R, S>
 }
 
@@ -203,6 +216,10 @@ export function CsvImportDrawer<
   const { open, onClose, hostId, vocabulary } = props
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
+  // The site every row is captured under: the mounted one, or at the
+  // organization level the one the picker named — `null` until it has.
+  const mount = useCrmOrgMount()
+  const createHostId = hostId ?? mount?.createHostId ?? null
 
   const [fileName, setFileName] = useState('')
   const [columns, setColumns] = useState<string[]>([])
@@ -327,7 +344,7 @@ export function CsvImportDrawer<
    * still reports what it did rather than nothing.
    */
   const handleImport = useCallback(async () => {
-    if (busy || !rows.length || !requiredMapped) return
+    if (busy || !rows.length || !requiredMapped || !createHostId) return
     setBusy(true)
     let total = vocabulary.emptyResult()
     setResult(total)
@@ -341,7 +358,7 @@ export function CsvImportDrawer<
         const response = await authorizedFetch(user, vocabulary.route, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ hostId, rows: chunk }),
+          body: JSON.stringify({ hostId: createHostId, rows: chunk }),
         })
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
@@ -363,7 +380,7 @@ export function CsvImportDrawer<
     } finally {
       setBusy(false)
     }
-  }, [busy, rows, requiredMapped, mapping, user, hostId, enqueueSnackbar, vocabulary])
+  }, [busy, rows, requiredMapped, mapping, user, createHostId, enqueueSnackbar, vocabulary])
 
   const handleDownloadSkipped = useCallback(() => {
     if (!result?.skipped.length) return
@@ -425,6 +442,15 @@ export function CsvImportDrawer<
             />
           ) : (
             <>
+              {/*
+                First, because every row is filed under the answer: the site
+                the file is imported into. Nothing under a site (AGL-2630).
+              */}
+              <CrmSitePicker
+                hostId={hostId}
+                disabled={busy}
+                helperText={vocabulary.sitePickerHelperText}
+              />
               <Typography variant="body2" color="text.secondary">
                 {vocabulary.intro}
               </Typography>
@@ -497,7 +523,8 @@ export function CsvImportDrawer<
               <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
                 <Button
                   variant="contained"
-                  disabled={busy || !rows.length || !requiredMapped}
+                  // Held until the capturing site is known.
+                  disabled={busy || !rows.length || !requiredMapped || !createHostId}
                   onClick={() => void handleImport()}
                 >
                   {rows.length

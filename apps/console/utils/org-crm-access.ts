@@ -18,14 +18,19 @@
 import type { OrgPermission } from '@aglyn/aglyn'
 
 /**
- * WHO MAY OPEN THE ORG-WIDE ADDRESS BOOK.
+ * WHO MAY OPEN THE ORGANIZATION-LEVEL CRM.
  *
- * The org contacts page is the one surface in the product that deliberately
- * reads ACROSS the host boundary: it answers which of an organization's sites
- * know a given person, which is a fact about every site at once. Every other
- * contacts surface is scoped by `visibleTo` and proves itself per document.
- * This one does not, so this decision is the whole of what keeps it from
- * becoming the leak the per-host work just closed.
+ * The org CRM hub (`/[orgSlug]/crm`, AGL-2630) is the one surface in the
+ * product that deliberately reads ACROSS the host boundary: every section
+ * lists every site's records at once, and the contacts section answers which
+ * of an organization's sites know a given person, which is a fact about every
+ * site at once. Every other CRM surface is scoped by `visibleTo` and proves
+ * itself per document. This one does not — its listeners carry no scope
+ * clause — so this decision is the whole of what keeps it from becoming the
+ * leak the per-host work closed. It was written for the read-only address
+ * book that lived at `/[orgSlug]/contacts` and it is unchanged by the hub
+ * that replaced it: the reasoning below is about REACH, and a hub that can
+ * also write makes it more load-bearing, not less.
  *
  * ## A ROLE IS NOT A REACH, and that is the defect this exists to avoid
  *
@@ -53,11 +58,11 @@ import type { OrgPermission } from '@aglyn/aglyn'
  * `data.manage` is the catalog key whose subject is exactly this data: the
  * Firestore rules place contacts in the org-shared data block and gate their
  * writes on `canWriteOrgData()` — owner, admin, editor — which is the
- * population `data.manage` defaults to. It is also the key the contacts
- * plugin declares for its HOST surface, so the two contacts surfaces name one
- * permission rather than two, and an owner revoking it closes both.
+ * population `data.manage` defaults to. It is also the key the CRM plugin
+ * declares for its SITE hub, so the two CRM surfaces name one permission
+ * rather than two, and an owner revoking it closes both.
  *
- * The host surface stops there, deliberately: a collaborator holding
+ * The site hub stops there, deliberately: a collaborator holding
  * `data.manage` may open their own site's CRM, where the listener filters on
  * `visibleTo` and the rules prove the same predicate per document. This
  * surface adds the reach requirement on top, because it is the one that has
@@ -67,12 +72,12 @@ import type { OrgPermission } from '@aglyn/aglyn'
  *
  * The rules are. `canReadScoped()` short-circuits on `isOrgWideMember()` and
  * otherwise demands `visibleTo.hasAny(scopeTokens)`, and Firestore refuses a
- * LIST it cannot prove per document — so the unfiltered org-wide query this
- * page runs is answered with `permission-denied` for a scoped collaborator
+ * LIST it cannot prove per document — so the unfiltered org-wide queries this
+ * hub runs are answered with `permission-denied` for a scoped collaborator
  * whatever the console decides. This function makes the console HONEST about
  * that, one layer earlier and with an explanation attached.
  */
-export type OrgContactsAccess =
+export type OrgCrmAccess =
   /** Org-wide reach and the permission. Render the surface. */
   | 'granted'
   /** A settled "no". Render the refusal. */
@@ -87,10 +92,10 @@ export type OrgContactsAccess =
    */
   | 'unavailable'
 
-/** The permission both contacts surfaces name. */
-export const ORG_CONTACTS_PERMISSION: OrgPermission = 'data.manage'
+/** The permission both CRM surfaces name. */
+export const ORG_CRM_PERMISSION: OrgPermission = 'data.manage'
 
-export interface OrgContactsAccessInput {
+export interface OrgCrmAccessInput {
   /**
    * `useOrgReach().orgWide` — false ONLY for a resolved scoped membership.
    * It fails OPEN while memberships load, which is why {@link reachReady}
@@ -126,9 +131,7 @@ export interface OrgContactsAccessInput {
  * inputs that could produce a false grant are exactly the two that are held
  * behind a readiness flag. `pending` renders no data and no refusal.
  */
-export function resolveOrgContactsAccess(
-  input: OrgContactsAccessInput,
-): OrgContactsAccess {
+export function resolveOrgCrmAccess(input: OrgCrmAccessInput): OrgCrmAccess {
   const {
     orgWide,
     reachReady,
@@ -146,7 +149,7 @@ export function resolveOrgContactsAccess(
   if (!orgWide) return 'refused'
   if (permissionsErrored) return 'unavailable'
   if (!permissionsLoaded) return 'pending'
-  return can(ORG_CONTACTS_PERMISSION) === true ? 'granted' : 'refused'
+  return can(ORG_CRM_PERMISSION) === true ? 'granted' : 'refused'
 }
 
 /**
@@ -158,15 +161,13 @@ export function resolveOrgContactsAccess(
  * not hold, and offering them "ask an admin for access" invites a request
  * that would have to be answered by widening their whole membership.
  */
-export function orgContactsRefusalNotice(
-  reason: 'scoped' | 'permission',
-): string {
+export function orgCrmRefusalNotice(reason: 'scoped' | 'permission'): string {
   return reason === 'scoped'
     ? 'This page covers every site in the organization. Your access is ' +
-        "limited to the sites you've been added to — open Contacts from " +
+        "limited to the sites you've been added to — open the CRM from " +
         'one of those sites to see the people it holds.'
-    : "You don't have permission to see the organization's contacts. An " +
+    : "You don't have permission to see the organization's CRM. An " +
         'organization owner or admin can grant it from Team.'
 }
 
-export default resolveOrgContactsAccess
+export default resolveOrgCrmAccess

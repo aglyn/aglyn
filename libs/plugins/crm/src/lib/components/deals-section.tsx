@@ -21,6 +21,7 @@ import {
   type CrmDealStatus,
   dealStageById,
   findOrgMember,
+  ORG_SCOPE_TOKEN,
   pluginDocsHelp,
 } from '@aglyn/aglyn'
 import {
@@ -81,6 +82,10 @@ import { PipelinesDialog } from './pipelines-dialog'
 
 type View = 'board' | 'table'
 type StatusFilter = CrmDealStatus | 'all'
+
+
+/** What a pipeline made at the organization level is stamped with — the org's own token. */
+const ORG_PIPELINE_TOKENS: readonly string[] = [ORG_SCOPE_TOKEN]
 
 /**
  * `/crm/deals` — the pipeline (AGL-2598).
@@ -229,14 +234,14 @@ export function DealsSection(props: ConsolePluginPageProps) {
       const stage = dealStageById(pipeline, stageId)
       void track(
         deal,
-        () => api.moveToStage(deal.$id, stageId),
+        () => api.moveToStage(deal, stageId),
         `Moved to ${stage?.name ?? 'stage'}`,
       )
     },
     [api, pipeline, track],
   )
   const handleWon = useCallback(
-    (deal: DealDoc) => void track(deal, () => api.markWon(deal.$id), 'Deal won'),
+    (deal: DealDoc) => void track(deal, () => api.markWon(deal), 'Deal won'),
     [api, track],
   )
   const [losing, setLosing] = useState<DealDoc | null>(null)
@@ -246,7 +251,7 @@ export function DealsSection(props: ConsolePluginPageProps) {
       const deal = losing
       if (!deal) return
       setLosing(null)
-      void track(deal, () => api.markLost(deal.$id, reason), 'Deal marked lost')
+      void track(deal, () => api.markLost(deal, reason), 'Deal marked lost')
     },
     [api, losing, track],
   )
@@ -614,12 +619,16 @@ export function DealsSection(props: ConsolePluginPageProps) {
         open={managingPipelines}
         onClose={() => setManagingPipelines(false)}
         orgId={scope.orgId ?? ''}
-        hostId={hostId}
+        // A pipeline made here is stamped the way the seeded default is
+        // (`usePipeline`): the site's own tokens under a site; at the
+        // organization level the org token, with the picked site as its
+        // provenance (AGL-2630).
+        hostId={scope.createHostId}
         pipelines={pipelineState.pipelines}
         fromCache={pipelineState.fromCache}
         unreadable={pipelineState.status === 'error'}
         visibleToTokens={scope.visibleTo}
-        createTokens={scope.createTokens}
+        createTokens={scope.level === 'site' ? scope.createTokens : ORG_PIPELINE_TOKENS}
       />
       <LostReasonDialog
         open={Boolean(losing)}

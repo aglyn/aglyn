@@ -86,7 +86,7 @@ export function ForecastCard(props: ForecastCardProps) {
     () =>
       query(
         scopedCollection(firestore, scope, 'deals'),
-        visibleToClause(tokens),
+        ...visibleToClause(tokens),
         where('status', '==', 'open'),
         orderBy('updatedAt', 'desc'),
         limit(OPEN_DEAL_CEILING + 1),
@@ -98,7 +98,7 @@ export function ForecastCard(props: ForecastCardProps) {
   const pipelineWindow = useWindowRead<PipelineRow>(
     () =>
       collectionCeiling(
-        query(scopedCollection(firestore, scope, 'pipelines'), visibleToClause(tokens)),
+        query(scopedCollection(firestore, scope, 'pipelines'), ...visibleToClause(tokens)),
         PIPELINE_CEILING,
       ),
     PIPELINE_CEILING,

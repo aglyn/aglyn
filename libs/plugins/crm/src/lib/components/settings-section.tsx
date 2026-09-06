@@ -41,7 +41,6 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
   useFirestoreDoc,
-  useOrgDataScope,
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import {
@@ -64,6 +63,8 @@ import {
 } from '@mui/material'
 import { deleteField, doc, FieldPath, updateDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
+import { useCrmScope } from '../hooks/use-crm-scope'
 import { useOrgMemberDirectory } from '../hooks/use-org-member-directory'
 import AssignmentRuleDrawer from './assignment-rule-drawer'
 
@@ -100,7 +101,8 @@ export function useCanManageCrmSettings(orgId: string | undefined): {
 }
 
 export interface AutoCreateCompaniesCardProps {
-  hostId: string
+  /** The site the section is read under, or `null` at the organization level. */
+  hostId: string | null
   org?: Partial<AglynOrgBilling> | null
 }
 
@@ -130,7 +132,7 @@ export function AutoCreateCompaniesCard(props: AutoCreateCompaniesCardProps) {
   const { hostId, org } = props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
-  const { orgId, ready: scopeReady } = useOrgDataScope({ hostId })
+  const { orgId, ready: scopeReady } = useCrmScope({ hostId, org })
   const { canManage, ready: roleReady } = useCanManageCrmSettings(orgId)
 
   const stored = orgAutoCreatesCompanies(org as Record<string, unknown> | undefined)
@@ -221,34 +223,103 @@ ManagersOnlyNote.displayName = 'ManagersOnlyNote'
 const NO_DEFAULT_OWNER = ''
 
 export interface AssignmentCardProps {
-  hostId: string
+  /** The site the section is read under, or `null` at the organization level. */
+  hostId: string | null
   org?: Partial<AglynOrgBilling> | null
 }
 
 /**
- * "Default owner" — who gets the records captured on THIS site when no
+ * "Default owner" — who gets the records captured on a site when no
  * assignment rule claims them (AGL-2618).
  *
  * Per site, on the org document: the reader is the org-level assignment
  * pass, which reads one document for every site's default, and the writer
- * is the same owner-or-admin the rest of the `crm` map admits. The field
- * is addressed by `FieldPath` segments rather than a dotted string because
- * a host id is a document id and may contain a dot — joined with dots, the
- * write would land beside the setting rather than in it. Clearing the
- * picker deletes the field, so an org that once set a default and unset
- * it reads exactly like one that never did.
+ * is the same owner-or-admin the rest of the `crm` map admits. Under a
+ * site the card is that site's one picker; at the ORGANIZATION level
+ * (AGL-2630) it is one picker per site in the org, because the map is per
+ * site and this is the one place all of it is on screen at once. The
+ * field is addressed by `FieldPath` segments rather than a dotted string
+ * because a host id is a document id and may contain a dot — joined with
+ * dots, the write would land beside the setting rather than in it.
+ * Clearing a picker deletes its field, so an org that once set a default
+ * and unset it reads exactly like one that never did.
  */
 export function DefaultOwnerCard(props: AssignmentCardProps) {
   const { hostId, org } = props
-  const firestore = useFirestore()
-  const { enqueueSnackbar } = useSnackbar()
-  const { orgId, ready: scopeReady } = useOrgDataScope({ hostId })
+  const { orgId, ready: scopeReady } = useCrmScope({ hostId, org })
   const { canManage, ready: roleReady } = useCanManageCrmSettings(orgId)
   const roster = useOrgMemberDirectory(orgId)
+  const mount = useCrmOrgMount()
+  const sites = useMemo<ReadonlyArray<{ id: string; name: string | null }>>(
+    () =>
+      hostId
+        ? [{ id: hostId, name: null }]
+        : (mount?.hosts ?? []).map((host) => ({ id: host.id, name: host.name })),
+    [hostId, mount?.hosts],
+  )
+  const ready = scopeReady && roleReady && (Boolean(hostId) || Boolean(mount?.hostsReady))
+  return (
+    <CardDisplay
+      header={'Default owner'}
+      help={pluginDocsHelp('crmSettings', { anchor: '#default-owner' })}
+      contentGutterX
+      contentGutterY
+    >
+      <Stack spacing={1}>
+        {sites.map((site) => (
+          <DefaultOwnerPicker
+            key={site.id}
+            orgId={orgId}
+            siteId={site.id}
+            siteName={site.name}
+            org={org}
+            roster={roster}
+            canManage={canManage}
+            ready={ready}
+          />
+        ))}
+        {!hostId && ready && sites.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            {'This organization has no sites yet, so there is nobody to route to.'}
+          </Typography>
+        ) : null}
+        <FormHelperText>
+          {'Every contact captured on a site — a form, a sign-up, a booking, ' +
+            'an order — that no assignment rule claims is handed to that ' +
+            "site's default owner, and they are notified. A contact added by " +
+            'hand or imported with an owner keeps the owner you chose.'}
+        </FormHelperText>
+        {roster.error ? (
+          <Typography variant="caption" color="error">
+            {roster.error}
+          </Typography>
+        ) : null}
+        <ManagersOnlyNote ready={ready} canManage={canManage} />
+      </Stack>
+    </CardDisplay>
+  )
+}
+DefaultOwnerCard.displayName = 'DefaultOwnerCard'
+
+/** One site's slot in the org-wide default-owner map, as a picker. */
+function DefaultOwnerPicker(props: {
+  orgId: string | undefined
+  siteId: string
+  /** How the site reads; `null` under the site itself, where "this site" will do. */
+  siteName: string | null
+  org?: Partial<AglynOrgBilling> | null
+  roster: ReturnType<typeof useOrgMemberDirectory>
+  canManage: boolean
+  ready: boolean
+}) {
+  const { orgId, siteId, siteName, org, roster, canManage, ready } = props
+  const firestore = useFirestore()
+  const { enqueueSnackbar } = useSnackbar()
+  const siteLabel = siteName ?? 'this site'
 
   const stored =
     readCrmAssignmentSettings(org as Record<string, unknown> | undefined)
-      .hostDefaultOwners[hostId] ?? NO_DEFAULT_OWNER
+      .hostDefaultOwners[siteId] ?? NO_DEFAULT_OWNER
   const [value, setValue] = useState(stored)
   const [busy, setBusy] = useState(false)
   useEffect(() => setValue(stored), [stored])
@@ -260,13 +331,13 @@ export function DefaultOwnerCard(props: AssignmentCardProps) {
     try {
       await updateDoc(
         doc(firestore, 'orgs', orgId),
-        new FieldPath(...crmHostDefaultOwnerSegments(hostId)),
+        new FieldPath(...crmHostDefaultOwnerSegments(siteId)),
         next || deleteField(),
       )
       enqueueSnackbar(
         next
-          ? `New contacts on this site go to ${roster.nameOf(next)} unless a rule says otherwise`
-          : 'New contacts on this site stay unassigned unless a rule says otherwise',
+          ? `New contacts on ${siteLabel} go to ${roster.nameOf(next)} unless a rule says otherwise`
+          : `New contacts on ${siteLabel} stay unassigned unless a rule says otherwise`,
         { variant: 'success', persist: false },
       )
     } catch (error) {
@@ -281,7 +352,6 @@ export function DefaultOwnerCard(props: AssignmentCardProps) {
     }
   }
 
-  const ready = scopeReady && roleReady
   // A stored owner the roster no longer lists is still shown, by uid, so
   // the picker never silently reads "Nobody" for a setting that is there.
   const options = useMemo(
@@ -292,49 +362,28 @@ export function DefaultOwnerCard(props: AssignmentCardProps) {
     [roster.members, stored],
   )
   return (
-    <CardDisplay
-      header={'Default owner'}
-      help={pluginDocsHelp('crmSettings', { anchor: '#default-owner' })}
-      contentGutterX
-      contentGutterY
+    <TextField
+      select
+      size="small"
+      label={siteName ? `Default owner · ${siteName}` : 'Default owner for this site'}
+      value={value}
+      onChange={(event) => void handleChange(event.target.value)}
+      disabled={!ready || !canManage || busy || roster.loading}
+      // "Nobody" is the empty value, which a select would otherwise
+      // render as a blank rather than as the choice it is.
+      slotProps={{ select: { displayEmpty: true } }}
+      sx={{ maxWidth: 360 }}
     >
-      <Stack spacing={1}>
-        <TextField
-          select
-          size="small"
-          label="Default owner for this site"
-          value={value}
-          onChange={(event) => void handleChange(event.target.value)}
-          disabled={!ready || !canManage || busy || roster.loading}
-          // "Nobody" is the empty value, which a select would otherwise
-          // render as a blank rather than as the choice it is.
-          slotProps={{ select: { displayEmpty: true } }}
-          sx={{ maxWidth: 360 }}
-        >
-          <MenuItem value={NO_DEFAULT_OWNER}>{'Nobody — leave unassigned'}</MenuItem>
-          {options.map((member) => (
-            <MenuItem key={member.uid} value={member.uid}>
-              {member.label}
-            </MenuItem>
-          ))}
-        </TextField>
-        <FormHelperText>
-          {'Every contact captured on this site — a form, a sign-up, a booking, ' +
-            'an order — that no assignment rule claims is handed to this ' +
-            'person, and they are notified. A contact added by hand or ' +
-            'imported with an owner keeps the owner you chose.'}
-        </FormHelperText>
-        {roster.error ? (
-          <Typography variant="caption" color="error">
-            {roster.error}
-          </Typography>
-        ) : null}
-        <ManagersOnlyNote ready={ready} canManage={canManage} />
-      </Stack>
-    </CardDisplay>
+      <MenuItem value={NO_DEFAULT_OWNER}>{'Nobody — leave unassigned'}</MenuItem>
+      {options.map((member) => (
+        <MenuItem key={member.uid} value={member.uid}>
+          {member.label}
+        </MenuItem>
+      ))}
+    </TextField>
   )
 }
-DefaultOwnerCard.displayName = 'DefaultOwnerCard'
+DefaultOwnerPicker.displayName = 'DefaultOwnerPicker'
 
 /**
  * "Assignment rules" — the ordered list the capture pass tries first
@@ -363,7 +412,7 @@ export function AssignmentRulesCard(props: AssignmentCardProps) {
   const { hostId, org } = props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
-  const { orgId, ready: scopeReady } = useOrgDataScope({ hostId })
+  const { orgId, ready: scopeReady } = useCrmScope({ hostId, org })
   const { canManage, ready: roleReady } = useCanManageCrmSettings(orgId)
   const roster = useOrgMemberDirectory(orgId)
   const settings = useMemo(
@@ -556,7 +605,7 @@ export function RoundRobinCard(props: AssignmentCardProps) {
   const { hostId, org } = props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
-  const { orgId, ready: scopeReady } = useOrgDataScope({ hostId })
+  const { orgId, ready: scopeReady } = useCrmScope({ hostId, org })
   const { canManage, ready: roleReady } = useCanManageCrmSettings(orgId)
   const roster = useOrgMemberDirectory(orgId)
   const { pool } = useMemo(
@@ -656,9 +705,10 @@ RoundRobinCard.displayName = 'RoundRobinCard'
  * beside this one rather than a field inside it. Every card writes the org
  * document, because a CRM setting is a fact about how the business files
  * people and not about one site; the section is reached from a site's hub
- * only because that is where every CRM section is reached from. The one
- * per-site setting — the default owner — is the site's slot in an org-wide
- * map, and the card names the site it is for.
+ * or from the organization's (AGL-2630), and writes the same document from
+ * either. The one per-site setting — the default owner — is the site's
+ * slot in an org-wide map: under a site the card names the site it is for,
+ * and at the organization level it lists every site's slot.
  */
 export function CrmSettingsSection(props: CrmSettingsSectionProps) {
   const { hostId, org } = props

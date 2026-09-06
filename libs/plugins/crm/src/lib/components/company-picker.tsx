@@ -45,7 +45,7 @@ import {
   where,
 } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
-import { useCrmScope } from '../hooks/use-crm-scope'
+import { crmVisibleToClause, useCrmScope } from '../hooks/use-crm-scope'
 import {
   type CompanyOption,
   companyDraftFields,
@@ -90,7 +90,8 @@ export interface CompanyOptions {
  * company list.
  */
 export function useCompanyOptions(props: {
-  hostId: string
+  /** The site whose console is reading, or `null` at the organization level. */
+  hostId: string | null
   org?: Partial<AglynOrgBilling> | null
   enabled?: boolean
 }): CompanyOptions {
@@ -102,7 +103,7 @@ export function useCompanyOptions(props: {
       enabled && scope
         ? query(
             collection(firestore, scope[0], scope[1], CRM_COLLECTIONS.companies),
-            where('visibleTo', 'array-contains-any', visibleTo),
+            ...crmVisibleToClause(visibleTo),
             orderBy('nameLower'),
             limit(COMPANY_OPTIONS_LIMIT + 1),
           )
@@ -143,16 +144,20 @@ export type CreateCompany = (name: string) => Promise<CompanyOption>
  * picker offered before the scope is known offers no create.
  */
 export function useCreateCompany(props: {
-  hostId: string
+  /** The site whose console is creating, or `null` at the organization level. */
+  hostId: string | null
   org?: Partial<AglynOrgBilling> | null
 }): CreateCompany | null {
   const { hostId, org } = props
   const firestore = useFirestore()
   const { data: user } = useUser()
-  const { scope, createTokens } = useCrmScope({ hostId, org })
+  // The provenance and the scope both come from the site the record is
+  // captured by — the mounted one, or at the organization level the one the
+  // reader picked (AGL-2630). No site picked, no create offered.
+  const { scope, createTokens, createHostId } = useCrmScope({ hostId, org })
   const uid = user?.uid ?? ''
   return useMemo<CreateCompany | null>(() => {
-    if (!scope) return null
+    if (!scope || !createHostId) return null
     return async (name) => {
       const result = companyDraftFields({
         ...EMPTY_COMPANY_DRAFT,
@@ -166,7 +171,7 @@ export function useCreateCompany(props: {
         {
           ...result.set,
           visibleTo: [...createTokens],
-          hostId,
+          hostId: createHostId,
           createdByUid: uid,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
@@ -174,7 +179,7 @@ export function useCreateCompany(props: {
       )
       return { id, name: String(result.set['name']), domain: null }
     }
-  }, [scope, createTokens, firestore, hostId, uid])
+  }, [scope, createTokens, firestore, createHostId, uid])
 }
 
 /** The sentinel id of the "Create …" row the list grows when nothing matches. */

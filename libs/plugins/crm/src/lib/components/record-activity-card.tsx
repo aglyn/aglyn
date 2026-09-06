@@ -31,7 +31,8 @@ import {
 import { LogActivityDialog } from './log-activity-dialog'
 
 export type RecordActivityCardProps = ActivityRecordLink & {
-  hostId: string
+  /** The site the record is read under, or `null` at the organization level. */
+  hostId: string | null
   org: CrmOrg
 }
 

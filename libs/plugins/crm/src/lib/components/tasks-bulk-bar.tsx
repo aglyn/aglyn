@@ -60,7 +60,11 @@ import {
 } from './crm-bulk-bar-frame'
 
 export interface TasksBulkBarProps {
-  hostId: string
+  /**
+   * The site the task routes run as, or `null` at the organization level
+   * (AGL-2630), where each call runs as its task's own capturing site.
+   */
+  hostId: string | null
   /** `['orgs', orgId]`, or `null` while the org is unresolved. */
   scope: readonly [string, string] | null
   rows: readonly CrmTaskRow[]
@@ -153,7 +157,7 @@ function TasksBulkBarBody(props: TasksBulkBarProps) {
     const open = selectedRows.filter((task) => task.status !== 'done')
     await runCalls(
       open,
-      (task) => completeCrmTask(user, { hostId, taskId: task.$id }),
+      (task) => completeCrmTask(user, { hostId: hostId ?? task.hostId, taskId: task.$id }),
       (count) => `Completed ${countNoun(count, NOUN)}`,
     )
   }, [selectedRows, runCalls, user, hostId])
@@ -169,7 +173,7 @@ function TasksBulkBarBody(props: TasksBulkBarProps) {
         selectedRows,
         (task) =>
           saveCrmTask(user, {
-            hostId,
+            hostId: hostId ?? task.hostId,
             taskId: task.$id,
             task: { ...crmTaskFieldsOf(task), assigneeUid },
           }),

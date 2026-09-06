@@ -32,6 +32,7 @@ import {
   where,
 } from 'firebase/firestore'
 import type { DealDoc } from '../model/deal-board-model'
+import { crmScopeListable, crmVisibleToClause } from './use-crm-scope'
 
 /**
  * The most open cards one pipeline draws. A board past this is a board
@@ -51,12 +52,15 @@ export const LINKED_DEALS_LIMIT = 25
  * Every query here carries the viewer's scope tokens and an `orderBy`, and
  * each shape sits on an index the foundation declared:
  * `(visibleTo, pipelineId, status, updatedAt DESC)`. Passing `null` for the
- * pipeline or the tokens issues nothing, which is how a column stays quiet
- * until the pipeline has loaded and a collapsed Won column costs no read.
+ * pipeline or an EMPTY token list issues nothing, which is how a column
+ * stays quiet until the pipeline has loaded and a collapsed Won column
+ * costs no read. A `null` token list is the ORGANIZATION level (AGL-2630):
+ * the clause is dropped and the query rides the `(pipelineId, status,
+ * updatedAt DESC)` twin of that index.
  */
 export function useDealsByStatus(
   orgId: string | null,
-  readTokens: readonly string[],
+  readTokens: readonly string[] | null,
   pipelineId: string | null,
   status: CrmDealStatus,
   max: number,
@@ -64,10 +68,10 @@ export function useDealsByStatus(
   const firestore = useFirestore()
   return useFirestoreCollection<DealDoc>(
     () =>
-      orgId && pipelineId && readTokens.length
+      orgId && pipelineId && crmScopeListable(readTokens)
         ? query(
             collection(firestore, 'orgs', orgId, CRM_COLLECTIONS.deals),
-            where('visibleTo', 'array-contains-any', readTokens),
+            ...crmVisibleToClause(readTokens),
             where('pipelineId', '==', pipelineId),
             where('status', '==', status),
             orderBy('updatedAt', 'desc'),
@@ -88,17 +92,17 @@ export function useDealsByStatus(
  */
 export function usePagedDeals(
   orgId: string | null,
-  readTokens: readonly string[],
+  readTokens: readonly string[] | null,
   status: CrmDealStatus | 'all',
   pipelineId: string | null = null,
 ) {
   const firestore = useFirestore()
   return usePagedCollection<DealDoc>(
     (pageLimit) =>
-      orgId && readTokens.length
+      orgId && crmScopeListable(readTokens)
         ? query(
             collection(firestore, 'orgs', orgId, CRM_COLLECTIONS.deals),
-            where('visibleTo', 'array-contains-any', readTokens),
+            ...crmVisibleToClause(readTokens),
             ...(pipelineId ? [where('pipelineId', '==', pipelineId)] : []),
             ...(status === 'all' ? [] : [where('status', '==', status)]),
             orderBy('updatedAt', 'desc'),
@@ -116,7 +120,7 @@ export function usePagedDeals(
  */
 export function useLinkedDeals(
   orgId: string | null,
-  readTokens: readonly string[],
+  readTokens: readonly string[] | null,
   link: { contactId: string } | { companyId: string },
 ) {
   const firestore = useFirestore()
@@ -124,10 +128,10 @@ export function useLinkedDeals(
   const id = 'contactId' in link ? link.contactId : link.companyId
   return useFirestoreCollection<DealDoc>(
     () =>
-      orgId && id && readTokens.length
+      orgId && id && crmScopeListable(readTokens)
         ? query(
             collection(firestore, 'orgs', orgId, CRM_COLLECTIONS.deals),
-            where('visibleTo', 'array-contains-any', readTokens),
+            ...crmVisibleToClause(readTokens),
             where(field, '==', id),
             orderBy('updatedAt', 'desc'),
             limit(LINKED_DEALS_LIMIT),

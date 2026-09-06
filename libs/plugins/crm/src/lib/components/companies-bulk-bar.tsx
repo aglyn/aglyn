@@ -72,7 +72,12 @@ import {
 } from './crm-bulk-bar-frame'
 
 export interface CompaniesBulkBarProps {
-  hostId: string
+  /**
+   * The site whose activity feed the bar's acts are logged in, or `null`
+   * at the organization level (AGL-2630), where the selection spans sites
+   * and no one feed is written.
+   */
+  hostId: string | null
   /** `['orgs', orgId]`, or `null` while the org is unresolved. */
   scope: readonly ['orgs', string] | null
   rows: readonly (CompanyBulkRow & CompanyCsvRow)[]
@@ -120,7 +125,7 @@ function CompaniesBulkBarBody(props: CompaniesBulkBarProps) {
   const { hostId, scope, rows, selected, onSelectedChange, members, csv } = props
   const firestore = useFirestore()
   const { confirm } = useConfirmationContext()
-  const logActivity = useHostActivityLogger(hostId)
+  const logActivity = useHostActivityLogger(hostId ?? undefined)
   const { busy, report, apply, dismissReport } = useCrmBulkApply()
 
   const selectedRows = useMemo(() => {

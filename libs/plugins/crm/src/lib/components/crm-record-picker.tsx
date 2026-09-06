@@ -21,13 +21,15 @@ import {
   useFirestoreCollection,
 } from '@aglyn/tenant-feature-instance'
 import { Autocomplete, TextField } from '@mui/material'
-import { collection, limit, orderBy, query, where } from 'firebase/firestore'
+import { collection, limit, orderBy, query } from 'firebase/firestore'
 import { useMemo } from 'react'
 import {
   CRM_RECORD_COLLECTIONS,
   type CrmRecordKind,
   crmRecordName,
 } from '../hooks/use-crm-record-names'
+import { crmVisibleToClause } from '../hooks/use-crm-scope'
+import { contactPrimaryGroup } from '../model/contact-record'
 
 /**
  * How many records a picker offers. The window is the hundred most recently
@@ -47,9 +49,16 @@ const PICKER_LABELS: Record<CrmRecordKind, string> = {
 export interface CrmRecordPickerProps {
   kind: CrmRecordKind
   scope: readonly [string, string] | null
-  readTokens: string[]
-  /** The viewing group, for a contact's facet name. */
-  groupId: string
+  /** The reader's tokens, or `null` at the organization level — no clause (AGL-2630). */
+  readTokens: readonly string[] | null
+  /**
+   * The viewing group, for a contact's facet name — or `null` at the
+   * organization level, where each contact is named through its own
+   * primary holder (`contactPrimaryGroup`), resolved from {@link org}.
+   */
+  groupId: string | null
+  /** The org document, for the per-contact holder when {@link groupId} is null. */
+  org?: Record<string, unknown> | null
   value: string | null
   onChange: (id: string | null) => void
   disabled?: boolean
@@ -67,14 +76,14 @@ export interface CrmRecordPickerProps {
  * window. The listener opens with the drawer and closes with it.
  */
 export function CrmRecordPicker(props: CrmRecordPickerProps) {
-  const { kind, scope, readTokens, groupId, value, onChange, disabled } = props
+  const { kind, scope, readTokens, groupId, org, value, onChange, disabled } = props
   const firestore = useFirestore()
   const { data, status } = useFirestoreCollection<Record<string, unknown> & { $id: string }>(
     () =>
       scope
         ? query(
             collection(firestore, scope[0], scope[1], CRM_RECORD_COLLECTIONS[kind]),
-            where('visibleTo', 'array-contains-any', readTokens),
+            ...crmVisibleToClause(readTokens),
             orderBy('updatedAt', 'desc'),
             limit(CRM_RECORD_PICKER_LIMIT),
           )
@@ -87,10 +96,15 @@ export function CrmRecordPicker(props: CrmRecordPickerProps) {
       (data ?? [])
         .map((row) => ({
           id: row.$id,
-          label: crmRecordName(kind, row, groupId) || row.$id,
+          label:
+            crmRecordName(
+              kind,
+              row,
+              groupId ?? contactPrimaryGroup(row, org).groupId,
+            ) || row.$id,
         }))
         .sort((a, b) => a.label.localeCompare(b.label)),
-    [data, kind, groupId],
+    [data, kind, groupId, org],
   )
   /*
    * The linked record may sit outside the window — an old contact a record

@@ -72,8 +72,12 @@ export interface PipelinesDialogProps {
   open: boolean
   onClose: () => void
   orgId: string
-  /** The site this console is viewed from — provenance on a pipeline created here. */
-  hostId: string
+  /**
+   * The site this console is viewed from — provenance on a pipeline created
+   * here — or at the organization level the site the reader picked, `null`
+   * until they have (AGL-2630): a pipeline made there is the org's.
+   */
+  hostId: string | null
   /** Every pipeline the viewer may read, archived ones included. */
   pipelines: PipelineDoc[]
   /** The listener's verdict on the rows, for the stale-seed guard. */

@@ -65,7 +65,17 @@ export function crmRoutes(basePath: string) {
       `${section('contacts')}?${new URLSearchParams({
         [CONTACTS_LIST_EMAIL_PARAM]: email,
       }).toString()}`,
-    lead: (id: string) => `${section('leads')}/${encodeURIComponent(id)}`,
+    /**
+     * A lead's page — and, at the ORGANIZATION level (AGL-2630), the site
+     * it lives under, as a segment before the id: a lead's id is a person
+     * key, the same on every site that met the person, and `hosts/{hostId}
+     * /leads` is host-scoped by path, so an address that spans sites has to
+     * name one. Under a site the address is the id alone, as it always was.
+     */
+    lead: (id: string, hostId?: string | null) =>
+      hostId
+        ? `${section('leads')}/${encodeURIComponent(hostId)}/${encodeURIComponent(id)}`
+        : `${section('leads')}/${encodeURIComponent(id)}`,
     company: (id: string) => `${section('companies')}/${encodeURIComponent(id)}`,
     deal: (id: string) => `${section('deals')}/${encodeURIComponent(id)}`,
     /**

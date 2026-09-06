@@ -82,7 +82,7 @@ export function ClosedDealsCard(props: ClosedDealsCardProps) {
   const closedInPeriod = (status: Aglyn.CrmDealStatus) =>
     query(
       scopedCollection(firestore, scope, 'deals'),
-      visibleToClause(tokens),
+      ...visibleToClause(tokens),
       where('status', '==', status),
       where('closedAtMs', '>=', range.from),
       where('closedAtMs', '<', range.to),

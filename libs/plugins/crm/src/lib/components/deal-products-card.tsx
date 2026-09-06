@@ -87,8 +87,12 @@ interface CatalogChoice {
 export interface DealProductsCardProps {
   deal: DealDoc
   orgId: string
-  /** The site whose catalog the search reads — the console's own. */
-  hostId: string
+  /**
+   * The site whose catalog the search reads — the console's own, or
+   * `null` at the organization level (AGL-2630), where the deal's own
+   * capturing site is searched; a deal with none takes lines by hand only.
+   */
+  hostId: string | null
   org: CrmOrgDoc
   /** The listener's verdict on the deal, for the stale-seed guard. */
   fromCache: boolean
@@ -125,6 +129,8 @@ export interface DealProductsCardProps {
 export function DealProductsCard(props: DealProductsCardProps) {
   const { deal, orgId, hostId, org, fromCache, unreadable } = props
   const firestore = useFirestore()
+  // The catalog searched: the mounted site's, or the deal's own.
+  const catalogHostId = hostId ?? deal.hostId ?? null
   const { enqueueSnackbar } = useSnackbar()
   const currency = String(deal.currency || DEFAULT_DEAL_CURRENCY).toLowerCase()
   const items = useMemo(() => deal.lineItems ?? [], [deal.lineItems])
@@ -303,9 +309,9 @@ export function DealProductsCard(props: DealProductsCardProps) {
       <AddLineDialog
         open={adding}
         onClose={() => setAdding(false)}
-        hostId={hostId}
+        hostId={catalogHostId}
         currency={currency}
-        catalog={hasCommerce}
+        catalog={hasCommerce && Boolean(catalogHostId)}
         busy={busy}
         onAdd={handleAdd}
       />
@@ -366,7 +372,8 @@ QuantityField.displayName = 'QuantityField'
 interface AddLineDialogProps {
   open: boolean
   onClose: () => void
-  hostId: string
+  /** The site whose catalog is searched; `null` draws no catalog door. */
+  hostId: string | null
   currency: string
   /** Whether the catalog door is drawn — the plan has commerce. */
   catalog: boolean

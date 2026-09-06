@@ -43,25 +43,18 @@ import {
   type ContactImportSkippedRow,
   contactImportSkippedCsv,
   CRM_COLLECTIONS,
-  consentGroupForHost,
   emptyContactImportResult,
   guessContactImportMapping,
-  hostScopeToken,
   mapContactImportRow,
-  MAX_SCOPE_HOSTS,
   mergeContactImportResults,
   normalizeContactEmail,
-  ORG_SCOPE_TOKEN,
   pluginDocsHelp,
 } from '@aglyn/aglyn'
-import {
-  useFirestore,
-  useFirestoreCollection,
-  useOrgDataScope,
-} from '@aglyn/tenant-feature-instance'
+import { useFirestore, useFirestoreCollection } from '@aglyn/tenant-feature-instance'
 import { Typography } from '@mui/material'
-import { collection, limit, query, where } from 'firebase/firestore'
+import { collection, limit, query } from 'firebase/firestore'
 import { useMemo } from 'react'
+import { crmVisibleToClause, useCrmScope } from '../hooks/use-crm-scope'
 import { contactImportTemplateCsv } from '../model/contacts-csv'
 import {
   CsvImportButton,
@@ -72,7 +65,13 @@ import {
 export interface ContactImportDrawerProps {
   open: boolean
   onClose: () => void
-  hostId: string
+  /**
+   * The site the file is imported INTO — what the route captures every row
+   * under — or `null` at the organization level (AGL-2630), where the
+   * drawer asks which site with a picker and holds the import until one is
+   * named.
+   */
+  hostId: string | null
   /**
    * The org document the shell passed, for the consent group's scope
    * tokens. Typed as the page prop it is forwarded from, so the contacts
@@ -97,7 +96,8 @@ export interface ContactImportDrawerProps {
  */
 function useImportFieldDefinitions(options: {
   orgId: string | null | undefined
-  visibleToTokens: readonly string[]
+  /** The reader's tokens, or `null` at the organization level — no clause. */
+  visibleToTokens: readonly string[] | null
   enabled: boolean
 }): ContactFieldDefinition[] {
   const { orgId, visibleToTokens, enabled } = options
@@ -107,7 +107,7 @@ function useImportFieldDefinitions(options: {
       enabled && orgId
         ? query(
             collection(firestore, 'orgs', orgId, CRM_COLLECTIONS.contactFields),
-            where('visibleTo', 'array-contains-any', [...visibleToTokens]),
+            ...crmVisibleToClause(visibleToTokens),
             limit(100),
           )
         : null,
@@ -134,6 +134,10 @@ function contactImportVocabulary(
   return {
     title: 'Import contacts from CSV',
     help: pluginDocsHelp('contacts', { anchor: '#import-from-csv' }),
+    sitePickerHelperText:
+      'The site these people are imported into — it decides which of your ' +
+      "sites may see them and whose marketing consent the file's consent " +
+      'column records.',
     intro:
       'A CSV with a header row. Match its columns to contact fields ' +
       'below, check the preview, then import. A person already in your ' +
@@ -186,19 +190,10 @@ function contactImportVocabulary(
 
 export function ContactImportDrawer(props: ContactImportDrawerProps) {
   const { open, onClose, hostId, org } = props
-  const { orgId } = useOrgDataScope({ hostId })
-  const consentGroup = useMemo(
-    () => consentGroupForHost((org ?? {}) as Record<string, unknown>, hostId),
-    [org, hostId],
-  )
-  const visibleToTokens = useMemo(
-    () =>
-      [
-        ORG_SCOPE_TOKEN,
-        ...consentGroup.hostIds.map((id) => hostScopeToken(id)),
-      ].slice(0, MAX_SCOPE_HOSTS),
-    [consentGroup],
-  )
+  // The org root and the reader's tokens from the one scope hook (AGL-2614);
+  // at the organization level no clause, and the site every row is captured
+  // under is the one the drawer's picker names (AGL-2630).
+  const { orgId, visibleTo: visibleToTokens } = useCrmScope({ hostId, org })
   const fields = useImportFieldDefinitions({
     orgId,
     visibleToTokens,
@@ -221,7 +216,8 @@ ContactImportDrawer.displayName = 'ContactImportDrawer'
  * mounted only once opened, so the list pays nothing for it until then.
  */
 export function ContactImportButton(props: {
-  hostId: string
+  /** The site the list is read under, or `null` at the organization level. */
+  hostId: string | null
   org?: ConsolePluginPageProps['org']
 }) {
   const { hostId, org } = props

@@ -46,7 +46,12 @@ import type { ContactRecord } from '../model/contact-record'
 import { crmRoutes } from '../model/crm-routes'
 
 export interface ContactAssociationsCardProps {
-  hostId: string
+  /**
+   * The site whose lead, campaigns and attribution are shown — the mounted
+   * site, or at the organization level the holder's own; `null` for a row
+   * no site has captured, when none of the three has an address.
+   */
+  hostId: string | null
   /** The row, flattened through the viewing group's facet. */
   record: ContactRecord
   /** The document as read, for the consent fields the projection leaves out. */
@@ -107,6 +112,7 @@ export function ContactAssociationsCard(props: ContactAssociationsCardProps) {
   useEffect(() => {
     let active = true
     setLeadKey(null)
+    if (!hostId) return undefined
     void (async () => {
       const key = await personKeyInBrowser(email)
       if (!key || !active) return
@@ -132,7 +138,7 @@ export function ContactAssociationsCard(props: ContactAssociationsCardProps) {
    * The site's campaigns, read because this page IS the ask: one picker on
    * one record, and nothing in the list ever paid for the campaign list.
    */
-  const siteCampaigns = useHostCampaigns(hostId, { enabled: true })
+  const siteCampaigns = useHostCampaigns(hostId ?? undefined, { enabled: Boolean(hostId) })
 
   const consent = useMemo(
     () => readMarketingBasis(row, consentGroup),
@@ -242,7 +248,9 @@ export function ContactAssociationsCard(props: ContactAssociationsCardProps) {
             </Typography>
           )}
         </Stack>
-        <ConversionAttribution hostId={hostId} kind="contact" refId={record.$id} />
+        {hostId ? (
+          <ConversionAttribution hostId={hostId} kind="contact" refId={record.$id} />
+        ) : null}
         <Stack spacing={0.5}>
           <Typography variant="subtitle2">{'Marketing email'}</Typography>
           <Typography variant="body2">

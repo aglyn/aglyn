@@ -19,11 +19,12 @@
 import type { AglynOrgBilling } from '@aglyn/aglyn'
 import { Button } from '@mui/material'
 import { useState } from 'react'
-import { useOrgDataScope } from '@aglyn/tenant-feature-instance'
+import { useCrmScope } from '../hooks/use-crm-scope'
 import AddToListDialog from './add-to-list-dialog'
 
 export interface AddToListButtonProps {
-  hostId: string
+  /** The site the record is read under, or `null` at the organization level. */
+  hostId: string | null
   /** The org the shell passed, so the scope needs no lookup when it has an id. */
   org?: Partial<AglynOrgBilling> | null
   /** The record the button sits on. */
@@ -43,7 +44,9 @@ export interface AddToListButtonProps {
  */
 export function AddToListButton(props: AddToListButtonProps) {
   const { hostId, org, email } = props
-  const { scope } = useOrgDataScope({ hostId, orgId: org?.$id })
+  // The audiences API takes the site whose console is asking: the mounted
+  // one, or at the organization level the one the reader picked (AGL-2630).
+  const { scope, createHostId } = useCrmScope({ hostId, org })
   const [open, setOpen] = useState(false)
   const address = String(email ?? '').trim()
   return (
@@ -51,7 +54,7 @@ export function AddToListButton(props: AddToListButtonProps) {
       <Button
         size="small"
         variant="outlined"
-        disabled={!scope || !address}
+        disabled={!scope || !address || !createHostId}
         onClick={() => setOpen(true)}
       >
         {'Add to list'}
@@ -60,7 +63,7 @@ export function AddToListButton(props: AddToListButtonProps) {
         <AddToListDialog
           open
           onClose={() => setOpen(false)}
-          hostId={hostId}
+          hostId={createHostId}
           scope={scope}
           emails={address ? [address] : []}
         />

@@ -25,6 +25,7 @@ import {
   type CrmViewState,
   crmViewStateEquals,
   EMPTY_CRM_VIEW_STATE,
+  ORG_SCOPE_TOKEN,
 } from '@aglyn/aglyn'
 import {
   useFirestore,
@@ -132,7 +133,8 @@ export interface CrmSavedViewController {
  */
 export function useCrmSavedView(options: {
   section: CrmViewSection
-  hostId: string
+  /** The site the list is read under, or `null` at the organization level. */
+  hostId: string | null
   org?: CrmOrgDoc
   /** The CRM hub path the section hangs beneath — what the address is built from. */
   basePath: string
@@ -286,8 +288,12 @@ export function useCrmSavedView(options: {
           ownerUid: uid,
           createdByUid: uid,
           shared,
-          hostId,
-          visibleTo: createTokens,
+          // A view made at the organization level belongs to the org
+          // (AGL-2630): it names no site, and it is stamped org-wide so
+          // every site's reader lists it — unlike a record, a view is a
+          // working arrangement, not a person's data.
+          hostId: hostId ?? null,
+          visibleTo: hostId ? createTokens : [ORG_SCOPE_TOKEN],
           createdAt: new Date(),
           updatedAt: new Date(),
         }),

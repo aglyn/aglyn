@@ -107,7 +107,7 @@ export function TasksCard(props: TasksCardProps) {
   const openTasks = () =>
     query(
       scopedCollection(firestore, scope, Aglyn.CRM_COLLECTIONS.tasks),
-      visibleToClause(tokens),
+      ...visibleToClause(tokens),
       where('status', '==', 'open'),
     )
 

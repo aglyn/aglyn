@@ -24,7 +24,6 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
   useFirestoreDoc,
-  useOrgDataScope,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import {
@@ -42,6 +41,8 @@ import {
   type ContactFieldDefinitionDoc,
   useContactFieldDefinitions,
 } from '../hooks/use-contact-field-definitions'
+import { useCrmScope } from '../hooks/use-crm-scope'
+import { contactPrimaryGroup } from '../model/contact-record'
 import { crmRoutes } from '../model/crm-routes'
 
 export interface ContactCustomFieldsCardProps
@@ -86,13 +87,9 @@ export function ContactCustomFieldsCard(props: ContactCustomFieldsCardProps) {
   const { hostId, org, contactId, contact, basePath } = props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
-  const { scope } = useOrgDataScope({ hostId })
+  const { scope, consentGroup: viewingGroup } = useCrmScope({ hostId, org })
   const orgId = scope?.[1] ?? null
   const { active, ready } = useContactFieldDefinitions(orgId)
-  const consentGroup = useMemo(
-    () => Aglyn.consentGroupForHost(org as Record<string, unknown>, hostId),
-    [org, hostId],
-  )
 
   // The record, read here only when the page did not hand one over.
   const ownRead = useFirestoreDoc<Record<string, unknown>>(
@@ -103,6 +100,12 @@ export function ContactCustomFieldsCard(props: ContactCustomFieldsCardProps) {
     [firestore, scope, contactId, contact === undefined],
   )
   const record = contact === undefined ? (ownRead.data ?? null) : contact
+  // The facet the values live on: the viewing group's under a site, the
+  // person's own primary holder's at the organization level (AGL-2630).
+  const consentGroup = useMemo(
+    () => viewingGroup ?? contactPrimaryGroup(record, org as Record<string, unknown>),
+    [viewingGroup, record, org],
+  )
   const stored = useMemo(
     () => Aglyn.readContactFacet(record, consentGroup.groupId).custom ?? {},
     [record, consentGroup.groupId],

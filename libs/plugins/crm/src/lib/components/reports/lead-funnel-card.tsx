@@ -33,6 +33,7 @@ import {
 } from 'firebase/firestore'
 import { useMemo } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useCrmOrgMount } from '../../hooks/use-crm-org-mount'
 import { ReportBreakdown } from './report-breakdown'
 import { ReportExport } from './report-export'
 import { plural, reportFilename } from './report-format'
@@ -62,9 +63,52 @@ export interface LeadFunnelCardProps {
   /**
    * The site whose leads are placed. A lead lives under its host, not the
    * org — `hosts/{hostId}/leads`, private by path, no `visibleTo` — so the
-   * report's org scope cannot reach it and the card is told the site.
+   * report's org scope cannot reach it and the card is told the site. At
+   * the organization level `null` (AGL-2630): the card then reads the site
+   * the reader picked for creates, and with none picked says so.
    */
-  hostId: string
+  hostId: string | null
+}
+
+const LEAD_FUNNEL_HELP = Aglyn.pluginDocsHelp('crmReports', {
+  anchor: '#lead-funnel',
+  excerpt:
+    'Of the leads this site captured in the period, how many are ' +
+    'still new, being worked, qualified or unqualified — and the ' +
+    'reasons the unqualified ones were closed. Placed by when each ' +
+    'lead was first seen.',
+})
+
+/**
+ * The site the funnel reads, decided once (AGL-2630).
+ *
+ * Under a site: that site. At the organization level the reports total
+ * every site, but leads have no cross-site listener a report can afford —
+ * one per site, each its own window — so the card places the leads of the
+ * site the reader has picked for creates and names it in the subheader;
+ * before any pick it has nothing to read and says so instead of guessing.
+ */
+export function LeadFunnelCard(props: LeadFunnelCardProps) {
+  const { report, hostId } = props
+  const mount = useCrmOrgMount()
+  const siteId = hostId ?? mount?.createHostId ?? null
+  if (!siteId) {
+    return (
+      <CardDisplay header={'Lead funnel'} help={LEAD_FUNNEL_HELP} contentGutterX contentGutterY>
+        <Typography variant="body2" color="text.secondary">
+          {'Leads live under a site. Pick one — in New contact, New deal or ' +
+            'any other create — and this card places that site’s leads.'}
+        </Typography>
+      </CardDisplay>
+    )
+  }
+  return (
+    <SiteLeadFunnelCard
+      report={report}
+      hostId={siteId}
+      siteName={hostId ? undefined : mount?.siteName(siteId)}
+    />
+  )
 }
 
 /**
@@ -85,8 +129,13 @@ export interface LeadFunnelCardProps {
  * it, so the funnel and the list can never disagree about who may see a
  * lead.
  */
-export function LeadFunnelCard(props: LeadFunnelCardProps) {
-  const { report, hostId } = props
+function SiteLeadFunnelCard(props: {
+  report: CrmReportScope
+  hostId: string
+  /** Named at the organization level, where the site was picked and not mounted. */
+  siteName?: string
+}) {
+  const { report, hostId, siteName } = props
   const { range, period, routes } = report
   const firestore = useFirestore()
 
@@ -141,14 +190,8 @@ export function LeadFunnelCard(props: LeadFunnelCardProps) {
   return (
     <CardDisplay
       header={'Lead funnel'}
-      help={Aglyn.pluginDocsHelp('crmReports', {
-        anchor: '#lead-funnel',
-        excerpt:
-          'Of the leads this site captured in the period, how many are ' +
-          'still new, being worked, qualified or unqualified — and the ' +
-          'reasons the unqualified ones were closed. Placed by when each ' +
-          'lead was first seen.',
-      })}
+      subheader={siteName}
+      help={LEAD_FUNNEL_HELP}
       contentGutterX
       contentGutterY
       HeaderProps={{
@@ -270,6 +313,7 @@ export function LeadFunnelCard(props: LeadFunnelCardProps) {
     </CardDisplay>
   )
 }
+SiteLeadFunnelCard.displayName = 'SiteLeadFunnelCard'
 LeadFunnelCard.displayName = 'LeadFunnelCard'
 
 export default LeadFunnelCard

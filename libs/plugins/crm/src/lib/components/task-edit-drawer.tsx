@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { consentGroupForHost, CRM_COLLECTIONS, findOrgMember } from '@aglyn/aglyn'
+import { CRM_COLLECTIONS, findOrgMember } from '@aglyn/aglyn'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -51,17 +51,25 @@ import {
   dueAtToLocalInput,
   localInputToDueAt,
 } from '../model/task-views'
+import { useCrmScope } from '../hooks/use-crm-scope'
 import CrmRecordPicker from './crm-record-picker'
+import { CrmSitePicker } from './crm-site-picker'
 import TaskSnoozeMenu from './task-snooze-menu'
 
 export interface TaskEditDrawerProps {
   open: boolean
   onClose: () => void
-  hostId: string
+  /**
+   * The site the drawer is opened under, or `null` at the organization
+   * level (AGL-2630), where a NEW task asks which site it is filed from and
+   * an edit keeps the task's own.
+   */
+  hostId: string | null
   org?: Record<string, unknown> | null
   orgId: string | null | undefined
   scope: readonly [string, string] | null
-  readTokens: string[]
+  /** The reader's tokens, or `null` at the organization level — no clause. */
+  readTokens: readonly string[] | null
   /** The task being edited; absent while creating. */
   task?: CrmTaskRow | null
   /**
@@ -109,10 +117,13 @@ function TaskForm(props: TaskEditDrawerProps) {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const directory = useOrgMemberDirectory(orgId)
-  const groupId = useMemo(
-    () => consentGroupForHost(org ?? null, hostId).groupId,
-    [org, hostId],
-  )
+  // The viewing group under a site, for a linked contact's facet name; null
+  // at the organization level, where the picker names each contact through
+  // its own holder. The site the route files a NEW task from is the mounted
+  // one or the picked one; an edit goes back to the task's own.
+  const { consentGroup, createHostId } = useCrmScope({ hostId, org })
+  const groupId = consentGroup?.groupId ?? null
+  const taskHostId = task ? (task.hostId ?? null) : createHostId
 
   const [fields, setFields] = useState<CrmTaskFields>(() => {
     const base = crmTaskFieldsOf(task ?? {})
@@ -134,12 +145,16 @@ function TaskForm(props: TaskEditDrawerProps) {
       setError('A task needs a title.')
       return
     }
+    if (!taskHostId) {
+      setError('Pick the site this task is filed from.')
+      return
+    }
     setBusy(true)
     setError(null)
     try {
       const write = async () => {
         const result = await saveCrmTask(user, {
-          hostId,
+          hostId: taskHostId,
           ...(task ? { taskId: task.$id } : {}),
           task: { ...fields, title: fields.title.trim() },
         })
@@ -216,6 +231,8 @@ function TaskForm(props: TaskEditDrawerProps) {
       }}
     >
       <Typography variant="h6">{task ? 'Edit task' : 'New task'}</Typography>
+      {/* Only a new task at the organization level asks — see `taskHostId`. */}
+      {task ? null : <CrmSitePicker hostId={hostId} disabled={busy} />}
       <TextField
         label="Title"
         value={fields.title}
@@ -324,6 +341,7 @@ function TaskForm(props: TaskEditDrawerProps) {
         scope={scope}
         readTokens={readTokens}
         groupId={groupId}
+        org={org}
         value={fields.contactId}
         onChange={(id) => set('contactId', id)}
         disabled={busy}
@@ -333,6 +351,7 @@ function TaskForm(props: TaskEditDrawerProps) {
         scope={scope}
         readTokens={readTokens}
         groupId={groupId}
+        org={org}
         value={fields.companyId}
         onChange={(id) => set('companyId', id)}
         disabled={busy}
@@ -342,6 +361,7 @@ function TaskForm(props: TaskEditDrawerProps) {
         scope={scope}
         readTokens={readTokens}
         groupId={groupId}
+        org={org}
         value={fields.dealId}
         onChange={(id) => set('dealId', id)}
         disabled={busy}
@@ -374,7 +394,7 @@ function TaskForm(props: TaskEditDrawerProps) {
         <Button onClick={onClose} disabled={busy}>
           {'Cancel'}
         </Button>
-        <Button type="submit" variant="contained" disabled={busy}>
+        <Button type="submit" variant="contained" disabled={busy || !taskHostId}>
           {task ? 'Save' : 'Create task'}
         </Button>
       </Stack>

@@ -39,7 +39,8 @@ import TaskEditDrawer from './task-edit-drawer'
 import TaskSnoozeMenu from './task-snooze-menu'
 
 export interface RecordTasksCardProps extends CrmRecordRef {
-  hostId: string
+  /** The site the record is read under, or `null` at the organization level. */
+  hostId: string | null
   /** The org document the shell passed the page; scopes the read when present. */
   org?: Record<string, unknown> | null
   /**
@@ -108,7 +109,8 @@ export function RecordTasksCard(props: RecordTasksCardProps) {
             },
           )
         } else {
-          await completeCrmTask(user, { hostId, taskId: task.$id })
+          // The mounted site, or at the organization level the task's own.
+          await completeCrmTask(user, { hostId: hostId ?? task.hostId, taskId: task.$id })
           enqueueSnackbar('Task completed', { variant: 'success' })
         }
       } catch (cause) {

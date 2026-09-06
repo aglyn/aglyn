@@ -69,7 +69,13 @@ import {
 import { LostReasonDialog } from './lost-reason-dialog'
 
 export interface DealsBulkBarProps {
-  hostId: string
+  /**
+   * The site whose activity feed the bar's acts are logged in, or `null`
+   * at the organization level (AGL-2630), where the selection spans sites
+   * and no one feed is written; a stage move still runs as each deal's own
+   * capturing site.
+   */
+  hostId: string | null
   /** `['orgs', orgId]`, or `null` while the org is unresolved. */
   scope: readonly ['orgs', string] | null
   rows: readonly DealDoc[]
@@ -108,7 +114,7 @@ function DealsBulkBarBody(props: DealsBulkBarProps) {
     props
   const firestore = useFirestore()
   const { confirm } = useConfirmationContext()
-  const logActivity = useHostActivityLogger(hostId)
+  const logActivity = useHostActivityLogger(hostId ?? undefined)
   const { busy, report, apply, dismissReport } = useCrmBulkApply()
 
   const selectedRows = useMemo(() => {
@@ -178,7 +184,7 @@ function DealsBulkBarBody(props: DealsBulkBarProps) {
       const stage = dealStageById(pipeline, value)
       if (!stage) return
       await runCalls(
-        (deal) => api.moveToStage(deal.$id, stage.id),
+        (deal) => api.moveToStage(deal, stage.id),
         (count) => `Moved ${countNoun(count, NOUN)} to ${stage.name}`,
       )
       return
@@ -200,7 +206,7 @@ function DealsBulkBarBody(props: DealsBulkBarProps) {
     async (reason: string) => {
       setLosing(false)
       await runCalls(
-        (deal) => api.markLost(deal.$id, reason),
+        (deal) => api.markLost(deal, reason),
         (count) => `Marked ${countNoun(count, NOUN)} lost`,
       )
     },

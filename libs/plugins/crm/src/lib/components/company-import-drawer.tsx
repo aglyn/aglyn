@@ -62,6 +62,9 @@ export const COMPANY_IMPORT_VOCABULARY: CsvImportVocabulary<
 > = {
   title: 'Import companies from CSV',
   help: pluginDocsHelp('companies', { anchor: '#import-from-csv' }),
+  sitePickerHelperText:
+    'The site these companies are filed under — it decides which of your ' +
+    'sites may see them.',
   intro:
     'A CSV with a header row. Match its columns to company fields below, ' +
     'check the preview, then import. A company already in your list — by ' +
@@ -97,7 +100,8 @@ export const COMPANY_IMPORT_VOCABULARY: CsvImportVocabulary<
 export interface CompanyImportDrawerProps {
   open: boolean
   onClose: () => void
-  hostId: string
+  /** The site the file is filed under, or `null` at the organization level (AGL-2630). */
+  hostId: string | null
 }
 
 export function CompanyImportDrawer(props: CompanyImportDrawerProps) {
@@ -114,7 +118,7 @@ export function CompanyImportDrawer(props: CompanyImportDrawerProps) {
 CompanyImportDrawer.displayName = 'CompanyImportDrawer'
 
 /** The "Import CSV" action on the companies list, with the drawer it opens. */
-export function CompanyImportButton(props: { hostId: string }) {
+export function CompanyImportButton(props: { hostId: string | null }) {
   const { hostId } = props
   return (
     <CsvImportButton>

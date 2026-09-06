@@ -44,6 +44,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useEffect, useState } from 'react'
+import { useCrmScope } from '../hooks/use-crm-scope'
 import { parseContactTags } from '../model/contact-record'
 import {
   CompanyPicker,
@@ -56,6 +57,7 @@ import {
   EMPTY_ADDRESS,
   type AddressDraft,
 } from './contact-address-fields'
+import { CrmSitePicker } from './crm-site-picker'
 import type { OrgMemberOption } from './use-org-members'
 
 /** What the drawer hands back — already normalized where the route would. */
@@ -78,16 +80,19 @@ export interface NewContactValues {
 export interface NewContactDrawerProps {
   open: boolean
   onClose: () => void
-  /** The site the contact is being added from — what scopes the company list. */
-  hostId: string
+  /**
+   * The site the contact is being added from — what scopes the company list
+   * and the controller the consent checkbox records a basis for. `null` at
+   * the organization level (AGL-2630), where the drawer asks which site
+   * with a picker and holds its submit until one is named.
+   */
+  hostId: string | null
   /** The org document the shell passed, for the company picker's scope. */
   org?: Partial<AglynOrgBilling> | null
   /** The request is in flight — the form holds still and the button says so. */
   busy?: boolean
   /** What the route answered when it refused, shown above the form. */
   error?: string | null
-  /** The controller the consent checkbox records a basis FOR. */
-  consentGroup: ConsentGroup
   /** The team, for the owner picker. */
   owners: OrgMemberOption[]
   /** The roster has answered — an empty list is then "nobody to pick". */
@@ -139,11 +144,18 @@ export function NewContactDrawer(props: NewContactDrawerProps) {
     org,
     busy,
     error,
-    consentGroup,
     owners,
     ownersReady,
     onSubmit,
   } = props
+  /*
+   * The controller the consent checkbox records a basis FOR: the mounted
+   * site's group, or at the organization level the picked site's — the one
+   * the route will capture the contact under. `null` until a site is
+   * picked, and the submit waits on it.
+   */
+  const { createHostId, createGroup } = useCrmScope({ hostId, org })
+  const consentGroup: ConsentGroup | null = createGroup
   const companies = useCompanyOptions({ hostId, org, enabled: open })
   const createCompany = useCreateCompany({ hostId, org })
 
@@ -209,7 +221,7 @@ export function NewContactDrawer(props: NewContactDrawerProps) {
     })
   }
 
-  const disclosure = consentGroupDisclosure(consentGroup)
+  const disclosure = consentGroup ? consentGroupDisclosure(consentGroup) : null
 
   return (
     <NavigationDrawerComponent
@@ -244,6 +256,17 @@ export function NewContactDrawer(props: NewContactDrawerProps) {
       <Container gutterY>
         <Stack spacing={2}>
           {error ? <Alert severity="warning">{error}</Alert> : null}
+          {/*
+            First, because everything below it is filed under the answer: the
+            site decides which of the org's sites may see the person and whose
+            consent the checkbox at the foot records. Renders nothing under a
+            site (AGL-2630).
+          */}
+          <CrmSitePicker
+            hostId={hostId}
+            disabled={Boolean(busy)}
+            helperText="The site that captures this person — it decides which sites may see them and whose marketing consent the checkbox below records."
+          />
           <TextField
             size="small"
             label="Email"
@@ -361,7 +384,9 @@ export function NewContactDrawer(props: NewContactDrawerProps) {
           <Button
             variant="contained"
             color="primary"
-            disabled={Boolean(busy)}
+            // Held until the capturing site is known: the route resolves the
+            // org from it and stamps the record with it.
+            disabled={Boolean(busy) || !createHostId}
             onClick={handleSubmit}
           >
             {busy ? 'Adding…' : 'Add contact'}

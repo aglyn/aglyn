@@ -98,7 +98,7 @@ export function PipelineCard(props: PipelineCardProps) {
       getAggregateFromServer(
         query(
           scopedCollection(firestore, scope, 'deals'),
-          visibleToClause(tokens),
+          ...visibleToClause(tokens),
           where('status', '==', 'open'),
         ),
         { count: count(), amountCents: sum('amountCents') },
@@ -119,7 +119,7 @@ export function PipelineCard(props: PipelineCardProps) {
     () =>
       query(
         scopedCollection(firestore, scope, 'deals'),
-        visibleToClause(tokens),
+        ...visibleToClause(tokens),
         where('status', '==', 'open'),
         orderBy('updatedAt', 'desc'),
         limit(OPEN_DEAL_CEILING + 1),
@@ -133,7 +133,7 @@ export function PipelineCard(props: PipelineCardProps) {
       collectionCeiling(
         query(
           scopedCollection(firestore, scope, 'pipelines'),
-          visibleToClause(tokens),
+          ...visibleToClause(tokens),
         ),
         PIPELINE_CEILING,
       ),

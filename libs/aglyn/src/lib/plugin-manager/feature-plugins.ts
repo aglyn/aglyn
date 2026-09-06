@@ -126,13 +126,63 @@ export function defineUiFeatureBundle(
 }
 
 /**
+ * One of the organization's sites, as the shell hands them to a surface
+ * mounted at the ORGANIZATION level (AGL-2630).
+ *
+ * The three facts a cross-site surface needs and a record never carries: a
+ * record holds a host DOCUMENT ID, a console URL under `/hosts/[host]` takes
+ * the SUBDOMAIN, and a person reads the NAME. `subdomain` is null for a site
+ * whose document did not answer — such a site is still named (the
+ * relationship is real) and never linked (the route would not exist).
+ */
+export interface ConsolePluginOrgHost {
+  id: string
+  name: string
+  subdomain: string | null
+}
+
+/**
+ * The organization a surface is mounted under when it is mounted at the
+ * org level rather than under a site (AGL-2630).
+ *
+ * The CRM exists at two levels: the site hub, where `hostId` names the site
+ * and every read is scoped to it, and `/[orgSlug]/crm`, where an org-wide
+ * member sees every site's records at once. At the org level there is no
+ * site, so the shell hands the org's own site list instead — the pickers a
+ * create needs (a record is always captured BY a site) and the names a
+ * cross-site fact is shown under. `hostsReady` separates "no sites" from
+ * "not yet".
+ */
+export interface ConsolePluginOrgMount {
+  orgId: string
+  hosts: readonly ConsolePluginOrgHost[]
+  hostsReady: boolean
+  /**
+   * The console path every site's own hub hangs beneath — `/[orgSlug]/hosts`
+   * — so a cross-site fact can link a person into the site that holds them:
+   * a site's CRM is `${hostsPath}/${subdomain}/crm`. A path rather than a
+   * builder because the mount is data the shell hands over and a plugin
+   * cannot import the console's route table.
+   */
+  hostsPath: string
+}
+
+/**
  * Props every plugin-contributed console page receives from the shell's
  * generic host route. The shell owns auth + chrome + flag gating and
  * passes the resolved host and entitlement state in, so plugin pages stay
  * free of console-app hooks.
  */
 export interface ConsolePluginPageProps {
-  hostId: string
+  /**
+   * The site this surface is mounted under — or `null` when it is mounted at
+   * the ORGANIZATION level, where there is no site and {@link orgMount} says
+   * which org (AGL-2630). Only the CRM mounts there today; every other
+   * surface is reached through a site route and always receives a string.
+   */
+  hostId: string | null
+  /** Present only at an org-level mount — see {@link ConsolePluginOrgMount}. */
+  orgMount?: ConsolePluginOrgMount
   /** True when the org holds the extension's `featureFlag` entitlement. */
   entitled: boolean
   /**

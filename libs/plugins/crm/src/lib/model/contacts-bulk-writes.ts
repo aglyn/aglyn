@@ -81,6 +81,13 @@ export const CONTACT_TAGS_CAP = 20
 export interface ContactBulkRow {
   $id: string
   email?: string
+  /**
+   * The holder this row was flattened through (`ContactRecord.groupId`),
+   * which a cross-holder reader — the organization-level list (AGL-2630) —
+   * plans each row's write against, since no one viewing group covers
+   * every selected person there.
+   */
+  groupId?: string
   /** THIS holder's tags, already read through the facet by the table. */
   tags?: string[]
   /** The holder tokens — what `planContactDetach` counts. */

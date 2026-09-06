@@ -117,14 +117,14 @@ export function ActivityCard(props: ActivityCardProps) {
   const activitiesBetween = (from: number, to: number) =>
     query(
       scopedCollection(firestore, scope, Aglyn.CRM_COLLECTIONS.activities),
-      visibleToClause(tokens),
+      ...visibleToClause(tokens),
       where('atMs', '>=', from),
       where('atMs', '<', to),
     )
   const tasksDoneBetween = (from: number, to: number) =>
     query(
       scopedCollection(firestore, scope, Aglyn.CRM_COLLECTIONS.tasks),
-      visibleToClause(tokens),
+      ...visibleToClause(tokens),
       where('status', '==', 'done'),
       where('completedAtMs', '>=', from),
       where('completedAtMs', '<', to),

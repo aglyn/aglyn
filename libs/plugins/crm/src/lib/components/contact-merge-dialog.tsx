@@ -62,6 +62,7 @@ import {
   where,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { crmVisibleToClause } from '../hooks/use-crm-scope'
 import { useCrmApi } from './use-crm-api'
 
 /** One contact as the dialog holds it: its id and the document as read. */
@@ -119,14 +120,23 @@ export function useContactMergeDialog() {
 
 export interface ContactMergeDialogProps extends ContactMergeDialogState {
   onClose: () => void
-  hostId: string
+  /**
+   * The site the merge runs as — the route logs it on that site's feed. At
+   * the organization level the record's own capturing site (AGL-2630), or
+   * `null` for a row no site has captured, which cannot be merged here.
+   */
+  hostId: string | null
   /** The record whose page this is. */
   current: ContactPick
   /** `['orgs', orgId]` — where the contacts live. */
   scope: readonly [string, string]
   consentGroup: ConsentGroup
-  /** What this viewer may list — the search's `array-contains-any`. */
-  visibleTo: readonly string[]
+  /**
+   * What this viewer may list — the search's `array-contains-any` — or
+   * `null` at the organization level, where the search carries no clause
+   * (AGL-2630).
+   */
+  visibleTo: readonly string[] | null
   /** The owner's name for a uid, for the preview. */
   memberName?: (uid: string) => string
   /** Told which record survived, once the server has merged. */
@@ -195,7 +205,7 @@ export function ContactMergeDialog(props: ContactMergeDialogProps) {
     setError(null)
     try {
       const contactsRef = collection(firestore, scope[0], scope[1], 'contacts')
-      const scoped = where('visibleTo', 'array-contains-any', [...visibleTo])
+      const scoped = crmVisibleToClause(visibleTo)
       let found
       if (raw.includes('@')) {
         const email = normalizeContactEmail(raw)
@@ -204,14 +214,14 @@ export function ContactMergeDialog(props: ContactMergeDialogProps) {
           return
         }
         found = await getDocs(
-          query(contactsRef, scoped, where('email', '==', email), limit(SEARCH_LIMIT)),
+          query(contactsRef, ...scoped, where('email', '==', email), limit(SEARCH_LIMIT)),
         )
       } else {
         const key = nameSearchKey(raw)
         found = await getDocs(
           query(
             contactsRef,
-            scoped,
+            ...scoped,
             orderBy('nameLower'),
             startAt(key),
             endAt(`${key}${HIGH}`),
@@ -244,7 +254,7 @@ export function ContactMergeDialog(props: ContactMergeDialogProps) {
   )
 
   const submit = useCallback(async () => {
-    if (!survivor || !merged || busy) return
+    if (!survivor || !merged || busy || !hostId) return
     setBusy(true)
     setError(null)
     try {
@@ -265,7 +275,7 @@ export function ContactMergeDialog(props: ContactMergeDialogProps) {
     } finally {
       setBusy(false)
     }
-  }, [survivor, merged, busy, callCrm, enqueueSnackbar, onClose, onMerged])
+  }, [survivor, merged, busy, hostId, callCrm, enqueueSnackbar, onClose, onMerged])
 
   const currentLabel = label(current, groupId)
   const otherLabel = other ? label(other, groupId) : ''
@@ -389,6 +399,12 @@ export function ContactMergeDialog(props: ContactMergeDialogProps) {
             </>
           )}
           {error ? <Alert severity="error">{error}</Alert> : null}
+          {!hostId ? (
+            <Alert severity="info">
+              {'No site has captured this contact, so there is no site to ' +
+                'merge it from. Open it from one of your sites instead.'}
+            </Alert>
+          ) : null}
         </Stack>
       </DialogContent>
       <DialogActions>
@@ -398,7 +414,7 @@ export function ContactMergeDialog(props: ContactMergeDialogProps) {
         <Button
           variant="contained"
           onClick={() => void submit()}
-          disabled={!other || busy}
+          disabled={!other || busy || !hostId}
         >
           {busy ? 'Merging…' : 'Merge'}
         </Button>

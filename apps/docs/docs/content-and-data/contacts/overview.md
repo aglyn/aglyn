@@ -15,9 +15,13 @@ meetings, reports, and the custom fields your business describes people by.
 
 In the console the plugin is called **CRM**. It is one tab, and a hub of eight
 sections, each with its own address under your site at
-`…/hosts/{site}/crm/<section>`; a bare `…/crm` lands on the first. The surface
-was called **Contacts** while it was a single list, and a link kept from then —
-the older `…/contacts` address — still opens the hub.
+`…/hosts/{site}/crm/<section>`; a bare `…/crm` lands on the first. The same hub
+opens at the **organization** level, over every site at once, at
+`…/{organization}/crm/<section>` — see
+[At the organization level](#at-the-organization-level). The surface was called
+**Contacts** while it was a single list, and a link kept from then — the older
+`…/contacts` address, under a site or under the organization — still opens the
+hub.
 
 :::caution Rolling out
 The **CRM** tab in the console isn't available yet — it's a release-flagged
@@ -172,6 +176,41 @@ site user — opens the Contacts list asked for that address, and the list moves
 straight on to the record when exactly one person matches. No match leaves the
 filtered list on screen, which is the honest answer for a capture the audience
 band dropped.
+
+## At the organization level
+
+The **CRM** tab under **Organization** opens the same hub over **every site in
+the organization at once**: the same eight sections, the same record pages,
+the same bulk actions, import, saved views, reports and settings, at
+`…/{organization}/crm/<section>`. A record captured on any of your sites is
+listed there, and opening it edits the same record the site's own hub edits.
+
+What differs from a site's hub:
+
+- **Every create names a site.** A contact, company, deal, task or logged
+  activity is always captured *by* a site — that is what decides which of your
+  sites may see it and whose marketing consent a contact's checkbox records —
+  so **New contact**, **New company**, **New deal**, **New task**, **Log
+  activity** and **Import CSV** each begin with a required **Site** picker. The
+  pick is remembered for the session, and an organization with exactly one site
+  never sees the field. The REST API asks the same question as `consentSiteId`.
+- **The cross-site facts.** The contacts list gains a **Known by** column — the
+  sites that have captured each person — and a contact's page gains a **Known
+  by** card listing those sites, each with the person's marketing consent
+  *for that site* (opted in, opted out, or no record — never a bare
+  "consented") and a link to open the person in that site's hub.
+- **Reports total the organization**, not one site.
+- **Leads** are listed from every site with a **Site** column, since a lead
+  belongs to the site that met the person; the per-site note about which forms
+  file a lead stays on each site's own hub.
+- **Settings** are the organization's, as they always were; the **Default
+  owner** card lists one picker per site.
+
+**Who may open it:** an organization **owner, admin or editor** — a member of
+the whole organization holding the *manage data* permission. A collaborator
+added to particular sites is refused here, with a note pointing at the sites
+they hold, because this is the one surface that reads across every site; they
+open the CRM from a site they have access to instead.
 
 ## Who can open the CRM
 

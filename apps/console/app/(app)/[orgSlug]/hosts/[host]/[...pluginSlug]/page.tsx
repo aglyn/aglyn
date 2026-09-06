@@ -55,6 +55,7 @@ import {
   requiredExtensionPermissions,
   resolveExtensionPermission,
 } from '../../../../../../utils/extension-permission'
+import { resolveHubSections } from '../../../../../../utils/plugin-hub-sections'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'
 import useHostRole from '../../../../../../hooks/use-host-role'
 import useOrgPermissions from '../../../../../../hooks/use-org-permissions'
@@ -214,27 +215,19 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
    * compute this for itself — release flags are `scope:app` — and a rail that
    * guessed would link into the shell's own "coming soon" notice.
    */
-  const resolvedSections = useMemo(() => {
-    const sections = resolved?.navItem.sections
-    if (!sections?.length || !basePath) return undefined
-    return sections.map((section) => {
-      const flagKey = section.navTabId
-        ? RELEASE_FLAGS.find((flag) => flag.navTabId === section.navTabId)?.key
-        : undefined
-      return {
-        id: section.id,
-        label: section.label,
-        href: `${basePath}/${section.id}`,
-        visible: flagKey ? flags[flagKey].released || isStaff : true,
-        // The entitlement verdict, for the rail (AGL-2611): `blocked` and
-        // nothing else, so an unsettled org draws no lock — the same
-        // three-state care the page body takes.
-        locked:
-          resolveExtensionEntitlement(section.featureFlag, org, orgReady) ===
-          'blocked',
-      }
-    })
-  }, [resolved, basePath, flags, isStaff, org, orgReady])
+  const resolvedSections = useMemo(
+    // One rule for both shells that mount a hub — this route and the
+    // organization-level CRM route (AGL-2630) — so the two rails cannot
+    // resolve a section's verdicts differently.
+    () =>
+      resolveHubSections(resolved?.navItem.sections, basePath, {
+        flags,
+        isStaff,
+        org,
+        orgReady,
+      }),
+    [resolved, basePath, flags, isStaff, org, orgReady],
+  )
 
   /**
    * Where a bare hub URL goes, when the nav item has sections and the URL

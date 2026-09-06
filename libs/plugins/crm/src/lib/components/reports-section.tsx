@@ -95,7 +95,11 @@ export function ContactsReportsSection(props: ConsolePluginPageProps) {
   // as, resolved the way every CRM surface resolves them so the facet a
   // stage is read from here is the facet the contacts list edits it in.
   const { scope: dataScope, consentGroup, visibleTo } = useCrmScope({ hostId, org })
-  const tokens = useMemo(() => [...visibleTo], [visibleTo])
+  // `null` at the organization level (AGL-2630): no clause, and every card
+  // totals every site; the holder is then each contact's own.
+  const tokens = useMemo(() => (visibleTo ? [...visibleTo] : null), [visibleTo])
+  const groupId = consentGroup?.groupId ?? null
+  const orgRecord = (org ?? null) as Record<string, unknown> | null
   /*
    * The period AND the moment it was chosen, as one value: the range is
    * anchored when the reader picks, not re-derived from a moving `Date.now()`
@@ -112,14 +116,12 @@ export function ContactsReportsSection(props: ConsolePluginPageProps) {
   const routes = useMemo(() => crmRoutes(basePath ?? ''), [basePath])
   const refresh = useCallback(() => {
     if (dataScope) {
-      invalidateAggregateReads(
-        reportCachePrefix({ scope: dataScope, tokens, groupId: consentGroup.groupId }),
-      )
+      invalidateAggregateReads(reportCachePrefix({ scope: dataScope, tokens, groupId }))
     }
     // A new anchor is what changes every card's dependencies, so each read
     // runs again and — its key forgotten — reaches the server.
     setView((current) => ({ period: current.period, nowMs: Date.now() }))
-  }, [dataScope, tokens, consentGroup.groupId])
+  }, [dataScope, tokens, groupId])
 
   const report = useMemo<CrmReportScope | null>(
     () =>
@@ -127,14 +129,15 @@ export function ContactsReportsSection(props: ConsolePluginPageProps) {
         ? {
             scope: dataScope,
             tokens,
-            groupId: consentGroup.groupId,
+            groupId,
+            org: orgRecord,
             period: view.period,
             range,
             nowMs: view.nowMs,
             routes,
           }
         : null,
-    [dataScope, tokens, consentGroup.groupId, view, range, routes],
+    [dataScope, tokens, groupId, orgRecord, view, range, routes],
   )
 
   /**
@@ -147,7 +150,7 @@ export function ContactsReportsSection(props: ConsolePluginPageProps) {
         ? getCountFromServer(
             query(
               scopedCollection(firestore, dataScope, 'contacts'),
-              visibleToClause(tokens),
+              ...visibleToClause(tokens),
             ),
           ).then((snapshot) => snapshot.data().count)
         : null,

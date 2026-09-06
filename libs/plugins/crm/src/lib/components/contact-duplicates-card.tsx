@@ -30,6 +30,7 @@ import {
 } from '@mui/material'
 import { collection, getDocs, limit, query, where } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
+import { crmVisibleToClause } from '../hooks/use-crm-scope'
 import { crmRoutes } from '../model/crm-routes'
 import {
   CONTACT_DUPLICATES_LIMIT,
@@ -46,8 +47,12 @@ export interface ContactDuplicatesCardProps {
   /** `['orgs', orgId]` — where the contacts live. */
   scope: readonly [string, string]
   consentGroup: ConsentGroup
-  /** What this viewer may list — the query's `array-contains-any`. */
-  visibleTo: readonly string[]
+  /**
+   * What this viewer may list — the query's `array-contains-any` — or
+   * `null` at the organization level, where the query carries no clause
+   * (AGL-2630).
+   */
+  visibleTo: readonly string[] | null
   /** The hub's own path, for the link to a candidate's page. */
   basePath: string
   /** Opens the merge dialog with the candidate picked. */
@@ -90,7 +95,7 @@ export function ContactDuplicatesCard(props: ContactDuplicatesCardProps) {
       const found = await getDocs(
         query(
           collection(firestore, scope[0], scope[1], 'contacts'),
-          where('visibleTo', 'array-contains-any', [...visibleTo]),
+          ...crmVisibleToClause(visibleTo),
           where('nameLower', '==', nameKey),
           limit(CONTACT_DUPLICATES_LIMIT),
         ),

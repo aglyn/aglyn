@@ -114,17 +114,17 @@ const roster = {
 let calls: Array<{ kind: string; dealId: string; arg?: string }>
 let refuseIds: Set<string>
 const api = {
-  moveToStage: jest.fn(async (dealId: string, stageId: string) => {
-    calls.push({ kind: 'move', dealId, arg: stageId })
-    if (refuseIds.has(dealId)) throw new Error('This deal is not visible to this site.')
+  moveToStage: jest.fn(async (deal: { $id: string }, stageId: string) => {
+    calls.push({ kind: 'move', dealId: deal.$id, arg: stageId })
+    if (refuseIds.has(deal.$id)) throw new Error('This deal is not visible to this site.')
     return {} as never
   }),
-  markWon: jest.fn(async (dealId: string) => {
-    calls.push({ kind: 'won', dealId })
+  markWon: jest.fn(async (deal: { $id: string }) => {
+    calls.push({ kind: 'won', dealId: deal.$id })
     return {} as never
   }),
-  markLost: jest.fn(async (dealId: string, reason?: string) => {
-    calls.push({ kind: 'lost', dealId, arg: reason })
+  markLost: jest.fn(async (deal: { $id: string }, reason?: string) => {
+    calls.push({ kind: 'lost', dealId: deal.$id, arg: reason })
     return {} as never
   }),
 }
