@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { CONTACT_CSV_COLUMNS, contactsCsv } from './contacts-csv'
+import { CONTACT_CSV_COLUMNS, contactsCsv, csvDocument } from './contacts-csv'
 
 /**
  * The selection's export is the table's export over fewer rows (AGL-2603):
@@ -51,5 +51,31 @@ describe('the contacts CSV', () => {
       'a@example.com,"Ada, Countess",form|order,vip|wholesale,2026-01-02T00:00:00.000Z,"Said ""hello"""',
       'b@example.com,,,,,',
     ])
+  })
+})
+
+/**
+ * One serializer for every CSV the CRM writes (AGL-2624): the report
+ * exports quote the way the contacts file always has.
+ */
+describe('csvDocument', () => {
+  it('quotes only what needs quoting and writes an absent cell as nothing', () => {
+    expect(
+      csvDocument([
+        ['name', 'count', 'note'],
+        ['Ada, Countess', 3, 'Said "hello"'],
+        ['plain', null, undefined],
+        ['two\nlines', 0, ''],
+      ]),
+    ).toBe(
+      'name,count,note\n' +
+        '"Ada, Countess",3,"Said ""hello"""\n' +
+        'plain,,\n' +
+        '"two\nlines",0,',
+    )
+  })
+
+  it('is empty for no lines at all', () => {
+    expect(csvDocument([])).toBe('')
   })
 })

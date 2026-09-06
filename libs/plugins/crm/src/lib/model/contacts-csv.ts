@@ -51,6 +51,22 @@ const csvEscape = (value: unknown): string => {
   return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
 }
 
+/**
+ * The lines of a CSV file — header first, one array per row — as text.
+ *
+ * One serializer for every CSV the CRM writes: the contacts export, and
+ * since AGL-2624 each report table's export. Quoting is decided here and
+ * nowhere else — a cell holding a comma, a quote or a newline is wrapped in
+ * quotes with its quotes doubled, and no other cell is touched — so that a
+ * report's file and the contacts file open the same way in a spreadsheet.
+ * A `null` or `undefined` cell is empty, not the word.
+ */
+export function csvDocument(
+  lines: ReadonlyArray<ReadonlyArray<unknown>>,
+): string {
+  return lines.map((line) => line.map(csvEscape).join(',')).join('\n')
+}
+
 /** The whole file, header first. */
 export function contactsCsv(rows: readonly ContactCsvRow[]): string {
   const lines: unknown[][] = [
@@ -66,7 +82,7 @@ export function contactsCsv(rows: readonly ContactCsvRow[]): string {
       contact.notes ?? '',
     ]),
   ]
-  return lines.map((line) => line.map(csvEscape).join(',')).join('\n')
+  return csvDocument(lines)
 }
 
 /** Hand the browser a file to save. */
