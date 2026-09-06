@@ -104,6 +104,18 @@ Recipes are definitions, the same on every site; only the form picker is the sit
 own. A recipe that reaches the CRM needs the plan the [CRM steps](#the-steps) need, and
 choosing one on a plan without the actions builder is refused the way **Add action** is.
 
+### Installing a recipe on a site from the organization {#installing-from-the-organization}
+
+An organization running several sites does not have to open each site's editor. The
+[organization-level CRM](./overview.md#at-the-organization-level) has a **Recipes** card
+under [Settings](./settings.md#recipes): every recipe, the sites that already carry it,
+and an **Install** button that writes the action the recipe builds straight into the
+site you pick — enabled, as the table above defines it, and stamped with the recipe it
+came from. There is no editor step; the card links to the site's **Automation →
+Actions** page, where the installed action is edited like any other. A recipe already
+installed on a site is refused rather than duplicated, and a site whose actions predate
+the stamp is shown as one that *may already have it*.
+
 ## Example: tag every new contact from a form
 
 1. Open **Automation → Actions** and choose **Add action**.
