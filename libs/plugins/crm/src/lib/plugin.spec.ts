@@ -73,7 +73,7 @@ describe('crm plugin', () => {
    * leave `/contacts/deals` a 404 while the page still had a Deals branch;
    * a second list would let the two drift apart.
    */
-  it('declares the seven CRM sections on the nav item, contacts first', () => {
+  it('declares the eight CRM sections on the nav item, contacts first and settings last', () => {
     registerCrmConsole()
     const sections = registered()?.navItems?.[0]?.sections
     expect(sections).toBe(CRM_CONSOLE_SECTIONS)
@@ -85,12 +85,17 @@ describe('crm plugin', () => {
       'tasks',
       'reports',
       'fields',
+      'settings',
     ])
     // The bare `/contacts` lands on the first section, so the people list
     // has to be first: it is the v1 page every existing link points at.
     expect(sections?.[0]?.label).toBe('Contacts')
-    // No section declares its own flag — all six ship with the surface and
-    // inherit `release_contacts` from the nav item.
+    // Settings is where a settings entry sits in every hub — after the work
+    // (AGL-2613). The rail decides where a bare `/crm` lands, so a settings
+    // page anywhere but last would be a landing page for somebody.
+    expect(sections?.[sections.length - 1]?.label).toBe('Settings')
+    // No section declares its own flag — all of them ship with the surface
+    // and inherit `release_contacts` from the nav item.
     expect(sections?.every((section) => !section.navTabId)).toBe(true)
   })
 })

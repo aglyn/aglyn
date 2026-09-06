@@ -29,7 +29,11 @@
 
 import {
   type AglynPostalAddress,
+  COMPANY_CONTACTS_COUNT_FIELD,
+  CONTACT_COMPANY_IDS_FIELD,
   CONTACT_FACETS_FIELD,
+  type ContactCompanyLinkPlan,
+  type ContactCompanyLinkState,
   type CrmCompany,
   companyDomainForEmail,
   contactFacetPath,
@@ -38,36 +42,23 @@ import {
   normalizeAddress,
   normalizeCompanyDomain,
   normalizePhone,
-  readContactFacet,
+  planContactCompanyLink,
+  readContactCompanyLink,
 } from '@aglyn/aglyn'
 import {
   arrayRemove,
   arrayUnion,
   deleteField,
+  increment,
   serverTimestamp,
 } from 'firebase/firestore'
 
-/**
- * The top-level field on a CONTACT naming every company it is linked to.
- *
- * The association proper is `facets.{groupId}.companyId` — one company per
- * holder, inside that holder's facet like the notes and the tags, and for the
- * same reason: which account a person belongs to is one business's knowledge
- * of them. But a facet path is per group, and Firestore cannot answer "every
- * contact whose facet, whichever group's, names company X" — a `where` needs
- * one field path, and the group id is part of the path.
- *
- * So the facet is MIRRORED into this array, which `array-contains` can query
- * and the `(companyIds CONTAINS, updatedAt DESC)` index serves. It carries the
- * union of every holder's link, so removing an id from it is only correct when
- * no other holder's facet still names that id — which is the rule
- * {@link contactCompanyLinkUpdate} enforces, and the reason nothing writes this
- * field without going through it.
- *
- * The facet is the truth and this is its index: a reader answering "which
- * company is this person at" reads the facet; only a QUERY reads this.
+/*
+ * The mirror field lives with the planner in `@aglyn/aglyn` now, because the
+ * server doors that link on capture read it too; it is re-exported here so
+ * the surfaces that always imported it from this module keep one name.
  */
-export const CONTACT_COMPANY_IDS_FIELD = 'companyIds'
+export { CONTACT_COMPANY_IDS_FIELD }
 
 /**
  * How many contacts one delete pass detaches.
@@ -279,14 +270,39 @@ function groupsNaming(
     .map(([groupId]) => groupId)
 }
 
-/** The ids the mirror currently carries, whatever shape it arrived in. */
-function currentCompanyIds(
-  contact: Record<string, unknown> | null | undefined,
-): string[] {
-  const value = (contact ?? {})[CONTACT_COMPANY_IDS_FIELD]
-  return Array.isArray(value)
-    ? value.filter((id): id is string => typeof id === 'string')
-    : []
+/**
+ * A link plan as the client SDK writes it: the contact's facet by dotted
+ * path, the mirror by the sentinel the plan chose, and — when the caller
+ * hands one in — the company name echoed where the row and the global search
+ * read it, so a person linked to Acme reads "Acme" in the list column whether
+ * the link was made here or the name typed before a company existed.
+ *
+ * Dotted paths into the facet, never a nested object — a nested write would
+ * replace the whole facet map and take every other holder's records with it.
+ */
+function contactLinkPatch(
+  plan: ContactCompanyLinkPlan,
+  groupId: string,
+  companyName: string | null | undefined,
+): Record<string, unknown> {
+  const update: Record<string, unknown> = {
+    [contactFacetPath(groupId, 'companyId')]: plan.companyId ?? deleteField(),
+    updatedAt: serverTimestamp(),
+  }
+  if (plan.mirror?.op === 'union') {
+    update[CONTACT_COMPANY_IDS_FIELD] = arrayUnion(plan.mirror.companyId)
+  } else if (plan.mirror?.op === 'remove') {
+    update[CONTACT_COMPANY_IDS_FIELD] = arrayRemove(plan.mirror.companyId)
+  } else if (plan.mirror?.op === 'set') {
+    update[CONTACT_COMPANY_IDS_FIELD] = plan.mirror.companyIds
+  }
+  if (companyName !== undefined) {
+    const stored = plan.companyId ? String(companyName ?? '').trim().slice(0, 120) : ''
+    update[contactFacetPath(groupId, 'companyName')] = stored || deleteField()
+    // The search echo — see `HostContact.companyName`.
+    update['companyName'] = stored || deleteField()
+  }
+  return update
 }
 
 /**
@@ -294,46 +310,65 @@ function currentCompanyIds(
  * them, with `null` — keeping the facet and its mirror in step. `null` when
  * the document already says what was asked.
  *
- * Three cases, and the mirror is handled differently in each because it is
- * shared across holders while the facet is not:
- *
- *  - A first link writes the facet and `arrayUnion`s the mirror, which is
- *    safe against a concurrent writer adding another holder's id.
- *  - A MOVE from one company to another writes the facet and rewrites the
- *    mirror as a whole, because Firestore cannot `arrayRemove` and
- *    `arrayUnion` the same field in one update. The old id is dropped only
- *    if no other holder's facet still names it: another business filing the
- *    same person under the same account is their link, not this one's.
- *  - An unlink clears the facet and `arrayRemove`s the old id, on the same
- *    condition.
- *
- * Dotted paths into the facet, never a nested object — a nested write would
- * replace the whole facet map and take every other holder's records with it.
+ * The decision is {@link planContactCompanyLink}'s; this applies it with the
+ * client SDK's sentinels. The company's contacts count is NOT in this
+ * update, because it lives on another document: a caller that can batch
+ * takes {@link contactCompanyLinkWrites} instead, and this stays for the
+ * caller that only has the contact in hand.
  */
 export function contactCompanyLinkUpdate(
   contact: Record<string, unknown> | null | undefined,
   groupId: string,
   companyId: string | null,
 ): Record<string, unknown> | null {
-  const previous = readContactFacet(contact, groupId).companyId ?? null
-  if (previous === companyId) return null
-  const heldElsewhere = (id: string) =>
-    groupsNaming(contact, id).some((group) => group !== groupId)
-  const update: Record<string, unknown> = {
-    [contactFacetPath(groupId, 'companyId')]: companyId ?? deleteField(),
-    updatedAt: serverTimestamp(),
+  const plan = planContactCompanyLink(
+    readContactCompanyLink(contact, groupId),
+    companyId,
+  )
+  return plan ? contactLinkPatch(plan, groupId, undefined) : null
+}
+
+/** Everything one link change writes: the contact, and each company it moves the count of. */
+export interface ContactCompanyLinkWrites {
+  /** The contact document's update, by dotted path. */
+  contact: Record<string, unknown>
+  /** One update per company whose contacts count moves, `increment`ed. */
+  companies: Array<{ id: string; update: Record<string, unknown> }>
+  /** The same moves as bare numbers, for a caller that sums them across rows. */
+  counts: ContactCompanyLinkPlan['counts']
+}
+
+/**
+ * The link change as a SET of writes, for a caller that commits a batch: the
+ * contact's patch and the `increment` on each company whose count moves.
+ *
+ * Takes the link STATE rather than the document, because the surfaces that
+ * link — the properties card, the bulk bar — hold the projected row, which
+ * carries `companyLink` for exactly this; a caller with the raw document
+ * reads the state off it with `readContactCompanyLink`.
+ *
+ * `companyName` is the picked company's name, or `null` to clear the label
+ * on an unlink; a caller that does not know the name leaves it `undefined`
+ * and the stored label is left alone. In one batch because the count is a
+ * derived figure of the mirror, and a mirror that changed while the count
+ * did not is a company page that says "3 contacts" over a list of four.
+ */
+export function contactCompanyLinkWrites(
+  link: ContactCompanyLinkState,
+  groupId: string,
+  companyId: string | null,
+  companyName?: string | null,
+): ContactCompanyLinkWrites | null {
+  const plan = planContactCompanyLink(link, companyId)
+  if (!plan) return null
+  return {
+    contact: contactLinkPatch(plan, groupId, companyName),
+    companies: plan.counts.map((count) => ({
+      id: count.companyId,
+      update: { [COMPANY_CONTACTS_COUNT_FIELD]: increment(count.delta) },
+    })),
+    counts: plan.counts,
   }
-  if (companyId && !previous) {
-    update[CONTACT_COMPANY_IDS_FIELD] = arrayUnion(companyId)
-  } else if (companyId && previous) {
-    const kept = currentCompanyIds(contact).filter(
-      (id) => id !== previous || heldElsewhere(previous),
-    )
-    update[CONTACT_COMPANY_IDS_FIELD] = [...new Set([...kept, companyId])]
-  } else if (previous && !heldElsewhere(previous)) {
-    update[CONTACT_COMPANY_IDS_FIELD] = arrayRemove(previous)
-  }
-  return update
 }
 
 /**

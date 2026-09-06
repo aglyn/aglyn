@@ -47,7 +47,11 @@
 
 import type { AglynPostalAddress } from '../foundation'
 import { type ConsentGroup, consentGroupScope } from './consent-groups'
-import type { ContactInteraction } from './contacts'
+import {
+  CONTACT_FACETS_FIELD,
+  type ContactInteraction,
+  readContactFacet,
+} from './contacts'
 import { MAX_SCOPE_HOSTS, ORG_SCOPE_TOKEN, type ScopeToken } from './scope-tokens'
 
 /**
@@ -200,6 +204,12 @@ export interface CrmCompany extends CrmScoped {
   ownerUid?: string
   notes?: string
   createdByUid?: string
+  /**
+   * How many contacts name this company in their {@link CONTACT_COMPANY_IDS_FIELD}
+   * mirror — see {@link COMPANY_CONTACTS_COUNT_FIELD}. Absent on a company
+   * nobody has linked since the counter existed, which reads as zero.
+   */
+  contactsCount?: number
 }
 
 /** One step of a pipeline. */
@@ -748,6 +758,222 @@ export function companyDomainForEmail(email: unknown): string | null {
   const domain = normalizeCompanyDomain(value.slice(at + 1))
   if (!domain || PUBLIC_MAILBOX_DOMAINS.has(domain)) return null
   return domain
+}
+
+/**
+ * The name a company minted from a domain starts with: the first label with
+ * a capital — `acme.com` → `Acme`, `initech.co.uk` → `Initech`.
+ *
+ * A starting point and not a claim about what the business is called: the
+ * lead-convert dialog offers it for editing, and a company the capture door
+ * creates on its own carries it until somebody renames the record. The
+ * domain itself would be an honest name too, but a list of companies that
+ * reads `acme.com`, `globex.example` looks like a list of websites, and the
+ * domain is on the row beside the name anyway.
+ */
+export function companyNameForDomain(domain: string): string {
+  const label = domain.split('.')[0] || domain
+  return label.charAt(0).toUpperCase() + label.slice(1)
+}
+
+/*==========================================
+ * THE CONTACT–COMPANY LINK (AGL-2597, AGL-2613).
+ *
+ * The association proper is `facets.{groupId}.companyId` — one company per
+ * holder, inside that holder's facet like the notes and the tags, and for
+ * the same reason: which account a person belongs to is one business's
+ * knowledge of them. But a facet path is per group, and Firestore cannot
+ * answer "every contact whose facet, whichever group's, names company X" —
+ * a `where` needs one field path, and the group id is part of the path. So
+ * the facet is MIRRORED into a top-level array an `array-contains` can
+ * query, and the company carries a COUNT of the contacts whose mirror names
+ * it, so a list of companies can say how many people are at each without
+ * reading a person.
+ *
+ * Three fields, kept in step by ONE planner. Every writer — the picker on a
+ * contact's page, the company page's link control, the bulk bar, the server
+ * doors that link on capture — asks {@link planContactCompanyLink} what
+ * changes and applies the answer with its own SDK's sentinels. None of them
+ * decides for itself whether the old id leaves the mirror, which is the rule
+ * a second copy would get wrong: another business filing the same person
+ * under the same account is THEIR link, and this holder letting go must not
+ * take it away.
+ *=========================================*/
+
+/**
+ * The top-level field on a CONTACT naming every company it is linked to.
+ *
+ * It carries the union of every holder's link, so removing an id from it is
+ * only correct when no other holder's facet still names that id — the rule
+ * the planner enforces, and the reason nothing writes this field without
+ * going through it. The facet is the truth and this is its index: a reader
+ * answering "which company is this person at" reads the facet; only a QUERY
+ * reads this.
+ */
+export const CONTACT_COMPANY_IDS_FIELD = 'companyIds'
+
+/**
+ * The field on a COMPANY counting the contacts whose mirror names it.
+ *
+ * Denormalized because the honest figure is an aggregate over every contact
+ * in the org, which a list of two hundred companies cannot afford to take
+ * per row. Moved by `increment` in the same batch as the link that changes
+ * it, so the two cannot disagree by a failed second write; a company's own
+ * page still takes the live aggregate, which is what corrects a count that
+ * predates the counter.
+ */
+export const COMPANY_CONTACTS_COUNT_FIELD = 'contactsCount'
+
+/** What the planner needs to know about a contact's links, and nothing else. */
+export interface ContactCompanyLinkState {
+  /** This holder's link, or `null` when the facet names no company. */
+  companyId: string | null
+  /** The mirror as stored, in no order. */
+  companyIds: string[]
+  /**
+   * Ids named by OTHER holders' facets — what keeps an id in the mirror
+   * when this holder lets go of it.
+   */
+  heldElsewhere: string[]
+}
+
+/** The link state of a stored contact, read for one holder. */
+export function readContactCompanyLink(
+  contact: Record<string, unknown> | null | undefined,
+  groupId: string,
+): ContactCompanyLinkState {
+  const document = contact ?? {}
+  const facets = document[CONTACT_FACETS_FIELD]
+  const heldElsewhere = new Set<string>()
+  if (facets && typeof facets === 'object' && !Array.isArray(facets)) {
+    for (const [holder, facet] of Object.entries(
+      facets as Record<string, unknown>,
+    )) {
+      if (holder === groupId) continue
+      const named =
+        facet && typeof facet === 'object' && !Array.isArray(facet)
+          ? (facet as Record<string, unknown>)['companyId']
+          : undefined
+      if (typeof named === 'string' && named) heldElsewhere.add(named)
+    }
+  }
+  const mirror = document[CONTACT_COMPANY_IDS_FIELD]
+  return {
+    companyId: readContactFacet(document, groupId).companyId ?? null,
+    companyIds: Array.isArray(mirror)
+      ? mirror.filter((id): id is string => typeof id === 'string' && !!id)
+      : [],
+    heldElsewhere: [...heldElsewhere],
+  }
+}
+
+/**
+ * How the mirror changes. Three shapes because Firestore takes ONE transform
+ * per field per write: an `arrayUnion` and an `arrayRemove` on the same
+ * field cannot share an update, so a move rewrites the array whole.
+ */
+export type ContactCompanyMirrorChange =
+  | { op: 'union'; companyId: string }
+  | { op: 'remove'; companyId: string }
+  | { op: 'set'; companyIds: string[] }
+
+export interface ContactCompanyLinkPlan {
+  /** The facet's new value: the id, or `null` meaning delete the field. */
+  companyId: string | null
+  /** What happens to the mirror, or `null` when it already carries the right ids. */
+  mirror: ContactCompanyMirrorChange | null
+  /**
+   * Per company, how its contacts count moves. A company enters the list
+   * only when the mirror actually gains or loses it, so a link some other
+   * holder already made is not counted twice and a mirror that never carried
+   * an id is not decremented for it.
+   */
+  counts: Array<{ companyId: string; delta: 1 | -1 }>
+}
+
+/**
+ * What linking a contact to a company FOR ONE HOLDER changes — or unlinking
+ * them, with `null`. `null` when the document already says what was asked.
+ *
+ * Three cases, and the mirror is handled differently in each because it is
+ * shared across holders while the facet is not:
+ *
+ *  - A first link `union`s the id in, which is safe against a concurrent
+ *    writer adding another holder's id.
+ *  - A MOVE from one company to another rewrites the mirror as a whole. The
+ *    old id is dropped only if no other holder's facet still names it.
+ *  - An unlink `remove`s the old id, on the same condition, and leaves the
+ *    mirror alone when another holder still needs it there.
+ *
+ * The counts follow the mirror, not the facet: the company's figure is "how
+ * many contacts name me in the mirror", and that is the quantity the
+ * company page's live aggregate measures.
+ */
+export function planContactCompanyLink(
+  state: ContactCompanyLinkState,
+  companyId: string | null,
+): ContactCompanyLinkPlan | null {
+  const previous = state.companyId
+  if (previous === companyId) return null
+  const mirror = new Set(state.companyIds)
+  const previousLeaves =
+    previous !== null && !state.heldElsewhere.includes(previous)
+  const counts: ContactCompanyLinkPlan['counts'] = []
+  let change: ContactCompanyMirrorChange | null = null
+  if (companyId && !previous) {
+    change = { op: 'union', companyId }
+    if (!mirror.has(companyId)) counts.push({ companyId, delta: 1 })
+  } else if (companyId && previous) {
+    const kept = state.companyIds.filter(
+      (id) => id !== previous || !previousLeaves,
+    )
+    change = { op: 'set', companyIds: [...new Set([...kept, companyId])] }
+    if (previousLeaves && mirror.has(previous)) {
+      counts.push({ companyId: previous, delta: -1 })
+    }
+    if (!mirror.has(companyId)) counts.push({ companyId, delta: 1 })
+  } else if (previous && previousLeaves) {
+    change = { op: 'remove', companyId: previous }
+    if (mirror.has(previous)) counts.push({ companyId: previous, delta: -1 })
+  }
+  return { companyId, mirror: change, counts }
+}
+
+/*==========================================
+ * THE CRM's ORGANIZATION SETTINGS (AGL-2613).
+ *
+ * One map under `crm` on the org document, so the CRM → Settings section
+ * can grow a key per setting without a rules change each time: the org
+ * document's client branch is a deny-list, and `crm` is declared
+ * client-writable in `ORG_CLIENT_WRITABLE_FIELDS` with its reason.
+ *=========================================*/
+
+/** The org-document key the CRM's settings live under. */
+export const ORG_CRM_SETTINGS_FIELD = 'crm'
+
+/** The dotted path an `update()` writes the auto-create switch by. */
+export const CRM_AUTO_CREATE_COMPANIES_PATH = `${ORG_CRM_SETTINGS_FIELD}.autoCreateCompanies`
+
+/**
+ * Whether a capture from a work email domain no visible company carries
+ * should CREATE the company. Off unless the org document says `true`: a
+ * company minted from every domain that ever submitted a form is a list
+ * nobody asked for, so the default is the quiet one.
+ *
+ * Read off the raw document rather than a typed field, because the capture
+ * door holds a `Partial<AglynOrganization>` and the console a
+ * `Partial<AglynOrgBilling>`, and one reader has to answer both.
+ */
+export function orgAutoCreatesCompanies(
+  orgDocument: Record<string, unknown> | null | undefined,
+): boolean {
+  const settings = (orgDocument ?? {})[ORG_CRM_SETTINGS_FIELD]
+  return Boolean(
+    settings &&
+      typeof settings === 'object' &&
+      !Array.isArray(settings) &&
+      (settings as Record<string, unknown>)['autoCreateCompanies'] === true,
+  )
 }
 
 /**

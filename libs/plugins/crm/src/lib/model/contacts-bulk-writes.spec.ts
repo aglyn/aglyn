@@ -26,12 +26,14 @@
  */
 
 import {
+  companyCountDeltas,
   CONTACT_BULK_WRITE_CHUNK,
   CONTACT_TAGS_CAP,
   normalizeBulkTag,
   planAddTag,
   planDetach,
   planRemoveTag,
+  planSetCompany,
   planSetFacetField,
   runContactBulkWrites,
   type ContactBulkWrite,
@@ -45,6 +47,8 @@ jest.mock('firebase/firestore', () => ({
   arrayUnion: (...values: unknown[]) => ({ op: 'union', values }),
   arrayRemove: (...values: unknown[]) => ({ op: 'remove', values }),
   deleteField: () => ({ op: 'delete' }),
+  increment: (by: number) => ({ op: 'increment', by }),
+  serverTimestamp: () => ({ op: 'serverTimestamp' }),
 }))
 
 const NOW = Date.UTC(2026, 8, 5)
@@ -121,6 +125,90 @@ describe('setting the owner or the stage', () => {
     // value nobody owns and no filter names.
     const plan = planSetFacetField(rows, GROUP, 'ownerUid', null, NOW)
     expect((plan.writes[0] as any).data['facets.group-1.ownerUid']).toEqual({ op: 'delete' })
+  })
+})
+
+/**
+ * Filing the selection under one company (AGL-2613): the record page's link
+ * write per row, with the count deltas riding as numbers so a batch can sum
+ * them and a per-row retry can apply one row's share.
+ */
+describe('setting the company', () => {
+  const ACME = { id: 'c-acme', name: 'Acme', domain: 'acme.com' }
+  const linked = [
+    {
+      $id: 'c1',
+      email: 'a@example.com',
+      companyLink: { companyId: null, companyIds: [], heldElsewhere: [] },
+    },
+    {
+      $id: 'c2',
+      email: 'b@example.com',
+      companyLink: { companyId: 'c-acme', companyIds: ['c-acme'], heldElsewhere: [] },
+    },
+    {
+      $id: 'c3',
+      email: 'c@example.com',
+      companyLink: { companyId: 'c-globex', companyIds: ['c-globex'], heldElsewhere: [] },
+    },
+  ]
+
+  it('links each row through the facet and the mirror, echoing the name, with its count delta', () => {
+    const plan = planSetCompany(linked, GROUP, ACME, NOW)
+    // c2 is already at Acme and is left alone, silently.
+    expect(plan.writes.map((write) => write.id)).toEqual(['c1', 'c3'])
+    expect(plan.skipped).toEqual([])
+    expect(plan.writes[0]).toEqual({
+      id: 'c1',
+      email: 'a@example.com',
+      kind: 'update',
+      data: {
+        'facets.group-1.companyId': 'c-acme',
+        'facets.group-1.companyName': 'Acme',
+        companyName: 'Acme',
+        companyIds: { op: 'union', values: ['c-acme'] },
+        updatedAt: new Date(NOW),
+      },
+      companyCounts: [{ companyId: 'c-acme', delta: 1 }],
+    })
+    // c3 MOVES: the old company loses one and the new one gains one.
+    expect((plan.writes[1] as any).companyCounts).toEqual([
+      { companyId: 'c-globex', delta: -1 },
+      { companyId: 'c-acme', delta: 1 },
+    ])
+  })
+
+  it('unlinks with an empty choice, clearing the name', () => {
+    const plan = planSetCompany(linked, GROUP, null, NOW)
+    expect(plan.writes.map((write) => write.id)).toEqual(['c2', 'c3'])
+    expect((plan.writes[0] as any).data).toMatchObject({
+      'facets.group-1.companyId': { op: 'delete' },
+      companyName: { op: 'delete' },
+      companyIds: { op: 'remove', values: ['c-acme'] },
+    })
+  })
+
+  it('names a row whose link state the table could not project, rather than guessing', () => {
+    const plan = planSetCompany([{ $id: 'c9', email: 'z@example.com' }], GROUP, ACME, NOW)
+    expect(plan.writes).toEqual([])
+    expect(plan.skipped).toEqual([
+      { email: 'z@example.com', reason: 'its company link could not be read' },
+    ])
+  })
+
+  it('sums the deltas per company across a batch, dropping the ones that cancel', () => {
+    const plan = planSetCompany(linked, GROUP, ACME, NOW)
+    expect([...companyCountDeltas(plan.writes)]).toEqual([
+      ['c-acme', 2],
+      ['c-globex', -1],
+    ])
+    // One row moved to Acme and another moved away: Acme's count is untouched.
+    const cancelling: ContactBulkWrite[] = [
+      { id: 'x', email: 'x', kind: 'update', data: {}, companyCounts: [{ companyId: 'c-acme', delta: 1 }] },
+      { id: 'y', email: 'y', kind: 'update', data: {}, companyCounts: [{ companyId: 'c-acme', delta: -1 }] },
+      { id: 'z', email: 'z', kind: 'delete' },
+    ]
+    expect(companyCountDeltas(cancelling).size).toBe(0)
   })
 })
 

@@ -147,6 +147,23 @@ function collectionRef(path: string): any {
 
 const fakeFirestore = {
   collection: (name: string) => collectionRef(name),
+  /**
+   * A batch as the link writer commits one: the queued writes applied in
+   * order on `commit`, so a contact link and its company count land
+   * together or not at all.
+   */
+  batch: () => {
+    const queued: Array<() => Promise<void>> = []
+    return {
+      set: (ref: any, value: Record<string, any>) =>
+        void queued.push(() => ref.set(value)),
+      update: (ref: any, value: Record<string, any>) =>
+        void queued.push(() => ref.update(value)),
+      commit: async () => {
+        for (const write of queued) await write()
+      },
+    }
+  },
 }
 
 const all = (collectionPath: string): Array<Record<string, any>> =>
@@ -238,6 +255,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   orgDataCollectionForHost: async (_hostId: string, name: string) =>
     collectionRef(`orgs/${ORG}/${name}`),
   upsertHostContact: (...args: unknown[]) => (mockUpsertHostContact as any)(...args),
+  // The real link writer (AGL-2613): the facet, the mirror and the count as
+  // one commit are what the company assertions below read back.
+  ...jest.requireActual(
+    '../../../../../tenant/data/admin/src/lib/server/contact-company-link',
+  ),
 }))
 
 // ---------------------------------------------------------------------------
@@ -415,9 +437,11 @@ describe('converting a lead', () => {
     })
 
     const [contact] = all(`orgs/${ORG}/contacts`)
-    // Both shapes of the association, in step.
+    // Both shapes of the association, in step — and the company counts the
+    // person it just gained (AGL-2613).
     expect(contact.companyIds).toEqual([company.id])
     expect(contact.facets[HOST].companyId).toBe(company.id)
+    expect(company.contactsCount).toBe(1)
 
     const pipelines = all(`orgs/${ORG}/pipelines`)
     expect(pipelines).toHaveLength(1)
@@ -511,6 +535,7 @@ describe('converting a lead', () => {
     expect(linked.status).toBe(200)
     expect(linked.body.companyId).toBe('co-1')
     expect(all(`orgs/${ORG}/contacts`)).toHaveLength(1)
+    expect(docs.get(`orgs/${ORG}/companies/co-1`)?.contactsCount).toBe(1)
   })
 
   it('opens the deal in the existing default pipeline, at the stage asked for', async () => {

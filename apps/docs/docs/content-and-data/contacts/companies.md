@@ -15,10 +15,17 @@ people at it. The Companies section lives in the CRM hub at
 ## The companies list
 
 The list shows every company your site may see, newest activity first, with
-its domain, its owner and when it was last changed. Open the column filter on
-**Company** to find one by name — the search reaches every company, not only
-the page on screen — and filter **Owner** to see one teammate's accounts.
-Clicking a row opens the company's page.
+its domain, how many **contacts** are linked to it, its owner and when it was
+last changed. Open the column filter on **Company** to find one by name — the
+search reaches every company, not only the page on screen — and filter
+**Owner** to see one teammate's accounts. Clicking a row opens the company's
+page.
+
+The **Contacts** column is a count kept on the company and moved with every
+link and unlink, so a page of companies costs no lookup per row. A company
+linked before the count existed can read lower than its page shows; the
+company's own page counts live, and is the figure to trust when the two
+differ.
 
 ## Create a company
 
@@ -49,10 +56,47 @@ among the contacts your site may see and links them. A contact belongs to one
 company at a time from your site's point of view; linking them to a second
 company moves them.
 
+The link can be made from either side. On a contact's own page the
+**Company** field of the Properties card is a picker over the companies your
+site may see — type to search by name or domain, choose one, or type a name
+nobody has filed yet and choose **Create** to make the company on the spot.
+Clearing the field unlinks the person. A contact whose record carries a
+company **name** but no link — from an import, or from before the picker
+existed — is offered that name as the company to link or create. The
+contacts table's [bulk bar](./bulk-actions.md) has **Set company** for many
+people at once.
+
 A [lead](./leads.md#converting-a-lead) converted with a company email address is
 offered the company whose domain matches it, and a [CSV import](./import.md)
 that names a company links each row to it — matching an existing company by
 name, or creating one.
+
+## Linked on capture
+
+A contact created by a capture — a form, a sign-up, an order, a booking —
+with a work email address is linked to the company at that address's domain
+on its own, the moment the contact is created. `jane@acme.com` is filed
+under the company whose **Domain** is `acme.com`, which is why the domain is
+worth filling in on every company.
+
+Three things have to be true:
+
+- **Exactly one** company visible to the capturing site carries the domain.
+  Two companies at one domain is an ambiguity the capture does not resolve
+  by picking one; the contact waits for a person.
+- The contact is **new** to the workspace. A repeat visit by somebody the
+  address book already holds is another interaction, not a new person, and
+  is not re-filed.
+- The capture did not **already name** a company — a contact added by hand
+  with a company picked, or an imported row with a company column, keeps the
+  company you chose.
+
+Addresses at a public mailbox (Gmail, Outlook, iCloud and the like) never
+link. When no company carries the domain, nothing is created unless the
+workspace has turned on **Create companies from work email domains** in
+[CRM settings](./settings.md#create-companies-from-work-email-domains), in
+which case the company is created from the domain and the contact linked to
+it.
 
 ## Deleting a company
 
@@ -73,6 +117,7 @@ to a reader who could not open the contacts at it.
 
 - [CRM overview](./overview.md)
 - [The contact record](./contact-record.md) — the people a company is made of
+- [CRM settings](./settings.md) — whether a capture creates the company it could not find
 - [Deals pipeline](./deals.md) — every deal names the company it is with
 - [Email campaigns](../../marketing-and-automation/email-campaigns/overview.md) — audiences built from a rule can target a contact's company
 - [REST API — companies](/api/resources/companies)

@@ -17,11 +17,18 @@
 
 import { consentGroupForHost, soloConsentGroup } from './consent-groups'
 import type { ContactInteraction } from './contacts'
+import { ORG_CLIENT_WRITABLE_FIELDS } from '../foundation'
 import {
   activityKindHasOutcome,
   activityTimeLabel,
   companyDomainForEmail,
+  companyNameForDomain,
   CONTACT_LIFECYCLE_STAGES,
+  CRM_AUTO_CREATE_COMPANIES_PATH,
+  ORG_CRM_SETTINGS_FIELD,
+  orgAutoCreatesCompanies,
+  planContactCompanyLink,
+  readContactCompanyLink,
   CONTACT_LIFECYCLE_STAGE_LABELS,
   advanceContactLifecycleStage,
   contactLifecycleStageAfterPurchase,
@@ -56,6 +63,140 @@ describe('CRM collections', () => {
       'crmActivities',
       'contactFields',
     ])
+  })
+})
+
+/**
+ * The one planner every writer of the contact–company link asks
+ * (AGL-2613): which id the facet takes, what the shared mirror becomes, and
+ * which companies' counts move. The properties a second copy gets wrong are
+ * the ones pinned here — an id another holder still names stays in the
+ * mirror, and a count moves only when the mirror actually changes.
+ */
+describe('planContactCompanyLink', () => {
+  const state = (
+    companyId: string | null,
+    companyIds: string[] = companyId ? [companyId] : [],
+    heldElsewhere: string[] = [],
+  ) => ({ companyId, companyIds, heldElsewhere })
+
+  it('is a no-op when the facet already says what was asked', () => {
+    expect(planContactCompanyLink(state('c-acme'), 'c-acme')).toBeNull()
+    expect(planContactCompanyLink(state(null), null)).toBeNull()
+  })
+
+  it('links a first company by union, and counts it once', () => {
+    expect(planContactCompanyLink(state(null), 'c-acme')).toEqual({
+      companyId: 'c-acme',
+      mirror: { op: 'union', companyId: 'c-acme' },
+      counts: [{ companyId: 'c-acme', delta: 1 }],
+    })
+  })
+
+  it('does not count a company another holder already put in the mirror', () => {
+    // Site g-2 linked Jane to Acme; g-1 linking her too is one more facet,
+    // not one more contact at Acme.
+    expect(
+      planContactCompanyLink(state(null, ['c-acme'], ['c-acme']), 'c-acme'),
+    ).toEqual({
+      companyId: 'c-acme',
+      mirror: { op: 'union', companyId: 'c-acme' },
+      counts: [],
+    })
+  })
+
+  it('moves between companies by rewriting the mirror, and moves both counts', () => {
+    expect(planContactCompanyLink(state('c-acme'), 'c-globex')).toEqual({
+      companyId: 'c-globex',
+      mirror: { op: 'set', companyIds: ['c-globex'] },
+      counts: [
+        { companyId: 'c-acme', delta: -1 },
+        { companyId: 'c-globex', delta: 1 },
+      ],
+    })
+  })
+
+  it('keeps an old id in the mirror, uncounted, while another holder still names it', () => {
+    expect(
+      planContactCompanyLink(state('c-acme', ['c-acme'], ['c-acme']), 'c-globex'),
+    ).toEqual({
+      companyId: 'c-globex',
+      mirror: { op: 'set', companyIds: ['c-acme', 'c-globex'] },
+      counts: [{ companyId: 'c-globex', delta: 1 }],
+    })
+  })
+
+  it('unlinks with a remove and a decrement, unless held elsewhere', () => {
+    expect(planContactCompanyLink(state('c-acme'), null)).toEqual({
+      companyId: null,
+      mirror: { op: 'remove', companyId: 'c-acme' },
+      counts: [{ companyId: 'c-acme', delta: -1 }],
+    })
+    expect(planContactCompanyLink(state('c-acme', ['c-acme'], ['c-acme']), null)).toEqual({
+      companyId: null,
+      mirror: null,
+      counts: [],
+    })
+  })
+
+  it('never decrements a company the mirror never carried', () => {
+    // A facet linked before the mirror existed: the count never went up for
+    // it, so letting go must not take it below what it is.
+    expect(planContactCompanyLink(state('c-acme', []), null)).toEqual({
+      companyId: null,
+      mirror: { op: 'remove', companyId: 'c-acme' },
+      counts: [],
+    })
+  })
+})
+
+describe('readContactCompanyLink', () => {
+  it('reads this holder’s link, the mirror, and the ids other holders name', () => {
+    const contact: Record<string, unknown> = {
+      companyIds: ['c-acme', 'c-globex', 7],
+      facets: {
+        'g-1': { sources: {}, interactions: [], companyId: 'c-acme' },
+        'g-2': { sources: {}, interactions: [], companyId: 'c-globex' },
+        'g-3': { sources: {}, interactions: [] },
+      },
+    }
+    expect(readContactCompanyLink(contact, 'g-1')).toEqual({
+      companyId: 'c-acme',
+      companyIds: ['c-acme', 'c-globex'],
+      heldElsewhere: ['c-globex'],
+    })
+    expect(readContactCompanyLink({}, 'g-1')).toEqual({
+      companyId: null,
+      companyIds: [],
+      heldElsewhere: [],
+    })
+  })
+})
+
+describe('companyNameForDomain', () => {
+  it('capitalizes the first label — the starting name a minted company gets', () => {
+    expect(companyNameForDomain('acme.com')).toBe('Acme')
+    expect(companyNameForDomain('initech.co.uk')).toBe('Initech')
+  })
+})
+
+/**
+ * The CRM's org setting (AGL-2613): read off the raw document, off by
+ * default, and declared client-writable so the coverage guard admits the
+ * dotted-path write the settings section makes.
+ */
+describe('crm.autoCreateCompanies', () => {
+  it('is off unless the org document says true', () => {
+    expect(orgAutoCreatesCompanies(null)).toBe(false)
+    expect(orgAutoCreatesCompanies({})).toBe(false)
+    expect(orgAutoCreatesCompanies({ crm: {} })).toBe(false)
+    expect(orgAutoCreatesCompanies({ crm: { autoCreateCompanies: 'yes' } })).toBe(false)
+    expect(orgAutoCreatesCompanies({ crm: { autoCreateCompanies: true } })).toBe(true)
+  })
+
+  it('is written by the path the reader reads, on a key the client may write', () => {
+    expect(CRM_AUTO_CREATE_COMPANIES_PATH).toBe(`${ORG_CRM_SETTINGS_FIELD}.autoCreateCompanies`)
+    expect(Object.keys(ORG_CLIENT_WRITABLE_FIELDS)).toContain(ORG_CRM_SETTINGS_FIELD)
   })
 })
 

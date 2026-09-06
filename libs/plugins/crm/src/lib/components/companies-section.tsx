@@ -196,6 +196,30 @@ export function CompaniesSection(props: CompaniesSectionProps) {
           ),
       },
       {
+        field: 'contactsCount',
+        headerName: 'Contacts',
+        width: 110,
+        align: 'right',
+        headerAlign: 'right',
+        /*
+         * The denormalized count every link moves (AGL-2613) — a stored
+         * number, so a page of companies costs no read per row. Absent on a
+         * company nobody has linked since the counter existed, which reads
+         * as zero; the company's own page takes the live aggregate.
+         */
+        filterable: false,
+        sortable: false,
+        valueGetter: (_value, row: CompanyRow) => Number(row.contactsCount ?? 0),
+        renderCell: ({ row }: { row: CompanyRow }) => (
+          <Typography
+            variant="body2"
+            color={row.contactsCount ? 'text.primary' : 'text.secondary'}
+          >
+            {Number(row.contactsCount ?? 0).toLocaleString()}
+          </Typography>
+        ),
+      },
+      {
         field: 'ownerUid',
         headerName: 'Owner',
         flex: 1,

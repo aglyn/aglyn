@@ -21,6 +21,7 @@ import {
   type UpsertHostContactOptions,
   type UpsertHostContactVerdict,
 } from '@aglyn/tenant-data-admin'
+import { associateCompanyByDomain } from './associate-company-by-domain'
 import { emitHostEvent } from './emit-host-event'
 import type { HostEventPayload } from './run-event-workflows'
 
@@ -52,6 +53,17 @@ import type { HostEventPayload } from './run-event-workflows'
  * Fire-and-forget in the same sense the capture itself is: the hook's
  * failure is caught inside `upsertHostContact`, so a runner that throws
  * costs the door nothing, and this function never rejects.
+ *
+ * ## The company, before the announcement (AGL-2613)
+ *
+ * A new person with a work email address is linked to the company at that
+ * domain here, in the same hook, BEFORE `contactCreated` goes out — so an
+ * automation that reads the new contact finds them already filed, rather
+ * than racing a link that lands a moment later. Only when the door did not
+ * name a company itself: the console's drawer and an import row that
+ * carried one have written it into the facet, and the capture must not
+ * second-guess a person's choice with a domain match. The association never
+ * rejects, and its own catch keeps a failed lookup from costing the event.
  */
 export async function captureHostContact(
   options: Omit<UpsertHostContactOptions, 'onCreated'>,
@@ -59,6 +71,11 @@ export async function captureHostContact(
   return upsertHostContact({
     ...options,
     onCreated: async (created) => {
+      if (!options.facet?.companyId) {
+        await associateCompanyByDomain(created).catch((error: unknown) => {
+          console.error('captureHostContact company association failed', error)
+        })
+      }
       await emitHostEvent(
         created.hostId,
         'contactCreated',
