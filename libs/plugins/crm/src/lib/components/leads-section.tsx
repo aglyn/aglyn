@@ -22,6 +22,9 @@ import { mdiAccountArrowRight, mdiAccountCancelOutline, mdiAccountTieOutline } f
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { useCrmSavedView } from '../hooks/use-crm-saved-view'
+import { useCrmViewGrid } from '../hooks/use-crm-view-grid'
+import CrmViewsControl from './crm-views-control'
 import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
@@ -135,7 +138,31 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
   const truncated = leadDocs.length > LEADS_WINDOW
   const window = useMemo(() => leadDocs.slice(0, LEADS_WINDOW), [leadDocs])
 
-  const [filter, setFilter] = useState<LeadFilter>('open')
+  /*
+   * The `Show` filter is the saved VIEW'S (AGL-2617): a saved view of leads
+   * holds the status beside the columns and the sort, and the select below
+   * writes into it. Unset reads as `open`, which is what the section opened
+   * on before views existed and the one reading a query cannot express.
+   */
+  const views = useCrmSavedView({
+    section: 'leads',
+    hostId,
+    org: props.org,
+    basePath: basePath ?? '',
+  })
+  const filter: LeadFilter = useMemo(() => {
+    const value = views.state.filters.find((clause) => clause.field === 'status')?.value
+    return (LEAD_FILTERS as readonly string[]).includes(value ?? '')
+      ? (value as LeadFilter)
+      : 'open'
+  }, [views.state.filters])
+  const setFilter = useCallback(
+    (next: LeadFilter) =>
+      views.setFilters(
+        next === 'open' ? [] : [{ field: 'status', op: 'equals', value: next }],
+      ),
+    [views.setFilters],
+  )
   const rows = useMemo(
     () => window.filter((lead) => leadMatchesFilter(lead, filter)),
     [window, filter],
@@ -290,6 +317,8 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
     ],
     [roster, routes, writeLead],
   )
+  /* The column and sort models are the view's (AGL-2617). */
+  const grid = useCrmViewGrid(views, columns)
 
   return (
     <>
@@ -297,20 +326,24 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         header={'Leads'}
         help={Aglyn.pluginDocsHelp('contacts', { anchor: '#whats-in-the-crm-area' })}
         actions={
-          <FormControl size="small" sx={{ minWidth: 160 }}>
-            <InputLabel>{'Show'}</InputLabel>
-            <Select
-              label="Show"
-              value={filter}
-              onChange={(event) => setFilter(event.target.value as LeadFilter)}
-            >
-              {LEAD_FILTERS.map((option) => (
-                <MenuItem key={option} value={option}>
-                  {LEAD_FILTER_LABELS[option]}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            {/* The saved view this list is showing, beside the status it narrows to (AGL-2617). */}
+            <CrmViewsControl controller={views} allLabel="All leads" />
+            <FormControl size="small" sx={{ minWidth: 160 }}>
+              <InputLabel>{'Show'}</InputLabel>
+              <Select
+                label="Show"
+                value={filter}
+                onChange={(event) => setFilter(event.target.value as LeadFilter)}
+              >
+                {LEAD_FILTERS.map((option) => (
+                  <MenuItem key={option} value={option}>
+                    {LEAD_FILTER_LABELS[option]}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Stack>
         }
         contentGutterX
         contentGutterY
@@ -335,6 +368,11 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
                 columns={columns}
                 loading={status === 'loading'}
                 onOpen={(id) => router.push(routes.lead(id))}
+                // Columns and sort are the view's, controlled (AGL-2617).
+                columnVisibilityModel={grid.columnVisibilityModel}
+                onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}
+                sortModel={grid.sortModel}
+                onSortModelChange={grid.onSortModelChange}
                 // Paged by the footer below, so the grid must not also slice.
                 hideFooter
               />
