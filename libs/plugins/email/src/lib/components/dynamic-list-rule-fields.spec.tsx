@@ -48,6 +48,7 @@ import {
 const FULL_RULE: DynamicListRule = {
   sources: ['contacts', 'formSubmissions'],
   segmentId: 'seg_1',
+  viewId: 'view_1',
   tags: ['vip', 'wholesale'],
   captureSources: ['form', 'order'],
   formNames: ['Contact us'],
@@ -82,6 +83,7 @@ const FULL_RULE: DynamicListRule = {
 const RULE_FIELDS = [
   'sources',
   'segmentId',
+  'viewId',
   'tags',
   'captureSources',
   'formNames',
@@ -125,7 +127,7 @@ describe('the rule editor reaches every field of the rule', () => {
     for (const field of ENGAGEMENT_FIELDS) {
       expect(FULL_RULE.engagement?.[field]).toBeDefined()
     }
-    expect(RULE_FIELDS).toHaveLength(16)
+    expect(RULE_FIELDS).toHaveLength(17)
     expect(BEHAVIOR_FIELDS).toHaveLength(4)
     expect(ENGAGEMENT_FIELDS).toHaveLength(4)
   })

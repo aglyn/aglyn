@@ -51,6 +51,10 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 jest.mock('../hooks/use-org-contact-segments', () => ({
   useOrgContactSegments: () => [],
 }))
+// The saved-view picker beside the segment picker (AGL-2617); none here.
+jest.mock('../hooks/use-org-crm-views', () => ({
+  useOrgCrmViews: () => [],
+}))
 jest.mock('../hooks/use-org-lists', () => ({ useOrgLists: () => [] }))
 jest.mock('../hooks/use-org-contact-fields', () => ({
   useOrgContactFields: () => ({
