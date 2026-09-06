@@ -65,6 +65,28 @@ export const CONTACT_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
     containsOrderBy: 'updatedAt',
     operators: ['contains', 'isNotEmpty'],
   },
+  {
+    /*
+     * The forms a person came in through — the top-level `formIds` mirror
+     * of the interactions' `formId` (AGL-2612), matched whole and as typed
+     * because a form id is minted with mixed case. The form's own page links
+     * here with its id; nobody types one. Ordered by the list's own
+     * timestamp for the reason `tags` is, served by the
+     * `(formIds CONTAINS, updatedAt DESC)` index.
+     *
+     * ⚠️ An `array-contains` on the mirror cannot share a query with the
+     * `visibleTo` scope clause, so the list drops that clause for this one
+     * filter and the rules admit the read to an org-wide member only — the
+     * caveat the company contacts card states, stated again on the list.
+     */
+    column: 'formIds',
+    kind: 'text',
+    path: 'formIds',
+    tokensPath: 'formIds',
+    verbatimTokens: true,
+    containsOrderBy: 'updatedAt',
+    operators: ['contains'],
+  },
   { column: 'hostId', kind: 'exact', path: 'hostId', presence: 'always' },
   { column: 'ordersCount', kind: 'number', path: 'ordersCount' },
   { column: 'ltvCents', kind: 'number', path: 'ltvCents' },
@@ -74,6 +96,7 @@ export const CONTACT_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
 
 /** Headers for contact fields that are filterable without being columns. */
 export const CONTACT_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  formIds: 'Form ID',
   hostId: 'Site ID',
   ordersCount: 'Orders',
   ltvCents: 'Lifetime value (cents)',

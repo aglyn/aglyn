@@ -83,6 +83,7 @@ describe('captureHostContact', () => {
       name: 'Ada Lovelace',
       source: 'form',
       campaignIds: ['spring-2026', 'launch'],
+      lifecycleStage: 'lead',
     }
 
     await capture()
@@ -94,6 +95,7 @@ describe('captureHostContact', () => {
       name: 'Ada Lovelace',
       source: 'form',
       hostId: 'site-1',
+      lifecycleStage: 'lead',
       campaignIds: 'spring-2026,launch',
     })
   })
@@ -105,7 +107,7 @@ describe('captureHostContact', () => {
 })
 
 describe('contactCreatedPayload', () => {
-  it('is flat scalars: name always present, campaigns only when there are some', () => {
+  it('is flat scalars: name and stage always present, campaigns only when there are some', () => {
     const payload = contactCreatedPayload({
       contactId: 'c1',
       hostId: 'site-1',
@@ -119,6 +121,7 @@ describe('contactCreatedPayload', () => {
       name: '',
       source: 'booking',
       hostId: 'site-1',
+      lifecycleStage: '',
     })
     for (const value of Object.values(payload)) {
       expect(['string', 'number', 'boolean']).toContain(typeof value)
@@ -149,6 +152,28 @@ describe('every server door captures through the wrapper', () => {
     return out
   }
 
+  /**
+   * The argument object of every `captureHostContact({ … })` call, by
+   * brace balance — a door is one call, and a regex over a whole file could
+   * not tell which call carried what.
+   */
+  const captureCalls = (source: string): string[] => {
+    const calls: string[] = []
+    const marker = /\bcaptureHostContact\(\{/g
+    let match: RegExpExecArray | null
+    while ((match = marker.exec(source))) {
+      let depth = 0
+      let index = match.index + match[0].length - 1
+      for (; index < source.length; index += 1) {
+        if (source[index] === '{') depth += 1
+        else if (source[index] === '}') depth -= 1
+        if (depth === 0) break
+      }
+      calls.push(source.slice(match.index, index + 1))
+    }
+    return calls
+  }
+
   it('finds no door calling upsertHostContact directly', () => {
     const files = ROOTS.flatMap((root) => sourceFiles(join(REPO_ROOT, root)))
     const direct: string[] = []
@@ -162,5 +187,31 @@ describe('every server door captures through the wrapper', () => {
     // coverage of nothing.
     expect(throughWrapper).toBeGreaterThan(0)
     expect(direct.map((file) => file.slice(REPO_ROOT.length + 1))).toEqual([])
+  })
+
+  /**
+   * Every door names a stage (AGL-2612): the earliest one that describes
+   * what happened (`initialLifecycleStage`), or the caller's own on the
+   * facet (`lifecycleStage`, for a manual create, an import or a lead
+   * conversion, which carry whatever they were given). A call that names
+   * neither is a door filing people at no stage at all — the Contacts list
+   * every row blank, the funnel report empty — with nothing on screen to
+   * say which surface did it.
+   */
+  it('finds no door that names no stage', () => {
+    const files = ROOTS.flatMap((root) => sourceFiles(join(REPO_ROOT, root)))
+    const unstaged: string[] = []
+    let doors = 0
+    for (const file of files) {
+      for (const call of captureCalls(readFileSync(file, 'utf8'))) {
+        doors += 1
+        if (!/\b(initialLifecycleStage|lifecycleStage)\b/.test(call)) {
+          unstaged.push(file.slice(REPO_ROOT.length + 1))
+        }
+      }
+    }
+    // The same control as above: a walk that saw no door proves nothing.
+    expect(doors).toBeGreaterThan(10)
+    expect(unstaged).toEqual([])
   })
 })

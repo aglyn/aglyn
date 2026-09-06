@@ -330,6 +330,9 @@ export const newsletterHandler: PluginApiHandler = async (req, res) => {
       hostId,
       email,
       source: 'newsletter',
+      // The stage the name is for (AGL-2612): somebody who asked to hear
+      // from the site and nothing more yet.
+      initialLifecycleStage: 'subscriber',
       marketingConsent: true,
       interaction: {
         refId: `newsletter-${now}`,

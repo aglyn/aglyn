@@ -39,11 +39,45 @@ export function crmRoutes(basePath: string) {
   return {
     section,
     contact: (id: string) => `${section('contacts')}/${encodeURIComponent(id)}`,
+    /**
+     * The Contacts list narrowed to the people one form captured (AGL-2612):
+     * source `form`, and the `formIds` filter on the form's id. The form's
+     * own page links here; the list reads the two keys back through
+     * `contactsListSeed`, which is the other half of this address.
+     */
+    contactsByForm: (formId: string) =>
+      `${section('contacts')}?${new URLSearchParams({
+        [CONTACTS_LIST_SOURCE_PARAM]: 'form',
+        [CONTACTS_LIST_FORM_PARAM]: formId,
+      }).toString()}`,
+    /**
+     * The Contacts list asked to OPEN the one person with this address
+     * (AGL-2612). The list is the lookup: a contact's id is minted at
+     * capture and nothing outside the CRM holds it, so a surface that has
+     * only an email — an Inbox submission row — links here, the list
+     * filters on the address (a whole-collection query, under the scope
+     * the viewer may read) and moves straight on to the record when exactly
+     * one matches. No match leaves the filtered list on screen, which is
+     * the honest answer for a submission whose contact the band dropped.
+     */
+    contactByEmail: (email: string) =>
+      `${section('contacts')}?${new URLSearchParams({
+        [CONTACTS_LIST_EMAIL_PARAM]: email,
+      }).toString()}`,
     lead: (id: string) => `${section('leads')}/${encodeURIComponent(id)}`,
     company: (id: string) => `${section('companies')}/${encodeURIComponent(id)}`,
     deal: (id: string) => `${section('deals')}/${encodeURIComponent(id)}`,
   }
 }
+
+/**
+ * The query keys the Contacts list reads on arrival — written by the two
+ * builders above and parsed by `contactsListSeed`, named once so neither
+ * side can misspell the other.
+ */
+export const CONTACTS_LIST_SOURCE_PARAM = 'source'
+export const CONTACTS_LIST_FORM_PARAM = 'formId'
+export const CONTACTS_LIST_EMAIL_PARAM = 'email'
 
 export type CrmRoutes = ReturnType<typeof crmRoutes>
 

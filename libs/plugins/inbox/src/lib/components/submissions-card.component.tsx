@@ -22,8 +22,18 @@ import { FORMS_MAX_PER_HOST, pluginDocsHelp } from '@aglyn/aglyn'
 // plugin's SITE half, so a console card named there ships to every published
 // page. The component path reaches the same module without crossing it.
 import { default as ConversionAttribution } from '@aglyn/plugins-marketing/components/conversion-attribution.component'
-import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+// The CRM's route builder by its leaf path, for the reason above: the barrel
+// is the plugin's site entry point.
+import { crmRoutes } from '@aglyn/plugins-crm/model/crm-routes'
+import {
+  mdiAccountArrowRight,
+  mdiDeleteOutline,
+  mdiEmailOpenOutline,
+  mdiEmailOutline,
+} from '@aglyn/shared-data-mdi'
+import { CardDisplay, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
@@ -70,6 +80,7 @@ import {
 } from '../model/submission-presenter'
 import SubmissionListAssignment from './submission-list-assignment.component'
 import SubmissionReply from './submission-reply.component'
+import { useCrmHubPath } from './use-crm-hub-path'
 
 /**
  * The Submissions section of the Inbox (AGL-77/104/109 → AGL-395): the form
@@ -108,6 +119,14 @@ export function SubmissionsCard({ hostId, formId }: SubmissionsCardProps) {
   const { confirm } = useConfirmationContext()
   /** Scoped to one form: the subject is fixed and nothing may widen it. */
   const scoped = Boolean(formId)
+  /*
+   * Where the sender's CONTACT is (AGL-2612). A submission that carried an
+   * address updated a contact in the CRM at stage Lead; the row links to
+   * it by that address, and the Contacts list — which holds the id nothing
+   * here does — opens the record. The same hub path the Members & leads
+   * rows use to open a lead.
+   */
+  const crmHubPath = useCrmHubPath()
 
   /*
    * The site's forms, for the Submissions filter.
@@ -442,19 +461,77 @@ export function SubmissionsCard({ hostId, formId }: SubmissionsCardProps) {
                     </TableCell>
                     <TableCell
                       align="right"
-                      sx={{ whiteSpace: 'nowrap' }}
+                      sx={{ whiteSpace: 'nowrap', width: 56 }}
                       onClick={(event) => event.stopPropagation()}
                     >
-                      <Button size="small" onClick={handleToggleRead(submission)}>
-                        {submission.read ? 'Mark unread' : 'Mark read'}
-                      </Button>
-                      <Button
-                        size="small"
-                        color="error"
-                        onClick={handleDelete(submission)}
-                      >
-                        {'Delete'}
-                      </Button>
+                      {/*
+                        One overflow menu, as the Members & leads rows have:
+                        two inline buttons had no room for a third, and the
+                        contact link is the one a reader reaches for after
+                        reading. Present but disabled for a submission with
+                        no address, with the reason — a row that simply
+                        lacked the item would read as the contact not
+                        existing.
+                      */}
+                      {(() => {
+                        const senderEmail = submissionSender(submission.fields).email
+                        return (
+                          <RowActionsMenu
+                            label={String(senderEmail ?? submission.$id)}
+                            items={[
+                              ...(crmHubPath
+                                ? [
+                                    {
+                                      key: 'crm',
+                                      label: 'Open contact in CRM',
+                                      icon: (
+                                        <MdiIcon
+                                          path={mdiAccountArrowRight.path}
+                                          size={0.8}
+                                        />
+                                      ),
+                                      ...(senderEmail
+                                        ? {
+                                            href: crmRoutes(
+                                              crmHubPath,
+                                            ).contactByEmail(senderEmail),
+                                          }
+                                        : {
+                                            disabled: true,
+                                            disabledReason:
+                                              'This submission carried no email address, so no contact was updated.',
+                                          }),
+                                    },
+                                  ]
+                                : []),
+                              {
+                                key: 'read',
+                                label: submission.read ? 'Mark unread' : 'Mark read',
+                                icon: (
+                                  <MdiIcon
+                                    path={
+                                      submission.read
+                                        ? mdiEmailOutline.path
+                                        : mdiEmailOpenOutline.path
+                                    }
+                                    size={0.8}
+                                  />
+                                ),
+                                onClick: handleToggleRead(submission),
+                              },
+                              {
+                                key: 'delete',
+                                label: 'Delete',
+                                icon: (
+                                  <MdiIcon path={mdiDeleteOutline.path} size={0.8} />
+                                ),
+                                destructive: true,
+                                onClick: handleDelete(submission),
+                              },
+                            ]}
+                          />
+                        )
+                      })()}
                     </TableCell>
                   </TableRow>
                 ))}

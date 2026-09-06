@@ -965,6 +965,20 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "formIds",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "contacts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
           "fieldPath": "visibleTo",
           "arrayConfig": "CONTAINS"
         },

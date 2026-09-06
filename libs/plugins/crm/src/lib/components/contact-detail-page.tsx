@@ -318,6 +318,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
             consentGroup={consentGroup}
             scope={scope}
             seed={{ status, fromCache }}
+            basePath={basePath}
           />
           <ContactCustomFieldsCard hostId={hostId} org={org} contactId={id} />
           <ContactTimelineCard hostId={hostId} org={org} contactId={id} contact={row} />

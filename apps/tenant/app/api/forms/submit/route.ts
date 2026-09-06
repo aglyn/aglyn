@@ -606,6 +606,10 @@ export async function POST(request: Request): Promise<Response> {
         email: contactEmail,
         name: sanitizedFields['name'] ?? sanitizedFields['fullName'],
         source: 'form',
+        // A submission is the earliest sign of interest the CRM names
+        // (AGL-2612): a lead, whether or not the form also files one to the
+        // Leads list below. A floor, so a customer who writes in stays one.
+        initialLifecycleStage: 'lead',
         interaction: {
           refId: submissionRef.id,
           summary: `Submitted "${resolvedFormName.slice(0, 60)}"`,

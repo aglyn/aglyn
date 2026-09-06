@@ -2262,6 +2262,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           email: object?.customer_details?.email,
           name: object?.customer_details?.name ?? undefined,
           source: 'order',
+          // Every order door names `customer` (AGL-2612): a floor, so the
+          // stage fills or advances and never moves anybody back.
+          initialLifecycleStage: 'customer',
           // RFM (AGL-328) counted a subscriber as having spent nothing, so
           // the customer paying every month looked colder than a one-off
           // buyer. The initial charge is real money and belongs in LTV.
@@ -2881,6 +2884,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               ? { name: String(soldSnapshot.get('customerName')) }
               : {}),
             source: 'order',
+            initialLifecycleStage: 'customer',
             purchaseCents: paidCents,
             interaction: {
               refId: invoiceId,
@@ -3065,6 +3069,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 reservation['guestName'] ??
                 undefined,
               source: 'booking',
+              // A paid stay is a sale (AGL-2612), whatever the source says
+              // about the kind of thing that was bought.
+              initialLifecycleStage: 'customer',
               ...(paidCents > 0 ? { purchaseCents: paidCents } : {}),
               interaction: {
                 refId: String(reservationId),
@@ -3526,6 +3533,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           email: object?.customer_details?.email,
           name: object?.customer_details?.name ?? undefined,
           source: 'order',
+          initialLifecycleStage: 'customer',
           ...(marketingOptIn ? { marketingConsent: true } : {}),
           purchaseCents: Number(object?.amount_total ?? 0),
           interaction: {
@@ -4030,6 +4038,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               email: draftEmail,
               name: object?.customer_details?.name ?? undefined,
               source: 'order',
+              initialLifecycleStage: 'customer',
               ...(chargedCents > 0 ? { purchaseCents: chargedCents } : {}),
               interaction: {
                 refId: String(orderId),
@@ -4405,6 +4414,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           email: object?.customer_details?.email,
           name: object?.customer_details?.name ?? undefined,
           source: 'order',
+          initialLifecycleStage: 'customer',
           purchaseCents: Number(object?.amount_total ?? 0),
           interaction: {
             refId: String(object.id),

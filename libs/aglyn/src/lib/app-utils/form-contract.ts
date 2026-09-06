@@ -146,12 +146,28 @@ function drawnFields(
   )
 }
 
-/** Whether a submission to this design could yield an address to key a lead on. */
-function canYieldAnEmail(fields: DrawnField[]): boolean {
+/**
+ * Whether a submission carrying these fields could yield an address to key
+ * a lead on — the one precondition of lead routing (AGL-2612).
+ *
+ * Exported because the check is asked in two places that never see a node
+ * tree: the form's own page decides whether to offer the routing switch, and
+ * the CRM's Leads section offers to turn routing on for a form from the
+ * declared field list alone. Both must agree with the publish check here or
+ * a switch flipped on one surface is refused on the next.
+ */
+export function formFieldsCanYieldAnEmail(
+  fields: ReadonlyArray<{ fieldName: string; fieldType: string }>,
+): boolean {
   return fields.some(
     (field) =>
       field.fieldType === 'email' || EMAIL_KEY_PATTERN.test(field.fieldName),
   )
+}
+
+/** The same question, of the fields a design DRAWS. */
+function canYieldAnEmail(fields: DrawnField[]): boolean {
+  return formFieldsCanYieldAnEmail(fields)
 }
 
 /**

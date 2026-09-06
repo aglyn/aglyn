@@ -1171,6 +1171,9 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         email: contactEmail,
         ...(contactName ? { name: contactName } : {}),
         source: 'order',
+        // A sale makes a customer of anybody who was not yet one and never
+        // moves anybody back (AGL-2612).
+        initialLifecycleStage: 'customer',
         // AGL-1748: the amount was formatted into the summary STRING below and
         // never passed to the field that exists to hold it, so `ltvCents`
         // counted online sales only — a shop-counter merchant's best customers
