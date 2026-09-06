@@ -816,6 +816,22 @@ describe('POST /v1/leads/{id}/convert', () => {
     expect(all(DEALS)).toHaveLength(0)
     expect(mockDocs.get(`${LEADS}/lead-a`)?.status).toBeUndefined()
   })
+
+  /*
+   * An erased person is its own conflict (AGL-2632): `contact_not_created`
+   * tells an integration the band may be full, and an integration told
+   * that retries after an upgrade — against a decision no plan lifts.
+   */
+  it('answers an erased person as its own conflict, and changes nothing', async () => {
+    mockCapture.mockImplementationOnce(async () => ({ refused: 'erased' }))
+    const erased = await convert('lead-a', { deal: { title: 'Acme' } })
+    expect(erased.status).toBe(409)
+    expect((await json(erased)).error.code).toBe('person_erased')
+    expect(all(CONTACTS)).toHaveLength(0)
+    expect(all(DEALS)).toHaveLength(0)
+    expect(mockDocs.get(`${LEADS}/lead-a`)?.status).toBeUndefined()
+    expect(mockLogActivity).not.toHaveBeenCalled()
+  })
 })
 
 // ── Usage ───────────────────────────────────────────────────────────────────

@@ -548,6 +548,14 @@ function convertRefusal(
         code: 'contact_not_created',
         headers: ctx.headers,
       })
+    case 'erased':
+      return ApiErrors.conflict({
+        message:
+          'This person was erased from the organization at their request, so ' +
+          'a contact cannot be created for this address. Nothing was changed.',
+        code: 'person_erased',
+        headers: ctx.headers,
+      })
     case 'no-stages':
       return ApiErrors.conflict({
         message: 'The default pipeline has no stages to open a deal in',

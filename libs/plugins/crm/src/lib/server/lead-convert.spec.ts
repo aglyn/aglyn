@@ -19,7 +19,7 @@ import type {
   PluginApiRequest,
   PluginApiResponse,
 } from '@aglyn/aglyn/server'
-import { DEFAULT_DEAL_STAGES } from '@aglyn/aglyn/server'
+import { CONTACT_ERASED_MESSAGE, DEFAULT_DEAL_STAGES } from '@aglyn/aglyn/server'
 import { leadConvertHandler, stageForNewDeal } from './lead-convert'
 
 /**
@@ -698,6 +698,28 @@ describe('converting a lead', () => {
     expect(status).toBe(409)
     expect(all(`orgs/${ORG}/deals`)).toHaveLength(0)
     expect(docs.get(leadPath('lead-1'))?.status).toBeUndefined()
+  })
+
+  /*
+   * An erased person is not "the band may be full" (AGL-2632). The door
+   * refused because the workspace erased this address, and the dialog has
+   * to say so with the contact create route's own sentence — a reader told
+   * to upgrade would retry against a decision no plan lifts.
+   */
+  it('names an erased person as its own refusal, with the create route’s sentence', async () => {
+    mockUpsertHostContact.mockImplementationOnce(async () => ({ refused: 'erased' }))
+    mockLogHostActivity.mockClear()
+    const { status, body } = await call({
+      hostId: HOST,
+      leadId: 'lead-1',
+      deal: { title: 'Acme' },
+    })
+    expect(status).toBe(409)
+    expect(body).toEqual({ error: CONTACT_ERASED_MESSAGE, reason: 'erased' })
+    expect(all(`orgs/${ORG}/contacts`)).toHaveLength(0)
+    expect(all(`orgs/${ORG}/deals`)).toHaveLength(0)
+    expect(docs.get(leadPath('lead-1'))?.status).toBeUndefined()
+    expect(mockLogHostActivity).not.toHaveBeenCalled()
   })
 
   it('refuses a malformed company domain and an untitled deal before reading anything', async () => {
