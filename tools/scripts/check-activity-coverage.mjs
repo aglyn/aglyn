@@ -129,6 +129,11 @@ const MUTATION_PATHS = [
   // module above.
   'libs/plugins/crm/src/lib/server.ts',
   'libs/plugins/crm/src/lib/server/lead-convert.ts',
+  // `crm/contacts-merge` (AGL-2625) destroys one contact document by folding
+  // it into another; the entry is written by the data library's
+  // `mergeContacts`, which both this route and `POST /v1/contacts/{id}/merge`
+  // call, so the module that performs the delete is the one listed.
+  'libs/tenant/data/admin/src/lib/server/contact-merge.ts',
 ]
 
 /**

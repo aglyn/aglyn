@@ -95,6 +95,7 @@ import { handleCompanies } from './api-v1/crm-companies'
 import { handleDeals } from './api-v1/crm-deals'
 import { handlePipelines } from './api-v1/crm-pipelines'
 import { handleTasks } from './api-v1/crm-tasks'
+import { mergeContactRoute } from './api-v1/contacts-merge'
 import {
   CRM_ID_MAX,
   CRM_LABEL_MAX,
@@ -2420,6 +2421,11 @@ function contactView(
     companyIds: Array.isArray(data.companyIds)
       ? data.companyIds.filter((id: unknown) => typeof id === 'string')
       : [],
+    // The other addresses a merge folded into this record (AGL-2625) —
+    // identity like `email`, and read-only for the same reason.
+    alternateEmails: Array.isArray(data.alternateEmails)
+      ? data.alternateEmails.filter((email: unknown) => typeof email === 'string')
+      : [],
     /*
      * TRUE means "some site may mail this person", and `consentSites` says
      * which. A single boolean is what the org-wide model published, and it is
@@ -3397,6 +3403,23 @@ async function handleContacts(
   }
 
   const contactRef = collection.doc(contactId)
+
+  // `/v1/contacts/{id}/merge` (AGL-2625): the one action on a contact that
+  // is not a verb on the document itself.
+  if (segments[2] === 'merge' && segments.length === 3) {
+    if (request.method !== 'POST') {
+      return ApiErrors.methodNotAllowed({
+        headers: { ...ctx.headers, Allow: 'POST' },
+      })
+    }
+    const denied = requireScope(ctx, 'contacts:write')
+    if (denied) return denied
+    const group = contactViewGroup(ctx, url)
+    if ('response' in group) return group.response
+    return mergeContactRoute(request, ctx, contactRef, (snap) =>
+      contactView(snap, group.groupId),
+    )
+  }
 
   if (request.method === 'GET') {
     const denied = requireScope(ctx, 'contacts:read')

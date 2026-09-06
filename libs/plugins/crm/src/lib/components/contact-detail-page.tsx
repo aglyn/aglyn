@@ -18,7 +18,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { CONTACT_LIFECYCLE_STAGE_LABELS, pluginDocsHelp } from '@aglyn/aglyn'
-import { mdiDeleteOutline } from '@aglyn/shared-data-mdi'
+import { mdiDeleteOutline, mdiMerge } from '@aglyn/shared-data-mdi'
 import { AppLink, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -38,10 +38,13 @@ import {
 } from 'firebase/firestore'
 import { useParams, useRouter } from 'next/navigation'
 import { useCallback, useMemo } from 'react'
+import { useCrmScope } from '../hooks/use-crm-scope'
 import { contactRecordFromDoc } from '../model/contact-record'
 import { type CrmDetailPageProps, crmRoutes } from '../model/crm-routes'
 import ContactAssociationsCard from './contact-associations-card'
 import ContactCustomFieldsCard from './contact-custom-fields-card'
+import ContactDuplicatesCard from './contact-duplicates-card'
+import ContactMergeDialog, { useContactMergeDialog } from './contact-merge-dialog'
 import ContactPropertiesCard from './contact-properties-card'
 import ContactTimelineCard from './contact-timeline-card'
 import { AddToListButton } from './add-to-list-button'
@@ -108,6 +111,10 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
   const { confirm } = useConfirmationContext()
   const logActivity = useHostActivityLogger(hostId)
   const { scope, orgId } = useOrgDataScope({ hostId })
+  // What this viewer may list, for the merge search and the duplicates
+  // query — the one expression every CRM listener filters on.
+  const { visibleTo } = useCrmScope({ hostId, org })
+  const merge = useContactMergeDialog()
 
   // The controller this page is showing — the sites declared to be one
   // sender, or this site alone — resolved from the org document the shell
@@ -231,6 +238,19 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
   ])
 
   const overflowItems: RowActionsMenuItem[] = [
+    /*
+     * Two records for one person become one (AGL-2625). Opened empty, to be
+     * searched, with the OTHER record surviving: a reader on the record they
+     * want gone says "merge this into…". The dialog lets them switch.
+     */
+    {
+      key: 'merge',
+      label: 'Merge into…',
+      icon: <MdiIcon path={mdiMerge.path} size={0.8} />,
+      disabled: !row,
+      disabledReason: 'The contact has not loaded',
+      onClick: () => merge.open(),
+    },
     {
       key: 'remove',
       label: 'Delete contact',
@@ -269,7 +289,12 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
       <CrmRecordHeader
         kind="Contact"
         title={record ? record.name || record.email : undefined}
-        subtitle={record?.email}
+        // The identity, and the other addresses a merge folded into it.
+        subtitle={
+          record
+            ? [record.email, ...record.alternateEmails.map((email) => `also ${email}`)].join(' · ')
+            : undefined
+        }
         help={contactDocsHelp}
         backHref={routes.section('contacts')}
         backLabel="Back to contacts"
@@ -375,6 +400,29 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
             contactName={record.name || record.email}
           />
           <RecordTasksCard hostId={hostId} org={org} basePath={basePath} contactId={id} />
+          <ContactDuplicatesCard
+            current={{ id, doc: row }}
+            scope={scope}
+            consentGroup={consentGroup}
+            visibleTo={visibleTo}
+            basePath={basePath}
+            onMerge={(candidate) => merge.open({ other: candidate, keep: 'current' })}
+          />
+          <ContactMergeDialog
+            {...merge.state}
+            onClose={merge.close}
+            hostId={hostId}
+            current={{ id, doc: row }}
+            scope={scope}
+            consentGroup={consentGroup}
+            visibleTo={visibleTo}
+            memberName={members.memberName}
+            // The page's own record was folded away: its address now opens
+            // the survivor, which is where the reader is taken.
+            onMerged={(survivorId) => {
+              if (survivorId !== id) router.replace(routes.contact(survivorId))
+            }}
+          />
         </>
       ) : null}
     </Stack>

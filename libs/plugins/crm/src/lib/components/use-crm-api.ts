@@ -24,7 +24,11 @@ import { useUser } from '@aglyn/tenant-feature-instance'
 import { useCallback, useRef } from 'react'
 
 /** The routes `registerCrmConsoleApi` registers under `/api/crm/`. */
-export type CrmApiRoute = 'contacts-create' | 'contact-email-history' | 'email-send'
+export type CrmApiRoute =
+  | 'contacts-create'
+  | 'contact-email-history'
+  | 'contacts-merge'
+  | 'email-send'
 
 /** What one call to the CRM API answered with. */
 export interface CrmApiResult {

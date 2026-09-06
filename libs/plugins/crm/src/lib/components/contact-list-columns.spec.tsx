@@ -37,6 +37,7 @@ import type { ContactRecord } from '../model/contact-record'
 const row = (overrides: Partial<ContactRecord> = {}): ContactRecord => ({
   $id: 'con-1',
   email: 'jo@example.com',
+  alternateEmails: [],
   name: 'Jo',
   canonicalName: 'Jo',
   nameOverride: '',
