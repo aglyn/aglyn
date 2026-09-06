@@ -11,6 +11,8 @@ profile your team keeps on them, where they came from, what they are filed
 under, and what the site recorded about them. You can add a person by hand,
 and edit every part of that profile from their own page.
 
+![A contact record in the CRM: the header with the person's name, stage and owner, and the Properties, Custom fields, Timeline, Deals and Tasks cards](/img/contacts/crm-record.png)
+
 ## Adding a contact by hand
 
 Open **CRM → Contacts** and choose **New contact**. A drawer opens over the

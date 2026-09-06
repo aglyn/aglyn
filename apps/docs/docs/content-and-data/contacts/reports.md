@@ -12,6 +12,8 @@ same records the other sections list — a report can never count a contact,
 deal or task the reader could not open — and most of them are counted by the
 database rather than downloaded, so the page stays quick on a large CRM.
 
+![The Reports section of the CRM: the period toggle, the cards for new contacts, leads converted, deals won and tasks completed, new contacts by week, the lifecycle funnel and new contacts by source](/img/contacts/crm-reports.png)
+
 ## Choosing a period
 
 A picker at the top of the page selects the window the flow reports measure:
