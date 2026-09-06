@@ -143,7 +143,7 @@ describe('HostActionsCard CRM steps (AGL-2605)', () => {
     // The keys a filter or a condition may name for the chosen event.
     expect(
       screen.getByText(
-        'In scope: contactId, email, name, source, hostId, lifecycleStage, campaignIds.',
+        'In scope: contactId, email, name, source, hostId, lifecycleStage, campaignIds, formId.',
       ),
     ).toBeTruthy()
 
