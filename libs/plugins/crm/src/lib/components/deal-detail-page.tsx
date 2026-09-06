@@ -37,6 +37,7 @@ import { useOrgMemberDirectory } from '../hooks/use-org-member-directory'
 import { usePipeline } from '../hooks/use-pipeline'
 import { type CrmDetailPageProps, crmRoutes } from '../model/crm-routes'
 import { RecordActivityCard } from './record-activity-card'
+import { CrmSendEmailButton } from './crm-send-email-button'
 import { DealEditDrawer } from './deal-edit-drawer'
 import { DealPropertiesCard } from './deal-properties-card'
 import { DealStageCard } from './deal-stage-card'
@@ -132,6 +133,7 @@ export function DealDetailPage(props: CrmDetailPageProps) {
               >
                 {'Delete'}
               </Button>
+              <CrmSendEmailButton hostId={hostId} org={org} dealId={deal.$id} contactId={deal.contactId} name={deal.contactName} />
             </>
           ) : null}
         </Stack>

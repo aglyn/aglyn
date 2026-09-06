@@ -56,6 +56,7 @@ import ContactCustomFieldsCard from './contact-custom-fields-card'
 import ContactPropertiesCard from './contact-properties-card'
 import ContactTimelineCard from './contact-timeline-card'
 import { AddToListButton } from './add-to-list-button'
+import { CrmSendEmailButton } from './crm-send-email-button'
 import { ContactDealsCard } from './contact-deals-card'
 import { RecordTasksCard } from './record-tasks-card'
 import { useOrgMembers } from './use-org-members'
@@ -233,6 +234,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
       {record ? (
         <AddToListButton hostId={hostId} org={org} contactId={id} email={record.email} />
       ) : null}
+      {record ? <CrmSendEmailButton hostId={hostId} org={org} contactId={id} email={record.email} name={record.name} /> : null}
       <RowActionsMenu label={record?.name || record?.email || 'Contact'} items={overflowItems} />
     </Stack>
   )

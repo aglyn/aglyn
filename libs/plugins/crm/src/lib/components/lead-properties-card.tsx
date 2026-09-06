@@ -39,6 +39,7 @@ import {
 import { deleteField, doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import { crmRoutes } from '../model/crm-routes'
+import { CrmSendEmailButton } from './crm-send-email-button'
 import { LeadOwnerSelect, type OrgMemberOptions } from './lead-owner-select'
 import { LeadStatusChip } from './lead-status-chip'
 
@@ -177,6 +178,7 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
               {'Convert'}
             </Button>
           ) : null}
+          <CrmSendEmailButton hostId={hostId} leadId={leadId} email={String(lead['email'] ?? '')} name={String(lead['name'] ?? '')} />
         </Stack>
       }
       contentGutterX
