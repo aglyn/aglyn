@@ -19,7 +19,11 @@ import type {
   PluginApiRequest,
   PluginApiResponse,
 } from '@aglyn/aglyn/server'
-import { CONTACT_ERASED_MESSAGE, DEFAULT_DEAL_STAGES } from '@aglyn/aglyn/server'
+import {
+  CONTACT_ERASED_MESSAGE,
+  DEFAULT_DEAL_STAGES,
+  personKey,
+} from '@aglyn/aglyn/server'
 import { leadConvertHandler, stageForNewDeal } from './lead-convert'
 
 /**
@@ -447,6 +451,70 @@ describe('converting a lead', () => {
     expect(lead?.companyId).toBeUndefined()
     // What the capture door wrote is still there — the stamp is an update.
     expect(lead?.sources).toEqual(['form'])
+  })
+
+  /**
+   * The historical lead (AGL-2631). A person a lead-routed form captured
+   * before lead routing existed is already a contact, and the backfill
+   * files a queue row for them under the person key. Converting that row
+   * has to land on the contact the org already holds — through the same
+   * door every conversion uses, which finds the row by address — and never
+   * mint a second row for one person.
+   */
+  it('converts a backfilled lead onto the contact the org already held (AGL-2631)', async () => {
+    docs.set(`orgs/${ORG}/contacts/contact-held`, {
+      email: 'ann@acme.com',
+      name: 'Ann Lee',
+      hostId: HOST,
+      capturedByHostIds: [HOST],
+      formIds: ['form-wholesale'],
+      visibleTo: [`host:${HOST}`],
+      facets: {
+        [HOST]: {
+          sources: { form: true },
+          interactions: [
+            { type: 'form', atMs: 1_000, refId: 's1', formId: 'form-wholesale', hostId: HOST },
+          ],
+          // The stage the backfill's first pass stamps for a form capture.
+          lifecycleStage: 'lead',
+        },
+      },
+    })
+    // The row exactly as `backfill-crm-lifecycle-stages.mjs --leads` writes
+    // it: keyed by the person key, `new`, no owner, the capture's bracket.
+    const key = personKey('ann@acme.com') as string
+    docs.set(leadPath(key), {
+      email: 'ann@acme.com',
+      name: 'Ann Lee',
+      status: 'new',
+      sources: ['form:form-wholesale'],
+      submissionCount: 1,
+      firstSeenAtMs: 1_000,
+      lastSeenAtMs: 1_000,
+      capturedByHostIds: [HOST],
+      backfilledAtMs: 2_000,
+      createdAt: { __serverTimestamp: true },
+    })
+    const { status, body } = await call({ hostId: HOST, leadId: key })
+    expect(status).toBe(200)
+    expect(mockUpsertHostContact).toHaveBeenCalledTimes(1)
+    expect(mockUpsertHostContact).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hostId: HOST,
+        email: 'ann@acme.com',
+        source: 'manual',
+        facet: { lifecycleStage: 'sales-qualified' },
+      }),
+    )
+    // One person, one row: the door found the address and created nothing.
+    expect(all(`orgs/${ORG}/contacts`)).toHaveLength(1)
+    expect(body).toEqual({ ok: true, contactId: 'contact-held', alreadyConverted: false })
+    const lead = docs.get(leadPath(key))
+    expect(lead?.status).toBe('qualified')
+    expect(lead?.convertedContactId).toBe('contact-held')
+    // What the backfill wrote is still there — the stamp is an update.
+    expect(lead?.sources).toEqual(['form:form-wholesale'])
+    expect(lead?.backfilledAtMs).toBe(2_000)
   })
 
   /**

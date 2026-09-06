@@ -36,7 +36,10 @@ bookings, and the lead-routed forms by name, each linking to the form's page
 with no email field cannot key a lead and the control says so instead of
 switching; a form without a consent field switches on, and the tooltip says
 the lead will not be mailable until the form names one. One person is one
-lead: a second submission updates the lead the first one created.
+lead: a second submission updates the lead the first one created. Leads from
+before the Leads section existed were created from those earlier submissions
+and bookings, so a person who wrote in through a lead-routed form before lead
+routing existed is in the Open view too, unassigned.
 
 The contact's own page links back: **Lead on this site** on the
 [Relationship card](./contact-record.md#where-the-persons-lead-is) opens the
