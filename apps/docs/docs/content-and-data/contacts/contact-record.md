@@ -221,7 +221,7 @@ a **Lead** — a **Customer** once it is paid — and an order makes a
 **Customer**. A subscriber who then submits a form becomes a lead; a customer
 who submits one stays a customer. A contact you add by hand, import, or
 create over the API gets the stage you give it, or none, and a contact
-captured before this rule carries no stage until something sets one.
+captured before this rule carries the stage its earlier captures imply.
 
 | Stage | Meaning |
 | --- | --- |
