@@ -31,13 +31,23 @@
  * needs "now" is handed it.
  */
 
+import type { ContactFacet, ContactSource } from './contacts'
 import {
   CONTACT_LIFECYCLE_STAGES,
   CONTACT_LIFECYCLE_STAGE_LABELS,
+  CRM_ACTIVITY_KINDS,
+  CRM_LEAD_STATUSES,
   type ContactLifecycleStage,
+  type CrmActivity,
+  type CrmActivityKind,
   type CrmDeal,
   type CrmDealStage,
+  type CrmLeadFields,
+  type CrmLeadStatus,
   type CrmPipeline,
+  type CrmTask,
+  crmLeadStatus,
+  isCrmActivityKind,
   weightedDealAmountCents,
 } from './crm'
 
@@ -395,4 +405,299 @@ export function localDayBounds(nowMs: number): { start: number; end: number } {
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
   return { start: start.getTime(), end: end.getTime() }
+}
+
+/*==========================================
+ * ACTIVITY BY TEAMMATE (AGL-2624)
+ *=========================================*/
+
+/** One teammate's row of the activity leaderboard. */
+export interface ActivityLeaderboardRow {
+  /**
+   * The account uid, or `''` for work no person did: an activity an
+   * automation logged, a task ticked off with nobody assigned. One row
+   * rather than a row per automation, because the leaderboard ranks the
+   * team, and "nobody" is the honest name for the rest.
+   */
+  uid: string
+  /**
+   * The name the newest of this uid's activities was signed with, or `null`
+   * when none carried one — a uid that only completed tasks, say. The
+   * activity's own `byName` because a scoped reader cannot resolve a
+   * colleague's uid any other way; see `CrmActivity.byName`.
+   */
+  name: string | null
+  /** Activities logged, by kind, every kind present even at zero. */
+  kinds: Record<CrmActivityKind, number>
+  /** Every activity logged, whatever its kind. */
+  activities: number
+  /** Tasks ticked off. */
+  tasksDone: number
+}
+
+/** An activity as stored — `kind` is whatever was written, not only what the model names. */
+type LeaderboardActivity = Pick<CrmActivity, 'byUid' | 'atMs' | 'byName'> & {
+  kind: string
+}
+type LeaderboardTask = Pick<CrmTask, 'assigneeUid' | 'completedByUid'>
+
+/**
+ * Who did what: the activities and the completed tasks of a period,
+ * grouped by the person who did them, busiest first.
+ *
+ * An activity is credited to whoever logged it. A task is credited to
+ * whoever COMPLETED it when the route stamped that, and to its assignee
+ * otherwise: the leaderboard measures work done, and a manager closing out
+ * a departed teammate's list did that work. A kind the model does not
+ * name counts as `other` rather than vanishing — the activity happened.
+ *
+ * Busiest means activities plus tasks; ties break on activities, then on
+ * the uid, so two renders of one window draw one order.
+ */
+export function activityLeaderboard(
+  activities: readonly LeaderboardActivity[],
+  tasksDone: readonly LeaderboardTask[],
+): ActivityLeaderboardRow[] {
+  const rows = new Map<string, ActivityLeaderboardRow & { namedAtMs: number }>()
+  const rowFor = (uid: string) => {
+    let row = rows.get(uid)
+    if (!row) {
+      row = {
+        uid,
+        name: null,
+        namedAtMs: Number.NEGATIVE_INFINITY,
+        kinds: Object.fromEntries(
+          CRM_ACTIVITY_KINDS.map((kind) => [kind, 0]),
+        ) as Record<CrmActivityKind, number>,
+        activities: 0,
+        tasksDone: 0,
+      }
+      rows.set(uid, row)
+    }
+    return row
+  }
+  for (const activity of activities) {
+    const row = rowFor(String(activity.byUid ?? ''))
+    const kind = isCrmActivityKind(activity.kind) ? activity.kind : 'other'
+    row.kinds[kind] += 1
+    row.activities += 1
+    const name = String(activity.byName ?? '').trim()
+    const atMs = Number(activity.atMs)
+    if (name && Number.isFinite(atMs) && atMs > row.namedAtMs) {
+      row.name = name
+      row.namedAtMs = atMs
+    }
+  }
+  for (const task of tasksDone) {
+    rowFor(String(task.completedByUid || task.assigneeUid || '')).tasksDone += 1
+  }
+  return [...rows.values()]
+    .sort(
+      (a, b) =>
+        b.activities + b.tasksDone - (a.activities + a.tasksDone) ||
+        b.activities - a.activities ||
+        a.uid.localeCompare(b.uid),
+    )
+    .map(({ namedAtMs: _namedAtMs, ...row }) => row)
+}
+
+/*==========================================
+ * LEAD FUNNEL (AGL-2624)
+ *=========================================*/
+
+/** The key a lead unqualified with no reason is tallied under. */
+export const LEAD_NO_REASON_KEY = '$none'
+export const LEAD_NO_REASON_LABEL = 'No reason given'
+
+export interface LeadFunnelReason {
+  /** The reason, case-folded and whitespace-collapsed, or {@link LEAD_NO_REASON_KEY}. */
+  key: string
+  /** The reason as it was first written. */
+  label: string
+  count: number
+}
+
+export interface LeadFunnel {
+  /** Every lead handed in. */
+  total: number
+  /** Leads at each status now, every status present. An absent status is `new`. */
+  byStatus: Record<CrmLeadStatus, number>
+  /** `new` and `working` — the leads still needing somebody. */
+  open: number
+  /** Qualified over every lead, 0–1, or `null` when there were none. */
+  qualifiedRate: number | null
+  /** Unqualified over every lead, 0–1, or `null` when there were none. */
+  unqualifiedRate: number | null
+  /** Why leads were unqualified, most common first. */
+  reasons: LeadFunnelReason[]
+}
+
+/**
+ * Where a set of leads stands, and why the ones that were closed without
+ * converting were closed.
+ *
+ * A status breakdown rather than a cumulative funnel, because a lead's
+ * history is not on the document — only where it is now — and a lead can
+ * be qualified straight from `new` without ever having been `working`. A
+ * step that claimed "reached working" would be inventing a past. The two
+ * rates are over EVERY lead handed in, so a period in which half the leads
+ * are still untouched reads as half unconverted, which is what it is.
+ *
+ * Reasons are free text — the unqualify dialog requires one but does not
+ * offer a list — so `Too small` and `too  small` are one reason and the
+ * label is whichever spelling came first. An unqualified lead written past
+ * the dialog with no reason is counted under its own key rather than
+ * dropped: the lead was closed, and "no reason given" is the count a
+ * manager wants to see.
+ */
+export function leadFunnel(
+  leads: ReadonlyArray<Pick<CrmLeadFields, 'status' | 'unqualifiedReason'>>,
+): LeadFunnel {
+  const byStatus = Object.fromEntries(
+    CRM_LEAD_STATUSES.map((status) => [status, 0]),
+  ) as Record<CrmLeadStatus, number>
+  const reasons = new Map<string, LeadFunnelReason>()
+  for (const lead of leads) {
+    const status = crmLeadStatus(lead)
+    byStatus[status] += 1
+    if (status !== 'unqualified') continue
+    const label = String(lead.unqualifiedReason ?? '').replace(/\s+/g, ' ').trim()
+    const key = label ? label.toLowerCase() : LEAD_NO_REASON_KEY
+    const row = reasons.get(key) ?? {
+      key,
+      label: label || LEAD_NO_REASON_LABEL,
+      count: 0,
+    }
+    row.count += 1
+    reasons.set(key, row)
+  }
+  const total = leads.length
+  return {
+    total,
+    byStatus,
+    open: byStatus.new + byStatus.working,
+    qualifiedRate: total > 0 ? byStatus.qualified / total : null,
+    unqualifiedRate: total > 0 ? byStatus.unqualified / total : null,
+    reasons: [...reasons.values()].sort(
+      (a, b) => b.count - a.count || a.label.localeCompare(b.label),
+    ),
+  }
+}
+
+/**
+ * The leads still needing somebody, from two server counts: every lead,
+ * less the ones closed one way or the other.
+ *
+ * Subtraction rather than a count of the open statuses because a lead
+ * nobody has touched carries NO status field — see `crmLeadStatus` — and
+ * Firestore cannot select a document by a field's absence. The closed
+ * statuses are always written, so they can be counted; what remains is
+ * open. Clamped at zero for the moment between the two counts in which a
+ * lead was closed.
+ */
+export function openLeadsFromCounts(total: number, closed: number): number {
+  return Math.max(0, Math.round(Number(total) || 0) - Math.round(Number(closed) || 0))
+}
+
+/*==========================================
+ * CONVERSION BY SOURCE (AGL-2624)
+ *=========================================*/
+
+/**
+ * The stages that mean a person has bought, or better.
+ *
+ * `customer` and `evangelist` only. `other` sits after `customer` in the
+ * stage list so that no capture can overwrite it, but it names a step the
+ * business chose and the report cannot know whether that step is past a
+ * purchase; counting it would credit a source with a sale nobody recorded.
+ */
+const CUSTOMER_STAGES: ReadonlySet<ContactLifecycleStage> = new Set([
+  'customer',
+  'evangelist',
+])
+
+type ConversionFacet = Pick<ContactFacet, 'sources' | 'lifecycleStage' | 'ordersCount'>
+
+/**
+ * Whether this holder's view of a person says they have bought: a stage
+ * at `customer` or past it, or an order on the books whatever the stage
+ * says — an order path that never advanced the stage still sold something.
+ */
+export function contactIsCustomer(
+  facet: Pick<ContactFacet, 'lifecycleStage' | 'ordersCount'>,
+): boolean {
+  if (facet.lifecycleStage && CUSTOMER_STAGES.has(facet.lifecycleStage)) return true
+  const orders = Number(facet.ordersCount ?? 0)
+  return Number.isFinite(orders) && orders > 0
+}
+
+export interface SourceConversionRow {
+  source: ContactSource
+  /** People this holder captured through the source. */
+  captured: number
+  /** Of those, the ones who are customers now. */
+  customers: number
+  /** `customers / captured`, 0–1. */
+  rate: number
+}
+
+export interface SourceConversion {
+  /** One row per source anybody came through, most captured first. */
+  rows: SourceConversionRow[]
+  /** People with no source under this holder — no door to credit. */
+  unsourced: number
+  /** Every counted person who is a customer, once each. */
+  customers: number
+  /** Every person handed in. */
+  total: number
+}
+
+/**
+ * Which capture surfaces turn into customers.
+ *
+ * Read through one holder's facet, like every by-source figure: a source
+ * is which of THIS business's doors the person came through. A person
+ * captured two ways counts under both — the question is "how well does
+ * each door convert", and a person who came through two is evidence for
+ * both — so the rows can add to more than `total`, and `customers` counts
+ * each person once for the tile above the table. Rows rank by captured,
+ * not by rate, because a door with one visitor who bought is not the best
+ * door.
+ */
+export function conversionBySource(
+  facets: readonly ConversionFacet[],
+): SourceConversion {
+  const rows = new Map<ContactSource, SourceConversionRow>()
+  let unsourced = 0
+  let customers = 0
+  for (const facet of facets) {
+    const isCustomer = contactIsCustomer(facet)
+    if (isCustomer) customers += 1
+    const sources = (Object.keys(facet.sources ?? {}) as ContactSource[]).filter(
+      (source) => facet.sources?.[source],
+    )
+    if (!sources.length) {
+      unsourced += 1
+      continue
+    }
+    for (const source of sources) {
+      const row = rows.get(source) ?? { source, captured: 0, customers: 0, rate: 0 }
+      row.captured += 1
+      if (isCustomer) row.customers += 1
+      rows.set(source, row)
+    }
+  }
+  return {
+    rows: [...rows.values()]
+      .map((row) => ({ ...row, rate: row.customers / row.captured }))
+      .sort(
+        (a, b) =>
+          b.captured - a.captured ||
+          b.customers - a.customers ||
+          a.source.localeCompare(b.source),
+      ),
+    unsourced,
+    customers,
+    total: facets.length,
+  }
 }

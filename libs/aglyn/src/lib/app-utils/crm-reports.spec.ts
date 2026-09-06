@@ -17,12 +17,19 @@
 
 import { DEFAULT_DEAL_STAGES } from './crm'
 import {
+  activityLeaderboard,
   bucketByWeek,
+  contactIsCustomer,
+  conversionBySource,
   crmReportRange,
   currencyOfDeals,
   deltaPercent,
   funnelFromStages,
+  LEAD_NO_REASON_KEY,
+  LEAD_NO_REASON_LABEL,
+  leadFunnel,
   localDayBounds,
+  openLeadsFromCounts,
   pipelineTotals,
   tally,
   weekBuckets,
@@ -260,5 +267,183 @@ describe('localDayBounds', () => {
     const bounds = localDayBounds(NOW)
     expect(bounds.start).toBe(new Date(2026, 8, 16).getTime())
     expect(bounds.end).toBe(new Date(2026, 8, 17).getTime())
+  })
+})
+
+/**
+ * Activity by teammate (AGL-2624): who logged what and who ticked what off,
+ * busiest first, with the rest of the work — automations, unassigned tasks
+ * — on one honest row.
+ */
+describe('activityLeaderboard', () => {
+  const activities = [
+    { kind: 'call', byUid: 'u-ada', byName: 'Ada', atMs: 100 },
+    { kind: 'email', byUid: 'u-ada', byName: 'Ada L.', atMs: 300 },
+    { kind: 'meeting', byUid: 'u-grace', byName: 'Grace', atMs: 200 },
+    { kind: 'note', byUid: 'u-grace', byName: 'Grace', atMs: 250 },
+    { kind: 'note', byUid: 'u-grace', atMs: 260 },
+    // A kind the model does not name still happened.
+    { kind: 'carrier-pigeon', byUid: 'u-grace', byName: 'Grace', atMs: 270 },
+    { kind: 'note', byUid: '', atMs: 50, sourceActionId: 'act-1' },
+  ] as const
+
+  it('groups activities by who logged them and counts every kind', () => {
+    const rows = activityLeaderboard(activities, [])
+    const grace = rows.find((row) => row.uid === 'u-grace')
+    expect(grace?.kinds).toEqual({ call: 0, email: 0, meeting: 1, note: 2, other: 1 })
+    expect(grace?.activities).toBe(4)
+    const ada = rows.find((row) => row.uid === 'u-ada')
+    expect(ada?.kinds).toEqual({ call: 1, email: 1, meeting: 0, note: 0, other: 0 })
+  })
+
+  it('signs each row with the name on the newest activity', () => {
+    const rows = activityLeaderboard(activities, [])
+    expect(rows.find((row) => row.uid === 'u-ada')?.name).toBe('Ada L.')
+    // An unsigned newer activity does not blank a name an older one carried.
+    expect(rows.find((row) => row.uid === 'u-grace')?.name).toBe('Grace')
+    expect(rows.find((row) => row.uid === '')?.name).toBeNull()
+  })
+
+  it('credits a task to whoever completed it, else to its assignee, else to nobody', () => {
+    const rows = activityLeaderboard([], [
+      { assigneeUid: 'u-ada', completedByUid: 'u-grace' },
+      { assigneeUid: 'u-ada' },
+      { assigneeUid: 'u-ada', completedByUid: '' },
+      {},
+    ])
+    expect(rows.map((row) => [row.uid, row.tasksDone])).toEqual([
+      ['u-ada', 2],
+      ['', 1],
+      ['u-grace', 1],
+    ])
+    expect(rows[0].activities).toBe(0)
+    expect(rows[0].name).toBeNull()
+  })
+
+  it('ranks by activities plus tasks, then activities, then uid', () => {
+    const rows = activityLeaderboard(activities, [
+      { assigneeUid: 'u-ada' },
+      { assigneeUid: 'u-ada' },
+      { assigneeUid: 'u-zed' },
+      { assigneeUid: 'u-zed' },
+      { assigneeUid: 'u-zed' },
+      { assigneeUid: 'u-zed' },
+    ])
+    // Grace 4+0, Ada 2+2 and Zed 0+4 tie at four; Ada logged more.
+    expect(rows.map((row) => row.uid)).toEqual(['u-grace', 'u-ada', 'u-zed', ''])
+  })
+
+  it('is empty for an empty period', () => {
+    expect(activityLeaderboard([], [])).toEqual([])
+  })
+})
+
+/**
+ * The lead funnel (AGL-2624): where a period's leads stand now, and why the
+ * closed-without-converting ones were closed.
+ */
+describe('leadFunnel', () => {
+  it('reads an absent status as new and counts every status', () => {
+    const funnel = leadFunnel([
+      {},
+      { status: 'new' },
+      { status: 'working' },
+      { status: 'qualified' },
+      { status: 'qualified' },
+      { status: 'unqualified', unqualifiedReason: 'Too small' },
+    ])
+    expect(funnel.total).toBe(6)
+    expect(funnel.byStatus).toEqual({ new: 2, working: 1, qualified: 2, unqualified: 1 })
+    expect(funnel.open).toBe(3)
+    expect(funnel.qualifiedRate).toBeCloseTo(2 / 6)
+    expect(funnel.unqualifiedRate).toBeCloseTo(1 / 6)
+  })
+
+  it('has no rate when nothing was captured', () => {
+    const funnel = leadFunnel([])
+    expect(funnel.total).toBe(0)
+    expect(funnel.qualifiedRate).toBeNull()
+    expect(funnel.unqualifiedRate).toBeNull()
+    expect(funnel.reasons).toEqual([])
+  })
+
+  it('folds spellings of one reason together and keeps the first spelling', () => {
+    const funnel = leadFunnel([
+      { status: 'unqualified', unqualifiedReason: 'Too small' },
+      { status: 'unqualified', unqualifiedReason: '  too   SMALL ' },
+      { status: 'unqualified', unqualifiedReason: 'Wrong region' },
+      { status: 'unqualified' },
+      // A reason on a lead that is not unqualified is not a reason.
+      { status: 'working', unqualifiedReason: 'Too small' },
+    ])
+    expect(funnel.reasons).toEqual([
+      { key: 'too small', label: 'Too small', count: 2 },
+      { key: LEAD_NO_REASON_KEY, label: LEAD_NO_REASON_LABEL, count: 1 },
+      { key: 'wrong region', label: 'Wrong region', count: 1 },
+    ])
+  })
+})
+
+describe('openLeadsFromCounts', () => {
+  it('is the total less the closed, never below zero', () => {
+    expect(openLeadsFromCounts(12, 5)).toBe(7)
+    expect(openLeadsFromCounts(3, 5)).toBe(0)
+    expect(openLeadsFromCounts(Number.NaN, 2)).toBe(0)
+  })
+})
+
+/**
+ * Conversion by source (AGL-2624): which doors turn into customers, read
+ * through one holder's facet.
+ */
+describe('contactIsCustomer', () => {
+  it('is a customer at the customer stage or past it, or with an order on the books', () => {
+    expect(contactIsCustomer({ lifecycleStage: 'customer' })).toBe(true)
+    expect(contactIsCustomer({ lifecycleStage: 'evangelist' })).toBe(true)
+    expect(contactIsCustomer({ lifecycleStage: 'lead', ordersCount: 1 })).toBe(true)
+    expect(contactIsCustomer({ ordersCount: 2 })).toBe(true)
+  })
+
+  it('is not a customer for an earlier stage, for other, or with no orders', () => {
+    expect(contactIsCustomer({ lifecycleStage: 'opportunity' })).toBe(false)
+    expect(contactIsCustomer({ lifecycleStage: 'other' })).toBe(false)
+    expect(contactIsCustomer({ ordersCount: 0 })).toBe(false)
+    expect(contactIsCustomer({})).toBe(false)
+  })
+})
+
+describe('conversionBySource', () => {
+  it('counts a person under every door they came through and a customer once', () => {
+    const report = conversionBySource([
+      { sources: { form: true, order: true }, lifecycleStage: 'customer' },
+      { sources: { form: true }, lifecycleStage: 'lead' },
+      { sources: { form: true }, ordersCount: 1 },
+      { sources: { booking: true }, lifecycleStage: 'subscriber' },
+      { sources: {}, lifecycleStage: 'customer' },
+    ])
+    expect(report.total).toBe(5)
+    expect(report.customers).toBe(3)
+    expect(report.unsourced).toBe(1)
+    expect(report.rows).toEqual([
+      { source: 'form', captured: 3, customers: 2, rate: 2 / 3 },
+      { source: 'order', captured: 1, customers: 1, rate: 1 },
+      { source: 'booking', captured: 1, customers: 0, rate: 0 },
+    ])
+  })
+
+  it('ignores a source the facet lists as false', () => {
+    const report = conversionBySource([
+      { sources: { form: true, member: false as unknown as true } },
+    ])
+    expect(report.rows.map((row) => row.source)).toEqual(['form'])
+  })
+
+  it('is empty with nothing to count', () => {
+    expect(conversionBySource([])).toEqual({
+      rows: [],
+      unsourced: 0,
+      customers: 0,
+      total: 0,
+    })
   })
 })
