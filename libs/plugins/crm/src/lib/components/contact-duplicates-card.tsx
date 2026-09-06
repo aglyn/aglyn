@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { type ConsentGroup, contactDisplayName } from '@aglyn/aglyn'
+import { type ConsentGroup, contactDisplayName, pluginDocsHelp } from '@aglyn/aglyn'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import {
@@ -117,6 +117,7 @@ export function ContactDuplicatesCard(props: ContactDuplicatesCardProps) {
     <CardDisplay
       header="Likely duplicates"
       subheader="Other records with this name and the same phone or company."
+      help={pluginDocsHelp('contactRecord', { anchor: '#likely-duplicates' })}
       contentGutterX
       contentGutterY
       HeaderProps={{
