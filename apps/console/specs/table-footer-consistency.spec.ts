@@ -1207,22 +1207,14 @@ const NOT_A_LIST: Array<[string, string]> = [
       'page the choices a person has to scan anyway.',
   ],
   [
-    'libs/plugins/crm/src/lib/components/contact-import-drawer.tsx',
-    'The spreadsheet PREVIEW and the skipped-row report in the CSV ' +
-      'import (AGL-2602): rows parsed from a file the reader just chose, ' +
-      'capped at `CONTACT_IMPORT_MAX_ROWS` on the client and shown ten at ' +
-      'a time as a preview before the import runs. The source is a local ' +
-      'array, not a collection, and the full file is what the download ' +
-      'offers.',
-  ],
-  [
     'libs/plugins/crm/src/lib/components/csv-import-drawer.tsx',
-    'The same PREVIEW and skipped-row report, generalized (AGL-2621): the ' +
-      'walk the contacts drawer and the companies drawer share, each ' +
-      'handing it a vocabulary of columns. The rows are the local array ' +
-      'parsed from the file the reader just chose, capped on the client ' +
-      'and shown ten at a time before the import runs — never a ' +
-      'collection, so there is no cursor a footer could advance.',
+    'The spreadsheet PREVIEW and the skipped-row report in the CSV ' +
+      'import (AGL-2602, shared by every section since AGL-2621): rows ' +
+      'parsed from a file the reader just chose, capped on the client and ' +
+      'shown ten at a time as a preview before the import runs. The ' +
+      'contacts and companies drawers are vocabularies over this one walk ' +
+      'and draw no table of their own. The source is a local array, not a ' +
+      'collection, and the full file is what the download offers.',
   ],
   [
     'libs/plugins/crm/src/lib/components/deal-products-card.tsx',
@@ -1569,7 +1561,16 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // 47 since the CRM's Settings gained owner assignment rules (AGL-2618):
     // a table of at most fifty rows the merchant wrote and ordered, read off
     // the org document under that cap — a policy, not a collection.
-    expect(NOT_A_LIST).toHaveLength(47)
+    //
+    // 48 since the CRM v2.1 merges (AGL-2614): two entries retired with the
+    // tables they described — the contacts import drawer is now a vocabulary
+    // over the shared preview, and the company card's detach probe moved
+    // into `model/company-delete.ts`, which is not a component — and three
+    // arrived, each bounded by something other than the account's age: the
+    // shared import preview (a local array), a deal's line items
+    // (`DEAL_LINE_ITEMS_MAX` on the document), and the forecast by close
+    // month (sums over a disclosed ceiling).
+    expect(NOT_A_LIST).toHaveLength(48)
   })
 })
 
