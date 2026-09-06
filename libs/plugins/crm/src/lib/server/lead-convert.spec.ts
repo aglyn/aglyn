@@ -707,7 +707,7 @@ describe('converting a lead', () => {
    * to upgrade would retry against a decision no plan lifts.
    */
   it('names an erased person as its own refusal, with the create route’s sentence', async () => {
-    mockUpsertHostContact.mockImplementationOnce(async () => ({ refused: 'erased' }))
+    ;(mockUpsertHostContact as jest.Mock).mockImplementationOnce(async () => ({ refused: 'erased' }))
     mockLogHostActivity.mockClear()
     const { status, body } = await call({
       hostId: HOST,
