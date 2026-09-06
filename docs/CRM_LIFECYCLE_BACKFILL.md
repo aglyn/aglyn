@@ -145,6 +145,19 @@ already skipped every address the host holds a row for. A company count is
 set to the re-derived figure. An interruption leaves a partially written org,
 which is the state a re-run finishes.
 
+## Emulator proof — 2026-09-06
+
+Against the seeded emulator (`docs/E2E_LOCAL.md`), with a routed form, a
+two-submission contact carrying a grant, an erased contact, a pre-form-entity
+capture, a buyer, a member, a booking request, an unrouted-form contact, a
+person already held under an older auto-id lead, and a company counted at
+zero planted beside the seed: the dry run planned 8 facet stages (customer 1,
+lead 6, subscriber 1), 4 leads with every skip class exercised (1 erased,
+1 already a lead, 5 already worked past Lead, 3 through no lead surface), and
+the one company at `0 → 1` with the orphan id left; `--apply` wrote exactly
+that; the second dry run planned nothing. Three seeded rows with no facet map
+at all were reported and left.
+
 ## Production runs
 
 None yet. Record the dry-run figures and the apply here when it runs.
