@@ -91,6 +91,7 @@ import CampaignPicker from '@aglyn/shared-ui-email-campaigns/components/campaign
 import { useOrgCompanyOptions } from '../hooks/use-org-company-options'
 import { useOrgContactFields } from '../hooks/use-org-contact-fields'
 import { useOrgContactSegments } from '../hooks/use-org-contact-segments'
+import { useOrgCrmViews } from '../hooks/use-org-crm-views'
 import { useOrgLists } from '../hooks/use-org-lists'
 
 /** How each silo reads on screen. */
@@ -128,6 +129,8 @@ export interface DynamicListRuleNames {
   lists?: Record<string, string>
   /** Segment id → its name. */
   segments?: Record<string, string>
+  /** Saved Contacts view id → its name. */
+  views?: Record<string, string>
   /** Campaign id → its name. */
   campaigns?: Record<string, string>
   /** Team member uid → how they read on the roster. */
@@ -305,6 +308,18 @@ function describeDimensions(
         .join(', ')}.`,
     )
   }
+  /*
+   * "One of your campaigns", against the engagement arms above that say
+   * "one of your emails": those count every message this workspace sent the
+   * address, this counts the campaigns the reading site's group sent — the
+   * sentence is the only place a reader can tell the two windows apart.
+   */
+  if (rule.engagedWithinDays !== undefined) {
+    clauses.push(
+      `Opened or clicked one of your campaigns in the last ` +
+        `${rule.engagedWithinDays} days.`,
+    )
+  }
   for (const clause of rule.custom ?? []) {
     clauses.push(`${describeCustomClause(clause, names)}.`)
   }
@@ -327,6 +342,9 @@ export function describeDynamicListRule(
     clauses.push(
       `Reuses saved segment ${named(rule.segmentId, names?.segments)}.`,
     )
+  }
+  if (rule.viewId) {
+    clauses.push(`Reuses saved view ${named(rule.viewId, names?.views)}.`)
   }
   const own = describeDimensions(rule, names)
   if (rule.negate && own.length) {
@@ -387,6 +405,8 @@ export interface DynamicListRuleDraft {
   sources: DynamicListSource[]
   match: DynamicListRuleMatch
   segmentId: string
+  /** A saved Contacts view's id, resolved by the sweep beside the segment (AGL-2617). */
+  viewId: string
   tags: string
   captureSources: ContactSource[]
   formNames: string
@@ -420,12 +440,18 @@ export interface DynamicListRuleDraft {
   lifecycleStages: ContactLifecycleStage[]
   companyIds: string[]
   custom: DynamicListCustomClause[]
+  /**
+   * The re-engagement window (AGL-2616), typed like the purchase windows
+   * — days, as text, so an empty box is not a zero-day window.
+   */
+  engagedWithinDays: string
 }
 
 export const EMPTY_RULE_DRAFT: DynamicListRuleDraft = {
   sources: ['contacts'],
   match: 'all',
   segmentId: '',
+  viewId: '',
   tags: '',
   captureSources: [],
   formNames: '',
@@ -446,6 +472,7 @@ export const EMPTY_RULE_DRAFT: DynamicListRuleDraft = {
   lifecycleStages: [],
   companyIds: [],
   custom: [],
+  engagedWithinDays: '',
 }
 
 /** Comma-separated free text → the trimmed, non-empty values. */
@@ -502,6 +529,7 @@ export function ruleToDraft(rule: DynamicListRule): DynamicListRuleDraft {
     sources: rule.sources ?? [],
     match: rule.any?.length ? 'any' : rule.negate ? 'none' : 'all',
     segmentId: rule.segmentId ?? '',
+    viewId: rule.viewId ?? '',
     tags: list((block) => block.tags).join(', '),
     captureSources: list((block) => block.captureSources) as ContactSource[],
     formNames: list((block) => block.formNames).join(', '),
@@ -525,6 +553,7 @@ export function ruleToDraft(rule: DynamicListRule): DynamicListRuleDraft {
       (block) => block.lifecycleStages,
     ) as ContactLifecycleStage[],
     companyIds: list((block) => block.companyIds),
+    engagedWithinDays: number((block) => block.engagedWithinDays),
     // Clauses are objects, so the string-set dedupe above cannot hold them;
     // two blocks carrying the same clause are one condition, keyed on its
     // whole shape.
@@ -629,6 +658,8 @@ function draftDimensions(draft: DynamicListRuleDraft): Record<string, unknown>[]
     blocks.push({ lifecycleStages: draft.lifecycleStages })
   }
   if (draft.companyIds.length) blocks.push({ companyIds: draft.companyIds })
+  const engagedWithinDays = typedNumber(draft.engagedWithinDays)
+  if (engagedWithinDays !== undefined) blocks.push({ engagedWithinDays })
   // One block PER CLAUSE, so that "any one of the filters below" reads each
   // condition row as a filter of its own — the same grain the purchase
   // figures get. `mergeDimensions` folds them back into one list for `all`.
@@ -671,6 +702,7 @@ export function draftToRule(draft: DynamicListRuleDraft): DynamicListRule {
   return normalizeDynamicListRule({
     sources: draft.sources,
     ...(draft.segmentId ? { segmentId: draft.segmentId } : {}),
+    ...(draft.viewId ? { viewId: draft.viewId } : {}),
     ...(draft.match === 'any'
       ? // Each filter its own branch. The top-level block stays empty, which
         // is no constraint — so the rule is `sources AND (one of these)`.
@@ -714,6 +746,7 @@ export interface DynamicListRuleFieldsProps {
 export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
   const { scope, hostId, draft, onChange, listId } = props
   const segmentDocs = useOrgContactSegments(scope)
+  const viewDocs = useOrgCrmViews(scope)
   const listDocs = useOrgLists(scope)
   /*
    * The site's campaigns, read because this form is on screen.
@@ -758,6 +791,21 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
     }
     return [{ $id: draft.segmentId, name: draft.segmentId }, ...rows]
   }, [segmentDocs, draft.segmentId])
+  /*
+   * The saved VIEW the rule already names, kept the way the segment is
+   * (AGL-2617) — and for one more reason: the picker lists only views that
+   * translate whole, so a view edited past that after the rule named it
+   * would vanish from its own picker, and saving from that screen would
+   * erase the reference. Shown as its id, the sweep's refusal is at least
+   * visible.
+   */
+  const crmViews = useMemo(() => {
+    const rows = viewDocs
+    if (!draft.viewId || rows.some((row) => row.$id === draft.viewId)) {
+      return rows
+    }
+    return [{ $id: draft.viewId, name: draft.viewId }, ...rows]
+  }, [viewDocs, draft.viewId])
 
   /** Every audience except the one being edited — see the prop's note. */
   const lists = useMemo(
@@ -774,6 +822,7 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
       segments: Object.fromEntries(
         segments.map((row) => [row.$id, row.name ?? row.$id]),
       ),
+      views: Object.fromEntries(crmViews.map((row) => [row.$id, row.name])),
       campaigns: Object.fromEntries(
         siteCampaigns.options.map((option) => [option.value, option.label]),
       ),
@@ -788,6 +837,7 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
     [
       listDocs,
       segments,
+      crmViews,
       siteCampaigns.options,
       team.options,
       companies.names,
@@ -1023,6 +1073,28 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
             </MenuItem>
           ))}
         </TextField>
+        {/*
+          A saved Contacts view as an audience (AGL-2617), beside the
+          segment: its filters — owner, stage, company, tags, sources,
+          dates, purchases and custom fields — always apply, the way a
+          segment's do. Only views the sweep can honor are offered.
+         */}
+        <TextField
+          select
+          size="small"
+          label="Saved view"
+          value={draft.viewId}
+          onChange={(event) => set('viewId', event.target.value)}
+          helperText="Reuses that Contacts view's filters"
+          sx={{ minWidth: 200 }}
+        >
+          <MenuItem value="">{'None'}</MenuItem>
+          {crmViews.map((view) => (
+            <MenuItem key={view.$id} value={view.$id}>
+              {view.name}
+            </MenuItem>
+          ))}
+        </TextField>
         <TextField
           size="small"
           label="Tagged"
@@ -1157,6 +1229,24 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
             />
           )}
           sx={{ minWidth: 260, flexGrow: 1, maxWidth: 420 }}
+        />
+        {/*
+          THE RE-ENGAGEMENT WINDOW (AGL-2616), beside the other facet reads
+          rather than under "Email engagement" below: that section reads the
+          address-level rollup — every message this workspace sent the
+          person — and this reads the stamp the delivery webhook wrote on
+          THIS site's contact for THIS site's campaigns. A contact never
+          stamped is left out, the lean every CRM dimension takes, and the
+          helper says so.
+         */}
+        <TextField
+          type="number"
+          size="small"
+          label="Engaged with a campaign within (days)"
+          helperText="Opened or clicked one of your campaigns. Never engaged is left out."
+          value={draft.engagedWithinDays}
+          onChange={(event) => set('engagedWithinDays', event.target.value)}
+          sx={{ minWidth: 280 }}
         />
       </Stack>
       {/*

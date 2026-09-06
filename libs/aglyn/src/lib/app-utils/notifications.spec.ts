@@ -16,6 +16,7 @@
  */
 
 import {
+  crmDailyDigestEnabled,
   NOTIFICATION_TYPE_LABELS,
   notificationCategory,
   notificationMuted,
@@ -47,6 +48,23 @@ describe('notification categories (AGL-267)', () => {
     for (const [type, label] of entries) {
       expect(`${type}:${label}`).not.toMatch(/:$/)
     }
+  })
+})
+
+describe('the daily CRM digest switch (AGL-2619)', () => {
+  it('is on until somebody turns it off, and reads only its own key', () => {
+    expect(crmDailyDigestEnabled(undefined)).toBe(true)
+    expect(crmDailyDigestEnabled({})).toBe(true)
+    expect(crmDailyDigestEnabled({ crmDaily: true })).toBe(true)
+    expect(crmDailyDigestEnabled({ crmDaily: false })).toBe(false)
+    // A category mute lives in a different map and does not reach it.
+    expect(crmDailyDigestEnabled({ content: false })).toBe(true)
+  })
+
+  it('files the digest notification under the operational category', () => {
+    expect(notificationCategory('content.crmDailyDigest')).toBe('content')
+    expect(notificationMuted({ content: false }, 'content.crmDailyDigest')).toBe(true)
+    expect(notificationMuted({ billing: false }, 'content.crmDailyDigest')).toBe(false)
   })
 })
 

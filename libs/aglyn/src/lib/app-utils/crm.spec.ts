@@ -23,6 +23,7 @@ import {
   activityTimeLabel,
   assignmentEmailDomain,
   assignmentRuleMatches,
+  campaignEmailSummary,
   companyDomainForEmail,
   CRM_ASSIGNMENT_RULES_MAX,
   CRM_ASSIGNMENT_RULES_PATH,
@@ -52,9 +53,25 @@ import {
   CRM_ACTIVITY_KIND_LABELS,
   CRM_ACTIVITY_KINDS,
   CRM_COLLECTIONS,
+  CRM_VIEW_MAX_FILTERS,
+  crmContactCustomColumn,
+  crmContactCustomKey,
+  crmDefaultViewId,
+  crmDefaultViewPatch,
+  crmViewFiltersFromSegment,
+  crmViewIsListed,
+  crmViewSegmentFilters,
+  crmViewStateEquals,
+  EMPTY_CRM_VIEW_STATE,
+  isCrmViewSection,
+  normalizeCrmViewColumns,
+  normalizeCrmViewFilters,
+  normalizeCrmViewSort,
+  normalizeCrmViewState,
   CRM_TASK_KIND_LABELS,
   CRM_TASK_KINDS,
   crmActivityRecordLink,
+  type ContactCampaignEmail,
   type CrmActivityRow,
   crmReadTokens,
   crmScopeTokens,
@@ -71,7 +88,7 @@ import {
 } from './crm'
 
 describe('CRM collections', () => {
-  it('names six org subcollections, two of them prefixed', () => {
+  it('names seven org subcollections, three of them prefixed', () => {
     expect(Object.values(CRM_COLLECTIONS)).toEqual([
       'companies',
       'pipelines',
@@ -79,7 +96,159 @@ describe('CRM collections', () => {
       'crmTasks',
       'crmActivities',
       'contactFields',
+      'crmViews',
     ])
+  })
+})
+
+/**
+ * A saved view (AGL-2617) is a list's filters, columns and sort under a
+ * name. The helpers here are what hold a stored document to that shape,
+ * decide what "unsaved changes" means, keep one person's private view out
+ * of another's menu, and carry a segment across into the same grammar.
+ */
+describe('a saved view', () => {
+  it('keeps only clauses that ask something', () => {
+    expect(
+      normalizeCrmViewFilters([
+        { field: 'ownerUid', op: 'equals', value: 'uid-a', label: 'Dana' },
+        // A valued operator with no value would match nothing.
+        { field: 'name', op: 'startsWith', value: '  ' },
+        // A valueless operator is a whole clause on its own.
+        { field: 'ordersCount', op: 'isNotEmpty' },
+        { field: '', op: 'equals', value: 'x' },
+        { op: 'equals', value: 'x' },
+        null,
+        'garbage',
+      ]),
+    ).toEqual([
+      { field: 'ownerUid', op: 'equals', value: 'uid-a', label: 'Dana' },
+      { field: 'ordersCount', op: 'isNotEmpty', value: '' },
+    ])
+    expect(normalizeCrmViewFilters('not a list')).toEqual([])
+    expect(
+      normalizeCrmViewFilters(
+        Array.from({ length: CRM_VIEW_MAX_FILTERS + 5 }, (_, index) => ({
+          field: `f${index}`,
+          op: 'equals',
+          value: 'v',
+        })),
+      ),
+    ).toHaveLength(CRM_VIEW_MAX_FILTERS)
+  })
+
+  it('reads columns as a de-duplicated list and the sort as one column', () => {
+    expect(normalizeCrmViewColumns(['name', 'tags', 'name', '', 7])).toEqual([
+      'name',
+      'tags',
+    ])
+    expect(normalizeCrmViewSort({ field: 'name', direction: 'desc' })).toEqual({
+      field: 'name',
+      direction: 'desc',
+    })
+    // Anything but `desc` is ascending; no field is no sort.
+    expect(normalizeCrmViewSort({ field: 'name', direction: 'sideways' })).toEqual({
+      field: 'name',
+      direction: 'asc',
+    })
+    expect(normalizeCrmViewSort({ direction: 'desc' })).toBeNull()
+    expect(normalizeCrmViewState({ filters: null, columns: 'x', sort: 3 })).toEqual(
+      EMPTY_CRM_VIEW_STATE,
+    )
+  })
+
+  it('compares states on what is matched, not on the labels', () => {
+    const state = normalizeCrmViewState({
+      filters: [{ field: 'ownerUid', op: 'equals', value: 'uid-a', label: 'Dana' }],
+      columns: ['name'],
+      sort: { field: 'name', direction: 'asc' },
+    })
+    expect(
+      crmViewStateEquals(state, {
+        ...state,
+        filters: [{ field: 'ownerUid', op: 'equals', value: 'uid-a' }],
+      }),
+    ).toBe(true)
+    expect(crmViewStateEquals(state, { ...state, sort: null })).toBe(false)
+    expect(
+      crmViewStateEquals(state, { ...state, sort: { field: 'name', direction: 'desc' } }),
+    ).toBe(false)
+    expect(crmViewStateEquals(state, { ...state, columns: ['name', 'tags'] })).toBe(false)
+    // Order is meaning: the first servable clause is the one the query runs.
+    const two = {
+      ...state,
+      filters: [
+        { field: 'tags', op: 'contains', value: 'vip' },
+        { field: 'ownerUid', op: 'equals', value: 'uid-a' },
+      ],
+    }
+    expect(
+      crmViewStateEquals(two, { ...two, filters: [...two.filters].reverse() }),
+    ).toBe(false)
+  })
+
+  it('lists a view for its owner, and for everybody once shared', () => {
+    expect(crmViewIsListed({ shared: false, ownerUid: 'uid-a' }, 'uid-a')).toBe(true)
+    expect(crmViewIsListed({ shared: false, ownerUid: 'uid-a' }, 'uid-b')).toBe(false)
+    expect(crmViewIsListed({ shared: true, ownerUid: 'uid-a' }, 'uid-b')).toBe(true)
+    expect(crmViewIsListed({ shared: false, ownerUid: 'uid-a' }, null)).toBe(false)
+  })
+
+  it('carries a segment into view clauses and back', () => {
+    // One tag is the served `contains`; several are the OR the grammar calls `isAnyOf`.
+    expect(crmViewFiltersFromSegment({ tags: ['vip'], sources: ['form'] })).toEqual([
+      { field: 'tags', op: 'contains', value: 'vip' },
+      { field: 'source', op: 'equals', value: 'form' },
+    ])
+    const filters = crmViewFiltersFromSegment({
+      tags: ['vip', 'wholesale'],
+      sources: ['form', 'order'],
+    })
+    expect(filters).toEqual([
+      { field: 'tags', op: 'isAnyOf', value: 'vip,wholesale' },
+      { field: 'source', op: 'isAnyOf', value: 'form,order' },
+    ])
+    expect(crmViewSegmentFilters(filters)).toEqual({
+      tags: ['vip', 'wholesale'],
+      sources: ['form', 'order'],
+    })
+    // Only the two dimensions a segment has are a segment's to keep.
+    expect(
+      crmViewSegmentFilters([
+        { field: 'name', op: 'startsWith', value: 'a' },
+        { field: 'ownerUid', op: 'equals', value: 'uid-a' },
+      ]),
+    ).toBeNull()
+    expect(
+      crmViewSegmentFilters([{ field: 'source', op: 'equals', value: 'carrier-pigeon' }]),
+    ).toBeNull()
+    expect(crmViewFiltersFromSegment({})).toEqual([])
+  })
+
+  it('reads and writes the default view on the profile, per org and section', () => {
+    const profile = {
+      notificationPrefs: { billing: false },
+      crmDefaultViews: { 'org-1': { contacts: 'view-1', deals: '' } },
+    }
+    expect(crmDefaultViewId(profile, 'org-1', 'contacts')).toBe('view-1')
+    expect(crmDefaultViewId(profile, 'org-1', 'deals')).toBeNull()
+    expect(crmDefaultViewId(profile, 'org-2', 'contacts')).toBeNull()
+    expect(crmDefaultViewId(null, 'org-1', 'contacts')).toBeNull()
+    expect(crmDefaultViewPatch('org-1', 'tasks', 'view-9')).toEqual({
+      crmDefaultViews: { 'org-1': { tasks: 'view-9' } },
+    })
+    expect(crmDefaultViewPatch('org-1', 'tasks', null)).toEqual({
+      crmDefaultViews: { 'org-1': { tasks: null } },
+    })
+  })
+
+  it('names a custom field column and reads the key back', () => {
+    expect(crmContactCustomColumn('plan')).toBe('custom_plan')
+    expect(crmContactCustomKey('custom_plan')).toBe('plan')
+    expect(crmContactCustomKey('custom_')).toBeNull()
+    expect(crmContactCustomKey('ownerUid')).toBeNull()
+    expect(isCrmViewSection('contacts')).toBe(true)
+    expect(isCrmViewSection('reports')).toBe(false)
   })
 })
 
@@ -592,7 +761,11 @@ describe('mergeContactTimeline', () => {
     )
     expect(
       merged.map((entry) =>
-        entry.kind === 'captured' ? entry.interaction.summary : entry.activity.$id,
+        entry.kind === 'captured'
+          ? entry.interaction.summary
+          : entry.kind === 'logged'
+            ? entry.activity.$id
+            : entry.key,
       ),
     ).toEqual(['first', 'second', 'a-1', 'a-2'])
   })
@@ -611,6 +784,96 @@ describe('mergeContactTimeline', () => {
       [activity({ $id: 'a-1', atMs: 1_000 })],
     )
     expect(merged.map((entry) => entry.kind)).toEqual(['logged', 'captured'])
+  })
+
+  /*
+   * THE THIRD HISTORY (AGL-2616): the campaign mail the platform sent this
+   * person. Placed at the instant it was SENT, keyed by the provider's
+   * message id, and a kind of its own — never the logged `email` activity,
+   * which is a message a person on the team recorded.
+   */
+  it('places a campaign email at its sent instant, under its own kind', () => {
+    const merged = mergeContactTimeline(captured, [activity({ $id: 'a-1', atMs: 2_000 })], [
+      campaignEmail({ messageId: 'msg-1', sentAtMs: 2_500, openedAtMs: 9_000, openCount: 2 }),
+    ])
+    expect(merged.map((entry) => [entry.kind, entry.atMs])).toEqual([
+      ['captured', 3_000],
+      ['campaign', 2_500],
+      ['logged', 2_000],
+      ['captured', 1_000],
+    ])
+    const entry = merged[1]
+    if (entry.kind !== 'campaign') throw new Error('expected the campaign entry second')
+    expect(entry.key).toBe('campaign:msg-1')
+    expect(entry.email.campaignId).toBe('camp-1')
+    // A logged email activity keeps its own kind beside a campaign entry.
+    const beside = mergeContactTimeline(null, [activity({ $id: 'a-2', kind: 'email' })], [
+      campaignEmail({ messageId: 'msg-2' }),
+    ])
+    expect(beside.map((entry) => entry.kind).sort()).toEqual(['campaign', 'logged'])
+    expect(mergeContactTimeline(null, null, null)).toEqual([])
+  })
+})
+
+const campaignEmail = (
+  overrides: Partial<ContactCampaignEmail> & { messageId: string },
+): ContactCampaignEmail => ({
+  hostId: 'host-a',
+  campaignId: 'camp-1',
+  campaignName: 'Spring sale',
+  subject: 'Spring sale ends Sunday',
+  sentAtMs: 1_000,
+  openCount: 0,
+  clickCount: 0,
+  ...overrides,
+})
+
+/**
+ * The sentence after the email's name: what became of it, in lifecycle
+ * order, counts only past one.
+ */
+describe('campaignEmailSummary', () => {
+  it('names only the states that happened, in the order they happen', () => {
+    expect(campaignEmailSummary(campaignEmail({ messageId: 'm' }))).toEqual(['sent'])
+    expect(
+      campaignEmailSummary(
+        campaignEmail({
+          messageId: 'm',
+          deliveredAtMs: 2,
+          openedAtMs: 3,
+          clickedAtMs: 4,
+          openCount: 1,
+          clickCount: 1,
+        }),
+      ),
+    ).toEqual(['sent', 'delivered', 'opened', 'clicked'])
+  })
+
+  it('counts repeat opens and clicks, and says so only past one', () => {
+    expect(
+      campaignEmailSummary(
+        campaignEmail({
+          messageId: 'm',
+          deliveredAtMs: 2,
+          openedAtMs: 3,
+          clickedAtMs: 4,
+          openCount: 2,
+          clickCount: 3,
+        }),
+      ),
+    ).toEqual(['sent', 'delivered', 'opened ×2', 'clicked ×3'])
+  })
+
+  it('reports a bounce and a complaint after whatever succeeded first', () => {
+    expect(campaignEmailSummary(campaignEmail({ messageId: 'm', bouncedAtMs: 2 }))).toEqual([
+      'sent',
+      'bounced',
+    ])
+    expect(
+      campaignEmailSummary(
+        campaignEmail({ messageId: 'm', deliveredAtMs: 2, complainedAtMs: 3 }),
+      ),
+    ).toEqual(['sent', 'delivered', 'marked as spam'])
   })
 })
 

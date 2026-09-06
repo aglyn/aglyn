@@ -872,6 +872,19 @@ Notes that keep these honest:
   minutes they used to carry was GitHub's drift budget, bought with six
   missed sends of a feature `/product/marketing` sells.
   **Clearing event:** the next invocation of that job; nothing latches.
+  **One schedule is outside the inventory on purpose (AGL-2619).** The daily
+  CRM digest — `0 13 * * *` → `/api/crm/daily-digest`, on GitHub Actions —
+  has no `SCHEDULED_JOBS` row, and `scheduled-crons-wiring.spec.ts` names it
+  in `UNWATCHED_BY_DECISION` with the reason: a NEW row reds this door
+  against **today's** fire time the moment the console build is live
+  (`job-never-reported`), before the job has run once, and this door is what
+  the monitors read. The route stamps `platformCronBeats/crm-daily-digest`
+  on every POST regardless, so adding the row is a two-place change — the
+  row in `health-report.ts`, the exemption deleted — the day after the
+  schedule first fires, with a beat already there to judge. Until then the
+  digest is watched only by the workflow's own non-200 check, which is
+  proportionate: it is a morning summary, and a dropped day is a day nobody
+  is reminded.
   **⚠️ A SINGLE PROBE OF THIS ENDPOINT PROVES NOTHING.** It memoizes its
   Firestore read for five minutes **per lambda instance**, and a burst lands
   on many. During the 2026-08-24 incident 36 probes split cleanly — ~19

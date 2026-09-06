@@ -58,6 +58,12 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   listFilterConstraints: jest.requireActual(
     '@aglyn/tenant-feature-instance',
   ).listFilterConstraints,
+  // The plan the views split the clauses with (AGL-2617) — real, for the
+  // reason the translator above is.
+  listFilterPlan: jest.requireActual('@aglyn/tenant-feature-instance')
+    .listFilterPlan,
+  // The reader's reach, for the views control's "may edit" — org-wide here.
+  useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),
   useFirestore: () => ({}),
   useOrgDataScope: () => ({ scope: ['orgs', 'org-1'] as const, orgId: 'org-1' }),
   useHostCampaigns: () => ({ options: [], truncated: false, ready: true }),

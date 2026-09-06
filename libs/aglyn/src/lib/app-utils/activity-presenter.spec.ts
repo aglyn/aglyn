@@ -160,4 +160,25 @@ describe('activityHref', () => {
       activityHref({ target: { type: 'mystery' } }, { orgSlug, host }),
     ).toBeUndefined()
   })
+
+  /**
+   * CRM work in Setup → Activity opens the record it names (AGL-2622), and
+   * a deleted record's entry still lands on its list rather than on a 404.
+   */
+  it('links CRM entries into the hub, by record or by section', () => {
+    expect(
+      activityHref({ target: { type: 'contact', id: 'c1' } }, { orgSlug, host }),
+    ).toBe('/acme/hosts/shop/crm/contacts/c1')
+    expect(
+      activityHref({ target: { type: 'lead', id: 'l1' } }, { orgSlug, host }),
+    ).toBe('/acme/hosts/shop/crm/leads/l1')
+    expect(
+      activityHref({ target: { type: 'company', id: 'co1' } }, { orgSlug, host }),
+    ).toBe('/acme/hosts/shop/crm/companies/co1')
+    expect(
+      activityHref({ target: { type: 'deal' } }, { orgSlug, host }),
+    ).toBe('/acme/hosts/shop/crm/deals')
+    expect(activityTypeLabel('deal')).toBe('Deal')
+    expect(activityTypeLabel('lead')).toBe('Lead')
+  })
 })

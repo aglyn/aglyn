@@ -31,6 +31,9 @@ import {
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { useCrmSavedView } from '../hooks/use-crm-saved-view'
+import { useCrmViewGrid } from '../hooks/use-crm-view-grid'
+import CrmViewsControl from './crm-views-control'
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -45,7 +48,7 @@ import {
 } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useRouter } from 'next/navigation'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import { useDealStageApi } from '../hooks/use-deal-stage-api'
 import {
@@ -117,7 +120,30 @@ export function DealsSection(props: ConsolePluginPageProps) {
 
   const [view, setView] = useState<View>('board')
   const [closedExpanded, setClosedExpanded] = useState(false)
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  /*
+   * The table's status filter is the saved VIEW'S (AGL-2617): a view of
+   * deals is a view of the table, and it holds the status beside the
+   * columns and the sort. Opening one shows the table, because the board
+   * has no columns to arrange and answers to the pipeline's stages alone.
+   */
+  const views = useCrmSavedView({
+    section: 'deals',
+    hostId,
+    org,
+    basePath: basePath ?? '',
+  })
+  const statusFilter: StatusFilter = useMemo(() => {
+    const value = views.state.filters.find((clause) => clause.field === 'status')?.value
+    return value === 'open' || value === 'won' || value === 'lost' ? value : 'all'
+  }, [views.state.filters])
+  const setStatusFilter = useCallback(
+    (next: StatusFilter) =>
+      views.setFilters(next === 'all' ? [] : [{ field: 'status', op: 'equals', value: next }]),
+    [views.setFilters],
+  )
+  useEffect(() => {
+    if (views.currentId) setView('table')
+  }, [views.currentId])
 
   // The board's read stays on in the table view too: it is what the summary
   // above both views is computed from, and it is already bounded.
@@ -298,6 +324,8 @@ export function DealsSection(props: ConsolePluginPageProps) {
     ],
     [pipelineState, roster],
   )
+  /* The table's column and sort models are the view's (AGL-2617). */
+  const grid = useCrmViewGrid(views, columns)
 
   const noOrg = scope.ready && !scope.orgId
   const pipelineLoading =
@@ -420,20 +448,28 @@ export function DealsSection(props: ConsolePluginPageProps) {
             </>
           ) : (
             <Stack spacing={1.5}>
-              <ToggleButtonGroup
-                exclusive
-                size="small"
-                value={statusFilter}
-                onChange={(_event, next) => {
-                  if (next) setStatusFilter(next as StatusFilter)
-                }}
-                aria-label="Status"
+              {/* The view this table is showing, beside the status it narrows by (AGL-2617). */}
+              <Stack
+                direction="row"
+                spacing={2}
+                sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
               >
-                <ToggleButton value="all">{'All'}</ToggleButton>
-                <ToggleButton value="open">{'Open'}</ToggleButton>
-                <ToggleButton value="won">{'Won'}</ToggleButton>
-                <ToggleButton value="lost">{'Lost'}</ToggleButton>
-              </ToggleButtonGroup>
+                <CrmViewsControl controller={views} allLabel="All deals" />
+                <ToggleButtonGroup
+                  exclusive
+                  size="small"
+                  value={statusFilter}
+                  onChange={(_event, next) => {
+                    if (next) setStatusFilter(next as StatusFilter)
+                  }}
+                  aria-label="Status"
+                >
+                  <ToggleButton value="all">{'All'}</ToggleButton>
+                  <ToggleButton value="open">{'Open'}</ToggleButton>
+                  <ToggleButton value="won">{'Won'}</ToggleButton>
+                  <ToggleButton value="lost">{'Lost'}</ToggleButton>
+                </ToggleButtonGroup>
+              </Stack>
               {paged.status === 'success' && paged.rows.length === 0 && paged.page === 0 ? (
                 <EmptyStateComponent
                   label={statusFilter === 'all' ? 'No deals yet' : `No ${statusFilter} deals`}
@@ -462,6 +498,11 @@ export function DealsSection(props: ConsolePluginPageProps) {
                     rows={paged.rows}
                     columns={columns}
                     onOpen={(_id, row) => openDeal(row as DealDoc)}
+                    // Columns and sort are the view's, controlled (AGL-2617).
+                    columnVisibilityModel={grid.columnVisibilityModel}
+                    onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}
+                    sortModel={grid.sortModel}
+                    onSortModelChange={grid.onSortModelChange}
                     hideFooter
                   />
                   <ListPagination

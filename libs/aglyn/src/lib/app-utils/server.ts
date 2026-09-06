@@ -36,6 +36,7 @@ export * from './url-slug'
 export * from './child-contract'
 export * from './child-contract-compose'
 export * from './console-routes'
+export * from './console-record-links'
 // What a stored screen-link value means, with no React attached — the
 // where-used scan reads these on the server (AGL-703).
 export * from './screen-link-value'
@@ -53,6 +54,10 @@ export * from './crm'
 // and beside it because it reads the stage list and the deal weighting from
 // there rather than restating either.
 export * from './crm-reports'
+// What one member is owed this morning — the day's window in a named zone,
+// the task and lead bucketing, and the words the notification and the mail
+// say (AGL-2619). Pure like `crm-reports`, read by the scheduled route.
+export * from './crm-digest'
 // Reading a spreadsheet of people INTO the CRM (AGL-2602): the column
 // mapping, the per-row normalizer and the chunk-result arithmetic the
 // console drawer and the `crm/contacts-import` route both read. Pure, and

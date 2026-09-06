@@ -1,5 +1,5 @@
 ---
-sidebar_position: 10
+sidebar_position: 11
 title: Reports
 description: New contacts, where they came from and which sources convert, this site's lead funnel, the open pipeline, won and lost, who logged what, and the task load — counted on the server, every table exportable as CSV.
 ---
@@ -11,6 +11,8 @@ description: New contacts, where they came from and which sources convert, this 
 same records the other sections list — a report can never count a contact,
 deal or task the reader could not open — and most of them are counted by the
 database rather than downloaded, so the page stays quick on a large CRM.
+
+![The Reports section of the CRM: the period toggle, the cards for new contacts, leads converted, deals won and tasks completed, new contacts by week, the lifecycle funnel and new contacts by source](/img/contacts/crm-reports.png)
 
 ## Choosing a period
 

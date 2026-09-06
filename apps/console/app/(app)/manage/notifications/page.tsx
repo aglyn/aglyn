@@ -17,6 +17,8 @@
 'use client'
 
 import {
+  crmDailyDigestEnabled,
+  DIGEST_PREFS_FIELD,
   NOTIFICATION_CATEGORY_LABELS,
   NOTIFICATION_TYPE_LABELS,
   type NotificationCategory,
@@ -214,8 +216,11 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
     void loadPage(0)
   }, [loadPage])
 
-  // Preferences (AGL-267): category mutes on users/{uid}.notificationPrefs.
+  // Preferences (AGL-267): category mutes on users/{uid}.notificationPrefs,
+  // and the digest switches beside them on `digestPrefs` (AGL-2619) — a
+  // digest is a schedule a person keeps or drops, not a category.
   const [prefs, setPrefs] = useState<Record<string, boolean>>({})
+  const [digestPrefs, setDigestPrefs] = useState<Record<string, boolean>>({})
   useEffect(() => {
     if (!uid) return
     let active = true
@@ -226,6 +231,9 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
           setPrefs(
             (snapshot.get('notificationPrefs') as Record<string, boolean>) ??
               {},
+          )
+          setDigestPrefs(
+            (snapshot.get(DIGEST_PREFS_FIELD) as Record<string, boolean>) ?? {},
           )
         }
       } catch {
@@ -243,6 +251,16 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
     void setDoc(
       doc(firestore, 'users', uid),
       { notificationPrefs: next },
+      { merge: true },
+    ).catch(console.error)
+  }
+  const toggleCrmDigest = () => {
+    if (!uid) return
+    const next = { ...digestPrefs, crmDaily: !crmDailyDigestEnabled(digestPrefs) }
+    setDigestPrefs(next)
+    void setDoc(
+      doc(firestore, 'users', uid),
+      { [DIGEST_PREFS_FIELD]: next },
       { merge: true },
     ).catch(console.error)
   }
@@ -371,6 +389,30 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
                   slotProps={{ typography: { variant: 'caption' } }}
                 />
               ))}
+            </Stack>
+            <Stack
+              direction="row"
+              spacing={1}
+              sx={{ flexWrap: 'wrap', rowGap: 1, alignItems: 'center' }}
+            >
+              <Typography variant="caption" color="text.secondary">
+                {'Daily digests:'}
+              </Typography>
+              <FormControlLabel
+                control={
+                  <Switch
+                    size="small"
+                    checked={crmDailyDigestEnabled(digestPrefs)}
+                    onChange={toggleCrmDigest}
+                  />
+                }
+                label="Daily CRM digest"
+                slotProps={{ typography: { variant: 'caption' } }}
+              />
+              <Typography variant="caption" color="text.secondary">
+                {'Each morning: your overdue and due-today tasks and the leads ' +
+                  'nobody has worked, here and by email.'}
+              </Typography>
             </Stack>
             <Stack
               direction="row"

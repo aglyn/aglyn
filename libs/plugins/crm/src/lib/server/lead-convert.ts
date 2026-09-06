@@ -77,6 +77,7 @@ import {
   crmRecordsQuotaForOrg,
   firebaseAdmin,
   getOrgForHost,
+  logHostActivity,
   orgDataCollectionForHost,
   writeContactCompanyLink,
 } from '@aglyn/tenant-data-admin'
@@ -583,6 +584,20 @@ export const leadConvertHandler: PluginApiHandler = async (req, res) => {
       ...(dealId ? { dealId } : {}),
     }
     await leadRef.update({ ...stamp, updatedAt: FieldValue.serverTimestamp() })
+
+    /*
+     * The audit line, from the route that did the work (AGL-2622): the
+     * conversion is one act however many records it opened, so it is one
+     * entry, on the lead, in the feed of the site that holds the lead. A
+     * repeat call answered above with the ids it already had wrote nothing
+     * and logs nothing.
+     */
+    await logHostActivity(
+      hostId,
+      { uid: decoded.uid, email: decoded.email ?? null },
+      'Converted lead',
+      { type: 'lead', id: leadId, name: String(lead['name'] ?? '') || email },
+    )
 
     const answer: LeadConvertResponse = {
       ok: true,

@@ -68,6 +68,7 @@ import {
   consentGroupForSite,
   firebaseAdmin,
   getOrgForHost,
+  logHostActivity,
   memberHasOrgPermission,
   orgDataCollectionForHost,
   resolveOrgMembership,
@@ -81,6 +82,10 @@ import { crmTaskCompleteHandler, crmTaskSaveHandler } from './server/task-routes
 import { crmContactsImportHandler } from './server/contacts-import'
 import { crmDealStageHandler } from './server-deal-stage'
 import { leadConvertHandler } from './server/lead-convert'
+import {
+  CONTACT_EMAIL_HISTORY_ROUTE,
+  contactEmailHistoryHandler,
+} from './server/contact-email-history'
 
 /**
  * `GET /api/crm/ping` → `{ ok: true, plugin: 'crm' }`.
@@ -473,6 +478,21 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
       })
     }
 
+    /*
+     * The audit line, written HERE rather than by the console (AGL-2622):
+     * a route that verified the caller and performed the write is the one
+     * writer that cannot record an act that did not happen, which is the
+     * reason `check-activity-coverage.mjs` counts this file. A merge into
+     * a person the org already held is said to be one — the row was
+     * updated, not added — so the feed cannot claim two people for one.
+     */
+    await logHostActivity(
+      hostId,
+      { uid: decoded.uid, email: decoded.email ?? null },
+      result.created ? 'Added contact' : 'Updated contact',
+      { type: 'contact', id: result.contactId, name: name || email },
+    )
+
     res
       .status(result.created ? 201 : 200)
       .json({ contactId: result.contactId, created: result.created })
@@ -505,4 +525,7 @@ export function registerCrmConsoleApi(): void {
   // write a browser cannot make alone, because only the server may create a
   // contact through the dedupe-and-meter door.
   registerPluginApiRoute('crm/lead-convert', leadConvertHandler)
+  // The one READ behind a route (AGL-2616): the per-recipient delivery log
+  // is closed to clients, so a contact's campaign mail is projected here.
+  registerPluginApiRoute(CONTACT_EMAIL_HISTORY_ROUTE, contactEmailHistoryHandler)
 }

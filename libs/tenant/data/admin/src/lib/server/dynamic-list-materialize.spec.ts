@@ -386,6 +386,88 @@ describe('a rule that selects nobody says so', () => {
   })
 })
 
+/**
+ * A saved Contacts VIEW as an audience (AGL-2617): resolved once into the
+ * rule's own dimensions, ANDed with the rule, planned for like the rule —
+ * and, like a segment, narrowing to nobody rather than to everybody when
+ * it cannot be honored.
+ */
+describe('a saved contacts view is an audience', () => {
+  const VIEW = 'orgs/org-1/crmViews/view-1'
+
+  it('narrows the rule to the view\'s clauses', async () => {
+    seedMatchingContacts(2)
+    store['orgs/org-1/contacts/c-other'] = {
+      email: 'other@example.com',
+      tags: ['other'],
+      sources: { form: true },
+    }
+    store[VIEW] = {
+      section: 'contacts',
+      filters: [{ field: 'tags', op: 'contains', value: 'vip' }],
+    }
+    const result = await materializeDynamicList({
+      listRef: listRef(),
+      hostId: 'host-1',
+      rule: { sources: ['contacts'], viewId: 'view-1' },
+    })
+    expect(result.empty).toBe(false)
+    expect(memberEmails()).toEqual(['person0@example.com', 'person1@example.com'])
+  })
+
+  it('reads the facet when the view names an owner, as a rule naming one would', async () => {
+    store['orgs/org-1/contacts/c-mine'] = {
+      email: 'mine@example.com',
+      tags: ['vip'],
+      facets: { [GROUP_ID]: { ownerUid: 'uid-a' } },
+    }
+    store['orgs/org-1/contacts/c-theirs'] = {
+      email: 'theirs@example.com',
+      tags: ['vip'],
+      facets: { [GROUP_ID]: { ownerUid: 'uid-b' } },
+    }
+    store[VIEW] = {
+      section: 'contacts',
+      filters: [{ field: 'ownerUid', op: 'equals', value: 'uid-a', label: 'Dana' }],
+    }
+    await materializeDynamicList({
+      listRef: listRef(),
+      hostId: 'host-1',
+      rule: { sources: ['contacts'], tags: ['vip'], viewId: 'view-1' },
+    })
+    // The facet group was resolved for the view's sake — the rule alone
+    // names nothing the facet holds.
+    expect(groupLookups).toEqual(['host-1'])
+    expect(memberEmails()).toEqual(['mine@example.com'])
+  })
+
+  it('narrows to nothing when the view is gone, is not of contacts, or says what this language cannot', async () => {
+    seedMatchingContacts(2)
+    const attempt = async (viewId: string) =>
+      materializeDynamicList({
+        listRef: listRef(),
+        hostId: 'host-1',
+        rule: { sources: ['contacts'], viewId },
+      })
+    expect((await attempt('gone')).empty).toBe(true)
+    store['orgs/org-1/crmViews/companies'] = {
+      section: 'companies',
+      filters: [],
+    }
+    expect((await attempt('companies')).empty).toBe(true)
+    store['orgs/org-1/crmViews/prefix'] = {
+      section: 'contacts',
+      filters: [
+        { field: 'tags', op: 'contains', value: 'vip' },
+        // A name prefix has no dimension here; dropping it would widen the audience.
+        { field: 'name', op: 'startsWith', value: 'Per' },
+      ],
+    }
+    expect((await attempt('prefix')).empty).toBe(true)
+    expect(memberRows()).toHaveLength(0)
+  })
+})
+
 describe('the rule can draw from silos other than contacts', () => {
   it('answers "everyone who submitted form X"', async () => {
     store['hosts/host-1/formSubmissions/s1'] = {
@@ -883,6 +965,33 @@ describe('a CRM field is an audience', () => {
     expect(memberEmails()).toEqual(['enterprise@example.com'])
   })
 
+  /*
+   * THE RE-ENGAGEMENT AUDIENCE (AGL-2616) reads the facet stamp the delivery
+   * webhook wrote, and never the address-level rollup: a person who opened a
+   * sibling business's newsletter last week has a fresh rollup and no stamp
+   * in this holder's facet, and must not be mailed as one of our readers.
+   */
+  it('enrolls the contacts who engaged with one of our campaigns inside the window', async () => {
+    const now = Date.UTC(2026, 8, 5)
+    const day = 86_400_000
+    seedProfiledContact('c1', 'reader@example.com', {
+      lastEmailEngagementAtMs: now - 3 * day,
+    })
+    seedProfiledContact('c2', 'lapsed@example.com', {
+      lastEmailEngagementAtMs: now - 45 * day,
+    })
+    seedProfiledContact('c3', 'never@example.com', {})
+    store['emailDeliveries/' + 'anything'] = { lastEngagedAtMs: now - day }
+    const result = await materializeDynamicList({
+      listRef: listRef(),
+      hostId: 'host-1',
+      rule: { sources: ['contacts'], engagedWithinDays: 30 },
+      nowMs: now,
+    })
+    expect(result.matched).toBe(1)
+    expect(memberEmails()).toEqual(['reader@example.com'])
+  })
+
   /**
    * ⛔ THE FACET IS THE HOLDER'S OWN RECORD.
    *
@@ -898,12 +1007,14 @@ describe('a CRM field is an audience', () => {
       lifecycleStage: 'customer',
       companyId: 'co-acme',
       custom: { plan: 'enterprise' },
+      lastEmailEngagementAtMs: Date.now(),
       facets: {
         'group-other': {
           ownerUid: 'uid-a',
           lifecycleStage: 'customer',
           companyId: 'co-acme',
           custom: { plan: 'enterprise' },
+          lastEmailEngagementAtMs: Date.now(),
         },
       },
     }
@@ -912,6 +1023,7 @@ describe('a CRM field is an audience', () => {
       { sources: ['contacts'], lifecycleStages: ['customer'] },
       { sources: ['contacts'], companyIds: ['co-acme'] },
       { sources: ['contacts'], custom: [{ key: 'plan', op: 'eq', value: 'enterprise' }] },
+      { sources: ['contacts'], engagedWithinDays: 30 },
     ]) {
       const result = await materializeDynamicList({
         listRef: listRef(),

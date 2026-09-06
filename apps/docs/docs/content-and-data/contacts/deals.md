@@ -1,5 +1,5 @@
 ---
-sidebar_position: 8
+sidebar_position: 9
 title: Deals pipeline
 description: Every open deal by stage — with an amount, an owner and an expected close — as a board you drag across or a table you page through, and the won and lost history behind it.
 ---
@@ -24,6 +24,8 @@ flowchart LR
   N --> W[Won]
   N --> L[Lost]
 ```
+
+![The Deals section of the CRM: the pipeline board with Inquiry, Demo booked, Proposal and Negotiation columns, the open, pipeline and weighted totals above, and Won and Lost beside the Board and Table toggle](/img/contacts/crm-deals-board.png)
 
 ## The pipeline and its stages
 

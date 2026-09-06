@@ -31,6 +31,7 @@ import { NavigationDrawerComponent } from '@aglyn/shared-ui-jsx/components/navig
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
+  useHostActivityLogger,
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
@@ -128,6 +129,7 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { scope, createTokens } = useCrmScope({ hostId, org })
+  const logActivity = useHostActivityLogger(hostId)
 
   const [draft, setDraft] = useState<CompanyDraft>(EMPTY_COMPANY_DRAFT)
   const [busy, setBusy] = useState(false)
@@ -239,6 +241,10 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
             updatedAt: serverTimestamp(),
           },
         )
+        // Setup → Activity shows CRM work (AGL-2622): the company is org
+        // data, but the act happened in this site's console and belongs in
+        // its feed. Creation only — an edit is a save the card reports.
+        logActivity('Added company', { type: 'company', id, name: draft.name.trim() })
         enqueueSnackbar(`Company "${draft.name.trim()}" created`, {
           variant: 'success',
           persist: false,
@@ -263,6 +269,7 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
     createTokens,
     hostId,
     user,
+    logActivity,
     enqueueSnackbar,
     onSaved,
     onClose,

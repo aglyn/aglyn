@@ -1102,6 +1102,39 @@ service cloud.firestore {
           (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()));
         allow delete: if isStaff() || canWriteScopedOrgData();
       }
+      /**
+       * Saved views (AGL-2617): a list's filters, columns and sort under a
+       * name, for one of the CRM sections. A view describes the people it
+       * selects, so it is READ under the contacts predicate like every
+       * companion collection; a private one is hidden by the console's
+       * listing, not by these rules.
+       *
+       * WRITES ARE THE CREATOR'S, OR AN ORG-WIDE MEMBER'S — the one place
+       * in the CRM where authorship gates a change. A view is somebody's
+       * working arrangement: a colleague on the same site may read a shared
+       * one and must not rename, re-filter or delete it out from under its
+       * owner, while an org-wide member may tidy views whoever left them.
+       * The create therefore requires the creator stamp to be the caller —
+       * a view minted under another person's uid would hand that person a
+       * document they never made and take it from the one who did — and the
+       * scoped-member update keeps `scopeUnchanged()` for the same reason
+       * every scoped collection above does.
+       */
+      match /crmViews/{viewId} {
+        allow read: if isStaff() || canReadScopedPeople();
+        allow create: if isStaff() ||
+          (canWriteOrgData() && canCreateScoped() &&
+           request.resource.data.createdByUid == request.auth.uid);
+        allow update: if isStaff() ||
+          (canWriteScopedOrgData() &&
+           (isOrgWideMember() ||
+            (resource.data.createdByUid == request.auth.uid &&
+             scopeUnchanged())));
+        allow delete: if isStaff() ||
+          (canWriteScopedOrgData() &&
+           (isOrgWideMember() ||
+            resource.data.createdByUid == request.auth.uid));
+      }
 
       // Email topics: the streams a recipient may leave one at a time.
       // Scoped like `lists` and for the same reason — a topic is authored

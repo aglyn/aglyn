@@ -81,8 +81,19 @@ const contact = {
           atMs: 3_000,
           summary: 'Submitted the contact form',
           path: '/pricing',
+          refId: 'sub-7',
+          hostId: 'host-1',
         },
-        { type: 'order', atMs: 1_000, summary: 'Placed order #12', refId: 'ord-12' },
+        {
+          type: 'order',
+          atMs: 1_000,
+          summary: 'Placed order #12',
+          refId: 'ord-12',
+          hostId: 'host-1',
+        },
+        // Written before the door stamped the site: shown, never linked —
+        // even though a booking's page needs no id to be addressed.
+        { type: 'booking', atMs: 500, summary: 'An older booking', refId: 'bk-1' },
       ],
     },
     // Another holder's history on the same shared row.
@@ -135,7 +146,52 @@ const enqueueSnackbar = jest.fn()
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar }),
 }))
+
+/*
+ * The campaign mail the server answered with (AGL-2616), as the hook hands
+ * it back. Doubled at the hook because the wire — one authorized POST per
+ * record open — is the hook's own contract; what this file owns is how the
+ * card draws what came back, and beside what.
+ */
+const campaignEmails: Array<Record<string, unknown>> = [
+  {
+    messageId: 'msg-spring',
+    hostId: 'host-1',
+    campaignId: 'camp-spring',
+    campaignName: 'Spring sale',
+    subject: 'Spring sale ends Sunday',
+    sentAtMs: 3_500,
+    deliveredAtMs: 3_600,
+    openedAtMs: 3_700,
+    clickedAtMs: 3_800,
+    openCount: 2,
+    clickCount: 1,
+  },
+  {
+    messageId: 'msg-gone',
+    hostId: 'host-1',
+    campaignId: 'camp-gone',
+    campaignName: null,
+    subject: 'A deleted mailing',
+    sentAtMs: 500,
+    bouncedAtMs: 600,
+    openCount: 0,
+    clickCount: 0,
+  },
+]
+let campaignState = { status: 'success', lookupFailed: false }
+const campaignHookCalls: Array<[string, string]> = []
+jest.mock('./use-contact-campaign-emails', () => ({
+  useContactCampaignEmails: (hostId: string, contactId: string) => {
+    campaignHookCalls.push([hostId, contactId])
+    return { emails: campaignEmails, ...campaignState }
+  },
+}))
+
 jest.mock('@aglyn/shared-ui-jsx', () => ({
+  AppLink: ({ href, children }: { href: string; children: ReactNode }) => (
+    <a href={href}>{children}</a>
+  ),
   CardDisplay: ({
     header,
     actions,
@@ -157,8 +213,14 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   }),
 }))
 
+jest.mock('next/navigation', () => ({
+  useParams: () => ({ orgSlug: 'acme', host: 'shop' }),
+}))
+
 beforeEach(() => {
   jest.clearAllMocks()
+  campaignState = { status: 'success', lookupFailed: false }
+  campaignHookCalls.length = 0
 })
 
 const renderCard = () =>
@@ -168,6 +230,9 @@ const renderCard = () =>
       org={{}}
       contactId="con-1"
       contact={contact}
+      campaignHref={(email) =>
+        email.campaignName ? `/acme/hosts/site/emails/messages/${email.campaignId}` : null
+      }
     />,
   )
 
@@ -180,19 +245,21 @@ describe('ContactTimelineCard (AGL-2600)', () => {
       expect(at).toBeGreaterThanOrEqual(0)
       return at
     }
-    // 4000 → 3000 → 2000 → 1000, across the two sources.
-    expect(position('Called about the renewal')).toBeLessThan(
-      position('Submitted the contact form'),
-    )
+    // 4000 → 3500 → 3000 → 2000 → 1000 → 500, across the three sources.
+    expect(position('Called about the renewal')).toBeLessThan(position('Spring sale'))
+    expect(position('Spring sale')).toBeLessThan(position('Submitted the contact form'))
     expect(position('Submitted the contact form')).toBeLessThan(
       position('Prefers to be called after lunch'),
     )
     expect(position('Prefers to be called after lunch')).toBeLessThan(
       position('Placed order #12'),
     )
+    expect(position('Placed order #12')).toBeLessThan(position('A deleted mailing'))
     // Which is which, on every row.
-    expect(screen.getAllByText('Captured')).toHaveLength(2)
+    expect(screen.getAllByText('Captured')).toHaveLength(3)
     expect(screen.getAllByText('Logged')).toHaveLength(2)
+    expect(screen.getAllByText('Campaign')).toHaveLength(2)
+    expect(screen.getAllByText('Sent')).toHaveLength(2)
     // The door's label and the entry point, on the captured row.
     expect(screen.getByText('Form')).toBeTruthy()
     expect(screen.getByText(/\/pricing/)).toBeTruthy()
@@ -204,6 +271,28 @@ describe('ContactTimelineCard (AGL-2600)', () => {
   it("reads THIS holder's facet alone — another holder's booking never surfaces", () => {
     renderCard()
     expect(screen.queryByText('Other client booking')).toBeNull()
+  })
+
+  /**
+   * A captured entry opens the record the door left (AGL-2622): the
+   * submission in the Inbox reader, the order in its dialog. Only an entry
+   * stamped with THIS site links — a sibling site's record is read on that
+   * site's console — and one written before the stamp is shown unlinked
+   * rather than pointed at a row this site may not hold.
+   */
+  it('links a captured submission to the Inbox reader and an order to its dialog', () => {
+    renderCard()
+    const submission = screen.getByRole('link', { name: 'Open submission' })
+    expect(submission.getAttribute('href')).toBe(
+      '/acme/hosts/shop/inbox/submissions?submission=sub-7',
+    )
+    const order = screen.getByRole('link', { name: 'Open order' })
+    expect(order.getAttribute('href')).toBe('/acme/hosts/shop/products/orders?order=ord-12')
+    // The unstamped older booking is on screen and carries no link; the
+    // campaign entry's link is its report's (AGL-2616), asserted by its own
+    // test, so only the captured doors are counted here.
+    expect(screen.getByText('An older booking')).toBeTruthy()
+    expect(screen.getAllByRole('link', { name: /^Open / })).toHaveLength(2)
   })
 
   it('logs a new activity against the contact with the full scope stamp', async () => {
@@ -266,5 +355,42 @@ describe('ContactTimelineCard (AGL-2600)', () => {
     // and the viewer is a scoped member — so exactly one row has controls.
     expect(screen.getAllByLabelText('Edit activity')).toHaveLength(1)
     expect(screen.getAllByLabelText('Delete activity')).toHaveLength(1)
+  })
+
+  /*
+   * THE CAMPAIGN MAIL (AGL-2616): asked for once per record, drawn as
+   * "«name» · sent · delivered · opened ×2 · clicked" with the name linking
+   * to the email's report, and apart from a logged email — no "Logged" chip,
+   * no controls.
+   */
+  it('draws a campaign email as its own kind, linked to the report, with what became of it', () => {
+    const { container } = renderCard()
+    expect(campaignHookCalls).toEqual([['host-1', 'con-1']])
+
+    const link = screen.getByRole('link', { name: 'Spring sale' })
+    expect(link.getAttribute('href')).toBe('/acme/hosts/site/emails/messages/camp-spring')
+    expect(container.textContent).toContain(
+      'Spring sale · sent · delivered · opened ×2 · clicked',
+    )
+    // The subject rides on the caption when it is not the name.
+    expect(screen.getByText(/Spring sale ends Sunday/)).toBeTruthy()
+    // Nobody may edit or delete a mailing; the two controls are the logged rows'.
+    expect(screen.getAllByLabelText('Edit activity')).toHaveLength(1)
+  })
+
+  it('keeps a deleted email’s subject and draws it unlinked', () => {
+    const { container } = renderCard()
+    expect(screen.queryByRole('link', { name: 'A deleted mailing' })).toBeNull()
+    expect(container.textContent).toContain('A deleted mailing · sent · bounced')
+  })
+
+  it('says when the campaign history could not be read, rather than showing none', () => {
+    campaignState = { status: 'error', lookupFailed: false }
+    renderCard()
+    expect(screen.getByText(/Campaign email could not be loaded/)).toBeTruthy()
+
+    campaignState = { status: 'success', lookupFailed: true }
+    renderCard()
+    expect(screen.getAllByText(/Campaign email could not be loaded/)).toHaveLength(2)
   })
 })

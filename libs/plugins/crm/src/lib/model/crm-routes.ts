@@ -15,8 +15,9 @@
  * limitations under the License.
  */
 
-import type { ConsolePluginPageProps } from '@aglyn/aglyn'
+import { CRM_CONTACTS_EMAIL_PARAM, type ConsolePluginPageProps } from '@aglyn/aglyn'
 import type { CrmConsoleSectionId } from '../components/crm-console-sections'
+import { CRM_VIEW_PARAM } from './crm-view-param'
 
 /**
  * Every address inside the Contacts surface, built from the one string the
@@ -67,6 +68,16 @@ export function crmRoutes(basePath: string) {
     lead: (id: string) => `${section('leads')}/${encodeURIComponent(id)}`,
     company: (id: string) => `${section('companies')}/${encodeURIComponent(id)}`,
     deal: (id: string) => `${section('deals')}/${encodeURIComponent(id)}`,
+    /**
+     * A section opened on one of its saved views (AGL-2617). The list reads
+     * the key back through `crmViewIdFromParams`; the same key composes
+     * with the Contacts seeds above, which is why it is a query key and not
+     * a path segment.
+     */
+    sectionView: (id: CrmConsoleSectionId, viewId: string) =>
+      `${section(id)}?${new URLSearchParams({
+        [CRM_VIEW_PARAM]: viewId,
+      }).toString()}`,
   }
 }
 
@@ -77,7 +88,14 @@ export function crmRoutes(basePath: string) {
  */
 export const CONTACTS_LIST_SOURCE_PARAM = 'source'
 export const CONTACTS_LIST_FORM_PARAM = 'formId'
-export const CONTACTS_LIST_EMAIL_PARAM = 'email'
+/**
+ * The email key is the SHARED constant (AGL-2622): the console app — which
+ * the module boundaries keep from importing this plugin — builds the same
+ * address through `crmContactByEmailHref`, and `crm-routes.spec.ts` pins
+ * `contactByEmail` against it so the plugin and the app cannot spell the
+ * key two ways.
+ */
+export const CONTACTS_LIST_EMAIL_PARAM = CRM_CONTACTS_EMAIL_PARAM
 
 export type CrmRoutes = ReturnType<typeof crmRoutes>
 

@@ -133,9 +133,11 @@ describe('scheduled-crons.yml wiring', () => {
     // A regex that silently matched nothing would make every assertion
     // below vacuously true — the exact shape this file exists to catch.
     // Six schedules remain here — the weeklies plus the month-boundary
-    // usage-email sweep. The five DAILY entries moved to Cloud Scheduler
-    // after GitHub dropped a whole day of them; the `workflow_dispatch`
-    // list still carries them all, which is why its floor is higher.
+    // usage-email sweep — and the daily CRM digest (AGL-2619) joined them
+    // on purpose; see `UNWATCHED_BY_DECISION` below. The five DAILY entries
+    // moved to Cloud Scheduler after GitHub dropped a whole day of them; the
+    // `workflow_dispatch` list still carries them all, which is why its floor
+    // is higher.
     expect(scheduled.length).toBeGreaterThanOrEqual(6)
     expect(caseArms.size).toBeGreaterThanOrEqual(6)
     expect(dispatchOptions.size).toBeGreaterThanOrEqual(10)
@@ -215,11 +217,62 @@ describe('scheduled-crons.yml wiring', () => {
       ),
     )
 
-    it('watches EVERY schedule in the workflow', () => {
+    /**
+     * Schedules DELIBERATELY outside the inventory, each with its reason.
+     *
+     * The rule this file holds is that a scheduled job nobody watches is a
+     * bug, and it stays the rule: an entry here is not a way past it but a
+     * decision written down where the test that would otherwise fail can
+     * read it. Two things keep the list honest below — an entry whose
+     * schedule is gone fails, so an exemption cannot outlive the job it
+     * excused, and an entry for a job the inventory DOES watch fails, so a
+     * stale exemption cannot shadow a real row.
+     *
+     * The daily CRM digest (AGL-2619) is here because of what a new
+     * `SCHEDULED_JOBS` row does on the day it deploys: `cronJobsHealth`
+     * reads a job with no beat as `job-never-reported` once TODAY's fire
+     * time has passed, and 13:00 UTC has passed for most of every day — so
+     * `/api/health/crons` 503s the moment the console build is live, before
+     * the job has had one chance to run, and that door is what the uptime
+     * monitors read. The route stamps `platformCronBeats/crm-daily-digest`
+     * on every POST regardless, so the row can join the inventory the day
+     * after the schedule first fires, with a beat already there to judge.
+     * The digest itself is a morning summary: GitHub's drift is an hour of
+     * lateness a summary absorbs, and a dropped day is a day nobody is
+     * reminded, which is what every day was before the route existed.
+     */
+    const UNWATCHED_BY_DECISION: ReadonlyMap<string, string> = new Map([
+      [
+        '0 13 * * * /api/crm/daily-digest',
+        'AGL-2619: a new inventory row reds /api/health/crons against today’s ' +
+          'fire time the moment it deploys; the route beats on every POST, so ' +
+          'add the row once a beat exists. Best-effort dispatch is acceptable ' +
+          'for a morning summary.',
+      ],
+    ])
+
+    it('watches EVERY schedule in the workflow, or says in writing why not', () => {
       const unwatched = scheduled
         .map((cron) => `${cron} ${caseArms.get(cron)}`)
-        .filter((key) => !inventoryByCron.has(key))
+        .filter((key) => !inventoryByCron.has(key) && !UNWATCHED_BY_DECISION.has(key))
       expect(unwatched).toEqual([])
+    })
+
+    it('exempts only schedules that exist, that the inventory does not already watch, with a reason', () => {
+      const workflowKeys = new Set(
+        scheduled.map((cron) => `${cron} ${caseArms.get(cron)}`),
+      )
+      for (const [key, reason] of UNWATCHED_BY_DECISION) {
+        // An exemption for a schedule that is gone is a decision nobody
+        // needs any more, and leaving it would let the NEXT job on that
+        // cron string slip past unwatched.
+        expect(workflowKeys.has(key) ? key : `${key} (no longer scheduled)`).toBe(key)
+        // An exemption for a job the inventory watches is stale, and a
+        // stale exemption is how a row's later removal goes unnoticed.
+        expect(inventoryByCron.has(key) ? `${key} (already watched)` : key).toBe(key)
+        expect(reason).toMatch(/AGL-\d+/)
+        expect(reason.length).toBeGreaterThan(40)
+      }
     })
 
     it('has no inventory row for a schedule that no longer exists', () => {

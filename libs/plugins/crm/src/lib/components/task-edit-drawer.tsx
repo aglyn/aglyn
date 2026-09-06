@@ -52,6 +52,7 @@ import {
   localInputToDueAt,
 } from '../model/task-views'
 import CrmRecordPicker from './crm-record-picker'
+import TaskSnoozeMenu from './task-snooze-menu'
 
 export interface TaskEditDrawerProps {
   open: boolean
@@ -256,15 +257,35 @@ function TaskForm(props: TaskEditDrawerProps) {
           ))}
         </TextField>
       </Stack>
-      <TextField
-        label="Due"
-        type="datetime-local"
-        value={dueAtToLocalInput(fields.dueAtMs)}
-        onChange={(event) => set('dueAtMs', localInputToDueAt(event.target.value))}
-        size="small"
-        slotProps={{ inputLabel: { shrink: true } }}
-        helperText="Leave empty for a task with no due date."
-      />
+      <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
+        <TextField
+          label="Due"
+          type="datetime-local"
+          value={dueAtToLocalInput(fields.dueAtMs)}
+          onChange={(event) => set('dueAtMs', localInputToDueAt(event.target.value))}
+          size="small"
+          slotProps={{ inputLabel: { shrink: true } }}
+          helperText="Leave empty for a task with no due date."
+          sx={{ flex: 1 }}
+        />
+        {/*
+          A stored task is snoozed in place — the one write lands and the
+          field follows it, so a later Save carries the same date. A task
+          that does not exist yet has nothing to write, so the same menu
+          fills the field and the save is the write.
+        */}
+        <TaskSnoozeMenu
+          variant="button"
+          dueAtMs={fields.dueAtMs}
+          disabled={busy}
+          target={
+            task && scope
+              ? { write: { scope, taskId: task.$id } }
+              : { pick: (dueAtMs) => set('dueAtMs', dueAtMs) }
+          }
+          onSnoozed={(dueAtMs) => set('dueAtMs', dueAtMs)}
+        />
+      </Stack>
       <TextField
         select
         label="Assignee"

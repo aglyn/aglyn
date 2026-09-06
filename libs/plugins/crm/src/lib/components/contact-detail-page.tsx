@@ -19,7 +19,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { CONTACT_LIFECYCLE_STAGE_LABELS, pluginDocsHelp } from '@aglyn/aglyn'
 import { mdiDeleteOutline } from '@aglyn/shared-data-mdi'
-import { MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { AppLink, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -28,7 +28,7 @@ import {
   useHostActivityLogger,
   useOrgDataScope,
 } from '@aglyn/tenant-feature-instance'
-import { Stack, Typography } from '@mui/material'
+import { Stack, Tooltip, Typography } from '@mui/material'
 import {
   arrayRemove,
   deleteDoc,
@@ -36,7 +36,7 @@ import {
   doc,
   updateDoc,
 } from 'firebase/firestore'
-import { useRouter } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { useCallback, useMemo } from 'react'
 import { contactRecordFromDoc } from '../model/contact-record'
 import { type CrmDetailPageProps, crmRoutes } from '../model/crm-routes'
@@ -48,6 +48,7 @@ import { AddToListButton } from './add-to-list-button'
 import { ContactDealsCard } from './contact-deals-card'
 import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
 import { RecordTasksCard } from './record-tasks-card'
+import { useEmailsHubPath } from './use-emails-hub-path'
 import { useOrgMembers } from './use-org-members'
 
 const contactDocsHelp = pluginDocsHelp('contacts', {
@@ -133,6 +134,37 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
   // The roster, for the owner picker and the owner's name — read because a
   // record page is the one place both are shown.
   const members = useOrgMembers(orgId, { enabled: Boolean(record) })
+  /*
+   * Where this person's ORDERS are read (AGL-2622): the site's orders list,
+   * narrowed to their address. The count on the header is the number; the
+   * list is the rows. Built from the route params already in the URL, so
+   * no document is read to draw a link, and absent off a site — the
+   * org-level mount has no orders list to point at.
+   */
+  const params = useParams<{ orgSlug?: string; host?: string }>()
+  const ordersHref =
+    params?.orgSlug && params?.host && record?.email
+      ? Aglyn.siteRecordLinks({
+          orgSlug: String(params.orgSlug),
+          host: String(params.host),
+        }).ordersByCustomer(record.email)
+      : null
+
+  /*
+   * Where a campaign entry on the timeline links to: the email's own report
+   * on this site's Emails hub (AGL-2616). Only a campaign THIS site sent can
+   * be addressed — a sibling site in the same consent group has an Emails
+   * hub of its own under a subdomain this page does not know — so the
+   * builder answers `null` for those and the entry draws unlinked.
+   */
+  const emailsHub = useEmailsHubPath()
+  const campaignHref = useCallback(
+    (email: Aglyn.ContactCampaignEmail) =>
+      emailsHub && email.hostId === hostId
+        ? `${emailsHub}/messages/${encodeURIComponent(email.campaignId)}`
+        : null,
+    [emailsHub, hostId],
+  )
 
   const handleRemove = useCallback(async () => {
     if (!row || !scope) return
@@ -262,12 +294,35 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
                 label="Owner"
                 value={record.ownerUid ? members.memberName(record.ownerUid) : undefined}
               />
+              {/*
+                The last time they opened or clicked one of this site's
+                campaigns (AGL-2616) — the relationship's pulse, beside the
+                owner who keeps it.
+              */}
+              <CrmRecordChip
+                label="Last engaged"
+                value={
+                  record.lastEmailEngagementAtMs ? (
+                    <Tooltip title={new Date(record.lastEmailEngagementAtMs).toLocaleString()}>
+                      <span>
+                        {Aglyn.activityTimeLabel(record.lastEmailEngagementAtMs, Date.now())}
+                      </span>
+                    </Tooltip>
+                  ) : undefined
+                }
+              />
               <CrmRecordChip
                 label="Orders"
                 value={
-                  record.ordersCount > 0
-                    ? `${record.ordersCount.toLocaleString()} · $${(record.ltvCents / 100).toFixed(2)} lifetime`
-                    : undefined
+                  record.ordersCount > 0 ? (
+                    ordersHref ? (
+                      <AppLink href={ordersHref} color="inherit" underline="hover">
+                        {`${record.ordersCount.toLocaleString()} · $${(record.ltvCents / 100).toFixed(2)} lifetime`}
+                      </AppLink>
+                    ) : (
+                      `${record.ordersCount.toLocaleString()} · $${(record.ltvCents / 100).toFixed(2)} lifetime`
+                    )
+                  ) : undefined
                 }
               />
             </>
@@ -295,7 +350,13 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
             basePath={basePath}
           />
           <ContactCustomFieldsCard hostId={hostId} org={org} contactId={id} basePath={basePath} />
-          <ContactTimelineCard hostId={hostId} org={org} contactId={id} contact={row} />
+          <ContactTimelineCard
+            hostId={hostId}
+            org={org}
+            contactId={id}
+            contact={row}
+            campaignHref={campaignHref}
+          />
           <ContactDealsCard
             hostId={hostId}
             org={org}

@@ -162,6 +162,16 @@ jest.mock('./use-org-members', () => ({
 }))
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: jest.fn() }),
+  useParams: () => ({ orgSlug: 'acme', host: 'shop' }),
+}))
+// The campaign history the timeline asks for on mount (AGL-2616) is one
+// authorized POST; this file is about the SAVE guard, so the wire is idle.
+jest.mock('./use-contact-campaign-emails', () => ({
+  useContactCampaignEmails: () => ({
+    emails: [],
+    status: 'success',
+    lookupFailed: false,
+  }),
 }))
 
 beforeEach(() => {

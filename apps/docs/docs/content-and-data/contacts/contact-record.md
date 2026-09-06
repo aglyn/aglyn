@@ -11,6 +11,8 @@ profile your team keeps on them, where they came from, what they are filed
 under, and what the site recorded about them. You can add a person by hand,
 and edit every part of that profile from their own page.
 
+![A contact record in the CRM: the header with the person's name, stage and owner, and the Properties, Custom fields, Timeline, Deals and Tasks cards](/img/contacts/crm-record.png)
+
 ## Adding a contact by hand
 
 Open **CRM → Contacts** and choose **New contact**. A drawer opens over the
@@ -39,8 +41,10 @@ the list shows; upgrade in Billing to keep adding.
 Clicking a row in the list opens the person's own page at
 `…/crm/contacts/{id}` — an address you can paste and that every other CRM
 record links to. The page opens with the person's name, their lifecycle stage,
-their owner and — for a buyer — how many orders they have placed and what they
-have spent. Under it, one card per aspect of the record:
+their owner, when they [last engaged](#last-engaged) with one of your
+campaigns, and — for a buyer — how many orders they have placed and what they
+have spent; the order count is a link to the site's orders list narrowed to the
+person's address. Under it, one card per aspect of the record:
 
 - **Properties** — the editable profile: name, phone, job title, company,
   lifecycle stage, owner, tags, address and an **About** box for your
@@ -61,11 +65,14 @@ have spent. Under it, one card per aspect of the record:
   Filing is your own bookkeeping; it never adds anyone to a send.
 - **Custom fields** — one control per field your organization has defined;
   see [Custom fields](./custom-fields.md).
-- **Timeline** — what the site recorded about the person and what your team
-  has logged, newest first: the forms they submitted, the orders they placed,
-  the bookings they made, and the calls, emails, meetings and notes filed
-  against them, with **Log activity** to add one — see
-  [Activities & the timeline](./activities.md).
+- **Timeline** — what the site recorded about the person, what your team
+  has logged, and the campaigns they were sent, newest first: the forms they
+  submitted, the orders they placed, the bookings they made, the calls,
+  emails, meetings and notes filed against them, and every campaign email
+  with whether it was delivered, opened or clicked, with **Log activity** to
+  add one. A captured entry links to the record it names — **Open
+  submission**, **Open order**, and the Bookings and Users pages for a booking
+  and a sign-up — see [Activities & the timeline](./activities.md).
 - **Deals** — the deals the person is named on, with a **New deal** shortcut
   that starts one already linked to them — see [Deals pipeline](./deals.md).
 - **Tasks** — the open tasks about this person, each with a checkbox to
@@ -92,6 +99,26 @@ The **Owner** is the team member responsible for the relationship. The
 contacts list has an **Owner** column and an **Assigned to me** toggle that
 narrows the list to the people assigned to you; the record page shows the
 owner beside the heading and lets you reassign.
+
+## Last engaged
+
+**Last engaged** is when the person last opened or clicked a campaign email
+sent by this site, or by a site declared to be one sender with it. The record
+page shows it beside the heading; the contacts list carries it as an optional
+**Last engaged** column, off until you turn it on from the column menu, and the
+CSV export always includes it as `lastEngaged`.
+
+It is set by the delivery webhook on the first open and the first click of
+each campaign email, so a reader opening one newsletter six times moves it
+once, and it only ever moves forward. Account mail — a receipt, a booking
+confirmation — never moves it, and neither does a campaign another business in
+your workspace sent the same person: it is *your* relationship's pulse.
+Campaign mail opened before the stamp existed did not set it, so a long-standing
+reader can show no value until their next open.
+
+A [list built from a rule](../../marketing-and-automation/email-campaigns/overview.md#lists-built-from-a-rule)
+can select on it — **Engaged with a campaign within (days)** — which is how a
+re-engagement audience is built.
 
 ## Lifecycle stages
 

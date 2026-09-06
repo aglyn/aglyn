@@ -133,6 +133,7 @@ const PLUGIN_TOPICS = {
   contactFields: '/content-and-data/contacts/custom-fields',
   crmLeads: '/content-and-data/contacts/leads',
   crmSettings: '/content-and-data/contacts/settings',
+  crmViews: '/content-and-data/contacts/views',
   datasets: '/content-and-data/datasets/overview',
   deals: '/content-and-data/contacts/deals',
   designedEmails: '/marketing-and-automation/email-campaigns/designed-emails',

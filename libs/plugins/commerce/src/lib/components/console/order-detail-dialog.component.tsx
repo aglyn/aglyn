@@ -18,7 +18,13 @@
 
 import * as CommerceModel from '../../model'
 import { escapeHtml } from '../../utils/escape-html'
-import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
+// The CRM's address from the SHARED builder, not the plugin (AGL-2622): the
+// CRM already reaches marketing, and marketing reaches commerce, so an
+// import of the CRM from here would close a cycle between the three
+// plugins. The shared builder is pinned against the CRM's own routes by a
+// spec, so the address is the same one the hub resolves.
+import { crmContactByEmailHref } from '@aglyn/aglyn'
+import { AppLink, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Button,
@@ -34,6 +40,7 @@ import {
   Typography,
 } from '@mui/material'
 import { doc, runTransaction, updateDoc } from 'firebase/firestore'
+import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -96,6 +103,25 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
 
   const order = rawOrder ? CommerceModel.liftLegacyOrder(rawOrder) : null
   const orderId = rawOrder?.$id
+  /*
+   * Where the buyer's CONTACT is (AGL-2622). A checkout that carried an
+   * address updated a person in the CRM — a customer, with this order on
+   * their timeline — and the dialog links there by the address, because
+   * the contact's id is minted at capture and nothing on the order holds
+   * it. The Contacts list is the lookup and opens the record on one match.
+   * A guest checkout with no address updated nobody, so there is no link.
+   * Built from the route params already in the URL — no document is read
+   * to draw a link — and absent until they settle, so the dialog never
+   * offers a link to a half-built address.
+   */
+  const params = useParams<{ orgSlug?: string; host?: string }>()
+  const customerCrmHref =
+    params?.orgSlug && params?.host && order?.customerEmail
+      ? crmContactByEmailHref(
+          { orgSlug: String(params.orgSlug), host: String(params.host) },
+          String(order.customerEmail),
+        )
+      : null
 
   /**
    * The one client write left in this dialog, and it is timeline-only ON
@@ -915,6 +941,15 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
         ) : null}
       </DialogContent>
       <DialogActions>
+        {customerCrmHref ? (
+          <Button
+            component={AppLink as any}
+            {...({ componentVariant: 'naked', nativeButton: false } as any)}
+            href={customerCrmHref}
+          >
+            {'View customer in CRM'}
+          </Button>
+        ) : null}
         <Button onClick={handlePackingSlip}>{'Packing slip'}</Button>
         {can('cancelled') ? (
           <Button color="error" disabled={busy} onClick={handleCancel}>

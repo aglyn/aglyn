@@ -123,18 +123,21 @@ export function GlobalSearchDialogComponent(props: GlobalSearchDialogProps) {
   }, [org, orgReady])
 
   /*
-   * The viewer's scope tokens for the org-shared CONTACTS (AGL-2596), or
-   * null when contacts must not be offered.
+   * The viewer's scope tokens for the org-shared CRM records (AGL-2596;
+   * companies, deals and the site's leads joined under AGL-2622), or null
+   * when none of them must be offered.
    *
-   * Three gates, all read from what the console already holds. The Contacts
+   * Three gates, all read from what the console already holds. The CRM
    * surface is release-flagged, so its rows are offered only where its nav
    * tab would be — searching a surface the reader cannot open is a link to a
    * 404. The rules read contacts for `data.manage` holders only, so a viewer
-   * without it is withheld the group rather than shown "could not be read".
+   * without it is withheld the groups rather than shown "could not be read".
    * And the tokens themselves are the site's consent group — the same set
    * the contacts list filters by — resolved from the org document, so this
    * costs no read and cannot disagree with the list about who a person is
-   * visible to. Off a site there is no group to resolve, so no contacts.
+   * visible to. Off a site there is no group to resolve, so no CRM groups —
+   * the leads read is host data, but it follows this same gate because the
+   * hub is where a lead opens.
    */
   const contactsFlag = useReleaseFlag('release_contacts')
   const permissions = useOrgPermissions()
