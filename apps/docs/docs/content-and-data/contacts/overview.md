@@ -187,13 +187,16 @@ listed there, and opening it edits the same record the site's own hub edits.
 
 What differs from a site's hub:
 
-- **Every create names a site.** A contact, company, deal, task or logged
-  activity is always captured *by* a site — that is what decides which of your
-  sites may see it and whose marketing consent a contact's checkbox records —
-  so **New contact**, **New company**, **New deal**, **New task**, **Log
-  activity** and **Import CSV** each begin with a required **Site** picker. The
-  pick is remembered for the session, and an organization with exactly one site
-  never sees the field. The REST API asks the same question as `consentSiteId`.
+- **Every create names a site.** A contact, company, deal or logged activity
+  is always captured *by* a site — that is what decides which of your sites may
+  see it and whose marketing consent a contact's checkbox records — so **New
+  contact**, **New company**, **New deal**, **Log activity** and **Import CSV**
+  each begin with a required **Site** picker. The pick is remembered for the
+  session, and an organization with exactly one site never sees the field. The
+  REST API asks the same question as `consentSiteId`. A **task** is the one
+  exception: **New task** offers **This organization (no site)** beside the
+  sites, for work the organization itself owes — see
+  [Organization tasks](./tasks.md#organization-tasks).
 - **The cross-site facts.** The contacts list gains a **Known by** column — the
   sites that have captured each person — and a contact's page gains a **Known
   by** card listing those sites, each with the person's marketing consent

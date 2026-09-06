@@ -89,6 +89,13 @@ writes one line into the organization's activity feed (**Team → Activity**) �
 stage move or a loss over deals is recorded per deal instead, by the move
 itself.
 
+The tasks bar's **Complete** and **Assign** run there as **one request for the
+whole selection**, authorized by the organization rather than task by task
+against each task's site; every task is still answered on its own, so one that
+was deleted while the page was open is named in the notice and the rest go
+through. Completing fires each task's event on the site it was created from —
+none for an [organization task](./tasks.md#organization-tasks).
+
 ## When a row cannot be changed
 
 A bulk action writes in batches. If any row in the selection cannot be

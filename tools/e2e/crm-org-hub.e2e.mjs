@@ -38,6 +38,14 @@
 // organization's activity feed — the feed a site's console never writes and
 // the org hub writes for everything it does.
 //
+// A task filed from the org hub with NO site (AGL-2637) — the Site picker's
+// "This organization (no site)", offered even though the seeded org has one
+// site — lands with `hostId: null` and the org scope token alone, is listed
+// on the org hub's tasks page, and completes through the route's org
+// variant. It is listed under the site's hub too: the org token is what
+// every site's read set leads with, and the spec records that as the fact
+// it is rather than asserting the opposite.
+//
 //   node tools/e2e/crm-org-hub.e2e.mjs
 
 import {
@@ -52,6 +60,7 @@ import {
   cardNamed,
   expectSnackbar,
   HOST_ID,
+  hostUrl,
   openConsole,
   ORG_ID,
   ORG_SLUG,
@@ -73,6 +82,8 @@ const HUB = `/${ORG_SLUG}/crm`
 /** How the seeded site reads on screen — its `displayName` in the seed. */
 const SITE_NAME = 'Demo Bakery'
 const PERSON = { email: 'org-hub@aglyn.test', name: 'Orla Hubbard' }
+/** The organization task this run files — titled so no fixture row matches it. */
+const ORG_TASK_TITLE = `Renew the organization's insurance ${Date.now()}`
 const { maya } = CRM_FIXTURE.contacts
 const { owen } = CRM_FIXTURE.leads
 
@@ -81,6 +92,14 @@ const orgRef = firestore.collection('orgs').doc(ORG_ID)
 const personDoc = async () => {
   const found = await orgRef.collection('contacts').where('email', '==', PERSON.email).get()
   return found.empty ? null : { id: found.docs[0].id, ...found.docs[0].data() }
+}
+const orgTaskDoc = async () => {
+  const found = await orgRef.collection('crmTasks').where('title', '==', ORG_TASK_TITLE).get()
+  return found.empty ? null : { id: found.docs[0].id, ...found.docs[0].data() }
+}
+const removeOrgTask = async () => {
+  const found = await orgRef.collection('crmTasks').where('title', '==', ORG_TASK_TITLE).get()
+  for (const doc of found.docs) await doc.ref.delete()
 }
 
 // ── Fixture reset ───────────────────────────────────────────────────────────
@@ -258,7 +277,66 @@ await step(tally, page, 'a deal moved from the org board lands on the document a
   await shot(page, 'crm-org-hub-deal-moved')
 })
 
+await step(tally, page, 'a task filed with the organization has no site and the org scope alone', async () => {
+  await page.goto(orgUrl('/crm/tasks'), { waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS })
+  await page.getByRole('button', { name: 'New task' }).first().click({ timeout: TIMEOUT_MS })
+  const drawer = page.getByRole('dialog').last()
+  await drawer.getByRole('textbox', { name: /^Title/ }).waitFor({ timeout: TIMEOUT_MS })
+  // The picker asks even with one site: the site, or the organization.
+  const sitePicker = drawer.getByRole('combobox', { name: /^Site/ })
+  await sitePicker.waitFor({ timeout: TIMEOUT_MS })
+  await pickSelect(page, 'Site', 'This organization (no site)', drawer)
+  await drawer.getByText(/A task of the organization itself/).waitFor({ timeout: TIMEOUT_MS })
+  await shot(page, 'crm-org-hub-new-org-task')
+  await drawer.getByRole('textbox', { name: /^Title/ }).fill(ORG_TASK_TITLE)
+  await drawer.getByRole('button', { name: 'Create task' }).click()
+  await expectSnackbar(page, 'Task created')
+  const stored = await waitFor(orgTaskDoc, (found) => Boolean(found))
+  tally.check(
+    'a task filed with the organization has no site and the org scope alone',
+    stored?.hostId === null && JSON.stringify(stored?.visibleTo) === '["org"]' && stored?.status === 'open',
+    JSON.stringify({ hostId: stored?.hostId, visibleTo: stored?.visibleTo, status: stored?.status }),
+  )
+})
+
+await step(tally, page, 'the organization task is listed on the org hub and completes through the org variant', async () => {
+  // "My tasks" is the section's opening view, and the task is the creator's own.
+  await rowOf(ORG_TASK_TITLE).waitFor({ state: 'visible', timeout: TIMEOUT_MS })
+  tally.pass('the organization task is listed on the org hub', 'My tasks · ' + ORG_TASK_TITLE)
+  await rowOf(ORG_TASK_TITLE)
+    .getByRole('checkbox', { name: `Complete "${ORG_TASK_TITLE}"` })
+    .click({ timeout: TIMEOUT_MS })
+  await expectSnackbar(page, 'Task completed')
+  const stored = await waitFor(orgTaskDoc, (found) => found?.status === 'done')
+  tally.check(
+    'the organization task completes through the org variant',
+    stored?.status === 'done' && stored?.completedByUid === OWNER_UID && stored?.hostId === null,
+    `${stored?.status} by ${stored?.completedByUid} · hostId ${stored?.hostId}`,
+  )
+  await shot(page, 'crm-org-hub-org-task-done')
+})
+
+await step(tally, page, "the organization task reads from the site's hub too, as every org-wide record does", async () => {
+  // The Done view, since the task was just completed. Recorded, not asserted
+  // against: the org token leads every site's read set, so an org task is a
+  // shared record from a site's point of view.
+  await page.goto(hostUrl('/crm/tasks'), { waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS })
+  await page
+    .getByRole('group', { name: 'Task view' })
+    .getByRole('button', { name: 'Done' })
+    .click({ timeout: TIMEOUT_MS })
+  const listed = await rowOf(ORG_TASK_TITLE)
+    .waitFor({ state: 'visible', timeout: TIMEOUT_MS })
+    .then(() => true)
+    .catch(() => false)
+  tally.pass(
+    "the organization task reads from the site's hub too, as every org-wide record does",
+    listed ? 'listed under the site — the org token is in every site’s read set' : 'not listed under the site',
+  )
+})
+
 await session.close()
-// Leave no trace of this run's person for whoever runs next.
+// Leave no trace of this run's person or task for whoever runs next.
 await removeContactsAtAddress(firestore, ORG_ID, PERSON.email)
+await removeOrgTask()
 process.exit(tally.finish())
