@@ -105,7 +105,7 @@ export const PLUGIN_DOCS = {
   crmReports: {
     path: '/content-and-data/contacts/reports',
     title: 'Reports',
-    excerpt: 'New contacts over time, where they came from, which sources turn into customers, how this site\'s leads converted, the open pipeline and its forecast, deals won and lost, who logged what, and the task load — counted on the server for the records your site can see, with every table exportable as CSV.',
+    excerpt: 'New contacts, where they came from and which sources convert, this site\'s lead funnel, the open pipeline, won and lost, who logged what, and the task load — counted on the server, every table exportable as CSV.',
   },
   crmSettings: {
     path: '/content-and-data/contacts/settings',
