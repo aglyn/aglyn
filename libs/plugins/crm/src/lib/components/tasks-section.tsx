@@ -59,6 +59,7 @@ import {
   TaskRecordLink,
 } from './task-cells'
 import TaskEditDrawer from './task-edit-drawer'
+import TaskSnoozeMenu from './task-snooze-menu'
 
 /** What an empty view is headed, by view — "nothing overdue" is good news. */
 const EMPTY_LABEL: Record<CrmTaskView, string> = {
@@ -263,10 +264,19 @@ export function TasksSection(props: ConsolePluginPageProps) {
       {
         field: 'dueAtMs',
         headerName: 'Due',
-        width: 220,
+        width: 260,
         sortable: false,
         renderCell: ({ row }: { row: CrmTaskRow }) => (
-          <TaskDueText task={row} nowMs={nowMs} />
+          <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', height: '100%' }}>
+            <TaskDueText task={row} nowMs={nowMs} />
+            {row.status === 'done' || !scope ? null : (
+              <TaskSnoozeMenu
+                dueAtMs={row.dueAtMs}
+                target={{ write: { scope, taskId: row.$id } }}
+                disabled={busyId === row.$id}
+              />
+            )}
+          </Stack>
         ),
       },
       {
@@ -294,7 +304,7 @@ export function TasksSection(props: ConsolePluginPageProps) {
         ),
       },
     ],
-    [busyId, toggleDone, nowMs, directory, routes, nameOf],
+    [busyId, toggleDone, nowMs, directory, routes, nameOf, scope],
   )
   /* The column and sort models are the view's (AGL-2617). */
   const grid = useCrmViewGrid(views, columns)

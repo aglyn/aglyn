@@ -105,6 +105,25 @@ on:
     # has 48 windows to drain a thousand orgs through before the month's
     # summaries would be lost.
     - cron: '0 * 1-2 * *' # usage-email    — hourly, 1st-2nd of the month
+    # The daily CRM digest (AGL-2619): per org, per member with open work,
+    # one console notification and one email naming their overdue and
+    # due-today tasks and the leads nobody has worked. 13:00 UTC is 08:00
+    # America/Chicago, the zone the route draws "today" in.
+    #
+    # ON THIS RUNNER DELIBERATELY, drift and all. GitHub's best-effort
+    # dispatch is exactly what a morning summary can absorb: an hour late is
+    # still the morning, and a dropped day is a day nobody is reminded — which
+    # is what every day was before this route existed. The route is
+    # idempotent per member per UTC day (`orgs/{orgId}/crmDigests/{day}`), so
+    # a manual re-dispatch after a dropped day sends only what never went.
+    #
+    # NOT in `SCHEDULED_JOBS`, and `scheduled-crons-wiring.spec.ts` says why
+    # by name: a new inventory row reds `/api/health/crons` against TODAY's
+    # fire time the moment the console build is live, before the job has had
+    # a chance to run, and the crons door is what the uptime monitors read.
+    # The route records its beat regardless, so the row can be added once a
+    # beat exists.
+    - cron: '0 13 * * *' # crm-daily-digest — daily 13:00 UTC (08:00 America/Chicago)
     # Weekly Firestore GCS export (AGL-1843) — the independent copy that
     # exists because the managed backups kept flipping READY → NOT_AVAILABLE
     # at ~day 7. Mondays 05:00 UTC: the day after the Sunday managed backup,
@@ -222,6 +241,11 @@ on:
           # to read the plan; the scheduled Cloud Scheduler job carries it.
           - /api/admin/reap-unverified-orgs
           - /api/admin/reap-unverified-orgs?dryRun=0
+          # The daily CRM digest (AGL-2619). A GET reports the plan; the
+          # scheduled POST sends. Safe to run by hand at any time — it is
+          # idempotent per member per UTC day, so a second run on the same
+          # day reaches only whoever the first one did not.
+          - /api/crm/daily-digest
       force:
         # Only /api/admin/reverify-plugin-versions reads this (AGL-1086). A
         # stored verdict is skipped while it is current, which is what makes
@@ -251,6 +275,7 @@ jobs:
         run: |
           case "$FIRED_SCHEDULE" in
             '0 * 1-2 * *') path=/api/billing/usage-email ;;
+            '0 13 * * *') path=/api/crm/daily-digest ;;
             '0 5 * * 1') path=/api/admin/firestore-export ;;
             '30 5 * * 1') path=/api/admin/reap-plugin-artifacts ;;
             '0 6 * * 1') path=/api/admin/reverify-plugin-versions ;;

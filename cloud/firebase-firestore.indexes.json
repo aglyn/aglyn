@@ -1321,6 +1321,20 @@
       ]
     },
     {
+      "collectionGroup": "crmTasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dueAtMs",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "crmActivities",
       "queryScope": "COLLECTION",
       "fields": [

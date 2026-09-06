@@ -217,6 +217,15 @@ lives under **Notifications**, with per-category mutes:
 
 ![The Notifications page: a Mark all read action, a row of per-category mute toggles (Billing, Team & access, Forms & bookings, Marketplace, Product & system), the three per-device Alerts switches with Send test alert beside them, and the paginated feed below](/img/getting-started/notifications-page.png)
 
+### Daily digests
+
+**Daily CRM digest**, beside the category mutes, is on by default. Each morning it
+sends you one notification and one email listing your overdue and due-today tasks and
+the leads nobody has worked, across every workspace you belong to. Switch it off to stop
+both. It is account-wide, like the category mutes; muting **Forms & bookings** silences
+the digest's console notification but not its email. What it counts, and when, is in
+[Tasks & follow-ups](../content-and-data/contacts/tasks.md#the-daily-digest).
+
 ### Alerts on this device
 
 Below the category mutes, three switches control how a new notification
