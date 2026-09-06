@@ -70,6 +70,7 @@ describe('the mapping menu', () => {
     expect(Object.keys(CONTACT_IMPORT_SKIP_LABELS).sort()).toEqual([
       'audience-band',
       'duplicate',
+      'erased',
       'invalid-email',
       'write-failed',
     ])

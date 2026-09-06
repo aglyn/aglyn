@@ -96,7 +96,7 @@ export const DOCS_HELP_TOPICS = {
   automations: {
     path: '/content-and-data/contacts/automations',
     title: 'Automations for the CRM',
-    excerpt: 'The CRM events an automation can start on — a contact created or changing stage, a deal moved, won or lost, a task completed — the steps that set a stage, tag, assign an owner, create a task or log an activity, and the recipes that build the common automations in one click.',
+    excerpt: 'The CRM events an automation can start on — a contact created or changing stage, a deal moved, won or lost, a task completed — the steps that tag, stage, assign, create a task or log an activity, and one-click recipes.',
   },
   bandwidth: {
     path: '/workspace-and-billing/billing-and-plans/bandwidth',
