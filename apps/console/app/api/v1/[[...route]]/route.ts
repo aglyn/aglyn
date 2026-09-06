@@ -73,6 +73,8 @@ async function dispatch(
         // `media` earns its place because `/v1/media` — the ORGANIZATION
         // library — really is a top-level path. The five CRM collections
         // (AGL-2606) are org-level like contacts, and so are top-level here.
+        // Leads (AGL-2627) are a site's rows, but the path is `/v1/leads`
+        // with the site as a parameter, so the path is what is advertised.
         resources: [
           'datasets',
           'contacts',
@@ -81,6 +83,7 @@ async function dispatch(
           'deals',
           'tasks',
           'activities',
+          'leads',
           'sites',
           'media',
         ],

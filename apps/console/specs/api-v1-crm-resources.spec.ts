@@ -977,6 +977,8 @@ describe('GET /v1/usage', () => {
       deals: { used: 1, included: null, remaining: null, metered: false },
       tasks: { used: 0, included: null, remaining: null, metered: false },
       activities: { used: 0, included: null, remaining: null, metered: false },
+      // A site's leads, summed across the org's sites (AGL-2627).
+      leads: { used: 0, included: null, remaining: null, metered: false },
     })
   })
 })
