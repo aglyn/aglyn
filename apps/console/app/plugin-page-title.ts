@@ -99,7 +99,7 @@ export const PLUGIN_SECTIONS: Readonly<Record<string, readonly string[]>> = {
   ],
   automation: ['workflows', 'actions', 'webhooks'],
   inbox: ['submissions', 'contacts', 'campaigns'],
-  crm: ['contacts', 'leads', 'companies', 'deals', 'tasks', 'reports', 'fields'],
+  crm: ['contacts', 'leads', 'companies', 'deals', 'tasks', 'reports', 'fields', 'settings'],
 }
 
 /**

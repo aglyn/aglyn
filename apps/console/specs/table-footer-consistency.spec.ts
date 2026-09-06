@@ -931,6 +931,18 @@ const NOT_A_LIST: Array<[string, string]> = [
       'existed, so there is no second page for a footer to turn to.',
   ],
   [
+    'libs/plugins/crm/src/lib/components/settings-section.tsx',
+    'The organization’s owner ASSIGNMENT RULES (AGL-2618) — a settings ' +
+      'table, one row per rule the merchant declared, bounded by ' +
+      '`CRM_ASSIGNMENT_RULES_MAX` (50) at the read itself: the rules live ' +
+      'on the org document, `readCrmAssignmentSettings` slices to the cap, ' +
+      'and the section refuses the fifty-first. First-match order is the ' +
+      'merchant’s, moved by the arrows on each row. The bound is what a ' +
+      'routing policy anybody can reason about carries, not how long the ' +
+      'account has existed, so there is no second page for a footer to ' +
+      'turn to.',
+  ],
+  [
     'apps/console/app/(app)/admin/margin-utilization/page.tsx',
     'Two tables, and neither wants a footer. The first is one row per BAND — ' +
       'a fixed vocabulary, the same rows on every load, so a pager would ' +
@@ -1536,7 +1548,11 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // control's own option list rather than as mapped row elements, so the
     // detector no longer sees a table there — the classification retires
     // with the surface it described, the way this guard is meant to shrink.
-    expect(NOT_A_LIST).toHaveLength(46)
+    //
+    // 47 since the CRM's Settings gained owner assignment rules (AGL-2618):
+    // a table of at most fifty rows the merchant wrote and ordered, read off
+    // the org document under that cap — a policy, not a collection.
+    expect(NOT_A_LIST).toHaveLength(47)
   })
 })
 

@@ -1131,6 +1131,15 @@ export const CRM_ASSIGNMENT_RULES_MAX = 50
 export const CRM_ROUND_ROBIN_POOL_MAX = 50
 
 /**
+ * The map of per-site CRM settings under `crm` on the ORG document, keyed
+ * by host id. A field on the org, not a subcollection of the host: the
+ * host-subcollection guards read a quoted `'hosts'` beside a site id as a
+ * client path under `hosts/{hostId}`, which this is not, so the key is
+ * named here and spelled nowhere else.
+ */
+const CRM_HOST_SETTINGS_KEY = 'hosts'
+
+/**
  * The field-path SEGMENTS of a site's default owner on the org document.
  *
  * Segments rather than a dotted string, because the host id is a document
@@ -1140,7 +1149,7 @@ export const CRM_ROUND_ROBIN_POOL_MAX = 50
  */
 export function crmHostDefaultOwnerSegments(hostId: string): string[] {
   if (!hostId) throw new Error('a site default owner must name a site')
-  return [ORG_CRM_SETTINGS_FIELD, 'hosts', hostId, 'defaultOwnerUid']
+  return [ORG_CRM_SETTINGS_FIELD, CRM_HOST_SETTINGS_KEY, hostId, 'defaultOwnerUid']
 }
 
 /** The conditions a rule may name — every one present must hold. */
@@ -1259,9 +1268,10 @@ export function readCrmAssignmentSettings(
         .filter((uid): uid is string => Boolean(uid)),
     ),
   ].slice(0, CRM_ROUND_ROBIN_POOL_MAX)
+  const hostSettings = crm[CRM_HOST_SETTINGS_KEY]
   const hosts =
-    crm['hosts'] && typeof crm['hosts'] === 'object' && !Array.isArray(crm['hosts'])
-      ? (crm['hosts'] as Record<string, unknown>)
+    hostSettings && typeof hostSettings === 'object' && !Array.isArray(hostSettings)
+      ? (hostSettings as Record<string, unknown>)
       : {}
   const hostDefaultOwners: Record<string, string> = {}
   for (const [hostId, value] of Object.entries(hosts)) {

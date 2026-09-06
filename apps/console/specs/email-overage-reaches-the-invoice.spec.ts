@@ -163,7 +163,7 @@ jest.mock('@aglyn/aglyn/server', () => {
     // REAL, not stubbed. These four are the arithmetic under test; a stub
     // would make every assertion below a test of the stub.
     checkApiRequestQuota: actual.checkApiRequestQuota,
-    checkContactQuota: actual.checkContactQuota,
+    checkCrmRecordsQuota: actual.checkCrmRecordsQuota,
     checkDataStorageQuota: actual.checkDataStorageQuota,
     // Same allow-list hazard the note below records: omit this and the
     // route's TypeError is swallowed per org and the sweep answers with no

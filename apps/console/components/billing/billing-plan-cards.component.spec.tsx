@@ -407,7 +407,7 @@ describe('the page opens on the decision, not the catalogue', () => {
 
   it('a metered limit carries its rate, not just its number', () => {
     renderCards({ plan: 'starter' })
-    expect(screen.queryAllByText(/contacts \(\+\$[\d.]+\/1k over\)/).length).toBeGreaterThan(0)
+    expect(screen.queryAllByText(/CRM records \(\+\$[\d.]+\/1k over\)/).length).toBeGreaterThan(0)
     expect(screen.queryAllByText(/hosts? \(\+\$[\d.]+\/extra\)/).length).toBeGreaterThan(0)
     // Email past the band bills too, and mostly it is TRANSACTIONAL mail that
     // carries an org there — the cap refuses campaigns, so campaign volume
@@ -427,8 +427,8 @@ describe('the page opens on the decision, not the catalogue', () => {
     renderCards({ plan: 'agency' })
     // Every band UNLIMITED and the price negotiated, so there is no
     // pass-through to quote — the row is the word, with nothing after it.
-    expect(screen.queryAllByText('Unlimited contacts').length).toBeGreaterThan(0)
-    expect(screen.queryAllByText(/Unlimited contacts \(\+/)).toHaveLength(0)
+    expect(screen.queryAllByText('Unlimited CRM records').length).toBeGreaterThan(0)
+    expect(screen.queryAllByText(/Unlimited CRM records \(\+/)).toHaveLength(0)
   })
 
   it('the Enterprise card states its limits like every other card', () => {
@@ -516,7 +516,7 @@ describe('the Enterprise card in the comparison grid', () => {
     expect(enterprise.getAllByText(/team seats?$/).length).toBeGreaterThan(0)
     expect(enterprise.getAllByText(/site collaborators?$/).length).toBeGreaterThan(0)
     expect(enterprise.getByText('Unlimited member accounts')).toBeTruthy()
-    expect(enterprise.getByText(/contacts$/)).toBeTruthy()
+    expect(enterprise.getByText(/CRM records$/)).toBeTruthy()
     expect(enterprise.getByText(/form submissions\/mo/)).toBeTruthy()
     expect(enterprise.getByText(/variables ·/)).toBeTruthy()
     expect(enterprise.getByText(/org datasets ×/)).toBeTruthy()
@@ -1273,10 +1273,10 @@ describe('an uncapped quota never leaks its sentinel (AGL-2482)', () => {
    * only the formatting was wrong. Same defect one surface over, which is why
    * it survived that sweep.
    */
-  it('the Agency card says Unlimited contacts, not the ∞ glyph', () => {
+  it('the Agency card says Unlimited CRM records, not the ∞ glyph', () => {
     renderGrid({ plan: 'agency' })
     expect(screen.queryAllByText(/∞/).length).toBe(0)
-    expect(screen.queryAllByText(/Unlimited contacts/).length).toBeGreaterThan(0)
+    expect(screen.queryAllByText(/Unlimited CRM records/).length).toBeGreaterThan(0)
   })
 
   it('no card anywhere prints ∞ or Infinity, on any plan', () => {
@@ -1298,8 +1298,8 @@ describe('an uncapped quota never leaks its sentinel (AGL-2482)', () => {
   it('a finite quota still reads exactly as it did, grouped', () => {
     // The counter-case. A "fix" that formatted every quota as Unlimited would
     // be the same defect pointed the other way, and grouping must survive:
-    // Scale is 500,000 contacts, never 500000.
+    // Scale is 500,000 CRM records, never 500000.
     renderGrid({ plan: 'scale' })
-    expect(screen.queryAllByText(/500,000 contacts/).length).toBeGreaterThan(0)
+    expect(screen.queryAllByText(/500,000 CRM records/).length).toBeGreaterThan(0)
   })
 })
