@@ -1,5 +1,5 @@
 ---
-sidebar_position: 12
+sidebar_position: 13
 title: CRM settings
 description: The switches that decide what the CRM does on its own for every site in your workspace — starting with whether a company is created from a captured contact's work email domain.
 ---

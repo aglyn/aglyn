@@ -8,7 +8,9 @@ description: Select contacts in the CRM table and tag them, set their owner, lif
 
 The **Contacts** table in the CRM has a checkbox on every row. Tick one or more —
 or the checkbox in the header for the whole page — and a bar appears above the
-table saying how many are selected, with one action for all of them.
+table saying how many are selected, with one action for all of them. The rows
+on offer are the ones the open [view](./views.md) shows, so narrowing to "my
+leads in Texas" first and ticking the header checkbox acts on exactly those.
 
 ## What you can do with a selection
 

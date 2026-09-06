@@ -1,5 +1,5 @@
 ---
-sidebar_position: 7
+sidebar_position: 8
 title: Companies
 description: Group your contacts under the businesses they belong to — one record per company, with its domain, owner, address and the people who work there.
 ---

@@ -1,5 +1,5 @@
 ---
-sidebar_position: 6
+sidebar_position: 7
 title: Leads
 description: Work the people your site has captured — a status, an owner and notes on every lead — and convert one into a contact, a company and a deal.
 ---

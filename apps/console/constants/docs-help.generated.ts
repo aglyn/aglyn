@@ -733,6 +733,11 @@ export const DOCS_HELP_TOPICS = {
     title: 'Versions & scheduled publishing',
     excerpt: 'Every screen, layout and reusable component keeps named versions — publish one, roll back to an older one, or schedule one to go live.',
   },
+  views: {
+    path: '/content-and-data/contacts/views',
+    title: 'Saved views',
+    excerpt: 'Keep a CRM list\'s filters, columns and sort under a name, open it from the views menu or a link, share it with the team, and use a contacts view as an email audience.',
+  },
   webhooks: {
     path: '/marketing-and-automation/workflows-and-actions/webhooks',
     title: 'Webhooks',
@@ -899,6 +904,7 @@ export const DOCS_HELP_ANCHORS = {
   troubleshooting: ['#checklist', '#verified-but-not-serving', '#the-site-loads-for-some-people-and-not-others', '#still-stuck', '#related'],
   uptimeAndStatus: ['#the-status-page', '#there-is-no-committed-uptime-percentage', '#where-the-platform-runs', '#reporting-an-outage'],
   versionsAndPublishing: ['#the-versions-dialog', '#publish--roll-back', '#scheduled-publishing', '#plan-requirements', '#related'],
+  views: ['#the-views-control', '#a-view-is-a-link', '#filters-on-the-contacts-list', '#columns-and-sort', '#segments-and-views', '#who-sees-what', '#related'],
   webhooks: ['#outbound-webhooks', '#inbound-webhooks', '#tips', '#related'],
   whiteLabel: ['#where', '#fields', '#where-you-see-it', '#email', '#merge-tokens', '#email-logo', '#sending-address', '#custom-console-domain', '#platform-brand', '#related'],
   workflows: ['#workflows', '#actions-builder', '#webhooks', '#run-history', '#related'],

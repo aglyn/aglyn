@@ -117,6 +117,11 @@ export const PLUGIN_DOCS = {
     title: 'Tasks & follow-ups',
     excerpt: 'Calls, emails, meetings and to-dos with a due date, an assignee and a link to the contact, company or deal they are for — with overdue and today read off the clock as you look.',
   },
+  crmViews: {
+    path: '/content-and-data/contacts/views',
+    title: 'Saved views',
+    excerpt: 'Keep a CRM list\'s filters, columns and sort under a name, open it from the views menu or a link, share it with the team, and use a contacts view as an email audience.',
+  },
   datasets: {
     path: '/content-and-data/datasets/overview',
     title: 'Datasets & Dynamic Content',
@@ -209,6 +214,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   crmReports: ['#choosing-a-period', '#contacts', '#sources-and-lifecycle', '#pipeline', '#won-and-lost', '#tasks', '#crm-at-a-glance', '#how-the-numbers-are-counted', '#related'],
   crmSettings: ['#companies', '#create-companies-from-work-email-domains', '#related'],
   crmTasks: ['#the-tasks-page', '#creating-a-task', '#assigning-a-task-to-someone-else', '#completing-and-reopening', '#tasks-on-a-contact-company-or-deal', '#the-dashboard-card', '#who-can-do-what', '#related'],
+  crmViews: ['#the-views-control', '#a-view-is-a-link', '#filters-on-the-contacts-list', '#columns-and-sort', '#segments-and-views', '#who-sees-what', '#related'],
   datasets: ['#model-builder', '#typed-documents', '#relations', '#query-layer', '#repeatable-components', '#who-a-dataset-is-shared-with', '#import--export', '#related'],
   deals: ['#the-pipeline-and-its-stages', '#the-board-and-the-table', '#creating-a-deal', '#moving-winning-and-losing', '#a-deals-page', '#related'],
   designedEmails: ['#create-a-template', '#styling-email-blocks', '#merge-tokens', '#send-it', '#the-plain-text-version'],

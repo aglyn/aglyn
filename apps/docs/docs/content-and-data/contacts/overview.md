@@ -50,7 +50,7 @@ flowchart LR
 
 | Section | Address | What lives there |
 | --- | --- | --- |
-| **[Contacts](./contact-record.md)** | `/crm/contacts` | Every person your site may see, as a list with Owner and Stage columns, filters and search; a person's own page is `/crm/contacts/{id}`. [CSV import](./import.md), [bulk actions](./bulk-actions.md) and the [timeline](./activities.md) live here too. |
+| **[Contacts](./contact-record.md)** | `/crm/contacts` | Every person your site may see, as a list with Owner and Stage columns, filters and search; a person's own page is `/crm/contacts/{id}`. [CSV import](./import.md), [bulk actions](./bulk-actions.md), [saved views](./views.md) and the [timeline](./activities.md) live here too. |
 | **[Leads](./leads.md)** | `/crm/leads` | People a site has captured but not yet qualified — a status, an owner and notes on each, and a conversion into a contact, a company and a deal. |
 | **[Companies](./companies.md)** | `/crm/companies` | The organizations your contacts belong to, keyed by domain — a captured contact is linked to the company at their email domain on its own; a company's page is `/crm/companies/{id}`. |
 | **[Deals](./deals.md)** | `/crm/deals` | The sales pipeline — open deals by stage, with an amount, an owner and an expected close, as a board or a table; a deal's page is `/crm/deals/{id}`. |
@@ -59,11 +59,14 @@ flowchart LR
 | **[Fields](./custom-fields.md)** | `/crm/fields` | The custom fields on a contact — text, number, date, choice, checkbox or link — which a form field can save into. |
 | **[Settings](./settings.md)** | `/crm/settings` | What the CRM does on its own for every site in the workspace — whether a company is created from a captured contact's work email domain. |
 
-Two things cut across the sections rather than having one of their own.
-**Activities** — the calls, emails, meetings and notes your team logs — are
-filed from the page of the record they are about and read in that record's
-timeline; see [Activities & the timeline](./activities.md). **Automations**
-can start on what happens in the CRM and act on it; see
+Three things cut across the sections rather than having one of their own.
+**Saved views** keep a list's filters, columns and sort under a name on every
+section that has a list, shareable and linkable; see
+[Saved views](./views.md). **Activities** — the calls, emails, meetings and
+notes your team logs — are filed from the page of the record they are about
+and read in that record's timeline; see
+[Activities & the timeline](./activities.md). **Automations** can start on
+what happens in the CRM and act on it; see
 [Automations for the CRM](./automations.md).
 
 Every record here is also on the [REST API](/api/): contacts under
@@ -120,9 +123,13 @@ of what was added, updated and skipped. See [Import contacts from CSV](./import.
 ## Segments
 
 Group contacts into **segments** — saved filters over tags and sources, kept
-from the Contacts list's own filter controls — and target them directly in
+from the Contacts list's filter bar through **Save as segment…** in the views
+menu — and target them directly in
 [email campaigns](../../marketing-and-automation/email-campaigns/overview.md).
-An audience built from a rule can also read a contact's owner, lifecycle stage,
+A [saved view](./views.md) keeps more than a segment — every filter, the
+columns and the sort — and a contacts view can be an audience in its own
+right, picked beside a segment when an audience is built from a rule. An
+audience built from a rule can also read a contact's owner, lifecycle stage,
 company and custom fields; see
 [email audiences](../../marketing-and-automation/email-campaigns/overview.md#email-lists).
 
