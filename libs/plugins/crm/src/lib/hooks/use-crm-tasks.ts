@@ -19,7 +19,6 @@ import { CRM_COLLECTIONS, type CrmTask } from '@aglyn/aglyn'
 import {
   useFirestore,
   useFirestoreCollection,
-  useOrgDataScope,
 } from '@aglyn/tenant-feature-instance'
 import {
   collection,
@@ -30,13 +29,13 @@ import {
   where,
 } from 'firebase/firestore'
 import { useEffect, useMemo, useState } from 'react'
-import { crmTaskReadTokens } from '../model/task-scope'
 import {
   CRM_TASK_VIEW_LIMIT,
   type CrmTaskView,
   crmTaskViewPlan,
   orderTaskRows,
 } from '../model/task-views'
+import { crmVisibleToClause, useCrmScope } from './use-crm-scope'
 
 /** A task as the console lists it: the document plus its id. */
 export type CrmTaskRow = CrmTask & { $id: string }
@@ -67,7 +66,8 @@ export interface CrmTaskListResult {
   truncated: boolean
   scope: readonly [string, string] | null
   orgId: string | null | undefined
-  readTokens: string[]
+  /** The reader's tokens, or `null` at the organization level — no clause (AGL-2630). */
+  readTokens: readonly string[] | null
 }
 
 /**
@@ -80,7 +80,8 @@ export interface CrmTaskListResult {
  * `assigneeUid == ''` would be a real read that could only answer nothing.
  */
 export function useCrmTaskList(options: {
-  hostId: string
+  /** The site the list is read under, or `null` at the organization level. */
+  hostId: string | null
   org?: Record<string, unknown> | null
   view: CrmTaskView
   uid: string | null | undefined
@@ -88,8 +89,10 @@ export function useCrmTaskList(options: {
 }): CrmTaskListResult {
   const { hostId, org, view, uid, nowMs } = options
   const firestore = useFirestore()
-  const { scope, orgId } = useOrgDataScope({ hostId })
-  const readTokens = useMemo(() => crmTaskReadTokens(org, hostId), [org, hostId])
+  // The org root and the reader's tokens from the one scope hook (AGL-2614)
+  // — the same expression the contacts list runs, so a task listed beside a
+  // contact is scoped by exactly the predicate that admitted the contact.
+  const { scope, orgId, visibleTo: readTokens } = useCrmScope({ hostId, org })
   const plan = useMemo(
     () => crmTaskViewPlan(view, { nowMs, uid }),
     [view, nowMs, uid],
@@ -99,7 +102,7 @@ export function useCrmTaskList(options: {
       if (!scope) return null
       if (plan.assigneeUid !== undefined && !plan.assigneeUid) return null
       const constraints: QueryConstraint[] = [
-        where('visibleTo', 'array-contains-any', readTokens),
+        ...crmVisibleToClause(readTokens),
         where('status', '==', plan.status),
       ]
       if (plan.assigneeUid) {
@@ -164,14 +167,14 @@ export interface CrmRecordRef {
  * and counts the rest, and two listeners for one short list is one too many.
  */
 export function useCrmRecordTasks(options: {
-  hostId: string
+  /** The site the record is read under, or `null` at the organization level. */
+  hostId: string | null
   org?: Record<string, unknown> | null
   record: CrmRecordRef
 }): CrmTaskListResult {
   const { hostId, org, record } = options
   const firestore = useFirestore()
-  const { scope, orgId } = useOrgDataScope({ hostId })
-  const readTokens = useMemo(() => crmTaskReadTokens(org, hostId), [org, hostId])
+  const { scope, orgId, visibleTo: readTokens } = useCrmScope({ hostId, org })
   const field = record.contactId
     ? 'contactId'
     : record.companyId
@@ -185,7 +188,7 @@ export function useCrmRecordTasks(options: {
       if (!scope || !field || !id) return null
       return query(
         collection(firestore, scope[0], scope[1], CRM_COLLECTIONS.tasks),
-        where('visibleTo', 'array-contains-any', readTokens),
+        ...crmVisibleToClause(readTokens),
         where(field, '==', id),
         orderBy('dueAtMs', 'asc'),
         limit(CRM_RECORD_TASK_LIMIT),

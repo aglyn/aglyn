@@ -542,6 +542,10 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
       email,
       name: name || undefined,
       source: 'booking',
+      // A request is interest, not a sale (AGL-2612): no money has moved at
+      // this point, so the stage is `lead`. The payment webhook is the door
+      // that makes a customer, once the charge has actually cleared.
+      initialLifecycleStage: 'lead',
       interaction: {
         refId: bookingId,
         summary: `Booked "${String(service.name ?? 'a service').slice(0, 60)}"`,

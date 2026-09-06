@@ -25,6 +25,7 @@ import {
   ORG_SCOPE_TOKEN,
   pluginDocsHelp,
 } from '@aglyn/aglyn'
+import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import {
   mdiArchiveArrowUpOutline,
   mdiArchiveOutline,
@@ -45,7 +46,6 @@ import RowActionsMenu, {
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
-  useOrgDataScope,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import {
@@ -73,6 +73,7 @@ import {
   type ContactFieldDefinitionDoc,
   useContactFieldDefinitions,
 } from '../hooks/use-contact-field-definitions'
+import { useCrmScope } from '../hooks/use-crm-scope'
 import ContactFieldDrawer, { type ContactFieldDraft } from './contact-field-drawer'
 
 export type ContactsFieldsSectionProps = Pick<ConsolePluginPageProps, 'hostId' | 'org'>
@@ -107,11 +108,15 @@ export type ContactsFieldsSectionProps = Pick<ConsolePluginPageProps, 'hostId' |
  * people into the same address book. `hostId` records which site defined it.
  */
 export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
-  const { hostId } = props
+  const { hostId, org } = props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const { scope, ready: scopeReady } = useOrgDataScope({ hostId })
+  // The org root from the one scope hook (AGL-2614), which also answers at
+  // the organization level (AGL-2630). A definition is org-wide either way;
+  // the defining site it records is the mounted one, or the picked one, or
+  // none for a field defined over the whole org before any pick.
+  const { scope, ready: scopeReady, createHostId } = useCrmScope({ hostId, org })
   const orgId = scope?.[1] ?? null
   const { definitions, ready, fromCache } = useContactFieldDefinitions(orgId)
 
@@ -189,7 +194,7 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
             required: draft.required,
             order,
             retiredAt: null,
-            hostId,
+            hostId: createHostId,
             ...newResourceScopeFields([ORG_SCOPE_TOKEN]),
             createdAt: now,
             updatedAt: now,
@@ -203,7 +208,7 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
       setDrawerOpen(false)
       setEditing(null)
     },
-    [scope, editing, fromCache, fieldRef, enqueueSnackbar, definitions, firestore, hostId],
+    [scope, editing, fromCache, fieldRef, enqueueSnackbar, definitions, firestore, createHostId],
   )
 
   /**
@@ -401,9 +406,17 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
             {'This site has no organization, so it has no contact fields.'}
           </Typography>
         ) : !ready ? null : definitions.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            {'No custom fields yet. Add one to start keeping it on every contact.'}
-          </Typography>
+          <EmptyStateComponent
+            label={'No custom fields yet'}
+            description={'A field you define here is kept on every contact and shows on their page.'}
+            action={
+              scope ? (
+                <Button variant="contained" onClick={openCreate}>
+                  {'New field'}
+                </Button>
+              ) : undefined
+            }
+          />
         ) : (
           <Table size="small">
             <TableHead>

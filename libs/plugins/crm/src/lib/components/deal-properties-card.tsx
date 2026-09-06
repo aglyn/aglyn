@@ -17,9 +17,8 @@
 'use client'
 
 import { dealStageById, pluginDocsHelp, weightedDealAmountCents } from '@aglyn/aglyn'
-import { mdiPencilOutline } from '@aglyn/shared-data-mdi'
-import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
-import { Button, Stack, Typography } from '@mui/material'
+import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
+import { Stack, Typography } from '@mui/material'
 import type { ReactNode } from 'react'
 import {
   type DealDoc,
@@ -34,7 +33,6 @@ export interface DealPropertiesCardProps {
   pipeline: PipelineDoc | null
   ownerLabel: string
   routes: CrmRoutes
-  onEdit: () => void
 }
 
 function Row(props: { label: string; children: ReactNode }) {
@@ -64,7 +62,7 @@ function Row(props: { label: string; children: ReactNode }) {
  * the deal is a caption that may lag a rename.
  */
 export function DealPropertiesCard(props: DealPropertiesCardProps) {
-  const { deal, pipeline, ownerLabel, routes, onEdit } = props
+  const { deal, pipeline, ownerLabel, routes } = props
   const stage = dealStageById(pipeline, deal.stageId)
   const weighted = weightedDealAmountCents(deal, stage)
   const createdMs = timestampMs(deal.createdAt)
@@ -72,15 +70,6 @@ export function DealPropertiesCard(props: DealPropertiesCardProps) {
     <CardDisplay
       header={'Properties'}
       help={pluginDocsHelp('deals', { anchor: '#a-deals-page' })}
-      actions={
-        <Button
-          size="small"
-          startIcon={<MdiIcon path={mdiPencilOutline.path} size={0.8} />}
-          onClick={onEdit}
-        >
-          {'Edit'}
-        </Button>
-      }
       contentGutterX
       contentGutterY
     >

@@ -19,7 +19,12 @@
 import * as CommerceModel from '../../model'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { checkEntitlement, pluginDocsHelp } from '@aglyn/aglyn'
+import {
+  checkEntitlement,
+  ORDERS_CUSTOMER_PARAM,
+  ORDERS_ORDER_PARAM,
+  pluginDocsHelp,
+} from '@aglyn/aglyn'
 import {
   Alert,
   AlertTitle,
@@ -40,7 +45,8 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import { collection, limit, orderBy, query } from 'firebase/firestore'
+import { collection, doc, getDoc, limit, orderBy, query } from 'firebase/firestore'
+import { useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ceilingedWindow,
@@ -156,7 +162,47 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
    * selects.
    */
   const [disputeFilter, setDisputeFilter] = useState('')
+  /*
+   * Customer filter (AGL-2622): the buyer's address, matched as a substring
+   * of `customerEmail` so a domain finds every buyer at a company. Seeded
+   * from the URL, because the CRM's contact page links here with the
+   * person's address to answer "what has this customer ordered" — the
+   * orders count on the record is the number, and this list is the rows.
+   */
+  const searchParams = useSearchParams()
+  const [customerFilter, setCustomerFilter] = useState(
+    () => searchParams?.get(ORDERS_CUSTOMER_PARAM) ?? '',
+  )
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  /*
+   * An order named in the URL opens in its dialog on arrival (AGL-2622). A
+   * contact's timeline names the order that made the person a customer,
+   * and the address it links to is this list with `?order={id}`. The
+   * window is the newest two hundred, and an order from last year is not
+   * in it, so the document is read once by id and held beside the window
+   * for the dialog; an order that IS in the window is found there first
+   * and the read is skipped. Once per id — the ref keeps a re-render from
+   * reopening a dialog the merchant has since closed — and the landing read
+   * is judged against the ref rather than an effect cleanup, because the
+   * `setSelectedId` above re-renders before the read lands and a cleanup
+   * keyed on any dep would cancel the answer to the question just asked.
+   */
+  const seededOrderId = searchParams?.get(ORDERS_ORDER_PARAM) ?? null
+  const [seededOrder, setSeededOrder] = useState<any | null>(null)
+  const seededOpened = useRef<string | null>(null)
+  useEffect(() => {
+    if (!seededOrderId || seededOpened.current === seededOrderId) return
+    if (orderDocs === undefined) return
+    seededOpened.current = seededOrderId
+    setSelectedId(seededOrderId)
+    if (orderDocs.some((order: any) => order.$id === seededOrderId)) return
+    void getDoc(doc(firestore, 'hosts', hostId, 'orders', seededOrderId))
+      .then((snapshot) => {
+        if (seededOpened.current !== snapshot.id || !snapshot.exists()) return
+        setSeededOrder({ ...snapshot.data(), $id: snapshot.id })
+      })
+      .catch(() => undefined)
+  }, [seededOrderId, orderDocs, firestore, hostId])
   const [draft, setDraft] = useState<{
     productId: string
     variantId: string
@@ -185,6 +231,14 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
         return false
       }
       if (statusFilter && lifted.status !== statusFilter) return false
+      if (
+        customerFilter &&
+        !String(order.customerEmail ?? '')
+          .toLowerCase()
+          .includes(customerFilter.trim().toLowerCase())
+      ) {
+        return false
+      }
       if (channelFilter && (lifted.channel ?? 'online') !== channelFilter) {
         return false
       }
@@ -218,6 +272,7 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
     statusFilter,
     channelFilter,
     disputeFilter,
+    customerFilter,
   ])
 
   /**
@@ -351,7 +406,8 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
   }, [draft, user, hostId, enqueueSnackbar])
 
   const selectedOrder =
-    (orderDocs ?? []).find((order: any) => order.$id === selectedId) ?? null
+    (orderDocs ?? []).find((order: any) => order.$id === selectedId) ??
+    (seededOrder && seededOrder.$id === selectedId ? seededOrder : null)
 
   /**
    * Shared by the two triggers (AGL-1805) so the empty state and the toolbar
@@ -537,6 +593,14 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
                 </MenuItem>
               ))}
             </TextField>
+            <TextField
+              size="small"
+              label="Customer"
+              placeholder="Email"
+              value={customerFilter}
+              onChange={(event) => setCustomerFilter(event.target.value)}
+              sx={{ minWidth: 180 }}
+            />
             <TextField
               select
               size="small"

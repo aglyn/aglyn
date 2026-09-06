@@ -73,7 +73,7 @@ const ORG = {
   plan: 'starter',
   entitlements: { contactsPerHost: 10 },
 } as any
-const OVERAGE_LEAD = "50 contacts over your plan's included 10"
+const OVERAGE_LEAD = "50 CRM records over your plan's included 10"
 /** The figure that must not appear while the flag is off. */
 const ESTIMATE = '0.05'
 
@@ -109,6 +109,12 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   listFilterConstraints: jest.requireActual(
     '@aglyn/tenant-feature-instance',
   ).listFilterConstraints,
+  // The plan the views split the clauses with (AGL-2617) — real, for the
+  // same reason.
+  listFilterPlan: jest.requireActual('@aglyn/tenant-feature-instance')
+    .listFilterPlan,
+  // The reader's reach, for the views control's "may edit" — org-wide here.
+  useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),
   useFirestore: () => ({}),
   useOrgDataScope: () => ({ scope: ['orgs', 'org-1'] }),
   // The site's campaigns, which fill the picker in the contact profile panel.
@@ -172,7 +178,9 @@ jest.mock('@aglyn/shared-ui-next', () => ({
 
 // A row is a link to the record page (AGL-2596); nothing here follows one.
 jest.mock('next/navigation', () => ({
-  useRouter: () => ({ push: jest.fn() }),
+  useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
+  // The list reads its own address for a seeded filter (AGL-2612); none here.
+  useSearchParams: () => new URLSearchParams(),
 }))
 
 const BASE_PATH = '/acme/hosts/shop/contacts'

@@ -141,6 +141,26 @@ export interface OrgFeatureFlags {
   /** Appointment bookings (AGL-159). */
   bookings?: boolean
   /**
+   * The CRM SUITE (AGL-2611): leads, companies, the deals pipeline, tasks,
+   * reports and custom fields, the CRM automation steps, and the `crm:*`
+   * REST resources.
+   *
+   * NOT the Contacts section. Contacts are the capture projection of a
+   * site's audience — the list, tags, notes, export and segments that the
+   * email audiences read — and they ship on every plan including Free, banded
+   * by `contactsPerHost`. What this flag gates is everything a sales team
+   * builds ON that list, and it is the upgrade motive from Free to the first
+   * paid tier rather than a line on top of one: for the small-business buyer
+   * the CRM is the reason to pick a platform over a page builder.
+   *
+   * Read by the console shell through a section's or a widget's
+   * `featureFlag` (so the shell refuses the surface before it mounts), by
+   * the automation executor before a CRM step runs, and by the REST
+   * dispatcher in front of the five CRM resources. A per-org override on
+   * `entitlements.features.crm` works the way every other flag's does.
+   */
+  crm?: boolean
+  /**
    * Basic presentational interactions (AGL-577): menu/drawer open-close,
    * element show/hide, class toggles, sticky nav, navigation, site
    * alerts. Included on ALL plans — pure client-side DOM with no server
@@ -428,8 +448,37 @@ export interface OrgEntitlements {
   servicesPerHost?: number
   /** Redirect rules per host (AGL-154). */
   redirectsPerHost?: number
-  /** Contacts CRM cap (AGL-197): unified people records per host. */
+  /**
+   * The CRM RECORDS band (AGL-197, widened in AGL-2611): contacts, companies
+   * and deals, counted together across the org. The persisted key still says
+   * "contacts" because it is written on live org documents as a staff
+   * override and read back through this type; every customer surface says
+   * "CRM records". Paid tiers meter past it at `extraContactsUsdPer1k`; Free
+   * refuses the next record of any of the three kinds. Tasks and activities
+   * are not counted — see `CRM_ACTIVITIES_PER_RECORD_CEILING`.
+   */
   contactsPerHost?: number
+  /**
+   * One-to-one emails a workspace may send from CRM records per UTC day —
+   * the message a rep writes to one person from their contact page, as
+   * against a campaign (`emailSendsPerMonth`) or transactional mail.
+   *
+   * A HARD cap on every tier and a daily one, because it is the only send
+   * class a person can produce by hand at volume: a campaign is one act over
+   * a metered audience, and a receipt follows an order somebody paid for,
+   * but a rep with a template and a list can put a thousand messages onto
+   * the platform's sending reputation in an afternoon. The day boundary is
+   * what makes the cap a pace rather than a wall — tomorrow the count is
+   * zero again — and the number is sized so that every tier holds its
+   * margin with the whole day spent, which is the arithmetic the Drive
+   * pricing decision of 2026-09-05 records. `checkCrmEmailQuota` reads it;
+   * the counter it is enforced against is `orgs/{orgId}/crmEmailUsage/{day}`.
+   *
+   * Every send still counts on the org's `emailSends` cost meter, like any
+   * other message the provider charged for. 0 on Free, which has no CRM
+   * suite; `UNLIMITED` on Enterprise, whose contract prices its own volume.
+   */
+  crmEmailsPerDay?: number
   /**
    * CAMPAIGN emails sendable per calendar month (AGL-161), and campaign
    * emails only (AGL-1438).
@@ -922,8 +971,93 @@ export interface AglynOrgBilling extends AglynDocument {
    * tools/scripts/erase-tenant.mjs, which calls the same function (AGL-1481).
    */
   erasureRequestedAt?: ITimestamp | null
+  /**
+   * The CRM's organization-wide settings (AGL-2613), written from
+   * CRM → Settings by an owner or admin with the client SDK — see
+   * `ORG_CLIENT_WRITABLE_FIELDS`. One map rather than a key per setting, so
+   * the section can grow without a rules change each time.
+   */
+  crm?: OrgCrmSettings
   createdAt?: ITimestamp
   updatedAt?: ITimestamp
+}
+
+/**
+ * What the CRM lets an organization decide for every site at once
+ * (AGL-2613). Every key is optional and off when absent: a setting that
+ * has never been touched behaves as the product did before it existed.
+ */
+export interface OrgCrmSettings {
+  /**
+   * Create a company from a captured contact's work email domain when no
+   * company the capturing site can see carries that domain. Off by default:
+   * a company minted from every domain that ever submitted a form is a list
+   * nobody asked for. Public mailbox domains never qualify either way.
+   */
+  autoCreateCompanies?: boolean
+  /**
+   * Per-site settings, keyed by host id (AGL-2618). On the ORG document
+   * rather than on each host document because the reader is the org-level
+   * assignment pass — one read of one document answers every site's default
+   * — and because the writer is the same owner-or-admin the rest of this
+   * map admits, through the same client branch. A host document would need
+   * its own rules clause for a key only the CRM reads.
+   */
+  hosts?: Record<string, OrgCrmHostSettings>
+  /**
+   * The assignment rules, in the order they are tried (AGL-2618). The first
+   * rule whose every condition holds names the owner; the site's default
+   * owner is the fallback when none does. Bounded by
+   * `CRM_ASSIGNMENT_RULES_MAX` in the section that writes it.
+   */
+  assignmentRules?: OrgCrmAssignmentRule[]
+  /** The round-robin pool and its pointer — see `OrgCrmRoundRobin`. */
+  roundRobin?: OrgCrmRoundRobin
+}
+
+/** What one site decides for records captured on it (AGL-2618). */
+export interface OrgCrmHostSettings {
+  /**
+   * The member every record captured on this site is handed to when no
+   * assignment rule claimed it. Absent: the record stays unassigned, which
+   * is what the product did before the setting existed.
+   */
+  defaultOwnerUid?: string
+}
+
+/**
+ * One assignment rule (AGL-2618): `when` every named condition holds for a
+ * capture, `assign` the record this way. A condition left out is not a
+ * condition — a rule naming only a source matches every capture from that
+ * source — and a rule naming nothing matches every capture, which is how a
+ * catch-all is written. `source` is a `ContactSource`, typed as a string
+ * here because the foundation cannot import the capture vocabulary; the CRM
+ * module narrows it.
+ */
+export interface OrgCrmAssignmentRule {
+  id: string
+  when: {
+    source?: string
+    formId?: string
+    emailDomain?: string
+    tag?: string
+  }
+  assign: { memberUid: string } | { roundRobin: true }
+}
+
+/**
+ * The round-robin pool (AGL-2618): the members handed records in turn, and
+ * WHO GOT THE LAST ONE. The pointer is a uid rather than an index so that
+ * editing the pool — a member added, removed or moved — never skips or
+ * repeats anybody: the next record goes to whoever follows the last
+ * recipient in the pool as it stands, and to the first member when the last
+ * recipient is no longer in it. Advanced only by the server, inside the
+ * transaction that writes the owner, so two captures landing together take
+ * two different members.
+ */
+export interface OrgCrmRoundRobin {
+  memberUids?: string[]
+  lastAssignedUid?: string
 }
 
 /**
@@ -974,6 +1108,19 @@ export const ORG_CLIENT_WRITABLE_FIELDS: Readonly<Record<string, string>> = {
     'Last-write stamp. Every client write that IS allowed sets it in the same ' +
     '`setDoc(..., { merge: true })` — the staff suspension, erasure-request ' +
     'and plan-override cards all do — so denying it would deny those writes.',
+  crm:
+    'The CRM settings map (AGL-2613): `autoCreateCompanies`, the per-site ' +
+    'default owner, the assignment rules and the round-robin pool ' +
+    '(AGL-2618), and whatever the CRM → Settings section adds beside them. ' +
+    'Deliberately writable by an org owner or admin — the section writes it ' +
+    'client-direct by dotted path. No entitlement, price, routing decision ' +
+    'or staff judgement reads it; its readers are the contact capture door ' +
+    'deciding whether to mint a company record from an email domain and ' +
+    'whom to hand a new record to, which are choices about the org\'s own ' +
+    "data that the org's managers are the right people to make. The pool's " +
+    'pointer (`crm.roundRobin.lastAssignedUid`) is advanced by the server ' +
+    'inside the assigning transaction; a client that moved it would only ' +
+    'change who is next, never what anybody may see.',
 }
 
 /**

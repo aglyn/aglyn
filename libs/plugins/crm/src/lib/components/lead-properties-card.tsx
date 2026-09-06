@@ -18,7 +18,9 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import type { CrmLeadFields, CrmLeadStatus } from '@aglyn/aglyn'
-import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
+import { mdiAccountCancelOutline } from '@aglyn/shared-data-mdi'
+import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
+import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   type FirestoreDocStatus,
@@ -39,7 +41,10 @@ import {
 import { deleteField, doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { useEffect, useId, useState } from 'react'
 import { crmRoutes } from '../model/crm-routes'
-import { LeadOwnerSelect, type OrgMemberOptions } from './lead-owner-select'
+import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
+import { CrmSendEmailButton } from './crm-send-email-button'
+import type { OrgMemberOptions } from '../hooks/use-org-member-options'
+import { LeadOwnerSelect } from './lead-owner-select'
 import { LeadStatusChip } from './lead-status-chip'
 
 const NOTES_MAX = 4000
@@ -69,6 +74,14 @@ export interface LeadPropertiesCardProps {
   roster: OrgMemberOptions
   onConvert: () => void
   onUnqualify: () => void
+  /**
+   * Items the page adds to the overflow beside Unqualify — the privacy
+   * erasure (AGL-2623) lives on the page, because it needs the workspace
+   * role and the API, and this card owns the header it must appear in.
+   */
+  extraMenuItems?: RowActionsMenuItem[]
+  /** What the page shows above the facts — the erasure-pending state. */
+  banner?: React.ReactNode
 }
 
 /**
@@ -96,6 +109,8 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
     roster,
     onConvert,
     onUnqualify,
+    extraMenuItems = [],
+    banner,
   } = props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
@@ -156,41 +171,57 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
         : 'No marketing consent recorded — this lead cannot be emailed marketing'
 
   return (
-    <CardDisplay
-      header={'Lead'}
+    <CrmRecordHeader
+      kind="Lead"
+      title={String(lead['name'] || lead['email'] || leadId)}
+      // The name is the heading; the address is the one line under it,
+      // unless the address IS the name, in which case there is no second fact.
+      subtitle={lead['name'] ? String(lead['email'] ?? '') : undefined}
       help={Aglyn.pluginDocsHelp('crmLeads', { anchor: '#working-a-lead-from-the-row' })}
+      backHref={routes.section('leads')}
+      backLabel="Back to leads"
       actions={
-        <Stack direction="row" spacing={1}>
-          <Button
-            component={AppLink as any}
-            {...({ componentVariant: 'naked', nativeButton: false } as any)}
-            href={routes.section('leads')}
-            size="small"
-            color="primary"
-          >
-            {'Back to leads'}
-          </Button>
-          {open ? (
-            <Button size="small" variant="outlined" color="warning" onClick={onUnqualify}>
-              {'Unqualify'}
-            </Button>
-          ) : null}
+        <>
           {!converted ? (
             <Button size="small" variant="contained" onClick={onConvert}>
               {'Convert'}
             </Button>
           ) : null}
-        </Stack>
+          <CrmSendEmailButton
+            hostId={hostId}
+            leadId={leadId}
+            email={String(lead['email'] ?? '')}
+            name={String(lead['name'] ?? '')}
+          />
+        </>
       }
-      contentGutterX
-      contentGutterY
+      menuItems={[
+        ...(open
+          ? [
+              {
+                key: 'unqualify',
+                label: 'Unqualify',
+                icon: <MdiIcon path={mdiAccountCancelOutline.path} size={0.8} />,
+                destructive: true,
+                onClick: onUnqualify,
+              } satisfies RowActionsMenuItem,
+            ]
+          : []),
+        ...extraMenuItems,
+      ]}
+      chips={
+        <>
+          <LeadStatusChip lead={lead} />
+          <CrmRecordChip
+            label="Owner"
+            value={lead.ownerUid ? roster.labelFor(lead.ownerUid) : undefined}
+          />
+        </>
+      }
     >
       <Stack spacing={3}>
-        <Stack direction={{ xs: 'column', md: 'row' }} spacing={3}>
-          <Fact label="Email">{String(lead['email'] ?? '—')}</Fact>
-          <Fact label="Name">{String(lead['name'] ?? '') || '—'}</Fact>
-          <Fact label="Marketing consent">{consentLine}</Fact>
-        </Stack>
+        {banner}
+        <Fact label="Marketing consent">{consentLine}</Fact>
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
           {converted ? (
             <Fact label="Status">
@@ -308,7 +339,7 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
           </Stack>
         </Stack>
       </Stack>
-    </CardDisplay>
+    </CrmRecordHeader>
   )
 }
 LeadPropertiesCard.displayName = 'LeadPropertiesCard'

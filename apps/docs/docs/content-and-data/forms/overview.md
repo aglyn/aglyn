@@ -214,10 +214,14 @@ either of two topic boxes is ticked.
   each submission's own detail dialog carries
   [chips saying where it went](#where-this-one-went) — including saying nothing about a
   dataset when the record wasn't created.
-- **Contacts** — form submissions are one of the [ingestion sources](../contacts/overview.md)
-  that build your contacts list. A field can also save its answer into one of your
+- **Contacts** — every submission that carries an email address updates the person in
+  the [CRM](../contacts/overview.md) at stage **Lead**: a new contact when the address
+  is new, an interaction on their timeline when it is not, and a customer stays a
+  customer. A field can also save its answer into one of your
   [custom contact fields](../contacts/custom-fields.md#save-a-form-field) — pick the
   field under **Saves to contact fields** on the form's own page.
+- **Leads** — only when the form's **CRM routing** card has the lead switch on. See
+  [What makes a lead](../contacts/leads.md#what-makes-a-lead).
 
 ### The inbox
 
@@ -233,6 +237,15 @@ row actions.
 - Unread submissions are **bold with a dot** at the left of the row. There is no "New"
   chip — bold text and a chip saying *New* are the same fact twice. Site managers also
   get an in-app notification per submission.
+- The row's **⋮** menu holds **Open contact in CRM** — the person this submission
+  updated, found by the address they gave — beside **Mark read** and **Delete**. A
+  submission that carried no email address updated no contact, and the item says so.
+- The CRM links back the other way: **Open submission** on a captured entry of a
+  contact's [timeline](../contacts/activities.md) lands on this tab with the reader
+  already open on that submission (the address carries `?submission={id}`) and marks
+  it read, as a click would. A submission that has since been deleted says so.
+- The dashboard's **Inbox** card previews the newest submissions and counts the site's
+  **open leads**, linking to **CRM → Leads**.
 - **Received** is relative — `now`, `18m`, `3h`, `2d`, `4w`, `7mo`. Hover it for the
   absolute date and time; the detail dialog carries the absolute time too. An inbox is
   scanned for recency, and a locale timestamp makes you do the subtraction.
@@ -316,6 +329,17 @@ offering a Send that would fail.
 
 The Inbox answers "who is waiting for a reply" for the whole site. **Forms →** a form
 answers a different question: how this one form is doing. Open it from the Forms list.
+
+**CRM routing** says what the CRM does with a submission. Every submission with an
+email address updates the person in **Contacts** at stage Lead, whatever else is set.
+The switch beneath — **Also create a lead from the address someone gives this form** —
+additionally files a lead in **CRM → Leads** for the sales team to work, and the caption
+under it says what that needs before you flip it: an email field in the published
+design (a submission without an address cannot key a lead, and publishing with the
+switch on would be refused until one exists), and a **Marketing consent field** if the
+lead is to be mailable — a lead exists without one and cannot be emailed. **See the
+contacts this form captured in the CRM** opens the Contacts list narrowed to source
+Form and this form.
 
 **What this form has collected** carries the counters:
 

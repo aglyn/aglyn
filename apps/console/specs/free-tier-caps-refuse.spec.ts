@@ -82,7 +82,7 @@ import { join } from 'node:path'
 import {
   bandwidthCapShouldEngage,
   checkApiRequestQuota,
-  checkContactQuota,
+  checkCrmRecordsQuota,
   checkDatasetQuota,
   checkDataStorageQuota,
   checkFormSubmissionQuota,
@@ -301,12 +301,14 @@ const DIMENSIONS: Record<string, Dimension> = {
     decider: 'checkFormSubmissionQuota',
   },
   contactsPerHost: {
-    decide: (org, used) => checkContactQuota(org as never, used).allowed,
+    // The band counts contacts, companies and deals together (AGL-2611);
+    // the capture door asks it with the three-collection sum.
+    decide: (org, used) => checkCrmRecordsQuota(org as never, used).allowed,
     refusedAt: 100,
     allowedAt: 99,
     relax: (n) => free({ contactsPerHost: n }),
     enforcedIn: 'libs/tenant/data/admin/src/lib/server/upsert-contact.ts',
-    decider: 'checkContactQuota',
+    decider: 'checkCrmRecordsQuota',
   },
   apiRequestsPerMonth: {
     decide: (org, used) => checkApiRequestQuota(org as never, used).allowed,
@@ -363,6 +365,14 @@ const NOT_A_CAP: Record<string, string> = {
     'of ONE credit and refuse harder, which is the opposite of what step ' +
     '(3) requires. The cap is driven to refusal on the plans that sell it ' +
     'in `assist-usage.spec.ts`, both ways.',
+  crmEmailsPerDay:
+    'a real cap with no door in the tree yet (AGL-2611): `checkCrmEmailQuota` ' +
+    'answers it and the `crmEmailUsage` counter it reads is rules-covered, ' +
+    'but the one-to-one send route that must consult it is the companion ' +
+    'issue and nothing calls the checker outside its own definition, so ' +
+    'there is no file to pin. The commit that lands the route moves this ' +
+    'key to a DIMENSIONS row pinned to it — refusing at 0 on Free with no ' +
+    'below-the-cap, the `apiRequestsPerMonth` shape.',
 }
 
 /** Comment-stripped source, so prose naming a symbol is not a call site. */

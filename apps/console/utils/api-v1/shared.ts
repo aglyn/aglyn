@@ -102,6 +102,9 @@ export type ClaimKind =
   | 'form-submission-deletes'
   | 'contacts'
   | 'contact-deletes'
+  // A merge destroys the source contact (AGL-2625), so it claims like a
+  // delete and records the survivor's view as its receipt.
+  | 'contact-merges'
   | 'media'
   | 'sites'
   | 'companies'
@@ -112,6 +115,7 @@ export type ClaimKind =
   | 'task-deletes'
   | 'activities'
   | 'activity-deletes'
+  | 'lead-conversions'
 
 /**
  * Take an exclusive claim on one write attempt (AGL-1709), and translate the

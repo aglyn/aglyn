@@ -23,10 +23,19 @@ for the how-to.
   [custom fields](content-and-data/contacts/custom-fields.md) each have a section. The
   list gains [CSV import](content-and-data/contacts/import.md),
   [bulk actions](content-and-data/contacts/bulk-actions.md) and a
-  [timeline](content-and-data/contacts/activities.md) of logged calls and meetings, and
+  [timeline](content-and-data/contacts/activities.md) of logged calls and meetings;
+  every section's table selects, acts and exports as a CSV that re-imports, and
+  [companies import](content-and-data/contacts/companies.md#import-from-csv) too; and
   automations gain [CRM events and steps](content-and-data/contacts/automations.md).
   Links to the older `/contacts` address still open the hub. Still release-flagged: it
   appears on its own once the rollout reaches your workspace.
+- **[Saved views in the CRM](content-and-data/contacts/views.md)** — every CRM list keeps
+  its filters, columns and sort under a name: open a view from the views menu or from
+  its link, share it with the team, make it your default for the section. The Contacts
+  list gains a filter bar with owner, stage, source, company, tags, dates, purchases and
+  one filter per custom field; a saved contacts view can be an
+  [email audience](content-and-data/contacts/views.md#segments-and-views) beside a
+  segment.
 - **[Companies, pipelines, deals, tasks and activities over the REST API](/api/resources/companies)** —
   the CRM's records join contacts on `/v1`, under one pair of scopes, `crm:read` and
   `crm:write`. Create a [company](/api/resources/companies) keyed by its domain, open a
@@ -167,7 +176,7 @@ for the how-to.
 - **[Unlimited member accounts on every plan](workspace-and-billing/teams-and-roles/overview.md#site-membership)** —
   visitors who sign up to your published site are never metered, capped, or charged per
   account, on any tier including Free.
-- **[Contact audience bands](workspace-and-billing/billing-and-plans/overview.md#audience-contacts)** —
+- **[Contact audience bands](workspace-and-billing/billing-and-plans/overview.md#crm-records)** —
   your contacts CRM is priced as an included band per tier. On paid plans, growing past
   the band **never drops a record**: extra contacts will bill as small metered overage
   ($0.25–$1.00 per 1,000/month, cheaper on higher tiers). The billing page has a new

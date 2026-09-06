@@ -61,6 +61,16 @@ function pageExists(template: string): boolean {
         if (!statSync(nested).isDirectory()) continue
         if (walk(nested, rest)) return true
       }
+      // …and through an OPTIONAL catch-all child. `[[...name]]` matches the
+      // EMPTY remainder as well as any — `crm/[[...crmSlug]]/page.tsx` IS
+      // `/[orgSlug]/crm` — which is how a hub owning its whole subtree lands
+      // its default section on the parent path with no page file there.
+      for (const entry of readdirSync(dir)) {
+        if (!entry.startsWith('[[...') || !entry.endsWith(']]')) continue
+        const nested = join(dir, entry)
+        if (!statSync(nested).isDirectory()) continue
+        if (walk(nested, [])) return true
+      }
       return false
     }
     const [segment, ...tail] = rest

@@ -40,18 +40,17 @@ import {
   where,
 } from 'firebase/firestore'
 import { useMemo } from 'react'
-import {
-  useFirestore,
-  useFirestoreCollection,
-} from '@aglyn/tenant-feature-instance'
-import { ceilingedWindow } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { ReportExport } from './report-export'
+import { reportFilename } from './report-format'
 import {
   type CrmReportScope,
+  reportCacheKey,
   scopedCollection,
   visibleToClause,
 } from './report-scope'
 import { ReportStatTile } from './report-stat-tile'
-import { useAggregateRead } from './use-aggregate-read'
+import { useAggregateRead, useWindowRead } from './use-aggregate-read'
 
 /**
  * How many open tasks the by-assignee table is grouped from.
@@ -65,6 +64,9 @@ const OPEN_TASK_CEILING = 1000
 const ASSIGNEE_NAME_CEILING = 30
 
 type TaskRow = Aglyn.CrmTask & { $id: string }
+
+/** The by-assignee table's columns, which are also the CSV's. */
+const ASSIGNEE_COLUMNS = ['Assignee', 'Overdue', 'Today', 'Upcoming', 'No date', 'Open'] as const
 
 interface AssigneeLoad {
   uid: string
@@ -105,7 +107,7 @@ export function TasksCard(props: TasksCardProps) {
   const openTasks = () =>
     query(
       scopedCollection(firestore, scope, Aglyn.CRM_COLLECTIONS.tasks),
-      visibleToClause(tokens),
+      ...visibleToClause(tokens),
       where('status', '==', 'open'),
     )
 
@@ -127,22 +129,21 @@ export function TasksCard(props: TasksCardProps) {
         today: today.data().count,
       })),
     [firestore, scope, tokens, day],
+    { cacheKey: reportCacheKey(report, 'tasks:counts') },
   )
 
-  const { data: taskDocs, status: tasksStatus } = useFirestoreCollection<TaskRow>(
+  const taskWindow = useWindowRead<TaskRow>(
     () =>
       query(
         openTasks(),
         orderBy('dueAtMs', 'asc'),
         limit(OPEN_TASK_CEILING + 1),
       ),
-    [firestore, scope, tokens],
-    { idField: '$id' },
+    OPEN_TASK_CEILING,
+    [firestore, scope, tokens, nowMs],
+    { cacheKey: reportCacheKey(report, 'tasks:open') },
   )
-  const taskWindow = useMemo(
-    () => ceilingedWindow(taskDocs ?? undefined, OPEN_TASK_CEILING),
-    [taskDocs],
-  )
+  const tasksStatus = taskWindow.status
 
   const load = useMemo(() => {
     const byAssignee = new Map<string, AssigneeLoad>()
@@ -195,9 +196,12 @@ export function TasksCard(props: TasksCardProps) {
           )
         : Promise.resolve({}),
     [firestore, scope, uidKey],
+    { cacheKey: reportCacheKey(report, `tasks:names:${uidKey}`) },
   )
 
   const figures = counts.value
+  const assigneeName = (row: AssigneeLoad): string =>
+    row.uid ? names.value?.[row.uid] ?? row.uid : 'Unassigned'
   return (
     <CardDisplay
       header={'Tasks'}
@@ -254,20 +258,17 @@ export function TasksCard(props: TasksCardProps) {
             <Table size="small">
               <TableHead>
                 <TableRow>
-                  <TableCell>{'Assignee'}</TableCell>
-                  <TableCell align="right">{'Overdue'}</TableCell>
-                  <TableCell align="right">{'Today'}</TableCell>
-                  <TableCell align="right">{'Upcoming'}</TableCell>
-                  <TableCell align="right">{'No date'}</TableCell>
-                  <TableCell align="right">{'Open'}</TableCell>
+                  {ASSIGNEE_COLUMNS.map((column, index) => (
+                    <TableCell key={column} align={index ? 'right' : 'left'}>
+                      {column}
+                    </TableCell>
+                  ))}
                 </TableRow>
               </TableHead>
               <TableBody>
                 {load.map((row) => (
                   <TableRow key={row.uid || '$unassigned'}>
-                    <TableCell>
-                      {row.uid ? names.value?.[row.uid] ?? row.uid : 'Unassigned'}
-                    </TableCell>
+                    <TableCell>{assigneeName(row)}</TableCell>
                     <TableCell
                       align="right"
                       sx={row.overdue ? { color: 'error.main' } : undefined}
@@ -287,11 +288,26 @@ export function TasksCard(props: TasksCardProps) {
               {tasksStatus === 'loading' ? 'Reading…' : 'No open tasks.'}
             </Typography>
           )}
-          {taskWindow.truncated ? (
-            <Typography variant="caption" color="text.secondary">
-              {`Grouped from the ${OPEN_TASK_CEILING.toLocaleString()} soonest-due open tasks; the tiles are counted on the server.`}
-            </Typography>
-          ) : null}
+          <ReportExport
+            filename={reportFilename('tasks-by-assignee')}
+            columns={ASSIGNEE_COLUMNS}
+            rows={() =>
+              load.map((row) => [
+                assigneeName(row),
+                row.overdue,
+                row.today,
+                row.upcoming,
+                row.undated,
+                row.open,
+              ])
+            }
+            disabled={tasksStatus !== 'success' || !load.length}
+            caption={
+              taskWindow.truncated
+                ? `Grouped from the ${OPEN_TASK_CEILING.toLocaleString()} soonest-due open tasks; the tiles are counted on the server.`
+                : undefined
+            }
+          />
         </Section>
       </Stack>
     </CardDisplay>

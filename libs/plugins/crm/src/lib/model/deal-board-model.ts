@@ -30,7 +30,9 @@ import {
   type CrmDeal,
   type CrmDealStage,
   type CrmPipeline,
+  DEFAULT_DEAL_STAGES,
   dealStageById,
+  isPipelineArchived,
   weightedDealAmountCents,
 } from '@aglyn/aglyn/app-utils/crm'
 
@@ -55,6 +57,117 @@ export const DEFAULT_PIPELINE_ID = 'default'
 
 /** Name of the pipeline every org starts with. */
 export const DEFAULT_PIPELINE_NAME = 'Sales'
+
+export const PIPELINE_NAME_MAX = 60
+
+/** The pipelines a picker offers and a new deal may land in: the ones not archived. */
+export function activePipelines<T extends Pick<CrmPipeline, 'archivedAt'>>(
+  pipelines: readonly T[],
+): T[] {
+  return pipelines.filter((pipeline) => !isPipelineArchived(pipeline))
+}
+
+/**
+ * The pipeline a new deal lands in when nobody picks one: the active one
+ * marked default, else the first active one, else nothing. An archived
+ * pipeline is never the default even if its flag was left on — archiving
+ * clears the flag, but a document written by an older console may not
+ * have had it cleared, and a default nobody can create a deal in is a
+ * board that opens on a pipeline the picker does not list.
+ */
+export function defaultPipelineOf<T extends Pick<CrmPipeline, 'archivedAt' | 'isDefault'>>(
+  pipelines: readonly T[],
+): T | null {
+  const active = activePipelines(pipelines)
+  return active.find((pipeline) => pipeline.isDefault) ?? active[0] ?? null
+}
+
+/**
+ * Why a pipeline cannot be created or renamed to `name`, or `null`.
+ *
+ * Names are unique among the ACTIVE pipelines, compared without case: the
+ * picker lists them by name alone, and two rows reading "Sales" would be a
+ * choice nobody can make. An archived pipeline's name is free to reuse —
+ * "Sales 2025" retired and "Sales" started over is the point of archiving.
+ */
+export function pipelineNameProblem(
+  name: string,
+  pipelines: ReadonlyArray<Pick<CrmPipeline, 'name' | 'archivedAt'> & { $id: string }>,
+  ownId?: string,
+): string | null {
+  const trimmed = String(name ?? '').trim()
+  if (!trimmed) return 'A pipeline needs a name.'
+  const taken = activePipelines(pipelines).find(
+    (pipeline) =>
+      pipeline.$id !== ownId &&
+      String(pipeline.name ?? '').trim().toLowerCase() === trimmed.toLowerCase(),
+  )
+  if (taken) return `Another pipeline is already called "${taken.name}".`
+  return null
+}
+
+/**
+ * Why a pipeline cannot be archived, or `null` when it can.
+ *
+ * `openDeals` is the server's count, asked for before this is called, the
+ * way `stageRemovalRefusal` asks: an open deal in an archived pipeline is
+ * a card on no board, and the count is taken at the click because a deal
+ * can be created into the pipeline from another tab meanwhile. The default
+ * pipeline cannot go while it is the default — a new deal has to land
+ * somewhere — and the last active one cannot go at all, for the same
+ * reason from the other side.
+ */
+export function pipelineArchiveRefusal(
+  pipeline: Pick<CrmPipeline, 'archivedAt' | 'isDefault'> & { $id: string },
+  pipelines: ReadonlyArray<Pick<CrmPipeline, 'archivedAt'> & { $id: string }>,
+  openDeals: number,
+): string | null {
+  if (isPipelineArchived(pipeline)) return 'This pipeline is already archived.'
+  if (activePipelines(pipelines).filter((entry) => entry.$id !== pipeline.$id).length === 0) {
+    return 'The last pipeline cannot be archived.'
+  }
+  if (pipeline.isDefault) {
+    return 'This is the default pipeline. Make another one the default first.'
+  }
+  if (openDeals > 0) {
+    return (
+      `${openDeals.toLocaleString()} open ${openDeals === 1 ? 'deal is' : 'deals are'} ` +
+      'in this pipeline. Close or move them first, so none is left on a board nobody opens.'
+    )
+  }
+  return null
+}
+
+/** What every pipeline write stamps besides its name. */
+export interface PipelineWriteContext {
+  visibleTo: readonly string[]
+  hostId: string
+  uid: string
+  nowMs: number
+}
+
+/**
+ * The document a new pipeline is created as: the name, a COPY of the
+ * default stages, not the default, active. A copy for the reason
+ * `DEFAULT_DEAL_STAGES` gives — a second pipeline seeded later must start
+ * from the original set, whatever the first one's editor did to its own.
+ */
+export function newPipelineDocument(
+  name: string,
+  context: PipelineWriteContext,
+): Record<string, unknown> {
+  return {
+    name: String(name ?? '').trim().slice(0, PIPELINE_NAME_MAX),
+    stages: DEFAULT_DEAL_STAGES.map((stage) => ({ ...stage })),
+    isDefault: false,
+    archivedAt: null,
+    visibleTo: [...context.visibleTo],
+    hostId: context.hostId,
+    createdByUid: context.uid,
+    createdAt: new Date(context.nowMs),
+    updatedAt: new Date(context.nowMs),
+  }
+}
 
 /**
  * Currencies the amount picker offers, lowercase ISO 4217 as the model

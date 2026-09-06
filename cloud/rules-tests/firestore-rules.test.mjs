@@ -4016,6 +4016,12 @@ describe('site collaborators are scoped out of the org (AGL-1026)', () => {
       await setDoc(doc(db, 'orgs', ORG, 'lists', 'l1', 'members', 'm1'), { email: 'x@y.z' })
       await setDoc(doc(db, 'orgs', ORG, 'usage', '2026-07'), { pageviews: 1 })
       await setDoc(doc(db, 'orgs', ORG, 'apiUsage', '2026-07'), { requests: 1 })
+      // What `recordCrmEmailSend` writes on a delivered one-to-one email: a
+      // per-UTC-day counter the billing meter reads (AGL-2611).
+      await setDoc(doc(db, 'orgs', ORG, 'crmEmailUsage', '2026-07-02'), {
+        count: 3,
+        day: '2026-07-02',
+      })
       // Exactly what `serve-media-cdn.ts` writes on an origin serve of an
       // ORG-library asset: a day-doc whose `media` map is keyed by asset id.
       await setDoc(doc(db, 'orgs', ORG, 'analytics', '2026-07-02'), {
@@ -4060,6 +4066,24 @@ describe('site collaborators are scoped out of the org (AGL-1026)', () => {
     await assertFails(getDoc(doc(authed(EDITOR), 'orgs', ORG, 'apiUsage', '2026-07')))
     await assertFails(getDoc(doc(authed(EDITOR), 'orgs', ORG, 'activity', 'a1')))
     await assertSucceeds(getDoc(doc(authed(VIEWER), 'orgs', ORG, 'usage', '2026-07')))
+  })
+
+  /**
+   * The one-to-one email counter is a billing meter (AGL-2611): the same
+   * three verdicts as `apiUsage` beside it. The org-wide viewer's read is
+   * the positive control — the Billing page meter is what the rule exists
+   * for, so a rule that denied everyone would pass the two denials and still
+   * leave a rep learning the cap by being refused.
+   */
+  it('the one-to-one email counter reads like apiUsage — org-wide only, never written', async () => {
+    const counter = (ctx) => doc(ctx, 'orgs', ORG, 'crmEmailUsage', '2026-07-02')
+    await assertFails(getDoc(counter(authed(EDITOR))))
+    await assertSucceeds(getDoc(counter(authed(VIEWER))))
+    await assertSucceeds(getDoc(counter(authed(OWNER))))
+    // Server-written only: the cap is enforced against this number, so a
+    // client that could lower it could lift its own cap.
+    await assertFails(setDoc(counter(authed(OWNER)), { count: 0 }))
+    await assertFails(deleteDoc(counter(authed(OWNER))))
   })
 
   /**
@@ -9046,6 +9070,128 @@ describe('the CRM companion collections answer to the contacts predicate', () =>
         deleteDoc(record(EDITOR, name, 'mine')),
       )
     }
+  })
+})
+
+/**
+ * SAVED VIEWS (AGL-2617): the one CRM collection where AUTHORSHIP gates a
+ * write.
+ *
+ * A view is somebody's working arrangement of a list. It is read under the
+ * contacts predicate like every companion collection above, and it is
+ * created under the same scope rule — plus the creator stamp must be the
+ * caller, or a view could be minted in a colleague's name. What differs is
+ * update and delete: the creator may, an org-wide member may, and another
+ * scoped member on the same site may NOT, however well they can read it. The
+ * six-collection loop above asserts the opposite shape ("a scoped editor
+ * editing their record"), which is why this collection is not in it.
+ */
+describe('a saved CRM view is changed by its creator or an org-wide member (AGL-2617)', () => {
+  const VIEWS = 'crmViews'
+  const MINE = `host:${HOST}`
+  /** A second scoped editor on the SAME site — can read the view, did not make it. */
+  const EDITOR_B = 'uid-editor-b'
+  const view = (uid, id) => doc(authed(uid), 'orgs', ORG, VIEWS, id)
+  const stamped = (createdByUid, visibleTo, extra = {}) => ({
+    section: 'contacts',
+    name: 'Open leads',
+    filters: [],
+    columns: [],
+    sort: null,
+    ownerUid: createdByUid,
+    createdByUid,
+    shared: false,
+    hostId: HOST,
+    visibleTo,
+    ...extra,
+  })
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'orgs', ORG, 'members', EDITOR_B), {
+        role: 'editor', allHosts: false, hostAccess: { [HOST]: 'editor' },
+        scopeTokens: ['org', MINE],
+      })
+      await setDoc(doc(db, 'orgs', ORG, VIEWS, 'editors'), stamped(EDITOR, [MINE]))
+      await setDoc(doc(db, 'orgs', ORG, VIEWS, 'editors-2'), stamped(EDITOR, [MINE]))
+      await setDoc(
+        doc(db, 'orgs', ORG, VIEWS, 'owners'),
+        stamped(OWNER, ['org'], { shared: true }),
+      )
+    })
+  })
+
+  it('reads under the contacts predicate', async () => {
+    await mustAllow(
+      'a scoped editor reading an org-wide shared view',
+      getDoc(view(EDITOR, 'owners')),
+    )
+    await mustAllow(
+      "another scoped editor reading a colleague's private view — hidden by the listing, not the rules",
+      getDoc(view(EDITOR_B, 'editors')),
+    )
+    await mustDeny(
+      'an org-wide viewer reading a view',
+      getDoc(view(VIEWER, 'owners')),
+    )
+  })
+
+  it('creates only in the caller\'s own name and scope', async () => {
+    await mustAllow(
+      'a scoped editor creating a view stamped with their own uid in their scope',
+      setDoc(view(EDITOR, 'new-mine'), stamped(EDITOR, [MINE])),
+    )
+    await mustDeny(
+      "a scoped editor creating a view stamped with somebody else's uid",
+      setDoc(view(EDITOR, 'new-forged'), stamped(OWNER, [MINE])),
+    )
+    await mustDeny(
+      'a scoped editor creating a view outside their scope',
+      setDoc(view(EDITOR, 'new-theirs'), stamped(EDITOR, ['host:host-b'])),
+    )
+    await mustDeny(
+      'an org-wide viewer creating a view',
+      setDoc(view(VIEWER, 'new-viewer'), stamped(VIEWER, ['org'])),
+    )
+  })
+
+  it('updates for the creator or an org-wide member, never a colleague', async () => {
+    await mustAllow(
+      'the creator renaming their view',
+      updateDoc(view(EDITOR, 'editors'), { name: 'Texas leads' }),
+    )
+    await mustDeny(
+      "another scoped editor renaming a colleague's view",
+      updateDoc(view(EDITOR_B, 'editors'), { name: 'Mine now' }),
+    )
+    await mustAllow(
+      "the owner renaming a scoped editor's view",
+      updateDoc(view(OWNER, 'editors'), { name: 'Tidied' }),
+    )
+    await mustDeny(
+      'the creator widening their view to the org',
+      updateDoc(view(EDITOR, 'editors'), { visibleTo: ['org'] }),
+    )
+    await mustDeny(
+      "a scoped editor rewriting the creator stamp onto themselves",
+      updateDoc(view(EDITOR_B, 'editors'), { createdByUid: EDITOR_B }),
+    )
+  })
+
+  it('deletes for the creator or an org-wide member, never a colleague', async () => {
+    await mustDeny(
+      "another scoped editor deleting a colleague's view",
+      deleteDoc(view(EDITOR_B, 'editors')),
+    )
+    await mustAllow(
+      'the creator deleting their view',
+      deleteDoc(view(EDITOR, 'editors')),
+    )
+    await mustAllow(
+      "the owner deleting a view a scoped editor left",
+      deleteDoc(view(OWNER, 'editors-2')),
+    )
   })
 })
 

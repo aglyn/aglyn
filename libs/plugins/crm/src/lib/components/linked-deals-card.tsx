@@ -19,9 +19,10 @@
 import { dealStageById, pluginDocsHelp } from '@aglyn/aglyn'
 import { mdiPlus } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
+import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { Button, Chip, Stack, Typography } from '@mui/material'
 import { useMemo, useState } from 'react'
-import { type CrmOrgDoc, useDealScope } from '../hooks/use-deal-scope'
+import { type CrmOrgDoc, useCrmScope } from '../hooks/use-crm-scope'
 import { useLinkedDeals } from '../hooks/use-deals'
 import { usePipeline } from '../hooks/use-pipeline'
 import { crmRoutes } from '../model/crm-routes'
@@ -33,7 +34,8 @@ import type { DealFormValues } from '../model/deal-form-model'
 import { DealEditDrawer } from './deal-edit-drawer'
 
 export interface LinkedDealsCardProps {
-  hostId: string
+  /** The site the record is read under, or `null` at the organization level. */
+  hostId: string | null
   org: CrmOrgDoc
   /** The CRM surface's own path, for links into deals. */
   basePath: string
@@ -55,14 +57,14 @@ export interface LinkedDealsCardProps {
 export function LinkedDealsCard(props: LinkedDealsCardProps) {
   const { hostId, org, basePath, link } = props
   const routes = crmRoutes(basePath)
-  const scope = useDealScope({ hostId, org })
+  const scope = useCrmScope({ hostId, org })
   const pipelineState = usePipeline(scope.orgId, {
     hostId,
     org: (org ?? null) as Record<string, unknown> | null,
   })
   const { data: deals, status } = useLinkedDeals(
     scope.orgId,
-    scope.readTokens,
+    scope.visibleTo,
     'contactId' in link ? { contactId: link.contactId } : { companyId: link.companyId },
   )
   const [creating, setCreating] = useState(false)
@@ -93,9 +95,22 @@ export function LinkedDealsCard(props: LinkedDealsCardProps) {
         contentGutterY
       >
         {status === 'success' && deals.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            {'No deals yet.'}
-          </Typography>
+          <EmptyStateComponent
+            compact
+            label={'No deals yet'}
+            description={'A deal started here is linked to this record from the first save.'}
+            action={
+              <Button
+                size="small"
+                variant="contained"
+                startIcon={<MdiIcon path={mdiPlus.path} size={0.8} />}
+                disabled={!pipelineState.pipeline || !scope.orgId}
+                onClick={() => setCreating(true)}
+              >
+                {'New deal'}
+              </Button>
+            }
+          />
         ) : (
           <Stack spacing={1}>
             {deals.map((deal) => {
@@ -140,7 +155,7 @@ export function LinkedDealsCard(props: LinkedDealsCardProps) {
         hostId={hostId}
         org={org}
         defaults={defaults}
-        pipelines={pipelineState.pipelines}
+        pipelines={pipelineState.activePipelines}
         defaultPipeline={pipelineState.pipeline}
       />
     </>

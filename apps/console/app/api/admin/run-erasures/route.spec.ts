@@ -79,6 +79,13 @@ jest.mock('../../_lib/render-system-email', () => ({
   renderSystemEmail: async () => null,
 }))
 
+// The person queue has its own spec; here it is empty, so the workspace
+// batch is what the assertions see.
+jest.mock('../../../../utils/server/run-person-erasures', () => ({
+  runPersonErasures: async () => ({ erased: [], failed: [], scanned: 0 }),
+  countPendingPersonErasures: async () => ({ pending: 0, truncated: false, maxPerRun: 25 }),
+}))
+
 const run = async () => {
   const { POST } = await import('./route')
   const response = await POST(

@@ -26,6 +26,8 @@ export const CRM_API_ROUTES = {
   ping: 'crm/ping',
   /** `POST` — moves one contact to a lifecycle stage; see `server.ts`. */
   contactStage: 'crm/contact-stage',
+  /** `POST` — one email to one person from a record; see `server/email-send.ts`. */
+  emailSend: 'crm/email-send',
 } as const
 
 /** The browser-side URL for a route key. */

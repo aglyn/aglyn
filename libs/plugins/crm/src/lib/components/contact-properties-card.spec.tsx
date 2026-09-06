@@ -52,6 +52,17 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     .writeGuardedBySeed,
 }))
 
+/*
+ * The Company field is the picker's, and the picker keeps a listen on the
+ * companies collection with a spec of its own; here it is a field that
+ * holds nothing, so the card's write is the only Firestore traffic.
+ */
+jest.mock('./company-picker', () => ({
+  CompanyPicker: () => null,
+  useCompanyOptions: () => ({ options: [], ready: true, truncated: false }),
+  useCreateCompany: () => null,
+}))
+
 /** Every call the card made to the stage route, and what it should answer. */
 const setContactStage = jest.fn()
 jest.mock('../model/crm-api', () => ({
@@ -89,6 +100,7 @@ const facetPath = (field: string) => `facets.${GROUP.groupId}.${field}`
 const record: ContactRecord = {
   $id: 'c1',
   email: 'maya@littlefoxcafe.com',
+  alternateEmails: [],
   name: 'Maya Delgado',
   canonicalName: 'Maya Delgado',
   nameOverride: '',
@@ -103,6 +115,7 @@ const record: ContactRecord = {
   jobTitle: 'Owner',
   companyName: '',
   companyId: '',
+  companyLink: { companyId: null, companyIds: [], heldElsewhere: [] },
   address: null,
   custom: {},
   ownerUid: '',
@@ -118,7 +131,12 @@ function renderCard(seeded: Partial<ContactRecord> = {}) {
       consentGroup={GROUP}
       scope={['orgs', 'org-1']}
       seed={{ status: 'success', fromCache: false }}
-      members={{ options: [], ready: true, memberName: (uid) => uid }}
+      members={{
+        options: [],
+        ready: true,
+        memberName: (uid) => uid,
+        memberEmail: (uid) => uid,
+      }}
     />,
   )
 }

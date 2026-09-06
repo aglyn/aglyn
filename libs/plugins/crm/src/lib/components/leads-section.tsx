@@ -20,13 +20,25 @@ import * as Aglyn from '@aglyn/aglyn'
 import type { ConsolePluginPageProps, CrmLeadFields, CrmLeadStatus } from '@aglyn/aglyn'
 import { mdiAccountArrowRight, mdiAccountCancelOutline, mdiAccountTieOutline } from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import {
+  type OrgMemberOptions,
+  useOrgMemberOptions,
+} from '../hooks/use-org-member-options'
+import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
+import { useCrmSavedView } from '../hooks/use-crm-saved-view'
+import { useCrmScope } from '../hooks/use-crm-scope'
+import { useCrmViewGrid } from '../hooks/use-crm-view-grid'
+import { useOrgLeads } from '../hooks/use-org-leads'
+import CrmViewsControl from './crm-views-control'
 import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
   useFirestoreCollection,
-  useOrgDataScope,
 } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
@@ -55,7 +67,7 @@ import {
   updateDoc,
 } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
-import { useCallback, useId, useMemo, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useState } from 'react'
 import { crmRoutes } from '../model/crm-routes'
 import {
   LEAD_FILTER_LABELS,
@@ -64,12 +76,9 @@ import {
   leadMatchesFilter,
 } from '../model/lead-filters'
 import { leadSourceLabel, leadSources, leadTimeLabel } from './lead-history-card'
-import {
-  LeadOwnerSelect,
-  type OrgMemberOptions,
-  useOrgMemberOptions,
-} from './lead-owner-select'
+import { LeadOwnerSelect } from './lead-owner-select'
 import { LeadStatusChip } from './lead-status-chip'
+import LeadSurfacesNote from './lead-surfaces-note'
 import { LeadUnqualifyDialog } from './lead-unqualify-dialog'
 
 /**
@@ -87,10 +96,24 @@ import { LeadUnqualifyDialog } from './lead-unqualify-dialog'
  * is the one order every lead can satisfy (`lastSeenAtMs`, stamped on every
  * capture), and the status filter narrows the loaded window — said out loud
  * beneath the table whenever the window is not the whole collection.
+ *
+ * The window is then PAGED in memory under the shared footer, the way the
+ * workspace pickers page a slice of a window they cannot re-key: the rows
+ * are already in the snapshot, so turning a page costs nothing, and the
+ * footer's count is exact because it counts the filtered window rather than
+ * a collection nobody has measured.
  */
 const LEADS_WINDOW = 200
 
-type LeadRow = Record<string, unknown> & CrmLeadFields & { $id: string }
+/**
+ * One row of the list. `$id` keys the grid — the document id under a site,
+ * `{hostId}/{leadId}` at the organization level, where a lead's id is a
+ * person key the same on every site that met the person — and `leadId`
+ * and `hostId` say which document, under which site, a write or a link
+ * names.
+ */
+type LeadRow = Record<string, unknown> &
+  CrmLeadFields & { $id: string; leadId: string; hostId: string }
 
 /**
  * `/crm/leads` — the people a site has met but not yet qualified (AGL-2608).
@@ -102,30 +125,82 @@ type LeadRow = Record<string, unknown> & CrmLeadFields & { $id: string }
  * no `visibleTo` filter; the Firestore rules admit any member of the site to
  * read it and an admin, editor or author to update it, which is what makes
  * the inline status and owner changes client-direct writes.
+ *
+ * At the ORGANIZATION level (AGL-2630) there is no one site to read: the
+ * section opens the same query under every site the org has (`useOrgLeads`)
+ * and lists the merged window with a Site column, every row naming the site
+ * its writes and its link go to. The per-site notes — which of a site's
+ * forms file a lead — belong to a site's own hub and are not drawn here.
  */
 export function CrmLeadsSection(props: ConsolePluginPageProps) {
-  const { hostId, basePath } = props
+  const { hostId, org, basePath } = props
   const firestore = useFirestore()
   const router = useRouter()
   const { enqueueSnackbar } = useSnackbar()
-  const { orgId } = useOrgDataScope({ hostId })
+  const { orgId } = useCrmScope({ hostId, org })
+  const mount = useCrmOrgMount()
   const roster = useOrgMemberOptions(orgId)
   const routes = crmRoutes(basePath ?? '')
 
-  const { data: leadDocs, status } = useFirestoreCollection<LeadRow>(
+  // Under a site: the site's own window, rows keyed by document id.
+  const site = useFirestoreCollection<Record<string, unknown> & CrmLeadFields & { $id: string }>(
     () =>
-      query(
-        collection(firestore, 'hosts', hostId, 'leads'),
-        orderBy('lastSeenAtMs', 'desc'),
-        limit(LEADS_WINDOW + 1),
-      ),
+      hostId
+        ? query(
+            collection(firestore, 'hosts', hostId, 'leads'),
+            orderBy('lastSeenAtMs', 'desc'),
+            limit(LEADS_WINDOW + 1),
+          )
+        : null,
     [firestore, hostId],
     { idField: '$id' },
   )
-  const truncated = leadDocs.length > LEADS_WINDOW
+  // At the organization level: every site's window, merged.
+  const orgHostIds = useMemo(
+    () => (hostId ? [] : (mount?.hosts ?? []).map((host) => host.id)),
+    [hostId, mount?.hosts],
+  )
+  const orgLeads = useOrgLeads({ hostIds: orgHostIds, windowSize: LEADS_WINDOW })
+  const leadDocs = useMemo<LeadRow[]>(
+    () =>
+      hostId
+        ? site.data.map((row) => ({ ...row, leadId: row.$id, hostId }))
+        : orgLeads.data,
+    [hostId, site.data, orgLeads.data],
+  )
+  const status = hostId
+    ? site.status
+    : mount?.hostsReady && !orgHostIds.length
+      ? 'success'
+      : orgLeads.status
+  const truncated = hostId ? leadDocs.length > LEADS_WINDOW : orgLeads.truncated
   const window = useMemo(() => leadDocs.slice(0, LEADS_WINDOW), [leadDocs])
 
-  const [filter, setFilter] = useState<LeadFilter>('open')
+  /*
+   * The `Show` filter is the saved VIEW'S (AGL-2617): a saved view of leads
+   * holds the status beside the columns and the sort, and the select below
+   * writes into it. Unset reads as `open`, which is what the section opened
+   * on before views existed and the one reading a query cannot express.
+   */
+  const views = useCrmSavedView({
+    section: 'leads',
+    hostId,
+    org: props.org,
+    basePath: basePath ?? '',
+  })
+  const filter: LeadFilter = useMemo(() => {
+    const value = views.state.filters.find((clause) => clause.field === 'status')?.value
+    return (LEAD_FILTERS as readonly string[]).includes(value ?? '')
+      ? (value as LeadFilter)
+      : 'open'
+  }, [views.state.filters])
+  const setFilter = useCallback(
+    (next: LeadFilter) =>
+      views.setFilters(
+        next === 'open' ? [] : [{ field: 'status', op: 'equals', value: next }],
+      ),
+    [views.setFilters],
+  )
   // The label's id, so the filter's combobox is named "Show" rather than
   // after the option it shows — see `LeadOwnerSelect`.
   const filterLabelId = useId()
@@ -133,14 +208,25 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
     () => window.filter((lead) => leadMatchesFilter(lead, filter)),
     [window, filter],
   )
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  // A new filter starts on page one: page three of the open leads is not a
+  // page of the unqualified ones, and an out-of-range page renders empty.
+  useEffect(() => {
+    setPage(0)
+  }, [filter])
+  const pageRows = useMemo(
+    () => rows.slice(page * pageSize, (page + 1) * pageSize),
+    [rows, page, pageSize],
+  )
 
   const [assigning, setAssigning] = useState<LeadRow | null>(null)
   const [unqualifying, setUnqualifying] = useState<LeadRow | null>(null)
 
   const writeLead = useCallback(
-    async (leadId: string, fields: Record<string, unknown>, done: string) => {
+    async (lead: LeadRow, fields: Record<string, unknown>, done: string) => {
       try {
-        await updateDoc(doc(firestore, 'hosts', hostId, 'leads', leadId), {
+        await updateDoc(doc(firestore, 'hosts', lead.hostId, 'leads', lead.leadId), {
           ...fields,
           updatedAt: serverTimestamp(),
         })
@@ -152,7 +238,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         )
       }
     },
-    [firestore, hostId, enqueueSnackbar],
+    [firestore, enqueueSnackbar],
   )
 
   const columns = useMemo<GridColDef[]>(
@@ -191,7 +277,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
                 return
               }
               void writeLead(
-                row.$id,
+                row,
                 {
                   status: next,
                   ...(Aglyn.crmLeadStatus(row) === 'unqualified'
@@ -209,8 +295,22 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         headerName: 'Owner',
         flex: 1,
         minWidth: 140,
-        valueGetter: (_value, row: LeadRow) => roster.labelFor(row.ownerUid),
+        valueGetter: (_value, row: LeadRow) =>
+          row.ownerUid ? roster.labelFor(row.ownerUid) : 'Unassigned',
       },
+      // Only at the organization level, where a row can be any site's.
+      ...(hostId
+        ? []
+        : [
+            {
+              field: 'hostId',
+              headerName: 'Site',
+              flex: 0.9,
+              minWidth: 140,
+              valueGetter: (_value: unknown, row: LeadRow) =>
+                mount?.siteName(row.hostId) ?? row.hostId,
+            } satisfies GridColDef,
+          ]),
       {
         field: 'sources',
         headerName: 'Source',
@@ -246,7 +346,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
                   key: 'open',
                   label: 'Open lead',
                   icon: <MdiIcon path={mdiAccountArrowRight.path} size={0.8} />,
-                  href: routes.lead(row.$id),
+                  href: routes.lead(row.leadId, hostId ? null : row.hostId),
                 },
                 {
                   key: 'assign',
@@ -270,8 +370,10 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         ),
       },
     ],
-    [roster, routes, writeLead],
+    [roster, routes, writeLead, hostId, mount],
   )
+  /* The column and sort models are the view's (AGL-2617). */
+  const grid = useCrmViewGrid(views, columns)
 
   return (
     <>
@@ -279,43 +381,68 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         header={'Leads'}
         help={Aglyn.pluginDocsHelp('contacts', { anchor: '#whats-in-the-crm-area' })}
         actions={
-          <FormControl size="small" sx={{ minWidth: 160 }}>
-            <InputLabel id={filterLabelId}>{'Show'}</InputLabel>
-            <Select
-              labelId={filterLabelId}
-              label="Show"
-              value={filter}
-              onChange={(event) => setFilter(event.target.value as LeadFilter)}
-            >
-              {LEAD_FILTERS.map((option) => (
-                <MenuItem key={option} value={option}>
-                  {LEAD_FILTER_LABELS[option]}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            {/* The saved view this list is showing, beside the status it narrows to (AGL-2617). */}
+            <CrmViewsControl controller={views} allLabel="All leads" />
+            <FormControl size="small" sx={{ minWidth: 160 }}>
+              <InputLabel id={filterLabelId}>{'Show'}</InputLabel>
+              <Select
+                labelId={filterLabelId}
+                label="Show"
+                value={filter}
+                onChange={(event) => setFilter(event.target.value as LeadFilter)}
+              >
+                {LEAD_FILTERS.map((option) => (
+                  <MenuItem key={option} value={option}>
+                    {LEAD_FILTER_LABELS[option]}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Stack>
         }
         contentGutterX
         contentGutterY
       >
         <Stack spacing={2}>
+          {/* Which surfaces file a lead on this site, by name (AGL-2612) — a site's own note. */}
+          {hostId ? <LeadSurfacesNote hostId={hostId} /> : null}
           {status === 'success' && window.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              {'No leads yet — sign-ups, bookings and form submissions on your ' +
-                'site become leads automatically.'}
-            </Typography>
+            <EmptyStateComponent
+              label={'No leads yet'}
+              description={'Sign-ups, bookings and form submissions on your site become leads on their own.'}
+            />
           ) : status === 'success' && rows.length === 0 ? (
             <Typography variant="body2" color="text.secondary">
               {`No ${LEAD_FILTER_LABELS[filter].toLowerCase()} leads among the ` +
                 `${window.length.toLocaleString()} most recently seen.`}
             </Typography>
           ) : (
-            <ListTable
-              rows={rows}
-              columns={columns}
-              loading={status === 'loading'}
-              onOpen={(id) => router.push(routes.lead(id))}
-            />
+            <>
+              <ListTable
+                rows={pageRows}
+                columns={columns}
+                loading={status === 'loading'}
+                onOpen={(_id, row: LeadRow) =>
+                  router.push(routes.lead(row.leadId, hostId ? null : row.hostId))
+                }
+                // Columns and sort are the view's, controlled (AGL-2617).
+                columnVisibilityModel={grid.columnVisibilityModel}
+                onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}
+                sortModel={grid.sortModel}
+                onSortModelChange={grid.onSortModelChange}
+                // Paged by the footer below, so the grid must not also slice.
+                hideFooter
+              />
+              <ListPagination
+                page={page}
+                pageSize={pageSize}
+                rowCount={pageRows.length}
+                count={rows.length}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+              />
+            </>
           )}
           {truncated ? (
             <Alert severity="info">
@@ -333,7 +460,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         onAssign={(uid) => {
           if (!assigning) return
           void writeLead(
-            assigning.$id,
+            assigning,
             { ownerUid: uid || deleteField() },
             uid ? 'Owner assigned' : 'Owner cleared',
           )
@@ -343,8 +470,8 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
       <LeadUnqualifyDialog
         open={Boolean(unqualifying)}
         onClose={() => setUnqualifying(null)}
-        hostId={hostId}
-        leadId={unqualifying?.$id ?? ''}
+        hostId={unqualifying?.hostId ?? hostId ?? ''}
+        leadId={unqualifying?.leadId ?? ''}
         leadLabel={String(unqualifying?.['name'] || unqualifying?.['email'] || '')}
       />
     </>

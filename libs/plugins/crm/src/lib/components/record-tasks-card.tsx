@@ -18,6 +18,7 @@
 
 import { CRM_COLLECTIONS, pluginDocsHelp } from '@aglyn/aglyn'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
+import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { Button, Checkbox, Stack, Typography } from '@mui/material'
@@ -35,9 +36,11 @@ import { crmRoutes } from '../model/crm-routes'
 import { completeCrmTask } from '../model/task-api'
 import { TaskDueText, TaskKindCell, TaskPriorityChip } from './task-cells'
 import TaskEditDrawer from './task-edit-drawer'
+import TaskSnoozeMenu from './task-snooze-menu'
 
 export interface RecordTasksCardProps extends CrmRecordRef {
-  hostId: string
+  /** The site the record is read under, or `null` at the organization level. */
+  hostId: string | null
   /** The org document the shell passed the page; scopes the read when present. */
   org?: Record<string, unknown> | null
   /**
@@ -106,7 +109,8 @@ export function RecordTasksCard(props: RecordTasksCardProps) {
             },
           )
         } else {
-          await completeCrmTask(user, { hostId, taskId: task.$id })
+          // The mounted site, or at the organization level the task's own.
+          await completeCrmTask(user, { hostId: hostId ?? task.hostId, taskId: task.$id })
           enqueueSnackbar('Task completed', { variant: 'success' })
         }
       } catch (cause) {
@@ -169,11 +173,25 @@ export function RecordTasksCard(props: RecordTasksCardProps) {
             {'The tasks could not be loaded.'}
           </Typography>
         ) : status === 'success' && !open.length ? (
-          <Typography variant="body2" color="text.secondary">
-            {doneCount
-              ? 'Everything here is done.'
-              : 'No tasks yet. Add a call, an email, a meeting or a to-do.'}
-          </Typography>
+          <EmptyStateComponent
+            compact
+            label={doneCount ? 'Everything here is done' : 'No tasks yet'}
+            description={
+              doneCount
+                ? 'The completed ones are kept on the Tasks list.'
+                : 'A call, an email, a meeting or a to-do owed to this record.'
+            }
+            action={
+              <Button
+                size="small"
+                variant="contained"
+                color="primary"
+                onClick={() => setDrawer({ open: true, task: null })}
+              >
+                {'New task'}
+              </Button>
+            }
+          />
         ) : (
           <Stack spacing={1}>
             {open.map((task) => (
@@ -211,6 +229,13 @@ export function RecordTasksCard(props: RecordTasksCardProps) {
                       <Typography variant="caption" color="text.secondary" noWrap>
                         {`· ${directory.nameOf(task.assigneeUid)}`}
                       </Typography>
+                    ) : null}
+                    {scope ? (
+                      <TaskSnoozeMenu
+                        dueAtMs={task.dueAtMs}
+                        target={{ write: { scope, taskId: task.$id } }}
+                        disabled={busyId === task.$id}
+                      />
                     ) : null}
                   </Stack>
                 </Stack>

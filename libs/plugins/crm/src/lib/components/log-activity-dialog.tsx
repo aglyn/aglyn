@@ -35,10 +35,15 @@ import {
   collection,
   deleteField,
   doc,
+  getCountFromServer,
+  query,
   updateDoc,
+  where,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
+import { crmVisibleToClause } from '../hooks/use-crm-scope'
 import type { ActivityRecordLink, ActivityScope } from './activity-queries'
+import { CrmSitePicker } from './crm-site-picker'
 
 /** The longest body a single activity stores — a call summary, not a document. */
 const BODY_MAX = 4000
@@ -145,7 +150,8 @@ export interface LogActivityDialogProps {
  */
 export function LogActivityDialog(props: LogActivityDialogProps) {
   const { open, onClose, scope, link, activity } = props
-  const { firestore, dataScope, hostId, writeTokens } = scope
+  const { firestore, dataScope, hostId, mountedHostId, readTokens, writeTokens } =
+    scope
   const { data: user } = useUser()
   const authorName = useUserName()
   const { enqueueSnackbar } = useSnackbar()
@@ -175,6 +181,10 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
   const canSave =
     Boolean(dataScope) &&
     Boolean(user?.uid) &&
+    // A NEW activity is stamped with a site's scope and provenance; at the
+    // organization level that is the picked site, and there is nothing to
+    // write until there is one (AGL-2630). An edit never touches either.
+    (Boolean(activity) || Boolean(hostId)) &&
     body.length > 0 &&
     atMs !== null &&
     durationValid &&
@@ -186,6 +196,7 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
     if (!dataScope || !user?.uid || !body || atMs === null || !durationValid) {
       return
     }
+    if (!activity && !hostId) return
     setSaving(true)
     try {
       const said = {
@@ -216,6 +227,38 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
         )
         enqueueSnackbar('Activity updated', { variant: 'success', persist: false })
       } else {
+        /*
+         * THE PER-RECORD CEILING (AGL-2611): one aggregate on the record
+         * this dialog is filing under, before the write — the same count
+         * the automation step and the REST create take, on the same link.
+         * Scoped to the tokens this viewer may list, as every activity
+         * listener is, so the rules admit the aggregate for a scoped
+         * member exactly as they admit the timeline.
+         */
+        const lead = Aglyn.crmActivityCeilingLink(link)
+        if (lead) {
+          const logged = (
+            await getCountFromServer(
+              query(
+                collection(
+                  firestore,
+                  dataScope[0],
+                  dataScope[1],
+                  Aglyn.CRM_COLLECTIONS.activities,
+                ),
+                ...crmVisibleToClause(readTokens),
+                where(lead.field, '==', lead.id),
+              ),
+            )
+          ).data().count
+          if (!Aglyn.crmActivityLogHasRoom(logged)) {
+            enqueueSnackbar(Aglyn.CRM_ACTIVITY_LOG_FULL_MESSAGE, {
+              variant: 'warning',
+              persist: false,
+            })
+            return
+          }
+        }
         await addDoc(
           collection(
             firestore,
@@ -233,6 +276,7 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
             ...(link.contactId ? { contactId: link.contactId } : {}),
             ...(link.companyId ? { companyId: link.companyId } : {}),
             ...(link.dealId ? { dealId: link.dealId } : {}),
+            ...(link.leadId ? { leadId: link.leadId } : {}),
             visibleTo: writeTokens,
             hostId,
             byUid: user.uid,
@@ -270,6 +314,7 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
     firestore,
     enqueueSnackbar,
     link,
+    readTokens,
     writeTokens,
     hostId,
     authorName,
@@ -280,6 +325,14 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>{activity ? 'Edit activity' : 'Log activity'}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {/* Only for a new activity at the organization level — see `canSave`. */}
+        {activity ? null : (
+          <CrmSitePicker
+            hostId={mountedHostId}
+            disabled={saving}
+            helperText="The site this activity is logged from — it decides which of your sites may see it."
+          />
+        )}
         <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
           <TextField
             select

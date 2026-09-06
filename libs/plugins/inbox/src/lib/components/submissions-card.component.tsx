@@ -16,14 +16,24 @@
  */
 'use client'
 
-import { FORMS_MAX_PER_HOST, pluginDocsHelp } from '@aglyn/aglyn'
+import { FORMS_MAX_PER_HOST, INBOX_SUBMISSION_PARAM, pluginDocsHelp } from '@aglyn/aglyn'
 // A deep import, NOT the plugin barrel (AGL-1151): the barrel is the entry
 // point the tenant's loader dynamically imports to activate the marketing
 // plugin's SITE half, so a console card named there ships to every published
 // page. The component path reaches the same module without crossing it.
 import { default as ConversionAttribution } from '@aglyn/plugins-marketing/components/conversion-attribution.component'
-import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+// The CRM's route builder by its leaf path, for the reason above: the barrel
+// is the plugin's site entry point.
+import { crmRoutes } from '@aglyn/plugins-crm/model/crm-routes'
+import {
+  mdiAccountArrowRight,
+  mdiDeleteOutline,
+  mdiEmailOpenOutline,
+  mdiEmailOutline,
+} from '@aglyn/shared-data-mdi'
+import { CardDisplay, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
@@ -55,13 +65,15 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   limit,
   orderBy,
   query,
   updateDoc,
   where,
 } from 'firebase/firestore'
-import { useCallback, useMemo, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   relativeTime,
   routingChips,
@@ -70,6 +82,7 @@ import {
 } from '../model/submission-presenter'
 import SubmissionListAssignment from './submission-list-assignment.component'
 import SubmissionReply from './submission-reply.component'
+import { useCrmHubPath } from './use-crm-hub-path'
 
 /**
  * The Submissions section of the Inbox (AGL-77/104/109 → AGL-395): the form
@@ -108,6 +121,14 @@ export function SubmissionsCard({ hostId, formId }: SubmissionsCardProps) {
   const { confirm } = useConfirmationContext()
   /** Scoped to one form: the subject is fixed and nothing may widen it. */
   const scoped = Boolean(formId)
+  /*
+   * Where the sender's CONTACT is (AGL-2612). A submission that carried an
+   * address updated a contact in the CRM at stage Lead; the row links to
+   * it by that address, and the Contacts list — which holds the id nothing
+   * here does — opens the record. The same hub path the Members & leads
+   * rows use to open a lead.
+   */
+  const crmHubPath = useCrmHubPath()
 
   /*
    * The site's forms, for the Submissions filter.
@@ -236,6 +257,46 @@ export function SubmissionsCard({ hostId, formId }: SubmissionsCardProps) {
     },
     [firestore, hostId],
   )
+
+  /*
+   * A submission named in the URL opens in the reader on arrival (AGL-2622).
+   *
+   * A contact's timeline names the submission that captured the person, and
+   * the address it links to is this tab with `?submission={id}`. The
+   * document is read once, by id, rather than looked for in the paged
+   * window: the window is the newest page of a walk that may not reach a
+   * submission from months back, and one document read is what the URL
+   * asked for. Opening it marks it read, as a click on the row would. A
+   * submission that is gone says so, because a reader that silently stays
+   * shut reads as the link having done nothing.
+   *
+   * Once per id: the ref keeps a re-render — and the same URL re-settling —
+   * from reopening a reader the person has since closed. The landing read
+   * is judged against that ref rather than an effect cleanup: a listener
+   * settling while the read is in flight re-renders this card, and a
+   * cleanup keyed on any dep would cancel the answer to the question the
+   * URL just asked.
+   */
+  const searchParams = useSearchParams()
+  const seededSubmissionId = searchParams?.get(INBOX_SUBMISSION_PARAM) ?? null
+  const seededOpened = useRef<string | null>(null)
+  useEffect(() => {
+    if (!seededSubmissionId || seededOpened.current === seededSubmissionId) return
+    seededOpened.current = seededSubmissionId
+    void getDoc(doc(firestore, 'hosts', hostId, 'formSubmissions', seededSubmissionId))
+      .then((snapshot) => {
+        if (seededOpened.current !== snapshot.id) return
+        if (!snapshot.exists()) {
+          enqueueSnackbar('That submission is no longer in the Inbox.', {
+            variant: 'warning',
+            persist: false,
+          })
+          return
+        }
+        handleOpenReader({ ...snapshot.data(), $id: snapshot.id })()
+      })
+      .catch(() => undefined)
+  }, [seededSubmissionId, firestore, hostId, handleOpenReader, enqueueSnackbar])
 
   const handleDelete = useCallback(
     (submission: any) => async () => {
@@ -442,19 +503,77 @@ export function SubmissionsCard({ hostId, formId }: SubmissionsCardProps) {
                     </TableCell>
                     <TableCell
                       align="right"
-                      sx={{ whiteSpace: 'nowrap' }}
+                      sx={{ whiteSpace: 'nowrap', width: 56 }}
                       onClick={(event) => event.stopPropagation()}
                     >
-                      <Button size="small" onClick={handleToggleRead(submission)}>
-                        {submission.read ? 'Mark unread' : 'Mark read'}
-                      </Button>
-                      <Button
-                        size="small"
-                        color="error"
-                        onClick={handleDelete(submission)}
-                      >
-                        {'Delete'}
-                      </Button>
+                      {/*
+                        One overflow menu, as the Members & leads rows have:
+                        two inline buttons had no room for a third, and the
+                        contact link is the one a reader reaches for after
+                        reading. Present but disabled for a submission with
+                        no address, with the reason — a row that simply
+                        lacked the item would read as the contact not
+                        existing.
+                      */}
+                      {(() => {
+                        const senderEmail = submissionSender(submission.fields).email
+                        return (
+                          <RowActionsMenu
+                            label={String(senderEmail ?? submission.$id)}
+                            items={[
+                              ...(crmHubPath
+                                ? [
+                                    {
+                                      key: 'crm',
+                                      label: 'Open contact in CRM',
+                                      icon: (
+                                        <MdiIcon
+                                          path={mdiAccountArrowRight.path}
+                                          size={0.8}
+                                        />
+                                      ),
+                                      ...(senderEmail
+                                        ? {
+                                            href: crmRoutes(
+                                              crmHubPath,
+                                            ).contactByEmail(senderEmail),
+                                          }
+                                        : {
+                                            disabled: true,
+                                            disabledReason:
+                                              'This submission carried no email address, so no contact was updated.',
+                                          }),
+                                    },
+                                  ]
+                                : []),
+                              {
+                                key: 'read',
+                                label: submission.read ? 'Mark unread' : 'Mark read',
+                                icon: (
+                                  <MdiIcon
+                                    path={
+                                      submission.read
+                                        ? mdiEmailOutline.path
+                                        : mdiEmailOpenOutline.path
+                                    }
+                                    size={0.8}
+                                  />
+                                ),
+                                onClick: handleToggleRead(submission),
+                              },
+                              {
+                                key: 'delete',
+                                label: 'Delete',
+                                icon: (
+                                  <MdiIcon path={mdiDeleteOutline.path} size={0.8} />
+                                ),
+                                destructive: true,
+                                onClick: handleDelete(submission),
+                              },
+                            ]}
+                          />
+                        )
+                      })()}
                     </TableCell>
                   </TableRow>
                 ))}

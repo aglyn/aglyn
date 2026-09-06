@@ -25,6 +25,7 @@ export type CrmConsoleSectionId =
   | 'tasks'
   | 'reports'
   | 'fields'
+  | 'settings'
 
 /**
  * The CRM hub's sections, in rail order (AGL-2595).
@@ -43,16 +44,29 @@ export type CrmConsoleSectionId =
  * `release_contacts` gate — no `navTabId` on any of them. A section that
  * later needs its own schedule declares one, which can only narrow.
  *
+ * The PLAN is the other axis (AGL-2611), and it splits the rail in two.
+ * Contacts declares no flag: the list, its tags, notes, segments and export
+ * are the capture projection every plan's email audiences read, banded by
+ * `contactsPerHost` and on Free. Every other section is the CRM SUITE —
+ * `features.crm`, included from Starter — so each names the flag, the shell
+ * draws it locked on a plan without it and refuses its body with the
+ * upgrade notice, and a bare `/crm` on Free lands on the one section Free
+ * has. Declared per section rather than on the extension because the
+ * extension's flag would take the contacts list with it.
+ *
  * Rail ORDER decides where a bare `/crm` lands: the shell redirects it to
  * the first section this reader may open. There is deliberately no separate
- * default constant.
+ * default constant. Settings is LAST (AGL-2613): it is the section a reader
+ * visits once and the records are what the rail is for, so it sits where a
+ * settings entry sits in every hub — after the work, before nothing.
  */
 export const CRM_CONSOLE_SECTIONS: readonly ConsoleNavSection[] = [
   { id: 'contacts', label: 'Contacts' },
-  { id: 'leads', label: 'Leads' },
-  { id: 'companies', label: 'Companies' },
-  { id: 'deals', label: 'Deals' },
-  { id: 'tasks', label: 'Tasks' },
-  { id: 'reports', label: 'Reports' },
-  { id: 'fields', label: 'Fields' },
+  { id: 'leads', label: 'Leads', featureFlag: 'crm' },
+  { id: 'companies', label: 'Companies', featureFlag: 'crm' },
+  { id: 'deals', label: 'Deals', featureFlag: 'crm' },
+  { id: 'tasks', label: 'Tasks', featureFlag: 'crm' },
+  { id: 'reports', label: 'Reports', featureFlag: 'crm' },
+  { id: 'fields', label: 'Fields', featureFlag: 'crm' },
+  { id: 'settings', label: 'Settings', featureFlag: 'crm' },
 ]

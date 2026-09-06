@@ -36,26 +36,54 @@ export * from './url-slug'
 export * from './child-contract'
 export * from './child-contract-compose'
 export * from './console-routes'
+export * from './console-record-links'
 // What a stored screen-link value means, with no React attached — the
 // where-used scan reads these on the server (AGL-703).
 export * from './screen-link-value'
 export * from './analytics-path-key'
 export * from './contacts'
+// The client-safe twin of `person-key` (server barrel only, for `node:crypto`).
+export * from './person-key-web'
 // The records that sit beside a contact — companies, pipelines, deals, tasks,
 // activities, field definitions (AGL-2595). Pure like `contacts`, and beside
 // it because `ContactFacet` names its lifecycle stage and custom-value types;
 // the scope stamp every CRM creator writes lives here too.
 export * from './crm'
+// Two contact documents folded into one (AGL-2625): the plan the console
+// previews and the server writes, reading the facet shape from `contacts`
+// and the company mirror from `crm`.
+export * from './contact-merge'
+// A person's privacy erasure from one workspace (AGL-2623): the request's
+// shape and id, the marker a record carries while it waits, and the lists
+// the dialog and the docs share. Pure like `crm`; the sweep is server-side.
+export * from './person-erasure'
 // What the CRM's reports compute from what they read — periods, weekly
 // buckets, the lifecycle funnel, pipeline totals (AGL-2604). Pure like `crm`,
 // and beside it because it reads the stage list and the deal weighting from
 // there rather than restating either.
 export * from './crm-reports'
+// What one member is owed this morning — the day's window in a named zone,
+// the task and lead bucketing, and the words the notification and the mail
+// say (AGL-2619). Pure like `crm-reports`, read by the scheduled route.
+export * from './crm-digest'
 // Reading a spreadsheet of people INTO the CRM (AGL-2602): the column
 // mapping, the per-row normalizer and the chunk-result arithmetic the
 // console drawer and the `crm/contacts-import` route both read. Pure, and
 // beside `crm` because it composes its stage list and field definitions.
 export * from './crm-import'
+// Reading a spreadsheet of COMPANIES into the CRM (AGL-2621): the same three
+// stages over the company vocabulary, on the generic helpers `crm-import`
+// also stands on. Pure, and beside it for the same reason.
+export * from './crm-company-import'
+// The CSV cell grammar the exports write with (AGL-2621) — named rather than
+// starred, because the two import modules above re-export the custom-target
+// helpers from the same file under their own names.
+export { csvCell, csvDocument } from './csv-import'
+export type {
+  ImportChunkResult,
+  ImportDroppedValue,
+  ImportSkippedRow,
+} from './csv-import'
 // What a VALUE under a custom contact field may be, and the coercion every
 // door applies to one (AGL-2601): a mapped form field, an API `custom` body,
 // and the carry-over that keeps a mapping across a publish. Pure like `crm`.

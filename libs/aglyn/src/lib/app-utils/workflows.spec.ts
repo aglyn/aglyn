@@ -225,7 +225,9 @@ describe('CRM host events', () => {
       'name',
       'source',
       'hostId',
+      'lifecycleStage',
       'campaignIds',
+      'formId',
     ])
     expect(HOST_EVENT_PAYLOAD_KEYS.contactStageChanged).toEqual([
       'contactId',

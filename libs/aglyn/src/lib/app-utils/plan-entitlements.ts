@@ -290,6 +290,12 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     servicesPerHost: 0,
     redirectsPerHost: 0,
     contactsPerHost: 100,
+    // No one-to-one email on Free, for the reason the tier has no CRM suite
+    // below: the send lives on a record's page, and the pages Free reaches
+    // do not compose mail. Zero here is what `checkCrmEmailQuota` refuses
+    // against, so a per-org grant of `features.crm` alone still sends
+    // nothing until the band is raised with it.
+    crmEmailsPerDay: 0,
     emailSendsPerMonth: 0,
     actionRunsPerMonth: 0,
     assistCreditsPerMonth: 0,
@@ -331,6 +337,16 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       dataStore: false,
       videoMedia: false,
       bookings: false,
+      // The CRM suite starts at Starter (AGL-2611). Free keeps the Contacts
+      // section — the capture projection every plan's email audiences read
+      // — banded at 100 records; what it does not get is the sales hub
+      // built on that list: leads, companies, deals, tasks, reports,
+      // fields, the CRM automation steps and the `crm:*` REST resources.
+      // The Drive pricing decision of 2026-09-05 records why Starter and
+      // not Pro: the field prices a CRM seat at $14–25 a month, so Starter
+      // with the suite included is the competitive entry, and gating a
+      // tier higher hands the small-business buyer to a free CRM elsewhere.
+      crm: false,
       interactions: true,
       actions: false,
       webhooks: false,
@@ -388,6 +404,14 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     servicesPerHost: 1,
     redirectsPerHost: 25,
     contactsPerHost: 1000,
+    // One-to-one email from a CRM record, per UTC day (AGL-2611). A hard
+    // daily pace rather than a monthly meter — see `crmEmailsPerDay` on
+    // `OrgEntitlements` — sized so the whole day spent at $0.0009 a message
+    // leaves the tier's CRM axis inside the 20% cost share the Drive
+    // pricing decision of 2026-09-05 sets. 50 a day is $1.35 a month against
+    // a $16 annual price. Every send still lands on the `emailSends` cost
+    // meter beside the transactional mail this tier already sends.
+    crmEmailsPerDay: 50,
     // Campaign email starts at Pro. A site that may send campaigns needs its
     // own verified provider sending domain, and provisioning one is a real
     // per-site operational cost that a campaign allowance commits the platform
@@ -448,6 +472,12 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       dataStore: true,
       videoMedia: false,
       bookings: true,
+      // The whole CRM suite, from the first paid tier (AGL-2611). At 100% of
+      // its band and its one-to-one email cap this costs $1.73 a month
+      // against a $16 annual price — the Drive pricing decision of
+      // 2026-09-05 has the arithmetic — and it is the upgrade motive from
+      // Free, not a line on top of a plan.
+      crm: true,
       interactions: true,
       actions: false,
       webhooks: false,
@@ -501,6 +531,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     servicesPerHost: UNLIMITED,
     redirectsPerHost: 100,
     contactsPerHost: 10000,
+    crmEmailsPerDay: 150,
     emailSendsPerMonth: 5000,
     actionRunsPerMonth: 5000,
     // $2.75 of provider spend, against the $8.35 the tier's other seven cost
@@ -556,6 +587,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       dataStore: true,
       videoMedia: true,
       bookings: true,
+      crm: true,
       interactions: true,
       actions: true,
       webhooks: false,
@@ -600,6 +632,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
     contactsPerHost: 50000,
+    crmEmailsPerDay: 200,
     emailSendsPerMonth: 25000,
     actionRunsPerMonth: 50000,
     // $7.50, against the $22.69 the other seven terms leave out of $139.
@@ -630,6 +663,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       dataStore: true,
       videoMedia: true,
       bookings: true,
+      crm: true,
       interactions: true,
       actions: true,
       webhooks: true,
@@ -677,6 +711,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
     contactsPerHost: 100000,
+    crmEmailsPerDay: 300,
     emailSendsPerMonth: 40000,
     actionRunsPerMonth: 100000,
     // $10.00, against the $30.62 the other seven terms leave out of $249.
@@ -707,6 +742,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       dataStore: true,
       videoMedia: true,
       bookings: true,
+      crm: true,
       interactions: true,
       actions: true,
       webhooks: true,
@@ -751,6 +787,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
     contactsPerHost: 150000,
+    crmEmailsPerDay: 500,
     emailSendsPerMonth: 65000,
     actionRunsPerMonth: 250000,
     // $13.00, against the $39.74 the other seven terms leave out of $399 —
@@ -783,6 +820,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       dataStore: true,
       videoMedia: true,
       bookings: true,
+      crm: true,
       interactions: true,
       actions: true,
       webhooks: true,
@@ -843,6 +881,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
     contactsPerHost: 500000,
+    crmEmailsPerDay: 1000,
     emailSendsPerMonth: 130000,
     actionRunsPerMonth: 1000000,
     // $58.00, against the $176.71 the other seven terms leave out of $1,299.
@@ -873,6 +912,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       dataStore: true,
       videoMedia: true,
       bookings: true,
+      crm: true,
       interactions: true,
       actions: true,
       webhooks: true,
@@ -932,6 +972,15 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
     contactsPerHost: UNLIMITED,
+    // Unlimited, unlike the campaign allowance beside it, and the difference
+    // is deliberate: `emailSendsPerMonth` is a DEFAULT a contract raises,
+    // because a campaign is bulk volume the provider prices; one-to-one mail
+    // is bounded by the people writing it, and a negotiated agreement that
+    // has to be told "your reps may send 1,000 a day" is one the price did
+    // not anticipate. `JSON.stringify(Infinity)` is `null` on the wire, so a
+    // surface that serializes this reads it back through
+    // `restoreQuotaLimit` as every other unbounded band does.
+    crmEmailsPerDay: UNLIMITED,
     emailSendsPerMonth: ENTERPRISE_EMAIL_SENDS_PER_MONTH,
     actionRunsPerMonth: UNLIMITED,
     assistCreditsPerMonth: ENTERPRISE_ASSIST_CREDITS_PER_MONTH,
@@ -961,6 +1010,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       dataStore: true,
       videoMedia: true,
       bookings: true,
+      crm: true,
       interactions: true,
       actions: true,
       webhooks: true,
@@ -1190,9 +1240,12 @@ export interface PlanPricing {
    */
   extraAssistCreditsUsdPer1k: number | null
   /**
-   * Metered overage per 1,000 contacts beyond `contactsPerHost` (AGL-890):
-   * audience bands, Ghost-style. Paid plans meter (a growing audience is
-   * never dropped); free is null and hard-bands at the included count.
+   * Metered overage per 1,000 CRM records beyond `contactsPerHost` (AGL-890,
+   * widened to contacts + companies + deals in AGL-2611): audience bands,
+   * Ghost-style. Paid plans meter (a growing audience is never dropped);
+   * free is null and hard-bands at the included count. The key keeps its
+   * name because it is a persisted Stripe-side vocabulary and a locked
+   * price; the band it prices was widened, the rate was not.
    */
   extraContactsUsdPer1k: number | null
   /**
@@ -1867,7 +1920,25 @@ export interface OrgUsageRollupInput {
   formSubmissions?: number | null
   dataStorageMb?: number | null
   apiRequests?: number | null
+  /**
+   * Contacts alone — the figure every rollup carried before AGL-2611 widened
+   * the band, kept so a month written under the old basis still prices.
+   * Read only when `crmRecordsCount` is absent; see it.
+   */
   contactsCount?: number | null
+  /**
+   * Contacts + companies + deals, the CRM records band's own figure
+   * (AGL-2611). Priced at `perContactMonth` — the rate was measured on a
+   * contact, which is the most expensive of the three to hold, so it
+   * over-covers a company or a deal rather than under-pricing one. When
+   * present it REPLACES `contactsCount` in the model rather than adding to
+   * it: the contacts are inside this sum, and a model that priced both
+   * would charge the same people twice.
+   */
+  crmRecordsCount?: number | null
+  /** The components of `crmRecordsCount`, recorded so the sum is legible. */
+  companiesCount?: number | null
+  dealsCount?: number | null
   /**
    * Every email the org sent this month, campaigns and transactional alike —
    * the `emailSends` cost meter, not `campaignEmailSends`.
@@ -1945,7 +2016,13 @@ export function orgMonthlyCogsUsd(
     // the stored field name, so convert here rather than in each caller.
     dataStorage: (num(rollup?.dataStorageMb) / 1024) * rates.dataStoragePerGbMonth,
     apiRequests: num(rollup?.apiRequests) * rates.perApiRequest,
-    contacts: num(rollup?.contactsCount) * rates.perContactMonth,
+    // The records band (AGL-2611), under the axis name every breakdown reader
+    // already keys on. `??` and not `||`: a rollup that measured ZERO records
+    // has answered, and must not fall back to a contacts figure from a month
+    // written under the narrower basis.
+    contacts:
+      num(rollup?.crmRecordsCount ?? rollup?.contactsCount) *
+      rates.perContactMonth,
     // Every send, not the overage — the provider bills the first message of
     // the month as much as the last, so a cost model that started counting at
     // the plan's included band would report an org that stayed inside its
@@ -1997,7 +2074,8 @@ export function orgMonthlyCogsUsd(
  * `dataStorageMb` are gigabytes and MEGABYTES respectively (the conversion
  * lives in `orgMonthlyCogsUsd`, with its own test); `pageViews`,
  * `formSubmissions`, `apiRequests` and `emailSends` are counts FOR THE MONTH;
- * `contactsCount` is a point-in-time headcount, not a monthly flow.
+ * `contactsCount` and `crmRecordsCount` are point-in-time levels, not monthly
+ * flows.
  */
 export function orgCogsInputFrom(
   source: Record<string, unknown> | null | undefined,
@@ -2014,6 +2092,12 @@ export function orgCogsInputFrom(
     dataStorageMb: read('dataStorageMb'),
     apiRequests: read('apiRequests'),
     contactsCount: read('contactsCount'),
+    // AGL-2611. The band's own figure, forwarded for the reason `assistCostUsd`
+    // is: a projection that drops it prices the CRM at its contacts alone,
+    // which is the direction that approves a discount.
+    crmRecordsCount: read('crmRecordsCount'),
+    companiesCount: read('companiesCount'),
+    dealsCount: read('dealsCount'),
     emailSends: read('emailSends'),
     // AGL-2280. Dollars, not a meter — the projection still has to forward it
     // or the model prices Assist at nothing, which is the direction that
@@ -3671,16 +3755,17 @@ export function checkApiRequestQuota(
   }
 }
 
-export interface ContactQuotaResult {
+export interface CrmRecordsQuotaResult {
   /** Metered plans always allow; free hard-bands at the included count. */
   allowed: boolean
-  /** Included contacts on the plan (the audience band). */
+  /** Included CRM records on the plan — the `contactsPerHost` band. */
   included: number
+  /** Contacts + companies + deals, as the caller counted them. */
   used: number
-  /** Remaining included contacts; 0 once into overage. */
+  /** Remaining included records; 0 once into overage. */
   remaining: number
-  /** Contacts beyond the included band (0 within the plan). */
-  overageContacts: number
+  /** Records beyond the included band (0 within the plan). */
+  overageRecords: number
   /** Estimated overage this month at the plan's per-1,000 rate. */
   overageMonthlyUsd: number
   /** Per-1,000 overage rate; null when the plan hard-bands (free). */
@@ -3688,35 +3773,142 @@ export interface ContactQuotaResult {
 }
 
 /**
- * Contacts audience-band meter (AGL-890): contacts are the CRM projection
- * of a site's audience (signups, form fills, buyers), stored org-wide.
- * Paid plans carry an `extraContactsUsdPer1k` rate, so contacts past the
- * included band meter onto the monthly invoice (cost-plus, like storage
- * and API overage — a growing audience is never dropped); free has no
- * rate and hard-bands at the included count. End-user member ACCOUNTS are
- * unlimited on every plan (AGL-889) — this meters only the CRM record.
+ * The name this result carried while the band counted contacts alone.
+ * @deprecated Read `CrmRecordsQuotaResult`; the shape is the same.
  */
-export function checkContactQuota(
+export type ContactQuotaResult = CrmRecordsQuotaResult
+
+/**
+ * CRM records band meter (AGL-890, widened in AGL-2611): contacts, companies
+ * and deals, counted together across the org and measured against the ONE
+ * band `contactsPerHost` names. Paid plans carry an `extraContactsUsdPer1k`
+ * rate, so records past the included band meter onto the monthly invoice
+ * (cost-plus, like storage and API overage — a growing audience is never
+ * dropped); free has no rate and hard-bands at the included count, refusing
+ * the next record of any of the three kinds.
+ *
+ * ONE band for three collections, and not three bands, because a company or
+ * a deal costs less to hold than a contact — a ~2 KB document with few index
+ * entries and no dynamic-list scan — so counting them at the contacts rate
+ * over-covers them, and a second and third number to explain would buy
+ * nothing a customer could act on. The caller passes the SUM; the server
+ * helper that takes the three aggregate reads is `countCrmRecords`, and the
+ * billing meter shows the three components in its caption so the sum is
+ * legible rather than opaque. Tasks and activities are not counted: they
+ * are bounded by human effort, and the activity log is capped per record by
+ * `CRM_ACTIVITIES_PER_RECORD_CEILING` instead.
+ *
+ * End-user member ACCOUNTS are unlimited on every plan (AGL-889) — this
+ * meters only the CRM record.
+ */
+export function checkCrmRecordsQuota(
   org: Partial<AglynOrgBilling> | null | undefined,
-  usedContacts: number,
-): ContactQuotaResult {
+  usedRecords: number,
+): CrmRecordsQuotaResult {
   const entitlements = resolveOrgEntitlements(org)
   const pricing = PLAN_PRICING[resolvePlan(org)]
   const included = entitlements.contactsPerHost
   const overageRateUsd = pricing.extraContactsUsdPer1k
-  const used = Math.max(0, usedContacts)
-  const overageContacts = Math.max(0, used - included)
+  const used = Math.max(0, usedRecords)
+  const overageRecords = Math.max(0, used - included)
   return {
     allowed: overageRateUsd !== null ? true : used < included,
     included,
     used,
     remaining: Math.max(0, included - used),
-    overageContacts,
+    overageRecords,
     overageMonthlyUsd:
       overageRateUsd === null
         ? 0
-        : Math.round((overageContacts / 1000) * overageRateUsd * 100) / 100,
+        : Math.round((overageRecords / 1000) * overageRateUsd * 100) / 100,
     overageRateUsd,
+  }
+}
+
+/**
+ * The name the band's gate carried while it counted contacts alone. The SAME
+ * function — every caller that still says "contact" is measuring the records
+ * band and must hand it the summed count, not the contacts aggregate.
+ * @deprecated Call `checkCrmRecordsQuota`.
+ */
+export const checkContactQuota = checkCrmRecordsQuota
+
+/**
+ * `orgs/{orgId}/crmEmailUsage/{YYYY-MM-DD}` — the durable per-day counter of
+ * one-to-one CRM emails, `{ count, day, updatedAt }`, server-written only and
+ * member-readable, exactly as `apiUsage/{month}` is for API requests.
+ */
+export const CRM_EMAIL_USAGE_COLLECTION = 'crmEmailUsage'
+
+/**
+ * The document id of today's one-to-one email counter, `YYYY-MM-DD` in UTC.
+ *
+ * UTC rather than the workspace's zone, for the reason `apiUsageMonth` keys
+ * the API counter in UTC: the cap is enforced on a server that has no zone
+ * of the customer's to read, and a boundary that moved with a browser's
+ * clock would let one day's sends be counted against two.
+ */
+export function crmEmailUsageDayKey(now: Date = new Date()): string {
+  return now.toISOString().slice(0, 10)
+}
+
+export interface CrmEmailQuotaResult {
+  /** Whether ONE MORE send is inside today's cap. Enterprise always allows. */
+  allowed: boolean
+  /** The plan's daily cap; 0 where the tier has no CRM suite. */
+  included: number
+  /** Sends already counted today. */
+  used: number
+  /** Sends left today; 0 at the cap. */
+  remaining: number
+  /** When the counter rolls over — the next UTC midnight. */
+  resetsAt: Date
+}
+
+/**
+ * One-to-one CRM email cap (AGL-2611): how many messages a workspace may
+ * still send from CRM records today, mirroring `checkApiRequestQuota`.
+ *
+ * A HARD cap with no overage rate, on every tier — the one respect in which
+ * it differs from the API meter it is shaped after. `allowed` is therefore
+ * `used < included` outright, `UNLIMITED` on Enterprise makes it true at any
+ * count, and 0 on Free makes it false at zero, so a per-org `features.crm`
+ * grant does not send until `crmEmailsPerDay` is raised beside it.
+ *
+ * ## The contract for the send route
+ *
+ * The route that sends a one-to-one email (a companion of this issue) reads
+ * `orgs/{orgId}/crmEmailUsage/{crmEmailUsageDayKey()}.count`, calls this
+ * with that figure and REFUSES with the plan reason when `allowed` is false
+ * — before a message leaves, never after. On a delivered send it increments
+ * that same document by one (`recordCrmEmailSend` in `@aglyn/tenant-data-admin`
+ * is the writer; `FieldValue.increment`, `{ merge: true }`, never a read-
+ * then-write) and records the send on the org's `emailSends` cost meter
+ * through `recordEmailSends` as `transactional`, because every message the
+ * provider charged for is priced into COGS and the campaign cap does not
+ * govern it. The count enforced is the count billed, from one document, the
+ * way the API meter works.
+ *
+ * Read the counter with `used` from the server: the console meter on the
+ * billing page reads the same document, member-readable, so a rep is never
+ * told their limit by being refused.
+ */
+export function checkCrmEmailQuota(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  usedToday: number,
+  now: Date = new Date(),
+): CrmEmailQuotaResult {
+  const included = resolveOrgEntitlements(org).crmEmailsPerDay
+  const used = Math.max(0, Math.floor(Number(usedToday) || 0))
+  const resetsAt = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1),
+  )
+  return {
+    allowed: used < included,
+    included,
+    used,
+    remaining: Math.max(0, included - used),
+    resetsAt,
   }
 }
 

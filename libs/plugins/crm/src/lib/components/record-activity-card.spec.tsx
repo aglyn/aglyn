@@ -49,6 +49,18 @@ const row = (id: string, byUid: string, atMs: number) => ({
 
 const activityRows = [row('act-1', 'u-1', 3_000), row('act-2', 'u-2', 2_000), row('act-3', 'u-2', 1_000)]
 
+/** A message the platform sent (AGL-2615), by the signed-in user. */
+const sentEmailRow = (deliveryState: string) => ({
+  ...row('act-mail', 'u-1', 4_000),
+  kind: 'email',
+  subject: 'Quick question',
+  body: 'Still keen?',
+  to: 'ada@example.com',
+  direction: 'outbound',
+  deliveryState,
+  deliveryAtMs: 4_500,
+})
+
 const mockPaged = jest.fn()
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
@@ -69,6 +81,8 @@ jest.mock('firebase/firestore', () => ({
   orderBy: () => undefined,
   limit: () => undefined,
   doc: (_db: unknown, ...segments: string[]) => segments.join('/'),
+  // The per-record ceiling's one aggregate before a log (AGL-2611).
+  getCountFromServer: async () => ({ data: () => ({ count: 0 }) }),
   addDoc: jest.fn().mockResolvedValue({ id: 'act-4' }),
   deleteDoc: jest.fn().mockResolvedValue(undefined),
   updateDoc: jest.fn().mockResolvedValue(undefined),
@@ -170,5 +184,51 @@ describe('RecordActivityCard (AGL-2600)', () => {
   it('has no foot when the window already holds everything', () => {
     renderCard()
     expect(screen.queryByRole('button', { name: 'Show more' })).toBeNull()
+  })
+})
+
+describe('a sent email on the log (AGL-2615)', () => {
+  const renderWith = (rows: unknown[]) => {
+    mockPaged.mockReturnValue({
+      data: rows,
+      rows,
+      hasMore: false,
+      page: 0,
+      pageSize: 100,
+      setPage,
+      setPageSize: jest.fn(),
+      status: 'success',
+      fromCache: false,
+    })
+    return renderCard()
+  }
+
+  it('shows its subject, its recipient and its delivery state', () => {
+    renderWith([sentEmailRow('opened')])
+    expect(screen.getByText('Quick question')).toBeTruthy()
+    expect(screen.getByText('Still keen?')).toBeTruthy()
+    expect(screen.getByTestId('activity-delivery-state').textContent).toBe('Opened')
+    expect(screen.getByText(/to ada@example\.com/)).toBeTruthy()
+  })
+
+  it('reads a bounce as a failure', () => {
+    renderWith([sentEmailRow('bounced')])
+    const chip = screen.getByTestId('activity-delivery-state')
+    expect(chip.textContent).toBe('Bounced')
+    expect(chip.className).toMatch(/colorError/)
+  })
+
+  it('offers no edit for what was sent, and keeps the delete', () => {
+    // The signed-in user is the author, so a hand-logged row would carry
+    // both controls; a sent message is a record of a fact.
+    renderWith([sentEmailRow('sent')])
+    expect(screen.queryByLabelText('Edit activity')).toBeNull()
+    expect(screen.getByLabelText('Delete activity')).toBeTruthy()
+  })
+
+  it('draws no state chip on a hand-logged email', () => {
+    renderWith([{ ...row('act-9', 'u-1', 5_000), kind: 'email', body: 'Sent the deck' }])
+    expect(screen.queryByTestId('activity-delivery-state')).toBeNull()
+    expect(screen.getByLabelText('Edit activity')).toBeTruthy()
   })
 })

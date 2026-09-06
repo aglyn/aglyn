@@ -73,6 +73,9 @@ jest.mock('firebase/firestore', () => ({
   orderBy: (...args: unknown[]): Clause => ({ kind: 'orderBy', args }),
   limit: (...args: unknown[]): Clause => ({ kind: 'limit', args }),
   doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
+  // The create drawer measures the records band on open (AGL-2611): three
+  // aggregates, all empty here, so nothing below is refused at a band.
+  getCountFromServer: async () => ({ data: () => ({ count: 0 }) }),
   setDoc: jest.fn(async (ref: { path: string }, data: Record<string, unknown>) => {
     written.push({ path: ref.path, data })
   }),
@@ -94,6 +97,10 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => FIRESTORE,
   useOrgDataScope: () => DATA_SCOPE,
   useUser: () => ({ data: USER }),
+  // The drawer logs the add to the site's activity feed (AGL-2622); the feed is not under test.
+  useHostActivityLogger: () => jest.fn(),
+  // The reader's reach, for the views control's "may edit" (AGL-2617).
+  useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),
   usePagedCollection: (build: (pageLimit: number) => BuiltQuery | null) => {
     const spec = build(11)
     if (spec) built.push(spec)
@@ -128,6 +135,8 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: (href: string) => pushes.push(href), replace: jest.fn() }),
   usePathname: () => '/',
+  // The views control reads the address for `?view=` (AGL-2617); none here.
+  useSearchParams: () => new URLSearchParams(),
 }))
 
 jest.mock('@aglyn/shared-ui-snackstack', () => ({

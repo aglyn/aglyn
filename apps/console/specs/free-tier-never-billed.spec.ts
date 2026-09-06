@@ -298,7 +298,7 @@ describe('DIMENSION BY DIMENSION: every band blown, every charge zero', () => {
   it('contacts: 250× the band, still $0', () => {
     const quota = checkContactQuota(freeOrg(), 25_000)
     expect(quota.included).toBe(100)
-    expect(quota.overageContacts).toBe(24_900)
+    expect(quota.overageRecords).toBe(24_900)
     expect(quota.overageRateUsd).toBeNull()
     expect(quota.overageMonthlyUsd).toBe(0)
     expect(quota.allowed).toBe(false)

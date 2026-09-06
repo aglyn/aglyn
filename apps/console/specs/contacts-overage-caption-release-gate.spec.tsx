@@ -172,9 +172,13 @@ function mount() {
   )
 }
 
-/** The contacts meter's readout — the head-count, which never goes away. */
+/**
+ * The records meter's readout — the head-count, which never goes away. The
+ * mock answers `CONTACTS` for the contacts aggregate and 0 for companies and
+ * deals, so the band's sum IS the contacts figure here (AGL-2611).
+ */
 async function contactsMeter(): Promise<HTMLElement> {
-  const row = screen.getByText('Contacts (organization)')
+  const row = screen.getByText('CRM records (organization)')
     .parentElement as HTMLElement
   await waitFor(() => {
     expect(row.textContent).toContain(`${CONTACTS} / 10000`)
@@ -183,7 +187,7 @@ async function contactsMeter(): Promise<HTMLElement> {
 }
 
 function caption(): HTMLElement | null {
-  return screen.queryByText(/Audience overage/)
+  return screen.queryByText(/Records overage/)
 }
 
 describe('the audience-overage caption follows what is billed', () => {
@@ -205,10 +209,10 @@ describe('the audience-overage caption follows what is billed', () => {
     // it exists to catch. A negative control has to name a phrase the wrong
     // branch really produces.
     expect(text).not.toContain('ends the month at this size')
-    // Worded to the docs pass (AGL-1601/1603): the PAGE is unavailable, and
+    // Worded to the docs pass (AGL-1601/1603): the CRM is unavailable, and
     // the published rate is what applies once it opens.
-    expect(text).toContain('not billed while the Contacts page is unavailable')
-    expect(text).toContain('$0.75/1,000 rate applies once Contacts opens')
+    expect(text).toContain('not billed while the CRM is unavailable')
+    expect(text).toContain('$0.75/1,000 rate applies once the CRM opens')
   })
 
   it('quotes the estimate for an org staff granted Contacts early', async () => {
@@ -220,7 +224,7 @@ describe('the audience-overage caption follows what is billed', () => {
 
     await waitFor(() =>
       expect(caption()?.textContent ?? '').toContain(
-        `≈$${ESTIMATE} if your audience ends the month at this size`,
+        `≈$${ESTIMATE} if your CRM ends the month at this size`,
       ),
     )
     const text = caption()?.textContent ?? ''
@@ -238,7 +242,7 @@ describe('the audience-overage caption follows what is billed', () => {
 
     await waitFor(() => expect(caption()).not.toBeNull())
     const text = caption()?.textContent ?? ''
-    expect(text).toContain('not billed while the Contacts page is unavailable')
+    expect(text).toContain('not billed while the CRM is unavailable')
     expect(text).not.toContain(ESTIMATE)
   })
 
@@ -249,7 +253,7 @@ describe('the audience-overage caption follows what is billed', () => {
 
     await waitFor(() =>
       expect(caption()?.textContent ?? '').toContain(
-        `≈$${ESTIMATE} if your audience ends the month at this size`,
+        `≈$${ESTIMATE} if your CRM ends the month at this size`,
       ),
     )
     expect(caption()?.textContent ?? '').not.toContain('not billed')
@@ -266,6 +270,19 @@ describe('the audience-overage caption follows what is billed', () => {
     // The meter still renders the count: the head-count is not a claim about
     // money, and blanking it would be its own defect.
     await contactsMeter()
+    expect(caption()).toBeNull()
+  })
+
+  it('shows the three parts under the total, whatever the verdict (AGL-2611)', async () => {
+    // The breakdown is a fact about the records, not a claim about money, so
+    // it renders before the flag settles — unlike the overage caption above.
+    mockActivationSettles = false
+    mount()
+    await contactsMeter()
+    const parts = screen.getByText(/^Contacts [\d,]+ · Companies [\d,]+ · Deals [\d,]+$/)
+    expect(parts.textContent).toBe(
+      `Contacts ${CONTACTS.toLocaleString()} · Companies 0 · Deals 0`,
+    )
     expect(caption()).toBeNull()
   })
 })

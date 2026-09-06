@@ -42,16 +42,49 @@ export interface CrmReportScope {
   scope: readonly ['orgs', string]
   /**
    * The scope tokens this reader may see — the `array-contains-any` operand
-   * of every query a card runs, and the same predicate the rules evaluate.
+   * of every query a card runs, and the same predicate the rules evaluate
+   * — or `null` at the ORGANIZATION level (AGL-2630), where an org-wide
+   * member's reports carry no clause and total every site at once.
    */
-  tokens: string[]
-  /** The consent group whose facet the contact fields are read through. */
-  groupId: string
+  tokens: readonly string[] | null
+  /**
+   * The consent group whose facet the contact fields are read through, or
+   * `null` at the organization level, where each contact's own primary
+   * holder is read instead (`contactPrimaryGroup`, from {@link org}).
+   */
+  groupId: string | null
+  /** The org document, for the per-contact holder when {@link groupId} is null. */
+  org: Record<string, unknown> | null
   period: CrmReportPeriod
   range: CrmReportRange
   /** The moment the period was anchored at, so every card shares one clock. */
   nowMs: number
   routes: CrmRoutes
+}
+
+/**
+ * What every remembered report answer is keyed by: the org, the reader's
+ * tokens, the holder's facet and the period — never the clock. A reopened
+ * section anchors a new `nowMs`, and the whole point of remembering is that
+ * the reopening is the same question; the TTL, not the key, decides when the
+ * answer has aged out. `cardKey` names the read within the card so that two
+ * counts on one card do not overwrite each other.
+ */
+export function reportCacheKey(
+  report: Pick<CrmReportScope, 'scope' | 'tokens' | 'groupId' | 'period'>,
+  cardKey: string,
+): string {
+  return `${reportCachePrefix(report)}${report.period}|${cardKey}`
+}
+
+/** Everything one reader's reports of one org are remembered under — what Refresh forgets. */
+export function reportCachePrefix(
+  report: Pick<CrmReportScope, 'scope' | 'tokens' | 'groupId'>,
+): string {
+  // `*` for the org level's "every token" and "every holder": a real token
+  // list never contains it, so the two levels cannot share an answer.
+  const tokens = report.tokens ? [...report.tokens].sort().join(',') : '*'
+  return `crm-report|${report.scope[1]}|${tokens}|${report.groupId ?? '*'}|`
 }
 
 /** One CRM collection under the report's org. */
@@ -64,15 +97,19 @@ export function scopedCollection(
 }
 
 /**
- * The visibility predicate, as the one clause every report query starts
- * with.
+ * The visibility predicate, as the clause every report query starts with —
+ * spread into the query, because at the organization level it is NOTHING.
  *
  * A function rather than a convention so that a card cannot forget it: a
  * query on a CRM collection without it is permission-denied rather than a
  * leak, per the rules, but a denied aggregate renders as a dash and a
  * missing clause would be diagnosed as "the count is broken" rather than as
- * what it is.
+ * what it is. The org level (AGL-2630) drops it on purpose: the rules admit
+ * an org-wide member to every row, and a report there is a total over
+ * every site.
  */
-export function visibleToClause(tokens: readonly string[]): QueryConstraint {
-  return where('visibleTo', 'array-contains-any', [...tokens])
+export function visibleToClause(
+  tokens: readonly string[] | null,
+): QueryConstraint[] {
+  return tokens ? [where('visibleTo', 'array-contains-any', [...tokens])] : []
 }

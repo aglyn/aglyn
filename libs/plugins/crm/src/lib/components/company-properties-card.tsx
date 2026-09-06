@@ -19,46 +19,32 @@
 import {
   type AglynOrgBilling,
   type AglynPostalAddress,
-  CRM_COLLECTIONS,
   type CrmCompany,
   pluginDocsHelp,
 } from '@aglyn/aglyn'
 import { mdiDeleteOutline, mdiPencilOutline } from '@aglyn/shared-data-mdi'
-import {
-  AppLink,
-  CardDisplay,
-  MdiIcon,
-  useConfirmationContext,
-} from '@aglyn/shared-ui-jsx'
+import { MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useHostActivityLogger } from '@aglyn/tenant-feature-instance'
 import { Button, Link, Stack, Typography } from '@mui/material'
-import {
-  collection,
-  deleteDoc,
-  doc,
-  getDocs,
-  limit,
-  query,
-  where,
-  writeBatch,
-} from 'firebase/firestore'
 import { type ReactNode, useCallback, useState } from 'react'
 import type { CrmScope } from '../hooks/use-crm-scope'
 import type { OrgMemberOptions } from '../hooks/use-org-member-options'
+import { COMPANY_DETACH_LIMIT } from '../model/companies'
 import {
-  COMPANY_DETACH_LIMIT,
-  CONTACT_COMPANY_IDS_FIELD,
-  companyDetachUpdate,
-} from '../model/companies'
+  companyDeleteFailureMessage,
+  deleteCompanyDetaching,
+} from '../model/company-delete'
 import type { CrmRoutes } from '../model/crm-routes'
 import CompanyEditDrawer from './company-edit-drawer'
+import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
 
 export interface CompanyPropertiesCardProps {
   company: Partial<CrmCompany> & { $id: string }
   /** Whether the document the card holds is server-confirmed. */
   seed: { fromCache: boolean; unreadable: boolean }
-  hostId: string
+  /** The site the record is read under, or `null` at the organization level. */
+  hostId: string | null
   org?: Partial<AglynOrgBilling>
   crmScope: CrmScope
   members: OrgMemberOptions
@@ -94,19 +80,12 @@ function formatAddress(address: AglynPostalAddress | null | undefined): string {
  *
  * ## Delete is a DETACH first
  *
- * Contacts point at a company from their own documents, and Firestore does
- * not cascade. A bare delete would leave every one of them naming a record
- * that no longer exists: their page would render a link to nothing, and the
- * `companyIds` mirror the company list queries would keep matching a ghost.
- * So the delete reads the contacts that name this company, takes it off each
- * of them in one batch, and removes the document only when nobody is left
- * pointing at it.
- *
- * Bounded at {@link COMPANY_DETACH_LIMIT} per pass — a batch holds that many
- * writes — and honest past it: the pass detaches what it can, reports that
- * more remain, and leaves the company standing so the next delete continues
- * from where this one stopped. A company is never deleted with a link still
- * on a contact.
+ * `deleteCompanyDetaching` — the pass the bulk bar runs per row as well —
+ * unlinks the contacts that name this company before removing it, bounded
+ * at {@link COMPANY_DETACH_LIMIT} per pass and honest past it: the company
+ * stands, and the person is told more remain. What this card adds is the
+ * confirm, the sentence for each outcome, and leaving the page once the
+ * record is gone.
  */
 export function CompanyPropertiesCard(props: CompanyPropertiesCardProps) {
   const {
@@ -123,6 +102,9 @@ export function CompanyPropertiesCard(props: CompanyPropertiesCardProps) {
   const firestore = useFirestore()
   const { confirm } = useConfirmationContext()
   const { enqueueSnackbar } = useSnackbar()
+  // The site whose feed the act is logged in: the mounted one, or at the
+  // organization level the company's own (AGL-2630).
+  const logActivity = useHostActivityLogger(hostId ?? company.hostId ?? undefined)
   const [editing, setEditing] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
@@ -145,31 +127,8 @@ export function CompanyPropertiesCard(props: CompanyPropertiesCardProps) {
     if (!accepted) return
     setDeleting(true)
     try {
-      /*
-       * One over the limit, so "more remain" is a fact from the probe row
-       * and not a guess from a full page — the same reason the paged lists
-       * over-fetch by one.
-       */
-      const probe = await getDocs(
-        query(
-          collection(firestore, scope[0], scope[1], 'contacts'),
-          where(CONTACT_COMPANY_IDS_FIELD, 'array-contains', company.$id),
-          limit(COMPANY_DETACH_LIMIT + 1),
-        ),
-      )
-      const linked = probe.docs.slice(0, COMPANY_DETACH_LIMIT)
-      const moreRemain = probe.docs.length > COMPANY_DETACH_LIMIT
-      if (linked.length) {
-        const batch = writeBatch(firestore)
-        for (const snapshot of linked) {
-          batch.update(
-            snapshot.ref,
-            companyDetachUpdate(snapshot.data(), company.$id),
-          )
-        }
-        await batch.commit()
-      }
-      if (moreRemain) {
+      const outcome = await deleteCompanyDetaching(firestore, scope, company.$id)
+      if (!outcome.deleted) {
         enqueueSnackbar(
           `${COMPANY_DETACH_LIMIT.toLocaleString()} contacts were unlinked ` +
             `from "${name}" and more remain. Delete again to continue.`,
@@ -177,51 +136,33 @@ export function CompanyPropertiesCard(props: CompanyPropertiesCardProps) {
         )
         return
       }
-      await deleteDoc(
-        doc(
-          firestore,
-          scope[0],
-          scope[1],
-          CRM_COLLECTIONS.companies,
-          company.$id,
-        ),
-      )
+      // Setup → Activity shows CRM work (AGL-2622): the company is org
+      // data, but the act happened in this site's console and belongs in
+      // its feed.
+      logActivity('Deleted company', { type: 'company', id: company.$id, name })
       enqueueSnackbar(
-        linked.length
-          ? `Company deleted and unlinked from ${linked.length.toLocaleString()} ` +
-              `contact${linked.length === 1 ? '' : 's'}`
+        outcome.detached
+          ? `Company deleted and unlinked from ${outcome.detached.toLocaleString()} ` +
+              `contact${outcome.detached === 1 ? '' : 's'}`
           : 'Company deleted',
         { variant: 'success', persist: false },
       )
       onDeleted()
     } catch (error) {
       console.error(error)
-      /*
-       * The contact read runs without a scope predicate — it cannot carry
-       * one beside the `array-contains` on the mirror — so the rules admit
-       * it only to an org-wide member. A site-scoped member's delete stops
-       * here, and is told why rather than shown a generic failure.
-       */
-      const denied =
-        typeof error === 'object' &&
-        error !== null &&
-        (error as { code?: string }).code === 'permission-denied'
-      enqueueSnackbar(
-        denied
-          ? 'Your access is limited to specific sites, so the contacts at ' +
-              'this company could not be read to unlink them. Ask an ' +
-              'organization administrator to delete it.'
-          : 'An error has occurred',
-        { variant: 'error', allowDuplicate: true },
-      )
+      enqueueSnackbar(companyDeleteFailureMessage(error), {
+        variant: 'error',
+        allowDuplicate: true,
+      })
     } finally {
       setDeleting(false)
     }
-  }, [scope, deleting, company, confirm, firestore, enqueueSnackbar, onDeleted])
+  }, [scope, deleting, company, confirm, firestore, logActivity, enqueueSnackbar, onDeleted])
 
   const address = formatAddress(company.address)
+  // The domain, the industry and the owner read on the header — the
+  // subtitle and the chip row — so the rows list what is left.
   const rows: Array<{ label: string; value: ReactNode }> = [
-    { label: 'Domain', value: company.domain },
     {
       label: 'Website',
       value: company.website ? (
@@ -231,50 +172,56 @@ export function CompanyPropertiesCard(props: CompanyPropertiesCardProps) {
       ) : null,
     },
     { label: 'Phone', value: company.phone },
-    { label: 'Industry', value: company.industry },
-    {
-      label: 'Owner',
-      value: company.ownerUid
-        ? members.ready
-          ? members.labelFor(company.ownerUid)
-          : '…'
-        : null,
-    },
     { label: 'Address', value: address },
+    { label: 'Tags', value: (company.tags ?? []).join(', ') },
     { label: 'Notes', value: company.notes },
   ]
 
   return (
-    <CardDisplay
-      header={'Company'}
+    <CrmRecordHeader
+      kind="Company"
+      title={String(company.name || company.$id)}
+      subtitle={company.domain}
       help={pluginDocsHelp('companies', { anchor: '#a-companys-page' })}
-      contentGutterX
-      contentGutterY
-      contentBordered="all"
-      HeaderProps={{
-        action: (
-          <Stack direction="row" spacing={1}>
-            <Button
-              size="small"
-              color="primary"
-              variant="outlined"
-              startIcon={<MdiIcon path={mdiPencilOutline.path} size={0.8} />}
-              onClick={() => setEditing(true)}
-            >
-              {'Edit'}
-            </Button>
-            <Button
-              size="small"
-              color="error"
-              disabled={!scope || deleting}
-              startIcon={<MdiIcon path={mdiDeleteOutline.path} size={0.8} />}
-              onClick={() => void handleDelete()}
-            >
-              {deleting ? 'Deleting…' : 'Delete'}
-            </Button>
-          </Stack>
-        ),
-      }}
+      backHref={routes.section('companies')}
+      backLabel="Back to companies"
+      actions={
+        <Button
+          size="small"
+          color="primary"
+          variant="outlined"
+          startIcon={<MdiIcon path={mdiPencilOutline.path} size={0.8} />}
+          onClick={() => setEditing(true)}
+        >
+          {'Edit'}
+        </Button>
+      }
+      menuItems={[
+        {
+          key: 'delete',
+          label: deleting ? 'Deleting…' : 'Delete company',
+          icon: <MdiIcon path={mdiDeleteOutline.path} size={0.8} />,
+          destructive: true,
+          disabled: !scope || deleting,
+          disabledReason: deleting ? 'The company is being deleted' : 'The organization has not loaded',
+          onClick: () => void handleDelete(),
+        },
+      ]}
+      chips={
+        <>
+          <CrmRecordChip label="Industry" value={company.industry} />
+          <CrmRecordChip
+            label="Owner"
+            value={
+              company.ownerUid
+                ? members.ready
+                  ? members.labelFor(company.ownerUid)
+                  : '…'
+                : undefined
+            }
+          />
+        </>
+      }
     >
       <Stack spacing={1}>
         {rows.map((row) => (
@@ -313,14 +260,7 @@ export function CompanyPropertiesCard(props: CompanyPropertiesCardProps) {
           onSaved={() => setEditing(false)}
         />
       ) : null}
-      {/* The way back is a link the trail does not carry: the record is the
-          last crumb and is not linked, so the section is offered here. */}
-      <Stack direction="row" sx={{ mt: 2 }}>
-        <Typography variant="caption" color="text.secondary">
-          <AppLink href={routes.section('companies')}>{'All companies'}</AppLink>
-        </Typography>
-      </Stack>
-    </CardDisplay>
+    </CrmRecordHeader>
   )
 }
 CompanyPropertiesCard.displayName = 'CompanyPropertiesCard'

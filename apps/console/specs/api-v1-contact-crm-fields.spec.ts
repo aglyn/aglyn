@@ -48,6 +48,11 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   return {
     __esModule: true,
     ...apiHttp,
+    // The REAL records-band measurement (AGL-2611), over the same double
+    // the creates write to.
+    ...jest.requireActual(
+      '../../../libs/tenant/data/admin/src/lib/server/crm-records',
+    ),
     verifyApiKey: async () => ({
       orgId: 'org-1',
       keyId: 'key-1',
@@ -66,6 +71,11 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       app: () => ({ firestore: () => double.mockFirestore }),
       firestore: { FieldValue: double.mockFieldValue },
     },
+    // The REAL link writer (AGL-2613): the mirror sentinels and the company
+    // count are what the `companyIds` assertions below read back.
+    ...jest.requireActual(
+      '../../../libs/tenant/data/admin/src/lib/server/contact-company-link',
+    ),
   }
 })
 
@@ -310,12 +320,17 @@ describe('PATCH /v1/contacts/{id} with a CRM profile', () => {
 
   it('keeps companyIds in step: a move removes the old id unless another holder has it', async () => {
     seed()
+    mockDocs.set('orgs/org-1/companies/co-acme', { name: 'Acme', contactsCount: 1 })
+    mockDocs.set('orgs/org-1/companies/co-bolt', { name: 'Bolt' })
     await call('PATCH', 'contacts/c-1', { consentSiteId: 'host-1', companyId: 'co-bolt' })
     let stored = mockDocs.get(`${CONTACTS}/c-1`)!
     // co-acme left (nobody else filed the person under it); co-other, put
     // there by some other surface, stayed; co-bolt joined.
     expect(stored.companyIds).toEqual(['co-other', 'co-bolt'])
     expect((stored.facets as any)['grp-a'].companyId).toBe('co-bolt')
+    // The companies count the move (AGL-2613): one left Acme, one joined Bolt.
+    expect(mockDocs.get('orgs/org-1/companies/co-acme')?.contactsCount).toBe(0)
+    expect(mockDocs.get('orgs/org-1/companies/co-bolt')?.contactsCount).toBe(1)
 
     // host-2 now files them under co-bolt too; grp-a clearing keeps the id.
     await call('PATCH', 'contacts/c-1', { consentSiteId: 'host-2', companyId: 'co-bolt' })
@@ -323,6 +338,9 @@ describe('PATCH /v1/contacts/{id} with a CRM profile', () => {
     stored = mockDocs.get(`${CONTACTS}/c-1`)!
     expect(stored.companyIds).toEqual(['co-other', 'co-bolt'])
     expect((stored.facets as any)['grp-a']).not.toHaveProperty('companyId')
+    // Still one contact at Bolt: a second holder's link is not a second
+    // person, and the first holder letting go takes nobody away.
+    expect(mockDocs.get('orgs/org-1/companies/co-bolt')?.contactsCount).toBe(1)
   })
 
   it('refuses a profile field with no site, and a site the org does not own', async () => {

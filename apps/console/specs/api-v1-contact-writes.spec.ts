@@ -219,6 +219,17 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   return {
     __esModule: true,
     ...apiHttp,
+    // The REAL records-band measurement (AGL-2611): three aggregates over
+    // the same in-memory Firestore the creates write to, so the band a
+    // create is refused at is the band these documents actually fill.
+    ...jest.requireActual(
+      '../../../libs/tenant/data/admin/src/lib/server/crm-records',
+    ),
+    // The REAL link writer (AGL-2613): a PATCH settles the company counts
+    // its link moved, and a body that named no company moves none.
+    ...jest.requireActual(
+      '../../../libs/tenant/data/admin/src/lib/server/contact-company-link',
+    ),
     verifyApiKey: async () => ({
       orgId: 'org-1',
       keyId: 'key-1',
@@ -529,7 +540,7 @@ describe('a contact created through the API enters the billed count', () => {
     // On a metered plan the same two rows are priced rather than refused.
     const metered = checkContactQuota({ plan: 'starter' } as never, 1_002)
     expect(metered.allowed).toBe(true)
-    expect(metered.overageContacts).toBe(2)
+    expect(metered.overageRecords).toBe(2)
   })
 })
 

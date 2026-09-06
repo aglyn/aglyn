@@ -104,7 +104,7 @@ export function DealStageCard(props: DealStageCardProps) {
               variant="outlined"
               disabled={busy || !pipeline}
               startIcon={<MdiIcon path={mdiTrophyOutline.path} size={0.8} />}
-              onClick={() => void run(() => api.markWon(deal.$id), 'Deal won')}
+              onClick={() => void run(() => api.markWon(deal), 'Deal won')}
             >
               {'Won'}
             </Button>
@@ -153,7 +153,7 @@ export function DealStageCard(props: DealStageCardProps) {
             onChange={(event) => {
               const stageId = event.target.value
               if (!stageId) return
-              void run(() => api.moveToStage(deal.$id, stageId), 'Deal reopened')
+              void run(() => api.moveToStage(deal, stageId), 'Deal reopened')
             }}
             helperText="Reopening puts the deal back in an open stage and tells the automations."
             sx={{ maxWidth: 320 }}
@@ -175,7 +175,7 @@ export function DealStageCard(props: DealStageCardProps) {
                   disabled={busy || stage.id === deal.stageId}
                   onClick={() =>
                     void run(
-                      () => api.moveToStage(deal.$id, stage.id),
+                      () => api.moveToStage(deal, stage.id),
                       `Moved to ${stage.name}`,
                     )
                   }
@@ -199,7 +199,7 @@ export function DealStageCard(props: DealStageCardProps) {
         busy={busy}
         onClose={() => setLosing(false)}
         onConfirm={(reason) =>
-          void run(() => api.markLost(deal.$id, reason), 'Deal marked lost').then(
+          void run(() => api.markLost(deal, reason), 'Deal marked lost').then(
             (ok) => ok && setLosing(false),
           )
         }

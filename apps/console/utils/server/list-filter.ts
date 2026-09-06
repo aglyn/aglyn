@@ -159,7 +159,8 @@ export function applyListFilter(
 
   if (field.kind === 'text') {
     if (op === 'contains' && field.tokensPath) {
-      const token = nameSearchToken(raw)
+      // An id array is matched as typed — see `verbatimTokens`.
+      const token = field.verbatimTokens ? raw : nameSearchToken(raw)
       if (!token) return null
       const sortBy = field.containsOrderBy ?? options.containsOrderBy ?? field.lowerPath ?? field.path
       const contains = ref.where(field.tokensPath, 'array-contains', token)

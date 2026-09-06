@@ -22,6 +22,7 @@ import {
   dueAtToLocalInput,
   localInputToDueAt,
   orderTaskRows,
+  snoozeDueAt,
   startOfLocalDay,
   startOfNextLocalDay,
   taskRecordLink,
@@ -183,5 +184,30 @@ describe('taskRecordLink', () => {
   it('is null for a task about nobody in particular', () => {
     expect(taskRecordLink({}, routes)).toBeNull()
     expect(taskRecordLink({ contactId: '', dealId: undefined }, routes)).toBeNull()
+  })
+})
+
+describe('snoozeDueAt (AGL-2619)', () => {
+  // A Wednesday evening, well past any working hour, from local parts.
+  const now = new Date(2026, 8, 9, 18, 45).getTime()
+
+  it('moves an overdue task to tomorrow and keeps its time of day', () => {
+    const due = new Date(2026, 8, 1, 14, 30).getTime()
+    expect(snoozeDueAt('tomorrow', due, now)).toBe(new Date(2026, 8, 10, 14, 30).getTime())
+  })
+
+  it('counts a week from today, not from the old due date', () => {
+    const due = new Date(2026, 7, 20, 11, 0).getTime()
+    expect(snoozeDueAt('nextWeek', due, now)).toBe(new Date(2026, 8, 16, 11, 0).getTime())
+  })
+
+  it('lands an undated task at nine in the morning', () => {
+    expect(snoozeDueAt('tomorrow', null, now)).toBe(new Date(2026, 8, 10, 9, 0).getTime())
+    expect(snoozeDueAt('nextWeek', undefined, now)).toBe(new Date(2026, 8, 16, 9, 0).getTime())
+  })
+
+  it('crosses a month boundary by the calendar', () => {
+    const endOfMonth = new Date(2026, 8, 30, 10, 0).getTime()
+    expect(snoozeDueAt('tomorrow', null, endOfMonth)).toBe(new Date(2026, 9, 1, 9, 0).getTime())
   })
 })

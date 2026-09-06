@@ -20,7 +20,7 @@ import { isCronAuthorized } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
 import {
   checkApiRequestQuota,
-  checkContactQuota,
+  checkCrmRecordsQuota,
   checkDataStorageQuota,
   decodeStoredNodes,
   isReleaseFlagOnForOrg,
@@ -653,6 +653,8 @@ async function handler(request: Request): Promise<Response> {
         siteSize,
         apiUsageSnap,
         contactsSnap,
+        companiesSnap,
+        dealsSnap,
         counterTotals,
         assistUsageSnap,
         offlineFeesSnap,
@@ -672,9 +674,14 @@ async function handler(request: Request): Promise<Response> {
         // requests over the included quota. The durable counter is written
         // per-request by the API auth chokepoint.
         orgRef.collection('apiUsage').doc(month).get(),
-        // Contacts audience-band overage (AGL-890): one aggregate count per
-        // org — contacts are org-scoped (AGL-237).
+        // The CRM records band (AGL-890, widened in AGL-2611): three
+        // aggregate counts per org, one per collection the band counts —
+        // `CRM_RECORD_COLLECTIONS` in the shared model — because contacts,
+        // companies and deals are all org-scoped (AGL-237) and the band is
+        // their SUM. Tasks and activities are not counted, deliberately.
         orgRef.collection('contacts').count().get(),
+        orgRef.collection('companies').count().get(),
+        orgRef.collection('deals').count().get(),
         // Email sends and workflow/action runs (AGL-1134) — counted per host
         // all along, enforced per org by `usage-alerts`, and never once
         // written down. RECORDED, NOT PRICED: see the rollup write below.
@@ -885,6 +892,12 @@ async function handler(request: Request): Promise<Response> {
       const dataStorageMbAtSweep =
         Math.round((datasetBytes / (1024 * 1024)) * 10) / 10
       const contactsCountAtSweep = Number(contactsSnap.data().count ?? 0)
+      const companiesCountAtSweep = Number(companiesSnap.data().count ?? 0)
+      const dealsCountAtSweep = Number(dealsSnap.data().count ?? 0)
+      // The records band's own figure (AGL-2611): the three summed, measured
+      // at the same instant, so the total and its parts describe one moment.
+      const crmRecordsCountAtSweep =
+        contactsCountAtSweep + companiesCountAtSweep + dealsCountAtSweep
       /**
        * A stock reading recorded by an earlier sweep, or `null` when there is
        * none to trust.
@@ -901,6 +914,11 @@ async function handler(request: Request): Promise<Response> {
       }
       const contactsAtPeriodEnd = storedStock('contactsCountAtPeriodEnd')
       const dataStorageMbAtPeriodEnd = storedStock('dataStorageMbAtPeriodEnd')
+      // The records band's period-end reading and its two non-contact
+      // parts, stamped together by the same in-progress sweep (AGL-2611).
+      const crmRecordsAtPeriodEnd = storedStock('crmRecordsCountAtPeriodEnd')
+      const companiesAtPeriodEnd = storedStock('companiesCountAtPeriodEnd')
+      const dealsAtPeriodEnd = storedStock('dealsCountAtPeriodEnd')
       /**
        * Which instant the billed stock figures describe.
        *
@@ -919,7 +937,9 @@ async function handler(request: Request): Promise<Response> {
        */
       const stockBasis: 'in-progress' | 'period-end' | 'sweep-time' = !closed
         ? 'in-progress'
-        : contactsAtPeriodEnd !== null || dataStorageMbAtPeriodEnd !== null
+        : contactsAtPeriodEnd !== null ||
+            crmRecordsAtPeriodEnd !== null ||
+            dataStorageMbAtPeriodEnd !== null
           ? 'period-end'
           : 'sweep-time'
       // The two are resolved INDEPENDENTLY, so one missing field never drags
@@ -934,6 +954,32 @@ async function handler(request: Request): Promise<Response> {
         closed && contactsAtPeriodEnd !== null
           ? contactsAtPeriodEnd
           : contactsCountAtSweep
+      /*
+       * The records band, on the same basis rule as the contacts figure
+       * inside it (AGL-2611), resolved as a TRIO so the parts always sum to
+       * the total on the audit row — `contactsCount + companiesCount +
+       * dealsCount === crmRecordsCount` on every basis, which is what makes
+       * the billed number legible rather than opaque.
+       *
+       * A closed month with a contacts reading but no records reading is a
+       * month whose in-progress sweeps ran before the band was widened. It
+       * was measured on contacts alone, and the two collections nobody read
+       * inside the period bill as NOTHING for that month rather than at a
+       * figure taken after it — the permissive direction, and the only one
+       * the period-end convention above permits. `companiesCount: 0` on that
+       * row means "billed as zero", exactly as `contactsCount` means "the
+       * billed basis", not "there were none".
+       */
+      const [crmRecordsCount, companiesCount, dealsCount] =
+        closed && crmRecordsAtPeriodEnd !== null
+          ? [
+              crmRecordsAtPeriodEnd,
+              companiesAtPeriodEnd ?? 0,
+              dealsAtPeriodEnd ?? 0,
+            ]
+          : closed && contactsAtPeriodEnd !== null
+            ? [contactsAtPeriodEnd, 0, 0]
+            : [crmRecordsCountAtSweep, companiesCountAtSweep, dealsCountAtSweep]
       // Msgpack bytes of the decoded node maps — see `nodesBytes`. One unit
       // for all three storage forms, so this figure is comparable BETWEEN
       // sites rather than only with itself.
@@ -941,17 +987,20 @@ async function handler(request: Request): Promise<Response> {
       const dataQuota = checkDataStorageQuota(orgData, dataStorageMb)
       const apiRequests = Number(apiUsageSnap.get('count') ?? 0)
       const apiQuota = checkApiRequestQuota(orgData, apiRequests)
-      const contactQuota = checkContactQuota(orgData, contactsCount)
-      // Audience-band overage is WITHHELD while `release_contacts` is off
-      // (AGL-1604). The flag gates one surface — the console Contacts page and
-      // its nav tab — while ingestion and `GET /v1/contacts` keep running. So
+      // The band's verdict on the SUM (AGL-2611) — the persisted field names
+      // below still say "contacts" because they are the vocabulary every
+      // reader of this document keys on; the quantity behind them widened.
+      const contactQuota = checkCrmRecordsQuota(orgData, crmRecordsCount)
+      // Records-band overage is WITHHELD while `release_contacts` is off
+      // (AGL-1604). The flag gates one surface — the console CRM and its nav
+      // tab — while ingestion and `GET /v1/contacts` keep running. So
       // records accrue, the band is crossed, and the org has no console way to
       // see, tag or export the very records it is being invoiced for. Nobody
       // may be charged for what they cannot reach.
       //
-      // WHEN the quota is applied, not HOW it is counted. `checkContactQuota`
+      // WHEN the quota is applied, not HOW it is counted. `checkCrmRecordsQuota`
       // also feeds entitlement resolution, and a defaulted or reshaped count
-      // there renders a paying org as Free; `contactsCount` and the quota call
+      // there renders a paying org as Free; the count and the quota call
       // are therefore byte-for-byte what they were, and only the figure that
       // reaches `billedCents` moves.
       //
@@ -1241,6 +1290,14 @@ async function handler(request: Request): Promise<Response> {
           // COUNTED ALWAYS (AGL-1604) — the records are real and the count is
           // an entitlement input, so it stays truthful whatever the flag says.
           contactsCount,
+          // The records band's billed figure and its other two parts
+          // (AGL-2611), on the basis `stockBasis` names. `orgMonthlyCogsUsd`
+          // prices `crmRecordsCount` and falls back to `contactsCount` only
+          // on a row written before this field existed; the console meter
+          // shows the three parts under the total so the sum is legible.
+          crmRecordsCount,
+          companiesCount,
+          dealsCount,
           /*==========================================
            * THE STOCK BASIS, WRITTEN DOWN (AGL-2399).
            *
@@ -1268,11 +1325,19 @@ async function handler(request: Request): Promise<Response> {
            *=========================================*/
           stockBasis,
           contactsCountAtSweep,
+          crmRecordsCountAtSweep,
           dataStorageMbAtSweep,
           ...(closed
             ? {}
             : {
                 contactsCountAtPeriodEnd: contactsCountAtSweep,
+                // The records trio, stamped together (AGL-2611): a closed
+                // sweep reads the total and the two parts back as one unit,
+                // so a row can never carry a period-end total whose parts
+                // were measured on a different day.
+                crmRecordsCountAtPeriodEnd: crmRecordsCountAtSweep,
+                companiesCountAtPeriodEnd: companiesCountAtSweep,
+                dealsCountAtPeriodEnd: dealsCountAtSweep,
                 dataStorageMbAtPeriodEnd: dataStorageMbAtSweep,
                 stockMeasuredAt:
                   firebaseAdmin.firestore.FieldValue.serverTimestamp(),

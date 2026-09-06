@@ -15,16 +15,13 @@
  * limitations under the License.
  */
 
+import { type CrmMemberOption, crmMemberOption, findOrgMember } from '@aglyn/aglyn'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { useCallback, useEffect, useState } from 'react'
 
 /** One person a task can be assigned to. */
-export interface OrgMemberOption {
-  uid: string
-  /** Display name, else email, else the uid — never blank. */
-  label: string
-  email: string
+export interface OrgMemberOption extends CrmMemberOption {
   role: string
 }
 
@@ -47,16 +44,9 @@ export function resetOrgMemberDirectoryCache(): void {
   rosterCache.clear()
 }
 
-function memberOption(member: Record<string, unknown>): OrgMemberOption {
-  const uid = String(member['$id'] ?? '')
-  const email = String(member['email'] ?? '')
-  const displayName = String(member['displayName'] ?? '').trim()
-  return {
-    uid,
-    label: displayName || email || uid,
-    email,
-    role: String(member['role'] ?? ''),
-  }
+function memberOption(member: Record<string, unknown>): OrgMemberOption | null {
+  const option = crmMemberOption(member)
+  return option ? { ...option, role: String(member['role'] ?? '') } : null
 }
 
 export interface OrgMemberDirectory {
@@ -65,8 +55,11 @@ export interface OrgMemberDirectory {
   loading: boolean
   /** Why the roster could not be read, when it could not. */
   error: string | null
-  /** A uid as a person, or the uid itself for someone no longer on the roster. */
-  nameOf: (uid: string | null | undefined) => string
+  /**
+   * A stored reference — a uid, or an address the roster has — as a person,
+   * or the reference itself for someone no longer on the roster.
+   */
+  nameOf: (ref: string | null | undefined) => string
 }
 
 export function useOrgMemberDirectory(
@@ -98,7 +91,7 @@ export function useOrgMemberDirectory(
         }
         return (payload.members ?? [])
           .map(memberOption)
-          .filter((member) => Boolean(member.uid))
+          .filter((member): member is OrgMemberOption => member !== null)
           .sort((a, b) => a.label.localeCompare(b.label))
       })
       rosterCache.set(orgId, roster)
@@ -129,9 +122,9 @@ export function useOrgMemberDirectory(
 
   const members = state.orgId === orgId ? state.members : []
   const nameOf = useCallback(
-    (uid: string | null | undefined) => {
-      if (!uid) return ''
-      return members.find((member) => member.uid === uid)?.label ?? uid
+    (ref: string | null | undefined) => {
+      if (!ref) return ''
+      return findOrgMember(members, ref)?.label ?? ref
     },
     [members],
   )

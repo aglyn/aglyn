@@ -24,7 +24,12 @@ import { useUser } from '@aglyn/tenant-feature-instance'
 import { useCallback, useRef } from 'react'
 
 /** The routes `registerCrmConsoleApi` registers under `/api/crm/`. */
-export type CrmApiRoute = 'contacts-create'
+export type CrmApiRoute =
+  | 'contacts-create'
+  | 'contact-email-history'
+  | 'contacts-merge'
+  | 'email-send'
+  | 'erase-person'
 
 /** What one call to the CRM API answered with. */
 export interface CrmApiResult {
@@ -48,7 +53,14 @@ export interface CrmApiResult {
  * sending the request unauthenticated, so a signed-out caller is told so
  * through the same `response.ok` branch every other refusal takes.
  */
-export function useCrmApi(hostId: string) {
+export function useCrmApi(
+  /**
+   * The site the request is made for. `null` at the organization level
+   * until a site is picked (AGL-2630) — a call made then is refused by the
+   * route, which is why every caller holds its button until one is known.
+   */
+  hostId: string | null,
+) {
   const { data: user } = useUser()
   const userRef = useRef(user)
   userRef.current = user

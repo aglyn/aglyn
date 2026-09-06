@@ -20,6 +20,7 @@ import {
   CONTACT_LIFECYCLE_STAGE_LABELS,
   CONTACT_LIFECYCLE_STAGES,
   consentGroupDisclosure,
+  type AglynOrgBilling,
   type AglynPostalAddress,
   type ConsentGroup,
   type ContactLifecycleStage,
@@ -43,12 +44,20 @@ import {
   Typography,
 } from '@mui/material'
 import { useEffect, useState } from 'react'
+import { useCrmScope } from '../hooks/use-crm-scope'
 import { parseContactTags } from '../model/contact-record'
+import {
+  CompanyPicker,
+  type CompanyOption,
+  useCompanyOptions,
+  useCreateCompany,
+} from './company-picker'
 import {
   ContactAddressFields,
   EMPTY_ADDRESS,
   type AddressDraft,
 } from './contact-address-fields'
+import { CrmSitePicker } from './crm-site-picker'
 import type { OrgMemberOption } from './use-org-members'
 
 /** What the drawer hands back — already normalized where the route would. */
@@ -57,7 +66,10 @@ export interface NewContactValues {
   name: string
   phone: string
   jobTitle: string
+  /** The picked company's name — the label the list column and the search read. */
   companyName: string
+  /** The picked company, or `null` for none (AGL-2613). */
+  companyId: string | null
   ownerUid: string
   lifecycleStage: ContactLifecycleStage | ''
   tags: string[]
@@ -68,12 +80,19 @@ export interface NewContactValues {
 export interface NewContactDrawerProps {
   open: boolean
   onClose: () => void
+  /**
+   * The site the contact is being added from — what scopes the company list
+   * and the controller the consent checkbox records a basis for. `null` at
+   * the organization level (AGL-2630), where the drawer asks which site
+   * with a picker and holds its submit until one is named.
+   */
+  hostId: string | null
+  /** The org document the shell passed, for the company picker's scope. */
+  org?: Partial<AglynOrgBilling> | null
   /** The request is in flight — the form holds still and the button says so. */
   busy?: boolean
   /** What the route answered when it refused, shown above the form. */
   error?: string | null
-  /** The controller the consent checkbox records a basis FOR. */
-  consentGroup: ConsentGroup
   /** The team, for the owner picker. */
   owners: OrgMemberOption[]
   /** The roster has answered — an empty list is then "nobody to pick". */
@@ -105,24 +124,46 @@ export interface NewContactDrawerProps {
  * never itself consent. Typing somebody into the CRM is not either — so the
  * checkbox is worded as the person's act, not the operator's, and the helper
  * carries the group disclosure the form would have shown them.
+ *
+ * ## The company is a record, picked or created here
+ *
+ * The Company field is the picker (AGL-2613): a choice from the companies
+ * this site may see, with a "Create …" row for a name none of them carry, so
+ * the person filing a contact never leaves the drawer to make the account.
+ * What leaves the drawer is the company's id AND its name — the id is the
+ * link the route writes into the facet, the name is the label the list
+ * column and the global search keep reading. The company listen opens with
+ * the drawer and closes with it, because the drawer is mounted only while
+ * it is open.
  */
 export function NewContactDrawer(props: NewContactDrawerProps) {
   const {
     open,
     onClose,
+    hostId,
+    org,
     busy,
     error,
-    consentGroup,
     owners,
     ownersReady,
     onSubmit,
   } = props
+  /*
+   * The controller the consent checkbox records a basis FOR: the mounted
+   * site's group, or at the organization level the picked site's — the one
+   * the route will capture the contact under. `null` until a site is
+   * picked, and the submit waits on it.
+   */
+  const { createHostId, createGroup } = useCrmScope({ hostId, org })
+  const consentGroup: ConsentGroup | null = createGroup
+  const companies = useCompanyOptions({ hostId, org, enabled: open })
+  const createCompany = useCreateCompany({ hostId, org })
 
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [jobTitle, setJobTitle] = useState('')
-  const [companyName, setCompanyName] = useState('')
+  const [company, setCompany] = useState<CompanyOption | null>(null)
   const [ownerUid, setOwnerUid] = useState('')
   const [lifecycleStage, setLifecycleStage] = useState<
     ContactLifecycleStage | ''
@@ -144,7 +185,7 @@ export function NewContactDrawer(props: NewContactDrawerProps) {
     setName('')
     setPhone('')
     setJobTitle('')
-    setCompanyName('')
+    setCompany(null)
     setOwnerUid('')
     setLifecycleStage('')
     setTags('')
@@ -170,7 +211,8 @@ export function NewContactDrawer(props: NewContactDrawerProps) {
       name: name.trim().slice(0, 120),
       phone: normalizedPhone ?? '',
       jobTitle: jobTitle.trim().slice(0, 120),
-      companyName: companyName.trim().slice(0, 120),
+      companyName: company ? company.name.trim().slice(0, 120) : '',
+      companyId: company?.id ?? null,
       ownerUid,
       lifecycleStage,
       tags: parseContactTags(tags),
@@ -179,7 +221,7 @@ export function NewContactDrawer(props: NewContactDrawerProps) {
     })
   }
 
-  const disclosure = consentGroupDisclosure(consentGroup)
+  const disclosure = consentGroup ? consentGroupDisclosure(consentGroup) : null
 
   return (
     <NavigationDrawerComponent
@@ -214,6 +256,17 @@ export function NewContactDrawer(props: NewContactDrawerProps) {
       <Container gutterY>
         <Stack spacing={2}>
           {error ? <Alert severity="warning">{error}</Alert> : null}
+          {/*
+            First, because everything below it is filed under the answer: the
+            site decides which of the org's sites may see the person and whose
+            consent the checkbox at the foot records. Renders nothing under a
+            site (AGL-2630).
+          */}
+          <CrmSitePicker
+            hostId={hostId}
+            disabled={Boolean(busy)}
+            helperText="The site that captures this person — it decides which sites may see them and whose marketing consent the checkbox below records."
+          />
           <TextField
             size="small"
             label="Email"
@@ -254,13 +307,16 @@ export function NewContactDrawer(props: NewContactDrawerProps) {
             slotProps={{ htmlInput: { maxLength: 120 } }}
             fullWidth
           />
-          <TextField
-            size="small"
-            label="Company"
-            value={companyName}
-            onChange={(event) => setCompanyName(event.target.value)}
-            slotProps={{ htmlInput: { maxLength: 120 } }}
-            fullWidth
+          <CompanyPicker
+            options={companies.options}
+            ready={companies.ready}
+            truncated={companies.truncated}
+            value={company?.id ?? null}
+            onChange={(_id, picked) => setCompany(picked)}
+            onCreate={createCompany}
+            email={email}
+            disabled={Boolean(busy)}
+            helperText="The account this person works for. Type a name nobody has filed yet to create it."
           />
           <TextField
             select
@@ -328,7 +384,9 @@ export function NewContactDrawer(props: NewContactDrawerProps) {
           <Button
             variant="contained"
             color="primary"
-            disabled={Boolean(busy)}
+            // Held until the capturing site is known: the route resolves the
+            // org from it and stamps the record with it.
+            disabled={Boolean(busy) || !createHostId}
             onClick={handleSubmit}
           >
             {busy ? 'Adding…' : 'Add contact'}

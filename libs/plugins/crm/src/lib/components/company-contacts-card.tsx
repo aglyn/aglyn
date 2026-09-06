@@ -18,18 +18,19 @@
 
 import {
   contactDisplayName,
+  CRM_COLLECTIONS,
   nameSearchKey,
   normalizeContactEmail,
   pluginDocsHelp,
+  readContactCompanyLink,
   readContactFacet,
 } from '@aglyn/aglyn'
 import { mdiAccountPlusOutline, mdiLinkOff } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import {
-  useFirestore,
-  useFirestoreCollection,
-} from '@aglyn/tenant-feature-instance'
+import { useFirestore, usePagedCollection } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
   Button,
@@ -54,25 +55,17 @@ import {
   orderBy,
   query,
   startAt,
-  updateDoc,
   where,
+  writeBatch,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
-import type { CrmScope } from '../hooks/use-crm-scope'
+import { type CrmScope, crmVisibleToClause } from '../hooks/use-crm-scope'
 import {
   CONTACT_COMPANY_IDS_FIELD,
-  contactCompanyLinkUpdate,
+  contactCompanyLinkWrites,
 } from '../model/companies'
+import { contactPrimaryGroup } from '../model/contact-record'
 import type { CrmRoutes } from '../model/crm-routes'
-
-/**
- * How many of a company's contacts the card lists.
- *
- * A company with more people than this is a rare account, and the count
- * beside the table says so — the table is a window and the aggregate is the
- * total, which are different questions with different answers.
- */
-const CONTACTS_AT_COMPANY_LIMIT = 100
 
 /** How many matches a search offers to link. */
 const SEARCH_LIMIT = 8
@@ -84,6 +77,8 @@ export interface CompanyContactsCardProps {
   companyId: string
   companyName: string
   crmScope: CrmScope
+  /** The org document, for each contact's own holder at the organization level. */
+  org?: Record<string, unknown> | null
   routes: CrmRoutes
 }
 
@@ -105,9 +100,13 @@ interface ContactRow {
  *
  * Contacts whose `companyIds` mirror carries this company — see
  * `CONTACT_COMPANY_IDS_FIELD` for why a mirror and not the facet — newest
- * activity first, capped, plus one server aggregate for the total. The
- * membership is PII and one document per person, so it is read HERE, where
- * somebody opened the company, and never on the list that names companies.
+ * activity first, one page at a time under the shared footer, plus one
+ * server aggregate for the total. The aggregate is what the footer counts
+ * with: a company's people are a real list, bounded by how many the account
+ * has met rather than by any taxonomy, and a page the reader can turn is the
+ * only honest answer to the fifty-first. The membership is PII and one
+ * document per person, so it is read HERE, where somebody opened the
+ * company, and never on the list that names companies.
  *
  * ## The scope caveat, stated rather than hidden
  *
@@ -127,32 +126,48 @@ interface ContactRow {
  * and the row says so before the click.
  */
 export function CompanyContactsCard(props: CompanyContactsCardProps) {
-  const { companyId, companyName, crmScope, routes } = props
+  const { companyId, companyName, crmScope, org, routes } = props
   const { scope, consentGroup, visibleTo } = crmScope
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
+  /**
+   * The holder a person is read and linked through: the viewing group under
+   * a site; at the organization level (AGL-2630) each person's own primary
+   * holder, so the link lands on the facet the record page edits.
+   */
+  const groupIdOf = useCallback(
+    (row: Record<string, unknown>) =>
+      consentGroup?.groupId ?? contactPrimaryGroup(row, org ?? null).groupId,
+    [consentGroup, org],
+  )
 
-  const { data: contactDocs, status } = useFirestoreCollection<
-    Record<string, unknown> & { $id: string }
-  >(
-    () =>
+  const {
+    rows: contactDocs,
+    status,
+    hasMore,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+  } = usePagedCollection<Record<string, unknown> & { $id: string }>(
+    (pageLimit) =>
       scope
         ? query(
             collection(firestore, scope[0], scope[1], 'contacts'),
             where(CONTACT_COMPANY_IDS_FIELD, 'array-contains', companyId),
             orderBy('updatedAt', 'desc'),
-            limit(CONTACTS_AT_COMPANY_LIMIT),
+            limit(pageLimit),
           )
         : null,
     [firestore, scope, companyId],
     { idField: '$id' },
   )
-  const contacts: ContactRow[] = (contactDocs ?? []).map((row) => ({
+  const contacts: ContactRow[] = contactDocs.map((row) => ({
     $id: row.$id,
-    name: contactDisplayName(row, consentGroup.groupId),
+    name: contactDisplayName(row, groupIdOf(row)),
     email: String(row['email'] ?? ''),
     linkedByThisHolder:
-      readContactFacet(row, consentGroup.groupId).companyId === companyId,
+      readContactFacet(row, groupIdOf(row)).companyId === companyId,
     data: row,
   }))
 
@@ -210,7 +225,8 @@ export function CompanyContactsCard(props: CompanyContactsCardProps) {
     setSearchError('')
     try {
       const contactsRef = collection(firestore, scope[0], scope[1], 'contacts')
-      const scoped = where('visibleTo', 'array-contains-any', visibleTo)
+      // Absent at the organization level, where the tokens are `null` (AGL-2630).
+      const scoped = crmVisibleToClause(visibleTo)
       let found
       if (raw.includes('@')) {
         const email = normalizeContactEmail(raw)
@@ -219,14 +235,14 @@ export function CompanyContactsCard(props: CompanyContactsCardProps) {
           return
         }
         found = await getDocs(
-          query(contactsRef, scoped, where('email', '==', email), limit(SEARCH_LIMIT)),
+          query(contactsRef, ...scoped, where('email', '==', email), limit(SEARCH_LIMIT)),
         )
       } else {
         const key = nameSearchKey(raw)
         found = await getDocs(
           query(
             contactsRef,
-            scoped,
+            ...scoped,
             orderBy('nameLower'),
             startAt(key),
             endAt(`${key}${HIGH}`),
@@ -239,11 +255,10 @@ export function CompanyContactsCard(props: CompanyContactsCardProps) {
           const data = snapshot.data()
           return {
             $id: snapshot.id,
-            name: contactDisplayName(data, consentGroup.groupId),
+            name: contactDisplayName(data, groupIdOf(data)),
             email: String(data['email'] ?? ''),
             linkedByThisHolder:
-              readContactFacet(data, consentGroup.groupId).companyId ===
-              companyId,
+              readContactFacet(data, groupIdOf(data)).companyId === companyId,
             data,
           }
         }),
@@ -255,22 +270,39 @@ export function CompanyContactsCard(props: CompanyContactsCardProps) {
     } finally {
       setSearching(false)
     }
-  }, [scope, searching, term, firestore, visibleTo, consentGroup, companyId])
+  }, [scope, searching, term, firestore, visibleTo, groupIdOf, companyId])
 
   const setLink = useCallback(
     async (row: ContactRow, companyIdOrNull: string | null) => {
       if (!scope) return
-      const update = contactCompanyLinkUpdate(
-        row.data,
-        consentGroup.groupId,
+      /*
+       * The name rides with the link, so the person reads as "at Acme" in
+       * the contact list and the global search the moment they are linked
+       * here — and stops reading so when unlinked. The count on each company
+       * the link moves lands in the same commit, so the figure above this
+       * table and the one on the companies list cannot disagree.
+       */
+      const groupId = groupIdOf(row.data)
+      const link = contactCompanyLinkWrites(
+        readContactCompanyLink(row.data, groupId),
+        groupId,
         companyIdOrNull,
+        companyIdOrNull ? companyName : null,
       )
-      if (!update) return
+      if (!link) return
       try {
-        await updateDoc(
+        const batch = writeBatch(firestore)
+        batch.update(
           doc(firestore, scope[0], scope[1], 'contacts', row.$id),
-          update,
+          link.contact,
         )
+        for (const company of link.companies) {
+          batch.update(
+            doc(firestore, scope[0], scope[1], CRM_COLLECTIONS.companies, company.id),
+            company.update,
+          )
+        }
+        await batch.commit()
         bumpMembership()
         enqueueSnackbar(
           companyIdOrNull
@@ -291,7 +323,7 @@ export function CompanyContactsCard(props: CompanyContactsCardProps) {
         })
       }
     },
-    [scope, consentGroup, firestore, bumpMembership, enqueueSnackbar, companyName],
+    [scope, groupIdOf, firestore, bumpMembership, enqueueSnackbar, companyName],
   )
 
   const denied = status === 'error'
@@ -363,7 +395,7 @@ export function CompanyContactsCard(props: CompanyContactsCardProps) {
             ) : null}
             {results?.map((row) => {
               const elsewhere =
-                readContactFacet(row.data, consentGroup.groupId).companyId
+                readContactFacet(row.data, groupIdOf(row.data)).companyId
               return (
                 <Stack
                   key={row.$id}
@@ -402,12 +434,30 @@ export function CompanyContactsCard(props: CompanyContactsCardProps) {
               'is limited to specific sites, and this list cannot be ' +
               'narrowed to them — an organization administrator can see it.'}
           </Alert>
-        ) : contacts.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            {status === 'loading'
-              ? 'Loading contacts…'
-              : 'Nobody is linked to this company yet.'}
-          </Typography>
+        ) : contacts.length === 0 && page === 0 ? (
+          <EmptyStateComponent
+            compact
+            label={status === 'loading' ? 'Loading contacts…' : 'Nobody is linked to this company yet'}
+            description={
+              status === 'loading'
+                ? undefined
+                : 'Find a contact by email address or name and link them here.'
+            }
+            action={
+              status === 'loading' || adding ? undefined : (
+                <Button
+                  size="small"
+                  variant="contained"
+                  color="primary"
+                  disabled={!scope}
+                  startIcon={<MdiIcon path={mdiAccountPlusOutline.path} size={0.8} />}
+                  onClick={() => setAdding(true)}
+                >
+                  {'Add contact'}
+                </Button>
+              )
+            }
+          />
         ) : (
           <Table size="small">
             <TableHead>
@@ -454,10 +504,21 @@ export function CompanyContactsCard(props: CompanyContactsCardProps) {
             </TableBody>
           </Table>
         )}
-        {contacts.length >= CONTACTS_AT_COMPANY_LIMIT ? (
-          <Typography variant="caption" color="text.secondary">
-            {`Showing the ${CONTACTS_AT_COMPANY_LIMIT} most recently updated.`}
-          </Typography>
+        {/*
+          The footer counts with the server aggregate when it has arrived —
+          the one number this card knows that the paged window does not —
+          and with the probe row until then.
+         */}
+        {!denied && (contacts.length > 0 || page > 0) ? (
+          <ListPagination
+            page={page}
+            pageSize={pageSize}
+            rowCount={contacts.length}
+            count={count ?? undefined}
+            hasMore={hasMore}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         ) : null}
       </Stack>
     </CardDisplay>

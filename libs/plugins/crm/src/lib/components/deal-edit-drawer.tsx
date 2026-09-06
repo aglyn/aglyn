@@ -16,7 +16,13 @@
  */
 'use client'
 
-import { CRM_COLLECTIONS, nameSearchKey } from '@aglyn/aglyn'
+import {
+  CRM_COLLECTIONS,
+  CRM_RECORDS_BAND_FULL_MESSAGE,
+  dealHasLineItems,
+  findOrgMember,
+  nameSearchKey,
+} from '@aglyn/aglyn'
 import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
 import { Container, MdiIcon, SrOnly } from '@aglyn/shared-ui-jsx'
 import { NavigationDrawerComponent } from '@aglyn/shared-ui-jsx/components/navigation-drawer.component'
@@ -24,6 +30,7 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
   useFirestoreCollection,
+  useHostActivityLogger,
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
@@ -52,8 +59,16 @@ import {
   where,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { type CrmOrgDoc, useDealScope } from '../hooks/use-deal-scope'
+import { useCrmRecordsQuota } from '../hooks/use-crm-records-quota'
+import {
+  type CrmOrgDoc,
+  crmScopeListable,
+  crmVisibleToClause,
+  useCrmScope,
+} from '../hooks/use-crm-scope'
 import { useOrgMemberDirectory } from '../hooks/use-org-member-directory'
+import { contactPrimaryGroup } from '../model/contact-record'
+import { CrmSitePicker } from './crm-site-picker'
 import {
   DEAL_CURRENCIES,
   type DealDoc,
@@ -93,7 +108,12 @@ interface CompanyChoice {
 export interface DealEditDrawerProps {
   open: boolean
   onClose: () => void
-  hostId: string
+  /**
+   * The site the drawer is opened under, or `null` at the organization
+   * level (AGL-2630), where a NEW deal asks which site captures it and an
+   * edit keeps the deal's own.
+   */
+  hostId: string | null
   org: CrmOrgDoc
   /** The deal being edited; absent for a new one. */
   deal?: DealDoc | null
@@ -122,6 +142,12 @@ export interface DealEditDrawerProps {
  * the server route can emit that event. A drawer that wrote `stageId`
  * directly would move a deal without anybody hearing it.
  *
+ * Nor the amount of a deal that has line items (AGL-2620): it is their
+ * sum, the products card on the deal's page owns it, and the field here
+ * is read-only with a caption saying so. The pipeline picker on a new
+ * deal lists every ACTIVE pipeline (`pipelines`) and opens on the one the
+ * caller was looking at.
+ *
  * ## The pickers
  *
  * The owner is picked from the org's roster, the company by a server-side
@@ -149,15 +175,19 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { data: user } = useUser()
-  const { orgId, consentGroup, readTokens, createTokens } = useDealScope({
-    hostId,
-    org,
-  })
+  const { orgId, consentGroup, visibleTo, createHostId, createTokens } =
+    useCrmScope({ hostId, org })
+  // The site a new deal is captured by — the mounted one, or the picked one
+  // — and the site whose feed the act is logged in: the deal's own on an
+  // edit, so a deal made on one site is not logged against another.
+  const dealHostId = deal ? (deal.hostId ?? null) : createHostId
+  const logActivity = useHostActivityLogger(dealHostId ?? undefined)
   const roster = useOrgMemberDirectory(open ? orgId : null)
 
   const [values, setValues] = useState<DealFormValues>(() =>
     emptyDealForm(defaultPipeline, defaults),
   )
+  const owner = findOrgMember(roster.members, values.ownerUid)
   const [busy, setBusy] = useState(false)
 
   // Re-seeded on every open: an existing deal's stored values, or a blank
@@ -189,21 +219,29 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
    */
   const { data: contactRows } = useFirestoreCollection<Record<string, unknown>>(
     () =>
-      open && orgId && readTokens.length
+      open && orgId && crmScopeListable(visibleTo)
         ? query(
             collection(firestore, 'orgs', orgId, 'contacts'),
-            where('visibleTo', 'array-contains-any', readTokens),
+            ...crmVisibleToClause(visibleTo),
             orderBy('updatedAt', 'desc'),
             limit(CONTACT_WINDOW),
           )
         : null,
-    [firestore, open, orgId, readTokens],
+    [firestore, open, orgId, visibleTo],
     { idField: '$id' },
   )
   const [contactQuery, setContactQuery] = useState('')
+  // Named through the viewing group under a site; at the organization level
+  // through each person's own primary holder.
   const contactChoices = useMemo(
-    () => contactChoicesFor(contactQuery, contactRows ?? [], consentGroup.groupId),
-    [contactQuery, contactRows, consentGroup.groupId],
+    () =>
+      contactChoicesFor(
+        contactQuery,
+        contactRows ?? [],
+        consentGroup?.groupId ??
+          ((row) => contactPrimaryGroup(row, org as Record<string, unknown>).groupId),
+      ),
+    [contactQuery, contactRows, consentGroup, org],
   )
   const contactValue: ContactChoice | null = values.contactId
     ? {
@@ -222,14 +260,14 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
   const [companyQuery, setCompanyQuery] = useState('')
   const [companyChoices, setCompanyChoices] = useState<CompanyChoice[]>([])
   useEffect(() => {
-    if (!open || !orgId || !readTokens.length) return
+    if (!open || !orgId || !crmScopeListable(visibleTo)) return
     const key = nameSearchKey(companyQuery)
     let active = true
     const timer = setTimeout(() => {
       void getDocs(
         query(
           collection(firestore, 'orgs', orgId, CRM_COLLECTIONS.companies),
-          where('visibleTo', 'array-contains-any', readTokens),
+          ...crmVisibleToClause(visibleTo),
           orderBy('nameLower'),
           ...(key ? [startAt(key), endAt(`${key}\uf8ff`)] : []),
           limit(COMPANY_MATCHES),
@@ -252,15 +290,35 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
       active = false
       clearTimeout(timer)
     }
-  }, [firestore, open, orgId, readTokens, companyQuery])
+  }, [firestore, open, orgId, visibleTo, companyQuery])
   const companyValue: CompanyChoice | null = values.companyId
     ? { id: values.companyId, name: values.companyName }
     : null
 
   const problem = dealFormProblem(values, mode)
+  const amountDerived = Boolean(deal && dealHasLineItems(deal))
+
+  /*
+   * THE RECORDS BAND (AGL-2611), read only while a CREATE is open: a deal
+   * is a record of the band the contacts list is banded by, and on a Free
+   * org at its hundred this drawer refuses the way `upsertHostContact`
+   * refuses a capture — same number, same sentence. Memoized, because the
+   * tuple is an effect dependency and a fresh one per render would re-read
+   * the three aggregates on every keystroke.
+   */
+  const recordsScope = useMemo(
+    () => (open && mode === 'create' && orgId ? (['orgs', orgId] as const) : null),
+    [open, mode, orgId],
+  )
+  const records = useCrmRecordsQuota(recordsScope, org)
+  const bandFull = mode === 'create' && records.ready && !records.quota.allowed
 
   const handleSave = useCallback(async () => {
     if (problem || !orgId || !user?.uid) return
+    if (bandFull) {
+      enqueueSnackbar(CRM_RECORDS_BAND_FULL_MESSAGE, { variant: 'warning', persist: false })
+      return
+    }
     setBusy(true)
     try {
       const nowMs = Date.now()
@@ -268,7 +326,7 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
         const verdict = await writeGuardedBySeed(
           { subject: 'deal', unreadable, fromCache },
           async () => {
-            const { set, clear } = dealPatchFromForm(values, nowMs)
+            const { set, clear } = dealPatchFromForm(values, nowMs, { amountDerived })
             await updateDoc(
               doc(firestore, 'orgs', orgId, CRM_COLLECTIONS.deals, deal.$id),
               {
@@ -285,15 +343,22 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
         enqueueSnackbar('Deal saved', { variant: 'success', persist: false })
         onSaved?.(deal.$id, 'edit')
       } else {
+        // Held by the button until the capturing site is known; checked
+        // again here because a callback can outlive the render that held it.
+        if (!createHostId) return
         const created = await addDoc(
           collection(firestore, 'orgs', orgId, CRM_COLLECTIONS.deals),
           dealDocumentFromForm(values, {
-            visibleTo: createTokens,
-            hostId,
+            visibleTo: [...createTokens],
+            hostId: createHostId,
             uid: user.uid,
             nowMs,
           }),
         )
+        // Setup → Activity shows CRM work (AGL-2622): the deal is org data,
+        // but the act happened in this site's console and belongs in its
+        // feed. Creation only — an edit is a save the card reports.
+        logActivity('Added deal', { type: 'deal', id: created.id, name: values.title })
         enqueueSnackbar('Deal created', { variant: 'success', persist: false })
         onSaved?.(created.id, 'create')
       }
@@ -309,6 +374,7 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
     }
   }, [
     problem,
+    bandFull,
     orgId,
     user,
     deal,
@@ -317,7 +383,8 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
     fromCache,
     firestore,
     createTokens,
-    hostId,
+    createHostId,
+    logActivity,
     enqueueSnackbar,
     onSaved,
     onClose,
@@ -349,6 +416,19 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
     >
       <Container gutterY>
         <Stack spacing={2} sx={{ width: { xs: '100%', sm: 420 } }}>
+          {/*
+            First, because the scope of everything below follows from it: at
+            the organization level a new deal names the site that captures
+            it. Nothing under a site, and nothing on an edit — a deal keeps
+            the site it was made on (AGL-2630).
+          */}
+          {mode === 'create' ? (
+            <CrmSitePicker
+              hostId={hostId}
+              disabled={busy}
+              helperText="The site this deal belongs to — it decides which of your sites may see it."
+            />
+          ) : null}
           <TextField
             label="Title"
             value={values.title}
@@ -359,29 +439,27 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
           />
           {mode === 'create' ? (
             <Stack direction="row" spacing={1}>
-              {pipelines.length > 1 ? (
-                <TextField
-                  select
-                  label="Pipeline"
-                  value={values.pipelineId}
-                  onChange={(event) => {
-                    const next = pipelines.find(
-                      (entry) => entry.$id === event.target.value,
-                    )
-                    update({
-                      pipelineId: event.target.value,
-                      stageId: openStages(next)[0]?.id ?? '',
-                    })
-                  }}
-                  sx={{ flex: 1 }}
-                >
-                  {pipelines.map((entry) => (
-                    <MenuItem key={entry.$id} value={entry.$id}>
-                      {entry.name}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              ) : null}
+              <TextField
+                select
+                label="Pipeline"
+                value={pipelines.some((entry) => entry.$id === values.pipelineId) ? values.pipelineId : ''}
+                onChange={(event) => {
+                  const next = pipelines.find(
+                    (entry) => entry.$id === event.target.value,
+                  )
+                  update({
+                    pipelineId: event.target.value,
+                    stageId: openStages(next)[0]?.id ?? '',
+                  })
+                }}
+                sx={{ flex: 1 }}
+              >
+                {pipelines.map((entry) => (
+                  <MenuItem key={entry.$id} value={entry.$id}>
+                    {entry.name}
+                  </MenuItem>
+                ))}
+              </TextField>
               <TextField
                 select
                 label="Stage"
@@ -397,20 +475,28 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
               </TextField>
             </Stack>
           ) : null}
-          <Stack direction="row" spacing={1}>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
             <TextField
               label="Amount"
               value={values.amount}
               onChange={(event) => update({ amount: event.target.value })}
               placeholder="0.00"
               sx={{ flex: 1 }}
-              slotProps={{ htmlInput: { inputMode: 'decimal' } }}
+              helperText={
+                amountDerived
+                  ? "The sum of the deal's line items — edit them on the Products card."
+                  : undefined
+              }
+              slotProps={{
+                htmlInput: { inputMode: 'decimal', readOnly: amountDerived },
+              }}
             />
             <TextField
               select
               label="Currency"
               value={values.currency}
               onChange={(event) => update({ currency: event.target.value })}
+              disabled={amountDerived}
               sx={{ width: 120 }}
             >
               {DEAL_CURRENCIES.map((code) => (
@@ -431,14 +517,10 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
           <TextField
             select
             label="Owner"
-            value={
-              values.ownerUid &&
-              roster.members.some((member) => member.uid === values.ownerUid)
-                ? values.ownerUid
-                : values.ownerUid
-                  ? '__keep'
-                  : ''
-            }
+            // The stored owner resolved to a member — by uid, or by an
+            // address the roster has — so the picker highlights the person
+            // and a save writes their uid.
+            value={owner ? owner.uid : values.ownerUid ? '__keep' : ''}
             onChange={(event) =>
               update({
                 ownerUid: event.target.value === '__keep' ? values.ownerUid : event.target.value,
@@ -452,8 +534,7 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
             }
           >
             <MenuItem value="">{'Nobody yet'}</MenuItem>
-            {values.ownerUid &&
-            !roster.members.some((member) => member.uid === values.ownerUid) ? (
+            {values.ownerUid && !owner ? (
               // The stored owner is not on the roster the route returned —
               // a member who left, or a roster that failed to load. Shown by
               // uid so the field is never blank while the deal has an owner.
@@ -535,10 +616,20 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
             fullWidth
             slotProps={{ htmlInput: { maxLength: DEAL_NOTES_MAX } }}
           />
+          {bandFull ? (
+            <Alert severity="warning">{CRM_RECORDS_BAND_FULL_MESSAGE}</Alert>
+          ) : null}
           {problem && values.title ? <Alert severity="warning">{problem}</Alert> : null}
           <Button
             variant="contained"
-            disabled={busy || Boolean(problem) || !orgId}
+            disabled={
+              busy ||
+              Boolean(problem) ||
+              !orgId ||
+              bandFull ||
+              // A new deal waits for its capturing site.
+              (mode === 'create' && !createHostId)
+            }
             onClick={() => void handleSave()}
           >
             {deal ? 'Save deal' : 'Create deal'}

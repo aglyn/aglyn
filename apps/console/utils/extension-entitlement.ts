@@ -18,6 +18,7 @@
 import {
   checkEntitlement,
   planGrantingFeature,
+  planLabelGrantingFeature,
   type ConsoleUpgradeNotice,
   type OrgFeatureFlags,
 } from '@aglyn/aglyn'
@@ -63,6 +64,27 @@ export function resolveExtensionEntitlement(
 }
 
 /**
+ * Several gates as one verdict (AGL-2611): an extension's flag AND a
+ * section's or a widget's own, the way `resolveExtensionPermission` ANDs
+ * the extension's permission with a surface's.
+ *
+ * `blocked` outranks `pending` outranks `entitled`, and the order is the
+ * whole function. A settled refusal is a refusal whatever else is still
+ * loading; an unsettled read holds the surface shut even beside a flag that
+ * has already answered yes, because rendering on the answered half would
+ * paint a paid section for the one paint the other half took to say no.
+ * Declaring nothing composes as `entitled`, so a surface that names no
+ * flag of its own inherits its extension's verdict unchanged.
+ */
+export function composeExtensionEntitlements(
+  ...verdicts: readonly ExtensionEntitlement[]
+): ExtensionEntitlement {
+  if (verdicts.includes('blocked')) return 'blocked'
+  if (verdicts.includes('pending')) return 'pending'
+  return 'entitled'
+}
+
+/**
  * The refusal sentence for a `blocked` plugin surface (owner feedback: the
  * Events page told an org an upgrade would include it, which is never true).
  *
@@ -81,9 +103,15 @@ export function blockedExtensionNotice(
 ): string {
   const grantedByAPlan =
     featureFlag != null && planGrantingFeature(featureFlag) !== undefined
+  // The tier that carries it, named — the "Included from Starter" affordance
+  // every other gated console surface ends its refusal with, derived from
+  // the same ladder walk so it can never name a plan that no longer grants
+  // the feature.
   return grantedByAPlan
     ? `${title} is not included in your current plan. Manage your plan and ` +
-        'add-ons from Billing.'
+        `add-ons from Billing. Included from ${planLabelGrantingFeature(
+          featureFlag,
+        )}.`
     : `${title} isn't included in any plan — it's a paid add-on. Manage ` +
         'your plan and add-ons from Billing.'
 }

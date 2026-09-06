@@ -195,7 +195,9 @@ await step(tally, page, 'a second conversion answers already converted', async (
 
 await step(tally, page, 'Unqualify closes a lead with its reason', async () => {
   await page.goto(hostUrl(`/crm/leads/${june.id}`), { waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS })
-  await page.getByRole('button', { name: 'Unqualify' }).click({ timeout: TIMEOUT_MS })
+  // The one record header (AGL-2614) keeps Convert and Send email on the
+  // button row and puts Unqualify in the overflow, beside the erasure.
+  await rowAction(page, june.name, 'Unqualify')
   const dialog = page.getByRole('dialog', { name: `Unqualify ${june.name}?` })
   await dialog.getByLabel('Reason').fill(UNQUALIFIED_REASON)
   await dialog.getByRole('button', { name: 'Unqualify' }).click()

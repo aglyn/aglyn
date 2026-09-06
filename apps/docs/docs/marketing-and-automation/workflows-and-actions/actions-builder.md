@@ -29,6 +29,16 @@ place; steps that need a higher plan are labeled in the editor.
 That's it — no multi-step logic to manage. Reach for a [workflow](build-a-workflow.md) when
 you need several steps, branching, or composition.
 
+### Start from a recipe {#recipes}
+
+Beside **Add action**, the **Recipes** menu lists four ready-to-edit CRM automations:
+**Welcome a new lead**, **Follow up a won deal**, **Re-engage a stale lead** and **Tag by
+form**. Choosing one opens the same editor already filled in — trigger, conditions and
+steps — with a line saying which recipe it started from; change anything, then save.
+Nothing is saved until you do. **Tag by form** asks for one of this site's forms first,
+because the trigger is keyed on it. What each recipe builds, step by step, is in
+[Automations for the CRM → Recipes](../../content-and-data/contacts/automations.md#recipes).
+
 ## Triggers
 
 Beyond server events (form submissions, page views, sign-ins, leads, bookings), actions
@@ -56,7 +66,7 @@ written without leaving the editor.
 
 | Event | Fires when | Keys in scope for filters and conditions |
 | --- | --- | --- |
-| **Contact created** (`contactCreated`) | A capture on your site makes a **new** contact: a form submission, a member sign-up, a newsletter subscription, an order or a booking from an address your workspace did not already hold. A repeat visit by somebody already on the list is recorded as an interaction and does **not** fire it. | `contactId` · `email` · `name` (empty when the capture had none) · `source` (`form`, `member`, `newsletter`, `order` or `booking`) · `hostId` · `campaignIds` (comma-joined; present only when the capture came through a campaign) |
+| **Contact created** (`contactCreated`) | A capture on your site makes a **new** contact: a form submission, a member sign-up, a newsletter subscription, an order or a booking from an address your workspace did not already hold. A repeat visit by somebody already on the list is recorded as an interaction and does **not** fire it. | `contactId` · `email` · `name` (empty when the capture had none) · `source` (`form`, `member`, `newsletter`, `order` or `booking`) · `hostId` · `lifecycleStage` (the stage the capture set — `lead`, `subscriber` or `customer`; empty when it set none) · `campaignIds` (comma-joined; present only when the capture came through a campaign) · `formId` (present only when the capture came through a form — the key **Tag by form** conditions on) |
 | **Contact changed stage** (`contactStageChanged`) | A contact's **lifecycle stage** is moved — from the contact's page in the console, or by a **Set the contact's lifecycle stage** step in another automation. Setting the stage a contact already has fires nothing. | `contactId` · `email` · `lifecycleStage` (the new stage) · `previousStage` (empty when the contact had none) |
 | **Deal moved** (`dealStageChanged`) | A [deal](../../content-and-data/contacts/deals.md#moving-winning-and-losing) moves between open stages, or is reopened — from the board, the deal's page or the REST API. | `dealId` · `title` · `amountCents` · `currency` · `stageId` · `previousStageId` · `ownerUid` · `contactId` · `companyId` |
 | **Deal won** (`dealWon`) | A deal is marked won. | The same keys as **Deal moved**. |
@@ -157,8 +167,8 @@ see for …"*), in the same [run history](#run-history) every other step reports
 | --- | --- | --- |
 | **Set the contact's lifecycle stage** | Stage | The stage on **this site's** view of the contact. A stage the contact already has is left alone and announces nothing; a real change announces **Contact changed stage**, so an automation listening for it runs — under the same nesting limit a custom event has. |
 | **Tag the contact** | Tag (up to 60 characters) | Adds the tag to this site's tags on the contact; a tag already there is not duplicated. |
-| **Assign the contact an owner** | Owner's email | Sets the owner to the team member with that address, matched when the automation runs. An address nobody on your team has is a failed step, not a stored string. |
-| **Create a CRM task** | Title, Kind (Call, Email, Meeting, To-do), Due in (0–365 days), Assignee's email (optional) | A new open task on the CRM's **Tasks** list, linked to the contact (and to the contact's company when it has one), due that many days from the run. Leave the assignee blank to give it to the contact's owner. |
+| **Assign the contact an owner** | Assign to (A team member, or Round robin), Owner (email address or member id) | Sets the owner to the team member named, matched against your workspace's roster when the automation runs — by the address on their member record, or by their member id for a teammate whose account carries no address; somebody the roster does not have is a failed step, not a stored string — or, in round robin, to the next member of the pool under [CRM → Settings](../../content-and-data/contacts/settings.md#round-robin), moving the rotation on; an empty pool is a failed step. Either way the contact is reassigned if it had an owner, the site's lead follows, and the new owner is notified. |
+| **Create a CRM task** | Title, Kind (Call, Email, Meeting, To-do), Due in (0–365 days), Assignee (email address or member id, optional) | A new open task on the CRM's **Tasks** list, linked to the contact (and to the contact's company when it has one), due that many days from the run. The assignee is matched the way the owner is; leave it blank to give the task to the contact's owner. |
 | **Log a CRM activity** | Kind (Call, Email, Meeting, Note, Other), What happened | An activity on the contact's timeline, stamped as made by the automation rather than by a person. |
 
 Tasks and activities an automation creates are visible to exactly the sites a record a

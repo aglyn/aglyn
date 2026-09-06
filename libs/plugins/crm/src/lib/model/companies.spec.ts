@@ -25,10 +25,12 @@
  * WHICH operation was chosen and not merely that one was.
  */
 
+import { readContactCompanyLink } from '@aglyn/aglyn'
 import {
   companyDetachUpdate,
   companyDraftFields,
   contactCompanyLinkUpdate,
+  contactCompanyLinkWrites,
   EMPTY_COMPANY_DRAFT,
   suggestCompanyForEmail,
 } from './companies'
@@ -38,6 +40,7 @@ jest.mock('firebase/firestore', () => ({
   arrayRemove: (...values: unknown[]) => ({ op: 'arrayRemove', values }),
   deleteField: () => ({ op: 'delete' }),
   serverTimestamp: () => ({ op: 'serverTimestamp' }),
+  increment: (by: number) => ({ op: 'increment', by }),
 }))
 
 const COMPANIES = [
@@ -82,6 +85,7 @@ describe('companyDraftFields', () => {
       industry: 'Hospitality',
       ownerUid: 'uid-1',
       address: { line1: '1 Main St', country: 'us' },
+      tags: 'Enterprise',
       notes: 'Big account',
     })
     expect(result.ok).toBe(true)
@@ -95,6 +99,7 @@ describe('companyDraftFields', () => {
       industry: 'Hospitality',
       ownerUid: 'uid-1',
       address: { line1: '1 Main St', country: 'US' },
+      tags: ['enterprise'],
       notes: 'Big account',
     })
     // The word-prefix tokens the list's index carries, so "cof" finds it.
@@ -114,11 +119,24 @@ describe('companyDraftFields', () => {
       'phone',
       'industry',
       'ownerUid',
+      'tags',
       'notes',
     ])
     // The address is nullable rather than absent: one stored shape for "none".
     expect(result.set['address']).toBeNull()
     expect('domain' in result.set).toBe(false)
+  })
+
+  it('stores the tags as a contact stores them: lowercased, deduplicated, capped', () => {
+    const result = companyDraftFields({
+      ...EMPTY_COMPANY_DRAFT,
+      name: 'Acme',
+      tags: ' VIP, west | vip,, East ',
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.set['tags']).toEqual(['vip', 'west', 'east'])
+    expect(result.cleared).not.toContain('tags')
   })
 
   it('refuses a domain that is not a hostname rather than storing nothing', () => {
@@ -221,6 +239,55 @@ describe('contactCompanyLinkUpdate', () => {
       'facets.g-1.companyId': { op: 'delete' },
       updatedAt: { op: 'serverTimestamp' },
     })
+  })
+})
+
+/**
+ * The batch a surface commits (AGL-2613): the contact's patch, the name
+ * echoed beside the link, and one `increment` per company whose count moves.
+ */
+describe('contactCompanyLinkWrites', () => {
+  const linkOf = (contact: Record<string, unknown>) =>
+    readContactCompanyLink(contact, 'g-1')
+
+  it('is a no-op when nothing changes', () => {
+    expect(contactCompanyLinkWrites(linkOf(contactAt('c-acme')), 'g-1', 'c-acme', 'Acme')).toBeNull()
+  })
+
+  it('links, echoes the name where the list and the search read it, and counts', () => {
+    const writes = contactCompanyLinkWrites(linkOf(contactAt(undefined)), 'g-1', 'c-acme', 'Acme')
+    expect(writes?.contact).toEqual({
+      'facets.g-1.companyId': 'c-acme',
+      'facets.g-1.companyName': 'Acme',
+      companyName: 'Acme',
+      companyIds: { op: 'arrayUnion', values: ['c-acme'] },
+      updatedAt: { op: 'serverTimestamp' },
+    })
+    expect(writes?.companies).toEqual([
+      { id: 'c-acme', update: { contactsCount: { op: 'increment', by: 1 } } },
+    ])
+    expect(writes?.counts).toEqual([{ companyId: 'c-acme', delta: 1 }])
+  })
+
+  it('moves the count from the old company to the new one', () => {
+    const writes = contactCompanyLinkWrites(linkOf(contactAt('c-acme')), 'g-1', 'c-globex', 'Globex')
+    expect(writes?.companies).toEqual([
+      { id: 'c-acme', update: { contactsCount: { op: 'increment', by: -1 } } },
+      { id: 'c-globex', update: { contactsCount: { op: 'increment', by: 1 } } },
+    ])
+  })
+
+  it('clears the name with the link on an unlink, and leaves it alone when not told', () => {
+    const cleared = contactCompanyLinkWrites(linkOf(contactAt('c-acme')), 'g-1', null, null)
+    expect(cleared?.contact).toMatchObject({
+      'facets.g-1.companyId': { op: 'delete' },
+      'facets.g-1.companyName': { op: 'delete' },
+      companyName: { op: 'delete' },
+      companyIds: { op: 'arrayRemove', values: ['c-acme'] },
+    })
+    const kept = contactCompanyLinkWrites(linkOf(contactAt('c-acme')), 'g-1', null)
+    expect(kept?.contact).not.toHaveProperty('companyName')
+    expect(kept?.contact).not.toHaveProperty('facets.g-1.companyName')
   })
 })
 

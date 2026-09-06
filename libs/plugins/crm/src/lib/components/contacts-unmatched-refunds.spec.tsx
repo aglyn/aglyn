@@ -100,6 +100,12 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   listFilterConstraints: jest.requireActual(
     '@aglyn/tenant-feature-instance',
   ).listFilterConstraints,
+  // The plan the views split the clauses with (AGL-2617) — real, for the
+  // same reason.
+  listFilterPlan: jest.requireActual('@aglyn/tenant-feature-instance')
+    .listFilterPlan,
+  // The reader's reach, for the views control's "may edit" — org-wide here.
+  useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),
   useFirestore: () => FIRESTORE,
   useOrgDataScope: () => DATA_SCOPE,
   // The site's campaigns, which fill the picker in the contact profile panel.
@@ -158,7 +164,9 @@ jest.mock('@aglyn/shared-ui-next', () => ({
 
 // A row is a link to the record page (AGL-2596); nothing here follows one.
 jest.mock('next/navigation', () => ({
-  useRouter: () => ({ push: jest.fn() }),
+  useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
+  // The list reads its own address for a seeded filter (AGL-2612); none here.
+  useSearchParams: () => new URLSearchParams(),
 }))
 
 const BASE_PATH = '/acme/hosts/shop/contacts'

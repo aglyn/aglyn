@@ -32,6 +32,10 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { teardownSendingDomain } from '../../../../utils/server/provision-sending-domain'
+import {
+  countPendingPersonErasures,
+  runPersonErasures,
+} from '../../../../utils/server/run-person-erasures'
 
 /**
  * Executes due GDPR erasures (AGL-487) — completes the self-serve deletion
@@ -165,6 +169,13 @@ async function handler(request: Request): Promise<Response> {
             due: Boolean(requestedMs) && requestedMs + ERASURE_HOLD_MS <= now,
           }
         })
+      // The PEOPLE waiting, beside the workspaces (AGL-2623): a workspace
+      // admin's erasure request for one person runs through this same job,
+      // and the card that watches the queue has to see both halves of it.
+      const people = await countPendingPersonErasures().catch((error) => {
+        console.error('run-erasures: person queue could not be counted', error)
+        return null
+      })
       return Response.json(
         {
           pending: rows,
@@ -173,6 +184,7 @@ async function handler(request: Request): Promise<Response> {
           // A lower bound, and said so: the query is capped, so a longer
           // queue reads identically to a complete one from the length alone.
           truncated,
+          people,
         },
         { status: 200 },
       )
@@ -318,7 +330,21 @@ async function handler(request: Request): Promise<Response> {
       }
     }
 
-    return Response.json({ erased, skipped, scanned: due.size }, { status: 200 })
+    /*
+     * The PEOPLE, after the workspaces (AGL-2623). One person is a few
+     * hundred writes where a workspace is a recursive delete, so the person
+     * batch is larger and runs second — a run that spends its minute on
+     * five workspaces has not skipped anyone's erasure, only deferred it to
+     * tomorrow's run, which is inside any clock a workspace could be held
+     * to. Its own catch: a fault in the person queue must not turn the
+     * workspaces this run already erased into a 500.
+     */
+    const people = await runPersonErasures().catch((error) => {
+      console.error('run-erasures: person queue failed', error)
+      return null
+    })
+
+    return Response.json({ erased, skipped, scanned: due.size, people }, { status: 200 })
   } catch (error) {
     // An unverifiable credential is a 401, not a fault of ours
     // (AGL-1993). Null for anything else, so a real failure keeps its 500.

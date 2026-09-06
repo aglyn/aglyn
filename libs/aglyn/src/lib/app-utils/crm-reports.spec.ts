@@ -17,12 +17,21 @@
 
 import { DEFAULT_DEAL_STAGES } from './crm'
 import {
+  activityLeaderboard,
   bucketByWeek,
+  closeMonthBuckets,
+  contactIsCustomer,
+  conversionBySource,
   crmReportRange,
   currencyOfDeals,
   deltaPercent,
+  forecastByCloseMonth,
   funnelFromStages,
+  LEAD_NO_REASON_KEY,
+  LEAD_NO_REASON_LABEL,
+  leadFunnel,
   localDayBounds,
+  openLeadsFromCounts,
   pipelineTotals,
   tally,
   weekBuckets,
@@ -260,5 +269,291 @@ describe('localDayBounds', () => {
     const bounds = localDayBounds(NOW)
     expect(bounds.start).toBe(new Date(2026, 8, 16).getTime())
     expect(bounds.end).toBe(new Date(2026, 8, 17).getTime())
+  })
+})
+
+describe('the forecast by close month (AGL-2620)', () => {
+  const sales = { $id: 'sales', name: 'Sales', stages: [...DEFAULT_DEAL_STAGES] }
+  const renewals = {
+    $id: 'renewals',
+    name: 'Renewals',
+    stages: DEFAULT_DEAL_STAGES.map((stage) =>
+      stage.id === 'qualified' ? { ...stage, probability: 50 } : stage,
+    ),
+  }
+  const local = (year: number, monthIndex: number, day: number) =>
+    new Date(year, monthIndex, day, 12).getTime()
+
+  it('buckets the next six local calendar months from the current one, whole', () => {
+    const buckets = closeMonthBuckets(NOW)
+    expect(buckets.map((bucket) => bucket.key)).toEqual([
+      '2026-09',
+      '2026-10',
+      '2026-11',
+      '2026-12',
+      '2027-01',
+      '2027-02',
+    ])
+    // The current month starts on its first, not at "now".
+    expect(buckets[0].start).toBe(new Date(2026, 8, 1).getTime())
+    expect(buckets[0].end).toBe(new Date(2026, 9, 1).getTime())
+    expect(buckets[5].end).toBe(new Date(2027, 2, 1).getTime())
+  })
+
+  it('lays open deals out per pipeline and month, face value and weighted', () => {
+    const forecast = forecastByCloseMonth(
+      [
+        // September, Sales, 10%: 1,000 → 100.
+        { status: 'open', pipelineId: 'sales', stageId: 'qualified', amountCents: 100_000, expectedCloseAtMs: local(2026, 8, 3) },
+        // November, Sales, 60%: 500 → 300.
+        { status: 'open', pipelineId: 'sales', stageId: 'negotiation', amountCents: 50_000, expectedCloseAtMs: local(2026, 10, 30) },
+        // November, Renewals, 50%: 200 → 100.
+        { status: 'open', pipelineId: 'renewals', stageId: 'qualified', amountCents: 20_000, expectedCloseAtMs: local(2026, 10, 1) },
+        // Undated: its own row, at face value and at its stage odds.
+        { status: 'open', pipelineId: 'sales', stageId: 'proposal-sent', amountCents: 10_000, expectedCloseAtMs: null },
+        // Overdue (August) and later (March 2027).
+        { status: 'open', pipelineId: 'sales', stageId: 'qualified', amountCents: 5_000, expectedCloseAtMs: local(2026, 7, 20) },
+        { status: 'open', pipelineId: 'sales', stageId: 'qualified', amountCents: 7_000, expectedCloseAtMs: local(2027, 2, 1) },
+        // Closed deals are not a forecast.
+        { status: 'won', pipelineId: 'sales', stageId: 'won', amountCents: 900_000, expectedCloseAtMs: local(2026, 8, 10) },
+        { status: 'lost', pipelineId: 'sales', stageId: 'lost', amountCents: 900_000, expectedCloseAtMs: local(2026, 8, 10) },
+      ],
+      [sales, renewals],
+      NOW,
+    )
+    expect(forecast.pipelines.map((row) => row.name)).toEqual(['Sales', 'Renewals'])
+    const [salesRow, renewalsRow] = forecast.pipelines
+    expect(salesRow.months.map((cell) => cell.amountCents)).toEqual([100_000, 0, 50_000, 0, 0, 0])
+    expect(salesRow.months.map((cell) => cell.weightedCents)).toEqual([10_000, 0, 30_000, 0, 0, 0])
+    expect(salesRow.undated).toEqual({ count: 1, amountCents: 10_000, weightedCents: 4_000 })
+    expect(salesRow.overdue).toEqual({ count: 1, amountCents: 5_000, weightedCents: 500 })
+    expect(salesRow.later).toEqual({ count: 1, amountCents: 7_000, weightedCents: 700 })
+    expect(salesRow.total).toEqual({ count: 5, amountCents: 172_000, weightedCents: 45_200 })
+    expect(renewalsRow.months[2]).toEqual({ count: 1, amountCents: 20_000, weightedCents: 10_000 })
+    // The grand rows add the pipelines together.
+    expect(forecast.months.map((cell) => cell.amountCents)).toEqual([100_000, 0, 70_000, 0, 0, 0])
+    expect(forecast.total).toEqual({ count: 6, amountCents: 192_000, weightedCents: 55_200 })
+    expect(forecast.buckets).toHaveLength(6)
+  })
+
+  it('keeps an empty pipeline as a row and an unknown one as an unnamed row worth nothing weighted', () => {
+    const forecast = forecastByCloseMonth(
+      [{ status: 'open', pipelineId: 'gone', stageId: 'qualified', amountCents: 1_000, expectedCloseAtMs: local(2026, 8, 3) }],
+      [sales],
+      NOW,
+    )
+    expect(forecast.pipelines.map((row) => [row.pipelineId, row.name])).toEqual([
+      ['sales', 'Sales'],
+      ['gone', ''],
+    ])
+    expect(forecast.pipelines[0].total.count).toBe(0)
+    expect(forecast.pipelines[1].months[0]).toEqual({ count: 1, amountCents: 1_000, weightedCents: 0 })
+    expect(forecast.total.amountCents).toBe(1_000)
+  })
+
+  it('gives an archived pipeline a row only while a deal still sits open in it', () => {
+    const retired = { $id: 'old', name: 'Sales 2025', stages: [...DEFAULT_DEAL_STAGES], archivedAt: 1_700_000_000_000 }
+    const empty = forecastByCloseMonth([], [sales, retired], NOW)
+    expect(empty.pipelines.map((row) => row.pipelineId)).toEqual(['sales'])
+    const holding = forecastByCloseMonth(
+      [{ status: 'open', pipelineId: 'old', stageId: 'qualified', amountCents: 500, expectedCloseAtMs: null }],
+      [sales, retired],
+      NOW,
+    )
+    expect(holding.pipelines.map((row) => [row.pipelineId, row.name])).toEqual([
+      ['sales', 'Sales'],
+      ['old', 'Sales 2025'],
+    ])
+    expect(holding.pipelines[1].undated).toEqual({ count: 1, amountCents: 500, weightedCents: 50 })
+  })
+
+  it('puts a deal dated the first of a month in that month, on the local calendar', () => {
+    const forecast = forecastByCloseMonth(
+      [
+        { status: 'open', pipelineId: 'sales', stageId: 'qualified', amountCents: 100, expectedCloseAtMs: local(2026, 9, 1) },
+        { status: 'open', pipelineId: 'sales', stageId: 'qualified', amountCents: 200, expectedCloseAtMs: new Date(2026, 9, 1).getTime() - 1 },
+      ],
+      [sales],
+      NOW,
+    )
+    expect(forecast.months.map((cell) => cell.amountCents)).toEqual([200, 100, 0, 0, 0, 0])
+  })
+})
+
+/**
+ * Activity by teammate (AGL-2624): who logged what and who ticked what off,
+ * busiest first, with the rest of the work — automations, unassigned tasks
+ * — on one honest row.
+ */
+describe('activityLeaderboard', () => {
+  const activities = [
+    { kind: 'call', byUid: 'u-ada', byName: 'Ada', atMs: 100 },
+    { kind: 'email', byUid: 'u-ada', byName: 'Ada L.', atMs: 300 },
+    { kind: 'meeting', byUid: 'u-grace', byName: 'Grace', atMs: 200 },
+    { kind: 'note', byUid: 'u-grace', byName: 'Grace', atMs: 250 },
+    { kind: 'note', byUid: 'u-grace', atMs: 260 },
+    // A kind the model does not name still happened.
+    { kind: 'carrier-pigeon', byUid: 'u-grace', byName: 'Grace', atMs: 270 },
+    { kind: 'note', byUid: '', atMs: 50, sourceActionId: 'act-1' },
+  ] as const
+
+  it('groups activities by who logged them and counts every kind', () => {
+    const rows = activityLeaderboard(activities, [])
+    const grace = rows.find((row) => row.uid === 'u-grace')
+    expect(grace?.kinds).toEqual({ call: 0, email: 0, meeting: 1, note: 2, other: 1 })
+    expect(grace?.activities).toBe(4)
+    const ada = rows.find((row) => row.uid === 'u-ada')
+    expect(ada?.kinds).toEqual({ call: 1, email: 1, meeting: 0, note: 0, other: 0 })
+  })
+
+  it('signs each row with the name on the newest activity', () => {
+    const rows = activityLeaderboard(activities, [])
+    expect(rows.find((row) => row.uid === 'u-ada')?.name).toBe('Ada L.')
+    // An unsigned newer activity does not blank a name an older one carried.
+    expect(rows.find((row) => row.uid === 'u-grace')?.name).toBe('Grace')
+    expect(rows.find((row) => row.uid === '')?.name).toBeNull()
+  })
+
+  it('credits a task to whoever completed it, else to its assignee, else to nobody', () => {
+    const rows = activityLeaderboard([], [
+      { assigneeUid: 'u-ada', completedByUid: 'u-grace' },
+      { assigneeUid: 'u-ada' },
+      { assigneeUid: 'u-ada', completedByUid: '' },
+      {},
+    ])
+    expect(rows.map((row) => [row.uid, row.tasksDone])).toEqual([
+      ['u-ada', 2],
+      ['', 1],
+      ['u-grace', 1],
+    ])
+    expect(rows[0].activities).toBe(0)
+    expect(rows[0].name).toBeNull()
+  })
+
+  it('ranks by activities plus tasks, then activities, then uid', () => {
+    const rows = activityLeaderboard(activities, [
+      { assigneeUid: 'u-ada' },
+      { assigneeUid: 'u-ada' },
+      { assigneeUid: 'u-zed' },
+      { assigneeUid: 'u-zed' },
+      { assigneeUid: 'u-zed' },
+      { assigneeUid: 'u-zed' },
+    ])
+    // Grace 4+0, Ada 2+2 and Zed 0+4 tie at four; Ada logged more.
+    expect(rows.map((row) => row.uid)).toEqual(['u-grace', 'u-ada', 'u-zed', ''])
+  })
+
+  it('is empty for an empty period', () => {
+    expect(activityLeaderboard([], [])).toEqual([])
+  })
+})
+
+/**
+ * The lead funnel (AGL-2624): where a period's leads stand now, and why the
+ * closed-without-converting ones were closed.
+ */
+describe('leadFunnel', () => {
+  it('reads an absent status as new and counts every status', () => {
+    const funnel = leadFunnel([
+      {},
+      { status: 'new' },
+      { status: 'working' },
+      { status: 'qualified' },
+      { status: 'qualified' },
+      { status: 'unqualified', unqualifiedReason: 'Too small' },
+    ])
+    expect(funnel.total).toBe(6)
+    expect(funnel.byStatus).toEqual({ new: 2, working: 1, qualified: 2, unqualified: 1 })
+    expect(funnel.open).toBe(3)
+    expect(funnel.qualifiedRate).toBeCloseTo(2 / 6)
+    expect(funnel.unqualifiedRate).toBeCloseTo(1 / 6)
+  })
+
+  it('has no rate when nothing was captured', () => {
+    const funnel = leadFunnel([])
+    expect(funnel.total).toBe(0)
+    expect(funnel.qualifiedRate).toBeNull()
+    expect(funnel.unqualifiedRate).toBeNull()
+    expect(funnel.reasons).toEqual([])
+  })
+
+  it('folds spellings of one reason together and keeps the first spelling', () => {
+    const funnel = leadFunnel([
+      { status: 'unqualified', unqualifiedReason: 'Too small' },
+      { status: 'unqualified', unqualifiedReason: '  too   SMALL ' },
+      { status: 'unqualified', unqualifiedReason: 'Wrong region' },
+      { status: 'unqualified' },
+      // A reason on a lead that is not unqualified is not a reason.
+      { status: 'working', unqualifiedReason: 'Too small' },
+    ])
+    expect(funnel.reasons).toEqual([
+      { key: 'too small', label: 'Too small', count: 2 },
+      { key: LEAD_NO_REASON_KEY, label: LEAD_NO_REASON_LABEL, count: 1 },
+      { key: 'wrong region', label: 'Wrong region', count: 1 },
+    ])
+  })
+})
+
+describe('openLeadsFromCounts', () => {
+  it('is the total less the closed, never below zero', () => {
+    expect(openLeadsFromCounts(12, 5)).toBe(7)
+    expect(openLeadsFromCounts(3, 5)).toBe(0)
+    expect(openLeadsFromCounts(Number.NaN, 2)).toBe(0)
+  })
+})
+
+/**
+ * Conversion by source (AGL-2624): which doors turn into customers, read
+ * through one holder's facet.
+ */
+describe('contactIsCustomer', () => {
+  it('is a customer at the customer stage or past it, or with an order on the books', () => {
+    expect(contactIsCustomer({ lifecycleStage: 'customer' })).toBe(true)
+    expect(contactIsCustomer({ lifecycleStage: 'evangelist' })).toBe(true)
+    expect(contactIsCustomer({ lifecycleStage: 'lead', ordersCount: 1 })).toBe(true)
+    expect(contactIsCustomer({ ordersCount: 2 })).toBe(true)
+  })
+
+  it('is not a customer for an earlier stage, for other, or with no orders', () => {
+    expect(contactIsCustomer({ lifecycleStage: 'opportunity' })).toBe(false)
+    expect(contactIsCustomer({ lifecycleStage: 'other' })).toBe(false)
+    expect(contactIsCustomer({ ordersCount: 0 })).toBe(false)
+    expect(contactIsCustomer({})).toBe(false)
+  })
+})
+
+describe('conversionBySource', () => {
+  it('counts a person under every door they came through and a customer once', () => {
+    const report = conversionBySource([
+      { sources: { form: true, order: true }, lifecycleStage: 'customer' },
+      { sources: { form: true }, lifecycleStage: 'lead' },
+      { sources: { form: true }, ordersCount: 1 },
+      { sources: { booking: true }, lifecycleStage: 'subscriber' },
+      { sources: {}, lifecycleStage: 'customer' },
+    ])
+    expect(report.total).toBe(5)
+    expect(report.customers).toBe(3)
+    expect(report.unsourced).toBe(1)
+    expect(report.rows).toEqual([
+      { source: 'form', captured: 3, customers: 2, rate: 2 / 3 },
+      { source: 'order', captured: 1, customers: 1, rate: 1 },
+      { source: 'booking', captured: 1, customers: 0, rate: 0 },
+    ])
+  })
+
+  it('ignores a source the facet lists as false', () => {
+    const report = conversionBySource([
+      { sources: { form: true, member: false as unknown as true } },
+    ])
+    expect(report.rows.map((row) => row.source)).toEqual(['form'])
+  })
+
+  it('is empty with nothing to count', () => {
+    expect(conversionBySource([])).toEqual({
+      rows: [],
+      unsourced: 0,
+      customers: 0,
+      total: 0,
+    })
   })
 })

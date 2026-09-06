@@ -121,6 +121,19 @@ const MUTATION_PATHS = [
   // live here, are reachable from several routes, and are where a workspace
   // actually comes into being.
   'libs/tenant/data/admin/src/lib/server/organizations.ts',
+  // The CRM's server routes (AGL-2622): `crm/contacts-create` brings a
+  // person into the org's shared address book, and `crm/lead-convert`
+  // brings a contact, a company and a deal into being from one lead. Plugin
+  // routes rather than `app/api` ones, which is why a glob over the app
+  // would never have listed them — the same shape as the provisioning
+  // module above.
+  'libs/plugins/crm/src/lib/server.ts',
+  'libs/plugins/crm/src/lib/server/lead-convert.ts',
+  // `crm/contacts-merge` (AGL-2625) destroys one contact document by folding
+  // it into another; the entry is written by the data library's
+  // `mergeContacts`, which both this route and `POST /v1/contacts/{id}/merge`
+  // call, so the module that performs the delete is the one listed.
+  'libs/tenant/data/admin/src/lib/server/contact-merge.ts',
 ]
 
 /**

@@ -30,6 +30,8 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { useState } from 'react'
 import DynamicListRuleFields, {
+  describeDynamicListRule,
+  draftToRule,
   EMPTY_RULE_DRAFT,
   type DynamicListRuleDraft,
 } from './dynamic-list-rule-fields'
@@ -50,6 +52,10 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 }))
 jest.mock('../hooks/use-org-contact-segments', () => ({
   useOrgContactSegments: () => [],
+}))
+// The saved-view picker beside the segment picker (AGL-2617); none here.
+jest.mock('../hooks/use-org-crm-views', () => ({
+  useOrgCrmViews: () => [],
 }))
 jest.mock('../hooks/use-org-lists', () => ({ useOrgLists: () => [] }))
 jest.mock('../hooks/use-org-contact-fields', () => ({
@@ -115,6 +121,33 @@ beforeEach(() => {
 })
 
 describe('the CRM controls on the rule form', () => {
+  /*
+   * THE RE-ENGAGEMENT WINDOW (AGL-2616): typed as days, stored as the
+   * facet-read dimension, and read back in the sentence that tells it apart
+   * from the address-level "one of your emails" arms.
+   */
+  it('takes a re-engagement window in days and reads it back as one of your campaigns', () => {
+    const onDraft = jest.fn()
+    render(<Harness onDraft={onDraft} />)
+    fireEvent.change(
+      screen.getByLabelText('Engaged with a campaign within (days)'),
+      { target: { value: '30' } },
+    )
+    expect(last(onDraft).engagedWithinDays).toBe('30')
+    const rule = draftToRule(last(onDraft))
+    expect(rule.engagedWithinDays).toBe(30)
+    expect(rule.engagement).toBeUndefined()
+    expect(describeDynamicListRule(rule)).toContain(
+      'Opened or clicked one of your campaigns in the last 30 days.',
+    )
+    // An emptied box is no filter at all.
+    fireEvent.change(
+      screen.getByLabelText('Engaged with a campaign within (days)'),
+      { target: { value: '' } },
+    )
+    expect(draftToRule(last(onDraft)).engagedWithinDays).toBeUndefined()
+  })
+
   it('offers the team as owners and stores the chosen uid', () => {
     const onDraft = jest.fn()
     render(<Harness onDraft={onDraft} />)

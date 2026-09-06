@@ -18,9 +18,11 @@
 import {
   type AglynPostalAddress,
   CAPTURED_BY_HOST_FIELD,
-  checkContactQuota,
+  checkCrmRecordsQuota,
   consentGroupScope,
   CONTACT_FACETS_FIELD,
+  CONTACT_FORM_IDS_CAP,
+  CONTACT_FORM_IDS_FIELD,
   type ContactFacet,
   type ContactInteraction,
   type ContactLifecycleStage,
@@ -34,7 +36,9 @@ import {
 } from '@aglyn/aglyn/server'
 import { FieldValue } from 'firebase-admin/firestore'
 import { firebaseAdmin } from './firebase-admin'
+import { countCrmRecords } from './crm-records'
 import { attributeOrderToEmail } from './email-revenue-attribution'
+import { hostRefusesCaptureForErasure } from './email-suppression'
 import {
   attributeCampaignConversion,
   type ResolvedCampaignTouch,
@@ -48,15 +52,28 @@ import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
  * drifts. A direct path is real in every harness.
  */
 import {
+  advanceContactLifecycleStage,
+  CONTACT_COMPANY_IDS_FIELD,
   CONTACT_FIELD_KEY_PATTERN,
   type ContactCustomValue,
-  contactLifecycleStageAfterPurchase,
+  CRM_COLLECTIONS,
   isContactLifecycleStage,
+  planContactCompanyLink,
+  readContactCompanyLink,
 } from '@aglyn/aglyn/app-utils/crm'
 import {
   normalizeAddress,
   normalizePhone,
 } from '@aglyn/aglyn/foundation/definitions/contact.types'
+import {
+  contactCompanyMirrorValue,
+  settleCompanyContactsCounts,
+} from './contact-company-link'
+import {
+  emailIndexBeside,
+  findContactByEmail,
+  writeContactEmailIndex,
+} from './contact-email-index'
 import {
   consentGroupForSite,
   getOrgForHost,
@@ -83,7 +100,16 @@ export type UpsertHostContactVerdict =
       /** True when this call created the row; false when it merged into one. */
       created: boolean
     }
-  | { refused: 'invalid-email' | 'band' | 'error' }
+  | {
+      /**
+       * `erased`: the site holds an erasure row for the address (AGL-2623),
+       * so no record is created — a capture must not quietly rebuild a
+       * person the workspace erased. Only a CREATE is refused; a merge
+       * cannot arise, because the erasure removed the row it would merge
+       * into.
+       */
+      refused: 'invalid-email' | 'band' | 'erased' | 'error'
+    }
 
 /**
  * The per-holder profile fields a door may write alongside the identity.
@@ -181,6 +207,22 @@ function storableProfile(input: ContactProfileInput | undefined): {
 }
 
 /**
+ * The org's companies collection, beside its contacts one.
+ *
+ * Reached through the contacts reference's parent — the org document —
+ * because that is the one handle this function holds on the org. `parent`
+ * is `null` only for a root collection, which an org subcollection never
+ * is; answered as `null` rather than thrown so a count that has nowhere to
+ * land is skipped, and never costs the capture.
+ */
+function companiesBeside(
+  contactsRef: FirebaseFirestore.CollectionReference,
+): FirebaseFirestore.CollectionReference | null {
+  const parent = contactsRef.parent
+  return parent ? parent.collection(CRM_COLLECTIONS.companies) : null
+}
+
+/**
  * Tags as the profile drawer stores them: trimmed, lowercased, deduplicated
  * and capped at twenty — so an imported `VIP` and a typed `vip` are one tag.
  */
@@ -224,6 +266,13 @@ export interface HostContactCreated {
   source: ContactSource
   /** The capture surface's campaigns, normalized — `[]` when it had none. */
   campaignIds: string[]
+  /**
+   * The stage the create wrote onto the capturing facet — the door's
+   * {@link UpsertHostContactOptions.initialLifecycleStage}, or the profile's
+   * own — and absent when the capture named none, so an automation can
+   * filter `lifecycleStage == "lead"` on the day the person appears.
+   */
+  lifecycleStage?: ContactLifecycleStage
 }
 
 export interface UpsertHostContactOptions {
@@ -323,6 +372,28 @@ export interface UpsertHostContactOptions {
    * phone and nothing else does not blank the title somebody typed.
    */
   facet?: UpsertHostContactFacet
+  /**
+   * The EARLIEST stage that describes what this capture was (AGL-2612).
+   *
+   * Every door names one: a form submission is a `lead`, a newsletter opt-in
+   * or a member sign-up is a `subscriber`, a purchase — an order, a paid
+   * booking — is a `customer`. The rule applied to it is
+   * `advanceContactLifecycleStage`: it fills an empty stage and advances an
+   * earlier one, and never moves anybody back, so a customer who fills in
+   * the contact form is still a customer and a subscriber who then submits
+   * a form becomes a lead. Applied on top of `facet.lifecycleStage` when a
+   * door carries both — the caller's stage is the base and this is its
+   * floor.
+   *
+   * A FLOOR and not a value, which is why it is not the facet field: the
+   * facet's `lifecycleStage` is a SET, the shape the console's create
+   * drawer and the import need — the merchant typed a stage and that is the
+   * stage — and a capture door writing a set would put every returning
+   * customer back to `lead` on their next enquiry. Omitted by the doors
+   * that carry the caller's own stage or none (manual, import, API, a lead
+   * conversion), whose contacts read as "no stage", which is true.
+   */
+  initialLifecycleStage?: ContactLifecycleStage
   /**
    * Told when this capture created a contact (AGL-2605).
    *
@@ -463,14 +534,17 @@ export async function upsertHostContact(
      * org-wide. They are separated here: this finds the person, and
      * `visibleTo` below decides who may see them — widened by the capture
      * that just happened, never by the lookup that found them.
+     *
+     * THROUGH THE ADDRESS INDEX FIRST (AGL-2625). A person whose two records
+     * were merged answers to two addresses, and only one of them is the
+     * document's `email`; the index is what lets a capture on the other one
+     * land on the survivor instead of minting the duplicate again. The query
+     * stays as the fallback, so a row the index has not seen costs one extra
+     * read once and needs no backfill.
      *=========================================*/
-    const existing = await contactsRef
-      .where('email', '==', email)
-      .limit(1)
-      .get()
+    const docSnapshot = await findContactByEmail(contactsRef, email)
 
-    if (!existing.empty) {
-      const docSnapshot = existing.docs[0]
+    if (docSnapshot) {
       /*
        * MERGED INTO THIS GROUP'S FACET, not into the top of the document.
        *
@@ -497,18 +571,64 @@ export async function upsertHostContact(
        * THE PROFILE, as this door knows it (AGL-2596).
        *
        * Given keys only, so the merge below leaves untouched whatever another
-       * door wrote. The stage is the one field with a rule of its own: a
-       * purchase makes a customer of anybody who was not yet one and never
-       * moves anybody back — `contactLifecycleStageAfterPurchase` is that
-       * rule, applied to the stage this door asked for or, failing that, the
-       * one already stored.
+       * door wrote. The stage is the one field with a rule of its own: the
+       * door's `initialLifecycleStage` fills an empty stage and advances an
+       * earlier one, and never moves anybody back —
+       * `advanceContactLifecycleStage` is that rule, applied to the stage
+       * this door asked for outright or, failing that, the one already
+       * stored. Written only when it comes back with something: a door that
+       * named no stage and found none leaves the key absent, which reads as
+       * "no stage" rather than as a stage somebody picked.
        */
       const profile = storableProfile(options.facet)
-      if (options.source === 'order') {
-        profile.lifecycleStage = contactLifecycleStageAfterPurchase(
-          profile.lifecycleStage ?? facet.lifecycleStage,
-        )
-      }
+      const advanced = advanceContactLifecycleStage(
+        profile.lifecycleStage ?? facet.lifecycleStage,
+        options.initialLifecycleStage,
+      )
+      if (advanced) profile.lifecycleStage = advanced
+      /*
+       * THE FORM MIRROR, bounded (see `HostContact.formIds`).
+       *
+       * Read off the document the lookup already fetched, so the bound costs
+       * no extra read: a person who has come in through twenty forms keeps
+       * the twenty, and this capture's form stays on the interaction alone.
+       * `arrayUnion` for the add, so a concurrent capture on a sibling site
+       * cannot drop this one's id.
+       */
+      const heldFormIds: unknown[] = Array.isArray(
+        docSnapshot.get(CONTACT_FORM_IDS_FIELD),
+      )
+        ? docSnapshot.get(CONTACT_FORM_IDS_FIELD)
+        : []
+      const formIdToAdd =
+        interaction.formId &&
+        !heldFormIds.includes(interaction.formId) &&
+        heldFormIds.length < CONTACT_FORM_IDS_CAP
+          ? interaction.formId
+          : null
+      /*
+       * THE COMPANY LINK, when the door carried one (AGL-2613).
+       *
+       * The facet's `companyId` is written with the rest of the profile
+       * below, but the facet is not the whole association: the top-level
+       * `companyIds` mirror is what the company page queries, and the
+       * company's `contactsCount` is what the companies list shows. The
+       * planner reads the row as it stands — this holder's previous link,
+       * the mirror, the other holders' ids — and says what the mirror
+       * becomes and which counts move; the mirror change rides in this same
+       * merge-set, and the counts settle after it.
+       */
+      const link =
+        profile.companyId !== undefined
+          ? planContactCompanyLink(
+              readContactCompanyLink(
+                docSnapshot.data() as Record<string, unknown>,
+                group.groupId,
+              ),
+              profile.companyId,
+            )
+          : null
+      const mirror = link ? contactCompanyMirrorValue(link) : undefined
       await docSnapshot.ref.set(
         {
           // The search keys travel WITH the name, and only when the name is
@@ -517,6 +637,7 @@ export async function upsertHostContact(
           ...(merged.name ? nameSearchFields(merged.name) : {}),
           // The search echo of the facet's phone — see `HostContact.phone`.
           ...(profile.phone ? { phone: profile.phone } : {}),
+          ...(mirror !== undefined ? { [CONTACT_COMPANY_IDS_FIELD]: mirror } : {}),
           /*
            * NESTED, not dot-pathed. This is a `set(…, { merge: true })`, and
            * a merge-set treats a key containing dots as a literal field name
@@ -583,6 +704,9 @@ export async function upsertHostContact(
            * or C" answers with the sites that actually met this person.
            */
           [CAPTURED_BY_HOST_FIELD]: FieldValue.arrayUnion(options.hostId),
+          ...(formIdToAdd
+            ? { [CONTACT_FORM_IDS_FIELD]: FieldValue.arrayUnion(formIdToAdd) }
+            : {}),
           /*
            * AND SO DOES VISIBILITY — by the capture, never by the lookup.
            *
@@ -614,18 +738,49 @@ export async function upsertHostContact(
         },
         { merge: true },
       )
+      await settleCompanyContactsCounts(companiesBeside(contactsRef), link)
       return { contactId: docSnapshot.id, created: false }
     }
 
-    // New contact: audience-band check via the aggregate count (cheap; no
+    /*
+     * THE ERASED PERSON DOES NOT COME BACK (AGL-2623).
+     *
+     * Before the band, on the CREATE branch only — the one read this adds
+     * is paid by a capture that would otherwise make a new row, never by
+     * the merge above. An erasure wrote a row on this site's suppression
+     * list with no address on it; finding that row here is what keeps the
+     * next form fill or checkout from rebuilding the record the workspace
+     * just erased. The order or booking that triggered the capture still
+     * succeeds, exactly as it does when the band refuses: the person bought
+     * something, and the merchant's record of the sale is not the CRM's
+     * record of the person.
+     */
+    if (await hostRefusesCaptureForErasure(options.hostId, email, firestore)) {
+      return { refused: 'erased' }
+    }
+
+    // New contact: records-band check via the aggregate counts (cheap; no
     // doc reads) against the owning org's entitlements (AGL-238/890).
     // Metered plans always pass (overage bills via the report-usage
     // cron); only free's hard band drops the CRM record — visibly, via
     // the counter and the console alert (AGL-891). The signup/order that
     // triggered the capture always succeeds either way.
+    //
+    // THE RECORDS BAND, not the contacts headcount (AGL-2611): companies
+    // and deals share this band, so a capture is refused on a Free org
+    // whose hundred records are ninety companies and ten people — the same
+    // verdict the company drawer would give the ninety-first company.
+    // `contactsRef` is handed in so the contacts aggregate is the one this
+    // door already reads; the org reference is its parent.
     const orgBilling = await getOrgForHost(options.hostId)
-    const count = (await contactsRef.count().get()).data().count
-    const quota = checkContactQuota((orgBilling?.org as any) ?? null, count)
+    const orgRef =
+      contactsRef.parent ??
+      firestore.collection('orgs').doc(String(orgBilling?.orgId ?? ''))
+    const { crmRecordsCount } = await countCrmRecords(orgRef, contactsRef)
+    const quota = checkCrmRecordsQuota(
+      (orgBilling?.org as any) ?? null,
+      crmRecordsCount,
+    )
     if (!quota.allowed) {
       await hostRef
         .collection('counters')
@@ -635,16 +790,17 @@ export async function upsertHostContact(
     }
 
     /*
-     * The profile on a create, with the order door's rule applied the same
-     * way as on a merge. A `null` address is dropped rather than written:
-     * there is nothing on a new document for it to clear.
+     * The profile on a create, with the door's stage floor applied the same
+     * way as on a merge — there is no stored stage yet, so the floor is what
+     * a door that named one writes. A `null` address is dropped rather than
+     * written: there is nothing on a new document for it to clear.
      */
     const profile = storableProfile(options.facet)
-    if (options.source === 'order') {
-      profile.lifecycleStage = contactLifecycleStageAfterPurchase(
-        profile.lifecycleStage,
-      )
-    }
+    const advanced = advanceContactLifecycleStage(
+      profile.lifecycleStage,
+      options.initialLifecycleStage,
+    )
+    if (advanced) profile.lifecycleStage = advanced
     if (profile.address === null) delete profile.address
 
     const created = await contactsRef.add({
@@ -658,6 +814,11 @@ export async function upsertHostContact(
        * one that grows and the one an audience query can filter on.
        */
       [CAPTURED_BY_HOST_FIELD]: [options.hostId],
+      // The form mirror's first entry, when this capture came through one —
+      // see `HostContact.formIds`. Absent otherwise, like the campaigns.
+      ...(interaction.formId
+        ? { [CONTACT_FORM_IDS_FIELD]: [interaction.formId] }
+        : {}),
       /*
        * THE CAPTURING GROUP, not the whole org.
        *
@@ -681,6 +842,11 @@ export async function upsertHostContact(
       ...(options.name ? nameSearchFields(options.name.slice(0, 120)) : {}),
       // The search echo of the facet's phone — see `HostContact.phone`.
       ...(profile.phone ? { phone: profile.phone } : {}),
+      // The company mirror the company page queries (AGL-2613) — a create
+      // has nothing to union with, so the door's company is the whole list.
+      ...(profile.companyId
+        ? { [CONTACT_COMPANY_IDS_FIELD]: [profile.companyId] }
+        : {}),
       // The facet this capture creates. Everything a holder owns lives under
       // its own group id; the address and the canonical name above are the
       // only shared identity.
@@ -713,6 +879,21 @@ export async function upsertHostContact(
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     })
+    // The address now resolves to this row (AGL-2625). Its own catch inside
+    // the writer, so an index the capture could not reach costs nothing.
+    await writeContactEmailIndex(emailIndexBeside(contactsRef), created.id, [email])
+    // The company the door named now has one more contact naming it
+    // (AGL-2613) — the fresh row's plan is the trivial one, nothing held
+    // before and nothing held elsewhere.
+    if (profile.companyId) {
+      await settleCompanyContactsCounts(
+        companiesBeside(contactsRef),
+        planContactCompanyLink(
+          { companyId: null, companyIds: [], heldElsewhere: [] },
+          profile.companyId,
+        ),
+      )
+    }
     /*
      * ATTRIBUTED ON CREATION ONLY, and therefore below the band gate rather
      * than above it — the opposite placement to the order join at the top of
@@ -755,6 +936,9 @@ export async function upsertHostContact(
           ...(options.name ? { name: options.name.slice(0, 120) } : {}),
           source: options.source,
           campaignIds,
+          ...(profile.lifecycleStage
+            ? { lifecycleStage: profile.lifecycleStage }
+            : {}),
         }),
       ).catch((error) => {
         console.error('upsertHostContact onCreated failed', error)

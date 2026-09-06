@@ -26,7 +26,12 @@
  */
 
 import { soloConsentGroup } from '@aglyn/aglyn/app-utils/consent-groups'
-import { contactRecordFromDoc, parseContactTags } from './contact-record'
+import {
+  contactPrimaryGroup,
+  contactRecordFromDoc,
+  NO_HOLDER_GROUP,
+  parseContactTags,
+} from './contact-record'
 
 const OTHER = 'other-holder'
 
@@ -58,6 +63,7 @@ const sharedContact = () => ({
       address: { line1: '1 Main St', country: 'US' },
       ownerUid: 'owner-1',
       lifecycleStage: 'lead',
+      lastEmailEngagementAtMs: 1_700_000_000_000,
     },
     'host-2': {
       name: `${OTHER}-name`,
@@ -70,6 +76,7 @@ const sharedContact = () => ({
       companyName: `${OTHER}-company`,
       ownerUid: `${OTHER}-owner`,
       lifecycleStage: 'evangelist',
+      lastEmailEngagementAtMs: 1_800_000_000_000,
     },
   },
 })
@@ -97,6 +104,7 @@ describe('contactRecordFromDoc', () => {
       address: { line1: '1 Main St', country: 'US' },
       ownerUid: 'owner-1',
       lifecycleStage: 'lead',
+      lastEmailEngagementAtMs: 1_700_000_000_000,
     })
     // The timeline is narrowed to the sites the group covers; an entry with
     // no host is everybody's.
@@ -118,6 +126,15 @@ describe('contactRecordFromDoc', () => {
     expect(record.address).toBeNull()
     expect(record.lifecycleStage).toBe('')
     expect(record.ltvCents).toBe(0)
+    expect(record.lastEmailEngagementAtMs).toBeNull()
+  })
+
+  it('reads an engagement stamp that is not a usable instant as none', () => {
+    const contact = sharedContact()
+    ;(contact.facets['host-1'] as Record<string, unknown>).lastEmailEngagementAtMs = 'soon'
+    expect(
+      contactRecordFromDoc(contact, soloConsentGroup('host-1')).lastEmailEngagementAtMs,
+    ).toBeNull()
   })
 
   it('reads a stage it does not know as absent rather than rendering it', () => {
@@ -125,6 +142,69 @@ describe('contactRecordFromDoc', () => {
     contact.facets['host-1'].lifecycleStage = 'vip'
     const record = contactRecordFromDoc(contact, soloConsentGroup('host-1'))
     expect(record.lifecycleStage).toBe('')
+  })
+})
+
+/*
+ * The holder an ORGANIZATION-level reader flattens a row through (AGL-2630):
+ * the first capturing site whose group holds a facet, so the profile shown
+ * across brands is the one the site that met the person keeps.
+ */
+describe('contactPrimaryGroup', () => {
+  const org = {
+    consentGroups: {
+      'grp-1': { name: 'Brand', hostIds: ['host-2', 'host-3'] },
+    },
+  }
+
+  it('picks the FIRST capturing site that holds a facet, in capture order', () => {
+    const row = {
+      capturedByHostIds: ['host-2', 'host-1'],
+      facets: { 'host-1': {}, 'grp-1': {} },
+    }
+    // host-2 captured first and its group (grp-1) holds a facet.
+    expect(contactPrimaryGroup(row, org)).toMatchObject({
+      groupId: 'grp-1',
+      hostId: 'host-2',
+      declared: true,
+    })
+    // Capture order, not sorted order: host-1 sorts first and loses.
+    expect(contactPrimaryGroup(row, org).groupId).not.toBe('host-1')
+  })
+
+  it('skips a capturing site with no facet for one that has', () => {
+    const row = { capturedByHostIds: ['host-9', 'host-1'], facets: { 'host-1': {} } }
+    expect(contactPrimaryGroup(row, org)).toEqual(soloConsentGroup('host-1'))
+  })
+
+  it('falls back to any facet, resolved to its declared group or its site', () => {
+    expect(contactPrimaryGroup({ facets: { 'grp-1': {} } }, org)).toMatchObject({
+      groupId: 'grp-1',
+      hostId: 'host-2',
+      hostIds: ['host-2', 'host-3'],
+    })
+    expect(contactPrimaryGroup({ facets: { 'host-7': {} } }, org)).toEqual(
+      soloConsentGroup('host-7'),
+    )
+  })
+
+  it('names the first capturing site even before it has written a facet', () => {
+    expect(contactPrimaryGroup({ capturedByHostIds: ['host-4'] }, org)).toEqual(
+      soloConsentGroup('host-4'),
+    )
+  })
+
+  it('reads a row nobody captured through the holder of nothing', () => {
+    expect(contactPrimaryGroup({}, org)).toBe(NO_HOLDER_GROUP)
+    expect(contactPrimaryGroup(null, null)).toBe(NO_HOLDER_GROUP)
+    // Flattening through it shows the shared identity and no holder's fields.
+    const record = contactRecordFromDoc(
+      { $id: 'c', email: 'x@example.com', name: 'X', facets: { 'host-1': { notes: 'n' } } },
+      NO_HOLDER_GROUP,
+    )
+    expect(record.groupId).toBe('')
+    expect(record.name).toBe('X')
+    expect(record.notes).toBe('')
   })
 })
 

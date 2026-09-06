@@ -17,19 +17,73 @@
 
 import { consentGroupForHost, soloConsentGroup } from './consent-groups'
 import type { ContactInteraction } from './contacts'
+import { ORG_CLIENT_WRITABLE_FIELDS } from '../foundation'
 import {
   activityKindHasOutcome,
   activityTimeLabel,
+  assignmentEmailDomain,
+  assignmentRuleMatches,
+  campaignEmailSummary,
   companyDomainForEmail,
+  CRM_ASSIGNMENT_RULES_MAX,
+  CRM_ASSIGNMENT_RULES_PATH,
+  CRM_ROUND_ROBIN_LAST_ASSIGNED_PATH,
+  CRM_ROUND_ROBIN_POOL_MAX,
+  CRM_ROUND_ROBIN_POOL_PATH,
+  crmHostDefaultOwner,
+  crmHostDefaultOwnerSegments,
+  describeAssignmentRule,
+  newAssignmentRuleId,
+  readCrmAssignmentRule,
+  readCrmAssignmentSettings,
+  roundRobinOrder,
+  companyNameForDomain,
+  findOrgMember,
+  parseCrmMemberRef,
+  buildCrmEmailActivity,
+  CRM_EMAIL_ACTIVITY_TAG,
+  CRM_EMAIL_BODY_MAX,
+  CRM_EMAIL_DELIVERY_STATE_LABELS,
+  CRM_EMAIL_DELIVERY_STATES,
+  CRM_EMAIL_ORG_TAG,
+  CRM_EMAIL_SUBJECT_MAX,
+  crmActivityCeilingLink,
+  crmEmailDeliveryTags,
+  isCrmEmailDeliveryFailure,
+  isCrmEmailDeliveryState,
+  nextCrmEmailDeliveryState,
   CONTACT_LIFECYCLE_STAGES,
+  CRM_AUTO_CREATE_COMPANIES_PATH,
+  ORG_CRM_SETTINGS_FIELD,
+  orgAutoCreatesCompanies,
+  planContactCompanyLink,
+  readContactCompanyLink,
   CONTACT_LIFECYCLE_STAGE_LABELS,
+  advanceContactLifecycleStage,
   contactLifecycleStageAfterPurchase,
+  crmMemberOption,
   CRM_ACTIVITY_KIND_LABELS,
   CRM_ACTIVITY_KINDS,
   CRM_COLLECTIONS,
+  CRM_VIEW_MAX_FILTERS,
+  crmContactCustomColumn,
+  crmContactCustomKey,
+  crmDefaultViewId,
+  crmDefaultViewPatch,
+  crmViewFiltersFromSegment,
+  crmViewIsListed,
+  crmViewSegmentFilters,
+  crmViewStateEquals,
+  EMPTY_CRM_VIEW_STATE,
+  isCrmViewSection,
+  normalizeCrmViewColumns,
+  normalizeCrmViewFilters,
+  normalizeCrmViewSort,
+  normalizeCrmViewState,
   CRM_TASK_KIND_LABELS,
   CRM_TASK_KINDS,
   crmActivityRecordLink,
+  type ContactCampaignEmail,
   type CrmActivityRow,
   crmReadTokens,
   crmScopeTokens,
@@ -43,10 +97,15 @@ import {
   normalizeContactFieldKey,
   taskDueState,
   weightedDealAmountCents,
+  DEAL_LINE_ITEMS_MAX,
+  dealHasLineItems,
+  isPipelineArchived,
+  lineItemsTotalCents,
+  readDealLineItems,
 } from './crm'
 
 describe('CRM collections', () => {
-  it('names six org subcollections, two of them prefixed', () => {
+  it('names seven org subcollections, three of them prefixed', () => {
     expect(Object.values(CRM_COLLECTIONS)).toEqual([
       'companies',
       'pipelines',
@@ -54,7 +113,293 @@ describe('CRM collections', () => {
       'crmTasks',
       'crmActivities',
       'contactFields',
+      'crmViews',
     ])
+  })
+})
+
+/**
+ * A saved view (AGL-2617) is a list's filters, columns and sort under a
+ * name. The helpers here are what hold a stored document to that shape,
+ * decide what "unsaved changes" means, keep one person's private view out
+ * of another's menu, and carry a segment across into the same grammar.
+ */
+describe('a saved view', () => {
+  it('keeps only clauses that ask something', () => {
+    expect(
+      normalizeCrmViewFilters([
+        { field: 'ownerUid', op: 'equals', value: 'uid-a', label: 'Dana' },
+        // A valued operator with no value would match nothing.
+        { field: 'name', op: 'startsWith', value: '  ' },
+        // A valueless operator is a whole clause on its own.
+        { field: 'ordersCount', op: 'isNotEmpty' },
+        { field: '', op: 'equals', value: 'x' },
+        { op: 'equals', value: 'x' },
+        null,
+        'garbage',
+      ]),
+    ).toEqual([
+      { field: 'ownerUid', op: 'equals', value: 'uid-a', label: 'Dana' },
+      { field: 'ordersCount', op: 'isNotEmpty', value: '' },
+    ])
+    expect(normalizeCrmViewFilters('not a list')).toEqual([])
+    expect(
+      normalizeCrmViewFilters(
+        Array.from({ length: CRM_VIEW_MAX_FILTERS + 5 }, (_, index) => ({
+          field: `f${index}`,
+          op: 'equals',
+          value: 'v',
+        })),
+      ),
+    ).toHaveLength(CRM_VIEW_MAX_FILTERS)
+  })
+
+  it('reads columns as a de-duplicated list and the sort as one column', () => {
+    expect(normalizeCrmViewColumns(['name', 'tags', 'name', '', 7])).toEqual([
+      'name',
+      'tags',
+    ])
+    expect(normalizeCrmViewSort({ field: 'name', direction: 'desc' })).toEqual({
+      field: 'name',
+      direction: 'desc',
+    })
+    // Anything but `desc` is ascending; no field is no sort.
+    expect(normalizeCrmViewSort({ field: 'name', direction: 'sideways' })).toEqual({
+      field: 'name',
+      direction: 'asc',
+    })
+    expect(normalizeCrmViewSort({ direction: 'desc' })).toBeNull()
+    expect(normalizeCrmViewState({ filters: null, columns: 'x', sort: 3 })).toEqual(
+      EMPTY_CRM_VIEW_STATE,
+    )
+  })
+
+  it('compares states on what is matched, not on the labels', () => {
+    const state = normalizeCrmViewState({
+      filters: [{ field: 'ownerUid', op: 'equals', value: 'uid-a', label: 'Dana' }],
+      columns: ['name'],
+      sort: { field: 'name', direction: 'asc' },
+    })
+    expect(
+      crmViewStateEquals(state, {
+        ...state,
+        filters: [{ field: 'ownerUid', op: 'equals', value: 'uid-a' }],
+      }),
+    ).toBe(true)
+    expect(crmViewStateEquals(state, { ...state, sort: null })).toBe(false)
+    expect(
+      crmViewStateEquals(state, { ...state, sort: { field: 'name', direction: 'desc' } }),
+    ).toBe(false)
+    expect(crmViewStateEquals(state, { ...state, columns: ['name', 'tags'] })).toBe(false)
+    // Order is meaning: the first servable clause is the one the query runs.
+    const two = {
+      ...state,
+      filters: [
+        { field: 'tags', op: 'contains', value: 'vip' },
+        { field: 'ownerUid', op: 'equals', value: 'uid-a' },
+      ],
+    }
+    expect(
+      crmViewStateEquals(two, { ...two, filters: [...two.filters].reverse() }),
+    ).toBe(false)
+  })
+
+  it('lists a view for its owner, and for everybody once shared', () => {
+    expect(crmViewIsListed({ shared: false, ownerUid: 'uid-a' }, 'uid-a')).toBe(true)
+    expect(crmViewIsListed({ shared: false, ownerUid: 'uid-a' }, 'uid-b')).toBe(false)
+    expect(crmViewIsListed({ shared: true, ownerUid: 'uid-a' }, 'uid-b')).toBe(true)
+    expect(crmViewIsListed({ shared: false, ownerUid: 'uid-a' }, null)).toBe(false)
+  })
+
+  it('carries a segment into view clauses and back', () => {
+    // One tag is the served `contains`; several are the OR the grammar calls `isAnyOf`.
+    expect(crmViewFiltersFromSegment({ tags: ['vip'], sources: ['form'] })).toEqual([
+      { field: 'tags', op: 'contains', value: 'vip' },
+      { field: 'source', op: 'equals', value: 'form' },
+    ])
+    const filters = crmViewFiltersFromSegment({
+      tags: ['vip', 'wholesale'],
+      sources: ['form', 'order'],
+    })
+    expect(filters).toEqual([
+      { field: 'tags', op: 'isAnyOf', value: 'vip,wholesale' },
+      { field: 'source', op: 'isAnyOf', value: 'form,order' },
+    ])
+    expect(crmViewSegmentFilters(filters)).toEqual({
+      tags: ['vip', 'wholesale'],
+      sources: ['form', 'order'],
+    })
+    // Only the two dimensions a segment has are a segment's to keep.
+    expect(
+      crmViewSegmentFilters([
+        { field: 'name', op: 'startsWith', value: 'a' },
+        { field: 'ownerUid', op: 'equals', value: 'uid-a' },
+      ]),
+    ).toBeNull()
+    expect(
+      crmViewSegmentFilters([{ field: 'source', op: 'equals', value: 'carrier-pigeon' }]),
+    ).toBeNull()
+    expect(crmViewFiltersFromSegment({})).toEqual([])
+  })
+
+  it('reads and writes the default view on the profile, per org and section', () => {
+    const profile = {
+      notificationPrefs: { billing: false },
+      crmDefaultViews: { 'org-1': { contacts: 'view-1', deals: '' } },
+    }
+    expect(crmDefaultViewId(profile, 'org-1', 'contacts')).toBe('view-1')
+    expect(crmDefaultViewId(profile, 'org-1', 'deals')).toBeNull()
+    expect(crmDefaultViewId(profile, 'org-2', 'contacts')).toBeNull()
+    expect(crmDefaultViewId(null, 'org-1', 'contacts')).toBeNull()
+    expect(crmDefaultViewPatch('org-1', 'tasks', 'view-9')).toEqual({
+      crmDefaultViews: { 'org-1': { tasks: 'view-9' } },
+    })
+    expect(crmDefaultViewPatch('org-1', 'tasks', null)).toEqual({
+      crmDefaultViews: { 'org-1': { tasks: null } },
+    })
+  })
+
+  it('names a custom field column and reads the key back', () => {
+    expect(crmContactCustomColumn('plan')).toBe('custom_plan')
+    expect(crmContactCustomKey('custom_plan')).toBe('plan')
+    expect(crmContactCustomKey('custom_')).toBeNull()
+    expect(crmContactCustomKey('ownerUid')).toBeNull()
+    expect(isCrmViewSection('contacts')).toBe(true)
+    expect(isCrmViewSection('reports')).toBe(false)
+  })
+})
+
+/**
+ * The one planner every writer of the contact–company link asks
+ * (AGL-2613): which id the facet takes, what the shared mirror becomes, and
+ * which companies' counts move. The properties a second copy gets wrong are
+ * the ones pinned here — an id another holder still names stays in the
+ * mirror, and a count moves only when the mirror actually changes.
+ */
+describe('planContactCompanyLink', () => {
+  const state = (
+    companyId: string | null,
+    companyIds: string[] = companyId ? [companyId] : [],
+    heldElsewhere: string[] = [],
+  ) => ({ companyId, companyIds, heldElsewhere })
+
+  it('is a no-op when the facet already says what was asked', () => {
+    expect(planContactCompanyLink(state('c-acme'), 'c-acme')).toBeNull()
+    expect(planContactCompanyLink(state(null), null)).toBeNull()
+  })
+
+  it('links a first company by union, and counts it once', () => {
+    expect(planContactCompanyLink(state(null), 'c-acme')).toEqual({
+      companyId: 'c-acme',
+      mirror: { op: 'union', companyId: 'c-acme' },
+      counts: [{ companyId: 'c-acme', delta: 1 }],
+    })
+  })
+
+  it('does not count a company another holder already put in the mirror', () => {
+    // Site g-2 linked Jane to Acme; g-1 linking her too is one more facet,
+    // not one more contact at Acme.
+    expect(
+      planContactCompanyLink(state(null, ['c-acme'], ['c-acme']), 'c-acme'),
+    ).toEqual({
+      companyId: 'c-acme',
+      mirror: { op: 'union', companyId: 'c-acme' },
+      counts: [],
+    })
+  })
+
+  it('moves between companies by rewriting the mirror, and moves both counts', () => {
+    expect(planContactCompanyLink(state('c-acme'), 'c-globex')).toEqual({
+      companyId: 'c-globex',
+      mirror: { op: 'set', companyIds: ['c-globex'] },
+      counts: [
+        { companyId: 'c-acme', delta: -1 },
+        { companyId: 'c-globex', delta: 1 },
+      ],
+    })
+  })
+
+  it('keeps an old id in the mirror, uncounted, while another holder still names it', () => {
+    expect(
+      planContactCompanyLink(state('c-acme', ['c-acme'], ['c-acme']), 'c-globex'),
+    ).toEqual({
+      companyId: 'c-globex',
+      mirror: { op: 'set', companyIds: ['c-acme', 'c-globex'] },
+      counts: [{ companyId: 'c-globex', delta: 1 }],
+    })
+  })
+
+  it('unlinks with a remove and a decrement, unless held elsewhere', () => {
+    expect(planContactCompanyLink(state('c-acme'), null)).toEqual({
+      companyId: null,
+      mirror: { op: 'remove', companyId: 'c-acme' },
+      counts: [{ companyId: 'c-acme', delta: -1 }],
+    })
+    expect(planContactCompanyLink(state('c-acme', ['c-acme'], ['c-acme']), null)).toEqual({
+      companyId: null,
+      mirror: null,
+      counts: [],
+    })
+  })
+
+  it('never decrements a company the mirror never carried', () => {
+    // A facet linked before the mirror existed: the count never went up for
+    // it, so letting go must not take it below what it is.
+    expect(planContactCompanyLink(state('c-acme', []), null)).toEqual({
+      companyId: null,
+      mirror: { op: 'remove', companyId: 'c-acme' },
+      counts: [],
+    })
+  })
+})
+
+describe('readContactCompanyLink', () => {
+  it('reads this holder’s link, the mirror, and the ids other holders name', () => {
+    const contact: Record<string, unknown> = {
+      companyIds: ['c-acme', 'c-globex', 7],
+      facets: {
+        'g-1': { sources: {}, interactions: [], companyId: 'c-acme' },
+        'g-2': { sources: {}, interactions: [], companyId: 'c-globex' },
+        'g-3': { sources: {}, interactions: [] },
+      },
+    }
+    expect(readContactCompanyLink(contact, 'g-1')).toEqual({
+      companyId: 'c-acme',
+      companyIds: ['c-acme', 'c-globex'],
+      heldElsewhere: ['c-globex'],
+    })
+    expect(readContactCompanyLink({}, 'g-1')).toEqual({
+      companyId: null,
+      companyIds: [],
+      heldElsewhere: [],
+    })
+  })
+})
+
+describe('companyNameForDomain', () => {
+  it('capitalizes the first label — the starting name a minted company gets', () => {
+    expect(companyNameForDomain('acme.com')).toBe('Acme')
+    expect(companyNameForDomain('initech.co.uk')).toBe('Initech')
+  })
+})
+
+/**
+ * The CRM's org setting (AGL-2613): read off the raw document, off by
+ * default, and declared client-writable so the coverage guard admits the
+ * dotted-path write the settings section makes.
+ */
+describe('crm.autoCreateCompanies', () => {
+  it('is off unless the org document says true', () => {
+    expect(orgAutoCreatesCompanies(null)).toBe(false)
+    expect(orgAutoCreatesCompanies({})).toBe(false)
+    expect(orgAutoCreatesCompanies({ crm: {} })).toBe(false)
+    expect(orgAutoCreatesCompanies({ crm: { autoCreateCompanies: 'yes' } })).toBe(false)
+    expect(orgAutoCreatesCompanies({ crm: { autoCreateCompanies: true } })).toBe(true)
+  })
+
+  it('is written by the path the reader reads, on a key the client may write', () => {
+    expect(CRM_AUTO_CREATE_COMPANIES_PATH).toBe(`${ORG_CRM_SETTINGS_FIELD}.autoCreateCompanies`)
+    expect(Object.keys(ORG_CLIENT_WRITABLE_FIELDS)).toContain(ORG_CRM_SETTINGS_FIELD)
   })
 })
 
@@ -97,6 +442,32 @@ describe('task and activity kinds', () => {
     expect(isCrmActivityKind('other')).toBe(true)
     expect(isCrmActivityKind('todo')).toBe(false)
     expect(isCrmActivityKind(4)).toBe(false)
+  })
+})
+
+describe('advanceContactLifecycleStage', () => {
+  it('fills an empty or unusable stage with the floor', () => {
+    expect(advanceContactLifecycleStage(undefined, 'lead')).toBe('lead')
+    expect(advanceContactLifecycleStage('', 'subscriber')).toBe('subscriber')
+    expect(advanceContactLifecycleStage('vip', 'lead')).toBe('lead')
+  })
+
+  it('advances an earlier stage and keeps a later one', () => {
+    expect(advanceContactLifecycleStage('subscriber', 'lead')).toBe('lead')
+    expect(advanceContactLifecycleStage('lead', 'customer')).toBe('customer')
+    expect(advanceContactLifecycleStage('customer', 'lead')).toBe('customer')
+    expect(advanceContactLifecycleStage('sales-qualified', 'subscriber')).toBe(
+      'sales-qualified',
+    )
+    expect(advanceContactLifecycleStage('evangelist', 'customer')).toBe('evangelist')
+    // The deliberate escape hatch sits after every capture stage on purpose.
+    expect(advanceContactLifecycleStage('other', 'customer')).toBe('other')
+  })
+
+  it('with no floor answers the stage as held, or nothing', () => {
+    expect(advanceContactLifecycleStage('lead', undefined)).toBe('lead')
+    expect(advanceContactLifecycleStage(undefined, undefined)).toBeUndefined()
+    expect(advanceContactLifecycleStage('vip', undefined)).toBeUndefined()
   })
 })
 
@@ -407,7 +778,11 @@ describe('mergeContactTimeline', () => {
     )
     expect(
       merged.map((entry) =>
-        entry.kind === 'captured' ? entry.interaction.summary : entry.activity.$id,
+        entry.kind === 'captured'
+          ? entry.interaction.summary
+          : entry.kind === 'logged'
+            ? entry.activity.$id
+            : entry.key,
       ),
     ).toEqual(['first', 'second', 'a-1', 'a-2'])
   })
@@ -426,6 +801,96 @@ describe('mergeContactTimeline', () => {
       [activity({ $id: 'a-1', atMs: 1_000 })],
     )
     expect(merged.map((entry) => entry.kind)).toEqual(['logged', 'captured'])
+  })
+
+  /*
+   * THE THIRD HISTORY (AGL-2616): the campaign mail the platform sent this
+   * person. Placed at the instant it was SENT, keyed by the provider's
+   * message id, and a kind of its own — never the logged `email` activity,
+   * which is a message a person on the team recorded.
+   */
+  it('places a campaign email at its sent instant, under its own kind', () => {
+    const merged = mergeContactTimeline(captured, [activity({ $id: 'a-1', atMs: 2_000 })], [
+      campaignEmail({ messageId: 'msg-1', sentAtMs: 2_500, openedAtMs: 9_000, openCount: 2 }),
+    ])
+    expect(merged.map((entry) => [entry.kind, entry.atMs])).toEqual([
+      ['captured', 3_000],
+      ['campaign', 2_500],
+      ['logged', 2_000],
+      ['captured', 1_000],
+    ])
+    const entry = merged[1]
+    if (entry.kind !== 'campaign') throw new Error('expected the campaign entry second')
+    expect(entry.key).toBe('campaign:msg-1')
+    expect(entry.email.campaignId).toBe('camp-1')
+    // A logged email activity keeps its own kind beside a campaign entry.
+    const beside = mergeContactTimeline(null, [activity({ $id: 'a-2', kind: 'email' })], [
+      campaignEmail({ messageId: 'msg-2' }),
+    ])
+    expect(beside.map((entry) => entry.kind).sort()).toEqual(['campaign', 'logged'])
+    expect(mergeContactTimeline(null, null, null)).toEqual([])
+  })
+})
+
+const campaignEmail = (
+  overrides: Partial<ContactCampaignEmail> & { messageId: string },
+): ContactCampaignEmail => ({
+  hostId: 'host-a',
+  campaignId: 'camp-1',
+  campaignName: 'Spring sale',
+  subject: 'Spring sale ends Sunday',
+  sentAtMs: 1_000,
+  openCount: 0,
+  clickCount: 0,
+  ...overrides,
+})
+
+/**
+ * The sentence after the email's name: what became of it, in lifecycle
+ * order, counts only past one.
+ */
+describe('campaignEmailSummary', () => {
+  it('names only the states that happened, in the order they happen', () => {
+    expect(campaignEmailSummary(campaignEmail({ messageId: 'm' }))).toEqual(['sent'])
+    expect(
+      campaignEmailSummary(
+        campaignEmail({
+          messageId: 'm',
+          deliveredAtMs: 2,
+          openedAtMs: 3,
+          clickedAtMs: 4,
+          openCount: 1,
+          clickCount: 1,
+        }),
+      ),
+    ).toEqual(['sent', 'delivered', 'opened', 'clicked'])
+  })
+
+  it('counts repeat opens and clicks, and says so only past one', () => {
+    expect(
+      campaignEmailSummary(
+        campaignEmail({
+          messageId: 'm',
+          deliveredAtMs: 2,
+          openedAtMs: 3,
+          clickedAtMs: 4,
+          openCount: 2,
+          clickCount: 3,
+        }),
+      ),
+    ).toEqual(['sent', 'delivered', 'opened ×2', 'clicked ×3'])
+  })
+
+  it('reports a bounce and a complaint after whatever succeeded first', () => {
+    expect(campaignEmailSummary(campaignEmail({ messageId: 'm', bouncedAtMs: 2 }))).toEqual([
+      'sent',
+      'bounced',
+    ])
+    expect(
+      campaignEmailSummary(
+        campaignEmail({ messageId: 'm', deliveredAtMs: 2, complainedAtMs: 3 }),
+      ),
+    ).toEqual(['sent', 'delivered', 'marked as spam'])
   })
 })
 
@@ -449,6 +914,167 @@ describe('crmActivityRecordLink', () => {
   it('answers null for an activity filed against nothing', () => {
     expect(crmActivityRecordLink({})).toBeNull()
     expect(crmActivityRecordLink({ contactId: '' })).toBeNull()
+  })
+
+  it('names the lead last — a converted lead links to the contact it became (AGL-2615)', () => {
+    expect(crmActivityRecordLink({ leadId: 'l' })).toEqual({ record: 'lead', id: 'l' })
+    expect(crmActivityRecordLink({ leadId: 'l', contactId: 'c' })).toEqual({
+      record: 'contact',
+      id: 'c',
+    })
+    expect(crmActivityRecordLink({ leadId: 'l', companyId: 'o' })).toEqual({
+      record: 'company',
+      id: 'o',
+    })
+  })
+})
+
+describe('crmActivityCeilingLink with a lead (AGL-2615)', () => {
+  it('counts on the lead only when nothing else is named', () => {
+    expect(crmActivityCeilingLink({ leadId: 'l' })).toEqual({ field: 'leadId', id: 'l' })
+    expect(crmActivityCeilingLink({ leadId: 'l', contactId: 'c' })).toEqual({
+      field: 'contactId',
+      id: 'c',
+    })
+    expect(crmActivityCeilingLink({ leadId: 'l', dealId: 'd' })).toEqual({
+      field: 'dealId',
+      id: 'd',
+    })
+  })
+})
+
+/**
+ * The delivery state of a one-to-one email (AGL-2615): the webhook advances
+ * it and never lets it regress, and a failure outranks every success.
+ */
+describe('nextCrmEmailDeliveryState', () => {
+  it('lists six states, each labeled', () => {
+    expect(CRM_EMAIL_DELIVERY_STATES).toEqual([
+      'sent',
+      'delivered',
+      'opened',
+      'clicked',
+      'bounced',
+      'complained',
+    ])
+    for (const state of CRM_EMAIL_DELIVERY_STATES) {
+      expect(CRM_EMAIL_DELIVERY_STATE_LABELS[state]).toEqual(expect.any(String))
+      expect(isCrmEmailDeliveryState(state)).toBe(true)
+    }
+    expect(isCrmEmailDeliveryState('queued')).toBe(false)
+  })
+
+  it('moves forward along the progression', () => {
+    expect(nextCrmEmailDeliveryState('sent', 'delivered')).toBe('delivered')
+    expect(nextCrmEmailDeliveryState('delivered', 'opened')).toBe('opened')
+    expect(nextCrmEmailDeliveryState('opened', 'clicked')).toBe('clicked')
+  })
+
+  it('never regresses on a late or replayed event', () => {
+    expect(nextCrmEmailDeliveryState('opened', 'delivered')).toBe('opened')
+    expect(nextCrmEmailDeliveryState('clicked', 'sent')).toBe('clicked')
+    expect(nextCrmEmailDeliveryState('clicked', 'clicked')).toBe('clicked')
+  })
+
+  it('lets a failure override any success, and a complaint override a bounce', () => {
+    expect(nextCrmEmailDeliveryState('clicked', 'bounced')).toBe('bounced')
+    expect(nextCrmEmailDeliveryState('bounced', 'opened')).toBe('bounced')
+    expect(nextCrmEmailDeliveryState('bounced', 'complained')).toBe('complained')
+    expect(nextCrmEmailDeliveryState('complained', 'bounced')).toBe('complained')
+    expect(isCrmEmailDeliveryFailure('bounced')).toBe(true)
+    expect(isCrmEmailDeliveryFailure('complained')).toBe(true)
+    expect(isCrmEmailDeliveryFailure('opened')).toBe(false)
+  })
+
+  it('treats a stored value outside the vocabulary as nothing', () => {
+    expect(nextCrmEmailDeliveryState(undefined, 'delivered')).toBe('delivered')
+    expect(nextCrmEmailDeliveryState('queued', 'sent')).toBe('sent')
+  })
+})
+
+describe('crmEmailDeliveryTags', () => {
+  it('names the org, the activity and the site in the provider alphabet', () => {
+    expect(
+      crmEmailDeliveryTags({ orgId: 'org_1', hostId: 'site-1', activityId: 'AbC123' }),
+    ).toEqual([
+      { name: CRM_EMAIL_ORG_TAG, value: 'org_1' },
+      { name: CRM_EMAIL_ACTIVITY_TAG, value: 'AbC123' },
+      { name: 'hostId', value: 'site-1' },
+    ])
+  })
+
+  it('yields no tags at all when the org or the activity cannot be stamped', () => {
+    expect(
+      crmEmailDeliveryTags({ orgId: 'org 1', hostId: 'site-1', activityId: 'a' }),
+    ).toEqual([])
+    expect(crmEmailDeliveryTags({ orgId: 'org', hostId: 'site-1', activityId: '' })).toEqual(
+      [],
+    )
+  })
+
+  it('drops only the site when the site alone is unstampable', () => {
+    expect(
+      crmEmailDeliveryTags({ orgId: 'org', hostId: 'my.site', activityId: 'a' }),
+    ).toEqual([
+      { name: CRM_EMAIL_ORG_TAG, value: 'org' },
+      { name: CRM_EMAIL_ACTIVITY_TAG, value: 'a' },
+    ])
+  })
+})
+
+describe('buildCrmEmailActivity', () => {
+  it('is an outbound email at `sent`, carrying only the links it was given', () => {
+    const row = buildCrmEmailActivity({
+      subject: 'Hello',
+      body: 'A note',
+      to: 'ada@example.com',
+      atMs: 1_000,
+      byUid: 'u-1',
+      byName: 'Ada',
+      link: { contactId: 'c', dealId: '' },
+      hostId: 'site-1',
+      visibleTo: ['host:site-1'],
+    })
+    expect(row).toEqual({
+      kind: 'email',
+      subject: 'Hello',
+      body: 'A note',
+      to: 'ada@example.com',
+      direction: 'outbound',
+      deliveryState: 'sent',
+      deliveryAtMs: 1_000,
+      atMs: 1_000,
+      byUid: 'u-1',
+      byName: 'Ada',
+      contactId: 'c',
+      hostId: 'site-1',
+      visibleTo: ['host:site-1'],
+    })
+    expect('dealId' in row).toBe(false)
+    expect('sourceActionId' in row).toBe(false)
+  })
+
+  it('names the automation instead of a person, and bounds what it stores', () => {
+    const row = buildCrmEmailActivity({
+      subject: 'x'.repeat(CRM_EMAIL_SUBJECT_MAX + 5),
+      body: 'y'.repeat(CRM_EMAIL_BODY_MAX + 5),
+      to: 'ada@example.com',
+      atMs: 2_000,
+      byUid: '',
+      sourceActionId: 'action-1',
+      link: { leadId: 'l', companyId: 'o' },
+      hostId: 'site-1',
+      visibleTo: ['org'],
+    })
+    expect(row.subject).toHaveLength(CRM_EMAIL_SUBJECT_MAX)
+    expect(row.body).toHaveLength(CRM_EMAIL_BODY_MAX)
+    expect(row).toMatchObject({
+      byUid: '',
+      sourceActionId: 'action-1',
+      leadId: 'l',
+      companyId: 'o',
+    })
+    expect('byName' in row).toBe(false)
   })
 })
 
@@ -481,5 +1107,340 @@ describe('activityTimeLabel', () => {
 
   it('says nothing for a time that is not one', () => {
     expect(activityTimeLabel(Number.NaN, now)).toBe('')
+  })
+})
+
+/**
+ * The team, as a record names them (AGL-2614): a reference is a uid or an
+ * address, a member is listed whether or not the document carries an
+ * address, and the roster is the only directory consulted.
+ */
+describe('parseCrmMemberRef', () => {
+  it('reads an address as an address, normalized', () => {
+    expect(parseCrmMemberRef(' Sam@Example.com ')).toEqual({
+      kind: 'email',
+      email: 'sam@example.com',
+    })
+  })
+
+  it('reads anything else as a uid', () => {
+    expect(parseCrmMemberRef('uid-sam')).toEqual({ kind: 'uid', uid: 'uid-sam' })
+  })
+
+  it('names nobody for a blank, and for an address that is not one', () => {
+    expect(parseCrmMemberRef('')).toBeNull()
+    expect(parseCrmMemberRef('   ')).toBeNull()
+    expect(parseCrmMemberRef(null)).toBeNull()
+    expect(parseCrmMemberRef('not@an')).toBeNull()
+  })
+})
+
+describe('crmMemberOption', () => {
+  it('labels by display name, then address, then uid', () => {
+    expect(crmMemberOption({ $id: 'u1', displayName: 'Ada', email: 'ada@example.com' })).toEqual({
+      uid: 'u1',
+      label: 'Ada',
+      email: 'ada@example.com',
+    })
+    expect(crmMemberOption({ $id: 'u2', email: 'sam@example.com' })).toEqual({
+      uid: 'u2',
+      label: 'sam@example.com',
+      email: 'sam@example.com',
+    })
+  })
+
+  it('lists a member whose document has no address, by name or by uid', () => {
+    // The re-granted and the address-less adds: still on the team, still
+    // pickable, never a blank line and never dropped.
+    expect(crmMemberOption({ $id: 'u3', displayName: 'Grace' })).toEqual({
+      uid: 'u3',
+      label: 'Grace',
+    })
+    expect(crmMemberOption({ $id: 'u4', displayName: '' })).toEqual({ uid: 'u4', label: 'u4' })
+  })
+
+  it('refuses a row with no uid', () => {
+    expect(crmMemberOption({ email: 'nobody@example.com' })).toBeNull()
+  })
+})
+
+describe('findOrgMember', () => {
+  const roster = [
+    { uid: 'u1', label: 'Ada', email: 'ada@example.com' },
+    { uid: 'u3', label: 'Grace' },
+  ]
+
+  it('resolves by uid, and by address when the record carries one', () => {
+    expect(findOrgMember(roster, 'u3')?.label).toBe('Grace')
+    expect(findOrgMember(roster, 'Ada@Example.com')?.uid).toBe('u1')
+  })
+
+  it('names nobody for a stranger, a blank, or an address nobody has', () => {
+    expect(findOrgMember(roster, 'u9')).toBeUndefined()
+    expect(findOrgMember(roster, '')).toBeUndefined()
+    expect(findOrgMember(roster, 'ghost@example.com')).toBeUndefined()
+  })
+})
+
+/*==========================================
+ * WHO A NEW RECORD BELONGS TO (AGL-2618).
+ *
+ * The settings are read tolerantly off the raw org document, a rule matches
+ * only when every condition it names holds, the pool is tried from the
+ * member after the last recipient, and every path the section writes is
+ * under the one key the org's client branch admits.
+ *=========================================*/
+describe('crm assignment settings', () => {
+  it('reads nothing from an org that has set nothing', () => {
+    for (const org of [null, undefined, {}, { crm: {} }, { crm: 'no' }]) {
+      expect(readCrmAssignmentSettings(org as never)).toEqual({
+        rules: [],
+        pool: { memberUids: [], lastAssignedUid: null },
+        hostDefaultOwners: {},
+      })
+    }
+  })
+
+  it('reads the rules in order, dropping the ones that cannot assign', () => {
+    const { rules } = readCrmAssignmentSettings({
+      crm: {
+        assignmentRules: [
+          { id: 'a', when: { source: 'form' }, assign: { memberUid: ' uid-1 ' } },
+          // No id: nothing could reorder or delete it.
+          { when: {}, assign: { memberUid: 'uid-2' } },
+          // Names nobody and no pool.
+          { id: 'c', when: {}, assign: {} },
+          // A source outside the capture vocabulary is not a condition.
+          { id: 'd', when: { source: 'carrier-pigeon', tag: ' VIP ' }, assign: { roundRobin: true } },
+          'not a rule',
+          null,
+          { id: 'f', when: { emailDomain: '@Acme.COM', formId: 'form-1' }, assign: { memberUid: 'uid-3' } },
+        ],
+      },
+    })
+    expect(rules).toEqual([
+      { id: 'a', when: { source: 'form' }, assign: { memberUid: 'uid-1' } },
+      { id: 'd', when: { tag: 'vip' }, assign: { roundRobin: true } },
+      { id: 'f', when: { emailDomain: 'acme.com', formId: 'form-1' }, assign: { memberUid: 'uid-3' } },
+    ])
+  })
+
+  it('caps the rules and the pool at the section’s ceilings, and dedupes the pool', () => {
+    const rules = Array.from({ length: CRM_ASSIGNMENT_RULES_MAX + 5 }, (_, index) => ({
+      id: `r${index}`,
+      when: {},
+      assign: { memberUid: 'uid' },
+    }))
+    const memberUids = [
+      ...Array.from({ length: CRM_ROUND_ROBIN_POOL_MAX + 5 }, (_, index) => `m${index}`),
+      'm0',
+    ]
+    const settings = readCrmAssignmentSettings({
+      crm: { assignmentRules: rules, roundRobin: { memberUids, lastAssignedUid: 'm3' } },
+    })
+    expect(settings.rules).toHaveLength(CRM_ASSIGNMENT_RULES_MAX)
+    expect(settings.pool.memberUids).toHaveLength(CRM_ROUND_ROBIN_POOL_MAX)
+    expect(new Set(settings.pool.memberUids).size).toBe(CRM_ROUND_ROBIN_POOL_MAX)
+    expect(settings.pool.lastAssignedUid).toBe('m3')
+  })
+
+  it('reads a site’s default owner and ignores a site that set none', () => {
+    const org = {
+      crm: { hosts: { 'site-1': { defaultOwnerUid: 'uid-lead' }, 'site-2': {}, 'site-3': 'x' } },
+    }
+    expect(readCrmAssignmentSettings(org).hostDefaultOwners).toEqual({ 'site-1': 'uid-lead' })
+    expect(crmHostDefaultOwner(org, 'site-1')).toBe('uid-lead')
+    expect(crmHostDefaultOwner(org, 'site-2')).toBeNull()
+    expect(crmHostDefaultOwner(null, 'site-1')).toBeNull()
+  })
+
+  it('reads one rule on its own, the way the drawer validates it', () => {
+    expect(readCrmAssignmentRule({ id: 'x', when: {}, assign: { roundRobin: true } })).toEqual({
+      id: 'x',
+      when: {},
+      assign: { roundRobin: true },
+    })
+    expect(readCrmAssignmentRule({ id: 'x', when: {}, assign: { roundRobin: 'yes' } })).toBeNull()
+    expect(readCrmAssignmentRule({ id: '', when: {}, assign: { memberUid: 'u' } })).toBeNull()
+    expect(readCrmAssignmentRule([])).toBeNull()
+  })
+
+  it('writes by paths under the one key the client may write', () => {
+    for (const path of [
+      CRM_ASSIGNMENT_RULES_PATH,
+      CRM_ROUND_ROBIN_POOL_PATH,
+      CRM_ROUND_ROBIN_LAST_ASSIGNED_PATH,
+    ]) {
+      expect(path.startsWith(`${ORG_CRM_SETTINGS_FIELD}.`)).toBe(true)
+    }
+    expect(crmHostDefaultOwnerSegments('site.with.dots')).toEqual([
+      ORG_CRM_SETTINGS_FIELD,
+      'hosts',
+      'site.with.dots',
+      'defaultOwnerUid',
+    ])
+    expect(() => crmHostDefaultOwnerSegments('')).toThrow()
+    expect(Object.keys(ORG_CLIENT_WRITABLE_FIELDS)).toContain(ORG_CRM_SETTINGS_FIELD)
+  })
+})
+
+describe('assignmentRuleMatches', () => {
+  const capture = {
+    source: 'form' as const,
+    email: 'Jo@Acme.com',
+    formId: 'form-1',
+    tags: ['VIP', 'newsletter'],
+  }
+
+  it('matches every capture when it names no condition', () => {
+    expect(assignmentRuleMatches({}, capture)).toBe(true)
+    expect(assignmentRuleMatches({}, { source: 'order', email: 'x@y.z' })).toBe(true)
+  })
+
+  it('holds every condition it names, and fails on the first that does not', () => {
+    expect(assignmentRuleMatches({ source: 'form', formId: 'form-1' }, capture)).toBe(true)
+    expect(assignmentRuleMatches({ source: 'booking' }, capture)).toBe(false)
+    expect(assignmentRuleMatches({ formId: 'form-2' }, capture)).toBe(false)
+    expect(assignmentRuleMatches({ formId: 'form-1' }, { ...capture, formId: null })).toBe(false)
+  })
+
+  it('compares the address’s own domain, public mailboxes included', () => {
+    expect(assignmentRuleMatches({ emailDomain: 'acme.com' }, capture)).toBe(true)
+    expect(assignmentRuleMatches({ emailDomain: 'acme.co' }, capture)).toBe(false)
+    expect(
+      assignmentRuleMatches({ emailDomain: 'gmail.com' }, { source: 'form', email: 'a@Gmail.com' }),
+    ).toBe(true)
+    expect(assignmentEmailDomain('a@Gmail.com')).toBe('gmail.com')
+    expect(assignmentEmailDomain('no-at-sign')).toBeNull()
+    // Where the company link answers null for a consumer domain, a rule may
+    // still name it: the two questions are different.
+    expect(companyDomainForEmail('a@gmail.com')).toBeNull()
+  })
+
+  it('matches a tag regardless of case, against the capture’s and the contact’s', () => {
+    expect(assignmentRuleMatches({ tag: 'vip' }, capture)).toBe(true)
+    expect(assignmentRuleMatches({ tag: 'partner' }, capture)).toBe(false)
+    expect(assignmentRuleMatches({ tag: 'vip' }, { ...capture, tags: undefined })).toBe(false)
+  })
+})
+
+describe('roundRobinOrder', () => {
+  it('starts after the last recipient and wraps round to them', () => {
+    expect(roundRobinOrder(['a', 'b', 'c'], 'a')).toEqual(['b', 'c', 'a'])
+    expect(roundRobinOrder(['a', 'b', 'c'], 'c')).toEqual(['a', 'b', 'c'])
+  })
+
+  it('starts from the top for no pointer, or a pointer no longer in the pool', () => {
+    expect(roundRobinOrder(['a', 'b'], null)).toEqual(['a', 'b'])
+    expect(roundRobinOrder(['a', 'b'], 'gone')).toEqual(['a', 'b'])
+  })
+
+  it('assigns a pool of one to that one, and an empty pool to nobody', () => {
+    expect(roundRobinOrder(['a'], 'a')).toEqual(['a'])
+    expect(roundRobinOrder([], 'a')).toEqual([])
+  })
+})
+
+describe('describeAssignmentRule', () => {
+  const name = (uid: string) => (uid === 'uid-1' ? 'Sam' : uid)
+
+  it('reads the conditions in words and the target by name', () => {
+    expect(
+      describeAssignmentRule(
+        {
+          id: 'r',
+          when: { source: 'form', formId: 'f1', emailDomain: 'acme.com', tag: 'vip' },
+          assign: { memberUid: 'uid-1' },
+        },
+        name,
+      ),
+    ).toEqual({
+      when: 'source is Form and form is f1 and email domain is acme.com and tagged vip',
+      assign: 'Sam',
+    })
+    expect(
+      describeAssignmentRule({ id: 'r', when: {}, assign: { roundRobin: true } }, name),
+    ).toEqual({ when: 'Every capture', assign: 'Round robin' })
+  })
+})
+
+describe('newAssignmentRuleId', () => {
+  it('mints an id the org does not already hold', () => {
+    const first = newAssignmentRuleId([])
+    expect(first).toMatch(/^rule-/)
+    const second = newAssignmentRuleId([first])
+    expect(second).not.toBe(first)
+  })
+})
+
+describe('line items on a deal (AGL-2620)', () => {
+  it('accepts a list in the deal\'s currency, normalized, and sums it in whole cents', () => {
+    const read = readDealLineItems(
+      [
+        { productId: ' prod-1 ', name: '  House blend, 5 lb ', quantity: 3, unitAmountCents: 4_500 },
+        { name: 'Delivery', quantity: 1, unitAmountCents: 0, currency: 'USD' },
+      ],
+      'usd',
+    )
+    expect(read).toEqual({
+      items: [
+        { productId: 'prod-1', name: 'House blend, 5 lb', quantity: 3, unitAmountCents: 4_500, currency: 'usd' },
+        { name: 'Delivery', quantity: 1, unitAmountCents: 0, currency: 'usd' },
+      ],
+    })
+    expect(lineItemsTotalCents('items' in read ? read.items : [])).toBe(13_500)
+    expect(dealHasLineItems({ lineItems: 'items' in read ? read.items : [] })).toBe(true)
+  })
+
+  it('reads nothing as no line items, and an empty list as the same', () => {
+    expect(readDealLineItems(undefined, 'usd')).toEqual({ items: [] })
+    expect(readDealLineItems(null, 'usd')).toEqual({ items: [] })
+    expect(readDealLineItems([], 'usd')).toEqual({ items: [] })
+    expect(dealHasLineItems({ lineItems: [] })).toBe(false)
+    expect(dealHasLineItems({})).toBe(false)
+    expect(lineItemsTotalCents(undefined)).toBe(0)
+  })
+
+  it('names the line and the reason it was refused', () => {
+    const error = (input: unknown, currency = 'usd') => {
+      const read = readDealLineItems(input, currency)
+      return 'error' in read ? read.error : null
+    }
+    expect(error('lines')).toMatch(/must be a list/)
+    expect(error([{ quantity: 1, unitAmountCents: 100 }])).toMatch(/^Line 1 needs a name/)
+    expect(error([{ name: 'A', quantity: 0, unitAmountCents: 100 }])).toMatch(/^Line 1: the quantity/)
+    expect(error([{ name: 'A', quantity: 1.5, unitAmountCents: 100 }])).toMatch(/^Line 1: the quantity/)
+    expect(error([{ name: 'A', quantity: 1, unitAmountCents: -1 }])).toMatch(/^Line 1: the unit amount/)
+    expect(error([{ name: 'A', quantity: 1, unitAmountCents: 10.5 }])).toMatch(/^Line 1: the unit amount/)
+    expect(error([{ name: 'A', quantity: 1, unitAmountCents: 100 }, 'x'])).toMatch(/^Line 2 must be an object/)
+    // A line in another currency cannot be added to the rest.
+    expect(error([{ name: 'A', quantity: 1, unitAmountCents: 100, currency: 'eur' }])).toMatch(
+      /Line 1 is in EUR; every line must be in the deal's currency, USD/,
+    )
+    expect(
+      error(
+        Array.from({ length: DEAL_LINE_ITEMS_MAX + 1 }, () => ({ name: 'A', quantity: 1, unitAmountCents: 1 })),
+      ),
+    ).toMatch(/at most 50/)
+  })
+
+  it('trusts a stored line no further than whole, non-negative numbers', () => {
+    expect(
+      lineItemsTotalCents([
+        { quantity: 2.4, unitAmountCents: 99.6 },
+        { quantity: -3, unitAmountCents: 100 },
+        { quantity: Number.NaN, unitAmountCents: 100 },
+      ]),
+    ).toBe(200)
+  })
+})
+
+describe('an archived pipeline (AGL-2620)', () => {
+  it('is one with a positive archivedAt, and nothing else', () => {
+    expect(isPipelineArchived({ archivedAt: 1_700_000_000_000 })).toBe(true)
+    expect(isPipelineArchived({ archivedAt: null })).toBe(false)
+    expect(isPipelineArchived({ archivedAt: 0 })).toBe(false)
+    expect(isPipelineArchived({})).toBe(false)
+    expect(isPipelineArchived(null)).toBe(false)
   })
 })

@@ -126,13 +126,63 @@ export function defineUiFeatureBundle(
 }
 
 /**
+ * One of the organization's sites, as the shell hands them to a surface
+ * mounted at the ORGANIZATION level (AGL-2630).
+ *
+ * The three facts a cross-site surface needs and a record never carries: a
+ * record holds a host DOCUMENT ID, a console URL under `/hosts/[host]` takes
+ * the SUBDOMAIN, and a person reads the NAME. `subdomain` is null for a site
+ * whose document did not answer — such a site is still named (the
+ * relationship is real) and never linked (the route would not exist).
+ */
+export interface ConsolePluginOrgHost {
+  id: string
+  name: string
+  subdomain: string | null
+}
+
+/**
+ * The organization a surface is mounted under when it is mounted at the
+ * org level rather than under a site (AGL-2630).
+ *
+ * The CRM exists at two levels: the site hub, where `hostId` names the site
+ * and every read is scoped to it, and `/[orgSlug]/crm`, where an org-wide
+ * member sees every site's records at once. At the org level there is no
+ * site, so the shell hands the org's own site list instead — the pickers a
+ * create needs (a record is always captured BY a site) and the names a
+ * cross-site fact is shown under. `hostsReady` separates "no sites" from
+ * "not yet".
+ */
+export interface ConsolePluginOrgMount {
+  orgId: string
+  hosts: readonly ConsolePluginOrgHost[]
+  hostsReady: boolean
+  /**
+   * The console path every site's own hub hangs beneath — `/[orgSlug]/hosts`
+   * — so a cross-site fact can link a person into the site that holds them:
+   * a site's CRM is `${hostsPath}/${subdomain}/crm`. A path rather than a
+   * builder because the mount is data the shell hands over and a plugin
+   * cannot import the console's route table.
+   */
+  hostsPath: string
+}
+
+/**
  * Props every plugin-contributed console page receives from the shell's
  * generic host route. The shell owns auth + chrome + flag gating and
  * passes the resolved host and entitlement state in, so plugin pages stay
  * free of console-app hooks.
  */
 export interface ConsolePluginPageProps {
-  hostId: string
+  /**
+   * The site this surface is mounted under — or `null` when it is mounted at
+   * the ORGANIZATION level, where there is no site and {@link orgMount} says
+   * which org (AGL-2630). Only the CRM mounts there today; every other
+   * surface is reached through a site route and always receives a string.
+   */
+  hostId: string | null
+  /** Present only at an org-level mount — see {@link ConsolePluginOrgMount}. */
+  orgMount?: ConsolePluginOrgMount
   /** True when the org holds the extension's `featureFlag` entitlement. */
   entitled: boolean
   /**
@@ -272,6 +322,24 @@ export interface ConsoleNavSection {
    * link exactly as it is hidden from the rail — one verdict, both places.
    */
   navTabId?: string
+  /**
+   * Entitlement flag gating THIS section, when the org's plan may include
+   * the surface and not the whole of it (AGL-2611). Omit to inherit the
+   * extension's `featureFlag`, which is the common case.
+   *
+   * Composes by AND with the extension's, the way `navTabId` composes with
+   * the nav item's release gate: the shell answers the extension's flag
+   * first and this one inside it, so a section can only ever be NARROWER
+   * than the surface holding it. A section this refuses is resolved
+   * `locked` for the rail and refused on a deep link with the shell's own
+   * upgrade notice — one verdict, both places — and the page body never
+   * mounts, which is the whole of the shell's promise about entitlements.
+   *
+   * The case it exists for is a hub whose first section ships on every
+   * plan and whose others do not: the CRM's contacts list is on Free, and
+   * the sales suite built on that list starts at Starter.
+   */
+  featureFlag?: keyof OrgFeatureFlags
 }
 
 /** A {@link ConsoleNavSection} with the shell's answers filled in. */
@@ -282,6 +350,15 @@ export interface ResolvedConsoleNavSection {
   href: string
   /** False when this section's release flag hides it from this viewer. */
   visible: boolean
+  /**
+   * True when the org's SETTLED plan does not carry the section's
+   * `featureFlag` (AGL-2611). The rail draws it locked and still links it —
+   * the notice behind the link is the way to buy it — and the shell refuses
+   * the body. Never true while the org read is pending: an unsettled plan
+   * is not a refusal, and a lock that appeared for one paint on a paying
+   * workspace would be the AGL-1380 defect in a new place.
+   */
+  locked?: boolean
 }
 
 export interface ConsoleNavItem {
@@ -489,6 +566,19 @@ export interface ConsoleWidget {
    * and for the same reason.
    */
   permission?: string
+  /**
+   * The entitlement THIS card needs, when it is narrower than its
+   * extension's {@link ConsoleExtension.featureFlag} (AGL-2611).
+   *
+   * Composes by AND with the extension's, exactly as `permission` above
+   * does: a card cannot escape its extension's gate by declaring nothing,
+   * and declaring one here can only narrow. The case is an extension whose
+   * surface ships on every plan while one of its cards belongs to a paid
+   * part of it — the CRM's dashboard cards, which read the tasks and the
+   * pipeline a Free workspace does not have. Absent without an upsell, for
+   * the reason `permission` gives.
+   */
+  featureFlag?: keyof OrgFeatureFlags
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   Component: ComponentType<any>
 }

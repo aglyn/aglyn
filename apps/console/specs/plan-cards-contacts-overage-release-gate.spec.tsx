@@ -169,16 +169,16 @@ function mount() {
   )
 }
 
-/** Every contacts row on screen, billed or not. */
-const contactsRows = () => screen.queryAllByText(/[\d,∞]+ contacts/)
+/** Every records row on screen, billed or not (the band widened, AGL-2611). */
+const contactsRows = () => screen.queryAllByText(/[\d,∞]+ CRM records/)
 
 /** Rows quoting the rate as a charge that is happening NOW. */
 const billedNow = () =>
-  screen.queryAllByText(/contacts \(\+\$[\d.]+\/1k over\)/)
+  screen.queryAllByText(/CRM records \(\+\$[\d.]+\/1k over\)/)
 
 /** Rows quoting the rate as one that starts later. */
 const billedLater = () =>
-  screen.queryAllByText(/contacts \(\+\$[\d.]+\/1k over once Contacts opens\)/)
+  screen.queryAllByText(/CRM records \(\+\$[\d.]+\/1k over once the CRM opens\)/)
 
 /**
  * The gate has settled into SOME claim — deliberately outcome-neutral.
@@ -214,9 +214,9 @@ describe('plan cards, contacts overage release gate', () => {
     await waitFor(settled)
     expect(billedLater().length).toBeGreaterThan(0)
 
-    // The band alone would read as a hard cap. Contacts over it are not
+    // The band alone would read as a hard cap. Records over it are not
     // capped, only uncharged, so a bare count is its own false claim.
-    expect(screen.queryAllByText(/[\d,]+ contacts$/)).toHaveLength(0)
+    expect(screen.queryAllByText(/[\d,]+ CRM records$/)).toHaveLength(0)
   })
 
   it('quotes the charge as active once the flag is on', async () => {

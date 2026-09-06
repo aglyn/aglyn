@@ -289,7 +289,7 @@ async function createEmulatorOrg() {
         'bookings',
         'commerce',
         'marketplace',
-        'contacts',
+        'crm',
         'data',
         'email',
         'events-calendar',

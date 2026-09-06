@@ -31,18 +31,19 @@ import {
 import { LogActivityDialog } from './log-activity-dialog'
 
 export type RecordActivityCardProps = ActivityRecordLink & {
-  hostId: string
+  /** The site the record is read under, or `null` at the organization level. */
+  hostId: string | null
   org: CrmOrg
 }
 
 /**
- * The activity log of one record — a contact, a company or a deal — with
- * the button that adds to it (AGL-2600).
+ * The activity log of one record — a contact, a company, a deal or a lead
+ * (AGL-2615) — with the button that adds to it (AGL-2600).
  *
- * One card for all three record pages, because the log is the same thing on
+ * One card for all four record pages, because the log is the same thing on
  * each of them: what people did about this record, newest first, bounded to
  * a page of a hundred with a foot that asks for the next hundred. Which
- * record is decided by whichever of the three ids the page passes, and that
+ * record is decided by whichever of the four ids the page passes, and that
  * id is what the dialog files a new activity against — the page fixes it,
  * the reader does not pick it.
  *
@@ -51,7 +52,7 @@ export type RecordActivityCardProps = ActivityRecordLink & {
  * stream; see `contact-timeline-card.tsx`, which is this card's superset.
  */
 export function RecordActivityCard(props: RecordActivityCardProps) {
-  const { hostId, org, contactId, companyId, dealId } = props
+  const { hostId, org, contactId, companyId, dealId, leadId } = props
   const scope = useActivityScope(hostId, org)
   /*
    * Memoized because the link is a listener dependency by value inside
@@ -60,8 +61,8 @@ export function RecordActivityCard(props: RecordActivityCardProps) {
    * noisy for anything that compares the object.
    */
   const link = useMemo<ActivityRecordLink>(
-    () => ({ contactId, companyId, dealId }),
-    [contactId, companyId, dealId],
+    () => ({ contactId, companyId, dealId, leadId }),
+    [contactId, companyId, dealId, leadId],
   )
   const activities = useActivityWindow(scope, link)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -106,7 +107,18 @@ export function RecordActivityCard(props: RecordActivityCardProps) {
             onEdit={openEdit}
             hasMore={activities.hasMore}
             onShowMore={activities.showMore}
-            emptyText="Nothing logged yet — a call, an email, a meeting or a note goes here."
+            emptyText="A call, an email, a meeting or a note about this record goes here."
+            emptyAction={
+              <Button
+                size="small"
+                variant="contained"
+                color="primary"
+                onClick={openNew}
+                disabled={!activities.ready}
+              >
+                {'Log activity'}
+              </Button>
+            }
           />
         )}
       </CardDisplay>

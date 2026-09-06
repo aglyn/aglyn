@@ -17,13 +17,18 @@
 'use client'
 
 import {
-  consentGroupForHost,
   type ConsolePluginPageProps,
   CRM_COLLECTIONS,
+  findOrgMember,
   pluginDocsHelp,
 } from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { useCrmSavedView } from '../hooks/use-crm-saved-view'
+import { useCrmScope } from '../hooks/use-crm-scope'
+import { useCrmViewGrid } from '../hooks/use-crm-view-grid'
+import CrmViewsControl from './crm-views-control'
+import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import {
@@ -36,17 +41,18 @@ import {
 } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import { deleteField, doc, serverTimestamp, updateDoc } from 'firebase/firestore'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useCrmRecordNames } from '../hooks/use-crm-record-names'
 import { type CrmTaskRow, useCrmTaskList, useNowMs } from '../hooks/use-crm-tasks'
 import { useOrgMemberDirectory } from '../hooks/use-org-member-directory'
+import { downloadTextFile } from '../model/contacts-csv'
 import { crmRoutes } from '../model/crm-routes'
 import { completeCrmTask } from '../model/task-api'
+import { type TaskCsvOptions, tasksCsv } from '../model/tasks-csv'
 import {
   CRM_TASK_VIEW_LIMIT,
   CRM_TASK_VIEWS,
   type CrmTaskView,
-  taskRecordLink,
 } from '../model/task-views'
 import {
   TaskDueText,
@@ -55,15 +61,27 @@ import {
   TaskRecordLink,
 } from './task-cells'
 import TaskEditDrawer from './task-edit-drawer'
+import TaskSnoozeMenu from './task-snooze-menu'
+import TasksBulkBar from './tasks-bulk-bar'
 
-/** What an empty view says, by view — "no overdue tasks" is good news. */
+/** What an empty view is headed, by view — "nothing overdue" is good news. */
+const EMPTY_LABEL: Record<CrmTaskView, string> = {
+  mine: 'Nothing is assigned to you',
+  overdue: 'Nothing is overdue',
+  today: 'Nothing is due today',
+  upcoming: 'Nothing is scheduled beyond today',
+  open: 'No open tasks',
+  done: 'No completed tasks yet',
+}
+
+/** The one sentence under it, by view. */
 const EMPTY_COPY: Record<CrmTaskView, string> = {
-  mine: 'Nothing is assigned to you. Tasks you create are yours unless you hand them to someone.',
-  overdue: 'Nothing is overdue.',
-  today: 'Nothing is due today.',
-  upcoming: 'Nothing is scheduled beyond today.',
-  open: 'No open tasks. Create one from a contact, a company, a deal, or here.',
-  done: 'No completed tasks yet.',
+  mine: 'Tasks you create are yours unless you hand them to someone.',
+  overdue: 'Every dated task is on or ahead of schedule.',
+  today: 'Nothing on your calendar day is owed to anyone in the CRM.',
+  upcoming: 'A task with a due date past today would be listed here.',
+  open: 'A task is a call, an email, a meeting or a to-do owed to a contact, a company or a deal.',
+  done: 'Tasks ticked off on their record, or here, are kept for the history.',
 }
 
 /**
@@ -80,6 +98,12 @@ const EMPTY_COPY: Record<CrmTaskView, string> = {
  * `taskCompleted` host event and only the server can run a workflow.
  * Reopening is client-direct: undoing a tick has no side effect beyond the
  * document, and the rules gate it like any other CRM write.
+ *
+ * The rows are selectable, and a selection raises `TasksBulkBar` over the
+ * list — Complete and Assign through their routes, the due date and the
+ * delete as batched writes (AGL-2621). Export CSV beside the view control
+ * writes the view through `tasksCsv()`, naming the assignee and the linked
+ * records; the bar writes the same file over the selection.
  */
 export function TasksSection(props: ConsolePluginPageProps) {
   const { hostId, org, basePath = '' } = props
@@ -89,12 +113,29 @@ export function TasksSection(props: ConsolePluginPageProps) {
   const { enqueueSnackbar } = useSnackbar()
   const nowMs = useNowMs()
   const routes = useMemo(() => crmRoutes(basePath), [basePath])
-  const groupId = useMemo(
-    () => consentGroupForHost(orgRecord ?? null, hostId).groupId,
-    [orgRecord, hostId],
-  )
+  // The viewing group a linked contact is named through, or `null` at the
+  // organization level, where each is named through its own holder.
+  const { consentGroup } = useCrmScope({ hostId, org: orgRecord })
+  const groupId = consentGroup?.groupId ?? null
 
-  const [view, setView] = useState<CrmTaskView>('mine')
+  /*
+   * Which of the six task views is open is the saved VIEW'S (AGL-2617): a
+   * saved view of tasks holds the task view beside the columns and the
+   * sort, and the toggle below writes into it. Unset reads as "My tasks",
+   * which is what the section opened on before views existed.
+   */
+  const views = useCrmSavedView({ section: 'tasks', hostId, org: orgRecord, basePath })
+  const view: CrmTaskView = useMemo(() => {
+    const value = views.state.filters.find((clause) => clause.field === 'view')?.value
+    return CRM_TASK_VIEWS.some((option) => option.id === value)
+      ? (value as CrmTaskView)
+      : 'mine'
+  }, [views.state.filters])
+  const setView = useCallback(
+    (next: CrmTaskView) =>
+      views.setFilters([{ field: 'view', op: 'equals', value: next }]),
+    [views.setFilters],
+  )
   const list = useCrmTaskList({
     hostId,
     org: orgRecord,
@@ -105,15 +146,39 @@ export function TasksSection(props: ConsolePluginPageProps) {
   const { tasks, status, fromCache, truncated, scope, orgId, readTokens } = list
   const directory = useOrgMemberDirectory(orgId)
 
+  /*
+   * Every record a task names, not only the one its "For" cell shows: the
+   * export writes the contact, the company and the deal each by name, and
+   * a task that names two would otherwise carry an id in one column.
+   */
   const linked = useMemo(
     () =>
-      tasks.flatMap((task) => {
-        const link = taskRecordLink(task, routes)
-        return link ? [{ kind: link.kind, id: link.id }] : []
-      }),
-    [tasks, routes],
+      tasks.flatMap((task) => [
+        ...(task.contactId ? [{ kind: 'contact' as const, id: task.contactId }] : []),
+        ...(task.companyId ? [{ kind: 'company' as const, id: task.companyId }] : []),
+        ...(task.dealId ? [{ kind: 'deal' as const, id: task.dealId }] : []),
+      ]),
+    [tasks],
   )
-  const nameOf = useCrmRecordNames({ orgId, groupId, records: linked })
+  const nameOf = useCrmRecordNames({ orgId, groupId, org: orgRecord, records: linked })
+
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  // A view is a different set of rows; a selection made on the last one
+  // would be a count over rows no longer on screen.
+  useEffect(() => setSelectedIds([]), [view])
+  const csvOptions: TaskCsvOptions = useMemo(
+    () => ({
+      assigneeEmail: (uid) => {
+        const member = findOrgMember(directory.members, uid)
+        return member?.email || member?.label || uid
+      },
+      recordName: nameOf,
+    }),
+    [directory.members, nameOf],
+  )
+  const handleExport = useCallback(() => {
+    downloadTextFile('tasks.csv', 'text/csv', tasksCsv(tasks, csvOptions))
+  }, [tasks, csvOptions])
 
   const [drawer, setDrawer] = useState<{ open: boolean; task: CrmTaskRow | null }>({
     open: false,
@@ -144,7 +209,9 @@ export function TasksSection(props: ConsolePluginPageProps) {
           )
           enqueueSnackbar('Task reopened', { variant: 'success' })
         } else {
-          await completeCrmTask(user, { hostId, taskId: task.$id })
+          // The route resolves the org and emits the event for a site: the
+          // mounted one, or at the organization level the task's own.
+          await completeCrmTask(user, { hostId: hostId ?? task.hostId, taskId: task.$id })
           enqueueSnackbar('Task completed', { variant: 'success' })
         }
       } catch (cause) {
@@ -232,10 +299,19 @@ export function TasksSection(props: ConsolePluginPageProps) {
       {
         field: 'dueAtMs',
         headerName: 'Due',
-        width: 220,
+        width: 260,
         sortable: false,
         renderCell: ({ row }: { row: CrmTaskRow }) => (
-          <TaskDueText task={row} nowMs={nowMs} />
+          <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', height: '100%' }}>
+            <TaskDueText task={row} nowMs={nowMs} />
+            {row.status === 'done' || !scope ? null : (
+              <TaskSnoozeMenu
+                dueAtMs={row.dueAtMs}
+                target={{ write: { scope, taskId: row.$id } }}
+                disabled={busyId === row.$id}
+              />
+            )}
+          </Stack>
         ),
       },
       {
@@ -263,8 +339,10 @@ export function TasksSection(props: ConsolePluginPageProps) {
         ),
       },
     ],
-    [busyId, toggleDone, nowMs, directory, routes, nameOf],
+    [busyId, toggleDone, nowMs, directory, routes, nameOf, scope],
   )
+  /* The column and sort models are the view's (AGL-2617). */
+  const grid = useCrmViewGrid(views, columns)
 
   return (
     <>
@@ -293,30 +371,53 @@ export function TasksSection(props: ConsolePluginPageProps) {
         }}
       >
         <Stack spacing={2}>
-          <ToggleButtonGroup
-            exclusive
-            size="small"
-            color="primary"
-            value={view}
-            onChange={(_event, next) => {
-              if (next) setView(next as CrmTaskView)
-            }}
-            aria-label="Task view"
+          {/* The saved view this list is showing, beside the task view it narrows to (AGL-2617). */}
+          <Stack
+            direction="row"
+            spacing={2}
+            sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
           >
-            {CRM_TASK_VIEWS.map((option) => (
-              <ToggleButton key={option.id} value={option.id}>
-                {option.label}
-              </ToggleButton>
-            ))}
-          </ToggleButtonGroup>
+            <CrmViewsControl controller={views} allLabel="All tasks" />
+            <ToggleButtonGroup
+              exclusive
+              size="small"
+              color="primary"
+              value={view}
+              onChange={(_event, next) => {
+                if (next) setView(next as CrmTaskView)
+              }}
+              aria-label="Task view"
+            >
+              {CRM_TASK_VIEWS.map((option) => (
+                <ToggleButton key={option.id} value={option.id}>
+                  {option.label}
+                </ToggleButton>
+              ))}
+            </ToggleButtonGroup>
+            <Stack sx={{ flex: 1 }} />
+            <Button size="small" onClick={handleExport} disabled={!tasks.length}>
+              {'Export CSV'}
+            </Button>
+          </Stack>
           {status === 'error' ? (
             <Typography variant="body2" color="error">
               {'The tasks could not be loaded. Reload to try again.'}
             </Typography>
           ) : status === 'success' && !tasks.length ? (
-            <Typography variant="body2" color="text.secondary">
-              {EMPTY_COPY[view]}
-            </Typography>
+            <EmptyStateComponent
+              label={EMPTY_LABEL[view]}
+              description={EMPTY_COPY[view]}
+              action={
+                <Button
+                  size="small"
+                  variant="contained"
+                  color="primary"
+                  onClick={() => setDrawer({ open: true, task: null })}
+                >
+                  {'New task'}
+                </Button>
+              }
+            />
           ) : (
             <>
               {truncated ? (
@@ -324,15 +425,30 @@ export function TasksSection(props: ConsolePluginPageProps) {
                   {`Showing the first ${CRM_TASK_VIEW_LIMIT} — narrow the view to see the rest.`}
                 </Typography>
               ) : null}
+              <TasksBulkBar
+                hostId={hostId}
+                scope={scope}
+                rows={tasks}
+                selected={selectedIds}
+                onSelectedChange={setSelectedIds}
+                directory={directory}
+                csv={csvOptions}
+              />
               <ListTable
                 rows={tasks}
                 columns={columns}
+                selectable={{ selected: selectedIds, onChange: setSelectedIds }}
                 loading={status === 'loading'}
                 onOpen={(id) => {
                   const found = tasks.find((row) => row.$id === id)
                   if (found) setDrawer({ open: true, task: found })
                 }}
                 disableColumnFilter
+                // Columns and sort are the view's, controlled (AGL-2617).
+                columnVisibilityModel={grid.columnVisibilityModel}
+                onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}
+                sortModel={grid.sortModel}
+                onSortModelChange={grid.onSortModelChange}
               />
             </>
           )}

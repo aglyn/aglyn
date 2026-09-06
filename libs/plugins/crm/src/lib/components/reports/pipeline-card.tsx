@@ -40,23 +40,19 @@ import {
   where,
 } from 'firebase/firestore'
 import { useMemo } from 'react'
-import {
-  useFirestore,
-  useFirestoreCollection,
-} from '@aglyn/tenant-feature-instance'
-import {
-  ceilingedWindow,
-  collectionCeiling,
-} from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { collectionCeiling } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
 import { ReportBreakdown } from './report-breakdown'
-import { plural, shortDate } from './report-format'
+import { ReportExport } from './report-export'
+import { plural, reportFilename, shortDate } from './report-format'
 import {
   type CrmReportScope,
+  reportCacheKey,
   scopedCollection,
   visibleToClause,
 } from './report-scope'
 import { ReportStatTile } from './report-stat-tile'
-import { useAggregateRead } from './use-aggregate-read'
+import { useAggregateRead, useWindowRead } from './use-aggregate-read'
 
 /**
  * How many open deals the by-stage chart, the forecast and the top-deals
@@ -71,6 +67,9 @@ const OPEN_DEAL_CEILING = 1000
 /** More pipelines than this is a shape nobody has asked for; the probe says if it happens. */
 const PIPELINE_CEILING = 20
 const TOP_DEALS = 10
+
+/** The top-deals table's columns, which are also the CSV's — the amount split from its currency there. */
+const TOP_DEAL_COLUMNS = ['Deal', 'Stage', 'Expected close', 'Amount', 'Currency'] as const
 
 type DealRow = Aglyn.CrmDeal & { $id: string }
 type PipelineRow = Aglyn.CrmPipeline & { $id: string }
@@ -91,7 +90,7 @@ export interface PipelineCardProps {
  */
 export function PipelineCard(props: PipelineCardProps) {
   const { report } = props
-  const { scope, tokens, routes } = report
+  const { scope, tokens, routes, nowMs } = report
   const firestore = useFirestore()
 
   const open = useAggregateRead(
@@ -99,7 +98,7 @@ export function PipelineCard(props: PipelineCardProps) {
       getAggregateFromServer(
         query(
           scopedCollection(firestore, scope, 'deals'),
-          visibleToClause(tokens),
+          ...visibleToClause(tokens),
           where('status', '==', 'open'),
         ),
         { count: count(), amountCents: sum('amountCents') },
@@ -107,7 +106,8 @@ export function PipelineCard(props: PipelineCardProps) {
         count: Number(snapshot.data().count ?? 0),
         amountCents: Number(snapshot.data().amountCents ?? 0),
       })),
-    [firestore, scope, tokens],
+    [firestore, scope, tokens, nowMs],
+    { cacheKey: reportCacheKey(report, 'pipeline:open') },
   )
 
   /**
@@ -115,38 +115,33 @@ export function PipelineCard(props: PipelineCardProps) {
    * `(visibleTo, status, updatedAt)` index the deals list already uses can
    * serve, so the report adds no index for this read.
    */
-  const { data: dealDocs, status: dealsStatus } = useFirestoreCollection<DealRow>(
+  const dealWindow = useWindowRead<DealRow>(
     () =>
       query(
         scopedCollection(firestore, scope, 'deals'),
-        visibleToClause(tokens),
+        ...visibleToClause(tokens),
         where('status', '==', 'open'),
         orderBy('updatedAt', 'desc'),
         limit(OPEN_DEAL_CEILING + 1),
       ),
-    [firestore, scope, tokens],
-    { idField: '$id' },
+    OPEN_DEAL_CEILING,
+    [firestore, scope, tokens, nowMs],
+    { cacheKey: reportCacheKey(report, 'pipeline:deals') },
   )
-  const { data: pipelineDocs } = useFirestoreCollection<PipelineRow>(
+  const pipelineWindow = useWindowRead<PipelineRow>(
     () =>
       collectionCeiling(
         query(
           scopedCollection(firestore, scope, 'pipelines'),
-          visibleToClause(tokens),
+          ...visibleToClause(tokens),
         ),
         PIPELINE_CEILING,
       ),
-    [firestore, scope, tokens],
-    { idField: '$id' },
+    PIPELINE_CEILING,
+    [firestore, scope, tokens, nowMs],
+    { cacheKey: reportCacheKey(report, 'pipeline:pipelines') },
   )
-  const dealWindow = useMemo(
-    () => ceilingedWindow(dealDocs ?? undefined, OPEN_DEAL_CEILING),
-    [dealDocs],
-  )
-  const pipelineWindow = useMemo(
-    () => ceilingedWindow(pipelineDocs ?? undefined, PIPELINE_CEILING),
-    [pipelineDocs],
-  )
+  const dealsStatus = dealWindow.status
 
   const summary = useMemo(() => {
     const byPipeline = new Map<string, DealRow[]>()
@@ -156,10 +151,15 @@ export function PipelineCard(props: PipelineCardProps) {
       list.push(deal)
       byPipeline.set(key, list)
     }
-    const pipelines = pipelineWindow.rows.map((pipeline) => ({
-      pipeline,
-      totals: Aglyn.pipelineTotals(byPipeline.get(pipeline.$id) ?? [], pipeline),
-    }))
+    // Every active pipeline is charted even with nothing open; an archived
+    // one only while a deal still sits open in it — the forecast card's
+    // rule, so the two cards name the same pipelines.
+    const pipelines = pipelineWindow.rows
+      .filter((pipeline) => !Aglyn.isPipelineArchived(pipeline) || byPipeline.has(pipeline.$id))
+      .map((pipeline) => ({
+        pipeline,
+        totals: Aglyn.pipelineTotals(byPipeline.get(pipeline.$id) ?? [], pipeline),
+      }))
     const known = new Set(pipelineWindow.rows.map((pipeline) => pipeline.$id))
     const orphans = dealWindow.rows.filter(
       (deal) => !known.has(deal.pipelineId ?? ''),
@@ -323,11 +323,27 @@ export function PipelineCard(props: PipelineCardProps) {
                 ))}
               </TableBody>
             </Table>
-            {dealWindow.truncated ? (
-              <Typography variant="caption" color="text.secondary">
-                {`Ranked within the ${OPEN_DEAL_CEILING.toLocaleString()} most recently updated open deals.`}
-              </Typography>
-            ) : null}
+            <ReportExport
+              filename={reportFilename('top-open-deals')}
+              columns={TOP_DEAL_COLUMNS}
+              rows={() =>
+                summary.top.map((deal) => [
+                  deal.title || deal.$id,
+                  summary.stageName(deal),
+                  typeof deal.expectedCloseAtMs === 'number' && deal.expectedCloseAtMs > 0
+                    ? new Date(deal.expectedCloseAtMs).toISOString().slice(0, 10)
+                    : '',
+                  (Number(deal.amountCents ?? 0) / 100).toFixed(2),
+                  String(deal.currency || currency).toUpperCase(),
+                ])
+              }
+              disabled={!dealsRead}
+              caption={
+                dealWindow.truncated
+                  ? `Ranked within the ${OPEN_DEAL_CEILING.toLocaleString()} most recently updated open deals.`
+                  : undefined
+              }
+            />
           </Section>
         ) : null}
       </Stack>

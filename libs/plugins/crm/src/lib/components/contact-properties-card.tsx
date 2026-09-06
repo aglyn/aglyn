@@ -18,10 +18,12 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import {
+  type AglynOrgBilling,
   CONTACT_LIFECYCLE_STAGE_LABELS,
   CONTACT_LIFECYCLE_STAGES,
   type ConsentGroup,
   type ContactLifecycleStage,
+  CRM_COLLECTIONS,
   normalizeAddress,
   normalizePhone,
 } from '@aglyn/aglyn'
@@ -34,10 +36,16 @@ import {
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { Button, Grid, MenuItem, Stack, TextField, Typography } from '@mui/material'
-import { deleteField, doc, updateDoc } from 'firebase/firestore'
+import { deleteField, doc, updateDoc, writeBatch } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
+import { contactCompanyLinkWrites } from '../model/companies'
 import { type ContactRecord, parseContactTags } from '../model/contact-record'
 import { setContactStage } from '../model/crm-api'
+import {
+  CompanyPicker,
+  useCompanyOptions,
+  useCreateCompany,
+} from './company-picker'
 import {
   addressDraftFrom,
   ContactAddressFields,
@@ -46,7 +54,10 @@ import {
 import type { OrgMembers } from './use-org-members'
 
 export interface ContactPropertiesCardProps {
-  hostId: string
+  /** The site the record is read under, or `null` at the organization level. */
+  hostId: string | null
+  /** The org document the shell passed, for the company picker's scope. */
+  org?: Partial<AglynOrgBilling> | null
   /** The row, flattened through the viewing group's facet. */
   record: ContactRecord
   /** The controller whose facet the edits are written into. */
@@ -107,22 +118,37 @@ export interface ContactPropertiesCardProps {
  * and the helper says what a blank falls back to, so nobody clears the
  * field expecting the record to go nameless.
  *
- * ## Company is a name, for now
+ * ## Company is a record, with its name kept beside it
  *
- * Free text until the companies section supplies a picker that sets
- * `companyId` as well; the name is what the row displays either way.
+ * The Company field is the picker (AGL-2613): the link is `companyId` in
+ * this holder's facet, mirrored into the top-level `companyIds` for the
+ * company page's query, and the company's contacts count moves in the same
+ * batch — `contactCompanyLinkWrites` decides all three from the row's link
+ * state, so this card never reasons about another holder's link. The name
+ * is still written, from the picked company, because the list column and
+ * the global search read the name and not the id; a record that carries a
+ * name with no link — an import, a save from before the picker — keeps it
+ * as the label, and the picker offers it as the company to link or create.
  */
 export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
-  const { hostId, record, consentGroup, scope, seed, members } = props
+  const { hostId, org, record, consentGroup, scope, seed, members } = props
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
-  const logActivity = useHostActivityLogger(hostId)
+  // The site a stage move is routed through and the act is logged in: the
+  // mounted one, or at the organization level the holder's own (AGL-2630).
+  const siteHostId = hostId ?? (consentGroup.hostId || null)
+  const logActivity = useHostActivityLogger(siteHostId ?? undefined)
+  const companies = useCompanyOptions({ hostId, org })
+  const createCompany = useCreateCompany({ hostId, org })
 
   const [nameOverride, setNameOverride] = useState(record.nameOverride)
   const [phone, setPhone] = useState(record.phone)
   const [jobTitle, setJobTitle] = useState(record.jobTitle)
   const [companyName, setCompanyName] = useState(record.companyName)
+  const [companyId, setCompanyId] = useState<string | null>(
+    record.companyId || null,
+  )
   const [ownerUid, setOwnerUid] = useState(record.ownerUid)
   const [lifecycleStage, setLifecycleStage] = useState<ContactLifecycleStage | ''>(
     record.lifecycleStage,
@@ -147,6 +173,7 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
     setPhone(record.phone)
     setJobTitle(record.jobTitle)
     setCompanyName(record.companyName)
+    setCompanyId(record.companyId || null)
     setOwnerUid(record.ownerUid)
     setLifecycleStage(record.lifecycleStage)
     setTags(record.tags.join(', '))
@@ -176,6 +203,17 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
     // A stage that differs from the record's and is not a clearing is a
     // MOVE, and a move is the server's to write — see the note above.
     const stageMoved = Boolean(lifecycleStage) && lifecycleStage !== record.lifecycleStage
+    /*
+     * The link, when it changed: the facet's id and the mirror on this
+     * document, and the count on each company it moved. `null` when the
+     * picker was left where the record had it, in which case the save is
+     * the one `updateDoc` it always was.
+     */
+    const link = contactCompanyLinkWrites(
+      record.companyLink,
+      consentGroup.groupId,
+      companyId,
+    )
     setSaving(true)
     try {
       const verdict = await writeGuardedBySeed(
@@ -185,26 +223,39 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
           fromCache: seed.fromCache,
         },
         async () => {
-          await updateDoc(
-            doc(firestore, scope[0], scope[1], 'contacts', record.$id),
-            {
-              [path('name')]: text(nameOverride, 120),
-              [path('phone')]: normalizedPhone || deleteField(),
-              [path('jobTitle')]: text(jobTitle, 120),
-              [path('companyName')]: storedCompany || deleteField(),
-              [path('address')]: storedAddress ?? deleteField(),
-              [path('ownerUid')]: ownerUid || deleteField(),
-              ...(stageMoved
-                ? {}
-                : { [path('lifecycleStage')]: lifecycleStage || deleteField() }),
-              [path('tags')]: parseContactTags(tags),
-              [path('notes')]: notes.slice(0, 2000),
-              // The search echoes — see `HostContact.phone`.
-              phone: normalizedPhone || deleteField(),
-              companyName: storedCompany || deleteField(),
-              updatedAt: new Date(),
-            },
-          )
+          const contactRef = doc(firestore, scope[0], scope[1], 'contacts', record.$id)
+          const payload = {
+            ...(link?.contact ?? {}),
+            [path('name')]: text(nameOverride, 120),
+            [path('phone')]: normalizedPhone || deleteField(),
+            [path('jobTitle')]: text(jobTitle, 120),
+            [path('companyName')]: storedCompany || deleteField(),
+            [path('address')]: storedAddress ?? deleteField(),
+            [path('ownerUid')]: ownerUid || deleteField(),
+            ...(stageMoved
+              ? {}
+              : { [path('lifecycleStage')]: lifecycleStage || deleteField() }),
+            [path('tags')]: parseContactTags(tags),
+            [path('notes')]: notes.slice(0, 2000),
+            // The search echoes — see `HostContact.phone`.
+            phone: normalizedPhone || deleteField(),
+            companyName: storedCompany || deleteField(),
+            updatedAt: new Date(),
+          }
+          if (!link?.companies.length) {
+            await updateDoc(contactRef, payload)
+            return
+          }
+          // The count moves with the link or not at all — one commit.
+          const batch = writeBatch(firestore)
+          batch.update(contactRef, payload)
+          for (const company of link.companies) {
+            batch.update(
+              doc(firestore, scope[0], scope[1], CRM_COLLECTIONS.companies, company.id),
+              company.update,
+            )
+          }
+          await batch.commit()
         },
       )
       if (!verdict.ok) {
@@ -218,9 +269,9 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
         id: record.$id,
         name: record.name || record.email,
       })
-      if (stageMoved && lifecycleStage) {
+      if (stageMoved && lifecycleStage && siteHostId) {
         try {
-          await setContactStage(user, hostId, record.$id, lifecycleStage)
+          await setContactStage(user, siteHostId, record.$id, lifecycleStage)
         } catch (error) {
           // The rest of the profile is saved; only the move was refused, and
           // the route's own sentence says why.
@@ -244,11 +295,12 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
     }
   }, [
     address,
+    companyId,
     companyName,
     consentGroup.groupId,
     enqueueSnackbar,
     firestore,
-    hostId,
+    siteHostId,
     jobTitle,
     lifecycleStage,
     logActivity,
@@ -257,6 +309,7 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
     ownerUid,
     phone,
     record.$id,
+    record.companyLink,
     record.email,
     record.lifecycleStage,
     record.name,
@@ -343,13 +396,22 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 6 }}>
-          <TextField
-            size="small"
-            label="Company"
-            value={companyName}
-            onChange={(event) => setCompanyName(event.target.value)}
-            slotProps={{ htmlInput: { maxLength: 120 } }}
-            fullWidth
+          <CompanyPicker
+            options={companies.options}
+            ready={companies.ready}
+            truncated={companies.truncated}
+            value={companyId}
+            onChange={(id, company) => {
+              setCompanyId(id)
+              // The label follows the link: the picked name, or nothing
+              // once the link is cleared. A company the list cannot name
+              // keeps whatever label the record already had.
+              setCompanyName(company ? company.name : id ? companyName : '')
+            }}
+            onCreate={createCompany}
+            email={record.email}
+            fallbackName={companyName}
+            disabled={saving}
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 6 }}>

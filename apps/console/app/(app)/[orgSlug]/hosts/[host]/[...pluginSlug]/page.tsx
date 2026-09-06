@@ -44,6 +44,8 @@ import {
 import { useOrgSlug } from '../../../../../../hooks/use-org-scope'
 import { CONTENT_MAX_WIDTH } from '../../../../../../constants/shared'
 import {
+  blockedExtensionNotice,
+  composeExtensionEntitlements,
   resolveExtensionEntitlement,
   resolveUpgradeNoticeAnchor,
   upgradeNoticeMessage,
@@ -53,6 +55,7 @@ import {
   requiredExtensionPermissions,
   resolveExtensionPermission,
 } from '../../../../../../utils/extension-permission'
+import { resolveHubSections } from '../../../../../../utils/plugin-hub-sections'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'
 import useHostRole from '../../../../../../hooks/use-host-role'
 import useOrgPermissions from '../../../../../../hooks/use-org-permissions'
@@ -212,21 +215,19 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
    * compute this for itself — release flags are `scope:app` — and a rail that
    * guessed would link into the shell's own "coming soon" notice.
    */
-  const resolvedSections = useMemo(() => {
-    const sections = resolved?.navItem.sections
-    if (!sections?.length || !basePath) return undefined
-    return sections.map((section) => {
-      const flagKey = section.navTabId
-        ? RELEASE_FLAGS.find((flag) => flag.navTabId === section.navTabId)?.key
-        : undefined
-      return {
-        id: section.id,
-        label: section.label,
-        href: `${basePath}/${section.id}`,
-        visible: flagKey ? flags[flagKey].released || isStaff : true,
-      }
-    })
-  }, [resolved, basePath, flags, isStaff])
+  const resolvedSections = useMemo(
+    // One rule for both shells that mount a hub — this route and the
+    // organization-level CRM route (AGL-2630) — so the two rails cannot
+    // resolve a section's verdicts differently.
+    () =>
+      resolveHubSections(resolved?.navItem.sections, basePath, {
+        flags,
+        isStaff,
+        org,
+        orgReady,
+      }),
+    [resolved, basePath, flags, isStaff, org, orgReady],
+  )
 
   /**
    * Where a bare hub URL goes, when the nav item has sections and the URL
@@ -260,13 +261,18 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
     resolved?.legacy && basePath
       ? resolved.segments.length
         ? `${basePath}/${resolved.segments.join('/')}`
-        : (resolvedSections?.find((section) => section.visible)?.href ??
-          basePath)
+        : (resolvedSections?.find(
+            (section) => section.visible && !section.locked,
+          )?.href ?? basePath)
       : undefined
+  // The first section this reader may OPEN — released, and on the plan
+  // (AGL-2611): a bare hub URL on a plan without the suite lands on the
+  // section it does have rather than on an upgrade notice.
   const sectionRedirect =
     legacyRedirect ??
     (resolved && !resolved.section && resolvedSections?.length
-      ? resolvedSections.find((section) => section.visible)?.href
+      ? resolvedSections.find((section) => section.visible && !section.locked)
+          ?.href
       : undefined)
 
   useEffect(() => {
@@ -302,6 +308,19 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
     resolved?.extension.featureFlag,
     org,
     orgReady,
+  )
+  /*
+   * The SECTION's own flag, inside the extension's (AGL-2611). A hub can
+   * ship its first section on every plan and the rest on a paid one — the
+   * CRM's contacts list is on Free, the sales suite built on it is not —
+   * so the surface's verdict is the extension's AND the section's, in the
+   * order `composeExtensionEntitlements` gives. Answered here, from the org
+   * doc and the declared flag alone, for the reason the extension's is: the
+   * plugin page below never mounts for a section it was refused.
+   */
+  const surfaceEntitlement = composeExtensionEntitlements(
+    extensionEntitlement,
+    resolveExtensionEntitlement(resolved?.section?.featureFlag, org, orgReady),
   )
 
   /*
@@ -404,7 +423,7 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
     // org to buy a feature that would change nothing for the person asking.
     // So authorization answers first and the plan question is never reached.
     <Alert severity="warning">{refusedExtensionNotice(title)}</Alert>
-  ) : extensionEntitlement === 'blocked' ? (
+  ) : surfaceEntitlement === 'blocked' ? (
     // Refused by the shell, not by the plugin — and refused with the upgrade
     // path attached, because the surface behind this notice is the only
     // place most workspaces ever go looking for the feature. The nav entry
@@ -437,11 +456,19 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
         ) : undefined
       }
     >
-      {upgradeNoticeMessage(
-        resolved?.extension.upgradeNotice,
-        title,
-        resolved?.extension.featureFlag,
-      )}
+      {extensionEntitlement === 'blocked'
+        ? upgradeNoticeMessage(
+            resolved?.extension.upgradeNotice,
+            title,
+            resolved?.extension.featureFlag,
+          )
+        : // The SECTION was what refused (AGL-2611): the extension's own
+          // copy describes the whole surface, so the derived sentence names
+          // the section and the tier that carries it instead.
+          blockedExtensionNotice(
+            resolved?.section?.label ?? title,
+            resolved?.section?.featureFlag,
+          )}
     </Alert>
   ) : (
     <Suspense

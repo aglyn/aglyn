@@ -15,8 +15,9 @@
  * limitations under the License.
  */
 
-import type { ConsolePluginPageProps } from '@aglyn/aglyn'
+import { CRM_CONTACTS_EMAIL_PARAM, type ConsolePluginPageProps } from '@aglyn/aglyn'
 import type { CrmConsoleSectionId } from '../components/crm-console-sections'
+import { CRM_VIEW_PARAM } from './crm-view-param'
 
 /**
  * Every address inside the Contacts surface, built from the one string the
@@ -39,11 +40,72 @@ export function crmRoutes(basePath: string) {
   return {
     section,
     contact: (id: string) => `${section('contacts')}/${encodeURIComponent(id)}`,
-    lead: (id: string) => `${section('leads')}/${encodeURIComponent(id)}`,
+    /**
+     * The Contacts list narrowed to the people one form captured (AGL-2612):
+     * source `form`, and the `formIds` filter on the form's id. The form's
+     * own page links here; the list reads the two keys back through
+     * `contactsListSeed`, which is the other half of this address.
+     */
+    contactsByForm: (formId: string) =>
+      `${section('contacts')}?${new URLSearchParams({
+        [CONTACTS_LIST_SOURCE_PARAM]: 'form',
+        [CONTACTS_LIST_FORM_PARAM]: formId,
+      }).toString()}`,
+    /**
+     * The Contacts list asked to OPEN the one person with this address
+     * (AGL-2612). The list is the lookup: a contact's id is minted at
+     * capture and nothing outside the CRM holds it, so a surface that has
+     * only an email — an Inbox submission row — links here, the list
+     * filters on the address (a whole-collection query, under the scope
+     * the viewer may read) and moves straight on to the record when exactly
+     * one matches. No match leaves the filtered list on screen, which is
+     * the honest answer for a submission whose contact the band dropped.
+     */
+    contactByEmail: (email: string) =>
+      `${section('contacts')}?${new URLSearchParams({
+        [CONTACTS_LIST_EMAIL_PARAM]: email,
+      }).toString()}`,
+    /**
+     * A lead's page — and, at the ORGANIZATION level (AGL-2630), the site
+     * it lives under, as a segment before the id: a lead's id is a person
+     * key, the same on every site that met the person, and `hosts/{hostId}
+     * /leads` is host-scoped by path, so an address that spans sites has to
+     * name one. Under a site the address is the id alone, as it always was.
+     */
+    lead: (id: string, hostId?: string | null) =>
+      hostId
+        ? `${section('leads')}/${encodeURIComponent(hostId)}/${encodeURIComponent(id)}`
+        : `${section('leads')}/${encodeURIComponent(id)}`,
     company: (id: string) => `${section('companies')}/${encodeURIComponent(id)}`,
     deal: (id: string) => `${section('deals')}/${encodeURIComponent(id)}`,
+    /**
+     * A section opened on one of its saved views (AGL-2617). The list reads
+     * the key back through `crmViewIdFromParams`; the same key composes
+     * with the Contacts seeds above, which is why it is a query key and not
+     * a path segment.
+     */
+    sectionView: (id: CrmConsoleSectionId, viewId: string) =>
+      `${section(id)}?${new URLSearchParams({
+        [CRM_VIEW_PARAM]: viewId,
+      }).toString()}`,
   }
 }
+
+/**
+ * The query keys the Contacts list reads on arrival — written by the two
+ * builders above and parsed by `contactsListSeed`, named once so neither
+ * side can misspell the other.
+ */
+export const CONTACTS_LIST_SOURCE_PARAM = 'source'
+export const CONTACTS_LIST_FORM_PARAM = 'formId'
+/**
+ * The email key is the SHARED constant (AGL-2622): the console app — which
+ * the module boundaries keep from importing this plugin — builds the same
+ * address through `crmContactByEmailHref`, and `crm-routes.spec.ts` pins
+ * `contactByEmail` against it so the plugin and the app cannot spell the
+ * key two ways.
+ */
+export const CONTACTS_LIST_EMAIL_PARAM = CRM_CONTACTS_EMAIL_PARAM
 
 export type CrmRoutes = ReturnType<typeof crmRoutes>
 

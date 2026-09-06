@@ -19,9 +19,11 @@
 import {
   type AglynOrgBilling,
   checkApiRequestQuota,
-  checkContactQuota,
+  checkCrmRecordsQuota,
   checkDatasetQuota,
   checkSeatQuota,
+  CRM_EMAIL_USAGE_COLLECTION,
+  crmEmailUsageDayKey,
   emailSendsOverage,
   priceEmailSendOverage,
   resolveHostCollaboratorCap,
@@ -348,8 +350,27 @@ export function BillingUsageComponent(props: BillingUsageProps) {
   // API requests this month (AGL-635): the live per-request counter, so the
   // current month is authoritative (not the monthly rollup).
   const [apiRequests, setApiRequests] = useState<number | null>(null)
-  // Contacts audience band (AGL-890/891): org-scoped aggregate count.
+  /*
+   * The CRM records band (AGL-890/891, widened in AGL-2611): three org-scoped
+   * aggregate counts, one per collection the band sums. Each stays `null`
+   * until its read answers, and the meter shows nothing until all three have
+   * — a total assembled from two of three parts would read LOW against a
+   * band the customer is enforced against right now, which is the partial-sum
+   * defect the bandwidth meter below already refuses.
+   */
   const [contactsCount, setContactsCount] = useState<number | null>(null)
+  const [companiesCount, setCompaniesCount] = useState<number | null>(null)
+  const [dealsCount, setDealsCount] = useState<number | null>(null)
+  /*
+   * One-to-one CRM emails sent today, ORG-WIDE (AGL-2611) — read from the
+   * per-UTC-day document the send route increments and `checkCrmEmailQuota`
+   * refuses against, so the meter and the refusal cannot disagree. Rules make
+   * it member-readable, like `apiUsage` beside it.
+   */
+  const [crmEmailsToday, setCrmEmailsToday] = useState<number | null>(null)
+  // A primitive for the effect below to depend on, so a plan change re-reads
+  // the counter and an object identity change does not.
+  const crmEmailCap = entitlements.crmEmailsPerDay
   /*
    * Aglyn Assist credits drawn this month, ORG-WIDE.
    *
@@ -446,6 +467,23 @@ export function BillingUsageComponent(props: BillingUsageProps) {
       .catch(() => {
         // Meter keeps its "not yet metered" state on failure.
       })
+    // The band's other two parts (AGL-2611): the same one-billed-read
+    // aggregate each, never a listing — a deals list is small, a company
+    // list can be tens of thousands, and the band is enforced on the sum.
+    void getCountFromServer(collection(firestore, 'orgs', orgId, 'companies'))
+      .then((snapshot) => {
+        if (active) setCompaniesCount(snapshot.data().count)
+      })
+      .catch(() => {
+        // Meter keeps its "not yet metered" state on failure.
+      })
+    void getCountFromServer(collection(firestore, 'orgs', orgId, 'deals'))
+      .then((snapshot) => {
+        if (active) setDealsCount(snapshot.data().count)
+      })
+      .catch(() => {
+        // Meter keeps its "not yet metered" state on failure.
+      })
     void getCountFromServer(collection(firestore, 'orgs', orgId, 'datasets'))
       .then((snapshot) => {
         if (active) setOrgDatasets(snapshot.data().count)
@@ -486,6 +524,31 @@ export function BillingUsageComponent(props: BillingUsageProps) {
       .catch(() => {
         // Meter keeps its "not yet metered" state on failure.
       })
+    // Today's one-to-one email counter (AGL-2611), keyed by UTC day exactly
+    // as the send route keys the write. Read only where a cap is sold: Free
+    // carries `crmEmailsPerDay: 0` and no CRM suite, so the document never
+    // exists there and the meter it would feed is not rendered.
+    if (crmEmailCap > 0) {
+      void getDoc(
+        doc(
+          firestore,
+          'orgs',
+          orgId,
+          CRM_EMAIL_USAGE_COLLECTION,
+          crmEmailUsageDayKey(),
+        ),
+      )
+        .then((snapshot) => {
+          if (active) {
+            setCrmEmailsToday(
+              snapshot.exists() ? Number(snapshot.data()?.count ?? 0) : 0,
+            )
+          }
+        })
+        .catch(() => {
+          // Meter keeps its "not yet metered" state on failure.
+        })
+    }
     void getDoc(
       doc(firestore, 'orgs', orgId, 'counters', 'campaignEmailSends'),
     )
@@ -550,7 +613,7 @@ export function BillingUsageComponent(props: BillingUsageProps) {
     return () => {
       active = false
     }
-  }, [firestore, orgId, user])
+  }, [crmEmailCap, firestore, orgId, user])
 
   /*
    * The hourly ceiling, from the server.
@@ -632,9 +695,20 @@ export function BillingUsageComponent(props: BillingUsageProps) {
     }
   }, [hostKey, user])
   const teamSeatLimit = checkSeatQuota(org, 'managers', 0).limit
-  // Contacts meter past the band on a paid plan is billing, not blocking
-  // (AGL-890) — the caption under the meter says so with the estimate.
-  const contactQuota = checkContactQuota(org, contactsCount ?? 0)
+  /*
+   * The records band's live figure: `null` until every part has answered —
+   * see the three states above — and otherwise the sum the band is enforced
+   * on. Past the band on a paid plan is billing, not blocking (AGL-890) — the
+   * caption under the meter says so with the estimate.
+   */
+  const recordsParts =
+    contactsCount == null || companiesCount == null || dealsCount == null
+      ? null
+      : { contacts: contactsCount, companies: companiesCount, deals: dealsCount }
+  const crmRecordsCount = recordsParts
+    ? recordsParts.contacts + recordsParts.companies + recordsParts.deals
+    : null
+  const recordsQuota = checkCrmRecordsQuota(org, crmRecordsCount ?? 0)
   /*
    * API requests past the plan's included band, priced.
    *
@@ -695,6 +769,14 @@ export function BillingUsageComponent(props: BillingUsageProps) {
   // the head-count meter above renders throughout.
   const { released: contactsBilled, ready: releaseFlagsReady } =
     useReleaseFlag('release_contacts')
+  // The overage caption is confined to a plan that can be charged for the
+  // excess (`overageRateUsd` non-null) and to a settled flag verdict; the
+  // breakdown caption above it renders regardless, because the parts are a
+  // fact and not a claim about money.
+  const showRecordsOverage =
+    recordsQuota.overageRecords > 0 &&
+    recordsQuota.overageRateUsd != null &&
+    releaseFlagsReady
   return (
     <>
       <UsageMeter
@@ -723,43 +805,77 @@ export function BillingUsageComponent(props: BillingUsageProps) {
         unit="MB"
       />
       <UsageMeter
-        label="Contacts (organization)"
-        used={contactsCount}
+        label="CRM records (organization)"
+        used={crmRecordsCount}
         limit={entitlements.contactsPerHost}
+        help={docsHelp('billing', { anchor: '#crm-records' })}
       />
-      {contactQuota.overageContacts > 0 &&
-      contactQuota.overageRateUsd != null &&
-      releaseFlagsReady ? (
+      {/*
+        The three parts under the total (AGL-2611), so the one number the
+        band is enforced on is legible rather than opaque: a customer at the
+        band needs to know whether it is the audience or the pipeline that
+        filled it, because the remedy differs. Rendered only once the total
+        is, and from the same three reads, so the parts always sum to it.
+      */}
+      {recordsParts ? (
         <Typography
           variant="caption"
           color="text.secondary"
-          sx={{ display: 'block', mt: -1.5, mb: 2 }}
+          sx={{ display: 'block', mt: -1.5, mb: showRecordsOverage ? 0.5 : 2 }}
+        >
+          {`Contacts ${recordsParts.contacts.toLocaleString()} · ` +
+            `Companies ${recordsParts.companies.toLocaleString()} · ` +
+            `Deals ${recordsParts.deals.toLocaleString()}`}
+        </Typography>
+      ) : null}
+      {showRecordsOverage ? (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ display: 'block', mb: 2 }}
         >
           {contactsBilled
-            ? // "if your audience ends the month at this size" is the basis,
-              // not a hedge (AGL-2399). The meter above is a LIVE head count —
-              // the right thing for a band you are enforced against right now —
-              // while the invoice charges the last reading taken before the
-              // month closes. So this total is a projection of a figure that is
-              // not fixed until the month is, and a bare "this month" claimed a
+            ? // "if your CRM ends the month at this size" is the basis, not a
+              // hedge (AGL-2399). The meter above is a LIVE count — the right
+              // thing for a band you are enforced against right now — while
+              // the invoice charges the last reading taken before the month
+              // closes. So this total is a projection of a figure that is not
+              // fixed until the month is, and a bare "this month" claimed a
               // certainty the meter cannot have on the 3rd.
-              `Audience overage: ${contactQuota.overageContacts.toLocaleString()} ` +
-              `over the included band at $${contactQuota.overageRateUsd}/1,000 ` +
-              `— ≈$${contactQuota.overageMonthlyUsd.toFixed(2)} if your audience ` +
+              `Records overage: ${recordsQuota.overageRecords.toLocaleString()} ` +
+              `over the included band at $${recordsQuota.overageRateUsd}/1,000 ` +
+              `— ≈$${recordsQuota.overageMonthlyUsd.toFixed(2)} if your CRM ` +
               `ends the month at this size.`
             : // Worded to `billing-and-plans/overview.md` (AGL-1601/1603),
-              // which tells the same customer that the Contacts page isn't
-              // available yet, that paid audience overage is not billed while
-              // it is unavailable, and that the published rates are what will
-              // apply once it opens. The count stays — it is real, it is what
+              // which tells the same customer that the CRM isn't available
+              // yet, that paid records overage is not billed while it is
+              // unavailable, and that the published rates are what will apply
+              // once it opens. The count stays — it is real, it is what
               // ingestion has captured, and it is why the band matters — while
               // the monthly dollar total goes, because that total is the part
               // no invoice will carry.
-              `Audience overage: ${contactQuota.overageContacts.toLocaleString()} ` +
-              `over the included band — not billed while the Contacts page is ` +
-              `unavailable. The $${contactQuota.overageRateUsd}/1,000 rate ` +
-              `applies once Contacts opens.`}
+              `Records overage: ${recordsQuota.overageRecords.toLocaleString()} ` +
+              `over the included band — not billed while the CRM is ` +
+              `unavailable. The $${recordsQuota.overageRateUsd}/1,000 rate ` +
+              `applies once the CRM opens.`}
         </Typography>
+      ) : null}
+      {/*
+        The one-to-one email cap is a PACE, not a meter that bills
+        (AGL-2611): at the cap the send is refused until the UTC day turns
+        over, and no overage rate exists on any tier. Rendered only where a
+        cap is sold — Free carries `crmEmailsPerDay: 0` and no CRM suite, and
+        "0 of 0" is not a readout of anything — and read from the document
+        the send route refuses against, so the number here is the number a
+        rep is enforced on rather than a second opinion about it.
+      */}
+      {entitlements.crmEmailsPerDay > 0 ? (
+        <UsageMeter
+          label="One-to-one emails (today)"
+          used={crmEmailsToday}
+          limit={entitlements.crmEmailsPerDay}
+          help={docsHelp('billing', { anchor: '#one-to-one-email' })}
+        />
       ) : null}
       {entitlements.apiRequestsPerMonth > 0 ? (
         <UsageMeter

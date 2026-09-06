@@ -140,6 +140,23 @@ jest.mock('./firebase-admin', () => ({
   },
 }))
 
+/*
+ * The records band is the contacts aggregate here — nothing seeds a
+ * company or a deal — so the door's verdict is exactly what these cases
+ * were written against. The three-collection sum has its own spec.
+ */
+jest.mock('./crm-records', () => ({
+  countCrmRecords: async (_orgRef: unknown, contacts: any) => {
+    const contactsCount = (await contacts.count().get()).data().count
+    return {
+      contactsCount,
+      companiesCount: 0,
+      dealsCount: 0,
+      crmRecordsCount: contactsCount,
+    }
+  },
+}))
+
 jest.mock('./organizations', () => ({
   consentGroupForSite: async (hostId: string) =>
     jest
@@ -160,7 +177,7 @@ jest.mock('@aglyn/aglyn/server', () => {
     ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/marketing-consent'),
     ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/campaign-membership'),
     ORG_SCOPE_TOKEN: 'org',
-    checkContactQuota: () => ({ allowed: mockBandAllowed }),
+    checkCrmRecordsQuota: () => ({ allowed: mockBandAllowed }),
   }
 })
 
@@ -335,6 +352,7 @@ describe('the order door and the lifecycle stage', () => {
       source: 'order',
       interaction: { refId: 'order-1', summary: 'Placed order' },
       purchaseCents: 4200,
+      initialLifecycleStage: 'customer',
     })
 
   it('makes a customer of a lead', async () => {
@@ -362,6 +380,151 @@ describe('the order door and the lifecycle stage', () => {
   it('creates a customer outright on a first purchase', async () => {
     await purchase('h1')
     expect(added[0].data.facets.h1.lifecycleStage).toBe('customer')
+  })
+})
+
+/**
+ * Every capture door names the earliest stage that describes what happened
+ * (AGL-2612), and the write only ever fills or advances.
+ */
+describe('the capture stage', () => {
+  const capture = (
+    stage: 'lead' | 'subscriber' | 'customer' | undefined,
+    facet?: { lifecycleStage: 'subscriber' | 'lead' | 'customer' },
+  ) =>
+    upsertHostContact({
+      hostId: 'h1',
+      email: 'jo@example.com',
+      source: 'form',
+      interaction: { refId: 's1', summary: 'Submitted the contact form' },
+      ...(stage ? { initialLifecycleStage: stage } : {}),
+      ...(facet ? { facet } : {}),
+    })
+
+  it('fills an empty stage on a merge', async () => {
+    seedSharedContact()
+    delete contacts['c1'].facets.h1.lifecycleStage
+    await capture('lead')
+    expect(facet('c1').lifecycleStage).toBe('lead')
+    // The sibling holder's stage is its own business.
+    expect(facet('c1', 'h2').lifecycleStage).toBe('evangelist')
+  })
+
+  it('advances an earlier stage: a subscriber who submits a form is a lead', async () => {
+    seedSharedContact()
+    contacts['c1'].facets.h1.lifecycleStage = 'subscriber'
+    await capture('lead')
+    expect(facet('c1').lifecycleStage).toBe('lead')
+  })
+
+  it('never downgrades: a customer who submits a form is still a customer', async () => {
+    seedSharedContact()
+    contacts['c1'].facets.h1.lifecycleStage = 'customer'
+    await capture('lead')
+    expect(facet('c1').lifecycleStage).toBe('customer')
+    // Nor does a newsletter opt-in make a subscriber of a lead.
+    contacts['c1'].facets.h1.lifecycleStage = 'lead'
+    await capture('subscriber')
+    expect(facet('c1').lifecycleStage).toBe('lead')
+  })
+
+  it('leaves the key absent when the door named no stage and none was held', async () => {
+    seedSharedContact()
+    delete contacts['c1'].facets.h1.lifecycleStage
+    await capture(undefined)
+    expect(facet('c1')).not.toHaveProperty('lifecycleStage')
+  })
+
+  it("is the caller's stage on a SET, floored by the door's", async () => {
+    seedSharedContact()
+    contacts['c1'].facets.h1.lifecycleStage = 'customer'
+    // An import that says "subscriber" is a set, and it lands: the file is
+    // the merchant's own word.
+    await capture(undefined, { lifecycleStage: 'subscriber' })
+    expect(facet('c1').lifecycleStage).toBe('subscriber')
+    // A door that carries both writes the set, then floors it.
+    await capture('lead', { lifecycleStage: 'subscriber' })
+    expect(facet('c1').lifecycleStage).toBe('lead')
+  })
+
+  it('writes the stage on a create and tells the hook about it', async () => {
+    const created: Array<Record<string, unknown>> = []
+    await upsertHostContact({
+      hostId: 'h1',
+      email: 'new@example.com',
+      source: 'newsletter',
+      interaction: { summary: 'Subscribed' },
+      initialLifecycleStage: 'subscriber',
+      onCreated: (report) => {
+        created.push(report as unknown as Record<string, unknown>)
+      },
+    })
+    expect(added[0].data.facets.h1.lifecycleStage).toBe('subscriber')
+    expect(created[0]['lifecycleStage']).toBe('subscriber')
+  })
+
+  it('tells the hook nothing about a stage the create did not write', async () => {
+    const created: Array<Record<string, unknown>> = []
+    await upsertHostContact({
+      hostId: 'h1',
+      email: 'new@example.com',
+      source: 'manual',
+      interaction: { summary: 'Added by hand' },
+      onCreated: (report) => {
+        created.push(report as unknown as Record<string, unknown>)
+      },
+    })
+    expect(added[0].data.facets.h1).not.toHaveProperty('lifecycleStage')
+    expect(created[0]).not.toHaveProperty('lifecycleStage')
+  })
+})
+
+/**
+ * The form mirror (`HostContact.formIds`): the one top-level array a form's
+ * contact list can query, kept in step with the interaction that is the
+ * record of the entry point.
+ */
+describe('the form mirror', () => {
+  const submit = (formId: string | undefined, email = 'jo@example.com') =>
+    upsertHostContact({
+      hostId: 'h1',
+      email,
+      source: 'form',
+      interaction: {
+        refId: 's1',
+        summary: 'Submitted',
+        ...(formId ? { formId } : {}),
+      },
+      initialLifecycleStage: 'lead',
+    })
+
+  it('starts the mirror on a create, and only for a capture that names a form', async () => {
+    await submit('form-a', 'new@example.com')
+    expect(added[0].data.formIds).toEqual(['form-a'])
+    await submit(undefined, 'other@example.com')
+    expect(added[1].data).not.toHaveProperty('formIds')
+  })
+
+  it('unions a new form onto a merge and never repeats one', async () => {
+    seedSharedContact()
+    await submit('form-a')
+    await submit('form-b')
+    await submit('form-a')
+    expect(contacts['c1'].formIds).toEqual(['form-a', 'form-b'])
+  })
+
+  it('stops at the cap rather than dropping an earlier form', async () => {
+    seedSharedContact()
+    contacts['c1'].formIds = Array.from({ length: 20 }, (_, i) => `form-${i}`)
+    await submit('form-late')
+    expect(contacts['c1'].formIds).toHaveLength(20)
+    expect(contacts['c1'].formIds).not.toContain('form-late')
+    // The interaction still carries the entry point: the timeline is the
+    // record and the mirror is only its index.
+    expect(facet('c1').interactions[0].formId).toBe('form-late')
+    // A form already in the mirror is still recognized at the cap.
+    await submit('form-3')
+    expect(contacts['c1'].formIds).toHaveLength(20)
   })
 })
 

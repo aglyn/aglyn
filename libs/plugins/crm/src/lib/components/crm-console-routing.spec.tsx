@@ -64,6 +64,18 @@ jest.mock('./contact-detail-page', () => ({
     </div>
   ),
 }))
+// A lead's page reads `hosts/{hostId}/leads` on mount; what is under test
+// is WHICH site the hub hands it, so the stub prints both.
+jest.mock('./lead-detail-page', () => ({
+  __esModule: true,
+  default: ({ id, hostId }: { id: string; hostId: string | null }) => (
+    <div>{`Lead ${id} on ${hostId ?? 'no site'}`}</div>
+  ),
+}))
+jest.mock('./leads-section', () => ({
+  __esModule: true,
+  default: () => <div>{'LEADS LIST'}</div>,
+}))
 
 const BASE_PATH = '/acme/hosts/shop/crm'
 
@@ -136,6 +148,37 @@ describe('the CRM hub routes sections and records (AGL-2595)', () => {
     expect(screen.getByText('PEOPLE LIST')).toBeTruthy()
   })
 
+  it('hands a lead page the SITE the address names at the organization level (AGL-2630)', () => {
+    // `/[orgSlug]/crm/leads/{hostId}/{leadId}`: a lead's id is a person
+    // key, the same on every site that met the person, so the org-level
+    // address carries the site and the page is mounted under it.
+    registerCrmConsole()
+    const resolved = resolveConsolePluginPage('/crm/leads/host-b/lead-1', ['crm'])
+    expect(resolved?.section?.id).toBe('leads')
+    expect(resolved?.segments).toEqual(['leads', 'host-b', 'lead-1'])
+    render(
+      <CrmConsolePage
+        hostId={null}
+        orgMount={{ orgId: 'org-1', hosts: [], hostsReady: true, hostsPath: '/acme/hosts' }}
+        entitled
+        basePath="/acme/crm"
+        sections={shellSections()}
+        section={resolved?.section?.id}
+        segments={resolved?.segments}
+      />,
+    )
+    expect(screen.getByText('Lead lead-1 on host-b')).toBeTruthy()
+    expect(screen.queryByText('LEADS LIST')).toBeNull()
+  })
+
+  it('hands a lead page the MOUNTED site under a site, from the one-segment address', () => {
+    // The same person key under a site: the address is the id alone, and
+    // the site is the route's.
+    const resolved = mountAt('/crm/leads/lead-1')
+    expect(resolved?.segments).toEqual(['leads', 'lead-1'])
+    expect(screen.getByText('Lead lead-1 on host-1')).toBeTruthy()
+  })
+
   it('renders nothing until the shell has named a section', () => {
     const { container } = render(
       <CrmConsolePage hostId="host-1" entitled basePath={BASE_PATH} sections={shellSections()} />,
@@ -150,6 +193,9 @@ describe('crmRoutes', () => {
     expect(routes.section('tasks')).toBe(`${BASE_PATH}/tasks`)
     expect(routes.contact('abc')).toBe(`${BASE_PATH}/contacts/abc`)
     expect(routes.lead('l1')).toBe(`${BASE_PATH}/leads/l1`)
+    // The organization-level form names the site first (AGL-2630).
+    expect(routes.lead('l1', 'host b')).toBe(`${BASE_PATH}/leads/host%20b/l1`)
+    expect(routes.lead('l1', null)).toBe(`${BASE_PATH}/leads/l1`)
     expect(routes.company('co 1')).toBe(`${BASE_PATH}/companies/co%201`)
     expect(routes.deal('a/b')).toBe(`${BASE_PATH}/deals/a%2Fb`)
   })

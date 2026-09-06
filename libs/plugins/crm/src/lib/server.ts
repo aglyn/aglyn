@@ -50,6 +50,8 @@
 
 import {
   contactFacetPath,
+  CRM_COLLECTIONS,
+  crmReadTokens,
   isContactLifecycleStage,
   isOrgWideMember,
   normalizeAddress,
@@ -66,6 +68,7 @@ import {
   consentGroupForSite,
   firebaseAdmin,
   getOrgForHost,
+  logHostActivity,
   memberHasOrgPermission,
   orgDataCollectionForHost,
   resolveOrgMembership,
@@ -76,9 +79,17 @@ import { CRM_API_ROUTES } from './constants/api-routes'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { CRM_TASK_ROUTES } from './model/task-routes'
 import { crmTaskCompleteHandler, crmTaskSaveHandler } from './server/task-routes'
+import { crmCompaniesImportHandler } from './server/companies-import'
 import { crmContactsImportHandler } from './server/contacts-import'
 import { crmDealStageHandler } from './server-deal-stage'
+import { crmEmailSendHandler } from './server/email-send'
 import { leadConvertHandler } from './server/lead-convert'
+import {
+  CONTACT_EMAIL_HISTORY_ROUTE,
+  contactEmailHistoryHandler,
+} from './server/contact-email-history'
+import { CONTACTS_MERGE_ROUTE, contactsMergeHandler } from './server/contacts-merge'
+import { CRM_ERASE_PERSON_ROUTE, crmErasePersonHandler } from './server/erase-person'
 
 /**
  * `GET /api/crm/ping` → `{ ok: true, plugin: 'crm' }`.
@@ -231,6 +242,17 @@ export const CONTACT_BAND_FULL_MESSAGE =
   'Contact limit reached — this contact was not added. Upgrade in Billing ' +
   'to keep collecting.'
 
+/**
+ * What the create route says when the address was erased from this
+ * workspace (AGL-2623). The person asked to be removed and a workspace admin
+ * filed it; a record cannot be re-created by hand any more than by a form,
+ * and the sentence says where the decision lives rather than implying the
+ * address is malformed.
+ */
+export const CONTACT_ERASED_MESSAGE =
+  'This person was erased from your workspace at their request, so a ' +
+  'record cannot be created for this address.'
+
 /** The most tags one create may attach, matching the record page's cap. */
 const CONTACT_TAGS_MAX = 20
 
@@ -261,12 +283,13 @@ function normalizeTags(value: unknown): string[] {
 /**
  * `POST /api/crm/contacts-create` — a person added by hand (AGL-2596).
  *
- * Body: `{ hostId, email, name?, phone?, jobTitle?, companyName?, address?,
- * ownerUid?, lifecycleStage?, tags?, marketingConsent? }`. Answers
- * `{ contactId, created }`: `created` is false when the address already
- * belonged to somebody, in which case what was typed MERGES into the
- * existing row — the dedupe the shared address book exists for, and the
- * reason a second "create" of one person is not an error.
+ * Body: `{ hostId, email, name?, phone?, jobTitle?, companyName?,
+ * companyId?, address?, ownerUid?, lifecycleStage?, tags?,
+ * marketingConsent? }`. Answers `{ contactId, created }`: `created` is
+ * false when the address already belonged to somebody, in which case what
+ * was typed MERGES into the existing row — the dedupe the shared address
+ * book exists for, and the reason a second "create" of one person is not
+ * an error.
  *
  * ## Who may call it
  *
@@ -284,16 +307,29 @@ function normalizeTags(value: unknown): string[] {
  * it is not a bad request and not a server fault, it is the plan saying no,
  * and the drawer relays the sentence rather than inventing one.
  *
+ * ## The company (AGL-2613)
+ *
+ * `companyId` is the picker's choice, and it is checked before anything is
+ * written: the company has to exist and be visible to the capturing site's
+ * scope, or a caller could file a person under a record they cannot open —
+ * the same refusal the lead conversion makes. It reaches the upsert as
+ * `facet.companyId`, which is where the link is kept in step with its mirror
+ * and the company's contacts count; a merge onto somebody already at another
+ * company is a MOVE there, not a second link. The stored company's own name
+ * is what is echoed, over whatever the client sent, because the name on the
+ * record is the company's and not the form's.
+ *
  * ## What it writes beyond the upsert
  *
  * `upsertHostContact` takes the profile — phone, title, address, owner,
- * stage — and writes it into the capturing group's facet. The two things it
- * does not take are written here by DOTTED path afterwards: the tags, which
- * union into whatever the person already carried, and the company name,
- * which is free text until the companies section supplies a picker. Dotted
- * paths because this is an `update()`, and only an update reads a dot as a
- * path — a nested object here would replace the facet map and take every
- * other holder's records with it.
+ * stage, company — and writes it into the capturing group's facet. The two
+ * things it does not take are written here by DOTTED path afterwards: the
+ * tags, which union into whatever the person already carried, and the
+ * company name — the picked company's, or free text for a person filed
+ * under a name no company record carries yet. Dotted paths because this is
+ * an `update()`, and only an update reads a dot as a path — a nested object
+ * here would replace the facet map and take every other holder's records
+ * with it.
  */
 export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
@@ -330,7 +366,8 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
   }
   const name = typed(body['name'], 120)
   const jobTitle = typed(body['jobTitle'], 120)
-  const companyName = typed(body['companyName'], 120)
+  let companyName = typed(body['companyName'], 120)
+  const companyId = typed(body['companyId'], 128)
   const ownerUid = typed(body['ownerUid'], 128)
   const address =
     body['address'] && typeof body['address'] === 'object'
@@ -373,6 +410,32 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
       }
     }
 
+    if (companyId) {
+      const group = await consentGroupForSite(
+        hostId,
+        resolved.org as Record<string, unknown>,
+      )
+      const readable = new Set<string>(crmReadTokens(group))
+      const companySnapshot = await firebaseAdmin
+        .app()
+        .firestore()
+        .collection('orgs')
+        .doc(resolved.orgId)
+        .collection(CRM_COLLECTIONS.companies)
+        .doc(companyId)
+        .get()
+      const tokens: unknown = companySnapshot.exists
+        ? companySnapshot.get('visibleTo')
+        : undefined
+      const visible =
+        Array.isArray(tokens) && tokens.some((token) => readable.has(String(token)))
+      if (!visible) {
+        res.status(404).json({ error: 'Unknown company' })
+        return
+      }
+      companyName = typed(companySnapshot.get('name'), 120) || companyName
+    }
+
     const result = await captureHostContact({
       hostId,
       email,
@@ -383,6 +446,7 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
       facet: {
         ...(phone ? { phone } : {}),
         ...(jobTitle ? { jobTitle } : {}),
+        ...(companyId ? { companyId } : {}),
         ...(address ? { address } : {}),
         ...(ownerUid ? { ownerUid } : {}),
         ...(rawStage && isContactLifecycleStage(rawStage)
@@ -398,6 +462,13 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
       }
       if (result.refused === 'invalid-email') {
         res.status(400).json({ error: 'Enter a valid email address.' })
+        return
+      }
+      // The person was erased from this workspace (AGL-2623). A conflict,
+      // like the band: the request was well-formed and the answer is a
+      // standing fact about the address, not a fault in the call.
+      if (result.refused === 'erased') {
+        res.status(409).json({ error: CONTACT_ERASED_MESSAGE, reason: 'erased' })
         return
       }
       res.status(500).json({ error: 'The contact could not be saved.' })
@@ -429,6 +500,21 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
       })
     }
 
+    /*
+     * The audit line, written HERE rather than by the console (AGL-2622):
+     * a route that verified the caller and performed the write is the one
+     * writer that cannot record an act that did not happen, which is the
+     * reason `check-activity-coverage.mjs` counts this file. A merge into
+     * a person the org already held is said to be one — the row was
+     * updated, not added — so the feed cannot claim two people for one.
+     */
+    await logHostActivity(
+      hostId,
+      { uid: decoded.uid, email: decoded.email ?? null },
+      result.created ? 'Added contact' : 'Updated contact',
+      { type: 'contact', id: result.contactId, name: name || email },
+    )
+
     res
       .status(result.created ? 201 : 200)
       .json({ contactId: result.contactId, created: result.created })
@@ -449,6 +535,9 @@ export function registerCrmConsoleApi(): void {
   // One chunk of a contact file (AGL-2602), judged and written through the
   // same door every capture uses.
   registerPluginApiRoute('crm/contacts-import', crmContactsImportHandler)
+  // One chunk of a companies file (AGL-2621), matched by domain then name
+  // and written with the stamp every CRM creator writes.
+  registerPluginApiRoute('crm/companies-import', crmCompaniesImportHandler)
   // The one writer of a deal's stage, won and lost (AGL-2598): the browser
   // could write the field, but only a server can emit the event an
   // automation listens for.
@@ -461,4 +550,18 @@ export function registerCrmConsoleApi(): void {
   // write a browser cannot make alone, because only the server may create a
   // contact through the dedupe-and-meter door.
   registerPluginApiRoute('crm/lead-convert', leadConvertHandler)
+  // The one READ behind a route (AGL-2616): the per-recipient delivery log
+  // is closed to clients, so a contact's campaign mail is projected here.
+  registerPluginApiRoute(CONTACT_EMAIL_HISTORY_ROUTE, contactEmailHistoryHandler)
+  // One email to one person from their record (AGL-2615): the recipient is
+  // read off the record, the daily cap and both suppression lists are
+  // judged, and the message leaves on the site's sending identity.
+  registerPluginApiRoute(CRM_API_ROUTES.emailSend, crmEmailSendHandler)
+  // Two records for one person become one (AGL-2625): the repoint of every
+  // row naming the merged record and the transaction over both documents
+  // are the server's, and the address index it writes is closed to clients.
+  registerPluginApiRoute(CONTACTS_MERGE_ROUTE, contactsMergeHandler)
+  // Files a person's privacy erasure for the daily job (AGL-2623);
+  // workspace admins only.
+  registerPluginApiRoute(CRM_ERASE_PERSON_ROUTE, crmErasePersonHandler)
 }

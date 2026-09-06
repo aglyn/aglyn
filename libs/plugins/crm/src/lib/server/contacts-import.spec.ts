@@ -144,6 +144,21 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     declared: false,
   }),
   upsertHostContact: (...args: unknown[]) => upsert(...(args as [])),
+  // The records band is not under test here (AGL-2611); always room, in the
+  // real shape, so no refusal below can be it in disguise.
+  crmRecordsQuotaForOrg: async () => ({
+    allowed: true,
+    included: 100,
+    used: 0,
+    remaining: 100,
+    overageRecords: 0,
+    overageMonthlyUsd: 0,
+    overageRateUsd: null,
+    contactsCount: 0,
+    companiesCount: 0,
+    dealsCount: 0,
+    crmRecordsCount: 0,
+  }),
 }))
 
 import { crmContactsImportHandler } from './contacts-import'

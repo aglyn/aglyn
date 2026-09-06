@@ -15,7 +15,12 @@
  * limitations under the License.
  */
 
-import { claimAttempt, type PluginApiHandler } from '@aglyn/aglyn/server'
+import {
+  claimAttempt,
+  CRM_EMAIL_ACTIVITY_TAG,
+  CRM_EMAIL_ORG_TAG,
+  type PluginApiHandler,
+} from '@aglyn/aglyn/server'
 import { normalizeResendDeliveryEvents } from '@aglyn/shared-util-email'
 // AGL-1771 lifted `isDocumentId` here from the local copy AGL-1768 wrote. The
 // copy's stated reason was wrong: `@nx/enforce-module-boundaries` does NOT
@@ -39,7 +44,15 @@ import {
   recordEmailDeliveryEvents,
   recordPersonEngagement,
 } from '@aglyn/tenant-data-admin/server/email-delivery-log'
+// The leaf again: the contact's own stamp is what the record page, the list
+// and the re-engagement audience read, and a wholesale mock would green a
+// webhook that stamped nobody.
+import { recordContactEmailEngagement } from '@aglyn/tenant-data-admin/server/contact-email-engagement'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
+import {
+  crmEmailDeliveryStateForEvent,
+  recordCrmEmailDelivery,
+} from '@aglyn/tenant-data-admin/server/crm-email-activity'
 import { getOrgForHost } from '@aglyn/tenant-data-admin/server/organizations'
 import { recordEmailReputationFailure } from '@aglyn/tenant-data-admin/server/email-sender-reputation'
 // The link rollup's key derivation and its cap live beside the READER that
@@ -380,9 +393,10 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
      * not turn into a non-2xx, which the provider would answer by retrying
      * the same event forever.
      *=========================================*/
-    const outcomes = await recordEmailDeliveryEvents(
-      normalizeResendDeliveryEvents(event, Date.now()),
-    ).catch(() => [])
+    const deliveryEvents = normalizeResendDeliveryEvents(event, Date.now())
+    const outcomes = await recordEmailDeliveryEvents(deliveryEvents).catch(
+      () => [],
+    )
 
     /*
      * DISTINCT RECIPIENTS this event is the first of its kind for.
@@ -454,6 +468,53 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
       hostRef && isDocumentId(campaignId)
         ? hostRef.collection('campaigns').doc(campaignId)
         : null
+
+    /*==========================================
+     * THE CONTACT'S OWN STAMP (AGL-2616).
+     *
+     * The person rollup above is about the ADDRESS and moves on any sender's
+     * mail; this one is about THIS SITE's relationship with the person and
+     * moves only on its own campaigns — which is why it sits below the
+     * `hostId` gate the rollup deliberately sits above. Same `firstOfType`
+     * outcomes, so a replay contributes nothing here either, and the leaf
+     * decides which types count. Best-effort: a stamp is worth less than
+     * the campaign counters below it.
+     *=========================================*/
+    if (hostRef && (type === 'email.opened' || type === 'email.clicked')) {
+      await recordContactEmailEngagement({ hostId: hostRef.id, outcomes }).catch(
+        () => 0,
+      )
+    }
+
+    /*==========================================
+     * THE ONE-TO-ONE EMAIL'S TIMELINE ENTRY (AGL-2615).
+     *
+     * A message sent from a CRM record carries the org and the activity row
+     * it was logged as, and the five events below are the row's delivery
+     * state — the chip a rep reads beside "Email" on the timeline. Placed
+     * above the campaign gates because a one-to-one email is not a campaign
+     * and names none; placed below the log and the engagement rollup
+     * because those are facts about the message and the person that this
+     * row merely restates.
+     *
+     * The state comes from the NORMALIZED event, not the wire string: the
+     * adapter above is the one reader of the provider's vocabulary. Both ids
+     * are path components, so both are checked the way `hostId` is. Never
+     * fatal — the writer reports rather than throws — and never behind the
+     * replay claim: the write is monotonic, so a replay finds the row
+     * already there and changes nothing.
+     *=========================================*/
+    const crmState = crmEmailDeliveryStateForEvent(deliveryEvents[0]?.type)
+    const crmActivityId = tags[CRM_EMAIL_ACTIVITY_TAG]
+    const crmOrgId = tags[CRM_EMAIL_ORG_TAG]
+    if (crmState && isDocumentId(crmActivityId) && isDocumentId(crmOrgId)) {
+      await recordCrmEmailDelivery(firestore, {
+        orgId: crmOrgId,
+        activityId: crmActivityId,
+        state: crmState,
+        atMs: deliveryEvents[0]?.at ?? Date.now(),
+      })
+    }
 
     /*==========================================
      * THE DELIVERY DENOMINATOR.

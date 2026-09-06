@@ -34,10 +34,10 @@ export interface FirstPartyPlugin {
    * under every `pluginSettings` collection.
    *
    * Renaming one is therefore a data change, not a code change, and it is
-   * done in two halves that must both ship: the old id goes into
-   * {@link LEGACY_PLUGIN_IDS} so every stored list still resolves, and
+   * done in two halves that must both ship: the old id is read through
+   * {@link canonicalPluginId} so every stored list still resolves, and
    * `tools/scripts/backfill-plugin-id-crm.mjs` (the shape to copy) rewrites
-   * the documents so the alias eventually reads nothing.
+   * the documents so the alias can be retired once it reads nothing.
    */
   id: string
   /** Console-facing display name. */
@@ -205,31 +205,28 @@ export const DEFAULT_ENABLED_PLUGINS: readonly string[] =
   FIRST_PARTY_PLUGINS.map((plugin) => plugin.id)
 
 /**
- * Ids a plugin USED to have, mapped to the id it has now (AGL-2595).
+ * The id a stored plugin id means today — the seam a rename re-arms.
  *
  * A first-party id is written into every org's `enabledPlugins` and every
  * site's `disabledPlugins` the moment somebody touches the switchboard, so a
  * rename in this file alone would silently turn the plugin OFF for every
  * workspace that had listed it under the old name — the stored id would match
  * nothing in the catalog and fall through as a marketplace listing id. Every
- * reader of a stored list runs it through {@link canonicalPluginId} first, so
- * a document written before the rename keeps meaning what it meant.
+ * reader of a stored list runs it through here first, so a document written
+ * before a rename keeps meaning what it meant while the backfill runs.
  *
- * The alias is the half that makes a deploy safe; the backfill is the half
- * that lets an entry leave this table. An entry stays until
- * `tools/scripts/backfill-plugin-id-crm.mjs` reports zero documents left
- * carrying the old id.
+ * Nothing is aliased today. `contacts` read as `crm` from the CRM's rename
+ * (AGL-2595) until `tools/scripts/backfill-plugin-id-crm.mjs` reported zero
+ * documents carrying the old id, and the alias was retired (AGL-2614) — an
+ * alias that outlives its backfill is a second name for the plugin that
+ * nothing writes and every reader must keep honoring. The next rename adds
+ * its pair here, ships the backfill, and removes the pair the same way.
  */
-export const LEGACY_PLUGIN_IDS: Readonly<Record<string, string>> = {
-  contacts: 'crm',
-}
-
-/** The id a stored plugin id means today. */
 export function canonicalPluginId(pluginId: string): string {
-  return LEGACY_PLUGIN_IDS[pluginId] ?? pluginId
+  return pluginId
 }
 
-/** A stored list, read through the alias table and de-duplicated. */
+/** A stored list, read through the alias seam and de-duplicated. */
 function canonicalPluginIds(pluginIds: readonly unknown[]): string[] {
   return Array.from(
     new Set(pluginIds.map((id) => canonicalPluginId(String(id)))),

@@ -17,29 +17,17 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
-import {
-  CONTACT_LIFECYCLE_STAGE_LABELS,
-  PageHeaderRecord,
-  pluginDocsHelp,
-} from '@aglyn/aglyn'
-import { mdiDeleteOutline } from '@aglyn/shared-data-mdi'
-import {
-  AppLink,
-  CardDisplay,
-  MdiIcon,
-  useConfirmationContext,
-} from '@aglyn/shared-ui-jsx'
-import RowActionsMenu, {
-  type RowActionsMenuItem,
-} from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import { CONTACT_LIFECYCLE_STAGE_LABELS, pluginDocsHelp } from '@aglyn/aglyn'
+import { mdiDeleteOutline, mdiMerge } from '@aglyn/shared-data-mdi'
+import { AppLink, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
   useFirestoreDoc,
   useHostActivityLogger,
-  useOrgDataScope,
 } from '@aglyn/tenant-feature-instance'
-import { Button, Chip, Stack, Typography } from '@mui/material'
+import { Stack, Tooltip, Typography } from '@mui/material'
 import {
   arrayRemove,
   deleteDoc,
@@ -47,17 +35,26 @@ import {
   doc,
   updateDoc,
 } from 'firebase/firestore'
-import { useRouter } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { useCallback, useMemo } from 'react'
-import { contactRecordFromDoc } from '../model/contact-record'
+import { CrmCreateSiteDefault, useCrmOrgMount } from '../hooks/use-crm-org-mount'
+import { useCrmScope } from '../hooks/use-crm-scope'
+import { contactPrimaryGroup, contactRecordFromDoc } from '../model/contact-record'
 import { type CrmDetailPageProps, crmRoutes } from '../model/crm-routes'
 import ContactAssociationsCard from './contact-associations-card'
 import ContactCustomFieldsCard from './contact-custom-fields-card'
+import ContactDuplicatesCard from './contact-duplicates-card'
+import ContactKnownByCard from './contact-known-by-card'
+import ContactMergeDialog, { useContactMergeDialog } from './contact-merge-dialog'
 import ContactPropertiesCard from './contact-properties-card'
 import ContactTimelineCard from './contact-timeline-card'
 import { AddToListButton } from './add-to-list-button'
+import { CrmSendEmailButton } from './crm-send-email-button'
 import { ContactDealsCard } from './contact-deals-card'
+import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
+import { useErasePersonAction } from './erase-person-action'
 import { RecordTasksCard } from './record-tasks-card'
+import { useEmailsHubPath } from './use-emails-hub-path'
 import { useOrgMembers } from './use-org-members'
 
 const contactDocsHelp = pluginDocsHelp('contacts', {
@@ -114,16 +111,19 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const logActivity = useHostActivityLogger(hostId)
-  const { scope, orgId } = useOrgDataScope({ hostId })
-
-  // The controller this page is showing — the sites declared to be one
-  // sender, or this site alone — resolved from the org document the shell
-  // already passed, so it costs no read.
-  const consentGroup = useMemo(
-    () => Aglyn.consentGroupForHost(org as Record<string, unknown>, hostId),
-    [org, hostId],
-  )
+  // The org root, the viewing group and what this viewer may list — the
+  // merge search's and the duplicates query's one clause — from the one
+  // scope hook (AGL-2614); at the organization level the group is `null`
+  // and resolved per person below, and the listeners carry no clause
+  // (AGL-2630).
+  const {
+    scope,
+    orgId,
+    consentGroup: viewingGroup,
+    visibleTo,
+  } = useCrmScope({ hostId, org })
+  const mount = useCrmOrgMount()
+  const merge = useContactMergeDialog()
 
   const {
     data: row,
@@ -134,22 +134,79 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
     [firestore, scope, id],
     { idField: '$id' },
   )
+  /*
+   * The controller this page is showing. Under a site: the sites declared
+   * to be one sender, or this site alone — resolved from the org document
+   * the shell already passed, so it costs no read. At the ORGANIZATION
+   * level: the person's own PRIMARY holder, the first capturing site's
+   * group, so an org-wide member reads the profile that site keeps and an
+   * edit goes back to the same facet; the "Known by" card says which other
+   * sites hold one.
+   */
+  const consentGroup = useMemo(
+    () => viewingGroup ?? contactPrimaryGroup(row, org as Record<string, unknown>),
+    [viewingGroup, row, org],
+  )
+  /**
+   * The SITE the page acts as, for what needs one — the lead lookup, the
+   * campaign filing, the site's activity feed: the mounted site, or the
+   * primary holder's, or nothing for a row no site has captured.
+   */
+  const siteHostId = hostId ?? (consentGroup.hostId || null)
+  const logActivity = useHostActivityLogger(siteHostId ?? undefined)
   const record = useMemo(
     () => (row ? contactRecordFromDoc(row, consentGroup) : null),
     [row, consentGroup],
   )
   const notFound = Boolean(scope) && status !== 'loading' && !row
+  /** How the site the delete detaches from is named — see `handleRemove`. */
+  const siteLabel = hostId
+    ? 'this site'
+    : siteHostId
+      ? (mount?.siteName(siteHostId) ?? siteHostId)
+      : 'its site'
 
   // The roster, for the owner picker and the owner's name — read because a
   // record page is the one place both are shown.
   const members = useOrgMembers(orgId, { enabled: Boolean(record) })
+  /*
+   * Where this person's ORDERS are read (AGL-2622): the site's orders list,
+   * narrowed to their address. The count on the header is the number; the
+   * list is the rows. Built from the route params already in the URL, so
+   * no document is read to draw a link, and absent off a site — the
+   * org-level mount has no orders list to point at.
+   */
+  const params = useParams<{ orgSlug?: string; host?: string }>()
+  const ordersHref =
+    params?.orgSlug && params?.host && record?.email
+      ? Aglyn.siteRecordLinks({
+          orgSlug: String(params.orgSlug),
+          host: String(params.host),
+        }).ordersByCustomer(record.email)
+      : null
+
+  /*
+   * Where a campaign entry on the timeline links to: the email's own report
+   * on this site's Emails hub (AGL-2616). Only a campaign THIS site sent can
+   * be addressed — a sibling site in the same consent group has an Emails
+   * hub of its own under a subdomain this page does not know — so the
+   * builder answers `null` for those and the entry draws unlinked.
+   */
+  const emailsHub = useEmailsHubPath()
+  const campaignHref = useCallback(
+    (email: Aglyn.ContactCampaignEmail) =>
+      emailsHub && email.hostId === hostId
+        ? `${emailsHub}/messages/${encodeURIComponent(email.campaignId)}`
+        : null,
+    [emailsHub, hostId],
+  )
 
   const handleRemove = useCallback(async () => {
     if (!row || !scope) return
     const confirmed = await confirm({
       title: 'Delete this contact?',
       description:
-        `"${record?.email ?? id}" is removed from this site's ` +
+        `"${record?.email ?? id}" is removed from ${siteLabel}'s ` +
         'Contacts, along with its notes, tags and timeline. Other sites ' +
         'that captured the same person keep their own records. Their form ' +
         'submissions, orders, bookings, and membership records are ' +
@@ -182,7 +239,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
       enqueueSnackbar(
         plan.action === 'delete'
           ? 'Contact deleted'
-          : 'Contact removed from this site',
+          : `Contact removed from ${siteLabel}`,
         { variant: 'success', persist: false },
       )
       router.push(routes.section('contacts'))
@@ -205,9 +262,23 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
     routes,
     row,
     scope,
+    siteLabel,
   ])
 
   const overflowItems: RowActionsMenuItem[] = [
+    /*
+     * Two records for one person become one (AGL-2625). Opened empty, to be
+     * searched, with the OTHER record surviving: a reader on the record they
+     * want gone says "merge this into…". The dialog lets them switch.
+     */
+    {
+      key: 'merge',
+      label: 'Merge into…',
+      icon: <MdiIcon path={mdiMerge.path} size={0.8} />,
+      disabled: !row,
+      disabledReason: 'The contact has not loaded',
+      onClick: () => merge.open(),
+    },
     {
       key: 'remove',
       label: 'Delete contact',
@@ -218,33 +289,25 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
       onClick: () => void handleRemove(),
     },
   ]
-
-  const headerActions = (
-    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-      <Button
-        component={AppLink as any}
-        {...({ componentVariant: 'naked', nativeButton: false } as any)}
-        href={routes.section('contacts')}
-        size="small"
-        color="primary"
-      >
-        {'Back to contacts'}
-      </Button>
-      {record ? (
-        <AddToListButton hostId={hostId} org={org} contactId={id} email={record.email} />
-      ) : null}
-      <RowActionsMenu label={record?.name || record?.email || 'Contact'} items={overflowItems} />
-    </Stack>
-  )
+  // The privacy erasure (AGL-2623): its item joins the overflow, its banner
+  // sits under the header while a request waits, its dialog renders once.
+  const erase = useErasePersonAction({
+    // Filed as the site the page acts as — at the organization level the
+    // person's primary holder (AGL-2630).
+    hostId: siteHostId,
+    orgId,
+    subject: record ? { kind: 'contact', id, email: record.email } : null,
+    requestedAtMs: Aglyn.readErasureRequestedAtMs(row),
+  })
 
   if (notFound) {
     return (
-      <CardDisplay
-        header={'Contact'}
+      <CrmRecordHeader
+        kind="Contact"
+        title={undefined}
         help={contactDocsHelp}
-        contentGutterX
-        contentGutterY
-        HeaderProps={{ action: headerActions }}
+        backHref={routes.section('contacts')}
+        backLabel="Back to contacts"
       >
         {/*
          * Not "no data". A contact that cannot be read is a different
@@ -255,56 +318,108 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
         <Typography variant="body2" color="text.secondary">
           {'This contact could not be loaded. It may have been removed from this site.'}
         </Typography>
-      </CardDisplay>
+      </CrmRecordHeader>
     )
   }
 
   return (
+    // A create opened from this page — a task, an activity, a deal — files
+    // under the site that captured this person unless the reader says
+    // otherwise (AGL-2630).
+    <CrmCreateSiteDefault hostId={siteHostId}>
     <Stack spacing={3}>
-      {/* The page heading and the trail name the person; the card is then
-          free to say what it holds rather than repeating the title. */}
-      <PageHeaderRecord
+      <CrmRecordHeader
+        kind="Contact"
         title={record ? record.name || record.email : undefined}
-      />
-      <CardDisplay
-        header={'Contact'}
-        subheader={record?.email}
+        // The identity, and the other addresses a merge folded into it.
+        subtitle={
+          record
+            ? [record.email, ...record.alternateEmails.map((email) => `also ${email}`)].join(' · ')
+            : undefined
+        }
         help={contactDocsHelp}
-        contentGutterX
-        contentGutterY
-        HeaderProps={{ action: headerActions }}
+        backHref={routes.section('contacts')}
+        backLabel="Back to contacts"
+        actions={
+          record ? (
+            <>
+              <AddToListButton hostId={hostId} org={org} contactId={id} email={record.email} />
+              <CrmSendEmailButton
+                hostId={siteHostId}
+                org={org}
+                contactId={id}
+                email={record.email}
+                name={record.name}
+              />
+            </>
+          ) : null
+        }
+        menuItems={[...overflowItems, ...erase.menuItems]}
+        loading={!record}
+        chips={
+          record ? (
+            <>
+              <CrmRecordChip
+                label="Stage"
+                value={
+                  record.lifecycleStage
+                    ? CONTACT_LIFECYCLE_STAGE_LABELS[record.lifecycleStage]
+                    : undefined
+                }
+              />
+              <CrmRecordChip
+                label="Owner"
+                value={record.ownerUid ? members.memberName(record.ownerUid) : undefined}
+              />
+              {/*
+                The last time they opened or clicked one of this site's
+                campaigns (AGL-2616) — the relationship's pulse, beside the
+                owner who keeps it.
+              */}
+              <CrmRecordChip
+                label="Last engaged"
+                value={
+                  record.lastEmailEngagementAtMs ? (
+                    <Tooltip title={new Date(record.lastEmailEngagementAtMs).toLocaleString()}>
+                      <span>
+                        {Aglyn.activityTimeLabel(record.lastEmailEngagementAtMs, Date.now())}
+                      </span>
+                    </Tooltip>
+                  ) : undefined
+                }
+              />
+              <CrmRecordChip
+                label="Orders"
+                value={
+                  record.ordersCount > 0 ? (
+                    ordersHref ? (
+                      <AppLink href={ordersHref} color="inherit" underline="hover">
+                        {`${record.ordersCount.toLocaleString()} · $${(record.ltvCents / 100).toFixed(2)} lifetime`}
+                      </AppLink>
+                    ) : (
+                      `${record.ordersCount.toLocaleString()} · $${(record.ltvCents / 100).toFixed(2)} lifetime`
+                    )
+                  ) : undefined
+                }
+              />
+            </>
+          ) : null
+        }
       >
-        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
-          {record?.lifecycleStage ? (
-            <Chip
-              size="small"
-              variant="outlined"
-              label={CONTACT_LIFECYCLE_STAGE_LABELS[record.lifecycleStage]}
-            />
-          ) : null}
-          {record?.ownerUid ? (
-            <Typography variant="body2" color="text.secondary">
-              {`Owner: ${members.memberName(record.ownerUid)}`}
-            </Typography>
-          ) : null}
-          {record && record.ordersCount > 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              {`${record.ordersCount.toLocaleString()} order${
-                record.ordersCount === 1 ? '' : 's'
-              } · $${(record.ltvCents / 100).toFixed(2)} lifetime`}
-            </Typography>
-          ) : null}
-          {!record ? (
-            <Typography variant="body2" color="text.secondary">
-              {'Loading…'}
-            </Typography>
-          ) : null}
-        </Stack>
-      </CardDisplay>
+        {erase.banner}
+      </CrmRecordHeader>
       {record && row && scope ? (
         <>
+          {/*
+            The cross-site fact, at the organization level only (AGL-2630):
+            which sites know this person, and their consent for each. Under
+            a site the page IS one site's view and the card would say so on
+            every record.
+          */}
+          {mount ? <ContactKnownByCard row={row} contactId={id} org={org} /> : null}
           <ContactPropertiesCard
             hostId={hostId}
+            org={org}
             record={record}
             consentGroup={consentGroup}
             scope={scope}
@@ -312,15 +427,22 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
             members={members}
           />
           <ContactAssociationsCard
-            hostId={hostId}
+            hostId={siteHostId}
             record={record}
             row={row}
             consentGroup={consentGroup}
             scope={scope}
             seed={{ status, fromCache }}
+            basePath={basePath}
           />
-          <ContactCustomFieldsCard hostId={hostId} org={org} contactId={id} />
-          <ContactTimelineCard hostId={hostId} org={org} contactId={id} contact={row} />
+          <ContactCustomFieldsCard hostId={hostId} org={org} contactId={id} basePath={basePath} />
+          <ContactTimelineCard
+            hostId={hostId}
+            org={org}
+            contactId={id}
+            contact={row}
+            campaignHref={campaignHref}
+          />
           <ContactDealsCard
             hostId={hostId}
             org={org}
@@ -329,9 +451,34 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
             contactName={record.name || record.email}
           />
           <RecordTasksCard hostId={hostId} org={org} basePath={basePath} contactId={id} />
+          <ContactDuplicatesCard
+            current={{ id, doc: row }}
+            scope={scope}
+            consentGroup={consentGroup}
+            visibleTo={visibleTo}
+            basePath={basePath}
+            onMerge={(candidate) => merge.open({ other: candidate, keep: 'current' })}
+          />
+          <ContactMergeDialog
+            {...merge.state}
+            onClose={merge.close}
+            hostId={siteHostId}
+            current={{ id, doc: row }}
+            scope={scope}
+            consentGroup={consentGroup}
+            visibleTo={visibleTo}
+            memberName={members.memberName}
+            // The page's own record was folded away: its address now opens
+            // the survivor, which is where the reader is taken.
+            onMerged={(survivorId) => {
+              if (survivorId !== id) router.replace(routes.contact(survivorId))
+            }}
+          />
         </>
       ) : null}
+      {erase.dialog}
     </Stack>
+    </CrmCreateSiteDefault>
   )
 }
 ContactDetailPage.displayName = 'ContactDetailPage'

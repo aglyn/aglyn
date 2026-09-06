@@ -47,6 +47,7 @@ import {
   where,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
+import { crmVisibleToClause } from '../hooks/use-crm-scope'
 import {
   addStage,
   moveStage,
@@ -68,7 +69,8 @@ export interface PipelineStagesDialogProps {
   fromCache: boolean
   unreadable: boolean
   /** The scope tokens the deal count is filtered by — the viewer's own. */
-  visibleToTokens: string[]
+  /** The reader's tokens, or `null` at the organization level — no clause (AGL-2630). */
+  visibleToTokens: readonly string[] | null
 }
 
 /**
@@ -122,7 +124,7 @@ export function PipelineStagesDialog(props: PipelineStagesDialogProps) {
         const snapshot = await getCountFromServer(
           query(
             collection(firestore, 'orgs', orgId, CRM_COLLECTIONS.deals),
-            where('visibleTo', 'array-contains-any', visibleToTokens),
+            ...crmVisibleToClause(visibleToTokens),
             where('pipelineId', '==', pipeline.$id),
             where('stageId', '==', stageId),
           ),

@@ -371,9 +371,17 @@ export function cardNamed(page, header) {
     .first()
 }
 
-/** Opens the `⋮` menu labeled for `subject` and clicks the item named `item`. */
+/**
+ * Opens the `⋮` menu labeled for `subject` and clicks the item named `item`.
+ *
+ * The label is matched whole: a draggable board card is itself a button
+ * whose accessible name is its content, menu label included, so a
+ * substring match would resolve the card as well as its menu.
+ */
 export async function rowAction(page, subject, item) {
-  await page.getByRole('button', { name: `More actions for ${subject}` }).click({ timeout: TIMEOUT_MS })
+  await page
+    .getByRole('button', { name: `More actions for ${subject}`, exact: true })
+    .click({ timeout: TIMEOUT_MS })
   const menu = page.locator('[role="menu"]').last()
   await menu.getByRole('menuitem', { name: item }).click({ timeout: TIMEOUT_MS })
 }

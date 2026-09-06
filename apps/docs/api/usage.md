@@ -32,7 +32,8 @@ to contacts still needs to see the request quota that would refuse it.
   "object": "usage",
   "month": "2026-08",
   "apiRequests":   { "used": 18422, "included": 100000, "remaining": 81578, "metered": true },
-  "contacts":      { "used": 3120,  "included": 100000, "remaining": 96880, "metered": true },
+  "contacts":      { "used": 3120,  "included": 100000, "remaining": 96480, "metered": true },
+  "crmRecords":    { "used": 3520,  "included": 100000, "remaining": 96480, "metered": true },
   "datasets":      { "used": 4,     "included": 25,     "remaining": 21,    "metered": false },
   "dataStorageMb": { "used": 412,   "included": 10240,  "remaining": 9828,  "metered": true },
   "campaignEmails": { "used": 1240,  "included": 50000,  "remaining": 48760, "metered": false },
@@ -40,7 +41,8 @@ to contacts still needs to see the request quota that would refuse it.
     "companies":  { "used": 312, "included": null, "remaining": null, "metered": false },
     "deals":      { "used": 88,  "included": null, "remaining": null, "metered": false },
     "tasks":      { "used": 41,  "included": null, "remaining": null, "metered": false },
-    "activities": { "used": 906, "included": null, "remaining": null, "metered": false }
+    "activities": { "used": 906, "included": null, "remaining": null, "metered": false },
+    "leads":      { "used": 1873, "included": null, "remaining": null, "metered": false }
   }
 }
 ```
@@ -50,11 +52,12 @@ to contacts still needs to see the request quota that would refuse it.
 | `object` | string | Always `"usage"`. |
 | `month` | string | The billing month these figures cover, `YYYY-MM`, UTC. |
 | `apiRequests` | band | Requests to `/v1` this month. |
-| `contacts` | band | [Contacts](resources/contacts.md) in the organization — the audience band. Not monthly: it's the current size of the list. |
+| `contacts` | band | [Contacts](resources/contacts.md) in the organization, against the **CRM records band**. `used` is the number of contacts; `included` and `remaining` are the band's, which contacts share with companies and deals — so `remaining` can be smaller than `included − used`. Not monthly: it's the current size of the list. |
+| `crmRecords` | band | The CRM records band itself: contacts + [companies](resources/companies.md) + [deals](resources/deals.md) against the plan's included records. This is the figure the invoice and the console meter are computed from; `contacts` above keeps its shape for clients that only read it. |
 | `datasets` | band | [Datasets](resources/datasets.md) in the organization. Also not monthly. |
 | `dataStorageMb` | band | Stored dataset bytes, in MB. |
 | `campaignEmails` | band | Marketing campaign emails sent this month. **Campaign mail only** — transactional messages (receipts, booking reminders, password resets) are never counted against this band and are never refused. |
-| `crm` | object of bands | The size of each CRM collection — [companies](resources/companies.md), [deals](resources/deals.md), [tasks](resources/tasks.md), [activities](resources/activities.md). **Not bands in the plan sense**: nothing meters or refuses a company or a deal, so `included` and `remaining` are always `null` and `metered` is always `false`. They are here so a sync can size a full walk of a list before taking it — `used / limit` pages, each a billed request. Live, counted at read time. |
+| `crm` | object of bands | The size of each CRM collection — [companies](resources/companies.md), [deals](resources/deals.md), [tasks](resources/tasks.md), [activities](resources/activities.md), and [leads](resources/leads.md) summed across every site the organization owns. **Sizes, not bands**: `included` and `remaining` are always `null` and `metered` is always `false`. Companies and deals are banded through `crmRecords` above; tasks, activities and leads are not banded at all. They are here so a sync can size a full walk of a list before taking it — `used / limit` pages, each a billed request. Live, counted at read time. |
 
 Every band has the same four fields:
 
@@ -104,7 +107,7 @@ before you alert on them.
 - **`apiRequests` is live.** It's read from the same counter that refuses a request
   over quota, so what this endpoint reports and what enforcement acts on can't drift.
   This call is itself metered, so the count it returns includes it.
-- **`contacts` and `datasets` are live.** Both are counted at read time.
+- **`contacts`, `crmRecords` and `datasets` are live.** All are counted at read time.
 - **`dataStorageMb` is swept, not live.** Stored bytes are measured by a background
   job, so the number here is the one **billing prices from** rather than an
   up-to-the-second figure. Records you wrote minutes ago may not be in it yet. That is

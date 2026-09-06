@@ -220,7 +220,15 @@ export function DealBoard(props: DealBoardProps) {
       onDragEnd={handleDragEnd}
       onDragCancel={() => setDragging(null)}
     >
-      <Box sx={{ overflowX: 'auto', pb: 1 }}>
+      {/*
+        The board scrolls sideways; the page does not. The columns are
+        fixed-width and refuse to shrink, so the row is as wide as its
+        stages — and a flex item's implicit `min-width: auto` would hand
+        that width up to the card and the page rather than clip it here.
+        `minWidth: 0` is what lets this box be narrower than its content,
+        which is the whole condition for the scrollbar to appear on it.
+       */}
+      <Box sx={{ overflowX: 'auto', pb: 1, minWidth: 0, width: '100%' }}>
         <Stack direction="row" spacing={1.5} sx={{ alignItems: 'stretch', minWidth: 'max-content' }}>
           {stages.map((stage) => (
             <StageColumn
@@ -428,7 +436,7 @@ function DealCard(props: DealCardProps) {
         deal={deal}
         ownerLabel={ownerLabel}
         days={days}
-        menu={<RowActionsMenu items={actions} label={`Actions for ${deal.title}`} />}
+        menu={<RowActionsMenu items={actions} label={deal.title} />}
         onOpen={onOpen}
       />
     </Box>

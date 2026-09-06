@@ -105,6 +105,8 @@ export function listFilterConstraints(
   if (!input) return null
   const field = fields.find((entry) => entry.column === input.field)
   if (!field) return null
+  // A window-only field is matched over the loaded rows — see the flag.
+  if (field.windowOnly) return null
   const raw = (input.value ?? '').trim()
   const op = input.op
   const pinned = options.fixedOrderBy
@@ -139,7 +141,8 @@ export function listFilterConstraints(
 
   if (field.kind === 'text') {
     if (op === 'contains' && field.tokensPath) {
-      const token = key(raw).split(' ')[0]
+      // An id array is matched as typed — see `verbatimTokens`.
+      const token = field.verbatimTokens ? raw : key(raw).split(' ')[0]
       if (!token) return null
       const sortBy = field.containsOrderBy ?? options.containsOrderBy ?? field.lowerPath ?? field.path
       return [
@@ -174,6 +177,13 @@ export function listFilterConstraints(
         : null
     }
     return null
+  }
+
+  if (field.keysOf) {
+    // One key of a presence map, as the equality on its own path. A key is
+    // an identifier the writer chose; anything else could not be a path.
+    if (op !== 'equals' || !/^[A-Za-z0-9_]+$/.test(raw)) return null
+    return [where(`${field.path}.${raw}`, '==', true), ...sorted(documentId())]
   }
 
   if (field.kind === 'exact') {
@@ -238,4 +248,53 @@ export function listFilterConstraints(
   }
 
   return null
+}
+
+/** How a list applies several clauses at once — see {@link listFilterPlan}. */
+export interface ListFilterPlan {
+  /** The one clause the query carries, or none. */
+  served: ListFilterRequest | null
+  /** Its constraints, or `null` when nothing was servable. */
+  constraints: QueryConstraint[] | null
+  /** Every other clause, matched over the rows the query returns. */
+  window: ListFilterRequest[]
+}
+
+/**
+ * Several clauses, split into the ONE the query serves and the rest the
+ * list matches in memory (AGL-2617).
+ *
+ * A saved view carries a list of clauses and Firestore composes predicates
+ * only through indexes nobody built for every pair of columns — and takes
+ * one array clause per query, which the scope predicate already is. So the
+ * first clause the translator can serve goes to the query, where it reaches
+ * the whole collection, and every other clause narrows the bounded window
+ * that query returns. The list says which is which in its caption: a clause
+ * that narrows only the window must not read as one that searched
+ * everything.
+ *
+ * First SERVABLE, not first listed: a reader who adds an owner clause (a
+ * facet field no query reaches) and then a name prefix should have the
+ * name searched, not the owner "served" as nothing.
+ */
+export function listFilterPlan(
+  fields: readonly ListFilterField[],
+  clauses: readonly ListFilterRequest[],
+  options: ListFilterConstraintOptions = {},
+): ListFilterPlan {
+  let served: ListFilterRequest | null = null
+  let constraints: QueryConstraint[] | null = null
+  const window: ListFilterRequest[] = []
+  for (const clause of clauses) {
+    if (!served) {
+      const built = listFilterConstraints(fields, clause, options)
+      if (built) {
+        served = clause
+        constraints = built
+        continue
+      }
+    }
+    window.push(clause)
+  }
+  return { served, constraints, window }
 }

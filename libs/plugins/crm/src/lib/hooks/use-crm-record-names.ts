@@ -19,6 +19,7 @@ import { contactDisplayName, CRM_COLLECTIONS } from '@aglyn/aglyn'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { doc, getDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
+import { contactPrimaryGroup } from '../model/contact-record'
 
 export type CrmRecordKind = 'contact' | 'company' | 'deal'
 
@@ -87,10 +88,16 @@ export function resetCrmRecordNameCache(): void {
  */
 export function useCrmRecordNames(options: {
   orgId: string | null | undefined
-  groupId: string
+  /**
+   * The viewing group a contact is named through, or `null` at the
+   * organization level (AGL-2630), where each contact is named through its
+   * own primary holder, resolved from {@link org}.
+   */
+  groupId: string | null
+  org?: Record<string, unknown> | null
   records: ReadonlyArray<{ kind: CrmRecordKind; id: string }>
 }): (kind: CrmRecordKind, id: string) => string | undefined {
-  const { orgId, groupId, records } = options
+  const { orgId, groupId, org, records } = options
   const firestore = useFirestore()
   // A counter rather than a copy of the cache: the cache is the source of
   // truth and this only exists to re-render when it grows.
@@ -118,13 +125,16 @@ export function useCrmRecordNames(options: {
           doc(firestore, 'orgs', orgId, CRM_RECORD_COLLECTIONS[kind], id),
         )
           .then((snapshot) => {
+            const data = snapshot.exists()
+              ? (snapshot.data() as Record<string, unknown>)
+              : undefined
             nameCache.set(
               key,
-              snapshot.exists()
+              data
                 ? crmRecordName(
                     kind,
-                    snapshot.data() as Record<string, unknown>,
-                    groupId,
+                    data,
+                    groupId ?? contactPrimaryGroup(data, org).groupId,
                   )
                 : null,
             )

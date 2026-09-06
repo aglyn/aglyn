@@ -26,6 +26,7 @@ import { ReportBarChart } from './report-bar-chart'
 import { weekLabel } from './report-format'
 import {
   type CrmReportScope,
+  reportCacheKey,
   scopedCollection,
   visibleToClause,
 } from './report-scope'
@@ -76,7 +77,7 @@ export function ContactsTrendCard(props: ContactsTrendCardProps) {
       getCountFromServer(
         query(
           contacts,
-          visibleToClause(tokens),
+          ...visibleToClause(tokens),
           where('createdAt', '>=', Timestamp.fromMillis(from)),
           where('createdAt', '<', Timestamp.fromMillis(to)),
         ),
@@ -93,7 +94,7 @@ export function ContactsTrendCard(props: ContactsTrendCardProps) {
         count: weekly[index] ?? 0,
       })),
     }))
-  }, [firestore, scope, tokens, range])
+  }, [firestore, scope, tokens, range], { cacheKey: reportCacheKey(report, 'contacts:trend') })
 
   const figures = trend.value
   return (

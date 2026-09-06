@@ -50,6 +50,7 @@ import {
 } from '@aglyn/aglyn/server'
 import {
   ApiErrors,
+  crmRecordsQuotaForOrg,
   decodeCursor,
   encodeCursor,
   listResponse,
@@ -85,6 +86,33 @@ export function crmCollection(
   name: CrmCollection,
 ): FirebaseFirestore.CollectionReference {
   return ctx.firestore.collection('orgs').doc(ctx.orgId).collection(name)
+}
+
+/**
+ * The records band, asked before a company or a deal is created (AGL-2611).
+ *
+ * `null` when there is room; the refusal otherwise, in the shape
+ * `POST /v1/contacts` has always answered at the same band — `plan_required`
+ * with a code, because on the one plan that refuses (Free) an upgrade is the
+ * whole remedy, and every paid plan meters the excess instead. The measure
+ * is the same three aggregates the monthly rollup bills from, so the API
+ * and the invoice cannot disagree about whether the band was full.
+ */
+export async function crmRecordsBandRefusal(
+  ctx: ApiV1Context,
+): Promise<Response | null> {
+  const room = await crmRecordsQuotaForOrg(
+    ctx.org as never,
+    ctx.firestore.collection('orgs').doc(ctx.orgId),
+  )
+  if (room.allowed) return null
+  return ApiErrors.planRequired({
+    message:
+      `CRM records limit reached (${room.included} records across contacts, ` +
+      'companies and deals). Upgrade the plan to add more.',
+    code: 'crm_records_quota',
+    headers: ctx.headers,
+  })
 }
 
 // ── The site a write names ──────────────────────────────────────────────────

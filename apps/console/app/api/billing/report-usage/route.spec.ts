@@ -195,6 +195,7 @@ jest.mock('@aglyn/aglyn/server', () => {
     // REAL: the arithmetic under the figure a budget reads.
     checkApiRequestQuota: entitlements.checkApiRequestQuota,
     checkContactQuota: entitlements.checkContactQuota,
+    checkCrmRecordsQuota: entitlements.checkCrmRecordsQuota,
     checkDataStorageQuota: entitlements.checkDataStorageQuota,
     // Same allow-list hazard the note below records — omit it and the
     // TypeError is swallowed per org rather than failing the assertion.
@@ -1007,6 +1008,110 @@ describe('contacts and dataset storage bill the month, not the sweep (AGL-2399)'
     expect(rollup['dataStorageMbAtPeriodEnd']).toBe(rollup['dataStorageMb'])
     // An open month is measured now BY DEFINITION — "now" is inside it.
     expect(rollup['stockBasis']).toBe('in-progress')
+  })
+
+  /*
+   * THE RECORDS BAND (AGL-2611). `contactsPerHost` now counts contacts +
+   * companies + deals, and the three sit under the same period-end
+   * convention as the contacts figure inside them. Each case below seeds
+   * REAL documents in the three collections, because the aggregate counts
+   * documents — a hand-set number would test the fixture, not the reads.
+   */
+  function seedLiveRecords(counts: { companies?: number; deals?: number }) {
+    for (let index = 0; index < (counts.companies ?? 0); index += 1) {
+      mockDocs.set(`orgs/org-1/companies/company-${index}`, { name: 'Acme' })
+    }
+    for (let index = 0; index < (counts.deals ?? 0); index += 1) {
+      mockDocs.set(`orgs/org-1/deals/deal-${index}`, { title: 'Renewal' })
+    }
+  }
+
+  it('bills contacts, companies and deals as ONE band, and stamps the trio (AGL-2611)', async () => {
+    // Starter includes 1,000 records at $1/1k. 600 contacts alone are inside
+    // the band; with 300 companies and 200 deals the org is 100 over.
+    //
+    // FORCED RED: on the contacts-only route this case failed with
+    // `crmRecordsCount: undefined` and `contactsOverageUsd: 0` — the
+    // companies and deals were never read, and the excess billed as nothing.
+    seedOrg()
+    seedLiveContacts(600)
+    seedLiveRecords({ companies: 300, deals: 200 })
+
+    await runSweep(loadRoute(), { query: '?month=current' })
+
+    const rollup = mockDocs.get(`orgs/org-1/usage/${OPEN}`)!
+    expect(rollup['crmRecordsCount']).toBe(1_100)
+    expect(rollup['contactsCount']).toBe(600)
+    expect(rollup['companiesCount']).toBe(300)
+    expect(rollup['dealsCount']).toBe(200)
+    // 100 over at $1/1k.
+    expect(rollup['contactsOverageUsd']).toBe(0.1)
+    // The open sweep stamps the total AND its parts, as one unit, so the
+    // closed sweep reads a trio that was measured on one day.
+    expect(rollup['crmRecordsCountAtPeriodEnd']).toBe(1_100)
+    expect(rollup['companiesCountAtPeriodEnd']).toBe(300)
+    expect(rollup['dealsCountAtPeriodEnd']).toBe(200)
+    expect(rollup['crmRecordsCountAtSweep']).toBe(1_100)
+  })
+
+  it('a closed month bills the records trio it stamped, not the sweep (AGL-2611)', async () => {
+    // The AGL-2399 convention, on the widened band: the month ended at 6,000
+    // records (700 contacts, 4,000 companies, 1,300 deals) and was gutted on
+    // the 1st. The sweep sees ten contacts and nothing else.
+    seedOrg()
+    seedPeriodEndReading({
+      contactsCountAtPeriodEnd: 700,
+      crmRecordsCountAtPeriodEnd: 6_000,
+      companiesCountAtPeriodEnd: 4_000,
+      dealsCountAtPeriodEnd: 1_300,
+      dataStorageMbAtPeriodEnd: 0,
+    })
+    seedLiveContacts(10)
+
+    await runSweep(loadRoute())
+
+    const rollup = mockDocs.get(`orgs/org-1/usage/${CLOSED}`)!
+    expect(rollup['stockBasis']).toBe('period-end')
+    expect(rollup['crmRecordsCount']).toBe(6_000)
+    expect(rollup['contactsCount']).toBe(700)
+    expect(rollup['companiesCount']).toBe(4_000)
+    expect(rollup['dealsCount']).toBe(1_300)
+    // 5,000 over at $1/1k — on the RECORDS total, which the contacts figure
+    // alone would have billed as nothing.
+    expect(rollup['contactsOverageUsd']).toBe(5)
+    expect(rollup['crmRecordsCountAtSweep']).toBe(10)
+    // The parts sum to the total on the audit row.
+    expect(
+      rollup['contactsCount'] + rollup['companiesCount'] + rollup['dealsCount'],
+    ).toBe(rollup['crmRecordsCount'])
+  })
+
+  it('a month stamped before the band widened bills its contacts alone (AGL-2611)', async () => {
+    // A closed month whose in-progress sweeps predate the records stamp has
+    // a contacts reading and no records reading. The companies that exist
+    // NOW were never measured inside that month, so they bill as nothing for
+    // it — the permissive direction, and the only one the period-end
+    // convention allows. Billing them at the sweep-time figure would be the
+    // AGL-2399 defect on a new collection.
+    seedOrg()
+    seedPeriodEndReading({
+      contactsCountAtPeriodEnd: CONTACTS_AT_PERIOD_END,
+      dataStorageMbAtPeriodEnd: 0,
+    })
+    seedLiveContacts(10)
+    seedLiveRecords({ companies: 3_000 })
+
+    await runSweep(loadRoute())
+
+    const rollup = mockDocs.get(`orgs/org-1/usage/${CLOSED}`)!
+    expect(rollup['stockBasis']).toBe('period-end')
+    expect(rollup['crmRecordsCount']).toBe(CONTACTS_AT_PERIOD_END)
+    expect(rollup['companiesCount']).toBe(0)
+    expect(rollup['dealsCount']).toBe(0)
+    expect(rollup['contactsOverageUsd']).toBe(EXPECTED_CONTACT_OVERAGE_USD)
+    // What the sweep saw is still on the row, so the size of what was NOT
+    // billed is recoverable: 3,010 records now against 6,000 billed.
+    expect(rollup['crmRecordsCountAtSweep']).toBe(3_010)
   })
 
   it('a closed month with no in-period reading falls back, and says so', async () => {

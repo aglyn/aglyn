@@ -71,6 +71,25 @@ import type { AglynPostalAddress } from '../foundation'
 import { normalizeAddress, normalizePhone } from '../foundation'
 import { normalizeContactEmail } from './contacts'
 import {
+  CSV_IMPORT_CHUNK_SIZE,
+  CSV_IMPORT_MAX_BODY_BYTES,
+  CSV_IMPORT_MAX_ROWS,
+  CSV_IMPORT_PREVIEW_ROWS,
+  customImportTarget,
+  customImportTargetKey,
+  emptyImportResult,
+  guessImportMapping,
+  importAliasKeys,
+  type ImportChunkResult,
+  type ImportDroppedValue,
+  importSkippedCsv,
+  importTextValue,
+  mapImportRow,
+  mergeImportResults,
+  parseImportFlag,
+  parseImportTags,
+} from './csv-import'
+import {
   CONTACT_LIFECYCLE_STAGE_LABELS,
   CONTACT_LIFECYCLE_STAGES,
   type ContactCustomValue,
@@ -79,37 +98,26 @@ import {
   isContactLifecycleStage,
 } from './crm'
 
-/**
- * The most rows one uploaded file may carry.
- *
- * A bound on the work one import represents and on the memory the browser
- * holds while mapping it — five thousand rows of a wide export is already
- * several megabytes of cells in a tab. A larger list is split and imported
- * in pieces; the drawer says so on the file, before a single row is sent.
+/*
+ * The custom-target grammar is the shared module's; it is re-exported here
+ * because every reader of a contact mapping has always taken it from this
+ * file, and the companies import reads the same two functions from theirs.
  */
-export const CONTACT_IMPORT_MAX_ROWS = 5_000
+export { customImportTarget, customImportTargetKey } from './csv-import'
 
 /**
- * Rows per request.
- *
- * Each row costs the server one dedupe read and one write, plus a company
- * lookup for a name it has not seen in this request; two hundred of those
- * sit comfortably inside a console request's budget and give the progress
- * bar twenty-five steps on the largest file the drawer accepts.
+ * The ceilings are the shared ones (`csv-import.ts`), under the names this
+ * file has always exported: one file, one request and one preview are
+ * bounded the same way for every collection, because the bounds are about
+ * the browser's memory and a request's budget rather than about people.
  */
-export const CONTACT_IMPORT_CHUNK_SIZE = 200
+export const CONTACT_IMPORT_MAX_ROWS = CSV_IMPORT_MAX_ROWS
 
-/**
- * The most bytes one request may carry, checked before the body is judged.
- *
- * Two hundred rows of a wide export with long custom values is well under a
- * megabyte; two megabytes is the line past which a request is not a chunk
- * of a contact file but something else being pushed through this door.
- */
-export const CONTACT_IMPORT_MAX_BODY_BYTES = 2_000_000
+export const CONTACT_IMPORT_CHUNK_SIZE = CSV_IMPORT_CHUNK_SIZE
 
-/** How many mapped rows the drawer shows before the operator commits. */
-export const CONTACT_IMPORT_PREVIEW_ROWS = 10
+export const CONTACT_IMPORT_MAX_BODY_BYTES = CSV_IMPORT_MAX_BODY_BYTES
+
+export const CONTACT_IMPORT_PREVIEW_ROWS = CSV_IMPORT_PREVIEW_ROWS
 
 /**
  * The most tags one row may carry — the profile drawer's own cap, so an
@@ -166,7 +174,7 @@ export const CONTACT_IMPORT_FIELD_LABELS: Record<ContactImportField, string> = {
 }
 
 /**
- * Header aliases per field, matched after {@link headerKey} normalization.
+ * Header aliases per field, matched after `importHeaderKey` normalization.
  *
  * The vocabulary of the exports people actually arrive with — HubSpot's
  * "First Name"/"Last Name" pair is deliberately NOT here, because two columns
@@ -217,100 +225,29 @@ const FIELD_ALIASES: Record<ContactImportField, readonly string[]> = {
   ],
 }
 
-/** The prefix a custom-field target id carries. */
-const CUSTOM_TARGET_PREFIX = 'custom:'
-
 /**
  * What a column is mapped to: a standard field by name, or a custom field
- * as `custom:<key>`. One string rather than a discriminated object because
- * it is the VALUE of a select control and travels through a form.
+ * as `custom:<key>` — see `customImportTarget`.
  */
 export type ContactImportTargetId = ContactImportField | `custom:${string}`
-
-/** The custom-field target id for a definition key. */
-export function customImportTarget(key: string): ContactImportTargetId {
-  return `${CUSTOM_TARGET_PREFIX}${key}`
-}
-
-/** The definition key a custom target names, or `null` for a standard field. */
-export function customImportTargetKey(target: string): string | null {
-  return target.startsWith(CUSTOM_TARGET_PREFIX)
-    ? target.slice(CUSTOM_TARGET_PREFIX.length)
-    : null
-}
 
 /** Column index → target. A column absent from the map is not imported. */
 export type ContactImportMapping = Record<number, ContactImportTargetId>
 
-/**
- * Normalizes a header cell for alias matching.
- *
- * Underscores, dots and hyphens all become one space, so `e-mail`,
- * `email_address` and `Email Address` compare as the words they are. The
- * aliases above are written in the human spelling and pass through the same
- * function, so the table stays readable and the comparison stays exact.
- */
-function headerKey(value: unknown): string {
-  return String(value ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/[_.\-/]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-/** {@link FIELD_ALIASES}, normalized once through {@link headerKey}. */
-const FIELD_ALIAS_KEYS: Record<ContactImportField, ReadonlySet<string>> = (() => {
-  const keys = {} as Record<ContactImportField, ReadonlySet<string>>
-  for (const field of CONTACT_IMPORT_FIELDS) {
-    keys[field] = new Set(FIELD_ALIASES[field].map(headerKey))
-  }
-  return keys
-})()
+/** {@link FIELD_ALIASES}, normalized once for the matcher. */
+const FIELD_ALIAS_KEYS = importAliasKeys(CONTACT_IMPORT_FIELDS, FIELD_ALIASES)
 
 /**
- * A proposed mapping from a file's header row.
- *
- * Custom fields win over standard aliases when a header matches a
- * definition's label or key exactly — a merchant who defined a field called
- * "Status" meant THEIR status, not our lifecycle stage. Each target is
- * taken at most once, by the first column that claims it, so a file with two
- * columns named "Email" maps the first and leaves the second for the
- * operator to decide.
+ * A proposed mapping from a file's header row — the shared matcher over the
+ * contact vocabulary. Custom fields win over standard aliases when a header
+ * matches a definition's label or key exactly: a merchant who defined a
+ * field called "Status" meant THEIR status, not our lifecycle stage.
  */
 export function guessContactImportMapping(
   columns: readonly string[],
   fields: readonly Pick<ContactFieldDefinition, 'key' | 'label'>[] = [],
 ): ContactImportMapping {
-  const mapping: ContactImportMapping = {}
-  const taken = new Set<string>()
-  const customByHeader = new Map<string, string>()
-  for (const field of fields) {
-    customByHeader.set(headerKey(field.label), field.key)
-    customByHeader.set(headerKey(field.key), field.key)
-  }
-  columns.forEach((column, index) => {
-    const key = headerKey(column)
-    if (!key) return
-    const customKey = customByHeader.get(key)
-    if (customKey) {
-      const target = customImportTarget(customKey)
-      if (!taken.has(target)) {
-        mapping[index] = target
-        taken.add(target)
-      }
-      return
-    }
-    for (const field of CONTACT_IMPORT_FIELDS) {
-      if (taken.has(field)) continue
-      if (FIELD_ALIAS_KEYS[field].has(key)) {
-        mapping[index] = field
-        taken.add(field)
-        return
-      }
-    }
-  })
-  return mapping
+  return guessImportMapping(columns, CONTACT_IMPORT_FIELDS, FIELD_ALIAS_KEYS, fields)
 }
 
 /**
@@ -345,20 +282,7 @@ export function mapContactImportRow(
   cells: readonly string[],
   mapping: ContactImportMapping,
 ): ContactImportRawRow {
-  const row: ContactImportRawRow = {}
-  const custom: Record<string, string> = {}
-  for (const [indexText, target] of Object.entries(mapping)) {
-    const value = String(cells[Number(indexText)] ?? '')
-    if (!value.trim()) continue
-    const customKey = customImportTargetKey(target)
-    if (customKey) {
-      custom[customKey] = value
-    } else {
-      row[target as ContactImportField] = value
-    }
-  }
-  if (Object.keys(custom).length) row.custom = custom
-  return row
+  return mapImportRow(cells, mapping)
 }
 
 /** Why one row was not stored. */
@@ -366,6 +290,8 @@ export type ContactImportSkipReason =
   | 'invalid-email'
   | 'duplicate'
   | 'audience-band'
+  /** The person was erased from this workspace at their request (AGL-2623). */
+  | 'erased'
   | 'write-failed'
 
 /** How a skip reason reads on screen and in the downloaded file. */
@@ -373,15 +299,12 @@ export const CONTACT_IMPORT_SKIP_LABELS: Record<ContactImportSkipReason, string>
   'invalid-email': 'Not a valid email address',
   duplicate: 'Appears earlier in the file',
   'audience-band': 'Contact limit reached',
+  erased: 'Erased from this workspace at their request',
   'write-failed': 'Could not be saved',
 }
 
 /** A cell the file carried that could not be read as the field it was mapped to. */
-export interface ContactImportDroppedValue {
-  /** The standard field name, or `custom:<key>`. */
-  field: string
-  value: string
-}
+export type ContactImportDroppedValue = ImportDroppedValue
 
 /** One row, ready to be written. */
 export interface ContactImportRow {
@@ -415,14 +338,7 @@ export type ContactImportRowVerdict =
  * field, so an imported `VIP` and a typed `vip` are one tag and not two.
  */
 export function parseContactImportTags(value: unknown): string[] {
-  const parts = Array.isArray(value)
-    ? value.map((entry) => String(entry ?? ''))
-    : String(value ?? '').split(/[|,]/)
-  return [
-    ...new Set(
-      parts.map((tag) => tag.trim().toLowerCase()).filter(Boolean),
-    ),
-  ].slice(0, CONTACT_IMPORT_TAGS_MAX)
+  return parseImportTags(value, CONTACT_IMPORT_TAGS_MAX)
 }
 
 /**
@@ -433,18 +349,7 @@ export function parseContactImportTags(value: unknown): string[] {
  * rather than an unreadable value that gets reported as dropped.
  */
 export function parseContactImportFlag(value: unknown): boolean | null {
-  if (typeof value === 'boolean') return value
-  if (typeof value === 'number') return value === 1 ? true : value === 0 ? false : null
-  const text = String(value ?? '')
-    .trim()
-    .toLowerCase()
-  if (['yes', 'y', 'true', '1', 'on', 'subscribed', 'opted in', 'opted-in'].includes(text)) {
-    return true
-  }
-  if (['no', 'n', 'false', '0', 'off', 'unsubscribed', ''].includes(text)) {
-    return false
-  }
-  return null
+  return parseImportFlag(value)
 }
 
 /**
@@ -510,14 +415,6 @@ export function parseContactImportCustomValue(
   }
 }
 
-/** A cell as trimmed text capped at `max`, or `undefined` when blank. */
-function textValue(value: unknown, max: number): string | undefined {
-  const text = String(value ?? '')
-    .trim()
-    .slice(0, max)
-  return text || undefined
-}
-
 /**
  * One raw row as the values that will be written, or the reason it cannot
  * be.
@@ -547,14 +444,14 @@ export function normalizeContactImportRow(
     dropped,
   }
 
-  const name = textValue(raw.name, NAME_MAX)
+  const name = importTextValue(raw.name, NAME_MAX)
   if (name) row.name = name
-  const jobTitle = textValue(raw.jobTitle, NAME_MAX)
+  const jobTitle = importTextValue(raw.jobTitle, NAME_MAX)
   if (jobTitle) row.jobTitle = jobTitle
-  const companyName = textValue(raw.companyName, NAME_MAX)
+  const companyName = importTextValue(raw.companyName, NAME_MAX)
   if (companyName) row.companyName = companyName
 
-  const phoneText = textValue(raw.phone, 64)
+  const phoneText = importTextValue(raw.phone, 64)
   if (phoneText) {
     const phone = normalizePhone(phoneText)
     if (phone) row.phone = phone
@@ -562,27 +459,27 @@ export function normalizeContactImportRow(
   }
 
   const address = normalizeAddress({
-    line1: textValue(raw.addressLine1, 200),
-    line2: textValue(raw.addressLine2, 200),
-    city: textValue(raw.addressCity, 120),
-    state: textValue(raw.addressState, 120),
-    postalCode: textValue(raw.addressPostalCode, 32),
-    country: textValue(raw.addressCountry, 8),
+    line1: importTextValue(raw.addressLine1, 200),
+    line2: importTextValue(raw.addressLine2, 200),
+    city: importTextValue(raw.addressCity, 120),
+    state: importTextValue(raw.addressState, 120),
+    postalCode: importTextValue(raw.addressPostalCode, 32),
+    country: importTextValue(raw.addressCountry, 8),
   })
   if (address) row.address = address
   // The country is the one address part the normalizer drops silently — a
   // typed name is not a code — so it is the one part the report has to name.
-  const countryText = textValue(raw.addressCountry, 64)
+  const countryText = importTextValue(raw.addressCountry, 64)
   if (countryText && !address?.country) drop('addressCountry', countryText)
 
-  const ownerText = textValue(raw.ownerEmail, 320)
+  const ownerText = importTextValue(raw.ownerEmail, 320)
   if (ownerText) {
     const owner = normalizeContactEmail(ownerText)
     if (owner) row.ownerEmail = owner
     else drop('ownerEmail', ownerText)
   }
 
-  const stageText = textValue(raw.lifecycleStage, 64)
+  const stageText = importTextValue(raw.lifecycleStage, 64)
   if (stageText) {
     const stage = parseContactImportLifecycleStage(stageText)
     if (stage) row.lifecycleStage = stage
@@ -615,99 +512,50 @@ export function normalizeContactImportRow(
   return { ok: true, row }
 }
 
-/** One row the server did not store, by its index in the request. */
+/** One row the server did not store, by its index in the request, named by address. */
 export interface ContactImportSkippedRow {
   index: number
   email: string
   reason: ContactImportSkipReason
 }
 
-/** What one request did. The drawer sums these across a file. */
-export interface ContactImportChunkResult {
-  received: number
-  created: number
-  merged: number
-  skipped: ContactImportSkippedRow[]
-  /** Unreadable cells, tallied by field. */
-  dropped: Record<string, number>
+/**
+ * What one request did — the shared tally plus how many companies the
+ * company column brought into being. The drawer sums these across a file.
+ */
+export interface ContactImportChunkResult
+  extends ImportChunkResult<ContactImportSkippedRow> {
   companiesCreated: number
-  /** Owner addresses that matched no member of the organization. */
-  ownersUnresolved: string[]
 }
 
 /** An empty tally, for the drawer to fold chunk results into. */
 export function emptyContactImportResult(): ContactImportChunkResult {
-  return {
-    received: 0,
-    created: 0,
-    merged: 0,
-    skipped: [],
-    dropped: {},
-    companiesCreated: 0,
-    ownersUnresolved: [],
-  }
+  return { ...emptyImportResult<ContactImportSkippedRow>(), companiesCreated: 0 }
 }
 
 /**
- * Two results as one.
- *
+ * Two results as one — the shared fold, with the company tally beside it.
  * `offset` is where the chunk started in the file, so a skipped row's index
- * comes back as its position in the FILE rather than in the request — which
- * is what the download of skipped rows has to look up.
+ * comes back as its position in the FILE rather than in the request.
  */
 export function mergeContactImportResults(
   total: ContactImportChunkResult,
   chunk: ContactImportChunkResult,
   offset = 0,
 ): ContactImportChunkResult {
-  const dropped = { ...total.dropped }
-  for (const [field, count] of Object.entries(chunk.dropped ?? {})) {
-    dropped[field] = (dropped[field] ?? 0) + Number(count ?? 0)
-  }
   return {
-    received: total.received + Number(chunk.received ?? 0),
-    created: total.created + Number(chunk.created ?? 0),
-    merged: total.merged + Number(chunk.merged ?? 0),
-    skipped: [
-      ...total.skipped,
-      ...(chunk.skipped ?? []).map((entry) => ({
-        ...entry,
-        index: Number(entry.index) + offset,
-      })),
-    ],
-    dropped,
+    ...mergeImportResults(total, chunk, offset),
     companiesCreated: total.companiesCreated + Number(chunk.companiesCreated ?? 0),
-    ownersUnresolved: [
-      ...new Set([...total.ownersUnresolved, ...(chunk.ownersUnresolved ?? [])]),
-    ],
   }
-}
-
-/** A CSV cell, quoted only when it has to be. */
-function csvCell(value: unknown): string {
-  const text = String(value ?? '')
-  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
 }
 
 /**
- * The skipped rows as a file the operator can fix and re-import.
- *
- * The original columns verbatim plus a trailing `Skipped because` column,
- * so the file round-trips: correct the address, delete the last column or
- * leave it unmapped, and import it again.
+ * The skipped rows as a file the operator can fix and re-import: the
+ * original columns verbatim plus a trailing `Skipped because` column.
  */
 export function contactImportSkippedCsv(
   columns: readonly string[],
   entries: readonly { cells: readonly string[]; reason: ContactImportSkipReason }[],
 ): string {
-  const header = [...columns, 'Skipped because'].map(csvCell).join(',')
-  const lines = entries.map((entry) =>
-    [
-      ...columns.map((_column, index) => entry.cells[index] ?? ''),
-      CONTACT_IMPORT_SKIP_LABELS[entry.reason] ?? entry.reason,
-    ]
-      .map(csvCell)
-      .join(','),
-  )
-  return [header, ...lines].join('\n')
+  return importSkippedCsv(columns, entries, CONTACT_IMPORT_SKIP_LABELS)
 }

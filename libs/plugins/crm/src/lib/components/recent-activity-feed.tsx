@@ -34,6 +34,7 @@ const RECORD_LABELS = {
   contact: 'Contact',
   deal: 'Deal',
   company: 'Company',
+  lead: 'Lead',
 } as const
 
 /** The feed's default depth — a glance, not a log. */
@@ -43,7 +44,8 @@ export const RECENT_ACTIVITY_LIMIT = 10
 const NO_RECORD = Object.freeze({})
 
 export interface RecentActivityFeedProps {
-  hostId: string
+  /** The site the record is read under, or `null` at the organization level. */
+  hostId: string | null
   org: CrmOrg
   /** The newest this many, across every record. */
   limit?: number

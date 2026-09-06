@@ -80,7 +80,7 @@ export const PLUGIN_DOCS = {
   contactActivities: {
     path: '/content-and-data/contacts/activities',
     title: 'Activities & the timeline',
-    excerpt: 'Log calls, emails, meetings and notes against a contact, a company or a deal, and read them in one timeline beside everything the platform captured.',
+    excerpt: 'Log calls, emails, meetings and notes against a contact, a company, a deal or a lead, email one person from their record, and read it all in one timeline beside everything captured and every campaign sent.',
   },
   contactFields: {
     path: '/content-and-data/contacts/custom-fields',
@@ -90,7 +90,7 @@ export const PLUGIN_DOCS = {
   contactRecord: {
     path: '/content-and-data/contacts/contact-record',
     title: 'The contact record',
-    excerpt: 'Add a contact by hand, keep a profile on them — phone, company, title, address, owner and lifecycle stage — and open their own page in the CRM.',
+    excerpt: 'Add a contact by hand, keep a profile on them — phone, company, title, address, owner and lifecycle stage — open their own page in the CRM, and merge two records that turn out to be one person.',
   },
   contacts: {
     path: '/content-and-data/contacts/overview',
@@ -105,12 +105,22 @@ export const PLUGIN_DOCS = {
   crmReports: {
     path: '/content-and-data/contacts/reports',
     title: 'Reports',
-    excerpt: 'New contacts over time, where they came from and how far they have gone, the open pipeline and its forecast, deals won and lost, and the task load — counted on the server for the records your site can see.',
+    excerpt: 'New contacts, where they came from and which sources convert, the lead funnel, the open pipeline and its forecast, won and lost, who logged what, and the task load — counted on the server, every table exportable as CSV.',
+  },
+  crmSettings: {
+    path: '/content-and-data/contacts/settings',
+    title: 'CRM settings',
+    excerpt: 'What the CRM does on its own for every site in your workspace — whether a company is created from a captured contact\'s work email domain, and who a new contact is assigned to, by default, by rule, or in turn.',
   },
   crmTasks: {
     path: '/content-and-data/contacts/tasks',
     title: 'Tasks & follow-ups',
-    excerpt: 'Calls, emails, meetings and to-dos with a due date, an assignee and a link to the contact, company or deal they are for — with overdue and today read off the clock as you look.',
+    excerpt: 'Calls, emails, meetings and to-dos with a due date, an assignee and a link to the contact, company or deal they are for — overdue and today read off the clock, a snooze, and a morning digest of what is owed.',
+  },
+  crmViews: {
+    path: '/content-and-data/contacts/views',
+    title: 'Saved views',
+    excerpt: 'Keep a CRM list\'s filters, columns and sort under a name, open it from the views menu or a link, share it with the team, and use a contacts view as an email audience.',
   },
   datasets: {
     path: '/content-and-data/datasets/overview',
@@ -187,26 +197,28 @@ export const PLUGIN_DOCS = {
 export type PluginDocsKey = keyof typeof PLUGIN_DOCS
 
 export const PLUGIN_DOCS_ANCHORS = {
-  actionsBuilder: ['#create-an-action', '#triggers', '#crm-events', '#only-run-when-a-field-matches', '#chain-multiple-conditions-andor', '#steps', '#crm-steps', '#step-conditions', '#sequences', '#run-history', '#what-is-and-isnt-recorded', '#interactions-from-the-besigner', '#when-to-use-which', '#related'],
+  actionsBuilder: ['#create-an-action', '#recipes', '#triggers', '#crm-events', '#only-run-when-a-field-matches', '#chain-multiple-conditions-andor', '#steps', '#crm-steps', '#step-conditions', '#sequences', '#run-history', '#what-is-and-isnt-recorded', '#interactions-from-the-besigner', '#when-to-use-which', '#related'],
   bindings: ['#binding-tokens', '#rename-safe-id-tokens', '#insert-a-variable', '#token-pills', '#in-the-canvas-text-editor', '#typed-variables', '#no-code-functions', '#where-used--safety', '#workflows', '#related'],
   bookings: ['#set-up-bookings', '#taking-bookings', '#reminders', '#payments-and-fees', '#service-tax', '#manage', '#canceling-and-refunding', '#related'],
   buildAWorkflow: ['#1-open-the-workflows-page', '#2-choose-a-trigger', '#3-add-steps', '#4-save-and-test', '#tips', '#related'],
   catalog: ['#products-options-and-variants', '#billing-modes-and-subscriptions', '#categories-and-tags', '#collections', '#slugs', '#merchant-center-feed', '#related'],
   commerce: ['#products-hub', '#inventory', '#reserved-stock', '#stock-movements', '#gift-cards', '#recovery-and-alerts', '#orders', '#orders-screen', '#order-statuses', '#order-money-tiles', '#a-lost-dispute', '#shipping--taxes', '#lodging-tax-on-reservations', '#storefront-sales-tax', '#destination-coverage', '#dropshipping', '#related'],
   commerceEndToEnd: ['#1-connect-payments', '#2-create-products', '#3-design-the-storefront', '#catalog-search-filters-and-sort', '#category-pages', '#the-product-page-template', '#4-what-checkout-does', '#paying-without-leaving-your-site', '#5-run-orders-from-the-console', '#6-subscriptions--the-stripe-portal', '#related'],
-  companies: ['#the-companies-list', '#create-a-company', '#a-companys-page', '#contacts-at-a-company', '#deleting-a-company', '#who-can-see-a-company', '#related'],
-  consoleTour: ['#the-app-bar', '#in-context-help', '#primary-navigation', '#editing-vs-managing', '#the-sites-list', '#the-status-pill', '#how-the-pill-is-decided', '#your-site-allowance', '#a-sites-dashboard', '#next', '#workspace-settings--notifications', '#alerts-on-this-device'],
-  contactActivities: ['#two-kinds-of-history', '#logging-an-activity', '#where-an-activity-is-visible', '#the-recent-activity-feed', '#related'],
+  companies: ['#the-companies-list', '#create-a-company', '#a-companys-page', '#contacts-at-a-company', '#linked-on-capture', '#import-from-csv', '#export-csv', '#deleting-a-company', '#who-can-see-a-company', '#related'],
+  consoleTour: ['#the-app-bar', '#in-context-help', '#primary-navigation', '#editing-vs-managing', '#the-sites-list', '#the-status-pill', '#how-the-pill-is-decided', '#your-site-allowance', '#a-sites-dashboard', '#next', '#workspace-settings--notifications', '#daily-digests', '#alerts-on-this-device'],
+  contactActivities: ['#four-kinds-of-history', '#campaign-email', '#logging-an-activity', '#sending-an-email', '#delivery-states', '#where-an-activity-is-visible', '#the-recent-activity-feed', '#related'],
   contactFields: ['#define-a-field', '#where-values-show', '#save-a-form-field', '#over-the-api', '#retire-restore-delete', '#related'],
-  contactRecord: ['#adding-a-contact-by-hand', '#the-record-page', '#what-each-site-keeps-to-itself', '#owner', '#lifecycle-stages', '#finding-a-contact', '#related'],
-  contacts: ['#whats-in-the-crm-area', '#unified-ingestion', '#the-contacts-page', '#import-from-csv', '#segments', '#who-can-open-the-crm', '#related'],
-  crmLeads: ['#the-leads-list', '#working-a-lead-from-the-row', '#a-leads-page', '#converting-a-lead', '#unqualifying-a-lead', '#who-can-do-this', '#related'],
-  crmReports: ['#choosing-a-period', '#contacts', '#sources-and-lifecycle', '#pipeline', '#won-and-lost', '#tasks', '#crm-at-a-glance', '#how-the-numbers-are-counted', '#related'],
-  crmTasks: ['#the-tasks-page', '#creating-a-task', '#assigning-a-task-to-someone-else', '#completing-and-reopening', '#tasks-on-a-contact-company-or-deal', '#the-dashboard-card', '#who-can-do-what', '#related'],
+  contactRecord: ['#adding-a-contact-by-hand', '#the-record-page', '#deleting-and-erasing', '#what-each-site-keeps-to-itself', '#merging-two-records', '#likely-duplicates', '#owner', '#last-engaged', '#lifecycle-stages', '#where-the-persons-lead-is', '#finding-a-contact', '#related'],
+  contacts: ['#whats-in-the-crm-area', '#unified-ingestion', '#what-each-plan-includes', '#the-contacts-page', '#import-from-csv', '#segments', '#everywhere-the-crm-shows-up', '#at-the-organization-level', '#who-can-open-the-crm', '#related'],
+  crmLeads: ['#what-makes-a-lead', '#the-leads-list', '#working-a-lead-from-the-row', '#who-owns-a-lead', '#a-leads-page', '#converting-a-lead', '#unqualifying-a-lead', '#erasing-the-person', '#who-can-do-this', '#related'],
+  crmReports: ['#choosing-a-period', '#contacts', '#sources-and-lifecycle', '#conversion-by-source', '#lead-funnel', '#pipeline', '#forecast-by-close-month', '#won-and-lost', '#activity-by-teammate', '#tasks', '#exporting-a-table', '#crm-at-a-glance', '#how-the-numbers-are-counted', '#related'],
+  crmSettings: ['#companies', '#create-companies-from-work-email-domains', '#default-owner', '#assignment-rules', '#round-robin', '#related'],
+  crmTasks: ['#the-tasks-page', '#snoozing-a-task', '#selecting-exporting-and-acting-on-many', '#creating-a-task', '#assigning-a-task-to-someone-else', '#completing-and-reopening', '#tasks-on-a-contact-company-or-deal', '#the-daily-digest', '#turning-it-off', '#the-dashboard-card', '#who-can-do-what', '#related'],
+  crmViews: ['#the-views-control', '#a-view-is-a-link', '#filters-on-the-contacts-list', '#columns-and-sort', '#segments-and-views', '#who-sees-what', '#related'],
   datasets: ['#model-builder', '#typed-documents', '#relations', '#query-layer', '#repeatable-components', '#who-a-dataset-is-shared-with', '#import--export', '#related'],
-  deals: ['#the-pipeline-and-its-stages', '#the-board-and-the-table', '#creating-a-deal', '#moving-winning-and-losing', '#a-deals-page', '#related'],
+  deals: ['#pipelines', '#stages', '#the-board-and-the-table', '#creating-a-deal', '#line-items', '#moving-winning-and-losing', '#a-deals-page', '#related'],
   designedEmails: ['#create-a-template', '#styling-email-blocks', '#merge-tokens', '#send-it', '#the-plain-text-version'],
-  emailCampaigns: ['#send-a-campaign', '#campaigns-group-emails', '#what-belongs-to-a-campaign', '#who-the-email-comes-from', '#sending-domains', '#account-email-always-sends', '#marketing-needs-a-domain', '#two-ways-to-get-a-domain', '#a-domain-we-set-up-is-a-request', '#domain-states', '#senders', '#send-a-test', '#preview-the-email', '#monthly-send-cap', '#personalize-with-merge-tags', '#recipient-count', '#who-a-campaign-is-allowed-to-reach', '#schedule-a-send', '#email-lists', '#manual-lists', '#list-members', '#add-to-a-list', '#import-a-list', '#remove-from-a-list', '#lists-built-from-a-rule', '#experiments', '#opens--clicks', '#the-campaign-report', '#which-links-were-clicked', '#revenue-from-a-campaign', '#compliance', '#topics', '#preference-page', '#frequency-opt-down', '#double-opt-in', '#marketing-mail', '#frequency-cap', '#suppressions', '#add-a-suppression', '#platform-suppressions', '#related'],
+  emailCampaigns: ['#send-a-campaign', '#campaigns-group-emails', '#what-belongs-to-a-campaign', '#who-the-email-comes-from', '#sending-domains', '#account-email-always-sends', '#marketing-needs-a-domain', '#two-ways-to-get-a-domain', '#a-domain-we-set-up-is-a-request', '#domain-states', '#senders', '#send-a-test', '#preview-the-email', '#monthly-send-cap', '#personalize-with-merge-tags', '#recipient-count', '#who-a-campaign-is-allowed-to-reach', '#schedule-a-send', '#email-lists', '#manual-lists', '#list-members', '#add-to-a-list', '#import-a-list', '#remove-from-a-list', '#lists-built-from-a-rule', '#experiments', '#opens--clicks', '#the-campaign-report', '#per-contact-engagement', '#which-links-were-clicked', '#revenue-from-a-campaign', '#compliance', '#topics', '#preference-page', '#frequency-opt-down', '#double-opt-in', '#marketing-mail', '#frequency-cap', '#suppressions', '#add-a-suppression', '#platform-suppressions', '#related'],
   events: ['#manage-events', '#show-events-on-a-screen', '#search-engines', '#related'],
   forms: ['#reading-submissions-from-code', '#build-a-form', '#monthly-allowance-per-plan', '#spam-and-abuse-protection', '#the-per-site-monthly-ceiling', '#field-types', '#labels-and-placeholders', '#example-a-quick-survey', '#after-submit', '#example-grow-an-email-list-from-a-signup-form', '#where-submissions-go', '#the-inbox', '#who-a-submission-is-from', '#where-this-one-went', '#replying-to-a-submission', '#one-forms-own-page', '#related'],
   installYourFirstPlugin: ['#before-you-start', '#step-1-open', '#step-2-browse', '#step-3-reviews', '#step-4-targeting', '#step-5-install', '#step-6-use', '#step-7-off', '#what-to-do-next', '#related'],

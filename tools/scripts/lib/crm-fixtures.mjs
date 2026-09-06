@@ -16,8 +16,8 @@
  */
 
 // The CRM's e2e fixtures (AGL-2610): one small business's book of contacts,
-// the company, deal, tasks, activity, custom fields, leads and audience that
-// sit around them — written by `seed-e2e.mjs` and re-written by the CRM specs
+// the company, two pipelines and their deals, a catalog product, tasks,
+// activity, custom fields, leads and audience that sit around them — written by `seed-e2e.mjs` and re-written by the CRM specs
 // under `tools/e2e/` when a spec has changed what it drove.
 //
 // ## One module, two callers
@@ -107,6 +107,29 @@ export const CRM_FIXTURE = {
   /** The host whose facet every profile lives under. */
   hostId: 'demo',
   pipelineId: 'seed-crm-pipeline-sales',
+  /** A second, non-default pipeline (AGL-2620): the switcher, the Pipelines dialog. */
+  renewalsPipelineId: 'seed-crm-pipeline-renewals',
+  renewalsPipelineName: 'Renewals',
+  /** The one open deal in Renewals — the deal the products card is driven on. */
+  renewalDealId: 'seed-crm-deal-littlefox-renewal',
+  renewalDealTitle: 'Little Fox Café — annual renewal',
+  /** Three more open Sales deals so the board has a card in every open stage. */
+  boardDeals: {
+    voss: { id: 'seed-crm-deal-voss', title: 'Voss & Co. — retail shelf trial', stageId: 'qualified', amountCents: 60_000 },
+    northShore: {
+      id: 'seed-crm-deal-northshore',
+      title: 'North Shore Hotel — lobby coffee program',
+      stageId: 'contact-made',
+      amountCents: 180_000,
+    },
+    cedar: { id: 'seed-crm-deal-cedar', title: 'Cedar & Salt — event season catering', stageId: 'negotiation', amountCents: 120_000 },
+  },
+  /** The catalog product the products card's search finds (AGL-2620). */
+  product: {
+    id: 'seed-crm-product-house-blend',
+    name: 'House blend, 5 lb bag',
+    priceUsd: 45,
+  },
   companyId: 'seed-crm-company-littlefox',
   companyName: 'Little Fox Café',
   companyDomain: 'littlefoxcafe.com',
@@ -369,10 +392,21 @@ export async function seedCrmFixtures(options) {
     name: 'Sales',
     stages: DEFAULT_DEAL_STAGES.map((stage) => ({ ...stage })),
     isDefault: true,
+    archivedAt: null,
     visibleTo,
     hostId,
     createdAt: stamp(at(30)),
     updatedAt: stamp(at(30)),
+  })
+  await write(orgRef.collection('pipelines').doc(F.renewalsPipelineId), {
+    name: F.renewalsPipelineName,
+    stages: DEFAULT_DEAL_STAGES.map((stage) => ({ ...stage })),
+    isDefault: false,
+    archivedAt: null,
+    visibleTo,
+    hostId,
+    createdAt: stamp(at(15)),
+    updatedAt: stamp(at(15)),
   })
 
   const deal = (id, title, fields) => ({
@@ -413,8 +447,76 @@ export async function seedCrmFixtures(options) {
       createdAt: stamp(at(11)),
       updatedAt: stamp(at(5)),
     }),
+    // One card in each open stage of Sales (AGL-2620), with expected
+    // closes spread across the coming months and one left undated, so the
+    // forecast by close month has a row of every kind.
+    deal(F.boardDeals.voss.id, F.boardDeals.voss.title, {
+      stageId: F.boardDeals.voss.stageId,
+      status: 'open',
+      amountCents: F.boardDeals.voss.amountCents,
+      expectedCloseAtMs: at(-40),
+      stageChangedAtMs: at(6),
+      ownerUid,
+      contactId: F.contacts.elena.id,
+      createdAt: stamp(at(8)),
+      updatedAt: stamp(at(6)),
+    }),
+    deal(F.boardDeals.northShore.id, F.boardDeals.northShore.title, {
+      stageId: F.boardDeals.northShore.stageId,
+      status: 'open',
+      amountCents: F.boardDeals.northShore.amountCents,
+      stageChangedAtMs: at(2),
+      ownerUid: teammateUid,
+      contactId: F.contacts.marcus.id,
+      createdAt: stamp(at(3)),
+      updatedAt: stamp(at(2)),
+    }),
+    deal(F.boardDeals.cedar.id, F.boardDeals.cedar.title, {
+      stageId: F.boardDeals.cedar.stageId,
+      status: 'open',
+      amountCents: F.boardDeals.cedar.amountCents,
+      expectedCloseAtMs: at(-75),
+      stageChangedAtMs: at(1),
+      ownerUid,
+      contactId: F.contacts.nadia.id,
+      createdAt: stamp(at(1)),
+      updatedAt: stamp(at(1)),
+    }),
+    // The Renewals pipeline's one open deal: no line items yet, so the
+    // products card starts empty and the amount is typed.
+    {
+      ...deal(F.renewalDealId, F.renewalDealTitle, {
+        stageId: 'qualified',
+        status: 'open',
+        amountCents: 250_000,
+        expectedCloseAtMs: at(-150),
+        stageChangedAtMs: at(4),
+        ownerUid,
+        contactId: F.contacts.maya.id,
+        companyId: F.companyId,
+        createdAt: stamp(at(4)),
+        updatedAt: stamp(at(4)),
+      }),
+    },
   ]
+  deals[deals.length - 1].data.pipelineId = F.renewalsPipelineId
   for (const { ref, data } of deals) await write(ref, data)
+
+  // A catalog product on the host (AGL-2620), keyed the way the products
+  // hub writes it — `productSearchFields` — so the deal page's catalog
+  // search finds it by a name-token prefix among active products.
+  await write(hostRef.collection('products').doc(F.product.id), {
+    ...nameSearchFields(F.product.name),
+    nameReversed: F.product.name.trim().replace(/\s+/g, ' ').toLowerCase().split('').reverse().join(''),
+    slug: 'house-blend-5-lb-bag',
+    description: 'Five pounds of the house blend, whole bean.',
+    type: 'physical',
+    status: 'active',
+    variants: [{ id: 'default', priceUsd: F.product.priceUsd, inventory: null }],
+    createdAtMs: at(60),
+    updatedAtMs: at(60),
+    deletedAt: null,
+  })
 
   const task = (id, title, fields) => ({
     ref: orgRef.collection('crmTasks').doc(id),
@@ -580,4 +682,34 @@ export async function removeContactsAtAddress(firestore, orgId, email) {
     .where('email', '==', email)
     .get()
   for (const entry of contacts.docs) await entry.ref.delete()
+}
+
+/**
+ * Removes every contact the site captured that is not the fixture's, with
+ * the deals that pointed at them.
+ *
+ * The specs share one site and each re-seeds the fixture, but a re-seed
+ * writes the fixture's records and leaves what the other specs added: a
+ * lead's conversion, a contact added by hand. A spec that reads a fixture
+ * row off a paged list needs the site's book to be the fixture's book —
+ * the fixture's rows are its oldest, and a list sorted newest-first pages
+ * them off the screen behind the newcomers.
+ *
+ * Keyed on `capturedByHostIds`, the mark every site-captured contact
+ * carries, so the org-scoped contacts the console seed writes with no site
+ * — which are not this site's and which other suites read — stay.
+ */
+export async function removeSiteContactsOutsideFixture(firestore, orgId, hostId) {
+  const fixtureIds = new Set(Object.values(CRM_FIXTURE.contacts).map((contact) => contact.id))
+  const orgRef = firestore.collection('orgs').doc(orgId)
+  const captured = await orgRef
+    .collection('contacts')
+    .where('capturedByHostIds', 'array-contains', hostId)
+    .get()
+  for (const entry of captured.docs) {
+    if (fixtureIds.has(entry.id)) continue
+    const deals = await orgRef.collection('deals').where('contactId', '==', entry.id).get()
+    for (const deal of deals.docs) await deal.ref.delete()
+    await entry.ref.delete()
+  }
 }

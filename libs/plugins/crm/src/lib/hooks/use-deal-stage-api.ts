@@ -52,15 +52,33 @@ export interface DealStageResponse {
  * Errors are thrown with the route's own message, which is written for the
  * person reading it, so a caller shows `error.message` and nothing else.
  */
-export function useDealStageApi(hostId: string) {
+/**
+ * What a call names: the deal, and — at the organization level (AGL-2630),
+ * where the surface has no site of its own — the site the deal was made on,
+ * which is the site the route resolves the org from and emits the stage
+ * event for. Under a site the mounted site wins, as it always has.
+ */
+export interface DealStageRef {
+  $id: string
+  hostId?: string
+}
+
+export function useDealStageApi(hostId: string | null) {
   const { data: user } = useUser()
 
   const call = useCallback(
-    async (body: DealStageRequest): Promise<DealStageResponse> => {
+    async (
+      deal: DealStageRef,
+      body: DealStageRequest,
+    ): Promise<DealStageResponse> => {
+      const site = hostId ?? deal.hostId
+      if (!site) {
+        throw new Error('This deal names no site, so its stage cannot be moved.')
+      }
       const response = await authorizedFetch(user, '/api/crm/deal-stage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hostId, ...body }),
+        body: JSON.stringify({ hostId: site, ...body }),
       })
       const payload = (await response.json().catch(() => ({}))) as
         | DealStageResponse
@@ -78,11 +96,11 @@ export function useDealStageApi(hostId: string) {
 
   return useMemo(
     () => ({
-      moveToStage: (dealId: string, stageId: string) =>
-        call({ dealId, stageId }),
-      markWon: (dealId: string) => call({ dealId, status: 'won' }),
-      markLost: (dealId: string, lostReason?: string) =>
-        call({ dealId, status: 'lost', lostReason }),
+      moveToStage: (deal: DealStageRef, stageId: string) =>
+        call(deal, { dealId: deal.$id, stageId }),
+      markWon: (deal: DealStageRef) => call(deal, { dealId: deal.$id, status: 'won' }),
+      markLost: (deal: DealStageRef, lostReason?: string) =>
+        call(deal, { dealId: deal.$id, status: 'lost', lostReason }),
     }),
     [call],
   )

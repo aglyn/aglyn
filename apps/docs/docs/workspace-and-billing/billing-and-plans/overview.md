@@ -98,7 +98,8 @@ Nothing here guarantees that a price or feature set will remain the same.
 ## Usage meters
 
 - The **billing page** shows meters for every quota — storage, bandwidth, datasets, seats,
-  sends, and more — with redesigned plan cards.
+  sends, CRM records (with the contacts, companies and deals beneath the total),
+  one-to-one emails sent today, and more — with redesigned plan cards.
 - A **usage-cap banner** appears site-wide at 80% and 100% of a quota, with an upgrade link.
 - Org admins also get an in-app **notification** when email sends, dataset count, data
   storage, or [bandwidth](bandwidth.md) crosses 80% or 100% — once per threshold per month,
@@ -182,34 +183,69 @@ warning you against the new number straight away.
 - **Site member accounts are not seats**: visitors who sign up to your published
   site are unlimited on every plan.
 
-## Audience (contacts)
+## CRM records {#crm-records}
 
 :::caution Rolling out
-The **[Contacts page](../../content-and-data/contacts/overview.md)** in the console
-isn't available yet. Contacts are still captured from your sites and readable over the
+The **[CRM](../../content-and-data/contacts/overview.md)** in the console isn't
+available yet. Contacts are still captured from your sites and readable over the
 [REST API](/api/resources/contacts), and the Free band below still applies — but while
-the page is unavailable, **paid audience overage is not billed**. The rates below are
-what will apply once Contacts opens.
+the page is unavailable, **paid records overage is not billed**. The rates below are
+what will apply once the CRM opens.
 :::
 
-Your **contacts CRM** — form fills, member sign-ups, buyers, and bookings unified into
-one people list — is priced as an **audience band**, not a hard cap:
+Your **CRM** — the contacts captured from forms, member sign-ups, buyers and bookings,
+and the companies and deals your team files beside them — is priced as one **CRM
+records band**, not a hard cap. A record is a **contact, a company or a deal**; tasks,
+logged activities, pipelines and custom fields are not counted.
 
 - Each tier includes a band: Free 100, Starter 1,000, Pro 10,000, Business 50,000,
-  Scale 100,000, Advanced 150,000, Agency 500,000 contacts. Enterprise is unlimited.
+  Scale 100,000, Advanced 150,000, Agency 500,000 records. Enterprise is unlimited.
 - On **paid tiers**, growing past the band never blocks or drops anything — extra
-  contacts are **metered overage** on your monthly invoice, at a per-1,000 rate that
+  records are **metered overage** on your monthly invoice, at a per-1,000 rate that
   falls as you move up the plans — see [pricing](https://aglyn.com/pricing) for the
-  current rate on your plan, per extra 1,000
-  contacts per month. Upgrading a tier is always cheaper than sustained overage.
-- On **Free**, the band is a hard limit: new visitors past 100 keep their member
-  accounts and orders, but no CRM record is kept. The count of missed sign-ups is
-  recorded and will be shown on the contacts page once it opens.
-- **The billed count is your list size at the end of the month**, not its size on any
-  other day. Your list is a running total rather than a monthly tally, so a month has
-  to be charged on one moment in it, and that moment is the last daily reading taken
-  before the month closes. Contacts added after a month ends belong to the new month;
-  contacts deleted after it ends do not undo the month that already ran.
+  current rate on your plan, per extra 1,000 records per month. Upgrading a tier is
+  always cheaper than sustained overage.
+- On **Free**, the band is a hard limit and the next record of any kind is refused:
+  a new visitor past 100 keeps their member account and orders but no contact is
+  kept (the count of missed sign-ups is recorded and shown on the contacts page), and
+  a company or deal that would be the 101st record is refused with a message where
+  you tried to add it.
+- **The billed count is the size of your CRM at the end of the month**, not its size
+  on any other day. The three collections are a running total rather than a monthly
+  tally, so a month has to be charged on one moment in it, and that moment is the
+  last daily reading taken before the month closes. Records added after a month ends
+  belong to the new month; records deleted after it ends do not undo the month that
+  already ran.
+- The billing page's **CRM records** meter shows the total against your band, with
+  the contacts, companies and deals it is made of beneath it.
+
+### The CRM suite {#the-crm-suite}
+
+The **Contacts** section — the list, its tags and notes, segments and CSV export — is
+on every plan including Free, because it is the audience your
+[email campaigns](../../marketing-and-automation/email-campaigns/overview.md) read.
+Everything built on that list is the **CRM suite**, included from **Starter**: Leads,
+Companies, Deals, Tasks, Reports and Fields, the two CRM cards on the site dashboard,
+the CRM steps in automations, and the `crm:*` resources of the REST API. On Free those
+sections still appear in the CRM rail, with a lock; opening one shows which plan
+includes it and a link to your plans. Records already held stay readable in Contacts
+whatever the plan.
+
+### One-to-one email {#one-to-one-email}
+
+A **one-to-one email** is a message a teammate writes to one person from a CRM record
+— **Send email** on a contact's, a lead's or a deal's page, described under
+[Activities & the timeline](../../content-and-data/contacts/activities.md#sending-an-email)
+— as against a [campaign](../../marketing-and-automation/email-campaigns/overview.md),
+which is one send over an audience, or the transactional mail your site sends on its
+own. It is capped **per organization per day (UTC)**: Free 0, Starter 50, Pro 150,
+Business 200, Scale 300, Advanced 500, Agency 1,000; Enterprise is unlimited. The cap
+is a pace rather than a meter: at the cap the send is refused — the dialog says so and
+names the count — until the day turns over, and nothing is ever billed for it. An
+email an automation sends is metered as usage and does not count against the cap.
+Every send still counts toward your organization's email usage like any other
+message. On plans that have the cap, the billing page shows
+**One-to-one emails (today)** against it.
 
 ## Organization data
 

@@ -627,6 +627,18 @@ service cloud.firestore {
         allow read: if isStaff() || isOrgWideMember();
         allow write: if false;
       }
+      // The one-to-one CRM email counter (AGL-2611): one document per UTC
+      // day, `{ count, day, updatedAt }`, the figure `checkCrmEmailQuota`
+      // refuses against and the Billing page's "One-to-one emails (today)"
+      // meter reads — so a rep learns the cap from a meter, never by being
+      // refused. Org-wide and server-written only, for `apiUsage`'s reasons:
+      // how much mail the workspace sends is not a fact about the one site a
+      // collaborator was invited to, and a client that could write the count
+      // could lift its own cap.
+      match /crmEmailUsage/{day} {
+        allow read: if isStaff() || isOrgWideMember();
+        allow write: if false;
+      }
 
       // Per-asset media delivery counters for the ORG library (AGL-176),
       // added here because they were never granted at all (AGL-1143).
@@ -1006,6 +1018,26 @@ service cloud.firestore {
           (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()));
         allow delete: if isStaff() || canWriteScopedOrgData();
       }
+      /**
+       * The address index (AGL-2625): `emailIndex/{personKey}` names the
+       * contact an address resolves to, so a capture on an address a merge
+       * recorded as an ALTERNATE lands on the survivor rather than minting
+       * the duplicate again. Keyed by the sha256 of the normalized address,
+       * so no document id carries the address itself.
+       *
+       * CLOSED TO EVERY CLIENT. It is written by the Admin SDK — the capture
+       * door, lazily, and the merge — and read by the same, and it carries
+       * no `visibleTo`: an entry maps an address to a contact for the whole
+       * org, and a scoped member who could list it could learn which
+       * addresses a sibling site holds without being able to read one of
+       * its contacts. Nothing in the console reads it; the record page shows
+       * a contact's alternate addresses off the contact document, which the
+       * contacts predicate above already gates. Staff read it for support.
+       */
+      match /emailIndex/{emailKey} {
+        allow read: if isStaff();
+        allow write: if false;
+      }
 
       /**
        * CRM v2 (AGL-2595): the six collections that sit BESIDE a contact.
@@ -1089,6 +1121,39 @@ service cloud.firestore {
         allow update: if isStaff() ||
           (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()));
         allow delete: if isStaff() || canWriteScopedOrgData();
+      }
+      /**
+       * Saved views (AGL-2617): a list's filters, columns and sort under a
+       * name, for one of the CRM sections. A view describes the people it
+       * selects, so it is READ under the contacts predicate like every
+       * companion collection; a private one is hidden by the console's
+       * listing, not by these rules.
+       *
+       * WRITES ARE THE CREATOR'S, OR AN ORG-WIDE MEMBER'S — the one place
+       * in the CRM where authorship gates a change. A view is somebody's
+       * working arrangement: a colleague on the same site may read a shared
+       * one and must not rename, re-filter or delete it out from under its
+       * owner, while an org-wide member may tidy views whoever left them.
+       * The create therefore requires the creator stamp to be the caller —
+       * a view minted under another person's uid would hand that person a
+       * document they never made and take it from the one who did — and the
+       * scoped-member update keeps `scopeUnchanged()` for the same reason
+       * every scoped collection above does.
+       */
+      match /crmViews/{viewId} {
+        allow read: if isStaff() || canReadScopedPeople();
+        allow create: if isStaff() ||
+          (canWriteOrgData() && canCreateScoped() &&
+           request.resource.data.createdByUid == request.auth.uid);
+        allow update: if isStaff() ||
+          (canWriteScopedOrgData() &&
+           (isOrgWideMember() ||
+            (resource.data.createdByUid == request.auth.uid &&
+             scopeUnchanged())));
+        allow delete: if isStaff() ||
+          (canWriteScopedOrgData() &&
+           (isOrgWideMember() ||
+            resource.data.createdByUid == request.auth.uid));
       }
 
       // Email topics: the streams a recipient may leave one at a time.

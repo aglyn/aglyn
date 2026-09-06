@@ -54,6 +54,9 @@ let mockUpsertResult: Record<string, unknown> = {
 }
 const mockUpsert = jest.fn(async () => mockUpsertResult)
 const mockUpdate = jest.fn(async () => undefined)
+/** The org's companies, by id, as the picker's choice is checked against them. */
+let mockCompanies: Record<string, Record<string, unknown>> = {}
+const mockLogActivity = jest.fn(async () => undefined)
 
 jest.mock('firebase-admin/firestore', () => ({
   FieldValue: {
@@ -73,6 +76,22 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   firebaseAdmin: {
     app: () => ({
       auth: () => ({ verifyIdToken: async () => mockDecoded }),
+      // `orgs/{orgId}/companies/{companyId}` — the one document the route
+      // reads before it writes anything.
+      firestore: () => ({
+        collection: () => ({
+          doc: () => ({
+            collection: () => ({
+              doc: (id: string) => ({
+                get: async () => ({
+                  exists: id in mockCompanies,
+                  get: (field: string) => mockCompanies[id]?.[field],
+                }),
+              }),
+            }),
+          }),
+        }),
+      }),
     }),
   },
   getOrgForHost: async (hostId: string) =>
@@ -80,6 +99,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   resolveOrgMembership: async () =>
     mockMember ? { orgId: 'org-1', member: mockMember } : null,
   memberHasOrgPermission: async () => mockHasPermission,
+  logHostActivity: (...args: unknown[]) => mockLogActivity(...(args as [])),
   consentGroupForSite: async (hostId: string) => ({
     hostId,
     groupId: hostId,
@@ -148,6 +168,46 @@ beforeEach(() => {
   mockMember = { $id: 'user-1', role: 'editor', allHosts: true }
   mockHasPermission = true
   mockUpsertResult = { contactId: 'con-new', created: true }
+  mockCompanies = {
+    'co-acme': { name: 'Acme Corporation', visibleTo: ['host:host-1'] },
+    'co-hidden': { name: 'Other client', visibleTo: ['host:host-9'] },
+  }
+})
+
+/**
+ * The picker's company (AGL-2613): checked for existence and visibility
+ * before anything is written, handed to the upsert as the facet's
+ * `companyId` — where the link is kept in step with its mirror and count —
+ * and named on the record by the company's own stored name.
+ */
+describe('the company', () => {
+  it('passes a visible company to the upsert and echoes its stored name', async () => {
+    await post({ ...GOOD, companyId: 'co-acme', companyName: 'whatever the form said' })
+    const [options] = mockUpsert.mock.calls[0] as unknown as [Record<string, any>]
+    expect(options.facet.companyId).toBe('co-acme')
+    const [patch] = mockUpdate.mock.calls[0] as unknown as [Record<string, any>]
+    expect(patch['facets.host-1.companyName']).toBe('Acme Corporation')
+    expect(patch['companyName']).toBe('Acme Corporation')
+  })
+
+  it('refuses a company that does not exist, before the upsert', async () => {
+    const { status, payload } = await post({ ...GOOD, companyId: 'co-nope' })
+    expect(status).toBe(404)
+    expect(payload.error).toMatch(/company/i)
+    expect(mockUpsert).not.toHaveBeenCalled()
+  })
+
+  it('refuses a company the capturing site cannot see, as if it did not exist', async () => {
+    const { status } = await post({ ...GOOD, companyId: 'co-hidden' })
+    expect(status).toBe(404)
+    expect(mockUpsert).not.toHaveBeenCalled()
+  })
+
+  it('hands the upsert no company when none was picked', async () => {
+    await post(GOOD)
+    const [options] = mockUpsert.mock.calls[0] as unknown as [Record<string, any>]
+    expect(options.facet).not.toHaveProperty('companyId')
+  })
 })
 
 describe('the gate', () => {
@@ -233,6 +293,34 @@ describe('the fields', () => {
       ownerUid: 'owner-1',
       lifecycleStage: 'lead',
     })
+  })
+
+  /**
+   * The audit line is the route's (AGL-2622): it verified the caller and
+   * performed the write, so it is the one writer that cannot record an add
+   * that did not happen, and the console no longer writes one of its own. A
+   * merge into a person the org already held is said to be an update.
+   */
+  it('writes the host activity entry as the verified caller, and says merge from add', async () => {
+    mockLogActivity.mockClear()
+    await post(GOOD)
+    expect(mockLogActivity).toHaveBeenCalledTimes(1)
+    expect(mockLogActivity).toHaveBeenCalledWith(
+      'host-1',
+      { uid: 'user-1', email: 'me@acme.test' },
+      'Added contact',
+      { type: 'contact', id: 'con-new', name: 'Ada Lovelace' },
+    )
+    mockLogActivity.mockClear()
+    mockUpsertResult = { contactId: 'con-old', created: false }
+    await post({ hostId: 'host-1', email: 'ada@example.test' })
+    expect(mockLogActivity).toHaveBeenCalledWith(
+      'host-1',
+      { uid: 'user-1', email: 'me@acme.test' },
+      'Updated contact',
+      { type: 'contact', id: 'con-old', name: 'ada@example.test' },
+    )
+    mockUpsertResult = { contactId: 'con-new', created: true }
   })
 
   it('records no consent unless the box was ticked', async () => {

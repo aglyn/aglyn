@@ -19,6 +19,7 @@
 import type { ConsolePluginPageProps } from '@aglyn/aglyn'
 import { HubSections } from '@aglyn/shared-ui-next'
 import type { ReactNode } from 'react'
+import { CrmOrgMountProvider } from '../hooks/use-crm-org-mount'
 import CompaniesSection from './companies-section'
 import CompanyDetailPage from './company-detail-page'
 import ContactDetailPage from './contact-detail-page'
@@ -30,6 +31,7 @@ import LeadDetailPage from './lead-detail-page'
 import LeadsSection from './leads-section'
 import ContactsSection from './contacts-section'
 import ReportsSection from './reports-section'
+import CrmSettingsSection from './settings-section'
 import TasksSection from './tasks-section'
 
 /**
@@ -70,8 +72,20 @@ function sectionBody(
         <ContactsSection {...props} />
       )
     case 'leads':
+      /*
+       * A lead lives under its site, so at the organization level the
+       * address names the site before the id — `leads/{hostId}/{leadId}`
+       * (AGL-2630) — and the record page is mounted UNDER that site: every
+       * read and write it makes is host-scoped by path, exactly as on the
+       * site's own hub. Under a site the id is the one segment it always
+       * was.
+       */
       return record ? (
-        <LeadDetailPage {...recordProps} id={record} />
+        !props.hostId && detail.length >= 2 ? (
+          <LeadDetailPage {...recordProps} hostId={record} id={detail[1]} />
+        ) : (
+          <LeadDetailPage {...recordProps} id={record} />
+        )
       ) : (
         <LeadsSection {...props} />
       )
@@ -100,6 +114,10 @@ function sectionBody(
       return <ReportsSection {...props} />
     case 'fields':
       return <FieldsSection hostId={props.hostId} org={props.org} />
+    case 'settings':
+      // The org-wide switches (AGL-2613): what the CRM does on its own for
+      // every site in the workspace, written to the org document.
+      return <CrmSettingsSection hostId={props.hostId} org={props.org} />
     default:
       return null
   }
@@ -119,7 +137,7 @@ function sectionBody(
  * file adds is the rail and the switch.
  */
 export function CrmConsolePage(props: ConsolePluginPageProps) {
-  const { section, sections, basePath, segments } = props
+  const { section, sections, basePath, segments, orgMount } = props
 
   /*
    * Nothing until the URL names a section. The shell redirects a bare
@@ -129,7 +147,7 @@ export function CrmConsolePage(props: ConsolePluginPageProps) {
    */
   if (!section || !sections?.length || !basePath) return null
 
-  return (
+  const hub = (
     <HubSections sections={sections}>
       {sectionBody(
         section as CrmConsoleSectionId,
@@ -140,6 +158,19 @@ export function CrmConsolePage(props: ConsolePluginPageProps) {
         basePath,
       )}
     </HubSections>
+  )
+  /*
+   * THE ORGANIZATION-LEVEL MOUNT (AGL-2630). The shell hands an `orgMount`
+   * only from `/[orgSlug]/crm`, where there is no site: the hub publishes it
+   * so every section, record page and drawer beneath resolves its scope from
+   * the org rather than from the `null` host it was handed. Under a site
+   * there is no provider, and `useCrmOrgMount` answering `null` is how a
+   * surface knows it is on one.
+   */
+  return orgMount ? (
+    <CrmOrgMountProvider mount={orgMount}>{hub}</CrmOrgMountProvider>
+  ) : (
+    hub
   )
 }
 CrmConsolePage.displayName = 'CrmConsolePage'

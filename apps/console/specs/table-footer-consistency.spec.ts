@@ -931,6 +931,18 @@ const NOT_A_LIST: Array<[string, string]> = [
       'existed, so there is no second page for a footer to turn to.',
   ],
   [
+    'libs/plugins/crm/src/lib/components/settings-section.tsx',
+    'The organization’s owner ASSIGNMENT RULES (AGL-2618) — a settings ' +
+      'table, one row per rule the merchant declared, bounded by ' +
+      '`CRM_ASSIGNMENT_RULES_MAX` (50) at the read itself: the rules live ' +
+      'on the org document, `readCrmAssignmentSettings` slices to the cap, ' +
+      'and the section refuses the fifty-first. First-match order is the ' +
+      'merchant’s, moved by the arrows on each row. The bound is what a ' +
+      'routing policy anybody can reason about carries, not how long the ' +
+      'account has existed, so there is no second page for a footer to ' +
+      'turn to.',
+  ],
+  [
     'apps/console/app/(app)/admin/margin-utilization/page.tsx',
     'Two tables, and neither wants a footer. The first is one row per BAND — ' +
       'a fixed vocabulary, the same rows on every load, so a pager would ' +
@@ -1195,30 +1207,39 @@ const NOT_A_LIST: Array<[string, string]> = [
       'page the choices a person has to scan anyway.',
   ],
   [
-    'libs/plugins/crm/src/lib/components/company-picker.tsx',
-    'The company OPTIONS behind a contact’s company field (AGL-2597): ' +
-      'an autocomplete fed by one read capped at `COMPANY_OPTIONS_LIMIT` ' +
-      'and sliced to it, with a `truncated` flag the field surfaces as ' +
-      'text when the org has more. A picker narrows by typing; a footer ' +
-      'under an autocomplete would page what the query box already ' +
-      'filters.',
-  ],
-  [
-    'libs/plugins/crm/src/lib/components/company-properties-card.tsx',
-    'The detach PROBE behind Delete company (AGL-2597), not a rendered ' +
-      'list: the contacts linked to the company are read one past ' +
-      '`COMPANY_DETACH_LIMIT` to decide whether the delete may proceed, ' +
-      'and the card says how many remain past the bound. Nothing is drawn ' +
-      'as rows; the map the detector sees builds the batch.',
-  ],
-  [
-    'libs/plugins/crm/src/lib/components/contact-import-drawer.tsx',
+    'libs/plugins/crm/src/lib/components/csv-import-drawer.tsx',
     'The spreadsheet PREVIEW and the skipped-row report in the CSV ' +
-      'import (AGL-2602): rows parsed from a file the reader just chose, ' +
-      'capped at `CONTACT_IMPORT_MAX_ROWS` on the client and shown ten at ' +
-      'a time as a preview before the import runs. The source is a local ' +
-      'array, not a collection, and the full file is what the download ' +
-      'offers.',
+      'import (AGL-2602, shared by every section since AGL-2621): rows ' +
+      'parsed from a file the reader just chose, capped on the client and ' +
+      'shown ten at a time as a preview before the import runs. The ' +
+      'contacts and companies drawers are vocabularies over this one walk ' +
+      'and draw no table of their own. The source is a local array, not a ' +
+      'collection, and the full file is what the download offers.',
+  ],
+  [
+    'libs/plugins/crm/src/lib/components/deal-products-card.tsx',
+    'A deal’s LINE ITEMS (AGL-2620): rows stored on the deal document ' +
+      'itself and bounded there by `DEAL_LINE_ITEMS_MAX` (50) — the card ' +
+      'refuses a further line at the cap and says so. The bound is what ' +
+      'one sale can carry, not how long the account has existed, and the ' +
+      'row under the items is the deal’s amount, their sum.',
+  ],
+  [
+    'libs/plugins/crm/src/lib/components/reports/forecast-card.tsx',
+    'An AGGREGATE table in a report (AGL-2620): the open pipeline by ' +
+      'close month, one row per month found in a read capped at ' +
+      '`OPEN_DEAL_CEILING` that the card discloses, sharing the Pipeline ' +
+      'card’s cache. The rows are sums by month, not documents; a pager ' +
+      'would offer to page a grouping whose size is the calendar’s.',
+  ],
+  [
+    'libs/plugins/crm/src/lib/components/lead-surfaces-note.tsx',
+    'The Leads section’s CAPTION naming which surfaces file a lead ' +
+      '(AGL-2612): the site’s forms read one past `LEAD_SURFACE_FORMS_WINDOW` ' +
+      'and rendered as a sentence of links with a switch beside the ones ' +
+      'that could route, "and possibly more" when the window is full. A ' +
+      'sentence is not a table; the paged list of forms is the Forms ' +
+      'plugin’s own.',
   ],
   [
     'libs/plugins/crm/src/lib/components/crm-tasks-due-card.tsx',
@@ -1250,6 +1271,39 @@ const NOT_A_LIST: Array<[string, string]> = [
       'computed from a read capped at `OPEN_TASK_CEILING` that the card ' +
       'discloses. The rows are counts by group, not documents; the ' +
       'documents are the Tasks section’s paged list.',
+  ],
+  [
+    'libs/plugins/crm/src/lib/components/reports/activity-card.tsx',
+    'An AGGREGATE table in a report (AGL-2624): activities per ' +
+      'teammate, one row per person, grouped from reads capped at ' +
+      '`ACTIVITY_CEILING` and `TASK_DONE_CEILING` that the card discloses ' +
+      'beside its export. The rows are counts by group, not documents; ' +
+      'the documents are each record’s own timeline.',
+  ],
+  [
+    'libs/plugins/crm/src/lib/components/reports/source-conversion-card.tsx',
+    'An AGGREGATE table in a report (AGL-2624): the period’s contacts ' +
+      'by capture source, one row per source found in a read capped at ' +
+      '`CONTACT_CEILING` that the card discloses. The rows are counts by ' +
+      'source, not documents; the people are the Contacts section’s paged ' +
+      'table.',
+  ],
+  [
+    'libs/plugins/crm/src/lib/components/contact-duplicates-card.tsx',
+    'A record’s LIKELY DUPLICATES (AGL-2625): the contacts sharing the ' +
+      'record’s name, read under `CONTACT_DUPLICATES_LIMIT` on a button ' +
+      'press and kept only where a phone or company matches too. A short ' +
+      'list to act on — "Merge into this record" opens the merge dialog on ' +
+      'the pick — not a view; a page of near-duplicates would be a list ' +
+      'nobody merges by hand.',
+  ],
+  [
+    'libs/plugins/crm/src/lib/components/contact-merge-dialog.tsx',
+    'The merge dialog (AGL-2625): the SEARCH for the other record — ' +
+      'bounded by `SEARCH_LIMIT`, narrowed as the reader types and closed ' +
+      'on a choice — and the preview beneath it, one row per FIELD of the ' +
+      'two records being folded, which is the schema and not a collection. ' +
+      'A pager under a search box pages what the box already filters.',
   ],
 ]
 
@@ -1353,23 +1407,6 @@ const OWES_A_FOOTER: Array<[string, string]> = [
     'Installed plugins, per site and per org, both unordered `limit(50)`. ' +
       'Bounded by the marketplace rather than by the account, but the ' +
       'marketplace is the thing that grows.',
-  ],
-  [
-    'libs/plugins/crm/src/lib/components/company-contacts-card.tsx',
-    'The contacts at one company (AGL-2597): a real list, read under ' +
-      '`CONTACTS_AT_COMPANY_LIMIT` with the count taken from the server ' +
-      'and shown beside it, so the truncation is honest but the ' +
-      'fifty-first contact is unreachable from the card. A shared footer ' +
-      'belongs here once the card takes the paged reader.',
-  ],
-  [
-    'libs/plugins/crm/src/lib/components/leads-section.tsx',
-    'The site’s leads (AGL-2608): a real list on `ListTable`, read as ' +
-      'one window of `LEADS_WINDOW` newest by last seen and filtered by ' +
-      'status in memory — because `addHostLead` writes no status and ' +
-      'Firestore cannot select on a missing field — with a notice when ' +
-      'the window filled. The notice is honest; a footer is owed once the ' +
-      'status is stamped at capture and the query can page.',
   ],
 ]
 
@@ -1491,7 +1528,13 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // capture door never stamps — each says when it was cut short, neither
     // can turn a page yet. Both are named so the debt is visible, not so it
     // is excused.
-    expect(OWES_A_FOOTER).toHaveLength(17)
+    //
+    // 15 since both paid (AGL-2614): the company's contacts take the paged
+    // reader, with the server aggregate as the footer's count, and the leads
+    // page their filtered window in memory the way the workspace pickers
+    // page theirs — the window cannot be re-keyed by a status the capture
+    // door never writes, but a slice of it can be turned.
+    expect(OWES_A_FOOTER).toHaveLength(15)
     // 37 since a site's senders became a list the composer picks from: the
     // drawer that edits one carries a picker of teammates, and a picker's
     // option list is a lookup rather than a window a reader pages through.
@@ -1535,7 +1578,39 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // contact list's drawer, whose interaction timeline was the row this list
     // once classified, is gone — the record page holds the timeline now, on
     // the load-more allowlist above.
-    expect(NOT_A_LIST).toHaveLength(46)
+    //
+    // 47 since the Leads section says what creates a lead (AGL-2612): a
+    // caption naming the site's lead-routed forms as links, read one past
+    // `LEAD_SURFACE_FORMS_WINDOW` and owning up to the window in prose. A
+    // sentence of links is not a view of a collection; the Forms plugin's
+    // own list is the paged one.
+    //
+    // 46 since the company picker became an `Autocomplete` (AGL-2613): its
+    // options are still one capped read, but they reach the field as the
+    // control's own option list rather than as mapped row elements, so the
+    // detector no longer sees a table there — the classification retires
+    // with the surface it described, the way this guard is meant to shrink.
+    //
+    // 47 since the CRM's Settings gained owner assignment rules (AGL-2618):
+    // a table of at most fifty rows the merchant wrote and ordered, read off
+    // the org document under that cap — a policy, not a collection.
+    //
+    // 48 since the CRM v2.1 merges (AGL-2614): two entries retired with the
+    // tables they described — the contacts import drawer is now a vocabulary
+    // over the shared preview, and the company card's detach probe moved
+    // into `model/company-delete.ts`, which is not a component — and three
+    // arrived, each bounded by something other than the account's age: the
+    // shared import preview (a local array), a deal's line items
+    // (`DEAL_LINE_ITEMS_MAX` on the document), and the forecast by close
+    // month (sums over a disclosed ceiling).
+    //
+    // 52 since the reports grew and a record learned to merge (AGL-2624,
+    // AGL-2625): two more aggregate tables in the Reports section — activity
+    // by teammate and conversion by source, each counts by group over a
+    // disclosed ceiling — the likely-duplicates list a button reads under
+    // `CONTACT_DUPLICATES_LIMIT` to act on, and the merge dialog's search
+    // picker with its per-field preview of what the merge keeps.
+    expect(NOT_A_LIST).toHaveLength(52)
   })
 })
 

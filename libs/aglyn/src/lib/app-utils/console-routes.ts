@@ -113,8 +113,24 @@ export enum Route {
    * per-site CRM — notes, tags, timeline, order history — stays on the site's
    * own Contacts surface, because those are the holder's business records and
    * this is the one route designed to cross between holders.
+   *
+   * A LEGACY ADDRESS since AGL-2630: the page behind it redirects, permanently,
+   * to the org-level CRM hub's contacts section. It stays declared so a link
+   * kept from before — a bookmark, a docs page, an email — still resolves,
+   * and so the redirect has a constant to be built from rather than a string.
    */
   ORG_CONTACTS = '/[orgSlug]/contacts',
+  /*
+   * The organization-level CRM hub (AGL-2630): the same sections the site hub
+   * has — `/[orgSlug]/crm/<section>[/<recordId>]` — mounted with an ORG scope,
+   * for an org-wide member who works every site's people at once. A bare
+   * `/crm` lands on the first section the reader may open, as the site hub's
+   * does. What this route adds over the site hub is the cross-site fact the
+   * old address book carried — which sites know a person — and what it takes
+   * from it is the site every create must name, since a record is always
+   * captured BY a site.
+   */
+  ORG_CRM = '/[orgSlug]/crm',
   ORG_PLUGINS = '/[orgSlug]/plugins',
   // One plugin, as installed in this workspace (AGL-1007): scope, settings
   // and permissions in one place. The segment takes EITHER identifier
@@ -510,6 +526,7 @@ export interface RoutePayload {
   [Route.ORG_MEDIA]: { orgSlug: string }
   [Route.ORG_DATA]: { orgSlug: string }
   [Route.ORG_CONTACTS]: { orgSlug: string }
+  [Route.ORG_CRM]: { orgSlug: string }
   [Route.ORG_PLUGINS]: { orgSlug: string }
   [Route.ORG_PLUGIN_INSTALLATION]: { orgSlug: string; pluginRef: string }
   [Route.ORG_MARKETPLACE]: { orgSlug: string }

@@ -34,6 +34,11 @@ export interface LostReasonDialogProps {
   open: boolean
   /** The deal being closed, for the title. */
   dealTitle: string
+  /**
+   * How many deals the reason applies to — the bulk bar's selection
+   * (AGL-2621). One, or absent, names the deal; more says the number.
+   */
+  count?: number
   busy?: boolean
   onClose: () => void
   onConfirm: (reason: string) => void
@@ -48,8 +53,9 @@ export interface LostReasonDialogProps {
  * data, and an empty reason is at least honest.
  */
 export function LostReasonDialog(props: LostReasonDialogProps) {
-  const { open, dealTitle, busy, onClose, onConfirm } = props
+  const { open, dealTitle, count = 1, busy, onClose, onConfirm } = props
   const [reason, setReason] = useState('')
+  const many = count > 1
 
   // A fresh field each time the dialog opens: the previous deal's reason is
   // not this deal's.
@@ -59,11 +65,14 @@ export function LostReasonDialog(props: LostReasonDialogProps) {
 
   return (
     <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="xs">
-      <DialogTitle>{'Mark this deal lost?'}</DialogTitle>
+      <DialogTitle>{many ? `Mark ${count} deals lost?` : 'Mark this deal lost?'}</DialogTitle>
       <DialogContent>
         <DialogContentText sx={{ mb: 2 }}>
-          {`"${dealTitle}" moves to Lost and leaves the open pipeline. ` +
-            'It can be reopened from its page.'}
+          {many
+            ? `${count} deals move to Lost and leave the open pipeline, each ` +
+              'with the reason below. Any can be reopened from its page.'
+            : `"${dealTitle}" moves to Lost and leaves the open pipeline. ` +
+              'It can be reopened from its page.'}
         </DialogContentText>
         <TextField
           label="Reason"
@@ -73,7 +82,11 @@ export function LostReasonDialog(props: LostReasonDialogProps) {
           minRows={2}
           fullWidth
           autoFocus
-          helperText="Optional. Kept on the deal and sent with the dealLost event."
+          helperText={
+            many
+              ? 'Optional. Kept on each deal and sent with each dealLost event.'
+              : 'Optional. Kept on the deal and sent with the dealLost event.'
+          }
           slotProps={{ htmlInput: { maxLength: LOST_REASON_MAX } }}
         />
       </DialogContent>

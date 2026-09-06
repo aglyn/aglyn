@@ -965,6 +965,20 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "formIds",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "contacts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
           "fieldPath": "visibleTo",
           "arrayConfig": "CONTAINS"
         },
@@ -1045,6 +1059,20 @@
       ]
     },
     {
+      "collectionGroup": "companies",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "visibleTo",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "domain",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "deals",
       "queryScope": "COLLECTION",
       "fields": [
@@ -1090,6 +1118,24 @@
         },
         {
           "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "deals",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "visibleTo",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "pipelineId",
           "order": "ASCENDING"
         },
         {
@@ -1293,6 +1339,38 @@
       ]
     },
     {
+      "collectionGroup": "crmTasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "visibleTo",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "completedAtMs",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "crmTasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dueAtMs",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "crmActivities",
       "queryScope": "COLLECTION",
       "fields": [
@@ -1350,6 +1428,260 @@
           "fieldPath": "visibleTo",
           "arrayConfig": "CONTAINS"
         },
+        {
+          "fieldPath": "dealId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "atMs",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "crmActivities",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "visibleTo",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "leadId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "atMs",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "crmViews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "visibleTo",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "section",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "name",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "crmViews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "section",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "name",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "deals",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "pipelineId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "deals",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "pipelineId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "deals",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "deals",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "contactId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "deals",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "companyId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "deals",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "closedAtMs",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "deals",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "closedAtMs",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "crmTasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "assigneeUid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dueAtMs",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "crmTasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "contactId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dueAtMs",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "crmTasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "companyId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dueAtMs",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "crmTasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "dealId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dueAtMs",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "crmActivities",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "contactId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "atMs",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "crmActivities",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "companyId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "atMs",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "crmActivities",
+      "queryScope": "COLLECTION",
+      "fields": [
         {
           "fieldPath": "dealId",
           "order": "ASCENDING"

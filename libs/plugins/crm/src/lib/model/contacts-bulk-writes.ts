@@ -54,17 +54,25 @@
 
 import {
   contactFacetPath,
+  type ContactCompanyLinkState,
   planContactDetach,
   type ContactLifecycleStage,
 } from '@aglyn/aglyn'
 import { arrayRemove, arrayUnion, deleteField } from 'firebase/firestore'
+import { type CompanyOption, contactCompanyLinkWrites } from './companies'
+import {
+  CRM_BULK_WRITE_CHUNK,
+  chunked,
+  runCrmBulkWrites,
+} from './crm-bulk-writes'
 
-/**
- * The Firestore batch cap is 500 writes; 400 leaves room for the sentinel
- * transforms a facet patch carries, which the cap counts as writes of their
- * own. The same margin the datasets card keeps.
+/*
+ * The runner and its chunk size are the shared ones (`crm-bulk-writes.ts`,
+ * AGL-2621), under the names this module has always exported: the batch
+ * cap and the per-row fallback are about Firestore, not about people.
  */
-export const CONTACT_BULK_WRITE_CHUNK = 400
+export const CONTACT_BULK_WRITE_CHUNK = CRM_BULK_WRITE_CHUNK
+export { chunked }
 
 /** The drawer's cap on a holder's tags — the same number, so the two agree. */
 export const CONTACT_TAGS_CAP = 20
@@ -73,15 +81,36 @@ export const CONTACT_TAGS_CAP = 20
 export interface ContactBulkRow {
   $id: string
   email?: string
+  /**
+   * The holder this row was flattened through (`ContactRecord.groupId`),
+   * which a cross-holder reader — the organization-level list (AGL-2630) —
+   * plans each row's write against, since no one viewing group covers
+   * every selected person there.
+   */
+  groupId?: string
   /** THIS holder's tags, already read through the facet by the table. */
   tags?: string[]
   /** The holder tokens — what `planContactDetach` counts. */
   visibleTo?: string[]
+  /** The link state the company planner reads — see `ContactRecord.companyLink`. */
+  companyLink?: ContactCompanyLinkState
 }
 
-/** One write to one contact document, named by the address it is about. */
+/**
+ * One write to one contact document, named by the address it is about.
+ *
+ * An update may carry `companyCounts`: the companies whose contacts count
+ * the write moves, as bare deltas. They are numbers rather than sentinels so
+ * a batch can SUM them — four hundred rows set to Acme are one `increment`
+ * of four hundred on Acme, not four hundred writes to one document — and a
+ * per-row fallback can apply the one row's share on its own.
+ */
 export type ContactBulkWrite = { id: string; email: string } & (
-  | { kind: 'update'; data: Record<string, unknown> }
+  | {
+      kind: 'update'
+      data: Record<string, unknown>
+      companyCounts?: Array<{ companyId: string; delta: 1 | -1 }>
+    }
   | { kind: 'delete' }
 )
 
@@ -112,14 +141,6 @@ const addressOf = (row: ContactBulkRow): string =>
 export function normalizeBulkTag(input: string): string | null {
   const tag = input.trim().toLowerCase().slice(0, 60)
   return tag || null
-}
-
-export function chunked<T>(items: readonly T[], size: number): T[][] {
-  const chunks: T[][] = []
-  for (let start = 0; start < items.length; start += size) {
-    chunks.push(items.slice(start, start + size))
-  }
-  return chunks
 }
 
 /**
@@ -215,6 +236,72 @@ export function planSetFacetField(
 }
 
 /**
+ * File every row under one company — or under none, with `null` (AGL-2613).
+ *
+ * The properties card's own link write, per row: the facet's `companyId`,
+ * the shared mirror by the sentinel the planner chose, and the company's
+ * name echoed where the list column and the global search read it. A row
+ * already at that company is left alone silently, as a row already tagged
+ * is — the plan is `null` and a report saying so would be noise. A row the
+ * table could not project a link state for is skipped AND named: the plan
+ * cannot tell whether an old id may leave the mirror without one, and a
+ * guess would either strand a company in another holder's index or take
+ * their link away.
+ */
+export function planSetCompany(
+  rows: readonly ContactBulkRow[],
+  groupId: string,
+  company: CompanyOption | null,
+  nowMs: number,
+): ContactBulkPlan {
+  const writes: ContactBulkWrite[] = []
+  const skipped: ContactBulkSkip[] = []
+  for (const row of rows) {
+    if (!row.companyLink) {
+      skipped.push({ email: addressOf(row), reason: 'its company link could not be read' })
+      continue
+    }
+    const link = contactCompanyLinkWrites(
+      row.companyLink,
+      groupId,
+      company?.id ?? null,
+      company ? company.name : null,
+    )
+    if (!link) continue
+    writes.push({
+      id: row.$id,
+      email: addressOf(row),
+      kind: 'update',
+      data: { ...link.contact, updatedAt: new Date(nowMs) },
+      ...(link.counts.length ? { companyCounts: link.counts } : {}),
+    })
+  }
+  return { writes, skipped }
+}
+
+/**
+ * The count each company moves by across a set of writes, summed — what a
+ * batch applies as one `increment` per company. Companies whose moves cancel
+ * out are left off, so a batch that moved a person from Acme and another to
+ * Acme writes nothing to Acme at all.
+ */
+export function companyCountDeltas(
+  writes: readonly ContactBulkWrite[],
+): Map<string, number> {
+  const deltas = new Map<string, number>()
+  for (const write of writes) {
+    if (write.kind !== 'update') continue
+    for (const count of write.companyCounts ?? []) {
+      deltas.set(count.companyId, (deltas.get(count.companyId) ?? 0) + count.delta)
+    }
+  }
+  for (const [companyId, delta] of deltas) {
+    if (delta === 0) deltas.delete(companyId)
+  }
+  return deltas
+}
+
+/**
  * Let every row go — the drawer's DELETE IS A DETACH, per row.
  *
  * `planContactDetach` decides for each document whether this holder is the
@@ -270,46 +357,24 @@ export interface ContactBulkOutcome {
   refused: Array<{ email: string; error: string }>
 }
 
-/** Whatever the store threw, as one sentence a snackbar can carry. */
-const reasonOf = (error: unknown): string => {
-  const code = (error as { code?: unknown } | null)?.code
-  if (code === 'permission-denied') return 'not permitted'
-  if (code === 'not-found') return 'no longer exists'
-  const message = (error as { message?: unknown } | null)?.message
-  return typeof message === 'string' && message ? message : 'the write failed'
-}
-
 /**
- * Apply the writes in chunks, and re-apply a failed chunk row by row.
- *
- * The batch is the fast path and the common one: four hundred facet patches
- * in one round trip. The fallback is the honest one: a batch that fails
- * names no row, so the only way to say WHICH of four hundred was refused is
- * to ask about each. The chunk that failed is the only one that pays for
- * that; the others commit as batches.
+ * The shared runner over contact writes — batched, with a per-row pass for
+ * the chunk that failed (`crm-bulk-writes.ts`) — reporting by ADDRESS, which
+ * is the name a contacts report lists a row under.
  */
 export async function runContactBulkWrites(
   writers: ContactBulkWriters,
   writes: readonly ContactBulkWrite[],
   chunkSize: number = CONTACT_BULK_WRITE_CHUNK,
 ): Promise<ContactBulkOutcome> {
-  const outcome: ContactBulkOutcome = { done: 0, refused: [] }
-  for (const chunk of chunked(writes, chunkSize)) {
-    try {
-      await writers.commitBatch(chunk)
-      outcome.done += chunk.length
-      continue
-    } catch {
-      // Fall through to the per-row pass below.
-    }
-    for (const write of chunk) {
-      try {
-        await writers.commitOne(write)
-        outcome.done += 1
-      } catch (error) {
-        outcome.refused.push({ email: write.email, error: reasonOf(error) })
-      }
-    }
+  const outcome = await runCrmBulkWrites(
+    writers,
+    writes,
+    (write) => write.email,
+    chunkSize,
+  )
+  return {
+    done: outcome.done,
+    refused: outcome.refused.map((row) => ({ email: row.label, error: row.error })),
   }
-  return outcome
 }

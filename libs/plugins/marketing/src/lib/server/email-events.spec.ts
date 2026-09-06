@@ -377,6 +377,26 @@ jest.mock(
   }),
 )
 
+/**
+ * What the handler handed the CONTACT STAMP (AGL-2616), per call. Recorded
+ * for the reason the rollup is: the stamp's own rules — forward-only, the
+ * holder's facet, a row the site may see — are proved against a Firestore
+ * double in `tenant-data-admin`; what only this file can prove is which
+ * events reach it and with which site.
+ */
+const recordedStamps: Array<{ hostId: string; outcomes: unknown[] }> = []
+jest.mock(
+  '@aglyn/tenant-data-admin/server/contact-email-engagement',
+  () => ({
+    recordContactEmailEngagement: jest.fn(
+      async (args: { hostId: string; outcomes: unknown[] }) => {
+        recordedStamps.push(args)
+        return 0
+      },
+    ),
+  }),
+)
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   // The literal three call sites compare against — the unsubscribe writes
   // it, the resubscribe link refuses to reverse anything else, and the
@@ -441,6 +461,25 @@ jest.mock('@aglyn/tenant-data-admin/server/organizations', () => ({
     orgId: `org-of-${hostId}`,
     org: {},
   }),
+}))
+
+/**
+ * The one-to-one email's timeline write (AGL-2615), doubled at its leaf.
+ *
+ * The writer's own rules — forward-only, transactional, never throwing —
+ * are proven against a Firestore double in `tenant-data-admin`. What only
+ * this file can prove is what the WEBHOOK hands it: which events reach it,
+ * from which tags, in the log's vocabulary rather than the provider's. The
+ * event-to-state mapping is the real one, so a spec here cannot pass on a
+ * vocabulary the writer does not speak.
+ */
+const recordedCrmDeliveries: Array<Record<string, unknown>> = []
+jest.mock('@aglyn/tenant-data-admin/server/crm-email-activity', () => ({
+  ...jest.requireActual('@aglyn/tenant-data-admin/server/crm-email-activity'),
+  recordCrmEmailDelivery: async (_firestore: unknown, input: Record<string, unknown>) => {
+    recordedCrmDeliveries.push(input)
+    return 'advanced'
+  },
 }))
 
 import { emailEventsHandler } from './email-events'
@@ -596,6 +635,8 @@ beforeEach(() => {
   recordedDeliveryEvents.length = 0
   recordedEngagement.length = 0
   recordedTouches.length = 0
+  recordedStamps.length = 0
+  recordedCrmDeliveries.length = 0
   fixtureMessageCounter = 0
   mockFirstOfType = true
   updateFailure = null
@@ -1944,5 +1985,161 @@ describe('the person rollup', () => {
 
     expect(result.body).toMatchObject({ ok: true })
     expect((docs.get(CAMPAIGN_PATH) as any).stats.opens).toBe(3)
+  })
+})
+
+/*==========================================
+ * THE CONTACT'S OWN STAMP (AGL-2616).
+ *
+ * Below the `hostId` gate the rollup sits above: the rollup is about the
+ * address and moves on anybody's mail, the stamp is about THIS SITE's
+ * relationship with the person and moves only on its own campaigns.
+ *=========================================*/
+describe('the contact engagement stamp', () => {
+  it('hands the site’s first opens and clicks to the stamp, with the site', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    await deliver(event('email.opened', TAGS))
+    await deliver(event('email.clicked', TAGS))
+
+    expect(recordedStamps).toEqual([
+      {
+        hostId: HOST,
+        outcomes: [expect.objectContaining({ to: RECIPIENT, type: 'opened', firstOfType: true })],
+      },
+      {
+        hostId: HOST,
+        outcomes: [expect.objectContaining({ to: RECIPIENT, type: 'clicked', firstOfType: true })],
+      },
+    ])
+  })
+
+  it('passes the delivery log’s own verdict through rather than re-deriving one', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+    mockFirstOfType = false
+
+    await deliver(event('email.opened', TAGS))
+
+    expect(recordedStamps[0].outcomes).toEqual([
+      expect.objectContaining({ firstOfType: false }),
+    ])
+  })
+
+  it('stamps nothing for mail that names no site — a receipt is not a campaign', async () => {
+    await deliver(event('email.opened', {}))
+    await deliver(event('email.clicked', { campaignId: CAMPAIGN }))
+
+    expect(recordedStamps).toEqual([])
+  })
+
+  it('is not asked about a delivery, a bounce or a complaint', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+    await deliver({
+      type: 'email.delivered',
+      data: { email_id: 'e1', to: [RECIPIENT], tags: TAGS },
+    })
+    await deliver({
+      type: 'email.bounced',
+      data: { email_id: 'e2', to: [RECIPIENT], tags: TAGS, bounce: { type: 'Permanent' } },
+    })
+
+    expect(recordedStamps).toEqual([])
+  })
+
+  it('cannot cost the campaign counters anything when it fails', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+    const stamp = jest.requireMock(
+      '@aglyn/tenant-data-admin/server/contact-email-engagement',
+    ).recordContactEmailEngagement as jest.Mock
+    stamp.mockRejectedValueOnce(new Error('stamp is down'))
+
+    const result = await deliver(event('email.opened', TAGS))
+
+    expect(result.body).toMatchObject({ ok: true })
+    expect((docs.get(CAMPAIGN_PATH) as any).stats.opens).toBe(3)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// A one-to-one CRM email's delivery state (AGL-2615)
+// ---------------------------------------------------------------------------
+
+describe('a one-to-one CRM email', () => {
+  const ORG = 'org-9'
+  const ACTIVITY = 'act-42'
+  const CRM_TAGS = { context: 'crm', hostId: HOST, orgId: ORG, activityId: ACTIVITY }
+  const withMessage = (type: string, tags: Record<string, string>) => ({
+    type,
+    data: {
+      email_id: `email_${(fixtureMessageCounter += 1)}`,
+      to: [RECIPIENT],
+      created_at: '2027-01-01T00:00:00.000Z',
+      tags,
+    },
+  })
+
+  it('moves the activity to delivered, and still needs no campaign', async () => {
+    const result = await deliver(withMessage('email.delivered', CRM_TAGS))
+
+    expect(result.status).toBe(200)
+    expect(recordedCrmDeliveries).toEqual([
+      { orgId: ORG, activityId: ACTIVITY, state: 'delivered', atMs: expect.any(Number) },
+    ])
+    // Not a campaign: the campaign denominator is untouched and nothing
+    // was re-created under the host.
+    expect(writtenPaths()).toEqual([])
+  })
+
+  it('moves it to opened and clicked from the engagement events', async () => {
+    await deliver(withMessage('email.opened', CRM_TAGS))
+    await deliver(withMessage('email.clicked', CRM_TAGS))
+
+    expect(recordedCrmDeliveries.map((one) => one['state'])).toEqual(['opened', 'clicked'])
+    expect(errors).toEqual([])
+  })
+
+  it('moves it to bounced and still suppresses the address', async () => {
+    // A message id, because the state is read off the NORMALIZED event and
+    // the adapter files nothing it cannot key by message.
+    await deliver(
+      failure(
+        'email.bounced',
+        {
+          email_id: 'email_bounced_1',
+          bounce: { type: 'Permanent', subType: 'General', message: 'no such user' },
+        },
+        CRM_TAGS,
+      ),
+    )
+
+    expect(recordedCrmDeliveries).toEqual([
+      { orgId: ORG, activityId: ACTIVITY, state: 'bounced', atMs: expect.any(Number) },
+    ])
+    expect(docs.get(SUPPRESSION_PATH)?.reason).toBe('bounce')
+  })
+
+  it('moves it to complained', async () => {
+    await deliver(failure('email.complained', { email_id: 'email_complained_1' }, CRM_TAGS))
+    expect(recordedCrmDeliveries[0]).toMatchObject({ state: 'complained' })
+  })
+
+  it('writes nothing for a message that names no activity', async () => {
+    await deliver(withMessage('email.delivered', { context: 'invite', hostId: HOST }))
+    expect(recordedCrmDeliveries).toEqual([])
+  })
+
+  it('writes nothing for an id that names a path rather than a document', async () => {
+    await deliver(
+      withMessage('email.delivered', { ...CRM_TAGS, activityId: 'a/b' }),
+    )
+    await deliver(withMessage('email.delivered', { ...CRM_TAGS, orgId: '__x__' }))
+    expect(recordedCrmDeliveries).toEqual([])
+  })
+
+  it('leaves an event with no state of its own alone', async () => {
+    // `email.sent` is gated out above the campaign counters; a CRM row
+    // starts at `sent` when it is written, so nothing is owed here.
+    await deliver(withMessage('email.sent', CRM_TAGS))
+    expect(recordedCrmDeliveries).toEqual([])
   })
 })

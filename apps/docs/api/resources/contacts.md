@@ -41,6 +41,7 @@ way to work with the contacts your sites have already captured.
   "ownerUid": "u_9f1c",
   "lifecycleStage": "customer",
   "companyIds": ["c_1a2b"],
+  "alternateEmails": ["robin.w@example.org"],
   "created": "2026-07-20T18:23:23.941Z",
   "updated": "2026-07-20T18:23:23.941Z"
 }
@@ -64,6 +65,7 @@ way to work with the contacts your sites have already captured.
 | `ownerUid` | string \| null | The team member responsible for the relationship. Must be a member of your organization. Writable. |
 | `lifecycleStage` | string \| null | `subscriber`, `lead`, `marketing-qualified`, `sales-qualified`, `opportunity`, `customer`, `evangelist` or `other`. Writable. |
 | `companyIds` | string[] | Every company any of your sites has filed this person under — the set of the per-site `companyId`s. What `?companyId=` queries. **Read-only.** |
+| `alternateEmails` | string[] | The other addresses this person answers to — each one the address of a record [merged](#merge) into this one. A capture on any of them lands here. **Read-only** — written by a merge. |
 | `created` / `updated` | string \| null | ISO 8601. |
 
 Every writable field in that table is also returned, so you can read back what you
@@ -93,14 +95,16 @@ behavior.
 
 ### What you can't write, and why {#read-only-fields}
 
-`email` and `sources` are refused rather than ignored — sending either is a
-`400 validation_failed` naming the key, not a silent drop.
+`email`, `sources` and `alternateEmails` are refused rather than ignored — sending
+any of them is a `400 validation_failed` naming the key, not a silent drop.
 
 - **`email`** is the dedupe key the whole CRM unifies on. Changing it through this API
   would merge or split people's records as a side effect of an edit. To move a
   contact to a different address, delete it and create the new one.
 - **`sources`** is provenance. It records where a person actually came from, which
   stops being true the moment an integration can write it.
+- **`alternateEmails`** is written by a [merge](#merge) and by nothing else: an
+  alternate address is a record that was folded in, not a label.
 
 ## Endpoints
 
@@ -267,7 +271,7 @@ When a plan *does* hard-band, a create past the band is refused:
 
 | `code` | Means |
 | --- | --- |
-| `contact_quota` | Every included contact slot is used and this plan doesn't meter the overage. The message names the limit. |
+| `contact_quota` | The plan's **CRM records band** — contacts, companies and deals together — is full and this plan doesn't meter the overage. The message names the limit. |
 
 **Neither this nor `contact_exists` consumes an `Idempotency-Key.`** Both clear —
 one when somebody upgrades, the other when the duplicate is removed — and the retry
@@ -344,17 +348,63 @@ This removes the contact record. It does not remove the
 [form submissions](form-submissions.md), orders, or bookings that person left behind —
 those are separate records with their own endpoints.
 
+### Merge two contacts {#merge}
+
+`POST /v1/contacts/{contactId}/merge` — scope `contacts:write`. Accepts an
+[`Idempotency-Key`](../conventions.md#deletes) with the delete's semantics.
+
+A contact is one record per email address, so one person with a work address and a
+personal one is two records. This folds the second into the first: **the contact in
+the path survives** and keeps its address as the identity; the contact named in the
+body is merged into it and deleted.
+
+**Body**
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `sourceContactId` | string | **yes** | The contact to merge into this one. It is deleted. Must be a different contact from the one in the path. No other field is accepted. |
+
+```bash
+curl -X POST "https://app.aglyn.com/api/v1/contacts/k7d2b9f104/merge" \
+  -H "Authorization: Bearer aglyn_sk_…" \
+  -H "Idempotency-Key: 2c9e5a11-…" \
+  -H "Content-Type: application/json" \
+  -d '{"sourceContactId":"m3f8a1c207"}'
+```
+
+Returns **`200`** with the surviving contact, read back the way `GET` reads it — the
+organization-wide profile, or one site's with `?consentSiteId=` — with the source's
+address now in `alternateEmails`.
+
+What the merge does, on every site's profile of the person under one rule:
+
+- A scalar — name, phone, job title, company, stage, owner, address, a custom
+  value — is the survivor's where it has one, and fills from the source where the
+  survivor is empty. Nothing the survivor holds is overwritten.
+- Tags, campaign filings, the timeline, the sites that captured the person and
+  `companyIds` are combined. Notes are appended, survivor first. Order counts and
+  lifetime value are added together.
+- Every [deal](deals.md), [task](tasks.md) and [activity](activities.md) that named
+  the source contact now names the survivor, and so does a lead converted into it.
+- An opt-in on either record stands on the survivor; so does a recorded opt-out.
+- The source's address becomes an alternate on the survivor, so a later capture on
+  it — a form, an order — lands on the survivor rather than creating the source
+  again.
+
+A retry after a lost response finds no source contact and answers `404`; send an
+`Idempotency-Key` and the original `200` is replayed instead.
+
 ## Errors
 
 | Status | `type` | When |
 | --- | --- | --- |
 | `400` | `bad_request` | `code: "validation_failed"` — on a write, a missing or unusable `email`, a non-boolean `marketingConsent`, a `marketingConsent: true` with no
 `consentSiteId` (or one naming a site the organization does not own), a profile field with no `consentSiteId`, a `phone` that does not normalize, a `lifecycleStage` outside the list, a `companyId` that does not exist, an `ownerUid` who is not a member, or an attempt
-to write `email`/`sources`. On the list, an `?email=` that isn't a usable address, a `?lifecycleStage=` outside the list, or a `?consentSiteId=` naming a site the organization does not own. `fields` names each offending key. |
-| `403` | `plan_required` | `code: "contact_quota"` — the audience band is full on a plan that doesn't meter the overage. |
+to write `email`/`sources`/`alternateEmails`. On a merge, a missing `sourceContactId`, one naming the contact in the path, or any other key. On the list, an `?email=` that isn't a usable address, a `?lifecycleStage=` outside the list, or a `?consentSiteId=` naming a site the organization does not own. `fields` names each offending key. |
+| `403` | `plan_required` | `code: "contact_quota"` — the CRM records band (contacts, companies and deals together) is full on a plan that doesn't meter the overage. |
 | `403` | `insufficient_scope` | Key lacks `contacts:read` / `contacts:write`. Checked before the method, so a write attempt with a read-only key returns `403`, not `405`. |
-| `404` | `not_found` | `"No such contact"`. |
-| `405` | `method_not_allowed` | Method not supported on that path. The `Allow` header lists what is: `GET, POST` on `/v1/contacts`, `GET, PATCH, DELETE` on one contact. |
+| `404` | `not_found` | `"No such contact"`. On a [merge](#merge), `code: "source_not_found"` — the contact in the body is not there, which after a merge that already ran is the ordinary case. |
+| `405` | `method_not_allowed` | Method not supported on that path. The `Allow` header lists what is: `GET, POST` on `/v1/contacts`, `GET, PATCH, DELETE` on one contact, `POST` on its `/merge`. |
 | `409` | `conflict` | `code: "contact_exists"` — that email is already a contact. `code: "idempotency_in_progress"` — an earlier write with the same key is still running. |
 
 See [Conventions → Errors](../conventions.md#errors) for the shared envelope.

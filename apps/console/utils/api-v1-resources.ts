@@ -23,7 +23,7 @@
 import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import {
   checkApiRequestQuota,
-  checkContactQuota,
+  checkCrmRecordsQuota,
   checkDataStorageQuota,
   checkDatasetQuota,
   checkEntitlement,
@@ -34,8 +34,10 @@ import {
   datasetIntegrityUpdate,
   defaultScopeForNewResource,
   CAPTURED_BY_HOST_FIELD,
+  CONTACT_COMPANY_IDS_FIELD,
   CONTACT_FACETS_FIELD,
   CONTACT_LIFECYCLE_STAGES,
+  type ContactCompanyLinkPlan,
   contactFacetPath,
   type ContactLifecycleStage,
   CRM_COLLECTIONS,
@@ -57,6 +59,8 @@ import {
   normalizeContactEmail,
   normalizePhone,
   ORG_SCOPE_TOKEN,
+  planContactCompanyLink,
+  readContactCompanyLink,
   readContactCustomInput,
   readContactFacet,
   readImageDimensions,
@@ -68,9 +72,11 @@ import {
   validateDocument,
 } from '@aglyn/aglyn/server'
 import {
-  apiJson,
   ApiErrors,
+  apiJson,
   consumeRateLimit,
+  contactCompanyMirrorValue,
+  crmRecordsQuotaForOrg,
   dataStorageRefusal,
   decodeCursor,
   encodeCursor,
@@ -79,6 +85,7 @@ import {
   getMediaQuarantine,
   listResponse,
   parseLimit,
+  settleCompanyContactsCounts,
 } from '@aglyn/tenant-data-admin'
 import { createHash, randomUUID } from 'crypto'
 import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore'
@@ -86,8 +93,10 @@ import { type ApiV1Context, apiUsageMonth, requireScope } from './api-v1'
 import { handleActivities } from './api-v1/crm-activities'
 import { handleCompanies } from './api-v1/crm-companies'
 import { handleDeals } from './api-v1/crm-deals'
+import { handleLeads } from './api-v1/crm-leads'
 import { handlePipelines } from './api-v1/crm-pipelines'
 import { handleTasks } from './api-v1/crm-tasks'
+import { mergeContactRoute } from './api-v1/contacts-merge'
 import {
   CRM_ID_MAX,
   CRM_LABEL_MAX,
@@ -2413,6 +2422,11 @@ function contactView(
     companyIds: Array.isArray(data.companyIds)
       ? data.companyIds.filter((id: unknown) => typeof id === 'string')
       : [],
+    // The other addresses a merge folded into this record (AGL-2625) —
+    // identity like `email`, and read-only for the same reason.
+    alternateEmails: Array.isArray(data.alternateEmails)
+      ? data.alternateEmails.filter((email: unknown) => typeof email === 'string')
+      : [],
     /*
      * TRUE means "some site may mail this person", and `consentSites` says
      * which. A single boolean is what the org-wide model published, and it is
@@ -2755,42 +2769,35 @@ function contactCrmCreateFields(
  * `null` becomes a field delete, so a PATCH can clear.
  *
  * `companyIds` is the top-level twin of the facets' `companyId`s, kept so
- * `?companyId=` can be one indexed clause. A move from one company to
- * another is a remove and an add, and Firestore takes one transform per
- * field per write, so the array is rewritten from what is stored: the old id
- * leaves only when no OTHER holder still files the person under it, and an
- * id some other surface put there is left exactly where it was.
+ * `?companyId=` can be one indexed clause. Which ids it keeps is the CRM's
+ * one planner's decision (`planContactCompanyLink`, AGL-2613): the old id
+ * leaves only when no OTHER holder still files the person under it, an id
+ * some other surface put there is left exactly where it was, and the plan
+ * also names the companies whose contacts count the write moves — which the
+ * caller settles after the contact is written, because they are other
+ * documents.
  */
 function contactCrmUpdateFields(
   ctx: ApiV1Context,
   data: FirebaseFirestore.DocumentData,
   crm: ContactCrmInput,
   siteId: string,
-): Record<string, unknown> {
+): { update: Record<string, unknown>; link: ContactCompanyLinkPlan | null } {
   const update: Record<string, unknown> = {}
   const group = consentGroupForHost(ctx.org as Record<string, unknown>, siteId)
   for (const [field, value] of Object.entries(updatePayload(crm))) {
     update[contactFacetPath(group.groupId, field)] = value
   }
+  let link: ContactCompanyLinkPlan | null = null
   if (crm.companyId !== undefined) {
-    const previous = readContactFacet(data, group.groupId).companyId
-    const next = new Set<string>(
-      Array.isArray(data.companyIds)
-        ? data.companyIds.filter((id: unknown): id is string => typeof id === 'string')
-        : [],
+    link = planContactCompanyLink(
+      readContactCompanyLink(data, group.groupId),
+      crm.companyId,
     )
-    if (previous && previous !== crm.companyId) {
-      const heldElsewhere = contactFacetHolders(data).some(
-        (holder) =>
-          holder !== group.groupId &&
-          readContactFacet(data, holder).companyId === previous,
-      )
-      if (!heldElsewhere) next.delete(previous)
-    }
-    if (crm.companyId) next.add(crm.companyId)
-    update.companyIds = [...next]
+    const mirror = link ? contactCompanyMirrorValue(link) : undefined
+    if (mirror !== undefined) update[CONTACT_COMPANY_IDS_FIELD] = mirror
   }
-  return update
+  return { update, link }
 }
 
 /**
@@ -2823,6 +2830,10 @@ function contactViewGroup(
 
 const contactsCollection = (ctx: ApiV1Context) =>
   ctx.firestore.collection('orgs').doc(ctx.orgId).collection('contacts')
+
+/** The org's companies, beside its contacts — where a link's count lands (AGL-2613). */
+const companiesCollection = (ctx: ApiV1Context) =>
+  ctx.firestore.collection('orgs').doc(ctx.orgId).collection(CRM_COLLECTIONS.companies)
 
 /**
  * `POST /v1/contacts` (AGL-2276) — the call that lets an integration own the
@@ -2963,18 +2974,25 @@ async function createContact(
       })
     }
 
-    // One aggregate read, the same one `upsertHostContact` and the monthly
-    // rollup take. Unconditional, matching `createDataset` — the alternative
-    // is a per-plan shape check like `dataStorageEnforcementShape`, and a
-    // `count()` costs one read against a write that costs one anyway.
-    const count = (await collection.count().get()).data().count
-    const quota = checkContactQuota(ctx.org as never, count)
+    // Three aggregate reads, the same ones `upsertHostContact` and the
+    // monthly rollup take — the band counts companies and deals beside the
+    // contacts (AGL-2611). Unconditional, matching `createDataset` — the
+    // alternative is a per-plan shape check like `dataStorageEnforcementShape`,
+    // and a `count()` costs one read against a write that costs one anyway.
+    const quota = await crmRecordsQuotaForOrg(
+      ctx.org as never,
+      ctx.firestore.collection('orgs').doc(ctx.orgId),
+      collection,
+    )
     if (!quota.allowed) {
       await claim.release()
+      // `contact_quota` is the code this endpoint has always answered with
+      // and integrators match on it; the band behind it widened, the code
+      // did not. Companies and deals answer `crm_records_quota`.
       return ApiErrors.planRequired({
         message:
-          `Audience limit reached (${quota.included} contacts). ` +
-          'Upgrade the plan to add more.',
+          `CRM records limit reached (${quota.included} records across ` +
+          'contacts, companies and deals). Upgrade the plan to add more.',
         code: 'contact_quota',
         headers: ctx.headers,
       })
@@ -3016,6 +3034,18 @@ async function createContact(
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
     })
+    // The company the body named has one more contact naming it (AGL-2613);
+    // a fresh row's plan is the trivial one, and `crmRefErrors` has already
+    // required the company to exist.
+    if (consentSiteId && crm.companyId) {
+      await settleCompanyContactsCounts(
+        companiesCollection(ctx),
+        planContactCompanyLink(
+          { companyId: null, companyIds: [], heldElsewhere: [] },
+          crm.companyId,
+        ),
+      )
+    }
     const view = contactView(await collection.doc(id).get())
     // Stored as 200 so a replay is distinguishable from the fresh 201.
     await claim.record(200, view)
@@ -3137,17 +3167,21 @@ async function updateContact(
   } else if (marketingConsent === false) {
     update.marketingConsent = false
   }
+  let link: ContactCompanyLinkPlan | null = null
   if (consentSiteId) {
-    Object.assign(
-      update,
-      contactCrmUpdateFields(ctx, snap.data() ?? {}, crm, consentSiteId),
-    )
+    const crmFields = contactCrmUpdateFields(ctx, snap.data() ?? {}, crm, consentSiteId)
+    Object.assign(update, crmFields.update)
+    link = crmFields.link
   }
   // An empty body is a no-op answered with the current contact, matching
   // `updateDataset`: a client re-sending an unchanged object should not have
   // to special-case it.
   if (Object.keys(update).length > 0) {
     await contactRef.update({ ...update, updatedAt: Timestamp.now() })
+    // The companies the link moved off or onto, counted after the contact
+    // is written (AGL-2613); `crmRefErrors` has already required the new
+    // company to exist.
+    await settleCompanyContactsCounts(companiesCollection(ctx), link)
   }
   // Read back through the site the write named, so what the client sees is
   // the profile it just wrote and not another holder's.
@@ -3371,6 +3405,23 @@ async function handleContacts(
 
   const contactRef = collection.doc(contactId)
 
+  // `/v1/contacts/{id}/merge` (AGL-2625): the one action on a contact that
+  // is not a verb on the document itself.
+  if (segments[2] === 'merge' && segments.length === 3) {
+    if (request.method !== 'POST') {
+      return ApiErrors.methodNotAllowed({
+        headers: { ...ctx.headers, Allow: 'POST' },
+      })
+    }
+    const denied = requireScope(ctx, 'contacts:write')
+    if (denied) return denied
+    const group = contactViewGroup(ctx, url)
+    if ('response' in group) return group.response
+    return mergeContactRoute(request, ctx, contactRef, (snap) =>
+      contactView(snap, group.groupId),
+    )
+  }
+
   if (request.method === 'GET') {
     const denied = requireScope(ctx, 'contacts:read')
     if (denied) return denied
@@ -3478,6 +3529,7 @@ export async function handleUsage(
     dealsSnap,
     tasksSnap,
     activitiesSnap,
+    leadCounts,
   ] = await Promise.all([
     orgRef.collection('apiUsage').doc(month).get(),
     orgRef.collection('usage').doc(month).get(),
@@ -3493,15 +3545,35 @@ export async function handleUsage(
     orgRef.collection(CRM_COLLECTIONS.deals).count().get(),
     orgRef.collection(CRM_COLLECTIONS.tasks).count().get(),
     orgRef.collection(CRM_COLLECTIONS.activities).count().get(),
+    /*
+     * Leads live under each SITE (`hosts/{id}/leads`), not under the org,
+     * so their size is one aggregate per site the org owns — bounded by the
+     * plan's site band, and the same count `/v1/leads?siteId=` will page.
+     */
+    Promise.all(
+      Object.keys((ctx.org.hosts ?? {}) as Record<string, unknown>).map((hostId) =>
+        ctx.firestore
+          .collection('hosts')
+          .doc(hostId)
+          .collection('leads')
+          .count()
+          .get(),
+      ),
+    ),
   ])
 
   const apiQuota = checkApiRequestQuota(
     ctx.org as never,
     Number(apiSnap.get('count') ?? 0),
   )
-  const contactQuota = checkContactQuota(
+  // The records band is measured on the SUM (AGL-2611); the contacts entry
+  // below keeps reporting the people count against it, so a client that
+  // only ever read `contacts` still sees the headroom that refuses it.
+  const crmRecordsQuota = checkCrmRecordsQuota(
     ctx.org as never,
-    contactsSnap.data().count,
+    contactsSnap.data().count +
+      companiesSnap.data().count +
+      dealsSnap.data().count,
   )
   const datasetQuota = checkDatasetQuota(ctx.org, datasetsSnap.data().count)
   const storageQuota = checkDataStorageQuota(
@@ -3532,10 +3604,23 @@ export async function handleUsage(
         apiQuota.overageRateUsd,
       ),
       contacts: usageBand(
-        contactQuota.used,
-        contactQuota.included,
-        contactQuota.remaining,
-        contactQuota.overageRateUsd,
+        contactsSnap.data().count,
+        crmRecordsQuota.included,
+        crmRecordsQuota.remaining,
+        crmRecordsQuota.overageRateUsd,
+      ),
+      /*
+       * THE BAND ITSELF (AGL-2611): contacts, companies and deals as one
+       * figure against the one band the plan sells. `contacts` above keeps
+       * its shape for the client that only reads it — same band, same
+       * headroom — and this is the number the invoice and the console
+       * meter are computed from. Companies and deals below stay as sizes.
+       */
+      crmRecords: usageBand(
+        crmRecordsQuota.used,
+        crmRecordsQuota.included,
+        crmRecordsQuota.remaining,
+        crmRecordsQuota.overageRateUsd,
       ),
       // Datasets are the one band with no overage RATE — extra slots are an
       // add-on you buy, not usage that meters — so `metered` is always false
@@ -3590,6 +3675,12 @@ export async function handleUsage(
           UNLIMITED,
           null,
         ),
+        leads: usageBand(
+          leadCounts.reduce((sum, snap) => sum + snap.data().count, 0),
+          UNLIMITED,
+          UNLIMITED,
+          null,
+        ),
       },
     },
     { headers: ctx.headers },
@@ -3598,6 +3689,23 @@ export async function handleUsage(
 
 // ── Dispatch ────────────────────────────────────────────────────────────────
 
+/**
+ * The resources the CRM SUITE entitlement gates (AGL-2611). Contacts are not
+ * among them: the contacts list ships on every plan, banded, and its API
+ * has been open since AGL-899.
+ */
+const CRM_SUITE_RESOURCES: ReadonlySet<string> = new Set([
+  'companies',
+  'pipelines',
+  'deals',
+  'tasks',
+  'activities',
+  // A site's leads are captured on every plan; their working state — a
+  // status, an owner, the conversion — is the suite's, and so is the API
+  // onto them (AGL-2627).
+  'leads',
+])
+
 /** Route a `/v1/<resource>/...` request to its handler. */
 export async function dispatchResource(
   request: Request,
@@ -3605,6 +3713,21 @@ export async function dispatchResource(
   segments: string[],
 ): Promise<Response> {
   const url = new URL(request.url)
+  // The plan question before the scope one, in front of the five handlers
+  // rather than inside each: `crm:*` is mintable on a Business key whose org
+  // was later moved to a plan without the suite by a staff override, and a
+  // scope that still answered would be the shell's "extensions cannot bypass
+  // entitlements" promise broken over the wire. Same shape as the
+  // `dataStore` refusal on datasets.
+  if (CRM_SUITE_RESOURCES.has(segments[0]) && !checkEntitlement(ctx.org, 'crm')) {
+    return ApiErrors.planRequired({
+      message:
+        'The CRM suite — companies, pipelines, deals, tasks, activities and ' +
+        'leads — is not included in this organization’s plan',
+      code: 'crm',
+      headers: ctx.headers,
+    })
+  }
   switch (segments[0]) {
     case 'datasets':
       return handleDatasets(request, ctx, segments, url)
@@ -3625,6 +3748,8 @@ export async function dispatchResource(
       return handleTasks(request, ctx, segments, url)
     case 'activities':
       return handleActivities(request, ctx, segments, url)
+    case 'leads':
+      return handleLeads(request, ctx, segments, url)
     case 'media':
       // The ORGANIZATION library. A site's own files are the same resource
       // under `/v1/sites/{siteId}/media`.

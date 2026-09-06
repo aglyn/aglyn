@@ -87,6 +87,9 @@ jest.mock('./recent-activity-feed', () => ({
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1' }),
+  // The company picker's listen (AGL-2613); no company is what this file
+  // needs, so the picker offers none and the save carries no link change.
+  useFirestoreCollection: () => ({ data: [], status: 'success', fromCache: false }),
   // The site's campaigns, which fill the filing picker on the card beside
   // the one under test.
   useHostCampaigns: () => ({ options: [], truncated: false, ready: true }),
@@ -159,6 +162,16 @@ jest.mock('./use-org-members', () => ({
 }))
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: jest.fn() }),
+  useParams: () => ({ orgSlug: 'acme', host: 'shop' }),
+}))
+// The campaign history the timeline asks for on mount (AGL-2616) is one
+// authorized POST; this file is about the SAVE guard, so the wire is idle.
+jest.mock('./use-contact-campaign-emails', () => ({
+  useContactCampaignEmails: () => ({
+    emails: [],
+    status: 'success',
+    lookupFailed: false,
+  }),
 }))
 
 beforeEach(() => {

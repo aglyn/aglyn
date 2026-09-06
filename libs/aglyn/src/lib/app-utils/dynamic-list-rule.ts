@@ -47,12 +47,19 @@
  */
 
 import { normalizeCampaignIds } from './campaign-membership'
-import { contactMatchesSegment, type ContactSource } from './contacts'
+import {
+  CONTACT_SOURCE_LABELS,
+  contactMatchesSegment,
+  type ContactSource,
+} from './contacts'
 import {
   isContactLifecycleStage,
   normalizeContactFieldKey,
   type ContactCustomValue,
   type ContactLifecycleStage,
+  CRM_CONTACT_VIEW_FIELDS,
+  crmContactCustomKey,
+  type CrmViewFilterClause,
 } from './crm'
 
 /** The silos a dynamic list may draw people from. */
@@ -253,6 +260,20 @@ export interface DynamicListDimensions {
   companyIds?: string[]
   /** Every clause must hold — AND within the dimension, unlike the lists above. */
   custom?: DynamicListCustomClause[]
+  /**
+   * Opened or clicked a campaign sent by the sweeping holder's sites within
+   * the last N days (AGL-2616) — the re-engagement audience.
+   *
+   * Read from the holder's facet like the four above, and contacts only for
+   * the same reason. It is NOT the {@link engagement} block one field up:
+   * that reads the address-level rollup, which counts every sender's mail
+   * to the address — a receipt, an invite, a sibling business's newsletter —
+   * and a "win back our quiet readers" audience built on it would mail
+   * people who are reading somebody else. This reads what the delivery
+   * webhook stamped on OUR facet from OUR campaigns. A contact with no stamp
+   * does not match, the dated-window lean the CRM dimensions all take.
+   */
+  engagedWithinDays?: number
 }
 
 /** One OR branch: an AND-block that may be inverted. */
@@ -286,6 +307,19 @@ export interface DynamicListRule extends DynamicListDimensions {
   sources: DynamicListSource[]
   /** Reuse a saved contact segment's tags and sources. Contacts only. */
   segmentId?: string
+  /**
+   * Reuse a saved contacts VIEW's filters (AGL-2617). Contacts only.
+   *
+   * `orgs/{orgId}/crmViews/{viewId}`, a view over the Contacts section.
+   * Resolved once by the materializer into the dimensions this rule
+   * language already has — see {@link dynamicListDimensionsForCrmView} —
+   * and applied to the rule's top-level block the way a segment is: it
+   * always applies, and it is not folded into the OR branches. A view whose
+   * filters this language cannot express narrows to nobody, which is the
+   * same lean a deleted segment takes: a rule must not quietly select more
+   * than the view it reads as.
+   */
+  viewId?: string
   /**
    * Invert the rule's own top-level block — "people who do NOT match these".
    *
@@ -356,6 +390,12 @@ export interface DynamicListCandidate {
   companyId?: string
   /** The holder's custom values, keyed by field key. */
   custom?: Record<string, ContactCustomValue>
+  /**
+   * When the person last opened or clicked one of the holder's campaigns —
+   * the facet stamp, read the way the fields above are. Absent when the
+   * facet carries none, which the matcher reads as "does not match".
+   */
+  lastEmailEngagementAtMs?: number | null
 }
 
 /** A saved segment's filters, resolved by the caller from `segmentId`. */
@@ -526,6 +566,7 @@ function normalizeDimensions(value: Record<string, unknown>): DynamicListDimensi
     .slice(0, DYNAMIC_LIST_MAX_CUSTOM_CLAUSES)
     .map(normalizeCustomClause)
     .filter((clause): clause is DynamicListCustomClause => clause !== null)
+  const engagedWithinDays = asPositiveNumber(value['engagedWithinDays'])
   return {
     ...(tags.length ? { tags } : {}),
     ...(captureSources.length ? { captureSources } : {}),
@@ -545,6 +586,7 @@ function normalizeDimensions(value: Record<string, unknown>): DynamicListDimensi
     ...(lifecycleStages.length ? { lifecycleStages } : {}),
     ...(companyIds.length ? { companyIds } : {}),
     ...(custom.length ? { custom } : {}),
+    ...(engagedWithinDays !== undefined ? { engagedWithinDays } : {}),
   }
 }
 
@@ -559,6 +601,7 @@ export function normalizeDynamicListRule(stored: unknown): DynamicListRule {
     (DYNAMIC_LIST_SOURCES as string[]).includes(source),
   )
   const segmentId = String(value['segmentId'] ?? '').trim()
+  const viewId = String(value['viewId'] ?? '').trim()
   /*
    * An empty OR branch is DROPPED rather than kept.
    *
@@ -582,6 +625,7 @@ export function normalizeDynamicListRule(stored: unknown): DynamicListRule {
   return {
     sources,
     ...(segmentId ? { segmentId } : {}),
+    ...(viewId ? { viewId } : {}),
     ...(value['negate'] === true ? { negate: true } : {}),
     ...normalizeDimensions(value),
     ...(groups.length ? { any: groups } : {}),
@@ -632,12 +676,18 @@ export function dynamicListRuleIsEmpty(rule: DynamicListRule): boolean {
  * typo above.
  *
  * @param segment filters resolved from `rule.segmentId`, when it names one.
+ * @param view    the dimensions resolved from `rule.viewId`, when it names
+ *                one — see {@link dynamicListDimensionsForCrmView}.
  * @param nowMs   evaluation instant, injected so a sweep is reproducible.
  */
 export function candidateMatchesDynamicListRule(
   candidate: DynamicListCandidate,
   rule: DynamicListRule,
-  options: { segment?: ResolvedSegmentFilters | null; nowMs: number },
+  options: {
+    segment?: ResolvedSegmentFilters | null
+    view?: DynamicListDimensions | null
+    nowMs: number
+  },
 ): boolean {
   /*
    * The source filter, first and outside everything else. It is the one
@@ -646,10 +696,25 @@ export function candidateMatchesDynamicListRule(
    */
   if (!rule.sources.includes(candidate.silo)) return false
 
-  const top = matchesDimensions(candidate, rule, {
-    segment: options.segment ?? null,
-    nowMs: options.nowMs,
-  })
+  /*
+   * A resolved VIEW is its own AND-block beside the rule's, inside the
+   * negatable top level with the segment — the view always applies, and a
+   * rule that inverts its block inverts the view with it, which is what
+   * "nobody matching all of these" reads as when a view is one of them.
+   * Beside rather than merged INTO the rule's dimensions: the lists within
+   * a dimension are OR, so merging a view's owners with the rule's would
+   * widen both.
+   */
+  const top =
+    matchesDimensions(candidate, rule, {
+      segment: options.segment ?? null,
+      nowMs: options.nowMs,
+    }) &&
+    (!options.view ||
+      matchesDimensions(candidate, options.view, {
+        segment: null,
+        nowMs: options.nowMs,
+      }))
   if ((rule.negate === true ? !top : top) === false) return false
 
   /*
@@ -816,6 +881,17 @@ function matchesDimensions(
         return false
       }
     }
+    /*
+     * ENGAGED WITH OUR CAMPAIGNS — the facet stamp, on the same lean as
+     * `lastPurchaseWithinDays`: no stamp is no match. This is the one
+     * engagement figure that is about THIS holder's mail; the address-level
+     * arms further down are about the address.
+     */
+    if (rule.engagedWithinDays !== undefined) {
+      const last = candidate.lastEmailEngagementAtMs ?? null
+      if (last === null) return false
+      if (last < options.nowMs - rule.engagedWithinDays * day) return false
+    }
   }
 
   /*
@@ -978,7 +1054,8 @@ export function dynamicListRuleNeedsContactFacet(rule: DynamicListRule): boolean
       (dimensions.ownerUids?.length ?? 0) > 0 ||
       (dimensions.lifecycleStages?.length ?? 0) > 0 ||
       (dimensions.companyIds?.length ?? 0) > 0 ||
-      (dimensions.custom?.length ?? 0) > 0,
+      (dimensions.custom?.length ?? 0) > 0 ||
+      dimensions.engagedWithinDays !== undefined,
   )
 }
 
@@ -1070,4 +1147,204 @@ export function dynamicListRuleListIds(rule: DynamicListRule): string[] {
     for (const listId of dimensions.notInListIds ?? []) ids.add(listId)
   }
   return [...ids]
+}
+
+/*==========================================
+ * A SAVED CONTACTS VIEW, IN THIS LANGUAGE (AGL-2617).
+ *
+ * A view stores the Contacts list's own filter clauses — a field, an
+ * operator, a value — and an audience rule stores dimensions. The two are
+ * different vocabularies for overlapping questions: "owner is Dana" is an
+ * `ownerUids` dimension, "tagged vip or wholesale" is a `tags` dimension,
+ * "created after June" is `createdAfterMs`. So a view is USABLE as an
+ * audience exactly as far as its clauses have a dimension here, and the
+ * translation below is the whole of that claim: it is pure, it names every
+ * clause it could not carry, and nothing about a view is matched any other
+ * way. The alternative — evaluating the list's grammar inside the sweep —
+ * would put a second matcher beside the one the console runs, in a module
+ * that may not import the grammar's home.
+ *
+ * A clause with no dimension is UNSUPPORTED, never dropped. A name prefix,
+ * an email, an `updatedAt` window, a form id: dropping one would make the
+ * audience wider than the view it was picked as, and a campaign going to
+ * the wrong people is the failure every part of this feature is shaped to
+ * prevent. The picker offers only views that translate whole, and the
+ * materializer treats a stored reference to one that does not the way it
+ * treats a deleted segment.
+ *=========================================*/
+
+/** What a view's filters became — see the section note. */
+export interface DynamicListViewTranslation {
+  dimensions: DynamicListDimensions
+  /** The clauses this language has no dimension for. Empty means an audience. */
+  unsupported: CrmViewFilterClause[]
+}
+
+const DAY_MS = 86_400_000
+
+/** The values an `isAnyOf` carries, or the one an equality does; `null` for any other operator. */
+const viewClauseValues = (clause: CrmViewFilterClause): string[] | null => {
+  const value = clause.value.trim()
+  if (clause.op === 'isAnyOf') {
+    return value
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+  }
+  if (clause.op === 'equals' || clause.op === 'is' || clause.op === 'contains') {
+    return value ? [value] : []
+  }
+  return null
+}
+
+const CUSTOM_VIEW_OPS: Readonly<Record<string, DynamicListCustomOp>> = {
+  equals: 'eq',
+  is: 'eq',
+  '=': 'eq',
+  doesNotEqual: 'neq',
+  '!=': 'neq',
+  contains: 'contains',
+  '>': 'gt',
+  '<': 'lt',
+  isNotEmpty: 'set',
+  isEmpty: 'unset',
+}
+
+/**
+ * A view's filters as the dimensions of one AND-block, and the clauses
+ * that could not be.
+ *
+ * Every list operator keeps its own meaning across the translation:
+ * `isAnyOf` is the OR the dimension lists already are, an equality is a
+ * list of one, a `contains` on the tag array is one tag matched whole. The
+ * dates read the clause's value as an instant — a day, as the filter bar
+ * writes one — with `after` and `onOrBefore` stepping a day past it the
+ * way the list's own matcher does. A purchase threshold has a floor here
+ * and no ceiling, so `at least` and `over` carry and `under` cannot.
+ */
+export function dynamicListDimensionsForCrmView(
+  filters: readonly CrmViewFilterClause[],
+): DynamicListViewTranslation {
+  const fields = CRM_CONTACT_VIEW_FIELDS
+  const dimensions: DynamicListDimensions = {}
+  const unsupported: CrmViewFilterClause[] = []
+  const behavior: DynamicListBehavior = {}
+  const custom: DynamicListCustomClause[] = []
+  const extend = (
+    key: 'tags' | 'ownerUids' | 'companyIds',
+    values: string[],
+  ) => {
+    dimensions[key] = [...(dimensions[key] ?? []), ...values]
+  }
+
+  for (const clause of filters) {
+    const values = viewClauseValues(clause)
+    const value = clause.value.trim()
+    const customKey = crmContactCustomKey(clause.field)
+    if (customKey !== null) {
+      const key = normalizeContactFieldKey(customKey)
+      const op = CUSTOM_VIEW_OPS[clause.op]
+      if (key && op) {
+        custom.push(
+          op === 'set' || op === 'unset' ? { key, op } : { key, op, value },
+        )
+        continue
+      }
+      unsupported.push(clause)
+      continue
+    }
+    switch (clause.field) {
+      case fields.tags:
+        if (values?.length) {
+          extend('tags', values.map((tag) => tag.toLowerCase()))
+          continue
+        }
+        break
+      case fields.source:
+        if (values?.length) {
+          const sources = values.filter(
+            (source): source is ContactSource => source in CONTACT_SOURCE_LABELS,
+          )
+          if (sources.length === values.length) {
+            dimensions.captureSources = [
+              ...(dimensions.captureSources ?? []),
+              ...sources,
+            ]
+            continue
+          }
+        }
+        break
+      case fields.owner:
+        if (values?.length) {
+          extend('ownerUids', values)
+          continue
+        }
+        break
+      case fields.stage:
+        if (values?.length && values.every(isContactLifecycleStage)) {
+          dimensions.lifecycleStages = [
+            ...(dimensions.lifecycleStages ?? []),
+            ...(values as ContactLifecycleStage[]),
+          ]
+          continue
+        }
+        break
+      case fields.company:
+        if (values?.length) {
+          extend('companyIds', values)
+          continue
+        }
+        break
+      case fields.createdAt: {
+        const at = Date.parse(value)
+        if (Number.isFinite(at)) {
+          if (clause.op === 'after') dimensions.createdAfterMs = at + DAY_MS
+          else if (clause.op === 'onOrAfter') dimensions.createdAfterMs = at
+          else if (clause.op === 'before') dimensions.createdBeforeMs = at
+          else if (clause.op === 'onOrBefore') {
+            dimensions.createdBeforeMs = at + DAY_MS
+          } else if (clause.op === 'is') {
+            dimensions.createdAfterMs = at
+            dimensions.createdBeforeMs = at + DAY_MS
+          } else break
+          continue
+        }
+        break
+      }
+      case fields.orders:
+      case fields.ltv: {
+        const amount = Number(value)
+        if (Number.isFinite(amount) && (clause.op === '>=' || clause.op === '>')) {
+          const floor = clause.op === '>' ? amount + 1 : amount
+          if (clause.field === fields.orders) behavior.ordersCountAtLeast = floor
+          else behavior.ltvCentsAtLeast = floor
+          continue
+        }
+        break
+      }
+      default:
+        break
+    }
+    unsupported.push(clause)
+  }
+
+  if (Object.keys(behavior).length) dimensions.behavior = behavior
+  if (custom.length) dimensions.custom = custom
+  return { dimensions, unsupported }
+}
+
+/**
+ * The rule the sweep PLANS with once a view is resolved: the rule itself
+ * with the view's block beside its branches, so the planners that read
+ * every block — does this need the contact facet, an engagement lookup, a
+ * list membership — see the view's dimensions too. For planning only; the
+ * matcher takes the view as its own option, because a branch is OR and a
+ * view is AND.
+ */
+export function dynamicListPlanningRule(
+  rule: DynamicListRule,
+  view: DynamicListDimensions | null,
+): DynamicListRule {
+  if (!view || Object.keys(view).length === 0) return rule
+  return { ...rule, any: [...(rule.any ?? []), view] }
 }

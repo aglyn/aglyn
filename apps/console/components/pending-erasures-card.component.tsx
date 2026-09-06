@@ -79,6 +79,12 @@ interface PendingResponse {
   dueCount: number
   maxPerRun: number
   truncated: boolean
+  /**
+   * The PEOPLE waiting (AGL-2623) — erasure requests a workspace admin filed
+   * for one person, drained by the same run. Null when the count could not
+   * be taken, which is not the same as none.
+   */
+  people?: { pending: number; truncated: boolean; maxPerRun: number } | null
 }
 
 interface RunResponse {
@@ -153,6 +159,7 @@ export function PendingErasuresCard() {
   }, [call, reason, refresh])
 
   const dueCount = pending?.dueCount ?? 0
+  const peopleWaiting = pending?.people?.pending ?? 0
   const reasonTooShort = reason.trim().length < 8
   /**
    * "at least", or nothing at all.
@@ -250,6 +257,20 @@ export function PendingErasuresCard() {
             size="small"
             label={`${countPrefix}${pending?.pending.length ?? 0} in the queue`}
           />
+          {/*
+            The people beside the workspaces: a person's request has no hold
+            and runs with the next scheduled run, so the number is the whole
+            fact and needs no "due" split.
+          */}
+          {pending?.people ? (
+            <Chip
+              size="small"
+              color={pending.people.pending > 0 ? 'warning' : 'default'}
+              label={`${pending.people.truncated ? 'at least ' : ''}${pending.people.pending} ${
+                pending.people.pending === 1 ? 'person' : 'people'
+              } waiting`}
+            />
+          ) : null}
           <Button size="small" disabled={busy} onClick={() => void refresh()}>
             {busy ? 'Working…' : 'Refresh'}
           </Button>
@@ -309,12 +330,16 @@ export function PendingErasuresCard() {
             // Disabled on an empty queue as well as an empty reason: a run
             // with nothing due is harmless but writes an audit row claiming
             // someone deleted workspaces early, which is worse than useless.
-            disabled={busy || reasonTooShort || dueCount === 0}
+            // A person waiting counts as due — their request has no hold.
+            disabled={busy || reasonTooShort || (dueCount === 0 && peopleWaiting === 0)}
             onClick={() => void run()}
           >
             {busy
               ? 'Working…'
-              : `Run ${Math.min(dueCount, pending?.maxPerRun ?? 5)} due erasure(s) now`}
+              : dueCount > 0
+                ? `Run ${Math.min(dueCount, pending?.maxPerRun ?? 5)} due erasure(s) now` +
+                  (peopleWaiting > 0 ? ` and ${peopleWaiting} waiting person(s)` : '')
+                : `Run ${peopleWaiting} waiting person erasure(s) now`}
           </Button>
           {pending && dueCount > (pending.maxPerRun ?? 5) ? (
             <Typography variant="caption" color="text.secondary">

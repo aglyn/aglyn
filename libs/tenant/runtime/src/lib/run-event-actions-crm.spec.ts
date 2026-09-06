@@ -50,6 +50,8 @@ let mockMembers: Record<string, Record<string, any>> = {}
 /** Auth accounts, uid → address, for the roster document that has none. */
 /** The org's billing doc, as the run's gate read it. */
 let mockOrg: Record<string, any> = { plan: 'business' }
+/** Activities the record already carries, as the ceiling's aggregate answers. */
+let mockActivityCount = 0
 /** Every `update()` the run made on the contact, in order. */
 let contactUpdates: Record<string, any>[] = []
 /** Every `add()` by collection path. */
@@ -58,6 +60,37 @@ let added: Record<string, Record<string, any>[]> = {}
 let mockActivity: Record<string, any>[] = []
 /** How many times the contacts query ran (the email lookup). */
 let emailLookups = 0
+/** Every owner assignment handed to the runtime helper (AGL-2618), in order. */
+let assignments: Record<string, any>[] = []
+/** What the helper answers the next assignment with. */
+let mockAssignment: Record<string, any> = {
+  outcome: 'assigned',
+  ownerUid: 'uid-sam',
+  by: 'member',
+  leadMirrored: false,
+  notified: true,
+}
+
+jest.mock('./assign-contact-owner', () => ({
+  __esModule: true,
+  OWNER_ASSIGNMENT_REFUSALS: {
+    'no-org': 'this site has no organization',
+    'no-contact': 'the contact no longer exists',
+    'no-rule': 'no assignment rule matched and the site has no default owner',
+    'empty-pool': 'the round-robin pool has nobody on the roster in it',
+    'not-a-member': 'the owner named is not on the team',
+    failed: 'the owner could not be assigned',
+  },
+  reassignContactOwner: async (input: Record<string, any>) => {
+    assignments.push(input)
+    return mockAssignment
+  },
+}))
+/** Ids `doc()` minted without one, in order. */
+let minted = 0
+/** Every message handed to `sendEmail`, and what it answers. */
+let sentMessages: Record<string, any>[] = []
+let sendResult: Record<string, any> = { sent: true }
 
 jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
@@ -143,17 +176,25 @@ const collectionHandle = (path: string): any => {
   })
   return {
     ...query([]),
-    doc: (id: string) => ({
-      id,
-      get: async () =>
-        path.endsWith('contacts') && mockContact?.id === id
-          ? docSnapshot(id, mockContact.data)
-          : path.endsWith('members') && mockMembers[id]
-            ? docSnapshot(id, mockMembers[id])
-            : missingSnapshot(id),
-      set: async () => undefined,
-      collection: (name: string) => collectionHandle(`${path}/${id}/${name}`),
-    }),
+    // Minted when no id is given, as the SDK mints one — the email row's id
+    // is allocated before the send so it can ride the message (AGL-2615).
+    doc: (given?: string) => {
+      const id = given ?? `minted-${(minted += 1)}`
+      return {
+        id,
+        get: async () =>
+          path.endsWith('contacts') && mockContact?.id === id
+            ? docSnapshot(id, mockContact.data)
+            : path.endsWith('members') && mockMembers[id]
+              ? docSnapshot(id, mockMembers[id])
+              : missingSnapshot(id),
+        set: async (data: Record<string, any>) => {
+          const key = path.split('/').at(-1) ?? path
+          ;(added[key] ??= []).push({ ...data, $id: id })
+        },
+        collection: (name: string) => collectionHandle(`${path}/${id}/${name}`),
+      }
+    },
     add: async (data: Record<string, any>) => {
       if (path.endsWith('activity')) mockActivity.push(data)
       const key = path.split('/').at(-1) ?? path
@@ -180,6 +221,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     declared: false,
   }),
   getOrgForHost: async () => ({ orgId: ORG_ID, org: mockOrg }),
+  // The per-record activity ceiling's one read (AGL-2611), answered from the
+  // fixture so a case can stand a record at the ceiling without seeding
+  // five thousand documents.
+  countCrmActivitiesForRecord: async () => mockActivityCount,
   meterHostEmail: async () => ({ allowed: true }),
   notifyHostManagers: async () => undefined,
   orgDataCollectionForHost: async () =>
@@ -205,15 +250,34 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   }),
   flowEmailRefusal: async () => null,
   enrollListMember: async () => undefined,
+  // The email row's reference and write (AGL-2615), faithful to the real
+  // pair: a minted document under the org's activities, set with the
+  // server clock on both stamps.
+  newCrmActivityRef: (_firestore: unknown, orgId: string) =>
+    collectionHandle(`orgs/${orgId}/crmActivities`).doc(),
+  writeCrmEmailActivity: async (ref: any, activity: Record<string, any>) =>
+    ref.set({
+      ...activity,
+      createdAt: 'server-timestamp',
+      updatedAt: 'server-timestamp',
+    }),
 }))
 
 jest.mock('@aglyn/shared-util-email', () => ({
   __esModule: true,
   isEmailConfigured: () => true,
-  sendEmail: async () => ({ sent: true }),
-  sendFailureReason: () => null,
+  sendEmail: async (message: Record<string, any>) => {
+    sentMessages.push(message)
+    return sendResult
+  },
+  sendFailureReason: (result: { sent?: boolean; reason?: string } | null) =>
+    !result || result.sent ? null : (result.reason ?? null),
 }))
 
+import {
+  CRM_ACTIVITIES_PER_RECORD_CEILING,
+  CRM_ACTIVITY_LOG_FULL_MESSAGE,
+} from '@aglyn/aglyn/app-utils/crm'
 import { runEventActions } from './run-event-actions'
 
 /** An action on `formSubmission` carrying one CRM step. */
@@ -238,8 +302,20 @@ beforeEach(() => {
   contactUpdates = []
   added = {}
   emailLookups = 0
+  assignments = []
+  mockAssignment = {
+    outcome: 'assigned',
+    ownerUid: 'uid-sam',
+    by: 'member',
+    leadMirrored: false,
+    notified: true,
+  }
+  minted = 0
+  sentMessages = []
+  sendResult = { sent: true }
   mockMembers = { 'uid-sam': { email: 'sam@example.com', role: 'editor' } }
   mockOrg = { plan: 'business' }
+  mockActivityCount = 0
   mockContact = {
     id: 'contact-1',
     data: {
@@ -340,32 +416,94 @@ describe('facet writes (claim 2)', () => {
     expect(mockActivity.at(-1)?.summary).toBe('tagged vip')
   })
 
-  it('assigns an owner named by address, resolved to the member’s uid', async () => {
+  /*
+   * The owner is written by the runtime's one assignment (AGL-2618), which
+   * moves the pool's pointer, mirrors the lead and tells the owner; what
+   * this step owes it is the resolved member, or the rotation, for the
+   * person the event names.
+   */
+  it('assigns an owner named by address, resolved to the member’s uid, through the assignment', async () => {
     mockActions = [acting({ type: 'assignContactOwner', ownerEmail: 'Sam@Example.com' })]
 
     await run({ email: 'ada@example.com' })
 
-    expect(contactUpdates[0][facetPath('ownerUid')]).toBe('uid-sam')
+    expect(assignments).toEqual([
+      { hostId: HOST_ID, contactId: 'contact-1', email: 'ada@example.com', assign: { memberUid: 'uid-sam' } },
+    ])
+    expect(contactUpdates).toHaveLength(0)
     expect(mockActivity.at(-1)?.summary).toBe('assigned owner sam@example.com')
   })
 
-  it('assigns an owner named by uid without a roster read', async () => {
-    mockMembers = {}
+  it('assigns an owner named by uid, once the roster has them', async () => {
+    // A member whose document carries no address: nameable by uid alone,
+    // which is the case the uid slot exists for.
+    mockMembers = { 'uid-direct': { displayName: 'Grace' } }
     mockActions = [acting({ type: 'assignContactOwner', ownerUid: 'uid-direct' })]
 
     await run({ email: 'ada@example.com' })
 
-    expect(contactUpdates[0][facetPath('ownerUid')]).toBe('uid-direct')
+    expect(assignments[0].assign).toEqual({ memberUid: 'uid-direct' })
   })
 
-  it('refuses an address nobody on the roster has, and stores nothing', async () => {
+  it('refuses a uid nobody on the roster has, and asks for no assignment', async () => {
+    mockMembers = {}
+    mockActions = [acting({ type: 'assignContactOwner', ownerUid: 'uid-stranger' })]
+
+    await run({ email: 'ada@example.com' })
+
+    expect(assignments).toHaveLength(0)
+    expect(mockActivity[0].result).toBe('failed')
+    expect(mockActivity[0].action).toContain('no team member with the id')
+  })
+
+  it('reads a uid typed into the address slot as a uid', async () => {
+    mockMembers = { 'uid-direct': { displayName: 'Grace' } }
+    mockActions = [acting({ type: 'assignContactOwner', ownerEmail: 'uid-direct' })]
+
+    await run({ email: 'ada@example.com' })
+
+    expect(assignments[0].assign).toEqual({ memberUid: 'uid-direct' })
+  })
+
+  it('refuses an address nobody on the roster has, and asks for no assignment', async () => {
     mockActions = [acting({ type: 'assignContactOwner', ownerEmail: 'ghost@example.com' })]
 
     await run({ email: 'ada@example.com' })
 
-    expect(contactUpdates).toHaveLength(0)
+    expect(assignments).toHaveLength(0)
     expect(mockActivity[0].result).toBe('failed')
     expect(mockActivity[0].action).toContain('no team member with the address')
+  })
+
+  it('rotates through the pool when the step says round robin, and records who got it', async () => {
+    mockActions = [acting({ type: 'assignContactOwner', roundRobin: true })]
+    mockAssignment = { outcome: 'assigned', ownerUid: 'uid-kim', by: 'roundRobin', leadMirrored: false, notified: true }
+
+    await run({ email: 'ada@example.com' })
+
+    expect(assignments).toEqual([
+      { hostId: HOST_ID, contactId: 'contact-1', email: 'ada@example.com', assign: { roundRobin: true } },
+    ])
+    expect(mockActivity.at(-1)?.summary).toBe('assigned owner round robin → uid-kim')
+  })
+
+  it('records the assignment’s refusal as the step’s failure', async () => {
+    mockActions = [acting({ type: 'assignContactOwner', roundRobin: true })]
+    mockAssignment = { outcome: 'none', reason: 'empty-pool' }
+
+    await run({ email: 'ada@example.com' })
+
+    expect(mockActivity[0].result).toBe('failed')
+    expect(mockActivity[0].action).toContain('the round-robin pool has nobody')
+  })
+
+  it('reports an owner the contact already had as already', async () => {
+    mockActions = [acting({ type: 'assignContactOwner', ownerEmail: 'sam@example.com' })]
+    mockAssignment = { outcome: 'unchanged', ownerUid: 'uid-sam' }
+
+    await run({ email: 'ada@example.com' })
+
+    expect(mockActivity.at(-1)?.summary).toBe('assigned owner sam@example.com (already)')
   })
 })
 
@@ -479,6 +617,77 @@ describe('records beside the contact (claim 3)', () => {
     expect(added['crmActivities']?.[0].atMs).toEqual(expect.any(Number))
     expect(mockActivity.at(-1)?.summary).toBe('logged activity note')
   })
+
+  it('refuses to log onto a record at the activity ceiling, and says so (AGL-2611)', async () => {
+    mockActivityCount = CRM_ACTIVITIES_PER_RECORD_CEILING
+    mockActions = [acting({ type: 'logCrmActivity', kind: 'note', body: 'One more' })]
+
+    await run({ email: 'ada@example.com' })
+
+    expect(added['crmActivities']).toBeUndefined()
+    expect(mockActivity[0].result).toBe('failed')
+    expect(mockActivity[0].action).toContain(CRM_ACTIVITY_LOG_FULL_MESSAGE)
+    // BOTH SIDES: one under the ceiling still writes, so the refusal is the
+    // boundary and not a step that refuses everything.
+    mockActivityCount = CRM_ACTIVITIES_PER_RECORD_CEILING - 1
+    mockActivity = []
+    await run({ email: 'ada@example.com' })
+    expect(added['crmActivities']).toHaveLength(1)
+  })
+})
+
+describe('the CRM suite gate (AGL-2611)', () => {
+  /*
+   * REACHABLE ONLY THROUGH AN OVERRIDE, and that is worth stating. Every
+   * plan that carries `actions` — the gate the whole executor runs behind —
+   * also carries `crm`, and the two plans without the suite (Free, Starter)
+   * run no server automations at all, so a stock plan never reaches this
+   * refusal. A staff override that withdraws the suite from a paid
+   * workspace does, and the executor must answer it the way it answers a
+   * withdrawn `webhooks` flag rather than treat the step as if it ran.
+   */
+  it('refuses every CRM step on an org whose suite was withdrawn, into the run history', async () => {
+    mockOrg = { plan: 'business', entitlements: { features: { crm: false } } }
+    mockActions = [
+      acting({ type: 'setContactStage', lifecycleStage: 'customer' }),
+    ]
+
+    await run({ email: 'ada@example.com' })
+
+    expect(contactUpdates).toHaveLength(0)
+    expect(added['crmTasks']).toBeUndefined()
+    expect(mockActivity[0].result).toBe('failed')
+    expect(mockActivity[0].action).toContain('CRM steps require the Starter plan')
+  })
+
+  it('CONTROL: the same step on the plan as sold runs', async () => {
+    mockOrg = { plan: 'business' }
+    mockActions = [
+      acting({ type: 'setContactStage', lifecycleStage: 'customer' }),
+    ]
+
+    await run({ email: 'ada@example.com' })
+
+    expect(contactUpdates).toHaveLength(1)
+    expect(mockActivity[0].result).not.toBe('failed')
+  })
+
+  it('never reaches a stock Free or Starter workspace — the actions gate answers first', async () => {
+    // Both halves of the composition: no server automation runs on either
+    // tier, so no history row is written and nothing is touched. A test
+    // that seeded a Free org and expected the suite sentence would be
+    // asserting a refusal the product never issues.
+    for (const plan of ['free', 'starter']) {
+      mockOrg = { plan }
+      mockActions = [
+        acting({ type: 'setContactStage', lifecycleStage: 'customer' }),
+      ]
+      mockActivity = []
+      await run({ email: 'ada@example.com' })
+      expect(contactUpdates).toHaveLength(0)
+      expect(mockActivity).toHaveLength(0)
+    }
+  })
 })
 
 describe('a stage change fans out (claim 4)', () => {
@@ -534,5 +743,97 @@ describe('a stage change fans out (claim 4)', () => {
     expect(mockActivity.some((row) => row.trigger === 'contactStageChanged')).toBe(false)
     expect(mockActivity[0].result).toBe('succeeded')
     expect(mockActivity[0].summary).toBe('set stage Lead (already)')
+  })
+})
+
+/**
+ * A `sendEmail` step's message on the timeline (AGL-2615): logged as the
+ * same email activity the console's send logs, on exactly one condition —
+ * that it is addressed to the contact the event is about.
+ */
+describe('a sendEmail step addressed to the contact', () => {
+  const welcome = (extra: Record<string, any> = {}) =>
+    acting({ type: 'sendEmail', subject: 'Welcome aboard', body: 'Glad to have you.', ...extra })
+
+  it('logs an email activity with the automation as its source, and tags the message with it', async () => {
+    mockActions = [welcome()]
+
+    await run({ contactId: 'contact-1', email: 'ada@example.com' })
+
+    expect(sentMessages).toHaveLength(1)
+    const row = added['crmActivities']?.[0]
+    expect(row).toMatchObject({
+      kind: 'email',
+      subject: 'Welcome aboard',
+      body: 'Glad to have you.',
+      to: 'ada@example.com',
+      direction: 'outbound',
+      deliveryState: 'sent',
+      byUid: '',
+      sourceActionId: 'action-1',
+      contactId: 'contact-1',
+      companyId: 'company-1',
+      hostId: HOST_ID,
+      visibleTo: [`host:${HOST_ID}`],
+      createdAt: 'server-timestamp',
+    })
+    // The id on the row is the id on the message, which is how the
+    // delivery webhook finds the row.
+    expect(sentMessages[0].tags).toEqual([
+      { name: 'orgId', value: ORG_ID },
+      { name: 'activityId', value: row.$id },
+      { name: 'hostId', value: HOST_ID },
+    ])
+    expect(mockActivity[0].result).not.toBe('failed')
+  })
+
+  it('resolves the contact by address when the event carries no id', async () => {
+    mockActions = [welcome()]
+    await run({ email: 'Ada@Example.com' })
+    expect(added['crmActivities']).toHaveLength(1)
+  })
+
+  it('logs nothing when the message goes to somebody other than the contact', async () => {
+    mockActions = [welcome({ toField: 'managerEmail' })]
+
+    await run({ contactId: 'contact-1', email: 'ada@example.com', managerEmail: 'boss@acme.com' })
+
+    expect(sentMessages).toHaveLength(1)
+    expect(sentMessages[0].to).toBe('boss@acme.com')
+    expect(sentMessages[0].tags).toBeUndefined()
+    expect(added['crmActivities']).toBeUndefined()
+  })
+
+  it('logs nothing when the address is nobody the site can see', async () => {
+    mockContact = null
+    mockActions = [welcome()]
+    await run({ email: 'stranger@example.com' })
+    expect(sentMessages).toHaveLength(1)
+    expect(added['crmActivities']).toBeUndefined()
+  })
+
+  it('logs nothing when the provider refused the message', async () => {
+    sendResult = { sent: false, reason: 'rejected' }
+    mockActions = [welcome()]
+    await run({ contactId: 'contact-1', email: 'ada@example.com' })
+    expect(added['crmActivities']).toBeUndefined()
+  })
+
+  it('still sends, and logs nothing, at the activity ceiling', async () => {
+    mockActivityCount = CRM_ACTIVITIES_PER_RECORD_CEILING
+    mockActions = [welcome()]
+    await run({ contactId: 'contact-1', email: 'ada@example.com' })
+    expect(sentMessages).toHaveLength(1)
+    expect(sentMessages[0].tags).toBeUndefined()
+    expect(added['crmActivities']).toBeUndefined()
+    expect(mockActivity[0].result).not.toBe('failed')
+  })
+
+  it('logs nothing on an org whose suite was withdrawn, and still sends', async () => {
+    mockOrg = { plan: 'business', entitlements: { features: { crm: false } } }
+    mockActions = [welcome()]
+    await run({ contactId: 'contact-1', email: 'ada@example.com' })
+    expect(sentMessages).toHaveLength(1)
+    expect(added['crmActivities']).toBeUndefined()
   })
 })

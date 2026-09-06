@@ -152,6 +152,26 @@ export interface HostContact {
    * beside it could never do.
    */
   capturedByHostIds?: string[]
+  /**
+   * Every form this person has come in through, in no order (AGL-2612).
+   *
+   * The entry point proper is `interactions[].formId` inside the capturing
+   * holder's facet, and that stays the record: which form produced which
+   * visit is one holder's business. But Firestore cannot select documents
+   * by a field of an array ELEMENT, and a facet path is per group, so
+   * "everyone who filled in this form" — the question the form's own page
+   * asks of the Contacts list — has to be a top-level array an
+   * `array-contains` can hit, exactly as `capturedByHostIds` is for sites
+   * and `companyIds` is for companies. A form id is minted under one site,
+   * so a query on it is one site's captures by construction.
+   *
+   * Grows by `arrayUnion` on every form capture, create or merge, bounded at
+   * {@link CONTACT_FORM_IDS_CAP}: a person who has filled in more forms than
+   * that keeps the first twenty and the timeline keeps the rest. The facet is
+   * the truth and this is its index — a reader answering "which form" reads
+   * the interaction; only a QUERY reads this.
+   */
+  formIds?: string[]
   /*
    * SEARCH KEYS (AGL-2596), and nothing more.
    *
@@ -173,10 +193,93 @@ export interface HostContact {
   phone?: string
   /** The company name as typed, mirrored the same way. */
   companyName?: string
+  /**
+   * The OTHER addresses this person answers to (AGL-2625).
+   *
+   * A contact is keyed on one email, so one human with a work address and a
+   * personal one is two documents until somebody merges them. The merge keeps
+   * the survivor's `email` as the identity and records the merged record's
+   * address here, so a later capture on it — a form filled in from the
+   * personal account — resolves to this row rather than minting the second
+   * document again. `emailIndex` (see {@link CONTACT_EMAIL_INDEX_COLLECTION})
+   * is the lookup; this array is the record of why an entry there points
+   * where it does, and what the record page shows as "also".
+   *
+   * Shared identity like `email`, not a facet field: which addresses are one
+   * person is a fact about the person, and a holder that did not perform the
+   * merge still needs its capture on the alternate address to land on the
+   * shared row. Bounded at {@link CONTACT_ALTERNATE_EMAILS_CAP}.
+   */
+  alternateEmails?: string[]
 }
 
 /** Timeline cap: keeps the doc small; older interactions age out. */
 export const CONTACT_INTERACTIONS_CAP = 50
+
+/** The field holding {@link HostContact.alternateEmails}. */
+export const CONTACT_ALTERNATE_EMAILS_FIELD = 'alternateEmails'
+
+/**
+ * The most alternate addresses one contact carries. Ten is past any real
+ * person's mailbox count, and it bounds the index writes one merge fans out.
+ */
+export const CONTACT_ALTERNATE_EMAILS_CAP = 10
+
+/**
+ * `orgs/{orgId}/emailIndex/{personKey}` → `{ email, contactId }` (AGL-2625).
+ *
+ * The address-to-contact lookup the capture door consults BEFORE the
+ * per-document `email ==` query, so an address recorded as an alternate on a
+ * merged row resolves to the survivor. Keyed by `personKey` — the sha256 of
+ * the normalized address — so a document id never carries the address
+ * itself, the same derivation a lead and a list membership use.
+ *
+ * WRITTEN LAZILY, never backfilled: the query on `email` stays as the
+ * fallback, and a contact that has no entry gets one on the next write that
+ * finds it. A row the index has never seen therefore costs one extra read
+ * once, and nothing needs to run over the existing collection.
+ *
+ * Server-written only; the rules close it to every client.
+ */
+export const CONTACT_EMAIL_INDEX_COLLECTION = 'emailIndex'
+
+/**
+ * Every address a contact answers to — the primary first, then the
+ * alternates — normalized and deduplicated, so an index writer and a lead
+ * lookup walk one list.
+ */
+export function contactEmails(
+  contact: Record<string, unknown> | null | undefined,
+): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  const push = (value: unknown) => {
+    const email = normalizeContactEmail(value)
+    if (email && !seen.has(email)) {
+      seen.add(email)
+      out.push(email)
+    }
+  }
+  push((contact ?? {})['email'])
+  const alternates = (contact ?? {})[CONTACT_ALTERNATE_EMAILS_FIELD]
+  if (Array.isArray(alternates)) alternates.forEach(push)
+  return out
+}
+
+/** The top-level field naming every form a contact came in through — see `HostContact.formIds`. */
+export const CONTACT_FORM_IDS_FIELD = 'formIds'
+
+/**
+ * How many forms the {@link CONTACT_FORM_IDS_FIELD} mirror holds.
+ *
+ * The same figure as the tag cap: enough that no real person reaches it,
+ * small enough that the array never becomes the document. Past it the
+ * capture stops adding rather than dropping the oldest, because the mirror
+ * is an index of the facet's timeline and an index that silently forgets an
+ * entry the timeline still holds would answer a form's contact list wrongly
+ * in the one direction nobody would notice.
+ */
+export const CONTACT_FORM_IDS_CAP = 20
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -346,6 +449,22 @@ export interface ContactFacet {
   lifecycleStage?: ContactLifecycleStage
   /** Custom field values, keyed by `ContactFieldDefinition.key`. */
   custom?: Record<string, ContactCustomValue>
+  /**
+   * When this person last OPENED or CLICKED a campaign sent by one of this
+   * holder's sites, epoch ms (AGL-2616).
+   *
+   * Stamped by the delivery webhook, forward-only, on the first open and the
+   * first click of each message — the same bound the per-person rollup on
+   * `emailDeliveries/{key}` keeps, so a reader opening one newsletter six
+   * times is one write. Per-holder because it answers "is this person still
+   * reading OUR mail": the address-level rollup counts every sender's mail
+   * and a sibling business's, and a re-engagement audience built on that
+   * would mail people who are reading somebody else.
+   *
+   * Absent until the first engagement after the stamp shipped; a message
+   * opened before then advanced the address-level rollup and nothing here.
+   */
+  lastEmailEngagementAtMs?: number
 }
 
 /** The map field holding the facets: `{ [groupId]: ContactFacet }`. */

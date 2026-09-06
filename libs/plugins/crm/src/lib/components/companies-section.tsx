@@ -31,13 +31,16 @@ import {
   listFilterColumn,
   type ListFilterRequest,
 } from '@aglyn/shared-ui-jsx/const/list-filter'
+import { useCrmSavedView } from '../hooks/use-crm-saved-view'
+import { useCrmViewGrid } from '../hooks/use-crm-view-grid'
+import CrmViewsControl from './crm-views-control'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import {
   listFilterConstraints,
   usePagedCollection,
   useFirestore,
 } from '@aglyn/tenant-feature-instance'
-import { Button, Stack, Typography } from '@mui/material'
+import { Button, Chip, Stack, Typography } from '@mui/material'
 import {
   getGridSingleSelectOperators,
   type GridColDef,
@@ -46,13 +49,18 @@ import { collection, limit, orderBy, query, where } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
 import { COMPANY_LIST_FILTER_FIELDS } from '../constants/company-filters'
-import { useCrmScope } from '../hooks/use-crm-scope'
+import { crmVisibleToClause, useCrmScope } from '../hooks/use-crm-scope'
 import { useOrgMemberOptions } from '../hooks/use-org-member-options'
+import { type CompanyCsvOptions, companiesCsv } from '../model/companies-csv'
+import { downloadTextFile } from '../model/contacts-csv'
 import { crmRoutes } from '../model/crm-routes'
+import CompaniesBulkBar from './companies-bulk-bar'
 import CompanyEditDrawer from './company-edit-drawer'
+import { CompanyImportButton } from './company-import-drawer'
 
 export interface CompaniesSectionProps {
-  hostId: string
+  /** The site the list is read under, or `null` at the organization level. */
+  hostId: string | null
   org?: Partial<AglynOrgBilling>
   /** The CRM hub URL, which every company route hangs beneath. */
   basePath: string
@@ -93,6 +101,13 @@ type CompanyRow = Partial<CrmCompany> & { $id: string; updatedAt?: any }
  * "New company" opens the same eight-field drawer the company's page edits
  * with, and the new record's page opens when it is saved. A form above a
  * list has nowhere to grow, and this one has an address in it.
+ *
+ * ## Selection, the bar and the file (AGL-2621)
+ *
+ * The rows are selectable, and a selection raises `CompaniesBulkBar` over
+ * the table. Export CSV writes the loaded page through `companiesCsv()` —
+ * the same file the bar writes over the selection, headed as the import
+ * reads it — and Import CSV opens the companies drawer beside it.
  */
 export function CompaniesSection(props: CompaniesSectionProps) {
   const { hostId, org, basePath } = props
@@ -108,10 +123,17 @@ export function CompaniesSection(props: CompaniesSectionProps) {
   const members = useOrgMemberOptions(orgId)
 
   /*
-   * The column filter, declared BEFORE the listener that reads it — the query
-   * is rebuilt from it, so it cannot be state introduced further down.
+   * The column filter is the saved VIEW'S first clause (AGL-2617): this
+   * grid's panel holds one, and a view of companies holds that one beside
+   * the columns and the sort. Declared BEFORE the listener that reads it,
+   * as the filter always was — the query is rebuilt from it.
    */
-  const [filter, setFilter] = useState<ListFilterRequest | null>(null)
+  const views = useCrmSavedView({ section: 'companies', hostId, org, basePath })
+  const filter: ListFilterRequest | null = views.state.filters[0] ?? null
+  const setFilter = useCallback(
+    (request: ListFilterRequest | null) => views.setFilters(request ? [request] : []),
+    [views.setFilters],
+  )
 
   const {
     rows: companies,
@@ -130,7 +152,8 @@ export function CompaniesSection(props: CompaniesSectionProps) {
       )
       return query(
         collection(firestore, scope[0], scope[1], CRM_COLLECTIONS.companies),
-        where('visibleTo', 'array-contains-any', visibleTo),
+        // Absent at the organization level, where the tokens are `null` (AGL-2630).
+        ...crmVisibleToClause(visibleTo),
         ...(constraints ?? [orderBy('updatedAt', 'desc')]),
         limit(pageLimit),
       )
@@ -140,6 +163,19 @@ export function CompaniesSection(props: CompaniesSectionProps) {
   )
 
   const [createOpen, setCreateOpen] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  /*
+   * The owner is written by ADDRESS, because the companies import resolves
+   * an owner by email; the same options reach the bar, so the page's file
+   * and the selection's are one format.
+   */
+  const csvOptions: CompanyCsvOptions = useMemo(
+    () => ({ ownerEmail: members.emailFor }),
+    [members.emailFor],
+  )
+  const handleExport = useCallback(() => {
+    downloadTextFile('companies.csv', 'text/csv', companiesCsv(companies, csvOptions))
+  }, [companies, csvOptions])
   const openCompany = useCallback(
     (id: string) => router.push(routes.company(id)),
     [router, routes],
@@ -189,6 +225,59 @@ export function CompaniesSection(props: CompaniesSectionProps) {
         renderCell: ({ row }: { row: CompanyRow }) =>
           row.domain ? (
             <Typography variant="body2">{row.domain}</Typography>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              {'—'}
+            </Typography>
+          ),
+      },
+      {
+        field: 'contactsCount',
+        headerName: 'Contacts',
+        width: 110,
+        align: 'right',
+        headerAlign: 'right',
+        /*
+         * The denormalized count every link moves (AGL-2613) — a stored
+         * number, so a page of companies costs no read per row. Absent on a
+         * company nobody has linked since the counter existed, which reads
+         * as zero; the company's own page takes the live aggregate.
+         */
+        filterable: false,
+        sortable: false,
+        valueGetter: (_value, row: CompanyRow) => Number(row.contactsCount ?? 0),
+        renderCell: ({ row }: { row: CompanyRow }) => (
+          <Typography
+            variant="body2"
+            color={row.contactsCount ? 'text.primary' : 'text.secondary'}
+          >
+            {Number(row.contactsCount ?? 0).toLocaleString()}
+          </Typography>
+        ),
+      },
+      {
+        field: 'tags',
+        headerName: 'Tags',
+        flex: 1,
+        minWidth: 140,
+        // Written by the drawer and the bulk bar (AGL-2621); read here, not
+        // filtered — a tag filter would need an `array-contains` index of
+        // its own beside the scope predicate.
+        filterable: false,
+        sortable: false,
+        valueGetter: (_value, row: CompanyRow) => (row.tags ?? []).join(', '),
+        renderCell: ({ row }: { row: CompanyRow }) =>
+          row.tags?.length ? (
+            <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', overflow: 'hidden' }}>
+              {row.tags.slice(0, 3).map((tag) => (
+                <Chip key={tag} size="small" variant="outlined" label={tag} />
+              ))}
+              {row.tags.length > 3 ? (
+                <Typography variant="caption" color="text.secondary">
+                  {`+${row.tags.length - 3}`}
+                </Typography>
+              ) : null}
+            </Stack>
           ) : (
             <Typography variant="body2" color="text.secondary">
               {'—'}
@@ -251,6 +340,30 @@ export function CompaniesSection(props: CompaniesSectionProps) {
     [members],
   )
 
+  /*
+   * The grid's models are the view's (AGL-2617). The filter model shows the
+   * view's clause in the panel as a typed one would appear — the owner's
+   * stored `equals` back as the single-select `is` the panel offers — so a
+   * view opened from its address reads as filtered, not as a mystery.
+   */
+  const grid = useCrmViewGrid(views, columns)
+  const filterModel = useMemo(
+    () => ({
+      items: filter
+        ? [
+            {
+              id: 'view',
+              field: filter.field,
+              operator:
+                filter.field === 'ownerUid' && filter.op === 'equals' ? 'is' : filter.op,
+              value: filter.value,
+            },
+          ]
+        : [],
+    }),
+    [filter],
+  )
+
   const newCompanyButton = (
     <Button
       size="small"
@@ -271,18 +384,45 @@ export function CompaniesSection(props: CompaniesSectionProps) {
       contentGutterX
       contentGutterY
       contentBordered="all"
-      HeaderProps={{ action: newCompanyButton }}
+      HeaderProps={{
+        action: (
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            <CrmViewsControl controller={views} allLabel="All companies" />
+            {newCompanyButton}
+          </Stack>
+        ),
+      }}
     >
       <Stack spacing={1.5}>
-        <Typography variant="body2" color="text.secondary">
-          {'The organizations your contacts belong to. Open one to see its ' +
-            'people, its deals and its open tasks, or to link a contact ' +
-            'to it.'}
-        </Typography>
+        <Stack
+          direction="row"
+          spacing={1}
+          sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
+        >
+          <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
+            {'The organizations your contacts belong to. Open one to see its ' +
+              'people, its deals and its open tasks, or to link a contact ' +
+              'to it.'}
+          </Typography>
+          <CompanyImportButton hostId={hostId} />
+          <Button size="small" onClick={handleExport} disabled={!companies.length}>
+            {'Export CSV'}
+          </Button>
+        </Stack>
+        <CompaniesBulkBar
+          hostId={hostId}
+          scope={scope}
+          rows={companies}
+          selected={selectedIds}
+          onSelectedChange={setSelectedIds}
+          members={members}
+          csv={csvOptions}
+        />
         <ListTable
           rowHeight={TABLE_ROW_HEIGHT}
           columns={columns}
           rows={companies}
+          selectable={{ selected: selectedIds, onChange: setSelectedIds }}
           noRowsLabel="No companies yet"
           noRowsDescription="A company groups the contacts who work at one business, with its domain, owner and address. Create the first one, or link a contact to a company from their page."
           noRowsAction={newCompanyButton}
@@ -295,6 +435,7 @@ export function CompaniesSection(props: CompaniesSectionProps) {
            * pass could only drop rows the query already matched.
            */
           filterMode="server"
+          filterModel={filterModel}
           onFilterModelChange={(model) => {
             const request = gridFilterRequest(model)
             setFilter(
@@ -303,6 +444,11 @@ export function CompaniesSection(props: CompaniesSectionProps) {
                 : request,
             )
           }}
+          // Columns and sort are the view's, controlled (AGL-2617).
+          columnVisibilityModel={grid.columnVisibilityModel}
+          onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}
+          sortModel={grid.sortModel}
+          onSortModelChange={grid.onSortModelChange}
           // Paged by the footer below, so the grid must not also slice.
           hideFooter
         />

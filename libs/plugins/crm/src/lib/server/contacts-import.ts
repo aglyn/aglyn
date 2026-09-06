@@ -56,12 +56,9 @@
  *
  * ## Who may call it
  *
- * The same two gates the rules put on the contacts collection: a site role
- * on the host the request names, AND the organization's `data.manage`
- * permission resolved through the member's custom role and overrides. The
- * Admin SDK evaluates no rules, so this route is the enforcement rather
- * than an echo of it — and `data.manage` rather than the raw role because
- * an owner who unticked "Manage data" on a custom role meant it.
+ * `resolveImportContext` (`import-context.ts`) — the two gates every CSV
+ * import route asks, shared with the companies import so one permission
+ * has one spelling.
  */
 
 import {
@@ -72,129 +69,24 @@ import {
   type ContactImportRawRow,
   type ContactImportRow,
   type ContactImportSkippedRow,
-  consentGroupScope,
   CRM_COLLECTIONS,
-  crmScopeTokens,
   nameSearchFields,
   normalizeContactImportRow,
-  ORG_SCOPE_TOKEN,
   type PluginApiHandler,
   visibleToTokens,
 } from '@aglyn/aglyn/server'
-import {
-  consentGroupForSite,
-  firebaseAdmin,
-  getOrgForHost,
-  listOrgMembers,
-  memberHasOrgPermission,
-  resolveOrgMembership,
-} from '@aglyn/tenant-data-admin'
+import { crmRecordsQuotaForOrg, firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { captureHostContact } from '@aglyn/tenant-runtime'
 import { FieldValue } from 'firebase-admin/firestore'
+import {
+  type ImportContext,
+  ownerDirectory,
+  readImportRows,
+  resolveImportContext,
+} from './import-context'
 
 /** The one sentence every imported contact's timeline opens with. */
 export const CONTACT_IMPORT_INTERACTION_SUMMARY = 'Imported from CSV'
-
-/** Everything the import needs about who is asking, or the refusal to send back. */
-type ImportContext =
-  | {
-      ok: true
-      uid: string
-      hostId: string
-      orgId: string
-      org: Record<string, unknown>
-      /**
-       * The stamp a record CREATED by this import carries — the org, when
-       * the org widened its default, and otherwise the capturing group.
-       */
-      scopeTokens: string[]
-      /**
-       * The tokens a record must overlap to be SEEN from this site: the
-       * group's own, plus `org`, because an org-wide record is visible to
-       * every site in the account. The reader's set is wider than the
-       * creator's stamp, exactly as it is on the contacts listener.
-       */
-      readTokens: string[]
-    }
-  | { ok: false; status: number; body: Record<string, unknown> }
-
-/**
- * Who is asking, and on whose behalf.
- *
- * A staff token passes both gates the way it does on every console route:
- * support importing a customer's file for them is the support act this
- * exists for, and the rules admit staff to the collection outright.
- */
-async function resolveImportContext(
-  req: Parameters<PluginApiHandler>[0],
-): Promise<ImportContext> {
-  const hostId = String(req.body?.hostId ?? '')
-  if (!hostId) {
-    return { ok: false, status: 400, body: { error: 'Missing hostId' } }
-  }
-  const authorization = String(req.headers.authorization ?? '')
-  const idToken = authorization.startsWith('Bearer ')
-    ? authorization.slice('Bearer '.length)
-    : undefined
-  if (!idToken) {
-    return { ok: false, status: 401, body: { error: 'Unauthenticated' } }
-  }
-  const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
-  const staff = decoded['staff'] === true
-  const firestore = firebaseAdmin.app().firestore()
-  const hostSnapshot = await firestore.collection('hosts').doc(hostId).get()
-  if (!hostSnapshot.exists) {
-    return { ok: false, status: 404, body: { error: 'Unknown site' } }
-  }
-  const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-  if (!staff && memberRole !== 'admin' && memberRole !== 'editor') {
-    return {
-      ok: false,
-      status: 403,
-      body: { error: 'Not a site admin or editor' },
-    }
-  }
-  const resolved = await getOrgForHost(hostId).catch(() => null)
-  const orgId = String(resolved?.orgId ?? '')
-  if (!orgId) {
-    return {
-      ok: false,
-      status: 404,
-      body: { error: 'This site has no organization, so it has no contacts.' },
-    }
-  }
-  const org = (resolved?.org ?? {}) as Record<string, unknown>
-  const membership = await resolveOrgMembership(decoded.uid, orgId).catch(
-    () => null,
-  )
-  const member = membership?.member
-  if (
-    !staff &&
-    (!member ||
-      (member as { orgSuspended?: boolean }).orgSuspended === true ||
-      !(await memberHasOrgPermission(orgId, member, 'data.manage')))
-  ) {
-    return {
-      ok: false,
-      status: 403,
-      body: {
-        error:
-          'Your organization role does not allow managing contacts, so it ' +
-          'cannot import them.',
-      },
-    }
-  }
-  const group = await consentGroupForSite(hostId)
-  return {
-    ok: true,
-    uid: decoded.uid,
-    hostId,
-    orgId,
-    org,
-    scopeTokens: crmScopeTokens(org, group),
-    readTokens: [ORG_SCOPE_TOKEN, ...consentGroupScope(group)],
-  }
-}
 
 /**
  * The holder's live custom-field definitions.
@@ -246,12 +138,12 @@ async function resolveCompanyId(
   const fields = nameSearchFields(name)
   const cached = cache.get(fields.nameLower)
   if (cached) return cached
-  const companies = firebaseAdmin
+  const orgRef = firebaseAdmin
     .app()
     .firestore()
     .collection('orgs')
     .doc(context.orgId)
-    .collection(CRM_COLLECTIONS.companies)
+  const companies = orgRef.collection(CRM_COLLECTIONS.companies)
   const matches = await companies
     .where('nameLower', '==', fields.nameLower)
     .limit(10)
@@ -263,6 +155,17 @@ async function resolveCompanyId(
     cache.set(fields.nameLower, seen.id)
     return seen.id
   }
+  /*
+   * THE RECORDS BAND (AGL-2611). A company is a record of the same band
+   * the contact behind this row will meet at its own door, so on a Free
+   * org at its hundred the row gets no company rather than a company it
+   * was not allowed to hold. Nothing is reported here: the contact is
+   * refused `audience-band` a few lines on and the row is listed skipped,
+   * which is the one message the operator needs. A paid org never reaches
+   * this branch — a rate is what makes the band meter instead of refuse.
+   */
+  const room = await crmRecordsQuotaForOrg(context.org as never, orgRef)
+  if (!room.allowed) return ''
   const created = await companies.add({
     ...fields,
     hostId: context.hostId,
@@ -274,54 +177,6 @@ async function resolveCompanyId(
   tally.created += 1
   cache.set(fields.nameLower, created.id)
   return created.id
-}
-
-/**
- * The org's members by address, read only when a row names an owner.
- *
- * A file with no owner column costs no roster read; a file with one costs
- * exactly one, however many rows it has.
- */
-async function ownerDirectory(
-  orgId: string,
-  rows: readonly ContactImportRow[],
-): Promise<Map<string, string>> {
-  const directory = new Map<string, string>()
-  if (!rows.some((row) => row.ownerEmail)) return directory
-  const members = await listOrgMembers(orgId)
-  for (const member of members) {
-    const email = String(member.email ?? '')
-      .trim()
-      .toLowerCase()
-    if (email && member.$id) directory.set(email, String(member.$id))
-  }
-  return directory
-}
-
-/** The rows a request may carry, or the refusal to send back. */
-function readRows(
-  req: Parameters<PluginApiHandler>[0],
-): { rows: ContactImportRawRow[] } | { status: number; error: string } {
-  if ((req.rawBody?.length ?? 0) > CONTACT_IMPORT_MAX_BODY_BYTES) {
-    return {
-      status: 413,
-      error: 'That request is too large. Import the file in smaller pieces.',
-    }
-  }
-  const rows = req.body?.rows
-  if (!Array.isArray(rows) || rows.length === 0) {
-    return { status: 400, error: 'No rows to import.' }
-  }
-  if (rows.length > CONTACT_IMPORT_CHUNK_SIZE) {
-    return {
-      status: 400,
-      error: `At most ${CONTACT_IMPORT_CHUNK_SIZE} rows per request.`,
-    }
-  }
-  if (!rows.every((row) => row && typeof row === 'object' && !Array.isArray(row))) {
-    return { status: 400, error: 'Every row must be an object.' }
-  }
-  return { rows: rows as ContactImportRawRow[] }
 }
 
 /**
@@ -337,7 +192,10 @@ export const crmContactsImportHandler: PluginApiHandler = async (req, res) => {
     res.setHeader('Allow', 'POST')
     return res.status(405).json({ error: 'Method not allowed' })
   }
-  const read = readRows(req)
+  const read = readImportRows<ContactImportRawRow>(req, {
+    maxBodyBytes: CONTACT_IMPORT_MAX_BODY_BYTES,
+    chunkSize: CONTACT_IMPORT_CHUNK_SIZE,
+  })
   if ('error' in read) return res.status(read.status).json({ error: read.error })
   try {
     const context = await resolveImportContext(req)
@@ -421,7 +279,9 @@ export const crmContactsImportHandler: PluginApiHandler = async (req, res) => {
               ? 'audience-band'
               : verdict.refused === 'invalid-email'
                 ? 'invalid-email'
-                : 'write-failed',
+                : verdict.refused === 'erased'
+                  ? 'erased'
+                  : 'write-failed',
         })
         continue
       }

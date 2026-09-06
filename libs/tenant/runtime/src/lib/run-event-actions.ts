@@ -19,6 +19,7 @@ import {
   ACTION_MAX_EVENT_DEPTH,
   ACTION_MAX_STEPS,
   checkEntitlement,
+  planLabelGrantingFeature,
   checkQuota,
   type HostWebhook,
   WEBHOOK_URL_PATTERN,
@@ -82,7 +83,11 @@ import {
   type FlowSweepResult,
   sweepDueFlowEnrollments,
 } from './flow-enrollments'
-import { runCrmActionStep } from './crm-action-steps'
+import {
+  logCrmEmailActivity,
+  prepareCrmEmailActivity,
+  runCrmActionStep,
+} from './crm-action-steps'
 import { resolveDatasetDoc } from './resolve-dataset'
 import {
   type HostEventPayload,
@@ -97,6 +102,13 @@ interface ActionRunEnv {
   hostRef: FirebaseFirestore.DocumentReference
   alerts: HostActionAlert[]
   webhooksAllowed: boolean
+  /**
+   * Whether the owning org holds the CRM suite (AGL-2611) — the gate the
+   * five CRM steps take, resolved once beside `webhooksAllowed` and for the
+   * same reason: a step gated on the org doc it already read costs no
+   * second read per step.
+   */
+  crmAllowed: boolean
   depth: number
   /**
    * The owning org's billing doc, already read by the entitlement gate that
@@ -632,11 +644,31 @@ async function executeAction(
           )
           continue
         }
+        const emailSubject = String(step.subject ?? '').slice(0, 200)
+        const emailText = String(step.body ?? '').slice(0, 5000)
+        /*
+         * THE TIMELINE ENTRY (AGL-2615). A message addressed to the contact
+         * the event is about is logged on that contact's timeline as an
+         * email activity — the same row the console's own send logs — so an
+         * automated welcome shows beside the calls a rep made, with its
+         * delivery state. Prepared first because the row's id has to be on
+         * the message for the webhook to find it; written only after the
+         * provider accepted. Behind the suite gate like every other CRM
+         * write an action makes.
+         */
+        const emailActivity = env.crmAllowed
+          ? await prepareCrmEmailActivity(
+              { hostId, org: env.org, orgId: env.orgId },
+              to,
+              payload,
+            )
+          : null
         const result = await sendEmail({
           to,
-          subject: String(step.subject ?? '').slice(0, 200),
-          text: String(step.body ?? '').slice(0, 5000),
+          subject: emailSubject,
+          text: emailText,
           sendingIdentity: await hostSendingIdentity(hostId),
+          ...(emailActivity ? { tags: emailActivity.tags } : {}),
           audience: 'tenant',
           context: enrollmentRef ? 'flow step' : 'event action',
           /*
@@ -684,7 +716,17 @@ async function executeAction(
         // counted, never capped. `sent` is false when Resend refused or the
         // environment is unconfigured, and an email that never left is not a
         // cost.
-        if (result.sent) await meterHostEmail(hostId)
+        if (result.sent) {
+          await meterHostEmail(hostId)
+          if (emailActivity) {
+            await logCrmEmailActivity(
+              { hostId, org: env.org, orgId: env.orgId },
+              emailActivity,
+              { subject: emailSubject, body: emailText, to },
+              actionId,
+            )
+          }
+        }
       } else if (step.type === 'enrollList') {
         const orgId = await resolveOrgIdForHost(hostId)
         const email = String((payload as any).email ?? '')
@@ -796,6 +838,16 @@ async function executeAction(
           updatedAt: FieldValue.serverTimestamp(),
         })
       } else if (isCrmActionStep(step)) {
+        // The plan gate, the way `webhookPost` takes the `webhooks` one:
+        // refused into the run history with the tier that carries it, so
+        // a Free workspace whose flow names a CRM step reads why the step
+        // did nothing rather than a log that says it ran.
+        if (!env.crmAllowed) {
+          stepErrors.push(
+            `CRM steps require the ${planLabelGrantingFeature('crm')} plan`,
+          )
+          continue
+        }
         // The five CRM steps (AGL-2605) share a resolver and a scope, so
         // they share a module; see `crm-action-steps.ts`.
         const outcome = await runCrmActionStep(
@@ -1054,6 +1106,7 @@ export async function runEventActions(
     // Webhook steps take the higher `webhooks` gate (AGL-149); plan gates
     // ride the owning org's doc (AGL-238).
     let webhooksAllowed = true
+    let crmAllowed = true
     // Plan-less orgs resolve as free (AGL-247) — gates always run. Held for
     // the rest of the run so the dataset caps below cost no second read.
     const owner = await getOrgForHost(hostId)
@@ -1061,6 +1114,7 @@ export async function runEventActions(
       const org = owner?.org
       if (!checkEntitlement(org as any, 'actions')) return alerts
       webhooksAllowed = checkEntitlement(org as any, 'webhooks')
+      crmAllowed = checkEntitlement(org as any, 'crm')
       const limit = resolveOrgEntitlements(
         org as any,
       ).actionRunsPerMonth
@@ -1074,6 +1128,7 @@ export async function runEventActions(
       hostRef,
       alerts,
       webhooksAllowed,
+      crmAllowed,
       depth,
       org: owner?.org ?? null,
       orgId: owner?.orgId ?? null,
@@ -1152,12 +1207,14 @@ export async function runSingleAction(
     const monthKey = new Date().toISOString().slice(0, 7)
     const runCounterRef = hostRef.collection('counters').doc('actionRuns')
     let webhooksAllowed = true
+    let crmAllowed = true
     // Held for the rest of the run, as in `runEventActions` above.
     const owner = await getOrgForHost(hostId)
     {
       const org = owner?.org
       if (!checkEntitlement(org as any, 'actions')) return alerts
       webhooksAllowed = checkEntitlement(org as any, 'webhooks')
+      crmAllowed = checkEntitlement(org as any, 'crm')
       const limit = resolveOrgEntitlements(
         org as any,
       ).actionRunsPerMonth
@@ -1171,6 +1228,7 @@ export async function runSingleAction(
       hostRef,
       alerts,
       webhooksAllowed,
+      crmAllowed,
       depth: 0,
       org: owner?.org ?? null,
       orgId: owner?.orgId ?? null,
@@ -1257,6 +1315,7 @@ export async function resumeFlowEnrollment(
     hostRef,
     alerts: [],
     webhooksAllowed: checkEntitlement(owner?.org as any, 'webhooks'),
+    crmAllowed: checkEntitlement(owner?.org as any, 'crm'),
     depth: 0,
     org: owner?.org ?? null,
     orgId: owner?.orgId ?? null,

@@ -94,6 +94,17 @@ export interface ListFilterField {
   /** Word-prefix token array, for `contains`. */
   tokensPath?: string
   /**
+   * The token array holds OPAQUE IDS, matched byte for byte.
+   *
+   * A word token array is lower-cased by its writer, so a `contains` folds
+   * the typed value the same way before it looks. An id array — the forms a
+   * contact came in through, the companies they are linked to — is not: the
+   * ids are minted with mixed case, and folding one would look up an id
+   * nothing wrote. A field that says so is matched on the value exactly as
+   * given, in the query and in memory alike.
+   */
+  verbatimTokens?: boolean
+  /**
    * What a `contains` orders by. Defaults to `lowerPath`, then `path`.
    *
    * A field whose `tokensPath` IS its own value — a real tag array, matched
@@ -137,6 +148,29 @@ export interface ListFilterField {
    * document's — an Auth record's `staff` lives under `customClaims`.
    */
   rowPath?: string
+  /**
+   * The field lives where no query can reach it, so the list matches it
+   * over the rows it has loaded and the translators refuse it.
+   *
+   * A contact's owner, stage and custom values sit on the viewing group's
+   * FACET — a map keyed per group — and a `where` on a per-group path would
+   * need an index per group. Declaring the field at all is what puts it in
+   * the menu and in a saved view; saying it is window-only is what keeps a
+   * clause on it from being sent to a query that would answer with a
+   * permission error or nothing. The list says which clauses narrowed only
+   * the window — see `listFilterPlan`.
+   */
+  windowOnly?: boolean
+  /**
+   * The stored value is a PRESENCE MAP — `{ form: true, order: true }` —
+   * and the filter asks about its keys.
+   *
+   * A contact's `sources` is such a map: one key per door the person came
+   * in through, never an array. Matched as though it were the array of its
+   * truthy keys, so `equals form` and `isAnyOf form,order` read the way a
+   * reader expects; a query can serve `equals` as `sources.form == true`.
+   */
+  keysOf?: boolean
 }
 
 /** The empty-operators a field can honestly offer. See `presence`. */
@@ -255,7 +289,29 @@ export function gridFilterRequest(model: {
       : String(item.value).trim() !== ''
   })
   if (!usable) return null
-  const raw = usable.value
+  return gridItemRequest(usable)
+}
+
+/** Whether a grid filter item asks anything at all — see `gridFilterRequest`. */
+const gridItemUsable = (item: {
+  field?: unknown
+  operator?: unknown
+  value?: unknown
+}): boolean => {
+  if (!item.field || !item.operator) return false
+  if (VALUELESS.includes(String(item.operator))) return true
+  if (item.value === undefined || item.value === null) return false
+  return Array.isArray(item.value)
+    ? item.value.length > 0
+    : String(item.value).trim() !== ''
+}
+
+const gridItemRequest = (item: {
+  field?: unknown
+  operator?: unknown
+  value?: unknown
+}): ListFilterRequest => {
+  const raw = item.value
   const value = Array.isArray(raw)
     ? raw.join(',')
     : // A date column hands back a `Date`, whose default string form is a
@@ -266,7 +322,74 @@ export function gridFilterRequest(model: {
       : raw === undefined || raw === null
         ? ''
         : String(raw)
-  return { field: String(usable.field), op: String(usable.operator), value }
+  return { field: String(item.field), op: String(item.operator), value }
+}
+
+/**
+ * EVERY usable filter item on a grid model, in the order the panel holds
+ * them — for a list that keeps more than one clause (AGL-2617).
+ *
+ * The singular reader above picks the first because a query serves one;
+ * a saved view carries a list of clauses and a list that applies it puts
+ * the first servable one on the query and matches the rest over the rows
+ * it loaded, which `listFilterPlan` in the instance library decides. The
+ * two readers share one notion of "usable", so a clause the singular one
+ * would take is a clause this one keeps.
+ */
+export function gridFilterRequests(model: {
+  items?: Array<{ field?: unknown; operator?: unknown; value?: unknown }>
+}): ListFilterRequest[] {
+  return (model.items ?? []).filter(gridItemUsable).map(gridItemRequest)
+}
+
+/**
+ * How an operator reads on a chip or in a sentence — "Owner is Dana",
+ * "Created on or after 1 Jan". One map so every list that shows its
+ * clauses back spells them the same way; an operator nothing here names
+ * is shown as itself rather than hidden.
+ */
+export function listFilterOperatorLabel(op: string): string {
+  switch (op) {
+    case 'contains':
+      return 'contains'
+    case 'doesNotContain':
+      return 'does not contain'
+    case 'equals':
+    case 'is':
+    case '=':
+      return 'is'
+    case 'doesNotEqual':
+    case '!=':
+      return 'is not'
+    case 'startsWith':
+      return 'starts with'
+    case 'endsWith':
+      return 'ends with'
+    case 'isAnyOf':
+      return 'is any of'
+    case 'isEmpty':
+      return 'is empty'
+    case 'isNotEmpty':
+      return 'is set'
+    case 'after':
+      return 'after'
+    case 'onOrAfter':
+      return 'on or after'
+    case 'before':
+      return 'before'
+    case 'onOrBefore':
+      return 'on or before'
+    case '>':
+      return 'over'
+    case '>=':
+      return 'at least'
+    case '<':
+      return 'under'
+    case '<=':
+      return 'at most'
+    default:
+      return op
+  }
 }
 
 /**
@@ -345,11 +468,20 @@ export function matchListFilter(
   if (!input) return true
   const field = fields.find((entry) => entry.column === input.field)
   if (!field) return true
-  const value = readPath(row, field.rowPath ?? field.path)
+  const stored = readPath(row, field.rowPath ?? field.path)
+  // A presence map is matched as the array of its truthy keys — see `keysOf`.
+  const value =
+    field.keysOf && stored && typeof stored === 'object' && !Array.isArray(stored)
+      ? Object.keys(stored as Record<string, unknown>).filter((key) =>
+          Boolean((stored as Record<string, unknown>)[key]),
+        )
+      : stored
   const op = input.op
 
-  if (op === 'isEmpty') return value == null || value === ''
-  if (op === 'isNotEmpty') return value != null && value !== ''
+  const blank =
+    value == null || value === '' || (Array.isArray(value) && value.length === 0)
+  if (op === 'isEmpty') return blank
+  if (op === 'isNotEmpty') return !blank
 
   const raw = (input.value ?? '').trim()
   if (field.kind === 'boolean') {
@@ -357,6 +489,46 @@ export function matchListFilter(
     return Boolean(value) === (raw === 'true')
   }
   if (!raw) return true
+
+  /*
+   * An array the QUERY serves whole is matched by whole member, never by
+   * substring of its joined form. A tag array asked `contains vip` holds the
+   * tag `vip` or it does not — `vip-gold` is a different tag, and the
+   * query's `array-contains` says so too, so the in-memory answer and the
+   * served answer agree. An id array keeps its case (`verbatimTokens`); a
+   * word array is folded the way its writer folded it. `isAnyOf` is any
+   * member in the asked list, which is what a saved segment's "any of these
+   * tags" becomes as a view clause. A presence map's keys are members too.
+   *
+   * A plain array with no token path is served by nothing, so there is no
+   * query to agree with, and it falls through to the scalar match over its
+   * joined text — the staff account list's providers, where `contains
+   * google` finding `google.com` is the mid-string answer that list
+   * documents (`operators`).
+   */
+  if (Array.isArray(value) && (field.tokensPath || field.keysOf)) {
+    const fold = (entry: unknown) =>
+      field.verbatimTokens ? String(entry) : String(entry).toLowerCase()
+    const members = value.map(fold)
+    const asked = fold(raw)
+    switch (op) {
+      case 'contains':
+      case 'equals':
+      case 'is':
+        return members.includes(asked)
+      case 'doesNotContain':
+      case 'doesNotEqual':
+        return !members.includes(asked)
+      case 'isAnyOf':
+        return asked
+          .split(',')
+          .map((entry) => entry.trim())
+          .filter(Boolean)
+          .some((entry) => members.includes(entry))
+      default:
+        return true
+    }
+  }
 
   if (field.kind === 'date') {
     const at = asTime(value)
@@ -405,6 +577,9 @@ export function matchListFilter(
     }
   }
 
+  // A scalar id is matched as typed — see `verbatimTokens`; the array case
+  // was answered above.
+  if (field.verbatimTokens && op === 'contains') return value === raw
   const held = value == null ? '' : String(value).toLowerCase()
   const asked = raw.toLowerCase()
   switch (op) {

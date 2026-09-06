@@ -145,6 +145,23 @@ jest.mock('./firebase-admin', () => ({
   },
 }))
 
+/*
+ * The records band is the contacts aggregate here — nothing seeds a
+ * company or a deal — so the door's verdict is exactly what these cases
+ * were written against. The three-collection sum has its own spec.
+ */
+jest.mock('./crm-records', () => ({
+  countCrmRecords: async (_orgRef: unknown, contacts: any) => {
+    const contactsCount = (await contacts.count().get()).data().count
+    return {
+      contactsCount,
+      companiesCount: 0,
+      dealsCount: 0,
+      crmRecordsCount: contactsCount,
+    }
+  },
+}))
+
 jest.mock('./organizations', () => ({
   // The real resolution, which for an org that declared nothing is the
   // group of one — the shape every case in this file exercises.
@@ -180,7 +197,7 @@ jest.mock('@aglyn/aglyn/server', () => {
     // membership array no reader is allowed to render.
     ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/campaign-membership'),
     ORG_SCOPE_TOKEN: 'org',
-    checkContactQuota: () => ({ allowed: true }),
+    checkCrmRecordsQuota: () => ({ allowed: true }),
   }
 })
 

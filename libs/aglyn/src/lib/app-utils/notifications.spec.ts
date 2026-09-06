@@ -16,6 +16,7 @@
  */
 
 import {
+  crmDailyDigestEnabled,
   NOTIFICATION_TYPE_LABELS,
   notificationCategory,
   notificationMuted,
@@ -50,6 +51,23 @@ describe('notification categories (AGL-267)', () => {
   })
 })
 
+describe('the daily CRM digest switch (AGL-2619)', () => {
+  it('is on until somebody turns it off, and reads only its own key', () => {
+    expect(crmDailyDigestEnabled(undefined)).toBe(true)
+    expect(crmDailyDigestEnabled({})).toBe(true)
+    expect(crmDailyDigestEnabled({ crmDaily: true })).toBe(true)
+    expect(crmDailyDigestEnabled({ crmDaily: false })).toBe(false)
+    // A category mute lives in a different map and does not reach it.
+    expect(crmDailyDigestEnabled({ content: false })).toBe(true)
+  })
+
+  it('files the digest notification under the operational category', () => {
+    expect(notificationCategory('content.crmDailyDigest')).toBe('content')
+    expect(notificationMuted({ content: false }, 'content.crmDailyDigest')).toBe(true)
+    expect(notificationMuted({ billing: false }, 'content.crmDailyDigest')).toBe(false)
+  })
+})
+
 describe('the verifier-regression alert is not mutable as marketplace noise (AGL-1088)', () => {
   const REGRESSION: AglynNotificationType = 'system.pluginVerifierRegression'
 
@@ -71,5 +89,16 @@ describe('the verifier-regression alert is not mutable as marketplace noise (AGL
     // Not a loophole worth closing here: the adminAudit record is the
     // durable one, and a category nothing can mute would be a new concept.
     expect(notificationMuted({ system: false }, REGRESSION)).toBe(true)
+  })
+})
+
+describe('an assigned record is work arriving (AGL-2618)', () => {
+  it('files a contact or lead assignment beside the task assignment', () => {
+    for (const type of ['content.contactAssigned', 'content.leadAssigned'] as const) {
+      expect(notificationCategory(type)).toBe(notificationCategory('content.taskAssigned'))
+      expect(NOTIFICATION_TYPE_LABELS[type]).toMatch(/assigned to you$/)
+    }
+    expect(notificationMuted({ content: false }, 'content.contactAssigned')).toBe(true)
+    expect(notificationMuted({ team: false }, 'content.leadAssigned')).toBe(false)
   })
 })

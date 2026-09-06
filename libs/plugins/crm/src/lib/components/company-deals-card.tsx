@@ -16,11 +16,12 @@
  */
 'use client'
 
-import type { CrmOrgDoc } from '../hooks/use-deal-scope'
+import type { CrmOrgDoc } from '../hooks/use-crm-scope'
 import { LinkedDealsCard } from './linked-deals-card'
 
 export interface CompanyDealsCardProps {
-  hostId: string
+  /** The site the record is read under, or `null` at the organization level. */
+  hostId: string | null
   org: CrmOrgDoc
   basePath: string
   companyId: string

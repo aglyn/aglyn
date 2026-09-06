@@ -1,5 +1,5 @@
 ---
-sidebar_position: 11
+sidebar_position: 12
 title: Custom fields
 description: Define your own contact properties — text, number, date, choice, checkbox or link — show them on every contact, and save form answers straight into them.
 ---

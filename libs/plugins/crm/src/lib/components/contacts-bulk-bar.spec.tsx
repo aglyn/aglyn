@@ -45,11 +45,14 @@ jest.mock('firebase/firestore', () => ({
   doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
   collection: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
   query: (base: unknown) => base,
+  where: () => undefined,
   orderBy: () => undefined,
   limit: () => undefined,
   arrayUnion: (...values: unknown[]) => ({ op: 'union', values }),
   arrayRemove: (...values: unknown[]) => ({ op: 'remove', values }),
   deleteField: () => ({ op: 'delete' }),
+  increment: (by: number) => ({ op: 'increment', by }),
+  serverTimestamp: () => ({ op: 'serverTimestamp' }),
   writeBatch: () => {
     const staged: typeof ops = []
     return {
@@ -76,9 +79,22 @@ jest.mock('firebase/firestore', () => ({
 }))
 
 const FIRESTORE = {}
+/** The companies the picker's listen answers with, once its dialog is open. */
+const COMPANY_ROWS = [
+  { $id: 'c-acme', name: 'Acme', domain: 'acme.com', nameLower: 'acme' },
+  { $id: 'c-globex', name: 'Globex', nameLower: 'globex' },
+]
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => FIRESTORE,
-  useFirestoreCollection: () => ({ data: [], status: 'success', fromCache: false }),
+  useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1', ready: true }),
+  useFirestoreCollection: (build: () => { path?: string } | null) => {
+    const built = build()
+    return {
+      data: built && String(built.path).endsWith('/companies') ? COMPANY_ROWS : [],
+      status: 'success',
+      fromCache: false,
+    }
+  },
   useUser: () => ({ data: { uid: 'uid-me', getIdToken: async () => 'token' } }),
   useOrgMemberOptions: () => ({
     options: [{ uid: 'uid-a', label: 'Ada Lovelace', email: 'ada@example.com' }],
@@ -109,6 +125,7 @@ jest.mock('./add-to-list-dialog', () => ({
 }))
 
 const GROUP = soloConsentGroup('host-1')
+const unlinked = { companyId: null, companyIds: [], heldElsewhere: [] }
 const rows = [
   {
     $id: 'c1',
@@ -116,6 +133,7 @@ const rows = [
     name: 'Ada',
     tags: [],
     visibleTo: ['host:host-1'],
+    companyLink: unlinked,
   },
   {
     $id: 'c2',
@@ -123,8 +141,17 @@ const rows = [
     name: 'Bea',
     tags: ['vip'],
     visibleTo: ['host:host-1', 'host:other'],
+    companyLink: unlinked,
   },
-  { $id: 'c3', email: 'c@example.com', name: 'Cy', tags: [], visibleTo: ['host:host-1'] },
+  {
+    $id: 'c3',
+    email: 'c@example.com',
+    name: 'Cy',
+    tags: [],
+    visibleTo: ['host:host-1'],
+    // Already at Globex: setting Acme MOVES Cy, and the counts follow.
+    companyLink: { companyId: 'c-globex', companyIds: ['c-globex'], heldElsewhere: [] },
+  },
 ]
 
 function Harness(props: { initial: string[]; children?: ReactNode }) {
@@ -167,12 +194,69 @@ describe('the bar and its selection', () => {
       'Remove tag',
       'Set owner',
       'Set stage',
+      'Set company',
       'Add to list',
       'Export CSV',
       'Remove from this site',
     ]) {
       expect(screen.getByRole('button', { name: label })).toBeTruthy()
     }
+  })
+})
+
+/**
+ * Filing the selection under a company (AGL-2613): the record page's own
+ * link write per row, and the company counts moved in the SAME batch, summed
+ * — one increment on Acme for the two people who joined it, one decrement on
+ * Globex for the one who left.
+ */
+describe('setting the company', () => {
+  it('links every selected row to the picked company and moves the counts in one batch', async () => {
+    render(<Harness initial={['c1', 'c3']} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Set company' }))
+    // Focused before typing, as a person's input is: the picker resets an
+    // unfocused input to the selection's label.
+    fireEvent.focus(screen.getByRole('combobox', { name: 'Company' }))
+    fireEvent.change(screen.getByRole('combobox', { name: 'Company' }), {
+      target: { value: 'acme' },
+    })
+    fireEvent.click(await screen.findByText('Acme · acme.com'))
+    expect(screen.queryByText('Globex')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+
+    await waitFor(() => expect(notices.length).toBeGreaterThan(0))
+    expect(ops.map((op) => op.path)).toEqual([
+      'orgs/org-1/contacts/c1',
+      'orgs/org-1/contacts/c3',
+      'orgs/org-1/companies/c-acme',
+      'orgs/org-1/companies/c-globex',
+    ])
+    expect(ops.every((op) => op.via === 'batch')).toBe(true)
+    expect(ops[0].data[facetPath('companyId')]).toBe('c-acme')
+    expect(ops[0].data[facetPath('companyName')]).toBe('Acme')
+    expect(ops[0].data.companyName).toBe('Acme')
+    expect(ops[0].data.companyIds).toEqual({ op: 'union', values: ['c-acme'] })
+    // Cy moves: the mirror is rewritten rather than unioned.
+    expect(ops[1].data.companyIds).toEqual(['c-acme'])
+    expect(ops[2].data).toEqual({ contactsCount: { op: 'increment', by: 2 } })
+    expect(ops[3].data).toEqual({ contactsCount: { op: 'increment', by: -1 } })
+    expect(notices).toContain('Company set on 2 contacts')
+  })
+
+  it('unlinks the selection when the picker is left empty', async () => {
+    render(<Harness initial={['c1', 'c3']} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Set company' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+
+    await waitFor(() => expect(notices.length).toBeGreaterThan(0))
+    // Ada had no company and is left alone; Cy is unlinked from Globex.
+    expect(ops.map((op) => op.path)).toEqual([
+      'orgs/org-1/contacts/c3',
+      'orgs/org-1/companies/c-globex',
+    ])
+    expect(ops[0].data[facetPath('companyId')]).toEqual({ op: 'delete' })
+    expect(ops[0].data.companyIds).toEqual({ op: 'remove', values: ['c-globex'] })
+    expect(ops[1].data).toEqual({ contactsCount: { op: 'increment', by: -1 } })
   })
 })
 

@@ -16,11 +16,10 @@
  */
 'use client'
 
-import * as Aglyn from '@aglyn/aglyn'
 import {
   CRM_COLLECTIONS,
-  crmScopeTokens,
   DEFAULT_DEAL_STAGES,
+  ORG_SCOPE_TOKEN,
 } from '@aglyn/aglyn'
 import {
   useFirestore,
@@ -39,32 +38,47 @@ import {
 } from 'firebase/firestore'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
+  activePipelines,
   DEFAULT_PIPELINE_ID,
   DEFAULT_PIPELINE_NAME,
+  defaultPipelineOf,
   type PipelineDoc,
 } from '../model/deal-board-model'
+import {
+  crmScopeListable,
+  crmVisibleToClause,
+  useCrmScope,
+} from './use-crm-scope'
 
 /** The most pipelines one org is read with. */
 export const PIPELINE_READ_LIMIT = 20
 
 export interface UsePipelineOptions {
-  /** The site whose console is reading — provenance on the seeded pipeline. */
-  hostId: string
+  /**
+   * The site whose console is reading — provenance on the seeded pipeline —
+   * or `null` at the organization level (AGL-2630).
+   */
+  hostId: string | null
   /** The org document the shell passed, for the scope the seed is stamped with. */
   org: Record<string, unknown> | null | undefined
 }
 
 export interface UsePipelineResult {
-  /** Every pipeline the viewer may read, in document-id order. */
+  /** Every pipeline the viewer may read, archived ones included, in document-id order. */
   pipelines: PipelineDoc[]
-  /** The default pipeline — `isDefault`, else the first — or null before one exists. */
+  /** The pipelines a picker offers — see `activePipelines`. */
+  activePipelines: PipelineDoc[]
+  /** The default ACTIVE pipeline — `isDefault`, else the first — or null before one exists. */
   pipeline: PipelineDoc | null
   status: 'loading' | 'success' | 'error'
   fromCache: boolean
   /** A seed write is in flight because the org had no pipeline. */
   seeding: boolean
-  /** The scope tokens this viewer reads with — what a new deal is filtered by. */
-  visibleToTokens: string[]
+  /**
+   * The scope tokens this viewer reads with — what a new deal is filtered
+   * by — or `null` at the organization level, where nothing filters.
+   */
+  visibleToTokens: readonly string[] | null
   pipelineById: (id: string | undefined) => PipelineDoc | null
 }
 
@@ -77,7 +91,10 @@ export interface UsePipelineResult {
  * `orgs/{orgId}/pipelines` is read with the same `visibleTo` predicate every
  * CRM listener uses, ordered by document id and capped at twenty. A pipeline
  * is a handful of documents per org — the cap is there so the query has one,
- * not because anybody is expected to reach it.
+ * not because anybody is expected to reach it. Archived pipelines are read
+ * too (AGL-2620): a closed deal still names the pipeline it closed in, and
+ * `pipelineById` has to resolve its stage on the deal's page and in the
+ * reports. Only `activePipelines` and the default exclude them.
  *
  * ## The seed
  *
@@ -97,7 +114,12 @@ export interface UsePipelineResult {
  *
  * The seed carries what every CRM creator stamps: the scope a contact
  * captured on this site would carry, the site as provenance, and the
- * creating account.
+ * creating account. At the ORGANIZATION level (AGL-2630) the seed is the
+ * org's: stamped `['org']`, so every site's board opens on the same default
+ * pipeline rather than each site seeding one of its own the others cannot
+ * see — a pipeline's stages describe how the business sells, and at this
+ * level the business is the org. Its provenance is the site the reader has
+ * picked, when they have; a default made before any pick names none.
  */
 export function usePipeline(
   orgId: string | null | undefined,
@@ -108,27 +130,22 @@ export function usePipeline(
   const { data: user } = useUser()
   const uid = user?.uid
 
-  const consentGroup = useMemo(
-    () => (hostId ? Aglyn.consentGroupForHost(org ?? null, hostId) : null),
-    [org, hostId],
-  )
-  const visibleToTokens = useMemo(
-    () =>
-      consentGroup
-        ? [
-            Aglyn.ORG_SCOPE_TOKEN,
-            ...consentGroup.hostIds.map((id) => Aglyn.hostScopeToken(id)),
-          ].slice(0, Aglyn.MAX_SCOPE_HOSTS)
-        : [],
-    [consentGroup],
-  )
+  // The reader's tokens and the seed's stamp, from the one scope hook
+  // (AGL-2614): under a site the group's tokens both ways; at the org level
+  // no read clause, and a create stamp from the picked site.
+  const {
+    level,
+    visibleTo: visibleToTokens,
+    createHostId,
+    createTokens,
+  } = useCrmScope({ hostId, org: org as Record<string, unknown> | null })
 
   const { data, status, fromCache } = useFirestoreCollection<PipelineDoc>(
     () =>
-      orgId && visibleToTokens.length
+      orgId && crmScopeListable(visibleToTokens)
         ? query(
             collection(firestore, 'orgs', orgId, CRM_COLLECTIONS.pipelines),
-            where('visibleTo', 'array-contains-any', visibleToTokens),
+            ...crmVisibleToClause(visibleToTokens),
             orderBy(documentId()),
             limit(PIPELINE_READ_LIMIT),
           )
@@ -141,7 +158,10 @@ export function usePipeline(
   // One seed attempt per org per mount, whatever the listener does after.
   const seededFor = useRef<string | null>(null)
   useEffect(() => {
-    if (!orgId || !uid || !consentGroup) return
+    if (!orgId || !uid) return
+    // Under a site the seed needs the site's own stamp; without one it
+    // would be a pipeline nobody may read.
+    if (level === 'site' && !createTokens.length) return
     if (status !== 'success' || fromCache || data.length > 0) return
     if (seededFor.current === orgId) return
     seededFor.current = orgId
@@ -161,8 +181,9 @@ export function usePipeline(
         name: DEFAULT_PIPELINE_NAME,
         stages: [...DEFAULT_DEAL_STAGES],
         isDefault: true,
-        visibleTo: crmScopeTokens(org, consentGroup),
-        hostId,
+        archivedAt: null,
+        visibleTo: level === 'site' ? [...createTokens] : [ORG_SCOPE_TOKEN],
+        hostId: createHostId,
         createdByUid: uid,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -177,15 +198,24 @@ export function usePipeline(
     return () => {
       active = false
     }
-  }, [firestore, orgId, uid, consentGroup, org, hostId, status, fromCache, data])
+  }, [
+    firestore,
+    orgId,
+    uid,
+    level,
+    createTokens,
+    createHostId,
+    status,
+    fromCache,
+    data,
+  ])
 
   return useMemo(() => {
     const pipelines = data ?? []
-    const pipeline =
-      pipelines.find((entry) => entry.isDefault) ?? pipelines[0] ?? null
     return {
       pipelines,
-      pipeline,
+      activePipelines: activePipelines(pipelines),
+      pipeline: defaultPipelineOf(pipelines),
       status,
       fromCache,
       seeding,

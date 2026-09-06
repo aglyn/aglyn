@@ -29,8 +29,44 @@
  * this" from "the stand-in forgot to grant it".
  */
 
-import { PLAN_ENTITLEMENTS } from '@aglyn/aglyn'
-import { blockedExtensionNotice } from './extension-entitlement'
+import { PLAN_ENTITLEMENTS, planLabelGrantingFeature } from '@aglyn/aglyn'
+import {
+  blockedExtensionNotice,
+  composeExtensionEntitlements,
+  resolveExtensionEntitlement,
+} from './extension-entitlement'
+
+describe('composeExtensionEntitlements (AGL-2611)', () => {
+  it('lets a settled refusal outrank everything, and an unsettled read outrank a yes', () => {
+    expect(composeExtensionEntitlements('entitled', 'blocked')).toBe('blocked')
+    expect(composeExtensionEntitlements('pending', 'blocked')).toBe('blocked')
+    expect(composeExtensionEntitlements('entitled', 'pending')).toBe('pending')
+    expect(composeExtensionEntitlements('entitled', 'entitled')).toBe('entitled')
+    // Declaring nothing composes as `entitled`, so a surface with no flag of
+    // its own inherits its extension's verdict unchanged — both ways.
+    expect(composeExtensionEntitlements('blocked')).toBe('blocked')
+    expect(composeExtensionEntitlements()).toBe('entitled')
+  })
+
+  it('is the extension flag AND the section flag, from real plan rows', () => {
+    // Free carries neither `redirects` nor `crm`; Starter carries both; the
+    // CRM's own case is an unflagged extension over a `crm`-flagged section.
+    const free = { plan: 'free' }
+    const starter = { plan: 'starter' }
+    const verdict = (org: unknown, ready: boolean) =>
+      composeExtensionEntitlements(
+        resolveExtensionEntitlement(undefined, org, ready),
+        resolveExtensionEntitlement('crm', org, ready),
+      )
+    expect(verdict(free, true)).toBe('blocked')
+    expect(verdict(starter, true)).toBe('entitled')
+    expect(verdict(undefined, false)).toBe('pending')
+    // A per-org grant on the section's flag is honored like any other.
+    expect(
+      verdict({ plan: 'free', entitlements: { features: { crm: true } } }, true),
+    ).toBe('entitled')
+  })
+})
 
 describe('blockedExtensionNotice', () => {
   it('never tells an org eventCalendar is a plan away — false on all eight plans', () => {
@@ -52,7 +88,14 @@ describe('blockedExtensionNotice', () => {
     const notice = blockedExtensionNotice('Redirects', 'redirects')
     expect(notice).toBe(
       'Redirects is not included in your current plan. Manage your plan and ' +
-        'add-ons from Billing.',
+        'add-ons from Billing. Included from Starter.',
+    )
+    // The tier is the ladder's answer, not a literal: the sentence names
+    // whichever plan first grants the flag today (AGL-2611).
+    expect(planLabelGrantingFeature('redirects')).toBe('Starter')
+    expect(blockedExtensionNotice('Deals', 'crm')).toBe(
+      'Deals is not included in your current plan. Manage your plan and ' +
+        'add-ons from Billing. Included from Starter.',
     )
   })
 })

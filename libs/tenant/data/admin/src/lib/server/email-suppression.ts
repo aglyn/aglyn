@@ -760,3 +760,101 @@ export function suppressionCursorTimestamp(
   if (!Number.isFinite(seconds) || !seconds) return null
   return new Timestamp(seconds, Number.isFinite(nanoseconds) ? nanoseconds : 0)
 }
+
+/*==========================================
+ * THE ERASURE ROW ON THE PER-SITE LIST (AGL-2623).
+ *
+ * A person erased from a workspace must not be quietly rebuilt by the next
+ * form they fill in or the next order they place, and must not be mailed by
+ * a campaign either. Both gates already read `hosts/{hostId}/suppressions`
+ * — every campaign filter refuses an address with a row there — so the
+ * erasure writes one row per site of the workspace rather than inventing a
+ * third list, and the capture door reads the same row.
+ *
+ * The row carries NO address. Every other writer of this list stores the
+ * email in the clear beside the hash, because a hub admin releasing an
+ * unsubscribe needs to see who it was; an erasure row is the one whose
+ * whole purpose is that the address is no longer held, so the id — the
+ * hash — is the entire record, and a row that already held the address in
+ * the clear has it removed. The hub's list renders such a row as an entry
+ * with no address, which it already knows how to do.
+ *
+ * Per SITE, not platform-wide, on purpose: the erasure was asked of one
+ * workspace, and a second workspace that knows the same person has a
+ * relationship this request has no claim on. The platform list is for
+ * bounces and complaints, which are facts about the address everywhere.
+ *=========================================*/
+
+/** The `reason` an erasure row carries. Read by the capture door, below. */
+export const HOST_ERASURE_SUPPRESSION_REASON = 'erasure'
+
+/**
+ * Suppress an address on one site because the person was erased. Idempotent:
+ * a second erasure of the same person merges onto the same row.
+ */
+export async function suppressEmailForHostErasure(input: {
+  hostId: string
+  email: string
+  firestore?: any
+}): Promise<{ key: string; created: boolean } | null> {
+  const key = emailSuppressionKey(input.email)
+  if (!key) return null
+  const db = input.firestore ?? defaultFirestore()
+  const ref = db
+    .collection('hosts')
+    .doc(input.hostId)
+    .collection(HOST_SUPPRESSIONS_SUBCOLLECTION)
+    .doc(key)
+  const snapshot = await ref.get()
+  await ref.set(
+    {
+      email: null,
+      reason: HOST_ERASURE_SUPPRESSION_REASON,
+      suppressedAt: FieldValue.serverTimestamp(),
+      ...(snapshot.exists ? {} : { createdAt: FieldValue.serverTimestamp() }),
+    },
+    { merge: true },
+  )
+  return { key, created: !snapshot.exists }
+}
+
+/**
+ * Whether a site has erased this address, so a capture must not create a
+ * contact for it. Only an ERASURE row refuses: an ordinary unsubscribe is a
+ * mailing preference, and a person who unsubscribed and then bought
+ * something is still a customer whose order the CRM should know about.
+ *
+ * Fails OPEN. A read that throws answers `false` and logs: the alternative
+ * refuses every capture on the site for as long as the list is unreadable,
+ * which turns a transient read failure into a silent drop of the site's
+ * leads and orders. The window this leaves — a recreate during an outage
+ * of the suppression read — is logged, and the next erasure run finds the
+ * recreated record by the same address.
+ */
+export async function hostRefusesCaptureForErasure(
+  hostId: string,
+  email: string | null | undefined,
+  injectedFirestore?: any,
+): Promise<boolean> {
+  const key = emailSuppressionKey(email)
+  if (!key) return false
+  try {
+    const db = injectedFirestore ?? defaultFirestore()
+    const snapshot = await db
+      .collection('hosts')
+      .doc(hostId)
+      .collection(HOST_SUPPRESSIONS_SUBCOLLECTION)
+      .doc(key)
+      .get()
+    return (
+      Boolean(snapshot?.exists) &&
+      snapshot.get('reason') === HOST_ERASURE_SUPPRESSION_REASON
+    )
+  } catch (error) {
+    console.error(
+      '[email-suppression] erasure lookup failed; the capture proceeds',
+      error,
+    )
+    return false
+  }
+}

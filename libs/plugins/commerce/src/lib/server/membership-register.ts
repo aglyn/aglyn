@@ -21,6 +21,7 @@ import {
   checkVisitorRecordCeiling,
   HOST_TOKENS,
   marketingConsentFieldsForHost,
+  personKey,
   SITE_MEMBER_CEILING_CODE,
   SITE_MEMBER_UNAVAILABLE_MESSAGE,
   SITE_MEMBERS_MAX_PER_HOST,
@@ -231,13 +232,24 @@ export const membershipRegisterHandler: PluginApiHandler = async (req, res) => {
       email,
       name: displayName || undefined,
       source: 'member',
+      // An account is a subscription to the site, not an enquiry (AGL-2612):
+      // the lead this sign-up also files is the sales record, and the stage
+      // on the contact says only that the person asked to be kept.
+      initialLifecycleStage: 'subscriber',
       interaction: { refId: memberRef.id, summary: 'Joined as a member' },
       ...(marketingConsent ? { marketingConsent: true } : {}),
       ...(campaignTouch ? { campaignTouch } : {}),
     })
-    // Event triggers (AGL-128/148): sign-ups double as leads here too.
+    // Event triggers (AGL-128/148): sign-ups double as leads here too. The
+    // lead's id is the person key `addHostLead` filed it under, so a webhook
+    // can read the row back over `/v1/leads/{leadId}` (AGL-2627); empty for
+    // an address that could not be keyed, as every optional payload key is.
     await emitHostEvent(hostId, 'memberSignUp', { email })
-    await emitHostEvent(hostId, 'lead', { email, source: 'signup' })
+    await emitHostEvent(hostId, 'lead', {
+      email,
+      source: 'signup',
+      leadId: personKey(email) ?? '',
+    })
     setMemberCookie(res, hostId, mintMemberSession(hostId, memberRef.id))
     return res.status(200).json({ ok: true })
   } catch (error) {

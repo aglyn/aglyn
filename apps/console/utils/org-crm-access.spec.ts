@@ -34,10 +34,10 @@ import {
   type OrgPermission,
 } from '@aglyn/aglyn'
 import {
-  ORG_CONTACTS_PERMISSION,
-  orgContactsRefusalNotice,
-  resolveOrgContactsAccess,
-} from './org-contacts-access'
+  ORG_CRM_PERMISSION,
+  orgCrmRefusalNotice,
+  resolveOrgCrmAccess,
+} from './org-crm-access'
 
 /** A real permission answer for a real membership. No test double. */
 const canFor = (member: Record<string, unknown>) => {
@@ -71,14 +71,14 @@ describe('the defect this gate exists to avoid is real', () => {
   it('a site collaborator DOES hold data.manage — the role check alone admits them', () => {
     // If this ever stops being true the gate below still holds, but the
     // reason for its shape is gone and the comment should change with it.
-    expect(canFor(COLLABORATOR)(ORG_CONTACTS_PERMISSION)).toBe(true)
+    expect(canFor(COLLABORATOR)(ORG_CRM_PERMISSION)).toBe(true)
     expect(isOrgWideMembership(COLLABORATOR as never)).toBe(false)
   })
 })
 
-describe('resolveOrgContactsAccess — reach', () => {
+describe('resolveOrgCrmAccess — reach', () => {
   it('REFUSES a site collaborator who holds the permission', () => {
-    expect(resolveOrgContactsAccess(settled(COLLABORATOR, false))).toBe(
+    expect(resolveOrgCrmAccess(settled(COLLABORATOR, false))).toBe(
       'refused',
     )
   })
@@ -86,7 +86,7 @@ describe('resolveOrgContactsAccess — reach', () => {
   it('refuses them without consulting the permission at all', () => {
     const can = jest.fn(() => true)
     expect(
-      resolveOrgContactsAccess({
+      resolveOrgCrmAccess({
         orgWide: false,
         reachReady: true,
         can,
@@ -100,7 +100,7 @@ describe('resolveOrgContactsAccess — reach', () => {
 
   it('refuses a collaborator even with every permission granted', () => {
     expect(
-      resolveOrgContactsAccess({
+      resolveOrgCrmAccess({
         orgWide: false,
         reachReady: true,
         can: () => true,
@@ -112,7 +112,7 @@ describe('resolveOrgContactsAccess — reach', () => {
 
   it('HOLDS while reach is unresolved, because orgWide fails open', () => {
     expect(
-      resolveOrgContactsAccess({
+      resolveOrgCrmAccess({
         // The value a collaborator carries before their membership lands.
         orgWide: true,
         reachReady: false,
@@ -124,33 +124,33 @@ describe('resolveOrgContactsAccess — reach', () => {
   })
 })
 
-describe('resolveOrgContactsAccess — permission', () => {
+describe('resolveOrgCrmAccess — permission', () => {
   /*
    * BREAKING THE GUARD THE OTHER WAY. These are the cases that fail if the
    * gate refuses everybody, which is what makes the refusals above evidence
    * rather than a tautology.
    */
   it('ADMITS an org owner', () => {
-    expect(resolveOrgContactsAccess(settled(OWNER, true))).toBe('granted')
+    expect(resolveOrgCrmAccess(settled(OWNER, true))).toBe('granted')
   })
 
   it('ADMITS an org-wide editor — data.manage is an editor default', () => {
-    expect(resolveOrgContactsAccess(settled(EDITOR, true))).toBe('granted')
+    expect(resolveOrgCrmAccess(settled(EDITOR, true))).toBe('granted')
   })
 
   it('refuses an org-wide VIEWER, who holds no data permission', () => {
-    expect(resolveOrgContactsAccess(settled(VIEWER, true))).toBe('refused')
+    expect(resolveOrgCrmAccess(settled(VIEWER, true))).toBe('refused')
   })
 
   it('honors a per-member override that revokes the permission', () => {
     const stripped = { role: 'admin', permissions: { 'data.manage': false } }
-    expect(canFor(stripped)(ORG_CONTACTS_PERMISSION)).toBe(false)
-    expect(resolveOrgContactsAccess(settled(stripped, true))).toBe('refused')
+    expect(canFor(stripped)(ORG_CRM_PERMISSION)).toBe(false)
+    expect(resolveOrgCrmAccess(settled(stripped, true))).toBe('refused')
   })
 
   it('honors a per-member override that grants it to a viewer', () => {
     const promoted = { role: 'viewer', permissions: { 'data.manage': true } }
-    expect(resolveOrgContactsAccess(settled(promoted, true))).toBe('granted')
+    expect(resolveOrgCrmAccess(settled(promoted, true))).toBe('granted')
   })
 
   it('refuses an answer that is not literally `true`', () => {
@@ -166,17 +166,17 @@ describe('resolveOrgContactsAccess — permission', () => {
       ...settled(OWNER, true),
       can: (() => undefined) as unknown as (p: OrgPermission) => boolean,
     }
-    expect(resolveOrgContactsAccess(absent)).toBe('refused')
+    expect(resolveOrgCrmAccess(absent)).toBe('refused')
     // CONTROL: the same harness admits a real `true`, so this is about the
     // non-boolean and not about the gate refusing everybody.
     expect(
-      resolveOrgContactsAccess({ ...absent, can: () => true }),
+      resolveOrgCrmAccess({ ...absent, can: () => true }),
     ).toBe('granted')
   })
 
   it('holds while the member read is still in flight', () => {
     expect(
-      resolveOrgContactsAccess({
+      resolveOrgCrmAccess({
         ...settled(OWNER, true),
         permissionsLoaded: false,
       }),
@@ -184,7 +184,7 @@ describe('resolveOrgContactsAccess — permission', () => {
   })
 
   it('reports a FAILED member read as unavailable, not as refused or pending', () => {
-    const verdict = resolveOrgContactsAccess({
+    const verdict = resolveOrgCrmAccess({
       ...settled(OWNER, true),
       permissionsLoaded: false,
       permissionsErrored: true,
@@ -196,7 +196,7 @@ describe('resolveOrgContactsAccess — permission', () => {
 
   it('a failed read still cannot rescue a collaborator', () => {
     expect(
-      resolveOrgContactsAccess({
+      resolveOrgCrmAccess({
         orgWide: false,
         reachReady: true,
         can: () => true,
@@ -209,18 +209,18 @@ describe('resolveOrgContactsAccess — permission', () => {
 
 describe('the refusal copy', () => {
   it('tells a collaborator where their own people are, not to ask for a role', () => {
-    const notice = orgContactsRefusalNotice('scoped')
+    const notice = orgCrmRefusalNotice('scoped')
     expect(notice).toContain('sites you')
     expect(notice).not.toContain('permission')
   })
 
   it('tells a member without the permission who can grant it', () => {
-    expect(orgContactsRefusalNotice('permission')).toContain('Team')
+    expect(orgCrmRefusalNotice('permission')).toContain('Team')
   })
 
   it('gives the two audiences different sentences', () => {
-    expect(orgContactsRefusalNotice('scoped')).not.toBe(
-      orgContactsRefusalNotice('permission'),
+    expect(orgCrmRefusalNotice('scoped')).not.toBe(
+      orgCrmRefusalNotice('permission'),
     )
   })
 })

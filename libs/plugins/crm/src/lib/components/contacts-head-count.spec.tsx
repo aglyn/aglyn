@@ -130,6 +130,12 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   listFilterConstraints: jest.requireActual(
     '@aglyn/tenant-feature-instance',
   ).listFilterConstraints,
+  // The plan the views split the clauses with (AGL-2617) — real, for the
+  // same reason.
+  listFilterPlan: jest.requireActual('@aglyn/tenant-feature-instance')
+    .listFilterPlan,
+  // The reader's reach, for the views control's "may edit" — org-wide here.
+  useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),
   useFirestore: () => FIRESTORE,
   useOrgDataScope: () => DATA_SCOPE,
   // The site's campaigns, which fill the picker in the contact profile panel.
@@ -155,11 +161,21 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 }))
 
 const limitSpy = jest.fn((value: number) => value)
+/*
+ * One aggregate per COUNTED collection (AGL-2611): the contacts answer is
+ * the staged head-count, and the two the records band added — companies
+ * and deals — answer zero, so every figure below is still the contacts
+ * figure this file was written around. A fake that answered every path
+ * with the head-count would triple the band's input and move every pin.
+ */
 const countSpy = jest.fn(async (path: string) => {
   if (aggregate.count == null) {
     throw Object.assign(new Error('denied'), { code: 'permission-denied' })
   }
-  return { data: () => ({ count: aggregate.count }), path } as any
+  return {
+    data: () => ({ count: path === 'contacts' ? aggregate.count : 0 }),
+    path,
+  } as any
 })
 
 jest.mock('firebase/firestore', () => ({
@@ -195,7 +211,9 @@ jest.mock('@aglyn/shared-ui-next', () => ({
 
 // A row is a link to the record page (AGL-2596); nothing here follows one.
 jest.mock('next/navigation', () => ({
-  useRouter: () => ({ push: jest.fn() }),
+  useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
+  // The list reads its own address for a seeded filter (AGL-2612); none here.
+  useSearchParams: () => new URLSearchParams(),
 }))
 
 const BASE_PATH = '/acme/hosts/shop/contacts'
@@ -236,9 +254,11 @@ describe('the Contacts head-count is a server aggregate (AGL-1706)', () => {
 
     // Before the fix this read "1,000 contacts · 10,000 included" — the
     // listener cap, presented as the org's audience.
+    // The band is the records band (AGL-2611): the readout keeps the people
+    // count and names the band's own figure beside it.
     await waitFor(() =>
       expect(
-        screen.queryByText(/40,000 contacts · 10,000 included/),
+        screen.queryByText(/40,000 contacts · 40,000 of 10,000 CRM records/),
       ).not.toBeNull(),
     )
     expect(screen.queryByText(/1,000 contacts ·/)).toBeNull()
@@ -252,7 +272,7 @@ describe('the Contacts head-count is a server aggregate (AGL-1706)', () => {
     // `overageContacts` was 0 and this alert had no way to render on a plan
     // without a per-org `contactsPerHost` override.
     const alert = await screen.findByText(
-      /30,000 contacts over your plan's included 10,000/,
+      /30,000 CRM records over your plan's included 10,000/,
     )
     expect(alert.textContent).toContain('metered at $0.75/1,000 per month')
     // The figure, and the basis it is a figure ON (AGL-2399). This count is
@@ -265,14 +285,17 @@ describe('the Contacts head-count is a server aggregate (AGL-1706)', () => {
     )
   })
 
-  it('reads the count ONCE, from the contacts collection', async () => {
+  it('reads each counted collection ONCE — contacts, companies, deals', async () => {
     mount()
 
-    await waitFor(() => expect(countSpy).toHaveBeenCalled())
-    // One aggregate per mount is the whole cost of this fix; a read per
-    // render would be a different bug wearing this one's fix.
-    expect(countSpy).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(countSpy).toHaveBeenCalledTimes(3))
+    // One aggregate per counted collection per mount is the whole cost of
+    // this fix, widened to the records band (AGL-2611); a read per render
+    // would be a different bug wearing this one's fix.
     expect(countSpy).toHaveBeenCalledWith('contacts')
+    expect(countSpy).toHaveBeenCalledWith('companies')
+    expect(countSpy).toHaveBeenCalledWith('deals')
+    expect(countSpy).toHaveBeenCalledTimes(3)
   })
 
   it('keeps the list capped — the cap was never the defect', () => {
@@ -293,9 +316,11 @@ describe('the Contacts head-count is a server aggregate (AGL-1706)', () => {
 
     await waitFor(() => expect(countSpy).toHaveBeenCalled())
     expect(
-      screen.queryByText(/Contact limit reached/)?.textContent ?? '',
+      screen.queryByText(/CRM records limit reached/)?.textContent ?? '',
     ).toContain('new visitors are no longer captured')
     // And the readout still shows what is known rather than nothing.
-    expect(screen.queryByText(/1,000 contacts · 100 included/)).not.toBeNull()
+    expect(
+      screen.queryByText(/1,000 contacts · 1,000 of 100 CRM records/),
+    ).not.toBeNull()
   })
 })

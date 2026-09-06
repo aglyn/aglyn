@@ -116,7 +116,7 @@ export const HOST_EVENT_PAYLOAD_KEYS: Partial<
   pageView: ['path'],
   memberSignUp: ['email'],
   memberSignIn: ['email'],
-  lead: ['email', 'source'],
+  lead: ['email', 'source', 'leadId'],
   booking: ['serviceName', 'email', 'startsAtMs'],
   contactCreated: [
     'contactId',
@@ -124,7 +124,12 @@ export const HOST_EVENT_PAYLOAD_KEYS: Partial<
     'name',
     'source',
     'hostId',
+    'lifecycleStage',
     'campaignIds',
+    // Present only when the capture came through a form (AGL-2626), so
+    // `formId` equals a form's id is the condition that picks that
+    // form's people out of every other door's.
+    'formId',
   ],
   contactStageChanged: ['contactId', 'email', 'lifecycleStage', 'previousStage'],
   taskCompleted: [

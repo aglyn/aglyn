@@ -294,6 +294,12 @@ const featureGroups = (
       { key: 'actions', label: 'Actions builder' },
       { key: 'dataStore', label: 'Datasets & dynamic data' },
       { key: 'bookings', label: 'Appointment bookings' },
+      // The CRM SUITE (AGL-2611) — everything built on the contacts list,
+      // which itself ships on every plan through the records band above.
+      // Named for what it adds, so a Free reader comparing cards sees the
+      // sales hub as the step up rather than "CRM" ticked against a plan
+      // that already shows them a Contacts section.
+      { key: 'crm', label: 'CRM suite: leads, companies, deals & tasks' },
       { key: 'marketingOverlays', label: 'Announcement bar & popups' },
       { key: 'customSendingDomain', label: 'Send email from your own domain' },
       { key: 'screenAnalytics', label: 'Per-screen traffic analytics' },
@@ -527,7 +533,7 @@ function headlineLimits(
     if (rate == null || contactsOverageBilled == null) return ''
     return contactsOverageBilled
       ? ` (+$${rate}/1k over)`
-      : ` (+$${rate}/1k over once Contacts opens)`
+      : ` (+$${rate}/1k over once the CRM opens)`
   }
   return [
     `${quotaLabel(entitlements.hostLimit)} host${
@@ -547,9 +553,21 @@ function headlineLimits(
     `${quotaLabel(entitlements.membersPerHost)} site collaborator${
       entitlements.membersPerHost === 1 ? '' : 's'
     }${per(pricing.extraCollaboratorMonthlyUsd, '/extra')}`,
-    `${quotaCount(entitlements.contactsPerHost)} contacts${contactsPer(
+    // Contacts, companies and deals against ONE band (AGL-2611); the
+    // persisted key still says contacts, the customer never sees that word
+    // alone here.
+    `${quotaCount(entitlements.contactsPerHost)} CRM records${contactsPer(
       pricing.extraContactsUsdPer1k,
     )}`,
+    /*
+     * One-to-one email from a CRM record (AGL-2611): a daily PACE with no
+     * overage rate on any tier, so no suffix — a rate here would advertise
+     * a charge that cannot exist. Free's zero prints as the absence it is
+     * rather than as "0 emails/day" beside a band it does not have.
+     */
+    entitlements.crmEmailsPerDay > 0
+      ? `${quotaCount(entitlements.crmEmailsPerDay)} one-to-one emails/day`
+      : 'No one-to-one email',
     /*
      * CAMPAIGN sends, and only those (AGL-1438). The cap does not apply to
      * transactional mail — invites, receipts, password resets — so the row
@@ -1369,13 +1387,21 @@ function PlanCardBody({
           what `report-usage` actually invoices, and an unsettled verdict
           prints no rate at all. */}
       <Typography variant="body2">
-        {`${quotaCount(entitlements.contactsPerHost)} contacts`}
+        {`${quotaCount(entitlements.contactsPerHost)} CRM records`}
         {pricing.extraContactsUsdPer1k != null &&
         contactsOverageBilled != null
           ? contactsOverageBilled
             ? ` (+$${pricing.extraContactsUsdPer1k}/1k over)`
-            : ` (+$${pricing.extraContactsUsdPer1k}/1k over once Contacts opens)`
+            : ` (+$${pricing.extraContactsUsdPer1k}/1k over once the CRM opens)`
           : ''}
+      </Typography>
+      {/* One-to-one email from a CRM record (AGL-2611) — a daily pace
+          with no overage on any tier, so no rate follows it; Free's
+          zero reads as the absence it is. */}
+      <Typography variant="body2">
+        {entitlements.crmEmailsPerDay > 0
+          ? `${quotaCount(entitlements.crmEmailsPerDay)} one-to-one emails/day`
+          : 'No one-to-one email'}
       </Typography>
       {/* CAMPAIGN sends only (AGL-1438) — transactional mail is
           not rationed by a plan, and this row must not imply it
