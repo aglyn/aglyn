@@ -683,3 +683,33 @@ export async function removeContactsAtAddress(firestore, orgId, email) {
     .get()
   for (const entry of contacts.docs) await entry.ref.delete()
 }
+
+/**
+ * Removes every contact the site captured that is not the fixture's, with
+ * the deals that pointed at them.
+ *
+ * The specs share one site and each re-seeds the fixture, but a re-seed
+ * writes the fixture's records and leaves what the other specs added: a
+ * lead's conversion, a contact added by hand. A spec that reads a fixture
+ * row off a paged list needs the site's book to be the fixture's book —
+ * the fixture's rows are its oldest, and a list sorted newest-first pages
+ * them off the screen behind the newcomers.
+ *
+ * Keyed on `capturedByHostIds`, the mark every site-captured contact
+ * carries, so the org-scoped contacts the console seed writes with no site
+ * — which are not this site's and which other suites read — stay.
+ */
+export async function removeSiteContactsOutsideFixture(firestore, orgId, hostId) {
+  const fixtureIds = new Set(Object.values(CRM_FIXTURE.contacts).map((contact) => contact.id))
+  const orgRef = firestore.collection('orgs').doc(orgId)
+  const captured = await orgRef
+    .collection('contacts')
+    .where('capturedByHostIds', 'array-contains', hostId)
+    .get()
+  for (const entry of captured.docs) {
+    if (fixtureIds.has(entry.id)) continue
+    const deals = await orgRef.collection('deals').where('contactId', '==', entry.id).get()
+    for (const deal of deals.docs) await deal.ref.delete()
+    await entry.ref.delete()
+  }
+}

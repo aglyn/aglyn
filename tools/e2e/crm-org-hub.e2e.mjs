@@ -38,6 +38,7 @@
 import {
   CRM_FIXTURE,
   removeContactsAtAddress,
+  removeSiteContactsOutsideFixture,
   seedCrmFixtures,
 } from '../scripts/lib/crm-fixtures.mjs'
 import {
@@ -87,6 +88,10 @@ await seedCrmFixtures({
 })
 // The person this run adds, so the create is a create and not a merge.
 await removeContactsAtAddress(firestore, ORG_ID, PERSON.email)
+// What the sibling specs leave on the site — a lead's conversion, a contact
+// added by hand. The list pages at the table default, the fixture's rows are
+// its oldest, and two more people put the row this spec reads on page two.
+await removeSiteContactsOutsideFixture(firestore, ORG_ID, HOST_ID)
 
 const tally = verdicts()
 const session = await openConsole()
