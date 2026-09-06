@@ -22,6 +22,7 @@ import {
 } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { useCallback, useRef } from 'react'
+import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
 
 /** The routes `registerCrmConsoleApi` registers under `/api/crm/`. */
 export type CrmApiRoute =
@@ -30,6 +31,7 @@ export type CrmApiRoute =
   | 'contacts-merge'
   | 'email-send'
   | 'erase-person'
+  | 'org-activity'
 
 /** What one call to the CRM API answered with. */
 export interface CrmApiResult {
@@ -53,17 +55,31 @@ export interface CrmApiResult {
  * sending the request unauthenticated, so a signed-out caller is told so
  * through the same `response.ok` branch every other refusal takes.
  */
+/**
+ * ## The organization level
+ *
+ * Beneath the org hub's mount (AGL-2630) the body also names the ORG, and
+ * that is what makes the call the route's org variant (AGL-2634): the route
+ * authorizes the caller by the org rather than by a site's role, and a
+ * `hostId` beside it — the record's own capturing site, or `null` for a
+ * record no site has captured — is what the act needs a site FOR, never
+ * what it is authorized against. Under a site there is no mount and the
+ * body is what it always was.
+ */
 export function useCrmApi(
   /**
-   * The site the request is made for. `null` at the organization level
-   * until a site is picked (AGL-2630) — a call made then is refused by the
-   * route, which is why every caller holds its button until one is known.
+   * The site the request is made for. At the organization level the
+   * record's own site, or `null` for a record no site has captured — the
+   * org variant of a route serves both, and a route with no org variant
+   * (a create, which is always captured BY a site) refuses the null as it
+   * always has.
    */
   hostId: string | null,
 ) {
   const { data: user } = useUser()
   const userRef = useRef(user)
   userRef.current = user
+  const orgId = useCrmOrgMount()?.orgId ?? null
   return useCallback(
     async (
       route: CrmApiRoute,
@@ -75,13 +91,17 @@ export function useCrmApi(
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ hostId, ...payload }),
+          body: JSON.stringify({
+            hostId,
+            ...(orgId ? { orgId } : {}),
+            ...payload,
+          }),
         },
       )
       const json = await response.json().catch(() => ({}))
       return { response, payload: json as Record<string, any> }
     },
-    [hostId],
+    [hostId, orgId],
   )
 }
 
