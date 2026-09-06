@@ -88,7 +88,9 @@ entity is joined to its form through the submission it names, which
 interaction carries none. The row is the one `addHostLead` writes — `email`,
 `name`, `sources` as `form:{formId}` / `booking`, `submissionCount` from the
 host's submissions plus the bookings, `firstSeenAtMs`/`lastSeenAtMs` from
-the captures, `capturedByHostIds`, `createdAt` — plus `status: 'new'` and
+the captures (falling back to the contact's own `createdAt` and `updatedAt`
+when the timeline kept no timestamp), `capturedByHostIds`, `createdAt` —
+plus `status: 'new'` and
 `backfilledAtMs`, and with the contact's marketing grant for that host
 copied across when the record reads as granted and nothing on it refuses.
 
@@ -129,6 +131,31 @@ an archived form, and a form deleted outright — a deleted form leaves its
 submissions behind (`hosts/{hostId}/formSubmissions` keeps `formId`), and
 they still name it.
 
+**The source kind, when no form id survived.** The second production dry
+run, with the flag, still planned no lead: the pre-CRM contacts carry no
+`formIds` mirror, their facet's `interactions` name no submission and no
+form (the timeline predates `refId` and `formId`), and the one record that
+a form met them is the facet's `sources: { form: true }` — the KIND of
+surface, the same flag the stage pass already reads as a lead. So under
+`--any-form` that kind is a lead surface too: a facet that is the host's own
+group of one (`facets.{hostId}`) with `sources.form` set, and no surface
+named anywhere on the record, plans a row `by source kind`. A shared facet
+(`facets.{groupId}` for a declared group) cannot say which site's form and
+is left, the same rule a booking without a `hostId` follows.
+
+For such a row the form is looked for in the host's submissions by the
+address, with the same email extraction the submit route uses across every
+form the host has held: every form those submissions name is spelled on the
+lead as `form:{formId}`, exactly as the door would have written it, and when
+none of them names a form — or there are none — the lead's `sources` reads
+`['form']`, the kind alone. The Leads list and the lead page label that
+chip `Form`; every other reader (`leadSources`, the convert route, the
+reports) takes the array as strings. `submissionCount` is every submission
+by the address on every form, named or not, never below one;
+`firstSeenAtMs`/`lastSeenAtMs` bracket the facet's form interactions when
+they carry `atMs`, else fall back to the contact's `createdAt` and
+`updatedAt`.
+
 Nothing else widens. The row is the same row; `submissionCount` counts the
 host's submissions for the address on every form the run counts; the
 marketing grant is copied on the same terms; `backfilledAtMs` is stamped;
@@ -143,16 +170,19 @@ GOOGLE_CLOUD_PROJECT=aglyn-main node tools/scripts/backfill-crm-lifecycle-stages
 
 `--any-form` without `--leads` exits 2 having written nothing. The report
 names every form it counted only because of the flag, with why it would not
-have counted otherwise:
+have counted otherwise, and counts the rows planned from the source kind
+alone (`by source kind (no form id)`), marking each such row:
 
 ```
-  leads (<hostId>): would create 9 — 1 routed form(s); via --any-form: 3 unrouted form(s); 2 already a lead; 4 already worked past Lead; 1 met through no lead surface (no form, no booking)
+  leads (<hostId>): would create 9 — 1 routed form(s); via --any-form: 3 unrouted form(s); via --any-form: 2 by source kind (no form id); 2 already a lead; 4 already worked past Lead; 1 met through no lead surface (no form, no booking)
       via --any-form: Contact us (<formId>)  routing off — turn it on
       via --any-form: Wholesale enquiry (<formId>)  archived
       via --any-form: <formId>  no form document
       3f2a9c1b0e7d…  form:<formId>  captures 2  seen 2026-03-11 → 2026-05-02
+      8b1e04c7d2a5…  form:<formId>  (by source kind)  captures 1  seen 2025-11-02 → 2025-11-02
+      c9d3f10a6e42…  form  (by source kind)  captures 1  seen 2025-10-19 → 2026-01-08
 …
-Dry run: …; 9 lead(s) created (…); via --any-form: 3 unrouted form(s) counted as lead surfaces; ….
+Dry run: …; 9 lead(s) created (…); via --any-form: 3 unrouted form(s) counted as lead surfaces; via --any-form: 2 by source kind (no form id); ….
 ```
 
 **Run it once, for the backlog.** The flag is a statement about the past —
@@ -219,4 +249,11 @@ at all were reported and left.
 - **2026-09-06, dry run (`--leads --companies`)**: 15 facet stages planned,
   0 leads — every candidate `met through no lead surface`, because the forms
   that captured them predate lead routing and several no longer exist. That
-  is what `--any-form` is for; record its dry run and the apply here.
+  is what `--any-form` is for.
+- **2026-09-06, dry run (`--leads --any-form --companies`)**: still 0 leads,
+  every candidate `met through no lead surface (no form, no booking)`. The
+  records were inspected read-only: the pre-CRM contacts carry no `formIds`
+  mirror, and the facet's `interactions` name no submission and no form —
+  the only record of the form is `facets.{hostId}.sources.form`. That is
+  what the source-kind rule above answers; record its dry run and the apply
+  here.
