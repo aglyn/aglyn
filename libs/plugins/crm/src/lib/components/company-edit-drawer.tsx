@@ -371,6 +371,14 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
               </MenuItem>
             ))}
           </TextField>
+          <TextField
+            size="small"
+            label="Tags"
+            placeholder="enterprise, west"
+            helperText="Comma-separated, lowercased — the same tags the bulk bar adds"
+            value={draft.tags}
+            onChange={(event) => patch('tags', event.target.value)}
+          />
           <Typography variant="subtitle2">{'Address'}</Typography>
           {ADDRESS_FIELDS.map((field) => (
             <TextField

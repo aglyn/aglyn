@@ -37,7 +37,7 @@ import {
   usePagedCollection,
   useFirestore,
 } from '@aglyn/tenant-feature-instance'
-import { Button, Stack, Typography } from '@mui/material'
+import { Button, Chip, Stack, Typography } from '@mui/material'
 import {
   getGridSingleSelectOperators,
   type GridColDef,
@@ -48,7 +48,10 @@ import { useCallback, useMemo, useState } from 'react'
 import { COMPANY_LIST_FILTER_FIELDS } from '../constants/company-filters'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import { useOrgMemberOptions } from '../hooks/use-org-member-options'
+import { type CompanyCsvOptions, companiesCsv } from '../model/companies-csv'
+import { downloadTextFile } from '../model/contacts-csv'
 import { crmRoutes } from '../model/crm-routes'
+import CompaniesBulkBar from './companies-bulk-bar'
 import CompanyEditDrawer from './company-edit-drawer'
 
 export interface CompaniesSectionProps {
@@ -93,6 +96,13 @@ type CompanyRow = Partial<CrmCompany> & { $id: string; updatedAt?: any }
  * "New company" opens the same eight-field drawer the company's page edits
  * with, and the new record's page opens when it is saved. A form above a
  * list has nowhere to grow, and this one has an address in it.
+ *
+ * ## Selection, the bar and the file (AGL-2621)
+ *
+ * The rows are selectable, and a selection raises `CompaniesBulkBar` over
+ * the table. Export CSV writes the loaded page through `companiesCsv()` —
+ * the same file the bar writes over the selection, headed as the import
+ * reads it — and Import CSV opens the companies drawer beside it.
  */
 export function CompaniesSection(props: CompaniesSectionProps) {
   const { hostId, org, basePath } = props
@@ -140,6 +150,19 @@ export function CompaniesSection(props: CompaniesSectionProps) {
   )
 
   const [createOpen, setCreateOpen] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  /*
+   * The owner is written by ADDRESS, because the companies import resolves
+   * an owner by email; the same options reach the bar, so the page's file
+   * and the selection's are one format.
+   */
+  const csvOptions: CompanyCsvOptions = useMemo(
+    () => ({ ownerEmail: members.emailFor }),
+    [members.emailFor],
+  )
+  const handleExport = useCallback(() => {
+    downloadTextFile('companies.csv', 'text/csv', companiesCsv(companies, csvOptions))
+  }, [companies, csvOptions])
   const openCompany = useCallback(
     (id: string) => router.push(routes.company(id)),
     [router, routes],
@@ -220,6 +243,35 @@ export function CompaniesSection(props: CompaniesSectionProps) {
         ),
       },
       {
+        field: 'tags',
+        headerName: 'Tags',
+        flex: 1,
+        minWidth: 140,
+        // Written by the drawer and the bulk bar (AGL-2621); read here, not
+        // filtered — a tag filter would need an `array-contains` index of
+        // its own beside the scope predicate.
+        filterable: false,
+        sortable: false,
+        valueGetter: (_value, row: CompanyRow) => (row.tags ?? []).join(', '),
+        renderCell: ({ row }: { row: CompanyRow }) =>
+          row.tags?.length ? (
+            <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', overflow: 'hidden' }}>
+              {row.tags.slice(0, 3).map((tag) => (
+                <Chip key={tag} size="small" variant="outlined" label={tag} />
+              ))}
+              {row.tags.length > 3 ? (
+                <Typography variant="caption" color="text.secondary">
+                  {`+${row.tags.length - 3}`}
+                </Typography>
+              ) : null}
+            </Stack>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              {'—'}
+            </Typography>
+          ),
+      },
+      {
         field: 'ownerUid',
         headerName: 'Owner',
         flex: 1,
@@ -298,15 +350,34 @@ export function CompaniesSection(props: CompaniesSectionProps) {
       HeaderProps={{ action: newCompanyButton }}
     >
       <Stack spacing={1.5}>
-        <Typography variant="body2" color="text.secondary">
-          {'The organizations your contacts belong to. Open one to see its ' +
-            'people, its deals and its open tasks, or to link a contact ' +
-            'to it.'}
-        </Typography>
+        <Stack
+          direction="row"
+          spacing={1}
+          sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
+        >
+          <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
+            {'The organizations your contacts belong to. Open one to see its ' +
+              'people, its deals and its open tasks, or to link a contact ' +
+              'to it.'}
+          </Typography>
+          <Button size="small" onClick={handleExport} disabled={!companies.length}>
+            {'Export CSV'}
+          </Button>
+        </Stack>
+        <CompaniesBulkBar
+          hostId={hostId}
+          scope={scope}
+          rows={companies}
+          selected={selectedIds}
+          onSelectedChange={setSelectedIds}
+          members={members}
+          csv={csvOptions}
+        />
         <ListTable
           rowHeight={TABLE_ROW_HEIGHT}
           columns={columns}
           rows={companies}
+          selectable={{ selected: selectedIds, onChange: setSelectedIds }}
           noRowsLabel="No companies yet"
           noRowsDescription="A company groups the contacts who work at one business, with its domain, owner and address. Create the first one, or link a contact to a company from their page."
           noRowsAction={newCompanyButton}

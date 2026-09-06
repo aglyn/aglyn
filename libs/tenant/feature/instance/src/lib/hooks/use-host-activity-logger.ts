@@ -43,6 +43,10 @@ export interface HostActivityTarget {
     // removed from the site. The record is org-shared, but the act happened
     // in THIS site's console and belongs in this site's feed.
     | 'contact'
+    // A company or a deal deleted from the CRM's bulk bars (AGL-2621), one
+    // line per record, for the same reason a contact's removal is one.
+    | 'company'
+    | 'deal'
   id?: string
   name?: string
   /**

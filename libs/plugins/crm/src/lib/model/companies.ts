@@ -106,6 +106,8 @@ export interface CompanyDraft {
   industry: string
   ownerUid: string
   address: AglynPostalAddress
+  /** Comma-separated as typed; stored as the list `companyDraftFields` reads. */
+  tags: string
   notes: string
 }
 
@@ -117,7 +119,28 @@ export const EMPTY_COMPANY_DRAFT: CompanyDraft = {
   industry: '',
   ownerUid: '',
   address: {},
+  tags: '',
   notes: '',
+}
+
+/** The drawer's cap on a company's tags — a contact's, so the two agree. */
+export const COMPANY_TAGS_MAX = 20
+
+/**
+ * A typed tag list as the document stores one: split on `,` or `|`,
+ * lowercased and trimmed, deduplicated, capped — the same shape a contact's
+ * tags take, so the bulk bar's "Add tag" over companies and the drawer's
+ * field write one kind of value.
+ */
+export function normalizeCompanyTags(input: string): string[] {
+  return [
+    ...new Set(
+      String(input ?? '')
+        .split(/[|,]/)
+        .map((tag) => tag.trim().toLowerCase().slice(0, 60))
+        .filter(Boolean),
+    ),
+  ].slice(0, COMPANY_TAGS_MAX)
 }
 
 /** A stored company, as the form should start from it. */
@@ -132,6 +155,7 @@ export function companyDraftFrom(
     industry: String(company?.industry ?? ''),
     ownerUid: String(company?.ownerUid ?? ''),
     address: { ...(company?.address ?? {}) },
+    tags: (company?.tags ?? []).join(', '),
     notes: String(company?.notes ?? ''),
   }
 }
@@ -223,6 +247,10 @@ export function companyDraftFields(draft: CompanyDraft): CompanyDraftResult {
   set['address'] = isBlankAddress(draft.address)
     ? null
     : normalizeAddress(draft.address)
+
+  const tags = normalizeCompanyTags(draft.tags)
+  if (tags.length) set['tags'] = tags
+  else cleared.push('tags')
 
   const notes = draft.notes.trim().slice(0, NOTES_MAX)
   if (notes) set['notes'] = notes

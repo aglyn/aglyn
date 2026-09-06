@@ -28,24 +28,14 @@ import { MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { Button, Link, Stack, Typography } from '@mui/material'
-import {
-  collection,
-  deleteDoc,
-  doc,
-  getDocs,
-  limit,
-  query,
-  where,
-  writeBatch,
-} from 'firebase/firestore'
 import { type ReactNode, useCallback, useState } from 'react'
 import type { CrmScope } from '../hooks/use-crm-scope'
 import type { OrgMemberOptions } from '../hooks/use-org-member-options'
+import { COMPANY_DETACH_LIMIT } from '../model/companies'
 import {
-  COMPANY_DETACH_LIMIT,
-  CONTACT_COMPANY_IDS_FIELD,
-  companyDetachUpdate,
-} from '../model/companies'
+  companyDeleteFailureMessage,
+  deleteCompanyDetaching,
+} from '../model/company-delete'
 import type { CrmRoutes } from '../model/crm-routes'
 import CompanyEditDrawer from './company-edit-drawer'
 import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
@@ -90,19 +80,12 @@ function formatAddress(address: AglynPostalAddress | null | undefined): string {
  *
  * ## Delete is a DETACH first
  *
- * Contacts point at a company from their own documents, and Firestore does
- * not cascade. A bare delete would leave every one of them naming a record
- * that no longer exists: their page would render a link to nothing, and the
- * `companyIds` mirror the company list queries would keep matching a ghost.
- * So the delete reads the contacts that name this company, takes it off each
- * of them in one batch, and removes the document only when nobody is left
- * pointing at it.
- *
- * Bounded at {@link COMPANY_DETACH_LIMIT} per pass — a batch holds that many
- * writes — and honest past it: the pass detaches what it can, reports that
- * more remain, and leaves the company standing so the next delete continues
- * from where this one stopped. A company is never deleted with a link still
- * on a contact.
+ * `deleteCompanyDetaching` — the pass the bulk bar runs per row as well —
+ * unlinks the contacts that name this company before removing it, bounded
+ * at {@link COMPANY_DETACH_LIMIT} per pass and honest past it: the company
+ * stands, and the person is told more remain. What this card adds is the
+ * confirm, the sentence for each outcome, and leaving the page once the
+ * record is gone.
  */
 export function CompanyPropertiesCard(props: CompanyPropertiesCardProps) {
   const {
@@ -141,31 +124,8 @@ export function CompanyPropertiesCard(props: CompanyPropertiesCardProps) {
     if (!accepted) return
     setDeleting(true)
     try {
-      /*
-       * One over the limit, so "more remain" is a fact from the probe row
-       * and not a guess from a full page — the same reason the paged lists
-       * over-fetch by one.
-       */
-      const probe = await getDocs(
-        query(
-          collection(firestore, scope[0], scope[1], 'contacts'),
-          where(CONTACT_COMPANY_IDS_FIELD, 'array-contains', company.$id),
-          limit(COMPANY_DETACH_LIMIT + 1),
-        ),
-      )
-      const linked = probe.docs.slice(0, COMPANY_DETACH_LIMIT)
-      const moreRemain = probe.docs.length > COMPANY_DETACH_LIMIT
-      if (linked.length) {
-        const batch = writeBatch(firestore)
-        for (const snapshot of linked) {
-          batch.update(
-            snapshot.ref,
-            companyDetachUpdate(snapshot.data(), company.$id),
-          )
-        }
-        await batch.commit()
-      }
-      if (moreRemain) {
+      const outcome = await deleteCompanyDetaching(firestore, scope, company.$id)
+      if (!outcome.deleted) {
         enqueueSnackbar(
           `${COMPANY_DETACH_LIMIT.toLocaleString()} contacts were unlinked ` +
             `from "${name}" and more remain. Delete again to continue.`,
@@ -173,43 +133,20 @@ export function CompanyPropertiesCard(props: CompanyPropertiesCardProps) {
         )
         return
       }
-      await deleteDoc(
-        doc(
-          firestore,
-          scope[0],
-          scope[1],
-          CRM_COLLECTIONS.companies,
-          company.$id,
-        ),
-      )
       enqueueSnackbar(
-        linked.length
-          ? `Company deleted and unlinked from ${linked.length.toLocaleString()} ` +
-              `contact${linked.length === 1 ? '' : 's'}`
+        outcome.detached
+          ? `Company deleted and unlinked from ${outcome.detached.toLocaleString()} ` +
+              `contact${outcome.detached === 1 ? '' : 's'}`
           : 'Company deleted',
         { variant: 'success', persist: false },
       )
       onDeleted()
     } catch (error) {
       console.error(error)
-      /*
-       * The contact read runs without a scope predicate — it cannot carry
-       * one beside the `array-contains` on the mirror — so the rules admit
-       * it only to an org-wide member. A site-scoped member's delete stops
-       * here, and is told why rather than shown a generic failure.
-       */
-      const denied =
-        typeof error === 'object' &&
-        error !== null &&
-        (error as { code?: string }).code === 'permission-denied'
-      enqueueSnackbar(
-        denied
-          ? 'Your access is limited to specific sites, so the contacts at ' +
-              'this company could not be read to unlink them. Ask an ' +
-              'organization administrator to delete it.'
-          : 'An error has occurred',
-        { variant: 'error', allowDuplicate: true },
-      )
+      enqueueSnackbar(companyDeleteFailureMessage(error), {
+        variant: 'error',
+        allowDuplicate: true,
+      })
     } finally {
       setDeleting(false)
     }
@@ -229,6 +166,7 @@ export function CompanyPropertiesCard(props: CompanyPropertiesCardProps) {
     },
     { label: 'Phone', value: company.phone },
     { label: 'Address', value: address },
+    { label: 'Tags', value: (company.tags ?? []).join(', ') },
     { label: 'Notes', value: company.notes },
   ]
 
