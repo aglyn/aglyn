@@ -20,6 +20,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import type { CrmLeadFields, CrmLeadStatus } from '@aglyn/aglyn'
 import { mdiAccountCancelOutline } from '@aglyn/shared-data-mdi'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
+import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   type FirestoreDocStatus,
@@ -71,6 +72,14 @@ export interface LeadPropertiesCardProps {
   roster: OrgMemberOptions
   onConvert: () => void
   onUnqualify: () => void
+  /**
+   * Items the page adds to the overflow beside Unqualify — the privacy
+   * erasure (AGL-2623) lives on the page, because it needs the workspace
+   * role and the API, and this card owns the header it must appear in.
+   */
+  extraMenuItems?: RowActionsMenuItem[]
+  /** What the page shows above the facts — the erasure-pending state. */
+  banner?: React.ReactNode
 }
 
 /**
@@ -98,6 +107,8 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
     roster,
     onConvert,
     onUnqualify,
+    extraMenuItems = [],
+    banner,
   } = props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
@@ -174,8 +185,8 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
           </Button>
         ) : null
       }
-      menuItems={
-        open
+      menuItems={[
+        ...(open
           ? [
               {
                 key: 'unqualify',
@@ -183,10 +194,11 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
                 icon: <MdiIcon path={mdiAccountCancelOutline.path} size={0.8} />,
                 destructive: true,
                 onClick: onUnqualify,
-              },
+              } satisfies RowActionsMenuItem,
             ]
-          : undefined
-      }
+          : []),
+        ...extraMenuItems,
+      ]}
       chips={
         <>
           <LeadStatusChip lead={lead} />
@@ -198,6 +210,7 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
       }
     >
       <Stack spacing={3}>
+        {banner}
         <Fact label="Marketing consent">{consentLine}</Fact>
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
           {converted ? (
