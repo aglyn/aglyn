@@ -16,12 +16,31 @@
  */
 'use client'
 
-import { buildRoute, pluginDocsHelp, Route } from '@aglyn/aglyn'
+import {
+  buildRoute,
+  CRM_LEAD_OPEN_STATUSES,
+  CRM_LEAD_STATUSES,
+  pluginDocsHelp,
+  Route,
+} from '@aglyn/aglyn'
+// The CRM's route builder by its leaf path, not the plugin barrel: the
+// barrel is the CRM's site entry point, and a dashboard card named there
+// would ship to every published page.
+import { crmRoutes } from '@aglyn/plugins-crm/model/crm-routes'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Avatar, Box, Button, Stack, Typography } from '@mui/material'
-import { collection, limit, orderBy, query } from 'firebase/firestore'
+import {
+  collection,
+  getCountFromServer,
+  limit,
+  orderBy,
+  query,
+  where,
+} from 'firebase/firestore'
 import { useParams } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import { useFirestore, useFirestoreCollection } from '@aglyn/tenant-feature-instance'
+import { useCrmHubPath } from './use-crm-hub-path'
 import {
   relativeTime,
   senderHue,
@@ -70,8 +89,43 @@ export function InboxGlanceCard(props: { hostId: string }) {
     { idField: '$id' },
   )
 
+  /*
+   * How many leads are waiting to be worked (AGL-2622), so the dashboard
+   * says where the Inbox's captures went and the CRM's Leads list is one
+   * click from here. Two server-side counts rather than a window: a lead
+   * nobody has touched carries no status field at all — it is `new` by
+   * absence, the rule `crmLeadStatus` reads — and Firestore can neither
+   * count an absent field nor exclude the closed statuses without dropping
+   * the unstamped rows too. So the open count is every lead less the ones
+   * closed by a stamped status, and both counts are aggregations that cost
+   * one read per thousand index entries, not one per lead. `null` until
+   * they land, and left null on a refused read so the line is withheld
+   * rather than drawn as zero.
+   */
+  const crmHubPath = useCrmHubPath()
+  const [openLeads, setOpenLeads] = useState<number | null>(null)
+  useEffect(() => {
+    let active = true
+    const leads = collection(firestore, 'hosts', hostId, 'leads')
+    const closedStatuses = CRM_LEAD_STATUSES.filter(
+      (status) => !CRM_LEAD_OPEN_STATUSES.includes(status),
+    )
+    void Promise.all([
+      getCountFromServer(query(leads)),
+      getCountFromServer(query(leads, where('status', 'in', closedStatuses))),
+    ])
+      .then(([all, closed]) => {
+        if (!active) return
+        setOpenLeads(Math.max(0, all.data().count - closed.data().count))
+      })
+      .catch(() => undefined)
+    return () => {
+      active = false
+    }
+  }, [firestore, hostId])
+
   const submissions = submissionDocs ?? []
-  if (!submissions.length) return null
+  if (!submissions.length && !openLeads) return null
   const rows = submissions.slice(0, PREVIEW_ROWS)
   const unread = rows.filter((submission: any) => !submission.read).length
 
@@ -164,6 +218,23 @@ export function InboxGlanceCard(props: { hostId: string }) {
             .filter(Boolean)
             .join(' · ') || 'All caught up'}
         </Typography>
+        {/*
+          Where the captures went (AGL-2622): the leads still to be worked,
+          and the CRM's Leads list where they are. Text alone until the
+          route params settle, so the line never links to nowhere.
+         */}
+        {openLeads ? (
+          <Typography variant="caption" color="text.secondary">
+            {`${openLeads.toLocaleString()} open lead${openLeads === 1 ? '' : 's'} · `}
+            {crmHubPath ? (
+              <AppLink href={crmRoutes(crmHubPath).section('leads')}>
+                {'Work them in the CRM'}
+              </AppLink>
+            ) : (
+              'in the CRM'
+            )}
+          </Typography>
+        ) : null}
       </Stack>
     </CardDisplay>
   )
