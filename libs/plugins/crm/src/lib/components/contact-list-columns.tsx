@@ -68,6 +68,13 @@ export interface ContactListColumnOptions {
   /** The owner's name for a uid — the roster's, or the uid itself. */
   memberName: (uid: string) => string
   /**
+   * How a site reads, by document id — handed in at the ORGANIZATION level
+   * only (AGL-2630), where it turns on the "Known by" column: the sites
+   * that have captured each person. Absent under a site, where every row
+   * is known by the site and the column would say so on every line.
+   */
+  siteName?: (hostId: string) => string
+  /**
    * One clock for every row of one paint, so two contacts engaged a second
    * apart cannot read "just now" and "1 min ago". Defaults to the paint's
    * own `Date.now()`.
@@ -91,7 +98,7 @@ export interface ContactListColumnOptions {
 export function contactListColumns(
   options: ContactListColumnOptions,
 ): GridColDef[] {
-  const { memberName } = options
+  const { memberName, siteName } = options
   const nowMs = options.nowMs ?? Date.now()
   return [
     {
@@ -160,6 +167,54 @@ export function contactListColumns(
           </Typography>
         ),
     },
+    /*
+     * KNOWN BY (AGL-2630): the sites that have captured this person, which
+     * is the cross-site fact the organization-level list exists to show —
+     * one deduplicated row per person, and which of the org's sites know
+     * them. `capturedByHostIds` is a top-level array precisely so the
+     * question can be answered without opening a facet. Not filterable from
+     * the panel: an `array-contains` on it would displace the scope clause
+     * under a site, and at the org level a saved view narrows the window
+     * instead. A row that names no site predates attribution and says so,
+     * rather than reading as "every site".
+     */
+    ...(siteName
+      ? [
+          {
+            field: 'capturedByHostIds',
+            headerName: 'Known by',
+            flex: 1.1,
+            minWidth: 200,
+            sortable: false,
+            filterable: false,
+            valueGetter: (_value: unknown, row: ContactRecord) =>
+              row.capturedByHostIds.map(siteName).join(', '),
+            renderCell: ({ row }: { row: ContactRecord }) =>
+              row.capturedByHostIds.length ? (
+                <Stack
+                  direction="row"
+                  spacing={0.5}
+                  sx={{ alignItems: 'center', height: '100%', flexWrap: 'nowrap' }}
+                >
+                  {row.capturedByHostIds.slice(0, 2).map((hostId) => (
+                    <Chip key={hostId} size="small" label={siteName(hostId)} />
+                  ))}
+                  {row.capturedByHostIds.length > 2 ? (
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      label={`+${row.capturedByHostIds.length - 2}`}
+                    />
+                  ) : null}
+                </Stack>
+              ) : (
+                <Typography variant="caption" color="text.secondary">
+                  {'No site recorded'}
+                </Typography>
+              ),
+          } satisfies GridColDef,
+        ]
+      : []),
     {
       field: 'sources',
       headerName: 'Sources',

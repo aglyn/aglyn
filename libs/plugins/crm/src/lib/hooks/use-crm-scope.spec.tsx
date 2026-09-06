@@ -78,7 +78,9 @@ const HOSTS = [
 function orgMount(hosts = HOSTS, hostsReady = true) {
   return function Mount({ children }: { children: ReactNode }) {
     return (
-      <CrmOrgMountProvider mount={{ orgId: 'org-1', hosts, hostsReady }}>
+      <CrmOrgMountProvider
+        mount={{ orgId: 'org-1', hosts, hostsReady, hostsPath: '/acme/hosts' }}
+      >
         {children}
       </CrmOrgMountProvider>
     )

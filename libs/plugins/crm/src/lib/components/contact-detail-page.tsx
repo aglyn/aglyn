@@ -43,6 +43,7 @@ import { contactPrimaryGroup, contactRecordFromDoc } from '../model/contact-reco
 import { type CrmDetailPageProps, crmRoutes } from '../model/crm-routes'
 import ContactAssociationsCard from './contact-associations-card'
 import ContactCustomFieldsCard from './contact-custom-fields-card'
+import ContactKnownByCard from './contact-known-by-card'
 import ContactPropertiesCard from './contact-properties-card'
 import ContactTimelineCard from './contact-timeline-card'
 import { AddToListButton } from './add-to-list-button'
@@ -354,6 +355,13 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
       />
       {record && row && scope ? (
         <>
+          {/*
+            The cross-site fact, at the organization level only (AGL-2630):
+            which sites know this person, and their consent for each. Under
+            a site the page IS one site's view and the card would say so on
+            every record.
+          */}
+          {mount ? <ContactKnownByCard row={row} contactId={id} org={org} /> : null}
           <ContactPropertiesCard
             hostId={hostId}
             org={org}

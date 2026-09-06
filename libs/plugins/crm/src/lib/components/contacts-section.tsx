@@ -47,6 +47,7 @@ import {
   contactPrimaryGroup,
   contactRecordFromDoc,
 } from '../model/contact-record'
+import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
 import { crmVisibleToClause, useCrmScope } from '../hooks/use-crm-scope'
 import { contactsListSeed } from '../model/contacts-list-seed'
 import { crmRoutes } from '../model/crm-routes'
@@ -201,6 +202,9 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
   // and the viewing group and the scope clause are both `null`.
   const crmScope = useCrmScope({ hostId, org })
   const { scope: dataScope, orgId, consentGroup, visibleTo: visibleToTokens } = crmScope
+  // The org's site list, at the organization level only — what names the
+  // sites in the "Known by" column (AGL-2630).
+  const mount = useCrmOrgMount()
   // The org's custom fields, for the optional columns below (AGL-2601).
   const customFields = useContactFieldDefinitions(dataScope?.[1] ?? null)
   /*==========================================
@@ -649,11 +653,15 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
   /* One row grammar, the console's (AGL-2501) — the same table everywhere. */
   const contactColumns = useMemo(
     () => [
-      ...contactListColumns({ memberName: members.memberName }),
+      ...contactListColumns({
+        memberName: members.memberName,
+        // "Known by", at the organization level only (AGL-2630).
+        siteName: mount ? mount.siteName : undefined,
+      }),
       // The org's custom fields as optional columns (AGL-2601).
       ...customFieldColumns(customFields.active),
     ],
-    [members.memberName, customFields.active],
+    [members.memberName, mount, customFields.active],
   )
   /*
    * The grid's column and sort models are the VIEW'S (AGL-2617). The

@@ -159,7 +159,7 @@ describe('the CRM hub routes sections and records (AGL-2595)', () => {
     render(
       <CrmConsolePage
         hostId={null}
-        orgMount={{ orgId: 'org-1', hosts: [], hostsReady: true }}
+        orgMount={{ orgId: 'org-1', hosts: [], hostsReady: true, hostsPath: '/acme/hosts' }}
         entitled
         basePath="/acme/crm"
         sections={shellSections()}

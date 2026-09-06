@@ -157,6 +157,14 @@ export interface ConsolePluginOrgMount {
   orgId: string
   hosts: readonly ConsolePluginOrgHost[]
   hostsReady: boolean
+  /**
+   * The console path every site's own hub hangs beneath — `/[orgSlug]/hosts`
+   * — so a cross-site fact can link a person into the site that holds them:
+   * a site's CRM is `${hostsPath}/${subdomain}/crm`. A path rather than a
+   * builder because the mount is data the shell hands over and a plugin
+   * cannot import the console's route table.
+   */
+  hostsPath: string
 }
 
 /**

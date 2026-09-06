@@ -56,6 +56,12 @@ export interface CrmOrgMount extends ConsolePluginOrgMount {
    * a site the list did not answer for — named, never linked.
    */
   siteSubdomain: (hostId: string) => string | null
+  /**
+   * The site's own CRM hub — `${hostsPath}/${subdomain}/crm` — or `null`
+   * for a site whose subdomain the list could not answer, which is named
+   * and not linked.
+   */
+  siteHubHref: (hostId: string) => string | null
 }
 
 const CrmOrgMountContext = createContext<CrmOrgMount | null>(null)
@@ -96,7 +102,7 @@ export function CrmOrgMountProvider(props: {
   children: ReactNode
 }) {
   const { mount, children } = props
-  const { orgId, hosts, hostsReady } = mount
+  const { orgId, hosts, hostsReady, hostsPath } = mount
   const [picked, setPicked] = useState<string | null>(null)
   // Read after mount rather than in the initializer, so the server and the
   // first client paint agree: the pick only ever affects a drawer somebody
@@ -139,18 +145,37 @@ export function CrmOrgMountProvider(props: {
     (hostId: string) => byId.get(hostId)?.subdomain ?? null,
     [byId],
   )
+  const siteHubHref = useCallback(
+    (hostId: string) => {
+      const subdomain = byId.get(hostId)?.subdomain
+      return subdomain ? `${hostsPath}/${encodeURIComponent(subdomain)}/crm` : null
+    },
+    [byId, hostsPath],
+  )
 
   const value = useMemo<CrmOrgMount>(
     () => ({
       orgId,
       hosts,
       hostsReady,
+      hostsPath,
       createHostId,
       setCreateHostId,
       siteName,
       siteSubdomain,
+      siteHubHref,
     }),
-    [orgId, hosts, hostsReady, createHostId, setCreateHostId, siteName, siteSubdomain],
+    [
+      orgId,
+      hosts,
+      hostsReady,
+      hostsPath,
+      createHostId,
+      setCreateHostId,
+      siteName,
+      siteSubdomain,
+      siteHubHref,
+    ],
   )
   return (
     <CrmOrgMountContext.Provider value={value}>

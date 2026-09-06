@@ -32,7 +32,6 @@ import { Suspense, useEffect, useMemo } from 'react'
 import { useEnabledPluginIds } from '../../../../../components/console-plugins-gate.component'
 import FeatureGate from '../../../../../components/feature-gate.component'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
-import { resolveDocsHelpTopic } from '../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import useCurrentOrg from '../../../../../hooks/use-current-org'
@@ -244,9 +243,10 @@ const OrgCrmPage: NextPageWithLayout<Record<string, never>> = () => {
               subdomain: (host['subdomain'] as string | undefined) ?? null,
             })),
             hostsReady: orgHosts.ready,
+            hostsPath: buildRoute(Route.HOST_LIST, { orgSlug }),
           }
         : undefined,
-    [orgId, orgHosts.hosts, orgHosts.ready],
+    [orgId, orgSlug, orgHosts.hosts, orgHosts.ready],
   )
 
   /*
@@ -396,7 +396,10 @@ const OrgCrmPage: NextPageWithLayout<Record<string, never>> = () => {
             ]
           : []),
       ]}
-      help={resolveDocsHelpTopic(header?.docsTopic, 'contacts')}
+      // The docs section about THIS mount (AGL-2630). The route serves the
+      // CRM hub alone, so the topic is fixed rather than read off the nav
+      // item, and the anchor is the heading a reader standing here needs.
+      help={{ topic: 'contacts', anchor: '#at-the-organization-level' }}
       header={{
         children: title,
         secondary: activeSection?.label,
