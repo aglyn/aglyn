@@ -167,6 +167,8 @@ jest.mock('next/navigation', () => ({
   useRouter: () => ({ replace: () => undefined, push: () => undefined }),
   useParams: () => ({ orgSlug: 'acme', host: 'site' }),
   usePathname: () => BASE_PATH,
+  // The submissions card reads the URL for a seeded submission (AGL-2622); none here.
+  useSearchParams: () => new URLSearchParams(),
 }))
 
 const BASE_PATH = '/acme/hosts/site/forms'

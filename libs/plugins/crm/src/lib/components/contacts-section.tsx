@@ -1059,7 +1059,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                 onOpen={(id) => router.push(routes.contact(id))}
                 /*
                  * The grid must NOT also filter: the bar above is the one
-                 * editor of the clauses, and the community grid's panel
+                 * editor of the clauses, and the grid's own filter panel
                  * holds one item where a view holds several. Columns and
                  * sort are the view's, controlled so a saved arrangement
                  * is what the grid shows and a change is what it saves.
