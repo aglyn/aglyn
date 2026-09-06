@@ -26,6 +26,7 @@ import { Alert, Stack, Typography } from '@mui/material'
 import { limit, orderBy, query } from 'firebase/firestore'
 import { useMemo } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { contactPrimaryGroup } from '../../model/contact-record'
 import { ReportBreakdown } from './report-breakdown'
 import { plural } from './report-format'
 import {
@@ -70,14 +71,14 @@ export interface ContactsMixCardProps {
  */
 export function ContactsMixCard(props: ContactsMixCardProps) {
   const { report, totalContacts } = props
-  const { scope, tokens, groupId, nowMs } = report
+  const { scope, tokens, groupId, org, nowMs } = report
   const firestore = useFirestore()
 
   const sample = useWindowRead<Record<string, unknown>>(
     () =>
       query(
         scopedCollection(firestore, scope, 'contacts'),
-        visibleToClause(tokens),
+        ...visibleToClause(tokens),
         orderBy('createdAt', 'desc'),
         limit(CONTACT_SAMPLE_CEILING + 1),
       ),
@@ -88,7 +89,15 @@ export function ContactsMixCard(props: ContactsMixCardProps) {
   const status = sample.status
 
   const mix = useMemo(() => {
-    const facets = sample.rows.map((row) => Aglyn.readContactFacet(row, groupId))
+    // Through the viewing group's facet under a site; at the organization
+    // level (AGL-2630) through each person's own primary holder, so the mix
+    // is of the profiles the capturing sites keep.
+    const facets = sample.rows.map((row) =>
+      Aglyn.readContactFacet(
+        row,
+        groupId ?? contactPrimaryGroup(row, org).groupId,
+      ),
+    )
     // A person captured two ways counts under both sources: the chart asks
     // "how many people came through each door", and a person who came
     // through two did.
@@ -111,7 +120,7 @@ export function ContactsMixCard(props: ContactsMixCardProps) {
       }
     }
     return { sources, funnel: Aglyn.funnelFromStages(stageCounts), unstaged }
-  }, [sample, groupId])
+  }, [sample, groupId, org])
 
   // A sample only once the read has settled: while the window is empty
   // every org "exceeds" zero rows.

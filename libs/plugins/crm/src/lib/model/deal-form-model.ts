@@ -250,7 +250,12 @@ export interface ContactChoice {
 export function contactChoicesFor(
   queryText: string,
   rows: readonly Record<string, unknown>[],
-  groupId: string,
+  /**
+   * The holder each row is named through: one group for every row under a
+   * site, or a resolver per row at the organization level (AGL-2630), where
+   * each contact reads through its own primary holder.
+   */
+  groupId: string | ((row: Record<string, unknown>) => string),
   max = 8,
 ): ContactChoice[] {
   const key = nameSearchKey(queryText)
@@ -258,7 +263,10 @@ export function contactChoicesFor(
   const choices: ContactChoice[] = []
   for (const row of rows) {
     const email = String(row['email'] ?? '').toLowerCase()
-    const name = contactDisplayName(row, groupId)
+    const name = contactDisplayName(
+      row,
+      typeof groupId === 'function' ? groupId(row) : groupId,
+    )
     const nameLower = nameSearchKey(name)
     const tokens = Array.isArray(row['nameTokens'])
       ? (row['nameTokens'] as unknown[]).map(String)

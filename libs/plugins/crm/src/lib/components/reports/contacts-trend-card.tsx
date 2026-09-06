@@ -77,7 +77,7 @@ export function ContactsTrendCard(props: ContactsTrendCardProps) {
       getCountFromServer(
         query(
           contacts,
-          visibleToClause(tokens),
+          ...visibleToClause(tokens),
           where('createdAt', '>=', Timestamp.fromMillis(from)),
           where('createdAt', '<', Timestamp.fromMillis(to)),
         ),

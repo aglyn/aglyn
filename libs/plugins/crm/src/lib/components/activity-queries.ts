@@ -92,11 +92,25 @@ export function useActivityScope(hostId: string | null, org: CrmOrg) {
       orgId,
       /** The site a NEW activity names as provenance — the mounted site, or the picked one. */
       hostId: createHostId,
+      /**
+       * The site the surface is MOUNTED under, or `null` at the organization
+       * level — what a dialog reads to decide whether to ask which site.
+       */
+      mountedHostId: hostId,
       consentGroup,
       readTokens,
       writeTokens,
     }),
-    [firestore, dataScope, orgId, createHostId, consentGroup, readTokens, writeTokens],
+    [
+      firestore,
+      dataScope,
+      orgId,
+      createHostId,
+      hostId,
+      consentGroup,
+      readTokens,
+      writeTokens,
+    ],
   )
 }
 

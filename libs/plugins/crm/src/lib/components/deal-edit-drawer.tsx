@@ -59,8 +59,15 @@ import {
 } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useCrmRecordsQuota } from '../hooks/use-crm-records-quota'
-import { type CrmOrgDoc, useCrmScope } from '../hooks/use-crm-scope'
+import {
+  type CrmOrgDoc,
+  crmScopeListable,
+  crmVisibleToClause,
+  useCrmScope,
+} from '../hooks/use-crm-scope'
 import { useOrgMemberDirectory } from '../hooks/use-org-member-directory'
+import { contactPrimaryGroup } from '../model/contact-record'
+import { CrmSitePicker } from './crm-site-picker'
 import {
   DEAL_CURRENCIES,
   type DealDoc,
@@ -100,7 +107,12 @@ interface CompanyChoice {
 export interface DealEditDrawerProps {
   open: boolean
   onClose: () => void
-  hostId: string
+  /**
+   * The site the drawer is opened under, or `null` at the organization
+   * level (AGL-2630), where a NEW deal asks which site captures it and an
+   * edit keeps the deal's own.
+   */
+  hostId: string | null
   org: CrmOrgDoc
   /** The deal being edited; absent for a new one. */
   deal?: DealDoc | null
@@ -156,11 +168,13 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { data: user } = useUser()
-  const logActivity = useHostActivityLogger(hostId)
-  const { orgId, consentGroup, visibleTo, createTokens } = useCrmScope({
-    hostId,
-    org,
-  })
+  const { orgId, consentGroup, visibleTo, createHostId, createTokens } =
+    useCrmScope({ hostId, org })
+  // The site a new deal is captured by — the mounted one, or the picked one
+  // — and the site whose feed the act is logged in: the deal's own on an
+  // edit, so a deal made on one site is not logged against another.
+  const dealHostId = deal ? (deal.hostId ?? null) : createHostId
+  const logActivity = useHostActivityLogger(dealHostId ?? undefined)
   const roster = useOrgMemberDirectory(open ? orgId : null)
 
   const [values, setValues] = useState<DealFormValues>(() =>
@@ -198,10 +212,10 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
    */
   const { data: contactRows } = useFirestoreCollection<Record<string, unknown>>(
     () =>
-      open && orgId && visibleTo.length
+      open && orgId && crmScopeListable(visibleTo)
         ? query(
             collection(firestore, 'orgs', orgId, 'contacts'),
-            where('visibleTo', 'array-contains-any', visibleTo),
+            ...crmVisibleToClause(visibleTo),
             orderBy('updatedAt', 'desc'),
             limit(CONTACT_WINDOW),
           )
@@ -210,9 +224,17 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
     { idField: '$id' },
   )
   const [contactQuery, setContactQuery] = useState('')
+  // Named through the viewing group under a site; at the organization level
+  // through each person's own primary holder.
   const contactChoices = useMemo(
-    () => contactChoicesFor(contactQuery, contactRows ?? [], consentGroup.groupId),
-    [contactQuery, contactRows, consentGroup.groupId],
+    () =>
+      contactChoicesFor(
+        contactQuery,
+        contactRows ?? [],
+        consentGroup?.groupId ??
+          ((row) => contactPrimaryGroup(row, org as Record<string, unknown>).groupId),
+      ),
+    [contactQuery, contactRows, consentGroup, org],
   )
   const contactValue: ContactChoice | null = values.contactId
     ? {
@@ -231,14 +253,14 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
   const [companyQuery, setCompanyQuery] = useState('')
   const [companyChoices, setCompanyChoices] = useState<CompanyChoice[]>([])
   useEffect(() => {
-    if (!open || !orgId || !visibleTo.length) return
+    if (!open || !orgId || !crmScopeListable(visibleTo)) return
     const key = nameSearchKey(companyQuery)
     let active = true
     const timer = setTimeout(() => {
       void getDocs(
         query(
           collection(firestore, 'orgs', orgId, CRM_COLLECTIONS.companies),
-          where('visibleTo', 'array-contains-any', visibleTo),
+          ...crmVisibleToClause(visibleTo),
           orderBy('nameLower'),
           ...(key ? [startAt(key), endAt(`${key}\uf8ff`)] : []),
           limit(COMPANY_MATCHES),
@@ -313,11 +335,14 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
         enqueueSnackbar('Deal saved', { variant: 'success', persist: false })
         onSaved?.(deal.$id, 'edit')
       } else {
+        // Held by the button until the capturing site is known; checked
+        // again here because a callback can outlive the render that held it.
+        if (!createHostId) return
         const created = await addDoc(
           collection(firestore, 'orgs', orgId, CRM_COLLECTIONS.deals),
           dealDocumentFromForm(values, {
             visibleTo: [...createTokens],
-            hostId,
+            hostId: createHostId,
             uid: user.uid,
             nowMs,
           }),
@@ -350,7 +375,7 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
     fromCache,
     firestore,
     createTokens,
-    hostId,
+    createHostId,
     logActivity,
     enqueueSnackbar,
     onSaved,
@@ -383,6 +408,19 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
     >
       <Container gutterY>
         <Stack spacing={2} sx={{ width: { xs: '100%', sm: 420 } }}>
+          {/*
+            First, because the scope of everything below follows from it: at
+            the organization level a new deal names the site that captures
+            it. Nothing under a site, and nothing on an edit — a deal keeps
+            the site it was made on (AGL-2630).
+          */}
+          {mode === 'create' ? (
+            <CrmSitePicker
+              hostId={hostId}
+              disabled={busy}
+              helperText="The site this deal belongs to — it decides which of your sites may see it."
+            />
+          ) : null}
           <TextField
             label="Title"
             value={values.title}
@@ -570,7 +608,14 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
           {problem && values.title ? <Alert severity="warning">{problem}</Alert> : null}
           <Button
             variant="contained"
-            disabled={busy || Boolean(problem) || !orgId || bandFull}
+            disabled={
+              busy ||
+              Boolean(problem) ||
+              !orgId ||
+              bandFull ||
+              // A new deal waits for its capturing site.
+              (mode === 'create' && !createHostId)
+            }
             onClick={() => void handleSave()}
           >
             {deal ? 'Save deal' : 'Create deal'}

@@ -94,23 +94,23 @@ export function CrmGlanceCard(props: { hostId: string }) {
     const countOf = (target: ReturnType<typeof query>) =>
       getCountFromServer(target).then((snapshot) => snapshot.data().count)
     return Promise.all([
-      countOf(query(contacts, visibleToClause(tokens))),
+      countOf(query(contacts, ...visibleToClause(tokens))),
       countOf(
         query(
           contacts,
-          visibleToClause(tokens),
+          ...visibleToClause(tokens),
           where('createdAt', '>=', Timestamp.fromMillis(nowMs - WEEK_MS)),
         ),
       ),
       getAggregateFromServer(
-        query(deals, visibleToClause(tokens), where('status', '==', 'open')),
+        query(deals, ...visibleToClause(tokens), where('status', '==', 'open')),
         { amountCents: sum('amountCents') },
       ).then((snapshot) => Number(snapshot.data().amountCents ?? 0)),
       // Due today OR overdue: everything open that is due before the day ends.
       countOf(
         query(
           tasks,
-          visibleToClause(tokens),
+          ...visibleToClause(tokens),
           where('status', '==', 'open'),
           where('dueAtMs', '<', day.end),
         ),

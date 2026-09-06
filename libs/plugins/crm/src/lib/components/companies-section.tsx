@@ -49,13 +49,14 @@ import { collection, limit, orderBy, query, where } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
 import { COMPANY_LIST_FILTER_FIELDS } from '../constants/company-filters'
-import { useCrmScope } from '../hooks/use-crm-scope'
+import { crmVisibleToClause, useCrmScope } from '../hooks/use-crm-scope'
 import { useOrgMemberOptions } from '../hooks/use-org-member-options'
 import { crmRoutes } from '../model/crm-routes'
 import CompanyEditDrawer from './company-edit-drawer'
 
 export interface CompaniesSectionProps {
-  hostId: string
+  /** The site the list is read under, or `null` at the organization level. */
+  hostId: string | null
   org?: Partial<AglynOrgBilling>
   /** The CRM hub URL, which every company route hangs beneath. */
   basePath: string
@@ -140,7 +141,8 @@ export function CompaniesSection(props: CompaniesSectionProps) {
       )
       return query(
         collection(firestore, scope[0], scope[1], CRM_COLLECTIONS.companies),
-        where('visibleTo', 'array-contains-any', visibleTo),
+        // Absent at the organization level, where the tokens are `null` (AGL-2630).
+        ...crmVisibleToClause(visibleTo),
         ...(constraints ?? [orderBy('updatedAt', 'desc')]),
         limit(pageLimit),
       )

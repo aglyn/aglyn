@@ -65,18 +65,14 @@ import {
   type ContactImportTargetId,
   contactImportSkippedCsv,
   CRM_COLLECTIONS,
-  consentGroupForHost,
   customImportTarget,
   customImportTargetKey,
   emptyContactImportResult,
   guessContactImportMapping,
-  hostScopeToken,
   LIST_IMPORT_MAX_CHARACTERS,
   mapContactImportRow,
-  MAX_SCOPE_HOSTS,
   mergeContactImportResults,
   normalizeContactEmail,
-  ORG_SCOPE_TOKEN,
   parseCsv,
   pluginDocsHelp,
 } from '@aglyn/aglyn'
@@ -88,7 +84,6 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   useFirestore,
   useFirestoreCollection,
-  useOrgDataScope,
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import {
@@ -109,13 +104,21 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { collection, limit, query, where } from 'firebase/firestore'
+import { collection, limit, query } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { crmVisibleToClause, useCrmScope } from '../hooks/use-crm-scope'
+import { CrmSitePicker } from './crm-site-picker'
 
 export interface ContactImportDrawerProps {
   open: boolean
   onClose: () => void
-  hostId: string
+  /**
+   * The site the file is imported INTO — what the route captures every row
+   * under — or `null` at the organization level (AGL-2630), where the
+   * drawer asks which site with a picker and holds the import until one is
+   * named.
+   */
+  hostId: string | null
   /**
    * The org document the shell passed, for the consent group's scope
    * tokens. Typed as the page prop it is forwarded from, so the contacts
@@ -158,7 +161,8 @@ function droppedFieldLabel(
  */
 function useImportFieldDefinitions(options: {
   orgId: string | null | undefined
-  visibleToTokens: readonly string[]
+  /** The reader's tokens, or `null` at the organization level — no clause. */
+  visibleToTokens: readonly string[] | null
   enabled: boolean
 }): ContactFieldDefinition[] {
   const { orgId, visibleToTokens, enabled } = options
@@ -168,7 +172,7 @@ function useImportFieldDefinitions(options: {
       enabled && orgId
         ? query(
             collection(firestore, 'orgs', orgId, CRM_COLLECTIONS.contactFields),
-            where('visibleTo', 'array-contains-any', [...visibleToTokens]),
+            ...crmVisibleToClause(visibleToTokens),
             limit(100),
           )
         : null,
@@ -188,19 +192,14 @@ export function ContactImportDrawer(props: ContactImportDrawerProps) {
   const { open, onClose, hostId, org } = props
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
-  const { orgId } = useOrgDataScope({ hostId })
-  const consentGroup = useMemo(
-    () => consentGroupForHost((org ?? {}) as Record<string, unknown>, hostId),
-    [org, hostId],
-  )
-  const visibleToTokens = useMemo(
-    () =>
-      [
-        ORG_SCOPE_TOKEN,
-        ...consentGroup.hostIds.map((id) => hostScopeToken(id)),
-      ].slice(0, MAX_SCOPE_HOSTS),
-    [consentGroup],
-  )
+  // The org root and the reader's tokens from the one scope hook (AGL-2614),
+  // and the site every row is captured under: the mounted one, or at the
+  // organization level the one the picker named (AGL-2630).
+  const {
+    orgId,
+    visibleTo: visibleToTokens,
+    createHostId,
+  } = useCrmScope({ hostId, org })
   const fields = useImportFieldDefinitions({
     orgId,
     visibleToTokens,
@@ -338,7 +337,7 @@ export function ContactImportDrawer(props: ContactImportDrawerProps) {
    * still reports what it did rather than nothing.
    */
   const handleImport = useCallback(async () => {
-    if (busy || !rows.length || !emailMapped) return
+    if (busy || !rows.length || !emailMapped || !createHostId) return
     setBusy(true)
     let total = emptyContactImportResult()
     setResult(total)
@@ -352,7 +351,7 @@ export function ContactImportDrawer(props: ContactImportDrawerProps) {
         const response = await authorizedFetch(user, '/api/crm/contacts-import', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ hostId, rows: chunk }),
+          body: JSON.stringify({ hostId: createHostId, rows: chunk }),
         })
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
@@ -378,7 +377,7 @@ export function ContactImportDrawer(props: ContactImportDrawerProps) {
     } finally {
       setBusy(false)
     }
-  }, [busy, rows, emailMapped, mapping, user, hostId, enqueueSnackbar])
+  }, [busy, rows, emailMapped, mapping, user, createHostId, enqueueSnackbar])
 
   const handleDownloadSkipped = useCallback(() => {
     if (!result?.skipped.length) return
@@ -444,6 +443,15 @@ export function ContactImportDrawer(props: ContactImportDrawerProps) {
             />
           ) : (
             <>
+              {/*
+                First, because every row is filed under the answer: the site
+                the file is imported into. Nothing under a site (AGL-2630).
+              */}
+              <CrmSitePicker
+                hostId={hostId}
+                disabled={busy}
+                helperText="The site these people are imported into — it decides which of your sites may see them and whose marketing consent the file's consent column records."
+              />
               <Typography variant="body2" color="text.secondary">
                 {'A CSV with a header row. Match its columns to contact ' +
                   'fields below, check the preview, then import. A person ' +
@@ -508,7 +516,8 @@ export function ContactImportDrawer(props: ContactImportDrawerProps) {
               <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
                 <Button
                   variant="contained"
-                  disabled={busy || !rows.length || !emailMapped}
+                  // Held until the capturing site is known.
+                  disabled={busy || !rows.length || !emailMapped || !createHostId}
                   onClick={() => void handleImport()}
                 >
                   {rows.length
@@ -760,7 +769,8 @@ function ImportResultPanel(props: {
  * its own.
  */
 export function ContactImportButton(props: {
-  hostId: string
+  /** The site the list is read under, or `null` at the organization level. */
+  hostId: string | null
   org?: ConsolePluginPageProps['org']
 }) {
   const { hostId, org } = props
