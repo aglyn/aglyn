@@ -133,6 +133,13 @@ export interface CrmActivityLink {
   contactId?: string | null
   companyId?: string | null
   dealId?: string | null
+  /**
+   * `hosts/{hostId}/leads/{leadId}` — a person not yet converted (AGL-2615).
+   * A lead is host-scoped by path and carries no `visibleTo` of its own, so
+   * an activity filed under one is stamped with the site's scope like any
+   * other record created from that site.
+   */
+  leadId?: string | null
 }
 
 /**
@@ -149,10 +156,13 @@ export interface CrmActivityLink {
  */
 export function crmActivityCeilingLink(
   link: CrmActivityLink,
-): { field: 'contactId' | 'companyId' | 'dealId'; id: string } | null {
+): { field: 'contactId' | 'companyId' | 'dealId' | 'leadId'; id: string } | null {
   if (link.contactId) return { field: 'contactId', id: String(link.contactId) }
   if (link.companyId) return { field: 'companyId', id: String(link.companyId) }
   if (link.dealId) return { field: 'dealId', id: String(link.dealId) }
+  // Last, because a converted lead's activities carry the contact beside it
+  // and the contact is the record whose page they are read on.
+  if (link.leadId) return { field: 'leadId', id: String(link.leadId) }
   return null
 }
 
@@ -455,6 +465,136 @@ export function activityKindHasOutcome(kind: CrmActivityKind): boolean {
 }
 
 /**
+ * Where a one-to-one email got to (AGL-2615), in the order it normally
+ * happens — the vocabulary the delivery webhook maps its events onto an
+ * `email` activity in, and the chip the timeline shows beside the entry.
+ *
+ * The first four are a progression: a message is sent, then delivered, then
+ * opened, then clicked, and a later state implies the earlier ones. The last
+ * two are terminal failures. A message the mailbox provider bounced or that
+ * the recipient reported is never "opened" in any sense the timeline should
+ * report, whatever a tracking pixel says afterwards.
+ */
+export const CRM_EMAIL_DELIVERY_STATES = [
+  'sent',
+  'delivered',
+  'opened',
+  'clicked',
+  'bounced',
+  'complained',
+] as const
+
+export type CrmEmailDeliveryState = (typeof CRM_EMAIL_DELIVERY_STATES)[number]
+
+/** How a delivery state reads on the chip — typed so a state cannot ship unlabeled. */
+export const CRM_EMAIL_DELIVERY_STATE_LABELS: Record<CrmEmailDeliveryState, string> = {
+  sent: 'Sent',
+  delivered: 'Delivered',
+  opened: 'Opened',
+  clicked: 'Clicked',
+  bounced: 'Bounced',
+  complained: 'Marked as spam',
+}
+
+export function isCrmEmailDeliveryState(
+  value: unknown,
+): value is CrmEmailDeliveryState {
+  return (
+    typeof value === 'string' &&
+    (CRM_EMAIL_DELIVERY_STATES as readonly string[]).includes(value)
+  )
+}
+
+/** The two states that mean the message did not land. */
+export function isCrmEmailDeliveryFailure(state: unknown): boolean {
+  return state === 'bounced' || state === 'complained'
+}
+
+/**
+ * The rank the webhook advances by. Higher wins; a failure outranks every
+ * progression state, and a complaint outranks a bounce because it is the
+ * one a sender is scored on.
+ */
+const CRM_EMAIL_DELIVERY_RANK: Record<CrmEmailDeliveryState, number> = {
+  sent: 1,
+  delivered: 2,
+  opened: 3,
+  clicked: 4,
+  bounced: 5,
+  complained: 6,
+}
+
+/**
+ * The state an activity holds after one more delivery event, from the state
+ * it held before.
+ *
+ * MONOTONIC. Provider events arrive at least once and in no promised order
+ * — an `opened` can reach the webhook before the `delivered` it implies, and
+ * a replay can hand back yesterday's `delivered` after today's `clicked` —
+ * so the row keeps whichever state is further along, and an event that says
+ * less than the row already knows changes nothing. A stored value the
+ * vocabulary does not name reads as nothing, so the incoming event stands.
+ */
+export function nextCrmEmailDeliveryState(
+  current: unknown,
+  incoming: CrmEmailDeliveryState,
+): CrmEmailDeliveryState {
+  if (!isCrmEmailDeliveryState(current)) return incoming
+  return CRM_EMAIL_DELIVERY_RANK[incoming] > CRM_EMAIL_DELIVERY_RANK[current]
+    ? incoming
+    : current
+}
+
+/** The most a one-to-one email's subject may hold. */
+export const CRM_EMAIL_SUBJECT_MAX = 200
+/** The most a one-to-one email's body may hold — a letter, not a document. */
+export const CRM_EMAIL_BODY_MAX = 10_000
+
+/**
+ * The `context` a one-to-one email is sent under, which `sendEmail` stamps
+ * as a provider tag on the message and the delivery log files it by.
+ */
+export const CRM_EMAIL_CONTEXT = 'crm'
+/** The provider tag naming the activity row a one-to-one email belongs to. */
+export const CRM_EMAIL_ACTIVITY_TAG = 'activityId'
+/** The provider tag naming the org whose `crmActivities` holds that row. */
+export const CRM_EMAIL_ORG_TAG = 'orgId'
+
+/** What a provider tag value may be — anything else fails the whole send. */
+const PROVIDER_TAG_VALUE = /^[A-Za-z0-9_-]{1,256}$/
+
+/**
+ * The tags a one-to-one email carries so the delivery webhook can find its
+ * activity row (AGL-2615): the org, the activity, and the site for the
+ * per-site suppression list a bounce lands on.
+ *
+ * Every value is checked against the provider's alphabet rather than
+ * trusted, for the reason `contextTag` gives — a value the provider rejects
+ * fails the send, and a failed send is worse than an untracked one. The
+ * org and the activity are the pair the webhook needs, so an unusable
+ * value for EITHER yields no tags at all: a tag set that named a row it
+ * could not locate would be a promise the timeline cannot keep. The site
+ * is stamped when it can be and dropped alone when it cannot.
+ */
+export function crmEmailDeliveryTags(input: {
+  orgId: string
+  hostId: string
+  activityId: string
+}): { name: string; value: string }[] {
+  const orgId = String(input.orgId ?? '')
+  const activityId = String(input.activityId ?? '')
+  const hostId = String(input.hostId ?? '')
+  if (!PROVIDER_TAG_VALUE.test(orgId) || !PROVIDER_TAG_VALUE.test(activityId)) {
+    return []
+  }
+  return [
+    { name: CRM_EMAIL_ORG_TAG, value: orgId },
+    { name: CRM_EMAIL_ACTIVITY_TAG, value: activityId },
+    ...(PROVIDER_TAG_VALUE.test(hostId) ? [{ name: 'hostId', value: hostId }] : []),
+  ]
+}
+
+/**
  * `orgs/{orgId}/crmActivities/{activityId}` — one thing that happened.
  *
  * Distinct from a contact's `interactions`: those are what the PLATFORM
@@ -486,12 +626,81 @@ export interface CrmActivity extends CrmScoped {
   contactId?: string
   companyId?: string
   dealId?: string
+  /** The lead it was filed under (AGL-2615) — see {@link CrmActivityLink.leadId}. */
+  leadId?: string
   outcome?: string
   durationMinutes?: number
+  /**
+   * An `email` the platform SENT (AGL-2615), as against one a person logged
+   * by hand: the subject line, who it went to, and where delivery got to.
+   * Absent on a hand-logged email, which has a body and nothing else.
+   */
+  subject?: string
+  /** The address the message left for. */
+  to?: string
+  /** `outbound` for a message the platform sent. Nothing is inbound yet. */
+  direction?: 'outbound'
+  /** See {@link CrmEmailDeliveryState}; advanced by the delivery webhook. */
+  deliveryState?: CrmEmailDeliveryState
+  /** When the delivery state last moved, epoch ms. */
+  deliveryAtMs?: number
 }
 
 /** An activity as a listener hands it back: the document plus its id. */
 export type CrmActivityRow = CrmActivity & { $id: string }
+
+/** What a sent one-to-one email is logged from — see {@link buildCrmEmailActivity}. */
+export interface CrmEmailActivityInput {
+  subject: string
+  body: string
+  /** The recipient, as the message was addressed. */
+  to: string
+  /** When it was sent. */
+  atMs: number
+  /** Who sent it, or `''` for an automation — see `CrmActivity.byUid`. */
+  byUid: string
+  byName?: string
+  sourceActionId?: string
+  link: CrmActivityLink
+  hostId: string
+  visibleTo: string[]
+}
+
+/**
+ * The activity row a sent one-to-one email is logged as (AGL-2615).
+ *
+ * ONE builder for the two writers — the console's send route and the
+ * `sendEmail` automation step — so a message a rep wrote and a message a
+ * flow sent are the same kind of entry on the timeline: `kind: 'email'`,
+ * outbound, starting at `sent` for the delivery webhook to advance. A
+ * writer that assembled its own would be the one whose rows the chip did
+ * not know how to read. Timestamps are the writer's: a server stamps
+ * `serverTimestamp()` and this module has no Firestore.
+ */
+export function buildCrmEmailActivity(input: CrmEmailActivityInput): CrmActivity {
+  const { link } = input
+  return {
+    kind: 'email',
+    subject: String(input.subject ?? '').slice(0, CRM_EMAIL_SUBJECT_MAX),
+    body: String(input.body ?? '').slice(0, CRM_EMAIL_BODY_MAX),
+    to: input.to,
+    direction: 'outbound',
+    deliveryState: 'sent',
+    deliveryAtMs: input.atMs,
+    atMs: input.atMs,
+    byUid: input.byUid,
+    ...(input.byName ? { byName: input.byName } : {}),
+    ...(input.sourceActionId ? { sourceActionId: input.sourceActionId } : {}),
+    // Only the links the caller fixed: a key with no value is `undefined`,
+    // which Firestore refuses.
+    ...(link.contactId ? { contactId: String(link.contactId) } : {}),
+    ...(link.companyId ? { companyId: String(link.companyId) } : {}),
+    ...(link.dealId ? { dealId: String(link.dealId) } : {}),
+    ...(link.leadId ? { leadId: String(link.leadId) } : {}),
+    hostId: input.hostId,
+    visibleTo: [...input.visibleTo],
+  }
+}
 
 /**
  * One entry of a contact's timeline (AGL-2600): something the platform
@@ -580,11 +789,13 @@ export function mergeContactTimeline(
  * the widest and so the last resort.
  */
 export function crmActivityRecordLink(
-  activity: Pick<CrmActivity, 'contactId' | 'companyId' | 'dealId'>,
-): { record: 'contact' | 'deal' | 'company'; id: string } | null {
+  activity: Pick<CrmActivity, 'contactId' | 'companyId' | 'dealId' | 'leadId'>,
+): { record: 'contact' | 'deal' | 'company' | 'lead'; id: string } | null {
   if (activity.contactId) return { record: 'contact', id: activity.contactId }
   if (activity.dealId) return { record: 'deal', id: activity.dealId }
   if (activity.companyId) return { record: 'company', id: activity.companyId }
+  // A lead is the narrowest: once converted, the contact it became leads.
+  if (activity.leadId) return { record: 'lead', id: activity.leadId }
   return null
 }
 
