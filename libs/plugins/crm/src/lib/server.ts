@@ -86,6 +86,7 @@ import {
   CONTACT_EMAIL_HISTORY_ROUTE,
   contactEmailHistoryHandler,
 } from './server/contact-email-history'
+import { CRM_ERASE_PERSON_ROUTE, crmErasePersonHandler } from './server/erase-person'
 
 /**
  * `GET /api/crm/ping` → `{ ok: true, plugin: 'crm' }`.
@@ -546,4 +547,7 @@ export function registerCrmConsoleApi(): void {
   // The one READ behind a route (AGL-2616): the per-recipient delivery log
   // is closed to clients, so a contact's campaign mail is projected here.
   registerPluginApiRoute(CONTACT_EMAIL_HISTORY_ROUTE, contactEmailHistoryHandler)
+  // Files a person's privacy erasure for the daily job (AGL-2623);
+  // workspace admins only.
+  registerPluginApiRoute(CRM_ERASE_PERSON_ROUTE, crmErasePersonHandler)
 }
