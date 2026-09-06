@@ -20,6 +20,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import {
   buildRoute,
   formFieldsCanYieldAnEmail,
+  formFieldsCaptureConsent,
   PageHeaderActions,
   PageHeaderRecord,
   pluginDocsHelp,
@@ -204,11 +205,13 @@ export function FormDetailCard(props: FormDetailCardProps) {
   const effectiveLead = lead ?? form?.routing?.lead === true
   const effectiveConsent = consentField ?? String(form?.consentFieldName ?? '')
   /*
-   * Whether lead routing COULD work on this design — the same precondition
+   * Whether lead routing COULD work on this design — the two preconditions
    * `checkFormContract` applies at publish, asked here so the switch says so
-   * before it is flipped rather than after (AGL-2612).
+   * before it is flipped rather than after (AGL-2612). Consent is read as
+   * it is being edited: picking a field below is what satisfies it.
    */
-  const canRouteLeads = formFieldsCanYieldAnEmail(declaredFields)
+  const hasEmailField = formFieldsCanYieldAnEmail(declaredFields)
+  const capturesConsent = formFieldsCaptureConsent(declaredFields, effectiveConsent)
   /*
    * Where this form's people are: the Contacts list, narrowed to source
    * `form` and this form's id. Built from the resolved org slug and
@@ -588,13 +591,17 @@ export function FormDetailCard(props: FormDetailCardProps) {
                     label="Also create a lead from the address someone gives this form"
                   />
                   <Typography variant="caption" color="text.secondary">
-                    {canRouteLeads
-                      ? 'Files a lead in CRM → Leads for the sales team to work. ' +
-                        'A consent field below is what makes that lead mailable; ' +
-                        'without one the lead exists and cannot be emailed.'
-                      : 'Needs an email field in the published design — a ' +
+                    {!hasEmailField
+                      ? 'Needs an email field in the published design — a ' +
                         'submission without an address cannot key a lead, and ' +
-                        'publishing with this on would be refused until one exists.'}
+                        'publishing with this on would be refused until one exists.'
+                      : !capturesConsent
+                        ? 'Needs a marketing consent field — a lead nobody opted ' +
+                          'in with is one the team cannot email, and publishing ' +
+                          'with this on would be refused until the field below ' +
+                          'names one.'
+                        : 'Files a lead in CRM → Leads for the sales team to work, ' +
+                          'carrying the opt-in the consent field records.'}
                   </Typography>
                 </Stack>
                 <TextField

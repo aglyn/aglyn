@@ -69,11 +69,9 @@ export interface LeadSurfacesNoteProps {
  * One dotted `updateDoc` on `routing.lead`, so a dataset binding beside it
  * is untouched, under the same host-content write the form's page makes.
  * Offered only where `leadSurfaceForms` says the publish check would honor
- * it — a form with no email field is refused with the reason as the
- * tooltip, because a switch that flips and then fails at publish is the
- * exact confusion this note exists to remove. A consent field is not a
- * precondition: it is what makes a lead MAILABLE, and the note says so
- * rather than refusing on it.
+ * it — a form with no email field, or one that records no consent, is
+ * refused with the reason as the tooltip, because a switch that flips and
+ * then fails at publish is the exact confusion this note exists to remove.
  */
 export function LeadSurfacesNote(props: LeadSurfacesNoteProps) {
   const { hostId } = props
@@ -195,15 +193,7 @@ export function LeadSurfacesNote(props: LeadSurfacesNoteProps) {
                 an absent control and an inapplicable one look alike, and
                 only one of them says what to do about it.
               */}
-              <Tooltip
-                title={
-                  form.blocker ??
-                  (form.hasConsentField
-                    ? ''
-                    : 'Turns on without a consent field. A lead is mailable ' +
-                      'only once the form names one on its own page.')
-                }
-              >
+              <Tooltip title={form.blocker ?? ''}>
                 <span>
                   <Button
                     size="small"

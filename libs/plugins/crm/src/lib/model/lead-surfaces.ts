@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { formFieldsCanYieldAnEmail } from '@aglyn/aglyn'
+import { formFieldsCanYieldAnEmail, formFieldsCaptureConsent } from '@aglyn/aglyn'
 
 /**
  * How many forms the Leads section reads to say which of them create leads.
@@ -30,6 +30,9 @@ export const LEAD_SURFACE_FORMS_WINDOW = 50
 export const LEAD_ROUTING_NEEDS_EMAIL_FIELD =
   'This form has no email field, so a submission could not key a lead. ' +
   'Add one in the besigner first.'
+export const LEAD_ROUTING_NEEDS_CONSENT_FIELD =
+  'This form records no consent, so every lead it filed would be one the ' +
+  'team cannot email. Name a marketing consent field on its page first.'
 
 /** One of the site's forms, as the Leads section describes it. */
 export interface LeadSurfaceForm {
@@ -37,12 +40,10 @@ export interface LeadSurfaceForm {
   displayName: string
   /** `routing.lead` is on: every submission with an address files a lead. */
   routed: boolean
-  /** Whether routing may be turned on — the same precondition the publish check applies. */
+  /** Whether routing may be turned on — the two preconditions the publish check applies. */
   canRoute: boolean
-  /** Why it may not, when it may not. */
+  /** Why it may not, when it may not: the first gate the publish check would refuse on. */
   blocker: string | null
-  /** Whether the form names a consent field, which is what makes a lead mailable. */
-  hasConsentField: boolean
 }
 
 /**
@@ -57,9 +58,10 @@ export interface LeadSurfaceForm {
  *
  * Pure over the raw documents so the verdict is testable without a
  * listener. An archived form is left out: it collects nothing, so whether
- * it would route is not a fact about the site. The email precondition is
- * `formFieldsCanYieldAnEmail`, the same check `checkFormContract` runs at
- * publish, so a switch this section offers is one the publish would honor.
+ * it would route is not a fact about the site. The preconditions are
+ * `formFieldsCanYieldAnEmail` and `formFieldsCaptureConsent`, the checks
+ * `checkFormContract` runs at publish, so a switch this section offers is
+ * one the publish would honor.
  */
 export function leadSurfaceForms(
   docs: ReadonlyArray<Record<string, unknown> & { $id: string }>,
@@ -76,16 +78,20 @@ export function leadSurfaceForms(
             }))
         : []
       const routing = (form['routing'] ?? {}) as Record<string, unknown>
-      const canRoute = formFieldsCanYieldAnEmail(fields)
+      const consentFieldName = String(form['consentFieldName'] ?? '').trim()
+      // In the order the publish check decides them: no address means no
+      // lead at all, so consent is not the question until a field exists.
+      const blocker = !formFieldsCanYieldAnEmail(fields)
+        ? LEAD_ROUTING_NEEDS_EMAIL_FIELD
+        : !formFieldsCaptureConsent(fields, consentFieldName)
+          ? LEAD_ROUTING_NEEDS_CONSENT_FIELD
+          : null
       return {
         $id: form.$id,
         displayName: String(form['displayName'] ?? '').trim() || form.$id,
         routed: routing['lead'] === true,
-        canRoute,
-        blocker: canRoute ? null : LEAD_ROUTING_NEEDS_EMAIL_FIELD,
-        hasConsentField: Boolean(
-          String(form['consentFieldName'] ?? '').trim(),
-        ),
+        canRoute: blocker === null,
+        blocker,
       }
     })
     .sort((a, b) => a.displayName.localeCompare(b.displayName))

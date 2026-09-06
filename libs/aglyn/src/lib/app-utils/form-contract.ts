@@ -30,7 +30,7 @@
  * That asymmetry is the whole reason this module exists. Publishing a form is
  * not "save the drawing"; it is "promise the server can still read this".
  *
- * ## The five silent failures, and why each one is checked here
+ * ## The six silent failures, and why each one is checked here
  *
  * Every check below corresponds to something a design can do that produces NO
  * error at submit time. A design that fails loudly needs no guard — the author
@@ -54,7 +54,13 @@
  *     and that prefers a key matching `/email/i` before falling back to any
  *     email-shaped value. A form with no such field can still route to leads
  *     on paper and never create one.
- *  5. **A consent field that no longer exists.** `readFormDeclaredConsent`
+ *  5. **Lead routing with nothing that records consent.** The route files
+ *     the lead either way, and stamps an opt-in on it only from the field the
+ *     form declares or from an undeclared field on the closed name list it
+ *     falls back to. A form with neither files leads nobody may email — the
+ *     send-time consent join refuses every one — so the sales team works a
+ *     list the campaigns cannot reach, and nothing at submit time says so.
+ *  6. **A consent field that no longer exists.** `readFormDeclaredConsent`
  *     looks up exactly `consentFieldName`. Rename or delete that field and it
  *     returns `false` forever — the form keeps collecting the tick and the
  *     opt-in stops being recorded. This is the one with consequences outside
@@ -77,7 +83,11 @@ import type {
   AglynNodeSchema,
   NodeId,
 } from '../foundation/definitions/components.types'
-import { collectFormFieldNodeIds, type FormDocument } from './forms'
+import {
+  collectFormFieldNodeIds,
+  type FormDocument,
+  isMarketingConsentFieldName,
+} from './forms'
 
 /**
  * Which coupling a violation is about.
@@ -92,6 +102,7 @@ export type FormContractViolationCode =
   | 'field-unnamed'
   | 'field-name-duplicated'
   | 'lead-routing-has-no-email-field'
+  | 'lead-routing-has-no-consent-field'
   | 'consent-field-missing'
 
 /** One way this design would fail to keep the server's side of the bargain. */
@@ -168,6 +179,29 @@ export function formFieldsCanYieldAnEmail(
 /** The same question, of the fields a design DRAWS. */
 function canYieldAnEmail(fields: DrawnField[]): boolean {
   return formFieldsCanYieldAnEmail(fields)
+}
+
+/**
+ * Whether a submission carrying these fields could record an opt-in — the
+ * other precondition of lead routing, and the one that decides whether a
+ * lead is worth filing: a lead nobody consented with is one the campaigns
+ * refuse at send time.
+ *
+ * Consent is recorded from the field the form DECLARES, or, when it declares
+ * none, from an undeclared field the route recognizes by name. Whether a
+ * declared field still exists is `consent-field-missing`'s question, asked
+ * separately so a lost field is reported once, as the loss it is.
+ *
+ * Exported for the same two surfaces as {@link formFieldsCanYieldAnEmail}:
+ * the switch on the form's page and the Leads section's offer must refuse
+ * what the publish check would refuse.
+ */
+export function formFieldsCaptureConsent(
+  fields: ReadonlyArray<{ fieldName: string }>,
+  consentFieldName: string | null | undefined,
+): boolean {
+  if (String(consentFieldName ?? '').trim()) return true
+  return fields.some((field) => isMarketingConsentFieldName(field.fieldName))
 }
 
 /**
@@ -255,18 +289,36 @@ export function checkFormContract(options: {
     seen.set(field.fieldName, field.nodeId)
   }
 
-  if (form?.routing?.lead === true && !canYieldAnEmail(fields)) {
-    violations.push({
-      code: 'lead-routing-has-no-email-field',
-      nodeId: formNodeId as NodeId,
-      message:
-        'This form creates a lead from the address someone gives it, and the ' +
-        'design has no email field. It would collect submissions and never ' +
-        'create a lead.',
-    })
+  const consentFieldName = String(form?.consentFieldName ?? '').trim()
+
+  /*
+   * The two gates on a lead, reported one at a time in the order the route
+   * decides them: no address means no lead at all, which makes consent moot
+   * until a field exists to key one on.
+   */
+  if (form?.routing?.lead === true) {
+    if (!canYieldAnEmail(fields)) {
+      violations.push({
+        code: 'lead-routing-has-no-email-field',
+        nodeId: formNodeId as NodeId,
+        message:
+          'This form creates a lead from the address someone gives it, and the ' +
+          'design has no email field. It would collect submissions and never ' +
+          'create a lead.',
+      })
+    } else if (!formFieldsCaptureConsent(fields, consentFieldName)) {
+      violations.push({
+        code: 'lead-routing-has-no-consent-field',
+        nodeId: formNodeId as NodeId,
+        message:
+          'This form creates a lead from the address someone gives it, and ' +
+          'nothing on it records their consent. Every lead it filed would be ' +
+          'one the team cannot email — name a marketing consent field on the ' +
+          'form’s page.',
+      })
+    }
   }
 
-  const consentFieldName = String(form?.consentFieldName ?? '').trim()
   if (consentFieldName && !seen.has(consentFieldName)) {
     violations.push({
       code: 'consent-field-missing',

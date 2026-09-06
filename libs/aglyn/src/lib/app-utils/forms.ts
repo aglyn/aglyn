@@ -903,3 +903,38 @@ export const AFFIRMATIVE_CHECKBOX_VALUES = new Set([
   '1',
   'checked',
 ])
+
+/**
+ * The field names the submit route reads an opt-in from when the form
+ * declares no consent field.
+ *
+ * A CLOSED list rather than a substring match on "consent": a merchant's
+ * field called `consentToTreatment` on a clinic intake form is a different
+ * instrument entirely, and matching it would manufacture a marketing basis
+ * out of a medical one. Compared after {@link isMarketingConsentFieldName}'s
+ * normalization, so `Subscribe to newsletter` and `subscribeToNewsletter`
+ * are one name.
+ */
+export const MARKETING_CONSENT_FIELD_NAMES: ReadonlySet<string> = new Set([
+  'marketingconsent',
+  'marketingoptin',
+  'emailoptin',
+  'newsletteroptin',
+  'subscribe',
+  'subscribetonewsletter',
+])
+
+/**
+ * Whether a field, by its name alone, is one the submit route reads an
+ * opt-in out of when no consent field is declared.
+ *
+ * Asked of a DESIGN by the publish check and of a PAYLOAD by the route, so
+ * the two cannot disagree about which undeclared field counts as consent.
+ */
+export function isMarketingConsentFieldName(name: unknown): boolean {
+  return MARKETING_CONSENT_FIELD_NAMES.has(
+    String(name ?? '')
+      .toLowerCase()
+      .replace(/[^a-z]/g, ''),
+  )
+}
