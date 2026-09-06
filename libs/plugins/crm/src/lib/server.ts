@@ -78,6 +78,7 @@ import { CRM_TASK_ROUTES } from './model/task-routes'
 import { crmTaskCompleteHandler, crmTaskSaveHandler } from './server/task-routes'
 import { crmContactsImportHandler } from './server/contacts-import'
 import { crmDealStageHandler } from './server-deal-stage'
+import { crmEmailSendHandler } from './server/email-send'
 import { leadConvertHandler } from './server/lead-convert'
 
 /**
@@ -461,4 +462,8 @@ export function registerCrmConsoleApi(): void {
   // write a browser cannot make alone, because only the server may create a
   // contact through the dedupe-and-meter door.
   registerPluginApiRoute('crm/lead-convert', leadConvertHandler)
+  // One email to one person from their record (AGL-2615): the recipient is
+  // read off the record, the daily cap and both suppression lists are
+  // judged, and the message leaves on the site's sending identity.
+  registerPluginApiRoute(CRM_API_ROUTES.emailSend, crmEmailSendHandler)
 }

@@ -75,6 +75,13 @@ import { resolvePluginApiRoute } from '@aglyn/aglyn/server'
 jest.mock('./server-deal-stage', () => ({
   crmDealStageHandler: jest.fn(),
 }))
+// The one-to-one email route (AGL-2615) reaches the mail provider seam and
+// the Admin SDK; its behavior is `server/email-send.spec.ts`. Stubbed here
+// for the same reason the deal-stage route is.
+jest.mock('./server/email-send', () => ({
+  crmEmailSendHandler: jest.fn(),
+}))
+import { CRM_API_ROUTES } from './constants/api-routes'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { CRM_TASK_ROUTES } from './model/task-routes'
 import { registerCrmConsoleApi } from './server'
@@ -216,5 +223,11 @@ describe('the CRM server entry', () => {
     const { status, headers } = await call('crm/contacts-import', 'GET')
     expect(status).toBe(405)
     expect(headers['Allow']).toBe('POST')
+  })
+
+  it('registers crm/email-send under the client-safe constant (AGL-2615)', () => {
+    registerCrmConsoleApi()
+    expect(CRM_API_ROUTES.emailSend).toBe('crm/email-send')
+    expect(resolvePluginApiRoute(CRM_API_ROUTES.emailSend)).toBeDefined()
   })
 })
