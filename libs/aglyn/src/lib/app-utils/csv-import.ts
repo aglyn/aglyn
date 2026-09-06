@@ -263,7 +263,8 @@ export function csvCell(value: unknown): string {
  * A whole CSV — the header, then one line per row — through {@link csvCell}.
  *
  * The one serializer for every CSV the console writes: each CRM section's
- * export, the import's skipped-rows file and every report table's export.
+ * export, the skipped-rows file an import hands back and each report
+ * table's export.
  * Quoting is decided in {@link csvCell} and nowhere else — a cell holding a
  * comma, a quote or a line break is wrapped in quotes with its quotes
  * doubled, no other cell is touched, and a `null` or `undefined` cell is

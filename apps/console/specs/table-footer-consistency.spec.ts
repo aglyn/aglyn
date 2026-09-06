@@ -1272,6 +1272,39 @@ const NOT_A_LIST: Array<[string, string]> = [
       'discloses. The rows are counts by group, not documents; the ' +
       'documents are the Tasks section’s paged list.',
   ],
+  [
+    'libs/plugins/crm/src/lib/components/reports/activity-card.tsx',
+    'An AGGREGATE table in a report (AGL-2624): activities per ' +
+      'teammate, one row per person, grouped from reads capped at ' +
+      '`ACTIVITY_CEILING` and `TASK_DONE_CEILING` that the card discloses ' +
+      'beside its export. The rows are counts by group, not documents; ' +
+      'the documents are each record’s own timeline.',
+  ],
+  [
+    'libs/plugins/crm/src/lib/components/reports/source-conversion-card.tsx',
+    'An AGGREGATE table in a report (AGL-2624): the period’s contacts ' +
+      'by capture source, one row per source found in a read capped at ' +
+      '`CONTACT_CEILING` that the card discloses. The rows are counts by ' +
+      'source, not documents; the people are the Contacts section’s paged ' +
+      'table.',
+  ],
+  [
+    'libs/plugins/crm/src/lib/components/contact-duplicates-card.tsx',
+    'A record’s LIKELY DUPLICATES (AGL-2625): the contacts sharing the ' +
+      'record’s name, read under `CONTACT_DUPLICATES_LIMIT` on a button ' +
+      'press and kept only where a phone or company matches too. A short ' +
+      'list to act on — "Merge into this record" opens the merge dialog on ' +
+      'the pick — not a view; a page of near-duplicates would be a list ' +
+      'nobody merges by hand.',
+  ],
+  [
+    'libs/plugins/crm/src/lib/components/contact-merge-dialog.tsx',
+    'The merge dialog (AGL-2625): the SEARCH for the other record — ' +
+      'bounded by `SEARCH_LIMIT`, narrowed as the reader types and closed ' +
+      'on a choice — and the preview beneath it, one row per FIELD of the ' +
+      'two records being folded, which is the schema and not a collection. ' +
+      'A pager under a search box pages what the box already filters.',
+  ],
 ]
 
 /**
@@ -1570,7 +1603,14 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // shared import preview (a local array), a deal's line items
     // (`DEAL_LINE_ITEMS_MAX` on the document), and the forecast by close
     // month (sums over a disclosed ceiling).
-    expect(NOT_A_LIST).toHaveLength(48)
+    //
+    // 52 since the reports grew and a record learned to merge (AGL-2624,
+    // AGL-2625): two more aggregate tables in the Reports section — activity
+    // by teammate and conversion by source, each counts by group over a
+    // disclosed ceiling — the likely-duplicates list a button reads under
+    // `CONTACT_DUPLICATES_LIMIT` to act on, and the merge dialog's search
+    // picker with its per-field preview of what the merge keeps.
+    expect(NOT_A_LIST).toHaveLength(52)
   })
 })
 
