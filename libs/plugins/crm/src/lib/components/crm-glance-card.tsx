@@ -21,6 +21,7 @@ import { money } from '@aglyn/shared-ui-email-campaigns/components/report-figure
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Button, Stack, Typography } from '@mui/material'
 import {
+  collection,
   getAggregateFromServer,
   getCountFromServer,
   query,
@@ -42,24 +43,42 @@ import { useAggregateRead } from './reports/use-aggregate-read'
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 
+/**
+ * The lead statuses that mean nobody needs to work the lead any more —
+ * the operand of the `in` clause the open-lead figure subtracts with.
+ */
+const CLOSED_LEAD_STATUSES = Aglyn.CRM_LEAD_STATUSES.filter(
+  (status) => !Aglyn.CRM_LEAD_OPEN_STATUSES.includes(status),
+)
+
 interface GlanceFigures {
   contacts: number
   newThisWeek: number
   pipelineCents: number
   tasksDue: number
+  /** Open leads on this site — new or being worked. */
+  leadsToWork: number
 }
 
 /**
- * CRM at a glance (AGL-2604): a `hostDashboard` widget with four numbers —
- * contacts, new this week, open pipeline value, tasks due today or overdue
- * — each a link into the section that explains it.
+ * CRM at a glance (AGL-2604): a `hostDashboard` widget with five numbers —
+ * contacts, new this week, open pipeline value, tasks due today or overdue,
+ * and leads still to work (AGL-2624) — each a link into the section that
+ * explains it.
  *
- * Four server aggregates and nothing else: a dashboard card mounts on every
+ * Server aggregates and nothing else: a dashboard card mounts on every
  * visit to the site's front page, so it is the one surface on which a
  * bounded read of a thousand rows would be a cost paid for nothing. Each
  * number is a count or a sum the server takes over the same `visibleTo`
  * predicate the hub's sections query with, so the card never shows a figure
  * the section behind the link would not.
+ *
+ * The lead figure is two counts and a subtraction — every lead on the site,
+ * less the closed ones — because a lead nobody has touched carries no status
+ * field and Firestore cannot select on a field's absence; see
+ * `openLeadsFromCounts`. Leads are host-scoped by path rather than by
+ * `visibleTo`, so those two counts run on `hosts/{hostId}/leads` under the
+ * site's own rules, the way the Leads section reads it.
  *
  * The widget is handed a host doc id and nothing else, so the org — needed
  * for the consent group whose tokens scope the reads — comes from
@@ -90,6 +109,7 @@ export function CrmGlanceCard(props: { hostId: string }) {
     const contacts = scopedCollection(firestore, scope, 'contacts')
     const deals = scopedCollection(firestore, scope, Aglyn.CRM_COLLECTIONS.deals)
     const tasks = scopedCollection(firestore, scope, Aglyn.CRM_COLLECTIONS.tasks)
+    const leads = collection(firestore, 'hosts', hostId, 'leads')
     const day = Aglyn.localDayBounds(nowMs)
     const countOf = (target: ReturnType<typeof query>) =>
       getCountFromServer(target).then((snapshot) => snapshot.data().count)
@@ -115,13 +135,16 @@ export function CrmGlanceCard(props: { hostId: string }) {
           where('dueAtMs', '<', day.end),
         ),
       ),
-    ]).then(([contacts, newThisWeek, pipelineCents, tasksDue]) => ({
+      countOf(query(leads)),
+      countOf(query(leads, where('status', 'in', CLOSED_LEAD_STATUSES))),
+    ]).then(([contacts, newThisWeek, pipelineCents, tasksDue, leads, closedLeads]) => ({
       contacts,
       newThisWeek,
       pipelineCents,
       tasksDue,
+      leadsToWork: Aglyn.openLeadsFromCounts(leads, closedLeads),
     }))
-  }, [firestore, scope, tokens, nowMs])
+  }, [firestore, scope, tokens, nowMs, hostId])
 
   const routes = useMemo(
     () => (consoleRoute.base ? crmRoutes(`${consoleRoute.base}/crm`) : null),
@@ -135,9 +158,9 @@ export function CrmGlanceCard(props: { hostId: string }) {
       help={Aglyn.pluginDocsHelp('crmReports', {
         anchor: '#crm-at-a-glance',
         excerpt:
-          'Contacts, new contacts this week, the value of every open deal ' +
-          'and the tasks due today or overdue — each counted on the server ' +
-          'and each a link into the CRM.',
+          'Contacts, new contacts this week, the value of every open deal, ' +
+          'the tasks due today or overdue, and the leads still to work — ' +
+          'each counted on the server and each a link into the CRM.',
       })}
       contentGutterX
       contentGutterY
@@ -178,6 +201,12 @@ export function CrmGlanceCard(props: { hostId: string }) {
             note={'today or overdue'}
             color={value?.tasksDue ? 'warning.main' : undefined}
             href={routes?.section('tasks')}
+          />
+          <ReportStatTile
+            label={'Leads to work'}
+            value={value ? value.leadsToWork.toLocaleString() : null}
+            note={'open on this site'}
+            href={routes?.section('leads')}
           />
         </Stack>
         {figures.status === 'error' ? (
