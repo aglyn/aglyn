@@ -458,14 +458,15 @@ export function activityLeaderboard(
   activities: readonly LeaderboardActivity[],
   tasksDone: readonly LeaderboardTask[],
 ): ActivityLeaderboardRow[] {
-  const rows = new Map<string, ActivityLeaderboardRow & { namedAtMs: number }>()
+  const rows = new Map<string, ActivityLeaderboardRow>()
+  /** When each row's name was signed, so a newer signature replaces an older one. */
+  const namedAtMs = new Map<string, number>()
   const rowFor = (uid: string) => {
     let row = rows.get(uid)
     if (!row) {
       row = {
         uid,
         name: null,
-        namedAtMs: Number.NEGATIVE_INFINITY,
         kinds: Object.fromEntries(
           CRM_ACTIVITY_KINDS.map((kind) => [kind, 0]),
         ) as Record<CrmActivityKind, number>,
@@ -483,22 +484,24 @@ export function activityLeaderboard(
     row.activities += 1
     const name = String(activity.byName ?? '').trim()
     const atMs = Number(activity.atMs)
-    if (name && Number.isFinite(atMs) && atMs > row.namedAtMs) {
+    if (
+      name &&
+      Number.isFinite(atMs) &&
+      atMs > (namedAtMs.get(row.uid) ?? Number.NEGATIVE_INFINITY)
+    ) {
       row.name = name
-      row.namedAtMs = atMs
+      namedAtMs.set(row.uid, atMs)
     }
   }
   for (const task of tasksDone) {
     rowFor(String(task.completedByUid || task.assigneeUid || '')).tasksDone += 1
   }
-  return [...rows.values()]
-    .sort(
-      (a, b) =>
-        b.activities + b.tasksDone - (a.activities + a.tasksDone) ||
-        b.activities - a.activities ||
-        a.uid.localeCompare(b.uid),
-    )
-    .map(({ namedAtMs: _namedAtMs, ...row }) => row)
+  return [...rows.values()].sort(
+    (a, b) =>
+      b.activities + b.tasksDone - (a.activities + a.tasksDone) ||
+      b.activities - a.activities ||
+      a.uid.localeCompare(b.uid),
+  )
 }
 
 /*==========================================
