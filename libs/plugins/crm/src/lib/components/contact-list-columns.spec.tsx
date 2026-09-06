@@ -27,7 +27,11 @@
  */
 
 import type { GridColDef } from '@mui/x-data-grid'
-import { CONTACT_FILTER_COLUMNS, contactListColumns } from './contact-list-columns'
+import {
+  CONTACT_FILTER_COLUMNS,
+  CONTACT_OPTIONAL_COLUMNS,
+  contactListColumns,
+} from './contact-list-columns'
 import type { ContactRecord } from '../model/contact-record'
 
 const row = (overrides: Partial<ContactRecord> = {}): ContactRecord => ({
@@ -50,11 +54,16 @@ const row = (overrides: Partial<ContactRecord> = {}): ContactRecord => ({
   address: null,
   ownerUid: '',
   lifecycleStage: '',
+  lastEmailEngagementAtMs: null,
   ...overrides,
 })
 
+const NOW = Date.UTC(2026, 8, 5, 12)
+const DAY = 86_400_000
+
 const columns = contactListColumns({
   memberName: (uid) => (uid === 'owner-1' ? 'Grace Hopper' : uid),
+  nowMs: NOW,
 })
 const column = (field: string) =>
   columns.find((definition) => definition.field === field) as GridColDef
@@ -64,17 +73,34 @@ const value = (field: string, record: ContactRecord) =>
 describe('contactListColumns', () => {
   it('keeps the v1 grammar and adds Owner and Stage between Contact and Sources', () => {
     // The shown columns lead; the hidden filter-only columns follow them.
-    expect(columns.slice(0, 6).map((definition) => definition.field)).toEqual([
+    expect(columns.slice(0, 7).map((definition) => definition.field)).toEqual([
       'name',
       'ownerUid',
       'lifecycleStage',
       'sources',
       'tags',
       'updatedAt',
+      'lastEmailEngagementAtMs',
     ])
     for (const field of CONTACT_FILTER_COLUMNS) {
       expect(column(field)).toBeDefined()
     }
+  })
+
+  /*
+   * "Last engaged" (AGL-2616): the facet stamp, as a date the grid can sort
+   * and export, printed in the timeline's relative words. Optional — it is
+   * the one column the list ships hidden.
+   */
+  it('reads the engagement stamp as a date, prints it relatively, and ships hidden', () => {
+    const engaged = row({ lastEmailEngagementAtMs: NOW - 3 * DAY })
+    expect(value('lastEmailEngagementAtMs', engaged)).toEqual(new Date(NOW - 3 * DAY))
+    expect(value('lastEmailEngagementAtMs', row())).toBeNull()
+    expect(column('lastEmailEngagementAtMs').type).toBe('date')
+    expect(column('lastEmailEngagementAtMs').filterable).toBe(false)
+    expect(CONTACT_OPTIONAL_COLUMNS).toEqual(['lastEmailEngagementAtMs'])
+    const cell = (column('lastEmailEngagementAtMs').renderCell as any)({ row: engaged })
+    expect(JSON.stringify(cell)).toContain('3 days ago')
   })
 
   it('names the owner through the roster, and never offers the column as a query', () => {

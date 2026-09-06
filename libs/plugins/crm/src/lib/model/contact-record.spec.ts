@@ -58,6 +58,7 @@ const sharedContact = () => ({
       address: { line1: '1 Main St', country: 'US' },
       ownerUid: 'owner-1',
       lifecycleStage: 'lead',
+      lastEmailEngagementAtMs: 1_700_000_000_000,
     },
     'host-2': {
       name: `${OTHER}-name`,
@@ -70,6 +71,7 @@ const sharedContact = () => ({
       companyName: `${OTHER}-company`,
       ownerUid: `${OTHER}-owner`,
       lifecycleStage: 'evangelist',
+      lastEmailEngagementAtMs: 1_800_000_000_000,
     },
   },
 })
@@ -97,6 +99,7 @@ describe('contactRecordFromDoc', () => {
       address: { line1: '1 Main St', country: 'US' },
       ownerUid: 'owner-1',
       lifecycleStage: 'lead',
+      lastEmailEngagementAtMs: 1_700_000_000_000,
     })
     // The timeline is narrowed to the sites the group covers; an entry with
     // no host is everybody's.
@@ -118,6 +121,15 @@ describe('contactRecordFromDoc', () => {
     expect(record.address).toBeNull()
     expect(record.lifecycleStage).toBe('')
     expect(record.ltvCents).toBe(0)
+    expect(record.lastEmailEngagementAtMs).toBeNull()
+  })
+
+  it('reads an engagement stamp that is not a usable instant as none', () => {
+    const contact = sharedContact()
+    ;(contact.facets['host-1'] as Record<string, unknown>).lastEmailEngagementAtMs = 'soon'
+    expect(
+      contactRecordFromDoc(contact, soloConsentGroup('host-1')).lastEmailEngagementAtMs,
+    ).toBeNull()
   })
 
   it('reads a stage it does not know as absent rather than rendering it', () => {

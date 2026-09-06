@@ -78,7 +78,11 @@ import {
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import RecentActivityFeed from './recent-activity-feed'
-import { CONTACT_FILTER_COLUMNS, contactListColumns } from './contact-list-columns'
+import {
+  CONTACT_FILTER_COLUMNS,
+  CONTACT_OPTIONAL_COLUMNS,
+  contactListColumns,
+} from './contact-list-columns'
 import NewContactDrawer, { type NewContactValues } from './new-contact-drawer'
 import { useCrmApi } from './use-crm-api'
 import { useOrgMembers } from './use-org-members'
@@ -606,6 +610,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
         'sources',
         'tags',
         'lastInteraction',
+        'lastEngaged',
         'notes',
       ],
       ...visible.map((contact) => [
@@ -622,6 +627,9 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
         (contact.tags ?? []).join('|'),
         contact.interactions?.[0]
           ? new Date(contact.interactions[0].atMs).toISOString()
+          : '',
+        contact.lastEmailEngagementAtMs
+          ? new Date(contact.lastEmailEngagementAtMs).toISOString()
           : '',
         contact.notes ?? '',
       ]),
@@ -892,10 +900,17 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                 }
                 initialState={{
                   columns: {
-                    columnVisibilityModel: hiddenFilterVisibility(
-                      CONTACT_LIST_FILTER_FIELDS,
-                      CONTACT_FILTER_COLUMNS,
-                    ),
+                    columnVisibilityModel: {
+                      ...hiddenFilterVisibility(
+                        CONTACT_LIST_FILTER_FIELDS,
+                        CONTACT_FILTER_COLUMNS,
+                      ),
+                      // The optional columns start hidden; the column menu
+                      // turns them on for a reader who wants them.
+                      ...Object.fromEntries(
+                        CONTACT_OPTIONAL_COLUMNS.map((field) => [field, false]),
+                      ),
+                    },
                   },
                 }}
               />

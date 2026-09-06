@@ -39,7 +39,7 @@ import {
   useHostActivityLogger,
   useOrgDataScope,
 } from '@aglyn/tenant-feature-instance'
-import { Button, Chip, Stack, Typography } from '@mui/material'
+import { Button, Chip, Stack, Tooltip, Typography } from '@mui/material'
 import {
   arrayRemove,
   deleteDoc,
@@ -58,6 +58,7 @@ import ContactTimelineCard from './contact-timeline-card'
 import { AddToListButton } from './add-to-list-button'
 import { ContactDealsCard } from './contact-deals-card'
 import { RecordTasksCard } from './record-tasks-card'
+import { useEmailsHubPath } from './use-emails-hub-path'
 import { useOrgMembers } from './use-org-members'
 
 const contactDocsHelp = pluginDocsHelp('contacts', {
@@ -143,6 +144,22 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
   // The roster, for the owner picker and the owner's name — read because a
   // record page is the one place both are shown.
   const members = useOrgMembers(orgId, { enabled: Boolean(record) })
+
+  /*
+   * Where a campaign entry on the timeline links to: the email's own report
+   * on this site's Emails hub (AGL-2616). Only a campaign THIS site sent can
+   * be addressed — a sibling site in the same consent group has an Emails
+   * hub of its own under a subdomain this page does not know — so the
+   * builder answers `null` for those and the entry draws unlinked.
+   */
+  const emailsHub = useEmailsHubPath()
+  const campaignHref = useCallback(
+    (email: Aglyn.ContactCampaignEmail) =>
+      emailsHub && email.hostId === hostId
+        ? `${emailsHub}/messages/${encodeURIComponent(email.campaignId)}`
+        : null,
+    [emailsHub, hostId],
+  )
 
   const handleRemove = useCallback(async () => {
     if (!row || !scope) return
@@ -294,6 +311,19 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
               } · $${(record.ltvCents / 100).toFixed(2)} lifetime`}
             </Typography>
           ) : null}
+          {record?.lastEmailEngagementAtMs ? (
+            // The last time they opened or clicked one of this site's
+            // campaigns (AGL-2616) — the relationship's pulse, beside the
+            // owner who keeps it.
+            <Tooltip title={new Date(record.lastEmailEngagementAtMs).toLocaleString()}>
+              <Typography variant="body2" color="text.secondary">
+                {`Last engaged: ${Aglyn.activityTimeLabel(
+                  record.lastEmailEngagementAtMs,
+                  Date.now(),
+                )}`}
+              </Typography>
+            </Tooltip>
+          ) : null}
           {!record ? (
             <Typography variant="body2" color="text.secondary">
               {'Loading…'}
@@ -320,7 +350,13 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
             seed={{ status, fromCache }}
           />
           <ContactCustomFieldsCard hostId={hostId} org={org} contactId={id} />
-          <ContactTimelineCard hostId={hostId} org={org} contactId={id} contact={row} />
+          <ContactTimelineCard
+            hostId={hostId}
+            org={org}
+            contactId={id}
+            contact={row}
+            campaignHref={campaignHref}
+          />
           <ContactDealsCard
             hostId={hostId}
             org={org}

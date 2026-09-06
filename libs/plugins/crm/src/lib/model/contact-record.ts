@@ -66,6 +66,11 @@ export interface ContactRecord {
   ownerUid: string
   /** Empty when the holder has not placed the person in the funnel. */
   lifecycleStage: ContactLifecycleStage | ''
+  /**
+   * When the person last opened or clicked one of this holder's campaigns
+   * (AGL-2616), or `null` when they never have since the stamp shipped.
+   */
+  lastEmailEngagementAtMs: number | null
   createdAt?: unknown
   updatedAt?: unknown
 }
@@ -99,6 +104,12 @@ export function contactRecordFromDoc(
     lifecycleStage: Aglyn.isContactLifecycleStage(facet.lifecycleStage)
       ? facet.lifecycleStage
       : '',
+    lastEmailEngagementAtMs:
+      typeof facet.lastEmailEngagementAtMs === 'number' &&
+      Number.isFinite(facet.lastEmailEngagementAtMs) &&
+      facet.lastEmailEngagementAtMs > 0
+        ? facet.lastEmailEngagementAtMs
+        : null,
     createdAt: row['createdAt'],
     updatedAt: row['updatedAt'],
   }
