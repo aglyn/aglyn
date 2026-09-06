@@ -97,6 +97,8 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => FIRESTORE,
   useOrgDataScope: () => DATA_SCOPE,
   useUser: () => ({ data: USER }),
+  // The drawer logs the add to the site's activity feed (AGL-2622); the feed is not under test.
+  useHostActivityLogger: () => jest.fn(),
   // The reader's reach, for the views control's "may edit" (AGL-2617).
   useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),
   usePagedCollection: (build: (pageLimit: number) => BuiltQuery | null) => {

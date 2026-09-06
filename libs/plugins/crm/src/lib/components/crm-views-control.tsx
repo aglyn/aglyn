@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { CRM_VIEW_NAME_MAX, type CrmViewFilterClause } from '@aglyn/aglyn'
+import { CRM_VIEW_NAME_MAX, type CrmViewFilterClause, pluginDocsHelp } from '@aglyn/aglyn'
 import {
   mdiBookmarkOutline,
   mdiCheck,
@@ -29,7 +29,7 @@ import {
   mdiStar,
   mdiStarOutline,
 } from '@aglyn/shared-data-mdi'
-import { MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { HelpTip, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Button,
@@ -487,8 +487,9 @@ export function CrmViewsControl(props: CrmViewsControlProps) {
         maxWidth="xs"
         fullWidth
       >
-        <DialogTitle>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
           {dialog?.mode === 'rename' ? 'Rename view' : 'Save as view'}
+          <HelpTip {...pluginDocsHelp('crmViews', { anchor: '#the-views-control' })} />
         </DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
