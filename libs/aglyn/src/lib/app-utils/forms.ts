@@ -110,6 +110,17 @@ export interface FormFieldDecl {
   /** Stable dataset model fieldId this value is stored under (AGL-556). */
   datasetFieldId?: string
   role?: FormFieldRole
+  /**
+   * The custom contact field this value is saved under (AGL-2601) — a
+   * `ContactFieldDefinition.key` in the org that owns the site.
+   *
+   * Edited on the form's own page rather than drawn on the canvas, so it is
+   * NOT read off the nodes: `carryContactFieldMappings` carries it across a
+   * publish by `fieldName`, or a design change would silently unmap every
+   * field. The built-in properties — name, email, phone — are what `role`
+   * names; this is only ever a field the merchant defined.
+   */
+  contactFieldKey?: string
 }
 
 /** Where a submission goes beyond the Inbox. */

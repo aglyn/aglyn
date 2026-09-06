@@ -20,7 +20,7 @@ subscription lapses) gated content is not served.
 ## Let visitors sign up
 
 Enable site **membership** so visitors can **sign in / sign up** to your site. New members
-flow into your [Contacts CRM](../../content-and-data/contacts/overview.md) automatically.
+flow into your [CRM](../../content-and-data/contacts/overview.md) automatically.
 
 ## Sign-in, sign-up, and recovery pages
 
@@ -105,5 +105,5 @@ list shows each account's Active/Suspended status at a glance.
 ## Related
 
 - [Invite teammates](invite-teammates.md)
-- [Contacts CRM](../../content-and-data/contacts/overview.md)
+- [CRM](../../content-and-data/contacts/overview.md)
 - [Site protection & error pages](../../building-sites/site-protection/overview.md)

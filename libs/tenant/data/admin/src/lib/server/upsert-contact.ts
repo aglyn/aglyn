@@ -16,11 +16,14 @@
  */
 
 import {
+  type AglynPostalAddress,
   CAPTURED_BY_HOST_FIELD,
   checkContactQuota,
   consentGroupScope,
   CONTACT_FACETS_FIELD,
+  type ContactFacet,
   type ContactInteraction,
+  type ContactLifecycleStage,
   type ContactSource,
   marketingConsentFieldsForGroup,
   mergeContactInteraction,
@@ -37,11 +40,159 @@ import {
   type ResolvedCampaignTouch,
 } from './campaign-conversion-attribution'
 import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
+/*
+ * The module paths, like `name-search` above, rather than the barrel: the
+ * pure helpers this door leans on are exactly the ones a spec of the door
+ * substitutes a fixture barrel for, and a fixture that has to re-export the
+ * whole of `@aglyn/aglyn` to keep a normalizer reachable is a fixture that
+ * drifts. A direct path is real in every harness.
+ */
+import {
+  CONTACT_FIELD_KEY_PATTERN,
+  type ContactCustomValue,
+  contactLifecycleStageAfterPurchase,
+  isContactLifecycleStage,
+} from '@aglyn/aglyn/app-utils/crm'
+import {
+  normalizeAddress,
+  normalizePhone,
+} from '@aglyn/aglyn/foundation/definitions/contact.types'
 import {
   consentGroupForSite,
   getOrgForHost,
   orgDataCollectionForHost,
 } from './organizations'
+
+/**
+ * What an upsert did, for the callers that need to know (AGL-2602).
+ *
+ * The capture doors never look: a form submission or an order must succeed
+ * whatever happened to the CRM record, which is why this function swallows
+ * its own errors and why every existing caller `await`s it for its side
+ * effect alone. An IMPORT is the caller that has to know, row by row —
+ * "created" and "merged" are its two headline numbers, and a row the
+ * audience band refused has to be handed back to the operator as a row
+ * rather than becoming one more tick on a counter nobody reconciles against
+ * a file. A verdict is returned rather than thrown so the swallowing stays:
+ * `refused: 'error'` is the same silence the doors have always had, now with
+ * a name.
+ */
+export type UpsertHostContactVerdict =
+  | {
+      contactId: string
+      /** True when this call created the row; false when it merged into one. */
+      created: boolean
+    }
+  | { refused: 'invalid-email' | 'band' | 'error' }
+
+/**
+ * The per-holder profile fields a door may write alongside the identity.
+ *
+ * `Pick`ed from the facet rather than typed afresh so the two cannot drift:
+ * a field the facet grows is a field this option may carry the moment the
+ * pick names it, and one it does not name is refused at compile time.
+ */
+export type UpsertHostContactFacet = Partial<
+  Pick<
+    ContactFacet,
+    | 'phone'
+    | 'jobTitle'
+    | 'companyId'
+    | 'address'
+    | 'ownerUid'
+    | 'lifecycleStage'
+    | 'custom'
+  >
+>
+
+/**
+ * The profile fields a door may hand this function (AGL-2596): the parts of
+ * a person's record that no capture surface collects — the console's create
+ * drawer and the import do, and the order door adds the stage. `custom` is
+ * the holder's own field values, keyed by `ContactFieldDefinition.key`; the
+ * import maps spreadsheet columns onto them, and the definitions live under
+ * the same group the values are written to.
+ */
+export type ContactProfileInput = UpsertHostContactFacet
+
+/**
+ * The profile as it may be STORED: every value normalized, every unusable
+ * one dropped, and nothing present that was not given.
+ *
+ * Only the keys given come back, which is what lets a merge write this
+ * straight into the facet: a door that knows the phone number and nothing
+ * else leaves the title, the owner and the stage exactly as another door
+ * left them. An address given as `null` is a deliberate clearing and is kept
+ * as `null`; one that normalizes to nothing is the same thing.
+ */
+function storableProfile(input: ContactProfileInput | undefined): {
+  phone?: string
+  jobTitle?: string
+  address?: ReturnType<typeof normalizeAddress>
+  companyId?: string
+  ownerUid?: string
+  lifecycleStage?: ContactFacet['lifecycleStage']
+  custom?: Record<string, ContactCustomValue>
+} {
+  if (!input) return {}
+  const out: ReturnType<typeof storableProfile> = {}
+  if (input.phone !== undefined) {
+    const phone = normalizePhone(input.phone)
+    if (phone) out.phone = phone
+  }
+  if (typeof input.jobTitle === 'string') {
+    const jobTitle = input.jobTitle.trim().slice(0, 120)
+    if (jobTitle) out.jobTitle = jobTitle
+  }
+  if (input.address !== undefined) out.address = normalizeAddress(input.address)
+  if (typeof input.companyId === 'string' && input.companyId.trim()) {
+    out.companyId = input.companyId.trim().slice(0, 128)
+  }
+  if (typeof input.ownerUid === 'string' && input.ownerUid.trim()) {
+    out.ownerUid = input.ownerUid.trim().slice(0, 128)
+  }
+  if (isContactLifecycleStage(input.lifecycleStage)) {
+    out.lifecycleStage = input.lifecycleStage
+  }
+  if (input.custom && typeof input.custom === 'object') {
+    /*
+     * Only a key a field definition could have, and only a value the field
+     * types can hold. A nested object here is a map the merge below would
+     * write as a subtree nobody can render; a key with a dot in it would be
+     * read as a PATH by the next dotted update to touch the facet. Nothing is
+     * coerced — a door that has a number should send one — and an empty map
+     * is left off rather than written as `{}` over a holder's values.
+     */
+    const custom: Record<string, ContactCustomValue> = {}
+    for (const [key, value] of Object.entries(input.custom)) {
+      if (!CONTACT_FIELD_KEY_PATTERN.test(key)) continue
+      if (
+        value === null ||
+        typeof value === 'string' ||
+        typeof value === 'number' ||
+        typeof value === 'boolean'
+      ) {
+        custom[key] = typeof value === 'string' ? value.slice(0, 2000) : value
+      }
+    }
+    if (Object.keys(custom).length) out.custom = custom
+  }
+  return out
+}
+
+/**
+ * Tags as the profile drawer stores them: trimmed, lowercased, deduplicated
+ * and capped at twenty — so an imported `VIP` and a typed `vip` are one tag.
+ */
+function normalizeTags(tags: readonly string[] | undefined): string[] {
+  return [
+    ...new Set(
+      (tags ?? [])
+        .map((tag) => String(tag ?? '').trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  ].slice(0, 20)
+}
 
 /**
  * Contacts ingestion (AGL-197): upserts an org-scoped contact doc (AGL-237)
@@ -56,7 +207,26 @@ import {
  * surfaced as a console alert (AGL-891). Interactions on existing
  * contacts always append regardless of plan.
  */
-export async function upsertHostContact(options: {
+/**
+ * What a capture door learns when its capture made a NEW person.
+ *
+ * Handed to {@link UpsertHostContactOptions.onCreated} once, on the create
+ * branch only. The merge branch is a visit by somebody the org already held,
+ * which is another interaction and not a new contact — the same line
+ * `campaignTouch` draws for attribution. Scalars and one string array, so
+ * the runtime can flatten it into an event payload without inventing keys.
+ */
+export interface HostContactCreated {
+  contactId: string
+  hostId: string
+  email: string
+  name?: string
+  source: ContactSource
+  /** The capture surface's campaigns, normalized — `[]` when it had none. */
+  campaignIds: string[]
+}
+
+export interface UpsertHostContactOptions {
   hostId: string
   email: unknown
   name?: string
@@ -139,10 +309,47 @@ export async function upsertHostContact(options: {
    * input that records a basis.
    */
   campaignIds?: readonly string[]
-}): Promise<void> {
+  /**
+   * Tags to put on THIS holder's facet (AGL-2602).
+   *
+   * Added to, never replaced, on a merge: a person the merchant tagged by
+   * hand and later imported keeps the hand-written tag beside the file's.
+   */
+  tags?: readonly string[]
+  /**
+   * The profile a door knows about the person — phone, title, company,
+   * address, owner, stage, custom values — written into THIS holder's facet
+   * (AGL-2602). Only the keys present are written, so a door that knows the
+   * phone and nothing else does not blank the title somebody typed.
+   */
+  facet?: UpsertHostContactFacet
+  /**
+   * Told when this capture created a contact (AGL-2605).
+   *
+   * A HOOK rather than an event emitted from here, and the reason is the
+   * dependency direction: the event fan-out lives in `libs/tenant/runtime`,
+   * which imports THIS library for its Firestore handle and its org helpers.
+   * An import back up from here would be a cycle, and the module boundaries
+   * (`scope:data` may depend on data and util only) refuse it besides. So
+   * this module reports the fact and the runtime's `captureHostContact`
+   * turns it into `contactCreated` — every server door goes through that
+   * wrapper, and a door that calls this function directly has chosen to
+   * create contacts nothing can react to.
+   *
+   * Awaited with its own catch, like the order join above: the least
+   * important write on the path, and a failure in it must not cost the
+   * capture that already happened.
+   */
+  onCreated?: (created: HostContactCreated) => void | Promise<void>
+}
+
+export async function upsertHostContact(
+  options: UpsertHostContactOptions,
+): Promise<UpsertHostContactVerdict> {
   try {
     const email = normalizeContactEmail(options.email)
-    if (!email) return
+    if (!email) return { refused: 'invalid-email' }
+    const tags = normalizeTags(options.tags)
 
     /*==========================================
      * THE PURCHASE DOOR, AND THEREFORE THE ATTRIBUTION DOOR.
@@ -227,6 +434,20 @@ export async function upsertHostContact(options: {
      * array goes through the same coercion.
      */
     const campaignIds = normalizeCampaignIds(options.campaignIds ?? [])
+    /*
+     * THE CUSTOM FIELD VALUES THIS CAPTURE CARRIES, as one nested map.
+     *
+     * Only the keys the door resolved. Written in the NESTED form because both
+     * writes below are merge-sets, which deep-merge a map one key at a time:
+     * `custom: { tier: 'Gold' }` lands beside an existing `custom.vip` and
+     * leaves it standing. A dotted `facets.h1.custom.tier` path would be a
+     * literal field name to a `set`, and a `custom` written whole would take
+     * every other key with it.
+     */
+    const customEntries = Object.entries(options.facet?.custom ?? {})
+    const customFacet = customEntries.length
+      ? { custom: Object.fromEntries(customEntries) }
+      : {}
 
     /*==========================================
      * THE DEDUPE LOOKUP IS UNSCOPED, AND HAS TO BE.
@@ -272,12 +493,30 @@ export async function upsertHostContact(options: {
         },
         { source: options.source, interaction, name: options.name },
       )
+      /*
+       * THE PROFILE, as this door knows it (AGL-2596).
+       *
+       * Given keys only, so the merge below leaves untouched whatever another
+       * door wrote. The stage is the one field with a rule of its own: a
+       * purchase makes a customer of anybody who was not yet one and never
+       * moves anybody back — `contactLifecycleStageAfterPurchase` is that
+       * rule, applied to the stage this door asked for or, failing that, the
+       * one already stored.
+       */
+      const profile = storableProfile(options.facet)
+      if (options.source === 'order') {
+        profile.lifecycleStage = contactLifecycleStageAfterPurchase(
+          profile.lifecycleStage ?? facet.lifecycleStage,
+        )
+      }
       await docSnapshot.ref.set(
         {
           // The search keys travel WITH the name, and only when the name is
           // written: stamping an empty key over a real one would make the
           // contact unfindable by the name it still displays.
           ...(merged.name ? nameSearchFields(merged.name) : {}),
+          // The search echo of the facet's phone — see `HostContact.phone`.
+          ...(profile.phone ? { phone: profile.phone } : {}),
           /*
            * NESTED, not dot-pathed. This is a `set(…, { merge: true })`, and
            * a merge-set treats a key containing dots as a literal field name
@@ -310,6 +549,12 @@ export async function upsertHostContact(options: {
               ...(campaignIds.length
                 ? { campaignIds: FieldValue.arrayUnion(...campaignIds) }
                 : {}),
+              // The same union rule as the campaigns above it, for the same
+              // reason: a tag the merchant put on by hand survives the file.
+              ...(tags.length ? { tags: FieldValue.arrayUnion(...tags) } : {}),
+              // Present keys only, deep-merged by the merge-set — so the
+              // fields this door did not carry keep whatever they held.
+              ...profile,
               ...(options.purchaseCents
                 ? {
                     ltvCents: FieldValue.increment(options.purchaseCents),
@@ -369,7 +614,7 @@ export async function upsertHostContact(options: {
         },
         { merge: true },
       )
-      return
+      return { contactId: docSnapshot.id, created: false }
     }
 
     // New contact: audience-band check via the aggregate count (cheap; no
@@ -386,8 +631,21 @@ export async function upsertHostContact(options: {
         .collection('counters')
         .doc('contactsDropped')
         .set({ total: FieldValue.increment(1) }, { merge: true })
-      return
+      return { refused: 'band' }
     }
+
+    /*
+     * The profile on a create, with the order door's rule applied the same
+     * way as on a merge. A `null` address is dropped rather than written:
+     * there is nothing on a new document for it to clear.
+     */
+    const profile = storableProfile(options.facet)
+    if (options.source === 'order') {
+      profile.lifecycleStage = contactLifecycleStageAfterPurchase(
+        profile.lifecycleStage,
+      )
+    }
+    if (profile.address === null) delete profile.address
 
     const created = await contactsRef.add({
       hostId: options.hostId,
@@ -421,6 +679,8 @@ export async function upsertHostContact(options: {
           : consentGroupScope(group),
       email,
       ...(options.name ? nameSearchFields(options.name.slice(0, 120)) : {}),
+      // The search echo of the facet's phone — see `HostContact.phone`.
+      ...(profile.phone ? { phone: profile.phone } : {}),
       // The facet this capture creates. Everything a holder owns lives under
       // its own group id; the address and the canonical name above are the
       // only shared identity.
@@ -428,13 +688,15 @@ export async function upsertHostContact(options: {
         [group.groupId]: {
           sources: { [options.source]: true },
           interactions: [interaction],
-          tags: [],
+          tags,
           // A create has nothing to union with, so the normalized list is the
           // whole membership.
           ...(campaignIds.length ? { campaignIds } : {}),
+          ...customFacet,
           ...(options.name
             ? { name: options.name.slice(0, 120) }
             : {}),
+          ...profile,
           ...(options.purchaseCents
             ? {
                 ltvCents: options.purchaseCents,
@@ -477,7 +739,30 @@ export async function upsertHostContact(options: {
         convertedAtMs: interaction.atMs,
       })
     }
+    /*
+     * REPORTED ON CREATION ONLY, below the band gate for the reason the
+     * attribution above is: a contact the band dropped does not exist, and
+     * an automation told about it would act on a person the console cannot
+     * show. The merge branch returned long before this line, so a repeat
+     * visit by somebody already held is never announced as a new contact.
+     */
+    if (options.onCreated) {
+      await Promise.resolve(
+        options.onCreated({
+          contactId: created.id,
+          hostId: options.hostId,
+          email,
+          ...(options.name ? { name: options.name.slice(0, 120) } : {}),
+          source: options.source,
+          campaignIds,
+        }),
+      ).catch((error) => {
+        console.error('upsertHostContact onCreated failed', error)
+      })
+    }
+    return { contactId: created.id, created: true }
   } catch (error) {
     console.error('upsertHostContact failed', error)
+    return { refused: 'error' }
   }
 }

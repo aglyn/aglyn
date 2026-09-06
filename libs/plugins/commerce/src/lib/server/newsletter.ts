@@ -35,8 +35,8 @@ import {
   resolveCampaignTouch,
   resolveOrgIdForHost,
   siteRequiresDoubleOptIn,
-  upsertHostContact,
 } from '@aglyn/tenant-data-admin'
+import { captureHostContact } from '@aglyn/tenant-runtime'
 import { buildConfirmUrl } from '@aglyn/tenant-data-admin/server/email-unsubscribe-link'
 import { sendEmail } from '@aglyn/shared-util-email'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
@@ -326,7 +326,7 @@ export const newsletterHandler: PluginApiHandler = async (req, res) => {
       email,
       atMs: now,
     })
-    await upsertHostContact({
+    await captureHostContact({
       hostId,
       email,
       source: 'newsletter',

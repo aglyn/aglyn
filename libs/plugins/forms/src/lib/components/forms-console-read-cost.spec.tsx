@@ -142,6 +142,18 @@ jest.mock(
   }),
 )
 
+/*
+ * The "Saves to contact fields" card (AGL-2601) sits on the form page beside
+ * what this suite is about. It reads the org's field definitions — bounded,
+ * cached per org — through the CRM plugin's own hook, and that read is that
+ * component's concern; here it renders nothing so the Publish control and
+ * the form's own reads are the only things under the lens.
+ */
+jest.mock('./form-contact-fields-card', () => ({
+  __esModule: true,
+  default: () => null,
+  FormContactFieldsCard: () => null,
+}))
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   __esModule: true,
   useSnackbar: () => ({

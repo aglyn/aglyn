@@ -146,6 +146,9 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/api-idempotency'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/contacts'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/scope-tokens'),
+  // The CRM collection names (AGL-2606): the usage object reports the size
+  // of each, so the handler reads them on every call.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/crm'),
   effectiveDatasetModel: () => ({ fields: [] }),
   coerceDocumentValues: (_m: unknown, v: Record<string, unknown>) => v,
   validateDocument: () => ({}),

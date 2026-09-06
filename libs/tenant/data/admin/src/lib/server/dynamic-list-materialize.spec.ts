@@ -798,3 +798,146 @@ describe('a rule can exclude the members of another audience', () => {
     expect(memberRows()).toHaveLength(0)
   })
 })
+
+/*==========================================
+ * THE CRM DIMENSIONS COME OUT OF THE HOLDER'S FACET (AGL-2603).
+ *
+ * An owner, a lifecycle stage, a company and a custom field are one
+ * business's knowledge of a person and live inside that business's facet on
+ * the shared row, beside its notes. The sweep reads them under the sweeping
+ * site's own group — the same read the campaign membership takes — so the
+ * assertions here are the campaign block's, made against each new field:
+ * the facet is read, another holder's is not, the top of the document is
+ * not, and the org read that resolves the group is charged only to a rule
+ * that asks for one of these.
+ *=========================================*/
+describe('a CRM field is an audience', () => {
+  /** A contact with a CRM profile, inside the capturing group's facet. */
+  function seedProfiledContact(
+    id: string,
+    email: string,
+    facet: Record<string, unknown>,
+  ) {
+    store[`orgs/org-1/contacts/${id}`] = {
+      email,
+      facets: { [GROUP_ID]: { sources: { form: true }, ...facet } },
+    }
+  }
+
+  it('enrolls the contacts one team member owns', async () => {
+    seedProfiledContact('c1', 'mine@example.com', { ownerUid: 'uid-a' })
+    seedProfiledContact('c2', 'theirs@example.com', { ownerUid: 'uid-b' })
+    seedProfiledContact('c3', 'nobodys@example.com', {})
+    const result = await materializeDynamicList({
+      listRef: listRef(),
+      hostId: 'host-1',
+      rule: { sources: ['contacts'], ownerUids: ['uid-a'] },
+    })
+    expect(result.matched).toBe(1)
+    expect(memberEmails()).toEqual(['mine@example.com'])
+  })
+
+  it('enrolls the contacts in a lifecycle stage', async () => {
+    seedProfiledContact('c1', 'lead@example.com', { lifecycleStage: 'lead' })
+    seedProfiledContact('c2', 'customer@example.com', {
+      lifecycleStage: 'customer',
+    })
+    await materializeDynamicList({
+      listRef: listRef(),
+      hostId: 'host-1',
+      rule: { sources: ['contacts'], lifecycleStages: ['customer'] },
+    })
+    expect(memberEmails()).toEqual(['customer@example.com'])
+  })
+
+  it('enrolls the contacts at a company', async () => {
+    seedProfiledContact('c1', 'acme@example.com', { companyId: 'co-acme' })
+    seedProfiledContact('c2', 'globex@example.com', { companyId: 'co-globex' })
+    await materializeDynamicList({
+      listRef: listRef(),
+      hostId: 'host-1',
+      rule: { sources: ['contacts'], companyIds: ['co-acme'] },
+    })
+    expect(memberEmails()).toEqual(['acme@example.com'])
+  })
+
+  it('enrolls the contacts whose custom field satisfies the clause', async () => {
+    seedProfiledContact('c1', 'enterprise@example.com', {
+      custom: { plan: 'Enterprise', seats: 40 },
+    })
+    seedProfiledContact('c2', 'starter@example.com', {
+      custom: { plan: 'starter', seats: 3 },
+    })
+    seedProfiledContact('c3', 'blank@example.com', {})
+    await materializeDynamicList({
+      listRef: listRef(),
+      hostId: 'host-1',
+      rule: {
+        sources: ['contacts'],
+        custom: [
+          { key: 'plan', op: 'eq', value: 'enterprise' },
+          { key: 'seats', op: 'gt', value: 10 },
+        ],
+      },
+    })
+    expect(memberEmails()).toEqual(['enterprise@example.com'])
+  })
+
+  /**
+   * ⛔ THE FACET IS THE HOLDER'S OWN RECORD.
+   *
+   * A read that fell back to the top of the document, or reached another
+   * group's facet, would build one agency client's audience out of another
+   * client's CRM — who owns a person and where they sit in a funnel is a
+   * business record on the same footing as the notes.
+   */
+  it('reads no other holder’s profile, and no top-level field', async () => {
+    store['orgs/org-1/contacts/c1'] = {
+      email: 'someone-elses@example.com',
+      ownerUid: 'uid-a',
+      lifecycleStage: 'customer',
+      companyId: 'co-acme',
+      custom: { plan: 'enterprise' },
+      facets: {
+        'group-other': {
+          ownerUid: 'uid-a',
+          lifecycleStage: 'customer',
+          companyId: 'co-acme',
+          custom: { plan: 'enterprise' },
+        },
+      },
+    }
+    for (const rule of [
+      { sources: ['contacts'], ownerUids: ['uid-a'] },
+      { sources: ['contacts'], lifecycleStages: ['customer'] },
+      { sources: ['contacts'], companyIds: ['co-acme'] },
+      { sources: ['contacts'], custom: [{ key: 'plan', op: 'eq', value: 'enterprise' }] },
+    ]) {
+      const result = await materializeDynamicList({
+        listRef: listRef(),
+        hostId: 'host-1',
+        rule,
+      })
+      expect(result.matched).toBe(0)
+    }
+    expect(memberRows()).toHaveLength(0)
+  })
+
+  it('resolves the holder once per sweep, for any of the four', async () => {
+    seedProfiledContact('c1', 'mine@example.com', { ownerUid: 'uid-a' })
+    for (const clause of [
+      { ownerUids: ['uid-a'] },
+      { lifecycleStages: ['lead'] },
+      { companyIds: ['co-acme'] },
+      { custom: [{ key: 'plan', op: 'set' }] },
+    ]) {
+      groupLookups = []
+      await materializeDynamicList({
+        listRef: listRef(),
+        hostId: 'host-1',
+        rule: { sources: ['contacts'], ...clause },
+      })
+      expect(groupLookups).toEqual(['host-1'])
+    }
+  })
+})

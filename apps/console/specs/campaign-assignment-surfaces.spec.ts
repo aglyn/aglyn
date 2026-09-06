@@ -59,8 +59,10 @@ const ASSIGNMENT_SURFACES: Record<string, string> = {
   screens:
     'apps/console/app/(editor)/[orgSlug]/hosts/[host]/screens/[screenId]/versions/[versionId]/view/page.tsx',
   forms: 'libs/plugins/forms/src/lib/components/form-detail-card.tsx',
+  // The record page's Relationship card (AGL-2596); the list's drawer that
+  // held the picker before is gone.
   contacts:
-    'libs/plugins/contacts/src/lib/components/contacts-console-page.tsx',
+    'libs/plugins/crm/src/lib/components/contact-associations-card.tsx',
 }
 
 /** The one place a campaign's removal walks its members. */

@@ -141,7 +141,11 @@ export const FLAG_DOC_PAGES: Partial<
     },
     {
       path: 'api/resources/contacts.md',
-      disclosure: [/Contacts page\*\*[\s\S]{0,80}rolling out/],
+      // The surface is the CRM hub now (AGL-2595), and the page names it by
+      // that name: the flag still gates only the console page, so the
+      // disclosure is that the console's CRM is rolling out while the API
+      // is live.
+      disclosure: [/console's \*\*CRM\*\*[\s\S]{0,80}rolling out/],
       checkNoPriceClaim: true,
     },
     {
@@ -150,14 +154,14 @@ export const FLAG_DOC_PAGES: Partial<
       // under Organization → Plugins) that CANNOT work for a Remote Config
       // flag. Both halves are asserted — the qualification and the dead end.
       disclosure: [
-        /\*\*Contacts\*\* is the exception[\s\S]{0,200}rolling out/,
+        /\*\*CRM\*\* is the exception[\s\S]{0,200}rolling out/,
         /dead end/i,
       ],
       checkNoPriceClaim: true,
     },
     {
       path: 'docs/intro.md',
-      disclosure: [/contacts CRM \(rolling out\)/i],
+      disclosure: [/the CRM \(rolling out\)/i],
       checkNoPriceClaim: false,
       priceClaimNote:
         'The docs home carries a general "Plan availability" callout explaining the docs convention; it is not a claim about Contacts.',
@@ -165,7 +169,9 @@ export const FLAG_DOC_PAGES: Partial<
     {
       path: 'docs/whats-new.md',
       disclosure: [
-        /\[Contacts CRM\][^\n]*\n?[^\n]*\*\(rolling out\)\*/,
+        // The hub's own entry at the top of the page and the older CRM
+        // entry lower down both carry the marker; either form satisfies it.
+        /\[(?:The CRM hub|CRM)\][^\n]*\n?[^\n]*\*\(rolling out\)\*/,
         // The release note still quotes the real overage rates. That is
         // allowed only while it says, next to them, that nobody is billed.
         /per 1,000\/month[\s\S]{0,400}not billed yet/i,

@@ -30,6 +30,12 @@ export const CONSOLE_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-marketplace/server'),
   },
   {
+    id: 'crm',
+    apiPrefixes: ["crm"],
+    register: {"consoleApi":"registerCrmConsoleApi"},
+    load: () => import('@aglyn/plugins-crm/server'),
+  },
+  {
     id: 'email',
     apiPrefixes: ["email"],
     register: {"consoleApi":"registerEmailConsoleApi"},

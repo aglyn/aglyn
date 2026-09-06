@@ -599,6 +599,13 @@ export const EGRESS_HOSTS: Record<string, EgressHost> = {
     dataReceived:
       "Aglyn's own GA4 property id and a date range. What comes back is aggregate counts — page views, sessions and event totals for Aglyn's own marketing and console pages. No identifier for any person is sent, and none is requested: the query asks for totals by date and event name only.",
   },
+  'analyticsadmin.googleapis.com': {
+    disposition: 'not-a-subprocessor',
+    reason:
+      "The GA4 Admin API, read by the same operator CLI (`npm run check:funnel-conversions`) for one field: the property's reporting time zone. GA4 reports an hour as a wall-clock hour in that zone, so the alarm has to cut its window on the property's clock or the page views and the conversions it compares would describe different hours. No customer data is in scope. It is never imported by the console or tenant runtime, so no request-serving code path reaches it, and it authenticates as the operator's own credential against the operator's own property.",
+    dataReceived:
+      "The operator's own GA4 property id. What comes back is that property's settings record — display name, currency and time zone. Nothing about any person is sent or returned.",
+  },
   'stats.uptimerobot.com': {
     disposition: 'not-a-subprocessor',
     reason:

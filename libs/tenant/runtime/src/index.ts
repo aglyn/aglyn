@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+export * from './lib/capture-host-contact'
 export * from './lib/emit-host-event'
 export * from './lib/resolve-dataset'
 export * from './lib/flow-enrollments'

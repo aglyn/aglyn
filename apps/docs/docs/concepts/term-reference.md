@@ -422,12 +422,12 @@ records. → [Relations](../content-and-data/datasets/relations.md)
 ### Contact
 
 A person captured into your workspace's audience — from forms, commerce, or
-manual entry. → [Contacts](../content-and-data/contacts/overview.md)
+manual entry. → [CRM](../content-and-data/contacts/overview.md)
 
 ### Segment
 
 A saved filter over contacts, used to target campaigns and automations.
-→ [Contacts](../content-and-data/contacts/overview.md)
+→ [CRM](../content-and-data/contacts/overview.md#segments)
 
 ### Media library
 

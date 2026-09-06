@@ -1,0 +1,30 @@
+{
+  "name": "plugins-crm",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/plugins/crm/src",
+  "projectType": "library",
+  "tags": ["aglyn:addons"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/plugins/crm",
+        "main": "libs/plugins/crm/src/index.ts",
+        "tsConfig": "libs/plugins/crm/tsconfig.lib.json",
+        "assets": ["libs/plugins/crm/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/libs/plugins/crm"],
+      "options": {
+        "jestConfig": "libs/plugins/crm/jest.config.ts"
+      }
+    }
+  }
+}

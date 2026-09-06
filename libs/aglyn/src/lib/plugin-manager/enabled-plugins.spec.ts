@@ -17,6 +17,7 @@
 
 import { isReleaseFlagKey } from '../app-utils/release-flags'
 import {
+  canonicalPluginId,
   classifyEnabledPlugins,
   DEFAULT_ENABLED_PLUGINS,
   FIRST_PARTY_PLUGINS,
@@ -62,6 +63,41 @@ describe('resolveEnabledPlugins (AGL-416)', () => {
     expect(isPluginEnabled({ enabledPlugins: ['data'] }, 'data')).toBe(true)
     expect(isPluginEnabled({ enabledPlugins: ['data'] }, 'email')).toBe(false)
     expect(isPluginEnabled(undefined, 'email')).toBe(true)
+  })
+})
+
+/**
+ * AGL-2595: `contacts` became `crm`, and the old id is still in stored lists.
+ * Each reader of a stored list must answer for the CURRENT id, or the rename
+ * would switch the plugin off everywhere it had ever been listed.
+ */
+describe('legacy plugin ids (AGL-2595)', () => {
+  it('reads the retired id as the current one', () => {
+    expect(canonicalPluginId('contacts')).toBe('crm')
+    expect(canonicalPluginId('crm')).toBe('crm')
+    expect(canonicalPluginId('acme-widgets')).toBe('acme-widgets')
+  })
+
+  it('an org that listed the old id still has the plugin enabled', () => {
+    const enabled = resolveEnabledPlugins({ enabledPlugins: ['contacts'] })
+    expect(enabled).toContain('crm')
+    expect(enabled).not.toContain('contacts')
+    expect(isPluginEnabled({ enabledPlugins: ['contacts'] }, 'crm')).toBe(true)
+  })
+
+  it('a site that disabled the old id has the plugin off', () => {
+    const enabled = resolveHostEnabledPlugins(
+      { enabledPlugins: ['crm', 'bookings'] },
+      { disabledPlugins: ['contacts'] },
+    )
+    expect(enabled).not.toContain('crm')
+    expect(enabled).toContain('bookings')
+  })
+
+  it('the catalog never carries a retired id', () => {
+    for (const plugin of FIRST_PARTY_PLUGINS) {
+      expect(canonicalPluginId(plugin.id)).toBe(plugin.id)
+    }
   })
 })
 

@@ -40,6 +40,7 @@ import { getApps, initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { FieldValue, getFirestore, Timestamp } from 'firebase-admin/firestore'
 
+import { seedCrmFixtures } from './lib/crm-fixtures.mjs'
 import { putMediaDocument } from './lib/media-counter.mjs'
 
 if (
@@ -221,6 +222,29 @@ const put = async (ref, data) => {
   await ref.set({ ...data, updatedAt: now }, { merge: true })
   written += 1
 }
+
+// The owner has accepted the current terms (AGL-2610). Without this record
+// the console opens every page under the re-acceptance banner — a real
+// customer whose account predates the clickwrap — and every screenshot the
+// e2e harnesses stage carries it. The version mirrors `LEGAL_DOCUMENT_VERSION`
+// in `apps/console/constants/legal-documents.ts`; the fields are the ones
+// `recordLegalAcceptance` writes.
+await put(
+  firestore
+    .collection('users')
+    .doc(E2E_UID)
+    .collection('legalAcceptances')
+    .doc('v1'),
+  {
+    version: 'v1',
+    documents: [],
+    method: 'clickwrap',
+    context: 'seed-e2e',
+    acceptedAt: now,
+    ipAddress: null,
+    userAgent: null,
+  },
+)
 
 // ── Org, membership mirror, host, hostIndex ────────────────────────────────
 await put(firestore.collection('orgs').doc(orgId), {
@@ -1155,7 +1179,34 @@ await put(hostRef.collection('experiments').doc('seed-experiment'), {
 await put(hostRef.collection('leads').doc('seed-lead-1'), {
   email: 'wholesale@example.com',
   source: 'signup',
+  sources: ['signup'],
+  submissionCount: 1,
+  // The CRM's Leads section orders by `lastSeenAtMs` (AGL-2608), the one
+  // field every capture stamps — a lead without it is dropped from that
+  // query while the Inbox, ordering by `createdAt`, still lists it.
+  firstSeenAtMs: Date.now() - 2 * dayMs,
+  lastSeenAtMs: Date.now() - 2 * dayMs,
   createdAt: now,
+})
+
+// ── The CRM (AGL-2610) ──────────────────────────────────────────────────────
+// A small business's book: six contacts under this site's facet, the company
+// one of them works for, a pipeline with an open deal and a won one, a task
+// due yesterday and one due next week, two logged activities, two custom
+// fields, a live audience, and two leads nobody has worked yet. Replaced on
+// every run rather than merged — the CRM specs mutate these and need the
+// second run to start where the first did; see the module for why.
+await seedCrmFixtures({
+  firestore,
+  orgId,
+  hostId,
+  ownerUid: E2E_UID,
+  ownerName: 'E2E Owner',
+  teammateUid: E2E_TEAMMATE_UID,
+  write: async (ref, data) => {
+    await ref.set(data)
+    written += 1
+  },
 })
 // A notification (AGL-259/267 taxonomy) so the notifications page's
 // feed and category mute switches have content.

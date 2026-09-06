@@ -28,7 +28,17 @@
  */
 
 export interface FirstPartyPlugin {
-  /** Stable plugin id — persisted in `org.enabledPlugins`; never rename. */
+  /**
+   * Stable plugin id — persisted in `org.enabledPlugins`,
+   * `host.disabledPlugins` and `host.enabledPlugins`, and the document id
+   * under every `pluginSettings` collection.
+   *
+   * Renaming one is therefore a data change, not a code change, and it is
+   * done in two halves that must both ship: the old id goes into
+   * {@link LEGACY_PLUGIN_IDS} so every stored list still resolves, and
+   * `tools/scripts/backfill-plugin-id-crm.mjs` (the shape to copy) rewrites
+   * the documents so the alias eventually reads nothing.
+   */
   id: string
   /** Console-facing display name. */
   label: string
@@ -119,7 +129,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<
   bookings: 'elements',
   commerce: 'elements',
   marketplace: 'console-only',
-  contacts: 'console-only',
+  crm: 'console-only',
   data: 'console-only',
   email: 'elements',
   'events-calendar': 'elements',
@@ -176,7 +186,9 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
   { id: 'bookings', label: 'Bookings', description: 'Services, open slots, and paid bookings.', releaseFlag: 'release_bookings' },
   { id: 'commerce', label: 'Commerce', description: 'Products, carts, checkout, orders, POS.', releaseFlag: 'release_commerce_v2' },
   { id: 'marketplace', label: 'Marketplace', description: 'Marketplace listings, templates, and installs.', releaseFlag: 'release_marketplace' },
-  { id: 'contacts', label: 'Contacts', description: 'People, segments, and interactions.', releaseFlag: 'release_contacts' },
+  // `crm` was `contacts` until AGL-2595 widened one list into the hub; the
+  // release flag kept its key because it is persisted in Remote Config.
+  { id: 'crm', label: 'CRM', description: 'Leads, contacts, companies, deals, tasks and reports.', releaseFlag: 'release_contacts' },
   { id: 'data', label: 'Data', description: 'Datasets, records, and CSV import/export.', releaseFlag: 'release_data_store' },
   { id: 'email', label: 'Email', description: 'Designed emails and campaign sending.', releaseFlag: 'release_email' },
   { id: 'events-calendar', label: 'Events Calendar', description: 'Event lists and calendars.', releaseFlag: 'release_events' },
@@ -191,6 +203,38 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 /** Ids loaded for orgs that have never touched the switchboard. */
 export const DEFAULT_ENABLED_PLUGINS: readonly string[] =
   FIRST_PARTY_PLUGINS.map((plugin) => plugin.id)
+
+/**
+ * Ids a plugin USED to have, mapped to the id it has now (AGL-2595).
+ *
+ * A first-party id is written into every org's `enabledPlugins` and every
+ * site's `disabledPlugins` the moment somebody touches the switchboard, so a
+ * rename in this file alone would silently turn the plugin OFF for every
+ * workspace that had listed it under the old name — the stored id would match
+ * nothing in the catalog and fall through as a marketplace listing id. Every
+ * reader of a stored list runs it through {@link canonicalPluginId} first, so
+ * a document written before the rename keeps meaning what it meant.
+ *
+ * The alias is the half that makes a deploy safe; the backfill is the half
+ * that lets an entry leave this table. An entry stays until
+ * `tools/scripts/backfill-plugin-id-crm.mjs` reports zero documents left
+ * carrying the old id.
+ */
+export const LEGACY_PLUGIN_IDS: Readonly<Record<string, string>> = {
+  contacts: 'crm',
+}
+
+/** The id a stored plugin id means today. */
+export function canonicalPluginId(pluginId: string): string {
+  return LEGACY_PLUGIN_IDS[pluginId] ?? pluginId
+}
+
+/** A stored list, read through the alias table and de-duplicated. */
+function canonicalPluginIds(pluginIds: readonly unknown[]): string[] {
+  return Array.from(
+    new Set(pluginIds.map((id) => canonicalPluginId(String(id)))),
+  )
+}
 
 const ALWAYS_ON: readonly string[] = FIRST_PARTY_PLUGINS.filter(
   (plugin) => plugin.alwaysOn,
@@ -230,7 +274,7 @@ export function applyDefaultOffOptIn(
 ): string[] {
   if (!DEFAULT_OFF_PER_SITE_PLUGIN_IDS.size) return [...pluginIds]
   const asked = new Set(
-    Array.isArray(optedIn) ? optedIn.map(String) : [],
+    Array.isArray(optedIn) ? canonicalPluginIds(optedIn) : [],
   )
   return pluginIds.filter(
     (id) => !DEFAULT_OFF_PER_SITE_PLUGIN_IDS.has(id) || asked.has(id),
@@ -278,7 +322,7 @@ export function resolveEnabledPlugins(
 ): string[] {
   const configured = org?.enabledPlugins
   const base = Array.isArray(configured)
-    ? configured.map(String)
+    ? canonicalPluginIds(configured)
     : [...DEFAULT_ENABLED_PLUGINS]
   return Array.from(new Set([...ALWAYS_ON, ...base]))
 }
@@ -294,7 +338,7 @@ export function subtractDisabledPlugins(
 ): string[] {
   if (!Array.isArray(disabledPlugins) || !disabledPlugins.length)
     return [...pluginIds]
-  const disabled = new Set(disabledPlugins.map(String))
+  const disabled = new Set(canonicalPluginIds(disabledPlugins))
   return pluginIds.filter(
     (id) => ALWAYS_ON.includes(id) || !disabled.has(id),
   )

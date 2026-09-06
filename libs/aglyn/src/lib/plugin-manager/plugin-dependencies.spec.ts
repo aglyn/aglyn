@@ -171,7 +171,7 @@ describe('the published-site consequence of a disable', () => {
   })
 
   it('marks a console-only plugin as console-only', () => {
-    expect(PUBLISHED_SITE_IMPACT['contacts']).toBe('console-only')
+    expect(PUBLISHED_SITE_IMPACT['crm']).toBe('console-only')
   })
 })
 

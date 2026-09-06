@@ -230,7 +230,7 @@ delivered, with cancel/refund exits — see the
 Active subscriptions are recorded per site and surface in two places:
 
 - **Buyers** manage their own — the
-  [Customer account block](member-accounts.md#2-design-an-account-page)'s
+  [Customer account block](member-accounts.md#3-design-an-account-page)'s
   **Subscriptions** section has a **Manage** button that opens the **Stripe
   Billing Portal** (update card, cancel, see invoices).
 - **You** see each member's subscriptions in the member drawer on the site's

@@ -27,10 +27,9 @@ import {
   notifyHostManagers,
   orgDataCollectionForHost,
   resolveCampaignTouch,
-  upsertHostContact,
   visitorWriteRefusal,
 } from '@aglyn/tenant-data-admin'
-import { emitHostEvent, resolveDatasetDoc } from '@aglyn/tenant-runtime'
+import { captureHostContact, emitHostEvent, resolveDatasetDoc } from '@aglyn/tenant-runtime'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
   NO_CLIENT_ADDRESS_BUCKET,
@@ -465,6 +464,40 @@ export async function POST(request: Request): Promise<Response> {
     const formCampaignIds = form
       ? Aglyn.readCampaignIds(form.data() as Record<string, unknown>)
       : []
+    /*
+     * THE CUSTOM CONTACT FIELDS THIS FORM SAVES TO (AGL-2601).
+     *
+     * Off the VERIFIED form's declaration, like the campaigns above and for
+     * the same reason: a mapping taken from the request body would let anyone
+     * write any value under any field of any contact on any site. The
+     * definitions are read from the owning org — one bounded read of a small
+     * collection — and only when the declaration maps at least one field, so
+     * a form that saves nowhere pays nothing.
+     *
+     * Coerced by the definition's TYPE before it goes anywhere near the
+     * contact: `collectMappedContactCustom` is the same rule the API applies
+     * to a `custom` body, so a number typed into a form and a number sent
+     * over the API are stored as the same thing. A blank field contributes no
+     * key at all, so a submission never clears a value the merchant set.
+     */
+    const formFieldDecls = Array.isArray(form?.get('fields'))
+      ? (form?.get('fields') as Aglyn.FormFieldDecl[])
+      : []
+    const mappedContactCustom =
+      form && owningOrg?.orgId && formFieldDecls.some((decl) => decl?.contactFieldKey)
+        ? Aglyn.collectMappedContactCustom({
+            fields: sanitizedFields,
+            decls: formFieldDecls,
+            definitions: (
+              await firestore
+                .collection('orgs')
+                .doc(owningOrg.orgId)
+                .collection(Aglyn.CRM_COLLECTIONS.contactFields)
+                .limit(Aglyn.CONTACT_FIELDS_MAX_PER_ORG)
+                .get()
+            ).docs.map((snapshot) => snapshot.data() as Aglyn.ContactFieldDefinition),
+          })
+        : {}
     // One instant for the whole submission. The attribution window is
     // measured against it in three places below, and three calls to
     // `Date.now()` would let a slow write decide whether a touch was inside
@@ -568,7 +601,7 @@ export async function POST(request: Request): Promise<Response> {
       convertedAtMs: submittedAtMs,
     })
     if (contactEmail) {
-      void upsertHostContact({
+      void captureHostContact({
         hostId,
         email: contactEmail,
         name: sanitizedFields['name'] ?? sanitizedFields['fullName'],
@@ -599,6 +632,11 @@ export async function POST(request: Request): Promise<Response> {
         // row the whole org shares. Membership is not consent, and this passes
         // none: `marketingConsent` above is the only input that records one.
         ...(formCampaignIds.length ? { campaignIds: formCampaignIds } : {}),
+        // The mapped custom field values, into this site's own facet. Absent
+        // when nothing mapped, so the writer adds no `custom` key for nothing.
+        ...(Object.keys(mappedContactCustom).length
+          ? { facet: { custom: mappedContactCustom } }
+          : {}),
       })
       /*
        * A lead, when the FORM says it is one (`docs/specs/reusable-forms.md`

@@ -49,7 +49,7 @@ Declare a key that is already enforced somewhere real — a permission a
 customer can untick that changes nothing is worse than its absence. A surface
 that omits both fields is open to every member of the workspace.
 
-Reference adopter: `libs/plugins/contacts` gates the CRM on `data.manage`.
+Reference adopter: `libs/plugins/crm` gates the CRM on `data.manage`.
 
 `ConsoleNavItem.sections?` turns one surface into a hub of routes — each
 `{ id, label, navTabId? }` becomes a URL at `${href}/${id}`, and the shell

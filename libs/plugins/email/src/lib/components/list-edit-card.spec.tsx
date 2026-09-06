@@ -63,6 +63,14 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   // a picker whose value is not among its options draws blank, and a save
   // from that screen would erase the reference.
   useHostCampaigns: () => SITE_CAMPAIGNS,
+  // The org roster behind the "Owned by" audience control (AGL-2603): empty
+  // and settled, so the control renders and the rule round-trips without a
+  // members read this suite has no business making.
+  useOrgMemberOptions: () => ({ options: [], ready: true, error: null }),
+  // The reader's scope tokens behind the custom-field condition control
+  // (AGL-2603): an org-wide reader, settled, so the definitions read is shaped
+  // and the control renders.
+  useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),
 }))
 
 const updateDoc = jest.fn().mockResolvedValue(undefined)

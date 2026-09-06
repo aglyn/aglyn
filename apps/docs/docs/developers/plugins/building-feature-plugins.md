@@ -507,10 +507,13 @@ Conventions the scaffold already applies:
   shared tooling — the where-used dialog and its fetch util, plus the
   variable/function cards — which the app's workflows surface and besigner
   ƒx button import from `@aglyn/plugins-logic`. Always-on (not release-flagged).
-- **Contacts** (`libs/plugins/contacts`) — console-only (AGL-395): the unified
-  contacts list, segments, and profile drawer. A whole self-contained page
-  relocated with just the layout wrapper + inline `FeatureGate` stripped (the
-  shell supplies both); reads the `contactsPerHost` quota off the `org` prop.
+- **CRM** (`libs/plugins/crm`) — console-only (AGL-395): one nav item whose
+  sections — contacts, leads, companies, deals, tasks, reports, fields — are
+  routes the shell resolves and gates, each with record pages beneath it. The
+  plugin id is `crm`; it was `contacts` while the surface was one list, and the
+  old id is still read from every org's enabled-plugins list. The `FeatureGate`
+  and layout wrapper come from the shell; the contacts section reads the
+  `contactsPerHost` quota off the `org` prop.
 - **Inbox** (`libs/plugins/inbox`) — console-only (AGL-395): form-submissions
   reader, site members + leads, and the borrowed **Campaigns** section. Its
   three sections are routes rather than tabs (AGL-2501), declared in

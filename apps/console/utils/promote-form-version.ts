@@ -17,6 +17,7 @@
 
 import {
   canvasTreeToDefinition,
+  carryContactFieldMappings,
   checkFormContract,
   decodeStoredNodes,
   formContractIsSatisfied,
@@ -82,10 +83,12 @@ export function isFormPromotionRefusal(
  * node maps rather than through a mocked Admin SDK — the property under test
  * is which trees it says no to, not how a 422 is serialized.
  *
- * @param options.form  the STORED form document. Only `routing` and
- *                      `consentFieldName` are read: the stored `fields` are
- *                      the previous design's output, not a contract the new
- *                      one owes anything to.
+ * @param options.form  the STORED form document. `routing` and
+ *                      `consentFieldName` are what the check reads; the
+ *                      stored `fields` are the previous design's output, not
+ *                      a contract the new one owes anything to — except the
+ *                      contact-field mappings drawn on them, which are
+ *                      carried across by field name (AGL-2601).
  * @param options.storedNodes the version document's `nodes` in any stored
  *                      form — a besigner save writes them compressed.
  */
@@ -154,8 +157,15 @@ export function resolveFormPromotion(options: {
      *
      * `checkFormContract` reports `form-node-missing` when there is no form
      * node, so reaching here means this id resolved.
+     *
+     * Where each field SAVES TO is not drawn on the canvas — it is edited on
+     * the form's page — so it is carried from the stored declaration by
+     * field name, or every publish would unmap every field (AGL-2601).
      */
-    fields: formFieldDeclsFromNodes(nodes as never, formNodeId as NodeId),
+    fields: carryContactFieldMappings(
+      form?.['fields'] as FormFieldDecl[] | undefined,
+      formFieldDeclsFromNodes(nodes as never, formNodeId as NodeId),
+    ),
   }
 }
 

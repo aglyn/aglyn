@@ -21,6 +21,8 @@ import {
   checkEntitlement,
   checkQuota,
   HOST_EVENT_TYPES,
+  hostEventLabel,
+  hostEventPayloadHint,
   type HostFunction,
   type HostVariable,
   type HostWorkflow,
@@ -526,7 +528,7 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
                     (workflow.steps ?? []).length === 1 ? '' : 's'
                   }${
                     workflow.trigger?.event
-                      ? ` · on ${workflow.trigger.event}`
+                      ? ` · on ${hostEventLabel(workflow.trigger.event)}`
                       : ''
                   } · ${(workflow.steps ?? [])
                     .map((step: any) => step.functionName)
@@ -828,7 +830,7 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
               <MenuItem value="">{'Manual only'}</MenuItem>
               {HOST_EVENT_TYPES.map((eventType) => (
                 <MenuItem key={eventType} value={eventType}>
-                  {eventType}
+                  {hostEventLabel(eventType)}
                 </MenuItem>
               ))}
             </TextField>
@@ -836,7 +838,12 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
               <TextField
                 label="Filter (optional)"
                 placeholder={'path == "/pricing"'}
-                helperText="Runs only when this expression is truthy"
+                helperText={[
+                  'Runs only when this expression is truthy.',
+                  hostEventPayloadHint(draft?.trigger?.event),
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
                 value={draft?.trigger?.filter ?? ''}
                 onChange={(event) =>
                   patch((previous) => ({

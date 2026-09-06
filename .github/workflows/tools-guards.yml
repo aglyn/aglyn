@@ -255,10 +255,11 @@ jobs:
       - run: npm run test:main-gate-red
       - run: npm run test:main-gate-full-sweep
 
-      # AGL-2587 — the views-to-conversions alarm's grading: it goes red on the
-      # 2026-09-01 incident's real numbers and green on the quiet days around
-      # them. Both halves matter; an alarm that cannot go green gets muted, and
-      # one that cannot go red was never a check.
+      # AGL-2587 / AGL-2609 — the views-to-conversions alarm's grading: it goes
+      # red on the 2026-09-01 incident's real numbers inside one twelve-hour
+      # window, green on the quiet days around them, and says a red once. Both
+      # halves matter; an alarm that cannot go green gets muted, and one that
+      # cannot go red was never a check.
       - run: npm run test:funnel-alarm
 
       - run: npm run test:deploy-guard

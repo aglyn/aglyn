@@ -96,14 +96,13 @@ import {
   notifyHostManagers,
   attributeCampaignConversion,
   resolveCampaignTouch,
-  upsertHostContact,
   getPluginConfig,
   resolveOrgIdForHost,
   renderHostEmailWithTokens,
   hostSendingIdentity,
 } from '@aglyn/tenant-data-admin'
 import { connectLinkageIsReady } from '@aglyn/tenant-data-admin/server/stripe-account-mode'
-import { emitHostEvent } from '@aglyn/tenant-runtime'
+import { captureHostContact, emitHostEvent } from '@aglyn/tenant-runtime'
 import {
   isEmailConfigured,
   loadHostEmail,
@@ -538,7 +537,7 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
     })
 
     // Contacts ingestion (AGL-197) — booking requests identify a person.
-    void upsertHostContact({
+    void captureHostContact({
       hostId,
       email,
       name: name || undefined,

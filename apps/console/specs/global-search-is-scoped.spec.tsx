@@ -75,6 +75,22 @@ jest.mock('../hooks/use-org-scope', () => ({
   useOrgScope: () => ({ currentOrg: { $id: 'org-1' } }),
   useOrgSlug: () => 'acme',
 }))
+// The dialog gates the contacts group on the reader's org permissions
+// (AGL-2596); an owner with everything granted, so every group the fixture
+// offers is one the reader may see and the rows under test all render.
+jest.mock('../hooks/use-org-permissions', () => ({
+  useOrgPermissions: () => ({
+    permissions: {},
+    can: () => true,
+    granted: {},
+    isOwner: true,
+    orgId: 'org-1',
+    role: 'owner',
+    loaded: true,
+    errored: false,
+    status: 'ready',
+  }),
+}))
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
   default: () => ({ org: { plan: 'pro' }, orgId: 'org-1', ready: true }),

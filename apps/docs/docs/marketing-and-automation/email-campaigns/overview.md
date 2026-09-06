@@ -6,7 +6,7 @@ description: Campaigns to audiences built from your contacts. Campaign email sta
 
 # Email Campaigns
 
-**Email campaigns** let you reach the people in your [contacts CRM](../../content-and-data/contacts/overview.md).
+**Email campaigns** let you reach the people in your [CRM](../../content-and-data/contacts/overview.md).
 Build an audience, compose a send, and Aglyn handles delivery, caps, and unsubscribes.
 
 ```mermaid
@@ -74,8 +74,8 @@ You set it from the record itself, never from the campaign:
 
 - **A screen** — open it from Screens and pick its campaigns on the **Campaigns** card.
 - **A form** — open it from Forms and pick its campaigns under **Details**.
-- **A contact** — open the contact from Contacts and pick its campaigns in the profile
-  panel.
+- **A contact** — open the contact under **CRM → Contacts** and pick its campaigns on
+  the **Relationship** card of [their page](../../content-and-data/contacts/contact-record.md#the-record-page).
 
 Each of them can be in **more than one campaign**, because the same landing page and the
 same signup form are usually re-run for the next push. Clearing every campaign takes the
@@ -589,9 +589,24 @@ minutes. Pick **From a rule** when you create the list, then say who it draws fr
 - **Tagged** — one or more contact tags, comma separated. Contacts only.
 - **Submitted form** — one or more form names, comma separated. Form submissions only.
 - **Created after** — only people whose record was created on or after that date.
+- **Owned by**, **Lifecycle stage**, **At company** — the CRM fields on a contact's
+  record for your site: any of the team members picked, any of the stages picked,
+  any of the companies found by typing a name. Contacts only; a contact with no
+  owner, stage or company on record does not match. A lead, a site member or a
+  form submission carries none of these, so the filters are simply not applied to
+  them.
+- **Field conditions** — one row per custom contact field, each a field, a
+  condition and a value: *is*, *is not*, *contains*, *is more than*, *is less
+  than*, *is set* or *is not set*. Every row must hold. A number field compares
+  numbers, a choice field offers its own options, and *is not* requires a value
+  that differs — a blank does not count, so excluding one plan does not select
+  everyone whose plan was never recorded (use *is not set* for that).
 
-So "everyone who submitted our Contact us form", "contacts tagged `vip`", and "site
-members who joined since March" are each one rule.
+So "everyone who submitted our Contact us form", "contacts tagged `vip`", "site
+members who joined since March", and "customers at Acme on the Enterprise plan"
+are each one rule. The paragraph above the filters reads the rule back in
+sentences — naming people, stages and companies rather than ids — so you can
+check it against what you meant.
 
 The list row shows when the rule last ran. If it says **not yet evaluated**, the next
 sweep has not reached it — a list created a moment ago is normal; hours is not.
@@ -907,6 +922,6 @@ sending reputation, so the confirmation names the reason before you do it.
 
 ## Related
 
-- [Contacts CRM](../../content-and-data/contacts/overview.md)
+- [CRM](../../content-and-data/contacts/overview.md)
 - [Forms & lead capture](../../content-and-data/forms/overview.md)
 - [Marketing overlays](../marketing-overlays/overview.md) (email capture popups)

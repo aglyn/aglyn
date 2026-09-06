@@ -9,6 +9,91 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.74 — 2026-09-05
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.73...v1.0.0-beta.74)
+
+### Added
+
+- **crm:** log calls, emails, meetings and notes; one timeline per contact ([AGL-2600](https://linear.app/aglyn/issue/AGL-2600))
+- **aglyn:** activity kinds, the contact timeline merge and the CRM read tokens ([AGL-2600](https://linear.app/aglyn/issue/AGL-2600))
+- **crm,docs,console,aglyn,tools:** the Companies section, its record page and docs ([AGL-2597](https://linear.app/aglyn/issue/AGL-2597))
+- **cloud:** indexes for the contact-company mirror and the scoped company filters ([AGL-2597](https://linear.app/aglyn/issue/AGL-2597))
+- **crm:** the companies model, its link mirror rules and the CRM scope hooks ([AGL-2597](https://linear.app/aglyn/issue/AGL-2597))
+- **crm,inbox:** the Leads section, the lead record and the convert dialog ([AGL-2608](https://linear.app/aglyn/issue/AGL-2608))
+- **crm:** the lead-convert route turns a lead into a contact, a company and a deal ([AGL-2608](https://linear.app/aglyn/issue/AGL-2608))
+- **aglyn,tenant-data-admin:** lead status fields and a contact-upsert facet option ([AGL-2608](https://linear.app/aglyn/issue/AGL-2608))
+- **docs,console:** the CRM reference pages, scopes, conventions and What's New ([AGL-2606](https://linear.app/aglyn/issue/AGL-2606))
+- **console:** a contact's CRM profile over /v1, the CRM sizes in usage, and the suites ([AGL-2606](https://linear.app/aglyn/issue/AGL-2606))
+- **console,admin:** /v1 grows companies, pipelines, deals, tasks and activities ([AGL-2606](https://linear.app/aglyn/issue/AGL-2606), [AGL-2595](https://linear.app/aglyn/issue/AGL-2595), [AGL-899](https://linear.app/aglyn/issue/AGL-899))
+- **forms,crm,docs:** a form field picks the contact field it saves into ([AGL-2601](https://linear.app/aglyn/issue/AGL-2601))
+- **crm,aglyn,console,tenant:** custom contact fields, from definition to value ([AGL-2601](https://linear.app/aglyn/issue/AGL-2601))
+- **console:** the global search finds a contact by name, email, phone or company ([AGL-2596](https://linear.app/aglyn/issue/AGL-2596))
+- **crm,tenant:** the contact record page, and a list that links to it ([AGL-2596](https://linear.app/aglyn/issue/AGL-2596))
+- **crm,aglyn,tenant:** a contact can be added by hand, with a profile on its facet ([AGL-2596](https://linear.app/aglyn/issue/AGL-2596))
+- **crm:** the deals pipeline — board, table, drawer, detail page and linked cards ([AGL-2598](https://linear.app/aglyn/issue/AGL-2598))
+- **crm,aglyn,docs:** the deal pipeline model, the deal-stage route and its events ([AGL-2598](https://linear.app/aglyn/issue/AGL-2598))
+- **crm,docs:** the contacts table grows bulk actions and an audience door ([AGL-2603](https://linear.app/aglyn/issue/AGL-2603))
+- **email,aglyn,admin:** audience rules reach owner, stage, company and custom fields ([AGL-2603](https://linear.app/aglyn/issue/AGL-2603))
+- **workflows:** the trigger pickers read as words and the editor builds the CRM steps ([AGL-2605](https://linear.app/aglyn/issue/AGL-2605))
+- **runtime,aglyn:** the CRM owner and assignee resolve by address via the roster ([AGL-2605](https://linear.app/aglyn/issue/AGL-2605))
+- **crm,runtime,aglyn:** contact events and five CRM steps for automations ([AGL-2605](https://linear.app/aglyn/issue/AGL-2605))
+- **crm,aglyn,docs:** tasks and follow-ups — section, record card, routes and widget ([AGL-2599](https://linear.app/aglyn/issue/AGL-2599))
+- **crm,cloud:** the Reports section, its cards and the CRM at a glance widget ([AGL-2604](https://linear.app/aglyn/issue/AGL-2604))
+- **aglyn:** the CRM report helpers — periods, week buckets, funnel, pipeline totals ([AGL-2604](https://linear.app/aglyn/issue/AGL-2604))
+- **crm:** the Import CSV drawer on the contacts list ([AGL-2602](https://linear.app/aglyn/issue/AGL-2602))
+- **crm:** the contacts-import route — one chunk of a file through the capture door ([AGL-2602](https://linear.app/aglyn/issue/AGL-2602))
+- **tenant-data-admin:** upsertHostContact answers a verdict and takes a facet ([AGL-2602](https://linear.app/aglyn/issue/AGL-2602))
+- **aglyn:** the contact-file normalizer — mapping, row verdicts, skipped-rows CSV ([AGL-2602](https://linear.app/aglyn/issue/AGL-2602))
+- **crm:** one edit verdict per list, and the cards link to the activities docs page ([AGL-2600](https://linear.app/aglyn/issue/AGL-2600))
+- **crm,aglyn,console,tools:** the Contacts plugin becomes the CRM hub, id and all ([AGL-2595](https://linear.app/aglyn/issue/AGL-2595))
+- **contacts,docs:** the Contacts hub — sections, record routes and a server entry ([AGL-2595](https://linear.app/aglyn/issue/AGL-2595))
+- **rules,cloud:** the CRM collections answer to the contacts predicate, indexed ([AGL-2595](https://linear.app/aglyn/issue/AGL-2595))
+- **shared-ui-jsx:** the list table grows an opt-in row selection ([AGL-2595](https://linear.app/aglyn/issue/AGL-2595))
+- **aglyn:** the CRM model, contact profile facet and scope stamp behind Contacts v2 ([AGL-2595](https://linear.app/aglyn/issue/AGL-2595))
+
+### Fixed
+
+- **console:** the docs flag registry reads the CRM's own name on the pages it watches ([AGL-2607](https://linear.app/aglyn/issue/AGL-2607))
+- **crm:** a stage moved on the contact page fires its event; the leads' selects are named ([AGL-2610](https://linear.app/aglyn/issue/AGL-2610))
+- **crm:** the convert dialog's Stage label no longer sits on its placeholder ([AGL-2610](https://linear.app/aglyn/issue/AGL-2610))
+- **crm,console,email,forms,runtime:** the consolidated CRM v2 tree clears every guard ([AGL-2595](https://linear.app/aglyn/issue/AGL-2595))
+- **console:** the GA4 Admin host the funnel alarm reads is in the outbound inventory ([AGL-2609](https://linear.app/aglyn/issue/AGL-2609))
+- **tools:** the plugin-id backfill finds settings rows by parent, not by collection group ([AGL-2595](https://linear.app/aglyn/issue/AGL-2595))
+- **tools:** the funnel alarm grades hourly off Firebase Auth, not two days late ([AGL-2609](https://linear.app/aglyn/issue/AGL-2609), [AGL-2581](https://linear.app/aglyn/issue/AGL-2581))
+
+### Changed
+
+- **crm:** the import drawer takes the org as the page prop it is forwarded from ([AGL-2602](https://linear.app/aglyn/issue/AGL-2602))
+
+### Documentation
+
+- **docs:** the commerce guide points at the account-page step by its current number ([AGL-2607](https://linear.app/aglyn/issue/AGL-2607))
+- **docs:** the CRM overview links the API reference at its real route ([AGL-2607](https://linear.app/aglyn/issue/AGL-2607))
+- **docs:** the Contacts folder reads as one CRM manual; v1 language swept ([AGL-2607](https://linear.app/aglyn/issue/AGL-2607))
+- **contacts:** the Leads page — list, record, convert, unqualify ([AGL-2608](https://linear.app/aglyn/issue/AGL-2608))
+- **contacts:** the contact record — adding by hand, the fields, owner, stages, the page ([AGL-2596](https://linear.app/aglyn/issue/AGL-2596))
+- **automation,contacts:** the CRM events and steps, with their payload tables ([AGL-2605](https://linear.app/aglyn/issue/AGL-2605))
+- **contacts:** the CRM Reports page, plus its crmReports plugin help topic ([AGL-2604](https://linear.app/aglyn/issue/AGL-2604))
+- **contacts:** the contacts page list points at the import page ([AGL-2602](https://linear.app/aglyn/issue/AGL-2602))
+- **contacts:** import contacts from CSV, with the registries regenerated ([AGL-2602](https://linear.app/aglyn/issue/AGL-2602))
+- **contacts:** activities and the timeline, registries regenerated ([AGL-2600](https://linear.app/aglyn/issue/AGL-2600))
+
+<details>
+<summary>Also in this release: 6 test, 2 chore, 1 tools</summary>
+
+- **tools:** the e2e seed carries a CRM — a roaster's wholesale book, leads, an audience ([AGL-2610](https://linear.app/aglyn/issue/AGL-2610))
+- **tools:** five browser-driven e2e specs cover the CRM surfaces the v2 arc left bare ([AGL-2610](https://linear.app/aglyn/issue/AGL-2610))
+- **tools,docs:** the console e2e suite reads the org-scoped routes and sectioned hubs ([AGL-2610](https://linear.app/aglyn/issue/AGL-2610))
+- **bookings,commerce,tenant:** the runtime mocks stub the capture door every server path now uses ([AGL-2605](https://linear.app/aglyn/issue/AGL-2605))
+- **tools:** the Linear ceiling reads AGL-2629 for the CRM v2.1 arc ([AGL-2629](https://linear.app/aglyn/issue/AGL-2629), [AGL-2610](https://linear.app/aglyn/issue/AGL-2610))
+- **console:** the footer guard counts the Fields settings table as bounded ([AGL-2601](https://linear.app/aglyn/issue/AGL-2601))
+- **console:** the org contacts bridge links into the CRM hub, not the retired route ([AGL-2595](https://linear.app/aglyn/issue/AGL-2595))
+- **crm:** task routes, views and scope proven; the wiring spec stubs the admin sdk ([AGL-2599](https://linear.app/aglyn/issue/AGL-2599))
+- **tools:** the Linear ceiling reads AGL-2609, the workspace head ([AGL-2609](https://linear.app/aglyn/issue/AGL-2609))
+
+</details>
+
 ## v1.0.0-beta.73 — 2026-09-05
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.72...v1.0.0-beta.73)

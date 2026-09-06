@@ -8900,6 +8900,156 @@ describe('the CRM answers to data.manage, on both halves of the scope', () => {
 })
 
 /**
+ * THE CRM'S COMPANION COLLECTIONS ANSWER TO THE CONTACTS PREDICATE (AGL-2595).
+ *
+ * Companies, pipelines, deals, tasks, activities and custom-field definitions
+ * are facts about the people in the CRM, and each is gated exactly as
+ * `contacts` is: scope AND `data.manage` to read, `canWriteOrgData` plus a
+ * scope the creator can see to create, no scope change by a scoped member on
+ * update. The one deliberate difference — no sole-holder clause on delete —
+ * is asserted in the other direction, because a scoped editor deleting their
+ * own record is the product working.
+ *
+ * Every case runs over ALL SIX by name, so a match block dropped from the
+ * rules file fails here naming the collection rather than falling through to
+ * the org's catch-all and reading as green.
+ */
+describe('the CRM companion collections answer to the contacts predicate', () => {
+  const MINE = `host:${HOST}`
+  const THEIRS = 'host:host-b'
+  const CRM_COLLECTIONS = [
+    'companies',
+    'pipelines',
+    'deals',
+    'crmTasks',
+    'crmActivities',
+    'contactFields',
+  ]
+  const record = (uid, name, id) => doc(authed(uid), 'orgs', ORG, name, id)
+  /** The console's own query shape: filtered on the reader's tokens. */
+  const scopedList = (uid, name, tokens) =>
+    query(
+      collection(authed(uid), 'orgs', ORG, name),
+      where('visibleTo', 'array-contains-any', tokens),
+    )
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const name of CRM_COLLECTIONS) {
+        await setDoc(doc(db, 'orgs', ORG, name, 'shared-org'), {
+          name: 'org-wide', hostId: HOST, visibleTo: ['org'],
+        })
+        await setDoc(doc(db, 'orgs', ORG, name, 'mine'), {
+          name: 'mine', hostId: HOST, visibleTo: [MINE],
+        })
+        await setDoc(doc(db, 'orgs', ORG, name, 'theirs'), {
+          name: 'theirs', hostId: 'host-b', visibleTo: [THEIRS],
+        })
+      }
+    })
+  })
+
+  it('refuses an org-wide VIEWER every one of them', async () => {
+    for (const name of CRM_COLLECTIONS) {
+      await mustDeny(
+        `an org-wide viewer reading an org-wide ${name} record`,
+        getDoc(record(VIEWER, name, 'shared-org')),
+      )
+      await mustDeny(
+        `an org-wide viewer listing ${name} on the scoped query`,
+        getDocs(scopedList(VIEWER, name, ['org'])),
+      )
+    }
+  })
+
+  it('keeps a scoped editor with data.manage on exactly the rows that intersect their scope', async () => {
+    for (const name of CRM_COLLECTIONS) {
+      await mustAllow(
+        `a scoped editor reading a ${name} record in their own host scope`,
+        getDoc(record(EDITOR, name, 'mine')),
+      )
+      await mustAllow(
+        `a scoped editor reading an org-wide ${name} record`,
+        getDoc(record(EDITOR, name, 'shared-org')),
+      )
+      await mustAllow(
+        `a scoped editor listing ${name} on their own tokens`,
+        getDocs(scopedList(EDITOR, name, ['org', MINE])),
+      )
+      await mustDeny(
+        `a scoped editor reading another host's ${name} record`,
+        getDoc(record(EDITOR, name, 'theirs')),
+      )
+      await mustDeny(
+        `a scoped editor listing ${name} unfiltered`,
+        getDocs(collection(authed(EDITOR), 'orgs', ORG, name)),
+      )
+    }
+  })
+
+  it('refuses a create whose visibleTo does not intersect the creator\'s scope', async () => {
+    for (const name of CRM_COLLECTIONS) {
+      await mustDeny(
+        `a scoped editor creating a ${name} record scoped to another host`,
+        setDoc(record(EDITOR, name, 'new-theirs'), {
+          name: 'new', hostId: HOST, visibleTo: [THEIRS],
+        }),
+      )
+      // The positive control, twice: the same editor inside their own scope,
+      // and an org-wide member anywhere. A rule that refused every create
+      // would pass the denial above and take the CRM offline.
+      await mustAllow(
+        `a scoped editor creating a ${name} record in their own scope`,
+        setDoc(record(EDITOR, name, 'new-mine'), {
+          name: 'new', hostId: HOST, visibleTo: [MINE],
+        }),
+      )
+      await mustAllow(
+        `the owner creating an org-wide ${name} record`,
+        setDoc(record(OWNER, name, 'new-org'), {
+          name: 'new', hostId: HOST, visibleTo: ['org'],
+        }),
+      )
+    }
+  })
+
+  it('lets only an org-wide member move a record\'s scope', async () => {
+    for (const name of CRM_COLLECTIONS) {
+      await mustDeny(
+        `a scoped editor widening their ${name} record to the org`,
+        updateDoc(record(EDITOR, name, 'mine'), { visibleTo: ['org'] }),
+      )
+      await mustAllow(
+        `a scoped editor editing their ${name} record with the scope untouched`,
+        updateDoc(record(EDITOR, name, 'mine'), { name: 'renamed' }),
+      )
+      await mustAllow(
+        `the owner widening a ${name} record to the org`,
+        updateDoc(record(OWNER, name, 'mine'), { visibleTo: ['org'] }),
+      )
+    }
+  })
+
+  it('lets a scoped editor delete their own record — no sole-holder clause', async () => {
+    for (const name of CRM_COLLECTIONS) {
+      await mustDeny(
+        `a scoped editor deleting another host's ${name} record`,
+        deleteDoc(record(EDITOR, name, 'theirs')),
+      )
+      await mustDeny(
+        `an org-wide viewer deleting a ${name} record`,
+        deleteDoc(record(VIEWER, name, 'shared-org')),
+      )
+      await mustAllow(
+        `a scoped editor deleting a ${name} record in their own scope`,
+        deleteDoc(record(EDITOR, name, 'mine')),
+      )
+    }
+  })
+})
+
+/**
  * THE PUBLISH OUTBOX (AGL-2575).
  *
  * Publishing a screen is a client Firestore write, so the cache-drop announce

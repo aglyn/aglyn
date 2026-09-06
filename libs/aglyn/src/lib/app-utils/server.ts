@@ -41,6 +41,25 @@ export * from './console-routes'
 export * from './screen-link-value'
 export * from './analytics-path-key'
 export * from './contacts'
+// The records that sit beside a contact — companies, pipelines, deals, tasks,
+// activities, field definitions (AGL-2595). Pure like `contacts`, and beside
+// it because `ContactFacet` names its lifecycle stage and custom-value types;
+// the scope stamp every CRM creator writes lives here too.
+export * from './crm'
+// What the CRM's reports compute from what they read — periods, weekly
+// buckets, the lifecycle funnel, pipeline totals (AGL-2604). Pure like `crm`,
+// and beside it because it reads the stage list and the deal weighting from
+// there rather than restating either.
+export * from './crm-reports'
+// Reading a spreadsheet of people INTO the CRM (AGL-2602): the column
+// mapping, the per-row normalizer and the chunk-result arithmetic the
+// console drawer and the `crm/contacts-import` route both read. Pure, and
+// beside `crm` because it composes its stage list and field definitions.
+export * from './crm-import'
+// What a VALUE under a custom contact field may be, and the coercion every
+// door applies to one (AGL-2601): a mapped form field, an API `custom` body,
+// and the carry-over that keeps a mapping across a publish. Pure like `crm`.
+export * from './contact-custom-fields'
 // The consent JOIN (`docs/specs/email-overhaul.md` §3f). Pure, and it composes
 // `contacts` for the normalizer, so it sits directly beside it. No Node
 // builtin, which is what keeps it out of the `/server`-only group `person-key`

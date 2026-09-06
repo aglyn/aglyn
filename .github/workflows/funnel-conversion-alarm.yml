@@ -1,30 +1,43 @@
 name: Funnel conversion alarm
 
-# The alarm that was missing on 2026-09-01 (AGL-2587).
+# The alarm that was missing on 2026-09-01 (AGL-2587), re-timed to the hour
+# (AGL-2609).
 #
-# That day `/signup` was viewed 14 times by 5 people and `sign_up` fired zero
-# times, on the biggest traffic day of its period, because the signup path was
-# broken (AGL-2581). Both halves of that fact were sitting in GA4 the whole
-# time and nothing looked at the ratio between them. This looks at it.
+# That day `/signup` was viewed 14 times by 5 people and not one account was
+# created, on the biggest traffic day of its period, because the signup path
+# was broken (AGL-2581). Both halves of that fact were sitting in the
+# platform's own data the whole time and nothing looked at the ratio between
+# them. This looks at it, every hour, over the trailing twelve.
 #
-# WHAT A RED MEANS: people reached a door and the door opened for nobody. That
-# is either a broken door or an event that stopped being emitted, and both are
-# incidents — but they are DIFFERENT incidents, so open the page in a browser
-# before concluding it is the instrumentation. `org_created` had never once
-# arrived in the property's whole history while nine workspaces existed, so
-# "the event is missing" is not the safe assumption here; it is a real
-# possibility with a precedent.
+# WHAT A DOOR RED MEANS: people reached a door and it opened for nobody.
+# Conversions are counted from Firebase Auth — accounts created, people signed
+# in — not from GA4 events, so a door red is the door itself. Open the page in
+# a browser; that is the first move, not the instrumentation.
+#
+# WHAT A BEACON RED MEANS: Auth says accounts were created and GA4 recorded no
+# `sign_up` (or sign-ins and no `login`) over a settled week. The event is not
+# being emitted or not arriving. Google Ads imports `sign_up`, so conversions
+# are blind until it is fixed. `org_created` had never once arrived while nine
+# workspaces existed, so this is not a theoretical failure.
 #
 # WHAT A RED DOES NOT MEAN: that traffic is down. Views are the DENOMINATOR.
 # A quiet window is green by construction — see the floors in
 # `tools/scripts/lib/funnel-conversion-alarm.mjs`, which exist so a single
 # curious visitor never alarms and so the channel stays worth reading.
 #
-# ⚠️ THE WINDOW IS DELIBERATELY STALE. GA4's batch tables trail live traffic,
-# and a half-processed day is indistinguishable from an outage: views present,
-# conversions not yet counted. So the graded window ends two days back. This
-# alarm is late on purpose. Do not "fix" the lag by grading today — that is
-# the exact mistake this issue was written to avoid making twice.
+# WHY THE DOOR WINDOW CAN END NOW. The first version ended its window two
+# days back, because GA4's batch tables trail live traffic (five hours behind
+# on this property) and a half-processed window looks exactly like an outage.
+# That guard protected the numerator. With the numerator on Firebase Auth,
+# which has no lag, GA4's lag can only make the alarm QUIETER — fewer views
+# counted — never falsely red. The beacon check, which compares Auth against
+# GA4 itself, is the one place a settled window still belongs, and it keeps
+# one.
+#
+# SAID ONCE. A red is announced on the run that turns red and not on the
+# eleven that follow; the first green after it posts a recovery line. The
+# previous scheduled run's conclusion is the state, read from this workflow's
+# own history — which is why the job needs `actions: read`.
 #
 # Runs on GitHub's runners rather than ours, for the same reason the uptime
 # probe does: a monitor hosted on the thing it monitors cannot observe its own
@@ -32,15 +45,14 @@ name: Funnel conversion alarm
 
 on:
   schedule:
-    # Once a day. The window is three days wide and slides, so a red persists
-    # across runs until the traffic that caused it ages out — which is the
-    # intended behaviour: an unconverted cohort does not stop mattering
-    # because a day passed.
-    - cron: '20 14 * * *'
+    # Every hour, twenty past. GA4's own tables trail by hours, so a finer
+    # cadence would re-read the same data; an hour is what the door window's
+    # wall-clock alignment assumes.
+    - cron: '20 * * * *'
   workflow_dispatch:
     inputs:
       as_of:
-        description: 'Grade the window a past day would have graded (YYYY-MM-DD)'
+        description: 'Grade the windows a past instant would have graded (ISO, e.g. 2026-09-02T05:00:00Z); never announces'
         required: false
         type: string
       test_notification:
@@ -55,6 +67,8 @@ concurrency:
 
 permissions:
   contents: read
+  # The previous run's conclusion is the say-it-once state.
+  actions: read
 
 jobs:
   grade:
@@ -81,17 +95,37 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: node tools/scripts/check-funnel-conversions.mjs --test
 
+      # The newest SCHEDULED run that reached a verdict. Cancelled runs (the
+      # concurrency group) and backtests (workflow_dispatch) are not verdicts.
+      # Empty when there is none, which the script treats as "not red".
+      - name: Read the previous verdict
+        id: previous
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.test_notification) }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          previous=$(gh run list --repo "$GITHUB_REPOSITORY" \
+            --workflow=funnel-conversion-alarm.yml --event=schedule \
+            --status=completed --limit=5 --json conclusion \
+            --jq '[.[] | select(.conclusion == "success" or .conclusion == "failure")][0].conclusion // ""' \
+            2>/dev/null || echo "")
+          echo "previous scheduled verdict: ${previous:-none}"
+          echo "conclusion=$previous" >> "$GITHUB_OUTPUT"
+
       - name: Grade the funnel
         if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.test_notification) }}
         env:
-          # The admin service account. It needs Viewer ON THE GA4 PROPERTY and
-          # `analyticsdata.googleapis.com` enabled on `aglyn-main` — neither is
-          # implied by its Firebase access, and confusing the two has already
-          # cost one wrong conclusion. `docs/ANALYTICS.md` has the details.
+          # The admin service account. It needs Viewer ON THE GA4 PROPERTY,
+          # `analyticsdata.googleapis.com` and `analyticsadmin.googleapis.com`
+          # enabled on `aglyn-main`, and it reads Auth through the project's
+          # own Identity Toolkit — none of which is implied by its Firebase
+          # access, and confusing the two has already cost one wrong
+          # conclusion. `docs/ANALYTICS.md` has the details.
           FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'aglyn-main' }}
           FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
           FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          PREVIOUS_CONCLUSION: ${{ steps.previous.outputs.conclusion }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -uo pipefail

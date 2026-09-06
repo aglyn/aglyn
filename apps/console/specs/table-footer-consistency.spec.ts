@@ -174,6 +174,14 @@ const SHARED_FOOTER: Array<[string, string]> = [
 const LOAD_MORE_ALLOWED = [
   'apps/console/components/media/media-library.component.tsx',
   'libs/plugins/commerce/src/lib/components/product-grid.tsx',
+  // The CRM's two FEEDS (AGL-2600): a record's logged activities, and the
+  // contact timeline that merges them with the facet's captured interactions.
+  // A feed is read down, not jumped into — the question it answers is "what
+  // happened lately" — and the timeline's two sources cannot share a page
+  // cursor, so each grows by one page of activities per "Show more", bounded
+  // at a hundred by `activity-queries`.
+  'libs/plugins/crm/src/lib/components/activity-list.tsx',
+  'libs/plugins/crm/src/lib/components/contact-timeline-card.tsx',
 ]
 
 /**
@@ -913,6 +921,16 @@ const NOT_A_LIST: Array<[string, string]> = [
       'the map is over a parsed prop, not over documents.',
   ],
   [
+    'libs/plugins/crm/src/lib/components/fields-section.tsx',
+    'The organization’s custom contact field DEFINITIONS (AGL-2601) — a ' +
+      'settings table, one row per field the merchant declared, bounded by ' +
+      '`CONTACT_FIELDS_MAX_PER_ORG` (100) at the read itself: the collection ' +
+      'has no index, is read whole under that `limit()`, and is ordered in ' +
+      'memory by the stored `order` the arrows on each row move. The bound ' +
+      'is what a profile form can carry, not how long the account has ' +
+      'existed, so there is no second page for a footer to turn to.',
+  ],
+  [
     'apps/console/app/(app)/admin/margin-utilization/page.tsx',
     'Two tables, and neither wants a footer. The first is one row per BAND — ' +
       'a fixed vocabulary, the same rows on every load, so a pager would ' +
@@ -1169,14 +1187,69 @@ const NOT_A_LIST: Array<[string, string]> = [
       'the console’s screen tree and starter bundles.',
   ],
   [
-    'libs/plugins/contacts/src/lib/components/contacts-console-page.tsx',
-    'MISCLASSIFIED as the contact roster, which is not what the detector ' +
-      'found here: the roster renders `ListTable` and has had a footer and a ' +
-      'server-side filter since AGL-2292. The rows this matches are one ' +
-      'contact’s interaction timeline in the drawer, and ' +
-      '`CONTACT_INTERACTIONS_CAP` is 50 — `mergeContactInteraction` slices to ' +
-      'it on every write, so the array cannot hold a fifty-first row and the ' +
-      'second page is empty for every contact that will ever exist.',
+    'libs/plugins/crm/src/lib/components/add-to-list-dialog.tsx',
+    'The audience PICKER behind "Add to list" (AGL-2603): the org’s ' +
+      'lists read under `AUDIENCE_PICKER_LIMIT` for a select, not a view ' +
+      '— the reader chooses one and the dialog closes. It maps options, ' +
+      'which is why the detector sees it; a pager under a select would ' +
+      'page the choices a person has to scan anyway.',
+  ],
+  [
+    'libs/plugins/crm/src/lib/components/company-picker.tsx',
+    'The company OPTIONS behind a contact’s company field (AGL-2597): ' +
+      'an autocomplete fed by one read capped at `COMPANY_OPTIONS_LIMIT` ' +
+      'and sliced to it, with a `truncated` flag the field surfaces as ' +
+      'text when the org has more. A picker narrows by typing; a footer ' +
+      'under an autocomplete would page what the query box already ' +
+      'filters.',
+  ],
+  [
+    'libs/plugins/crm/src/lib/components/company-properties-card.tsx',
+    'The detach PROBE behind Delete company (AGL-2597), not a rendered ' +
+      'list: the contacts linked to the company are read one past ' +
+      '`COMPANY_DETACH_LIMIT` to decide whether the delete may proceed, ' +
+      'and the card says how many remain past the bound. Nothing is drawn ' +
+      'as rows; the map the detector sees builds the batch.',
+  ],
+  [
+    'libs/plugins/crm/src/lib/components/contact-import-drawer.tsx',
+    'The spreadsheet PREVIEW and the skipped-row report in the CSV ' +
+      'import (AGL-2602): rows parsed from a file the reader just chose, ' +
+      'capped at `CONTACT_IMPORT_MAX_ROWS` on the client and shown ten at ' +
+      'a time as a preview before the import runs. The source is a local ' +
+      'array, not a collection, and the full file is what the download ' +
+      'offers.',
+  ],
+  [
+    'libs/plugins/crm/src/lib/components/crm-tasks-due-card.tsx',
+    'The dashboard GLANCE at the reader’s own tasks (AGL-2599): two ' +
+      'counts and the next `NEXT_UP` due, read under `MY_TASKS_WINDOW` ' +
+      'and sliced, with "View all" opening the Tasks section — which is ' +
+      'the paged list. A card on the front page that paged would be the ' +
+      'section twice.',
+  ],
+  [
+    'libs/plugins/crm/src/lib/components/deal-edit-drawer.tsx',
+    'The contact and company SEARCH pickers inside the New deal drawer ' +
+      '(AGL-2598): bounded reads (`CONTACT_WINDOW`, `COMPANY_MATCHES`) ' +
+      'that narrow as the reader types and close on a choice. A pager ' +
+      'under a search box pages what the box already filters.',
+  ],
+  [
+    'libs/plugins/crm/src/lib/components/reports/pipeline-card.tsx',
+    'A TOP-N table in a report (AGL-2604): the open deals read one past ' +
+      '`OPEN_DEAL_CEILING`, summed for the tiles, and the largest ' +
+      '`TOP_DEALS` shown by amount. A ranking is bounded by the rank it ' +
+      'shows, and the card says when the ceiling was reached; the whole ' +
+      'pipeline is the Deals section’s paged table.',
+  ],
+  [
+    'libs/plugins/crm/src/lib/components/reports/tasks-card.tsx',
+    'An AGGREGATE table in a report (AGL-2604): open tasks per ' +
+      'assignee, one row per person up to `ASSIGNEE_NAME_CEILING`, ' +
+      'computed from a read capped at `OPEN_TASK_CEILING` that the card ' +
+      'discloses. The rows are counts by group, not documents; the ' +
+      'documents are the Tasks section’s paged list.',
   ],
 ]
 
@@ -1280,6 +1353,23 @@ const OWES_A_FOOTER: Array<[string, string]> = [
     'Installed plugins, per site and per org, both unordered `limit(50)`. ' +
       'Bounded by the marketplace rather than by the account, but the ' +
       'marketplace is the thing that grows.',
+  ],
+  [
+    'libs/plugins/crm/src/lib/components/company-contacts-card.tsx',
+    'The contacts at one company (AGL-2597): a real list, read under ' +
+      '`CONTACTS_AT_COMPANY_LIMIT` with the count taken from the server ' +
+      'and shown beside it, so the truncation is honest but the ' +
+      'fifty-first contact is unreachable from the card. A shared footer ' +
+      'belongs here once the card takes the paged reader.',
+  ],
+  [
+    'libs/plugins/crm/src/lib/components/leads-section.tsx',
+    'The site’s leads (AGL-2608): a real list on `ListTable`, read as ' +
+      'one window of `LEADS_WINDOW` newest by last seen and filtered by ' +
+      'status in memory — because `addHostLead` writes no status and ' +
+      'Firestore cannot select on a missing field — with a notice when ' +
+      'the window filled. The notice is honest; a footer is owed once the ' +
+      'status is stamped at capture and the query can page.',
   ],
 ]
 
@@ -1395,7 +1485,13 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // 15 since a form became a designable document: its detail page carries
     // the same version history the component and layout ones do, read the
     // same unordered way, and is blocked on the same `createdAt` audit.
-    expect(OWES_A_FOOTER).toHaveLength(15)
+    // 17 since the CRM grew companies and leads (AGL-2597, AGL-2608): the
+    // contacts at one company are read under a bound with the server's count
+    // beside them, and a site's leads as one window filtered by a status the
+    // capture door never stamps — each says when it was cut short, neither
+    // can turn a page yet. Both are named so the debt is visible, not so it
+    // is excused.
+    expect(OWES_A_FOOTER).toHaveLength(17)
     // 37 since a site's senders became a list the composer picks from: the
     // drawer that edits one carries a picker of teammates, and a picker's
     // option list is a lookup rather than a window a reader pages through.
@@ -1422,7 +1518,24 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // sees is over a parsed prop rather than over documents, and there is no
     // query behind it for a footer to page. Bounded by what somebody typed
     // is the strongest form of the property this list records.
-    expect(NOT_A_LIST).toHaveLength(38)
+    //
+    // 39 since a contact gained custom fields (AGL-2601). The Fields section
+    // is one row per definition the merchant declared — a merchant's own
+    // vocabulary, like the topic catalog — and the read that fills it is
+    // ceilinged at `CONTACT_FIELDS_MAX_PER_ORG` (100) on a collection with no
+    // index, sorted in memory by a stored `order`. A pager under it would
+    // page a settings table whose whole population is already on screen.
+    //
+    // 46 since the CRM grew its sections (AGL-2596 through AGL-2604): eight
+    // more bounded surfaces — the audience picker, the company autocomplete,
+    // the detach probe, the CSV preview, the dashboard glance, the deal
+    // drawer's search pickers, and two report tables (a top-N and a
+    // per-assignee aggregate) — each capped at its own constant and each a
+    // control or a summary rather than a view of a collection. Minus one: the
+    // contact list's drawer, whose interaction timeline was the row this list
+    // once classified, is gone — the record page holds the timeline now, on
+    // the load-more allowlist above.
+    expect(NOT_A_LIST).toHaveLength(46)
   })
 })
 

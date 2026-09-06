@@ -436,7 +436,7 @@ describe('the bridge into a site owns the URL it builds', () => {
       name: /Open in Acme Shop/,
     })) as HTMLAnchorElement
     expect(link.getAttribute('href')).toBe(
-      '/test-org/hosts/acme/contacts',
+      '/test-org/hosts/acme/crm/contacts',
     )
     expect(link.getAttribute('href')).not.toContain('host-a')
   })
@@ -459,7 +459,7 @@ describe('the bridge into a site owns the URL it builds', () => {
     expect(
       screen.getByRole('menuitem', { name: /Open in Acme Shop/ })
         .getAttribute('href'),
-    ).toBe('/test-org/hosts/acme/contacts')
+    ).toBe('/test-org/hosts/acme/crm/contacts')
   })
 })
 

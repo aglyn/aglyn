@@ -87,7 +87,7 @@ const USAGE_SURFACES = [
   'libs/plugins/redirects/src/lib/components/redirects-console-page.tsx',
   'libs/plugins/bookings/src/lib/components/bookings-console-page.tsx',
   'libs/plugins/data/src/lib/components/host-datasets-card.component.tsx',
-  'libs/plugins/contacts/src/lib/components/contacts-console-page.tsx',
+  'libs/plugins/crm/src/lib/components/contacts-section.tsx',
   'libs/plugins/email/src/lib/components/campaign-composer.tsx',
 ]
 

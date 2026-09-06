@@ -84,6 +84,20 @@ jest.mock('@aglyn/aglyn/server', () => ({
 }))
 
 jest.mock('@aglyn/tenant-runtime', () => ({
+  // Every server door captures through `captureHostContact` (AGL-2605), which
+  // is `upsertHostContact` plus the contactCreated announcement. The stub
+  // hands the call to whichever double this spec keeps for the writer — the
+  // runtime mock's own, or the data-admin mock's when the spec doubles the
+  // data layer instead — so assertions on its options read the same calls.
+  captureHostContact: (...args: unknown[]) => {
+    const runtime = jest.requireMock('@aglyn/tenant-runtime') as {
+      upsertHostContact?: (...a: unknown[]) => unknown
+    }
+    const dataAdmin = jest.requireMock('@aglyn/tenant-data-admin') as {
+      upsertHostContact?: (...a: unknown[]) => unknown
+    }
+    return (runtime.upsertHostContact ?? dataAdmin.upsertHostContact)?.(...args)
+  },
   // Returns `{ alerts }`, which the FREE-booking branch destructures. A double
   // answering `undefined` throws there, and the resulting 500 reads as a money
   // bug in a test about a $0 service — an unfaithful fake fabricating a false
