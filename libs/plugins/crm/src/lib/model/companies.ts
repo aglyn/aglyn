@@ -41,6 +41,7 @@ import {
   nameSearchFields,
   normalizeAddress,
   normalizeCompanyDomain,
+  normalizeCompanyWebsite,
   normalizePhone,
   planContactCompanyLink,
   readContactCompanyLink,
@@ -151,28 +152,6 @@ export type CompanyDraftResult =
 
 const INDUSTRY_MAX = 80
 const NOTES_MAX = 4000
-const WEBSITE_MAX = 500
-
-/**
- * The typed website, as a URL, or `null` when it cannot be one.
- *
- * People type `acme.com` where a URL is asked for, and refusing that is
- * pedantry — it becomes `https://acme.com`. What IS refused is anything the
- * URL parser cannot read or a scheme other than http(s): a `javascript:` link
- * on a record that renders as an anchor is not a website.
- */
-function normalizeWebsite(input: string): string | null {
-  const raw = input.trim()
-  if (!raw) return ''
-  const candidate = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`
-  try {
-    const url = new URL(candidate)
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null
-    return url.href.length > WEBSITE_MAX ? null : url.href
-  } catch {
-    return null
-  }
-}
 
 /**
  * The document a draft becomes — normalized, keyed for search, and refused
@@ -207,7 +186,7 @@ export function companyDraftFields(draft: CompanyDraft): CompanyDraftResult {
     cleared.push('domain')
   }
 
-  const website = normalizeWebsite(draft.website)
+  const website = normalizeCompanyWebsite(draft.website)
   if (website === null) {
     return { ok: false, error: 'The website is not a web address.' }
   }

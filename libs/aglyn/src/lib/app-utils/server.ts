@@ -58,6 +58,7 @@ export * from './crm-reports'
 // console drawer and the `crm/contacts-import` route both read. Pure, and
 // beside `crm` because it composes its stage list and field definitions.
 export * from './crm-import'
+export * from './crm-company-import'
 // What a VALUE under a custom contact field may be, and the coercion every
 // door applies to one (AGL-2601): a mapped form field, an API `custom` body,
 // and the carry-over that keeps a mapping across a publish. Pure like `crm`.

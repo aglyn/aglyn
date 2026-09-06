@@ -301,6 +301,12 @@ export interface CrmCompany extends CrmScoped {
   industry?: string
   ownerUid?: string
   notes?: string
+  /**
+   * Lowercased, deduplicated, capped at twenty — the same shape a contact's
+   * tags take, so a bulk "Add tag" over companies and one over contacts
+   * write the same kind of value (AGL-2621).
+   */
+  tags?: string[]
   createdByUid?: string
   /**
    * How many contacts name this company in their {@link CONTACT_COMPANY_IDS_FIELD}
@@ -804,6 +810,33 @@ export function normalizeCompanyDomain(input: unknown): string | null {
   if (!labels.every((label) => DOMAIN_LABEL.test(label))) return null
   if (!/^[a-z]{2,}$/.test(labels[labels.length - 1])) return null
   return value
+}
+
+/** The longest website URL a company stores. */
+const COMPANY_WEBSITE_MAX = 500
+
+/**
+ * The typed website, as a URL; `''` for a blank; `null` when it cannot be
+ * one.
+ *
+ * People type `acme.com` where a URL is asked for, and refusing that is
+ * pedantry — it becomes `https://acme.com`. What IS refused is anything the
+ * URL parser cannot read or a scheme other than http(s): a `javascript:` link
+ * on a record that renders as an anchor is not a website. One function for
+ * the company drawer and the companies import, so a website typed and a
+ * website imported are stored the same way.
+ */
+export function normalizeCompanyWebsite(input: unknown): string | null {
+  const raw = String(input ?? '').trim()
+  if (!raw) return ''
+  const candidate = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`
+  try {
+    const url = new URL(candidate)
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null
+    return url.href.length > COMPANY_WEBSITE_MAX ? null : url.href
+  } catch {
+    return null
+  }
 }
 
 /**
