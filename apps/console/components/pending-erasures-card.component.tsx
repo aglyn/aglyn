@@ -159,6 +159,7 @@ export function PendingErasuresCard() {
   }, [call, reason, refresh])
 
   const dueCount = pending?.dueCount ?? 0
+  const peopleWaiting = pending?.people?.pending ?? 0
   const reasonTooShort = reason.trim().length < 8
   /**
    * "at least", or nothing at all.
@@ -329,12 +330,16 @@ export function PendingErasuresCard() {
             // Disabled on an empty queue as well as an empty reason: a run
             // with nothing due is harmless but writes an audit row claiming
             // someone deleted workspaces early, which is worse than useless.
-            disabled={busy || reasonTooShort || dueCount === 0}
+            // A person waiting counts as due — their request has no hold.
+            disabled={busy || reasonTooShort || (dueCount === 0 && peopleWaiting === 0)}
             onClick={() => void run()}
           >
             {busy
               ? 'Working…'
-              : `Run ${Math.min(dueCount, pending?.maxPerRun ?? 5)} due erasure(s) now`}
+              : dueCount > 0
+                ? `Run ${Math.min(dueCount, pending?.maxPerRun ?? 5)} due erasure(s) now` +
+                  (peopleWaiting > 0 ? ` and ${peopleWaiting} waiting person(s)` : '')
+                : `Run ${peopleWaiting} waiting person erasure(s) now`}
           </Button>
           {pending && dueCount > (pending.maxPerRun ?? 5) ? (
             <Typography variant="caption" color="text.secondary">
