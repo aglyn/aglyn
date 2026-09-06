@@ -24,9 +24,15 @@
  * assignee is told; the due date and the delete are batched document
  * writes, the due date written as `null` rather than deleted; a refusal
  * is named by title; the export is the list's file over the selection.
+ *
+ * Beneath the ORGANIZATION hub (AGL-2637) Complete and Assign are ONE
+ * request each — the routes' org-level batch form — tallied off the
+ * per-task answers, with a refused task still named by title, and the
+ * bar's sentence posted once as the org feed's line.
  */
 
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { CrmOrgMountProvider } from '../hooks/use-crm-org-mount'
 import type { CrmTaskRow } from '../hooks/use-crm-tasks'
 import { TasksBulkBar } from './tasks-bulk-bar'
 
@@ -56,19 +62,54 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: USER }),
 }))
 
-/** The two routes, as the bar reaches them — every call recorded, refusals by id. */
+/**
+ * The two routes, as the bar reaches them — every call recorded, refusals
+ * by id. The batch forms answer per task, a refused one as a row.
+ */
 let calls: Array<{ route: string; body: Record<string, unknown> }>
 let refuseIds: Set<string>
+const REFUSAL = 'That task is not visible to you.'
 jest.mock('../model/task-api', () => ({
   completeCrmTask: async (_user: unknown, body: { taskId: string }) => {
     calls.push({ route: 'complete', body })
-    if (refuseIds.has(body.taskId)) throw new Error('That task is not visible to you.')
+    if (refuseIds.has(body.taskId)) throw new Error(REFUSAL)
     return { ok: true, completedAtMs: 1 }
   },
   saveCrmTask: async (_user: unknown, body: { taskId: string }) => {
     calls.push({ route: 'save', body })
-    if (refuseIds.has(body.taskId)) throw new Error('That task is not visible to you.')
+    if (refuseIds.has(body.taskId)) throw new Error(REFUSAL)
     return { ok: true, taskId: body.taskId, notified: true }
+  },
+  completeCrmTasks: async (_user: unknown, body: { taskIds: string[] }) => {
+    calls.push({ route: 'complete-batch', body })
+    return {
+      ok: true,
+      results: body.taskIds.map((taskId) =>
+        refuseIds.has(taskId)
+          ? { taskId, ok: false, error: REFUSAL }
+          : { taskId, ok: true, completedAtMs: 1 },
+      ),
+    }
+  },
+  saveCrmTasks: async (_user: unknown, body: { tasks: Array<{ taskId: string }> }) => {
+    calls.push({ route: 'save-batch', body })
+    return {
+      ok: true,
+      results: body.tasks.map(({ taskId }) =>
+        refuseIds.has(taskId)
+          ? { taskId, ok: false, error: REFUSAL }
+          : { taskId, ok: true, notified: true },
+      ),
+    }
+  },
+}))
+
+/** The org feed's line, posted through `crm/org-activity` beneath the org hub. */
+let posted: Array<{ route: string; payload: Record<string, unknown> }>
+jest.mock('../components/use-crm-api', () => ({
+  useCrmApi: () => async (route: string, payload: Record<string, unknown>) => {
+    posted.push({ route, payload })
+    return { response: { ok: true }, payload: { ok: true } }
   },
 }))
 
@@ -129,11 +170,35 @@ function mount(selected: string[], onSelectedChange = jest.fn()) {
   return { ...result, onSelectedChange }
 }
 
+/** The same bar beneath the org hub: no site, the org's mount published. */
+function mountUnderOrg(selected: string[]) {
+  return render(
+    <CrmOrgMountProvider
+      mount={{
+        orgId: 'org-1',
+        hosts: [{ id: 'host-1', name: 'Site 1', subdomain: 'one' }],
+        hostsReady: true,
+        hostsPath: '/acme/hosts',
+      }}
+    >
+      <TasksBulkBar
+        hostId={null}
+        scope={SCOPE}
+        rows={rows}
+        selected={selected}
+        onSelectedChange={jest.fn()}
+        directory={directory}
+      />
+    </CrmOrgMountProvider>,
+  )
+}
+
 const dialog = () => within(screen.getByRole('dialog'))
 
 beforeEach(() => {
   ops = []
   calls = []
+  posted = []
   refuseIds = new Set()
   notices = []
   downloads.length = 0
@@ -221,6 +286,82 @@ describe('as document writes', () => {
       'delete orgs/org-1/crmTasks/t3',
     ])
     expect(onSelectedChange).toHaveBeenCalledWith([])
+  })
+})
+
+describe('beneath the organization hub (AGL-2637)', () => {
+  it('completes the open selection in ONE request, names a refused task, and posts the org line once', async () => {
+    refuseIds = new Set(['t3'])
+    mountUnderOrg(['t1', 't2', 't3'])
+    fireEvent.click(screen.getByRole('button', { name: 'Complete' }))
+    await waitFor(() => expect(notices).toEqual(['Completed 1 task']))
+    // One request, the open tasks only — a done one is left alone — and
+    // no per-task call at all.
+    expect(calls).toEqual([
+      { route: 'complete-batch', body: { orgId: 'org-1', taskIds: ['t1', 't3'] } },
+    ])
+    expect(ops).toEqual([])
+    expect(screen.getByText(/Follow up — That task is not visible to you\./)).toBeTruthy()
+    await waitFor(() =>
+      expect(posted).toEqual([
+        {
+          route: 'org-activity',
+          payload: { action: 'Completed 1 task', target: { type: 'task' } },
+        },
+      ]),
+    )
+  })
+
+  it('assigns the selection in ONE request, each task with its own fields and the new assignee', async () => {
+    mountUnderOrg(['t1', 't3'])
+    fireEvent.click(screen.getByRole('button', { name: 'Assign' }))
+    fireEvent.mouseDown(dialog().getByRole('combobox'))
+    fireEvent.click(screen.getByRole('option', { name: 'Ada Lovelace' }))
+    fireEvent.click(dialog().getByRole('button', { name: 'Apply' }))
+    await waitFor(() => expect(notices).toEqual(['Assigned 2 tasks to Ada Lovelace']))
+    expect(calls).toHaveLength(1)
+    expect(calls[0].route).toBe('save-batch')
+    expect(calls[0].body).toEqual({
+      orgId: 'org-1',
+      tasks: [
+        {
+          taskId: 't1',
+          task: {
+            title: 'Call Ada',
+            kind: 'call',
+            priority: 'normal',
+            dueAtMs: null,
+            assigneeUid: 'uid-a',
+            notes: '',
+            contactId: 'c-ada',
+            companyId: null,
+            dealId: null,
+          },
+        },
+        {
+          taskId: 't3',
+          task: {
+            title: 'Follow up',
+            kind: 'call',
+            priority: 'normal',
+            dueAtMs: null,
+            assigneeUid: 'uid-a',
+            notes: '',
+            contactId: null,
+            companyId: null,
+            dealId: null,
+          },
+        },
+      ],
+    })
+  })
+
+  it('makes no batch call under a site, and posts no org line there', async () => {
+    mount(['t1', 't3'])
+    fireEvent.click(screen.getByRole('button', { name: 'Complete' }))
+    await waitFor(() => expect(notices).toEqual(['Completed 2 tasks']))
+    expect(calls.map((call) => call.route)).toEqual(['complete', 'complete'])
+    expect(posted).toEqual([])
   })
 })
 
