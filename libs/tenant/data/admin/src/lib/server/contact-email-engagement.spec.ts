@@ -18,9 +18,11 @@
 /**
  * The contact's own engagement stamp (AGL-2616): written by the delivery
  * webhook onto the sending site's facet, forward-only, first-of-type only,
- * and never onto a row the site may not see.
+ * and never onto a row the site may not see. The person is found through
+ * the address index (AGL-2633), inside the same transaction as the stamp.
  */
 
+import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import type { EmailDeliveryEventOutcome } from './email-delivery-log'
 
 jest.mock('./firebase-admin', () => ({ firebaseAdmin: {} }))
@@ -71,10 +73,30 @@ const docRef = (path: string) => ({
     for (const [key, value] of Object.entries(data)) setPath(next, key, value)
     store.set(path, next)
   },
+  get: async () => {
+    const data = store.get(path)
+    return {
+      id: path.split('/').pop(),
+      exists: data !== undefined,
+      ref: docRef(path),
+      data: () => data,
+      get: (field: string) => data?.[field],
+    }
+  },
+  set: async (data: Record<string, unknown>, options?: { merge?: boolean }) => {
+    store.set(path, { ...(options?.merge ? (store.get(path) ?? {}) : {}), ...data })
+  },
 })
 
 const fake = {
-  collection: (prefix: string) => ({
+  collection: (prefix: string): any => ({
+    // The org document the collection hangs off, so the address lookup can
+    // find `emailIndex` beside `contacts` the way it does in production.
+    parent: {
+      collection: (name: string) =>
+        fake.collection(`${prefix.slice(0, prefix.lastIndexOf('/'))}/${name}`),
+    },
+    doc: (id: string) => docRef(`${prefix}/${id}`),
     where: (field: string, _op: string, value: unknown) => ({
       limit: (cap: number) => ({
         get: async () => {
@@ -94,7 +116,10 @@ const fake = {
   }),
   runTransaction: async (body: (transaction: any) => Promise<void>) =>
     body({
-      get: async (query: any) => query.get(),
+      get: async (target: any) => {
+        transactionReads += 1
+        return target.get()
+      },
       update: (ref: any, data: Record<string, unknown>) => {
         writes.push({ path: ref.path, data })
         void ref.update(data)
@@ -103,6 +128,8 @@ const fake = {
 }
 
 const writes: Array<{ path: string; data: Record<string, unknown> }> = []
+/** Every read the stamp routed through its transaction. */
+let transactionReads = 0
 
 const HOST = 'host-1'
 const CONTACT = 'orgs/org-1/contacts/c-1'
@@ -129,6 +156,7 @@ let errors: unknown[][] = []
 beforeEach(() => {
   store.clear()
   writes.length = 0
+  transactionReads = 0
   groupId = HOST
   resolveFailure = null
   errors = []
@@ -165,6 +193,23 @@ describe('a first open or click stamps the sending site’s facet', () => {
         data: { [`facets.${HOST}.lastEmailEngagementAtMs`]: 1_800_000_000_000 },
       },
     ])
+  })
+
+  it('reaches the survivor when the address is one a merge folded in, reading through the transaction (AGL-2633)', async () => {
+    store.set(CONTACT, {
+      email: 'dana@work.example.com',
+      alternateEmails: [EMAIL],
+      visibleTo: [`host:${HOST}`],
+      facets: { [HOST]: { sources: { form: true } } },
+    })
+    store.set(`orgs/org-1/emailIndex/${personKey(EMAIL)}`, { email: EMAIL, contactId: 'c-1' })
+
+    expect(await stamp([outcome()])).toBe(1)
+
+    expect(facet().lastEmailEngagementAtMs).toBe(1_800_000_000_000)
+    // The index entry and the contact it names: two reads, both through
+    // the transaction the stamp commits in.
+    expect(transactionReads).toBe(2)
   })
 
   it('takes a click as engagement too, and keeps the newest instant of a batch', async () => {

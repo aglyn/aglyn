@@ -48,10 +48,34 @@
  * its own failures. An index that cannot be reached is a miss, and a miss
  * is the query.
  *
+ * ## One lookup for every door (AGL-2633)
+ *
+ * The capture door was the first reader; every other place that finds a
+ * person by address — an automation step, the flow-email consent gate, the
+ * delivery webhook's engagement stamp, the Inbox add-to-list check, a
+ * refund, a campaign's proof and consent reads, the REST create and
+ * `?email=` list — resolves through this same function, so a merged
+ * record's alternate address answers the same person everywhere. Two of
+ * those doors read differently from the capture, and the options carry it:
+ *
+ * - **`hostId`** narrows the answer to what ONE site may see. The index is
+ *   org-wide, so the lookup is too; the scope check is applied to the
+ *   document it names, in memory, which answers exactly what the scoped
+ *   `email ==` query used to — one document per address, so a contact the
+ *   site cannot see is `null` rather than a reason to look further.
+ * - **`transaction`** routes every read through the caller's transaction,
+ *   for a door that updates the contact it finds inside one. The lazy index
+ *   write stays OUTSIDE the transaction, deliberately: a queued write would
+ *   forbid the caller any later read, and the entry is a cache fill that
+ *   never has to be atomic with anything. It is idempotent, so a retried
+ *   transaction body writing it twice is harmless.
+ *
  * Imported by module path rather than through the `@aglyn/aglyn/server`
  * barrel, for the reason `upsert-contact.ts` gives: the door's specs
  * substitute a fixture barrel, and a helper that reached the normalizer only
- * through it would find `undefined` there.
+ * through it would find `undefined` there. Callers outside this library
+ * import THIS module by its leaf path for the mirror-image reason: most of
+ * their specs substitute the `@aglyn/tenant-data-admin` barrel wholesale.
  */
 
 import {
@@ -59,6 +83,7 @@ import {
   normalizeContactEmail,
 } from '@aglyn/aglyn/app-utils/contacts'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
+import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import { FieldValue } from 'firebase-admin/firestore'
 
 /** One entry: the address as stored, and the contact it resolves to. */
@@ -111,6 +136,22 @@ export async function writeContactEmailIndex(
   })
 }
 
+/** How one door reads differently from the capture; see the module notes. */
+export interface FindContactByEmailOptions {
+  /**
+   * Answer only a contact THIS site may see. A document the address names
+   * but the site cannot read is `null` — the same answer the scoped
+   * `email ==` query gave, since one address names one document.
+   */
+  hostId?: string
+  /**
+   * Read through this transaction. Every read — the index entry, the
+   * contact it names, the fallback query — goes through it; the lazy index
+   * write does not, so the caller may still read after this returns.
+   */
+  transaction?: FirebaseFirestore.Transaction
+}
+
 /**
  * The contact an address belongs to, as a document snapshot — or `null`.
  *
@@ -121,26 +162,41 @@ export async function writeContactEmailIndex(
 export async function findContactByEmail(
   contactsRef: FirebaseFirestore.CollectionReference,
   email: unknown,
+  options: FindContactByEmailOptions = {},
 ): Promise<FirebaseFirestore.DocumentSnapshot | null> {
   const normalized = normalizeContactEmail(email)
   if (!normalized) return null
+  const { hostId, transaction } = options
+  const readDoc = (ref: FirebaseFirestore.DocumentReference) =>
+    transaction ? transaction.get(ref) : ref.get()
+  const readQuery = (query: FirebaseFirestore.Query) =>
+    transaction ? transaction.get(query) : query.get()
+
   const index = emailIndexBeside(contactsRef)
   const key = index ? personKey(normalized) : null
+  let hit: FirebaseFirestore.DocumentSnapshot | null = null
   if (index && key) {
     try {
-      const entry = await index.doc(key).get()
+      const entry = await readDoc(index.doc(key))
       const contactId = entry.exists ? String(entry.get('contactId') ?? '') : ''
       if (contactId) {
-        const contact = await contactsRef.doc(contactId).get()
-        if (contact.exists) return contact
+        const contact = await readDoc(contactsRef.doc(contactId))
+        if (contact.exists) hit = contact
       }
     } catch (error) {
       console.error('[contact-email-index] lookup failed', error)
     }
   }
-  const found = await contactsRef.where('email', '==', normalized).limit(1).get()
-  if (found.empty) return null
-  const hit = found.docs[0]
-  await writeContactEmailIndex(index, hit.id, [normalized])
+  if (!hit) {
+    const found = await readQuery(
+      contactsRef.where('email', '==', normalized).limit(1),
+    )
+    hit = found.docs[0] ?? null
+    if (!hit) return null
+    await writeContactEmailIndex(index, hit.id, [normalized])
+  }
+  if (hostId && !visibleToHost(hit.get('visibleTo') as string[] | undefined, hostId)) {
+    return null
+  }
   return hit
 }

@@ -162,9 +162,21 @@ The rule is the same for every field:
 
 An alternate address is what makes the merge stick: a later capture on it — a
 form the person fills in from the personal account, an order placed with it —
-lands on the kept record rather than creating the second record again. The
+lands on the kept record rather than creating the second record again. Every
+place that finds a person by address reads the same way: an automation step
+that sets a stage or files someone under a campaign, a flow email's consent
+check, the engagement stamp a delivery webhook writes, the Inbox's add-to-list
+check, a refund, a proof's consent read, and the REST API's lookup and
+duplicate refusal all resolve the alternate to the kept record. The
 [REST API](/api/resources/contacts#merge) performs the same merge, and reads
 the alternates back as `alternateEmails`.
+
+What the merge does **not** rewrite is anything keyed by the address itself.
+A list membership, a suppression, and the delivery log of past sends each
+belong to the address they were recorded against, so the personal address's
+list memberships stay under the personal address and the work address's under
+the work address. The kept record shows both addresses in its header, which
+is where to look when a person's mail history seems split.
 
 Merging is available to members whose **data** permission covers the whole
 workspace, because a contact is shared by every site that captured the person

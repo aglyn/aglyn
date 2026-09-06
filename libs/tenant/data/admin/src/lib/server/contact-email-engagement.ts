@@ -73,6 +73,7 @@ import {
   readContactFacet,
   visibleToHost,
 } from '@aglyn/aglyn/server'
+import { findContactByEmail } from './contact-email-index'
 import type { EmailDeliveryEventOutcome } from './email-delivery-log'
 import { firebaseAdmin } from './firebase-admin'
 import { consentGroupForSite, orgDataCollectionForHost } from './organizations'
@@ -132,14 +133,15 @@ export async function recordContactEmailEngagement(args: {
       await db.runTransaction(async (transaction: any) => {
         /*
          * The same unscoped lookup the capture door makes — one human is one
-         * row whichever site met them — followed by the scope check the
-         * capture door's `visibleTo` write is the source of.
+         * row whichever site met them, and through the address index
+         * (AGL-2633) the row is found under an address a merge folded into
+         * it too — followed by the scope check the capture door's
+         * `visibleTo` write is the source of. Read THROUGH the transaction:
+         * the stamp below is a compare-and-set against the instant this
+         * read saw.
          */
-        const found = await transaction.get(
-          contactsRef.where('email', '==', email).limit(1),
-        )
-        if (found.empty) return
-        const snapshot = found.docs[0]
+        const snapshot = await findContactByEmail(contactsRef, email, { transaction })
+        if (!snapshot) return
         const data = (snapshot.data() ?? {}) as Record<string, unknown>
         if (!visibleToHost(data['visibleTo'] as string[] | undefined, hostId)) {
           return

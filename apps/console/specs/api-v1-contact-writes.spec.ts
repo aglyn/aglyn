@@ -207,6 +207,11 @@ function mockCollectionRef(path: string) {
     ...query,
     path,
     doc: (id: string) => mockDocRef(`${path}/${id}`),
+    /** The org document a subcollection hangs off; a root collection has none. */
+    get parent() {
+      const parentPath = path.slice(0, path.lastIndexOf('/'))
+      return parentPath ? mockDocRef(parentPath) : null
+    },
   }
 }
 
@@ -316,6 +321,7 @@ jest.mock('firebase-admin/firestore', () => {
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DELETE, GET, PATCH, POST } from '../app/api/v1/[[...route]]/route'
+import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import { checkContactQuota, PLAN_ENTITLEMENTS } from '@aglyn/aglyn/app-utils/plan-entitlements'
 
 /**
@@ -601,6 +607,51 @@ describe('idempotency on POST /v1/contacts', () => {
     expect(body.error.code).toBe('contact_exists')
     expect(String(body.error.message)).toContain('con_1')
     expect(contactCount()).toBe(1)
+  })
+
+  /*
+   * The address a merge folded into another record is that record's
+   * (AGL-2633): a create on it would mint the duplicate the merge removed,
+   * so it is the same 409 naming the survivor — and the same lookup finds
+   * the survivor for `?email=`.
+   */
+  it('refuses a create on an address a merge folded into another contact, naming the survivor', async () => {
+    mockDocs.set(`${CONTACTS_PATH}/con_survivor`, {
+      email: 'jane@acme.com',
+      alternateEmails: ['jane@gmail.com'],
+      visibleTo: ['org'],
+    })
+    mockDocs.set(`orgs/org-1/emailIndex/${personKey('jane@gmail.com')}`, {
+      email: 'jane@gmail.com',
+      contactId: 'con_survivor',
+    })
+    const response = await postContact({ email: 'jane@gmail.com' })
+    expect(response.status).toBe(409)
+    const body = await response.json()
+    expect(body.error.code).toBe('contact_exists')
+    expect(String(body.error.message)).toContain('con_survivor')
+    expect(contactCount()).toBe(1)
+  })
+
+  it('finds the survivor for ?email= on an address a merge folded into it', async () => {
+    mockDocs.set(`${CONTACTS_PATH}/con_survivor`, {
+      email: 'jane@acme.com',
+      alternateEmails: ['jane@gmail.com'],
+      visibleTo: ['org'],
+    })
+    mockDocs.set(`orgs/org-1/emailIndex/${personKey('jane@gmail.com')}`, {
+      email: 'jane@gmail.com',
+      contactId: 'con_survivor',
+    })
+    const response = await GET(
+      request('contacts?email=Jane%40Gmail.com', 'GET'),
+      routeContext(['contacts']),
+    )
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body.data.map((row: { id: string }) => row.id)).toEqual(['con_survivor'])
+    expect(body.data[0].alternateEmails).toEqual(['jane@gmail.com'])
+    expect(body.has_more).toBe(false)
   })
 
   it('the delete replays its receipt, and a wrong id still 404s', async () => {

@@ -51,6 +51,10 @@ let contactUpdates: Record<string, any>[] = []
 let mockActivity: Record<string, any>[] = []
 /** Whether the org holds a contact for the payload address at all. */
 let contactExists = true
+/** The one contact the org holds, when it holds one. */
+let mockContactData: Record<string, any> = {}
+/** `orgs/{org}/emailIndex/{personKey}` → `{ email, contactId }` (AGL-2625). */
+let mockEmailIndex: Record<string, Record<string, any>> = {}
 
 jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
@@ -106,14 +110,13 @@ const collectionHandle = (path: string): any => {
         return { docs, empty: docs.length === 0 }
       }
       if (path.endsWith('contacts')) {
-        const docs = contactExists
-          ? [
-              {
-                ...docSnapshot('contact-1', { email: 'ada@example.com' }),
-                ref: contactRef,
-              },
-            ]
-          : []
+        // Matched on the address, as the real query is: a double that
+        // answered the contact for any address could never show an
+        // alternate address being resolved.
+        const docs =
+          contactExists && matcher(mockContactData)
+            ? [{ ...docSnapshot('contact-1', mockContactData), ref: contactRef }]
+            : []
         return { docs, empty: docs.length === 0 }
       }
       return { docs: [], empty: true }
@@ -121,13 +124,29 @@ const collectionHandle = (path: string): any => {
   })
   return {
     ...query(() => true),
+    // The org document a subcollection hangs off, so the address lookup can
+    // find `emailIndex` beside `contacts` the way it does in production.
+    get parent() {
+      const parentPath = path.slice(0, path.lastIndexOf('/'))
+      return parentPath
+        ? { collection: (name: string) => collectionHandle(`${parentPath}/${name}`) }
+        : null
+    },
     doc: (id: string) => ({
       id,
       get: async () =>
         path.endsWith('emailCampaigns') && mockCampaigns[id]
           ? docSnapshot(id, mockCampaigns[id] as Record<string, any>)
-          : { id, exists: false, data: () => undefined, get: () => undefined },
-      set: async () => undefined,
+          : path.endsWith('contacts') && contactExists && id === 'contact-1'
+            ? { ...docSnapshot(id, mockContactData), ref: contactRef }
+            : path.endsWith('emailIndex') && mockEmailIndex[id]
+              ? docSnapshot(id, mockEmailIndex[id])
+              : { id, exists: false, data: () => undefined, get: () => undefined },
+      set: async (data: Record<string, any>) => {
+        if (path.endsWith('emailIndex')) {
+          mockEmailIndex[id] = { ...(mockEmailIndex[id] ?? {}), ...data }
+        }
+      },
       collection: (name: string) => collectionHandle(`${path}/${id}/${name}`),
     }),
     add: async (data: Record<string, any>) => {
@@ -184,6 +203,7 @@ jest.mock('@aglyn/shared-util-email', () => ({
   sendFailureReason: () => null,
 }))
 
+import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import { CAMPAIGN_MEMBERSHIP_FIELD } from '@aglyn/aglyn/server'
 import { runEventActions } from './run-event-actions'
 
@@ -198,14 +218,18 @@ const assigning = (step: Record<string, any>) => ({
   },
 })
 
-const run = () =>
-  runEventActions(HOST_ID, 'formSubmission', { email: 'ada@example.com' })
+const run = (email = 'ada@example.com') =>
+  runEventActions(HOST_ID, 'formSubmission', { email })
 
 beforeEach(() => {
   mockActions = []
   mockActivity = []
   contactUpdates = []
   contactExists = true
+  // Scoped to the org, as a stamped contact is: the lookup narrows to what
+  // the site may see, and a row with no `visibleTo` is visible to nobody.
+  mockContactData = { email: 'ada@example.com', visibleTo: ['org'] }
+  mockEmailIndex = {}
   mockCampaigns = { 'spring-2026': { name: 'Spring sale' } }
 })
 
@@ -259,6 +283,40 @@ describe('assigning a contact to a campaign', () => {
     expect(Object.keys(contactUpdates[0])).not.toContain(
       CAMPAIGN_MEMBERSHIP_FIELD,
     )
+  })
+})
+
+describe('finding the person (AGL-2633)', () => {
+  it('files the survivor when the event carries an address a merge folded in', async () => {
+    mockContactData['alternateEmails'] = ['ada@gmail.com']
+    mockEmailIndex[personKey('ada@gmail.com')!] = {
+      email: 'ada@gmail.com',
+      contactId: 'contact-1',
+    }
+    mockActions = [assigning({ campaignId: 'spring-2026' })]
+
+    await run('ada@gmail.com')
+
+    expect(contactUpdates).toHaveLength(1)
+    expect(contactUpdates[0][`facets.${GROUP_ID}.${CAMPAIGN_MEMBERSHIP_FIELD}`]).toEqual({
+      __arrayUnion: ['spring-2026'],
+    })
+  })
+
+  it('reports an alternate whose survivor this site cannot see as no contact', async () => {
+    mockContactData['visibleTo'] = ['host:other-site']
+    mockContactData['alternateEmails'] = ['ada@gmail.com']
+    mockEmailIndex[personKey('ada@gmail.com')!] = {
+      email: 'ada@gmail.com',
+      contactId: 'contact-1',
+    }
+    mockActions = [assigning({ campaignId: 'spring-2026' })]
+
+    await run('ada@gmail.com')
+
+    expect(contactUpdates).toHaveLength(0)
+    expect(mockActivity[0].result).toBe('failed')
+    expect(mockActivity[0].action).toContain('no contact for ada@gmail.com')
   })
 })
 
