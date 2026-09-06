@@ -18,11 +18,12 @@
 
 import * as CommerceModel from '../../model'
 import { escapeHtml } from '../../utils/escape-html'
-// The CRM's route builder and hub hook by their leaf paths, not the plugin
-// barrel: the barrel is the CRM's site entry point, and a console dialog
-// named there would ship to every published page.
-import { useCrmHubPathFromRoute } from '@aglyn/plugins-crm/hooks/use-crm-hub-path'
-import { crmRoutes } from '@aglyn/plugins-crm/model/crm-routes'
+// The CRM's address from the SHARED builder, not the plugin (AGL-2622): the
+// CRM already reaches marketing, and marketing reaches commerce, so an
+// import of the CRM from here would close a cycle between the three
+// plugins. The shared builder is pinned against the CRM's own routes by a
+// spec, so the address is the same one the hub resolves.
+import { crmContactByEmailHref } from '@aglyn/aglyn'
 import { AppLink, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -39,6 +40,7 @@ import {
   Typography,
 } from '@mui/material'
 import { doc, runTransaction, updateDoc } from 'firebase/firestore'
+import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -108,11 +110,17 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
    * the contact's id is minted at capture and nothing on the order holds
    * it. The Contacts list is the lookup and opens the record on one match.
    * A guest checkout with no address updated nobody, so there is no link.
+   * Built from the route params already in the URL — no document is read
+   * to draw a link — and absent until they settle, so the dialog never
+   * offers a link to a half-built address.
    */
-  const crmHubPath = useCrmHubPathFromRoute()
+  const params = useParams<{ orgSlug?: string; host?: string }>()
   const customerCrmHref =
-    crmHubPath && order?.customerEmail
-      ? crmRoutes(crmHubPath).contactByEmail(String(order.customerEmail))
+    params?.orgSlug && params?.host && order?.customerEmail
+      ? crmContactByEmailHref(
+          { orgSlug: String(params.orgSlug), host: String(params.host) },
+          String(order.customerEmail),
+        )
       : null
 
   /**

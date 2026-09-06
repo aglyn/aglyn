@@ -16,15 +16,10 @@
  */
 'use client'
 
-import { checkQuota, pluginDocsHelp } from '@aglyn/aglyn'
+import { checkQuota, crmContactByEmailHref, pluginDocsHelp } from '@aglyn/aglyn'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
 import { type HostBookingService, isBookingReminderDue } from '../model'
-// The CRM's route builder and hub hook by their leaf paths, not the plugin
-// barrel: the barrel is the CRM's site entry point, and a console page
-// named there would ship to every published page.
-import { useCrmHubPathFromRoute } from '@aglyn/plugins-crm/hooks/use-crm-hub-path'
-import { crmRoutes } from '@aglyn/plugins-crm/model/crm-routes'
 import { AppLink, CardDisplay, HelpTip, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -48,6 +43,7 @@ import {
   setDoc,
   updateDoc,
 } from 'firebase/firestore'
+import { useParams } from 'next/navigation'
 import { useCallback, useState } from 'react'
 import {
   useFirestore,
@@ -114,10 +110,18 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
    * Where a booker's CONTACT is (AGL-2622). A booking updated a person in
    * the CRM by the address it carried, and the row links there by that
    * address — the Contacts list holds the id nothing here does and opens
-   * the record on one match. `null` until the route params settle, so no
-   * row renders a link to nowhere.
+   * the record on one match. The address comes from the SHARED builder
+   * rather than the CRM plugin, the way the commerce dialog's does: a
+   * plugin importing a sibling is a cycle waiting for its third edge, and
+   * the shared builder is pinned against the CRM's own routes by a spec.
+   * `null` until the route params settle, so no row renders a link to
+   * nowhere.
    */
-  const crmHubPath = useCrmHubPathFromRoute()
+  const params = useParams<{ orgSlug?: string; host?: string }>()
+  const siteContext =
+    params?.orgSlug && params?.host
+      ? { orgSlug: String(params.orgSlug), host: String(params.host) }
+      : null
 
   const {
     data: serviceDocs,
@@ -548,11 +552,11 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
                     }`}
                   </Typography>
                 </Stack>
-                {crmHubPath && booking.email ? (
+                {siteContext && booking.email ? (
                   <Button
                     component={AppLink as any}
                     {...({ componentVariant: 'naked', nativeButton: false } as any)}
-                    href={crmRoutes(crmHubPath).contactByEmail(String(booking.email))}
+                    href={crmContactByEmailHref(siteContext, String(booking.email))}
                     size="small"
                   >
                     {'View in CRM'}
