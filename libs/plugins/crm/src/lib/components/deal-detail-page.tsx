@@ -194,7 +194,7 @@ export function DealDetailPage(props: CrmDetailPageProps) {
         hostId={hostId}
         org={org}
         deal={deal ?? null}
-        pipelines={pipelineState.pipelines}
+        pipelines={pipelineState.activePipelines}
         defaultPipeline={pipeline ?? pipelineState.pipeline}
         unreadable={status === 'error'}
         fromCache={fromCache}

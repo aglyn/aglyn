@@ -38,7 +38,9 @@ import {
   Button,
   Chip,
   CircularProgress,
+  MenuItem,
   Stack,
+  TextField,
   ToggleButton,
   ToggleButtonGroup,
   Typography,
@@ -68,7 +70,7 @@ import { DealBoard } from './deal-board'
 import { DealEditDrawer } from './deal-edit-drawer'
 import { LostReasonDialog } from './lost-reason-dialog'
 import { OwnerAvatar } from './owner-avatar'
-import { PipelineStagesDialog } from './pipeline-stages-dialog'
+import { PipelinesDialog } from './pipelines-dialog'
 
 type View = 'board' | 'table'
 type StatusFilter = CrmDealStatus | 'all'
@@ -76,16 +78,24 @@ type StatusFilter = CrmDealStatus | 'all'
 /**
  * `/crm/deals` — the pipeline (AGL-2598).
  *
- * ## Two views of one collection
+ * ## Two views of one pipeline
  *
- * The BOARD is the default pipeline's open deals, one column per open stage,
- * read in one bounded listener over `(visibleTo, pipelineId, status,
- * updatedAt)` and sorted into columns here — a listener per column would be
- * five subscriptions for one board. The TABLE is every deal the viewer may
- * see, paged by the query, with a status toggle; it is where the closed
- * history and the deals of a second pipeline are found. The three figures
- * above both come from the board's read, so they describe what is in play
- * whichever view is showing.
+ * The BOARD is one pipeline's open deals, one column per open stage, read
+ * in one bounded listener over `(visibleTo, pipelineId, status, updatedAt)`
+ * and sorted into columns here — a listener per column would be five
+ * subscriptions for one board. The TABLE is the same pipeline's deals,
+ * paged by the query, with a status toggle; it is where the closed history
+ * is found. The three figures above both come from the board's read, so
+ * they describe what is in play whichever view is showing.
+ *
+ * ## Which pipeline
+ *
+ * The switcher in the header (AGL-2620) picks among the ACTIVE pipelines
+ * and opens on the default; the board, the table, the figures and the New
+ * deal drawer all follow it. It is section state rather than a route: a
+ * pipeline is a lens on the section, and a saved view that names one
+ * composes with it. **Pipelines** opens the dialog that creates, renames,
+ * defaults, archives and — through it — edits the stages of each.
  *
  * ## Every move goes through the route
  *
@@ -110,7 +120,14 @@ export function DealsSection(props: ConsolePluginPageProps) {
     hostId,
     org: (org ?? null) as Record<string, unknown> | null,
   })
-  const { pipeline, pipelines } = pipelineState
+  const { activePipelines } = pipelineState
+  const [pipelineId, setPipelineId] = useState<string | null>(null)
+  // The chosen pipeline while it is still active; else the default. A
+  // pipeline archived from another tab falls back rather than leaving the
+  // board on a pipeline the picker no longer lists.
+  const pipeline =
+    (pipelineId ? activePipelines.find((entry) => entry.$id === pipelineId) : null) ??
+    pipelineState.pipeline
   const roster = useOrgMemberDirectory(scope.orgId)
   const api = useDealStageApi(hostId)
   const nowMs = useMemo(() => Date.now(), [])
@@ -136,6 +153,7 @@ export function DealsSection(props: ConsolePluginPageProps) {
     view === 'table' ? scope.orgId : null,
     scope.visibleTo,
     statusFilter,
+    pipeline?.$id ?? null,
   )
 
   const summary = useMemo(() => boardSummary(open.data, pipeline), [open.data, pipeline])
@@ -201,7 +219,7 @@ export function DealsSection(props: ConsolePluginPageProps) {
   )
 
   const [creating, setCreating] = useState(false)
-  const [editingStages, setEditingStages] = useState(false)
+  const [managingPipelines, setManagingPipelines] = useState(false)
 
   const columns: GridColDef[] = useMemo(
     () => [
@@ -309,14 +327,31 @@ export function DealsSection(props: ConsolePluginPageProps) {
         header={'Deals'}
         help={pluginDocsHelp('deals', { anchor: '#the-board-and-the-table' })}
         actions={
-          <Stack direction="row" spacing={1}>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            {activePipelines.length > 1 ? (
+              <TextField
+                select
+                size="small"
+                label="Pipeline"
+                value={pipeline?.$id ?? ''}
+                onChange={(event) => setPipelineId(event.target.value)}
+                sx={{ minWidth: 160 }}
+                slotProps={{ select: { 'aria-label': 'Pipeline' } }}
+              >
+                {activePipelines.map((entry) => (
+                  <MenuItem key={entry.$id} value={entry.$id}>
+                    {entry.name}
+                  </MenuItem>
+                ))}
+              </TextField>
+            ) : null}
             <Button
               size="small"
               startIcon={<MdiIcon path={mdiCogOutline.path} size={0.8} />}
-              disabled={!pipeline}
-              onClick={() => setEditingStages(true)}
+              disabled={!scope.orgId || pipelineState.status === 'loading'}
+              onClick={() => setManagingPipelines(true)}
             >
-              {'Stages'}
+              {'Pipelines'}
             </Button>
             <Button
               size="small"
@@ -483,17 +518,19 @@ export function DealsSection(props: ConsolePluginPageProps) {
         onClose={() => setCreating(false)}
         hostId={hostId}
         org={org}
-        pipelines={pipelines}
+        pipelines={activePipelines}
         defaultPipeline={pipeline}
       />
-      <PipelineStagesDialog
-        open={editingStages}
-        onClose={() => setEditingStages(false)}
+      <PipelinesDialog
+        open={managingPipelines}
+        onClose={() => setManagingPipelines(false)}
         orgId={scope.orgId ?? ''}
-        pipeline={pipeline}
+        hostId={hostId}
+        pipelines={pipelineState.pipelines}
         fromCache={pipelineState.fromCache}
         unreadable={pipelineState.status === 'error'}
         visibleToTokens={scope.visibleTo}
+        createTokens={scope.createTokens}
       />
       <LostReasonDialog
         open={Boolean(losing)}

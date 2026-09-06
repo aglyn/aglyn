@@ -80,14 +80,17 @@ export function useDealsByStatus(
 }
 
 /**
- * Every deal the viewer may see, paged, optionally narrowed to one status —
- * the table's read. `(visibleTo, updatedAt DESC)` and
- * `(visibleTo, status, updatedAt DESC)` are both indexed.
+ * Every deal the viewer may see, paged, optionally narrowed to one status
+ * and to one pipeline — the table's read. Four shapes, four indexes:
+ * `(visibleTo, updatedAt DESC)`, `(visibleTo, status, updatedAt DESC)`,
+ * `(visibleTo, pipelineId, updatedAt DESC)` and
+ * `(visibleTo, pipelineId, status, updatedAt DESC)`.
  */
 export function usePagedDeals(
   orgId: string | null,
   readTokens: readonly string[],
   status: CrmDealStatus | 'all',
+  pipelineId: string | null = null,
 ) {
   const firestore = useFirestore()
   return usePagedCollection<DealDoc>(
@@ -96,12 +99,13 @@ export function usePagedDeals(
         ? query(
             collection(firestore, 'orgs', orgId, CRM_COLLECTIONS.deals),
             where('visibleTo', 'array-contains-any', readTokens),
+            ...(pipelineId ? [where('pipelineId', '==', pipelineId)] : []),
             ...(status === 'all' ? [] : [where('status', '==', status)]),
             orderBy('updatedAt', 'desc'),
             limit(pageLimit),
           )
         : null,
-    [firestore, orgId, readTokens, status],
+    [firestore, orgId, readTokens, status, pipelineId],
     { idField: '$id' },
   )
 }
