@@ -25,7 +25,7 @@ import {
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useHostActivityLogger } from '@aglyn/tenant-feature-instance'
 import { Button, Stack, Typography } from '@mui/material'
 import { deleteDoc, doc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
@@ -59,6 +59,7 @@ export function DealDetailPage(props: CrmDetailPageProps) {
   const router = useRouter()
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
+  const logActivity = useHostActivityLogger(hostId)
   const { confirm } = useConfirmationContext()
   const scope = useDealScope({ hostId, org })
   const { data: deal, status, fromCache } = useDeal(scope.orgId, id)
@@ -91,6 +92,9 @@ export function DealDetailPage(props: CrmDetailPageProps) {
     setDeleting(true)
     try {
       await deleteDoc(doc(firestore, 'orgs', scope.orgId, CRM_COLLECTIONS.deals, deal.$id))
+      // Setup → Activity shows CRM work (AGL-2622): the deal is org data,
+      // but the act happened in this site's console and belongs in its feed.
+      logActivity('Deleted deal', { type: 'deal', id: deal.$id, name: deal.title })
       enqueueSnackbar('Deal deleted', { variant: 'success', persist: false })
       router.push(routes.section('deals'))
     } catch (error) {
@@ -98,7 +102,7 @@ export function DealDetailPage(props: CrmDetailPageProps) {
       enqueueSnackbar('An error has occurred', { variant: 'error', allowDuplicate: true })
       setDeleting(false)
     }
-  }, [deal, scope.orgId, confirm, firestore, enqueueSnackbar, router, routes])
+  }, [deal, scope.orgId, confirm, firestore, logActivity, enqueueSnackbar, router, routes])
 
   return (
     <>

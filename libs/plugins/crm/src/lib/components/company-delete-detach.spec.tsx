@@ -120,6 +120,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => FIRESTORE,
   useOrgDataScope: () => DATA_SCOPE,
   useUser: () => ({ data: USER }),
+  useHostActivityLogger: () => jest.fn(),
   useFirestoreDoc: () => ({
     data: { name: 'Acme', domain: 'acme.com', visibleTo: ['host:host-1'] },
     status: 'success',

@@ -24,6 +24,7 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
   useFirestoreCollection,
+  useHostActivityLogger,
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
@@ -149,6 +150,7 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { data: user } = useUser()
+  const logActivity = useHostActivityLogger(hostId)
   const { orgId, consentGroup, readTokens, createTokens } = useDealScope({
     hostId,
     org,
@@ -294,6 +296,10 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
             nowMs,
           }),
         )
+        // Setup → Activity shows CRM work (AGL-2622): the deal is org data,
+        // but the act happened in this site's console and belongs in its
+        // feed. Creation only — an edit is a save the card reports.
+        logActivity('Added deal', { type: 'deal', id: created.id, name: values.title })
         enqueueSnackbar('Deal created', { variant: 'success', persist: false })
         onSaved?.(created.id, 'create')
       }
@@ -318,6 +324,7 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
     firestore,
     createTokens,
     hostId,
+    logActivity,
     enqueueSnackbar,
     onSaved,
     onClose,

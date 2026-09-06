@@ -165,6 +165,7 @@ const CALLER = 'uid-caller'
 
 let mockOrg: Record<string, unknown> = {}
 const mockVerifyIdToken = jest.fn(async () => ({ uid: CALLER }))
+const mockLogHostActivity = jest.fn(async () => undefined)
 const mockResolveOrgPermissions = jest.fn(async () => ({
   orgId: ORG,
   role: 'editor',
@@ -238,6 +239,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   orgDataCollectionForHost: async (_hostId: string, name: string) =>
     collectionRef(`orgs/${ORG}/${name}`),
   upsertHostContact: (...args: unknown[]) => (mockUpsertHostContact as any)(...args),
+  logHostActivity: (...args: unknown[]) => mockLogHostActivity(...(args as [])),
 }))
 
 // ---------------------------------------------------------------------------
@@ -380,6 +382,25 @@ describe('converting a lead', () => {
     expect(lead?.companyId).toBeUndefined()
     // What the capture door wrote is still there — the stamp is an update.
     expect(lead?.sources).toEqual(['form'])
+  })
+
+  /**
+   * One act, one entry (AGL-2622): the conversion is logged from the route
+   * that did the work, on the lead, in the site's feed — and a repeat call,
+   * which writes nothing, logs nothing.
+   */
+  it('writes one host activity entry for the conversion, and none for a repeat', async () => {
+    mockLogHostActivity.mockClear()
+    await call({ hostId: HOST, leadId: 'lead-1' })
+    expect(mockLogHostActivity).toHaveBeenCalledTimes(1)
+    expect(mockLogHostActivity).toHaveBeenCalledWith(
+      HOST,
+      { uid: CALLER, email: null },
+      'Converted lead',
+      { type: 'lead', id: 'lead-1', name: 'Ann Lee' },
+    )
+    await call({ hostId: HOST, leadId: 'lead-1' })
+    expect(mockLogHostActivity).toHaveBeenCalledTimes(1)
   })
 
   it("prefers the lead's owner to the caller, and the body's owner to both", async () => {

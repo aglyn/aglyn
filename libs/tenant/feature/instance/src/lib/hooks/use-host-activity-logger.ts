@@ -43,6 +43,13 @@ export interface HostActivityTarget {
     // removed from the site. The record is org-shared, but the act happened
     // in THIS site's console and belongs in this site's feed.
     | 'contact'
+    // The rest of the CRM (AGL-2622): a company or a deal created or deleted
+    // from this site's console, and a lead converted into the three. Org
+    // data all of them, filed under the site whose console did the work for
+    // the reason a contact is.
+    | 'company'
+    | 'deal'
+    | 'lead'
   id?: string
   name?: string
   /**
