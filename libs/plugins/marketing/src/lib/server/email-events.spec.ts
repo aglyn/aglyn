@@ -377,6 +377,26 @@ jest.mock(
   }),
 )
 
+/**
+ * What the handler handed the CONTACT STAMP (AGL-2616), per call. Recorded
+ * for the reason the rollup is: the stamp's own rules — forward-only, the
+ * holder's facet, a row the site may see — are proved against a Firestore
+ * double in `tenant-data-admin`; what only this file can prove is which
+ * events reach it and with which site.
+ */
+const recordedStamps: Array<{ hostId: string; outcomes: unknown[] }> = []
+jest.mock(
+  '@aglyn/tenant-data-admin/server/contact-email-engagement',
+  () => ({
+    recordContactEmailEngagement: jest.fn(
+      async (args: { hostId: string; outcomes: unknown[] }) => {
+        recordedStamps.push(args)
+        return 0
+      },
+    ),
+  }),
+)
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   // The literal three call sites compare against — the unsubscribe writes
   // it, the resubscribe link refuses to reverse anything else, and the
@@ -596,6 +616,7 @@ beforeEach(() => {
   recordedDeliveryEvents.length = 0
   recordedEngagement.length = 0
   recordedTouches.length = 0
+  recordedStamps.length = 0
   fixtureMessageCounter = 0
   mockFirstOfType = true
   updateFailure = null
@@ -1939,6 +1960,78 @@ describe('the person rollup', () => {
       '@aglyn/tenant-data-admin/server/email-delivery-log',
     ).recordPersonEngagement as jest.Mock
     rollup.mockRejectedValueOnce(new Error('rollup is down'))
+
+    const result = await deliver(event('email.opened', TAGS))
+
+    expect(result.body).toMatchObject({ ok: true })
+    expect((docs.get(CAMPAIGN_PATH) as any).stats.opens).toBe(3)
+  })
+})
+
+/*==========================================
+ * THE CONTACT'S OWN STAMP (AGL-2616).
+ *
+ * Below the `hostId` gate the rollup sits above: the rollup is about the
+ * address and moves on anybody's mail, the stamp is about THIS SITE's
+ * relationship with the person and moves only on its own campaigns.
+ *=========================================*/
+describe('the contact engagement stamp', () => {
+  it('hands the site’s first opens and clicks to the stamp, with the site', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    await deliver(event('email.opened', TAGS))
+    await deliver(event('email.clicked', TAGS))
+
+    expect(recordedStamps).toEqual([
+      {
+        hostId: HOST,
+        outcomes: [expect.objectContaining({ to: RECIPIENT, type: 'opened', firstOfType: true })],
+      },
+      {
+        hostId: HOST,
+        outcomes: [expect.objectContaining({ to: RECIPIENT, type: 'clicked', firstOfType: true })],
+      },
+    ])
+  })
+
+  it('passes the delivery log’s own verdict through rather than re-deriving one', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+    mockFirstOfType = false
+
+    await deliver(event('email.opened', TAGS))
+
+    expect(recordedStamps[0].outcomes).toEqual([
+      expect.objectContaining({ firstOfType: false }),
+    ])
+  })
+
+  it('stamps nothing for mail that names no site — a receipt is not a campaign', async () => {
+    await deliver(event('email.opened', {}))
+    await deliver(event('email.clicked', { campaignId: CAMPAIGN }))
+
+    expect(recordedStamps).toEqual([])
+  })
+
+  it('is not asked about a delivery, a bounce or a complaint', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+    await deliver({
+      type: 'email.delivered',
+      data: { email_id: 'e1', to: [RECIPIENT], tags: TAGS },
+    })
+    await deliver({
+      type: 'email.bounced',
+      data: { email_id: 'e2', to: [RECIPIENT], tags: TAGS, bounce: { type: 'Permanent' } },
+    })
+
+    expect(recordedStamps).toEqual([])
+  })
+
+  it('cannot cost the campaign counters anything when it fails', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+    const stamp = jest.requireMock(
+      '@aglyn/tenant-data-admin/server/contact-email-engagement',
+    ).recordContactEmailEngagement as jest.Mock
+    stamp.mockRejectedValueOnce(new Error('stamp is down'))
 
     const result = await deliver(event('email.opened', TAGS))
 
