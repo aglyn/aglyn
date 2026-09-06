@@ -2065,6 +2065,17 @@ export const CRM_LEAD_STATUS_LABELS: Record<CrmLeadStatus, string> = {
  */
 export const CRM_LEAD_OPEN_STATUSES: readonly CrmLeadStatus[] = ['new', 'working']
 
+/**
+ * The statuses that mean nobody needs to work the lead any more — the
+ * operand of the `in` clause an open-lead figure subtracts with. Subtracts,
+ * because an untouched lead carries no status field at all and Firestore
+ * cannot select on a field's absence; the closed statuses are always
+ * written, so they can be counted, and what remains is open. See
+ * `openLeadsFromCounts`.
+ */
+export const CRM_LEAD_CLOSED_STATUSES: readonly CrmLeadStatus[] =
+  CRM_LEAD_STATUSES.filter((status) => !CRM_LEAD_OPEN_STATUSES.includes(status))
+
 export function isCrmLeadStatus(value: unknown): value is CrmLeadStatus {
   return (
     typeof value === 'string' &&

@@ -105,7 +105,7 @@ export const PLUGIN_DOCS = {
   crmReports: {
     path: '/content-and-data/contacts/reports',
     title: 'Reports',
-    excerpt: 'New contacts over time, where they came from and how far they have gone, the open pipeline, its forecast by close month, deals won and lost, and the task load — counted on the server for the records your site can see.',
+    excerpt: 'New contacts, where they came from and which sources convert, this site\'s lead funnel, the open pipeline and its forecast by close month, won and lost, who logged what, and the task load — counted on the server, every table exportable as CSV.',
   },
   crmSettings: {
     path: '/content-and-data/contacts/settings',
@@ -211,7 +211,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   contactRecord: ['#adding-a-contact-by-hand', '#the-record-page', '#what-each-site-keeps-to-itself', '#owner', '#last-engaged', '#lifecycle-stages', '#where-the-persons-lead-is', '#finding-a-contact', '#related'],
   contacts: ['#whats-in-the-crm-area', '#unified-ingestion', '#what-each-plan-includes', '#the-contacts-page', '#import-from-csv', '#segments', '#everywhere-the-crm-shows-up', '#who-can-open-the-crm', '#related'],
   crmLeads: ['#what-makes-a-lead', '#the-leads-list', '#working-a-lead-from-the-row', '#who-owns-a-lead', '#a-leads-page', '#converting-a-lead', '#unqualifying-a-lead', '#who-can-do-this', '#related'],
-  crmReports: ['#choosing-a-period', '#contacts', '#sources-and-lifecycle', '#pipeline', '#forecast-by-close-month', '#won-and-lost', '#tasks', '#crm-at-a-glance', '#how-the-numbers-are-counted', '#related'],
+  crmReports: ['#choosing-a-period', '#contacts', '#sources-and-lifecycle', '#conversion-by-source', '#lead-funnel', '#pipeline', '#forecast-by-close-month', '#won-and-lost', '#activity-by-teammate', '#tasks', '#exporting-a-table', '#crm-at-a-glance', '#how-the-numbers-are-counted', '#related'],
   crmSettings: ['#companies', '#create-companies-from-work-email-domains', '#default-owner', '#assignment-rules', '#round-robin', '#related'],
   crmTasks: ['#the-tasks-page', '#snoozing-a-task', '#selecting-exporting-and-acting-on-many', '#creating-a-task', '#assigning-a-task-to-someone-else', '#completing-and-reopening', '#tasks-on-a-contact-company-or-deal', '#the-daily-digest', '#turning-it-off', '#the-dashboard-card', '#who-can-do-what', '#related'],
   crmViews: ['#the-views-control', '#a-view-is-a-link', '#filters-on-the-contacts-list', '#columns-and-sort', '#segments-and-views', '#who-sees-what', '#related'],

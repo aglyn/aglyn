@@ -43,7 +43,8 @@ import { useMemo } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { collectionCeiling } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
 import { ReportBreakdown } from './report-breakdown'
-import { plural, shortDate } from './report-format'
+import { ReportExport } from './report-export'
+import { plural, reportFilename, shortDate } from './report-format'
 import {
   type CrmReportScope,
   reportCacheKey,
@@ -66,6 +67,9 @@ const OPEN_DEAL_CEILING = 1000
 /** More pipelines than this is a shape nobody has asked for; the probe says if it happens. */
 const PIPELINE_CEILING = 20
 const TOP_DEALS = 10
+
+/** The top-deals table's columns, which are also the CSV's — the amount split from its currency there. */
+const TOP_DEAL_COLUMNS = ['Deal', 'Stage', 'Expected close', 'Amount', 'Currency'] as const
 
 type DealRow = Aglyn.CrmDeal & { $id: string }
 type PipelineRow = Aglyn.CrmPipeline & { $id: string }
@@ -319,11 +323,27 @@ export function PipelineCard(props: PipelineCardProps) {
                 ))}
               </TableBody>
             </Table>
-            {dealWindow.truncated ? (
-              <Typography variant="caption" color="text.secondary">
-                {`Ranked within the ${OPEN_DEAL_CEILING.toLocaleString()} most recently updated open deals.`}
-              </Typography>
-            ) : null}
+            <ReportExport
+              filename={reportFilename('top-open-deals')}
+              columns={TOP_DEAL_COLUMNS}
+              rows={() =>
+                summary.top.map((deal) => [
+                  deal.title || deal.$id,
+                  summary.stageName(deal),
+                  typeof deal.expectedCloseAtMs === 'number' && deal.expectedCloseAtMs > 0
+                    ? new Date(deal.expectedCloseAtMs).toISOString().slice(0, 10)
+                    : '',
+                  (Number(deal.amountCents ?? 0) / 100).toFixed(2),
+                  String(deal.currency || currency).toUpperCase(),
+                ])
+              }
+              disabled={!dealsRead}
+              caption={
+                dealWindow.truncated
+                  ? `Ranked within the ${OPEN_DEAL_CEILING.toLocaleString()} most recently updated open deals.`
+                  : undefined
+              }
+            />
           </Section>
         ) : null}
       </Stack>

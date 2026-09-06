@@ -571,7 +571,7 @@ export const DOCS_HELP_TOPICS = {
   reports: {
     path: '/content-and-data/contacts/reports',
     title: 'Reports',
-    excerpt: 'New contacts over time, where they came from and how far they have gone, the open pipeline, its forecast by close month, deals won and lost, and the task load — counted on the server for the records your site can see.',
+    excerpt: 'New contacts, where they came from and which sources convert, this site\'s lead funnel, the open pipeline and its forecast by close month, won and lost, who logged what, and the task load — counted on the server, every table exportable as CSV.',
   },
   responsiveStyling: {
     path: '/building-sites/besigner/responsive-styling',
@@ -871,7 +871,7 @@ export const DOCS_HELP_ANCHORS = {
   refunds: ['#where-it-is', '#how-much-you-can-refund', '#you-see-your-limit', '#enforced-on-the-server', '#issuing-a-refund', '#a-refund-is-a-loss', '#what-it-refuses', '#what-is-recorded', '#in-revenue', '#what-this-is-not', '#related'],
   relations: ['#reference-fields', '#many-to-many', '#using-relations', '#tips', '#related'],
   reportAnIssue: ['#is-it-us-or-your-site', '#what-to-write', '#a-bug', '#an-idea', '#a-question', '#length-caps', '#what-gets-attached-for-you', '#being-contacted', '#where-it-goes', '#when-it-does-not-send', '#rate-limits', '#verified-email', '#something-went-wrong-on-our-side', '#related'],
-  reports: ['#choosing-a-period', '#contacts', '#sources-and-lifecycle', '#pipeline', '#forecast-by-close-month', '#won-and-lost', '#tasks', '#crm-at-a-glance', '#how-the-numbers-are-counted', '#related'],
+  reports: ['#choosing-a-period', '#contacts', '#sources-and-lifecycle', '#conversion-by-source', '#lead-funnel', '#pipeline', '#forecast-by-close-month', '#won-and-lost', '#activity-by-teammate', '#tasks', '#exporting-a-table', '#crm-at-a-glance', '#how-the-numbers-are-counted', '#related'],
   responsiveStyling: ['#style-per-breakpoint', '#mute-a-style', '#interaction-states', '#you-can-see-the-state-while-you-style-it', '#fields-you-dont-touch-keep-inheriting', '#states-and-breakpoints-combine', '#focus-state', '#box-stylers', '#spacing-side-names', '#spacing-units', '#spacing-steps', '#spacing-custom-amounts', '#unit-px', '#unit-rem', '#unit-em', '#unit-percent', '#unit-ch', '#unit-viewport', '#unit-small-viewport', '#style-groups', '#borders-without-css', '#picking-a-font', '#gradient-backgrounds', '#visibility-per-device-band', '#scheme-scoped-colors', '#custom-classes', '#custom-css-sx', '#semantic-sections--theme-mode', '#edit-json-for-one-element'],
   revenue: ['#the-two-bases', '#how-each-org-is-treated', '#the-gap', '#where-the-money-came-from', '#gross-versus-net', '#three-costs-the-page-flags-but-does-not-net-out', '#rows-that-need-attention', '#related'],
   runAnAgencyWorkspace: ['#the-model', '#step-1-plan', '#step-2-templates', '#step-3-access', '#step-4-domains', '#step-5-backups', '#step-6-billing', '#step-7-automate', '#checklist', '#related'],

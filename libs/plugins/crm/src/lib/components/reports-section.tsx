@@ -33,11 +33,14 @@ import { useCallback, useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import { crmRoutes } from '../model/crm-routes'
+import { ActivityCard } from './reports/activity-card'
 import { ClosedDealsCard } from './reports/closed-deals-card'
 import { ContactsMixCard } from './reports/contacts-mix-card'
 import { ContactsTrendCard } from './reports/contacts-trend-card'
 import { ForecastCard } from './reports/forecast-card'
+import { LeadFunnelCard } from './reports/lead-funnel-card'
 import { PipelineCard } from './reports/pipeline-card'
+import { SourceConversionCard } from './reports/source-conversion-card'
 import {
   type CrmReportScope,
   reportCacheKey,
@@ -49,14 +52,16 @@ import { TasksCard } from './reports/tasks-card'
 import { invalidateAggregateReads, useAggregateRead } from './reports/use-aggregate-read'
 
 /**
- * `/crm/reports` — the CRM in aggregate (AGL-2604).
+ * `/crm/reports` — the CRM in aggregate (AGL-2604, AGL-2624).
  *
- * Six cards, each reading its own collection: contacts over time, contacts
- * by source and stage, the open pipeline, what closed, the forecast by
- * close month (AGL-2620, over the pipeline card's own window), and the
- * task load. This section resolves what they share and hands it down — see
- * `CrmReportScope` — so that every card counts the same reader's records
- * over the same clock.
+ * Nine cards, each reading its own collection: contacts over time, contacts
+ * by source and stage, which sources convert, this site's lead funnel, the
+ * open pipeline, what closed, who logged what, the forecast by close month
+ * (AGL-2620, over the pipeline card's own window), and the task load. This
+ * section resolves what they share and hands it down — see `CrmReportScope`
+ * — so that every card counts the same reader's records over the same
+ * clock. The lead funnel is the one card handed the site as well: leads live
+ * under the host, not the org.
  *
  * ## The period is a control, and the reads follow it
  *
@@ -206,8 +211,11 @@ export function ContactsReportsSection(props: ConsolePluginPageProps) {
         >
           <ContactsTrendCard report={report} totalContacts={totalContacts} />
           <ContactsMixCard report={report} totalContacts={totalContacts} />
+          <SourceConversionCard report={report} />
+          <LeadFunnelCard report={report} hostId={hostId} />
           <PipelineCard report={report} />
           <ClosedDealsCard report={report} />
+          <ActivityCard report={report} />
           <Box sx={{ gridColumn: { lg: '1 / -1' } }}>
             <ForecastCard report={report} />
           </Box>

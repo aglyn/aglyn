@@ -259,7 +259,17 @@ export function csvCell(value: unknown): string {
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
 }
 
-/** A whole CSV — the header, then one line per row — through {@link csvCell}. */
+/**
+ * A whole CSV — the header, then one line per row — through {@link csvCell}.
+ *
+ * The one serializer for every CSV the console writes: each CRM section's
+ * export, the import's skipped-rows file and every report table's export.
+ * Quoting is decided in {@link csvCell} and nowhere else — a cell holding a
+ * comma, a quote or a line break is wrapped in quotes with its quotes
+ * doubled, no other cell is touched, and a `null` or `undefined` cell is
+ * empty rather than the word — so that a report's file and a contacts file
+ * open the same way in a spreadsheet.
+ */
 export function csvDocument(
   header: readonly unknown[],
   rows: readonly (readonly unknown[])[],
