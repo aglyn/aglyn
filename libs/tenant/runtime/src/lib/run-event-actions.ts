@@ -83,7 +83,11 @@ import {
   type FlowSweepResult,
   sweepDueFlowEnrollments,
 } from './flow-enrollments'
-import { runCrmActionStep } from './crm-action-steps'
+import {
+  logCrmEmailActivity,
+  prepareCrmEmailActivity,
+  runCrmActionStep,
+} from './crm-action-steps'
 import { resolveDatasetDoc } from './resolve-dataset'
 import {
   type HostEventPayload,
@@ -640,11 +644,31 @@ async function executeAction(
           )
           continue
         }
+        const emailSubject = String(step.subject ?? '').slice(0, 200)
+        const emailText = String(step.body ?? '').slice(0, 5000)
+        /*
+         * THE TIMELINE ENTRY (AGL-2615). A message addressed to the contact
+         * the event is about is logged on that contact's timeline as an
+         * email activity — the same row the console's own send logs — so an
+         * automated welcome shows beside the calls a rep made, with its
+         * delivery state. Prepared first because the row's id has to be on
+         * the message for the webhook to find it; written only after the
+         * provider accepted. Behind the suite gate like every other CRM
+         * write an action makes.
+         */
+        const emailActivity = env.crmAllowed
+          ? await prepareCrmEmailActivity(
+              { hostId, org: env.org, orgId: env.orgId },
+              to,
+              payload,
+            )
+          : null
         const result = await sendEmail({
           to,
-          subject: String(step.subject ?? '').slice(0, 200),
-          text: String(step.body ?? '').slice(0, 5000),
+          subject: emailSubject,
+          text: emailText,
           sendingIdentity: await hostSendingIdentity(hostId),
+          ...(emailActivity ? { tags: emailActivity.tags } : {}),
           audience: 'tenant',
           context: enrollmentRef ? 'flow step' : 'event action',
           /*
@@ -692,7 +716,17 @@ async function executeAction(
         // counted, never capped. `sent` is false when Resend refused or the
         // environment is unconfigured, and an email that never left is not a
         // cost.
-        if (result.sent) await meterHostEmail(hostId)
+        if (result.sent) {
+          await meterHostEmail(hostId)
+          if (emailActivity) {
+            await logCrmEmailActivity(
+              { hostId, org: env.org, orgId: env.orgId },
+              emailActivity,
+              { subject: emailSubject, body: emailText, to },
+              actionId,
+            )
+          }
+        }
       } else if (step.type === 'enrollList') {
         const orgId = await resolveOrgIdForHost(hostId)
         const email = String((payload as any).email ?? '')
