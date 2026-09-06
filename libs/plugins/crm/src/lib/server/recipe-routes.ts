@@ -206,10 +206,11 @@ const stampsQuery = (host: FirebaseFirestore.DocumentReference) =>
 /**
  * `POST /api/crm/recipe-install`
  *
- * Body: `{ hostId, recipeId, formId?, orgId? }`. Answers `201 { ok, actionId,
- * name, recipeId }` once the action is written; `409` when a live action on
- * the site already carries the stamp, naming it, so the caller can say
- * "already installed" rather than install it twice.
+ * The body is a CrmRecipeInstallRequest: the site, the recipe, the form a
+ * recipe that needs one is keyed on, and the org at the organization level.
+ * Answers 201 with a CrmRecipeInstallResult once the action is written, and
+ * 409 when a live action on the site already carries the stamp — naming it,
+ * so the caller can say "already installed" rather than install it twice.
  *
  * The write is one transaction: the stamps are read, the duplicate and the
  * per-site cap are judged, and the document is created — all inside it, so
@@ -378,8 +379,9 @@ export const crmRecipeInstallHandler: PluginApiHandler = async (req, res) => {
 /**
  * `POST /api/crm/recipe-status`
  *
- * Body: `{ orgId }` for every site of the organization, or `{ hostId }` for
- * one site. Answers `{ ok: true, sites: CrmRecipeSiteStatus[] }`.
+ * The body names the organization (`orgId`) for every one of its sites, or
+ * one site (`hostId`) for that site alone. Answers `ok: true` and `sites`,
+ * one CrmRecipeSiteStatus per site swept.
  */
 export const crmRecipeStatusHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
