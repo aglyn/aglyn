@@ -346,6 +346,22 @@ export interface ContactFacet {
   lifecycleStage?: ContactLifecycleStage
   /** Custom field values, keyed by `ContactFieldDefinition.key`. */
   custom?: Record<string, ContactCustomValue>
+  /**
+   * When this person last OPENED or CLICKED a campaign sent by one of this
+   * holder's sites, epoch ms (AGL-2616).
+   *
+   * Stamped by the delivery webhook, forward-only, on the first open and the
+   * first click of each message — the same bound the per-person rollup on
+   * `emailDeliveries/{key}` keeps, so a reader opening one newsletter six
+   * times is one write. Per-holder because it answers "is this person still
+   * reading OUR mail": the address-level rollup counts every sender's mail
+   * and a sibling business's, and a re-engagement audience built on that
+   * would mail people who are reading somebody else.
+   *
+   * Absent until the first engagement after the stamp shipped; a message
+   * opened before then advanced the address-level rollup and nothing here.
+   */
+  lastEmailEngagementAtMs?: number
 }
 
 /** The map field holding the facets: `{ [groupId]: ContactFacet }`. */

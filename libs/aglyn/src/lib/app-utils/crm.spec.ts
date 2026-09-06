@@ -20,6 +20,7 @@ import type { ContactInteraction } from './contacts'
 import {
   activityKindHasOutcome,
   activityTimeLabel,
+  campaignEmailSummary,
   companyDomainForEmail,
   CONTACT_LIFECYCLE_STAGES,
   CONTACT_LIFECYCLE_STAGE_LABELS,
@@ -30,6 +31,7 @@ import {
   CRM_TASK_KIND_LABELS,
   CRM_TASK_KINDS,
   crmActivityRecordLink,
+  type ContactCampaignEmail,
   type CrmActivityRow,
   crmReadTokens,
   crmScopeTokens,
@@ -407,7 +409,11 @@ describe('mergeContactTimeline', () => {
     )
     expect(
       merged.map((entry) =>
-        entry.kind === 'captured' ? entry.interaction.summary : entry.activity.$id,
+        entry.kind === 'captured'
+          ? entry.interaction.summary
+          : entry.kind === 'logged'
+            ? entry.activity.$id
+            : entry.key,
       ),
     ).toEqual(['first', 'second', 'a-1', 'a-2'])
   })
@@ -426,6 +432,96 @@ describe('mergeContactTimeline', () => {
       [activity({ $id: 'a-1', atMs: 1_000 })],
     )
     expect(merged.map((entry) => entry.kind)).toEqual(['logged', 'captured'])
+  })
+
+  /*
+   * THE THIRD HISTORY (AGL-2616): the campaign mail the platform sent this
+   * person. Placed at the instant it was SENT, keyed by the provider's
+   * message id, and a kind of its own — never the logged `email` activity,
+   * which is a message a person on the team recorded.
+   */
+  it('places a campaign email at its sent instant, under its own kind', () => {
+    const merged = mergeContactTimeline(captured, [activity({ $id: 'a-1', atMs: 2_000 })], [
+      campaignEmail({ messageId: 'msg-1', sentAtMs: 2_500, openedAtMs: 9_000, openCount: 2 }),
+    ])
+    expect(merged.map((entry) => [entry.kind, entry.atMs])).toEqual([
+      ['captured', 3_000],
+      ['campaign', 2_500],
+      ['logged', 2_000],
+      ['captured', 1_000],
+    ])
+    const entry = merged[1]
+    if (entry.kind !== 'campaign') throw new Error('expected the campaign entry second')
+    expect(entry.key).toBe('campaign:msg-1')
+    expect(entry.email.campaignId).toBe('camp-1')
+    // A logged email activity keeps its own kind beside a campaign entry.
+    const beside = mergeContactTimeline(null, [activity({ $id: 'a-2', kind: 'email' })], [
+      campaignEmail({ messageId: 'msg-2' }),
+    ])
+    expect(beside.map((entry) => entry.kind).sort()).toEqual(['campaign', 'logged'])
+    expect(mergeContactTimeline(null, null, null)).toEqual([])
+  })
+})
+
+const campaignEmail = (
+  overrides: Partial<ContactCampaignEmail> & { messageId: string },
+): ContactCampaignEmail => ({
+  hostId: 'host-a',
+  campaignId: 'camp-1',
+  campaignName: 'Spring sale',
+  subject: 'Spring sale ends Sunday',
+  sentAtMs: 1_000,
+  openCount: 0,
+  clickCount: 0,
+  ...overrides,
+})
+
+/**
+ * The sentence after the email's name: what became of it, in lifecycle
+ * order, counts only past one.
+ */
+describe('campaignEmailSummary', () => {
+  it('names only the states that happened, in the order they happen', () => {
+    expect(campaignEmailSummary(campaignEmail({ messageId: 'm' }))).toEqual(['sent'])
+    expect(
+      campaignEmailSummary(
+        campaignEmail({
+          messageId: 'm',
+          deliveredAtMs: 2,
+          openedAtMs: 3,
+          clickedAtMs: 4,
+          openCount: 1,
+          clickCount: 1,
+        }),
+      ),
+    ).toEqual(['sent', 'delivered', 'opened', 'clicked'])
+  })
+
+  it('counts repeat opens and clicks, and says so only past one', () => {
+    expect(
+      campaignEmailSummary(
+        campaignEmail({
+          messageId: 'm',
+          deliveredAtMs: 2,
+          openedAtMs: 3,
+          clickedAtMs: 4,
+          openCount: 2,
+          clickCount: 3,
+        }),
+      ),
+    ).toEqual(['sent', 'delivered', 'opened ×2', 'clicked ×3'])
+  })
+
+  it('reports a bounce and a complaint after whatever succeeded first', () => {
+    expect(campaignEmailSummary(campaignEmail({ messageId: 'm', bouncedAtMs: 2 }))).toEqual([
+      'sent',
+      'bounced',
+    ])
+    expect(
+      campaignEmailSummary(
+        campaignEmail({ messageId: 'm', deliveredAtMs: 2, complainedAtMs: 3 }),
+      ),
+    ).toEqual(['sent', 'delivered', 'marked as spam'])
   })
 })
 

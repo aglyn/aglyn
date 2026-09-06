@@ -883,6 +883,33 @@ describe('a CRM field is an audience', () => {
     expect(memberEmails()).toEqual(['enterprise@example.com'])
   })
 
+  /*
+   * THE RE-ENGAGEMENT AUDIENCE (AGL-2616) reads the facet stamp the delivery
+   * webhook wrote, and never the address-level rollup: a person who opened a
+   * sibling business's newsletter last week has a fresh rollup and no stamp
+   * in this holder's facet, and must not be mailed as one of our readers.
+   */
+  it('enrolls the contacts who engaged with one of our campaigns inside the window', async () => {
+    const now = Date.UTC(2026, 8, 5)
+    const day = 86_400_000
+    seedProfiledContact('c1', 'reader@example.com', {
+      lastEmailEngagementAtMs: now - 3 * day,
+    })
+    seedProfiledContact('c2', 'lapsed@example.com', {
+      lastEmailEngagementAtMs: now - 45 * day,
+    })
+    seedProfiledContact('c3', 'never@example.com', {})
+    store['emailDeliveries/' + 'anything'] = { lastEngagedAtMs: now - day }
+    const result = await materializeDynamicList({
+      listRef: listRef(),
+      hostId: 'host-1',
+      rule: { sources: ['contacts'], engagedWithinDays: 30 },
+      nowMs: now,
+    })
+    expect(result.matched).toBe(1)
+    expect(memberEmails()).toEqual(['reader@example.com'])
+  })
+
   /**
    * ⛔ THE FACET IS THE HOLDER'S OWN RECORD.
    *
@@ -898,12 +925,14 @@ describe('a CRM field is an audience', () => {
       lifecycleStage: 'customer',
       companyId: 'co-acme',
       custom: { plan: 'enterprise' },
+      lastEmailEngagementAtMs: Date.now(),
       facets: {
         'group-other': {
           ownerUid: 'uid-a',
           lifecycleStage: 'customer',
           companyId: 'co-acme',
           custom: { plan: 'enterprise' },
+          lastEmailEngagementAtMs: Date.now(),
         },
       },
     }
@@ -912,6 +941,7 @@ describe('a CRM field is an audience', () => {
       { sources: ['contacts'], lifecycleStages: ['customer'] },
       { sources: ['contacts'], companyIds: ['co-acme'] },
       { sources: ['contacts'], custom: [{ key: 'plan', op: 'eq', value: 'enterprise' }] },
+      { sources: ['contacts'], engagedWithinDays: 30 },
     ]) {
       const result = await materializeDynamicList({
         listRef: listRef(),
