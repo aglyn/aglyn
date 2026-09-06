@@ -27,16 +27,20 @@
  * from `contacts-bulk-writes.ts`, so the bar cannot spell a facet path
  * differently from the drawer.
  *
- * ## It appears when something is selected, and says how many
+ * ## The chrome is the shared frame
  *
- * Nothing renders with an empty selection: a bar of disabled buttons above
- * a list is a question the reader has to dismiss. With a selection it says
- * "n selected", so every button's object is on screen beside it.
+ * This bar settled how a bar over a table reads — it appears only for a
+ * selection and says how many, its actions sit in one wrapping row with
+ * Clear at the end, and whatever the last action could not do is listed by
+ * name in an alert under it — and the companies, deals and tasks bars were
+ * built on that shape as `CrmBulkBarFrame` and `useCrmBulkApply` (AGL-2621).
+ * The contacts bar now stands on the same two (AGL-2635): what is its own is
+ * the actions, the dialog's field, the audience door, and the writers.
  *
  * ## A refused row is named
  *
  * The writes go in batches with a per-row fallback, and whatever the store
- * refused comes back by address into an alert under the bar — not into a
+ * refused comes back by address into the alert under the bar — not into a
  * count, and not into the console. A merchant who tagged four hundred people
  * and got three hundred and ninety-eight needs the two addresses.
  *
@@ -57,19 +61,7 @@ import {
   CRM_COLLECTIONS,
 } from '@aglyn/aglyn'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
-import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import {
-  Alert,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  MenuItem,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material'
+import { Button, MenuItem, TextField } from '@mui/material'
 import {
   deleteDoc,
   doc,
@@ -79,6 +71,8 @@ import {
 } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
 import { useFirestore, useOrgMemberOptions } from '@aglyn/tenant-feature-instance'
+import { useCrmBulkApply } from '../hooks/use-crm-bulk-apply'
+import { useCrmScope } from '../hooks/use-crm-scope'
 import {
   companyCountDeltas,
   normalizeBulkTag,
@@ -87,8 +81,6 @@ import {
   planRemoveTag,
   planSetCompany,
   planSetFacetField,
-  runContactBulkWrites,
-  type ContactBulkOutcome,
   type ContactBulkPlan,
   type ContactBulkRow,
   type ContactBulkWrite,
@@ -100,14 +92,20 @@ import {
   contactsCsv,
   downloadTextFile,
 } from '../model/contacts-csv'
+import { runCrmBulkWrites } from '../model/crm-bulk-writes'
 import AddToListDialog from './add-to-list-dialog'
-import { useCrmScope } from '../hooks/use-crm-scope'
 import {
   CompanyPicker,
   type CompanyOption,
   useCompanyOptions,
   useCreateCompany,
 } from './company-picker'
+import {
+  type CrmBulkNoun,
+  CrmBulkBarFrame,
+  CrmBulkValueDialog,
+  countNoun,
+} from './crm-bulk-bar-frame'
 
 export interface ContactsBulkBarProps {
   /** The site the list is read under, or `null` at the organization level. */
@@ -135,6 +133,8 @@ export interface ContactsBulkBarProps {
   csv?: ContactCsvOptions
 }
 
+const NOUN: CrmBulkNoun = { singular: 'contact', plural: 'contacts' }
+
 /** The one small dialog the value-taking actions share. */
 type PendingAction = 'add-tag' | 'remove-tag' | 'owner' | 'stage' | 'company'
 
@@ -148,7 +148,7 @@ const ACTION_TITLES: Record<PendingAction, string> = {
 
 /** How a finished action reads, given how many rows it reached. */
 const doneSentence = (action: PendingAction | 'detach', done: number): string => {
-  const people = done === 1 ? '1 contact' : `${done.toLocaleString()} contacts`
+  const people = countNoun(done, NOUN)
   switch (action) {
     case 'add-tag':
       return `Tagged ${people}`
@@ -183,8 +183,8 @@ function ContactsBulkBarBody(props: ContactsBulkBarProps) {
   const { hostId, org, scope, consentGroup, rows, selected, onSelectedChange, csv } =
     props
   const firestore = useFirestore()
-  const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
+  const { busy, report, apply, dismissReport } = useCrmBulkApply()
 
   const selectedRows = useMemo(() => {
     const chosen = new Set(selected)
@@ -194,12 +194,7 @@ function ContactsBulkBarBody(props: ContactsBulkBarProps) {
   const [pending, setPending] = useState<PendingAction | null>(null)
   const [value, setValue] = useState('')
   const [company, setCompany] = useState<CompanyOption | null>(null)
-  const [busy, setBusy] = useState(false)
   const [listOpen, setListOpen] = useState(false)
-  /** What the last action could not do, by address, until dismissed. */
-  const [report, setReport] = useState<
-    Array<{ email: string; reason: string }> | null
-  >(null)
 
   /*
    * The roster, read only while the owner dialog is open. A bulk bar sits on
@@ -227,10 +222,11 @@ function ContactsBulkBarBody(props: ContactsBulkBarProps) {
   /**
    * The Firestore writers the runner drives — a batch, and a single write.
    *
-   * A write that moves a company's contacts count carries the delta, and
-   * the count lands in the SAME commit as the contact: summed per company
-   * across a batch, so four hundred people set to Acme are one `increment`
-   * on Acme, and applied on its own for the one row a per-row retry writes.
+   * The bar's own pair rather than `crmBulkWriters`, because a write that
+   * moves a company's contacts count carries the delta, and the count lands
+   * in the SAME commit as the contact: summed per company across a batch, so
+   * four hundred people set to Acme are one `increment` on Acme, and applied
+   * on its own for the one row a per-row retry writes.
    */
   const writers = useMemo(() => {
     const refFor = (id: string) =>
@@ -276,42 +272,16 @@ function ContactsBulkBarBody(props: ContactsBulkBarProps) {
     }
   }, [firestore, scope])
 
-  /** Apply a plan, then say what happened — the refused rows by address. */
-  const apply = useCallback(
-    async (action: PendingAction | 'detach', plan: ContactBulkPlan) => {
-      setBusy(true)
-      let outcome: ContactBulkOutcome = { done: 0, refused: [] }
-      try {
-        outcome = await runContactBulkWrites(writers, plan.writes)
-      } catch (error) {
-        console.error(error)
-        enqueueSnackbar('An error has occurred', {
-          variant: 'error',
-          allowDuplicate: true,
-        })
-        setBusy(false)
-        return outcome
-      }
-      const left: ContactBulkSkip[] = [
-        ...plan.skipped,
-        ...outcome.refused.map((row) => ({ email: row.email, reason: row.error })),
-      ]
-      setReport(left.length ? left : null)
-      enqueueSnackbar(
-        outcome.done
-          ? doneSentence(action, outcome.done)
-          : plan.writes.length
-            ? 'Nothing was changed'
-            : 'Nothing to change',
-        {
-          variant: outcome.done && !left.length ? 'success' : 'warning',
-          persist: false,
-        },
-      )
-      setBusy(false)
-      return outcome
-    },
-    [writers, enqueueSnackbar],
+  /** Apply a plan through the shared runner, with every refusal named by address. */
+  const runPlan = useCallback(
+    (action: PendingAction | 'detach', plan: ContactBulkPlan) =>
+      apply({
+        attempted: plan.writes.length,
+        skipped: plan.skipped.map((row) => ({ label: row.email, reason: row.reason })),
+        job: () => runCrmBulkWrites(writers, plan.writes, (write) => write.email),
+        done: (count) => doneSentence(action, count),
+      }),
+    [apply, writers],
   )
 
   const handleApply = useCallback(async () => {
@@ -372,8 +342,8 @@ function ContactsBulkBarBody(props: ContactsBulkBarProps) {
     if (!byGroup.size && !unheld.length) return
     const action = pending
     setPending(null)
-    await apply(action, plan)
-  }, [pending, scope, consentGroup, value, company, selectedRows, apply])
+    await runPlan(action, plan)
+  }, [pending, scope, consentGroup, value, company, selectedRows, runPlan])
 
   const handleExport = useCallback(() => {
     downloadTextFile(
@@ -402,121 +372,50 @@ function ContactsBulkBarBody(props: ContactsBulkBarProps) {
       .then(() => true)
       .catch(() => false)
     if (!confirmed) return
-    const outcome = await apply(
+    const outcome = await runPlan(
       'detach',
       planDetach(selectedRows, consentGroup, Date.now()),
     )
     // The rows that went are gone from the table; the refused ones stay
     // selected, so the reader can see which they are and try again.
-    const refused = new Set(outcome.refused.map((row) => row.email))
+    const refused = new Set(outcome.refused.map((row) => row.label))
     onSelectedChange(
       selectedRows
         .filter((row) => refused.has(String(row.email || row.$id)))
         .map((row) => row.$id),
     )
-  }, [scope, selectedRows, confirm, apply, consentGroup, onSelectedChange])
+  }, [scope, selectedRows, confirm, runPlan, consentGroup, onSelectedChange])
 
   const emails = selectedRows
     .map((row) => String(row.email ?? '').trim())
     .filter(Boolean)
 
   return (
-    <Stack spacing={1}>
-      <Stack
-        direction="row"
-        spacing={1}
-        useFlexGap
-        sx={{
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          rowGap: 1,
-          p: 1,
-          border: 1,
-          borderColor: 'divider',
-          borderRadius: 1,
-        }}
-      >
-        <Typography variant="body2" sx={{ mr: 1 }}>
-          {`${selected.length.toLocaleString()} selected`}
-        </Typography>
-        <Button size="small" disabled={busy || !scope} onClick={() => openAction('add-tag')}>
-          {'Add tag'}
-        </Button>
-        <Button
-          size="small"
-          disabled={busy || !scope}
-          onClick={() => openAction('remove-tag')}
-        >
-          {'Remove tag'}
-        </Button>
-        <Button size="small" disabled={busy || !scope} onClick={() => openAction('owner')}>
-          {'Set owner'}
-        </Button>
-        <Button size="small" disabled={busy || !scope} onClick={() => openAction('stage')}>
-          {'Set stage'}
-        </Button>
-        <Button size="small" disabled={busy || !scope} onClick={() => openAction('company')}>
-          {'Set company'}
-        </Button>
-        <Button
-          size="small"
-          disabled={busy || !scope || !emails.length || !createHostId}
-          onClick={() => setListOpen(true)}
-        >
-          {'Add to list'}
-        </Button>
-        <Button size="small" disabled={busy} onClick={handleExport}>
-          {'Export CSV'}
-        </Button>
-        {/*
-          Only under a site. The act is a DETACH from the viewing site's
-          CRM, and at the organization level there is no viewing site — an
-          org-wide member removes a person from a site by opening the record
-          under that site.
-        */}
-        {consentGroup ? (
-          <Button
-            size="small"
-            color="error"
-            disabled={busy || !scope}
-            onClick={() => void handleDetach()}
+    <CrmBulkBarFrame
+      count={selected.length}
+      noun={NOUN}
+      busy={busy}
+      onClear={() => onSelectedChange([])}
+      report={report}
+      onDismissReport={dismissReport}
+      extras={
+        <>
+          <CrmBulkValueDialog
+            open={pending !== null}
+            title={pending ? ACTION_TITLES[pending] : ''}
+            count={selected.length}
+            noun={NOUN}
+            busy={busy}
+            canApply={
+              !(pending === 'stage' && !value) &&
+              !(
+                (pending === 'add-tag' || pending === 'remove-tag') &&
+                !normalizeBulkTag(value)
+              )
+            }
+            onClose={() => setPending(null)}
+            onApply={() => void handleApply()}
           >
-            {'Remove from this site'}
-          </Button>
-        ) : null}
-        <Button size="small" disabled={busy} onClick={() => onSelectedChange([])}>
-          {'Clear'}
-        </Button>
-      </Stack>
-      {report ? (
-        <Alert severity="warning" onClose={() => setReport(null)}>
-          <Typography variant="body2">
-            {report.length === 1
-              ? 'One contact was not changed:'
-              : `${report.length} contacts were not changed:`}
-          </Typography>
-          {report.map((row) => (
-            <Typography key={`${row.email}:${row.reason}`} variant="caption" component="div">
-              {`${row.email} — ${row.reason}`}
-            </Typography>
-          ))}
-        </Alert>
-      ) : null}
-
-      <Dialog
-        open={pending !== null}
-        onClose={busy ? undefined : () => setPending(null)}
-        fullWidth
-        maxWidth="xs"
-      >
-        <DialogTitle>{pending ? ACTION_TITLES[pending] : ''}</DialogTitle>
-        <DialogContent>
-          <Stack spacing={1.5} sx={{ pt: 1 }}>
-            <Typography variant="body2" color="text.secondary">
-              {`Applies to ${selected.length.toLocaleString()} selected ${
-                selected.length === 1 ? 'contact' : 'contacts'
-              }.`}
-            </Typography>
             {pending === 'add-tag' || pending === 'remove-tag' ? (
               <TextField
                 autoFocus
@@ -573,37 +472,65 @@ function ContactsBulkBarBody(props: ContactsBulkBarProps) {
                 helperText="Leave it empty to unlink the selected contacts from their companies."
               />
             ) : null}
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setPending(null)} disabled={busy}>
-            {'Cancel'}
-          </Button>
-          <Button
-            variant="contained"
-            disabled={
-              busy ||
-              (pending === 'stage' && !value) ||
-              ((pending === 'add-tag' || pending === 'remove-tag') &&
-                !normalizeBulkTag(value))
-            }
-            onClick={() => void handleApply()}
-          >
-            {'Apply'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {listOpen ? (
-        <AddToListDialog
-          open
-          onClose={() => setListOpen(false)}
-          hostId={createHostId}
-          scope={scope}
-          emails={emails}
-        />
+          </CrmBulkValueDialog>
+          {listOpen ? (
+            <AddToListDialog
+              open
+              onClose={() => setListOpen(false)}
+              hostId={createHostId}
+              scope={scope}
+              emails={emails}
+            />
+          ) : null}
+        </>
+      }
+    >
+      <Button size="small" disabled={busy || !scope} onClick={() => openAction('add-tag')}>
+        {'Add tag'}
+      </Button>
+      <Button
+        size="small"
+        disabled={busy || !scope}
+        onClick={() => openAction('remove-tag')}
+      >
+        {'Remove tag'}
+      </Button>
+      <Button size="small" disabled={busy || !scope} onClick={() => openAction('owner')}>
+        {'Set owner'}
+      </Button>
+      <Button size="small" disabled={busy || !scope} onClick={() => openAction('stage')}>
+        {'Set stage'}
+      </Button>
+      <Button size="small" disabled={busy || !scope} onClick={() => openAction('company')}>
+        {'Set company'}
+      </Button>
+      <Button
+        size="small"
+        disabled={busy || !scope || !emails.length || !createHostId}
+        onClick={() => setListOpen(true)}
+      >
+        {'Add to list'}
+      </Button>
+      <Button size="small" disabled={busy} onClick={handleExport}>
+        {'Export CSV'}
+      </Button>
+      {/*
+        Only under a site. The act is a DETACH from the viewing site's
+        CRM, and at the organization level there is no viewing site — an
+        org-wide member removes a person from a site by opening the record
+        under that site.
+      */}
+      {consentGroup ? (
+        <Button
+          size="small"
+          color="error"
+          disabled={busy || !scope}
+          onClick={() => void handleDetach()}
+        >
+          {'Remove from this site'}
+        </Button>
       ) : null}
-    </Stack>
+    </CrmBulkBarFrame>
   )
 }
 ContactsBulkBarBody.displayName = 'ContactsBulkBarBody'
