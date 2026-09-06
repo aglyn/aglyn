@@ -484,8 +484,19 @@ export const CRM_TASK_MAX_DUE_DAYS = 365
 export type CrmTaskPriority = 'low' | 'normal' | 'high'
 export type CrmTaskStatus = 'open' | 'done'
 
-/** `orgs/{orgId}/crmTasks/{taskId}`. */
-export interface CrmTask extends CrmScoped {
+/**
+ * `orgs/{orgId}/crmTasks/{taskId}`.
+ *
+ * The one CRM record that may belong to NO site (AGL-2637): a task filed
+ * from the organization's own hub carries `hostId: null` and the org scope
+ * token alone, because a to-do owed by the organization — renew the
+ * insurance, chase the agency's own invoice — is not captured by any brand.
+ * Every other record is a fact about a person some site met, so
+ * `CrmScoped` keeps its site required.
+ */
+export interface CrmTask extends Omit<CrmScoped, 'hostId'> {
+  /** The site that created it, or `null` for the organization's own task. */
+  hostId: string | null
   title: string
   notes?: string
   kind: CrmTaskKind
