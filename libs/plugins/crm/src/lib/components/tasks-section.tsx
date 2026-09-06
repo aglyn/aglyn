@@ -17,7 +17,6 @@
 'use client'
 
 import {
-  consentGroupForHost,
   type ConsolePluginPageProps,
   CRM_COLLECTIONS,
   pluginDocsHelp,
@@ -25,6 +24,7 @@ import {
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { useCrmSavedView } from '../hooks/use-crm-saved-view'
+import { useCrmScope } from '../hooks/use-crm-scope'
 import { useCrmViewGrid } from '../hooks/use-crm-view-grid'
 import CrmViewsControl from './crm-views-control'
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
@@ -104,10 +104,10 @@ export function TasksSection(props: ConsolePluginPageProps) {
   const { enqueueSnackbar } = useSnackbar()
   const nowMs = useNowMs()
   const routes = useMemo(() => crmRoutes(basePath), [basePath])
-  const groupId = useMemo(
-    () => consentGroupForHost(orgRecord ?? null, hostId).groupId,
-    [orgRecord, hostId],
-  )
+  // The viewing group a linked contact is named through, or `null` at the
+  // organization level, where each is named through its own holder.
+  const { consentGroup } = useCrmScope({ hostId, org: orgRecord })
+  const groupId = consentGroup?.groupId ?? null
 
   /*
    * Which of the six task views is open is the saved VIEW'S (AGL-2617): a
@@ -145,7 +145,7 @@ export function TasksSection(props: ConsolePluginPageProps) {
       }),
     [tasks, routes],
   )
-  const nameOf = useCrmRecordNames({ orgId, groupId, records: linked })
+  const nameOf = useCrmRecordNames({ orgId, groupId, org: orgRecord, records: linked })
 
   const [drawer, setDrawer] = useState<{ open: boolean; task: CrmTaskRow | null }>({
     open: false,
@@ -176,7 +176,9 @@ export function TasksSection(props: ConsolePluginPageProps) {
           )
           enqueueSnackbar('Task reopened', { variant: 'success' })
         } else {
-          await completeCrmTask(user, { hostId, taskId: task.$id })
+          // The route resolves the org and emits the event for a site: the
+          // mounted one, or at the organization level the task's own.
+          await completeCrmTask(user, { hostId: hostId ?? task.hostId, taskId: task.$id })
           enqueueSnackbar('Task completed', { variant: 'success' })
         }
       } catch (cause) {

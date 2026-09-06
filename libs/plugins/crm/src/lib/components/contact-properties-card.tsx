@@ -54,7 +54,8 @@ import {
 import type { OrgMembers } from './use-org-members'
 
 export interface ContactPropertiesCardProps {
-  hostId: string
+  /** The site the record is read under, or `null` at the organization level. */
+  hostId: string | null
   /** The org document the shell passed, for the company picker's scope. */
   org?: Partial<AglynOrgBilling> | null
   /** The row, flattened through the viewing group's facet. */
@@ -134,7 +135,10 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
-  const logActivity = useHostActivityLogger(hostId)
+  // The site a stage move is routed through and the act is logged in: the
+  // mounted one, or at the organization level the holder's own (AGL-2630).
+  const siteHostId = hostId ?? (consentGroup.hostId || null)
+  const logActivity = useHostActivityLogger(siteHostId ?? undefined)
   const companies = useCompanyOptions({ hostId, org })
   const createCompany = useCreateCompany({ hostId, org })
 
@@ -265,9 +269,9 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
         id: record.$id,
         name: record.name || record.email,
       })
-      if (stageMoved && lifecycleStage) {
+      if (stageMoved && lifecycleStage && siteHostId) {
         try {
-          await setContactStage(user, hostId, record.$id, lifecycleStage)
+          await setContactStage(user, siteHostId, record.$id, lifecycleStage)
         } catch (error) {
           // The rest of the profile is saved; only the move was refused, and
           // the route's own sentence says why.
@@ -296,7 +300,7 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
     consentGroup.groupId,
     enqueueSnackbar,
     firestore,
-    hostId,
+    siteHostId,
     jobTitle,
     lifecycleStage,
     logActivity,

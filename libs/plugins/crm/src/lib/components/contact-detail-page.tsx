@@ -26,7 +26,6 @@ import {
   useFirestore,
   useFirestoreDoc,
   useHostActivityLogger,
-  useOrgDataScope,
 } from '@aglyn/tenant-feature-instance'
 import { Stack, Tooltip, Typography } from '@mui/material'
 import {
@@ -38,7 +37,9 @@ import {
 } from 'firebase/firestore'
 import { useParams, useRouter } from 'next/navigation'
 import { useCallback, useMemo } from 'react'
-import { contactRecordFromDoc } from '../model/contact-record'
+import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
+import { useCrmScope } from '../hooks/use-crm-scope'
+import { contactPrimaryGroup, contactRecordFromDoc } from '../model/contact-record'
 import { type CrmDetailPageProps, crmRoutes } from '../model/crm-routes'
 import ContactAssociationsCard from './contact-associations-card'
 import ContactCustomFieldsCard from './contact-custom-fields-card'
@@ -105,16 +106,11 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const logActivity = useHostActivityLogger(hostId)
-  const { scope, orgId } = useOrgDataScope({ hostId })
-
-  // The controller this page is showing — the sites declared to be one
-  // sender, or this site alone — resolved from the org document the shell
-  // already passed, so it costs no read.
-  const consentGroup = useMemo(
-    () => Aglyn.consentGroupForHost(org as Record<string, unknown>, hostId),
-    [org, hostId],
-  )
+  // The org root and the viewing group from the one scope hook (AGL-2614);
+  // at the organization level the group is `null` and resolved per person
+  // below (AGL-2630).
+  const { scope, orgId, consentGroup: viewingGroup } = useCrmScope({ hostId, org })
+  const mount = useCrmOrgMount()
 
   const {
     data: row,
@@ -125,11 +121,37 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
     [firestore, scope, id],
     { idField: '$id' },
   )
+  /*
+   * The controller this page is showing. Under a site: the sites declared
+   * to be one sender, or this site alone — resolved from the org document
+   * the shell already passed, so it costs no read. At the ORGANIZATION
+   * level: the person's own PRIMARY holder, the first capturing site's
+   * group, so an org-wide member reads the profile that site keeps and an
+   * edit goes back to the same facet; the "Known by" card says which other
+   * sites hold one.
+   */
+  const consentGroup = useMemo(
+    () => viewingGroup ?? contactPrimaryGroup(row, org as Record<string, unknown>),
+    [viewingGroup, row, org],
+  )
+  /**
+   * The SITE the page acts as, for what needs one — the lead lookup, the
+   * campaign filing, the site's activity feed: the mounted site, or the
+   * primary holder's, or nothing for a row no site has captured.
+   */
+  const siteHostId = hostId ?? (consentGroup.hostId || null)
+  const logActivity = useHostActivityLogger(siteHostId ?? undefined)
   const record = useMemo(
     () => (row ? contactRecordFromDoc(row, consentGroup) : null),
     [row, consentGroup],
   )
   const notFound = Boolean(scope) && status !== 'loading' && !row
+  /** How the site the delete detaches from is named — see `handleRemove`. */
+  const siteLabel = hostId
+    ? 'this site'
+    : siteHostId
+      ? (mount?.siteName(siteHostId) ?? siteHostId)
+      : 'its site'
 
   // The roster, for the owner picker and the owner's name — read because a
   // record page is the one place both are shown.
@@ -171,7 +193,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
     const confirmed = await confirm({
       title: 'Delete this contact?',
       description:
-        `"${record?.email ?? id}" is removed from this site's ` +
+        `"${record?.email ?? id}" is removed from ${siteLabel}'s ` +
         'Contacts, along with its notes, tags and timeline. Other sites ' +
         'that captured the same person keep their own records. Their form ' +
         'submissions, orders, bookings, and membership records are ' +
@@ -204,7 +226,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
       enqueueSnackbar(
         plan.action === 'delete'
           ? 'Contact deleted'
-          : 'Contact removed from this site',
+          : `Contact removed from ${siteLabel}`,
         { variant: 'success', persist: false },
       )
       router.push(routes.section('contacts'))
@@ -227,6 +249,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
     routes,
     row,
     scope,
+    siteLabel,
   ])
 
   const overflowItems: RowActionsMenuItem[] = [
@@ -341,7 +364,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
             members={members}
           />
           <ContactAssociationsCard
-            hostId={hostId}
+            hostId={siteHostId}
             record={record}
             row={row}
             consentGroup={consentGroup}

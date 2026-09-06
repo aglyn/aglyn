@@ -34,7 +34,8 @@ import type { DealFormValues } from '../model/deal-form-model'
 import { DealEditDrawer } from './deal-edit-drawer'
 
 export interface LinkedDealsCardProps {
-  hostId: string
+  /** The site the record is read under, or `null` at the organization level. */
+  hostId: string | null
   org: CrmOrgDoc
   /** The CRM surface's own path, for links into deals. */
   basePath: string

@@ -118,6 +118,7 @@ export function CompanyDetailPage(props: CrmDetailPageProps) {
           companyId={id}
           companyName={String(company.name ?? '')}
           crmScope={crmScope}
+          org={org as Record<string, unknown> | undefined}
           routes={routes}
         />
         <CompanyDealsCard

@@ -54,7 +54,8 @@ export interface CompanyPropertiesCardProps {
   company: Partial<CrmCompany> & { $id: string }
   /** Whether the document the card holds is server-confirmed. */
   seed: { fromCache: boolean; unreadable: boolean }
-  hostId: string
+  /** The site the record is read under, or `null` at the organization level. */
+  hostId: string | null
   org?: Partial<AglynOrgBilling>
   crmScope: CrmScope
   members: OrgMemberOptions
@@ -119,7 +120,9 @@ export function CompanyPropertiesCard(props: CompanyPropertiesCardProps) {
   const firestore = useFirestore()
   const { confirm } = useConfirmationContext()
   const { enqueueSnackbar } = useSnackbar()
-  const logActivity = useHostActivityLogger(hostId)
+  // The site whose feed the act is logged in: the mounted one, or at the
+  // organization level the company's own (AGL-2630).
+  const logActivity = useHostActivityLogger(hostId ?? company.hostId ?? undefined)
   const [editing, setEditing] = useState(false)
   const [deleting, setDeleting] = useState(false)
 

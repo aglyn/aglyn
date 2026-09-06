@@ -55,7 +55,8 @@ const EMPTY: ContactCampaignEmailsState = {
  * renders and would re-bill the page on every paint.
  */
 export function useContactCampaignEmails(
-  hostId: string,
+  /** The site whose campaigns are asked about; nothing is asked without one. */
+  hostId: string | null,
   contactId: string,
 ): ContactCampaignEmailsState {
   const api = useCrmApi(hostId)
@@ -64,7 +65,7 @@ export function useContactCampaignEmails(
   useEffect(() => {
     let cancelled = false
     setState(EMPTY)
-    if (!contactId) return undefined
+    if (!contactId || !hostId) return undefined
     api('contact-email-history', { contactId })
       .then(({ response, payload }) => {
         if (cancelled) return
@@ -88,7 +89,7 @@ export function useContactCampaignEmails(
     return () => {
       cancelled = true
     }
-  }, [api, contactId])
+  }, [api, contactId, hostId])
 
   return state
 }

@@ -59,11 +59,12 @@ import {
   writeBatch,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
-import type { CrmScope } from '../hooks/use-crm-scope'
+import { type CrmScope, crmVisibleToClause } from '../hooks/use-crm-scope'
 import {
   CONTACT_COMPANY_IDS_FIELD,
   contactCompanyLinkWrites,
 } from '../model/companies'
+import { contactPrimaryGroup } from '../model/contact-record'
 import type { CrmRoutes } from '../model/crm-routes'
 
 /** How many matches a search offers to link. */
@@ -76,6 +77,8 @@ export interface CompanyContactsCardProps {
   companyId: string
   companyName: string
   crmScope: CrmScope
+  /** The org document, for each contact's own holder at the organization level. */
+  org?: Record<string, unknown> | null
   routes: CrmRoutes
 }
 
@@ -123,10 +126,20 @@ interface ContactRow {
  * and the row says so before the click.
  */
 export function CompanyContactsCard(props: CompanyContactsCardProps) {
-  const { companyId, companyName, crmScope, routes } = props
+  const { companyId, companyName, crmScope, org, routes } = props
   const { scope, consentGroup, visibleTo } = crmScope
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
+  /**
+   * The holder a person is read and linked through: the viewing group under
+   * a site; at the organization level (AGL-2630) each person's own primary
+   * holder, so the link lands on the facet the record page edits.
+   */
+  const groupIdOf = useCallback(
+    (row: Record<string, unknown>) =>
+      consentGroup?.groupId ?? contactPrimaryGroup(row, org ?? null).groupId,
+    [consentGroup, org],
+  )
 
   const {
     rows: contactDocs,
@@ -151,10 +164,10 @@ export function CompanyContactsCard(props: CompanyContactsCardProps) {
   )
   const contacts: ContactRow[] = contactDocs.map((row) => ({
     $id: row.$id,
-    name: contactDisplayName(row, consentGroup.groupId),
+    name: contactDisplayName(row, groupIdOf(row)),
     email: String(row['email'] ?? ''),
     linkedByThisHolder:
-      readContactFacet(row, consentGroup.groupId).companyId === companyId,
+      readContactFacet(row, groupIdOf(row)).companyId === companyId,
     data: row,
   }))
 
@@ -212,7 +225,8 @@ export function CompanyContactsCard(props: CompanyContactsCardProps) {
     setSearchError('')
     try {
       const contactsRef = collection(firestore, scope[0], scope[1], 'contacts')
-      const scoped = where('visibleTo', 'array-contains-any', visibleTo)
+      // Absent at the organization level, where the tokens are `null` (AGL-2630).
+      const scoped = crmVisibleToClause(visibleTo)
       let found
       if (raw.includes('@')) {
         const email = normalizeContactEmail(raw)
@@ -221,14 +235,14 @@ export function CompanyContactsCard(props: CompanyContactsCardProps) {
           return
         }
         found = await getDocs(
-          query(contactsRef, scoped, where('email', '==', email), limit(SEARCH_LIMIT)),
+          query(contactsRef, ...scoped, where('email', '==', email), limit(SEARCH_LIMIT)),
         )
       } else {
         const key = nameSearchKey(raw)
         found = await getDocs(
           query(
             contactsRef,
-            scoped,
+            ...scoped,
             orderBy('nameLower'),
             startAt(key),
             endAt(`${key}${HIGH}`),
@@ -241,11 +255,10 @@ export function CompanyContactsCard(props: CompanyContactsCardProps) {
           const data = snapshot.data()
           return {
             $id: snapshot.id,
-            name: contactDisplayName(data, consentGroup.groupId),
+            name: contactDisplayName(data, groupIdOf(data)),
             email: String(data['email'] ?? ''),
             linkedByThisHolder:
-              readContactFacet(data, consentGroup.groupId).companyId ===
-              companyId,
+              readContactFacet(data, groupIdOf(data)).companyId === companyId,
             data,
           }
         }),
@@ -257,7 +270,7 @@ export function CompanyContactsCard(props: CompanyContactsCardProps) {
     } finally {
       setSearching(false)
     }
-  }, [scope, searching, term, firestore, visibleTo, consentGroup, companyId])
+  }, [scope, searching, term, firestore, visibleTo, groupIdOf, companyId])
 
   const setLink = useCallback(
     async (row: ContactRow, companyIdOrNull: string | null) => {
@@ -269,9 +282,10 @@ export function CompanyContactsCard(props: CompanyContactsCardProps) {
        * the link moves lands in the same commit, so the figure above this
        * table and the one on the companies list cannot disagree.
        */
+      const groupId = groupIdOf(row.data)
       const link = contactCompanyLinkWrites(
-        readContactCompanyLink(row.data, consentGroup.groupId),
-        consentGroup.groupId,
+        readContactCompanyLink(row.data, groupId),
+        groupId,
         companyIdOrNull,
         companyIdOrNull ? companyName : null,
       )
@@ -309,7 +323,7 @@ export function CompanyContactsCard(props: CompanyContactsCardProps) {
         })
       }
     },
-    [scope, consentGroup, firestore, bumpMembership, enqueueSnackbar, companyName],
+    [scope, groupIdOf, firestore, bumpMembership, enqueueSnackbar, companyName],
   )
 
   const denied = status === 'error'
@@ -381,7 +395,7 @@ export function CompanyContactsCard(props: CompanyContactsCardProps) {
             ) : null}
             {results?.map((row) => {
               const elsewhere =
-                readContactFacet(row.data, consentGroup.groupId).companyId
+                readContactFacet(row.data, groupIdOf(row.data)).companyId
               return (
                 <Stack
                   key={row.$id}

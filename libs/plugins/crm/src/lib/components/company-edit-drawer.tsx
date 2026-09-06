@@ -61,11 +61,17 @@ import {
   companyDraftFrom,
   EMPTY_COMPANY_DRAFT,
 } from '../model/companies'
+import { CrmSitePicker } from './crm-site-picker'
 
 export interface CompanyEditDrawerProps {
   open: boolean
   onClose: () => void
-  hostId: string
+  /**
+   * The site the drawer is opened under, or `null` at the organization
+   * level (AGL-2630), where a NEW company asks which site captures it and
+   * an edit keeps the company's own.
+   */
+  hostId: string | null
   org?: Partial<AglynOrgBilling> | null
   /**
    * The company being EDITED, or nothing to create one.
@@ -128,8 +134,11 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
-  const { scope, createTokens } = useCrmScope({ hostId, org })
-  const logActivity = useHostActivityLogger(hostId)
+  const { scope, createTokens, createHostId } = useCrmScope({ hostId, org })
+  // The site a new company is captured by, or the one an existing company
+  // was — and the site whose feed the act is logged in.
+  const companyHostId = company ? (company.hostId ?? null) : createHostId
+  const logActivity = useHostActivityLogger(companyHostId ?? undefined)
 
   const [draft, setDraft] = useState<CompanyDraft>(EMPTY_COMPANY_DRAFT)
   const [busy, setBusy] = useState(false)
@@ -222,6 +231,9 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
       } else {
         if (bandFull) return setError(CRM_RECORDS_BAND_FULL_MESSAGE)
         const id = createResourceUid()
+        // Held by the button until the capturing site is known; checked
+        // again here because a callback can outlive the render that held it.
+        if (!createHostId) return
         await setDoc(
           doc(firestore, scope[0], scope[1], CRM_COLLECTIONS.companies, id),
           {
@@ -235,7 +247,7 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
              */
             visibleTo: [...createTokens],
             // Provenance: the site whose console filed it, never rewritten.
-            hostId,
+            hostId: createHostId,
             createdByUid: user?.uid ?? '',
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
@@ -267,7 +279,7 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
     firestore,
     seed,
     createTokens,
-    hostId,
+    createHostId,
     user,
     logActivity,
     enqueueSnackbar,
@@ -304,6 +316,19 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
     >
       <Container gutterY>
         <Stack spacing={2}>
+          {/*
+            First, because the scope of everything below follows from it: at
+            the organization level a new company names the site that
+            captures it. Nothing under a site, and nothing on an edit — a
+            company keeps the site it was made on (AGL-2630).
+          */}
+          {company ? null : (
+            <CrmSitePicker
+              hostId={hostId}
+              disabled={busy}
+              helperText="The site this company belongs to — it decides which of your sites may see it."
+            />
+          )}
           <Typography variant="body2" color="text.secondary">
             {'The organization behind one or more of your contacts. The ' +
               'domain is what suggests this company for a person from their ' +
@@ -401,7 +426,8 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
             <Button
               variant="contained"
               color="primary"
-              disabled={busy || !scope || !draft.name.trim()}
+              // A new company waits for its capturing site.
+              disabled={busy || !scope || !draft.name.trim() || (!company && !createHostId)}
               onClick={() => void handleSave()}
             >
               {busy

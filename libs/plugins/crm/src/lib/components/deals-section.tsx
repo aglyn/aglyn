@@ -199,14 +199,14 @@ export function DealsSection(props: ConsolePluginPageProps) {
       const stage = dealStageById(pipeline, stageId)
       void track(
         deal,
-        () => api.moveToStage(deal.$id, stageId),
+        () => api.moveToStage(deal, stageId),
         `Moved to ${stage?.name ?? 'stage'}`,
       )
     },
     [api, pipeline, track],
   )
   const handleWon = useCallback(
-    (deal: DealDoc) => void track(deal, () => api.markWon(deal.$id), 'Deal won'),
+    (deal: DealDoc) => void track(deal, () => api.markWon(deal), 'Deal won'),
     [api, track],
   )
   const [losing, setLosing] = useState<DealDoc | null>(null)
@@ -216,7 +216,7 @@ export function DealsSection(props: ConsolePluginPageProps) {
       const deal = losing
       if (!deal) return
       setLosing(null)
-      void track(deal, () => api.markLost(deal.$id, reason), 'Deal marked lost')
+      void track(deal, () => api.markLost(deal, reason), 'Deal marked lost')
     },
     [api, losing, track],
   )

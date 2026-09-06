@@ -40,6 +40,7 @@ import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.com
 import { Button, Chip, Stack, Tooltip, Typography } from '@mui/material'
 import { useParams } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
+import { contactPrimaryGroup } from '../model/contact-record'
 import { ActivityRow } from './activity-list'
 import {
   type ActivityRecordLink,
@@ -202,7 +203,8 @@ function CampaignEmailRow(props: {
 CampaignEmailRow.displayName = 'CampaignEmailRow'
 
 export interface ContactTimelineCardProps {
-  hostId: string
+  /** The site the record is read under, or `null` at the organization level. */
+  hostId: string | null
   org: CrmOrg
   contactId: string
   /**
@@ -259,12 +261,19 @@ export interface ContactTimelineCardProps {
 export function ContactTimelineCard(props: ContactTimelineCardProps) {
   const { hostId, org, contactId, contact, campaignHref } = props
   const scope = useActivityScope(hostId, org)
-  const { consentGroup } = scope
   /*
    * THIS holder's captured history, and only the visits this group may see.
    * A read off the top of the document, or of another group's facet, would
    * be another business's records — the disclosure the facet shape ended.
+   * At the organization level (AGL-2630) the holder is the person's own
+   * primary one, the group the record page reads the profile through.
    */
+  const consentGroup = useMemo(
+    () =>
+      scope.consentGroup ??
+      contactPrimaryGroup(contact, (org ?? null) as Record<string, unknown> | null),
+    [scope.consentGroup, contact, org],
+  )
   const interactions = useMemo(() => {
     const facet = Aglyn.readContactFacet(contact, consentGroup.groupId)
     return Aglyn.interactionsForGroup(facet.interactions, consentGroup.hostIds)
@@ -297,7 +306,11 @@ export function ContactTimelineCard(props: ContactTimelineCardProps) {
         : null,
     [siteContext, hostId],
   )
-  const campaigns = useContactCampaignEmails(hostId, contactId)
+  // The campaign history is asked of a site: the mounted one, or the holder's.
+  const campaigns = useContactCampaignEmails(
+    hostId ?? (consentGroup.hostId || null),
+    contactId,
+  )
   // One member read for the whole stream, however many rows it has.
   const canEdit = useCanEditActivity(scope.orgId)
   const entries = useMemo(

@@ -56,10 +56,12 @@ export function DealDetailPage(props: CrmDetailPageProps) {
   const router = useRouter()
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
-  const logActivity = useHostActivityLogger(hostId)
   const { confirm } = useConfirmationContext()
   const scope = useCrmScope({ hostId, org })
   const { data: deal, status, fromCache } = useDeal(scope.orgId, id)
+  // The site whose feed the act is logged in: the mounted one, or at the
+  // organization level the deal's own (AGL-2630).
+  const logActivity = useHostActivityLogger(hostId ?? deal?.hostId ?? undefined)
   const pipelineState = usePipeline(scope.orgId, {
     hostId,
     org: (org ?? null) as Record<string, unknown> | null,
