@@ -37,7 +37,7 @@ import {
 } from 'firebase/firestore'
 import { useParams, useRouter } from 'next/navigation'
 import { useCallback, useMemo } from 'react'
-import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
+import { CrmCreateSiteDefault, useCrmOrgMount } from '../hooks/use-crm-org-mount'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import { contactPrimaryGroup, contactRecordFromDoc } from '../model/contact-record'
 import { type CrmDetailPageProps, crmRoutes } from '../model/crm-routes'
@@ -312,6 +312,10 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
   }
 
   return (
+    // A create opened from this page — a task, an activity, a deal — files
+    // under the site that captured this person unless the reader says
+    // otherwise (AGL-2630).
+    <CrmCreateSiteDefault hostId={siteHostId}>
     <Stack spacing={3}>
       <CrmRecordHeader
         kind="Contact"
@@ -460,6 +464,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
         </>
       ) : null}
     </Stack>
+    </CrmCreateSiteDefault>
   )
 }
 ContactDetailPage.displayName = 'ContactDetailPage'

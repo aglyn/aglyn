@@ -22,6 +22,7 @@ import { Stack, Typography } from '@mui/material'
 import { doc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback } from 'react'
+import { CrmCreateSiteDefault } from '../hooks/use-crm-org-mount'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import { useOrgMemberOptions } from '../hooks/use-org-member-options'
 import { type CrmDetailPageProps, crmRoutes } from '../model/crm-routes'
@@ -99,7 +100,9 @@ export function CompanyDetailPage(props: CrmDetailPageProps) {
   }
 
   return (
-    <>
+    // A create opened from this page — a task, an activity — files under
+    // the company's own site unless the reader says otherwise (AGL-2630).
+    <CrmCreateSiteDefault hostId={company.hostId ?? null}>
       {/* The properties card is the record's lead card: it publishes the
           page heading and the trail, so the cards under it say what they
           hold rather than repeating the name. */}
@@ -131,7 +134,7 @@ export function CompanyDetailPage(props: CrmDetailPageProps) {
         <RecordTasksCard hostId={hostId} org={org} basePath={basePath} companyId={id} />
         <RecordActivityCard hostId={hostId} org={org} companyId={id} />
       </Stack>
-    </>
+    </CrmCreateSiteDefault>
   )
 }
 CompanyDetailPage.displayName = 'CompanyDetailPage'

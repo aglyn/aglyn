@@ -190,4 +190,47 @@ export function useCrmOrgMount(): CrmOrgMount | null {
   return useContext(CrmOrgMountContext)
 }
 
+/**
+ * THE SITE A CREATE OPENED FROM A RECORD DEFAULTS TO (AGL-2630).
+ *
+ * A task, an activity or a deal filed from a contact's page belongs, nine
+ * times in ten, with the site that captured the contact — not with the
+ * site the reader last picked in a list's drawer. So a record page wraps
+ * its cards in this, naming its record's own capturing site, and every
+ * create under it defaults its Site picker there. A pick the reader makes
+ * INSIDE such a create is held for that page alone; the session's pick,
+ * which a create opened from a list keeps defaulting to, is untouched.
+ *
+ * Nothing under a site, nothing for a record no site has captured, and
+ * nothing for a site the mount's list does not carry — the reader may not
+ * have it: the children render as they are and the session's pick stands.
+ */
+export function CrmCreateSiteDefault(props: {
+  hostId: string | null | undefined
+  children: ReactNode
+}) {
+  const { hostId, children } = props
+  const mount = useContext(CrmOrgMountContext)
+  const [picked, setPicked] = useState<string | null>(null)
+  // Another record on the same page starts from its own site again.
+  useEffect(() => {
+    setPicked(null)
+  }, [hostId])
+  const value = useMemo<CrmOrgMount | null>(() => {
+    if (!mount || !hostId) return mount
+    if (!mount.hosts.some((host) => host.id === hostId)) return mount
+    return {
+      ...mount,
+      createHostId: picked ?? hostId,
+      setCreateHostId: setPicked,
+    }
+  }, [mount, hostId, picked])
+  return (
+    <CrmOrgMountContext.Provider value={value}>
+      {children}
+    </CrmOrgMountContext.Provider>
+  )
+}
+CrmCreateSiteDefault.displayName = 'CrmCreateSiteDefault'
+
 export default useCrmOrgMount

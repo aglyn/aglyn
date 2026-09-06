@@ -25,6 +25,7 @@ import { Button, Stack, Typography } from '@mui/material'
 import { deleteDoc, doc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
+import { CrmCreateSiteDefault } from '../hooks/use-crm-org-mount'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import { useDealStageApi } from '../hooks/use-deal-stage-api'
 import { useDeal } from '../hooks/use-deals'
@@ -109,7 +110,9 @@ export function DealDetailPage(props: CrmDetailPageProps) {
   const stage = deal ? dealStageById(pipeline, deal.stageId) : undefined
 
   return (
-    <>
+    // A create opened from this page — a task, an activity — files under
+    // the deal's own site unless the reader says otherwise (AGL-2630).
+    <CrmCreateSiteDefault hostId={deal?.hostId ?? null}>
       <Stack spacing={2}>
         <CrmRecordHeader
           kind="Deal"
@@ -227,7 +230,7 @@ export function DealDetailPage(props: CrmDetailPageProps) {
         unreadable={status === 'error'}
         fromCache={fromCache}
       />
-    </>
+    </CrmCreateSiteDefault>
   )
 }
 DealDetailPage.displayName = 'DealDetailPage'
