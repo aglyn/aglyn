@@ -196,6 +196,16 @@ company or a deal that would not fit answers `403 plan_required` with
 `code: "crm_records_quota"`, the contact stands, and the lead stays unconverted so a
 retry after the upgrade finds it where it was.
 
+A lead whose person the organization has erased at their request — the erasure
+pending, or already run and the address captured again since — answers `409 conflict`
+with `code: "person_erased"`. The erasure closed the address to capture, and a
+conversion creates the contact by capturing it; nothing is changed, and a pending
+erasure removes the lead itself when it runs. Do not retry: no plan change lifts it.
+
+The conversion is logged on the site's activity feed in the console, attributed to
+your key by its name — *API key Zapier* — the way a conversion from the console is
+attributed to the person who made it.
+
 ## Errors
 
 | Status | `type` | When |
@@ -205,7 +215,7 @@ retry after the upgrade finds it where it was.
 | `403` | `insufficient_scope` | Key lacks `crm:read` / `crm:write`. |
 | `404` | `not_found` | `"No such lead"`. |
 | `405` | `method_not_allowed` | `Allow`: `GET` on `/v1/leads`, `GET, PATCH` on one lead, `POST` on `…/convert`. |
-| `409` | `conflict` | `code: "lead_converted"` — a `status` on a converted lead. `code: "lead_not_convertible"` — the lead's address cannot become a contact. `code: "contact_not_created"` — the contact could not be created (the site's audience band may be full); nothing was changed. `code: "pipeline_has_no_stages"` — the default pipeline has no stage to open the deal in. `code: "idempotency_in_progress"`. |
+| `409` | `conflict` | `code: "lead_converted"` — a `status` on a converted lead. `code: "lead_not_convertible"` — the lead's address cannot become a contact. `code: "contact_not_created"` — the contact could not be created (the site's audience band may be full); nothing was changed. `code: "person_erased"` — the lead's person was erased from the organization at their request, or an erasure is pending; no contact can be created for the address, and nothing was changed. `code: "pipeline_has_no_stages"` — the default pipeline has no stage to open the deal in. `code: "idempotency_in_progress"`. |
 
 See [Conventions → Errors](../conventions.md#errors) for the shared envelope.
 

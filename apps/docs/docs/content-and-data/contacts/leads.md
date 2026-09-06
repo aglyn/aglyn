@@ -135,6 +135,15 @@ you to the new contact's page. Back on the lead, the card links to the
 contact, the company and the deal. A converted lead cannot be converted
 again — opening the dialog on one simply takes you to its contact.
 
+A lead whose person has an [erasure pending](#erasing-the-person) cannot be
+converted either: **Convert** stays on the page but is disabled, with the
+reason as its tooltip, until the nightly job has run — and the job removes
+the lead along with the person. If a later form fill captures the same
+address as a new lead, that lead cannot be converted: the erasure closed the
+address to capture, and a conversion is a capture, so the dialog answers
+*This person was erased from your workspace at their request, so a record
+cannot be created for this address*. Nothing is changed.
+
 The same conversion — the same contact, company and deal, through the same
 code — is available to an integration as
 [`POST /v1/leads/{id}/convert`](/api/resources/leads#convert-a-lead) on the
@@ -154,8 +163,9 @@ The menu (⋮) in the header of the lead's page also carries **Erase this
 person** — the privacy erasure, for a person who asks to be forgotten. It is
 the same request the contact record offers, filed by the lead's address: the
 person is removed from every site in the workspace, the address is closed to
-capture at once, the lead shows an **Erasure pending** banner, and the sweep
-runs with the nightly erasure job. Workspace admins only. What it removes,
+capture at once, the lead shows an **Erasure pending** banner with its
+**Convert** button disabled, and the sweep runs with the nightly erasure job.
+Workspace admins only. What it removes,
 what it keeps and what it does not reach are listed in
 [Deleting and erasing](./contact-record.md#deleting-and-erasing).
 
