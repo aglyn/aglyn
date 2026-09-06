@@ -79,6 +79,12 @@ interface PendingResponse {
   dueCount: number
   maxPerRun: number
   truncated: boolean
+  /**
+   * The PEOPLE waiting (AGL-2623) — erasure requests a workspace admin filed
+   * for one person, drained by the same run. Null when the count could not
+   * be taken, which is not the same as none.
+   */
+  people?: { pending: number; truncated: boolean; maxPerRun: number } | null
 }
 
 interface RunResponse {
@@ -250,6 +256,20 @@ export function PendingErasuresCard() {
             size="small"
             label={`${countPrefix}${pending?.pending.length ?? 0} in the queue`}
           />
+          {/*
+            The people beside the workspaces: a person's request has no hold
+            and runs with the next scheduled run, so the number is the whole
+            fact and needs no "due" split.
+          */}
+          {pending?.people ? (
+            <Chip
+              size="small"
+              color={pending.people.pending > 0 ? 'warning' : 'default'}
+              label={`${pending.people.truncated ? 'at least ' : ''}${pending.people.pending} ${
+                pending.people.pending === 1 ? 'person' : 'people'
+              } waiting`}
+            />
+          ) : null}
           <Button size="small" disabled={busy} onClick={() => void refresh()}>
             {busy ? 'Working…' : 'Refresh'}
           </Button>
