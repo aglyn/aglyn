@@ -88,7 +88,11 @@ export function useDealsByStatus(
  * and to one pipeline — the table's read. Four shapes, four indexes:
  * `(visibleTo, updatedAt DESC)`, `(visibleTo, status, updatedAt DESC)`,
  * `(visibleTo, pipelineId, updatedAt DESC)` and
- * `(visibleTo, pipelineId, status, updatedAt DESC)`.
+ * `(visibleTo, pipelineId, status, updatedAt DESC)`. At the organization
+ * level (AGL-2630) the scope clause is dropped and the same shapes ride
+ * their twins without `visibleTo` — `(status, updatedAt DESC)`,
+ * `(pipelineId, updatedAt DESC)`, `(pipelineId, status, updatedAt DESC)`;
+ * the first shape orders on one field and needs none.
  */
 export function usePagedDeals(
   orgId: string | null,
