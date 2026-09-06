@@ -146,7 +146,7 @@ export const DOCS_HELP_TOPICS = {
   bulkActions: {
     path: '/content-and-data/contacts/bulk-actions',
     title: 'Bulk actions',
-    excerpt: 'Select contacts in the CRM table and tag them, set their owner, lifecycle stage or company, add them to an email audience, export them, or remove them from this site — all at once.',
+    excerpt: 'Select rows in any CRM table — contacts, companies, deals or tasks — and act on all of them at once, or export them as a CSV that re-imports.',
   },
   catalog: {
     path: '/commerce-and-bookings/commerce/catalog',
@@ -783,7 +783,7 @@ export const DOCS_HELP_ANCHORS = {
   buildAndPublishASurvey: ['#1-create-the-dataset', '#2-add-a-screen-for-the-survey', '#3-insert-a-form-from-the-element-picker', '#4-configure-the-fields', '#5-point-the-form-at-the-dataset', '#6-publish', '#7-watch-responses-arrive', '#related'],
   buildAWorkflow: ['#1-open-the-workflows-page', '#2-choose-a-trigger', '#3-add-steps', '#4-save-and-test', '#tips', '#related'],
   buildingFeaturePlugins: ['#the-ui-half', '#the-console-half', '#how-the-shell-consumes-the-registry', '#routed-sections-agl-2501', '#which-registration-owns-a-path', '#gating-a-section', '#loading-org-gated-and-dynamic-agl-417', '#extending-beyond-pages-slots-providers-runtimes-hooks-agl-418419', '#remote-bundles-the-trusted-realm-tier-agl-420', '#the-server-half-api-routes', '#shared-server-runtime-aglyntenant-runtime', '#project-setup', '#reference-implementations'],
-  bulkActions: ['#what-you-can-do-with-a-selection', '#when-a-contact-cannot-be-changed', '#adding-people-to-an-audience', '#related'],
+  bulkActions: ['#contacts', '#the-contacts-file', '#companies', '#deals', '#tasks', '#when-a-row-cannot-be-changed', '#adding-people-to-an-audience', '#related'],
   catalog: ['#products-options-and-variants', '#billing-modes-and-subscriptions', '#categories-and-tags', '#collections', '#slugs', '#merchant-center-feed', '#related'],
   comingSoonLaunch: ['#1-build-the-coming-soon-page', '#the-notify-me-form', '#2-make-it-the-home-page', '#3-keep-everything-else-out-of-search', '#while-nothing-is-ready-the-site-wide-switch', '#once-youre-launching-page-by-page-per-screen-visibility', '#4-collect-the-signups', '#5-launch-day-reverse-every-step', '#6-verify-it-actually-worked', '#related'],
   commerce: ['#products-hub', '#inventory', '#reserved-stock', '#stock-movements', '#gift-cards', '#recovery-and-alerts', '#orders', '#orders-screen', '#order-statuses', '#order-money-tiles', '#a-lost-dispute', '#shipping--taxes', '#lodging-tax-on-reservations', '#storefront-sales-tax', '#destination-coverage', '#dropshipping', '#related'],
@@ -889,7 +889,7 @@ export const DOCS_HELP_ANCHORS = {
   supportQueue: ['#triage', '#notifications', '#related'],
   supportTiers: ['#why-enterprise-is-in-hours-not-business-days', '#what-starts-and-stops-the-clock', '#where-to-see-it'],
   supportTriage: ['#why-this-exists', '#1-order-the-queue', '#not-a-support-ticket', '#3-the-billing-answers', '#4-acting-on-the-customers-account', '#escalation', '#related'],
-  tasks: ['#the-tasks-page', '#creating-a-task', '#assigning-a-task-to-someone-else', '#completing-and-reopening', '#tasks-on-a-contact-company-or-deal', '#the-dashboard-card', '#who-can-do-what', '#related'],
+  tasks: ['#the-tasks-page', '#selecting-exporting-and-acting-on-many', '#creating-a-task', '#assigning-a-task-to-someone-else', '#completing-and-reopening', '#tasks-on-a-contact-company-or-deal', '#the-dashboard-card', '#who-can-do-what', '#related'],
   team: ['#team-roles', '#organizations', '#three-kinds-of-user', '#site-roles', '#what-a-site-collaborator-sees', '#site-membership', '#visitor-record-ceiling', '#seats', '#related'],
   templatesLibrary: ['#the-three-kinds', '#installing-from-the-marketplace', '#saving-something-as-a-template', '#using-a-template', '#where-a-template-came-from', '#first-party-starters', '#templates-are-per-site', '#deleting', '#related'],
   termReference: ['#platform--accounts', '#organization-org', '#workspace', '#tenant', '#host', '#site', '#console', '#staff-console', '#member', '#custom-role', '#publisher', '#sites--content', '#screen', '#layout', '#slug', '#version', '#redirect', '#error-screens', '#maintenance-mode', '#locale', '#site-template', '#theme', '#custom-domain', '#subdomain', '#the-node-tree', '#node', '#tree', '#tree-root', '#trunk', '#stem', '#branch', '#leaf', '#component', '#component-bundle', '#preset', '#reusable-component', '#lineal-placement-rules', '#besigner-the-editor', '#besigner', '#canvas', '#hierarchy-panel', '#drawer', '#binding', '#plugins--marketplace', '#plugin', '#add-on', '#surface', '#console-extension', '#widget', '#injection-zone', '#plugin-manifest', '#enabled-plugins', '#feature-flag', '#release-flag', '#plugin-config', '#plugin-permission', '#plugin-job', '#listing', '#install', '#realm-bundle', '#sandbox', '#host-abi', '#review-queue', '#data--logic', '#dataset', '#record', '#field', '#relation', '#contact', '#segment', '#media-library', '#variable', '#function-fx', '#form', '#automation--marketing', '#event', '#workflow', '#action', '#automation', '#overlay', '#experiment', '#email-campaign', '#designed-email', '#merge-tag', '#commerce', '#product', '#order', '#pos', '#booking', '#billing--plans', '#plan', '#entitlement', '#quota', '#seat', '#metered-usage'],

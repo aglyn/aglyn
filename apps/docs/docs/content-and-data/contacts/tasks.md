@@ -35,10 +35,24 @@ them. Each view is a window over the due date computed from **your own clock and
 zone** when you look, and a tab left open across midnight repaints yesterday's work as
 overdue on its own.
 
-Each row shows a checkbox, the title (with the first line of notes under it), the kind,
-the priority, the due date colored by where it stands — red when overdue, amber when due
-today — the assignee, and the record it is for, as a link into that record's page. A view
-shows at most 200 rows and says so when it is full; narrow the view to see the rest.
+Each row shows a checkbox that completes or reopens the task, the title (with the first
+line of notes under it), the kind, the priority, the due date colored by where it stands
+— red when overdue, amber when due today — the assignee, and the record it is for, as a
+link into that record's page. A view shows at most 200 rows and says so when it is full;
+narrow the view to see the rest.
+
+### Selecting, exporting and acting on many
+
+The rows have a second checkbox, for selection: tick some and a
+[bulk bar](./bulk-actions.md#tasks) appears above the list to complete them, assign
+them, set their due date, export them or delete them. Completing and assigning go
+through the server exactly as the row's checkbox and the drawer do, so every completion
+fires its event and every new assignee is told.
+
+**Export CSV** beside the view control downloads the view on screen as `tasks.csv`:
+title, kind, priority, status, the due date and the completion as timestamps, the
+assignee by email address, the contact, company and deal by name, and notes. The bar's
+**Export CSV** writes the same file over the selection.
 
 ### Creating a task
 
@@ -102,6 +116,7 @@ sees that site's tasks and no others.
 
 - [CRM overview](./overview.md)
 - [Activities & the timeline](./activities.md) — what happened, as opposed to what is owed
+- [Bulk actions](./bulk-actions.md#tasks) — complete, assign, reschedule, export and delete over a selection
 - [Reports](./reports.md) — open, overdue and due-today tasks by assignee
 - [Automations for the CRM](./automations.md) — the **Create a CRM task** step and the **CRM task completed** event
 - [Workflows & actions](../../marketing-and-automation/workflows-and-actions/overview.md)

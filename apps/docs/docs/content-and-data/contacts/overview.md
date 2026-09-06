@@ -52,9 +52,9 @@ flowchart LR
 | --- | --- | --- |
 | **[Contacts](./contact-record.md)** | `/crm/contacts` | Every person your site may see, as a list with Owner and Stage columns, filters and search; a person's own page is `/crm/contacts/{id}`. [CSV import](./import.md), [bulk actions](./bulk-actions.md) and the [timeline](./activities.md) live here too. |
 | **[Leads](./leads.md)** | `/crm/leads` | People a site has captured but not yet qualified — a status, an owner and notes on each, and a conversion into a contact, a company and a deal. |
-| **[Companies](./companies.md)** | `/crm/companies` | The organizations your contacts belong to, keyed by domain — a captured contact is linked to the company at their email domain on its own; a company's page is `/crm/companies/{id}`. |
-| **[Deals](./deals.md)** | `/crm/deals` | The sales pipeline — open deals by stage, with an amount, an owner and an expected close, as a board or a table; a deal's page is `/crm/deals/{id}`. |
-| **[Tasks](./tasks.md)** | `/crm/tasks` | Calls, emails, meetings and to-dos by due date, each linked to the contact, company or deal it is for. |
+| **[Companies](./companies.md)** | `/crm/companies` | The organizations your contacts belong to, keyed by domain — a captured contact is linked to the company at their email domain on its own; a company's page is `/crm/companies/{id}`. [CSV import and export](./companies.md#import-from-csv) and [bulk actions](./bulk-actions.md#companies) too. |
+| **[Deals](./deals.md)** | `/crm/deals` | The sales pipeline — open deals by stage, with an amount, an owner and an expected close, as a board or a table with [export and bulk actions](./bulk-actions.md#deals); a deal's page is `/crm/deals/{id}`. |
+| **[Tasks](./tasks.md)** | `/crm/tasks` | Calls, emails, meetings and to-dos by due date, each linked to the contact, company or deal it is for, with [export and bulk actions](./bulk-actions.md#tasks). |
 | **[Reports](./reports.md)** | `/crm/reports` | New contacts over time, sources and the lifecycle funnel, the open pipeline and its forecast, won and lost, and the task load. |
 | **[Fields](./custom-fields.md)** | `/crm/fields` | The custom fields on a contact — text, number, date, choice, checkbox or link — which a form field can save into. |
 | **[Settings](./settings.md)** | `/crm/settings` | What the CRM does on its own for every site in the workspace — whether a company is created from a captured contact's work email domain. |
