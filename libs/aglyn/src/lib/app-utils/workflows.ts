@@ -116,7 +116,7 @@ export const HOST_EVENT_PAYLOAD_KEYS: Partial<
   pageView: ['path'],
   memberSignUp: ['email'],
   memberSignIn: ['email'],
-  lead: ['email', 'source'],
+  lead: ['email', 'source', 'leadId'],
   booking: ['serviceName', 'email', 'startsAtMs'],
   contactCreated: [
     'contactId',
