@@ -39,8 +39,10 @@ import {
 } from 'firebase/firestore'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
+  activePipelines,
   DEFAULT_PIPELINE_ID,
   DEFAULT_PIPELINE_NAME,
+  defaultPipelineOf,
   type PipelineDoc,
 } from '../model/deal-board-model'
 
@@ -55,9 +57,11 @@ export interface UsePipelineOptions {
 }
 
 export interface UsePipelineResult {
-  /** Every pipeline the viewer may read, in document-id order. */
+  /** Every pipeline the viewer may read, archived ones included, in document-id order. */
   pipelines: PipelineDoc[]
-  /** The default pipeline — `isDefault`, else the first — or null before one exists. */
+  /** The pipelines a picker offers — see `activePipelines`. */
+  activePipelines: PipelineDoc[]
+  /** The default ACTIVE pipeline — `isDefault`, else the first — or null before one exists. */
   pipeline: PipelineDoc | null
   status: 'loading' | 'success' | 'error'
   fromCache: boolean
@@ -77,7 +81,10 @@ export interface UsePipelineResult {
  * `orgs/{orgId}/pipelines` is read with the same `visibleTo` predicate every
  * CRM listener uses, ordered by document id and capped at twenty. A pipeline
  * is a handful of documents per org — the cap is there so the query has one,
- * not because anybody is expected to reach it.
+ * not because anybody is expected to reach it. Archived pipelines are read
+ * too (AGL-2620): a closed deal still names the pipeline it closed in, and
+ * `pipelineById` has to resolve its stage on the deal's page and in the
+ * reports. Only `activePipelines` and the default exclude them.
  *
  * ## The seed
  *
@@ -161,6 +168,7 @@ export function usePipeline(
         name: DEFAULT_PIPELINE_NAME,
         stages: [...DEFAULT_DEAL_STAGES],
         isDefault: true,
+        archivedAt: null,
         visibleTo: crmScopeTokens(org, consentGroup),
         hostId,
         createdByUid: uid,
@@ -181,11 +189,10 @@ export function usePipeline(
 
   return useMemo(() => {
     const pipelines = data ?? []
-    const pipeline =
-      pipelines.find((entry) => entry.isDefault) ?? pipelines[0] ?? null
     return {
       pipelines,
-      pipeline,
+      activePipelines: activePipelines(pipelines),
+      pipeline: defaultPipelineOf(pipelines),
       status,
       fromCache,
       seeding,

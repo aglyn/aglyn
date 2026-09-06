@@ -1,27 +1,28 @@
 ---
 sidebar_position: 6
 title: Activities & the timeline
-description: Log calls, emails, meetings and notes against a contact, a company or a deal, and read them in one timeline beside everything the platform captured and every campaign it sent.
+description: Log calls, emails, meetings and notes against a contact, a company, a deal or a lead, send one person an email from their record, and read it all in one timeline beside everything the platform captured and every campaign it sent.
 ---
 
 # Activities & the timeline
 
 An **activity** is something a person on your team did about a record — a call
 made, an email sent, a meeting held, a note worth keeping. It is logged by hand,
-from the record it is about, and it sits in one timeline beside everything the
-platform captured about that person on its own and every campaign email it sent
-them.
+from the record it is about — or, for an email, written and sent from there — and
+it sits in one timeline beside everything the platform captured about that
+person on its own and every campaign email it sent them.
 
-## Three kinds of history
+## Four kinds of history
 
-A contact's timeline is one newest-first stream drawn from three sources, and
+A contact's timeline is one newest-first stream drawn from four sources, and
 every entry says which it is:
 
 | Entry | Where it comes from | Who can change it |
 | --- | --- | --- |
 | **Captured** | The platform recorded it — a form submission, an order, a booking, a member sign-up, a newsletter opt-in, an API or import create, or a contact added by hand. Each carries the door it came through and, for a form, the page the person was on. | Nobody. It is a record of what happened. |
 | **Logged** | A member of your team logged it — a call, an email, a meeting, a note, or something else. | Its author, or an org-wide member. |
-| **Sent** | A campaign email the platform delivered to the person — which email, when it went out, and what became of it. See [Campaign email on the timeline](#campaign-email). | Nobody. It is the delivery record. |
+| **Sent** | An email the platform sent to this person from their record — by a teammate with **Send email**, or by an automation's **Send an email** step. It carries its subject, the address it went to, and where delivery got to. See [Sending an email](#sending-an-email). | Nobody edits what was sent; its author or an org-wide member may delete it. |
+| **Campaign** | A campaign email the platform delivered to the person — which email, when it went out, and what became of it. See [Campaign email on the timeline](#campaign-email). | Nobody. It is the delivery record. |
 
 A captured entry from *this* site carries a link to its record: **Open
 submission** lands on the Inbox with the reader open on that submission, **Open
@@ -41,10 +42,10 @@ offers **Show more activity** while older entries remain. Campaign email is
 read from the delivery log the moment the page opens, over the newest fifty
 messages sent to the address.
 
-A logged **Email** activity and a **Sent** campaign entry are different things
-and are drawn differently: the first is a message somebody on your team wrote or
-recorded, the second is a mailing the platform sent to an audience the person
-was in.
+A logged or sent **Email** activity and a **Campaign** entry are different
+things and are drawn differently: the first is a message somebody on your team
+wrote, sent or recorded, the second is a mailing the platform sent to an
+audience the person was in.
 
 ## Campaign email on the timeline {#campaign-email}
 
@@ -92,9 +93,9 @@ re-engagement audience can be
 ## Logging an activity
 
 Open the record — a contact's page under **CRM › Contacts**, a company's under
-**Companies**, or a deal's under **Deals** — and choose **Log activity**. The
-activity is filed against that record; there is no picker, because what you are
-looking at is what the activity is about.
+**Companies**, a deal's under **Deals**, or a lead's under **Leads** — and choose
+**Log activity**. The activity is filed against that record; there is no picker,
+because what you are looking at is what the activity is about.
 
 | Field | What it is |
 | --- | --- |
@@ -108,6 +109,51 @@ Each entry shows who logged it and how long ago. The author can edit or delete
 their own entries; an org-wide member can edit or delete anyone's. A colleague
 with access to only some of your sites can read an entry they did not write, and
 cannot change it.
+
+## Sending an email
+
+A contact's, a lead's and a deal's page each carry **Send email**: one message,
+from you, to the person the record is about. It is a letter, not a campaign —
+there is no audience, no template and no unsubscribe footer — and it is logged on
+the timeline the moment it leaves, with its delivery state following.
+
+| Field | What it is |
+| --- | --- |
+| **To** | The record's own address. It cannot be changed here: a deal writes to its contact, a lead to the address it was captured with. |
+| **From** | The site's sending address — the same identity campaigns and transactional mail leave on — with your name in front of it. |
+| **Reply-to** | Your own address, so a reply lands in your inbox rather than the site's mailbox. |
+| **Subject** and **Message** | What you write. The message is plain text; a blank line starts a new paragraph. |
+
+The send is refused, and the dialog says why, when:
+
+- the site has no sending identity in effect — an admin sets one up under
+  **Emails › Sending**, and the dialog links there;
+- the address is on a suppression list because it bounced or reported a message
+  as spam, or the person has asked this site not to email them;
+- the organization has reached its **one-to-one email** allowance for the day —
+  see [the cap](../../workspace-and-billing/billing-and-plans/overview.md#one-to-one-email),
+  which resets at midnight UTC;
+- you have sent more than twenty emails in the last minute.
+
+Every sent email counts toward the organization's email usage like any other
+message.
+
+### Delivery states {#delivery-states}
+
+A sent email's entry shows a chip beside **Email** that follows the message:
+
+| Chip | Meaning |
+| --- | --- |
+| **Sent** | The mail provider accepted it. |
+| **Delivered** | The recipient's mail server accepted it. |
+| **Opened** | The recipient opened it, as far as an open can be known. |
+| **Clicked** | The recipient followed a link in it. |
+| **Bounced** | The mailbox refused it. The address is suppressed and cannot be emailed again from this site. |
+| **Marked as spam** | The recipient reported it. The address is suppressed. |
+
+The chip only ever moves forward — a late "delivered" never replaces an "opened" —
+and a bounce or a complaint stands over anything that came before it. Hover the
+chip for when the state was reached.
 
 ## Where an activity is visible
 
@@ -131,5 +177,6 @@ whole log lives.
 - [CRM overview](./overview.md)
 - [The contact record](./contact-record.md) — the page a contact's timeline lives on
 - [Tasks & follow-ups](./tasks.md) — what is owed, as opposed to what happened
-- [Automations for the CRM](./automations.md) — the **Log a CRM activity** step
+- [Automations for the CRM](./automations.md) — the **Log a CRM activity** step, and how a **Send an email** step lands on the timeline
+- [Sending domains](../../marketing-and-automation/email-campaigns/overview.md#sending-domains) — the identity a one-to-one email leaves on
 - [REST API — activities](/api/resources/activities)

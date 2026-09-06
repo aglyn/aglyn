@@ -41,6 +41,7 @@ import {
   nameSearchFields,
   normalizeAddress,
   normalizeCompanyDomain,
+  normalizeCompanyWebsite,
   normalizePhone,
   planContactCompanyLink,
   readContactCompanyLink,
@@ -105,6 +106,8 @@ export interface CompanyDraft {
   industry: string
   ownerUid: string
   address: AglynPostalAddress
+  /** Comma-separated as typed; stored as the list `companyDraftFields` reads. */
+  tags: string
   notes: string
 }
 
@@ -116,7 +119,28 @@ export const EMPTY_COMPANY_DRAFT: CompanyDraft = {
   industry: '',
   ownerUid: '',
   address: {},
+  tags: '',
   notes: '',
+}
+
+/** The drawer's cap on a company's tags — a contact's, so the two agree. */
+export const COMPANY_TAGS_MAX = 20
+
+/**
+ * A typed tag list as the document stores one: split on `,` or `|`,
+ * lowercased and trimmed, deduplicated, capped — the same shape a contact's
+ * tags take, so the bulk bar's "Add tag" over companies and the drawer's
+ * field write one kind of value.
+ */
+export function normalizeCompanyTags(input: string): string[] {
+  return [
+    ...new Set(
+      String(input ?? '')
+        .split(/[|,]/)
+        .map((tag) => tag.trim().toLowerCase().slice(0, 60))
+        .filter(Boolean),
+    ),
+  ].slice(0, COMPANY_TAGS_MAX)
 }
 
 /** A stored company, as the form should start from it. */
@@ -131,6 +155,7 @@ export function companyDraftFrom(
     industry: String(company?.industry ?? ''),
     ownerUid: String(company?.ownerUid ?? ''),
     address: { ...(company?.address ?? {}) },
+    tags: (company?.tags ?? []).join(', '),
     notes: String(company?.notes ?? ''),
   }
 }
@@ -151,28 +176,6 @@ export type CompanyDraftResult =
 
 const INDUSTRY_MAX = 80
 const NOTES_MAX = 4000
-const WEBSITE_MAX = 500
-
-/**
- * The typed website, as a URL, or `null` when it cannot be one.
- *
- * People type `acme.com` where a URL is asked for, and refusing that is
- * pedantry — it becomes `https://acme.com`. What IS refused is anything the
- * URL parser cannot read or a scheme other than http(s): a `javascript:` link
- * on a record that renders as an anchor is not a website.
- */
-function normalizeWebsite(input: string): string | null {
-  const raw = input.trim()
-  if (!raw) return ''
-  const candidate = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`
-  try {
-    const url = new URL(candidate)
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null
-    return url.href.length > WEBSITE_MAX ? null : url.href
-  } catch {
-    return null
-  }
-}
 
 /**
  * The document a draft becomes — normalized, keyed for search, and refused
@@ -207,7 +210,7 @@ export function companyDraftFields(draft: CompanyDraft): CompanyDraftResult {
     cleared.push('domain')
   }
 
-  const website = normalizeWebsite(draft.website)
+  const website = normalizeCompanyWebsite(draft.website)
   if (website === null) {
     return { ok: false, error: 'The website is not a web address.' }
   }
@@ -244,6 +247,10 @@ export function companyDraftFields(draft: CompanyDraft): CompanyDraftResult {
   set['address'] = isBlankAddress(draft.address)
     ? null
     : normalizeAddress(draft.address)
+
+  const tags = normalizeCompanyTags(draft.tags)
+  if (tags.length) set['tags'] = tags
+  else cleared.push('tags')
 
   const notes = draft.notes.trim().slice(0, NOTES_MAX)
   if (notes) set['notes'] = notes

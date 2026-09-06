@@ -19,6 +19,7 @@
 import {
   CRM_COLLECTIONS,
   CRM_RECORDS_BAND_FULL_MESSAGE,
+  dealHasLineItems,
   findOrgMember,
   nameSearchKey,
 } from '@aglyn/aglyn'
@@ -128,6 +129,12 @@ export interface DealEditDrawerProps {
  * because a stage change is the moment an automation listens for and only
  * the server route can emit that event. A drawer that wrote `stageId`
  * directly would move a deal without anybody hearing it.
+ *
+ * Nor the amount of a deal that has line items (AGL-2620): it is their
+ * sum, the products card on the deal's page owns it, and the field here
+ * is read-only with a caption saying so. The pipeline picker on a new
+ * deal lists every ACTIVE pipeline (`pipelines`) and opens on the one the
+ * caller was looking at.
  *
  * ## The pickers
  *
@@ -267,6 +274,7 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
     : null
 
   const problem = dealFormProblem(values, mode)
+  const amountDerived = Boolean(deal && dealHasLineItems(deal))
 
   /*
    * THE RECORDS BAND (AGL-2611), read only while a CREATE is open: a deal
@@ -296,7 +304,7 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
         const verdict = await writeGuardedBySeed(
           { subject: 'deal', unreadable, fromCache },
           async () => {
-            const { set, clear } = dealPatchFromForm(values, nowMs)
+            const { set, clear } = dealPatchFromForm(values, nowMs, { amountDerived })
             await updateDoc(
               doc(firestore, 'orgs', orgId, CRM_COLLECTIONS.deals, deal.$id),
               {
@@ -393,29 +401,27 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
           />
           {mode === 'create' ? (
             <Stack direction="row" spacing={1}>
-              {pipelines.length > 1 ? (
-                <TextField
-                  select
-                  label="Pipeline"
-                  value={values.pipelineId}
-                  onChange={(event) => {
-                    const next = pipelines.find(
-                      (entry) => entry.$id === event.target.value,
-                    )
-                    update({
-                      pipelineId: event.target.value,
-                      stageId: openStages(next)[0]?.id ?? '',
-                    })
-                  }}
-                  sx={{ flex: 1 }}
-                >
-                  {pipelines.map((entry) => (
-                    <MenuItem key={entry.$id} value={entry.$id}>
-                      {entry.name}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              ) : null}
+              <TextField
+                select
+                label="Pipeline"
+                value={pipelines.some((entry) => entry.$id === values.pipelineId) ? values.pipelineId : ''}
+                onChange={(event) => {
+                  const next = pipelines.find(
+                    (entry) => entry.$id === event.target.value,
+                  )
+                  update({
+                    pipelineId: event.target.value,
+                    stageId: openStages(next)[0]?.id ?? '',
+                  })
+                }}
+                sx={{ flex: 1 }}
+              >
+                {pipelines.map((entry) => (
+                  <MenuItem key={entry.$id} value={entry.$id}>
+                    {entry.name}
+                  </MenuItem>
+                ))}
+              </TextField>
               <TextField
                 select
                 label="Stage"
@@ -431,20 +437,28 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
               </TextField>
             </Stack>
           ) : null}
-          <Stack direction="row" spacing={1}>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
             <TextField
               label="Amount"
               value={values.amount}
               onChange={(event) => update({ amount: event.target.value })}
               placeholder="0.00"
               sx={{ flex: 1 }}
-              slotProps={{ htmlInput: { inputMode: 'decimal' } }}
+              helperText={
+                amountDerived
+                  ? "The sum of the deal's line items — edit them on the Products card."
+                  : undefined
+              }
+              slotProps={{
+                htmlInput: { inputMode: 'decimal', readOnly: amountDerived },
+              }}
             />
             <TextField
               select
               label="Currency"
               value={values.currency}
               onChange={(event) => update({ currency: event.target.value })}
+              disabled={amountDerived}
               sx={{ width: 120 }}
             >
               {DEAL_CURRENCIES.map((code) => (

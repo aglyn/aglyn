@@ -436,7 +436,7 @@ function DealCard(props: DealCardProps) {
         deal={deal}
         ownerLabel={ownerLabel}
         days={days}
-        menu={<RowActionsMenu items={actions} label={`Actions for ${deal.title}`} />}
+        menu={<RowActionsMenu items={actions} label={deal.title} />}
         onOpen={onOpen}
       />
     </Box>

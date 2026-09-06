@@ -234,13 +234,17 @@ whatever the plan.
 ### One-to-one email {#one-to-one-email}
 
 A **one-to-one email** is a message a teammate writes to one person from a CRM record
+— **Send email** on a contact's, a lead's or a deal's page, described under
+[Activities & the timeline](../../content-and-data/contacts/activities.md#sending-an-email)
 — as against a [campaign](../../marketing-and-automation/email-campaigns/overview.md),
 which is one send over an audience, or the transactional mail your site sends on its
 own. It is capped **per organization per day (UTC)**: Free 0, Starter 50, Pro 150,
 Business 200, Scale 300, Advanced 500, Agency 1,000; Enterprise is unlimited. The cap
-is a pace rather than a meter: at the cap the send is refused until the day turns over,
-and nothing is ever billed for it. Every send still counts toward your organization's
-email usage like any other message. On plans that have the cap, the billing page shows
+is a pace rather than a meter: at the cap the send is refused — the dialog says so and
+names the count — until the day turns over, and nothing is ever billed for it. An
+email an automation sends is metered as usage and does not count against the cap.
+Every send still counts toward your organization's email usage like any other
+message. On plans that have the cap, the billing page shows
 **One-to-one emails (today)** against it.
 
 ## Organization data

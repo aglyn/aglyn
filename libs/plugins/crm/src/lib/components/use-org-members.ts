@@ -37,6 +37,12 @@ export interface OrgMembers {
    * roster has — or the reference itself when the roster does not know it.
    */
   memberName: (ref: string) => string
+  /**
+   * The member's ADDRESS for a stored reference — what a CSV export writes
+   * in the owner column, because the import resolves an owner by email —
+   * falling back to the name and then to the reference itself.
+   */
+  memberEmail: (ref: string) => string
 }
 
 /**
@@ -107,10 +113,18 @@ export function useOrgMembers(
     (ref: string) => findOrgMember(roster, ref)?.label ?? ref,
     [roster],
   )
+  const memberEmail = useCallback(
+    (ref: string) => {
+      const member = findOrgMember(roster, ref)
+      return member?.email || member?.label || ref
+    },
+    [roster],
+  )
   return {
     options: roster,
     ready: current !== null,
     memberName,
+    memberEmail,
   }
 }
 

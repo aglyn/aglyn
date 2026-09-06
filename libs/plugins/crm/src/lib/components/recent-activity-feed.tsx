@@ -34,6 +34,7 @@ const RECORD_LABELS = {
   contact: 'Contact',
   deal: 'Deal',
   company: 'Company',
+  lead: 'Lead',
 } as const
 
 /** The feed's default depth — a glance, not a log. */

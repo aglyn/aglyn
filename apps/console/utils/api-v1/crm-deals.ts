@@ -33,14 +33,29 @@
  * Every stage move stamps `stageChangedAtMs`, which is what "stuck in
  * stage" reports read, and a move into or out of a closed stage sets or
  * clears `closedAtMs`.
+ *
+ * ## The line items own the amount
+ *
+ * A deal may carry `lineItems` (AGL-2620) — the products behind its value,
+ * each in the deal's currency. With one or more lines the stored
+ * `amountCents` IS their sum, written beside them, so a typed `amountCents`
+ * in the same body, or alone on a deal that has lines, is refused rather
+ * than reconciled: whichever number we kept would be the one the client did
+ * not mean. `lineItems: []` clears the lines and hands the amount back to
+ * the client; the last sum stays until it is retyped. Changing the currency
+ * of a deal with lines needs the lines resent in that currency, because
+ * their sum is one number in one unit.
  */
 import {
   CRM_COLLECTIONS,
   type CrmDeal,
+  type CrmDealLineItem,
   type CrmDealStage,
   type CrmDealStatus,
   createResourceUid,
   dealStageById,
+  lineItemsTotalCents,
+  readDealLineItems,
 } from '@aglyn/aglyn/server'
 import { apiJson, ApiErrors } from '@aglyn/tenant-data-admin'
 import { Timestamp } from 'firebase-admin/firestore'
@@ -73,6 +88,17 @@ import { claimWrite, readJsonBody } from './shared'
 
 const DEAL_STATUSES = ['open', 'won', 'lost'] as const
 
+/** One line as published: the stored shape, with `productId` always present. */
+function lineItemView(item: CrmDealLineItem) {
+  return {
+    productId: item.productId ?? null,
+    name: item.name,
+    quantity: item.quantity,
+    unitAmountCents: item.unitAmountCents,
+    currency: item.currency,
+  }
+}
+
 /** The deal object as published. Every writable field appears here. */
 function dealView(doc: FirebaseFirestore.DocumentSnapshot) {
   const data = (doc.data() ?? {}) as Partial<CrmDeal>
@@ -87,6 +113,7 @@ function dealView(doc: FirebaseFirestore.DocumentSnapshot) {
     // `'usd'` when absent, as the model says — a deal with no currency is a
     // dollar deal, not a deal with an unknown one.
     currency: data.currency ?? 'usd',
+    lineItems: Array.isArray(data.lineItems) ? data.lineItems.map(lineItemView) : [],
     expectedCloseAt: isoFromMs(data.expectedCloseAtMs),
     closedAt: isoFromMs(data.closedAtMs),
     stageChangedAt: isoFromMs(data.stageChangedAtMs),
@@ -106,6 +133,7 @@ const DEAL_WRITABLE = new Set([
   'status',
   'amountCents',
   'currency',
+  'lineItems',
   'expectedCloseAt',
   'ownerUid',
   'contactId',
@@ -121,6 +149,12 @@ interface DealInput {
   status?: CrmDealStatus
   amountCents?: Clearable<number>
   currency?: string
+  /**
+   * The lines as sent, validated only for shape here; the currency check
+   * and the sum wait for `placeLineItems`, which knows the deal's currency
+   * on a PATCH that did not send one. `[]` means "clear them".
+   */
+  lineItems?: unknown[]
   expectedCloseAtMs?: Clearable<number>
   ownerUid?: Clearable<string>
   contactId?: Clearable<string>
@@ -193,6 +227,19 @@ function readDealInput(
     else errors.currency = 'Must be a three-letter ISO 4217 code, like usd'
   }
 
+  if (body.lineItems !== undefined) {
+    if (body.lineItems === null || (Array.isArray(body.lineItems) && body.lineItems.length === 0)) {
+      values.lineItems = []
+    } else if (!Array.isArray(body.lineItems)) {
+      errors.lineItems = 'Must be a list of line items'
+    } else {
+      values.lineItems = body.lineItems
+      if (body.amountCents !== undefined) {
+        errors.amountCents = 'Derived from lineItems — omit it, or send lineItems: [] to type an amount'
+      }
+    }
+  }
+
   if (body.expectedCloseAt !== undefined) {
     if (body.expectedCloseAt === null) {
       values.expectedCloseAtMs = null
@@ -253,6 +300,28 @@ function resolveStage(
   return { stage: null }
 }
 
+/**
+ * The stored lines and the amount they derive, for a write that sent
+ * `lineItems`, validated against the currency the deal WILL have — the
+ * body's, else the stored one, else `usd`. Returns nothing to write when
+ * the body carried no lines.
+ */
+function placeLineItems(
+  values: Pick<DealInput, 'lineItems' | 'currency'>,
+  stored: Partial<CrmDeal> | null,
+): { fields: Record<string, unknown> } | { errors: Record<string, string> } {
+  if (values.lineItems === undefined) return { fields: {} }
+  const currency = values.currency ?? stored?.currency ?? 'usd'
+  const read = readDealLineItems(values.lineItems, currency)
+  if ('error' in read) return { errors: { lineItems: read.error } }
+  return {
+    fields: {
+      lineItems: read.items,
+      ...(read.items.length ? { amountCents: lineItemsTotalCents(read.items) } : {}),
+    },
+  }
+}
+
 /** The fields a stage move writes, beside the stage itself. */
 function stageMove(stage: CrmDealStage, nowMs: number) {
   return {
@@ -303,7 +372,12 @@ async function createDeal(request: Request, ctx: ApiV1Context): Promise<Response
   const { claim } = claimed
 
   try {
-    const { title, pipelineId, stageId, status, ...rest } = parsed.values
+    const { title, pipelineId, stageId, status, lineItems, ...rest } = parsed.values
+    const placedLines = placeLineItems({ lineItems, currency: rest.currency }, null)
+    if ('errors' in placedLines) {
+      await claim.release()
+      return crmValidationFailed(ctx, 'deal', placedLines.errors)
+    }
     const resolved = await resolvePipeline(ctx, site.siteId, pipelineId)
     if ('error' in resolved) {
       await claim.release()
@@ -336,7 +410,11 @@ async function createDeal(request: Request, ctx: ApiV1Context): Promise<Response
       title,
       titleLower: (title ?? '').toLowerCase(),
       pipelineId: resolved.id,
-      ...createPayload({ ...rest, ...stageMove(stage, stamp.createdAt.toMillis()) }),
+      ...createPayload({
+        ...rest,
+        ...placedLines.fields,
+        ...stageMove(stage, stamp.createdAt.toMillis()),
+      }),
       ...stamp,
     })
     const view = dealView(await collection.doc(id).get())
@@ -363,17 +441,34 @@ async function updateDeal(
   const refErrors = await dealRefErrors(ctx, parsed.values)
   if (Object.keys(refErrors).length) return crmValidationFailed(ctx, 'deal', refErrors)
 
-  const { title, stageId, status, ...rest } = parsed.values
+  const { title, stageId, status, lineItems, ...rest } = parsed.values
+  const stored = snap.data() as Partial<CrmDeal>
+  const storedLines = Array.isArray(stored.lineItems) && stored.lineItems.length > 0
+  const keepsLines = storedLines && lineItems === undefined
+  if (keepsLines && rest.amountCents !== undefined) {
+    return crmValidationFailed(ctx, 'deal', {
+      amountCents: "This deal's amount is the sum of its line items — edit lineItems instead",
+    })
+  }
+  if (keepsLines && rest.currency !== undefined && rest.currency !== (stored.currency ?? 'usd')) {
+    return crmValidationFailed(ctx, 'deal', {
+      currency: "Every line item is in the deal's currency — send lineItems in the new currency with it",
+    })
+  }
+  const placedLines = placeLineItems({ lineItems, currency: rest.currency }, stored)
+  if ('errors' in placedLines) return crmValidationFailed(ctx, 'deal', placedLines.errors)
   const update: Record<string, unknown> = {
     ...(title !== undefined ? { title, titleLower: title.toLowerCase() } : {}),
-    ...updatePayload(rest),
+    ...updatePayload({ ...rest, ...placedLines.fields }),
   }
   // The write's one instant: `updatedAt`, and the stage move if there is one,
   // so a deal closed at T reads updated at T.
   const now = Timestamp.now()
   if (stageId !== undefined || status !== undefined) {
     const current = snap.data() as CrmDeal
-    const resolved = await resolvePipeline(ctx, current.hostId, current.pipelineId)
+    const resolved = await resolvePipeline(ctx, current.hostId, current.pipelineId, {
+      allowArchived: true,
+    })
     if ('error' in resolved) {
       return crmValidationFailed(ctx, 'deal', {
         stageId: "This deal's pipeline no longer exists",

@@ -40,6 +40,18 @@ import {
   companyNameForDomain,
   findOrgMember,
   parseCrmMemberRef,
+  buildCrmEmailActivity,
+  CRM_EMAIL_ACTIVITY_TAG,
+  CRM_EMAIL_BODY_MAX,
+  CRM_EMAIL_DELIVERY_STATE_LABELS,
+  CRM_EMAIL_DELIVERY_STATES,
+  CRM_EMAIL_ORG_TAG,
+  CRM_EMAIL_SUBJECT_MAX,
+  crmActivityCeilingLink,
+  crmEmailDeliveryTags,
+  isCrmEmailDeliveryFailure,
+  isCrmEmailDeliveryState,
+  nextCrmEmailDeliveryState,
   CONTACT_LIFECYCLE_STAGES,
   CRM_AUTO_CREATE_COMPANIES_PATH,
   ORG_CRM_SETTINGS_FIELD,
@@ -85,6 +97,11 @@ import {
   normalizeContactFieldKey,
   taskDueState,
   weightedDealAmountCents,
+  DEAL_LINE_ITEMS_MAX,
+  dealHasLineItems,
+  isPipelineArchived,
+  lineItemsTotalCents,
+  readDealLineItems,
 } from './crm'
 
 describe('CRM collections', () => {
@@ -898,6 +915,167 @@ describe('crmActivityRecordLink', () => {
     expect(crmActivityRecordLink({})).toBeNull()
     expect(crmActivityRecordLink({ contactId: '' })).toBeNull()
   })
+
+  it('names the lead last — a converted lead links to the contact it became (AGL-2615)', () => {
+    expect(crmActivityRecordLink({ leadId: 'l' })).toEqual({ record: 'lead', id: 'l' })
+    expect(crmActivityRecordLink({ leadId: 'l', contactId: 'c' })).toEqual({
+      record: 'contact',
+      id: 'c',
+    })
+    expect(crmActivityRecordLink({ leadId: 'l', companyId: 'o' })).toEqual({
+      record: 'company',
+      id: 'o',
+    })
+  })
+})
+
+describe('crmActivityCeilingLink with a lead (AGL-2615)', () => {
+  it('counts on the lead only when nothing else is named', () => {
+    expect(crmActivityCeilingLink({ leadId: 'l' })).toEqual({ field: 'leadId', id: 'l' })
+    expect(crmActivityCeilingLink({ leadId: 'l', contactId: 'c' })).toEqual({
+      field: 'contactId',
+      id: 'c',
+    })
+    expect(crmActivityCeilingLink({ leadId: 'l', dealId: 'd' })).toEqual({
+      field: 'dealId',
+      id: 'd',
+    })
+  })
+})
+
+/**
+ * The delivery state of a one-to-one email (AGL-2615): the webhook advances
+ * it and never lets it regress, and a failure outranks every success.
+ */
+describe('nextCrmEmailDeliveryState', () => {
+  it('lists six states, each labeled', () => {
+    expect(CRM_EMAIL_DELIVERY_STATES).toEqual([
+      'sent',
+      'delivered',
+      'opened',
+      'clicked',
+      'bounced',
+      'complained',
+    ])
+    for (const state of CRM_EMAIL_DELIVERY_STATES) {
+      expect(CRM_EMAIL_DELIVERY_STATE_LABELS[state]).toEqual(expect.any(String))
+      expect(isCrmEmailDeliveryState(state)).toBe(true)
+    }
+    expect(isCrmEmailDeliveryState('queued')).toBe(false)
+  })
+
+  it('moves forward along the progression', () => {
+    expect(nextCrmEmailDeliveryState('sent', 'delivered')).toBe('delivered')
+    expect(nextCrmEmailDeliveryState('delivered', 'opened')).toBe('opened')
+    expect(nextCrmEmailDeliveryState('opened', 'clicked')).toBe('clicked')
+  })
+
+  it('never regresses on a late or replayed event', () => {
+    expect(nextCrmEmailDeliveryState('opened', 'delivered')).toBe('opened')
+    expect(nextCrmEmailDeliveryState('clicked', 'sent')).toBe('clicked')
+    expect(nextCrmEmailDeliveryState('clicked', 'clicked')).toBe('clicked')
+  })
+
+  it('lets a failure override any success, and a complaint override a bounce', () => {
+    expect(nextCrmEmailDeliveryState('clicked', 'bounced')).toBe('bounced')
+    expect(nextCrmEmailDeliveryState('bounced', 'opened')).toBe('bounced')
+    expect(nextCrmEmailDeliveryState('bounced', 'complained')).toBe('complained')
+    expect(nextCrmEmailDeliveryState('complained', 'bounced')).toBe('complained')
+    expect(isCrmEmailDeliveryFailure('bounced')).toBe(true)
+    expect(isCrmEmailDeliveryFailure('complained')).toBe(true)
+    expect(isCrmEmailDeliveryFailure('opened')).toBe(false)
+  })
+
+  it('treats a stored value outside the vocabulary as nothing', () => {
+    expect(nextCrmEmailDeliveryState(undefined, 'delivered')).toBe('delivered')
+    expect(nextCrmEmailDeliveryState('queued', 'sent')).toBe('sent')
+  })
+})
+
+describe('crmEmailDeliveryTags', () => {
+  it('names the org, the activity and the site in the provider alphabet', () => {
+    expect(
+      crmEmailDeliveryTags({ orgId: 'org_1', hostId: 'site-1', activityId: 'AbC123' }),
+    ).toEqual([
+      { name: CRM_EMAIL_ORG_TAG, value: 'org_1' },
+      { name: CRM_EMAIL_ACTIVITY_TAG, value: 'AbC123' },
+      { name: 'hostId', value: 'site-1' },
+    ])
+  })
+
+  it('yields no tags at all when the org or the activity cannot be stamped', () => {
+    expect(
+      crmEmailDeliveryTags({ orgId: 'org 1', hostId: 'site-1', activityId: 'a' }),
+    ).toEqual([])
+    expect(crmEmailDeliveryTags({ orgId: 'org', hostId: 'site-1', activityId: '' })).toEqual(
+      [],
+    )
+  })
+
+  it('drops only the site when the site alone is unstampable', () => {
+    expect(
+      crmEmailDeliveryTags({ orgId: 'org', hostId: 'my.site', activityId: 'a' }),
+    ).toEqual([
+      { name: CRM_EMAIL_ORG_TAG, value: 'org' },
+      { name: CRM_EMAIL_ACTIVITY_TAG, value: 'a' },
+    ])
+  })
+})
+
+describe('buildCrmEmailActivity', () => {
+  it('is an outbound email at `sent`, carrying only the links it was given', () => {
+    const row = buildCrmEmailActivity({
+      subject: 'Hello',
+      body: 'A note',
+      to: 'ada@example.com',
+      atMs: 1_000,
+      byUid: 'u-1',
+      byName: 'Ada',
+      link: { contactId: 'c', dealId: '' },
+      hostId: 'site-1',
+      visibleTo: ['host:site-1'],
+    })
+    expect(row).toEqual({
+      kind: 'email',
+      subject: 'Hello',
+      body: 'A note',
+      to: 'ada@example.com',
+      direction: 'outbound',
+      deliveryState: 'sent',
+      deliveryAtMs: 1_000,
+      atMs: 1_000,
+      byUid: 'u-1',
+      byName: 'Ada',
+      contactId: 'c',
+      hostId: 'site-1',
+      visibleTo: ['host:site-1'],
+    })
+    expect('dealId' in row).toBe(false)
+    expect('sourceActionId' in row).toBe(false)
+  })
+
+  it('names the automation instead of a person, and bounds what it stores', () => {
+    const row = buildCrmEmailActivity({
+      subject: 'x'.repeat(CRM_EMAIL_SUBJECT_MAX + 5),
+      body: 'y'.repeat(CRM_EMAIL_BODY_MAX + 5),
+      to: 'ada@example.com',
+      atMs: 2_000,
+      byUid: '',
+      sourceActionId: 'action-1',
+      link: { leadId: 'l', companyId: 'o' },
+      hostId: 'site-1',
+      visibleTo: ['org'],
+    })
+    expect(row.subject).toHaveLength(CRM_EMAIL_SUBJECT_MAX)
+    expect(row.body).toHaveLength(CRM_EMAIL_BODY_MAX)
+    expect(row).toMatchObject({
+      byUid: '',
+      sourceActionId: 'action-1',
+      leadId: 'l',
+      companyId: 'o',
+    })
+    expect('byName' in row).toBe(false)
+  })
 })
 
 /**
@@ -1192,5 +1370,77 @@ describe('newAssignmentRuleId', () => {
     expect(first).toMatch(/^rule-/)
     const second = newAssignmentRuleId([first])
     expect(second).not.toBe(first)
+  })
+})
+
+describe('line items on a deal (AGL-2620)', () => {
+  it('accepts a list in the deal\'s currency, normalized, and sums it in whole cents', () => {
+    const read = readDealLineItems(
+      [
+        { productId: ' prod-1 ', name: '  House blend, 5 lb ', quantity: 3, unitAmountCents: 4_500 },
+        { name: 'Delivery', quantity: 1, unitAmountCents: 0, currency: 'USD' },
+      ],
+      'usd',
+    )
+    expect(read).toEqual({
+      items: [
+        { productId: 'prod-1', name: 'House blend, 5 lb', quantity: 3, unitAmountCents: 4_500, currency: 'usd' },
+        { name: 'Delivery', quantity: 1, unitAmountCents: 0, currency: 'usd' },
+      ],
+    })
+    expect(lineItemsTotalCents('items' in read ? read.items : [])).toBe(13_500)
+    expect(dealHasLineItems({ lineItems: 'items' in read ? read.items : [] })).toBe(true)
+  })
+
+  it('reads nothing as no line items, and an empty list as the same', () => {
+    expect(readDealLineItems(undefined, 'usd')).toEqual({ items: [] })
+    expect(readDealLineItems(null, 'usd')).toEqual({ items: [] })
+    expect(readDealLineItems([], 'usd')).toEqual({ items: [] })
+    expect(dealHasLineItems({ lineItems: [] })).toBe(false)
+    expect(dealHasLineItems({})).toBe(false)
+    expect(lineItemsTotalCents(undefined)).toBe(0)
+  })
+
+  it('names the line and the reason it was refused', () => {
+    const error = (input: unknown, currency = 'usd') => {
+      const read = readDealLineItems(input, currency)
+      return 'error' in read ? read.error : null
+    }
+    expect(error('lines')).toMatch(/must be a list/)
+    expect(error([{ quantity: 1, unitAmountCents: 100 }])).toMatch(/^Line 1 needs a name/)
+    expect(error([{ name: 'A', quantity: 0, unitAmountCents: 100 }])).toMatch(/^Line 1: the quantity/)
+    expect(error([{ name: 'A', quantity: 1.5, unitAmountCents: 100 }])).toMatch(/^Line 1: the quantity/)
+    expect(error([{ name: 'A', quantity: 1, unitAmountCents: -1 }])).toMatch(/^Line 1: the unit amount/)
+    expect(error([{ name: 'A', quantity: 1, unitAmountCents: 10.5 }])).toMatch(/^Line 1: the unit amount/)
+    expect(error([{ name: 'A', quantity: 1, unitAmountCents: 100 }, 'x'])).toMatch(/^Line 2 must be an object/)
+    // A line in another currency cannot be added to the rest.
+    expect(error([{ name: 'A', quantity: 1, unitAmountCents: 100, currency: 'eur' }])).toMatch(
+      /Line 1 is in EUR; every line must be in the deal's currency, USD/,
+    )
+    expect(
+      error(
+        Array.from({ length: DEAL_LINE_ITEMS_MAX + 1 }, () => ({ name: 'A', quantity: 1, unitAmountCents: 1 })),
+      ),
+    ).toMatch(/at most 50/)
+  })
+
+  it('trusts a stored line no further than whole, non-negative numbers', () => {
+    expect(
+      lineItemsTotalCents([
+        { quantity: 2.4, unitAmountCents: 99.6 },
+        { quantity: -3, unitAmountCents: 100 },
+        { quantity: Number.NaN, unitAmountCents: 100 },
+      ]),
+    ).toBe(200)
+  })
+})
+
+describe('an archived pipeline (AGL-2620)', () => {
+  it('is one with a positive archivedAt, and nothing else', () => {
+    expect(isPipelineArchived({ archivedAt: 1_700_000_000_000 })).toBe(true)
+    expect(isPipelineArchived({ archivedAt: null })).toBe(false)
+    expect(isPipelineArchived({ archivedAt: 0 })).toBe(false)
+    expect(isPipelineArchived({})).toBe(false)
+    expect(isPipelineArchived(null)).toBe(false)
   })
 })

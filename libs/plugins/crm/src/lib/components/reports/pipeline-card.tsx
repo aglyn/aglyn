@@ -147,10 +147,15 @@ export function PipelineCard(props: PipelineCardProps) {
       list.push(deal)
       byPipeline.set(key, list)
     }
-    const pipelines = pipelineWindow.rows.map((pipeline) => ({
-      pipeline,
-      totals: Aglyn.pipelineTotals(byPipeline.get(pipeline.$id) ?? [], pipeline),
-    }))
+    // Every active pipeline is charted even with nothing open; an archived
+    // one only while a deal still sits open in it — the forecast card's
+    // rule, so the two cards name the same pipelines.
+    const pipelines = pipelineWindow.rows
+      .filter((pipeline) => !Aglyn.isPipelineArchived(pipeline) || byPipeline.has(pipeline.$id))
+      .map((pipeline) => ({
+        pipeline,
+        totals: Aglyn.pipelineTotals(byPipeline.get(pipeline.$id) ?? [], pipeline),
+      }))
     const known = new Set(pipelineWindow.rows.map((pipeline) => pipeline.$id))
     const orphans = dealWindow.rows.filter(
       (deal) => !known.has(deal.pipelineId ?? ''),

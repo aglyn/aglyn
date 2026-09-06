@@ -45,6 +45,11 @@ import {
 import { type ContactRecord, contactRecordFromDoc } from '../model/contact-record'
 import { contactsListSeed } from '../model/contacts-list-seed'
 import { crmRoutes } from '../model/crm-routes'
+import {
+  type ContactCsvOptions,
+  contactsCsv,
+  downloadTextFile,
+} from '../model/contacts-csv'
 import { useCrmRecordsQuota } from '../hooks/use-crm-records-quota'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
@@ -131,11 +136,6 @@ const UNMATCHED_REFUND_REASON: Record<string, string> = {
   'no-email': 'the order carried no email address',
   'no-contact': 'no contact record matched the buyer',
   'contact-deleted': 'the contact was deleted between the sale and the refund',
-}
-
-const csvEscape = (value: unknown) => {
-  const text = String(value ?? '')
-  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
 }
 
 /**
@@ -793,51 +793,19 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
     [crmApi, enqueueSnackbar, router, routes],
   )
 
+  /*
+   * The file is `contactsCsv()`'s — every CRM column, the owner by address,
+   * one column per custom field — and the same options reach the bulk bar,
+   * so the table's export and the selection's are one file over two row
+   * sets (AGL-2621).
+   */
+  const csvOptions: ContactCsvOptions = useMemo(
+    () => ({ ownerEmail: members.memberEmail, customFields: customFields.active }),
+    [members.memberEmail, customFields.active],
+  )
   const handleExport = useCallback(() => {
-    const rows = [
-      [
-        'email',
-        'name',
-        'phone',
-        'company',
-        'jobTitle',
-        'owner',
-        'stage',
-        'sources',
-        'tags',
-        'lastInteraction',
-        'lastEngaged',
-        'notes',
-      ],
-      ...visible.map((contact) => [
-        contact.email,
-        contact.name ?? '',
-        contact.phone,
-        contact.companyName,
-        contact.jobTitle,
-        contact.ownerUid ? members.memberName(contact.ownerUid) : '',
-        contact.lifecycleStage
-          ? CONTACT_LIFECYCLE_STAGE_LABELS[contact.lifecycleStage]
-          : '',
-        Object.keys(contact.sources ?? {}).join('|'),
-        (contact.tags ?? []).join('|'),
-        contact.interactions?.[0]
-          ? new Date(contact.interactions[0].atMs).toISOString()
-          : '',
-        contact.lastEmailEngagementAtMs
-          ? new Date(contact.lastEmailEngagementAtMs).toISOString()
-          : '',
-        contact.notes ?? '',
-      ]),
-    ]
-    const csv = rows.map((row) => row.map(csvEscape).join(',')).join('\n')
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = 'contacts.csv'
-    anchor.click()
-    URL.revokeObjectURL(url)
-  }, [visible, members])
+    downloadTextFile('contacts.csv', 'text/csv', contactsCsv(visible, csvOptions))
+  }, [visible, csvOptions])
 
   return (
     <>
@@ -1045,7 +1013,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                     ' Sorting reorders that window.'}
                 </Typography>
               ) : null}
-              <ContactsBulkBar hostId={hostId} org={org} scope={dataScope} consentGroup={consentGroup} rows={visible} selected={selectedIds} onSelectedChange={setSelectedIds} />
+              <ContactsBulkBar hostId={hostId} org={org} scope={dataScope} consentGroup={consentGroup} rows={visible} selected={selectedIds} onSelectedChange={setSelectedIds} csv={csvOptions} />
               <ListTable
                 rows={visible}
                 columns={contactColumns}

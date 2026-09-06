@@ -20,6 +20,7 @@ import {
   type ConsolePluginPageProps,
   type CrmDealStatus,
   dealStageById,
+  findOrgMember,
   pluginDocsHelp,
 } from '@aglyn/aglyn'
 import {
@@ -41,7 +42,9 @@ import {
   Button,
   Chip,
   CircularProgress,
+  MenuItem,
   Stack,
+  TextField,
   ToggleButton,
   ToggleButtonGroup,
   Typography,
@@ -59,7 +62,9 @@ import {
 } from '../hooks/use-deals'
 import { useOrgMemberDirectory } from '../hooks/use-org-member-directory'
 import { usePipeline } from '../hooks/use-pipeline'
+import { downloadTextFile } from '../model/contacts-csv'
 import { crmRoutes } from '../model/crm-routes'
+import { type DealCsvOptions, dealsCsv } from '../model/deals-csv'
 import {
   boardSummary,
   DEAL_STATUS_LABELS,
@@ -69,9 +74,10 @@ import {
 } from '../model/deal-board-model'
 import { DealBoard } from './deal-board'
 import { DealEditDrawer } from './deal-edit-drawer'
+import DealsBulkBar from './deals-bulk-bar'
 import { LostReasonDialog } from './lost-reason-dialog'
 import { OwnerAvatar } from './owner-avatar'
-import { PipelineStagesDialog } from './pipeline-stages-dialog'
+import { PipelinesDialog } from './pipelines-dialog'
 
 type View = 'board' | 'table'
 type StatusFilter = CrmDealStatus | 'all'
@@ -79,16 +85,24 @@ type StatusFilter = CrmDealStatus | 'all'
 /**
  * `/crm/deals` — the pipeline (AGL-2598).
  *
- * ## Two views of one collection
+ * ## Two views of one pipeline
  *
- * The BOARD is the default pipeline's open deals, one column per open stage,
- * read in one bounded listener over `(visibleTo, pipelineId, status,
- * updatedAt)` and sorted into columns here — a listener per column would be
- * five subscriptions for one board. The TABLE is every deal the viewer may
- * see, paged by the query, with a status toggle; it is where the closed
- * history and the deals of a second pipeline are found. The three figures
- * above both come from the board's read, so they describe what is in play
- * whichever view is showing.
+ * The BOARD is one pipeline's open deals, one column per open stage, read
+ * in one bounded listener over `(visibleTo, pipelineId, status, updatedAt)`
+ * and sorted into columns here — a listener per column would be five
+ * subscriptions for one board. The TABLE is the same pipeline's deals,
+ * paged by the query, with a status toggle; it is where the closed history
+ * is found. The three figures above both come from the board's read, so
+ * they describe what is in play whichever view is showing.
+ *
+ * ## Which pipeline
+ *
+ * The switcher in the header (AGL-2620) picks among the ACTIVE pipelines
+ * and opens on the default; the board, the table, the figures and the New
+ * deal drawer all follow it. It is section state rather than a route: a
+ * pipeline is a lens on the section, and a saved view that names one
+ * composes with it. **Pipelines** opens the dialog that creates, renames,
+ * defaults, archives and — through it — edits the stages of each.
  *
  * ## Every move goes through the route
  *
@@ -102,6 +116,14 @@ type StatusFilter = CrmDealStatus | 'all'
  *
  * "New deal" opens a drawer; there is no form above the list. The drawer
  * writes client-direct against the rules, stamped with this console's scope.
+ *
+ * ## The table selects and exports (AGL-2621)
+ *
+ * The table's rows are selectable, and a selection raises `DealsBulkBar`
+ * over it — whose stage moves go through the same `useDealStageApi` as a
+ * drag. Export CSV beside the status toggle writes the page through
+ * `dealsCsv()`, naming the pipeline, the stage and the owner; the bar
+ * writes the same file over the selection.
  */
 export function DealsSection(props: ConsolePluginPageProps) {
   const { hostId, org, basePath } = props
@@ -113,7 +135,14 @@ export function DealsSection(props: ConsolePluginPageProps) {
     hostId,
     org: (org ?? null) as Record<string, unknown> | null,
   })
-  const { pipeline, pipelines } = pipelineState
+  const { activePipelines } = pipelineState
+  const [pipelineId, setPipelineId] = useState<string | null>(null)
+  // The chosen pipeline while it is still active; else the default. A
+  // pipeline archived from another tab falls back rather than leaving the
+  // board on a pipeline the picker no longer lists.
+  const pipeline =
+    (pipelineId ? activePipelines.find((entry) => entry.$id === pipelineId) : null) ??
+    pipelineState.pipeline
   const roster = useOrgMemberDirectory(scope.orgId)
   const api = useDealStageApi(hostId)
   const nowMs = useMemo(() => Date.now(), [])
@@ -162,6 +191,7 @@ export function DealsSection(props: ConsolePluginPageProps) {
     view === 'table' ? scope.orgId : null,
     scope.visibleTo,
     statusFilter,
+    pipeline?.$id ?? null,
   )
 
   const summary = useMemo(() => boardSummary(open.data, pipeline), [open.data, pipeline])
@@ -227,7 +257,27 @@ export function DealsSection(props: ConsolePluginPageProps) {
   )
 
   const [creating, setCreating] = useState(false)
-  const [editingStages, setEditingStages] = useState(false)
+  const [managingPipelines, setManagingPipelines] = useState(false)
+
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  // A page or a status is a different set of rows; a selection made on
+  // the last one would be a count over rows no longer on screen.
+  useEffect(() => setSelectedIds([]), [statusFilter, paged.page])
+  const csvOptions: DealCsvOptions = useMemo(
+    () => ({
+      pipelineName: (id) => pipelineState.pipelineById(id)?.name,
+      stageName: (pipelineId, stageId) =>
+        dealStageById(pipelineState.pipelineById(pipelineId), stageId)?.name,
+      ownerEmail: (uid) => {
+        const member = findOrgMember(roster.members, uid)
+        return member?.email || member?.label || uid
+      },
+    }),
+    [pipelineState, roster.members],
+  )
+  const handleExport = useCallback(() => {
+    downloadTextFile('deals.csv', 'text/csv', dealsCsv(paged.rows, csvOptions))
+  }, [paged.rows, csvOptions])
 
   const columns: GridColDef[] = useMemo(
     () => [
@@ -337,14 +387,31 @@ export function DealsSection(props: ConsolePluginPageProps) {
         header={'Deals'}
         help={pluginDocsHelp('deals', { anchor: '#the-board-and-the-table' })}
         actions={
-          <Stack direction="row" spacing={1}>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            {activePipelines.length > 1 ? (
+              <TextField
+                select
+                size="small"
+                label="Pipeline"
+                value={pipeline?.$id ?? ''}
+                onChange={(event) => setPipelineId(event.target.value)}
+                sx={{ minWidth: 160 }}
+                slotProps={{ select: { 'aria-label': 'Pipeline' } }}
+              >
+                {activePipelines.map((entry) => (
+                  <MenuItem key={entry.$id} value={entry.$id}>
+                    {entry.name}
+                  </MenuItem>
+                ))}
+              </TextField>
+            ) : null}
             <Button
               size="small"
               startIcon={<MdiIcon path={mdiCogOutline.path} size={0.8} />}
-              disabled={!pipeline}
-              onClick={() => setEditingStages(true)}
+              disabled={!scope.orgId || pipelineState.status === 'loading'}
+              onClick={() => setManagingPipelines(true)}
             >
-              {'Stages'}
+              {'Pipelines'}
             </Button>
             <Button
               size="small"
@@ -469,6 +536,10 @@ export function DealsSection(props: ConsolePluginPageProps) {
                   <ToggleButton value="won">{'Won'}</ToggleButton>
                   <ToggleButton value="lost">{'Lost'}</ToggleButton>
                 </ToggleButtonGroup>
+                <Stack sx={{ flex: 1 }} />
+                <Button size="small" onClick={handleExport} disabled={!paged.rows.length}>
+                  {'Export CSV'}
+                </Button>
               </Stack>
               {paged.status === 'success' && paged.rows.length === 0 && paged.page === 0 ? (
                 <EmptyStateComponent
@@ -494,9 +565,21 @@ export function DealsSection(props: ConsolePluginPageProps) {
                 />
               ) : (
                 <>
+                  <DealsBulkBar
+                    hostId={hostId}
+                    scope={scope.scope}
+                    rows={paged.rows}
+                    selected={selectedIds}
+                    onSelectedChange={setSelectedIds}
+                    pipelineById={pipelineState.pipelineById}
+                    roster={roster}
+                    api={api}
+                    csv={csvOptions}
+                  />
                   <ListTable
                     rows={paged.rows}
                     columns={columns}
+                    selectable={{ selected: selectedIds, onChange: setSelectedIds }}
                     onOpen={(_id, row) => openDeal(row as DealDoc)}
                     // Columns and sort are the view's, controlled (AGL-2617).
                     columnVisibilityModel={grid.columnVisibilityModel}
@@ -524,17 +607,19 @@ export function DealsSection(props: ConsolePluginPageProps) {
         onClose={() => setCreating(false)}
         hostId={hostId}
         org={org}
-        pipelines={pipelines}
+        pipelines={activePipelines}
         defaultPipeline={pipeline}
       />
-      <PipelineStagesDialog
-        open={editingStages}
-        onClose={() => setEditingStages(false)}
+      <PipelinesDialog
+        open={managingPipelines}
+        onClose={() => setManagingPipelines(false)}
         orgId={scope.orgId ?? ''}
-        pipeline={pipeline}
+        hostId={hostId}
+        pipelines={pipelineState.pipelines}
         fromCache={pipelineState.fromCache}
         unreadable={pipelineState.status === 'error'}
         visibleToTokens={scope.visibleTo}
+        createTokens={scope.createTokens}
       />
       <LostReasonDialog
         open={Boolean(losing)}

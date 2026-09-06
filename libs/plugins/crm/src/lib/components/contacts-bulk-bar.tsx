@@ -94,7 +94,12 @@ import {
   type ContactBulkWrite,
   type ContactBulkSkip,
 } from '../model/contacts-bulk-writes'
-import { contactsCsv, downloadTextFile } from '../model/contacts-csv'
+import {
+  type ContactCsvOptions,
+  type ContactCsvRow,
+  contactsCsv,
+  downloadTextFile,
+} from '../model/contacts-csv'
 import AddToListDialog from './add-to-list-dialog'
 import {
   CompanyPicker,
@@ -112,14 +117,15 @@ export interface ContactsBulkBarProps {
   /** The holder these rows are being read AS — whose facet the writes land in. */
   consentGroup: ConsentGroup
   /** The table's rows, already projected through the holder's facet. */
-  rows: readonly (ContactBulkRow & {
-    name?: string
-    notes?: string
-    sources?: Record<string, unknown>
-    interactions?: Array<{ atMs: number }>
-  })[]
+  rows: readonly (ContactBulkRow & ContactCsvRow)[]
   selected: readonly string[]
   onSelectedChange: (ids: string[]) => void
+  /**
+   * How the export names an owner and which custom fields it carries — the
+   * table's own options, so the selection's file and the table's are one
+   * format (AGL-2621).
+   */
+  csv?: ContactCsvOptions
 }
 
 /** The one small dialog the value-taking actions share. */
@@ -167,7 +173,7 @@ export function ContactsBulkBar(props: ContactsBulkBarProps) {
 ContactsBulkBar.displayName = 'ContactsBulkBar'
 
 function ContactsBulkBarBody(props: ContactsBulkBarProps) {
-  const { hostId, org, scope, consentGroup, rows, selected, onSelectedChange } =
+  const { hostId, org, scope, consentGroup, rows, selected, onSelectedChange, csv } =
     props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
@@ -334,9 +340,9 @@ function ContactsBulkBarBody(props: ContactsBulkBarProps) {
     downloadTextFile(
       'contacts-selected.csv',
       'text/csv',
-      contactsCsv(selectedRows),
+      contactsCsv(selectedRows, csv),
     )
-  }, [selectedRows])
+  }, [selectedRows, csv])
 
   const handleDetach = useCallback(async () => {
     if (!scope || !selectedRows.length) return

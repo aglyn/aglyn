@@ -1,7 +1,7 @@
 ---
 sidebar_position: 11
 title: Reports
-description: New contacts over time, where they came from and how far they have gone, the open pipeline and its forecast, deals won and lost, and the task load — counted on the server for the records your site can see.
+description: New contacts over time, where they came from and how far they have gone, the open pipeline, its forecast by close month, deals won and lost, and the task load — counted on the server for the records your site can see.
 ---
 
 # Reports
@@ -24,9 +24,9 @@ one before it of the same length — thirty days against the thirty before them,
 this month against last month — which is what the percentage next to a figure
 is measured against.
 
-Two cards ignore the period on purpose. The **Pipeline** and **Tasks** cards
-describe what is open *now*; "the pipeline over the last 30 days" would be a
-different question.
+Three cards ignore the period on purpose. The **Pipeline**, **Forecast by
+close month** and **Tasks** cards describe what is open *now*; "the pipeline
+over the last 30 days" would be a different question.
 
 ## Contacts
 
@@ -73,6 +73,30 @@ a sample.
 Deals in more than one currency are added as numbers and shown in the most
 common currency, with a note saying so.
 
+## Forecast by close month
+
+Every open deal, laid out by the month it is **expected to close** — one row
+per month for the next six, starting with the current month — and one column
+per [pipeline](./deals.md#pipelines), with a column for all of them together
+when there is more than one. Each cell shows the deals' face value, their
+**weighted** value (each at the odds of its stage) and how many there are.
+
+Three rows sit beside the months so the column adds up to the open pipeline:
+
+- **No expected close** — open deals with no close date. Their own row on
+  purpose: it is the size of the pipeline nobody has scheduled, which is
+  usually the number worth acting on.
+- **Before this month** — deals whose expected close has passed. Shown only
+  when there are any.
+- **Later** — deals expected past the sixth month. Shown only when there are
+  any.
+
+The last row is the whole open pipeline per column. Months are your calendar
+months, and a deal dated the first of a month belongs to that month. Won and
+lost deals are never forecast. The card reads the same window of open deals
+the Pipeline card reads — the 1,000 most recently updated — and says so when
+the window was full.
+
 ## Won and lost
 
 - **Won** in the period, with the value of what was won.
@@ -105,10 +129,11 @@ want it there.
   dash — never as a zero. A zero is a measurement; a dash is the absence of
   one.
 - Counts and sums are taken by the database. Where a chart needs a field off
-  each record — a lifecycle stage, an assignee, the stage a deal sits in — it
-  reads a bounded window (the newest 1,000 contacts, the 1,000 most recently
-  updated open deals, the 1,000 soonest-due open tasks, the 500 most recently
-  closed deals of each outcome) and says when the window was full.
+  each record — a lifecycle stage, an assignee, the stage a deal sits in, its
+  expected close — it reads a bounded window (the newest 1,000 contacts, the
+  1,000 most recently updated open deals, the 1,000 soonest-due open tasks,
+  the 500 most recently closed deals of each outcome) and says when the
+  window was full. Two cards that need the same window share one read.
 - Everything follows the same per-site visibility as the contacts themselves.
   A collaborator scoped to one site sees that site's totals, not the
   organization's.

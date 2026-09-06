@@ -68,6 +68,23 @@ which run on capture and only for a contact with no owner. Use a rule to
 decide who gets a new contact; use this step to move a contact when
 something happens to them — a stage change, a won deal.
 
+## An automated email on the timeline
+
+The **Send an email** step is not a CRM step — it mails whichever address the
+event carries — but when that address is the contact the event is about, the
+message is logged on the contact's timeline as a sent email, exactly as a
+teammate's **Send email** is: with its subject, the address it went to, and a
+[delivery state](./activities.md#delivery-states) that follows the message. So a
+welcome sequence shows on the person's history beside the calls a rep made.
+
+Nothing is logged when the step writes to somebody else — an internal alert sent
+to your own address through the **To** field — or when the address belongs to
+nobody this site can see. The row needs the CRM suite like the five steps above,
+and a record already at the activity ceiling gets the email without the entry.
+Automated email is metered as usage and is not counted against the
+[one-to-one email](../../workspace-and-billing/billing-and-plans/overview.md#one-to-one-email)
+allowance, which is for what people send by hand.
+
 ## Recipes {#recipes}
 
 The common CRM automations do not have to be built from scratch. Beside **Add action**
@@ -78,7 +95,7 @@ steps — with a line saying which recipe it started from. Change anything, then
 
 | Recipe | Starts on | What it builds |
 | --- | --- | --- |
-| **Welcome a new lead** | **Contact created**, with the condition *`source` equals `form`* | **Assign the contact an owner** on **Round robin** (the pool under [CRM → Settings](./settings.md#round-robin); with no pool the step fails, the run carries on, and the run history says so), then **Create a CRM task** — a call, due in 1 day, assignee blank so it goes to the owner just chosen — then **Send an email** thanking them (sent from your workspace's identity to the address the event carries, as an immediate reply rather than marketing), then **Tag the contact** `website`. |
+| **Welcome a new lead** | **Contact created**, with the condition *`source` equals `form`* | **Assign the contact an owner** on **Round robin** (the pool under [CRM → Settings](./settings.md#round-robin); with no pool the step fails, the run carries on, and the run history says so), then **Create a CRM task** — a call, due in 1 day, assignee blank so it goes to the owner just chosen — then **Send an email** thanking them (sent from your workspace's identity to the address the event carries, as an immediate reply rather than marketing, and [logged on the contact's timeline](#an-automated-email-on-the-timeline)), then **Tag the contact** `website`. |
 | **Follow up a won deal** | **Deal won** | **Set the contact's lifecycle stage** to **Customer**, then **Create a CRM task** — a call, due in 7 days, to the contact's owner. |
 | **Re-engage a stale lead** | **Contact changed stage**, with the condition *`lifecycleStage` equals `lead`* | **Wait for something to happen** — the next **Contact changed stage** for this person, giving up after a week — then **Create a CRM task** (a call, due in 1 day) with the step condition *`_waitTimedOut` is not empty*, so the call is booked only when the week ran out. A lead whose stage moved on in the meantime skips it. |
 | **Tag by form** | **Contact created**, with the condition *`formId` equals* the form you pick | **Tag the contact** with the form's name. This recipe asks for one of the site's forms first — the picker offers the site's live forms, not archived ones — because the form is what the trigger is keyed on. Change the tag in the editor if the form's name is not the tag you want. |

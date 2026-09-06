@@ -107,6 +107,33 @@ describe('useAggregateRead with a cache key', () => {
     expect(read).toHaveBeenCalledTimes(2)
   })
 
+  it('joins a read already in the air for the same key, so two cards cost one read (AGL-2620)', async () => {
+    let settle: (value: number) => void = () => undefined
+    const read = jest.fn(
+      () =>
+        new Promise<number>((resolve) => {
+          settle = resolve
+        }),
+    )
+    // Two cards mounted together — the pipeline card and the forecast card
+    // over the same window — before either answer has landed.
+    const first = renderHook(() => useAggregateRead(read, ['a'], { cacheKey: 'org-1|30d|deals' }))
+    const second = renderHook(() => useAggregateRead(read, ['a'], { cacheKey: 'org-1|30d|deals' }))
+    expect(read).toHaveBeenCalledTimes(1)
+    expect(first.result.current.status).toBe('loading')
+    expect(second.result.current.status).toBe('loading')
+    act(() => settle(1000))
+    await waitFor(() => expect(first.result.current.value).toBe(1000))
+    await waitFor(() => expect(second.result.current.value).toBe(1000))
+    expect(read).toHaveBeenCalledTimes(1)
+    // Settled, the read is out of the air: a later miss reads afresh.
+    act(() => invalidateAggregateReads('org-1|'))
+    const third = renderHook(() => useAggregateRead(read, ['a'], { cacheKey: 'org-1|30d|deals' }))
+    expect(read).toHaveBeenCalledTimes(2)
+    act(() => settle(7))
+    await waitFor(() => expect(third.result.current.value).toBe(7))
+  })
+
   it('THE CONTROL: an unkeyed read reads on every mount', async () => {
     const read = jest.fn(async () => 1)
     const first = renderHook(() => useAggregateRead(read, ['a']))

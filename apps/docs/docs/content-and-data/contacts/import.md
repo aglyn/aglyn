@@ -19,7 +19,9 @@ The address is `…/hosts/{site}/crm/contacts`. Importing needs the same
 
 1. **Choose the file.** A CSV with a header row. Up to **5,000 rows** per file —
    split a larger one and import the pieces. Nothing is sent until you press
-   Import.
+   Import. **Download template** beside it hands you the export's own header
+   over no rows — every field below, plus one column per custom field — so a
+   sheet filled in against it maps itself.
 2. **Match the columns.** Each column in the file is matched to a contact field.
    Aglyn proposes a match from the header names (`Email`, `Phone`, `Company`,
    `Tags` and their usual variants) and shows the first row's value beside each
@@ -64,6 +66,13 @@ it, and the result names the values it could not keep, by field.
 | **Contact limit reached** | Your plan's contact band is full. Only the Free tier's band is a hard limit — see [Billing & plans](../../workspace-and-billing/billing-and-plans/overview.md). |
 | **Could not be saved** | Something went wrong writing the record. Try that row again. |
 
+A file the CRM itself exported — from the table's **Export CSV** or the
+[bulk bar's](./bulk-actions.md#the-contacts-file) — re-imports without a hand
+mapping: its header is this vocabulary, its owner column carries email
+addresses, and its **Sources** and **Last interaction** columns are proposed
+as **Do not import**, because the platform records those and a file cannot
+set them.
+
 Every imported person shows **Import** as a source on their contact and
 "Imported from CSV" at the top of their activity. Contacts are shared across
 your organization the same way captured ones are: a person imported on one
@@ -75,4 +84,5 @@ it), not to every site in the account.
 - [CRM overview](./overview.md)
 - [The contact record](./contact-record.md) — the fields an imported row lands in
 - [Bulk actions](./bulk-actions.md) — tag, assign or stage the people you just imported, all at once
+- [Import companies from CSV](./companies.md#import-from-csv) — the same three steps for the organizations behind them
 - [Import a list into an email audience](../../marketing-and-automation/email-campaigns/overview.md#import-a-list) — for adding people to a mailing list rather than to the CRM

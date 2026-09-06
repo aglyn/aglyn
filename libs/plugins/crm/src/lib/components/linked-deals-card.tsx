@@ -154,7 +154,7 @@ export function LinkedDealsCard(props: LinkedDealsCardProps) {
         hostId={hostId}
         org={org}
         defaults={defaults}
-        pipelines={pipelineState.pipelines}
+        pipelines={pipelineState.activePipelines}
         defaultPipeline={pipelineState.pipeline}
       />
     </>

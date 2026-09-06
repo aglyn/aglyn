@@ -142,6 +142,13 @@ export interface CrmActivityLink {
   contactId?: string | null
   companyId?: string | null
   dealId?: string | null
+  /**
+   * `hosts/{hostId}/leads/{leadId}` — a person not yet converted (AGL-2615).
+   * A lead is host-scoped by path and carries no `visibleTo` of its own, so
+   * an activity filed under one is stamped with the site's scope like any
+   * other record created from that site.
+   */
+  leadId?: string | null
 }
 
 /**
@@ -158,10 +165,13 @@ export interface CrmActivityLink {
  */
 export function crmActivityCeilingLink(
   link: CrmActivityLink,
-): { field: 'contactId' | 'companyId' | 'dealId'; id: string } | null {
+): { field: 'contactId' | 'companyId' | 'dealId' | 'leadId'; id: string } | null {
   if (link.contactId) return { field: 'contactId', id: String(link.contactId) }
   if (link.companyId) return { field: 'companyId', id: String(link.companyId) }
   if (link.dealId) return { field: 'dealId', id: String(link.dealId) }
+  // Last, because a converted lead's activities carry the contact beside it
+  // and the contact is the record whose page they are read on.
+  if (link.leadId) return { field: 'leadId', id: String(link.leadId) }
   return null
 }
 
@@ -303,6 +313,12 @@ export interface CrmCompany extends CrmScoped {
   industry?: string
   ownerUid?: string
   notes?: string
+  /**
+   * Lowercased, deduplicated, capped at twenty — the same shape a contact's
+   * tags take, so a bulk "Add tag" over companies and one over contacts
+   * write the same kind of value (AGL-2621).
+   */
+  tags?: string[]
   createdByUid?: string
   /**
    * How many contacts name this company in their {@link CONTACT_COMPANY_IDS_FIELD}
@@ -334,6 +350,20 @@ export interface CrmPipeline extends CrmScoped {
   stages: CrmDealStage[]
   /** The pipeline a new deal lands in when nobody picks one. */
   isDefault?: boolean
+  /**
+   * When the pipeline was retired, epoch ms. An archived pipeline takes no
+   * new deal and is offered by no picker, but it is never deleted: the deals
+   * it closed still name it, and a report that could not resolve their
+   * stages would forecast them as orphans. Absent or `null` while active.
+   */
+  archivedAt?: number | null
+}
+
+/** Whether a pipeline has been retired — see {@link CrmPipeline.archivedAt}. */
+export function isPipelineArchived(
+  pipeline: Pick<CrmPipeline, 'archivedAt'> | null | undefined,
+): boolean {
+  return typeof pipeline?.archivedAt === 'number' && pipeline.archivedAt > 0
 }
 
 /**
@@ -354,6 +384,34 @@ export const DEFAULT_DEAL_STAGES: readonly CrmDealStage[] = [
 
 export type CrmDealStatus = 'open' | 'won' | 'lost'
 
+/**
+ * One product on a deal — what is being sold, how many, at what.
+ *
+ * `productId` names a catalog product when the line came from one; a line
+ * typed by hand has none. The name is copied rather than joined, the way a
+ * deal copies its contact's name: a catalog product can be renamed or
+ * deleted after the deal was priced, and the deal has to keep saying what
+ * it was for. `currency` is the deal's — every line on a deal is in one
+ * currency, because their sum is the deal's amount and a sum across
+ * currencies is a number with no unit.
+ */
+export interface CrmDealLineItem {
+  productId?: string
+  name: string
+  /** A whole number of units, one or more. */
+  quantity: number
+  /** Per unit, in the currency's minor unit, zero or more. */
+  unitAmountCents: number
+  /** Lowercase ISO 4217. */
+  currency: string
+}
+
+/** The most lines one deal carries — a quote, not a catalog. */
+export const DEAL_LINE_ITEMS_MAX = 50
+export const DEAL_LINE_ITEM_NAME_MAX = 120
+/** Units per line; past this the number is a data-entry slip. */
+export const DEAL_LINE_ITEM_QUANTITY_MAX = 1_000_000
+
 /** `orgs/{orgId}/deals/{dealId}`. */
 export interface CrmDeal extends CrmScoped {
   title: string
@@ -366,9 +424,18 @@ export interface CrmDeal extends CrmScoped {
    * pipeline to ask what the stage means.
    */
   status: CrmDealStatus
+  /**
+   * What the deal is worth. Typed by hand on a deal with no line items;
+   * on a deal WITH them it is their sum, stored beside them by every
+   * writer (`lineItemsTotalCents`), because the board, the reports and the
+   * REST list all read this one field and none of them can afford to add
+   * up fifty lines per row. A deal with line items refuses a typed amount.
+   */
   amountCents?: number
   /** Lowercase ISO 4217; `'usd'` when absent. */
   currency?: string
+  /** The products behind the amount — see {@link CrmDealLineItem}. */
+  lineItems?: CrmDealLineItem[]
   expectedCloseAtMs?: number | null
   closedAtMs?: number | null
   /** When the deal last moved — what "stuck in stage" reports read. */
@@ -493,6 +560,136 @@ export function activityKindHasOutcome(kind: CrmActivityKind): boolean {
 }
 
 /**
+ * Where a one-to-one email got to (AGL-2615), in the order it normally
+ * happens — the vocabulary the delivery webhook maps its events onto an
+ * `email` activity in, and the chip the timeline shows beside the entry.
+ *
+ * The first four are a progression: a message is sent, then delivered, then
+ * opened, then clicked, and a later state implies the earlier ones. The last
+ * two are terminal failures. A message the mailbox provider bounced or that
+ * the recipient reported is never "opened" in any sense the timeline should
+ * report, whatever a tracking pixel says afterwards.
+ */
+export const CRM_EMAIL_DELIVERY_STATES = [
+  'sent',
+  'delivered',
+  'opened',
+  'clicked',
+  'bounced',
+  'complained',
+] as const
+
+export type CrmEmailDeliveryState = (typeof CRM_EMAIL_DELIVERY_STATES)[number]
+
+/** How a delivery state reads on the chip — typed so a state cannot ship unlabeled. */
+export const CRM_EMAIL_DELIVERY_STATE_LABELS: Record<CrmEmailDeliveryState, string> = {
+  sent: 'Sent',
+  delivered: 'Delivered',
+  opened: 'Opened',
+  clicked: 'Clicked',
+  bounced: 'Bounced',
+  complained: 'Marked as spam',
+}
+
+export function isCrmEmailDeliveryState(
+  value: unknown,
+): value is CrmEmailDeliveryState {
+  return (
+    typeof value === 'string' &&
+    (CRM_EMAIL_DELIVERY_STATES as readonly string[]).includes(value)
+  )
+}
+
+/** The two states that mean the message did not land. */
+export function isCrmEmailDeliveryFailure(state: unknown): boolean {
+  return state === 'bounced' || state === 'complained'
+}
+
+/**
+ * The rank the webhook advances by. Higher wins; a failure outranks every
+ * progression state, and a complaint outranks a bounce because it is the
+ * one a sender is scored on.
+ */
+const CRM_EMAIL_DELIVERY_RANK: Record<CrmEmailDeliveryState, number> = {
+  sent: 1,
+  delivered: 2,
+  opened: 3,
+  clicked: 4,
+  bounced: 5,
+  complained: 6,
+}
+
+/**
+ * The state an activity holds after one more delivery event, from the state
+ * it held before.
+ *
+ * MONOTONIC. Provider events arrive at least once and in no promised order
+ * — an `opened` can reach the webhook before the `delivered` it implies, and
+ * a replay can hand back yesterday's `delivered` after today's `clicked` —
+ * so the row keeps whichever state is further along, and an event that says
+ * less than the row already knows changes nothing. A stored value the
+ * vocabulary does not name reads as nothing, so the incoming event stands.
+ */
+export function nextCrmEmailDeliveryState(
+  current: unknown,
+  incoming: CrmEmailDeliveryState,
+): CrmEmailDeliveryState {
+  if (!isCrmEmailDeliveryState(current)) return incoming
+  return CRM_EMAIL_DELIVERY_RANK[incoming] > CRM_EMAIL_DELIVERY_RANK[current]
+    ? incoming
+    : current
+}
+
+/** The most a one-to-one email's subject may hold. */
+export const CRM_EMAIL_SUBJECT_MAX = 200
+/** The most a one-to-one email's body may hold — a letter, not a document. */
+export const CRM_EMAIL_BODY_MAX = 10_000
+
+/**
+ * The `context` a one-to-one email is sent under, which `sendEmail` stamps
+ * as a provider tag on the message and the delivery log files it by.
+ */
+export const CRM_EMAIL_CONTEXT = 'crm'
+/** The provider tag naming the activity row a one-to-one email belongs to. */
+export const CRM_EMAIL_ACTIVITY_TAG = 'activityId'
+/** The provider tag naming the org whose `crmActivities` holds that row. */
+export const CRM_EMAIL_ORG_TAG = 'orgId'
+
+/** What a provider tag value may be — anything else fails the whole send. */
+const PROVIDER_TAG_VALUE = /^[A-Za-z0-9_-]{1,256}$/
+
+/**
+ * The tags a one-to-one email carries so the delivery webhook can find its
+ * activity row (AGL-2615): the org, the activity, and the site for the
+ * per-site suppression list a bounce lands on.
+ *
+ * Every value is checked against the provider's alphabet rather than
+ * trusted, for the reason `contextTag` gives — a value the provider rejects
+ * fails the send, and a failed send is worse than an untracked one. The
+ * org and the activity are the pair the webhook needs, so an unusable
+ * value for EITHER yields no tags at all: a tag set that named a row it
+ * could not locate would be a promise the timeline cannot keep. The site
+ * is stamped when it can be and dropped alone when it cannot.
+ */
+export function crmEmailDeliveryTags(input: {
+  orgId: string
+  hostId: string
+  activityId: string
+}): { name: string; value: string }[] {
+  const orgId = String(input.orgId ?? '')
+  const activityId = String(input.activityId ?? '')
+  const hostId = String(input.hostId ?? '')
+  if (!PROVIDER_TAG_VALUE.test(orgId) || !PROVIDER_TAG_VALUE.test(activityId)) {
+    return []
+  }
+  return [
+    { name: CRM_EMAIL_ORG_TAG, value: orgId },
+    { name: CRM_EMAIL_ACTIVITY_TAG, value: activityId },
+    ...(PROVIDER_TAG_VALUE.test(hostId) ? [{ name: 'hostId', value: hostId }] : []),
+  ]
+}
+
+/**
  * `orgs/{orgId}/crmActivities/{activityId}` — one thing that happened.
  *
  * Distinct from a contact's `interactions`: those are what the PLATFORM
@@ -524,12 +721,81 @@ export interface CrmActivity extends CrmScoped {
   contactId?: string
   companyId?: string
   dealId?: string
+  /** The lead it was filed under (AGL-2615) — see {@link CrmActivityLink.leadId}. */
+  leadId?: string
   outcome?: string
   durationMinutes?: number
+  /**
+   * An `email` the platform SENT (AGL-2615), as against one a person logged
+   * by hand: the subject line, who it went to, and where delivery got to.
+   * Absent on a hand-logged email, which has a body and nothing else.
+   */
+  subject?: string
+  /** The address the message left for. */
+  to?: string
+  /** `outbound` for a message the platform sent. Nothing is inbound yet. */
+  direction?: 'outbound'
+  /** See {@link CrmEmailDeliveryState}; advanced by the delivery webhook. */
+  deliveryState?: CrmEmailDeliveryState
+  /** When the delivery state last moved, epoch ms. */
+  deliveryAtMs?: number
 }
 
 /** An activity as a listener hands it back: the document plus its id. */
 export type CrmActivityRow = CrmActivity & { $id: string }
+
+/** What a sent one-to-one email is logged from — see {@link buildCrmEmailActivity}. */
+export interface CrmEmailActivityInput {
+  subject: string
+  body: string
+  /** The recipient, as the message was addressed. */
+  to: string
+  /** When it was sent. */
+  atMs: number
+  /** Who sent it, or `''` for an automation — see `CrmActivity.byUid`. */
+  byUid: string
+  byName?: string
+  sourceActionId?: string
+  link: CrmActivityLink
+  hostId: string
+  visibleTo: string[]
+}
+
+/**
+ * The activity row a sent one-to-one email is logged as (AGL-2615).
+ *
+ * ONE builder for the two writers — the console's send route and the
+ * `sendEmail` automation step — so a message a rep wrote and a message a
+ * flow sent are the same kind of entry on the timeline: `kind: 'email'`,
+ * outbound, starting at `sent` for the delivery webhook to advance. A
+ * writer that assembled its own would be the one whose rows the chip did
+ * not know how to read. Timestamps are the writer's: a server stamps
+ * `serverTimestamp()` and this module has no Firestore.
+ */
+export function buildCrmEmailActivity(input: CrmEmailActivityInput): CrmActivity {
+  const { link } = input
+  return {
+    kind: 'email',
+    subject: String(input.subject ?? '').slice(0, CRM_EMAIL_SUBJECT_MAX),
+    body: String(input.body ?? '').slice(0, CRM_EMAIL_BODY_MAX),
+    to: input.to,
+    direction: 'outbound',
+    deliveryState: 'sent',
+    deliveryAtMs: input.atMs,
+    atMs: input.atMs,
+    byUid: input.byUid,
+    ...(input.byName ? { byName: input.byName } : {}),
+    ...(input.sourceActionId ? { sourceActionId: input.sourceActionId } : {}),
+    // Only the links the caller fixed: a key with no value is `undefined`,
+    // which Firestore refuses.
+    ...(link.contactId ? { contactId: String(link.contactId) } : {}),
+    ...(link.companyId ? { companyId: String(link.companyId) } : {}),
+    ...(link.dealId ? { dealId: String(link.dealId) } : {}),
+    ...(link.leadId ? { leadId: String(link.leadId) } : {}),
+    hostId: input.hostId,
+    visibleTo: [...input.visibleTo],
+  }
+}
 
 /**
  * One campaign email this person was sent, and what became of it (AGL-2616).
@@ -708,11 +974,13 @@ export function mergeContactTimeline(
  * the widest and so the last resort.
  */
 export function crmActivityRecordLink(
-  activity: Pick<CrmActivity, 'contactId' | 'companyId' | 'dealId'>,
-): { record: 'contact' | 'deal' | 'company'; id: string } | null {
+  activity: Pick<CrmActivity, 'contactId' | 'companyId' | 'dealId' | 'leadId'>,
+): { record: 'contact' | 'deal' | 'company' | 'lead'; id: string } | null {
   if (activity.contactId) return { record: 'contact', id: activity.contactId }
   if (activity.dealId) return { record: 'deal', id: activity.dealId }
   if (activity.companyId) return { record: 'company', id: activity.companyId }
+  // A lead is the narrowest: once converted, the contact it became leads.
+  if (activity.leadId) return { record: 'lead', id: activity.leadId }
   return null
 }
 
@@ -834,6 +1102,97 @@ export function weightedDealAmountCents(
   return Math.round((amount * probability) / 100)
 }
 
+/** Whether a deal's amount is derived — it has at least one line item. */
+export function dealHasLineItems(
+  deal: Pick<CrmDeal, 'lineItems'> | null | undefined,
+): boolean {
+  return Array.isArray(deal?.lineItems) && deal.lineItems.length > 0
+}
+
+/**
+ * What a set of line items adds up to, in cents — the amount a deal with
+ * line items stores. Whole cents, never negative: a line's quantity and
+ * unit amount have both been through `readDealLineItems`, but a stored
+ * document from an older writer is trusted no further than that.
+ */
+export function lineItemsTotalCents(
+  items: readonly Pick<CrmDealLineItem, 'quantity' | 'unitAmountCents'>[] | null | undefined,
+): number {
+  let total = 0
+  for (const item of items ?? []) {
+    const quantity = Math.max(0, Math.round(Number(item.quantity) || 0))
+    const unit = Math.max(0, Math.round(Number(item.unitAmountCents) || 0))
+    total += quantity * unit
+  }
+  return total
+}
+
+/**
+ * Line items as a client typed or sent them, validated into the stored
+ * shape, or the one reason they were refused.
+ *
+ * The one reader for both writers — the products card on a deal's page
+ * and `POST`/`PATCH /v1/deals` — so a line the console accepts is a line
+ * the API accepts and the other way round. The rules: at most
+ * {@link DEAL_LINE_ITEMS_MAX} lines; every line a name, a whole quantity
+ * of one or more, a whole unit amount of zero or more; every line in the
+ * DEAL's currency (`currency`), which a line may omit and may not
+ * contradict. An empty list is valid and means "no line items" — the
+ * amount goes back to being typed.
+ */
+export function readDealLineItems(
+  input: unknown,
+  currency: string,
+): { items: CrmDealLineItem[] } | { error: string } {
+  if (input === undefined || input === null) return { items: [] }
+  if (!Array.isArray(input)) return { error: 'Line items must be a list' }
+  if (input.length > DEAL_LINE_ITEMS_MAX) {
+    return { error: `A deal carries at most ${DEAL_LINE_ITEMS_MAX} line items` }
+  }
+  const dealCurrency = String(currency || 'usd').trim().toLowerCase()
+  const items: CrmDealLineItem[] = []
+  for (const [index, raw] of input.entries()) {
+    const at = `Line ${index + 1}`
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      return { error: `${at} must be an object` }
+    }
+    const line = raw as Record<string, unknown>
+    const name = String(line.name ?? '')
+      .trim()
+      .slice(0, DEAL_LINE_ITEM_NAME_MAX)
+    if (!name) return { error: `${at} needs a name` }
+    const quantity = Number(line.quantity)
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > DEAL_LINE_ITEM_QUANTITY_MAX) {
+      return {
+        error: `${at}: the quantity must be a whole number from 1 to ${DEAL_LINE_ITEM_QUANTITY_MAX.toLocaleString()}`,
+      }
+    }
+    const unitAmountCents = Number(line.unitAmountCents)
+    if (!Number.isInteger(unitAmountCents) || unitAmountCents < 0) {
+      return { error: `${at}: the unit amount must be a whole number of cents, 0 or more` }
+    }
+    const lineCurrency =
+      line.currency === undefined || line.currency === null || line.currency === ''
+        ? dealCurrency
+        : String(line.currency).trim().toLowerCase()
+    if (lineCurrency !== dealCurrency) {
+      return { error: `${at} is in ${lineCurrency.toUpperCase()}; every line must be in the deal's currency, ${dealCurrency.toUpperCase()}` }
+    }
+    const productId =
+      typeof line.productId === 'string' && line.productId.trim()
+        ? line.productId.trim().slice(0, 200)
+        : undefined
+    items.push({
+      ...(productId ? { productId } : {}),
+      name,
+      quantity,
+      unitAmountCents,
+      currency: dealCurrency,
+    })
+  }
+  return { items }
+}
+
 export type TaskDueState = 'overdue' | 'today' | 'upcoming' | 'none' | 'done'
 
 /**
@@ -896,6 +1255,33 @@ export function normalizeCompanyDomain(input: unknown): string | null {
   if (!labels.every((label) => DOMAIN_LABEL.test(label))) return null
   if (!/^[a-z]{2,}$/.test(labels[labels.length - 1])) return null
   return value
+}
+
+/** The longest website URL a company stores. */
+const COMPANY_WEBSITE_MAX = 500
+
+/**
+ * The typed website, as a URL; `''` for a blank; `null` when it cannot be
+ * one.
+ *
+ * People type `acme.com` where a URL is asked for, and refusing that is
+ * pedantry — it becomes `https://acme.com`. What IS refused is anything the
+ * URL parser cannot read or a scheme other than http(s): a `javascript:` link
+ * on a record that renders as an anchor is not a website. One function for
+ * the company drawer and the companies import, so a website typed and a
+ * website imported are stored the same way.
+ */
+export function normalizeCompanyWebsite(input: unknown): string | null {
+  const raw = String(input ?? '').trim()
+  if (!raw) return ''
+  const candidate = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`
+  try {
+    const url = new URL(candidate)
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null
+    return url.href.length > COMPANY_WEBSITE_MAX ? null : url.href
+  } catch {
+    return null
+  }
 }
 
 /**

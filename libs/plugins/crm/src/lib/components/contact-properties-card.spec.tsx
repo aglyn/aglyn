@@ -130,7 +130,12 @@ function renderCard(seeded: Partial<ContactRecord> = {}) {
       consentGroup={GROUP}
       scope={['orgs', 'org-1']}
       seed={{ status: 'success', fromCache: false }}
-      members={{ options: [], ready: true, memberName: (uid) => uid }}
+      members={{
+        options: [],
+        ready: true,
+        memberName: (uid) => uid,
+        memberEmail: (uid) => uid,
+      }}
     />,
   )
 }
