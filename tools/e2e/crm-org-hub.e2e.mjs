@@ -38,6 +38,12 @@
 // organization's activity feed — the feed a site's console never writes and
 // the org hub writes for everything it does.
 //
+// The organization's SITES page carries the CRM's two dashboard cards above
+// the site grid (AGL-2636), totaling every site and linking into this hub:
+// the glance card's figures and its Open CRM, and the tasks-due card naming
+// the owner's overdue fixture task — the card that renders nothing on a
+// workspace without an open task, so its presence is the org-wide read.
+//
 //   node tools/e2e/crm-org-hub.e2e.mjs
 
 import {
@@ -256,6 +262,43 @@ await step(tally, page, 'a deal moved from the org board lands on the document a
     `${stored?.stageId} · ${stored?.status} · feed: ${line ? `${line.action} by ${line.actorId}` : 'no line'}`,
   )
   await shot(page, 'crm-org-hub-deal-moved')
+})
+
+await step(tally, page, "the organization's sites page carries both CRM cards over every site", async () => {
+  await page.goto(orgUrl('/hosts'), { waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS })
+  const glance = cardNamed(page, 'CRM at a glance')
+  const tasksDue = cardNamed(page, 'Tasks due')
+  await glance.waitFor({ timeout: TIMEOUT_MS })
+  await tasksDue.waitFor({ timeout: TIMEOUT_MS })
+  // Above the sites, not among them: the row precedes the first site card.
+  const siteCard = cardNamed(page, SITE_NAME)
+  await siteCard.waitFor({ timeout: TIMEOUT_MS })
+  const order = await page.evaluate(
+    ([glanceHeader, siteHeader]) => {
+      const headers = [...document.querySelectorAll('.MuiCardHeader-root')].map((node) =>
+        node.textContent ?? '',
+      )
+      const at = (text) => headers.findIndex((header) => header.includes(text))
+      return { glance: at(glanceHeader), site: at(siteHeader) }
+    },
+    ['CRM at a glance', SITE_NAME],
+  )
+  // Each card links into THIS hub, not into a site's.
+  const openCrm = await glance.getByRole('link', { name: 'Open CRM' }).getAttribute('href')
+  const viewAll = await tasksDue.getByRole('link', { name: 'View all' }).getAttribute('href')
+  const leadsNote = await glance.getByText('open across every site').count()
+  // The reader is the fixture's assignee, and the overdue task is theirs.
+  await tasksDue.getByText(CRM_FIXTURE.overdueTaskTitle, { exact: true }).waitFor({ timeout: TIMEOUT_MS })
+  tally.check(
+    "the organization's sites page carries both CRM cards over every site",
+    openCrm === HUB &&
+      viewAll === `${HUB}/tasks` &&
+      leadsNote >= 1 &&
+      order.glance >= 0 &&
+      order.site > order.glance,
+    JSON.stringify({ openCrm, viewAll, leadsNote, order }),
+  )
+  await shot(page, 'crm-org-sites-dashboard-row')
 })
 
 await session.close()
