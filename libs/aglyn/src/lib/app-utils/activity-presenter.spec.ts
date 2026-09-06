@@ -149,6 +149,26 @@ describe('activityHref', () => {
     ).toBe('/acme/team')
   })
 
+  it('routes org-level CRM entries into the org hub (AGL-2634)', () => {
+    expect(
+      activityHref({ target: { type: 'deal', id: 'd1' } }, { orgSlug }),
+    ).toBe('/acme/crm/deals/d1')
+    expect(
+      activityHref({ target: { type: 'contact', id: 'c 1' } }, { orgSlug }),
+    ).toBe('/acme/crm/contacts/c%201')
+    // A bulk line names a kind and no record; a lead's org address needs
+    // its site; a task has no page: each lands on the section.
+    expect(activityHref({ target: { type: 'company' } }, { orgSlug })).toBe(
+      '/acme/crm/companies',
+    )
+    expect(
+      activityHref({ target: { type: 'lead', id: 'k1' } }, { orgSlug }),
+    ).toBe('/acme/crm/leads')
+    expect(
+      activityHref({ target: { type: 'task', id: 't1' } }, { orgSlug }),
+    ).toBe('/acme/crm/tasks')
+  })
+
   it('tolerates legacy top-level type/targetId fields', () => {
     expect(
       activityHref({ type: 'org', targetId: 'o1' }, { orgSlug }),

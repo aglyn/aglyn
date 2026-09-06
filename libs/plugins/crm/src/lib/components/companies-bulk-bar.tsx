@@ -126,7 +126,7 @@ function CompaniesBulkBarBody(props: CompaniesBulkBarProps) {
   const firestore = useFirestore()
   const { confirm } = useConfirmationContext()
   const logActivity = useHostActivityLogger(hostId ?? undefined)
-  const { busy, report, apply, dismissReport } = useCrmBulkApply()
+  const { busy, report, apply, dismissReport } = useCrmBulkApply({ recordKind: 'company' })
 
   const selectedRows = useMemo(() => {
     const chosen = new Set(selected)

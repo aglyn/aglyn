@@ -53,6 +53,7 @@ jest.mock('firebase/firestore', () => ({
 let logged: Array<{ action: string; target: Record<string, unknown> }>
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
+  useUser: () => ({ data: null }),
   useHostActivityLogger: () => (action: string, target: Record<string, unknown>) =>
     void logged.push({ action, target }),
 }))

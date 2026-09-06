@@ -98,7 +98,7 @@ function TasksBulkBarBody(props: TasksBulkBarProps) {
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { confirm } = useConfirmationContext()
-  const { busy, report, apply, dismissReport } = useCrmBulkApply()
+  const { busy, report, apply, dismissReport } = useCrmBulkApply({ recordKind: 'task' })
 
   const selectedRows = useMemo(() => {
     const chosen = new Set(selected)
