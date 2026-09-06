@@ -72,8 +72,8 @@ export interface DealsBulkBarProps {
   /**
    * The site whose activity feed the bar's acts are logged in, or `null`
    * at the organization level (AGL-2630), where the selection spans sites
-   * and no one feed is written; a stage move still runs as each deal's own
-   * capturing site.
+   * and the org's feed takes one line for the action instead (AGL-2634);
+   * a stage move runs as the org there and is logged per deal by the route.
    */
   hostId: string | null
   /** `['orgs', orgId]`, or `null` while the org is unresolved. */
@@ -115,7 +115,7 @@ function DealsBulkBarBody(props: DealsBulkBarProps) {
   const firestore = useFirestore()
   const { confirm } = useConfirmationContext()
   const logActivity = useHostActivityLogger(hostId ?? undefined)
-  const { busy, report, apply, dismissReport } = useCrmBulkApply()
+  const { busy, report, apply, dismissReport } = useCrmBulkApply({ recordKind: 'deal' })
 
   const selectedRows = useMemo(() => {
     const chosen = new Set(selected)
@@ -172,6 +172,8 @@ function DealsBulkBarBody(props: DealsBulkBarProps) {
         skipped: [],
         job: () => runCrmBulkCalls(selectedRows, labelOf, call),
         done,
+        // The stage route writes the org's line per deal (AGL-2634).
+        loggedByRoute: true,
       }),
     [apply, selectedRows],
   )

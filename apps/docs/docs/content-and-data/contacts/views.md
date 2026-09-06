@@ -73,9 +73,11 @@ the sort.
 
 ## Columns and sort
 
-**Manage columns** in any list's column menu chooses what shows; a view keeps
-the choice, and a view saved before a column existed shows the new column too.
-Click a column header to sort; a view keeps that as well.
+**Manage columns** in any list's column menu chooses what shows, and **Move
+left** / **Move right** in the same menu put a column where you want it. A view
+keeps both — the choice and the order — and a view saved before a column existed
+shows the new column too, after the ones it names. Click a column header to
+sort; a view keeps that as well.
 
 ## Segments and views
 

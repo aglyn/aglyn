@@ -22,6 +22,7 @@
  */
 
 import {
+  LEAD_ROUTING_NEEDS_CONSENT_FIELD,
   LEAD_ROUTING_NEEDS_EMAIL_FIELD,
   leadSurfaceForms,
 } from './lead-surfaces'
@@ -45,29 +46,43 @@ describe('leadSurfaceForms', () => {
         fields: [{ fieldName: 'workEmail', fieldType: 'text' }],
       },
       {
+        $id: 'newsletter',
+        displayName: 'Newsletter',
+        fields: [
+          { fieldName: 'email', fieldType: 'email' },
+          { fieldName: 'subscribe', fieldType: 'checkbox' },
+        ],
+      },
+      {
         $id: 'poll',
         displayName: 'Poll',
         fields: [{ fieldName: 'answer', fieldType: 'text' }],
       },
     ])
-    expect(forms.map((form) => form.$id)).toEqual(['quote', 'contact', 'poll'])
+    expect(forms.map((form) => form.$id)).toEqual([
+      'quote',
+      'contact',
+      'newsletter',
+      'poll',
+    ])
     expect(forms.find((form) => form.$id === 'contact')).toEqual(
-      expect.objectContaining({
-        routed: true,
-        canRoute: true,
-        blocker: null,
-        hasConsentField: true,
-      }),
+      expect.objectContaining({ routed: true, canRoute: true, blocker: null }),
     )
-    // An email-shaped field NAME is enough, as it is for the publish check.
+    // An email-shaped field NAME is enough for the address, as it is for the
+    // publish check — and with nothing recording consent the publish would
+    // refuse, so this section does too, for the same reason.
     expect(forms.find((form) => form.$id === 'quote')).toEqual(
       expect.objectContaining({
         routed: false,
-        canRoute: true,
-        blocker: null,
-        hasConsentField: false,
+        canRoute: false,
+        blocker: LEAD_ROUTING_NEEDS_CONSENT_FIELD,
       }),
     )
+    // An undeclared opt-in the route reads by name counts, as it does there.
+    expect(forms.find((form) => form.$id === 'newsletter')).toEqual(
+      expect.objectContaining({ routed: false, canRoute: true, blocker: null }),
+    )
+    // No address at all is the first gate, and the only one reported.
     expect(forms.find((form) => form.$id === 'poll')).toEqual(
       expect.objectContaining({
         routed: false,

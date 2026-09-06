@@ -179,6 +179,7 @@ jest.mock('@aglyn/shared-util-email', () => ({
   },
 }))
 
+import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import { MARKETING_CONSENT_ENFORCED_FROM_MS } from '@aglyn/aglyn/server'
 import { CampaignSendError, performCampaignSend } from './campaign-send'
 
@@ -231,6 +232,15 @@ function mockFirestore(): any {
   const collectionRef = (path: string): any => ({
     doc: (id: string) => docRef(`${path}/${id}`),
     ...queryRef(path),
+    /** One equality, honored: the address lookup's fallback query. */
+    where: (field: string, _op: string, value: unknown) => ({
+      limit: (max: number) => ({
+        get: async () => {
+          const ids = childIds(path).filter((id) => store[`${path}/${id}`]?.[field] === value)
+          return { docs: ids.slice(0, max).map((id) => snapshot(`${path}/${id}`)) }
+        },
+      }),
+    }),
     get parent() {
       return docRef(path.split('/').slice(0, -1).join('/'))
     },
@@ -517,6 +527,34 @@ describe('a marketing campaign sends only where a basis permits it', () => {
         send({
           audience: 'leads',
           proofFor: 'declined@example.com',
+        }),
+      ).rejects.toThrow(/recorded marketing opt-out/i)
+      expect(mockState.sent).toHaveLength(0)
+    })
+
+    /**
+     * WALL 3, through a merge. The opt-out lives on a contact whose two
+     * records were merged with the work address kept, so the proof address
+     * is an alternate now; the address index (AGL-2633) is what still lets
+     * the stored-consent read find it.
+     */
+    it('still refuses an opt-out recorded on a contact the proof address was merged into', async () => {
+      configurePolicy('strict')
+      mockState.store['orgs/org-1/contacts/c1'] = {
+        email: 'admin@work.example.com',
+        alternateEmails: ['admin@example.com'],
+        visibleTo: ['host:host-1'],
+        marketingConsent: false,
+      }
+      mockState.store[`orgs/org-1/emailIndex/${personKey('admin@example.com')}`] = {
+        email: 'admin@example.com',
+        contactId: 'c1',
+      }
+      await expect(
+        send({
+          audience: 'manual',
+          emails: ['admin@example.com'],
+          proofFor: 'admin@example.com',
         }),
       ).rejects.toThrow(/recorded marketing opt-out/i)
       expect(mockState.sent).toHaveLength(0)

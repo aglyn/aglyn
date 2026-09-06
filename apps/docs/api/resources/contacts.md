@@ -152,6 +152,12 @@ without it, a lookup could answer "no such contact" for an address that
 [`POST` refuses as a duplicate](#contact-exists), and you would have two endpoints
 disagreeing about whether a person exists.
 
+The lookup answers for **every address a contact holds**, not only `email`: an
+address that a [merge](#merge) folded into a record as one of its
+`alternateEmails` finds that record, and the response's `email` is the surviving
+identity rather than the address you asked for. The page is at most one contact
+and never carries a cursor.
+
 An address that isn't a usable email at all is a `400 bad_request`
 (`code: "validation_failed"`, `fields: { "email": … }`) rather than an empty page.
 No stored contact can match one, so an empty page would be true and useless — it reads
@@ -234,7 +240,10 @@ people an integration put there rather than a site captured.
 #### The email is already in use {#contact-exists}
 
 If a contact with that address already exists you get `409 conflict` with
-`code: "contact_exists"`, and the message names the existing id:
+`code: "contact_exists"`, and the message names the existing id. An address that a
+[merge](#merge) folded into a record as an alternate counts as in use too — the
+conflict names the surviving contact, since creating another would re-mint the
+duplicate the merge removed:
 
 ```json
 {

@@ -208,6 +208,12 @@ export interface VerifiedApiKey {
   orgId: string
   keyId: string
   scopes: ApiScope[]
+  /**
+   * The name the organization gave the key — what a feed attributes the
+   * key's writes to (AGL-2632). Every minted key carries one; empty only
+   * for a document written before the field was required.
+   */
+  name: string
 }
 
 // ── Pure helpers (unit-tested; no I/O) ──────────────────────────────────────
@@ -373,7 +379,12 @@ export async function verifyApiKey(
       .catch(() => undefined)
   }
 
-  return { orgId: data.orgId, keyId: data.keyId, scopes: data.scopes ?? [] }
+  return {
+    orgId: data.orgId,
+    keyId: data.keyId,
+    scopes: data.scopes ?? [],
+    name: String(data.name ?? ''),
+  }
 }
 
 /** All keys for an org, newest first (metadata only). */

@@ -9,6 +9,67 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.76 — 2026-09-06
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.75...v1.0.0-beta.76)
+
+### Added
+
+- **tools:** the lifecycle backfill reads a form-kind source as a lead surface ([AGL-2631](https://linear.app/aglyn/issue/AGL-2631))
+- **tools:** the lifecycle backfill can treat every form as a lead surface ([AGL-2631](https://linear.app/aglyn/issue/AGL-2631))
+- **crm:** the lead funnel and the glance lead figure total every site at the org level ([AGL-2634](https://linear.app/aglyn/issue/AGL-2634))
+- **console:** the REST create and email list find the contact through the index ([AGL-2633](https://linear.app/aglyn/issue/AGL-2633))
+- **crm:** the org-level bulk bars write one line into the org's feed ([AGL-2634](https://linear.app/aglyn/issue/AGL-2634))
+- **crm:** a saved view keeps its column order, and the column menu can move one ([AGL-2635](https://linear.app/aglyn/issue/AGL-2635))
+- **marketing:** a proof's consent and persona reads find the contact through the index ([AGL-2633](https://linear.app/aglyn/issue/AGL-2633))
+- **crm:** a one-to-one email leaves from the organization level ([AGL-2634](https://linear.app/aglyn/issue/AGL-2634))
+- **commerce:** a refund finds the buyer through the address index ([AGL-2633](https://linear.app/aglyn/issue/AGL-2633))
+- **crm:** a privacy erasure files from the organization level ([AGL-2634](https://linear.app/aglyn/issue/AGL-2634))
+- **crm:** two contacts merge at the organization level ([AGL-2634](https://linear.app/aglyn/issue/AGL-2634))
+- **inbox:** the add-to-list consent read finds the person through the address index ([AGL-2633](https://linear.app/aglyn/issue/AGL-2633))
+- **console:** an API key's writes are attributed to the key by name ([AGL-2632](https://linear.app/aglyn/issue/AGL-2632))
+- **tools:** the CRM lifecycle backfill — stages, historical leads, company counts ([AGL-2631](https://linear.app/aglyn/issue/AGL-2631), [AGL-2612](https://linear.app/aglyn/issue/AGL-2612), [AGL-2613](https://linear.app/aglyn/issue/AGL-2613))
+- **tenant:** the engagement stamp finds the person through the index, in its transaction ([AGL-2633](https://linear.app/aglyn/issue/AGL-2633))
+- **tenant:** the flow-email gate reads the person through the address index ([AGL-2633](https://linear.app/aglyn/issue/AGL-2633))
+- **crm:** the deal-stage route runs at the organization level ([AGL-2634](https://linear.app/aglyn/issue/AGL-2634))
+- **crm:** the lead page refuses Convert while an erasure is pending ([AGL-2632](https://linear.app/aglyn/issue/AGL-2632), [AGL-2623](https://linear.app/aglyn/issue/AGL-2623))
+- **tenant:** the assignCampaign step finds the person through the address index ([AGL-2633](https://linear.app/aglyn/issue/AGL-2633))
+- **crm:** the org hub's client acts write one line into the org activity feed ([AGL-2634](https://linear.app/aglyn/issue/AGL-2634))
+- **tenant:** the automation steps find the person through the address index ([AGL-2633](https://linear.app/aglyn/issue/AGL-2633))
+- **crm:** an erased person is its own lead-convert refusal at both doors ([AGL-2632](https://linear.app/aglyn/issue/AGL-2632))
+- **tenant:** the address lookup takes a site scope and a transaction ([AGL-2633](https://linear.app/aglyn/issue/AGL-2633))
+
+### Fixed
+
+- **crm:** the consolidated CRM follow-up tree clears every guard ([AGL-2635](https://linear.app/aglyn/issue/AGL-2635), [AGL-975](https://linear.app/aglyn/issue/AGL-975))
+- **crm:** the consolidated CRM follow-up tree clears every guard ([AGL-2635](https://linear.app/aglyn/issue/AGL-2635), [AGL-2634](https://linear.app/aglyn/issue/AGL-2634))
+- **crm:** the lead source label reads the bare form kind as Form ([AGL-2631](https://linear.app/aglyn/issue/AGL-2631))
+- **aglyn,forms,crm:** lead routing is refused for consent once the address is there ([AGL-2635](https://linear.app/aglyn/issue/AGL-2635))
+
+### Changed
+
+- **crm:** the contacts bulk bar stands on the shared frame and apply hook ([AGL-2635](https://linear.app/aglyn/issue/AGL-2635))
+
+### Documentation
+
+- **docs:** the lifecycle backfill runbook covers the source-kind rule ([AGL-2631](https://linear.app/aglyn/issue/AGL-2631))
+- **docs:** the lifecycle backfill runbook covers --any-form and the first dry run ([AGL-2631](https://linear.app/aglyn/issue/AGL-2631))
+- **docs:** the organization-level hub runs every action and logs into the org feed ([AGL-2634](https://linear.app/aglyn/issue/AGL-2634))
+- **docs:** a merged alternate resolves at every lookup; address-keyed records stay put ([AGL-2633](https://linear.app/aglyn/issue/AGL-2633))
+- **docs:** the CRM lifecycle backfill runbook records its emulator proof ([AGL-2631](https://linear.app/aglyn/issue/AGL-2631))
+- **docs:** leads name the erasure gate, the person_erased code and the key's name ([AGL-2632](https://linear.app/aglyn/issue/AGL-2632))
+- **docs:** the CRM lifecycle backfill runbook and the leads page's history note ([AGL-2631](https://linear.app/aglyn/issue/AGL-2631))
+
+<details>
+<summary>Also in this release: 2 test, 2 chore</summary>
+
+- **crm:** a backfilled lead converts onto the contact the org already held ([AGL-2631](https://linear.app/aglyn/issue/AGL-2631))
+- **crm:** the erased-verdict double is typed as the mock it is ([AGL-2632](https://linear.app/aglyn/issue/AGL-2632))
+- **e2e,inbox:** the E2E docs count seven CRM scripts, the reports step names nine cards ([AGL-2635](https://linear.app/aglyn/issue/AGL-2635))
+- **tools:** the Linear ceiling reads AGL-2635 for the CRM follow-ups ([AGL-2635](https://linear.app/aglyn/issue/AGL-2635))
+
+</details>
+
 ## v1.0.0-beta.75 — 2026-09-06
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.74...v1.0.0-beta.75)

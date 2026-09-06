@@ -28,7 +28,32 @@ export const CRM_API_ROUTES = {
   contactStage: 'crm/contact-stage',
   /** `POST` — one email to one person from a record; see `server/email-send.ts`. */
   emailSend: 'crm/email-send',
+  /**
+   * `POST` — one line in the ORGANIZATION's activity feed for an act the
+   * org-level hub performed client-direct (AGL-2634); see
+   * `server/org-activity.ts`.
+   */
+  orgActivity: 'crm/org-activity',
 } as const
+
+/**
+ * What an organization-level activity line may point at: the CRM's record
+ * kinds, and nothing the org feed holds for its own reasons (a member, a
+ * subscription). The route refuses any other type, so a bulk bar cannot
+ * write a line the feed's presenter would render as a workspace event.
+ */
+export const CRM_ORG_ACTIVITY_KINDS = [
+  'contact',
+  'company',
+  'deal',
+  'lead',
+  'task',
+] as const
+
+export type CrmOrgActivityKind = (typeof CRM_ORG_ACTIVITY_KINDS)[number]
+
+/** The most an activity line may say — a sentence, not a report. */
+export const CRM_ORG_ACTIVITY_ACTION_MAX = 160
 
 /** The browser-side URL for a route key. */
 export function crmApiUrl(route: keyof typeof CRM_API_ROUTES): string {

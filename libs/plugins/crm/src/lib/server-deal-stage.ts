@@ -49,6 +49,17 @@
  * The Admin SDK evaluates no rules, so without this check an editor of one
  * site in an agency could move another client's deals by id.
  *
+ * ## The organization variant (AGL-2634)
+ *
+ * `{ orgId, dealId, … }` instead of a site: the org-level hub's board. The
+ * caller is authorized by the ORG — an org-wide member holding
+ * `data.manage`, the org hub's own gate — and no visibility check is made,
+ * because an org-wide member reads every row the org holds. The event
+ * still goes to the deal's own capturing site, which is where the
+ * automations that listen for it live; a deal no site captured has none to
+ * tell. And the act is logged in the org's feed, since there is no one
+ * site's feed it happened in.
+ *
  * ## What it writes
  *
  * `stageId`, `status` (from the target stage's `kind`, never from the body),
@@ -72,6 +83,7 @@ import {
   consentGroupForSite,
   firebaseAdmin,
   getOrgForHost,
+  logOrgActivity,
   memberHasOrgPermission,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
@@ -82,6 +94,7 @@ import {
   dealEventName,
   dealEventPayload,
 } from './model/deal-board-model'
+import { authorizeOrgCaller, readCrmRouteScope } from './server/org-caller'
 
 /** The most a lost reason may carry — a sentence or two, not a post-mortem. */
 export const LOST_REASON_MAX = 500
@@ -92,7 +105,7 @@ export const crmDealStageHandler: PluginApiHandler = async (req, res) => {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  const hostId = String(req.body?.hostId ?? '').trim()
+  const routeScope = readCrmRouteScope(req.body as Record<string, unknown>)
   const dealId = String(req.body?.dealId ?? '').trim()
   const stageId =
     typeof req.body?.stageId === 'string' ? req.body.stageId.trim() : ''
@@ -101,7 +114,7 @@ export const crmDealStageHandler: PluginApiHandler = async (req, res) => {
   const lostReason = String(req.body?.lostReason ?? '')
     .trim()
     .slice(0, LOST_REASON_MAX)
-  if (!hostId || !dealId) {
+  if (!routeScope || !dealId) {
     return res.status(400).json({ error: 'Missing hostId or dealId' })
   }
   if (!stageId && !closing) {
@@ -110,44 +123,71 @@ export const crmDealStageHandler: PluginApiHandler = async (req, res) => {
     })
   }
 
-  const authorization = String(req.headers.authorization ?? '')
-  const idToken = authorization.startsWith('Bearer ')
-    ? authorization.slice('Bearer '.length)
-    : ''
-  if (!idToken) {
-    return res.status(401).json({ error: 'Unauthenticated' })
-  }
-  let uid: string
-  try {
-    uid = (await firebaseAdmin.app().auth().verifyIdToken(idToken)).uid
-  } catch {
-    return res.status(401).json({ error: 'Unauthenticated' })
-  }
+  /*
+   * Who is calling, and the org whose deal it is. The site variant
+   * resolves the org from the site and the caller's role on it; the org
+   * variant is authorized by the org itself, and the site the body may
+   * name beside it is not consulted — the deal's own site, read off the
+   * document, is the one its event goes to.
+   */
+  let orgId: string
+  let org: Record<string, unknown>
+  let actor: { uid: string; email: string | null } | null = null
+  if (routeScope.level === 'org') {
+    const caller = await authorizeOrgCaller(req, routeScope.orgId, {
+      needs: 'data.manage',
+      refusal:
+        'Moving a deal at the organization level requires the "Manage data" ' +
+        'permission across the whole workspace.',
+    })
+    if (caller.ok === false) {
+      return res.status(caller.status).json({ error: caller.error })
+    }
+    orgId = caller.orgId
+    org = caller.org as Record<string, unknown>
+    actor = { uid: caller.uid, email: caller.email }
+  } else {
+    const authorization = String(req.headers.authorization ?? '')
+    const idToken = authorization.startsWith('Bearer ')
+      ? authorization.slice('Bearer '.length)
+      : ''
+    if (!idToken) {
+      return res.status(401).json({ error: 'Unauthenticated' })
+    }
+    let uid: string
+    try {
+      uid = (await firebaseAdmin.app().auth().verifyIdToken(idToken)).uid
+    } catch {
+      return res.status(401).json({ error: 'Unauthenticated' })
+    }
 
-  const owner = await getOrgForHost(hostId).catch(() => null)
-  if (!owner) {
-    return res.status(404).json({
-      error: 'This site has no organization, so it has no deals.',
-    })
-  }
-  const membership = await resolveOrgMembership(uid, owner.orgId).catch(
-    () => null,
-  )
-  const member = membership?.member
-  const hostRole = hostRoleFor(member, hostId)
-  if (!member || (hostRole !== 'admin' && hostRole !== 'editor')) {
-    return res.status(403).json({
-      error: 'Moving a deal needs an admin or editor role on this site.',
-    })
-  }
-  if (!(await memberHasOrgPermission(owner.orgId, member, 'data.manage'))) {
-    return res.status(403).json({
-      error: 'Moving a deal requires the "Manage data" permission.',
-    })
+    const owner = await getOrgForHost(routeScope.hostId).catch(() => null)
+    if (!owner) {
+      return res.status(404).json({
+        error: 'This site has no organization, so it has no deals.',
+      })
+    }
+    const membership = await resolveOrgMembership(uid, owner.orgId).catch(
+      () => null,
+    )
+    const member = membership?.member
+    const hostRole = hostRoleFor(member, routeScope.hostId)
+    if (!member || (hostRole !== 'admin' && hostRole !== 'editor')) {
+      return res.status(403).json({
+        error: 'Moving a deal needs an admin or editor role on this site.',
+      })
+    }
+    if (!(await memberHasOrgPermission(owner.orgId, member, 'data.manage'))) {
+      return res.status(403).json({
+        error: 'Moving a deal requires the "Manage data" permission.',
+      })
+    }
+    orgId = owner.orgId
+    org = owner.org as Record<string, unknown>
   }
 
   const firestore = firebaseAdmin.app().firestore()
-  const orgRef = firestore.collection('orgs').doc(owner.orgId)
+  const orgRef = firestore.collection('orgs').doc(orgId)
   const dealRef = orgRef.collection(CRM_COLLECTIONS.deals).doc(dealId)
   const dealSnapshot = await dealRef.get()
   if (!dealSnapshot.exists) {
@@ -155,16 +195,15 @@ export const crmDealStageHandler: PluginApiHandler = async (req, res) => {
   }
   const deal = dealSnapshot.data() as CrmDeal
 
-  const group = await consentGroupForSite(
-    hostId,
-    owner.org as Record<string, unknown>,
-  )
-  const readable = new Set<string>([
-    ORG_SCOPE_TOKEN,
-    ...group.hostIds.map(hostScopeToken),
-  ])
-  if (!(deal.visibleTo ?? []).some((token) => readable.has(token))) {
-    return res.status(403).json({ error: 'This deal is not visible to this site.' })
+  if (routeScope.level === 'site') {
+    const group = await consentGroupForSite(routeScope.hostId, org)
+    const readable = new Set<string>([
+      ORG_SCOPE_TOKEN,
+      ...group.hostIds.map(hostScopeToken),
+    ])
+    if (!(deal.visibleTo ?? []).some((token) => readable.has(token))) {
+      return res.status(403).json({ error: 'This deal is not visible to this site.' })
+    }
   }
 
   const pipelineSnapshot = await orgRef
@@ -212,19 +251,37 @@ export const crmDealStageHandler: PluginApiHandler = async (req, res) => {
   })
 
   const event = dealEventName(nextStatus)
-  await emitHostEvent(
-    hostId,
-    event,
-    dealEventPayload(
-      dealId,
-      {
-        ...deal,
-        stageId: target.id,
-        lostReason: nextStatus === 'lost' ? lostReason : undefined,
-      },
-      previousStageId,
-    ),
-  )
+  // The site whose automations hear the move: the mounted site, or at the
+  // organization level the deal's own — a deal no site captured has none.
+  const eventHostId =
+    routeScope.level === 'site' ? routeScope.hostId : String(deal.hostId ?? '').trim()
+  if (eventHostId) {
+    await emitHostEvent(
+      eventHostId,
+      event,
+      dealEventPayload(
+        dealId,
+        {
+          ...deal,
+          stageId: target.id,
+          lostReason: nextStatus === 'lost' ? lostReason : undefined,
+        },
+        previousStageId,
+      ),
+    )
+  }
+  if (actor) {
+    await logOrgActivity(
+      orgId,
+      actor,
+      nextStatus === 'won'
+        ? 'Marked deal won'
+        : nextStatus === 'lost'
+          ? 'Marked deal lost'
+          : `Moved deal to ${target.name}`,
+      { type: 'deal', id: dealId, name: String(deal.title ?? '') },
+    )
+  }
 
   return res.status(200).json({
     ok: true,

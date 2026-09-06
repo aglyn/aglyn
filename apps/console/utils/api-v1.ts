@@ -51,6 +51,13 @@ import {
 export interface ApiV1Context {
   orgId: string
   keyId: string
+  /**
+   * The key's name, as the organization labeled it, or null for a key with
+   * none. What a write made with the key is attributed to in the console's
+   * activity feeds (AGL-2632) — the key is the actor, and "API key Zapier"
+   * is its name the way an address is a person's.
+   */
+  keyName: string | null
   scopes: ApiScope[]
   org: Partial<AglynOrganization>
   firestore: FirebaseFirestore.Firestore
@@ -378,6 +385,7 @@ export async function authenticateApiV1(
     context: {
       orgId: verified.orgId,
       keyId: verified.keyId,
+      keyName: verified.name || null,
       scopes: verified.scopes,
       org,
       firestore,

@@ -19,6 +19,7 @@ import type {
   PluginApiRequest,
   PluginApiResponse,
 } from '@aglyn/aglyn/server'
+import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import { refundHandler } from './refund'
 
 /**
@@ -196,6 +197,11 @@ function makeQuery(path: string, filters: FakeFilter[], limit?: number): any {
 
 function makeCollectionRef(path: string): any {
   return {
+    /** Root collections have no parent document; subcollections do. */
+    get parent() {
+      const parentPath = path.slice(0, path.lastIndexOf('/'))
+      return parentPath ? makeDocRef(parentPath) : null
+    },
     doc: (id: string) => makeDocRef(`${path}/${id}`),
     get: async () => ({ docs: childPaths(path).map(makeSnapshot) }),
     where: (field: string, op: any, value: any) =>
@@ -894,6 +900,29 @@ describe('refund and lifetime value (AGL-1754)', () => {
 
     expect(storedContact().refundedCents).toBe(5000)
     expect(unmatchedCounter().total).toBeUndefined()
+  })
+
+  /**
+   * The buyer's two records were merged with the work address kept; the
+   * order carries the address that became an alternate. The address index
+   * (AGL-2633) is what still connects it to the surviving record.
+   */
+  it('matches the contact through an address a merge folded into it', async () => {
+    docs.set('orgs/org-1/contacts/contact-1', {
+      ...docs.get('orgs/org-1/contacts/contact-1'),
+      email: 'dana@work.example.com',
+      alternateEmails: ['buyer@example.com'],
+    })
+    docs.set(`orgs/org-1/emailIndex/${personKey('buyer@example.com')}`, {
+      email: 'buyer@example.com',
+      contactId: 'contact-1',
+    })
+
+    await post({}, { 'idempotency-key': 'attempt-a' })
+
+    expect(storedContact().refundedCents).toBe(5000)
+    expect(unmatchedCounter().total).toBeUndefined()
+    expectNothingSwallowed()
   })
 
   /** A partial refunds what was refunded, never the order total. */

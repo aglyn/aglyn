@@ -19,6 +19,7 @@
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { useCallback, useMemo } from 'react'
+import { useCrmOrgMount } from './use-crm-org-mount'
 
 /** What `POST /api/crm/deal-stage` accepts, minus the `hostId` this hook adds. */
 export type DealStageRequest =
@@ -55,30 +56,41 @@ export interface DealStageResponse {
 /**
  * What a call names: the deal, and — at the organization level (AGL-2630),
  * where the surface has no site of its own — the site the deal was made on,
- * which is the site the route resolves the org from and emits the stage
- * event for. Under a site the mounted site wins, as it always has.
+ * which is the site the route emits the stage event for. Under a site the
+ * mounted site wins, as it always has.
  */
 export interface DealStageRef {
   $id: string
   hostId?: string
 }
 
+/**
+ * Beneath the org hub's mount the body names the ORG (AGL-2634), and the
+ * route runs its org variant: authorized by the org rather than by a role
+ * on the deal's site, so a deal no site captured moves too — the site
+ * beside it, when the deal has one, is where the event goes.
+ */
 export function useDealStageApi(hostId: string | null) {
   const { data: user } = useUser()
+  const orgId = useCrmOrgMount()?.orgId ?? null
 
   const call = useCallback(
     async (
       deal: DealStageRef,
       body: DealStageRequest,
     ): Promise<DealStageResponse> => {
-      const site = hostId ?? deal.hostId
-      if (!site) {
+      const site = hostId ?? deal.hostId ?? null
+      if (!site && !orgId) {
         throw new Error('This deal names no site, so its stage cannot be moved.')
       }
       const response = await authorizedFetch(user, '/api/crm/deal-stage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hostId: site, ...body }),
+        body: JSON.stringify({
+          hostId: site,
+          ...(orgId ? { orgId } : {}),
+          ...body,
+        }),
       })
       const payload = (await response.json().catch(() => ({}))) as
         | DealStageResponse
@@ -91,7 +103,7 @@ export function useDealStageApi(hostId: string | null) {
       }
       return payload
     },
-    [user, hostId],
+    [user, hostId, orgId],
   )
 
   return useMemo(

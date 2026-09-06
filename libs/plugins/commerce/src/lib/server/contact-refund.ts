@@ -23,12 +23,12 @@ import {
 import {
   firebaseAdmin,
   orgDataCollectionForHost,
-  scopedToHost,
 } from '@aglyn/tenant-data-admin'
-// Leaf import, not the barrel: `refund.spec.ts` and most specs in this
+// Leaf imports, not the barrel: `refund.spec.ts` and most specs in this
 // library mock `@aglyn/tenant-data-admin` wholesale, and a permissive stub of
-// this function would turn every case below green without a document ever
+// either function would turn every case below green without a document ever
 // having to exist.
+import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
 import { updateExisting } from '@aglyn/tenant-data-admin/server/update-existing'
 
 /**
@@ -143,22 +143,21 @@ export async function recordContactRefund(options: {
       return
     }
     // Contacts are ORG-scoped (AGL-237), not `hosts/{h}/contacts`, and reads
-    // narrow to what this host may see (AGL-1039) — the same pair
-    // `upsertHostContact` uses, so both writers resolve the same document.
+    // narrow to what this host may see (AGL-1039) — the same lookup
+    // `upsertHostContact` makes, through the org's address index
+    // (AGL-2633), so both writers resolve the same document even when the
+    // order's address is one a merge folded into the buyer's record.
     const contactsRef = await orgDataCollectionForHost(
       options.hostId,
       'contacts',
     )
-    const existing = await scopedToHost(contactsRef, options.hostId)
-      .where('email', '==', email)
-      .limit(1)
-      .get()
-    if (existing.empty) {
+    const snapshot = await findContactByEmail(contactsRef, email, {
+      hostId: options.hostId,
+    })
+    if (!snapshot) {
       await recordUnmatchedRefund(options.hostId, options.orderId, 'no-contact')
       return
     }
-
-    const snapshot = existing.docs[0]
     const atMs = Date.now()
     const interaction: ContactInteraction = {
       // `refId` names an order, so the interaction is an order interaction.

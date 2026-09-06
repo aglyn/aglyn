@@ -199,10 +199,22 @@ What differs from a site's hub:
   by** card listing those sites, each with the person's marketing consent
   *for that site* (opted in, opted out, or no record — never a bare
   "consented") and a link to open the person in that site's hub.
-- **Reports total the organization**, not one site.
+- **Reports total the organization**, not one site — the **Lead funnel**
+  included, which reads every site's leads, at most 200 per site, and says so
+  when a site held more.
 - **Leads** are listed from every site with a **Site** column, since a lead
   belongs to the site that met the person; the per-site note about which forms
   file a lead stays on each site's own hub.
+- **Every action runs here too.** A deal moves on the organization's board,
+  two records **merge**, a person is **erased**, and an email is **sent** from
+  a record, whether or not any site captured it. An email still leaves from
+  one site — the site that captured the person, or the one you pick under
+  **Send from** — because the sending address, the suppression list and a
+  person's stated refusal are each a site's.
+- **The organization's activity feed** (**Team → Activity**) records what is
+  done here: each stage move, merge, erasure and email, and one line per
+  [bulk action](./bulk-actions.md) — "Owner set on 3 deals". A site's own feed
+  records what is done on that site's hub, as before.
 - **Settings** are the organization's, as they always were; the **Default
   owner** card lists one picker per site.
 

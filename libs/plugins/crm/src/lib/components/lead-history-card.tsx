@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { CAPTURED_BY_HOST_FIELD, pluginDocsHelp } from '@aglyn/aglyn'
+import { CAPTURED_BY_HOST_FIELD, CONTACT_SOURCE_LABELS, pluginDocsHelp } from '@aglyn/aglyn'
 // The component path and NOT the marketing barrel, for the reason the Inbox
 // and the contacts list give: the barrel is the tenant loader's entry point
 // for the plugin's SITE half, and a console card named there ships to every
@@ -28,11 +28,15 @@ import { Chip, Stack, Typography } from '@mui/material'
 /**
  * The surfaces `addHostLead` names — `signup`, `booking`, `form:{formId}` —
  * as they read on screen. A form's id is not a name, so it is shown as the
- * kind with the id beside it rather than as an opaque token.
+ * kind with the id beside it rather than as an opaque token. The bare kind
+ * `form` is the lifecycle backfill's spelling for a person whose timeline
+ * kept no form id (AGL-2631), and reads as the kind, the way the contact's
+ * own source chip does.
  */
 export function leadSourceLabel(source: string): string {
   if (source === 'signup') return 'Sign-up'
   if (source === 'booking') return 'Booking'
+  if (source === 'form') return CONTACT_SOURCE_LABELS.form
   if (source.startsWith('form:')) return `Form ${source.slice('form:'.length)}`
   return source
 }

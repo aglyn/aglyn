@@ -179,8 +179,9 @@ edit it — every card is a summary with a link to the section that owns the det
 - **Newest site users** — the five most recent people who signed up *on your site*.
   **View all** opens **Users**.
 - **Recent Activity** — the ten most recent changes, each naming the thing that changed
-  ("Saved the screen — Home") and linking straight to it. The full, paginated log lives
-  under **Admin → Activity**.
+  ("Saved the screen — Home") and linking straight to it. A change an integration made
+  through the REST API is attributed to its key by name — *API key Zapier* — rather than
+  to a person. The full, paginated log lives under **Admin → Activity**.
 
 Plugins contribute the rest, so this list is a floor rather than an exact match for your
 own dashboard: **Last campaign** appears once you've sent an email campaign, and

@@ -33,10 +33,14 @@ So Contacts is the address book and Leads is the working list. The Leads
 section opens with which surfaces create leads on this site — sign-ups,
 bookings, and the lead-routed forms by name, each linking to the form's page
 — and offers **Turn on lead routing** beside a form that could route. A form
-with no email field cannot key a lead and the control says so instead of
-switching; a form without a consent field switches on, and the tooltip says
-the lead will not be mailable until the form names one. One person is one
-lead: a second submission updates the lead the first one created.
+with no email field cannot key a lead, and a form that records no consent
+would file leads the team cannot email; in either case the control says so
+instead of switching, because publishing the form would refuse the same
+thing. One person is one lead: a second submission updates the lead the first
+one created. Leads from before the Leads section existed were created from
+those earlier submissions and bookings, so a person who wrote in through a
+lead-routed form before lead routing existed is in the Open view too,
+unassigned.
 
 The contact's own page links back: **Lead on this site** on the
 [Relationship card](./contact-record.md#where-the-persons-lead-is) opens the
@@ -135,6 +139,15 @@ you to the new contact's page. Back on the lead, the card links to the
 contact, the company and the deal. A converted lead cannot be converted
 again — opening the dialog on one simply takes you to its contact.
 
+A lead whose person has an [erasure pending](#erasing-the-person) cannot be
+converted either: **Convert** stays on the page but is disabled, with the
+reason as its tooltip, until the nightly job has run — and the job removes
+the lead along with the person. If a later form fill captures the same
+address as a new lead, that lead cannot be converted: the erasure closed the
+address to capture, and a conversion is a capture, so the dialog answers
+*This person was erased from your workspace at their request, so a record
+cannot be created for this address*. Nothing is changed.
+
 The same conversion — the same contact, company and deal, through the same
 code — is available to an integration as
 [`POST /v1/leads/{id}/convert`](/api/resources/leads#convert-a-lead) on the
@@ -154,8 +167,9 @@ The menu (⋮) in the header of the lead's page also carries **Erase this
 person** — the privacy erasure, for a person who asks to be forgotten. It is
 the same request the contact record offers, filed by the lead's address: the
 person is removed from every site in the workspace, the address is closed to
-capture at once, the lead shows an **Erasure pending** banner, and the sweep
-runs with the nightly erasure job. Workspace admins only. What it removes,
+capture at once, the lead shows an **Erasure pending** banner with its
+**Convert** button disabled, and the sweep runs with the nightly erasure job.
+Workspace admins only. What it removes,
 what it keeps and what it does not reach are listed in
 [Deleting and erasing](./contact-record.md#deleting-and-erasing).
 

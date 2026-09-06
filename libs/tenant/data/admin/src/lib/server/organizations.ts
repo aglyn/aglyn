@@ -46,6 +46,7 @@ import {
   type OrgPermission,
   type OrgRole,
 } from '@aglyn/aglyn/server'
+import type { HostActivityActor } from '@aglyn/aglyn/app-utils/activity-presenter'
 import {
   nameSearchKey,
   nameSearchReversed,
@@ -1005,7 +1006,14 @@ export interface OrgActivityTarget {
    * A subscription belongs to no single site at all. Both are org-level
    * events, and this is the only feed that outlives them.
    */
-  type: 'org' | 'member' | 'invite' | 'host' | 'subscription'
+  type:
+    | 'org' | 'member' | 'invite' | 'host' | 'subscription'
+    // The CRM's records (AGL-2634), written by the plugin's server routes
+    // for an act performed at the ORGANIZATION level — a deal moved from the
+    // org board, two contacts merged over every site, a bulk bar's action —
+    // where there is no one site's feed to hold it. The org feed's presenter
+    // links them into the org-level hub.
+    | 'contact' | 'company' | 'deal' | 'lead' | 'task'
   id?: string
   name?: string
 }
@@ -1086,7 +1094,7 @@ export interface HostActivityTarget {
  */
 export async function logHostActivity(
   hostId: string,
-  actor: { uid: string; email?: string | null },
+  actor: HostActivityActor,
   action: string,
   target: HostActivityTarget,
 ): Promise<void> {
@@ -1097,6 +1105,9 @@ export async function logHostActivity(
     .add({
       actorId: actor.uid,
       actorEmail: actor.email ?? null,
+      // A key's entry names the key (AGL-2632); a person's carries no such
+      // field, so the two are told apart by its presence.
+      ...(actor.apiKeyName ? { apiKeyName: actor.apiKeyName } : {}),
       action,
       target: {
         type: target.type,

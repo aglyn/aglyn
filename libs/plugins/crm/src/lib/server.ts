@@ -49,6 +49,7 @@
  */
 
 import {
+  CONTACT_ERASED_MESSAGE,
   contactFacetPath,
   CRM_COLLECTIONS,
   crmReadTokens,
@@ -90,6 +91,7 @@ import {
 } from './server/contact-email-history'
 import { CONTACTS_MERGE_ROUTE, contactsMergeHandler } from './server/contacts-merge'
 import { CRM_ERASE_PERSON_ROUTE, crmErasePersonHandler } from './server/erase-person'
+import { CRM_ORG_ACTIVITY_ROUTE, crmOrgActivityHandler } from './server/org-activity'
 
 /**
  * `GET /api/crm/ping` → `{ ok: true, plugin: 'crm' }`.
@@ -241,17 +243,6 @@ export const contactStageHandler: PluginApiHandler = async (req, res) => {
 export const CONTACT_BAND_FULL_MESSAGE =
   'Contact limit reached — this contact was not added. Upgrade in Billing ' +
   'to keep collecting.'
-
-/**
- * What the create route says when the address was erased from this
- * workspace (AGL-2623). The person asked to be removed and a workspace admin
- * filed it; a record cannot be re-created by hand any more than by a form,
- * and the sentence says where the decision lives rather than implying the
- * address is malformed.
- */
-export const CONTACT_ERASED_MESSAGE =
-  'This person was erased from your workspace at their request, so a ' +
-  'record cannot be created for this address.'
 
 /** The most tags one create may attach, matching the record page's cap. */
 const CONTACT_TAGS_MAX = 20
@@ -564,4 +555,8 @@ export function registerCrmConsoleApi(): void {
   // Files a person's privacy erasure for the daily job (AGL-2623);
   // workspace admins only.
   registerPluginApiRoute(CRM_ERASE_PERSON_ROUTE, crmErasePersonHandler)
+  // One line in the organization's activity feed for an act the org-level
+  // hub performed client-direct (AGL-2634): the feed is closed to clients,
+  // so the bulk bars' lines come through here.
+  registerPluginApiRoute(CRM_ORG_ACTIVITY_ROUTE, crmOrgActivityHandler)
 }

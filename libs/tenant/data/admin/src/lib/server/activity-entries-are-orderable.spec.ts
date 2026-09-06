@@ -126,6 +126,26 @@ describe('an activity entry is orderable, or it does not exist (AGL-118)', () =>
     })
   })
 
+  it('a key’s entry carries the key’s name, and a person’s carries none (AGL-2632)', async () => {
+    // A key has no address, and an entry with no address and no name reads
+    // as "Someone" in every feed — an audit trail with a hole in it.
+    await logHostActivity(
+      'host-1',
+      { uid: 'api', email: null, apiKeyName: 'Zapier' },
+      'Converted lead',
+      { type: 'lead', id: 'lead-1', name: 'Ann Lee' },
+    )
+    await logHostActivity(
+      'host-1',
+      { uid: 'uid-1', email: 'person@example.test' },
+      'Converted lead',
+      { type: 'lead', id: 'lead-2' },
+    )
+    const [byKey, byPerson] = rows()
+    expect(byKey).toMatchObject({ actorId: 'api', actorEmail: null, apiKeyName: 'Zapier' })
+    expect(byPerson).not.toHaveProperty('apiKeyName')
+  })
+
   it('a host entry carries createdAt, server-stamped', async () => {
     await logHostActivity('host-1', { uid: 'uid-1' }, 'Created the site', {
       type: 'host',

@@ -18,7 +18,9 @@
 /**
  * The address index (AGL-2625): consulted before the query, trusted only
  * when the contact it names still exists, written lazily on a query hit,
- * and never in the way of a lookup that has to answer.
+ * and never in the way of a lookup that has to answer. Every door reads it
+ * through one function (AGL-2633), so the two ways a door differs from the
+ * capture — a site's scope, a transaction — are options on that function.
  */
 
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
@@ -35,6 +37,8 @@ import {
 
 const docs = new Map<string, Record<string, any>>()
 let indexFailure: Error | null = null
+/** When set, a read that did not go through the transaction throws. */
+let transactionOnly = false
 
 const snapshot = (path: string) => ({
   id: path.split('/').pop() as string,
@@ -42,6 +46,12 @@ const snapshot = (path: string) => ({
   data: () => docs.get(path),
   get: (field: string) => docs.get(path)?.[field],
 })
+
+const queryHits = (path: string, field: string, value: unknown) =>
+  [...docs.keys()]
+    .filter((key) => key.startsWith(`${path}/`) && !key.slice(path.length + 1).includes('/'))
+    .filter((key) => docs.get(key)?.[field] === value)
+    .map(snapshot)
 
 function collection(path: string): any {
   return {
@@ -54,7 +64,9 @@ function collection(path: string): any {
     },
     doc: (id: string) => ({
       id,
+      path: `${path}/${id}`,
       get: async () => {
+        if (transactionOnly) throw new Error(`read outside the transaction: ${path}/${id}`)
         if (indexFailure && path.endsWith('/emailIndex')) throw indexFailure
         return snapshot(`${path}/${id}`)
       },
@@ -68,16 +80,29 @@ function collection(path: string): any {
     }),
     where: (field: string, _op: string, value: unknown) => ({
       limit: () => ({
+        filter: { path, field, value },
         get: async () => {
-          const hits = [...docs.keys()]
-            .filter((key) => key.startsWith(`${path}/`) && !key.slice(path.length + 1).includes('/'))
-            .filter((key) => docs.get(key)?.[field] === value)
-            .map(snapshot)
+          if (transactionOnly) throw new Error(`read outside the transaction: ${path}`)
+          const hits = queryHits(path, field, value)
           return { empty: hits.length === 0, docs: hits }
         },
       }),
     }),
   }
+}
+
+/**
+ * A transaction double that answers from the store itself rather than by
+ * delegating to the plain `get`, so a read the helper routed around the
+ * transaction is the plain `get` — which `transactionOnly` makes throw.
+ */
+const transaction = {
+  get: jest.fn(async (target: any) => {
+    if (typeof target.path === 'string') return snapshot(target.path)
+    const { path, field, value } = target.filter
+    const hits = queryHits(path, field, value)
+    return { empty: hits.length === 0, docs: hits }
+  }),
 }
 
 const CONTACTS = 'orgs/org-1/contacts'
@@ -87,6 +112,8 @@ const indexPath = (email: string) => `orgs/org-1/emailIndex/${personKey(email)}`
 beforeEach(() => {
   docs.clear()
   indexFailure = null
+  transactionOnly = false
+  transaction.get.mockClear()
   jest.spyOn(console, 'error').mockImplementation(() => undefined)
 })
 
@@ -137,6 +164,83 @@ describe('findContactByEmail', () => {
     const found = await findContactByEmail(bare as any, 'flat@acme.com')
     expect(found?.id).toBe('c-5')
     expect([...docs.keys()].some((key) => key.includes('emailIndex'))).toBe(false)
+  })
+
+  describe('narrowed to one site (hostId)', () => {
+    it('answers the survivor an alternate names when the site may see it', async () => {
+      docs.set(`${CONTACTS}/c-6`, {
+        email: 'jane@acme.com',
+        alternateEmails: ['jane@gmail.com'],
+        visibleTo: ['host:site-a'],
+      })
+      docs.set(indexPath('jane@gmail.com'), { email: 'jane@gmail.com', contactId: 'c-6' })
+      const found = await findContactByEmail(contactsRef, 'jane@gmail.com', { hostId: 'site-a' })
+      expect(found?.id).toBe('c-6')
+    })
+
+    it('answers null for a contact the index names but the site cannot see', async () => {
+      docs.set(`${CONTACTS}/c-7`, {
+        email: 'jane@acme.com',
+        alternateEmails: ['jane@gmail.com'],
+        visibleTo: ['host:site-b'],
+      })
+      docs.set(indexPath('jane@gmail.com'), { email: 'jane@gmail.com', contactId: 'c-7' })
+      expect(
+        await findContactByEmail(contactsRef, 'jane@gmail.com', { hostId: 'site-a' }),
+      ).toBeNull()
+    })
+
+    it('narrows the query fallback the same way, and an org-wide contact passes', async () => {
+      docs.set(`${CONTACTS}/c-8`, { email: 'sam@acme.com', visibleTo: ['host:site-b'] })
+      expect(
+        await findContactByEmail(contactsRef, 'sam@acme.com', { hostId: 'site-a' }),
+      ).toBeNull()
+      docs.set(`${CONTACTS}/c-8`, { email: 'sam@acme.com', visibleTo: ['org'] })
+      const found = await findContactByEmail(contactsRef, 'sam@acme.com', { hostId: 'site-a' })
+      expect(found?.id).toBe('c-8')
+    })
+  })
+
+  describe('inside a transaction', () => {
+    it('reads the index entry and the survivor through the transaction', async () => {
+      docs.set(`${CONTACTS}/c-10`, { email: 'jane@acme.com', alternateEmails: ['jane@gmail.com'] })
+      docs.set(indexPath('jane@gmail.com'), { email: 'jane@gmail.com', contactId: 'c-10' })
+      transactionOnly = true
+      const found = await findContactByEmail(contactsRef, 'jane@gmail.com', {
+        transaction: transaction as any,
+      })
+      expect(found?.id).toBe('c-10')
+      expect(transaction.get).toHaveBeenCalledTimes(2)
+    })
+
+    it('runs the fallback query through the transaction and still fills the entry', async () => {
+      docs.set(`${CONTACTS}/c-11`, { email: 'sam@acme.com' })
+      transactionOnly = true
+      const found = await findContactByEmail(contactsRef, 'sam@acme.com', {
+        transaction: transaction as any,
+      })
+      expect(found?.id).toBe('c-11')
+      // The index miss and the query: two reads, both through the transaction.
+      expect(transaction.get).toHaveBeenCalledTimes(2)
+      // The lazy write is a plain `set`, outside the transaction.
+      expect(docs.get(indexPath('sam@acme.com'))?.contactId).toBe('c-11')
+    })
+
+    it('applies the site scope to a transactional read too', async () => {
+      docs.set(`${CONTACTS}/c-12`, {
+        email: 'jane@acme.com',
+        alternateEmails: ['jane@gmail.com'],
+        visibleTo: ['host:site-b'],
+      })
+      docs.set(indexPath('jane@gmail.com'), { email: 'jane@gmail.com', contactId: 'c-12' })
+      transactionOnly = true
+      expect(
+        await findContactByEmail(contactsRef, 'jane@gmail.com', {
+          hostId: 'site-a',
+          transaction: transaction as any,
+        }),
+      ).toBeNull()
+    })
   })
 })
 

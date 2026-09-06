@@ -127,13 +127,15 @@ describe('a promotion that may proceed', () => {
         canvas([
           { id: 'f1', fieldName: 'name' },
           { id: 'f2', fieldName: 'email', fieldType: 'email' },
+          { id: 'f3', fieldName: 'optIn', fieldType: 'checkbox' },
         ]),
-        { routing: { lead: true } },
+        { routing: { lead: true }, consentFieldName: 'optIn' },
       ),
     )
     expect(result.fields.map((field) => field.fieldName)).toEqual([
       'name',
       'email',
+      'optIn',
     ])
   })
 
@@ -202,6 +204,20 @@ describe('a promotion the contract refuses', () => {
       'lead-routing-has-no-email-field',
     ])
     expect(result.body.violations?.[0]?.message).toContain('never create a lead')
+  })
+
+  it('refuses lead routing with nothing that records consent', () => {
+    // An address without an opt-in files leads nobody may email; the
+    // refusal names consent, since the field is already there.
+    const result = refusal(
+      promote(canvas([{ id: 'f1', fieldName: 'email', fieldType: 'email' }]), {
+        routing: { lead: true },
+      }),
+    )
+    expect(result.body.violations?.map((one) => one.code)).toEqual([
+      'lead-routing-has-no-consent-field',
+    ])
+    expect(result.body.violations?.[0]?.message).toContain('consent')
   })
 
   it('refuses a consent field the design no longer has, and names it', () => {

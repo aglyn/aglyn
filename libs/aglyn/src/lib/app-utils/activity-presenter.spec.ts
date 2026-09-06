@@ -16,6 +16,7 @@
  */
 
 import {
+  activityActorLabel,
   activityHref,
   activityPrimaryText,
   activityTargetLabel,
@@ -73,6 +74,25 @@ describe('activityPrimaryText', () => {
 
   it('falls back to the target label when there is no action', () => {
     expect(activityPrimaryText({ target: { type: 'theme' } })).toBe('Theme')
+  })
+})
+
+describe('activityActorLabel', () => {
+  it('names a person by the address the entry recorded', () => {
+    expect(activityActorLabel({ actorEmail: 'person@example.test' })).toBe(
+      'person@example.test',
+    )
+  })
+
+  it('names an API key by its name, never as Someone (AGL-2632)', () => {
+    expect(activityActorLabel({ actorEmail: null, apiKeyName: 'Zapier' })).toBe(
+      'API key Zapier',
+    )
+  })
+
+  it('falls back to Someone for an entry that recorded neither', () => {
+    expect(activityActorLabel({})).toBe('Someone')
+    expect(activityActorLabel({ actorEmail: null })).toBe('Someone')
   })
 })
 
@@ -147,6 +167,26 @@ describe('activityHref', () => {
     expect(
       activityHref({ target: { type: 'invite', id: 'inv1' } }, { orgSlug }),
     ).toBe('/acme/team')
+  })
+
+  it('routes org-level CRM entries into the org hub (AGL-2634)', () => {
+    expect(
+      activityHref({ target: { type: 'deal', id: 'd1' } }, { orgSlug }),
+    ).toBe('/acme/crm/deals/d1')
+    expect(
+      activityHref({ target: { type: 'contact', id: 'c 1' } }, { orgSlug }),
+    ).toBe('/acme/crm/contacts/c%201')
+    // A bulk line names a kind and no record; a lead's org address needs
+    // its site; a task has no page: each lands on the section.
+    expect(activityHref({ target: { type: 'company' } }, { orgSlug })).toBe(
+      '/acme/crm/companies',
+    )
+    expect(
+      activityHref({ target: { type: 'lead', id: 'k1' } }, { orgSlug }),
+    ).toBe('/acme/crm/leads')
+    expect(
+      activityHref({ target: { type: 'task', id: 't1' } }, { orgSlug }),
+    ).toBe('/acme/crm/tasks')
   })
 
   it('tolerates legacy top-level type/targetId fields', () => {

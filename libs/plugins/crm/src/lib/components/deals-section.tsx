@@ -35,6 +35,7 @@ import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { useCrmSavedView } from '../hooks/use-crm-saved-view'
 import { useCrmViewGrid } from '../hooks/use-crm-view-grid'
+import { CRM_LIST_SLOTS, CrmColumnOrderProvider } from './crm-column-menu'
 import CrmViewsControl from './crm-views-control'
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -581,18 +582,21 @@ export function DealsSection(props: ConsolePluginPageProps) {
                     api={api}
                     csv={csvOptions}
                   />
-                  <ListTable
-                    rows={paged.rows}
-                    columns={columns}
-                    selectable={{ selected: selectedIds, onChange: setSelectedIds }}
-                    onOpen={(_id, row) => openDeal(row as DealDoc)}
-                    // Columns and sort are the view's, controlled (AGL-2617).
-                    columnVisibilityModel={grid.columnVisibilityModel}
-                    onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}
-                    sortModel={grid.sortModel}
-                    onSortModelChange={grid.onSortModelChange}
-                    hideFooter
-                  />
+                  <CrmColumnOrderProvider value={grid.columnOrder}>
+                    <ListTable
+                      rows={paged.rows}
+                      columns={grid.columns}
+                      slots={CRM_LIST_SLOTS}
+                      selectable={{ selected: selectedIds, onChange: setSelectedIds }}
+                      onOpen={(_id, row) => openDeal(row as DealDoc)}
+                      // Columns and sort are the view's, controlled (AGL-2617).
+                      columnVisibilityModel={grid.columnVisibilityModel}
+                      onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}
+                      sortModel={grid.sortModel}
+                      onSortModelChange={grid.onSortModelChange}
+                      hideFooter
+                    />
+                  </CrmColumnOrderProvider>
                   <ListPagination
                     page={paged.page}
                     pageSize={paged.pageSize}

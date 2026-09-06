@@ -114,6 +114,9 @@ import {
   orgDataCollectionForHost,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
+// The leaf, not the barrel: this plugin's specs substitute the barrel
+// wholesale, and the lookup must reach the real index logic under them.
+import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
 import { sendEmail } from '@aglyn/shared-util-email'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
@@ -489,6 +492,11 @@ async function resolveAssignmentContext(
  * somebody who said no. It is safe here because the caller has already been
  * proved an org-wide member, which is the tier the rules grant the whole
  * org's contacts to.
+ *
+ * Through the org's address index (AGL-2633), for the same failure mode
+ * from the other side: a refusal recorded on a record that was later
+ * merged into another is the survivor's refusal, and the sender's address
+ * may be the one that became an alternate.
  */
 async function storedConsentForAddress(
   hostId: string,
@@ -497,11 +505,9 @@ async function storedConsentForAddress(
 ): Promise<MarketingConsentRecord> {
   try {
     const contacts = await orgDataCollectionForHost(hostId, 'contacts')
-    const found = await contacts.where('email', '==', email).limit(1).get()
+    const found = await findContactByEmail(contacts, email)
     return readMarketingBasis(
-      found.empty
-        ? null
-        : (found.docs[0].data() as Record<string, unknown>),
+      found ? (found.data() as Record<string, unknown>) : null,
       group,
     )
   } catch (error) {

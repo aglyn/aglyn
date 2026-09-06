@@ -57,6 +57,9 @@ import {
   type CampaignSendReservation,
   resolveHostSendingIdentity,
 } from '@aglyn/tenant-data-admin'
+// The leaf, not the barrel: this plugin's specs substitute the barrel
+// wholesale, and the lookup must reach the real index logic under them.
+import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 /*
  * The LEAF module for the impersonation exemption too, and for a sharper
@@ -3005,12 +3008,13 @@ export async function proofPersonasForHost(
  * The three sources are the three an audience is built from, tried in the
  * order a small site grows them. Nothing here is taken from the request.
  *
- * The org `contacts` lookup runs against the UNSCOPED collection and checks
- * `visibleTo` after the read. A scoped query carries `array-contains-any` on
- * `visibleTo`, and pairing that with an equality on `email` would need a
- * composite index for a lookup that happens on one click. This is the same
- * shape the segment branch above uses, for the same reason, and the scope
- * check is not skipped — it is moved.
+ * The org `contacts` lookup goes through the org's address index narrowed
+ * to this site (AGL-2633): the index is consulted for the address, the
+ * contact it names is checked against `visibleTo` in memory, and only
+ * then does the `email ==` query run. So a person whose two records were
+ * merged is found under the address that became an alternate, and the
+ * scope check is not skipped — it is applied to the one document an
+ * address names, which is the same shape the segment branch above uses.
  */
 async function findAudienceDocument(
   hostId: string,
@@ -3039,23 +3043,15 @@ async function findAudienceDocument(
   const contacts = await orgDataCollectionForHost(hostId, 'contacts').catch(
     () => null,
   )
-  const matches = contacts
-    ? await contacts
-        .where('email', '==', email)
-        // More than one, because a name can exist in several scopes within one
-        // org and only the ones this site may see are answers.
-        .limit(5)
-        .get()
-        .catch(() => null)
+  const contact = contacts
+    ? await findContactByEmail(contacts, email, { hostId }).catch(() => null)
     : null
-  for (const doc of matches?.docs ?? []) {
-    if (!visibleToHost(doc.get('visibleTo'), hostId)) continue
-    return {
-      data: (doc.data() ?? {}) as Record<string, unknown>,
-      nameFields: ['name', 'firstName'],
-    }
-  }
-  return null
+  return contact
+    ? {
+        data: (contact.data() ?? {}) as Record<string, unknown>,
+        nameFields: ['name', 'firstName'],
+      }
+    : null
 }
 
 /**

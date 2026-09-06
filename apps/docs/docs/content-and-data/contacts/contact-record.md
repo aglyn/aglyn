@@ -98,7 +98,9 @@ is a housekeeping act, and it is not a privacy erasure.
 to be forgotten under GDPR, the CCPA or any similar law. It removes the person
 from *every* site in the workspace, whoever captured them, and it cannot be
 undone. Only a workspace admin or owner can do it; for everyone else the item
-is present but disabled, and its tooltip says who can.
+is present but disabled, and its tooltip says who can. It is offered on a
+site's hub and on the
+[organization's](./overview.md#at-the-organization-level) alike.
 
 Choosing it opens a dialog that lists exactly what will happen, and asks you to
 type the person's email address back before it files anything:
@@ -146,7 +148,9 @@ The dialog first finds the other record — type an email address for an exact
 match, or a name to search among the contacts your site may see — and then
 shows the two side by side, field by field, with the value the kept record will
 carry. Pick which record to **keep**; the other is merged into it and deleted.
-The rule is the same for every field:
+At the [organization level](./overview.md#at-the-organization-level) the
+search spans every site and a record no site captured merges too. The rule is
+the same for every field:
 
 | What | After the merge |
 | --- | --- |
@@ -162,9 +166,21 @@ The rule is the same for every field:
 
 An alternate address is what makes the merge stick: a later capture on it — a
 form the person fills in from the personal account, an order placed with it —
-lands on the kept record rather than creating the second record again. The
+lands on the kept record rather than creating the second record again. Every
+place that finds a person by address reads the same way: an automation step
+that sets a stage or files someone under a campaign, a flow email's consent
+check, the engagement stamp a delivery webhook writes, the Inbox's add-to-list
+check, a refund, a proof's consent read, and the REST API's lookup and
+duplicate refusal all resolve the alternate to the kept record. The
 [REST API](/api/resources/contacts#merge) performs the same merge, and reads
 the alternates back as `alternateEmails`.
+
+What the merge does **not** rewrite is anything keyed by the address itself.
+A list membership, a suppression, and the delivery log of past sends each
+belong to the address they were recorded against, so the personal address's
+list memberships stay under the personal address and the work address's under
+the work address. The kept record shows both addresses in its header, which
+is where to look when a person's mail history seems split.
 
 Merging is available to members whose **data** permission covers the whole
 workspace, because a contact is shared by every site that captured the person
@@ -221,7 +237,7 @@ a **Lead** — a **Customer** once it is paid — and an order makes a
 **Customer**. A subscriber who then submits a form becomes a lead; a customer
 who submits one stays a customer. A contact you add by hand, import, or
 create over the API gets the stage you give it, or none, and a contact
-captured before this rule carries no stage until something sets one.
+captured before this rule carries the stage its earlier captures imply.
 
 | Stage | Meaning |
 | --- | --- |

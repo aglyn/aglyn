@@ -27,6 +27,7 @@ import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { useCrmSavedView } from '../hooks/use-crm-saved-view'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import { useCrmViewGrid } from '../hooks/use-crm-view-grid'
+import { CRM_LIST_SLOTS, CrmColumnOrderProvider } from './crm-column-menu'
 import CrmViewsControl from './crm-views-control'
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -434,22 +435,25 @@ export function TasksSection(props: ConsolePluginPageProps) {
                 directory={directory}
                 csv={csvOptions}
               />
-              <ListTable
-                rows={tasks}
-                columns={columns}
-                selectable={{ selected: selectedIds, onChange: setSelectedIds }}
-                loading={status === 'loading'}
-                onOpen={(id) => {
-                  const found = tasks.find((row) => row.$id === id)
-                  if (found) setDrawer({ open: true, task: found })
-                }}
-                disableColumnFilter
-                // Columns and sort are the view's, controlled (AGL-2617).
-                columnVisibilityModel={grid.columnVisibilityModel}
-                onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}
-                sortModel={grid.sortModel}
-                onSortModelChange={grid.onSortModelChange}
-              />
+              <CrmColumnOrderProvider value={grid.columnOrder}>
+                <ListTable
+                  rows={tasks}
+                  columns={grid.columns}
+                  slots={CRM_LIST_SLOTS}
+                  selectable={{ selected: selectedIds, onChange: setSelectedIds }}
+                  loading={status === 'loading'}
+                  onOpen={(id) => {
+                    const found = tasks.find((row) => row.$id === id)
+                    if (found) setDrawer({ open: true, task: found })
+                  }}
+                  disableColumnFilter
+                  // Columns and sort are the view's, controlled (AGL-2617).
+                  columnVisibilityModel={grid.columnVisibilityModel}
+                  onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}
+                  sortModel={grid.sortModel}
+                  onSortModelChange={grid.onSortModelChange}
+                />
+              </CrmColumnOrderProvider>
             </>
           )}
         </Stack>

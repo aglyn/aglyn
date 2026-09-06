@@ -69,6 +69,9 @@ import {
   orgDataQueryForHost,
   resolveOrgIdForHost,
 } from '@aglyn/tenant-data-admin'
+// The leaf, not the barrel: this library's specs substitute the barrel
+// wholesale, and the lookup must reach the real index logic under them.
+import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
 import { createHmac } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
@@ -772,14 +775,11 @@ async function executeAction(
           continue
         }
         // Scoped to this host (AGL-1039): a site must not reach a contact
-        // it cannot see, even to tag it onto a campaign.
-        const { query: contactsQuery } = await orgDataQueryForHost(
-          hostId,
-          'contacts',
-        )
-        const contact = (
-          await contactsQuery.where('email', '==', email).limit(1).get()
-        ).docs[0]
+        // it cannot see, even to tag it onto a campaign. Through the org's
+        // address index (AGL-2633), so an address a merge folded into
+        // another record still names the person who now holds it.
+        const { ref: contactsRef } = await orgDataQueryForHost(hostId, 'contacts')
+        const contact = await findContactByEmail(contactsRef, email, { hostId })
         if (!contact) {
           stepErrors.push(`no contact for ${email}`)
           continue

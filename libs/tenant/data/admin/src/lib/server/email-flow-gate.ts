@@ -73,6 +73,7 @@ import {
   resolveMarketingConsentPolicy,
 } from '@aglyn/aglyn/server'
 import firebaseAdmin from './firebase-admin'
+import { findContactByEmail } from './contact-email-index'
 import { filterTopicSendable } from './email-suppression'
 import { orgDataQueryForHost } from './organizations'
 
@@ -130,6 +131,11 @@ export type FlowEmailScope = 'scheduled' | 'immediate'
  * expensive shape would be reading these on a beat, for people no step is
  * mailing.
  *
+ * The contact is found through the org's address index narrowed to this
+ * site (AGL-2633): a basis recorded on a record that was later merged into
+ * another is the survivor's basis now, and the address the message goes to
+ * may be the one that became an alternate.
+ *
  * An address in NEITHER silo reads as record-less, which is what
  * `readMarketingBasis(null)` describes: `unrecorded`, with no capture date.
  * Under a `forward` policy that grandfathers and under `strict` it is
@@ -143,9 +149,8 @@ async function readPersonRecord(
 ): Promise<Record<string, unknown> | null> {
   const db = firestore ?? firebaseAdmin.app().firestore()
   try {
-    const { query } = await orgDataQueryForHost(hostId, 'contacts')
-    const contact = (await query.where('email', '==', email).limit(1).get())
-      .docs[0]
+    const { ref } = await orgDataQueryForHost(hostId, 'contacts')
+    const contact = await findContactByEmail(ref, email, { hostId })
     if (contact) return contact.data() as Record<string, unknown>
   } catch (error) {
     console.error('[flow-email] contact lookup failed', hostId, error)

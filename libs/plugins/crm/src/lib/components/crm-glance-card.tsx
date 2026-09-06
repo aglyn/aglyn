@@ -21,7 +21,6 @@ import { money } from '@aglyn/shared-ui-email-campaigns/components/report-figure
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Button, Stack, Typography } from '@mui/material'
 import {
-  collection,
   getAggregateFromServer,
   getCountFromServer,
   query,
@@ -36,7 +35,9 @@ import {
   useOrgDataScope,
   useOrgPlan,
 } from '@aglyn/tenant-feature-instance'
+import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
 import { crmRoutes } from '../model/crm-routes'
+import { openLeadsAcrossSites } from './reports/lead-counts'
 import { scopedCollection, visibleToClause } from './reports/report-scope'
 import { ReportStatTile } from './reports/report-stat-tile'
 import { useAggregateRead } from './reports/use-aggregate-read'
@@ -48,8 +49,20 @@ interface GlanceFigures {
   newThisWeek: number
   pipelineCents: number
   tasksDue: number
-  /** Open leads on this site — new or being worked. */
+  /** Open leads — new or being worked — on this site, or across the org's sites. */
   leadsToWork: number
+}
+
+export interface CrmGlanceCardProps {
+  /**
+   * The site the card is on the dashboard of, or `null` beneath the org
+   * hub's mount (AGL-2634), where the figures total every site: the
+   * org-wide reads carry no scope clause, and the lead figure fans out
+   * over the mount's site list.
+   */
+  hostId: string | null
+  /** The org hub's own path, for the links when there is no site to derive them from. */
+  basePath?: string
 }
 
 /**
@@ -78,30 +91,54 @@ interface GlanceFigures {
  * commerce glance card builds its store link. Nothing is read until the org
  * has settled: a first round of aggregates against the solo group, replaced
  * by a second against the real one, would be two reads for one answer.
+ *
+ * ## The organization level (AGL-2634)
+ *
+ * Mounted with no site beneath the org hub's mount, the card totals the
+ * organization: the reads carry no scope clause — the rules admit an
+ * org-wide member to every row — and the lead figure is the same two
+ * counts per site, over every site the mount lists, summed. Nothing is
+ * read until that list has settled, for the reason nothing is read under
+ * a site until the org has. The org's dashboard has no widget slot yet, so
+ * the mount is a capability rather than a page; what it needs from the
+ * shell is a slot and the hub's `basePath`.
  */
-export function CrmGlanceCard(props: { hostId: string }) {
-  const { hostId } = props
+export function CrmGlanceCard(props: CrmGlanceCardProps) {
+  const { hostId, basePath } = props
+  const mount = useCrmOrgMount()
   const consoleRoute = useConsoleHostRoute(hostId)
-  const { org, ready: orgReady } = useOrgPlan(hostId)
-  const { scope } = useOrgDataScope({ hostId })
+  const { org, ready: planReady } = useOrgPlan(hostId ?? undefined)
+  const { scope } = useOrgDataScope(hostId ? { hostId } : { orgId: mount?.orgId })
   const firestore = useFirestore()
+  // Under a site, the site's group's tokens once the org has settled; at
+  // the org level `null` — no clause — once the site list has.
   const tokens = useMemo(() => {
-    if (!orgReady) return null
+    if (!hostId) return null
+    if (!planReady) return undefined
     const group = Aglyn.consentGroupForHost(org ?? null, hostId)
     return [
       Aglyn.ORG_SCOPE_TOKEN,
       ...group.hostIds.map((id) => Aglyn.hostScopeToken(id)),
     ].slice(0, Aglyn.MAX_SCOPE_HOSTS)
-  }, [org, orgReady, hostId])
+  }, [org, planReady, hostId])
+  const leadSites = useMemo(
+    () =>
+      hostId
+        ? [hostId]
+        : mount?.hostsReady
+          ? mount.hosts.map((host) => host.id)
+          : null,
+    [hostId, mount],
+  )
+  const leadSitesKey = leadSites?.join('\n') ?? ''
   // Anchored once per mount so the queries are stable across renders.
   const nowMs = useMemo(() => Date.now(), [])
 
   const figures = useAggregateRead<GlanceFigures>(() => {
-    if (!scope || !tokens) return null
+    if (!scope || tokens === undefined || !leadSites) return null
     const contacts = scopedCollection(firestore, scope, 'contacts')
     const deals = scopedCollection(firestore, scope, Aglyn.CRM_COLLECTIONS.deals)
     const tasks = scopedCollection(firestore, scope, Aglyn.CRM_COLLECTIONS.tasks)
-    const leads = collection(firestore, 'hosts', hostId, 'leads')
     const day = Aglyn.localDayBounds(nowMs)
     const countOf = (target: ReturnType<typeof query>) =>
       getCountFromServer(target).then((snapshot) => snapshot.data().count)
@@ -127,21 +164,32 @@ export function CrmGlanceCard(props: { hostId: string }) {
           where('dueAtMs', '<', day.end),
         ),
       ),
-      countOf(query(leads)),
-      countOf(query(leads, where('status', 'in', Aglyn.CRM_LEAD_CLOSED_STATUSES))),
-    ]).then(([contacts, newThisWeek, pipelineCents, tasksDue, leads, closedLeads]) => ({
+      openLeadsAcrossSites(firestore, leadSites),
+    ]).then(([contacts, newThisWeek, pipelineCents, tasksDue, leadsToWork]) => ({
       contacts,
       newThisWeek,
       pipelineCents,
       tasksDue,
-      leadsToWork: Aglyn.openLeadsFromCounts(leads, closedLeads),
+      leadsToWork,
     }))
-  }, [firestore, scope, tokens, nowMs, hostId])
+  }, [firestore, scope, tokens, nowMs, leadSitesKey])
 
   const routes = useMemo(
-    () => (consoleRoute.base ? crmRoutes(`${consoleRoute.base}/crm`) : null),
-    [consoleRoute.base],
+    () =>
+      hostId
+        ? consoleRoute.base
+          ? crmRoutes(`${consoleRoute.base}/crm`)
+          : null
+        : basePath
+          ? crmRoutes(basePath)
+          : null,
+    [hostId, consoleRoute.base, basePath],
   )
+  const hubHref = hostId
+    ? consoleRoute.base
+      ? `${consoleRoute.base}/crm`
+      : undefined
+    : basePath
   const value = figures.value
 
   return (
@@ -161,7 +209,7 @@ export function CrmGlanceCard(props: { hostId: string }) {
           <Button
             component={AppLink as any}
             {...({ componentVariant: 'naked', nativeButton: false } as any)}
-            href={consoleRoute.base ? `${consoleRoute.base}/crm` : undefined}
+            href={hubHref}
             size="small"
             color="primary"
           >
@@ -197,7 +245,7 @@ export function CrmGlanceCard(props: { hostId: string }) {
           <ReportStatTile
             label={'Leads to work'}
             value={value ? value.leadsToWork.toLocaleString() : null}
-            note={'open on this site'}
+            note={hostId ? 'open on this site' : 'open across every site'}
             href={routes?.section('leads')}
           />
         </Stack>

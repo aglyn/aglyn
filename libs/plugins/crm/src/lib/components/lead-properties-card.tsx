@@ -36,6 +36,7 @@ import {
   Select,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import { deleteField, doc, serverTimestamp, updateDoc } from 'firebase/firestore'
@@ -48,6 +49,12 @@ import { LeadOwnerSelect } from './lead-owner-select'
 import { LeadStatusChip } from './lead-status-chip'
 
 const NOTES_MAX = 4000
+
+/**
+ * Why Convert is refused while an erasure waits on the person — the same
+ * sentence shape the overflow's items carry, so the two read as one state.
+ */
+const CONVERT_PENDING_ERASURE_REASON = 'An erasure is pending for this person'
 
 /** A label over a value — the record page's one row shape. */
 function Fact(props: { label: string; children: React.ReactNode }) {
@@ -82,6 +89,13 @@ export interface LeadPropertiesCardProps {
   extraMenuItems?: RowActionsMenuItem[]
   /** What the page shows above the facts — the erasure-pending state. */
   banner?: React.ReactNode
+  /**
+   * An erasure request is waiting on this person (AGL-2623). Convert stays
+   * on the page but is refused with the reason, the way the overflow's items
+   * are: a conversion filed now would reach the capture door only to be
+   * refused there, and the lead itself goes when the request runs.
+   */
+  erasurePending?: boolean
 }
 
 /**
@@ -111,6 +125,7 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
     onUnqualify,
     extraMenuItems = [],
     banner,
+    erasurePending = false,
   } = props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
@@ -182,11 +197,21 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
       backLabel="Back to leads"
       actions={
         <>
-          {!converted ? (
+          {converted ? null : erasurePending ? (
+            <Tooltip title={CONVERT_PENDING_ERASURE_REASON}>
+              {/* A disabled button receives no pointer events, so the
+                  tooltip anchors on the span around it. */}
+              <span>
+                <Button size="small" variant="contained" disabled>
+                  {'Convert'}
+                </Button>
+              </span>
+            </Tooltip>
+          ) : (
             <Button size="small" variant="contained" onClick={onConvert}>
               {'Convert'}
             </Button>
-          ) : null}
+          )}
           <CrmSendEmailButton
             hostId={hostId}
             leadId={leadId}

@@ -44,6 +44,7 @@ import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import {
+  activityActorLabel,
   activityHref,
   activityTargetLabel,
 } from '@aglyn/aglyn/app-utils/activity-presenter'
@@ -180,7 +181,7 @@ export function HostActivityTable(props: HostActivityTableProps) {
         description:
           'The address this account had when the entry was written. It is ' +
           'not updated if the address changes later.',
-        valueGetter: (_value, row: any) => row.actorEmail ?? 'Someone',
+        valueGetter: (_value, row: any) => activityActorLabel(row),
       },
       {
         field: 'createdAt',
@@ -256,7 +257,7 @@ export function HostActivityTable(props: HostActivityTableProps) {
                       label
                     )}
                   </TableCell>
-                  <TableCell>{entry.actorEmail ?? 'Someone'}</TableCell>
+                  <TableCell>{activityActorLabel(entry)}</TableCell>
                   <TableCell>
                     {formatStaffTimestamp(
                       entry.createdAt?.toDate?.() ?? null,

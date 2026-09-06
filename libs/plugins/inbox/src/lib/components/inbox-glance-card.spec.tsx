@@ -27,7 +27,7 @@
  * PROBE that lets it say there are more without counting the collection.
  */
 
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
 /** The window the card asked for, and what Firestore answers with. */
@@ -112,6 +112,23 @@ const submission = (
   ...extra,
 })
 
+/**
+ * Mounts the card and lets its leads count land.
+ *
+ * The count is read in an effect and set when the promise answers, so a
+ * test that asserted the moment `render` returned would finish before that
+ * state update — React reports the update as unwrapped, and the test has
+ * proven nothing about the line the count draws. The effect settles inside
+ * the act scope instead, so every assertion is over the card as it reads.
+ */
+async function renderCard() {
+  let rendered!: ReturnType<typeof render>
+  await act(async () => {
+    rendered = render(<InboxGlanceCard hostId="host-1" />)
+  })
+  return rendered
+}
+
 beforeEach(() => {
   submissions = []
   askedLimit = undefined
@@ -121,14 +138,14 @@ beforeEach(() => {
 })
 
 describe('the inbox glance card', () => {
-  it('renders nothing until the site has a submission', () => {
+  it('renders nothing until the site has a submission', async () => {
     // An empty card about forms on a site with no form is an advertisement,
     // not a summary — the rule every other capability glance follows.
-    const { container } = render(<InboxGlanceCard hostId="host-1" />)
+    const { container } = await renderCard()
     expect(container.innerHTML).toBe('')
   })
 
-  it('names each sender, their form, and how long ago it arrived', () => {
+  it('names each sender, their form, and how long ago it arrived', async () => {
     submissions = [
       submission('s-1', { name: 'Priya Nair', email: 'priya@lumen.co' }),
       submission(
@@ -137,7 +154,7 @@ describe('the inbox glance card', () => {
         { formName: 'Quote request', createdAt: minutesAgo(180) },
       ),
     ]
-    render(<InboxGlanceCard hostId="host-1" />)
+    await renderCard()
     expect(screen.getByText('Priya Nair')).toBeTruthy()
     expect(screen.getByText('Contact')).toBeTruthy()
     // No name field, so the sender falls back to the email — the same
@@ -148,9 +165,9 @@ describe('the inbox glance card', () => {
     expect(screen.getByText('3h')).toBeTruthy()
   })
 
-  it('reads the newest first, and only a preview of them', () => {
+  it('reads the newest first, and only a preview of them', async () => {
     submissions = [submission('s-1', { name: 'Priya Nair' })]
-    render(<InboxGlanceCard hostId="host-1" />)
+    await renderCard()
     // Ordered, because an unordered `limit` is answered in document-id order
     // and would make "newest" a pseudo-random sample.
     expect(askedOrder).toBe('createdAt desc')
@@ -159,13 +176,13 @@ describe('the inbox glance card', () => {
     expect(askedLimit).toBe(4)
   })
 
-  it('draws three rows and says the rest are in the Inbox', () => {
+  it('draws three rows and says the rest are in the Inbox', async () => {
     submissions = ['a', 'b', 'c', 'd'].map((id, index) =>
       submission(id, { name: `Sender ${id.toUpperCase()}` }, {
         createdAt: minutesAgo(index + 1),
       }),
     )
-    render(<InboxGlanceCard hostId="host-1" />)
+    await renderCard()
     expect(screen.getByText('Sender C')).toBeTruthy()
     // The fourth document is the probe: it is a FACT that more exist, and it
     // is never drawn as a row.
@@ -173,21 +190,21 @@ describe('the inbox glance card', () => {
     expect(screen.getByText(/more in the Inbox/)).toBeTruthy()
   })
 
-  it('counts the unread rows it is actually showing', () => {
+  it('counts the unread rows it is actually showing', async () => {
     submissions = [
       submission('s-1', { name: 'Priya Nair' }, { read: false }),
       submission('s-2', { name: 'Sam Okafor' }, { read: false }),
       submission('s-3', { name: 'Rae Visitor' }),
     ]
-    render(<InboxGlanceCard hostId="host-1" />)
+    await renderCard()
     expect(screen.getByText(/2 unread here/)).toBeTruthy()
     // The dot is the Inbox's own unread mark, one per unread row.
     expect(screen.getAllByLabelText('Unread')).toHaveLength(2)
   })
 
-  it('says so when nothing is waiting', () => {
+  it('says so when nothing is waiting', async () => {
     submissions = [submission('s-1', { name: 'Priya Nair' })]
-    render(<InboxGlanceCard hostId="host-1" />)
+    await renderCard()
     expect(screen.getByText('All caught up')).toBeTruthy()
     expect(screen.queryByLabelText('Unread')).toBeNull()
   })
@@ -200,8 +217,8 @@ describe('the inbox glance card', () => {
   it('counts the open leads on the server and links them to the CRM', async () => {
     submissions = [submission('a', { name: 'Priya Nair' })]
     leadCounts = { all: 5, closed: 2 }
-    render(<InboxGlanceCard hostId="host-1" />)
-    await waitFor(() => expect(screen.getByText(/3 open leads/)).toBeTruthy())
+    await renderCard()
+    expect(screen.getByText(/3 open leads/)).toBeTruthy()
     expect(askedLeadStatuses).toBe('status in qualified,unqualified')
     const link = screen.getByRole('link', { name: 'Work them in the CRM' })
     expect(link.getAttribute('href')).toBe('/acme/hosts/demo/crm/leads')
@@ -209,25 +226,25 @@ describe('the inbox glance card', () => {
 
   it('shows the card for a site with leads and no submissions yet', async () => {
     leadCounts = { all: 1, closed: 0 }
-    render(<InboxGlanceCard hostId="host-1" />)
-    await waitFor(() => expect(screen.getByText(/1 open lead ·/)).toBeTruthy())
+    await renderCard()
+    expect(screen.getByText(/1 open lead ·/)).toBeTruthy()
     expect(screen.getByText('All caught up')).toBeTruthy()
   })
 
   it('says nothing about leads when none are open', async () => {
     submissions = [submission('a', { name: 'Priya Nair' })]
     leadCounts = { all: 2, closed: 2 }
-    render(<InboxGlanceCard hostId="host-1" />)
-    await waitFor(() => expect(screen.getByText('Priya Nair')).toBeTruthy())
+    await renderCard()
+    expect(screen.getByText('Priya Nair')).toBeTruthy()
     expect(screen.queryByText(/open lead/)).toBeNull()
   })
 
-  it('THE CONTROL: the fixture reaches the card', () => {
+  it('THE CONTROL: the fixture reaches the card', async () => {
     // Guard the guard. Every assertion above is about rendered text, and a
     // mock that answered `undefined` would make the empty-state test pass
     // while proving nothing about the rest.
     submissions = [submission('s-1', { name: 'Priya Nair' })]
-    render(<InboxGlanceCard hostId="host-1" />)
+    await renderCard()
     expect(screen.getByText('Inbox')).toBeTruthy()
     expect(screen.getByText('Open inbox')).toBeTruthy()
   })

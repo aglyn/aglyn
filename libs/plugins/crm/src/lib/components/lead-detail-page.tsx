@@ -128,6 +128,7 @@ export function LeadDetailPage(props: CrmDetailPageProps) {
           onUnqualify={() => setUnqualifying(true)}
           extraMenuItems={erase.menuItems}
           banner={erase.banner}
+          erasurePending={erase.pendingSinceMs !== null}
         />
         <LeadHistoryCard hostId={hostId} leadId={id} lead={lead} />
         <RecordActivityCard hostId={hostId} org={org} leadId={id} />

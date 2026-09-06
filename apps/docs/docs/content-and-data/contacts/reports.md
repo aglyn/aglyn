@@ -108,8 +108,10 @@ A lead is placed by when it was **first seen**, so a returning visitor's second
 form does not make a second lead in a second period. The funnel is read from
 the period's **200 most recently captured leads** — the same window the Leads
 list shows — and says so when the period held more. Because leads belong to a
-site rather than to the workspace, this card always reports the site you are
-looking at.
+site rather than to the workspace, this card reports the site you are looking
+at; at the [organization level](./overview.md#at-the-organization-level) it
+reads every site — at most 200 leads per site — and totals them, naming the
+per-site window when any site held more.
 
 ## Pipeline
 

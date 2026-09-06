@@ -112,7 +112,27 @@ const crowded: FakeDoc[] = Array.from({ length: WINDOW + 5 }, (_, i) => ({
   },
 }))
 
-const DOCS: FakeDoc[] = [...filler, ...busy, ...crowded]
+/** A lead an integration converted through the REST API, by a named key. */
+const API_LEAD = 'lead-by-key'
+/**
+ * The one entry a key wrote: no address, the key's name. Oldest of all, so
+ * the un-targeted feed's newest-first order is unchanged by its presence.
+ */
+const byKey: FakeDoc[] = [
+  {
+    id: 'C0000',
+    data: {
+      action: 'Converted lead',
+      actorId: 'api',
+      actorEmail: null,
+      apiKeyName: 'Zapier',
+      target: { type: 'lead', id: API_LEAD, name: 'Ann Lee' },
+      createdAt: { seconds: 0 },
+    },
+  },
+]
+
+const DOCS: FakeDoc[] = [...filler, ...busy, ...crowded, ...byKey]
 
 /** Reads a dotted field path the way Firestore does. */
 const readPath = (data: Record<string, any>, path: string) =>
@@ -258,6 +278,14 @@ describe('Page Activity — the window it asks for', () => {
     expect(
       screen.getByText('Updated SEO — Press — Entry Template'),
     ).not.toBeNull()
+  })
+})
+
+describe('Page Activity — who did it', () => {
+  it('names an API key by its name rather than as "Someone" (AGL-2632)', () => {
+    render(<HostActivityCard hostId={HOST_ID} targetId={API_LEAD} />)
+    expect(screen.getByText(/API key Zapier/)).not.toBeNull()
+    expect(screen.queryByText(/Someone/)).toBeNull()
   })
 })
 
