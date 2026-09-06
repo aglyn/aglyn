@@ -69,6 +69,11 @@ import {
   settleCompanyContactsCounts,
 } from './contact-company-link'
 import {
+  emailIndexBeside,
+  findContactByEmail,
+  writeContactEmailIndex,
+} from './contact-email-index'
+import {
   consentGroupForSite,
   getOrgForHost,
   orgDataCollectionForHost,
@@ -519,14 +524,17 @@ export async function upsertHostContact(
      * org-wide. They are separated here: this finds the person, and
      * `visibleTo` below decides who may see them — widened by the capture
      * that just happened, never by the lookup that found them.
+     *
+     * THROUGH THE ADDRESS INDEX FIRST (AGL-2625). A person whose two records
+     * were merged answers to two addresses, and only one of them is the
+     * document's `email`; the index is what lets a capture on the other one
+     * land on the survivor instead of minting the duplicate again. The query
+     * stays as the fallback, so a row the index has not seen costs one extra
+     * read once and needs no backfill.
      *=========================================*/
-    const existing = await contactsRef
-      .where('email', '==', email)
-      .limit(1)
-      .get()
+    const docSnapshot = await findContactByEmail(contactsRef, email)
 
-    if (!existing.empty) {
-      const docSnapshot = existing.docs[0]
+    if (docSnapshot) {
       /*
        * MERGED INTO THIS GROUP'S FACET, not into the top of the document.
        *
@@ -844,6 +852,9 @@ export async function upsertHostContact(
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     })
+    // The address now resolves to this row (AGL-2625). Its own catch inside
+    // the writer, so an index the capture could not reach costs nothing.
+    await writeContactEmailIndex(emailIndexBeside(contactsRef), created.id, [email])
     // The company the door named now has one more contact naming it
     // (AGL-2613) — the fresh row's plan is the trivial one, nothing held
     // before and nothing held elsewhere.

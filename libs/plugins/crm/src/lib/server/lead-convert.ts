@@ -75,6 +75,7 @@ import {
 import {
   consentGroupForSite,
   crmRecordsQuotaForOrg,
+  findContactByEmail,
   firebaseAdmin,
   getOrgForHost,
   logHostActivity,
@@ -345,8 +346,14 @@ export const leadConvertHandler: PluginApiHandler = async (req, res) => {
       },
     })
     const contactsRef = await orgDataCollectionForHost(hostId, 'contacts')
-    const found = await contactsRef.where('email', '==', email).limit(1).get()
-    if (found.empty) {
+    /*
+     * The same resolution the capture door just made (AGL-2625): the
+     * address index first, so a lead whose address is an ALTERNATE on a
+     * merged contact converts into the survivor the capture landed on
+     * rather than reading as a contact the band dropped.
+     */
+    const contactSnapshot = await findContactByEmail(contactsRef, email)
+    if (!contactSnapshot) {
       /*
        * The upsert swallows its own failures and drops a creation past a Free
        * org's audience band — either way there is no contact to convert
@@ -361,8 +368,9 @@ export const leadConvertHandler: PluginApiHandler = async (req, res) => {
       })
       return
     }
-    const contactRef = found.docs[0].ref
-    const contactId = found.docs[0].id
+    const contactRef = contactSnapshot.ref
+    const contactId = contactSnapshot.id
+    const contactData = (contactSnapshot.data() ?? {}) as Record<string, unknown>
     const orgRef = firestore.collection('orgs').doc(orgId)
     /*
      * THE RECORDS BAND (AGL-2611), asked before each record this conversion
@@ -395,8 +403,7 @@ export const leadConvertHandler: PluginApiHandler = async (req, res) => {
      * lead's existing owner and the caller are not, having chosen for
      * themselves.
      */
-    let ownerUid =
-      readContactFacet(found.docs[0].data(), group.groupId).ownerUid ?? ''
+    let ownerUid = readContactFacet(contactData, group.groupId).ownerUid ?? ''
     if (!ownerUid) {
       const assigned = await assignOwnerForCapture({
         hostId,
@@ -486,7 +493,7 @@ export const leadConvertHandler: PluginApiHandler = async (req, res) => {
       await writeContactCompanyLink({
         firestore,
         contactRef,
-        contact: found.docs[0].data() as Record<string, unknown>,
+        contact: contactData,
         companiesRef: orgRef.collection(CRM_COLLECTIONS.companies),
         groupId: group.groupId,
         companyId,

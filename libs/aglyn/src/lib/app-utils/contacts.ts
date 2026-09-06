@@ -193,10 +193,78 @@ export interface HostContact {
   phone?: string
   /** The company name as typed, mirrored the same way. */
   companyName?: string
+  /**
+   * The OTHER addresses this person answers to (AGL-2625).
+   *
+   * A contact is keyed on one email, so one human with a work address and a
+   * personal one is two documents until somebody merges them. The merge keeps
+   * the survivor's `email` as the identity and records the merged record's
+   * address here, so a later capture on it — a form filled in from the
+   * personal account — resolves to this row rather than minting the second
+   * document again. `emailIndex` (see {@link CONTACT_EMAIL_INDEX_COLLECTION})
+   * is the lookup; this array is the record of why an entry there points
+   * where it does, and what the record page shows as "also".
+   *
+   * Shared identity like `email`, not a facet field: which addresses are one
+   * person is a fact about the person, and a holder that did not perform the
+   * merge still needs its capture on the alternate address to land on the
+   * shared row. Bounded at {@link CONTACT_ALTERNATE_EMAILS_CAP}.
+   */
+  alternateEmails?: string[]
 }
 
 /** Timeline cap: keeps the doc small; older interactions age out. */
 export const CONTACT_INTERACTIONS_CAP = 50
+
+/** The field holding {@link HostContact.alternateEmails}. */
+export const CONTACT_ALTERNATE_EMAILS_FIELD = 'alternateEmails'
+
+/**
+ * The most alternate addresses one contact carries. Ten is past any real
+ * person's mailbox count, and it bounds the index writes one merge fans out.
+ */
+export const CONTACT_ALTERNATE_EMAILS_CAP = 10
+
+/**
+ * `orgs/{orgId}/emailIndex/{personKey}` → `{ email, contactId }` (AGL-2625).
+ *
+ * The address-to-contact lookup the capture door consults BEFORE the
+ * per-document `email ==` query, so an address recorded as an alternate on a
+ * merged row resolves to the survivor. Keyed by `personKey` — the sha256 of
+ * the normalized address — so a document id never carries the address
+ * itself, the same derivation a lead and a list membership use.
+ *
+ * WRITTEN LAZILY, never backfilled: the query on `email` stays as the
+ * fallback, and a contact that has no entry gets one on the next write that
+ * finds it. A row the index has never seen therefore costs one extra read
+ * once, and nothing needs to run over the existing collection.
+ *
+ * Server-written only; the rules close it to every client.
+ */
+export const CONTACT_EMAIL_INDEX_COLLECTION = 'emailIndex'
+
+/**
+ * Every address a contact answers to — the primary first, then the
+ * alternates — normalized and deduplicated, so an index writer and a lead
+ * lookup walk one list.
+ */
+export function contactEmails(
+  contact: Record<string, unknown> | null | undefined,
+): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  const push = (value: unknown) => {
+    const email = normalizeContactEmail(value)
+    if (email && !seen.has(email)) {
+      seen.add(email)
+      out.push(email)
+    }
+  }
+  push((contact ?? {})['email'])
+  const alternates = (contact ?? {})[CONTACT_ALTERNATE_EMAILS_FIELD]
+  if (Array.isArray(alternates)) alternates.forEach(push)
+  return out
+}
 
 /** The top-level field naming every form a contact came in through — see `HostContact.formIds`. */
 export const CONTACT_FORM_IDS_FIELD = 'formIds'

@@ -49,6 +49,10 @@ export * from './person-key-web'
 // it because `ContactFacet` names its lifecycle stage and custom-value types;
 // the scope stamp every CRM creator writes lives here too.
 export * from './crm'
+// Two contact documents folded into one (AGL-2625): the plan the console
+// previews and the server writes, reading the facet shape from `contacts`
+// and the company mirror from `crm`.
+export * from './contact-merge'
 // What the CRM's reports compute from what they read — periods, weekly
 // buckets, the lifecycle funnel, pipeline totals (AGL-2604). Pure like `crm`,
 // and beside it because it reads the stage list and the deal weighting from

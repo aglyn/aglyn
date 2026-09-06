@@ -86,6 +86,7 @@ import {
   CONTACT_EMAIL_HISTORY_ROUTE,
   contactEmailHistoryHandler,
 } from './server/contact-email-history'
+import { CONTACTS_MERGE_ROUTE, contactsMergeHandler } from './server/contacts-merge'
 
 /**
  * `GET /api/crm/ping` → `{ ok: true, plugin: 'crm' }`.
@@ -528,4 +529,8 @@ export function registerCrmConsoleApi(): void {
   // The one READ behind a route (AGL-2616): the per-recipient delivery log
   // is closed to clients, so a contact's campaign mail is projected here.
   registerPluginApiRoute(CONTACT_EMAIL_HISTORY_ROUTE, contactEmailHistoryHandler)
+  // Two records for one person become one (AGL-2625): the repoint of every
+  // row naming the merged record and the transaction over both documents
+  // are the server's, and the address index it writes is closed to clients.
+  registerPluginApiRoute(CONTACTS_MERGE_ROUTE, contactsMergeHandler)
 }
