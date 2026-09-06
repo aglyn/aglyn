@@ -16,12 +16,21 @@
  */
 'use client'
 
-import type { ContactCustomValue, ContactFieldDefinition } from '@aglyn/aglyn'
+import {
+  type ContactCustomValue,
+  type ContactFieldDefinition,
+  crmContactCustomColumn,
+} from '@aglyn/aglyn'
 import { Link, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 
-/** The column `field` a definition's key is listed under — namespaced so a key can never collide with a built-in column. */
-export const customFieldColumnId = (key: string) => `custom_${key}`
+/**
+ * The column `field` a definition's key is listed under — namespaced so a
+ * key can never collide with a built-in column, and the shared contract
+ * since AGL-2617 so a saved view's filter clause and its column list name
+ * the field the same way.
+ */
+export const customFieldColumnId = crmContactCustomColumn
 
 /**
  * One stored value, as the list shows it.

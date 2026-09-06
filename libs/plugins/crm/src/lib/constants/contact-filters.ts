@@ -15,6 +15,11 @@
  * limitations under the License.
  */
 
+import {
+  type ContactFieldDefinition,
+  CRM_CONTACT_VIEW_FIELDS,
+  crmContactCustomColumn,
+} from '@aglyn/aglyn'
 import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
 
 /*
@@ -63,7 +68,11 @@ export const CONTACT_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
     // array — `orderBy` on the same field an `array-contains` matches is a
     // composite index nobody wants to explain.
     containsOrderBy: 'updatedAt',
-    operators: ['contains', 'isNotEmpty'],
+    // `isAnyOf` is a saved segment's "any of these tags" (AGL-2617). The
+    // query cannot serve it — `array-contains-any` is the scope clause's
+    // — so the translator refuses it and the list matches it over the
+    // window, which the caption says.
+    operators: ['contains', 'isAnyOf', 'isNotEmpty'],
   },
   {
     /*
@@ -92,13 +101,132 @@ export const CONTACT_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
   { column: 'ltvCents', kind: 'number', path: 'ltvCents' },
   { column: 'createdAt', kind: 'date', path: 'createdAt', presence: 'always' },
   { column: 'updatedAt', kind: 'date', path: 'updatedAt', presence: 'always' },
+  /*
+   * THE FACET FIELDS (AGL-2617) — window-only, every one of them.
+   *
+   * An owner, a stage, a company and the capture sources live on the
+   * viewing group's facet of the shared contact row, and a facet path is
+   * per group: a `where` on it would need an index per group, and the
+   * translator would send a scoped member a query the rules deny. So these
+   * are declared for the menu and for a saved view, matched over the loaded
+   * window against the flattened row (`ContactRecord` carries each at the
+   * top), and never put on a query — `windowOnly` is what holds that line.
+   * The paths are the ROW'S, which is what the matcher reads.
+   *
+   * The values are picked, not typed — a uid from the roster, a stage from
+   * the fixed list, a source from its labels, a company from the picker —
+   * so `equals` and `isAnyOf` are what they offer; the section supplies
+   * the choices. The column names are the contract `CRM_CONTACT_VIEW_FIELDS`
+   * states, because the dynamic-list translator reads a view by them.
+   */
+  {
+    column: CRM_CONTACT_VIEW_FIELDS.owner,
+    kind: 'exact',
+    path: 'ownerUid',
+    windowOnly: true,
+    operators: ['equals', 'isAnyOf', 'isNotEmpty'],
+  },
+  {
+    column: CRM_CONTACT_VIEW_FIELDS.stage,
+    kind: 'exact',
+    path: 'lifecycleStage',
+    windowOnly: true,
+    operators: ['equals', 'isAnyOf', 'isNotEmpty'],
+  },
+  {
+    // The `sources` presence map, matched on its keys — see `keysOf`.
+    column: CRM_CONTACT_VIEW_FIELDS.source,
+    kind: 'exact',
+    path: 'sources',
+    keysOf: true,
+    windowOnly: true,
+    operators: ['equals', 'isAnyOf'],
+  },
+  {
+    column: CRM_CONTACT_VIEW_FIELDS.company,
+    kind: 'exact',
+    path: 'companyId',
+    windowOnly: true,
+    operators: ['equals', 'isNotEmpty'],
+  },
 ]
 
-/** Headers for contact fields that are filterable without being columns. */
+/**
+ * One filter field per active custom contact field (AGL-2617).
+ *
+ * A custom value lives under the facet's `custom` map, so every one is
+ * window-only for the reason the facet fields above are, and its column is
+ * the one the table shows it under — `crmContactCustomColumn(key)` — so a
+ * clause and a column agree on the name and a saved view's columns and
+ * filters name the same thing. The kind follows the definition's type, and
+ * `nullable` is how a cleared value is stored, which is what makes both
+ * empty operators honest here.
+ */
+export function contactCustomFilterFields(
+  definitions: readonly Pick<ContactFieldDefinition, 'key' | 'type' | 'retiredAt'>[],
+): ListFilterField[] {
+  return definitions
+    .filter((definition) => !definition.retiredAt)
+    .map((definition) => {
+      const column = crmContactCustomColumn(definition.key)
+      const path = `custom.${definition.key}`
+      switch (definition.type) {
+        case 'number':
+          return { column, kind: 'number', path, windowOnly: true, presence: 'nullable' }
+        case 'date':
+          return { column, kind: 'date', path, windowOnly: true, presence: 'nullable' }
+        case 'checkbox':
+          return { column, kind: 'boolean', path, windowOnly: true }
+        case 'select':
+          return {
+            column,
+            kind: 'exact',
+            path,
+            windowOnly: true,
+            presence: 'nullable',
+            operators: ['equals', 'isAnyOf', 'isEmpty', 'isNotEmpty'],
+          }
+        default:
+          return {
+            column,
+            kind: 'text',
+            path,
+            windowOnly: true,
+            presence: 'nullable',
+            operators: ['contains', 'equals', 'startsWith', 'isEmpty', 'isNotEmpty'],
+          }
+      }
+    })
+}
+
+/** The custom fields' headers, keyed by the column each filters as. */
+export function contactCustomFilterHeaders(
+  definitions: readonly Pick<ContactFieldDefinition, 'key' | 'label'>[],
+): Record<string, string> {
+  return Object.fromEntries(
+    definitions.map((definition) => [
+      crmContactCustomColumn(definition.key),
+      definition.label || definition.key,
+    ]),
+  )
+}
+
+/**
+ * How every filterable contact field reads — on a chip, in the add-filter
+ * picker, and as the header of a filter-only hidden column.
+ */
 export const CONTACT_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  name: 'Contact',
+  email: 'Email',
+  tags: 'Tags',
   formIds: 'Form ID',
   hostId: 'Site ID',
   ordersCount: 'Orders',
   ltvCents: 'Lifetime value (cents)',
+  createdAt: 'Created',
   updatedAt: 'Updated',
+  [CRM_CONTACT_VIEW_FIELDS.owner]: 'Owner',
+  [CRM_CONTACT_VIEW_FIELDS.stage]: 'Stage',
+  [CRM_CONTACT_VIEW_FIELDS.source]: 'Source',
+  [CRM_CONTACT_VIEW_FIELDS.company]: 'Company',
 }

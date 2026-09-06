@@ -17,6 +17,7 @@
 
 import type { ConsolePluginPageProps } from '@aglyn/aglyn'
 import type { CrmConsoleSectionId } from '../components/crm-console-sections'
+import { CRM_VIEW_PARAM } from './crm-view-param'
 
 /**
  * Every address inside the Contacts surface, built from the one string the
@@ -67,6 +68,16 @@ export function crmRoutes(basePath: string) {
     lead: (id: string) => `${section('leads')}/${encodeURIComponent(id)}`,
     company: (id: string) => `${section('companies')}/${encodeURIComponent(id)}`,
     deal: (id: string) => `${section('deals')}/${encodeURIComponent(id)}`,
+    /**
+     * A section opened on one of its saved views (AGL-2617). The list reads
+     * the key back through `crmViewIdFromParams`; the same key composes
+     * with the Contacts seeds above, which is why it is a query key and not
+     * a path segment.
+     */
+    sectionView: (id: CrmConsoleSectionId, viewId: string) =>
+      `${section(id)}?${new URLSearchParams({
+        [CRM_VIEW_PARAM]: viewId,
+      }).toString()}`,
   }
 }
 

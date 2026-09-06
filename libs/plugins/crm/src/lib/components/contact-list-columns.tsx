@@ -37,7 +37,21 @@ import type { ContactRecord } from '../model/contact-record'
  * The filterable fields that get a column. The rest of
  * `CONTACT_LIST_FILTER_FIELDS` still reaches the filter panel, hidden.
  */
-export const CONTACT_FILTER_COLUMNS = ['name', 'sources', 'tags', 'updatedAt']
+/**
+ * The declared filter fields that ARE table columns, so the hidden
+ * filter-only columns are built for the others alone. Owner and Stage
+ * joined it when the grammar learned them (AGL-2617): each is a shown
+ * column already, and a second, hidden one under the same field would be
+ * a duplicate the grid refuses.
+ */
+export const CONTACT_FILTER_COLUMNS = [
+  'name',
+  'ownerUid',
+  'lifecycleStage',
+  'sources',
+  'tags',
+  'updatedAt',
+]
 
 export interface ContactListColumnOptions {
   /** The owner's name for a uid — the roster's, or the uid itself. */
