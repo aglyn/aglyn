@@ -30,7 +30,11 @@
 // a lead surface, not only the lead-routed ones. The people captured before
 // lead routing existed came in through forms nobody could have switched on,
 // and several of those forms are gone. It is for that backlog, once; the
-// report names every form it counted only because of the flag.
+// report names every form it counted only because of the flag. The oldest
+// facets name no form at all — the timeline predates `refId` and `formId`
+// — and record only that a form met the person (`sources.form`), so under
+// the flag that kind is a lead surface too; the report counts those rows
+// separately, as `by source kind (no form id)`.
 //
 // Credentials come from the root `.env` — the `FIREBASE_CLIENT_EMAIL` and
 // `FIREBASE_PRIVATE_KEY` every Admin-SDK script here uses — and the project
@@ -323,7 +327,9 @@ async function runOrg(db, orgId, hostIds, nowMs, totals) {
   const hosts = withLeads
     ? await Promise.all(hostIds.map((hostId) => readHostForLeads(db, hostId, nowMs)))
     : []
-  const leadPlans = new Map(hosts.map((host) => [host.hostId, { create: [], skips: {} }]))
+  const leadPlans = new Map(
+    hosts.map((host) => [host.hostId, { create: [], skips: {}, viaSourceKind: 0 }]),
+  )
 
   for await (const snapshot of everyDocument(contactsRef)) {
     const contact = snapshot.data() ?? {}
@@ -345,6 +351,7 @@ async function runOrg(db, orgId, hostIds, nowMs, totals) {
       const bucket = leadPlans.get(host.hostId)
       if (verdict.kind === 'create') {
         bucket.create.push(verdict)
+        if (verdict.viaSourceKind) bucket.viaSourceKind += 1
       } else if (verdict.reason !== 'not-captured-here') {
         bucket.skips[verdict.reason] = (bucket.skips[verdict.reason] ?? 0) + 1
       }
@@ -378,7 +385,10 @@ async function runOrg(db, orgId, hostIds, nowMs, totals) {
       console.log(
         `  leads (${host.hostId}): ${apply ? 'creating' : 'would create'} ${bucket.create.length}` +
           ` — ${host.routedForms.size} routed form(s)` +
-          (anyForm ? `; via --any-form: ${host.unroutedForms.size} unrouted form(s)` : '') +
+          (anyForm
+            ? `; via --any-form: ${host.unroutedForms.size} unrouted form(s)` +
+              `; via --any-form: ${bucket.viaSourceKind} by source kind (no form id)`
+            : '') +
           (skips ? `; ${skips}` : ''),
       )
       for (const [formId, form] of host.unroutedForms) {
@@ -388,10 +398,12 @@ async function runOrg(db, orgId, hostIds, nowMs, totals) {
         )
       }
       totals.unroutedForms += host.unroutedForms.size
+      totals.viaSourceKind += bucket.viaSourceKind
       for (const verdict of bucket.create) {
         const row = verdict.row
         console.log(
           `      ${verdict.key.slice(0, 12)}…  ${row.sources.join(', ')}` +
+            (verdict.viaSourceKind ? '  (by source kind)' : '') +
             `  captures ${row.submissionCount}  seen ${day(row.firstSeenAtMs)} → ${day(row.lastSeenAtMs)}` +
             (row[FIELDS.marketingConsentByHost] ? '  consent carried' : ''),
         )
@@ -461,6 +473,7 @@ async function run() {
     leads: 0,
     leadSkips: {},
     unroutedForms: 0,
+    viaSourceKind: 0,
     companies: 0,
     orphans: 0,
   }
@@ -485,7 +498,8 @@ async function run() {
                 .join('; ')})`
             : '') +
           (anyForm
-            ? `; via --any-form: ${totals.unroutedForms} unrouted form(s) counted as lead surfaces`
+            ? `; via --any-form: ${totals.unroutedForms} unrouted form(s) counted as lead surfaces` +
+              `; via --any-form: ${totals.viaSourceKind} by source kind (no form id)`
             : '')
         : '; leads not run (--leads)') +
       (withCompanies

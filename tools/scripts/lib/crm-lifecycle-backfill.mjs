@@ -42,7 +42,11 @@
 //      `--any-form` (`hostLeadContext`'s `anyForm`): the backlog from before
 //      lead routing existed came in through forms nobody could have switched
 //      on, and several of those forms are gone — known now only through the
-//      submissions they left behind.
+//      submissions they left behind. The oldest facets name no form at all:
+//      their timeline predates `refId` and `formId`, and the one record that
+//      a form met the person is the facet's `sources.form` flag — the KIND
+//      of surface, which the same flag also reads as a lead for the stage
+//      floor. Under `--any-form` that kind is a lead surface too.
 //
 //   3. THE COMPANY COUNT. AGL-2613 keeps `contactsCount` on a company by
 //      `increment` alongside every link, so a link made before the counter
@@ -251,13 +255,28 @@ export function planFacetStages(contact) {
  * that field existed is taken as this host's only when the facet IS this
  * host's group of one — a shared facet cannot say which site of the group
  * took the booking, and a guess would file a lead under the wrong site.
+ *
+ * The KIND is attributed the same way. A facet's `sources.form` says a form
+ * met the person and nothing more — not which form, and on a shared facet
+ * not which site's — so it is this host's evidence (`formKind`) only on the
+ * host's own group of one, and it is the evidence of last resort: the plan
+ * reads it only when neither the timeline nor the mirror names a surface,
+ * and only under `anyForm`. `formAtMs` carries every form capture's
+ * timestamp on the facet, named or not, for the bracket of such a row.
  */
 export function facetEvidenceForHost(groupId, facet, host) {
-  const evidence = { formIds: new Set(), bookings: 0, atMs: [] }
+  const evidence = {
+    formIds: new Set(),
+    bookings: 0,
+    atMs: [],
+    formKind: groupId === host.hostId && facet?.sources?.form === true,
+    formAtMs: [],
+  }
   for (const interaction of facet?.interactions ?? []) {
     if (!interaction || typeof interaction !== 'object') continue
     const at = Number(interaction.atMs)
     if (interaction.type === 'form') {
+      if (Number.isFinite(at)) evidence.formAtMs.push(at)
       const formId =
         interaction.formId ??
         (interaction.refId ? host.formIdByRef.get(String(interaction.refId)) : undefined)
@@ -304,6 +323,12 @@ export function contactCapturedByHost(contact, hostId) {
  *    a lead: a form without lead routing, an order, a newsletter opt-in.
  *    Turning routing on and re-running, or running with `anyForm`, is what
  *    changes this verdict for the form; nothing changes it for the rest.
+ *    Under `anyForm` a facet that records only the KIND — `sources.form`
+ *    on the host's own group of one, with a timeline that names no form —
+ *    is a lead surface as well, and its verdict carries `viaSourceKind`
+ *    so the report can count it. For such a row the form is looked for in
+ *    the host's submissions by the address: every form they name is
+ *    spelled on the lead, and when none names one the kind itself is.
  *  - `erased` — the site's suppression list carries an erasure for the
  *    address. The person asked to be forgotten; nothing is rebuilt.
  *  - `already-a-lead` — a row exists under the person key, or under an
@@ -323,14 +348,21 @@ export function planLeadForHost({ contactId, contact, host }) {
   const formIds = new Set()
   let bookings = 0
   const atMs = []
+  let formKind = false
+  const formAtMs = []
   let highest = -1
   let name
   for (const [groupId, facet] of Object.entries(facets)) {
     const evidence = facetEvidenceForHost(groupId, facet, host)
-    if (!evidence.formIds.size && !evidence.bookings) continue
+    const kindOnly = host.anyForm && evidence.formKind
+    if (!evidence.formIds.size && !evidence.bookings && !kindOnly) continue
     for (const id of evidence.formIds) formIds.add(id)
     bookings += evidence.bookings
     atMs.push(...evidence.atMs)
+    if (kindOnly) {
+      formKind = true
+      formAtMs.push(...evidence.formAtMs)
+    }
     highest = Math.max(highest, stageIndex(facetStageAfterBackfill(facet)))
     if (!name && typeof facet.name === 'string' && facet.name.trim()) {
       name = facet.name.trim()
@@ -343,7 +375,9 @@ export function planLeadForHost({ contactId, contact, host }) {
       if (host.leadSurfaceFormIds.has(String(id))) formIds.add(String(id))
     }
   }
-  if (!formIds.size && !bookings) {
+  // The kind is read only when nothing names a surface.
+  const viaSourceKind = !formIds.size && !bookings && formKind
+  if (!formIds.size && !bookings && !viaSourceKind) {
     return {
       kind: 'skip',
       reason: contactCapturedByHost(contact, host.hostId)
@@ -364,17 +398,36 @@ export function planLeadForHost({ contactId, contact, host }) {
       contactId,
     }
   }
-  const row = leadRowForContact({
+  const shared = {
     contact,
     email,
     name: name ?? (typeof contact?.name === 'string' ? contact.name.trim() : ''),
     hostId: host.hostId,
+    nowMs: host.nowMs,
+  }
+  if (viaSourceKind) {
+    // The submissions are the one place the form's id may survive for a
+    // timeline that names none: every form they carry for the address is
+    // the person's, and the count is every submission by the address on
+    // every form the host has held, named or not.
+    const captures = host.capturesByEmail.get(email)
+    const row = leadRowForContact({
+      ...shared,
+      formIds: [...(captures?.formIds ?? [])].sort(),
+      formKind: true,
+      bookings: 0,
+      atMs: formAtMs,
+      submissionCount: captures?.count ?? 0,
+    })
+    return { kind: 'create', key, row, contactId, viaSourceKind: true }
+  }
+  const row = leadRowForContact({
+    ...shared,
     formIds: [...formIds].sort(),
     bookings,
     atMs,
     submissionCount:
       (host.submissionsByEmail.get(email) ?? 0) + bookings,
-    nowMs: host.nowMs,
   })
   return { kind: 'create', key, row, contactId }
 }
@@ -385,14 +438,17 @@ export function planLeadForHost({ contactId, contact, host }) {
  *
  * `sources` spells each surface the way the doors do — `form:{formId}` and
  * `booking` — so the Leads list resolves the form's name the same way for a
- * historical row as for a live one. `submissionCount` is the submissions
- * this host's routed forms hold for the address plus the bookings, and never
- * below one: a lead exists because at least one capture did. The seen
- * bracket comes from the captures themselves, falling back to the row's own
- * creation when the timeline kept no timestamp for them. No `ownerUid`: the
- * site's default owner and the round-robin apply to captures as they
- * arrive, and a queue of old leads handed to whoever is next up today would
- * be an assignment nobody decided.
+ * historical row as for a live one. A row whose only evidence is the kind
+ * (`formKind`) and for which no submission names a form is spelled `form`,
+ * the kind alone: the door never writes it, because the door always has the
+ * form in hand, and the Leads reader labels it as the kind. `submissionCount`
+ * is the submissions this host's lead surfaces hold for the address plus
+ * the bookings, and never below one: a lead exists because at least one
+ * capture did. The seen bracket comes from the captures themselves, falling
+ * back to the contact's own creation and last edit when the timeline kept
+ * no timestamp for them. No `ownerUid`: the site's default owner and the
+ * round-robin apply to captures as they arrive, and a queue of old leads
+ * handed to whoever is next up today would be an assignment nobody decided.
  *
  * The consent the contact holds for THIS host rides along when it is a
  * grant. Copied, not re-derived: the entry records what the person was
@@ -409,6 +465,7 @@ export function leadRowForContact({
   name,
   hostId,
   formIds,
+  formKind = false,
   bookings,
   atMs,
   submissionCount,
@@ -416,10 +473,13 @@ export function leadRowForContact({
 }) {
   const seen = atMs.filter((at) => Number.isFinite(at))
   const createdAtMs = timestampMs(contact?.createdAt)
+  const updatedAtMs = timestampMs(contact?.updatedAt)
   const firstSeenAtMs = seen.length
     ? Math.min(...seen)
     : (createdAtMs ?? nowMs)
-  const lastSeenAtMs = seen.length ? Math.max(...seen) : firstSeenAtMs
+  const lastSeenAtMs = seen.length
+    ? Math.max(...seen)
+    : Math.max(firstSeenAtMs, updatedAtMs ?? firstSeenAtMs)
   const consent = grantedConsentEntry(contact, hostId)
   return {
     email,
@@ -427,6 +487,7 @@ export function leadRowForContact({
     status: LEAD_STATUS_NEW,
     sources: [
       ...formIds.map((formId) => `form:${formId}`),
+      ...(formKind && !formIds.length ? ['form'] : []),
       ...(bookings > 0 ? ['booking'] : []),
     ],
     submissionCount: Math.max(1, submissionCount),
@@ -470,8 +531,11 @@ export function grantedConsentEntry(contact, hostId) {
  * on, the archived ones, and the ones deleted outright — a deleted form
  * leaves its submissions behind, and they still name it. Each form counted
  * only because of the flag is listed in `unroutedForms` with why it would
- * not have counted, so the report can say which. Nothing else widens: the
- * skips, the row and the submission count read the same either way.
+ * not have counted, so the report can say which. `capturesByEmail` is every
+ * submission the host holds, by the address the submit route would have
+ * extracted, with the forms they name — what a row planned from the kind
+ * alone counts and is spelled from. Nothing else widens: the skips, the row
+ * and the submission count read the same either way.
  *
  * @param {object} input
  * @param {string} input.hostId
@@ -508,17 +572,25 @@ export function hostLeadContext({
   const knownFormIds = new Set(forms.map((form) => form.id))
   const formIdByRef = new Map()
   const submissionsByEmail = new Map()
+  const capturesByEmail = new Map()
   for (const submission of submissions) {
+    const email = emailFromSubmissionFields(submission.data?.fields)
     const formId = submission.data?.formId
-    if (typeof formId !== 'string' || !formId) continue
-    formIdByRef.set(submission.id, formId)
+    const named = typeof formId === 'string' && formId ? formId : null
+    if (email) {
+      const captures = capturesByEmail.get(email) ?? { count: 0, formIds: new Set() }
+      captures.count += 1
+      if (named) captures.formIds.add(named)
+      capturesByEmail.set(email, captures)
+    }
+    if (!named) continue
+    formIdByRef.set(submission.id, named)
     // A form deleted outright keeps its submissions, which are the only
     // record left that it existed on this host.
-    if (anyForm && !knownFormIds.has(formId)) {
-      unroutedForms.set(formId, { name: formId, state: 'no form document' })
+    if (anyForm && !knownFormIds.has(named)) {
+      unroutedForms.set(named, { name: named, state: 'no form document' })
     }
-    if (!routedForms.has(formId) && !unroutedForms.has(formId)) continue
-    const email = emailFromSubmissionFields(submission.data?.fields)
+    if (!routedForms.has(named) && !unroutedForms.has(named)) continue
     if (!email) continue
     submissionsByEmail.set(email, (submissionsByEmail.get(email) ?? 0) + 1)
   }
@@ -542,6 +614,7 @@ export function hostLeadContext({
     leadSurfaceFormIds: new Set([...routedForms.keys(), ...unroutedForms.keys()]),
     formIdByRef,
     submissionsByEmail,
+    capturesByEmail,
     leadKeys,
     leadEmails,
     erasedKeys,

@@ -695,6 +695,228 @@ describe('--any-form: every form the host holds is a lead surface', () => {
   })
 })
 
+describe('--any-form: a facet that says only "form" is a lead surface', () => {
+  const UNROUTED = 'form-contact'
+
+  /**
+   * The host under `--any-form`, with the submissions the Aglyn backlog
+   * left: some name their form, some predate the form entity and name
+   * none, and none is named by any interaction.
+   */
+  function kindHost(overrides = {}) {
+    return hostLeadContext({
+      hostId: HOST,
+      forms: [
+        { id: FORM, data: { displayName: 'Wholesale', routing: { lead: true } } },
+        { id: UNROUTED, data: { displayName: 'Contact us', routing: {} } },
+      ],
+      submissions: [],
+      leads: [],
+      suppressions: [],
+      nowMs: NOW,
+      anyForm: true,
+      ...overrides,
+    })
+  }
+
+  /**
+   * Ann as a pre-CRM contact: the facet is the host's own group of one and
+   * records the KIND of surface that met her — `sources.form` — with a
+   * timeline that names no submission and no form, and no `formIds` mirror.
+   */
+  function kindContact(facet = {}, top = {}) {
+    return {
+      email: 'ann@acme.com',
+      name: 'Ann Lee',
+      hostId: HOST,
+      capturedByHostIds: [HOST],
+      createdAt: { seconds: 1_700_000_000 },
+      updatedAt: { seconds: 1_700_100_000 },
+      facets: {
+        [HOST]: {
+          lifecycleStage: 'lead',
+          sources: { form: true },
+          interactions: [
+            { type: 'form', atMs: 3_000 },
+            { type: 'form', atMs: 1_000 },
+          ],
+          tags: [],
+          ...facet,
+        },
+      },
+      ...top,
+    }
+  }
+
+  it('files a lead whose source is the kind itself when nothing names the form', () => {
+    const verdict = planLeadForHost({ contactId: 'c1', contact: kindContact(), host: kindHost() })
+    assert.equal(verdict.kind, 'create')
+    assert.equal(verdict.viaSourceKind, true)
+    assert.equal(verdict.key, personKey('ann@acme.com'))
+    assert.deepEqual(verdict.row, {
+      email: 'ann@acme.com',
+      name: 'Ann Lee',
+      status: 'new',
+      sources: ['form'],
+      // A lead exists because at least one capture did.
+      submissionCount: 1,
+      firstSeenAtMs: 1_000,
+      lastSeenAtMs: 3_000,
+      capturedByHostIds: [HOST],
+      backfilledAtMs: NOW,
+    })
+    assert.equal('ownerUid' in verdict.row, false)
+  })
+
+  it('CONTROL: a facet a form met beside an opt-in is still a lead surface', () => {
+    const verdict = planLeadForHost({
+      contactId: 'c1',
+      contact: kindContact({ sources: { newsletter: true, form: true } }),
+      host: kindHost(),
+    })
+    assert.equal(verdict.kind, 'create')
+    assert.deepEqual(verdict.row.sources, ['form'])
+  })
+
+  it('is off without the flag, and names the flag as the remedy', () => {
+    assert.deepEqual(
+      planLeadForHost({ contactId: 'c1', contact: kindContact(), host: kindHost({ anyForm: false }) }),
+      { kind: 'skip', reason: 'no-lead-surface', contactId: 'c1' },
+    )
+  })
+
+  it("counts every submission by the address across the host's forms, and names the forms they carry", () => {
+    const context = kindHost({
+      submissions: [
+        { id: 's1', data: { formId: UNROUTED, fields: { email: 'Ann@Acme.com' } } },
+        // Predates the form entity: no `formId`, still Ann's capture.
+        { id: 's2', data: { fields: { 'Your email': 'ann@acme.com', note: 'hi' } } },
+        // Somebody else, on the routed form.
+        { id: 's3', data: { formId: FORM, fields: { email: 'bob@acme.com' } } },
+      ],
+    })
+    const verdict = planLeadForHost({ contactId: 'c1', contact: kindContact(), host: context })
+    assert.equal(verdict.kind, 'create')
+    assert.equal(verdict.viaSourceKind, true)
+    assert.equal(verdict.row.submissionCount, 2)
+    assert.deepEqual(verdict.row.sources, [`form:${UNROUTED}`])
+  })
+
+  it('names every form the submissions name, as the door would have', () => {
+    const context = kindHost({
+      submissions: [
+        { id: 's1', data: { formId: UNROUTED, fields: { email: 'ann@acme.com' } } },
+        { id: 's2', data: { formId: FORM, fields: { email: 'ann@acme.com' } } },
+        { id: 's3', data: { formId: FORM, fields: { email: 'ann@acme.com' } } },
+      ],
+    })
+    const verdict = planLeadForHost({ contactId: 'c1', contact: kindContact(), host: context })
+    assert.deepEqual(verdict.row.sources, [`form:${UNROUTED}`, `form:${FORM}`])
+    assert.equal(verdict.row.submissionCount, 3)
+  })
+
+  it('reads the seen bracket off the timeline, else off the contact itself', () => {
+    const noTimes = planLeadForHost({
+      contactId: 'c1',
+      contact: kindContact({ interactions: [{ type: 'form' }] }),
+      host: kindHost(),
+    })
+    assert.equal(noTimes.row.firstSeenAtMs, 1_700_000_000_000)
+    assert.equal(noTimes.row.lastSeenAtMs, 1_700_100_000_000)
+    const neverEdited = planLeadForHost({
+      contactId: 'c1',
+      contact: kindContact({ interactions: [] }, { updatedAt: undefined }),
+      host: kindHost(),
+    })
+    assert.equal(neverEdited.row.firstSeenAtMs, 1_700_000_000_000)
+    assert.equal(neverEdited.row.lastSeenAtMs, 1_700_000_000_000)
+    // An opt-in's timestamp is not a form capture's.
+    const mixed = planLeadForHost({
+      contactId: 'c1',
+      contact: kindContact({
+        interactions: [{ type: 'newsletter', atMs: 9_000 }, { type: 'form', atMs: 2_000 }],
+      }),
+      host: kindHost(),
+    })
+    assert.deepEqual([mixed.row.firstSeenAtMs, mixed.row.lastSeenAtMs], [2_000, 2_000])
+  })
+
+  it('leaves a customer, by the stage or by the money on the facet', () => {
+    const staged = planLeadForHost({
+      contactId: 'c1',
+      contact: kindContact({ lifecycleStage: 'customer' }),
+      host: kindHost(),
+    })
+    assert.deepEqual(staged, { kind: 'skip', reason: 'beyond-lead', stage: 'customer', contactId: 'c1' })
+    const bought = planLeadForHost({
+      contactId: 'c1',
+      contact: kindContact({ lifecycleStage: undefined, sources: { form: true, order: true } }),
+      host: kindHost(),
+    })
+    assert.deepEqual([bought.reason, bought.stage], ['beyond-lead', 'customer'])
+  })
+
+  it('never overwrites a lead the site already holds, under the key or an older id', () => {
+    const byKey = kindHost({
+      leads: [{ id: personKey('ann@acme.com'), data: { email: 'ann@acme.com' } }],
+    })
+    assert.equal(
+      planLeadForHost({ contactId: 'c1', contact: kindContact(), host: byKey }).reason,
+      'already-a-lead',
+    )
+    const byAutoId = kindHost({ leads: [{ id: 'auto-legacy-1', data: { email: 'Ann@Acme.com' } }] })
+    assert.equal(
+      planLeadForHost({ contactId: 'c1', contact: kindContact(), host: byAutoId }).reason,
+      'already-a-lead',
+    )
+  })
+
+  it('keeps the erasure skip and the consent copy', () => {
+    const key = personKey('ann@acme.com')
+    assert.equal(
+      planLeadForHost({
+        contactId: 'c1',
+        contact: kindContact(),
+        host: kindHost({ suppressions: [{ id: key, data: { email: null, reason: 'erasure' } }] }),
+      }).reason,
+      'erased',
+    )
+    const granted = kindContact(
+      {},
+      { marketingConsentByHost: { [HOST]: { marketingConsent: true, marketingConsentAtMs: 1_500 } } },
+    )
+    const row = planLeadForHost({ contactId: 'c1', contact: granted, host: kindHost() }).row
+    assert.deepEqual(row.marketingConsentByHost, {
+      [HOST]: { marketingConsent: true, marketingConsentAtMs: 1_500 },
+    })
+  })
+
+  it("reads only the host's own group of one: a shared facet cannot say whose form", () => {
+    const shared = kindContact()
+    shared.facets = { 'agency-group': shared.facets[HOST] }
+    assert.equal(
+      planLeadForHost({ contactId: 'c1', contact: shared, host: kindHost() }).reason,
+      'no-lead-surface',
+    )
+    const elsewhere = kindContact({}, { hostId: 'other', capturedByHostIds: ['other'] })
+    elsewhere.facets = { other: elsewhere.facets[HOST] }
+    assert.equal(
+      planLeadForHost({ contactId: 'c1', contact: elsewhere, host: kindHost() }).reason,
+      'not-captured-here',
+    )
+  })
+
+  it('credits none of it to a facet whose timeline already names a lead surface', () => {
+    const named = kindContact({
+      interactions: [{ type: 'form', atMs: 500, formId: UNROUTED }],
+    })
+    const verdict = planLeadForHost({ contactId: 'c1', contact: named, host: kindHost() })
+    assert.equal(verdict.kind, 'create')
+    assert.equal(verdict.viaSourceKind, undefined)
+    assert.deepEqual(verdict.row.sources, [`form:${UNROUTED}`])
+  })
+})
+
 describe('the company recount', () => {
   it('counts each company once per contact naming it in the mirror', () => {
     const tally = tallyCompanyMirrors([
