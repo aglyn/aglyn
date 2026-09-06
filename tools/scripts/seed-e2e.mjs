@@ -259,7 +259,7 @@ await put(firestore.collection('orgs').doc(orgId), {
     'bookings',
     'commerce',
     'marketplace',
-    'contacts',
+    'crm',
     'data',
     'email',
     'events-calendar',

@@ -127,11 +127,18 @@ await step(tally, page, 'the org hub lists the contacts with a Known by column',
 
 await step(tally, page, 'the rail offers every section under the org', async () => {
   const sections = ['Leads', 'Companies', 'Deals', 'Tasks', 'Reports', 'Fields', 'Settings']
+  // The rail is a set of tabs, each an anchor — `HubSections` in the shared
+  // UI — scoped to the tablist that holds Contacts, because the org's own
+  // nav strip has a Settings tab of its own.
+  const rail = page
+    .locator('[role="tablist"]', { has: page.getByRole('tab', { name: 'Contacts', exact: true }) })
+    .last()
+  await rail.waitFor({ timeout: TIMEOUT_MS })
   const hrefs = {}
   for (const label of sections) {
-    const link = page.getByRole('link', { name: label, exact: true }).first()
-    await link.waitFor({ timeout: TIMEOUT_MS })
-    hrefs[label] = await link.getAttribute('href')
+    const tab = rail.getByRole('tab', { name: label, exact: true })
+    await tab.waitFor({ timeout: TIMEOUT_MS })
+    hrefs[label] = await tab.getAttribute('href')
   }
   const wrong = sections.filter((label) => hrefs[label] !== `${HUB}/${label.toLowerCase()}`)
   tally.check(
