@@ -586,7 +586,11 @@ export interface CrmActionRecipe {
    * saves and then silently matches nothing.
    */
   needs?: 'form'
-  /** A fresh action each call, because the draft is edited in place. */
+  /**
+   * A fresh action each call, because the draft is edited in place. The
+   * action carries `recipe: id` — the provenance is the builder's to stamp,
+   * so a writer that saves what it was handed cannot forget it.
+   */
   build: (input?: CrmActionRecipeInput) => HostAction
 }
 
@@ -628,6 +632,7 @@ export const CRM_ACTION_RECIPES: readonly CrmActionRecipe[] = [
      * identity, to the address the event carries.
      */
     build: () => ({
+      recipe: 'welcomeNewLead',
       name: 'Welcome a new lead',
       trigger: {
         event: 'contactCreated',
@@ -661,6 +666,7 @@ export const CRM_ACTION_RECIPES: readonly CrmActionRecipe[] = [
       'When a deal is won: move the contact to Customer and book a check-in ' +
       'call a week out.',
     build: () => ({
+      recipe: 'followUpWonDeal',
       name: 'Follow up a won deal',
       trigger: { event: 'dealWon' },
       steps: [
@@ -690,6 +696,7 @@ export const CRM_ACTION_RECIPES: readonly CrmActionRecipe[] = [
      * re-engage somebody who just moved to Sales qualified.
      */
     build: () => ({
+      recipe: 'reengageStaleLead',
       name: 'Re-engage a stale lead',
       trigger: {
         event: 'contactStageChanged',
@@ -725,6 +732,7 @@ export const CRM_ACTION_RECIPES: readonly CrmActionRecipe[] = [
     build: (input) => {
       const form = input?.form
       return {
+        recipe: 'tagByForm',
         name: form ? `Tag ${form.name.trim()} submissions` : 'Tag by form',
         trigger: {
           event: 'contactCreated',
@@ -743,6 +751,77 @@ export const CRM_ACTION_RECIPES: readonly CrmActionRecipe[] = [
 /** The recipe with this id, or null for a string that names none. */
 export function crmActionRecipe(id: unknown): CrmActionRecipe | null {
   return CRM_ACTION_RECIPES.find((recipe) => recipe.id === id) ?? null
+}
+
+/**
+ * The recipe a STORED action came from, read off its document (AGL-2639).
+ *
+ * Three answers, and the third is the one that matters. A known id: the
+ * action was installed from, or begun as, that recipe. `null`: the action
+ * was begun blank, or from a recipe this build no longer knows — the
+ * editor wrote the field and said "no recipe". `undefined`: the document
+ * carries no `recipe` field at all, which is every action saved before the
+ * stamp existed. Such an action may well have started from a recipe — the
+ * menu opened the editor prefilled long before anything recorded it — so a
+ * reader that needs to know whether a site has a recipe treats `undefined`
+ * as UNKNOWN, never as absent, and never writes a `null` over it.
+ */
+export function hostActionRecipeId(
+  action: { recipe?: unknown } | null | undefined,
+): CrmActionRecipeId | null | undefined {
+  const stamp = action?.recipe
+  if (stamp === undefined) return undefined
+  return crmActionRecipe(stamp)?.id ?? null
+}
+
+/**
+ * A HostAction as the document at `hosts/{hostId}/actions/{id}` holds it.
+ *
+ * Every optional trigger key is written OUT — a boolean cap as `false`, a
+ * cleared list as `null` — because the editor saves with a merge-set, and
+ * a merge keeps whatever key the payload omits: a frequency cap switched
+ * off, left out of the payload, would stay on. The legacy single
+ * `condition` is always nulled; `conditions` has been canonical since the
+ * list shape arrived and a document that carried both would have the
+ * reader pick. Everything else is the action, unchanged.
+ *
+ * `recipe` rides along only when the action SAYS something about it: an
+ * id or `null`. An action that carries no stamp (an older document, edited
+ * and saved again) keeps carrying none — see {@link hostActionRecipeId}
+ * for why an absent stamp must not become a `null` one.
+ */
+export interface HostActionDocument extends HostAction {
+  trigger: HostActionTrigger & {
+    oncePerVisitor: boolean
+    oncePerSession: boolean
+    cooldownMinutes: number | null
+    everyTime: boolean
+    condition: null
+    conditions: HostActionTriggerCondition[] | null
+    combinator: TriggerCombinator | null
+  }
+  enabled: boolean
+}
+
+export function hostActionDocument(action: HostAction): HostActionDocument {
+  const { recipe, ...rest } = action
+  const trigger = action.trigger
+  return {
+    ...rest,
+    trigger: {
+      ...trigger,
+      oncePerVisitor: trigger.oncePerVisitor === true,
+      oncePerSession: trigger.oncePerSession === true,
+      cooldownMinutes:
+        Number(trigger.cooldownMinutes) >= 1 ? Number(trigger.cooldownMinutes) : null,
+      everyTime: trigger.everyTime === true,
+      condition: null,
+      conditions: trigger.conditions ?? null,
+      combinator: trigger.combinator ?? null,
+    },
+    enabled: action.enabled !== false,
+    ...(recipe !== undefined ? { recipe } : {}),
+  }
 }
 
 /**
@@ -837,6 +916,13 @@ export interface HostAction {
   steps: HostActionStep[]
   /** Disabled actions never run; new actions default enabled. */
   enabled?: boolean
+  /**
+   * The recipe this action was installed from or begun as (AGL-2639), or
+   * `null` for one begun blank. Absent on a document from before the stamp
+   * existed — read it through {@link hostActionRecipeId}, which keeps the
+   * three cases apart.
+   */
+  recipe?: CrmActionRecipeId | null
 }
 
 export const ACTION_MAX_STEPS = 10
@@ -1041,6 +1127,11 @@ export function isCustomEventName(event: string): boolean {
  */
 export function validateHostAction(action: HostAction): string | null {
   if (!action.name?.trim()) return 'Name the action'
+  // A stamp is provenance, and provenance naming a recipe that does not
+  // exist is a document nothing can read back; `null` and absent both pass.
+  if (action.recipe != null && !crmActionRecipe(action.recipe)) {
+    return 'Unknown recipe'
+  }
   const event = action.trigger?.event?.trim() ?? ''
   if (!event) return 'Pick a trigger event'
   if (
