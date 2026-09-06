@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { CrmOrgMountProvider } from '../hooks/use-crm-org-mount'
 import { CrmSendEmailDialog } from './crm-send-email-dialog'
 
 /**
@@ -43,11 +44,21 @@ const firestoreHandle = {}
 jest.mock('@aglyn/plugins-email/components/use-sending-identity-api', () => ({
   useSendingApi: () => sendingApi,
 }))
-jest.mock('@aglyn/plugins-marketing/components/use-emails-hub-path', () => ({
-  useEmailsHubPath: () => '/acme/hosts/site/emails',
+// The hub path and the API door, each recording the site they were asked
+// for: at the organization level that is the send-from site, not the page's.
+let hubPathAskedFor: Array<string | null | undefined> = []
+jest.mock('./use-emails-hub-path', () => ({
+  useEmailsHubPath: (hostId?: string | null) => {
+    hubPathAskedFor.push(hostId)
+    return hostId === null ? null : `/acme/hosts/${hostId === 'site-2' ? 'two' : 'site'}/emails`
+  },
 }))
+let crmApiHost: string | null | undefined
 jest.mock('./use-crm-api', () => ({
-  useCrmApi: () => crmApi,
+  useCrmApi: (hostId: string | null) => {
+    crmApiHost = hostId
+    return crmApi
+  },
 }))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => firestoreHandle,
@@ -111,6 +122,8 @@ const draft = () => {
 
 beforeEach(() => {
   jest.clearAllMocks()
+  hubPathAskedFor = []
+  crmApiHost = undefined
   sendingApi.mockResolvedValue(READY)
   crmApi.mockResolvedValue({ response: { ok: true }, payload: { ok: true, activityId: 'act-1' } })
 })
@@ -191,5 +204,60 @@ describe('CrmSendEmailDialog', () => {
     await waitFor(() =>
       expect(screen.getByLabelText('To')).toHaveProperty('value', 'Ada <deal@example.com>'),
     )
+  })
+})
+
+/**
+ * A record no site captured, beneath the org hub's mount (AGL-2634): the
+ * message leaves from the site the reader picked — the org's only one,
+ * silently — and everything a site owns is asked of THAT site.
+ */
+describe('at the organization level', () => {
+  const hosts = (count: 1 | 2) =>
+    [
+      { id: 'site-2', name: 'Site Two', subdomain: 'two' },
+      { id: 'site-3', name: 'Site Three', subdomain: 'three' },
+    ].slice(0, count)
+  const openWithoutSite = (count: 1 | 2, props: Partial<React.ComponentProps<typeof CrmSendEmailDialog>> = {}) =>
+    render(
+      <CrmOrgMountProvider
+        mount={{ orgId: 'org-1', hosts: hosts(count), hostsReady: true, hostsPath: '/acme/hosts' }}
+      >
+        <CrmSendEmailDialog
+          open
+          onClose={onClose}
+          hostId={null}
+          contactId="contact-1"
+          email="ada@example.com"
+          name="Ada"
+          {...props}
+        />
+      </CrmOrgMountProvider>,
+    )
+
+  it('sends from the org’s only site, asking that site for its identity and linking its Sending page', async () => {
+    sendingApi.mockResolvedValue(REFUSED)
+    openWithoutSite(1)
+    expect(sendingApi).toHaveBeenCalledWith({
+      path: 'sending-identity',
+      method: 'GET',
+      query: { hostId: 'site-2' },
+    })
+    expect(crmApiHost).toBe('site-2')
+    await screen.findByText('Verify mail.acme.com before sending.')
+    expect((screen.getByText('Set up sending') as HTMLAnchorElement).getAttribute('href')).toBe(
+      '/acme/hosts/two/emails/sending',
+    )
+    // One site to choose from is no choice: no picker is drawn.
+    expect(screen.queryByLabelText(/^Send from/)).toBeNull()
+  })
+
+  it('offers the sites and holds Send until one is picked', async () => {
+    openWithoutSite(2)
+    await screen.findByText('Pick the site the email leaves from.')
+    expect(sendingApi).not.toHaveBeenCalled()
+    expect(screen.getByLabelText(/^Send from/)).toBeTruthy()
+    draft()
+    expect(sendButton()).toHaveProperty('disabled', true)
   })
 })
