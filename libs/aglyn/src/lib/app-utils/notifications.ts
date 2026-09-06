@@ -51,6 +51,14 @@ export type AglynNotificationType =
   // (`system.`). Someone who has muted the operational stream has said they
   // do not want to be told about work as it arrives, and a task is work.
   | 'content.taskAssigned'
+  // The morning's CRM digest (AGL-2619): what the recipient owes today —
+  // overdue and due-today tasks, and the leads nobody has worked. `content.`
+  // for the reason `taskAssigned` is: it is about work on the site, and the
+  // person who muted the operational stream has asked not to be told about
+  // work. The digest EMAIL is governed separately, by
+  // `crmDailyDigestEnabled`: the mute is a fact about the console feed and
+  // the digest switch is a fact about the digest.
+  | 'content.crmDailyDigest'
   // Marketplace review verdicts (AGL-432/653).
   | 'marketplace.review'
   // Support desk, staff audience (AGL-850): a subscriber opened or replied to
@@ -197,6 +205,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> =
     'content.order': 'New order',
     'content.lowStock': 'Low stock',
     'content.taskAssigned': 'Task assigned to you',
+    'content.crmDailyDigest': 'Daily CRM digest',
     'marketplace.review': 'Listing review',
 
     'support.ticketOpened': 'New support ticket',
@@ -259,4 +268,21 @@ export function notificationMuted(
   type: AglynNotificationType | string,
 ): boolean {
   return prefs?.[notificationCategory(type)] === false
+}
+
+/**
+ * The field on `users/{uid}` that holds a person's digest switches
+ * (AGL-2619): `{ crmDaily: false }` turns the daily CRM digest off, and an
+ * absent key leaves it on. Its own map rather than a key in
+ * `notificationPrefs`, because that map is keyed by CATEGORY and read by
+ * {@link notificationMuted} — a digest is a schedule a person keeps or
+ * drops, not a bucket of types, and one switch governs both the console
+ * notification and the email it travels with.
+ */
+export const DIGEST_PREFS_FIELD = 'digestPrefs'
+
+export function crmDailyDigestEnabled(
+  prefs: Record<string, boolean> | null | undefined,
+): boolean {
+  return prefs?.['crmDaily'] !== false
 }
