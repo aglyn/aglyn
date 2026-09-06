@@ -100,6 +100,12 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   listFilterConstraints: jest.requireActual(
     '@aglyn/tenant-feature-instance',
   ).listFilterConstraints,
+  // The plan the views split the clauses with (AGL-2617) — real, for the
+  // same reason.
+  listFilterPlan: jest.requireActual('@aglyn/tenant-feature-instance')
+    .listFilterPlan,
+  // The reader's reach, for the views control's "may edit" — org-wide here.
+  useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),
   useFirestore: () => FIRESTORE,
   useOrgDataScope: () => DATA_SCOPE,
   // The site's campaigns, which fill the picker in the contact profile panel.

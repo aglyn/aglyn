@@ -1,5 +1,5 @@
 ---
-sidebar_position: 10
+sidebar_position: 11
 title: Reports
 description: New contacts over time, where they came from and how far they have gone, the open pipeline and its forecast, deals won and lost, and the task load — counted on the server for the records your site can see.
 ---

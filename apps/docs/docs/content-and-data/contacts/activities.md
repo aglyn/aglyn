@@ -1,5 +1,5 @@
 ---
-sidebar_position: 5
+sidebar_position: 6
 title: Activities & the timeline
 description: Log calls, emails, meetings and notes against a contact, a company or a deal, and read them in one timeline beside everything the platform captured.
 ---

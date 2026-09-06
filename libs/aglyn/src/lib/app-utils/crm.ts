@@ -51,6 +51,7 @@ import {
   CONTACT_FACETS_FIELD,
   CONTACT_SOURCE_LABELS,
   type ContactInteraction,
+  type ContactSegment,
   type ContactSource,
   normalizeContactEmail,
   readContactFacet,
@@ -61,10 +62,10 @@ import { MAX_SCOPE_HOSTS, ORG_SCOPE_TOKEN, type ScopeToken } from './scope-token
  * The CRM's collections, every one under `orgs/{orgId}/`.
  *
  * Named here rather than spelled at each call site because the rules, the
- * indexes and the console must agree on the string, and the two prefixed
- * ones are prefixed on purpose: `tasks` and `activities` are words the org
- * document will want for something else one day, and a collection name is
- * persisted in every document path that uses it.
+ * indexes and the console must agree on the string, and the three prefixed
+ * ones are prefixed on purpose: `tasks`, `activities` and `views` are words
+ * the org document will want for something else one day, and a collection
+ * name is persisted in every document path that uses it.
  */
 export const CRM_COLLECTIONS = {
   companies: 'companies',
@@ -73,6 +74,7 @@ export const CRM_COLLECTIONS = {
   tasks: 'crmTasks',
   activities: 'crmActivities',
   contactFields: 'contactFields',
+  views: 'crmViews',
 } as const
 
 export type CrmCollection = (typeof CRM_COLLECTIONS)[keyof typeof CRM_COLLECTIONS]
@@ -1644,4 +1646,386 @@ export function isCrmLeadOpen(
   lead: Pick<CrmLeadFields, 'status'> | null | undefined,
 ): boolean {
   return CRM_LEAD_OPEN_STATUSES.includes(crmLeadStatus(lead))
+}
+
+/*==========================================
+ * SAVED VIEWS (AGL-2617) — a list the way one person works it.
+ *
+ * "My open leads in Texas" is a list a rep opens every morning, and it is
+ * three things at once: the filters that pick the people, the columns they
+ * want to see about them, and the order they want them in. A `ContactSegment`
+ * kept the first of those for two dimensions — tags and capture sources —
+ * and nothing kept the rest, so every reload put the reader back at the
+ * whole list. A view keeps all three, for every list in the CRM, under a
+ * name, and is addressable: `?view=<id>` on the section's own URL opens it.
+ *
+ * ## The filters are the LIST'S grammar, not a second one
+ *
+ * A clause here is `{ field, op, value }` — structurally the
+ * `ListFilterRequest` the shared list-filter grammar already speaks, the
+ * request a grid's filter panel produces and the one the query translator
+ * and the in-memory matcher both read. A view stores a list of them and
+ * nothing more, so a view can only ask what the list can already answer,
+ * and a list that gains a filterable field gains it for its views at no
+ * cost. The type is restated here rather than imported because this module
+ * is pure data and the grammar's home is a UI library; the shape is the
+ * contract, and `normalizeCrmViewFilters` is what holds a stored document
+ * to it.
+ *
+ * ## Mine, and shared
+ *
+ * A view is one person's working arrangement until they say otherwise, so
+ * it lists only for its owner; `shared` puts it in front of everyone who
+ * can read the section. Both are stamped `visibleTo` like every CRM row,
+ * because a view is a description of the people it selects and answers to
+ * the same authority they do — a private view is hidden by the LISTING, not
+ * by the rules, and the rules let the creator or an org-wide member change
+ * or remove it.
+ *
+ * ## The default is the reader's, not the view's
+ *
+ * Which view a section opens on is a preference of one person for one
+ * organization, so it lives on the reader's own profile document beside
+ * their notification mutes rather than on the view — a shared view somebody
+ * else made their default must not become everybody's.
+ *=========================================*/
+
+/** The lists a view can be saved for — every CRM section that has one. */
+export const CRM_VIEW_SECTIONS = [
+  'contacts',
+  'companies',
+  'deals',
+  'tasks',
+  'leads',
+] as const
+
+export type CrmViewSection = (typeof CRM_VIEW_SECTIONS)[number]
+
+export function isCrmViewSection(value: unknown): value is CrmViewSection {
+  return (
+    typeof value === 'string' &&
+    (CRM_VIEW_SECTIONS as readonly string[]).includes(value)
+  )
+}
+
+/**
+ * One filter a view carries: a field, an operator and a value, exactly as a
+ * list's own filter panel would send them to its query.
+ *
+ * `label` is the human reading of an OPAQUE value — a team member's name
+ * beside their uid, a company's name beside its id — kept on the clause so
+ * the chip that shows it can say "Owner is Dana" without a read. Display
+ * only: nothing matches on it, and a clause without one shows its value.
+ */
+export interface CrmViewFilterClause {
+  field: string
+  op: string
+  value: string
+  label?: string
+}
+
+/** The column a view orders by, and which way. */
+export interface CrmViewSort {
+  field: string
+  direction: 'asc' | 'desc'
+}
+
+/**
+ * What a view holds about a list — the part a section reads and writes,
+ * without the name and the ownership around it.
+ *
+ * `columns` is the VISIBLE set, by column field, or empty for the list's
+ * own default; `sort` is one column or none, because a table sorts by one.
+ */
+export interface CrmViewState {
+  filters: CrmViewFilterClause[]
+  columns: string[]
+  sort: CrmViewSort | null
+}
+
+/** `orgs/{orgId}/crmViews/{viewId}`. */
+export interface CrmSavedView extends CrmScoped, CrmViewState {
+  section: CrmViewSection
+  name: string
+  /** Whose working arrangement this is — the creator, and the one member the rules let change it. */
+  ownerUid: string
+  createdByUid: string
+  /** Listed for everybody who can read the section, rather than the owner alone. */
+  shared: boolean
+}
+
+export const CRM_VIEW_NAME_MAX = 60
+/**
+ * The most clauses one view carries. A bound on the predicate, not the
+ * audience: the list matches most of them in memory over a bounded window,
+ * and a stored array has no natural end.
+ */
+export const CRM_VIEW_MAX_FILTERS = 20
+export const CRM_VIEW_MAX_COLUMNS = 60
+/** Filter operators that carry no value, so an empty `value` is not a dropped clause. */
+const VALUELESS_VIEW_OPS: ReadonlySet<string> = new Set(['isEmpty', 'isNotEmpty'])
+
+export const EMPTY_CRM_VIEW_STATE: CrmViewState = Object.freeze({
+  filters: [],
+  columns: [],
+  sort: null,
+}) as CrmViewState
+
+const asViewText = (value: unknown, max: number): string =>
+  typeof value === 'string' ? value.trim().slice(0, max) : ''
+
+/**
+ * A stored view's filters, held to the clause shape.
+ *
+ * Strict about what it keeps: a clause with no field or no operator is not
+ * a filter, and a valued operator with no value would read as a filter
+ * that matches nothing — so both are dropped rather than kept, for the same
+ * reason the dynamic-list rule drops an empty branch: a view must not
+ * quietly select a different population than the one it reads as.
+ */
+export function normalizeCrmViewFilters(value: unknown): CrmViewFilterClause[] {
+  if (!Array.isArray(value)) return []
+  const clauses: CrmViewFilterClause[] = []
+  for (const raw of value) {
+    const entry = (raw ?? {}) as Record<string, unknown>
+    const field = asViewText(entry['field'], 80)
+    const op = asViewText(entry['op'], 40)
+    const text = asViewText(entry['value'], 500)
+    if (!field || !op) continue
+    if (!text && !VALUELESS_VIEW_OPS.has(op)) continue
+    const label = asViewText(entry['label'], 120)
+    clauses.push({ field, op, value: text, ...(label ? { label } : {}) })
+    if (clauses.length >= CRM_VIEW_MAX_FILTERS) break
+  }
+  return clauses
+}
+
+export function normalizeCrmViewColumns(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  for (const raw of value) {
+    const column = asViewText(raw, 80)
+    if (column) seen.add(column)
+    if (seen.size >= CRM_VIEW_MAX_COLUMNS) break
+  }
+  return [...seen]
+}
+
+export function normalizeCrmViewSort(value: unknown): CrmViewSort | null {
+  const entry = (value ?? null) as Record<string, unknown> | null
+  const field = entry ? asViewText(entry['field'], 80) : ''
+  if (!field) return null
+  return { field, direction: entry?.['direction'] === 'desc' ? 'desc' : 'asc' }
+}
+
+/** A stored document's three list-facing fields, held to their shapes. */
+export function normalizeCrmViewState(value: unknown): CrmViewState {
+  const entry = (value ?? {}) as Record<string, unknown>
+  return {
+    filters: normalizeCrmViewFilters(entry['filters']),
+    columns: normalizeCrmViewColumns(entry['columns']),
+    sort: normalizeCrmViewSort(entry['sort']),
+  }
+}
+
+/**
+ * Whether two states describe the same list — what "unsaved changes" means.
+ *
+ * Clause order matters (a list applies them in order, and the first one the
+ * query can serve is the one it serves); the label on a clause does not,
+ * because nothing matches on it.
+ */
+export function crmViewStateEquals(a: CrmViewState, b: CrmViewState): boolean {
+  if (a.filters.length !== b.filters.length) return false
+  for (let index = 0; index < a.filters.length; index += 1) {
+    const left = a.filters[index]
+    const right = b.filters[index]
+    if (
+      left.field !== right.field ||
+      left.op !== right.op ||
+      left.value !== right.value
+    ) {
+      return false
+    }
+  }
+  if (a.columns.length !== b.columns.length) return false
+  if (a.columns.some((column, index) => column !== b.columns[index])) {
+    return false
+  }
+  if (!a.sort || !b.sort) return a.sort === b.sort
+  return a.sort.field === b.sort.field && a.sort.direction === b.sort.direction
+}
+
+/**
+ * Whether a view belongs in this reader's menu: their own, or one somebody
+ * shared. The rules admit the read either way — see the module note — so
+ * this is what keeps one person's private arrangement out of another's
+ * list.
+ */
+export function crmViewIsListed(
+  view: Pick<CrmSavedView, 'shared' | 'ownerUid'>,
+  uid: string | null | undefined,
+): boolean {
+  return view.shared === true || (Boolean(uid) && view.ownerUid === uid)
+}
+
+/**
+ * The Contacts list's filterable fields, by the names a view clause carries.
+ *
+ * A contract between three readers that cannot import one another: the
+ * list's own filter grammar (which declares these as its columns), a saved
+ * view (which stores them), and the dynamic-list translator below in
+ * `dynamic-list-rule.ts` (which turns them into audience dimensions). Named
+ * once so a rename on the list cannot silently stop an audience matching.
+ * `custom` is a PREFIX: a custom field's column is the prefix and its key.
+ */
+export const CRM_CONTACT_VIEW_FIELDS = {
+  tags: 'tags',
+  source: 'source',
+  owner: 'ownerUid',
+  stage: 'lifecycleStage',
+  company: 'companyId',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt',
+  orders: 'ordersCount',
+  ltv: 'ltvCents',
+  custom: 'custom_',
+} as const
+
+/** The column a custom contact field filters and shows as. */
+export const crmContactCustomColumn = (key: string): string =>
+  `${CRM_CONTACT_VIEW_FIELDS.custom}${key}`
+
+/** The field key a custom column stands for, or `null` for any other column. */
+export function crmContactCustomKey(column: string): string | null {
+  const prefix = CRM_CONTACT_VIEW_FIELDS.custom
+  return column.startsWith(prefix) && column.length > prefix.length
+    ? column.slice(prefix.length)
+    : null
+}
+
+const CRM_VIEW_TAGS_FIELD = CRM_CONTACT_VIEW_FIELDS.tags
+const CRM_VIEW_SOURCE_FIELD = CRM_CONTACT_VIEW_FIELDS.source
+
+/**
+ * A saved segment, as the filters of a contacts view.
+ *
+ * A segment is "any of these tags AND any of these sources", so each
+ * becomes one `isAnyOf` clause — OR within, AND across, which is the
+ * reading `contactMatchesSegment` gives it. A single tag is emitted as
+ * `contains` instead: that operator is the one the contacts query can serve
+ * from the index, so a one-tag segment opened as a view reaches the whole
+ * collection rather than the loaded window. The values are the segment's
+ * own, joined the way the grammar's `isAnyOf` splits them.
+ */
+export function crmViewFiltersFromSegment(
+  segment: Pick<ContactSegment, 'tags' | 'sources'>,
+): CrmViewFilterClause[] {
+  const tags = (segment.tags ?? []).map((tag) => tag.trim()).filter(Boolean)
+  const sources = (segment.sources ?? []).filter(
+    (source) => source in CONTACT_SOURCE_LABELS,
+  )
+  return [
+    ...(tags.length === 1
+      ? [{ field: CRM_VIEW_TAGS_FIELD, op: 'contains', value: tags[0] }]
+      : tags.length
+        ? [{ field: CRM_VIEW_TAGS_FIELD, op: 'isAnyOf', value: tags.join(',') }]
+        : []),
+    ...(sources.length === 1
+      ? [{ field: CRM_VIEW_SOURCE_FIELD, op: 'equals', value: sources[0] }]
+      : sources.length
+        ? [
+            {
+              field: CRM_VIEW_SOURCE_FIELD,
+              op: 'isAnyOf',
+              value: sources.join(','),
+            },
+          ]
+        : []),
+  ]
+}
+
+/**
+ * The other direction: the segment a view's filters describe, or `null`
+ * when the view carries no tag or source clause a segment could hold.
+ *
+ * Only the two dimensions a segment has are read, and only through the
+ * operators that mean "has one of these"; a `name startsWith` or an owner
+ * clause is not a segment's to keep. What comes back is what "Save as
+ * segment" writes, so a campaign audience built from it selects exactly the
+ * tags and sources the reader could see on the chips.
+ */
+export function crmViewSegmentFilters(
+  filters: readonly CrmViewFilterClause[],
+): Pick<ContactSegment, 'tags' | 'sources'> | null {
+  const tags = new Set<string>()
+  const sources = new Set<ContactSource>()
+  const split = (value: string) =>
+    value
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+  for (const clause of filters) {
+    if (clause.field === CRM_VIEW_TAGS_FIELD) {
+      if (clause.op === 'contains') tags.add(clause.value.trim().toLowerCase())
+      else if (clause.op === 'isAnyOf') {
+        for (const tag of split(clause.value)) tags.add(tag.toLowerCase())
+      }
+    } else if (clause.field === CRM_VIEW_SOURCE_FIELD) {
+      const values = clause.op === 'equals' ? [clause.value.trim()] : clause.op === 'isAnyOf' ? split(clause.value) : []
+      for (const source of values) {
+        if (source in CONTACT_SOURCE_LABELS) sources.add(source as ContactSource)
+      }
+    }
+  }
+  tags.delete('')
+  if (!tags.size && !sources.size) return null
+  return {
+    ...(tags.size ? { tags: [...tags] } : {}),
+    ...(sources.size ? { sources: [...sources] } : {}),
+  }
+}
+
+/**
+ * `users/{uid}.crmDefaultViews` — `{ [orgId]: { [section]: viewId } }`.
+ *
+ * On the reader's own profile document, beside `notificationPrefs`, because
+ * it is the same kind of fact: how one person wants their console to
+ * behave, owned and written by them alone. Keyed by org first because one
+ * account sits on several organizations and a view id is only meaningful
+ * inside the one that holds it.
+ */
+export const CRM_DEFAULT_VIEWS_FIELD = 'crmDefaultViews'
+
+/** The view a section opens on for this reader in this org, or none. */
+export function crmDefaultViewId(
+  profile: Record<string, unknown> | null | undefined,
+  orgId: string | null | undefined,
+  section: CrmViewSection,
+): string | null {
+  if (!profile || !orgId) return null
+  const byOrg = profile[CRM_DEFAULT_VIEWS_FIELD]
+  if (!byOrg || typeof byOrg !== 'object' || Array.isArray(byOrg)) return null
+  const bySection = (byOrg as Record<string, unknown>)[orgId]
+  if (!bySection || typeof bySection !== 'object' || Array.isArray(bySection)) {
+    return null
+  }
+  const viewId = (bySection as Record<string, unknown>)[section]
+  return typeof viewId === 'string' && viewId.trim() ? viewId : null
+}
+
+/**
+ * The merge patch that sets — or, with `null`, clears — one default.
+ *
+ * Shaped for a merged write so the other organizations' and sections'
+ * defaults on the same document survive it; `null` rather than a delete
+ * sentinel because this module carries no Firestore, and the reader above
+ * treats a null as no default.
+ */
+export function crmDefaultViewPatch(
+  orgId: string,
+  section: CrmViewSection,
+  viewId: string | null,
+): Record<string, unknown> {
+  return { [CRM_DEFAULT_VIEWS_FIELD]: { [orgId]: { [section]: viewId } } }
 }

@@ -91,6 +91,7 @@ import CampaignPicker from '@aglyn/shared-ui-email-campaigns/components/campaign
 import { useOrgCompanyOptions } from '../hooks/use-org-company-options'
 import { useOrgContactFields } from '../hooks/use-org-contact-fields'
 import { useOrgContactSegments } from '../hooks/use-org-contact-segments'
+import { useOrgCrmViews } from '../hooks/use-org-crm-views'
 import { useOrgLists } from '../hooks/use-org-lists'
 
 /** How each silo reads on screen. */
@@ -128,6 +129,8 @@ export interface DynamicListRuleNames {
   lists?: Record<string, string>
   /** Segment id → its name. */
   segments?: Record<string, string>
+  /** Saved Contacts view id → its name. */
+  views?: Record<string, string>
   /** Campaign id → its name. */
   campaigns?: Record<string, string>
   /** Team member uid → how they read on the roster. */
@@ -328,6 +331,9 @@ export function describeDynamicListRule(
       `Reuses saved segment ${named(rule.segmentId, names?.segments)}.`,
     )
   }
+  if (rule.viewId) {
+    clauses.push(`Reuses saved view ${named(rule.viewId, names?.views)}.`)
+  }
   const own = describeDimensions(rule, names)
   if (rule.negate && own.length) {
     /*
@@ -387,6 +393,8 @@ export interface DynamicListRuleDraft {
   sources: DynamicListSource[]
   match: DynamicListRuleMatch
   segmentId: string
+  /** A saved Contacts view's id, resolved by the sweep beside the segment (AGL-2617). */
+  viewId: string
   tags: string
   captureSources: ContactSource[]
   formNames: string
@@ -426,6 +434,7 @@ export const EMPTY_RULE_DRAFT: DynamicListRuleDraft = {
   sources: ['contacts'],
   match: 'all',
   segmentId: '',
+  viewId: '',
   tags: '',
   captureSources: [],
   formNames: '',
@@ -502,6 +511,7 @@ export function ruleToDraft(rule: DynamicListRule): DynamicListRuleDraft {
     sources: rule.sources ?? [],
     match: rule.any?.length ? 'any' : rule.negate ? 'none' : 'all',
     segmentId: rule.segmentId ?? '',
+    viewId: rule.viewId ?? '',
     tags: list((block) => block.tags).join(', '),
     captureSources: list((block) => block.captureSources) as ContactSource[],
     formNames: list((block) => block.formNames).join(', '),
@@ -671,6 +681,7 @@ export function draftToRule(draft: DynamicListRuleDraft): DynamicListRule {
   return normalizeDynamicListRule({
     sources: draft.sources,
     ...(draft.segmentId ? { segmentId: draft.segmentId } : {}),
+    ...(draft.viewId ? { viewId: draft.viewId } : {}),
     ...(draft.match === 'any'
       ? // Each filter its own branch. The top-level block stays empty, which
         // is no constraint — so the rule is `sources AND (one of these)`.
@@ -714,6 +725,7 @@ export interface DynamicListRuleFieldsProps {
 export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
   const { scope, hostId, draft, onChange, listId } = props
   const segmentDocs = useOrgContactSegments(scope)
+  const viewDocs = useOrgCrmViews(scope)
   const listDocs = useOrgLists(scope)
   /*
    * The site's campaigns, read because this form is on screen.
@@ -758,6 +770,21 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
     }
     return [{ $id: draft.segmentId, name: draft.segmentId }, ...rows]
   }, [segmentDocs, draft.segmentId])
+  /*
+   * The saved VIEW the rule already names, kept the way the segment is
+   * (AGL-2617) — and for one more reason: the picker lists only views that
+   * translate whole, so a view edited past that after the rule named it
+   * would vanish from its own picker, and saving from that screen would
+   * erase the reference. Shown as its id, the sweep's refusal is at least
+   * visible.
+   */
+  const crmViews = useMemo(() => {
+    const rows = viewDocs
+    if (!draft.viewId || rows.some((row) => row.$id === draft.viewId)) {
+      return rows
+    }
+    return [{ $id: draft.viewId, name: draft.viewId }, ...rows]
+  }, [viewDocs, draft.viewId])
 
   /** Every audience except the one being edited — see the prop's note. */
   const lists = useMemo(
@@ -774,6 +801,7 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
       segments: Object.fromEntries(
         segments.map((row) => [row.$id, row.name ?? row.$id]),
       ),
+      views: Object.fromEntries(crmViews.map((row) => [row.$id, row.name])),
       campaigns: Object.fromEntries(
         siteCampaigns.options.map((option) => [option.value, option.label]),
       ),
@@ -788,6 +816,7 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
     [
       listDocs,
       segments,
+      crmViews,
       siteCampaigns.options,
       team.options,
       companies.names,
@@ -1020,6 +1049,28 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
           {segments.map((segment) => (
             <MenuItem key={segment.$id} value={segment.$id}>
               {segment.name ?? segment.$id}
+            </MenuItem>
+          ))}
+        </TextField>
+        {/*
+          A saved Contacts view as an audience (AGL-2617), beside the
+          segment: its filters — owner, stage, company, tags, sources,
+          dates, purchases and custom fields — always apply, the way a
+          segment's do. Only views the sweep can honor are offered.
+         */}
+        <TextField
+          select
+          size="small"
+          label="Saved view"
+          value={draft.viewId}
+          onChange={(event) => set('viewId', event.target.value)}
+          helperText="Reuses that Contacts view's filters"
+          sx={{ minWidth: 200 }}
+        >
+          <MenuItem value="">{'None'}</MenuItem>
+          {crmViews.map((view) => (
+            <MenuItem key={view.$id} value={view.$id}>
+              {view.name}
             </MenuItem>
           ))}
         </TextField>

@@ -386,6 +386,88 @@ describe('a rule that selects nobody says so', () => {
   })
 })
 
+/**
+ * A saved Contacts VIEW as an audience (AGL-2617): resolved once into the
+ * rule's own dimensions, ANDed with the rule, planned for like the rule —
+ * and, like a segment, narrowing to nobody rather than to everybody when
+ * it cannot be honored.
+ */
+describe('a saved contacts view is an audience', () => {
+  const VIEW = 'orgs/org-1/crmViews/view-1'
+
+  it('narrows the rule to the view\'s clauses', async () => {
+    seedMatchingContacts(2)
+    store['orgs/org-1/contacts/c-other'] = {
+      email: 'other@example.com',
+      tags: ['other'],
+      sources: { form: true },
+    }
+    store[VIEW] = {
+      section: 'contacts',
+      filters: [{ field: 'tags', op: 'contains', value: 'vip' }],
+    }
+    const result = await materializeDynamicList({
+      listRef: listRef(),
+      hostId: 'host-1',
+      rule: { sources: ['contacts'], viewId: 'view-1' },
+    })
+    expect(result.empty).toBe(false)
+    expect(memberEmails()).toEqual(['person0@example.com', 'person1@example.com'])
+  })
+
+  it('reads the facet when the view names an owner, as a rule naming one would', async () => {
+    store['orgs/org-1/contacts/c-mine'] = {
+      email: 'mine@example.com',
+      tags: ['vip'],
+      facets: { [GROUP_ID]: { ownerUid: 'uid-a' } },
+    }
+    store['orgs/org-1/contacts/c-theirs'] = {
+      email: 'theirs@example.com',
+      tags: ['vip'],
+      facets: { [GROUP_ID]: { ownerUid: 'uid-b' } },
+    }
+    store[VIEW] = {
+      section: 'contacts',
+      filters: [{ field: 'ownerUid', op: 'equals', value: 'uid-a', label: 'Dana' }],
+    }
+    await materializeDynamicList({
+      listRef: listRef(),
+      hostId: 'host-1',
+      rule: { sources: ['contacts'], tags: ['vip'], viewId: 'view-1' },
+    })
+    // The facet group was resolved for the view's sake — the rule alone
+    // names nothing the facet holds.
+    expect(groupLookups).toEqual(['host-1'])
+    expect(memberEmails()).toEqual(['mine@example.com'])
+  })
+
+  it('narrows to nothing when the view is gone, is not of contacts, or says what this language cannot', async () => {
+    seedMatchingContacts(2)
+    const attempt = async (viewId: string) =>
+      materializeDynamicList({
+        listRef: listRef(),
+        hostId: 'host-1',
+        rule: { sources: ['contacts'], viewId },
+      })
+    expect((await attempt('gone')).empty).toBe(true)
+    store['orgs/org-1/crmViews/companies'] = {
+      section: 'companies',
+      filters: [],
+    }
+    expect((await attempt('companies')).empty).toBe(true)
+    store['orgs/org-1/crmViews/prefix'] = {
+      section: 'contacts',
+      filters: [
+        { field: 'tags', op: 'contains', value: 'vip' },
+        // A name prefix has no dimension here; dropping it would widen the audience.
+        { field: 'name', op: 'startsWith', value: 'Per' },
+      ],
+    }
+    expect((await attempt('prefix')).empty).toBe(true)
+    expect(memberRows()).toHaveLength(0)
+  })
+})
+
 describe('the rule can draw from silos other than contacts', () => {
   it('answers "everyone who submitted form X"', async () => {
     store['hosts/host-1/formSubmissions/s1'] = {

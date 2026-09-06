@@ -97,6 +97,8 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => FIRESTORE,
   useOrgDataScope: () => DATA_SCOPE,
   useUser: () => ({ data: USER }),
+  // The reader's reach, for the views control's "may edit" (AGL-2617).
+  useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),
   usePagedCollection: (build: (pageLimit: number) => BuiltQuery | null) => {
     const spec = build(11)
     if (spec) built.push(spec)
@@ -131,6 +133,8 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: (href: string) => pushes.push(href), replace: jest.fn() }),
   usePathname: () => '/',
+  // The views control reads the address for `?view=` (AGL-2617); none here.
+  useSearchParams: () => new URLSearchParams(),
 }))
 
 jest.mock('@aglyn/shared-ui-snackstack', () => ({

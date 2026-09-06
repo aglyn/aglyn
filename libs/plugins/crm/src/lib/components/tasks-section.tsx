@@ -24,6 +24,9 @@ import {
 } from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { useCrmSavedView } from '../hooks/use-crm-saved-view'
+import { useCrmViewGrid } from '../hooks/use-crm-view-grid'
+import CrmViewsControl from './crm-views-control'
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
@@ -105,7 +108,24 @@ export function TasksSection(props: ConsolePluginPageProps) {
     [orgRecord, hostId],
   )
 
-  const [view, setView] = useState<CrmTaskView>('mine')
+  /*
+   * Which of the six task views is open is the saved VIEW'S (AGL-2617): a
+   * saved view of tasks holds the task view beside the columns and the
+   * sort, and the toggle below writes into it. Unset reads as "My tasks",
+   * which is what the section opened on before views existed.
+   */
+  const views = useCrmSavedView({ section: 'tasks', hostId, org: orgRecord, basePath })
+  const view: CrmTaskView = useMemo(() => {
+    const value = views.state.filters.find((clause) => clause.field === 'view')?.value
+    return CRM_TASK_VIEWS.some((option) => option.id === value)
+      ? (value as CrmTaskView)
+      : 'mine'
+  }, [views.state.filters])
+  const setView = useCallback(
+    (next: CrmTaskView) =>
+      views.setFilters([{ field: 'view', op: 'equals', value: next }]),
+    [views.setFilters],
+  )
   const list = useCrmTaskList({
     hostId,
     org: orgRecord,
@@ -276,6 +296,8 @@ export function TasksSection(props: ConsolePluginPageProps) {
     ],
     [busyId, toggleDone, nowMs, directory, routes, nameOf],
   )
+  /* The column and sort models are the view's (AGL-2617). */
+  const grid = useCrmViewGrid(views, columns)
 
   return (
     <>
@@ -304,22 +326,30 @@ export function TasksSection(props: ConsolePluginPageProps) {
         }}
       >
         <Stack spacing={2}>
-          <ToggleButtonGroup
-            exclusive
-            size="small"
-            color="primary"
-            value={view}
-            onChange={(_event, next) => {
-              if (next) setView(next as CrmTaskView)
-            }}
-            aria-label="Task view"
+          {/* The saved view this list is showing, beside the task view it narrows to (AGL-2617). */}
+          <Stack
+            direction="row"
+            spacing={2}
+            sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
           >
-            {CRM_TASK_VIEWS.map((option) => (
-              <ToggleButton key={option.id} value={option.id}>
-                {option.label}
-              </ToggleButton>
-            ))}
-          </ToggleButtonGroup>
+            <CrmViewsControl controller={views} allLabel="All tasks" />
+            <ToggleButtonGroup
+              exclusive
+              size="small"
+              color="primary"
+              value={view}
+              onChange={(_event, next) => {
+                if (next) setView(next as CrmTaskView)
+              }}
+              aria-label="Task view"
+            >
+              {CRM_TASK_VIEWS.map((option) => (
+                <ToggleButton key={option.id} value={option.id}>
+                  {option.label}
+                </ToggleButton>
+              ))}
+            </ToggleButtonGroup>
+          </Stack>
           {status === 'error' ? (
             <Typography variant="body2" color="error">
               {'The tasks could not be loaded. Reload to try again.'}
@@ -355,6 +385,11 @@ export function TasksSection(props: ConsolePluginPageProps) {
                   if (found) setDrawer({ open: true, task: found })
                 }}
                 disableColumnFilter
+                // Columns and sort are the view's, controlled (AGL-2617).
+                columnVisibilityModel={grid.columnVisibilityModel}
+                onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}
+                sortModel={grid.sortModel}
+                onSortModelChange={grid.onSortModelChange}
               />
             </>
           )}

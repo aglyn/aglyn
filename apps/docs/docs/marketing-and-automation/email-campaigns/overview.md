@@ -37,7 +37,9 @@ two are treated differently.
    between, and the lists it is aimed at.
 2. Open it and **write an email** inside it. Pick the audience for that email — leads,
    site members, [segments](../../content-and-data/contacts/overview.md#segments), or an
-   email list.
+   email list. An audience built from a rule can also reuse a
+   [saved Contacts view](../../content-and-data/contacts/views.md#segments-and-views)
+   beside a segment.
 3. Send — subject to your plan's **send cap**.
 
 A campaign lives under **Marketing** because that is what it is: a window of dates, a

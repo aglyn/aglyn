@@ -18,25 +18,30 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import {
-  contactMatchesSegment,
   CONTACT_LIFECYCLE_STAGE_LABELS,
   CONTACT_LIFECYCLE_STAGES,
   CONTACT_SOURCE_LABELS,
-  type ContactLifecycleStage,
-  type ContactSegment,
-  type ContactSource,
+  CRM_CONTACT_VIEW_FIELDS,
+  type CrmViewFilterClause,
+  crmContactCustomColumn,
+  crmViewFiltersFromSegment,
+  crmViewSegmentFilters,
   newResourceScopeFields,
   ORG_SCOPE_TOKEN,
   pluginDocsHelp,
 } from '@aglyn/aglyn'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
 import {
-  gridFilterRequest,
   hiddenFilterVisibility,
-  type ListFilterRequest,
+  matchListFilter,
 } from '@aglyn/shared-ui-jsx/const/list-filter'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
-import { CONTACT_LIST_FILTER_FIELDS } from '../constants/contact-filters'
+import {
+  CONTACT_LIST_FILTER_FIELDS,
+  CONTACT_LIST_FILTER_HEADERS,
+  contactCustomFilterFields,
+  contactCustomFilterHeaders,
+} from '../constants/contact-filters'
 import { type ContactRecord, contactRecordFromDoc } from '../model/contact-record'
 import { contactsListSeed } from '../model/contacts-list-seed'
 import { crmRoutes } from '../model/crm-routes'
@@ -47,7 +52,7 @@ import ContactsBulkBar from './contacts-bulk-bar'
 import { ContactImportButton } from './contact-import-drawer'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
-  listFilterConstraints,
+  listFilterPlan,
   useFirestore,
   useFirestoreCollection,
   useFirestoreDoc,
@@ -57,11 +62,11 @@ import {
 import {
   Alert,
   Button,
-  Chip,
-  FormControlLabel,
-  MenuItem,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Stack,
-  Switch,
   TextField,
   Typography,
 } from '@mui/material'
@@ -75,7 +80,6 @@ import {
   query,
   where,
 } from 'firebase/firestore'
-import type { GridFilterModel } from '@mui/x-data-grid'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import RecentActivityFeed from './recent-activity-feed'
@@ -85,6 +89,11 @@ import { useCrmApi } from './use-crm-api'
 import { useOrgMembers } from './use-org-members'
 import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
 import { customFieldColumns } from './contact-custom-columns'
+import { useCrmSavedView } from '../hooks/use-crm-saved-view'
+import { useCrmViewGrid } from '../hooks/use-crm-view-grid'
+import { useCompanyOptions } from './company-picker'
+import CrmFilterBar, { type CrmFilterOption } from './crm-filter-bar'
+import CrmViewsControl, { type CrmViewPreset } from './crm-views-control'
 
 /**
  * The shared labels, under the name this file has always called them.
@@ -93,6 +102,12 @@ import { customFieldColumns } from './contact-custom-columns'
  * editor and this filter cannot disagree about what `order` is called.
  */
 const SOURCE_LABELS = CONTACT_SOURCE_LABELS
+
+/** The filter-only columns, hidden whatever a view's column list says. */
+const HIDDEN_FILTER_COLUMNS = hiddenFilterVisibility(
+  CONTACT_LIST_FILTER_FIELDS,
+  CONTACT_FILTER_COLUMNS,
+)
 
 /**
  * Why a refund found no contact to record itself against (AGL-2329).
@@ -207,27 +222,62 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
   const searchParams = useSearchParams()
   const seed = useMemo(() => contactsListSeed(searchParams), [searchParams])
   /*
-   * The column filter, declared BEFORE the listener that reads it — the query
-   * is rebuilt from it, so it cannot be state introduced further down.
+   * The seed as CLAUSES, in front of everything else (AGL-2617).
    *
-   * The grid's model is CONTROLLED, beside the request the query reads, so
-   * a seeded filter shows in the panel exactly as a typed one would and the
-   * chip that clears it below clears both — an `initialState` alone would
-   * leave the panel claiming a filter the query had already dropped.
+   * A view holds a list of clauses in the grammar the grid's panel speaks,
+   * and the seed is two of them — the form's captures and the address, plus
+   * the source the form link names. They lead every state the list works
+   * from, whichever view is open, so the query serves the seed (it reaches
+   * the whole collection, as it did before views) and a view narrows what
+   * comes back. The controller keeps them out of what a view SAVES.
    */
-  const [filter, setFilter] = useState<ListFilterRequest | null>(seed.filter)
-  const [gridFilter, setGridFilter] = useState<GridFilterModel>(() => ({
-    items: seed.filter
-      ? [
-          {
-            id: 'seed',
-            field: seed.filter.field,
-            operator: seed.filter.op,
-            value: seed.filter.value,
-          },
-        ]
-      : [],
-  }))
+  const seedFilters = useMemo<CrmViewFilterClause[]>(
+    () => [
+      ...(seed.filter ? [seed.filter] : []),
+      ...(seed.source
+        ? [{ field: CRM_CONTACT_VIEW_FIELDS.source, op: 'equals', value: seed.source }]
+        : []),
+    ],
+    [seed],
+  )
+  const viewInitial = useMemo(() => ({ filters: seedFilters }), [seedFilters])
+  const views = useCrmSavedView({
+    section: 'contacts',
+    hostId,
+    org,
+    basePath: basePath ?? '',
+    initial: viewInitial,
+  })
+  /*
+   * The grammar this list speaks: the declared fields, and one field per
+   * custom contact field the org has defined — so a view can filter on
+   * "plan is enterprise" the way it filters on a stage.
+   */
+  const filterFields = useMemo(
+    () => [...CONTACT_LIST_FILTER_FIELDS, ...contactCustomFilterFields(customFields.active)],
+    [customFields.active],
+  )
+  const filterHeaders = useMemo(
+    () => ({
+      ...CONTACT_LIST_FILTER_HEADERS,
+      ...contactCustomFilterHeaders(customFields.active),
+    }),
+    [customFields.active],
+  )
+  /*
+   * ONE clause on the query, the rest over the window.
+   *
+   * Firestore takes one array clause per query and composes the rest only
+   * through indexes nobody built for every pair of columns, so the first
+   * clause the translator can serve is the one that reaches every contact
+   * and every other narrows the thousand the query returned. The caption
+   * under the bar says which is which; the chips mark the served one.
+   */
+  const plan = useMemo(
+    () => listFilterPlan(filterFields, views.state.filters),
+    [filterFields, views.state.filters],
+  )
+  const filter = plan.served
   /**
    * The one filter that cannot carry the scope clause.
    *
@@ -290,10 +340,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
        * changes is that the thousand are now the newest thousand, and that a
        * filter reaches the whole collection before the cap applies.
        */
-      const constraints = listFilterConstraints(
-        CONTACT_LIST_FILTER_FIELDS,
-        filter,
-      )
+      const constraints = plan.constraints
       /*
        * SCOPED, and this is the leak it closes.
        *
@@ -317,7 +364,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
         limit(1000),
       )
     },
-    [firestore, dataScope, filter, byForm, visibleToTokens],
+    [firestore, dataScope, plan.constraints, byForm, visibleToTokens],
     { idField: '$id' },
   )
   /*
@@ -365,8 +412,23 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
    * the team list, and the create drawer asks for it in its own right.
    */
   const [createOpen, setCreateOpen] = useState(false)
+  /*
+   * The filter bar's pickers name people and companies, so the roster is
+   * also read once the reader has reached for a filter, or is looking at a
+   * view that names an owner or a company (AGL-2617).
+   */
+  const [filterOpened, setFilterOpened] = useState(false)
+  const namesFilter = views.state.filters.some(
+    (clause) =>
+      clause.field === CRM_CONTACT_VIEW_FIELDS.owner ||
+      clause.field === CRM_CONTACT_VIEW_FIELDS.company,
+  )
   const members = useOrgMembers(orgId, {
-    enabled: createOpen || contacts.some((contact) => Boolean(contact.ownerUid)),
+    enabled:
+      createOpen ||
+      filterOpened ||
+      namesFilter ||
+      contacts.some((contact) => Boolean(contact.ownerUid)),
   })
   /**
    * The HEAD-COUNT, read as a server-side aggregate (AGL-1706).
@@ -462,59 +524,114 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
     [firestore, dataScope],
     { idField: '$id' },
   )
-  const segments = [...(segmentDocs ?? [])].sort((a, b) =>
-    String(a.name ?? '').localeCompare(String(b.name ?? '')),
+  const segments = useMemo(
+    () =>
+      [...(segmentDocs ?? [])].sort((a, b) =>
+        String(a.name ?? '').localeCompare(String(b.name ?? '')),
+      ),
+    [segmentDocs],
+  )
+  /*
+   * Every saved segment, offered in the views menu as a view (AGL-2617):
+   * choosing one puts its tag and source clauses on the filter bar. A
+   * segment can only have come FROM an org scope, so the delete is
+   * unreachable without one in practice — but the scope is nullable
+   * (AGL-1050) and an unguarded deref would be a crash rather than a no-op
+   * if that ever stopped being true.
+   */
+  const segmentPresets = useMemo<CrmViewPreset[]>(
+    () =>
+      segments.map((segment: any) => ({
+        id: String(segment.$id),
+        label: String(segment.name ?? ''),
+        filters: crmViewFiltersFromSegment({
+          tags: segment.tags ?? [],
+          sources: segment.sources ?? [],
+        }),
+        onRemove: dataScope
+          ? () =>
+              deleteDoc(
+                doc(
+                  firestore,
+                  dataScope[0],
+                  dataScope[1],
+                  'contactSegments',
+                  String(segment.$id),
+                ),
+              )
+          : undefined,
+      })),
+    [segments, dataScope, firestore],
   )
 
-  const [sourceFilter, setSourceFilter] = useState<'' | ContactSource>(seed.source)
-  const [tagFilter, setTagFilter] = useState('')
   /*
-   * Stage and owner narrow the loaded window the way the segment controls
-   * do, and for the same reason one layer down: both live on the viewing
-   * group's FACET, and a facet path is per group, so neither is a field the
-   * query grammar can reach without an index per group. Ordinary orgs load
-   * their whole list into the window anyway; the caption below says what
-   * these narrow for the ones that do not.
-   */
-  const [stageFilter, setStageFilter] = useState<'' | ContactLifecycleStage>('')
-  const [assignedToMe, setAssignedToMe] = useState(false)
-  const filterSegment: Pick<ContactSegment, 'tags' | 'sources'> = useMemo(
-    () => ({
-      tags: tagFilter
-        .split(',')
-        .map((tag) => tag.trim())
-        .filter(Boolean),
-      sources: sourceFilter ? [sourceFilter] : [],
-    }),
-    [tagFilter, sourceFilter],
-  )
-  const filterActive = Boolean(
-    filterSegment.tags?.length || filterSegment.sources?.length,
-  )
-  const windowNarrowed = filterActive || Boolean(stageFilter) || assignedToMe
-  /*
-   * The SEGMENT controls still narrow in the browser, and say so below.
+   * THE WINDOW CLAUSES narrow in the browser, and the caption says so.
    *
-   * They are a different feature from the search: a segment is saved and
-   * becomes a campaign audience, and `contactMatchesSegment` is the one
-   * predicate that both the console and the sender read. Pushing it into the
-   * query would need a second copy of it in Firestore terms — and two copies
-   * of "who is in this audience" is how a campaign goes to the wrong people.
-   *
-   * So it refines the ordered window rather than the collection, which the
-   * caption states rather than leaving to be discovered. The free-text search
-   * that used to sit beside it is the grid's now, and reaches everything.
+   * An owner, a stage, a source, a company and a custom value all live on
+   * the viewing group's FACET, and a facet path is per group, so none of
+   * them is a field the query grammar can reach without an index per
+   * group; a second tag clause, or "any of these tags", is an array clause
+   * the scope predicate already occupies. So every clause the plan could
+   * not serve refines the ordered window rather than the collection —
+   * through the same matcher the grammar declares, so a chip and the rows
+   * under it agree. Ordinary orgs load their whole list into the window
+   * anyway; the caption below says what these narrow for the ones that do
+   * not.
    */
   const uid = user?.uid ?? ''
+  const windowClauses = plan.window
   const visible = useMemo(
     () =>
-      contacts.filter(
-        (contact) =>
-          contactMatchesSegment(contact, filterSegment) &&
-          (!stageFilter || contact.lifecycleStage === stageFilter) &&
-          (!assignedToMe || (Boolean(uid) && contact.ownerUid === uid)),
+      windowClauses.length
+        ? contacts.filter((contact) =>
+            windowClauses.every((clause) =>
+              matchListFilter(contact, filterFields, clause),
+            ),
+          )
+        : contacts,
+    [contacts, windowClauses, filterFields],
+  )
+  /*
+   * The choices the filter bar picks from. The companies are read only once
+   * the reader has reached for a filter or is looking at a view that names
+   * one — a read a list nobody is narrowing should not pay for, the same
+   * bargain the roster gets above. A stage and a source are fixed lists and
+   * cost nothing; a custom `select` field offers its own options.
+   */
+  const companies = useCompanyOptions({
+    hostId,
+    org,
+    enabled: filterOpened || namesFilter,
+  })
+  const filterOptions = useMemo<Record<string, readonly CrmFilterOption[]>>(
+    () => ({
+      [CRM_CONTACT_VIEW_FIELDS.owner]: [
+        ...(uid ? [{ value: uid, label: 'Me' }] : []),
+        ...members.options
+          .filter((option) => option.uid !== uid)
+          .map((option) => ({ value: option.uid, label: option.label })),
+      ],
+      [CRM_CONTACT_VIEW_FIELDS.stage]: CONTACT_LIFECYCLE_STAGES.map((stage) => ({
+        value: stage,
+        label: CONTACT_LIFECYCLE_STAGE_LABELS[stage],
+      })),
+      [CRM_CONTACT_VIEW_FIELDS.source]: Object.entries(SOURCE_LABELS).map(
+        ([value, label]) => ({ value, label }),
       ),
-    [contacts, filterSegment, stageFilter, assignedToMe, uid],
+      [CRM_CONTACT_VIEW_FIELDS.company]: companies.options.map((company) => ({
+        value: company.id,
+        label: company.name,
+      })),
+      ...Object.fromEntries(
+        customFields.active
+          .filter((definition) => definition.type === 'select' && definition.options?.length)
+          .map((definition) => [
+            crmContactCustomColumn(definition.key),
+            (definition.options ?? []).map((option) => ({ value: option, label: option })),
+          ]),
+      ),
+    }),
+    [uid, members.options, companies.options, customFields.active],
   )
 
   /* One row grammar, the console's (AGL-2501) — the same table everywhere. */
@@ -526,20 +643,47 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
     ],
     [members.memberName, customFields.active],
   )
+  /*
+   * The grid's column and sort models are the VIEW'S (AGL-2617). The
+   * filter-only hidden columns — the declared fields that are not table
+   * columns, never the custom ones, which are shown — stay hidden whatever
+   * a view says, so a saved arrangement cannot unhide a strip of blank
+   * cells.
+   */
+  const grid = useCrmViewGrid(views, contactColumns, HIDDEN_FILTER_COLUMNS)
 
-  const [segmentName, setSegmentName] = useState('')
+  /*
+   * A SEGMENT IS A VIEW'S TAG AND SOURCE CLAUSES, kept where a campaign
+   * can reach them (AGL-2617).
+   *
+   * The segment stays: it is what a campaign audience and a dynamic list
+   * resolve, and `contactMatchesSegment` is the one predicate both the
+   * console and the sender read. What changed is where it comes from — the
+   * filter bar's tag and source clauses, read back through
+   * `crmViewSegmentFilters`, so "Save as segment" is offered exactly when
+   * the working filters hold something a segment can hold. Each saved
+   * segment is offered in the views menu as a preset, and applying one
+   * puts its clauses on the bar, where they can be narrowed further and
+   * saved as a view.
+   */
+  const segmentFilters = useMemo(
+    () => crmViewSegmentFilters(views.state.filters),
+    [views.state.filters],
+  )
+  const [segmentName, setSegmentName] = useState<string | null>(null)
   const handleSaveSegment = useCallback(async () => {
-    const name = segmentName.trim().slice(0, 60)
+    const name = (segmentName ?? '').trim().slice(0, 60)
     // No org, no place to put it (AGL-1050). The button is disabled in
     // this state; the guard is here so the callback cannot outlive it.
-    if (!name || !filterActive || !dataScope) return
+    if (!name || !segmentFilters || !dataScope) return
+    setSegmentName(null)
     try {
       await addDoc(
         collection(firestore, dataScope[0], dataScope[1], 'contactSegments'),
         {
           name,
-          tags: filterSegment.tags ?? [],
-          sources: filterSegment.sources ?? [],
+          tags: segmentFilters.tags ?? [],
+          sources: segmentFilters.sources ?? [],
           // `contactSegments` is in SCOPED_COLLECTIONS and was the one
           // member of it with no `array-contains-any` reader and no rules
           // `hasAny` — the rules gate it on `isOrgWideMember()` and
@@ -559,7 +703,6 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
           createdAt: new Date(),
         },
       )
-      setSegmentName('')
       enqueueSnackbar(
         `Segment "${name}" saved — usable as a campaign audience`,
         { variant: 'success', persist: false },
@@ -571,14 +714,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
         allowDuplicate: true,
       })
     }
-  }, [
-    segmentName,
-    filterActive,
-    filterSegment,
-    firestore,
-    dataScope,
-    enqueueSnackbar,
-  ])
+  }, [segmentName, segmentFilters, firestore, dataScope, enqueueSnackbar])
 
   /** The rows ticked for a bulk action (AGL-2603); the bar above the table acts on them. */
   const [selectedIds, setSelectedIds] = useState<string[]>([])
@@ -739,108 +875,31 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
               {'New contact'}
             </Button>
           </Stack>
-          <Stack
-            direction="row"
-            spacing={1}
-            sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
-          >
-            <TextField
-              select
-              size="small"
-              label="Source"
-              value={sourceFilter}
-              onChange={(event) => setSourceFilter(event.target.value as any)}
-              sx={{ minWidth: 140 }}
-            >
-              <MenuItem value="">{'Any source'}</MenuItem>
-              {Object.entries(SOURCE_LABELS).map(([value, label]) => (
-                <MenuItem key={value} value={value}>
-                  {label}
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              size="small"
-              label="Tags"
-              placeholder="vip, beta"
-              value={tagFilter}
-              onChange={(event) => setTagFilter(event.target.value)}
-              sx={{ minWidth: 160 }}
-            />
-            <TextField
-              select
-              size="small"
-              label="Stage"
-              value={stageFilter}
-              onChange={(event) =>
-                setStageFilter(event.target.value as '' | ContactLifecycleStage)
+          {/*
+            The view this list is showing, and the clauses narrowing it
+            (AGL-2617). The control names the view and holds everything a
+            reader does to one; the bar holds the clauses, the seed's
+            included, with the one the query serves marked. Segments are
+            offered in the control's menu and saved from it.
+          */}
+          <Stack spacing={1}>
+            <CrmViewsControl
+              controller={views}
+              allLabel="All contacts"
+              presets={segmentPresets}
+              onSaveAsSegment={
+                segmentFilters && dataScope ? () => setSegmentName('') : null
               }
-              sx={{ minWidth: 150 }}
-            >
-              <MenuItem value="">{'Any stage'}</MenuItem>
-              {CONTACT_LIFECYCLE_STAGES.map((stage) => (
-                <MenuItem key={stage} value={stage}>
-                  {CONTACT_LIFECYCLE_STAGE_LABELS[stage]}
-                </MenuItem>
-              ))}
-            </TextField>
-            <FormControlLabel
-              control={
-                <Switch
-                  size="small"
-                  checked={assignedToMe}
-                  onChange={(event) => setAssignedToMe(event.target.checked)}
-                />
-              }
-              label="Assigned to me"
             />
-            {filterActive ? (
-              <>
-                <TextField
-                  size="small"
-                  label="Segment name"
-                  value={segmentName}
-                  onChange={(event) => setSegmentName(event.target.value)}
-                  sx={{ minWidth: 160 }}
-                />
-                <Button
-                  size="small"
-                  disabled={!segmentName.trim() || !dataScope}
-                  onClick={handleSaveSegment}
-                >
-                  {'Save segment'}
-                </Button>
-              </>
-            ) : null}
-            {segments.map((segment: any) => (
-              <Chip
-                key={segment.$id}
-                label={segment.name}
-                size="small"
-                onClick={() => {
-                  setTagFilter((segment.tags ?? []).join(', '))
-                  setSourceFilter(segment.sources?.[0] ?? '')
-                }}
-                // A segment can only have come FROM an org scope, so this
-                // is unreachable in practice — but the scope is nullable
-                // now (AGL-1050) and an unguarded deref would be a crash
-                // rather than a no-op if that ever stopped being true.
-                onDelete={
-                  dataScope
-                    ? () =>
-                        deleteDoc(
-                          doc(
-                            firestore,
-                            dataScope[0],
-                            dataScope[1],
-                            'contactSegments',
-                            segment.$id,
-                          ),
-                        )
-                    : undefined
-                }
-              />
-            ))}
+            <CrmFilterBar
+              fields={filterFields}
+              headers={filterHeaders}
+              clauses={views.state.filters}
+              onChange={views.setFilters}
+              options={filterOptions}
+              servedField={plan.served?.field ?? null}
+              onOpen={() => setFilterOpened(true)}
+            />
           </Stack>
           {!quota.allowed ? (
             <Alert severity="warning">
@@ -914,24 +973,6 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
               }. The money moved; the customer's timeline does not show it.`}
             </Alert>
           ) : null}
-          {/*
-            The form the list was opened for, as a chip that clears it — the
-            panel holds the same filter, so the two clear together.
-          */}
-          {byForm && filter ? (
-            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-              <Chip
-                size="small"
-                color="primary"
-                variant="outlined"
-                label={`Captured through form ${filter.value}`}
-                onDelete={() => {
-                  setFilter(null)
-                  setGridFilter({ items: [] })
-                }}
-              />
-            </Stack>
-          ) : null}
           {byForm && contactsStatus === 'error' ? (
             <Alert severity="info">
               {'The contacts this form captured could not be listed. Your ' +
@@ -975,14 +1016,20 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
             />
           ) : (
             <>
-              {/* The segment controls refine the loaded window; the search
-                  and the column filters reach the whole collection. Said out
-                  loud, because a control that narrows less than it looks like
-                  it does is the thing this page has been fixing. */}
-              {windowNarrowed ? (
+              {/* Which clauses reached the whole collection and which
+                  narrowed the loaded window. Said out loud, because a control
+                  that narrows less than it looks like it does is the thing
+                  this page has been fixing. */}
+              {windowClauses.length ? (
                 <Typography variant="caption" color="text.secondary">
-                  {'Source, tag, stage and "Assigned to me" narrow the loaded ' +
-                    'window. Search and the column filters reach every contact.'}
+                  {(windowClauses.length === 1
+                    ? `${filterHeaders[windowClauses[0].field] ?? windowClauses[0].field} narrows `
+                    : `${windowClauses.length} of the filters narrow `) +
+                    'the loaded window — the newest 1,000 contacts' +
+                    (plan.served
+                      ? ` matching ${filterHeaders[plan.served.field] ?? plan.served.field}, which reached every contact.`
+                      : '.') +
+                    ' Sorting reorders that window.'}
                 </Typography>
               ) : null}
               <ContactsBulkBar hostId={hostId} org={org} scope={dataScope} consentGroup={consentGroup} rows={visible} selected={selectedIds} onSelectedChange={setSelectedIds} />
@@ -992,29 +1039,66 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                 selectable={{ selected: selectedIds, onChange: setSelectedIds }}
                 onOpen={(id) => router.push(routes.contact(id))}
                 /*
-                 * The grid must NOT also filter. The query answers it, so a
-                 * client pass could only drop rows the query already matched.
+                 * The grid must NOT also filter: the bar above is the one
+                 * editor of the clauses, and the community grid's panel
+                 * holds one item where a view holds several. Columns and
+                 * sort are the view's, controlled so a saved arrangement
+                 * is what the grid shows and a change is what it saves.
                  */
-                filterMode="server"
-                filterModel={gridFilter}
-                onFilterModelChange={(model) => {
-                  setGridFilter(model)
-                  setFilter(gridFilterRequest(model))
-                }}
-                initialState={{
-                  columns: {
-                    columnVisibilityModel: hiddenFilterVisibility(
-                      CONTACT_LIST_FILTER_FIELDS,
-                      CONTACT_FILTER_COLUMNS,
-                    ),
-                  },
-                }}
+                disableColumnFilter
+                columnVisibilityModel={grid.columnVisibilityModel}
+                onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}
+                sortModel={grid.sortModel}
+                onSortModelChange={grid.onSortModelChange}
               />
             </>
           )}
           <RecentActivityFeed hostId={hostId} org={org} basePath={props.basePath} />
         </Stack>
       </CardDisplay>
+      {/*
+        Naming a segment is a dialog, never a form above the list. Open
+        while the name is a string; `null` is closed.
+       */}
+      <Dialog
+        open={segmentName !== null}
+        onClose={() => setSegmentName(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>{'Save as segment'}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              {'The tag and source filters, kept as a segment an email campaign or a dynamic list can send to. The other filters stay on this view only.'}
+            </Typography>
+            <TextField
+              autoFocus
+              size="small"
+              label="Segment name"
+              value={segmentName ?? ''}
+              onChange={(event) => setSegmentName(event.target.value.slice(0, 60))}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  void handleSaveSegment()
+                }
+              }}
+              slotProps={{ htmlInput: { maxLength: 60 } }}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSegmentName(null)}>{'Cancel'}</Button>
+          <Button
+            variant="contained"
+            disabled={!(segmentName ?? '').trim() || !dataScope}
+            onClick={() => void handleSaveSegment()}
+          >
+            {'Save segment'}
+          </Button>
+        </DialogActions>
+      </Dialog>
       {/*
         Mounted only while open, so a page that never reaches for it never
         renders a drawer's chrome, and every opening starts from a blank form.

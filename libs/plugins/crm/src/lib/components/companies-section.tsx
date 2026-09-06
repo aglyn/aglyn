@@ -31,6 +31,9 @@ import {
   listFilterColumn,
   type ListFilterRequest,
 } from '@aglyn/shared-ui-jsx/const/list-filter'
+import { useCrmSavedView } from '../hooks/use-crm-saved-view'
+import { useCrmViewGrid } from '../hooks/use-crm-view-grid'
+import CrmViewsControl from './crm-views-control'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import {
   listFilterConstraints,
@@ -108,10 +111,17 @@ export function CompaniesSection(props: CompaniesSectionProps) {
   const members = useOrgMemberOptions(orgId)
 
   /*
-   * The column filter, declared BEFORE the listener that reads it — the query
-   * is rebuilt from it, so it cannot be state introduced further down.
+   * The column filter is the saved VIEW'S first clause (AGL-2617): this
+   * grid's panel holds one, and a view of companies holds that one beside
+   * the columns and the sort. Declared BEFORE the listener that reads it,
+   * as the filter always was — the query is rebuilt from it.
    */
-  const [filter, setFilter] = useState<ListFilterRequest | null>(null)
+  const views = useCrmSavedView({ section: 'companies', hostId, org, basePath })
+  const filter: ListFilterRequest | null = views.state.filters[0] ?? null
+  const setFilter = useCallback(
+    (request: ListFilterRequest | null) => views.setFilters(request ? [request] : []),
+    [views.setFilters],
+  )
 
   const {
     rows: companies,
@@ -275,6 +285,30 @@ export function CompaniesSection(props: CompaniesSectionProps) {
     [members],
   )
 
+  /*
+   * The grid's models are the view's (AGL-2617). The filter model shows the
+   * view's clause in the panel as a typed one would appear — the owner's
+   * stored `equals` back as the single-select `is` the panel offers — so a
+   * view opened from its address reads as filtered, not as a mystery.
+   */
+  const grid = useCrmViewGrid(views, columns)
+  const filterModel = useMemo(
+    () => ({
+      items: filter
+        ? [
+            {
+              id: 'view',
+              field: filter.field,
+              operator:
+                filter.field === 'ownerUid' && filter.op === 'equals' ? 'is' : filter.op,
+              value: filter.value,
+            },
+          ]
+        : [],
+    }),
+    [filter],
+  )
+
   const newCompanyButton = (
     <Button
       size="small"
@@ -295,7 +329,14 @@ export function CompaniesSection(props: CompaniesSectionProps) {
       contentGutterX
       contentGutterY
       contentBordered="all"
-      HeaderProps={{ action: newCompanyButton }}
+      HeaderProps={{
+        action: (
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            <CrmViewsControl controller={views} allLabel="All companies" />
+            {newCompanyButton}
+          </Stack>
+        ),
+      }}
     >
       <Stack spacing={1.5}>
         <Typography variant="body2" color="text.secondary">
@@ -319,6 +360,7 @@ export function CompaniesSection(props: CompaniesSectionProps) {
            * pass could only drop rows the query already matched.
            */
           filterMode="server"
+          filterModel={filterModel}
           onFilterModelChange={(model) => {
             const request = gridFilterRequest(model)
             setFilter(
@@ -327,6 +369,11 @@ export function CompaniesSection(props: CompaniesSectionProps) {
                 : request,
             )
           }}
+          // Columns and sort are the view's, controlled (AGL-2617).
+          columnVisibilityModel={grid.columnVisibilityModel}
+          onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}
+          sortModel={grid.sortModel}
+          onSortModelChange={grid.onSortModelChange}
           // Paged by the footer below, so the grid must not also slice.
           hideFooter
         />

@@ -1,5 +1,5 @@
 ---
-sidebar_position: 12
+sidebar_position: 13
 title: CRM settings
 description: What the CRM does on its own for every site in your workspace — whether a company is created from a captured contact's work email domain, and who a new contact is assigned to, by default, by rule, or in turn.
 ---

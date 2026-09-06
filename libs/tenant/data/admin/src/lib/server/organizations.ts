@@ -722,6 +722,9 @@ export type OrgDataCollection =
   | 'datasets'
   | 'contacts'
   | 'contactSegments'
+  // A saved Contacts view, resolved by the dynamic-list sweep the way a
+  // segment is (AGL-2617).
+  | 'crmViews'
   | 'lists'
   | 'media'
   | 'mediaFolders'
