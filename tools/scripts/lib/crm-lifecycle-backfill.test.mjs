@@ -486,6 +486,215 @@ describe('the skips that protect a person', () => {
   })
 })
 
+describe('--any-form: every form the host holds is a lead surface', () => {
+  const UNROUTED = 'form-contact'
+  const ARCHIVED = 'form-old'
+  const GONE = 'form-gone'
+
+  /**
+   * A host with one routed form, one whose author never switched routing
+   * on, and one Ann wrote in through twice — the unrouted one.
+   */
+  function anyFormHost(overrides = {}) {
+    return host({
+      forms: [
+        { id: FORM, data: { displayName: 'Wholesale', routing: { lead: true } } },
+        { id: UNROUTED, data: { displayName: 'Contact us', routing: {} } },
+      ],
+      submissions: [
+        { id: 'u1', data: { formId: UNROUTED, fields: { email: 'ann@acme.com' } } },
+        { id: 'u2', data: { formId: UNROUTED, fields: { email: 'Ann@Acme.com' } } },
+        // Somebody else, on the same unrouted form.
+        { id: 'u3', data: { formId: UNROUTED, fields: { email: 'bob@acme.com' } } },
+      ],
+      anyForm: true,
+      ...overrides,
+    })
+  }
+
+  /** Ann, met twice through the unrouted form and through nothing else. */
+  function unroutedContact(facet = {}) {
+    const contact = formContact({
+      interactions: [
+        { type: 'form', atMs: 2_000, refId: 'u2', formId: UNROUTED, hostId: HOST },
+        { type: 'form', atMs: 1_000, refId: 'u1', formId: UNROUTED, hostId: HOST },
+      ],
+      ...facet,
+    })
+    contact.formIds = [UNROUTED]
+    return contact
+  }
+
+  it('is off by default: only a live, routed form is a lead surface', () => {
+    const context = anyFormHost({ anyForm: false })
+    assert.equal(context.anyForm, false)
+    assert.deepEqual(context.leadSurfaceFormIds, new Set([FORM]))
+    assert.equal(context.unroutedForms.size, 0)
+    assert.deepEqual(
+      planLeadForHost({ contactId: 'c1', contact: unroutedContact(), host: context }),
+      { kind: 'skip', reason: 'no-lead-surface', contactId: 'c1' },
+    )
+    // Omitting the option reads the same as switching it off.
+    assert.equal(host().anyForm, false)
+  })
+
+  it('files a lead for a form without lead routing, with exactly the shape the door leaves', () => {
+    const verdict = planLeadForHost({
+      contactId: 'c1',
+      contact: unroutedContact(),
+      host: anyFormHost(),
+    })
+    assert.equal(verdict.kind, 'create')
+    assert.equal(verdict.key, personKey('ann@acme.com'))
+    assert.deepEqual(verdict.row, {
+      email: 'ann@acme.com',
+      name: 'Ann Lee',
+      status: 'new',
+      sources: [`form:${UNROUTED}`],
+      // Both of Ann's submissions on the unrouted form, not Bob's.
+      submissionCount: 2,
+      firstSeenAtMs: 1_000,
+      lastSeenAtMs: 2_000,
+      capturedByHostIds: [HOST],
+      backfilledAtMs: NOW,
+    })
+    assert.equal('ownerUid' in verdict.row, false)
+  })
+
+  it('names the forms it treats as lead surfaces only because of the flag', () => {
+    const context = anyFormHost()
+    assert.equal(context.anyForm, true)
+    assert.deepEqual(context.routedForms, new Map([[FORM, 'Wholesale']]))
+    assert.deepEqual(
+      context.unroutedForms,
+      new Map([[UNROUTED, { name: 'Contact us', state: 'routing off' }]]),
+    )
+    assert.deepEqual(context.leadSurfaceFormIds, new Set([FORM, UNROUTED]))
+  })
+
+  it('counts an archived form and a form that no longer exists, and says which', () => {
+    const context = anyFormHost({
+      forms: [
+        { id: FORM, data: { displayName: 'Wholesale', routing: { lead: true } } },
+        { id: ARCHIVED, data: { displayName: 'Old', routing: { lead: true }, archivedAt: 1 } },
+      ],
+      // A deleted form leaves its submissions behind, and they name it.
+      submissions: [{ id: 'g1', data: { formId: GONE, fields: { email: 'ann@acme.com' } } }],
+    })
+    assert.deepEqual(
+      context.unroutedForms,
+      new Map([
+        [ARCHIVED, { name: 'Old', state: 'archived' }],
+        [GONE, { name: GONE, state: 'no form document' }],
+      ]),
+    )
+    // A capture that predates the form entity, joined to the vanished form
+    // through the submission it names.
+    const contact = formContact({
+      interactions: [{ type: 'form', atMs: 700, refId: 'g1', hostId: HOST }],
+    })
+    delete contact.formIds
+    const verdict = planLeadForHost({ contactId: 'c1', contact, host: context })
+    assert.equal(verdict.kind, 'create')
+    assert.deepEqual(verdict.row.sources, [`form:${GONE}`])
+    assert.equal(verdict.row.submissionCount, 1)
+    assert.equal(verdict.row.firstSeenAtMs, 700)
+  })
+
+  it('reads the form mirror for a capped timeline, on and off', () => {
+    const contact = unroutedContact({ interactions: [] })
+    const on = planLeadForHost({ contactId: 'c1', contact, host: anyFormHost() })
+    assert.equal(on.kind, 'create')
+    assert.equal(on.row.submissionCount, 2)
+    const off = planLeadForHost({ contactId: 'c1', contact, host: anyFormHost({ anyForm: false }) })
+    assert.equal(off.reason, 'no-lead-surface')
+  })
+
+  it("leaves a routed form's capture exactly as it was, and credits none of it to the flag", () => {
+    const verdict = planLeadForHost({ contactId: 'c1', contact: formContact(), host: anyFormHost() })
+    assert.equal(verdict.kind, 'create')
+    assert.deepEqual(verdict.row.sources, [`form:${FORM}`])
+    assert.equal(anyFormHost().unroutedForms.has(FORM), false)
+  })
+
+  it('keeps every skip that protects a person', () => {
+    const key = personKey('ann@acme.com')
+    assert.equal(
+      planLeadForHost({
+        contactId: 'c1',
+        contact: unroutedContact(),
+        host: anyFormHost({ suppressions: [{ id: key, data: { email: null, reason: 'erasure' } }] }),
+      }).reason,
+      'erased',
+    )
+    assert.equal(
+      planLeadForHost({
+        contactId: 'c1',
+        contact: unroutedContact(),
+        host: anyFormHost({ leads: [{ id: 'auto-legacy-1', data: { email: 'Ann@Acme.com' } }] }),
+      }).reason,
+      'already-a-lead',
+    )
+    const worked = planLeadForHost({
+      contactId: 'c1',
+      contact: unroutedContact({ lifecycleStage: 'marketing-qualified' }),
+      host: anyFormHost(),
+    })
+    assert.equal(worked.reason, 'beyond-lead')
+    const bought = planLeadForHost({
+      contactId: 'c1',
+      contact: unroutedContact({ sources: { form: true, order: true } }),
+      host: anyFormHost(),
+    })
+    assert.deepEqual([bought.reason, bought.stage], ['beyond-lead', 'customer'])
+  })
+
+  it('carries the grant for this host, and only a grant', () => {
+    const granted = {
+      ...unroutedContact(),
+      marketingConsentByHost: { [HOST]: { marketingConsent: true, marketingConsentAtMs: 1_500 } },
+    }
+    const row = planLeadForHost({ contactId: 'c1', contact: granted, host: anyFormHost() }).row
+    assert.deepEqual(row.marketingConsentByHost, {
+      [HOST]: { marketingConsent: true, marketingConsentAtMs: 1_500 },
+    })
+    const refused = { ...granted, marketingConsent: false }
+    assert.equal(
+      'marketingConsentByHost' in
+        planLeadForHost({ contactId: 'c1', contact: refused, host: anyFormHost() }).row,
+      false,
+    )
+  })
+
+  it("is still silent about another site's form, and still files nothing for an opt-in", () => {
+    const elsewhere = {
+      email: 'ann@acme.com',
+      hostId: 'other',
+      capturedByHostIds: ['other'],
+      formIds: ['form-elsewhere'],
+      facets: {
+        other: {
+          sources: { form: true },
+          interactions: [{ type: 'form', atMs: 1_000, refId: 'x1', formId: 'form-elsewhere', hostId: 'other' }],
+        },
+      },
+    }
+    assert.equal(
+      planLeadForHost({ contactId: 'c1', contact: elsewhere, host: anyFormHost() }).reason,
+      'not-captured-here',
+    )
+    const subscriber = {
+      email: 'sam@acme.com',
+      capturedByHostIds: [HOST],
+      facets: { [HOST]: { sources: { newsletter: true }, interactions: [] } },
+    }
+    assert.equal(
+      planLeadForHost({ contactId: 'c2', contact: subscriber, host: anyFormHost() }).reason,
+      'no-lead-surface',
+    )
+  })
+})
+
 describe('the company recount', () => {
   it('counts each company once per contact naming it in the mirror', () => {
     const tally = tallyCompanyMirrors([

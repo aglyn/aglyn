@@ -21,9 +21,16 @@
 //   GOOGLE_CLOUD_PROJECT=aglyn-main node tools/scripts/backfill-crm-lifecycle-stages.mjs
 //   GOOGLE_CLOUD_PROJECT=aglyn-main node tools/scripts/backfill-crm-lifecycle-stages.mjs --leads --companies
 //   GOOGLE_CLOUD_PROJECT=aglyn-main node tools/scripts/backfill-crm-lifecycle-stages.mjs --leads --companies --apply
+//   GOOGLE_CLOUD_PROJECT=aglyn-main node tools/scripts/backfill-crm-lifecycle-stages.mjs --leads --any-form
 //
 // DRY RUN BY DEFAULT. The stage pass always runs; `--leads` and
 // `--companies` add the other two; `--apply` writes whichever passes ran.
+//
+// `--any-form` widens `--leads`: every form the host has ever held counts as
+// a lead surface, not only the lead-routed ones. The people captured before
+// lead routing existed came in through forms nobody could have switched on,
+// and several of those forms are gone. It is for that backlog, once; the
+// report names every form it counted only because of the flag.
 //
 // Credentials come from the root `.env` — the `FIREBASE_CLIENT_EMAIL` and
 // `FIREBASE_PRIVATE_KEY` every Admin-SDK script here uses — and the project
@@ -89,13 +96,28 @@ const args = parseDeployArgs({
     { flag: '--apply', key: 'apply', describe: 'Write. Without it, a dry run.' },
     { flag: '--leads', key: 'leads', describe: 'Also file historical leads under each host.' },
     { flag: '--companies', key: 'companies', describe: 'Also recount contactsCount on every company.' },
+    {
+      flag: '--any-form',
+      key: 'anyForm',
+      describe:
+        'With --leads: every form the host has ever held is a lead surface, ' +
+        'not only the lead-routed ones (the backlog from before lead routing).',
+    },
     { flag: '--org', key: 'org', value: 'string', describe: 'Limit to one org id.' },
   ],
 })
 const apply = Boolean(args.apply)
 const withLeads = Boolean(args.leads)
 const withCompanies = Boolean(args.companies)
+const anyForm = Boolean(args.anyForm)
 const onlyOrg = args.org
+
+// A widening of a pass that is not running is a belief about what this run
+// files that nothing will act on.
+if (anyForm && !withLeads) {
+  console.error('--any-form widens the lead pass: pass --leads with it. NOTHING WAS WRITTEN.')
+  process.exit(2)
+}
 
 const PAGE_SIZE = 400
 const BATCH_OPERATIONS = 400
@@ -217,12 +239,16 @@ async function readHostForLeads(db, hostId, nowMs) {
   return hostLeadContext({
     hostId,
     forms,
-    // The submissions are only needed to join and count routed-form
-    // captures; a site with no routed form pays no read for them.
-    submissions: routed ? await collect(hostRef.collection('formSubmissions')) : [],
+    // The submissions are only needed to join and count lead-surface
+    // captures; a site with no routed form pays no read for them unless
+    // every form is a surface — then they are also where a deleted form's
+    // id survives.
+    submissions:
+      routed || anyForm ? await collect(hostRef.collection('formSubmissions')) : [],
     leads: await collect(hostRef.collection('leads')),
     suppressions: await collect(hostRef.collection('suppressions')),
     nowMs,
+    anyForm,
   })
 }
 
@@ -254,8 +280,27 @@ const SKIP_LABELS = {
   'already-a-lead': 'already a lead',
   erased: 'erased on this site',
   'beyond-lead': 'already worked past Lead',
-  'no-lead-surface': 'met through no lead surface (turn routing on and re-run)',
   'no-email': 'no usable address',
+}
+
+/**
+ * The skip, in the operator's words. `no-lead-surface` names its remedy,
+ * and under `--any-form` the form half of the remedy is already in effect.
+ */
+function skipLabel(reason) {
+  if (reason === 'no-lead-surface') {
+    return anyForm
+      ? 'met through no lead surface (no form, no booking)'
+      : 'met through no lead surface (turn routing on, or pass --any-form, and re-run)'
+  }
+  return SKIP_LABELS[reason] ?? reason
+}
+
+/** Why a form counted only because of `--any-form`, in the operator's words. */
+const UNROUTED_STATES = {
+  'routing off': 'routing off — turn it on',
+  archived: 'archived',
+  'no form document': 'no form document',
 }
 
 function stageCountsLine(byStage) {
@@ -328,13 +373,21 @@ async function runOrg(db, orgId, hostIds, nowMs, totals) {
       const bucket = leadPlans.get(host.hostId)
       const skips = Object.entries(bucket.skips)
         .sort(([a], [b]) => a.localeCompare(b))
-        .map(([reason, count]) => `${count} ${SKIP_LABELS[reason] ?? reason}`)
+        .map(([reason, count]) => `${count} ${skipLabel(reason)}`)
         .join('; ')
       console.log(
         `  leads (${host.hostId}): ${apply ? 'creating' : 'would create'} ${bucket.create.length}` +
           ` — ${host.routedForms.size} routed form(s)` +
+          (anyForm ? `; via --any-form: ${host.unroutedForms.size} unrouted form(s)` : '') +
           (skips ? `; ${skips}` : ''),
       )
+      for (const [formId, form] of host.unroutedForms) {
+        console.log(
+          `      via --any-form: ${form.name === formId ? formId : `${form.name} (${formId})`}` +
+            `  ${UNROUTED_STATES[form.state] ?? form.state}`,
+        )
+      }
+      totals.unroutedForms += host.unroutedForms.size
       for (const verdict of bucket.create) {
         const row = verdict.row
         console.log(
@@ -407,6 +460,7 @@ async function run() {
     byStage: {},
     leads: 0,
     leadSkips: {},
+    unroutedForms: 0,
     companies: 0,
     orphans: 0,
   }
@@ -427,8 +481,11 @@ async function run() {
         ? `; ${totals.leads} lead(s) created` +
           (Object.keys(totals.leadSkips).length
             ? ` (${Object.entries(totals.leadSkips)
-                .map(([reason, count]) => `${count} ${SKIP_LABELS[reason] ?? reason}`)
+                .map(([reason, count]) => `${count} ${skipLabel(reason)}`)
                 .join('; ')})`
+            : '') +
+          (anyForm
+            ? `; via --any-form: ${totals.unroutedForms} unrouted form(s) counted as lead surfaces`
             : '')
         : '; leads not run (--leads)') +
       (withCompanies

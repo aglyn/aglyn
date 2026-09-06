@@ -38,6 +38,11 @@
 //      in Contacts and never in the Leads queue. `planLeadForHost` finds the
 //      evidence on the contact's timeline and plans the row `addHostLead`
 //      would have written, with `status: 'new'` and nobody working it.
+//      A form that was never routed is a lead surface only under
+//      `--any-form` (`hostLeadContext`'s `anyForm`): the backlog from before
+//      lead routing existed came in through forms nobody could have switched
+//      on, and several of those forms are gone — known now only through the
+//      submissions they left behind.
 //
 //   3. THE COMPANY COUNT. AGL-2613 keeps `contactsCount` on a company by
 //      `increment` alongside every link, so a link made before the counter
@@ -234,8 +239,8 @@ export function planFacetStages(contact) {
  * What one holder's facet says about this host's lead surfaces.
  *
  * A form capture is attributed by the FORM, because a form id is minted
- * under one site: an interaction naming a routed form of this host is this
- * host's, whichever facet holds it. An interaction that predates the form
+ * under one site: an interaction naming a lead-surface form of this host is
+ * this host's, whichever facet holds it. An interaction that predates the form
  * entity carries no `formId` — the submission it names does, once
  * `backfill-form-ids` has stamped it — so the id is joined through the
  * host's own submissions by `refId`. The top-level `formIds` mirror is read
@@ -256,7 +261,7 @@ export function facetEvidenceForHost(groupId, facet, host) {
       const formId =
         interaction.formId ??
         (interaction.refId ? host.formIdByRef.get(String(interaction.refId)) : undefined)
-      if (formId && host.routedFormIds.has(formId)) {
+      if (formId && host.leadSurfaceFormIds.has(formId)) {
         evidence.formIds.add(formId)
         if (Number.isFinite(at)) evidence.atMs.push(at)
       }
@@ -297,7 +302,8 @@ export function contactCapturedByHost(contact, hostId) {
  *    that never met them; not reported per row.
  *  - `no-lead-surface` — the site met them, but through nothing that files
  *    a lead: a form without lead routing, an order, a newsletter opt-in.
- *    Turning routing on and re-running is what changes this verdict.
+ *    Turning routing on and re-running, or running with `anyForm`, is what
+ *    changes this verdict for the form; nothing changes it for the rest.
  *  - `erased` — the site's suppression list carries an erasure for the
  *    address. The person asked to be forgotten; nothing is rebuilt.
  *  - `already-a-lead` — a row exists under the person key, or under an
@@ -334,7 +340,7 @@ export function planLeadForHost({ contactId, contact, host }) {
   const mirrored = contact?.[FIELDS.formIds]
   if (Array.isArray(mirrored)) {
     for (const id of mirrored) {
-      if (host.routedFormIds.has(String(id))) formIds.add(String(id))
+      if (host.leadSurfaceFormIds.has(String(id))) formIds.add(String(id))
     }
   }
   if (!formIds.size && !bookings) {
@@ -459,6 +465,14 @@ export function grantedConsentEntry(contact, hostId) {
 /**
  * The per-host inputs a lead plan reads, from the host's own collections.
  *
+ * `anyForm` widens the lead surfaces from the routed, live forms to every
+ * form the host has ever held: the ones whose author never switched routing
+ * on, the archived ones, and the ones deleted outright — a deleted form
+ * leaves its submissions behind, and they still name it. Each form counted
+ * only because of the flag is listed in `unroutedForms` with why it would
+ * not have counted, so the report can say which. Nothing else widens: the
+ * skips, the row and the submission count read the same either way.
+ *
  * @param {object} input
  * @param {string} input.hostId
  * @param {Array<{id: string, data: object}>} input.forms  `hosts/{hostId}/forms`
@@ -466,26 +480,44 @@ export function grantedConsentEntry(contact, hostId) {
  * @param {Array<{id: string, data: object}>} input.leads  `hosts/{hostId}/leads`
  * @param {Array<{id: string, data: object}>} input.suppressions  `hosts/{hostId}/suppressions`
  * @param {number} input.nowMs
+ * @param {boolean} [input.anyForm]  every form is a lead surface, not only the routed ones
  */
-export function hostLeadContext({ hostId, forms, submissions, leads, suppressions, nowMs }) {
+export function hostLeadContext({
+  hostId,
+  forms,
+  submissions,
+  leads,
+  suppressions,
+  nowMs,
+  anyForm = false,
+}) {
   // `leadSurfaceForms`, restated for the one verdict this script needs: a
-  // live form whose author declared `routing.lead`.
+  // live form whose author declared `routing.lead`. Every other form is a
+  // surface only under `anyForm`, and remembered as such.
   const routedForms = new Map()
+  const unroutedForms = new Map()
   for (const form of forms) {
-    if (form.data?.archivedAt) continue
-    if (form.data?.routing?.lead !== true) continue
-    routedForms.set(
-      form.id,
-      String(form.data?.displayName ?? '').trim() || form.id,
-    )
+    const name = String(form.data?.displayName ?? '').trim() || form.id
+    const live = !form.data?.archivedAt
+    if (live && form.data?.routing?.lead === true) {
+      routedForms.set(form.id, name)
+    } else if (anyForm) {
+      unroutedForms.set(form.id, { name, state: live ? 'routing off' : 'archived' })
+    }
   }
+  const knownFormIds = new Set(forms.map((form) => form.id))
   const formIdByRef = new Map()
   const submissionsByEmail = new Map()
   for (const submission of submissions) {
     const formId = submission.data?.formId
     if (typeof formId !== 'string' || !formId) continue
     formIdByRef.set(submission.id, formId)
-    if (!routedForms.has(formId)) continue
+    // A form deleted outright keeps its submissions, which are the only
+    // record left that it existed on this host.
+    if (anyForm && !knownFormIds.has(formId)) {
+      unroutedForms.set(formId, { name: formId, state: 'no form document' })
+    }
+    if (!routedForms.has(formId) && !unroutedForms.has(formId)) continue
     const email = emailFromSubmissionFields(submission.data?.fields)
     if (!email) continue
     submissionsByEmail.set(email, (submissionsByEmail.get(email) ?? 0) + 1)
@@ -503,8 +535,11 @@ export function hostLeadContext({ hostId, forms, submissions, leads, suppression
   )
   return {
     hostId,
+    anyForm,
     routedFormIds: new Set(routedForms.keys()),
     routedForms,
+    unroutedForms,
+    leadSurfaceFormIds: new Set([...routedForms.keys(), ...unroutedForms.keys()]),
     formIdByRef,
     submissionsByEmail,
     leadKeys,
