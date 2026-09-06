@@ -288,9 +288,11 @@ describe('ContactTimelineCard (AGL-2600)', () => {
     )
     const order = screen.getByRole('link', { name: 'Open order' })
     expect(order.getAttribute('href')).toBe('/acme/hosts/shop/products/orders?order=ord-12')
-    // The unstamped older booking is on screen and carries no link.
+    // The unstamped older booking is on screen and carries no link; the
+    // campaign entry's link is its report's (AGL-2616), asserted by its own
+    // test, so only the captured doors are counted here.
     expect(screen.getByText('An older booking')).toBeTruthy()
-    expect(screen.getAllByRole('link')).toHaveLength(2)
+    expect(screen.getAllByRole('link', { name: /^Open / })).toHaveLength(2)
   })
 
   it('logs a new activity against the contact with the full scope stamp', async () => {

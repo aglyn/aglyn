@@ -129,7 +129,7 @@ describe('the rule editor reaches every field of the rule', () => {
     for (const field of ENGAGEMENT_FIELDS) {
       expect(FULL_RULE.engagement?.[field]).toBeDefined()
     }
-    expect(RULE_FIELDS).toHaveLength(17)
+    expect(RULE_FIELDS).toHaveLength(18)
     expect(BEHAVIOR_FIELDS).toHaveLength(4)
     expect(ENGAGEMENT_FIELDS).toHaveLength(4)
   })

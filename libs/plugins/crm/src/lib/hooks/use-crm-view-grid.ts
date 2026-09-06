@@ -35,9 +35,12 @@ import type { CrmSavedViewController } from './use-crm-saved-view'
  * that empty list rather than as a copy of today's columns, so a view saved
  * before a column existed shows the new column too.
  *
- * `hidden` is what the list keeps out of sight regardless — the
- * filter-only columns the contacts grammar declares — and is folded into
- * every model so a view cannot unhide a strip of blank cells.
+ * `hidden` is what the list keeps out of sight by default — the
+ * filter-only columns the contacts grammar declares, and an optional column
+ * a reader turns on when they want it — and is folded into the default
+ * model, so the empty list means the columns the list opens with rather than
+ * every column it has, and a view that shows an optional column stores it
+ * by name.
  */
 export function useCrmViewGrid(
   controller: Pick<CrmSavedViewController, 'state' | 'setColumns' | 'setSort'>,
@@ -62,12 +65,21 @@ export function useCrmViewGrid(
     return model
   }, [hidden, state.columns, hideable])
 
+  /** The columns the list opens with: every hideable one not hidden by default. */
+  const defaultVisible = useMemo(
+    () => hideable.filter((field) => hidden[field] !== false),
+    [hideable, hidden],
+  )
+
   const onColumnVisibilityModelChange = useCallback(
     (model: GridColumnVisibilityModel) => {
       const visible = hideable.filter((field) => model[field] !== false)
-      setColumns(visible.length === hideable.length ? [] : visible)
+      const isDefault =
+        visible.length === defaultVisible.length &&
+        visible.every((field, index) => field === defaultVisible[index])
+      setColumns(isDefault ? [] : visible)
     },
-    [hideable, setColumns],
+    [hideable, defaultVisible, setColumns],
   )
 
   const sortModel = useMemo<GridSortModel>(
