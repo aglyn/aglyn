@@ -158,17 +158,14 @@ function CompaniesBulkBarBody(props: CompaniesBulkBarProps) {
   const handleApply = useCallback(async () => {
     if (!pending || !scope) return
     const nowMs = Date.now()
-    let plan: CrmBulkPlan | null = null
-    if (pending === 'add-tag' || pending === 'remove-tag') {
-      const tag = normalizeBulkTag(value)
-      if (!tag) return
-      plan =
-        pending === 'add-tag'
-          ? planCompanyAddTag(selectedRows, tag, nowMs)
-          : planCompanyRemoveTag(selectedRows, tag, nowMs)
-    } else {
-      plan = planCompanySetOwner(selectedRows, value || null, nowMs)
-    }
+    const tag = normalizeBulkTag(value)
+    if (pending !== 'owner' && !tag) return
+    const plan: CrmBulkPlan =
+      pending === 'add-tag'
+        ? planCompanyAddTag(selectedRows, tag ?? '', nowMs)
+        : pending === 'remove-tag'
+          ? planCompanyRemoveTag(selectedRows, tag ?? '', nowMs)
+          : planCompanySetOwner(selectedRows, value || null, nowMs)
     const action = pending
     setPending(null)
     await runPlan(action, plan)
