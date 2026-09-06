@@ -41,13 +41,13 @@ npm run e2e:console                # E2E_BASE_URL overrides the target
 
 ## The CRM specs (AGL-2610)
 
-Six browser-driven scripts under `tools/e2e/crm-*.e2e.mjs`, one per surface
+Seven browser-driven scripts under `tools/e2e/crm-*.e2e.mjs`, one per surface
 the v2 arc shipped, each signing in through `/signin`, driving the console
 as a person does, and asserting on the page AND on the document behind it
 through the emulator-side Admin SDK:
 
 ```bash
-E2E_BASE_URL=http://localhost:4210 npm run e2e:crm          # all six, in order
+E2E_BASE_URL=http://localhost:4210 npm run e2e:crm          # all seven, in order
 npm run e2e:crm:bulk-bar        # tick two rows → tag, stage, owner, audience, CSV, remove
 npm run e2e:crm:reports         # /crm/reports (dashes until read) + the two dashboard cards
 npm run e2e:crm:leads           # status, owner, convert, already-converted, unqualify, Inbox → CRM
