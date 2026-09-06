@@ -23,7 +23,9 @@ for the how-to.
   [custom fields](content-and-data/contacts/custom-fields.md) each have a section. The
   list gains [CSV import](content-and-data/contacts/import.md),
   [bulk actions](content-and-data/contacts/bulk-actions.md) and a
-  [timeline](content-and-data/contacts/activities.md) of logged calls and meetings, and
+  [timeline](content-and-data/contacts/activities.md) of logged calls and meetings;
+  every section's table selects, acts and exports as a CSV that re-imports, and
+  [companies import](content-and-data/contacts/companies.md#import-from-csv) too; and
   automations gain [CRM events and steps](content-and-data/contacts/automations.md).
   Links to the older `/contacts` address still open the hub. Still release-flagged: it
   appears on its own once the rollout reaches your workspace.

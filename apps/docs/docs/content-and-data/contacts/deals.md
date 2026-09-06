@@ -63,6 +63,15 @@ value** (each amount multiplied by its stage's probability).
 Switch to the **table** for a paged list with the title, stage, amount, owner,
 expected close date and status of every deal, including the closed ones.
 
+The table's rows have checkboxes: tick some and a [bulk bar](./bulk-actions.md#deals)
+appears above it to set their stage, set their owner, mark them lost with one
+reason, export them or delete them. **Export CSV** beside the status filter
+downloads the deals on screen as `deals.csv` — title, pipeline and stage by
+name, the amount in major units beside its currency, the owner by email
+address, the expected close date, status, the contact and the company, when
+it closed, the lost reason and notes; the bar's **Export CSV** writes the same
+file over the selection.
+
 ## Creating a deal
 
 **New deal** opens a drawer. A deal needs only a title; everything else is
@@ -120,6 +129,7 @@ with a **New deal** shortcut that starts a deal already linked to them.
 - [CRM overview](./overview.md)
 - [Companies](./companies.md) and [the contact record](./contact-record.md) — the two records a deal is with
 - [Tasks & follow-ups](./tasks.md) and [Activities & the timeline](./activities.md) — what is owed on a deal and what has happened on it
+- [Bulk actions](./bulk-actions.md#deals) — stage, owner, loss, export and delete over a selection
 - [Reports](./reports.md) — the open pipeline, its weighted forecast, and won against lost
 - [Automations for the CRM](./automations.md) — the three deal events
 - [Workflows & actions](../../marketing-and-automation/workflows-and-actions/overview.md)

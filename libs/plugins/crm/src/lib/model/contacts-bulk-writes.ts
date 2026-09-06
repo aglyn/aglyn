@@ -60,13 +60,19 @@ import {
 } from '@aglyn/aglyn'
 import { arrayRemove, arrayUnion, deleteField } from 'firebase/firestore'
 import { type CompanyOption, contactCompanyLinkWrites } from './companies'
+import {
+  CRM_BULK_WRITE_CHUNK,
+  chunked,
+  runCrmBulkWrites,
+} from './crm-bulk-writes'
 
-/**
- * The Firestore batch cap is 500 writes; 400 leaves room for the sentinel
- * transforms a facet patch carries, which the cap counts as writes of their
- * own. The same margin the datasets card keeps.
+/*
+ * The runner and its chunk size are the shared ones (`crm-bulk-writes.ts`,
+ * AGL-2621), under the names this module has always exported: the batch
+ * cap and the per-row fallback are about Firestore, not about people.
  */
-export const CONTACT_BULK_WRITE_CHUNK = 400
+export const CONTACT_BULK_WRITE_CHUNK = CRM_BULK_WRITE_CHUNK
+export { chunked }
 
 /** The drawer's cap on a holder's tags — the same number, so the two agree. */
 export const CONTACT_TAGS_CAP = 20
@@ -128,14 +134,6 @@ const addressOf = (row: ContactBulkRow): string =>
 export function normalizeBulkTag(input: string): string | null {
   const tag = input.trim().toLowerCase().slice(0, 60)
   return tag || null
-}
-
-export function chunked<T>(items: readonly T[], size: number): T[][] {
-  const chunks: T[][] = []
-  for (let start = 0; start < items.length; start += size) {
-    chunks.push(items.slice(start, start + size))
-  }
-  return chunks
 }
 
 /**
@@ -352,46 +350,24 @@ export interface ContactBulkOutcome {
   refused: Array<{ email: string; error: string }>
 }
 
-/** Whatever the store threw, as one sentence a snackbar can carry. */
-const reasonOf = (error: unknown): string => {
-  const code = (error as { code?: unknown } | null)?.code
-  if (code === 'permission-denied') return 'not permitted'
-  if (code === 'not-found') return 'no longer exists'
-  const message = (error as { message?: unknown } | null)?.message
-  return typeof message === 'string' && message ? message : 'the write failed'
-}
-
 /**
- * Apply the writes in chunks, and re-apply a failed chunk row by row.
- *
- * The batch is the fast path and the common one: four hundred facet patches
- * in one round trip. The fallback is the honest one: a batch that fails
- * names no row, so the only way to say WHICH of four hundred was refused is
- * to ask about each. The chunk that failed is the only one that pays for
- * that; the others commit as batches.
+ * The shared runner over contact writes — batched, with a per-row pass for
+ * the chunk that failed (`crm-bulk-writes.ts`) — reporting by ADDRESS, which
+ * is the name a contacts report lists a row under.
  */
 export async function runContactBulkWrites(
   writers: ContactBulkWriters,
   writes: readonly ContactBulkWrite[],
   chunkSize: number = CONTACT_BULK_WRITE_CHUNK,
 ): Promise<ContactBulkOutcome> {
-  const outcome: ContactBulkOutcome = { done: 0, refused: [] }
-  for (const chunk of chunked(writes, chunkSize)) {
-    try {
-      await writers.commitBatch(chunk)
-      outcome.done += chunk.length
-      continue
-    } catch {
-      // Fall through to the per-row pass below.
-    }
-    for (const write of chunk) {
-      try {
-        await writers.commitOne(write)
-        outcome.done += 1
-      } catch (error) {
-        outcome.refused.push({ email: write.email, error: reasonOf(error) })
-      }
-    }
+  const outcome = await runCrmBulkWrites(
+    writers,
+    writes,
+    (write) => write.email,
+    chunkSize,
+  )
+  return {
+    done: outcome.done,
+    refused: outcome.refused.map((row) => ({ email: row.label, error: row.error })),
   }
-  return outcome
 }

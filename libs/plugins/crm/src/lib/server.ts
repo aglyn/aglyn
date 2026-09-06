@@ -79,6 +79,7 @@ import { CRM_API_ROUTES } from './constants/api-routes'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { CRM_TASK_ROUTES } from './model/task-routes'
 import { crmTaskCompleteHandler, crmTaskSaveHandler } from './server/task-routes'
+import { crmCompaniesImportHandler } from './server/companies-import'
 import { crmContactsImportHandler } from './server/contacts-import'
 import { crmDealStageHandler } from './server-deal-stage'
 import { crmEmailSendHandler } from './server/email-send'
@@ -514,6 +515,9 @@ export function registerCrmConsoleApi(): void {
   // One chunk of a contact file (AGL-2602), judged and written through the
   // same door every capture uses.
   registerPluginApiRoute('crm/contacts-import', crmContactsImportHandler)
+  // One chunk of a companies file (AGL-2621), matched by domain then name
+  // and written with the stamp every CRM creator writes.
+  registerPluginApiRoute('crm/companies-import', crmCompaniesImportHandler)
   // The one writer of a deal's stage, won and lost (AGL-2598): the browser
   // could write the field, but only a server can emit the event an
   // automation listens for.

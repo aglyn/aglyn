@@ -20,6 +20,7 @@ import {
   consentGroupForHost,
   type ConsolePluginPageProps,
   CRM_COLLECTIONS,
+  findOrgMember,
   pluginDocsHelp,
 } from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
@@ -40,17 +41,18 @@ import {
 } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import { deleteField, doc, serverTimestamp, updateDoc } from 'firebase/firestore'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useCrmRecordNames } from '../hooks/use-crm-record-names'
 import { type CrmTaskRow, useCrmTaskList, useNowMs } from '../hooks/use-crm-tasks'
 import { useOrgMemberDirectory } from '../hooks/use-org-member-directory'
+import { downloadTextFile } from '../model/contacts-csv'
 import { crmRoutes } from '../model/crm-routes'
 import { completeCrmTask } from '../model/task-api'
+import { type TaskCsvOptions, tasksCsv } from '../model/tasks-csv'
 import {
   CRM_TASK_VIEW_LIMIT,
   CRM_TASK_VIEWS,
   type CrmTaskView,
-  taskRecordLink,
 } from '../model/task-views'
 import {
   TaskDueText,
@@ -60,6 +62,7 @@ import {
 } from './task-cells'
 import TaskEditDrawer from './task-edit-drawer'
 import TaskSnoozeMenu from './task-snooze-menu'
+import TasksBulkBar from './tasks-bulk-bar'
 
 /** What an empty view is headed, by view — "nothing overdue" is good news. */
 const EMPTY_LABEL: Record<CrmTaskView, string> = {
@@ -95,6 +98,12 @@ const EMPTY_COPY: Record<CrmTaskView, string> = {
  * `taskCompleted` host event and only the server can run a workflow.
  * Reopening is client-direct: undoing a tick has no side effect beyond the
  * document, and the rules gate it like any other CRM write.
+ *
+ * The rows are selectable, and a selection raises `TasksBulkBar` over the
+ * list — Complete and Assign through their routes, the due date and the
+ * delete as batched writes (AGL-2621). Export CSV beside the view control
+ * writes the view through `tasksCsv()`, naming the assignee and the linked
+ * records; the bar writes the same file over the selection.
  */
 export function TasksSection(props: ConsolePluginPageProps) {
   const { hostId, org, basePath = '' } = props
@@ -137,15 +146,39 @@ export function TasksSection(props: ConsolePluginPageProps) {
   const { tasks, status, fromCache, truncated, scope, orgId, readTokens } = list
   const directory = useOrgMemberDirectory(orgId)
 
+  /*
+   * Every record a task names, not only the one its "For" cell shows: the
+   * export writes the contact, the company and the deal each by name, and
+   * a task that names two would otherwise carry an id in one column.
+   */
   const linked = useMemo(
     () =>
-      tasks.flatMap((task) => {
-        const link = taskRecordLink(task, routes)
-        return link ? [{ kind: link.kind, id: link.id }] : []
-      }),
-    [tasks, routes],
+      tasks.flatMap((task) => [
+        ...(task.contactId ? [{ kind: 'contact' as const, id: task.contactId }] : []),
+        ...(task.companyId ? [{ kind: 'company' as const, id: task.companyId }] : []),
+        ...(task.dealId ? [{ kind: 'deal' as const, id: task.dealId }] : []),
+      ]),
+    [tasks],
   )
   const nameOf = useCrmRecordNames({ orgId, groupId, records: linked })
+
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  // A view is a different set of rows; a selection made on the last one
+  // would be a count over rows no longer on screen.
+  useEffect(() => setSelectedIds([]), [view])
+  const csvOptions: TaskCsvOptions = useMemo(
+    () => ({
+      assigneeEmail: (uid) => {
+        const member = findOrgMember(directory.members, uid)
+        return member?.email || member?.label || uid
+      },
+      recordName: nameOf,
+    }),
+    [directory.members, nameOf],
+  )
+  const handleExport = useCallback(() => {
+    downloadTextFile('tasks.csv', 'text/csv', tasksCsv(tasks, csvOptions))
+  }, [tasks, csvOptions])
 
   const [drawer, setDrawer] = useState<{ open: boolean; task: CrmTaskRow | null }>({
     open: false,
@@ -359,6 +392,10 @@ export function TasksSection(props: ConsolePluginPageProps) {
                 </ToggleButton>
               ))}
             </ToggleButtonGroup>
+            <Stack sx={{ flex: 1 }} />
+            <Button size="small" onClick={handleExport} disabled={!tasks.length}>
+              {'Export CSV'}
+            </Button>
           </Stack>
           {status === 'error' ? (
             <Typography variant="body2" color="error">
@@ -386,9 +423,19 @@ export function TasksSection(props: ConsolePluginPageProps) {
                   {`Showing the first ${CRM_TASK_VIEW_LIMIT} — narrow the view to see the rest.`}
                 </Typography>
               ) : null}
+              <TasksBulkBar
+                hostId={hostId}
+                scope={scope}
+                rows={tasks}
+                selected={selectedIds}
+                onSelectedChange={setSelectedIds}
+                directory={directory}
+                csv={csvOptions}
+              />
               <ListTable
                 rows={tasks}
                 columns={columns}
+                selectable={{ selected: selectedIds, onChange: setSelectedIds }}
                 loading={status === 'loading'}
                 onOpen={(id) => {
                   const found = tasks.find((row) => row.$id === id)

@@ -85,6 +85,7 @@ describe('companyDraftFields', () => {
       industry: 'Hospitality',
       ownerUid: 'uid-1',
       address: { line1: '1 Main St', country: 'us' },
+      tags: 'Enterprise',
       notes: 'Big account',
     })
     expect(result.ok).toBe(true)
@@ -98,6 +99,7 @@ describe('companyDraftFields', () => {
       industry: 'Hospitality',
       ownerUid: 'uid-1',
       address: { line1: '1 Main St', country: 'US' },
+      tags: ['enterprise'],
       notes: 'Big account',
     })
     // The word-prefix tokens the list's index carries, so "cof" finds it.
@@ -117,11 +119,24 @@ describe('companyDraftFields', () => {
       'phone',
       'industry',
       'ownerUid',
+      'tags',
       'notes',
     ])
     // The address is nullable rather than absent: one stored shape for "none".
     expect(result.set['address']).toBeNull()
     expect('domain' in result.set).toBe(false)
+  })
+
+  it('stores the tags as a contact stores them: lowercased, deduplicated, capped', () => {
+    const result = companyDraftFields({
+      ...EMPTY_COMPANY_DRAFT,
+      name: 'Acme',
+      tags: ' VIP, west | vip,, East ',
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.set['tags']).toEqual(['vip', 'west', 'east'])
+    expect(result.cleared).not.toContain('tags')
   })
 
   it('refuses a domain that is not a hostname rather than storing nothing', () => {

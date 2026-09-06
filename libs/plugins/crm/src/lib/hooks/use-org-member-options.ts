@@ -31,6 +31,12 @@ export interface OrgMemberOptions {
    * the reference's own tail when the roster does not know it.
    */
   labelFor: (ref: string | null | undefined) => string
+  /**
+   * The member's ADDRESS for a stored reference — what a CSV export writes
+   * in an owner column, because an import resolves an owner by email —
+   * falling back to the label and then to the reference itself.
+   */
+  emailFor: (ref: string | null | undefined) => string
   /** The roster has answered — with people, or with a refusal. */
   ready: boolean
   /** The roster was refused or unreachable; `options` is then empty. */
@@ -131,6 +137,14 @@ export function useOrgMemberOptions(
       ref ? (findOrgMember(options, ref)?.label ?? `Member ${ref.slice(-6)}`) : '',
     [options],
   )
+  const emailFor = useMemo(
+    () => (ref: string | null | undefined) => {
+      if (!ref) return ''
+      const member = findOrgMember(options, ref)
+      return member?.email || member?.label || ref
+    },
+    [options],
+  )
 
   // One object per answer, so a column list or a drawer that lists this in
   // its dependencies recomputes when the roster changes and not per render.
@@ -138,10 +152,11 @@ export function useOrgMemberOptions(
     () => ({
       options,
       labelFor,
+      emailFor,
       ready: current !== null,
       error: current?.error ?? null,
     }),
-    [options, labelFor, current],
+    [options, labelFor, emailFor, current],
   )
 }
 

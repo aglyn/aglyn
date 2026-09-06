@@ -20,6 +20,7 @@ import {
   type ConsolePluginPageProps,
   type CrmDealStatus,
   dealStageById,
+  findOrgMember,
   pluginDocsHelp,
 } from '@aglyn/aglyn'
 import {
@@ -59,7 +60,9 @@ import {
 } from '../hooks/use-deals'
 import { useOrgMemberDirectory } from '../hooks/use-org-member-directory'
 import { usePipeline } from '../hooks/use-pipeline'
+import { downloadTextFile } from '../model/contacts-csv'
 import { crmRoutes } from '../model/crm-routes'
+import { type DealCsvOptions, dealsCsv } from '../model/deals-csv'
 import {
   boardSummary,
   DEAL_STATUS_LABELS,
@@ -69,6 +72,7 @@ import {
 } from '../model/deal-board-model'
 import { DealBoard } from './deal-board'
 import { DealEditDrawer } from './deal-edit-drawer'
+import DealsBulkBar from './deals-bulk-bar'
 import { LostReasonDialog } from './lost-reason-dialog'
 import { OwnerAvatar } from './owner-avatar'
 import { PipelineStagesDialog } from './pipeline-stages-dialog'
@@ -102,6 +106,14 @@ type StatusFilter = CrmDealStatus | 'all'
  *
  * "New deal" opens a drawer; there is no form above the list. The drawer
  * writes client-direct against the rules, stamped with this console's scope.
+ *
+ * ## The table selects and exports (AGL-2621)
+ *
+ * The table's rows are selectable, and a selection raises `DealsBulkBar`
+ * over it — whose stage moves go through the same `useDealStageApi` as a
+ * drag. Export CSV beside the status toggle writes the page through
+ * `dealsCsv()`, naming the pipeline, the stage and the owner; the bar
+ * writes the same file over the selection.
  */
 export function DealsSection(props: ConsolePluginPageProps) {
   const { hostId, org, basePath } = props
@@ -228,6 +240,26 @@ export function DealsSection(props: ConsolePluginPageProps) {
 
   const [creating, setCreating] = useState(false)
   const [editingStages, setEditingStages] = useState(false)
+
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  // A page or a status is a different set of rows; a selection made on
+  // the last one would be a count over rows no longer on screen.
+  useEffect(() => setSelectedIds([]), [statusFilter, paged.page])
+  const csvOptions: DealCsvOptions = useMemo(
+    () => ({
+      pipelineName: (id) => pipelineState.pipelineById(id)?.name,
+      stageName: (pipelineId, stageId) =>
+        dealStageById(pipelineState.pipelineById(pipelineId), stageId)?.name,
+      ownerEmail: (uid) => {
+        const member = findOrgMember(roster.members, uid)
+        return member?.email || member?.label || uid
+      },
+    }),
+    [pipelineState, roster.members],
+  )
+  const handleExport = useCallback(() => {
+    downloadTextFile('deals.csv', 'text/csv', dealsCsv(paged.rows, csvOptions))
+  }, [paged.rows, csvOptions])
 
   const columns: GridColDef[] = useMemo(
     () => [
@@ -469,6 +501,10 @@ export function DealsSection(props: ConsolePluginPageProps) {
                   <ToggleButton value="won">{'Won'}</ToggleButton>
                   <ToggleButton value="lost">{'Lost'}</ToggleButton>
                 </ToggleButtonGroup>
+                <Stack sx={{ flex: 1 }} />
+                <Button size="small" onClick={handleExport} disabled={!paged.rows.length}>
+                  {'Export CSV'}
+                </Button>
               </Stack>
               {paged.status === 'success' && paged.rows.length === 0 && paged.page === 0 ? (
                 <EmptyStateComponent
@@ -494,9 +530,21 @@ export function DealsSection(props: ConsolePluginPageProps) {
                 />
               ) : (
                 <>
+                  <DealsBulkBar
+                    hostId={hostId}
+                    scope={scope.scope}
+                    rows={paged.rows}
+                    selected={selectedIds}
+                    onSelectedChange={setSelectedIds}
+                    pipelineById={pipelineState.pipelineById}
+                    roster={roster}
+                    api={api}
+                    csv={csvOptions}
+                  />
                   <ListTable
                     rows={paged.rows}
                     columns={columns}
+                    selectable={{ selected: selectedIds, onChange: setSelectedIds }}
                     onOpen={(_id, row) => openDeal(row as DealDoc)}
                     // Columns and sort are the view's, controlled (AGL-2617).
                     columnVisibilityModel={grid.columnVisibilityModel}
