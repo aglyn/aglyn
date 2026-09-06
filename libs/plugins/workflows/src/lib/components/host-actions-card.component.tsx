@@ -26,6 +26,9 @@ import {
   CONTACT_TAG_MAX_LENGTH,
   type ContactLifecycleStage,
   createResourceUid,
+  CRM_ACTION_RECIPES,
+  type CrmActionRecipe,
+  type CrmActionRecipeId,
   CRM_ACTIVITY_KIND_LABELS,
   CRM_ACTIVITY_KINDS,
   CRM_TASK_KIND_LABELS,
@@ -63,6 +66,8 @@ import {
   DialogContent,
   DialogTitle,
   IconButton,
+  ListItemText,
+  Menu,
   MenuItem,
   Stack,
   Switch,
@@ -136,6 +141,11 @@ interface ActionDraft extends HostAction {
   // single-`condition` docs hydrate through normalizeTriggerConditions.
   conditionRows: ConditionRowDraft[]
   conditionCombinator: TriggerCombinator
+  /**
+   * The recipe this draft started from (AGL-2626), so the editor can say
+   * so; null for an action begun blank or opened from the list.
+   */
+  recipe: CrmActionRecipeId | null
 }
 
 /**
@@ -260,6 +270,57 @@ function defaultStep(type: HostActionStepType): HostActionStep {
       return { type }
     default:
       return { type: 'datasetAppend', datasetName: '' }
+  }
+}
+
+/**
+ * A stored action — or one a recipe just built — as the editor holds it.
+ *
+ * One conversion for both doors, because they must agree: an action that
+ * round-trips through Edit and one a recipe hands over are the same shape
+ * to the editor, and a field the Edit path hydrated that the recipe path
+ * forgot would be a recipe whose conditions vanished on open. Site events
+ * are first-class (AGL-256/266): their selector/threshold/path config is
+ * kept through an edit. Structured conditions (AGL-557; chained AGL-565)
+ * become rows; a legacy single-condition doc normalizes to one row.
+ */
+function draftFromAction(
+  action: Record<string, any>,
+  id: string | null,
+  recipe: CrmActionRecipeId | null = null,
+): ActionDraft {
+  const builtIn =
+    HOST_EVENT_TYPES.includes(action.trigger?.event) ||
+    isSiteEventType(String(action.trigger?.event ?? ''))
+  const rows = normalizeTriggerConditions(action.trigger).map(
+    (condition): ConditionRowDraft => ({
+      op: condition.op ?? '',
+      field: condition.field ?? '',
+      value: condition.value ?? '',
+    }),
+  )
+  return {
+    id,
+    name: action.name ?? '',
+    trigger: {
+      event: builtIn ? action.trigger.event : CUSTOM_EVENT_VALUE,
+      filter: action.trigger?.filter ?? '',
+      selector: action.trigger?.selector ?? '',
+      threshold: action.trigger?.threshold,
+      pathPattern: action.trigger?.pathPattern ?? '',
+      oncePerVisitor: action.trigger?.oncePerVisitor === true,
+      oncePerSession: action.trigger?.oncePerSession === true,
+      everyTime: action.trigger?.everyTime === true,
+      ...(Number(action.trigger?.cooldownMinutes) >= 1
+        ? { cooldownMinutes: Number(action.trigger?.cooldownMinutes) }
+        : {}),
+    },
+    steps: action.steps ?? [],
+    enabled: action.enabled !== false,
+    customEvent: builtIn ? '' : (action.trigger?.event ?? ''),
+    conditionRows: rows.length ? rows : [EMPTY_CONDITION_ROW],
+    conditionCombinator: action.trigger?.combinator === 'or' ? 'or' : 'and',
+    recipe,
   }
 }
 
@@ -577,13 +638,22 @@ export function HostActionsCard(props: {
     [],
   )
 
+  /**
+   * Whether this workspace may open the editor at all. One gate for the
+   * blank action and the recipes: a recipe is an action, so the plan that
+   * carries one carries the other, and the refusal reads the same.
+   */
+  const actionsEntitled = useCallback(() => {
+    if (checkEntitlement(org, 'actions')) return true
+    enqueueSnackbar(
+      'The actions builder requires a Pro plan — see Billing to upgrade',
+      { variant: 'warning', persist: false },
+    )
+    return false
+  }, [org, enqueueSnackbar])
+
   const handleAdd = useCallback(() => {
-    if (!checkEntitlement(org, 'actions')) {
-      return void enqueueSnackbar(
-        'The actions builder requires a Pro plan — see Billing to upgrade',
-        { variant: 'warning', persist: false },
-      )
-    }
+    if (!actionsEntitled()) return
     setDraft({
       id: null,
       name: '',
@@ -593,8 +663,78 @@ export function HostActionsCard(props: {
       customEvent: '',
       conditionRows: [EMPTY_CONDITION_ROW],
       conditionCombinator: 'and',
+      recipe: null,
     })
-  }, [org, enqueueSnackbar])
+  }, [actionsEntitled])
+
+  /*
+   * THE RECIPES (AGL-2626).
+   *
+   * A recipe opens the editor prefilled and writes nothing: the draft it
+   * builds is the one Save would persist, and until then it is state in
+   * this card and nowhere else. Three recipes open at once; "Tag by form"
+   * needs a form first, and the form is this site's — `hosts/{hostId}/forms`
+   * — so the picker is the one host-scoped piece of the feature, held here
+   * rather than in the catalog.
+   */
+  const [recipesAnchor, setRecipesAnchor] = useState<HTMLElement | null>(null)
+  const [formPickFor, setFormPickFor] = useState<CrmActionRecipe | null>(null)
+  const [pickedFormId, setPickedFormId] = useState('')
+  /**
+   * The form picker has been opened at least once — the `editorOpened`
+   * latch's twin, and for the same reason: the forms window is read for
+   * this picker only, and a reader who never opens it pays nothing.
+   */
+  const [formPickerOpened, setFormPickerOpened] = useState(false)
+  if (formPickFor && !formPickerOpened) setFormPickerOpened(true)
+  const { data: formRead } = useFirestoreCollection<any>(
+    () =>
+      formPickerOpened
+        ? collectionCeiling(
+            collection(firestore, 'hosts', hostId, 'forms'),
+            EDITOR_OPTION_CEILING,
+          )
+        : null,
+    [firestore, hostId, formPickerOpened],
+    { idField: '$id' },
+  )
+  const { rows: formDocs, truncated: formsTruncated } = ceilingedWindow<any>(
+    formRead,
+    EDITOR_OPTION_CEILING,
+  )
+  // An archived form collects nothing, so a recipe keyed on it would never
+  // fire; the name falls back to the id the way every form list's does.
+  const formOptions = (formDocs ?? [])
+    .filter((form: any) => !form.archivedAt)
+    .map((form: any) => ({
+      id: form.$id as string,
+      name: (String(form.displayName ?? '').trim() || form.$id) as string,
+    }))
+    .sort((a: { name: string }, b: { name: string }) =>
+      a.name.localeCompare(b.name),
+    )
+
+  const handleRecipe = useCallback(
+    (recipe: CrmActionRecipe) => {
+      setRecipesAnchor(null)
+      if (!actionsEntitled()) return
+      if (recipe.needs === 'form') {
+        setPickedFormId('')
+        setFormPickFor(recipe)
+        return
+      }
+      setDraft(draftFromAction(recipe.build(), null, recipe.id))
+    },
+    [actionsEntitled],
+  )
+
+  const handleFormPicked = useCallback(() => {
+    const recipe = formPickFor
+    const form = formOptions.find((option) => option.id === pickedFormId)
+    if (!recipe || !form) return
+    setFormPickFor(null)
+    setDraft(draftFromAction(recipe.build({ form }), null, recipe.id))
+  }, [formPickFor, formOptions, pickedFormId])
 
   // Run log + test runs (AGL-266).
   const [runsFor, setRunsFor] = useState<any | null>(null)
@@ -872,56 +1012,7 @@ export function HostActionsCard(props: {
             </Stack>
             <Button
               size="small"
-              onClick={() =>
-                setDraft({
-                  id: action.$id,
-                  name: action.name ?? '',
-                  // Site events are first-class (AGL-256/266): keep their
-                  // selector/threshold/path config through an edit.
-                  trigger: {
-                    event:
-                      HOST_EVENT_TYPES.includes(action.trigger?.event) ||
-                      isSiteEventType(String(action.trigger?.event ?? ''))
-                        ? action.trigger.event
-                        : CUSTOM_EVENT_VALUE,
-                    filter: action.trigger?.filter ?? '',
-                    selector: action.trigger?.selector ?? '',
-                    threshold: action.trigger?.threshold,
-                    pathPattern: action.trigger?.pathPattern ?? '',
-                    oncePerVisitor: action.trigger?.oncePerVisitor === true,
-                    oncePerSession: action.trigger?.oncePerSession === true,
-                    everyTime: action.trigger?.everyTime === true,
-                    ...(Number(action.trigger?.cooldownMinutes) >= 1
-                      ? {
-                          cooldownMinutes: Number(
-                            action.trigger?.cooldownMinutes,
-                          ),
-                        }
-                      : {}),
-                  },
-                  steps: action.steps ?? [],
-                  enabled: action.enabled !== false,
-                  customEvent:
-                    HOST_EVENT_TYPES.includes(action.trigger?.event) ||
-                    isSiteEventType(String(action.trigger?.event ?? ''))
-                      ? ''
-                      : (action.trigger?.event ?? ''),
-                  // Structured conditions (AGL-557; chained AGL-565):
-                  // legacy single-condition docs normalize to one row.
-                  conditionRows: (() => {
-                    const rows = normalizeTriggerConditions(action.trigger).map(
-                      (condition): ConditionRowDraft => ({
-                        op: condition.op ?? '',
-                        field: condition.field ?? '',
-                        value: condition.value ?? '',
-                      }),
-                    )
-                    return rows.length ? rows : [EMPTY_CONDITION_ROW]
-                  })(),
-                  conditionCombinator:
-                    action.trigger?.combinator === 'or' ? 'or' : 'and',
-                })
-              }
+              onClick={() => setDraft(draftFromAction(action, action.$id))}
             >
               {'Edit'}
             </Button>
@@ -960,14 +1051,37 @@ export function HostActionsCard(props: {
               'read.'}
           </Alert>
         ) : null}
-        <Button
-          size="small"
-          color="primary"
-          sx={{ alignSelf: 'flex-start' }}
-          onClick={handleAdd}
+        <Stack direction="row" spacing={1} sx={{ alignSelf: 'flex-start' }}>
+          <Button size="small" color="primary" onClick={handleAdd}>
+            {'Add action'}
+          </Button>
+          <Button
+            size="small"
+            color="primary"
+            aria-haspopup="menu"
+            aria-controls={recipesAnchor ? 'host-action-recipes' : undefined}
+            aria-expanded={recipesAnchor ? true : undefined}
+            onClick={(event) => setRecipesAnchor(event.currentTarget)}
+          >
+            {'Recipes'}
+          </Button>
+        </Stack>
+        <Menu
+          id="host-action-recipes"
+          anchorEl={recipesAnchor}
+          open={Boolean(recipesAnchor)}
+          onClose={() => setRecipesAnchor(null)}
         >
-          {'Add action'}
-        </Button>
+          {CRM_ACTION_RECIPES.map((recipe) => (
+            <MenuItem key={recipe.id} onClick={() => handleRecipe(recipe)}>
+              <ListItemText
+                primary={recipe.title}
+                secondary={recipe.description}
+                slotProps={{ secondary: { sx: { whiteSpace: 'normal', maxWidth: 360 } } }}
+              />
+            </MenuItem>
+          ))}
+        </Menu>
         {/* Says where they went. A list that silently drops rows
             a reader saw last week is a list they stop trusting; this is the
             one sentence that makes the absence deliberate. */}
@@ -993,6 +1107,14 @@ export function HostActionsCard(props: {
         <DialogContent
           sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}
         >
+          {draft?.recipe ? (
+            <Typography variant="body2" color="text.secondary">
+              {`Started from the “${
+                CRM_ACTION_RECIPES.find((recipe) => recipe.id === draft.recipe)
+                  ?.title ?? 'recipe'
+              }” recipe — change anything, then save.`}
+            </Typography>
+          ) : null}
           {/*
             A short picker is worse than an empty one, because it looks
             complete: the target an author cannot find reads as deleted, and
@@ -2396,6 +2518,60 @@ export function HostActionsCard(props: {
             onClick={handleSave}
           >
             {'Save action'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog
+        open={Boolean(formPickFor)}
+        onClose={() => setFormPickFor(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>{formPickFor?.title ?? ''}</DialogTitle>
+        <DialogContent
+          sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}
+        >
+          <Typography variant="body2" color="text.secondary">
+            {'Pick the form whose new contacts get the tag. The action opens ' +
+              'ready to edit; nothing is saved until you save it.'}
+          </Typography>
+          {formsTruncated ? (
+            <Alert severity="info">
+              {`Offering the first ${EDITOR_OPTION_CEILING} forms, ordered by ` +
+                'id. This site has more, so the form you want may not be listed.'}
+            </Alert>
+          ) : null}
+          {formOptions.length ? (
+            <TextField
+              select
+              label="Form"
+              value={pickedFormId}
+              onChange={(event) => setPickedFormId(event.target.value)}
+              size="small"
+              sx={{ mt: 1 }}
+            >
+              {formOptions.map((option) => (
+                <MenuItem key={option.id} value={option.id}>
+                  {option.name}
+                </MenuItem>
+              ))}
+            </TextField>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              {'This site has no forms yet. Add one in the besigner, then come back.'}
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button color="inherit" onClick={() => setFormPickFor(null)}>
+            {'Cancel'}
+          </Button>
+          <Button
+            variant="contained"
+            disabled={!pickedFormId}
+            onClick={handleFormPicked}
+          >
+            {'Use recipe'}
           </Button>
         </DialogActions>
       </Dialog>
