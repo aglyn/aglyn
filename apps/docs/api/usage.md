@@ -41,7 +41,8 @@ to contacts still needs to see the request quota that would refuse it.
     "companies":  { "used": 312, "included": null, "remaining": null, "metered": false },
     "deals":      { "used": 88,  "included": null, "remaining": null, "metered": false },
     "tasks":      { "used": 41,  "included": null, "remaining": null, "metered": false },
-    "activities": { "used": 906, "included": null, "remaining": null, "metered": false }
+    "activities": { "used": 906, "included": null, "remaining": null, "metered": false },
+    "leads":      { "used": 1873, "included": null, "remaining": null, "metered": false }
   }
 }
 ```
@@ -56,7 +57,7 @@ to contacts still needs to see the request quota that would refuse it.
 | `datasets` | band | [Datasets](resources/datasets.md) in the organization. Also not monthly. |
 | `dataStorageMb` | band | Stored dataset bytes, in MB. |
 | `campaignEmails` | band | Marketing campaign emails sent this month. **Campaign mail only** — transactional messages (receipts, booking reminders, password resets) are never counted against this band and are never refused. |
-| `crm` | object of bands | The size of each CRM collection — [companies](resources/companies.md), [deals](resources/deals.md), [tasks](resources/tasks.md), [activities](resources/activities.md). **Sizes, not bands**: `included` and `remaining` are always `null` and `metered` is always `false`. Companies and deals are banded through `crmRecords` above; tasks and activities are not banded at all. They are here so a sync can size a full walk of a list before taking it — `used / limit` pages, each a billed request. Live, counted at read time. |
+| `crm` | object of bands | The size of each CRM collection — [companies](resources/companies.md), [deals](resources/deals.md), [tasks](resources/tasks.md), [activities](resources/activities.md), and [leads](resources/leads.md) summed across every site the organization owns. **Sizes, not bands**: `included` and `remaining` are always `null` and `metered` is always `false`. Companies and deals are banded through `crmRecords` above; tasks, activities and leads are not banded at all. They are here so a sync can size a full walk of a list before taking it — `used / limit` pages, each a billed request. Live, counted at read time. |
 
 Every band has the same four fields:
 

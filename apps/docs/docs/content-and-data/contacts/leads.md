@@ -135,6 +135,11 @@ you to the new contact's page. Back on the lead, the card links to the
 contact, the company and the deal. A converted lead cannot be converted
 again — opening the dialog on one simply takes you to its contact.
 
+The same conversion — the same contact, company and deal, through the same
+code — is available to an integration as
+[`POST /v1/leads/{id}/convert`](/api/resources/leads#convert-a-lead) on the
+REST API, and the list itself as `GET /v1/leads`.
+
 ## Unqualifying a lead
 
 **Unqualify** — from the row's menu on the list, or from the menu (⋮) in the
@@ -169,3 +174,4 @@ also requires a role on the site the lead belongs to.
 - [Companies](./companies.md) and the [deals pipeline](./deals.md) — the other two records a conversion can open
 - [Forms & lead capture](../forms/overview.md)
 - [Email campaigns](../../marketing-and-automation/email-campaigns/overview.md)
+- [REST API — leads](/api/resources/leads) — the same queue and the same conversion, for an integration

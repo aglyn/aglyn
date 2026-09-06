@@ -19,31 +19,12 @@
  * `POST /api/crm/lead-convert` — a lead becomes a contact, and optionally a
  * company and a deal (AGL-2608).
  *
- * ## Why a server route and not four client writes
- *
- * The lead is a host document the browser may edit, and a company or a deal
- * is a client-creatable org document. What the browser cannot do is CREATE A
- * CONTACT: the contacts collection is written only by `captureHostContact`
- * (the runtime's wrapper over `upsertHostContact`, so `contactCreated` fires),
- * because that function is the dedupe — one human, one row, found by
- * normalized address across every site in the org — and the audience-band
- * gate. A client that wrote a contact document of its own would mint a
- * second row for a person the org already holds, and would do it past the
- * band.
- *
- * Once the contact has to come from the server, the rest follows it: the
- * conversion is one act with four writes, and a browser that made three of
- * them and lost the connection before the fourth leaves a lead marked
- * qualified with no contact, or a deal pointing at a contact that was never
- * stamped on the lead. Here the order is fixed — contact, then company, then
- * deal, then the lead — and the lead is stamped LAST, so a lead that carries
- * `convertedContactId` names a contact that exists.
- *
- * ## Idempotent on the lead
- *
- * A lead already carrying `convertedContactId` answers with the ids it has
- * and creates nothing more. A double-click on the dialog's button, or a
- * retry after a slow response, must not open a second deal for one person.
+ * This is the console's door onto `convertHostLead` (the tenancy runtime),
+ * which owns the four writes, their order, and the idempotency on the lead;
+ * the REST API's `POST /v1/leads/{id}/convert` is the other door onto the
+ * same function (AGL-2627). What lives here is what only this door knows:
+ * the ID token, the body the convert dialog posts, and the statuses and
+ * sentences the dialog shows.
  *
  * ## What the caller has to be
  *
@@ -55,40 +36,20 @@
  */
 
 import {
-  consentGroupScope,
-  CRM_COLLECTIONS,
   CRM_RECORDS_BAND_FULL_MESSAGE,
-  type CrmDealStage,
-  type CrmDealStatus,
-  type CrmLeadFields,
-  type CrmPipeline,
-  crmScopeTokens,
-  DEFAULT_DEAL_STAGES,
-  nameSearchFields,
   normalizeCompanyDomain,
-  contactFacetPath,
-  normalizeContactEmail,
-  ORG_SCOPE_TOKEN,
   type PluginApiHandler,
-  readContactFacet,
 } from '@aglyn/aglyn/server'
+import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import {
-  consentGroupForSite,
-  crmRecordsQuotaForOrg,
-  findContactByEmail,
-  firebaseAdmin,
-  getOrgForHost,
-  logHostActivity,
-  orgDataCollectionForHost,
-  writeContactCompanyLink,
-} from '@aglyn/tenant-data-admin'
-import {
-  assignOwnerForCapture,
-  captureHostContact,
-  notifyRecordAssigned,
-} from '@aglyn/tenant-runtime'
+  type ConvertHostLeadRefusal,
+  convertHostLead,
+} from '@aglyn/tenant-runtime/convert-host-lead'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
-import { FieldPath, FieldValue } from 'firebase-admin/firestore'
+
+// The stage picker moved to the runtime with the writes; re-exported so the
+// pipeline code that imports it from here keeps its import.
+export { stageForNewDeal } from '@aglyn/tenant-runtime/convert-host-lead'
 
 /** The body the console's convert dialog posts. */
 export interface LeadConvertRequest {
@@ -128,42 +89,40 @@ export interface LeadConvertResponse {
   alreadyConverted: boolean
 }
 
-/** The stamp the conversion leaves on the lead — see `CrmLeadFields`. */
-type LeadConversionStamp = Required<
-  Pick<CrmLeadFields, 'status' | 'convertedContactId' | 'convertedAtMs'>
-> &
-  Pick<CrmLeadFields, 'dealId' | 'companyId' | 'ownerUid'>
-
 const COMPANY_NAME_MAX = 120
 const DEAL_TITLE_MAX = 200
 const CURRENCY_PATTERN = /^[a-z]{3}$/
 
 /**
- * The stage a new deal opens in.
- *
- * The caller's choice when the pipeline has it, otherwise the first OPEN
- * stage by order — a deal created by converting a lead is by definition not
- * yet won or lost, so defaulting to a closed stage would record an outcome
- * nobody reached. A pipeline with no open stage at all falls back to its
- * first stage rather than refusing: the merchant edited their pipeline into
- * that shape, and a conversion that failed because of it would read as a bug
- * in the lead.
+ * How each refusal the writes can answer reads at this door — the status
+ * and the sentence the convert dialog has always shown for it.
  */
-export function stageForNewDeal(
-  pipeline: Pick<CrmPipeline, 'stages'>,
-  requestedStageId: string | undefined,
-): CrmDealStage | null {
-  const stages = [...(pipeline.stages ?? [])].sort((a, b) => a.order - b.order)
-  if (!stages.length) return null
-  const requested = requestedStageId
-    ? stages.find((stage) => stage.id === requestedStageId)
-    : undefined
-  return requested ?? stages.find((stage) => stage.kind === 'open') ?? stages[0]
-}
-
-/** A stage's kind as the deal's denormalized status. */
-function dealStatusForStage(stage: CrmDealStage): CrmDealStatus {
-  return stage.kind === 'won' ? 'won' : stage.kind === 'lost' ? 'lost' : 'open'
+const REFUSALS: Record<
+  ConvertHostLeadRefusal,
+  { status: number; body: Record<string, unknown> }
+> = {
+  'unknown-lead': { status: 404, body: { error: 'Unknown lead' } },
+  'no-email': {
+    status: 422,
+    body: { error: 'This lead has no usable email address to convert' },
+  },
+  'contact-not-created': {
+    status: 409,
+    body: {
+      error:
+        'The contact could not be created — the audience band may be ' +
+        'full. Nothing was changed.',
+    },
+  },
+  'band-full': {
+    status: 409,
+    body: { error: CRM_RECORDS_BAND_FULL_MESSAGE, reason: 'band' },
+  },
+  'unknown-company': { status: 404, body: { error: 'Unknown company' } },
+  'no-stages': {
+    status: 409,
+    body: { error: 'The default pipeline has no stages to open a deal in' },
+  },
 }
 
 export const leadConvertHandler: PluginApiHandler = async (req, res) => {
@@ -267,351 +226,29 @@ export const leadConvertHandler: PluginApiHandler = async (req, res) => {
       return
     }
     const { orgId, org } = resolved
-    const firestore = firebaseAdmin.app().firestore()
-    const leadRef = firestore
-      .collection('hosts')
-      .doc(hostId)
-      .collection('leads')
-      .doc(leadId)
-    const leadSnapshot = await leadRef.get()
-    if (!leadSnapshot.exists) {
-      res.status(404).json({ error: 'Unknown lead' })
-      return
-    }
-    const lead = (leadSnapshot.data() ?? {}) as Record<string, unknown> &
-      CrmLeadFields
-    if (lead.convertedContactId) {
-      const answer: LeadConvertResponse = {
-        ok: true,
-        contactId: lead.convertedContactId,
-        ...(lead.companyId ? { companyId: lead.companyId } : {}),
-        ...(lead.dealId ? { dealId: lead.dealId } : {}),
-        alreadyConverted: true,
-      }
-      res.status(200).json(answer)
-      return
-    }
-    const email = normalizeContactEmail(lead['email'])
-    if (!email) {
-      res
-        .status(422)
-        .json({ error: 'This lead has no usable email address to convert' })
-      return
-    }
-
-    const group = await consentGroupForSite(hostId, org as Record<string, unknown>)
-    const visibleTo = crmScopeTokens(org as Record<string, unknown>, group)
-    /*
-     * What the CALLER may read, for the company-by-domain reuse below: their
-     * group's own tokens plus `org`, exactly the set the console's listeners
-     * filter on. A company outside it is one they could not open, so linking
-     * a contact to it would point at a record the page then 404s on.
-     */
-    const readableTokens = new Set<string>([
-      ORG_SCOPE_TOKEN,
-      ...consentGroupScope(group),
-    ])
-    /*
-     * THE OWNER A PERSON CHOSE, when one did: the converter's pick, else
-     * whoever was already working the lead. Handed to the capture as the
-     * facet's owner, which is what tells the capture's own assignment pass
-     * to stand down — a person's choice outranks a rule. When nobody chose,
-     * the facet names no owner and the pass runs the org's rules and the
-     * site's default for a contact it creates (AGL-2618).
-     */
-    const pickedOwner = String(body.ownerUid ?? '').trim()
-    const chosenOwner =
-      pickedOwner || (typeof lead.ownerUid === 'string' ? lead.ownerUid : '')
-    const now = Date.now()
-    const leadName = typeof lead['name'] === 'string' ? lead['name'] : undefined
-
-    /*==========================================
-     * 1. THE CONTACT — through the one door that dedupes and meters.
-     *
-     * `source: 'manual'` because a person converted this lead by hand, and
-     * the source filter should say so; the interaction names the lead so the
-     * contact's timeline can be walked back to what was captured. The facet
-     * carries the stage and the owner, which is what makes this a sales
-     * record rather than another form capture.
-     *=========================================*/
-    await captureHostContact({
+    const result = await convertHostLead({
+      firestore: firebaseAdmin.app().firestore(),
       hostId,
-      email,
-      ...(leadName ? { name: leadName } : {}),
-      source: 'manual',
-      interaction: { summary: 'Converted from a lead', refId: leadId },
-      facet: {
-        lifecycleStage: 'sales-qualified',
-        ...(chosenOwner ? { ownerUid: chosenOwner } : {}),
-      },
+      orgId,
+      org: org as Record<string, unknown>,
+      leadId,
+      actor: { uid: decoded.uid, email: decoded.email ?? null, kind: 'member' },
+      ...(body.ownerUid ? { ownerUid: String(body.ownerUid) } : {}),
+      ...(requestedCompanyId ? { companyId: requestedCompanyId } : {}),
+      createCompany,
+      deal,
     })
-    const contactsRef = await orgDataCollectionForHost(hostId, 'contacts')
-    /*
-     * The same resolution the capture door just made (AGL-2625): the
-     * address index first, so a lead whose address is an ALTERNATE on a
-     * merged contact converts into the survivor the capture landed on
-     * rather than reading as a contact the band dropped.
-     */
-    const contactSnapshot = await findContactByEmail(contactsRef, email)
-    if (!contactSnapshot) {
-      /*
-       * The upsert swallows its own failures and drops a creation past a Free
-       * org's audience band — either way there is no contact to convert
-       * into, and saying so is the only honest answer. Nothing has been
-       * written to the lead, so the converter can try again once there is
-       * room.
-       */
-      res.status(409).json({
-        error:
-          'The contact could not be created — the audience band may be ' +
-          'full. Nothing was changed.',
-      })
+    if (result.ok === false) {
+      const refusal = REFUSALS[result.reason]
+      res.status(refusal.status).json(refusal.body)
       return
     }
-    const contactRef = contactSnapshot.ref
-    const contactId = contactSnapshot.id
-    const contactData = (contactSnapshot.data() ?? {}) as Record<string, unknown>
-    const orgRef = firestore.collection('orgs').doc(orgId)
-    /*
-     * THE RECORDS BAND (AGL-2611), asked before each record this conversion
-     * CREATES. The contact went through the capture door, which refuses at
-     * the band on its own; a company and a deal are records of the same
-     * band, and on a Free org at its hundred the honest answer is the one
-     * the drawers give — refuse, write nothing more, and leave the lead
-     * unconverted so a retry after the upgrade finds it where it was. The
-     * contact step 1 captured stays: it is one person's record, and a second
-     * conversion merges onto it rather than making another. Measured fresh
-     * each time because the company created in step 2 is itself a record.
-     */
-    const bandRefused = async () => {
-      const room = await crmRecordsQuotaForOrg(org as never, orgRef)
-      if (room.allowed) return false
-      res.status(409).json({ error: CRM_RECORDS_BAND_FULL_MESSAGE, reason: 'band' })
-      return true
-    }
-
-    /*
-     * WHOSE THE CONTACT IS, now that it exists. The capture wrote the chosen
-     * owner, or its pass assigned one to a contact it created; a contact
-     * the org already held with no owner has had neither, so the same pass
-     * is asked once more — it touches only a record with no owner and
-     * answers `unchanged` for one that has — and the caller is the last
-     * resort. The caller's own uid is written directly, not through the
-     * deliberate reassignment: they may be staff converting on a
-     * workspace's behalf, and a roster check would refuse the one person
-     * who is actually here. A colleague the converter picked is told; the
-     * lead's existing owner and the caller are not, having chosen for
-     * themselves.
-     */
-    let ownerUid = readContactFacet(contactData, group.groupId).ownerUid ?? ''
-    if (!ownerUid) {
-      const assigned = await assignOwnerForCapture({
-        hostId,
-        contactId,
-        email,
-        source: 'manual',
-        actorUid: decoded.uid,
-      })
-      if (assigned.outcome !== 'none') ownerUid = assigned.ownerUid
-    }
-    if (!ownerUid) {
-      ownerUid = decoded.uid
-      await contactRef.update({
-        [contactFacetPath(group.groupId, 'ownerUid')]: ownerUid,
-        updatedAt: FieldValue.serverTimestamp(),
-      })
-    } else if (pickedOwner && pickedOwner === ownerUid) {
-      await notifyRecordAssigned({
-        hostId,
-        orgId,
-        ownerUid,
-        actorUid: decoded.uid,
-        record: { kind: 'contact', id: contactId },
-        who: leadName || email,
-      })
-    }
-
-    /*==========================================
-     * 2. THE COMPANY — linked, found by domain, or created.
-     *=========================================*/
-    let companyId: string | undefined
-    if (requestedCompanyId) {
-      const companySnapshot = await orgRef
-        .collection(CRM_COLLECTIONS.companies)
-        .doc(requestedCompanyId)
-        .get()
-      if (!companySnapshot.exists) {
-        res.status(404).json({ error: 'Unknown company' })
-        return
-      }
-      companyId = requestedCompanyId
-    } else if (createCompany) {
-      if (createCompany.domain) {
-        /*
-         * FIND BEFORE CREATE. The domain is the key two contacts at one
-         * business share, and a second company document for `acme.com`
-         * would split the account the key exists to join. Only a company the
-         * caller can see counts as found — see `readableTokens`.
-         */
-        const byDomain = await orgRef
-          .collection(CRM_COLLECTIONS.companies)
-          .where('domain', '==', createCompany.domain)
-          .limit(5)
-          .get()
-        const visible = byDomain.docs.find((snapshot) => {
-          const tokens = snapshot.get('visibleTo')
-          return (
-            Array.isArray(tokens) &&
-            tokens.some((token) => readableTokens.has(String(token)))
-          )
-        })
-        if (visible) companyId = visible.id
-      }
-      if (!companyId) {
-        if (await bandRefused()) return
-        const created = await orgRef.collection(CRM_COLLECTIONS.companies).add({
-          ...nameSearchFields(createCompany.name),
-          ...(createCompany.domain ? { domain: createCompany.domain } : {}),
-          ownerUid,
-          visibleTo,
-          hostId,
-          createdByUid: decoded.uid,
-          createdAt: FieldValue.serverTimestamp(),
-          updatedAt: FieldValue.serverTimestamp(),
-        })
-        companyId = created.id
-      }
-    }
-    if (companyId) {
-      /*
-       * The one link writer (AGL-2613): the holder's facet field the contact
-       * record reads, the queryable top-level mirror the company's contacts
-       * card filters on, and the company's contacts count — planned from
-       * the row as the capture left it, so a person the org already held
-       * under another company is MOVED rather than counted twice.
-       */
-      await writeContactCompanyLink({
-        firestore,
-        contactRef,
-        contact: contactData,
-        companiesRef: orgRef.collection(CRM_COLLECTIONS.companies),
-        groupId: group.groupId,
-        companyId,
-      })
-    }
-
-    /*==========================================
-     * 3. THE DEAL — in the default pipeline, seeded if the org has none.
-     *=========================================*/
-    let dealId: string | undefined
-    if (deal) {
-      const pipelinesRef = orgRef.collection(CRM_COLLECTIONS.pipelines)
-      let pipelineId: string
-      let pipeline: Pick<CrmPipeline, 'stages'>
-      const defaults = await pipelinesRef
-        .where('isDefault', '==', true)
-        .limit(1)
-        .get()
-      if (!defaults.empty) {
-        pipelineId = defaults.docs[0].id
-        pipeline = defaults.docs[0].data() as CrmPipeline
-      } else {
-        /*
-         * The deals section's own read shape, so the two agree on which
-         * pipeline "the org's pipeline" is when none is flagged default: the
-         * first by document id of a bounded window. Seeding a SECOND pipeline
-         * here while one exists unflagged would leave the merchant with two
-         * boards and their deals split between them.
-         */
-        const any = await pipelinesRef
-          .orderBy(FieldPath.documentId())
-          .limit(20)
-          .get()
-        if (!any.empty) {
-          pipelineId = any.docs[0].id
-          pipeline = any.docs[0].data() as CrmPipeline
-        } else {
-          // Exactly what the Deals section seeds: one `Sales` pipeline
-          // carrying a COPY of the default stages, flagged default.
-          const seeded: Omit<CrmPipeline, 'createdAt' | 'updatedAt'> = {
-            name: 'Sales',
-            stages: [...DEFAULT_DEAL_STAGES],
-            isDefault: true,
-            visibleTo,
-            hostId,
-          }
-          const created = await pipelinesRef.add({
-            ...seeded,
-            createdByUid: decoded.uid,
-            createdAt: FieldValue.serverTimestamp(),
-            updatedAt: FieldValue.serverTimestamp(),
-          })
-          pipelineId = created.id
-          pipeline = seeded
-        }
-      }
-      const stage = stageForNewDeal(pipeline, deal.stageId)
-      if (!stage) {
-        res.status(409).json({
-          error: 'The default pipeline has no stages to open a deal in',
-        })
-        return
-      }
-      if (await bandRefused()) return
-      const created = await orgRef.collection(CRM_COLLECTIONS.deals).add({
-        title: deal.title,
-        titleLower: deal.title.toLowerCase(),
-        pipelineId,
-        stageId: stage.id,
-        status: dealStatusForStage(stage),
-        ...(deal.amountCents !== null ? { amountCents: deal.amountCents } : {}),
-        currency: deal.currency,
-        stageChangedAtMs: now,
-        ownerUid,
-        contactId,
-        ...(companyId ? { companyId } : {}),
-        visibleTo,
-        hostId,
-        createdByUid: decoded.uid,
-        createdAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      })
-      dealId = created.id
-    }
-
-    /*==========================================
-     * 4. THE LEAD — stamped last, once everything it names exists.
-     *=========================================*/
-    const stamp: LeadConversionStamp = {
-      status: 'qualified',
-      convertedContactId: contactId,
-      convertedAtMs: now,
-      ownerUid,
-      ...(companyId ? { companyId } : {}),
-      ...(dealId ? { dealId } : {}),
-    }
-    await leadRef.update({ ...stamp, updatedAt: FieldValue.serverTimestamp() })
-
-    /*
-     * The audit line, from the route that did the work (AGL-2622): the
-     * conversion is one act however many records it opened, so it is one
-     * entry, on the lead, in the feed of the site that holds the lead. A
-     * repeat call answered above with the ids it already had wrote nothing
-     * and logs nothing.
-     */
-    await logHostActivity(
-      hostId,
-      { uid: decoded.uid, email: decoded.email ?? null },
-      'Converted lead',
-      { type: 'lead', id: leadId, name: String(lead['name'] ?? '') || email },
-    )
-
     const answer: LeadConvertResponse = {
       ok: true,
-      contactId,
-      ...(companyId ? { companyId } : {}),
-      ...(dealId ? { dealId } : {}),
-      alreadyConverted: false,
+      contactId: result.contactId,
+      ...(result.companyId ? { companyId: result.companyId } : {}),
+      ...(result.dealId ? { dealId: result.dealId } : {}),
+      alreadyConverted: result.alreadyConverted,
     }
     res.status(200).json(answer)
   } catch (error) {

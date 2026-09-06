@@ -11,8 +11,9 @@ The Aglyn REST API gives you programmatic access to your organization's data —
 [datasets and records](resources/datasets.md), [contacts](resources/contacts.md) and
 the CRM around them — [companies](resources/companies.md),
 [pipelines](resources/pipelines.md), [deals](resources/deals.md),
-[tasks](resources/tasks.md) and [activities](resources/activities.md) —
-[sites](resources/sites.md) and their [form submissions](resources/form-submissions.md), your store's
+[tasks](resources/tasks.md), [activities](resources/activities.md) and each site's
+[leads](resources/leads.md) — [sites](resources/sites.md) and their
+[form submissions](resources/form-submissions.md), your store's
 [orders](resources/orders.md) and [products](resources/products.md), and your
 [media library](resources/media.md). Use it to sync content from another system, push
 orders into accounting, record shipments from a 3PL or warehouse system, feed a
@@ -109,7 +110,7 @@ What this API is and what it serves.
   "name": "Aglyn REST API",
   "version": "v1",
   "documentation": "https://docs.aglyn.com/api",
-  "resources": ["datasets", "contacts", "companies", "pipelines", "deals", "tasks", "activities", "sites", "media"]
+  "resources": ["datasets", "contacts", "companies", "pipelines", "deals", "tasks", "activities", "leads", "sites", "media"]
 }
 ```
 
@@ -119,7 +120,9 @@ and [products](resources/products.md) all live under a site
 never builds a path that 404s. `media` is here because
 [`/v1/media`](resources/media.md) — the *organization* library — really is a top-level
 path; each site's own files are additionally at `/v1/sites/{siteId}/media`. The five
-CRM resources are organization-level like contacts, and so are top-level here.
+CRM resources are organization-level like contacts, and so are top-level here. Leads are
+a site's rows, but the path is `/v1/leads` with the site as a
+[parameter](resources/leads.md#site), so the path is what is listed.
 
 ### `GET /v1/me`
 
@@ -159,6 +162,7 @@ each CRM collection, for sizing a sync. See [Usage](usage.md).
 | [Deals](resources/deals.md) | Opportunities with a value, a stage and a status — create them, move them, close them. |
 | [Tasks](resources/tasks.md) | Calls, emails, meetings and to-dos with a due date, against a contact, company or deal. |
 | [Activities](resources/activities.md) | What happened — a write-once log of calls, meetings and notes. |
+| [Leads](resources/leads.md) | A site's work queue — everyone it has captured, with status, owner and notes — and the conversion of a lead into a contact, a company and a deal. |
 | [Sites](resources/sites.md) | List sites and read their details. |
 | [Form submissions](resources/form-submissions.md) | Read a site's form submissions, mark them read as you process them, and delete them after export. |
 | [Orders](resources/orders.md) | Read a site's store orders — line items, totals, refunds, disputes — and record shipments against them. |
@@ -166,9 +170,9 @@ each CRM collection, for sizing a sync. See [Usage](usage.md).
 | [Media](resources/media.md) | List files in the organization library and in each site's media. |
 
 Orders and products need a plan that includes **commerce**, in addition to their
-scope — see each page's plan note. Companies, pipelines, deals, tasks and activities
-need a plan that includes the **CRM suite** (Starter and above); a plan without it
-answers `plan_required` with `code: "crm"` on all five, while contacts keep working.
+scope — see each page's plan note. Companies, pipelines, deals, tasks, activities and
+leads need a plan that includes the **CRM suite** (Starter and above); a plan without it
+answers `plan_required` with `code: "crm"` on all six, while contacts keep working.
 
 For event-driven integrations, see [Webhooks](integrations/webhooks.md) — push instead
 of poll.

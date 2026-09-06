@@ -32,7 +32,9 @@
 const mockState: {
   members: Array<Record<string, unknown>>
   leads: Array<Record<string, unknown>>
-} = { members: [], leads: [] }
+  /** Every host event the handler emitted, in order. */
+  events: Array<{ event: string; payload: Record<string, unknown> }>
+} = { members: [], leads: [], events: [] }
 
 jest.mock('@aglyn/tenant-data-admin', () => {
   // The sign-up now COUNTS AND CREATES IN ONE TRANSACTION (AGL-1529), so the
@@ -118,7 +120,10 @@ jest.mock('@aglyn/tenant-runtime', () => ({
     }
     return (runtime.upsertHostContact ?? dataAdmin.upsertHostContact)?.(...args)
   },
-  emitHostEvent: async () => ({ alerts: [] }),
+  emitHostEvent: async (_hostId: string, event: string, payload: Record<string, unknown>) => {
+    mockState.events.push({ event, payload })
+    return { alerts: [] }
+  },
 }))
 
 jest.mock('./membership', () => ({
@@ -128,6 +133,7 @@ jest.mock('./membership', () => ({
 }))
 
 import {
+  personKey,
   readMarketingBasis,
   soloConsentGroup,
 } from '@aglyn/aglyn/server'
@@ -170,6 +176,7 @@ const register = (body: Record<string, unknown>) =>
 beforeEach(() => {
   mockState.members = []
   mockState.leads = []
+  mockState.events = []
 })
 
 describe('the lead a sign-up leaves behind (AGL-2303)', () => {
@@ -181,6 +188,23 @@ describe('the lead a sign-up leaves behind (AGL-2303)', () => {
       name: 'Dana Reed',
       source: 'signup',
     })
+  })
+
+  /**
+   * The `lead` event names the row it announces (AGL-2627): the person key
+   * `addHostLead` files the lead under, which is what `/v1/leads/{id}` takes.
+   * A webhook that heard "a lead" and had to guess its id from the address
+   * would have to know the key derivation; the payload says it instead.
+   */
+  it('announces the lead with the id it was filed under', async () => {
+    await register({ email: '  Dana@Example.com ' })
+    const lead = mockState.events.find((entry) => entry.event === 'lead')
+    expect(lead?.payload).toEqual({
+      email: 'dana@example.com',
+      source: 'signup',
+      leadId: personKey('dana@example.com'),
+    })
+    expect(lead?.payload['leadId']).toMatch(/^[0-9a-f]{64}$/)
   })
 
   it('carries THAT sign-up’s name, not a constant', async () => {

@@ -220,6 +220,8 @@ export function mockDocRef(path: string) {
 interface QueryState {
   filters: IssuedFilter[]
   orderBy: string[]
+  /** One per `orderBy`, `1` ascending and `-1` descending. */
+  directions: number[]
   startAfter: unknown[] | null
   limit: number
 }
@@ -235,9 +237,19 @@ function mockQuery(collectionPath: string, state: QueryState) {
         matches(mockDocs.get(path)?.[field], op, value),
       ),
     )
+    // A row missing an ordered field is not in that field's index, which is
+    // what Firestore does with it — it is not listed at all.
+    if (state.orderBy.length) {
+      paths = paths.filter((path) =>
+        state.orderBy.every(
+          (field) => field === '__name__' || valueOf(path, field) !== undefined,
+        ),
+      )
+    }
+    const directionOf = (index: number) => state.directions[index] ?? 1
     paths.sort((a, b) => {
-      for (const field of orderFields) {
-        const order = compare(valueOf(a, field), valueOf(b, field))
+      for (const [index, field] of orderFields.entries()) {
+        const order = compare(valueOf(a, field), valueOf(b, field)) * directionOf(index)
         if (order !== 0) return order
       }
       return a < b ? -1 : a > b ? 1 : 0
@@ -246,7 +258,9 @@ function mockQuery(collectionPath: string, state: QueryState) {
       const after = state.startAfter
       paths = paths.filter((path) => {
         for (let index = 0; index < after.length; index += 1) {
-          const order = compare(valueOf(path, orderFields[index] ?? '__name__'), after[index])
+          const order =
+            compare(valueOf(path, orderFields[index] ?? '__name__'), after[index]) *
+            directionOf(index)
           if (order !== 0) return order > 0
         }
         return false
@@ -260,7 +274,11 @@ function mockQuery(collectionPath: string, state: QueryState) {
   return {
     where: (field: string, op: string, value: unknown) =>
       next({ filters: [...state.filters, { field, op, value }] }),
-    orderBy: (field: string) => next({ orderBy: [...state.orderBy, field] }),
+    orderBy: (field: string, direction: 'asc' | 'desc' = 'asc') =>
+      next({
+        orderBy: [...state.orderBy, field],
+        directions: [...state.directions, direction === 'desc' ? -1 : 1],
+      }),
     startAfter: (...values: unknown[]) => next({ startAfter: values }),
     limit: (limit: number) => next({ limit }),
     get: async () => run(),
@@ -275,7 +293,13 @@ let addedSeq = 0
 
 export function mockCollectionRef(path: string) {
   return {
-    ...mockQuery(path, { filters: [], orderBy: [], startAfter: null, limit: 0 }),
+    ...mockQuery(path, {
+      filters: [],
+      orderBy: [],
+      directions: [],
+      startAfter: null,
+      limit: 0,
+    }),
     path,
     doc: (id: string) => mockDocRef(`${path}/${id}`),
     add: async (data: Record<string, unknown>) => {

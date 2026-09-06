@@ -237,11 +237,20 @@ let mockAssignment: Record<string, any> = { outcome: 'none', reason: 'no-rule' }
 const mockAssignOwnerForCapture = jest.fn(async () => mockAssignment)
 const mockNotifyRecordAssigned = jest.fn(async () => true)
 
-jest.mock('@aglyn/tenant-runtime', () => ({
+/*
+ * The writes live in the runtime's `convertHostLead` (AGL-2627), which
+ * reaches the capture door and the owner assignment as its own siblings —
+ * so the doubles are installed at those modules, not at the barrel the
+ * route once imported them from. The route captures through the runtime
+ * wrapper so `contactCreated` fires (AGL-2605); the double answers what the
+ * case under test needs.
+ */
+jest.mock('../../../../../tenant/runtime/src/lib/capture-host-contact', () => ({
   __esModule: true,
-  // The route captures through the runtime wrapper so `contactCreated` fires
-  // (AGL-2605); the double answers what the case under test needs.
   captureHostContact: (...args: unknown[]) => (mockUpsertHostContact as any)(...args),
+}))
+jest.mock('../../../../../tenant/runtime/src/lib/assign-contact-owner', () => ({
+  __esModule: true,
   assignOwnerForCapture: (...args: unknown[]) => (mockAssignOwnerForCapture as any)(...args),
   notifyRecordAssigned: (...args: unknown[]) => (mockNotifyRecordAssigned as any)(...args),
 }))

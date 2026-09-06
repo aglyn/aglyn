@@ -93,6 +93,7 @@ import { type ApiV1Context, apiUsageMonth, requireScope } from './api-v1'
 import { handleActivities } from './api-v1/crm-activities'
 import { handleCompanies } from './api-v1/crm-companies'
 import { handleDeals } from './api-v1/crm-deals'
+import { handleLeads } from './api-v1/crm-leads'
 import { handlePipelines } from './api-v1/crm-pipelines'
 import { handleTasks } from './api-v1/crm-tasks'
 import { mergeContactRoute } from './api-v1/contacts-merge'
@@ -3528,6 +3529,7 @@ export async function handleUsage(
     dealsSnap,
     tasksSnap,
     activitiesSnap,
+    leadCounts,
   ] = await Promise.all([
     orgRef.collection('apiUsage').doc(month).get(),
     orgRef.collection('usage').doc(month).get(),
@@ -3543,6 +3545,21 @@ export async function handleUsage(
     orgRef.collection(CRM_COLLECTIONS.deals).count().get(),
     orgRef.collection(CRM_COLLECTIONS.tasks).count().get(),
     orgRef.collection(CRM_COLLECTIONS.activities).count().get(),
+    /*
+     * Leads live under each SITE (`hosts/{id}/leads`), not under the org,
+     * so their size is one aggregate per site the org owns — bounded by the
+     * plan's site band, and the same count `/v1/leads?siteId=` will page.
+     */
+    Promise.all(
+      Object.keys((ctx.org.hosts ?? {}) as Record<string, unknown>).map((hostId) =>
+        ctx.firestore
+          .collection('hosts')
+          .doc(hostId)
+          .collection('leads')
+          .count()
+          .get(),
+      ),
+    ),
   ])
 
   const apiQuota = checkApiRequestQuota(
@@ -3658,6 +3675,12 @@ export async function handleUsage(
           UNLIMITED,
           null,
         ),
+        leads: usageBand(
+          leadCounts.reduce((sum, snap) => sum + snap.data().count, 0),
+          UNLIMITED,
+          UNLIMITED,
+          null,
+        ),
       },
     },
     { headers: ctx.headers },
@@ -3677,6 +3700,10 @@ const CRM_SUITE_RESOURCES: ReadonlySet<string> = new Set([
   'deals',
   'tasks',
   'activities',
+  // A site's leads are captured on every plan; their working state — a
+  // status, an owner, the conversion — is the suite's, and so is the API
+  // onto them (AGL-2627).
+  'leads',
 ])
 
 /** Route a `/v1/<resource>/...` request to its handler. */
@@ -3695,8 +3722,8 @@ export async function dispatchResource(
   if (CRM_SUITE_RESOURCES.has(segments[0]) && !checkEntitlement(ctx.org, 'crm')) {
     return ApiErrors.planRequired({
       message:
-        'The CRM suite — companies, pipelines, deals, tasks and activities — ' +
-        'is not included in this organization’s plan',
+        'The CRM suite — companies, pipelines, deals, tasks, activities and ' +
+        'leads — is not included in this organization’s plan',
       code: 'crm',
       headers: ctx.headers,
     })
@@ -3721,6 +3748,8 @@ export async function dispatchResource(
       return handleTasks(request, ctx, segments, url)
     case 'activities':
       return handleActivities(request, ctx, segments, url)
+    case 'leads':
+      return handleLeads(request, ctx, segments, url)
     case 'media':
       // The ORGANIZATION library. A site's own files are the same resource
       // under `/v1/sites/{siteId}/media`.
