@@ -15,14 +15,19 @@
  * limitations under the License.
  */
 
+/*
+ * Named beneath the entry barrel, not `@aglyn/aglyn`: the save and complete
+ * routes import this module, and the barrel reaches the console's React
+ * contexts, which the App Router's server graph refuses (AGL-405).
+ */
+import { consentGroupForHost } from '@aglyn/aglyn/app-utils/consent-groups'
+import type { CrmTask } from '@aglyn/aglyn/app-utils/crm'
 import {
-  consentGroupForHost,
-  type CrmTask,
   hostScopeToken,
   MAX_SCOPE_HOSTS,
   ORG_SCOPE_TOKEN,
   type ScopeToken,
-} from '@aglyn/aglyn'
+} from '@aglyn/aglyn/app-utils/scope-tokens'
 
 /**
  * The `visibleTo` an ORGANIZATION task carries (AGL-2637): a task filed
