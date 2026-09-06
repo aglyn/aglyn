@@ -19,7 +19,6 @@
 import {
   checkEntitlement,
   resolveConsolePluginPage,
-  type ConsolePluginOrgMount,
   type ReleaseFlagKey,
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
@@ -56,6 +55,7 @@ import {
   orgCrmRefusalNotice,
   resolveOrgCrmAccess,
 } from '../../../../../utils/org-crm-access'
+import { resolveOrgMount } from '../../../../../utils/org-mount'
 import {
   hubLandingHref,
   releaseFlagForNavTab,
@@ -229,23 +229,14 @@ const OrgCrmPage: NextPageWithLayout<Record<string, never>> = () => {
     user?.uid,
     admitted && orgId ? orgId : undefined,
   )
-  const orgMount = useMemo<ConsolePluginOrgMount | undefined>(
+  const orgMount = useMemo(
     () =>
-      orgId
-        ? {
-            orgId,
-            hosts: orgHosts.hosts.map((host) => ({
-              id: host.$id,
-              name:
-                (host['displayName'] as string) ||
-                (host['subdomain'] as string) ||
-                host.$id,
-              subdomain: (host['subdomain'] as string | undefined) ?? null,
-            })),
-            hostsReady: orgHosts.ready,
-            hostsPath: buildRoute(Route.HOST_LIST, { orgSlug }),
-          }
-        : undefined,
+      resolveOrgMount({
+        orgId,
+        orgSlug,
+        hosts: orgHosts.hosts,
+        hostsReady: orgHosts.ready,
+      }),
     [orgId, orgSlug, orgHosts.hosts, orgHosts.ready],
   )
 
