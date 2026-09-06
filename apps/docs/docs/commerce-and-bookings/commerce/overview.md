@@ -190,7 +190,7 @@ sale the tab is an invitation rather than a table: it explains where orders come
 and offers **Draft order**, so you can invoice a customer you already have. The
 filters and **Export CSV** appear once there are rows to filter.
 
-Above the table sit five filters and two buttons:
+Above the table sit six filters and two buttons:
 
 | Control | Choices |
 | --- | --- |
@@ -198,6 +198,7 @@ Above the table sit five filters and two buttons:
 | **Period** | **All time**, **Last 7 days**, **Last 30 days**. |
 | **Status** | **All statuses**, or one of the seven below. |
 | **Channel** | **All channels**, or one of the four below. |
+| **Customer** | A buyer's email address, or part of one — `acme.com` finds every buyer at a company. Filled in for you when you arrive from a contact's page in the CRM. |
 | **Disputes** | **All orders**, **Open dispute**, **Charged back**. |
 | **Export CSV** | Writes the rows currently shown — the filters apply. |
 | **Draft order** | Builds an order by hand and sends the buyer a payment link. |
@@ -222,6 +223,14 @@ refund shows **$70**, and a second line appears under it reading **$100.00 less
 refunds** — the gross figure, so you can see both without opening the order. An order
 with no refund shows one figure and no caption. Reconciling against a Stripe payout
 means reading the caption, not assuming the big number is what was charged.
+
+Clicking a row opens the order's dialog. When the order carries the buyer's address,
+the dialog offers **View customer in CRM** — the [CRM's](../../content-and-data/contacts/overview.md)
+Contacts list asked for that address, which moves straight on to the person's record.
+The CRM links back: **Open order** on a captured entry of a contact's timeline opens
+this list with that order's dialog already open (`?order={id}`), reading the order on
+its own when it is older than the two hundred the list holds, and the order count on
+the contact's header opens this list filtered to their address.
 
 ### Statuses and channels {#order-statuses}
 

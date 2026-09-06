@@ -21,6 +21,13 @@ entry says which it is:
 | **Captured** | The platform recorded it — a form submission, an order, a booking, a member sign-up, a newsletter opt-in, an API or import create, or a contact added by hand. Each carries the door it came through and, for a form, the page the person was on. | Nobody. It is a record of what happened. |
 | **Logged** | A member of your team logged it — a call, an email, a meeting, a note, or something else. | Its author, or an org-wide member. |
 
+A captured entry from *this* site carries a link to its record: **Open
+submission** lands on the Inbox with the reader open on that submission, **Open
+order** on the orders list with the order's dialog open, and a booking or a
+sign-up on the Bookings or Users page. An entry from another site in your
+workspace — read on that site's console — or one written before the site was
+stamped on it is shown without a link.
+
 Captured history lives on the contact and is kept to the most recent fifty
 entries. Logged activity is a collection of its own, bounded at **5,000 entries
 per record** — a call a day for fourteen years, so nobody working a real

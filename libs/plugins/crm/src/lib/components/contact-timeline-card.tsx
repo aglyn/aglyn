@@ -33,9 +33,10 @@ import {
   mdiFileImportOutline,
   mdiFormSelect,
 } from '@aglyn/shared-data-mdi'
-import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
+import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { Button, Chip, Stack, Tooltip, Typography } from '@mui/material'
+import { useParams } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
 import { ActivityRow } from './activity-list'
 import {
@@ -72,8 +73,13 @@ const SOURCE_ICONS: Record<ContactSource, { path: string }> = {
  * path is a fact the door recorded, and a long path on the sentence's line
  * pushes out the thing the row is about.
  */
-function CapturedRow(props: { interaction: ContactInteraction; nowMs: number }) {
-  const { interaction, nowMs } = props
+function CapturedRow(props: {
+  interaction: ContactInteraction
+  nowMs: number
+  /** The console page the door's record is read on, when it left one. */
+  href: string | null
+}) {
+  const { interaction, nowMs, href } = props
   const source = interaction.type
   const label = CONTACT_SOURCE_LABELS[source] ?? String(source)
   const icon = SOURCE_ICONS[source]
@@ -112,6 +118,19 @@ function CapturedRow(props: { interaction: ContactInteraction; nowMs: number }) 
               : Aglyn.activityTimeLabel(interaction.atMs, nowMs)}
           </Typography>
         </Tooltip>
+        {/*
+          The record the door left, where the console reads it (AGL-2622):
+          the submission in the Inbox reader, the order in its dialog. A door
+          that left nothing to open — a newsletter opt-in, an import — has no
+          link, and the caption above is the whole entry.
+        */}
+        {href ? (
+          <Typography variant="caption" sx={{ alignSelf: 'flex-start' }}>
+            <AppLink href={href}>
+              {Aglyn.INTERACTION_LINK_LABELS[source] ?? 'Open'}
+            </AppLink>
+          </Typography>
+        ) : null}
       </Stack>
     </Stack>
   )
@@ -173,6 +192,32 @@ export function ContactTimelineCard(props: ContactTimelineCardProps) {
   }, [contact, consentGroup])
   const link = useMemo<ActivityRecordLink>(() => ({ contactId }), [contactId])
   const activities = useActivityWindow(scope, link)
+  /*
+   * Where a captured entry's record is READ (AGL-2622). The site console's
+   * two route params are already in the URL this page is on, so the link is
+   * built from them rather than from two document reads per timeline. Only
+   * an interaction on THIS site links: a sibling site's order is that
+   * site's record, read on that site's console, and a link built with this
+   * site's segment would 404 or — worse — open the wrong site's row under
+   * the same id. An interaction with no site recorded predates the stamp
+   * and is left unlinked rather than guessed at. Off a site — the org-level
+   * mount — there is no segment to build with, and nothing links.
+   */
+  const params = useParams<{ orgSlug?: string; host?: string }>()
+  const siteContext = useMemo(
+    () =>
+      params?.orgSlug && params?.host
+        ? { orgSlug: String(params.orgSlug), host: String(params.host) }
+        : null,
+    [params?.orgSlug, params?.host],
+  )
+  const interactionHref = useCallback(
+    (interaction: ContactInteraction): string | null =>
+      siteContext && interaction.hostId === hostId
+        ? Aglyn.contactInteractionHref(interaction, siteContext)
+        : null,
+    [siteContext, hostId],
+  )
   // One member read for the whole stream, however many rows it has.
   const canEdit = useCanEditActivity(scope.orgId)
   const entries = useMemo(
@@ -250,6 +295,7 @@ export function ContactTimelineCard(props: ContactTimelineCardProps) {
                   key={entry.key}
                   interaction={entry.interaction}
                   nowMs={nowMs}
+                  href={interactionHref(entry.interaction)}
                 />
               ) : (
                 <ActivityRow

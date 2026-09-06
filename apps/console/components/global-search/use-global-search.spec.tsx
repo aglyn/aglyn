@@ -325,6 +325,61 @@ describe('how the reads are scoped', () => {
     expect(result.current.groups[0].rows[0].$label).toBe('ada@example.test')
   })
 
+  /**
+   * The three CRM groups that joined under AGL-2622: leads are the site's
+   * own collection and read as host data, companies and deals sit under the
+   * org's data root and carry the viewer's tokens exactly as contacts do.
+   */
+  it('reads leads under the host and finds one by address, labelled by it', async () => {
+    mockRowsByCollection.leads = [{ $id: 'l1', email: 'grace@example.test' }]
+    const { result } = renderHook(() =>
+      useGlobalSearch({
+        ...base,
+        entities: [entity('leads')],
+        orgDataTokens: ['org', 'host:host-1'],
+        text: 'grace',
+      }),
+    )
+    await waitFor(() => expect(readsFor('leads')).toHaveLength(1))
+    expect(readsFor('leads')[0].path).toBe('hosts/host-1/leads')
+    expect(
+      readsFor('leads')[0].constraints.some((c: any) => c.type === 'where'),
+    ).toBe(false)
+    await waitFor(() => expect(result.current.groups[0]?.rows).toHaveLength(1))
+    expect(result.current.groups[0].rows[0].$label).toBe('grace@example.test')
+  })
+
+  it("reads companies and deals under the org's data root with the viewer's tokens", async () => {
+    mockRowsByCollection.companies = [
+      { $id: 'co1', name: 'Analytical Engines', domain: 'engines.test' },
+    ]
+    mockRowsByCollection.deals = [{ $id: 'd1', title: 'Engine retrofit' }]
+    const companies = entity('companies')
+    const deals = entity('deals')
+    expect(matchesIn(companies, mockRowsByCollection.companies, 'engines.test')).toBe(true)
+    expect(matchesIn(deals, mockRowsByCollection.deals, 'retrofit')).toBe(true)
+    renderHook(() =>
+      useGlobalSearch({
+        ...base,
+        entities: [companies, deals],
+        orgDataTokens: ['org', 'host:host-1'],
+        text: 'engine',
+      }),
+    )
+    await waitFor(() => expect(readsFor('companies')).toHaveLength(1))
+    await waitFor(() => expect(readsFor('deals')).toHaveLength(1))
+    expect(readsFor('companies')[0].path).toBe('orgs/org-1/companies')
+    expect(readsFor('deals')[0].path).toBe('orgs/org-1/deals')
+    for (const name of ['companies', 'deals']) {
+      expect(readsFor(name)[0].constraints).toContainEqual({
+        type: 'where',
+        field: 'visibleTo',
+        op: 'array-contains-any',
+        value: ['org', 'host:host-1'],
+      })
+    }
+  })
+
   it('holds a host read while the host id is still empty', async () => {
     renderHook(() =>
       useGlobalSearch({

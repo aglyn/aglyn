@@ -56,6 +56,7 @@ const mockUpsert = jest.fn(async () => mockUpsertResult)
 const mockUpdate = jest.fn(async () => undefined)
 /** The org's companies, by id, as the picker's choice is checked against them. */
 let mockCompanies: Record<string, Record<string, unknown>> = {}
+const mockLogActivity = jest.fn(async () => undefined)
 
 jest.mock('firebase-admin/firestore', () => ({
   FieldValue: {
@@ -98,6 +99,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   resolveOrgMembership: async () =>
     mockMember ? { orgId: 'org-1', member: mockMember } : null,
   memberHasOrgPermission: async () => mockHasPermission,
+  logHostActivity: (...args: unknown[]) => mockLogActivity(...(args as [])),
   consentGroupForSite: async (hostId: string) => ({
     hostId,
     groupId: hostId,
@@ -291,6 +293,34 @@ describe('the fields', () => {
       ownerUid: 'owner-1',
       lifecycleStage: 'lead',
     })
+  })
+
+  /**
+   * The audit line is the route's (AGL-2622): it verified the caller and
+   * performed the write, so it is the one writer that cannot record an add
+   * that did not happen, and the console no longer writes one of its own. A
+   * merge into a person the org already held is said to be an update.
+   */
+  it('writes the host activity entry as the verified caller, and says merge from add', async () => {
+    mockLogActivity.mockClear()
+    await post(GOOD)
+    expect(mockLogActivity).toHaveBeenCalledTimes(1)
+    expect(mockLogActivity).toHaveBeenCalledWith(
+      'host-1',
+      { uid: 'user-1', email: 'me@acme.test' },
+      'Added contact',
+      { type: 'contact', id: 'con-new', name: 'Ada Lovelace' },
+    )
+    mockLogActivity.mockClear()
+    mockUpsertResult = { contactId: 'con-old', created: false }
+    await post({ hostId: 'host-1', email: 'ada@example.test' })
+    expect(mockLogActivity).toHaveBeenCalledWith(
+      'host-1',
+      { uid: 'user-1', email: 'me@acme.test' },
+      'Updated contact',
+      { type: 'contact', id: 'con-old', name: 'ada@example.test' },
+    )
+    mockUpsertResult = { contactId: 'con-new', created: true }
   })
 
   it('records no consent unless the box was ticked', async () => {

@@ -16,11 +16,11 @@
  */
 'use client'
 
-import { checkQuota, pluginDocsHelp } from '@aglyn/aglyn'
+import { checkQuota, crmContactByEmailHref, pluginDocsHelp } from '@aglyn/aglyn'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
 import { type HostBookingService, isBookingReminderDue } from '../model'
-import { CardDisplay, HelpTip, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { AppLink, CardDisplay, HelpTip, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
@@ -43,6 +43,7 @@ import {
   setDoc,
   updateDoc,
 } from 'firebase/firestore'
+import { useParams } from 'next/navigation'
 import { useCallback, useState } from 'react'
 import {
   useFirestore,
@@ -105,6 +106,22 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
   const { confirm } = useConfirmationContext()
   // The id token the refund route authenticates with (AGL-2315).
   const { data: user } = useUser()
+  /*
+   * Where a booker's CONTACT is (AGL-2622). A booking updated a person in
+   * the CRM by the address it carried, and the row links there by that
+   * address — the Contacts list holds the id nothing here does and opens
+   * the record on one match. The address comes from the SHARED builder
+   * rather than the CRM plugin, the way the commerce dialog's does: a
+   * plugin importing a sibling is a cycle waiting for its third edge, and
+   * the shared builder is pinned against the CRM's own routes by a spec.
+   * `null` until the route params settle, so no row renders a link to
+   * nowhere.
+   */
+  const params = useParams<{ orgSlug?: string; host?: string }>()
+  const siteContext =
+    params?.orgSlug && params?.host
+      ? { orgSlug: String(params.orgSlug), host: String(params.host) }
+      : null
 
   const {
     data: serviceDocs,
@@ -535,6 +552,16 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
                     }`}
                   </Typography>
                 </Stack>
+                {siteContext && booking.email ? (
+                  <Button
+                    component={AppLink as any}
+                    {...({ componentVariant: 'naked', nativeButton: false } as any)}
+                    href={crmContactByEmailHref(siteContext, String(booking.email))}
+                    size="small"
+                  >
+                    {'View in CRM'}
+                  </Button>
+                ) : null}
                 {booking.status !== 'canceled' ? (
                   <Button
                     size="small"

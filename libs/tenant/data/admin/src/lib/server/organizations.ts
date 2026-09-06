@@ -1051,6 +1051,10 @@ export interface HostActivityTarget {
   type:
     | 'host' | 'screen' | 'layout' | 'theme' | 'media' | 'content' | 'variable'
     | 'function' | 'workflow' | 'member' | 'component' | 'template'
+    // The CRM's records (AGL-2622), written by the plugin's server routes —
+    // a contact added by hand, a lead converted — and read back by the
+    // feed's presenter as links into the hub.
+    | 'contact' | 'company' | 'deal' | 'lead'
   id?: string
   name?: string
   versionId?: string

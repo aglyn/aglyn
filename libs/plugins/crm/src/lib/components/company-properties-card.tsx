@@ -26,7 +26,7 @@ import {
 import { mdiDeleteOutline, mdiPencilOutline } from '@aglyn/shared-data-mdi'
 import { MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useHostActivityLogger } from '@aglyn/tenant-feature-instance'
 import { Button, Link, Stack, Typography } from '@mui/material'
 import {
   collection,
@@ -119,6 +119,7 @@ export function CompanyPropertiesCard(props: CompanyPropertiesCardProps) {
   const firestore = useFirestore()
   const { confirm } = useConfirmationContext()
   const { enqueueSnackbar } = useSnackbar()
+  const logActivity = useHostActivityLogger(hostId)
   const [editing, setEditing] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
@@ -182,6 +183,10 @@ export function CompanyPropertiesCard(props: CompanyPropertiesCardProps) {
           company.$id,
         ),
       )
+      // Setup → Activity shows CRM work (AGL-2622): the company is org
+      // data, but the act happened in this site's console and belongs in
+      // its feed.
+      logActivity('Deleted company', { type: 'company', id: company.$id, name })
       enqueueSnackbar(
         linked.length
           ? `Company deleted and unlinked from ${linked.length.toLocaleString()} ` +
@@ -213,7 +218,7 @@ export function CompanyPropertiesCard(props: CompanyPropertiesCardProps) {
     } finally {
       setDeleting(false)
     }
-  }, [scope, deleting, company, confirm, firestore, enqueueSnackbar, onDeleted])
+  }, [scope, deleting, company, confirm, firestore, logActivity, enqueueSnackbar, onDeleted])
 
   const address = formatAddress(company.address)
   // The domain, the industry and the owner read on the header — the

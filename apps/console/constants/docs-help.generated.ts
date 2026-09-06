@@ -795,7 +795,7 @@ export const DOCS_HELP_ANCHORS = {
   consoleSearch: ['#what-it-searches', '#how-matching-works', '#what-it-does-not-search', '#why-a-group-sometimes-says-it-was-only-partly-searched'],
   consoleTour: ['#the-app-bar', '#in-context-help', '#primary-navigation', '#editing-vs-managing', '#the-sites-list', '#the-status-pill', '#how-the-pill-is-decided', '#your-site-allowance', '#a-sites-dashboard', '#next', '#workspace-settings--notifications', '#alerts-on-this-device'],
   contactRecord: ['#adding-a-contact-by-hand', '#the-record-page', '#what-each-site-keeps-to-itself', '#owner', '#lifecycle-stages', '#where-the-persons-lead-is', '#finding-a-contact', '#related'],
-  contacts: ['#whats-in-the-crm-area', '#unified-ingestion', '#what-each-plan-includes', '#the-contacts-page', '#import-from-csv', '#segments', '#who-can-open-the-crm', '#related'],
+  contacts: ['#whats-in-the-crm-area', '#unified-ingestion', '#what-each-plan-includes', '#the-contacts-page', '#import-from-csv', '#segments', '#everywhere-the-crm-shows-up', '#who-can-open-the-crm', '#related'],
   content: ['#site-templates--starter-gallery', '#section--block-library', '#content-collections--blog', '#related'],
   cookieConsent: ['#how-it-works', '#what-needs-consent', '#privacy-choices--the-persistent-control', '#where-the-choice-is-kept', '#global-privacy-control', '#previewing-what-visitors-see', '#turn-the-banner-off'],
   copyAssist: ['#use-it', '#tips', '#related'],

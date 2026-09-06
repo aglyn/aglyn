@@ -142,6 +142,30 @@ An audience built from a rule can also read a contact's owner, lifecycle stage,
 company and custom fields; see
 [email audiences](../../marketing-and-automation/email-campaigns/overview.md#email-lists).
 
+## Everywhere the CRM shows up
+
+The CRM is wired into the rest of the console rather than standing beside it.
+Every place a person's record is met links into the CRM, and the CRM links
+back out to the record that put the person there.
+
+| Where | Into the CRM | Out of the CRM |
+| --- | --- | --- |
+| **Search** (the top bar) | Contacts by name, email, phone or company; **leads** by name or email; **companies** by name or domain; **deals** by title. Each result opens the record. The CRM groups appear only for members who may open the CRM. | — |
+| **Inbox** | A submission row's **⋮ → Open contact in CRM**; a member or lead row's **Open in CRM**. | A contact's timeline opens the submission that captured them, in the Inbox reader. |
+| **Forms** | A form's page: **See the contacts this form captured in the CRM**, and the **CRM routing** card. | — |
+| **Products → Orders** | An order's dialog: **View customer in CRM**. | The contact header's order count opens the orders list narrowed to the person's address; a timeline entry opens the order itself. |
+| **Bookings** | Each upcoming booking: **View in CRM**. | A timeline entry for a booking opens the Bookings page. |
+| **Users** | A site user's row menu: **Open in CRM**. | A timeline entry for a sign-up opens the Users page. |
+| **Dashboard** | The **Inbox** card counts the site's open leads and links to **Leads**; the **CRM at a glance** card's figures open Contacts, Deals and Tasks. | — |
+| **Marketing** | — | The Relationship card's campaign attribution opens the campaign's page. |
+| **Setup → Activity** | — | Adding, deleting or converting a contact, company, deal or lead is logged, and each entry opens the record. |
+
+A link that arrives by a person's *address* — from an order, a booking or a
+site user — opens the Contacts list asked for that address, and the list moves
+straight on to the record when exactly one person matches. No match leaves the
+filtered list on screen, which is the honest answer for a capture the audience
+band dropped.
+
 ## Who can open the CRM
 
 Opening the CRM takes the workspace's **manage data** permission — owners,

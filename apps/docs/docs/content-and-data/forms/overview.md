@@ -240,6 +240,12 @@ row actions.
 - The row's **⋮** menu holds **Open contact in CRM** — the person this submission
   updated, found by the address they gave — beside **Mark read** and **Delete**. A
   submission that carried no email address updated no contact, and the item says so.
+- The CRM links back the other way: **Open submission** on a captured entry of a
+  contact's [timeline](../contacts/activities.md) lands on this tab with the reader
+  already open on that submission (the address carries `?submission={id}`) and marks
+  it read, as a click would. A submission that has since been deleted says so.
+- The dashboard's **Inbox** card previews the newest submissions and counts the site's
+  **open leads**, linking to **CRM → Leads**.
 - **Received** is relative — `now`, `18m`, `3h`, `2d`, `4w`, `7mo`. Hover it for the
   absolute date and time; the detail dialog carries the absolute time too. An inbox is
   scanned for recency, and a locale timestamp makes you do the subtraction.

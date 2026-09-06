@@ -68,6 +68,7 @@ import {
   consentGroupForSite,
   firebaseAdmin,
   getOrgForHost,
+  logHostActivity,
   memberHasOrgPermission,
   orgDataCollectionForHost,
   resolveOrgMembership,
@@ -472,6 +473,21 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
         updatedAt: FieldValue.serverTimestamp(),
       })
     }
+
+    /*
+     * The audit line, written HERE rather than by the console (AGL-2622):
+     * a route that verified the caller and performed the write is the one
+     * writer that cannot record an act that did not happen, which is the
+     * reason `check-activity-coverage.mjs` counts this file. A merge into
+     * a person the org already held is said to be one — the row was
+     * updated, not added — so the feed cannot claim two people for one.
+     */
+    await logHostActivity(
+      hostId,
+      { uid: decoded.uid, email: decoded.email ?? null },
+      result.created ? 'Added contact' : 'Updated contact',
+      { type: 'contact', id: result.contactId, name: name || email },
+    )
 
     res
       .status(result.created ? 201 : 200)

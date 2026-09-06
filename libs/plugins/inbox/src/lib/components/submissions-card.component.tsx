@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { FORMS_MAX_PER_HOST, pluginDocsHelp } from '@aglyn/aglyn'
+import { FORMS_MAX_PER_HOST, INBOX_SUBMISSION_PARAM, pluginDocsHelp } from '@aglyn/aglyn'
 // A deep import, NOT the plugin barrel (AGL-1151): the barrel is the entry
 // point the tenant's loader dynamically imports to activate the marketing
 // plugin's SITE half, so a console card named there ships to every published
@@ -65,13 +65,15 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   limit,
   orderBy,
   query,
   updateDoc,
   where,
 } from 'firebase/firestore'
-import { useCallback, useMemo, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   relativeTime,
   routingChips,
@@ -255,6 +257,46 @@ export function SubmissionsCard({ hostId, formId }: SubmissionsCardProps) {
     },
     [firestore, hostId],
   )
+
+  /*
+   * A submission named in the URL opens in the reader on arrival (AGL-2622).
+   *
+   * A contact's timeline names the submission that captured the person, and
+   * the address it links to is this tab with `?submission={id}`. The
+   * document is read once, by id, rather than looked for in the paged
+   * window: the window is the newest page of a walk that may not reach a
+   * submission from months back, and one document read is what the URL
+   * asked for. Opening it marks it read, as a click on the row would. A
+   * submission that is gone says so, because a reader that silently stays
+   * shut reads as the link having done nothing.
+   *
+   * Once per id: the ref keeps a re-render — and the same URL re-settling —
+   * from reopening a reader the person has since closed. The landing read
+   * is judged against that ref rather than an effect cleanup: a listener
+   * settling while the read is in flight re-renders this card, and a
+   * cleanup keyed on any dep would cancel the answer to the question the
+   * URL just asked.
+   */
+  const searchParams = useSearchParams()
+  const seededSubmissionId = searchParams?.get(INBOX_SUBMISSION_PARAM) ?? null
+  const seededOpened = useRef<string | null>(null)
+  useEffect(() => {
+    if (!seededSubmissionId || seededOpened.current === seededSubmissionId) return
+    seededOpened.current = seededSubmissionId
+    void getDoc(doc(firestore, 'hosts', hostId, 'formSubmissions', seededSubmissionId))
+      .then((snapshot) => {
+        if (seededOpened.current !== snapshot.id) return
+        if (!snapshot.exists()) {
+          enqueueSnackbar('That submission is no longer in the Inbox.', {
+            variant: 'warning',
+            persist: false,
+          })
+          return
+        }
+        handleOpenReader({ ...snapshot.data(), $id: snapshot.id })()
+      })
+      .catch(() => undefined)
+  }, [seededSubmissionId, firestore, hostId, handleOpenReader, enqueueSnackbar])
 
   const handleDelete = useCallback(
     (submission: any) => async () => {

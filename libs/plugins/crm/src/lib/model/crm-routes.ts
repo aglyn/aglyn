@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { ConsolePluginPageProps } from '@aglyn/aglyn'
+import { CRM_CONTACTS_EMAIL_PARAM, type ConsolePluginPageProps } from '@aglyn/aglyn'
 import type { CrmConsoleSectionId } from '../components/crm-console-sections'
 
 /**
@@ -77,7 +77,14 @@ export function crmRoutes(basePath: string) {
  */
 export const CONTACTS_LIST_SOURCE_PARAM = 'source'
 export const CONTACTS_LIST_FORM_PARAM = 'formId'
-export const CONTACTS_LIST_EMAIL_PARAM = 'email'
+/**
+ * The email key is the SHARED constant (AGL-2622): the console app — which
+ * the module boundaries keep from importing this plugin — builds the same
+ * address through `crmContactByEmailHref`, and `crm-routes.spec.ts` pins
+ * `contactByEmail` against it so the plugin and the app cannot spell the
+ * key two ways.
+ */
+export const CONTACTS_LIST_EMAIL_PARAM = CRM_CONTACTS_EMAIL_PARAM
 
 export type CrmRoutes = ReturnType<typeof crmRoutes>
 

@@ -51,7 +51,6 @@ import {
   useFirestore,
   useFirestoreCollection,
   useFirestoreDoc,
-  useHostActivityLogger,
   useOrgDataScope,
   useUser,
 } from '@aglyn/tenant-feature-instance'
@@ -194,7 +193,6 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { data: user } = useUser()
-  const logActivity = useHostActivityLogger(hostId)
 
   /*
    * WHAT THE LIST WAS OPENED FOR (AGL-2612).
@@ -628,11 +626,10 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
           return
         }
         const contactId = String(payload['contactId'] ?? '')
-        logActivity('Added contact', {
-          type: 'contact',
-          id: contactId,
-          name: values.name || values.email,
-        })
+        // The activity entry is the route's (AGL-2622): it verified the
+        // caller and performed the write, so it is the one writer that
+        // cannot record an add that did not happen — and a second entry
+        // from here would put two rows on one act.
         enqueueSnackbar(
           payload['created']
             ? 'Contact added'
@@ -648,7 +645,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
         setCreateBusy(false)
       }
     },
-    [crmApi, enqueueSnackbar, logActivity, router, routes],
+    [crmApi, enqueueSnackbar, router, routes],
   )
 
   const handleExport = useCallback(() => {

@@ -27,12 +27,14 @@
  * PROBE that lets it say there are more without counting the collection.
  */
 
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
 /** The window the card asked for, and what Firestore answers with. */
 let submissions: Array<Record<string, unknown>>
 let askedLimit: number | undefined
+let askedLeadStatuses: string | undefined
+let leadCounts = { all: 0, closed: 0 }
 let askedOrder: string | undefined
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
@@ -46,7 +48,8 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...segments: string[]) =>
     segments[segments.length - 1],
-  query: (name: string) => name,
+  query: (name: string, ...constraints: unknown[]) =>
+    constraints.some((constraint) => constraint === 'closed') ? 'leads:closed' : name,
   limit: (value: number) => {
     askedLimit = value
     return undefined
@@ -55,6 +58,13 @@ jest.mock('firebase/firestore', () => ({
     askedOrder = `${field} ${direction}`
     return undefined
   },
+  where: (field: string, op: string, value: string[]) => {
+    askedLeadStatuses = `${field} ${op} ${value.join(',')}`
+    return 'closed'
+  },
+  getCountFromServer: async (target: string) => ({
+    data: () => ({ count: target === 'leads:closed' ? leadCounts.closed : leadCounts.all }),
+  }),
 }))
 
 jest.mock('next/navigation', () => ({
@@ -62,7 +72,9 @@ jest.mock('next/navigation', () => ({
 }))
 
 jest.mock('@aglyn/shared-ui-jsx', () => ({
-  AppLink: ({ children }: { children: ReactNode }) => <span>{children}</span>,
+  AppLink: ({ href, children }: { href?: string; children: ReactNode }) => (
+    <a href={href}>{children}</a>
+  ),
   CardDisplay: ({
     children,
     header,
@@ -104,6 +116,8 @@ beforeEach(() => {
   submissions = []
   askedLimit = undefined
   askedOrder = undefined
+  askedLeadStatuses = undefined
+  leadCounts = { all: 0, closed: 0 }
 })
 
 describe('the inbox glance card', () => {
@@ -176,6 +190,36 @@ describe('the inbox glance card', () => {
     render(<InboxGlanceCard hostId="host-1" />)
     expect(screen.getByText('All caught up')).toBeTruthy()
     expect(screen.queryByLabelText('Unread')).toBeNull()
+  })
+
+  /**
+   * Where the captures went (AGL-2622). The open count is every lead less
+   * the ones a stamped status closed, because an untouched lead carries no
+   * status at all and a query cannot count an absent field.
+   */
+  it('counts the open leads on the server and links them to the CRM', async () => {
+    submissions = [submission('a', { name: 'Priya Nair' })]
+    leadCounts = { all: 5, closed: 2 }
+    render(<InboxGlanceCard hostId="host-1" />)
+    await waitFor(() => expect(screen.getByText(/3 open leads/)).toBeTruthy())
+    expect(askedLeadStatuses).toBe('status in qualified,unqualified')
+    const link = screen.getByRole('link', { name: 'Work them in the CRM' })
+    expect(link.getAttribute('href')).toBe('/acme/hosts/demo/crm/leads')
+  })
+
+  it('shows the card for a site with leads and no submissions yet', async () => {
+    leadCounts = { all: 1, closed: 0 }
+    render(<InboxGlanceCard hostId="host-1" />)
+    await waitFor(() => expect(screen.getByText(/1 open lead ·/)).toBeTruthy())
+    expect(screen.getByText('All caught up')).toBeTruthy()
+  })
+
+  it('says nothing about leads when none are open', async () => {
+    submissions = [submission('a', { name: 'Priya Nair' })]
+    leadCounts = { all: 2, closed: 2 }
+    render(<InboxGlanceCard hostId="host-1" />)
+    await waitFor(() => expect(screen.getByText('Priya Nair')).toBeTruthy())
+    expect(screen.queryByText(/open lead/)).toBeNull()
   })
 
   it('THE CONTROL: the fixture reaches the card', () => {

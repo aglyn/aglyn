@@ -27,6 +27,12 @@
 // `@aglyn/aglyn/app-utils/activity-presenter`.
 
 import { Route, buildRoute } from './console-routes'
+import {
+  CRM_RECORD_SECTIONS,
+  crmRecordHref,
+  crmSectionHref,
+  type CrmRecordKind,
+} from './console-record-links'
 import { hostEventLabel } from './workflows'
 
 /** The stored `target` sub-object, read defensively (any field may be absent). */
@@ -76,7 +82,17 @@ const TYPE_LABELS: Record<string, string> = {
   template: 'Template',
   org: 'Organization',
   invite: 'Invitation',
+  // CRM records (AGL-2622): a person added, a company or a deal created or
+  // deleted, a lead converted — logged into the feed of the site whose
+  // console did it, and linked to the record the way a screen is.
+  contact: 'Contact',
+  lead: 'Lead',
+  company: 'Company',
+  deal: 'Deal',
 }
+
+/** The activity target types that are CRM records, for the link switch. */
+const CRM_TARGET_KINDS = new Set<string>(Object.keys(CRM_RECORD_SECTIONS))
 
 /** Human noun for a target type, e.g. `'screen'` → `'Screen'`. */
 export function activityTypeLabel(type: string | undefined): string {
@@ -179,6 +195,16 @@ export function activityHref(
         // host route.
         return buildRoute(Route.HOST_SETUP, { orgSlug, host })
       default:
+        // A CRM record's own page, or its list when the entry named no id —
+        // a deleted record still has a list to land on. The CRM is a plugin
+        // hub, so its addresses come from the shared builder rather than
+        // the route table, the same door the console's search uses.
+        if (type && CRM_TARGET_KINDS.has(type)) {
+          const kind = type as CrmRecordKind
+          return id
+            ? crmRecordHref({ orgSlug, host }, kind, id)
+            : crmSectionHref({ orgSlug, host }, CRM_RECORD_SECTIONS[kind])
+        }
         return undefined
     }
   }

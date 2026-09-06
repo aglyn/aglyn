@@ -19,7 +19,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { CONTACT_LIFECYCLE_STAGE_LABELS, pluginDocsHelp } from '@aglyn/aglyn'
 import { mdiDeleteOutline } from '@aglyn/shared-data-mdi'
-import { MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { AppLink, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -36,7 +36,7 @@ import {
   doc,
   updateDoc,
 } from 'firebase/firestore'
-import { useRouter } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { useCallback, useMemo } from 'react'
 import { contactRecordFromDoc } from '../model/contact-record'
 import { type CrmDetailPageProps, crmRoutes } from '../model/crm-routes'
@@ -133,6 +133,21 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
   // The roster, for the owner picker and the owner's name — read because a
   // record page is the one place both are shown.
   const members = useOrgMembers(orgId, { enabled: Boolean(record) })
+  /*
+   * Where this person's ORDERS are read (AGL-2622): the site's orders list,
+   * narrowed to their address. The count on the header is the number; the
+   * list is the rows. Built from the route params already in the URL, so
+   * no document is read to draw a link, and absent off a site — the
+   * org-level mount has no orders list to point at.
+   */
+  const params = useParams<{ orgSlug?: string; host?: string }>()
+  const ordersHref =
+    params?.orgSlug && params?.host && record?.email
+      ? Aglyn.siteRecordLinks({
+          orgSlug: String(params.orgSlug),
+          host: String(params.host),
+        }).ordersByCustomer(record.email)
+      : null
 
   const handleRemove = useCallback(async () => {
     if (!row || !scope) return
@@ -265,9 +280,15 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
               <CrmRecordChip
                 label="Orders"
                 value={
-                  record.ordersCount > 0
-                    ? `${record.ordersCount.toLocaleString()} · $${(record.ltvCents / 100).toFixed(2)} lifetime`
-                    : undefined
+                  record.ordersCount > 0 ? (
+                    ordersHref ? (
+                      <AppLink href={ordersHref} color="inherit" underline="hover">
+                        {`${record.ordersCount.toLocaleString()} · $${(record.ltvCents / 100).toFixed(2)} lifetime`}
+                      </AppLink>
+                    ) : (
+                      `${record.ordersCount.toLocaleString()} · $${(record.ltvCents / 100).toFixed(2)} lifetime`
+                    )
+                  ) : undefined
                 }
               />
             </>
