@@ -12,8 +12,6 @@ creates one lead per person, and the **Leads** section of the CRM is where the
 team works them — decides who owns each one, keeps notes, and either converts
 the lead into a contact or closes it with a reason.
 
-![The Leads section of the CRM: a table of leads with their status, owner, source and last-seen time, and the Open and Show filters](/img/contacts/crm-leads.png)
-
 Leads live under the site that captured them, so each site's list is its own.
 Open **CRM → Leads** in the console, or use **Open in CRM** on a lead row in
 the Inbox's **Site Members & Leads** section.

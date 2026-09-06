@@ -30,7 +30,7 @@ sign-ups, orders and bookings **today**, and you can read them over the
 wait. Audience-band overage is **not billed** while the page is unavailable.
 :::
 
-![The Contacts section of the CRM in the Aglyn console: the contacts table with two rows selected and the bulk bar offering Add tag, Set stage, Set owner, Add to list, Export CSV and Remove from this site](/img/contacts/crm-contacts-bulk-bar.png)
+![The Contacts section of the CRM: the contacts table with two rows selected and the bulk bar offering Add tag, Set stage, Set owner, Add to list, Export CSV and Remove](/img/contacts/crm-contacts.png)
 
 ```mermaid
 flowchart LR
