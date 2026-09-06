@@ -22,10 +22,13 @@ import {
   percent,
   Section,
 } from '@aglyn/shared-ui-jsx/components/measured-figures.component'
+import { ceilingedWindow } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
 import { Alert, Button, Stack, Typography } from '@mui/material'
 import {
   collection,
+  type Firestore,
   getCountFromServer,
+  getDocs,
   limit,
   orderBy,
   query,
@@ -39,7 +42,12 @@ import { ReportExport } from './report-export'
 import { plural, reportFilename } from './report-format'
 import { type CrmReportScope, reportCacheKey } from './report-scope'
 import { ReportStatTile } from './report-stat-tile'
-import { useAggregateRead, useWindowRead } from './use-aggregate-read'
+import {
+  type AggregateRead,
+  useAggregateRead,
+  useWindowRead,
+  type WindowRead,
+} from './use-aggregate-read'
 
 /**
  * How many of the period's leads the funnel is placed from — the Leads
@@ -47,9 +55,11 @@ import { useAggregateRead, useWindowRead } from './use-aggregate-read'
  *
  * The captured count is a server aggregate and never meets this bound; the
  * funnel needs each lead's status and reason, so it reads the period's
- * newest two hundred and says when there were more.
+ * newest two hundred and says when there were more. At the organization
+ * level the bound is PER SITE (AGL-2634): each site's window is its own,
+ * and a site with a thousand leads must not crowd out a site with ten.
  */
-const LEAD_CEILING = 200
+export const LEAD_CEILING = 200
 /** How many reasons the bar list draws; the rest are counted beneath it. */
 const REASONS_SHOWN = 8
 
@@ -58,14 +68,20 @@ const COLUMNS = ['Kind', 'Label', 'Count', 'Share'] as const
 
 type LeadRow = Record<string, unknown> & Aglyn.CrmLeadFields & { $id: string }
 
+/** The period's captured count, and the previous period's for the delta. */
+interface CapturedFigures {
+  current: number
+  previous: number
+}
+
 export interface LeadFunnelCardProps {
   report: CrmReportScope
   /**
    * The site whose leads are placed. A lead lives under its host, not the
    * org — `hosts/{hostId}/leads`, private by path, no `visibleTo` — so the
    * report's org scope cannot reach it and the card is told the site. At
-   * the organization level `null` (AGL-2630): the card then reads the site
-   * the reader picked for creates, and with none picked says so.
+   * the organization level `null` (AGL-2630): the card then reads every
+   * site the mount lists, one window each (AGL-2634).
    */
   hostId: string | null
 }
@@ -79,35 +95,43 @@ const LEAD_FUNNEL_HELP = Aglyn.pluginDocsHelp('crmReports', {
     'lead was first seen.',
 })
 
+/** One site's leads first seen in a range — a single-field range, no composite index. */
+function leadsBetween(firestore: Firestore, hostId: string, from: number, to: number) {
+  return query(
+    collection(firestore, 'hosts', hostId, 'leads'),
+    where('firstSeenAtMs', '>=', from),
+    where('firstSeenAtMs', '<', to),
+  )
+}
+
+const countOf = (target: ReturnType<typeof query>) =>
+  getCountFromServer(target).then((snapshot) => snapshot.data().count)
+
 /**
- * The site the funnel reads, decided once (AGL-2630).
+ * The lead funnel, at whichever level the report is mounted (AGL-2624,
+ * AGL-2630, AGL-2634).
  *
- * Under a site: that site. At the organization level the reports total
- * every site, but leads have no cross-site listener a report can afford —
- * one per site, each its own window — so the card places the leads of the
- * site the reader has picked for creates and names it in the subheader;
- * before any pick it has nothing to read and says so instead of guessing.
+ * Under a site: that site. At the organization level: every site the
+ * mount lists, one window each, totaled — the org hub's reports total
+ * every site, and the leads are no exception now that the fan-out is
+ * bounded by the org's site list. With no sites to read the card says so
+ * instead of guessing.
  */
 export function LeadFunnelCard(props: LeadFunnelCardProps) {
   const { report, hostId } = props
   const mount = useCrmOrgMount()
-  const siteId = hostId ?? mount?.createHostId ?? null
-  if (!siteId) {
-    return (
-      <CardDisplay header={'Lead funnel'} help={LEAD_FUNNEL_HELP} contentGutterX contentGutterY>
-        <Typography variant="body2" color="text.secondary">
-          {'Leads live under a site. Pick one — in New contact, New deal or ' +
-            'any other create — and this card places that site’s leads.'}
-        </Typography>
-      </CardDisplay>
-    )
+  if (hostId) return <SiteLeadFunnelCard report={report} hostId={hostId} />
+  if (mount && (!mount.hostsReady || mount.hosts.length > 0)) {
+    return <OrgLeadFunnelCard report={report} />
   }
   return (
-    <SiteLeadFunnelCard
-      report={report}
-      hostId={siteId}
-      siteName={hostId ? undefined : mount?.siteName(siteId)}
-    />
+    <CardDisplay header={'Lead funnel'} help={LEAD_FUNNEL_HELP} contentGutterX contentGutterY>
+      <Typography variant="body2" color="text.secondary">
+        {mount
+          ? 'Leads live under a site, and this organization has no sites yet.'
+          : 'Leads live under a site, and this report is mounted under none.'}
+      </Typography>
+    </CardDisplay>
   )
 }
 
@@ -129,30 +153,16 @@ export function LeadFunnelCard(props: LeadFunnelCardProps) {
  * it, so the funnel and the list can never disagree about who may see a
  * lead.
  */
-function SiteLeadFunnelCard(props: {
-  report: CrmReportScope
-  hostId: string
-  /** Named at the organization level, where the site was picked and not mounted. */
-  siteName?: string
-}) {
-  const { report, hostId, siteName } = props
-  const { range, period, routes } = report
+function SiteLeadFunnelCard(props: { report: CrmReportScope; hostId: string }) {
+  const { report, hostId } = props
+  const { range } = report
   const firestore = useFirestore()
 
-  const leadsBetween = (from: number, to: number) =>
-    query(
-      collection(firestore, 'hosts', hostId, 'leads'),
-      where('firstSeenAtMs', '>=', from),
-      where('firstSeenAtMs', '<', to),
-    )
-  const countOf = (target: ReturnType<typeof query>) =>
-    getCountFromServer(target).then((snapshot) => snapshot.data().count)
-
-  const captured = useAggregateRead(
+  const captured = useAggregateRead<CapturedFigures>(
     () =>
       Promise.all([
-        countOf(leadsBetween(range.from, range.to)),
-        countOf(leadsBetween(range.previousFrom, range.previousTo)),
+        countOf(leadsBetween(firestore, hostId, range.from, range.to)),
+        countOf(leadsBetween(firestore, hostId, range.previousFrom, range.previousTo)),
       ]).then(([current, previous]) => ({ current, previous })),
     [firestore, hostId, range],
     { cacheKey: reportCacheKey(report, `leads:counts:${hostId}`) },
@@ -160,7 +170,7 @@ function SiteLeadFunnelCard(props: {
   const window = useWindowRead<LeadRow>(
     () =>
       query(
-        leadsBetween(range.from, range.to),
+        leadsBetween(firestore, hostId, range.from, range.to),
         orderBy('firstSeenAtMs', 'desc'),
         limit(LEAD_CEILING + 1),
       ),
@@ -168,6 +178,156 @@ function SiteLeadFunnelCard(props: {
     [firestore, hostId, range],
     { cacheKey: reportCacheKey(report, `leads:window:${hostId}`) },
   )
+  const figures = captured.value
+  const sampled =
+    window.status === 'success' &&
+    (window.truncated || (figures !== null && figures.current > window.rows.length))
+  return (
+    <LeadFunnelBody
+      report={report}
+      captured={captured}
+      window={window}
+      caption={
+        sampled
+          ? `Placed from the ${window.rows.length.toLocaleString()} most recently captured leads` +
+            (figures !== null ? ` of ${figures.current.toLocaleString()}` : '') +
+            ' in the period; the captured tile is counted on the server.'
+          : undefined
+      }
+      errorText={'This site’s leads could not be read.'}
+    />
+  )
+}
+SiteLeadFunnelCard.displayName = 'SiteLeadFunnelCard'
+
+/**
+ * THE CROSS-SITE FUNNEL (AGL-2634): every site of the organization, one
+ * window each, totaled.
+ *
+ * The counts are one server aggregate per site per period, summed. The
+ * windows are one bounded read per site — the site card's own query, the
+ * same ceiling — merged newest-seen first and NOT cut again: the funnel
+ * is a placement of leads by status, and cutting the merged list would
+ * place a busy site's leads and drop a quiet site's. What the ceiling
+ * bounds is the read per site, and the caption says so when any site had
+ * more than its window. Held until the mount's site list has settled, so
+ * a first round against a partial list is not answered and remembered.
+ */
+function OrgLeadFunnelCard(props: { report: CrmReportScope }) {
+  const { report } = props
+  const { range } = report
+  const firestore = useFirestore()
+  const mount = useCrmOrgMount()
+  const hostIds = useMemo(
+    () => (mount?.hostsReady ? mount.hosts.map((host) => host.id) : null),
+    [mount],
+  )
+  const key = hostIds?.join('\n') ?? ''
+
+  const captured = useAggregateRead<CapturedFigures>(
+    () =>
+      hostIds
+        ? Promise.all(
+            hostIds.map((hostId) =>
+              Promise.all([
+                countOf(leadsBetween(firestore, hostId, range.from, range.to)),
+                countOf(leadsBetween(firestore, hostId, range.previousFrom, range.previousTo)),
+              ]),
+            ),
+          ).then((pairs) =>
+            pairs.reduce(
+              (sum, [current, previous]) => ({
+                current: sum.current + current,
+                previous: sum.previous + previous,
+              }),
+              { current: 0, previous: 0 },
+            ),
+          )
+        : null,
+    [firestore, key, range],
+    { cacheKey: reportCacheKey(report, `leads:counts:org:${key}`) },
+  )
+  const merged = useAggregateRead<{ rows: LeadRow[]; truncated: boolean }>(
+    () =>
+      hostIds
+        ? Promise.all(
+            hostIds.map((hostId) =>
+              getDocs(
+                query(
+                  leadsBetween(firestore, hostId, range.from, range.to),
+                  orderBy('firstSeenAtMs', 'desc'),
+                  limit(LEAD_CEILING + 1),
+                ),
+              ).then((snapshot) =>
+                ceilingedWindow(
+                  snapshot.docs.map(
+                    (document) =>
+                      ({ ...document.data(), $id: `${hostId}/${document.id}` }) as unknown as LeadRow,
+                  ),
+                  LEAD_CEILING,
+                ),
+              ),
+            ),
+          ).then((windows) => ({
+            rows: windows
+              .flatMap((window) => window.rows)
+              .sort(
+                (a, b) =>
+                  Number(b['firstSeenAtMs'] ?? 0) - Number(a['firstSeenAtMs'] ?? 0),
+              ),
+            truncated: windows.some((window) => window.truncated),
+          }))
+        : null,
+    [firestore, key, range],
+    { cacheKey: reportCacheKey(report, `leads:window:org:${key}`) },
+  )
+  const window = useMemo<WindowRead<LeadRow>>(
+    () => ({
+      rows: merged.value?.rows ?? [],
+      truncated: merged.value?.truncated ?? false,
+      status: merged.status,
+    }),
+    [merged],
+  )
+  const sites = hostIds?.length ?? 0
+  const figures = captured.value
+  const sampled =
+    window.status === 'success' &&
+    (window.truncated || (figures !== null && figures.current > window.rows.length))
+  return (
+    <LeadFunnelBody
+      report={report}
+      subheader={`Every site (${sites.toLocaleString()})`}
+      captured={captured}
+      window={window}
+      caption={
+        sampled
+          ? `Placed from the ${window.rows.length.toLocaleString()} most recently captured leads` +
+            ` across ${plural(sites, 'site')} — at most ${LEAD_CEILING.toLocaleString()} per site` +
+            (figures !== null ? ` — of ${figures.current.toLocaleString()}` : '') +
+            ' in the period; the captured tile is counted on the server.'
+          : undefined
+      }
+      errorText={'Some site’s leads could not be read.'}
+    />
+  )
+}
+OrgLeadFunnelCard.displayName = 'OrgLeadFunnelCard'
+
+/**
+ * The funnel as drawn, whichever level fed it: four tiles, the statuses,
+ * the reasons, the export. Pure over the two reads.
+ */
+function LeadFunnelBody(props: {
+  report: CrmReportScope
+  subheader?: string
+  captured: AggregateRead<CapturedFigures>
+  window: WindowRead<LeadRow>
+  caption?: string
+  errorText: string
+}) {
+  const { report, subheader, captured, window, caption, errorText } = props
+  const { period, routes } = report
   const status = window.status
 
   const funnel = useMemo(() => Aglyn.leadFunnel(window.rows), [window])
@@ -175,22 +335,13 @@ function SiteLeadFunnelCard(props: {
   const figures = captured.value
   const share = (count: number, of: number): string | null =>
     of > 0 ? percent(count / of) : null
-  const sampled =
-    read &&
-    (window.truncated ||
-      (figures !== null && figures.current > window.rows.length))
-  const caption = sampled
-    ? `Placed from the ${window.rows.length.toLocaleString()} most recently captured leads` +
-      (figures !== null ? ` of ${figures.current.toLocaleString()}` : '') +
-      ' in the period; the captured tile is counted on the server.'
-    : undefined
   const reasons = funnel.reasons.slice(0, REASONS_SHOWN)
   const moreReasons = funnel.reasons.length - reasons.length
 
   return (
     <CardDisplay
       header={'Lead funnel'}
-      subheader={siteName}
+      subheader={subheader}
       help={LEAD_FUNNEL_HELP}
       contentGutterX
       contentGutterY
@@ -246,7 +397,7 @@ function SiteLeadFunnelCard(props: {
           />
         </Stack>
         {captured.status === 'error' || status === 'error' ? (
-          <Alert severity="warning">{'This site’s leads could not be read.'}</Alert>
+          <Alert severity="warning">{errorText}</Alert>
         ) : null}
         <Section title={'Where they stand'}>
           <ReportBreakdown
@@ -313,7 +464,7 @@ function SiteLeadFunnelCard(props: {
     </CardDisplay>
   )
 }
-SiteLeadFunnelCard.displayName = 'SiteLeadFunnelCard'
+LeadFunnelBody.displayName = 'LeadFunnelBody'
 LeadFunnelCard.displayName = 'LeadFunnelCard'
 
 export default LeadFunnelCard

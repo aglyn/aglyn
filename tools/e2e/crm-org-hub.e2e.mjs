@@ -33,6 +33,11 @@
 // Prerequisites (see docs/E2E_LOCAL.md): emulators, `npm run seed:e2e`, and a
 // console dev server carrying the emulator flags, pointed at by E2E_BASE_URL.
 //
+// A deal moved from the ORG board runs the stage route's org variant
+// (AGL-2634): the move lands on the document, and the act is one line in the
+// organization's activity feed — the feed a site's console never writes and
+// the org hub writes for everything it does.
+//
 //   node tools/e2e/crm-org-hub.e2e.mjs
 
 import {
@@ -53,6 +58,7 @@ import {
   OWNER_NAME,
   OWNER_UID,
   pickSelect,
+  rowAction,
   shot,
   step,
   TEAMMATE_UID,
@@ -217,6 +223,39 @@ await step(tally, page, "a lead's org-level address names its site", async () =>
   })
   await page.getByRole('heading', { name: owen.name }).first().waitFor({ timeout: TIMEOUT_MS })
   tally.pass("a lead's org-level address names its site", new URL(page.url()).pathname)
+})
+
+await step(tally, page, 'a deal moved from the org board lands on the document and in the org feed', async () => {
+  const startedAtMs = Date.now()
+  await page.goto(orgUrl('/crm/deals'), { waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS })
+  await rowAction(page, CRM_FIXTURE.dealTitle, 'Move to Negotiation')
+  await expectSnackbar(page, 'Moved to Negotiation')
+  const dealRef = orgRef.collection('deals').doc(CRM_FIXTURE.dealId)
+  const stored = await waitFor(
+    async () => (await dealRef.get()).data(),
+    (deal) => deal?.stageId === 'negotiation',
+  )
+  // The org feed's line, written by the route's org variant with the Admin
+  // SDK — the feed is closed to clients, so nothing else could have.
+  const line = await waitFor(
+    async () => {
+      const lines = await orgRef.collection('activity').where('target.id', '==', CRM_FIXTURE.dealId).get()
+      return lines.docs
+        .map((doc) => doc.data())
+        .find(
+          (entry) =>
+            entry.action === 'Moved deal to Negotiation' &&
+            (entry.createdAt?.toMillis?.() ?? 0) >= startedAtMs - 5_000,
+        )
+    },
+    (found) => Boolean(found),
+  )
+  tally.check(
+    'a deal moved from the org board lands on the document and in the org feed',
+    stored?.stageId === 'negotiation' && stored?.status === 'open' && line?.target?.type === 'deal',
+    `${stored?.stageId} · ${stored?.status} · feed: ${line ? `${line.action} by ${line.actorId}` : 'no line'}`,
+  )
+  await shot(page, 'crm-org-hub-deal-moved')
 })
 
 await session.close()

@@ -18,6 +18,7 @@
 
 import { buildRoute, Route } from '@aglyn/aglyn'
 import { useParams } from 'next/navigation'
+import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
 
 /**
  * The Emails hub of the site this page is on — `/{org}/hosts/{site}/emails`
@@ -30,18 +31,28 @@ import { useParams } from 'next/navigation'
  * `basePath`, because the `[host]` segment is the site's subdomain and
  * nothing a CRM component holds says what that is.
  *
- * ⚠️ THIS SITE's hub only. A record page under one site cannot address a
- * sibling site's Emails console without that site's subdomain, which a
- * contact document does not carry. A mount that holds the org's host list —
- * the org-level contacts surface does — should hand the component a href
- * builder of its own rather than this one.
+ * ⚠️ Under a site, THIS SITE's hub only. A record page under one site cannot
+ * address a sibling site's Emails console without that site's subdomain,
+ * which a contact document does not carry.
+ *
+ * At the ORGANIZATION level (AGL-2634) the URL names no site, and the mount
+ * holds the org's site list instead: handed a `hostId`, this answers that
+ * site's hub — `${hostsPath}/${subdomain}/emails` — or `null` for a site
+ * whose subdomain the list could not answer, which is named and not linked.
+ * Handed none, `null`: an org-level page has no hub of its own to fall
+ * back to.
  */
-export function useEmailsHubPath(): string | null {
+export function useEmailsHubPath(hostId?: string | null): string | null {
   const params = useParams<{ orgSlug: string; host: string }>()
+  const mount = useCrmOrgMount()
   const orgSlug = params?.orgSlug
   const host = params?.host
-  if (!orgSlug || !host) return null
-  return buildRoute(Route.HOST_PLUGIN, { orgSlug, host, pluginSlug: 'emails' })
+  if (orgSlug && host) {
+    return buildRoute(Route.HOST_PLUGIN, { orgSlug, host, pluginSlug: 'emails' })
+  }
+  if (!mount || !hostId) return null
+  const subdomain = mount.siteSubdomain(hostId)
+  return subdomain ? `${mount.hostsPath}/${encodeURIComponent(subdomain)}/emails` : null
 }
 
 export default useEmailsHubPath

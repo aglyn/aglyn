@@ -17,6 +17,7 @@
 
 import { soloConsentGroup } from '@aglyn/aglyn'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { CrmOrgMountProvider } from '../hooks/use-crm-org-mount'
 import { ContactMergeDialog, type ContactPick } from './contact-merge-dialog'
 
 /**
@@ -230,5 +231,66 @@ describe('merging', () => {
     ).toBeTruthy()
     expect(onClose).not.toHaveBeenCalled()
     expect(onMerged).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * A record no site captured (AGL-2634): beneath the org hub's mount the
+ * route's org variant merges it, so the dialog offers Merge and names the
+ * org; on a surface mounted nowhere it holds the button and says why.
+ */
+describe('a record no site captured', () => {
+  const renderWithoutSite = (mounted: boolean) => {
+    const dialog = (
+      <ContactMergeDialog
+        open
+        other={other}
+        keep="current"
+        onClose={jest.fn()}
+        hostId={null}
+        current={current}
+        scope={['orgs', 'org-1']}
+        consentGroup={GROUP}
+        visibleTo={null}
+      />
+    )
+    return render(
+      mounted ? (
+        <CrmOrgMountProvider
+          mount={{
+            orgId: 'org-1',
+            hosts: [{ id: 'host-1', name: 'Site 1', subdomain: 'one' }],
+            hostsReady: true,
+            hostsPath: '/acme/hosts',
+          }}
+        >
+          {dialog}
+        </CrmOrgMountProvider>
+      ) : (
+        dialog
+      ),
+    )
+  }
+
+  it('merges through the org variant beneath the mount', async () => {
+    renderWithoutSite(true)
+    expect(screen.queryByText(/No site has captured this contact/)).toBeNull()
+    const button = screen.getByRole('button', { name: 'Merge' }) as HTMLButtonElement
+    expect(button.disabled).toBe(false)
+    fireEvent.click(button)
+    await waitFor(() => expect(calls).toHaveLength(1))
+    expect(calls[0].body).toEqual({
+      hostId: null,
+      orgId: 'org-1',
+      survivorId: 'c-keep',
+      mergedId: 'c-gone',
+    })
+  })
+
+  it('holds the button on a surface mounted nowhere, and says why', () => {
+    renderWithoutSite(false)
+    expect(screen.getByText(/No site has captured this contact/)).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Merge' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(calls).toEqual([])
   })
 })

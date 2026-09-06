@@ -16,6 +16,7 @@
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { CrmOrgMountProvider } from '../hooks/use-crm-org-mount'
 import { useErasePersonAction, type UseErasePersonActionProps } from './erase-person-action'
 
 let canManage = true
@@ -221,5 +222,50 @@ describe('the dialog', () => {
     )
     expect(screen.getByRole('dialog')).toBeTruthy()
     expect(screen.queryByTestId('erasure-pending-banner')).toBeNull()
+  })
+})
+
+/**
+ * A person no site captured (AGL-2634): beneath the org hub's mount the
+ * route's org variant files the request, so the item is offered and the
+ * body names the org; on a surface mounted nowhere the item is held.
+ */
+describe('a contact no site captured', () => {
+  const orgMount = ({ children }: { children: React.ReactNode }) => (
+    <CrmOrgMountProvider
+      mount={{
+        orgId: 'org-1',
+        hosts: [{ id: 'h1', name: 'Site 1', subdomain: 'one' }],
+        hostsReady: true,
+        hostsPath: '/acme/hosts',
+      }}
+    >
+      {children}
+    </CrmOrgMountProvider>
+  )
+
+  it('files through the org variant beneath the mount', async () => {
+    render(<Harness hostId={null} orgId="org-1" subject={contact} requestedAtMs={null} />, {
+      wrapper: orgMount,
+    })
+    expect(item().disabled).toBe(false)
+    fireEvent.click(item())
+    fireEvent.change(screen.getByLabelText('Type the email address to confirm'), {
+      target: { value: 'jane@example.com' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Erase permanently' }))
+    await waitFor(() => expect(calls).toHaveLength(1))
+    expect(calls[0].body).toEqual({
+      hostId: null,
+      orgId: 'org-1',
+      contactId: 'c1',
+      email: 'jane@example.com',
+    })
+  })
+
+  it('holds the item on a surface mounted nowhere, with the reason', () => {
+    render(<Harness hostId={null} orgId="org-1" subject={contact} requestedAtMs={null} />)
+    expect(item().disabled).toBe(true)
+    expect(item().title).toBe('No site has captured this person to file from')
   })
 })

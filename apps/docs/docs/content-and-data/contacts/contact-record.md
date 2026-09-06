@@ -98,7 +98,9 @@ is a housekeeping act, and it is not a privacy erasure.
 to be forgotten under GDPR, the CCPA or any similar law. It removes the person
 from *every* site in the workspace, whoever captured them, and it cannot be
 undone. Only a workspace admin or owner can do it; for everyone else the item
-is present but disabled, and its tooltip says who can.
+is present but disabled, and its tooltip says who can. It is offered on a
+site's hub and on the
+[organization's](./overview.md#at-the-organization-level) alike.
 
 Choosing it opens a dialog that lists exactly what will happen, and asks you to
 type the person's email address back before it files anything:
@@ -146,7 +148,9 @@ The dialog first finds the other record — type an email address for an exact
 match, or a name to search among the contacts your site may see — and then
 shows the two side by side, field by field, with the value the kept record will
 carry. Pick which record to **keep**; the other is merged into it and deleted.
-The rule is the same for every field:
+At the [organization level](./overview.md#at-the-organization-level) the
+search spans every site and a record no site captured merges too. The rule is
+the same for every field:
 
 | What | After the merge |
 | --- | --- |

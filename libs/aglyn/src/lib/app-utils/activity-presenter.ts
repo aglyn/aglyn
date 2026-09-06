@@ -115,6 +115,16 @@ const TYPE_LABELS: Record<string, string> = {
 /** The activity target types that are CRM records, for the link switch. */
 const CRM_TARGET_KINDS = new Set<string>(Object.keys(CRM_RECORD_SECTIONS))
 
+/**
+ * The org-level hub's section for each record kind an org feed entry may
+ * name (AGL-2634): the four record kinds, and tasks, which have a section
+ * and no page of their own.
+ */
+const ORG_CRM_SECTIONS: Record<string, string> = {
+  ...CRM_RECORD_SECTIONS,
+  task: 'tasks',
+}
+
 /** Human noun for a target type, e.g. `'screen'` → `'Screen'`. */
 export function activityTypeLabel(type: string | undefined): string {
   if (!type) return 'Item'
@@ -256,8 +266,19 @@ export function activityHref(
         : buildRoute(Route.MANAGE_TEAM, { orgSlug })
     case 'invite':
       return buildRoute(Route.MANAGE_TEAM, { orgSlug })
-    default:
-      return undefined
+    default: {
+      // A CRM record acted on at the ORGANIZATION level (AGL-2634) — a deal
+      // moved from the org board, a merge, a bulk bar's action — opens in
+      // the org-level hub. A lead's org address needs its site, which the
+      // entry does not carry, and a bulk line names no record: both land
+      // on the section.
+      const section = type ? ORG_CRM_SECTIONS[type] : undefined
+      if (!section) return undefined
+      const hub = `${buildRoute(Route.ORG_CRM, { orgSlug })}/${section}`
+      return id && type !== 'lead' && type !== 'task'
+        ? `${hub}/${encodeURIComponent(id)}`
+        : hub
+    }
   }
 }
 

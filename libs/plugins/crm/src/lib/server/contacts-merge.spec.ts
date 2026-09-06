@@ -49,9 +49,11 @@ let mockMergeResult: Record<string, unknown> = {
 }
 const mockMergeContacts = jest.fn(async () => mockMergeResult)
 const mockVerifyIdToken = jest.fn(async () => mockDecoded)
+const mockResolveOrgPermissions = jest.fn(async () => mockPermissions)
+const mockLogOrgActivity = jest.fn(async () => undefined)
 
 jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
-  resolveOrgPermissions: async () => mockPermissions,
+  resolveOrgPermissions: (...args: unknown[]) => (mockResolveOrgPermissions as any)(...args),
 }))
 jest.mock('@aglyn/tenant-data-admin', () => ({
   firebaseAdmin: {
@@ -66,6 +68,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
   getOrgForHost: async (hostId: string) =>
     hostId === HOST ? { orgId: ORG, org: {} } : null,
+  getOrgDoc: async (orgId: string) => (orgId === ORG ? { $id: ORG } : null),
+  logOrgActivity: (...args: unknown[]) => (mockLogOrgActivity as any)(...args),
   mergeContacts: (...args: unknown[]) => (mockMergeContacts as any)(...args),
 }))
 
@@ -121,6 +125,8 @@ beforeEach(() => {
     repointed: { deals: 1, tasks: 0, activities: 0, leads: 0 },
   }
   mockMergeContacts.mockClear()
+  mockResolveOrgPermissions.mockClear()
+  mockLogOrgActivity.mockClear()
   jest.spyOn(console, 'error').mockImplementation(() => undefined)
 })
 
@@ -188,5 +194,56 @@ describe('crm/contacts-merge', () => {
     const { status, answer } = await call(good)
     expect(status).toBe(500)
     expect(answer.error).toBe('The contacts could not be merged.')
+  })
+})
+
+/**
+ * THE ORGANIZATION VARIANT (AGL-2634): the org named in the body is what the
+ * caller is authorized against, a site beside it is only where the data
+ * library files the note, and the act lands in the org's feed.
+ */
+describe('crm/contacts-merge at the organization level', () => {
+  const org = { orgId: ORG, survivorId: 'c-keep', mergedId: 'c-gone' }
+
+  it('merges a record no site captured, authorized by the org, and logs the org line', async () => {
+    const { status, answer } = await call(org)
+    expect(status).toBe(200)
+    expect(answer).toEqual(mockMergeResult)
+    expect(mockResolveOrgPermissions).toHaveBeenCalledWith('u-1', { orgId: ORG })
+    const options = (mockMergeContacts.mock.calls[0] as unknown[])[0] as Record<string, any>
+    expect(options).toMatchObject({ hostId: null, actorName: 'Ada' })
+    expect(options.orgRef.path).toBe(`orgs/${ORG}`)
+    expect(mockLogOrgActivity).toHaveBeenCalledWith(
+      ORG,
+      { uid: 'u-1', email: 'ada@acme.test' },
+      'Merged with jane@gmail.com',
+      { type: 'contact', id: 'c-keep', name: 'jane@acme.com' },
+    )
+  })
+
+  it('hands the record’s own site to the data library when the body names one', async () => {
+    await call({ ...org, hostId: HOST })
+    const options = (mockMergeContacts.mock.calls[0] as unknown[])[0] as Record<string, any>
+    expect(options.hostId).toBe(HOST)
+    // Authorized by the org, not resolved through the site.
+    expect(mockResolveOrgPermissions).toHaveBeenCalledWith('u-1', { orgId: ORG })
+  })
+
+  it('refuses a site-scoped member at the org level, and writes no line on a refusal', async () => {
+    mockPermissions = { ...mockPermissions, orgWide: false, hostRole: 'admin' }
+    expect((await call(org)).status).toBe(403)
+    expect(mockMergeContacts).not.toHaveBeenCalled()
+    expect(mockLogOrgActivity).not.toHaveBeenCalled()
+  })
+
+  it('writes no org line when the merge itself was refused', async () => {
+    mockMergeResult = { ok: false, reason: 'merged-missing' }
+    expect((await call(org)).status).toBe(404)
+    expect(mockLogOrgActivity).not.toHaveBeenCalled()
+  })
+
+  it('writes no org line under a site — the site variant’s feed is the site’s', async () => {
+    await call(good)
+    expect(mockLogOrgActivity).not.toHaveBeenCalled()
   })
 })

@@ -20,6 +20,7 @@ import {
   type AglynOrgMember,
   buildCrmEmailActivity,
   checkCrmEmailQuota,
+  contactCaptureHostIds,
   CRM_ACTIVITY_LOG_FULL_MESSAGE,
   CRM_COLLECTIONS,
   CRM_EMAIL_BODY_MAX,
@@ -53,6 +54,7 @@ import {
   firebaseAdmin,
   getOrgForHost,
   hostSendingIdentity,
+  logOrgActivity,
   memberHasOrgPermission,
   newCrmActivityRef,
   orgDataCollectionForHost,
@@ -61,6 +63,12 @@ import {
   resolveOrgMembership,
   writeCrmEmailActivity,
 } from '@aglyn/tenant-data-admin'
+import {
+  authorizeOrgCaller,
+  type CrmRouteScope,
+  orgHostIds,
+  readCrmRouteScope,
+} from './org-caller'
 
 /**
  * `POST /api/crm/email-send` — one email to one person, from their record
@@ -90,6 +98,22 @@ import {
  * every other CRM route makes. A `to` in the body would make this a route
  * that sends the site's mail to any address a member types, which is a
  * different product with a different abuse surface.
+ *
+ * ## The organization variant (AGL-2634)
+ *
+ * `{ orgId, hostId?, … }` from the org-level hub. The caller is authorized
+ * by the org — an org-wide member holding `data.manage` — and the record is
+ * read with no site's visibility to check, because an org-wide member reads
+ * every row. What the org level cannot do away with is the SITE the message
+ * leaves from: the sending identity, the suppression list and the person's
+ * stated refusal are each a site's. So the org variant still names one —
+ * the record's own capturing site or the site the reader picked, in the
+ * body; failing that the record's own site read off the document; failing
+ * that the org's only site — and refuses, with a `site` reason, when the
+ * org has several and none was named. The row it writes is visible to
+ * whoever may see the RECORD, so an email to a person another site
+ * captured shows on their timeline under that site's hub; the act is
+ * logged in the org's feed.
  *
  * ## The order of the gates
  *
@@ -129,6 +153,11 @@ export const CRM_EMAIL_DECLINED_MESSAGE =
 
 export const CRM_EMAIL_RATE_MESSAGE =
   'You have sent too many emails in the last minute. Wait a moment and try again.'
+
+/** What the org variant says when no site was named and the org has several. */
+export const CRM_EMAIL_PICK_SITE_MESSAGE =
+  'Pick the site this email leaves from — its sending address is what the ' +
+  'message is sent as.'
 
 type Refusal = { ok: false; status: number; body: Record<string, unknown> }
 
@@ -216,12 +245,49 @@ async function authorizeSender(
   }
 }
 
+/**
+ * The org variant's sender (AGL-2634): authorized by the org for an
+ * org-wide member holding `data.manage`, with the same reply-to rule.
+ */
+async function authorizeOrgSender(
+  req: PluginApiRequest,
+  orgId: string,
+): Promise<Sender | Refusal> {
+  const caller = await authorizeOrgCaller(req, orgId, {
+    needs: 'data.manage',
+    refusal:
+      'Sending email at the organization level requires the data.manage ' +
+      'permission across the whole workspace',
+  })
+  if (caller.ok === false) return refuse(caller.status, caller.error)
+  const email = normalizeContactEmail(caller.email)
+  if (!email) {
+    return refuse(403, 'Your account has no email address to receive replies at.')
+  }
+  return {
+    ok: true,
+    uid: caller.uid,
+    email,
+    name: caller.name,
+    orgId,
+    org: caller.org as Partial<AglynOrgBilling>,
+  }
+}
+
 interface Recipient {
   ok: true
   email: string
   /** The document the consent basis is read off — the contact, or the lead. */
   record: Record<string, unknown>
+  /** The contact document, when one was read — where the company link is. */
+  contact: Record<string, unknown> | null
   link: CrmActivityLink
+  /**
+   * The site the record itself names — a contact's first capturing site, a
+   * deal's own, a lead's — which is the site an org-level send leaves from
+   * when the body named none.
+   */
+  siteHint: string
 }
 
 /**
@@ -233,16 +299,24 @@ interface Recipient {
  * not be able to mail site B's contact by guessing an id. The links the
  * activity is filed under are whatever resolved: a deal's email is also the
  * contact's, so it lands on both timelines.
+ *
+ * At the organization level there is no site to check against and none is
+ * checked: the caller was admitted as an org-wide member, who reads every
+ * row. A lead still needs its site named — a lead lives under one.
  */
 async function resolveRecipient(
   firestore: FirebaseFirestore.Firestore,
-  hostId: string,
+  scope: CrmRouteScope,
   orgId: string,
-  groupId: string,
   ids: { contactId: string; leadId: string; dealId: string },
 ): Promise<Recipient | Refusal> {
   const link: CrmActivityLink = {}
+  const { hostId } = scope
+  const scoped = scope.level === 'site'
+  const visible = (tokens: unknown) =>
+    !scoped || visibleToHost(tokens as readonly string[], hostId)
   let contactId = ids.contactId
+  let siteHint = ''
 
   if (ids.dealId) {
     const deal = await firestore
@@ -251,10 +325,11 @@ async function resolveRecipient(
       .collection(CRM_COLLECTIONS.deals)
       .doc(ids.dealId)
       .get()
-    if (!deal.exists || !visibleToHost(deal.get('visibleTo'), hostId)) {
+    if (!deal.exists || !visible(deal.get('visibleTo'))) {
       return refuse(404, 'Unknown deal')
     }
     link.dealId = deal.id
+    siteHint = typed(deal.get('hostId'), 128)
     contactId = contactId || String(deal.get('contactId') ?? '').trim()
     if (!contactId) {
       return refuse(400, 'This deal names no contact to email.')
@@ -262,24 +337,25 @@ async function resolveRecipient(
   }
 
   if (contactId) {
-    const contacts = await orgDataCollectionForHost(hostId, 'contacts')
+    const contacts = scoped
+      ? await orgDataCollectionForHost(hostId, 'contacts')
+      : firestore.collection('orgs').doc(orgId).collection('contacts')
     const contact = await contacts.doc(contactId).get()
-    if (!contact.exists || !visibleToHost(contact.get('visibleTo'), hostId)) {
+    if (!contact.exists || !visible(contact.get('visibleTo'))) {
       return refuse(404, 'Unknown contact')
     }
     const email = normalizeContactEmail(contact.get('email'))
     if (!email) return refuse(400, 'This contact has no email address.')
     const record = (contact.data() ?? {}) as Record<string, unknown>
     link.contactId = contact.id
-    // The company the site files this person under, so the email shows on
-    // the company's log as the automation step's rows do.
-    const facet = readContactFacet(record, groupId)
-    if (facet.companyId) link.companyId = facet.companyId
     if (ids.leadId) link.leadId = ids.leadId
-    return { ok: true, email, record, link }
+    siteHint =
+      siteHint || typed(record['hostId'], 128) || contactCaptureHostIds(record)[0] || ''
+    return { ok: true, email, record, contact: record, link, siteHint }
   }
 
   if (ids.leadId) {
+    if (!hostId) return refuse(400, 'Name the site the lead lives under.')
     const lead = await firestore
       .collection('hosts')
       .doc(hostId)
@@ -294,10 +370,28 @@ async function resolveRecipient(
     // A converted lead's email belongs on the contact it became as well.
     const converted = String(lead.get('convertedContactId') ?? '').trim()
     if (converted) link.contactId = converted
-    return { ok: true, email, record, link }
+    return { ok: true, email, record, contact: null, link, siteHint: hostId }
   }
 
   return refuse(400, 'Name a contact, lead or deal to email.')
+}
+
+/**
+ * The site an org-level send leaves from (AGL-2634): the body's, else the
+ * record's own, else the org's only site — and a refusal the dialog turns
+ * into a Site picker when the org has several and none was named.
+ */
+async function resolveSendingSite(
+  firestore: FirebaseFirestore.Firestore,
+  scope: CrmRouteScope,
+  orgId: string,
+  siteHint: string,
+): Promise<{ ok: true; hostId: string } | Refusal> {
+  if (scope.hostId) return { ok: true, hostId: scope.hostId }
+  if (siteHint) return { ok: true, hostId: siteHint }
+  const hosts = await orgHostIds(firestore, orgId)
+  if (hosts.length === 1) return { ok: true, hostId: hosts[0] }
+  return refuse(409, CRM_EMAIL_PICK_SITE_MESSAGE, { reason: 'site' })
 }
 
 /** The HTTP shape of a send the provider did not accept. */
@@ -346,8 +440,8 @@ export const crmEmailSendHandler: PluginApiHandler = async (req, res) => {
     return
   }
   const body = (req.body ?? {}) as Record<string, unknown>
-  const hostId = typed(body['hostId'], 128)
-  if (!hostId) {
+  const routeScope = readCrmRouteScope(body)
+  if (!routeScope) {
     res.status(400).json({ error: 'Missing hostId' })
     return
   }
@@ -378,7 +472,10 @@ export const crmEmailSendHandler: PluginApiHandler = async (req, res) => {
   }
 
   try {
-    const sender = await authorizeSender(req, hostId)
+    const sender =
+      routeScope.level === 'org'
+        ? await authorizeOrgSender(req, routeScope.orgId)
+        : await authorizeSender(req, routeScope.hostId)
     if (sender.ok === false) return answer(res, sender)
     const { orgId, org } = sender
 
@@ -407,18 +504,21 @@ export const crmEmailSendHandler: PluginApiHandler = async (req, res) => {
     }
 
     const firestore = firebaseAdmin.app().firestore()
-    const group = await consentGroupForSite(
-      hostId,
-      org as Record<string, unknown>,
-    )
-    const recipient = await resolveRecipient(
-      firestore,
-      hostId,
-      orgId,
-      group.groupId,
-      ids,
-    )
+    const recipient = await resolveRecipient(firestore, routeScope, orgId, ids)
     if (recipient.ok === false) return answer(res, recipient)
+    // The site the message leaves from — the mounted one under a site, and
+    // at the organization level whatever the body, the record or the org
+    // can answer.
+    const site = await resolveSendingSite(firestore, routeScope, orgId, recipient.siteHint)
+    if (site.ok === false) return answer(res, site)
+    const { hostId } = site
+    const group = await consentGroupForSite(hostId, org as Record<string, unknown>)
+    // The company the sending site files this person under, so the email
+    // shows on the company's log as the automation step's rows do.
+    if (recipient.contact) {
+      const facet = readContactFacet(recipient.contact, group.groupId)
+      if (facet.companyId) recipient.link.companyId = facet.companyId
+    }
 
     // THE DAILY CAP (AGL-2611): today's counter, refused before a message
     // leaves — the contract on `checkCrmEmailQuota`.
@@ -492,6 +592,18 @@ export const crmEmailSendHandler: PluginApiHandler = async (req, res) => {
 
     const sentAtMs = Date.now()
     let logged = true
+    /*
+     * Who may list the row. Under a site, what a record created there is
+     * stamped with. At the organization level the RECORD's own tokens, so
+     * an email to a person another site captured shows on their timeline
+     * under that site's hub — a row stamped with the sending site alone
+     * would be invisible where the person is read.
+     */
+    const recordTokens = recipient.record['visibleTo']
+    const visibleTo =
+      routeScope.level === 'org' && Array.isArray(recordTokens) && recordTokens.length
+        ? recordTokens.map(String)
+        : crmScopeTokens(org as Record<string, unknown>, group)
     try {
       await writeCrmEmailActivity(
         activityRef,
@@ -504,7 +616,7 @@ export const crmEmailSendHandler: PluginApiHandler = async (req, res) => {
           ...(sender.name ? { byName: sender.name } : {}),
           link: recipient.link,
           hostId,
-          visibleTo: crmScopeTokens(org as Record<string, unknown>, group),
+          visibleTo,
         }),
       )
     } catch (error) {
@@ -523,6 +635,18 @@ export const crmEmailSendHandler: PluginApiHandler = async (req, res) => {
       sendClass: 'transactional',
       firestore,
     })
+    // The org-level act, in the org's feed: the site variant's is the
+    // timeline row itself, under the site the record page is on.
+    if (routeScope.level === 'org') {
+      await logOrgActivity(
+        orgId,
+        { uid: sender.uid, email: sender.email },
+        'Sent email',
+        recipient.link.contactId
+          ? { type: 'contact', id: recipient.link.contactId, name: recipient.email }
+          : { type: 'lead', id: recipient.link.leadId, name: recipient.email },
+      )
+    }
     res.status(200).json({
       ok: true,
       activityId: activityRef.id,
@@ -531,7 +655,7 @@ export const crmEmailSendHandler: PluginApiHandler = async (req, res) => {
       logged,
     })
   } catch (error) {
-    console.error('[crm] email-send failed', hostId, error)
+    console.error('[crm] email-send failed', routeScope, error)
     res.status(500).json({ error: 'The email could not be sent.' })
   }
 }

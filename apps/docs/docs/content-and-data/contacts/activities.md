@@ -138,6 +138,11 @@ The send is refused, and the dialog says why, when:
 Every sent email counts toward the organization's email usage like any other
 message.
 
+At the [organization level](./overview.md#at-the-organization-level) the
+message still leaves from one site: the site that captured the person, or —
+for a record no site captured — the one you pick under **Send from**. The
+dialog links that site's **Emails › Sending** page when it cannot send.
+
 ### Delivery states {#delivery-states}
 
 A sent email's entry shows a chip beside **Email** that follows the message:

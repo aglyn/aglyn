@@ -47,8 +47,12 @@ const countCrmActivitiesForRecord = jest.fn()
 const writeCrmEmailActivity = jest.fn()
 const sendEmail = jest.fn()
 const isEmailConfigured = jest.fn()
+const resolveOrgPermissions = jest.fn()
+const logOrgActivity = jest.fn()
 
 let store: Record<string, Record<string, any>> = {}
+/** The org's sites, as `hosts.orgId` answers the org variant's sweep. */
+let orgHosts: string[] = []
 
 const snapshotFor = (path: string) => ({
   id: path.slice(path.lastIndexOf('/') + 1),
@@ -75,9 +79,20 @@ const firestoreHandle = {
       path: `${name}/${id}`,
       collection: (sub: string) => collectionHandle(`${name}/${id}/${sub}`),
     }),
+    where: (field: string, _op: string, value: unknown) => ({
+      get: async () => ({
+        docs:
+          name === 'hosts' && field === 'orgId' && value === ORG_ID
+            ? orgHosts.map((id) => ({ id }))
+            : [],
+      }),
+    }),
   }),
 }
 
+jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
+  resolveOrgPermissions: (...args: unknown[]) => resolveOrgPermissions(...args),
+}))
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: {
@@ -87,6 +102,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     }),
   },
   getOrgForHost: (...args: unknown[]) => getOrgForHost(...args),
+  getOrgDoc: async (orgId: string) => (orgId === ORG_ID ? { $id: ORG_ID, plan: PLAN } : null),
+  logOrgActivity: (...args: unknown[]) => logOrgActivity(...args),
   resolveOrgMembership: (...args: unknown[]) => resolveOrgMembership(...args),
   memberHasOrgPermission: (...args: unknown[]) => memberHasOrgPermission(...args),
   consumeRateLimit: (...args: unknown[]) => consumeRateLimit(...args),
@@ -128,6 +145,7 @@ import {
 import {
   CRM_EMAIL_DECLINED_MESSAGE,
   CRM_EMAIL_NOT_INCLUDED_MESSAGE,
+  CRM_EMAIL_PICK_SITE_MESSAGE,
   CRM_EMAIL_RATE_MESSAGE,
   CRM_EMAIL_SUPPRESSED_MESSAGE,
   crmEmailCapReachedMessage,
@@ -143,7 +161,10 @@ const LEAD = `hosts/${HOST_ID}/leads/lead-1`
 const PLAN = 'starter'
 const INCLUDED = resolveOrgEntitlements({ plan: PLAN } as never).crmEmailsPerDay
 
-async function call(body: Record<string, unknown>, options: { token?: string | null; method?: string } = {}) {
+async function call(
+  body: Record<string, unknown>,
+  options: { token?: string | null; method?: string; scope?: Record<string, unknown> } = {},
+) {
   let status = 0
   let answered: any
   const headers: Record<string, string> = {}
@@ -169,7 +190,7 @@ async function call(body: Record<string, unknown>, options: { token?: string | n
     {
       method: options.method ?? 'POST',
       query: {},
-      body: { hostId: HOST_ID, ...body },
+      body: { ...(options.scope ?? { hostId: HOST_ID }), ...body },
       headers: token ? { authorization: `Bearer ${token}` } : {},
       cookies: {},
       socket: {},
@@ -198,6 +219,16 @@ beforeEach(() => {
     member: { role: 'editor', hostAccess: { [HOST_ID]: true } },
   })
   memberHasOrgPermission.mockResolvedValue(true)
+  orgHosts = [HOST_ID, 'site-2']
+  resolveOrgPermissions.mockResolvedValue({
+    orgId: ORG_ID,
+    role: 'editor',
+    isOwner: false,
+    permissions: { 'data.manage': true },
+    orgWide: true,
+    hostRole: 'editor',
+  })
+  logOrgActivity.mockResolvedValue(undefined)
   consumeRateLimit.mockResolvedValue({ allowed: true, resetMs: Date.now() + 60_000 })
   crmEmailsSentToday.mockResolvedValue(0)
   countCrmActivitiesForRecord.mockResolvedValue(0)
@@ -533,5 +564,100 @@ describe('a send the provider refused', () => {
     const { status, body } = await call(MESSAGE)
     expect(status).toBe(409)
     expect(body).toEqual({ error: 'No identity.', reason: 'sending-identity' })
+  })
+})
+
+/**
+ * THE ORGANIZATION VARIANT (AGL-2634): authorized by the org, the record
+ * read with no site's visibility to check, and the message still leaving
+ * from ONE site — named, or the record's own, or the org's only one.
+ */
+describe('at the organization level', () => {
+  const asOrg = (extra: Record<string, unknown> = {}) => ({ scope: { orgId: ORG_ID, ...extra } })
+
+  it('mails a contact another site captured, from the site the body names, and logs the org line', async () => {
+    store[CONTACT].visibleTo = ['host:other-site']
+    const { status } = await call(MESSAGE, asOrg({ hostId: 'site-2' }))
+    expect(status).toBe(200)
+    expect(resolveOrgPermissions).toHaveBeenCalledWith('u-rep', { orgId: ORG_ID })
+    expect(getOrgForHost).not.toHaveBeenCalled()
+    // Everything a site owns is the sending site's.
+    expect(hostSendingIdentity).toHaveBeenCalledWith('site-2')
+    expect(filterSendableForHost).toHaveBeenCalledWith('site-2', ['ada@example.com'])
+    expect(sendEmail.mock.calls[0][0].tags).toEqual(
+      expect.arrayContaining([
+        { name: 'hostId', value: 'site-2' },
+        { name: 'orgId', value: ORG_ID },
+      ]),
+    )
+    // The row is visible where the RECORD is, not only to the sending site.
+    const row = writeCrmEmailActivity.mock.calls[0][1]
+    expect(row).toMatchObject({ hostId: 'site-2', visibleTo: ['host:other-site'] })
+    expect(logOrgActivity).toHaveBeenCalledWith(
+      ORG_ID,
+      { uid: 'u-rep', email: 'rep@acme.com' },
+      'Sent email',
+      { type: 'contact', id: 'contact-1', name: 'ada@example.com' },
+    )
+  })
+
+  it('leaves from the record’s own site when the body names none', async () => {
+    store[CONTACT].capturedByHostIds = ['site-2']
+    await call(MESSAGE, asOrg())
+    expect(hostSendingIdentity).toHaveBeenCalledWith('site-2')
+    jest.clearAllMocks()
+    hostSendingIdentity.mockResolvedValue({ from: 'x@y.z', refusal: null })
+    sendEmail.mockResolvedValue({ sent: true, id: 'msg-2' })
+    await call({ dealId: 'deal-1', subject: 'x', body: 'y' }, asOrg())
+    // A deal's own site, ahead of its contact's.
+    store[DEAL].hostId = HOST_ID
+    await call({ dealId: 'deal-1', subject: 'x', body: 'y' }, asOrg())
+    expect(hostSendingIdentity).toHaveBeenLastCalledWith(HOST_ID)
+  })
+
+  it('leaves from the org’s only site for a record no site captured, and asks when there are several', async () => {
+    delete store[CONTACT].capturedByHostIds
+    orgHosts = ['site-2']
+    expect((await call(MESSAGE, asOrg())).status).toBe(200)
+    expect(hostSendingIdentity).toHaveBeenCalledWith('site-2')
+    jest.clearAllMocks()
+    orgHosts = [HOST_ID, 'site-2']
+    const { status, body } = await call(MESSAGE, asOrg())
+    expect(status).toBe(409)
+    expect(body).toMatchObject({ error: CRM_EMAIL_PICK_SITE_MESSAGE, reason: 'site' })
+    expectNothingSent()
+    expect(logOrgActivity).not.toHaveBeenCalled()
+  })
+
+  it('refuses a site-scoped member, whatever their site role, sending nothing', async () => {
+    resolveOrgPermissions.mockResolvedValue({
+      orgId: ORG_ID,
+      role: 'admin',
+      isOwner: true,
+      permissions: { 'data.manage': true },
+      orgWide: false,
+      hostRole: 'admin',
+    })
+    const { status, body } = await call(MESSAGE, asOrg({ hostId: HOST_ID }))
+    expect(status).toBe(403)
+    expect(body.error).toContain('whole workspace')
+    expectNothingSent()
+  })
+
+  it('needs a lead’s site named, and files a lead’s email under the lead in the org line', async () => {
+    expect((await call({ leadId: 'lead-1', subject: 'x', body: 'y' }, asOrg())).status).toBe(400)
+    expectNothingSent()
+    const { status } = await call({ leadId: 'lead-1', subject: 'x', body: 'y' }, asOrg({ hostId: HOST_ID }))
+    expect(status).toBe(200)
+    expect(logOrgActivity).toHaveBeenCalledWith(ORG_ID, expect.anything(), 'Sent email', {
+      type: 'lead',
+      id: 'lead-1',
+      name: 'lead@example.com',
+    })
+  })
+
+  it('writes no org line under a site', async () => {
+    await call(MESSAGE)
+    expect(logOrgActivity).not.toHaveBeenCalled()
   })
 })

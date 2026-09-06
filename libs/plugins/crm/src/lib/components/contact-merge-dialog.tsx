@@ -62,6 +62,7 @@ import {
   where,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
 import { crmVisibleToClause } from '../hooks/use-crm-scope'
 import { useCrmApi } from './use-crm-api'
 
@@ -123,7 +124,9 @@ export interface ContactMergeDialogProps extends ContactMergeDialogState {
   /**
    * The site the merge runs as — the route logs it on that site's feed. At
    * the organization level the record's own capturing site (AGL-2630), or
-   * `null` for a row no site has captured, which cannot be merged here.
+   * `null` for a row no site has captured: beneath the org hub's mount the
+   * route's org variant merges it anyway (AGL-2634), and only a surface
+   * mounted nowhere holds the button.
    */
   hostId: string | null
   /** The record whose page this is. */
@@ -178,6 +181,9 @@ export function ContactMergeDialog(props: ContactMergeDialogProps) {
   const callCrm = useCrmApi(hostId)
   const { enqueueSnackbar } = useSnackbar()
   const groupId = consentGroup.groupId
+  // A site to run as, or the org to run as (AGL-2634): one of the two is
+  // what the route authorizes against, and with neither there is no door.
+  const canMerge = Boolean(hostId) || Boolean(useCrmOrgMount())
 
   const [other, setOther] = useState<ContactPick | null>(props.other)
   const [keep, setKeep] = useState<ContactMergeKeep>(props.keep)
@@ -254,7 +260,7 @@ export function ContactMergeDialog(props: ContactMergeDialogProps) {
   )
 
   const submit = useCallback(async () => {
-    if (!survivor || !merged || busy || !hostId) return
+    if (!survivor || !merged || busy || !canMerge) return
     setBusy(true)
     setError(null)
     try {
@@ -275,7 +281,7 @@ export function ContactMergeDialog(props: ContactMergeDialogProps) {
     } finally {
       setBusy(false)
     }
-  }, [survivor, merged, busy, hostId, callCrm, enqueueSnackbar, onClose, onMerged])
+  }, [survivor, merged, busy, canMerge, callCrm, enqueueSnackbar, onClose, onMerged])
 
   const currentLabel = label(current, groupId)
   const otherLabel = other ? label(other, groupId) : ''
@@ -399,7 +405,7 @@ export function ContactMergeDialog(props: ContactMergeDialogProps) {
             </>
           )}
           {error ? <Alert severity="error">{error}</Alert> : null}
-          {!hostId ? (
+          {!canMerge ? (
             <Alert severity="info">
               {'No site has captured this contact, so there is no site to ' +
                 'merge it from. Open it from one of your sites instead.'}
@@ -414,7 +420,7 @@ export function ContactMergeDialog(props: ContactMergeDialogProps) {
         <Button
           variant="contained"
           onClick={() => void submit()}
-          disabled={!other || busy || !hostId}
+          disabled={!other || busy || !canMerge}
         >
           {busy ? 'Merging…' : 'Merge'}
         </Button>

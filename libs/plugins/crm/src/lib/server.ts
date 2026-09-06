@@ -91,6 +91,7 @@ import {
 } from './server/contact-email-history'
 import { CONTACTS_MERGE_ROUTE, contactsMergeHandler } from './server/contacts-merge'
 import { CRM_ERASE_PERSON_ROUTE, crmErasePersonHandler } from './server/erase-person'
+import { CRM_ORG_ACTIVITY_ROUTE, crmOrgActivityHandler } from './server/org-activity'
 
 /**
  * `GET /api/crm/ping` → `{ ok: true, plugin: 'crm' }`.
@@ -554,4 +555,8 @@ export function registerCrmConsoleApi(): void {
   // Files a person's privacy erasure for the daily job (AGL-2623);
   // workspace admins only.
   registerPluginApiRoute(CRM_ERASE_PERSON_ROUTE, crmErasePersonHandler)
+  // One line in the organization's activity feed for an act the org-level
+  // hub performed client-direct (AGL-2634): the feed is closed to clients,
+  // so the bulk bars' lines come through here.
+  registerPluginApiRoute(CRM_ORG_ACTIVITY_ROUTE, crmOrgActivityHandler)
 }

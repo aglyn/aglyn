@@ -19,14 +19,16 @@
 import type { AglynOrgBilling } from '@aglyn/aglyn'
 import { Button, Tooltip } from '@mui/material'
 import { useState } from 'react'
+import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
 import CrmSendEmailDialog from './crm-send-email-dialog'
 
 export interface CrmSendEmailButtonProps {
   /**
    * The site the message leaves from — passed in, never read off the URL.
-   * At the organization level the record's own capturing site (AGL-2630);
-   * `null` for a record no site has captured, which cannot be written to
-   * from here.
+   * At the organization level the record's own capturing site (AGL-2630),
+   * or `null` for a record no site has captured: beneath the org hub's
+   * mount the dialog offers the org's sites to send from (AGL-2634), and
+   * only a surface mounted nowhere holds the button.
    */
   hostId: string | null
   org?: Partial<AglynOrgBilling> | null
@@ -52,11 +54,13 @@ export function CrmSendEmailButton(props: CrmSendEmailButtonProps) {
   const { hostId, org, contactId, leadId, dealId, email, name } = props
   const [open, setOpen] = useState(false)
   const address = String(email ?? '').trim()
+  // A site to send from, or an org whose sites the dialog can offer.
+  const canSend = Boolean(hostId) || Boolean(useCrmOrgMount())
   // A contact can be read for its address on open; a deal names one or
   // nothing; a lead carries its own.
-  const reachable = Boolean(hostId) && (Boolean(address) || Boolean(contactId))
+  const reachable = canSend && (Boolean(address) || Boolean(contactId))
   const reason = !reachable
-    ? !hostId
+    ? !canSend
       ? 'No site has captured this record to send from'
       : dealId && !contactId
         ? 'This deal names no contact to email'

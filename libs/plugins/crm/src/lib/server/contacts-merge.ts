@@ -44,17 +44,35 @@
  * cannot repoint deals it may not list, the address index is closed to
  * clients, and the transaction over both documents is what keeps two merges
  * of one pair from both succeeding.
+ *
+ * ## The organization variant (AGL-2634)
+ *
+ * `{ orgId, hostId?, survivorId, mergedId }` from the org-level hub. The
+ * same org-wide caller, authorized by the org directly rather than through
+ * a site it names — so a record no site captured can be merged there — and
+ * the act logged in the org's feed. A site beside the org is the record's
+ * own, and is where the data library files the timeline note and the
+ * site's feed line when there is one.
  */
 
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
-import { firebaseAdmin, getOrgForHost, mergeContacts } from '@aglyn/tenant-data-admin'
+import {
+  firebaseAdmin,
+  getOrgForHost,
+  logOrgActivity,
+  mergeContacts,
+} from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
+import { authorizeOrgCaller, readCrmRouteScope } from './org-caller'
 
 export const CONTACTS_MERGE_ROUTE = 'crm/contacts-merge'
 
 /** The body the console's merge dialog posts. */
 export interface ContactsMergeRequest {
-  hostId: string
+  /** The site the merge runs as; at the organization level the record's own, or absent. */
+  hostId?: string
+  /** The organization, at the organization level (AGL-2634). */
+  orgId?: string
   /** `orgs/{orgId}/contacts/{id}` — the record that stays. */
   survivorId: string
   /** The record folded into it and deleted. */
@@ -87,10 +105,10 @@ export const contactsMergeHandler: PluginApiHandler = async (req, res) => {
   }
   const body: Partial<ContactsMergeRequest> =
     typeof req.body === 'string' ? JSON.parse(req.body) : (req.body ?? {})
-  const hostId = typed(body.hostId, 128)
+  const routeScope = readCrmRouteScope(body as Record<string, unknown>)
   const survivorId = typed(body.survivorId, 200)
   const mergedId = typed(body.mergedId, 200)
-  if (!hostId || !survivorId || !mergedId) {
+  if (!routeScope || !survivorId || !mergedId) {
     res.status(400).json({ error: 'Missing hostId, survivorId or mergedId' })
     return
   }
@@ -98,43 +116,65 @@ export const contactsMergeHandler: PluginApiHandler = async (req, res) => {
     res.status(400).json({ error: 'Pick two different contacts to merge' })
     return
   }
-  const authorization = String(req.headers.authorization ?? '')
-  const idToken = authorization.startsWith('Bearer ')
-    ? authorization.slice('Bearer '.length)
-    : undefined
-  if (!idToken) {
-    res.status(401).json({ error: 'Unauthenticated' })
-    return
-  }
+  const { hostId } = routeScope
+  const refusal =
+    'Merging contacts requires the data permission across the whole workspace'
 
   try {
-    const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
-    const staff = decoded['staff'] === true
-    const membership = await resolveOrgPermissions(decoded.uid, { hostId })
-    if (
-      !staff &&
-      !(membership.orgWide && membership.permissions['data.manage'] === true)
-    ) {
-      res.status(403).json({
-        error:
-          'Merging contacts requires the data permission across the whole workspace',
+    let orgId: string
+    let actor: { uid: string; email: string | null }
+    let actorName: string | null
+    let orgActor: typeof actor | null = null
+    if (routeScope.level === 'org') {
+      const caller = await authorizeOrgCaller(req, routeScope.orgId, {
+        needs: 'data.manage',
+        refusal,
       })
-      return
-    }
-    const resolved = await getOrgForHost(hostId)
-    if (!resolved) {
-      res.status(404).json({ error: 'Unknown site' })
-      return
+      if (caller.ok === false) {
+        res.status(caller.status).json({ error: caller.error })
+        return
+      }
+      orgId = caller.orgId
+      actor = { uid: caller.uid, email: caller.email }
+      actorName = caller.name || null
+      orgActor = actor
+    } else {
+      const authorization = String(req.headers.authorization ?? '')
+      const idToken = authorization.startsWith('Bearer ')
+        ? authorization.slice('Bearer '.length)
+        : undefined
+      if (!idToken) {
+        res.status(401).json({ error: 'Unauthenticated' })
+        return
+      }
+      const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+      const staff = decoded['staff'] === true
+      const membership = await resolveOrgPermissions(decoded.uid, { hostId })
+      if (
+        !staff &&
+        !(membership.orgWide && membership.permissions['data.manage'] === true)
+      ) {
+        res.status(403).json({ error: refusal })
+        return
+      }
+      const resolved = await getOrgForHost(hostId)
+      if (!resolved) {
+        res.status(404).json({ error: 'Unknown site' })
+        return
+      }
+      orgId = resolved.orgId
+      actor = { uid: decoded.uid, email: decoded.email ?? null }
+      actorName = typeof decoded['name'] === 'string' ? decoded['name'] : null
     }
     const firestore = firebaseAdmin.app().firestore()
     const result = await mergeContacts({
       firestore,
-      orgRef: firestore.collection('orgs').doc(resolved.orgId),
+      orgRef: firestore.collection('orgs').doc(orgId),
       survivorId,
       mergedId,
-      actor: { uid: decoded.uid, email: decoded.email ?? null },
-      hostId,
-      actorName: typeof decoded['name'] === 'string' ? decoded['name'] : null,
+      actor,
+      hostId: hostId || null,
+      actorName,
     })
     if (result.ok === false) {
       if (result.reason === 'same-record') {
@@ -149,6 +189,15 @@ export const contactsMergeHandler: PluginApiHandler = async (req, res) => {
       })
       return
     }
+    // The org-level act, in the org's feed: the data library wrote the
+    // site's line when a site was named, and the org's is this door's.
+    if (orgActor) {
+      await logOrgActivity(orgId, orgActor, `Merged with ${result.mergedEmail}`, {
+        type: 'contact',
+        id: result.survivorId,
+        name: result.survivorEmail,
+      })
+    }
     const answer: ContactsMergeResponse = {
       ok: true,
       survivorId: result.survivorId,
@@ -160,7 +209,7 @@ export const contactsMergeHandler: PluginApiHandler = async (req, res) => {
     }
     res.status(200).json(answer)
   } catch (error) {
-    console.error('[crm] contacts-merge failed', hostId, survivorId, mergedId, error)
+    console.error('[crm] contacts-merge failed', routeScope, survivorId, mergedId, error)
     res.status(500).json({ error: 'The contacts could not be merged.' })
   }
 }

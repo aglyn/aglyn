@@ -64,7 +64,14 @@ const state = {
   deals: {} as Record<string, Record<string, unknown>>,
   pipelines: {} as Record<string, Record<string, unknown>>,
   updates: [] as Array<{ id: string; patch: Record<string, unknown> }>,
+  /** What the org resolver answers the ORG variant (AGL-2634). */
+  orgPermissions: {} as Record<string, unknown>,
+  orgLines: [] as Array<{ orgId: string; actor: unknown; action: string; target: unknown }>,
 }
+
+jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
+  resolveOrgPermissions: async () => state.orgPermissions,
+}))
 
 const docHandle = (store: Record<string, Record<string, unknown>>, id: string) => ({
   get: async () => ({
@@ -113,6 +120,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   resolveOrgMembership: async () =>
     state.member ? { orgId: 'org-1', member: state.member } : null,
   memberHasOrgPermission: async () => state.permitted,
+  getOrgDoc: async (orgId: string) => (orgId === 'org-1' ? { $id: 'org-1' } : null),
+  logOrgActivity: async (orgId: string, actor: unknown, action: string, target: unknown) => {
+    state.orgLines.push({ orgId, actor, action, target })
+  },
   consentGroupForSite: async (hostId: string) => ({
     hostId,
     groupId: hostId,
@@ -169,8 +180,17 @@ async function call(
 beforeEach(() => {
   emitted.length = 0
   state.updates.length = 0
+  state.orgLines.length = 0
   state.member = { role: 'editor', allHosts: true }
   state.permitted = true
+  state.orgPermissions = {
+    orgId: 'org-1',
+    role: 'editor',
+    isOwner: false,
+    permissions: { 'data.manage': true },
+    orgWide: true,
+    hostRole: 'editor',
+  }
   state.pipelines = {
     default: { name: 'Sales', stages: [...DEFAULT_DEAL_STAGES], isDefault: true },
   }
@@ -321,5 +341,76 @@ describe('the deal-stage route (AGL-2598)', () => {
     expect(body.event).toBeNull()
     expect(state.updates).toEqual([])
     expect(emitted).toEqual([])
+  })
+})
+
+/**
+ * THE ORGANIZATION VARIANT (AGL-2634): `orgId` in the body instead of a
+ * site. Authorized by the org — an org-wide member holding `data.manage`,
+ * never a site collaborator — with no site to check the deal's visibility
+ * against, because an org-wide member reads every row. The event still
+ * goes to the deal's OWN site, which is where its automations live; the
+ * line goes to the org's feed, which is the feed the act was performed in.
+ */
+describe('the deal-stage route at the organization level (AGL-2634)', () => {
+  const ORG = { orgId: 'org-1', dealId: 'd1' }
+
+  it('moves a deal another site captured, emits for the deal’s own site, and logs the org line', async () => {
+    // No site role at all — the org variant does not consult one.
+    state.member = null
+    const { status, body } = await call({ ...ORG, stageId: 'negotiation' })
+    expect(status).toBe(200)
+    expect(body).toMatchObject({ ok: true, stageId: 'negotiation', event: 'dealStageChanged' })
+    expect(state.updates[0].patch['stageId']).toBe('negotiation')
+    expect(emitted).toHaveLength(1)
+    expect(emitted[0].hostId).toBe('shop')
+    expect(state.orgLines).toEqual([
+      {
+        orgId: 'org-1',
+        actor: { uid: 'u1', email: null },
+        action: 'Moved deal to Negotiation',
+        target: { type: 'deal', id: 'd1', name: 'Roaster upgrade' },
+      },
+    ])
+  })
+
+  it('names the win and the loss in the org line', async () => {
+    await call({ ...ORG, status: 'won' })
+    expect(state.orgLines[0].action).toBe('Marked deal won')
+    state.deals['d1']['stageId'] = 'proposal-sent'
+    state.deals['d1']['status'] = 'open'
+    await call({ ...ORG, status: 'lost', lostReason: 'Budget cut' })
+    expect(state.orgLines[1].action).toBe('Marked deal lost')
+    expect(emitted.map((entry) => entry.event)).toEqual(['dealWon', 'dealLost'])
+  })
+
+  it('refuses a site-scoped member and an org-wide one without data.manage, writing nothing', async () => {
+    state.orgPermissions = { ...state.orgPermissions, orgWide: false, hostRole: 'admin' }
+    expect((await call({ ...ORG, stageId: 'negotiation' })).status).toBe(403)
+    state.orgPermissions = {
+      ...state.orgPermissions,
+      orgWide: true,
+      permissions: { 'data.manage': false },
+    }
+    expect((await call({ ...ORG, stageId: 'negotiation' })).status).toBe(403)
+    expect(state.updates).toEqual([])
+    expect(emitted).toEqual([])
+    expect(state.orgLines).toEqual([])
+  })
+
+  it('moves a deal no site captured, with no event to emit and the org line still written', async () => {
+    delete state.deals['d1']['hostId']
+    state.deals['d1']['visibleTo'] = ['org']
+    const { status, body } = await call({ ...ORG, stageId: 'negotiation' })
+    expect(status).toBe(200)
+    expect(body.event).toBe('dealStageChanged')
+    expect(emitted).toEqual([])
+    expect(state.orgLines).toHaveLength(1)
+  })
+
+  it('answers a no-op with no line, and an unknown deal with 404', async () => {
+    expect((await call({ ...ORG, stageId: 'proposal-sent' })).status).toBe(200)
+    expect(state.orgLines).toEqual([])
+    expect((await call({ orgId: 'org-1', dealId: 'nope', stageId: 'negotiation' })).status).toBe(404)
   })
 })

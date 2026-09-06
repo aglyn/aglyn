@@ -80,6 +80,15 @@ Board / Table control).
 | **Export CSV** | Download the selected tasks as `tasks-selected.csv` — the same file the list's **Export CSV** writes for the view on screen: title, kind, priority, status, the due date and the completion as timestamps, the assignee by email address, the contact, company and deal by name, and notes. |
 | **Delete** | After a confirmation, the selected tasks are deleted for everyone who can see them. A finished task is better ticked done, which keeps it in the Done view. |
 
+## At the organization level
+
+The same bars, over every site's rows at once, on the
+[organization's hub](./overview.md#at-the-organization-level). Each action
+writes one line into the organization's activity feed (**Team → Activity**) —
+"Owner set on 3 deals" — where a site's hub writes into the site's own feed. A
+stage move or a loss over deals is recorded per deal instead, by the move
+itself.
+
 ## When a row cannot be changed
 
 A bulk action writes in batches. If any row in the selection cannot be

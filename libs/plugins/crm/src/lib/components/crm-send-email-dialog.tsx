@@ -23,7 +23,6 @@ import {
   normalizeContactEmail,
 } from '@aglyn/aglyn'
 import { useSendingApi } from '@aglyn/plugins-email/components/use-sending-identity-api'
-import { useEmailsHubPath } from '@aglyn/plugins-marketing/components/use-emails-hub-path'
 import { AppLink } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -44,14 +43,19 @@ import {
 } from '@mui/material'
 import { doc, getDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
+import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
+import { CrmSitePicker } from './crm-site-picker'
 import { useCrmApi } from './use-crm-api'
+import { useEmailsHubPath } from './use-emails-hub-path'
 
 /**
  * What the sending-identity route said about this site, as the dialog
- * needs it: an address to print, or the reason there is none.
+ * needs it: an address to print, or the reason there is none — or, at the
+ * organization level, that no site has been picked to ask about.
  */
 type IdentityState =
   | { status: 'loading' }
+  | { status: 'site' }
   | { status: 'ready'; from: string }
   | { status: 'refused'; message: string; canManage: boolean }
   | { status: 'error'; message: string }
@@ -59,8 +63,13 @@ type IdentityState =
 export interface CrmSendEmailDialogProps {
   open: boolean
   onClose: () => void
-  /** The site the message leaves from — passed in, never assumed from the URL. */
-  hostId: string
+  /**
+   * The site the message leaves from — passed in, never assumed from the
+   * URL. At the organization level the record's own capturing site, or
+   * `null` for a record no site has captured (AGL-2634): the dialog then
+   * offers the org's sites to send from, defaulting to the reader's pick.
+   */
+  hostId: string | null
   /** The org the shell passed; lets a deal's contact be read without a lookup. */
   org?: Partial<AglynOrgBilling> | null
   contactId?: string
@@ -108,15 +117,27 @@ export interface CrmSendEmailDialogProps {
 export function CrmSendEmailDialog(props: CrmSendEmailDialogProps) {
   const { open, onClose, hostId, org, contactId, leadId, dealId, onSent } = props
   const firestore = useFirestore()
-  const { orgId } = useOrgDataScope({ hostId, orgId: org?.$id })
+  const mount = useCrmOrgMount()
+  const { orgId } = useOrgDataScope({
+    hostId: hostId ?? undefined,
+    orgId: org?.$id ?? mount?.orgId,
+  })
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const sendingApi = useSendingApi()
-  const crmApi = useCrmApi(hostId)
-  const emailsHub = useEmailsHubPath()
+  /*
+   * The site the message LEAVES FROM: the record's own, or at the
+   * organization level — for a record no site captured — the site the
+   * reader picked (AGL-2634). The identity, the suppression list and the
+   * person's stated refusal are each that site's, which is why the org
+   * level cannot do without one.
+   */
+  const sendHostId = hostId ?? mount?.createHostId ?? null
+  const crmApi = useCrmApi(sendHostId)
+  const emailsHub = useEmailsHubPath(sendHostId)
   // The Sending section of the Emails console — the page that fixes a
-  // missing identity. `null` on a surface with no site in its URL, so the
-  // refusal prints the section's name instead of a link to nowhere.
+  // missing identity. `null` on a surface that cannot name the site's hub,
+  // so the refusal prints the section's name instead of a link to nowhere.
   const sendingPath = emailsHub ? `${emailsHub}/sending` : null
 
   const [identity, setIdentity] = useState<IdentityState>({ status: 'loading' })
@@ -137,15 +158,19 @@ export function CrmSendEmailDialog(props: CrmSendEmailDialogProps) {
   useEffect(() => {
     if (!open) return
     let cancelled = false
-    setIdentity({ status: 'loading' })
     setError(null)
-    setSubject('')
-    setBody('')
+    // The draft survives a change of sending site — the site is not the
+    // letter — and is cleared only when the dialog opens.
+    if (!sendHostId) {
+      setIdentity({ status: 'site' })
+      return undefined
+    }
+    setIdentity({ status: 'loading' })
     void (async () => {
       const { response, payload } = await sendingApi({
         path: 'sending-identity',
         method: 'GET',
-        query: { hostId },
+        query: { hostId: sendHostId },
       })
       if (cancelled) return
       if (!response.ok) {
@@ -183,7 +208,12 @@ export function CrmSendEmailDialog(props: CrmSendEmailDialogProps) {
     return () => {
       cancelled = true
     }
-  }, [open, hostId, sendingApi])
+  }, [open, sendHostId, sendingApi])
+  useEffect(() => {
+    if (!open) return
+    setSubject('')
+    setBody('')
+  }, [open])
 
   /*
    * The address, when the caller had none: one read of the contact, on
@@ -255,7 +285,19 @@ export function CrmSendEmailDialog(props: CrmSendEmailDialogProps) {
     <Dialog open={open} onClose={sending ? undefined : onClose} maxWidth="sm" fullWidth>
       <DialogTitle>{'Send email'}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {identity.status === 'refused' ? (
+        {!hostId ? (
+          <CrmSitePicker
+            hostId={hostId}
+            label="Send from"
+            helperText="The site whose sending address the email leaves on."
+            disabled={sending}
+          />
+        ) : null}
+        {identity.status === 'site' ? (
+          <Alert severity="info" sx={{ mt: 1 }}>
+            {'Pick the site the email leaves from.'}
+          </Alert>
+        ) : identity.status === 'refused' ? (
           <Alert severity="warning" sx={{ mt: 1 }}>
             <Typography variant="body2">{identity.message}</Typography>
             {sendingPath ? (
@@ -285,7 +327,7 @@ export function CrmSendEmailDialog(props: CrmSendEmailDialogProps) {
           label="To"
           value={toLabel}
           slotProps={{ input: { readOnly: true }, inputLabel: { shrink: true } }}
-          sx={{ mt: identity.status === 'refused' || identity.status === 'error' ? 0 : 1 }}
+          sx={{ mt: identity.status === 'ready' || identity.status === 'loading' ? 1 : 0 }}
         />
         <TextField
           size="small"
@@ -295,7 +337,9 @@ export function CrmSendEmailDialog(props: CrmSendEmailDialogProps) {
               ? identity.from
               : identity.status === 'loading'
                 ? 'Resolving the site’s sending address…'
-                : ''
+                : identity.status === 'site'
+                  ? 'Pick a site to send from'
+                  : ''
           }
           slotProps={{ input: { readOnly: true }, inputLabel: { shrink: true } }}
         />

@@ -1006,7 +1006,14 @@ export interface OrgActivityTarget {
    * A subscription belongs to no single site at all. Both are org-level
    * events, and this is the only feed that outlives them.
    */
-  type: 'org' | 'member' | 'invite' | 'host' | 'subscription'
+  type:
+    | 'org' | 'member' | 'invite' | 'host' | 'subscription'
+    // The CRM's records (AGL-2634), written by the plugin's server routes
+    // for an act performed at the ORGANIZATION level — a deal moved from the
+    // org board, two contacts merged over every site, a bulk bar's action —
+    // where there is no one site's feed to hold it. The org feed's presenter
+    // links them into the org-level hub.
+    | 'contact' | 'company' | 'deal' | 'lead' | 'task'
   id?: string
   name?: string
 }
