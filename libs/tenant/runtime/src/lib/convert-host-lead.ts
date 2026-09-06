@@ -94,6 +94,7 @@ import {
 import {
   consentGroupForSite,
   crmRecordsQuotaForOrg,
+  findContactByEmail,
   logHostActivity,
   orgDataCollectionForHost,
   writeContactCompanyLink,
@@ -295,10 +296,17 @@ export async function convertHostLead(
     },
   })
   const contactsRef = await orgDataCollectionForHost(hostId, 'contacts')
-  const found = await contactsRef.where('email', '==', email).limit(1).get()
-  if (found.empty) return { ok: false, reason: 'contact-not-created' }
-  const contactRef = found.docs[0].ref
-  const contactId = found.docs[0].id
+  /*
+   * The same resolution the capture door just made (AGL-2625): the
+   * address index first, so a lead whose address is an ALTERNATE on a
+   * merged contact converts into the survivor the capture landed on
+   * rather than reading as a contact the band dropped.
+   */
+  const contactSnapshot = await findContactByEmail(contactsRef, email)
+  if (!contactSnapshot) return { ok: false, reason: 'contact-not-created' }
+  const contactRef = contactSnapshot.ref
+  const contactId = contactSnapshot.id
+  const contactData = (contactSnapshot.data() ?? {}) as Record<string, unknown>
   const orgRef = firestore.collection('orgs').doc(orgId)
   /*
    * THE RECORDS BAND (AGL-2611), asked before each record this conversion
@@ -325,8 +333,7 @@ export async function convertHostLead(
    * resort. A colleague the converter picked is told; the lead's existing
    * owner and the caller are not, having chosen for themselves.
    */
-  let ownerUid =
-    readContactFacet(found.docs[0].data(), group.groupId).ownerUid ?? ''
+  let ownerUid = readContactFacet(contactData, group.groupId).ownerUid ?? ''
   if (!ownerUid) {
     const assigned = await assignOwnerForCapture({
       hostId,
@@ -413,7 +420,7 @@ export async function convertHostLead(
     await writeContactCompanyLink({
       firestore,
       contactRef,
-      contact: found.docs[0].data() as Record<string, unknown>,
+      contact: contactData,
       companiesRef: orgRef.collection(CRM_COLLECTIONS.companies),
       groupId: group.groupId,
       companyId,

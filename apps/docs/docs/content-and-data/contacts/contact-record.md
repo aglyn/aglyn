@@ -1,7 +1,7 @@
 ---
 sidebar_position: 2
 title: The contact record
-description: Add a contact by hand, keep a profile on them — phone, company, title, address, owner and lifecycle stage — and open their own page in the CRM.
+description: Add a contact by hand, keep a profile on them — phone, company, title, address, owner and lifecycle stage — open their own page in the CRM, and merge two records that turn out to be one person.
 ---
 
 # The contact record
@@ -78,11 +78,14 @@ person's address. Under it, one card per aspect of the record:
 - **Tasks** — the open tasks about this person, each with a checkbox to
   complete it, and a **New task** shortcut — see
   [Tasks & follow-ups](./tasks.md).
+- **Likely duplicates** — other records that may be the same person, found
+  when you ask; see [Merging two records](#merging-two-records).
 
-The overflow menu on the page carries **Delete contact**. Deleting removes
-the person from *this site's* CRM — its notes, tags and timeline. Other sites
-in your workspace that captured the same person keep their own records, and
-the person's form submissions, orders, bookings and membership records are
+The overflow menu on the page carries **Merge into…** — see
+[Merging two records](#merging-two-records) — and **Delete contact**. Deleting
+removes the person from *this site's* CRM — its notes, tags and timeline. Other
+sites in your workspace that captured the same person keep their own records,
+and the person's form submissions, orders, bookings and membership records are
 separate and are deleted from their own pages.
 
 ## What each site keeps to itself
@@ -92,6 +95,54 @@ touched two of your sites is one row. Almost nothing *on* it is shared: the
 notes, tags, timeline, phone, title, company, address, owner and stage are one
 site's knowledge of the person and are never shown to another site's console.
 The email and the name the person gave are the only shared identity.
+
+## Merging two records
+
+A contact is one record per **email address**, so the same person cannot be
+captured twice under one address — but one human with a work address and a
+personal one is two records, with tags, deals, tasks and a timeline split
+between them. **Merge into…**, in the overflow menu on either record, folds the
+two into one.
+
+The dialog first finds the other record — type an email address for an exact
+match, or a name to search among the contacts your site may see — and then
+shows the two side by side, field by field, with the value the kept record will
+carry. Pick which record to **keep**; the other is merged into it and deleted.
+The rule is the same for every field:
+
+| What | After the merge |
+| --- | --- |
+| Name, phone, job title, company, stage, owner, address, custom fields | The kept record's value where it has one; an empty field fills from the other record. Nothing the kept record holds is overwritten. |
+| Tags, campaign filings | Combined. |
+| Timeline | Combined and ordered, newest first. The other record's calls, notes and logged activities move across too. |
+| Notes | The other record's notes are added below the kept record's. |
+| Orders and lifetime value | Added together — two records of one person's purchases are one person's purchases. |
+| Deals, tasks, activities, and a converted [lead](./leads.md) | Repointed at the kept record. |
+| Companies | The kept record is filed under every company either record named. |
+| Marketing email | A site's opt-in on either record stands on the kept one. A recorded **opt-out** on either record stands too: the merge says these are one person, and that person said no. |
+| Email address | The kept record's address stays the identity. The other record's address is recorded as an **alternate**, shown after the address in the page header as *also …*. |
+
+An alternate address is what makes the merge stick: a later capture on it — a
+form the person fills in from the personal account, an order placed with it —
+lands on the kept record rather than creating the second record again. The
+[REST API](/api/resources/contacts#merge) performs the same merge, and reads
+the alternates back as `alternateEmails`.
+
+Merging is available to members whose **data** permission covers the whole
+workspace, because a contact is shared by every site that captured the person
+and the merge touches each site's records of them. Every site's own profile
+of the person is combined under the same rule; no site's notes reach another
+site's view.
+
+### Likely duplicates
+
+The **Likely duplicates** card on the record page looks for other records with
+the **same name and the same phone number**, or the **same name and the same
+company**, among the contacts your site may see. It looks only when you press
+**Find likely duplicates** — never on its own — and lists what it finds with
+why, and a **Merge into this record** button that opens the merge dialog with
+this record as the one kept. Two records with different names can still be one
+person; merge those from the overflow menu.
 
 ## Owner
 

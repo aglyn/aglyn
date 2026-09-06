@@ -77,6 +77,10 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     ...jest.requireActual(
       '../../../libs/tenant/data/admin/src/lib/server/contact-company-link',
     ),
+    // The real address lookup (AGL-2625): the index first, the query second.
+    ...jest.requireActual(
+      '../../../libs/tenant/data/admin/src/lib/server/contact-email-index',
+    ),
     verifyApiKey: async () => ({
       orgId: 'org-1',
       keyId: 'key-1',

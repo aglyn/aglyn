@@ -180,10 +180,12 @@ export function mockDocRef(path: string) {
     },
     set: async (data: Record<string, unknown>, options?: { merge?: boolean }) => {
       const existing = mockDocs.get(path)
-      mockDocs.set(path, {
-        ...(options?.merge ? (existing ?? {}) : {}),
-        ...resolveWrite(existing, data),
-      })
+      mockDocs.set(
+        path,
+        options?.merge
+          ? mergeMaps(existing ?? {}, resolveWrite(existing, data))
+          : resolveWrite(existing, data),
+      )
     },
     update: async (data: Record<string, unknown>) => {
       const existing = mockDocs.get(path)
@@ -286,8 +288,8 @@ function mockQuery(collectionPath: string, state: QueryState) {
   }
 }
 
-/** Ids `add()` minted, in order — reset with the store. */
-let minted = 0
+/** Ids `add()` mints, in order, so a spec can find what a writer added. */
+let addedSeq = 0
 
 export function mockCollectionRef(path: string) {
   return {
@@ -300,33 +302,96 @@ export function mockCollectionRef(path: string) {
     }),
     path,
     doc: (id: string) => mockDocRef(`${path}/${id}`),
-    // Minted the way the SDK mints one: a fresh id nothing else holds.
     add: async (data: Record<string, unknown>) => {
-      const ref = mockDocRef(`${path}/minted_${++minted}`)
+      const ref = mockDocRef(`${path}/added-${++addedSeq}`)
       await ref.set(data)
       return ref
     },
   }
 }
 
+/**
+ * A merge-`set` the way Firestore applies one: a PLAIN map is merged one
+ * key at a time, and everything else — an array, a scalar, a Timestamp —
+ * is replaced whole. The per-holder facets and the per-site consent entries
+ * are maps written one key at a time, and a shallow fake would let a write
+ * that wipes every other holder's facet pass here and wipe them in
+ * production.
+ */
+function isPlainMap(value: unknown): value is Record<string, unknown> {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    Object.getPrototypeOf(value) === Object.prototype
+  )
+}
+
+function mergeMaps(
+  target: Record<string, unknown>,
+  data: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...target }
+  for (const [key, value] of Object.entries(data)) {
+    out[key] =
+      isPlainMap(value) && isPlainMap(out[key])
+        ? mergeMaps(out[key] as Record<string, unknown>, value)
+        : value
+  }
+  return out
+}
+
+/** Writes queued against the store, applied in order on commit. */
+function queuedWrites() {
+  const queued: Array<() => Promise<void>> = []
+  return {
+    set: (ref: ReturnType<typeof mockDocRef>, data: Record<string, unknown>, options?: { merge?: boolean }) =>
+      void queued.push(() => ref.set(data, options)),
+    update: (ref: ReturnType<typeof mockDocRef>, data: Record<string, unknown>) =>
+      void queued.push(() => ref.update(data)),
+    delete: (ref: ReturnType<typeof mockDocRef>) => void queued.push(() => ref.delete()),
+    flush: async () => {
+      for (const write of queued) await write()
+    },
+  }
+}
+
 export const mockFirestore = {
   collection: (name: string) => mockCollectionRef(name),
-  /**
-   * A batch as the contact–company link writer commits one (AGL-2613): the
-   * queued writes applied in order on `commit`, so a link and its count
-   * land together or not at all.
-   */
+  /** A batch: its writes land together on `commit`. */
   batch: () => {
-    const queued: Array<() => Promise<void>> = []
+    const writes = queuedWrites()
     return {
-      set: (ref: ReturnType<typeof mockDocRef>, data: Record<string, unknown>) =>
-        void queued.push(() => ref.set(data)),
-      update: (ref: ReturnType<typeof mockDocRef>, data: Record<string, unknown>) =>
-        void queued.push(() => ref.update(data)),
-      commit: async () => {
-        for (const write of queued) await write()
-      },
+      set: writes.set,
+      update: writes.update,
+      delete: writes.delete,
+      commit: writes.flush,
     }
+  },
+  /**
+   * A transaction: reads answer the store as it stands, writes land when
+   * the body returns — the two-phase shape the merge's swap relies on.
+   */
+  runTransaction: async <T>(
+    body: (transaction: {
+      get: (ref: ReturnType<typeof mockDocRef>) => Promise<ReturnType<typeof snapshotOf>>
+      set: (
+        ref: ReturnType<typeof mockDocRef>,
+        data: Record<string, unknown>,
+        options?: { merge?: boolean },
+      ) => void
+      update: (ref: ReturnType<typeof mockDocRef>, data: Record<string, unknown>) => void
+      delete: (ref: ReturnType<typeof mockDocRef>) => void
+    }) => Promise<T>,
+  ): Promise<T> => {
+    const writes = queuedWrites()
+    const result = await body({
+      get: (ref) => ref.get(),
+      set: writes.set,
+      update: writes.update,
+      delete: writes.delete,
+    })
+    await writes.flush()
+    return result
   },
 }
 
@@ -336,6 +401,6 @@ export const lastFilters = (): IssuedFilter[] => issued[issued.length - 1] ?? []
 export function resetMockFirestore(): void {
   mockDocs.clear()
   issued.length = 0
-  minted = 0
+  addedSeq = 0
   mockClock.nowMs = 1_760_000_000_000
 }

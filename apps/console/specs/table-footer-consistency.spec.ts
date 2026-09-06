@@ -1207,21 +1207,30 @@ const NOT_A_LIST: Array<[string, string]> = [
       'page the choices a person has to scan anyway.',
   ],
   [
-    'libs/plugins/crm/src/lib/components/company-properties-card.tsx',
-    'The detach PROBE behind Delete company (AGL-2597), not a rendered ' +
-      'list: the contacts linked to the company are read one past ' +
-      '`COMPANY_DETACH_LIMIT` to decide whether the delete may proceed, ' +
-      'and the card says how many remain past the bound. Nothing is drawn ' +
-      'as rows; the map the detector sees builds the batch.',
+    'libs/plugins/crm/src/lib/components/csv-import-drawer.tsx',
+    'The spreadsheet PREVIEW and the skipped-row report in the CSV ' +
+      'import (AGL-2602, shared by every section since AGL-2621): rows ' +
+      'parsed from a file the reader just chose, capped on the client and ' +
+      'shown ten at a time as a preview before the import runs. The ' +
+      'contacts and companies drawers are vocabularies over this one walk ' +
+      'and draw no table of their own. The source is a local array, not a ' +
+      'collection, and the full file is what the download offers.',
   ],
   [
-    'libs/plugins/crm/src/lib/components/contact-import-drawer.tsx',
-    'The spreadsheet PREVIEW and the skipped-row report in the CSV ' +
-      'import (AGL-2602): rows parsed from a file the reader just chose, ' +
-      'capped at `CONTACT_IMPORT_MAX_ROWS` on the client and shown ten at ' +
-      'a time as a preview before the import runs. The source is a local ' +
-      'array, not a collection, and the full file is what the download ' +
-      'offers.',
+    'libs/plugins/crm/src/lib/components/deal-products-card.tsx',
+    'A deal’s LINE ITEMS (AGL-2620): rows stored on the deal document ' +
+      'itself and bounded there by `DEAL_LINE_ITEMS_MAX` (50) — the card ' +
+      'refuses a further line at the cap and says so. The bound is what ' +
+      'one sale can carry, not how long the account has existed, and the ' +
+      'row under the items is the deal’s amount, their sum.',
+  ],
+  [
+    'libs/plugins/crm/src/lib/components/reports/forecast-card.tsx',
+    'An AGGREGATE table in a report (AGL-2620): the open pipeline by ' +
+      'close month, one row per month found in a read capped at ' +
+      '`OPEN_DEAL_CEILING` that the card discloses, sharing the Pipeline ' +
+      'card’s cache. The rows are sums by month, not documents; a pager ' +
+      'would offer to page a grouping whose size is the calendar’s.',
   ],
   [
     'libs/plugins/crm/src/lib/components/lead-surfaces-note.tsx',
@@ -1262,6 +1271,39 @@ const NOT_A_LIST: Array<[string, string]> = [
       'computed from a read capped at `OPEN_TASK_CEILING` that the card ' +
       'discloses. The rows are counts by group, not documents; the ' +
       'documents are the Tasks section’s paged list.',
+  ],
+  [
+    'libs/plugins/crm/src/lib/components/reports/activity-card.tsx',
+    'An AGGREGATE table in a report (AGL-2624): activities per ' +
+      'teammate, one row per person, grouped from reads capped at ' +
+      '`ACTIVITY_CEILING` and `TASK_DONE_CEILING` that the card discloses ' +
+      'beside its export. The rows are counts by group, not documents; ' +
+      'the documents are each record’s own timeline.',
+  ],
+  [
+    'libs/plugins/crm/src/lib/components/reports/source-conversion-card.tsx',
+    'An AGGREGATE table in a report (AGL-2624): the period’s contacts ' +
+      'by capture source, one row per source found in a read capped at ' +
+      '`CONTACT_CEILING` that the card discloses. The rows are counts by ' +
+      'source, not documents; the people are the Contacts section’s paged ' +
+      'table.',
+  ],
+  [
+    'libs/plugins/crm/src/lib/components/contact-duplicates-card.tsx',
+    'A record’s LIKELY DUPLICATES (AGL-2625): the contacts sharing the ' +
+      'record’s name, read under `CONTACT_DUPLICATES_LIMIT` on a button ' +
+      'press and kept only where a phone or company matches too. A short ' +
+      'list to act on — "Merge into this record" opens the merge dialog on ' +
+      'the pick — not a view; a page of near-duplicates would be a list ' +
+      'nobody merges by hand.',
+  ],
+  [
+    'libs/plugins/crm/src/lib/components/contact-merge-dialog.tsx',
+    'The merge dialog (AGL-2625): the SEARCH for the other record — ' +
+      'bounded by `SEARCH_LIMIT`, narrowed as the reader types and closed ' +
+      'on a choice — and the preview beneath it, one row per FIELD of the ' +
+      'two records being folded, which is the schema and not a collection. ' +
+      'A pager under a search box pages what the box already filters.',
   ],
 ]
 
@@ -1552,7 +1594,23 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // 47 since the CRM's Settings gained owner assignment rules (AGL-2618):
     // a table of at most fifty rows the merchant wrote and ordered, read off
     // the org document under that cap — a policy, not a collection.
-    expect(NOT_A_LIST).toHaveLength(47)
+    //
+    // 48 since the CRM v2.1 merges (AGL-2614): two entries retired with the
+    // tables they described — the contacts import drawer is now a vocabulary
+    // over the shared preview, and the company card's detach probe moved
+    // into `model/company-delete.ts`, which is not a component — and three
+    // arrived, each bounded by something other than the account's age: the
+    // shared import preview (a local array), a deal's line items
+    // (`DEAL_LINE_ITEMS_MAX` on the document), and the forecast by close
+    // month (sums over a disclosed ceiling).
+    //
+    // 52 since the reports grew and a record learned to merge (AGL-2624,
+    // AGL-2625): two more aggregate tables in the Reports section — activity
+    // by teammate and conversion by source, each counts by group over a
+    // disclosed ceiling — the likely-duplicates list a button reads under
+    // `CONTACT_DUPLICATES_LIMIT` to act on, and the merge dialog's search
+    // picker with its per-field preview of what the merge keeps.
+    expect(NOT_A_LIST).toHaveLength(52)
   })
 })
 

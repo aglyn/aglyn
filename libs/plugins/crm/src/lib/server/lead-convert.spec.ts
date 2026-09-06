@@ -292,6 +292,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   ...jest.requireActual(
     '../../../../../tenant/data/admin/src/lib/server/contact-company-link',
   ),
+  // The real address lookup (AGL-2625): the index first, the query second.
+  // The fake's collections have no parent, so this is the query — the
+  // contract the route has with it is "find the row the capture landed on".
+  ...jest.requireActual(
+    '../../../../../tenant/data/admin/src/lib/server/contact-email-index',
+  ),
   logHostActivity: (...args: unknown[]) => mockLogHostActivity(...(args as [])),
 }))
 

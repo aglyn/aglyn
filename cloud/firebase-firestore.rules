@@ -1018,6 +1018,26 @@ service cloud.firestore {
           (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()));
         allow delete: if isStaff() || canWriteScopedOrgData();
       }
+      /**
+       * The address index (AGL-2625): `emailIndex/{personKey}` names the
+       * contact an address resolves to, so a capture on an address a merge
+       * recorded as an ALTERNATE lands on the survivor rather than minting
+       * the duplicate again. Keyed by the sha256 of the normalized address,
+       * so no document id carries the address itself.
+       *
+       * CLOSED TO EVERY CLIENT. It is written by the Admin SDK — the capture
+       * door, lazily, and the merge — and read by the same, and it carries
+       * no `visibleTo`: an entry maps an address to a contact for the whole
+       * org, and a scoped member who could list it could learn which
+       * addresses a sibling site holds without being able to read one of
+       * its contacts. Nothing in the console reads it; the record page shows
+       * a contact's alternate addresses off the contact document, which the
+       * contacts predicate above already gates. Staff read it for support.
+       */
+      match /emailIndex/{emailKey} {
+        allow read: if isStaff();
+        allow write: if false;
+      }
 
       /**
        * CRM v2 (AGL-2595): the six collections that sit BESIDE a contact.

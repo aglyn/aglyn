@@ -42,6 +42,8 @@ export interface ContactRecord {
   $id: string
   /** The shared identity and the dedupe key. */
   email: string
+  /** The other addresses a merge folded into this record (AGL-2625). */
+  alternateEmails: string[]
   /** What THIS holder sees — their own override, or the canonical name. */
   name: string
   /** The canonical name: the identity of last resort, shared by every holder. */
@@ -92,6 +94,11 @@ export function contactRecordFromDoc(
   return {
     $id: String(row['$id'] ?? ''),
     email: typeof row['email'] === 'string' ? row['email'] : '',
+    alternateEmails: Array.isArray(row[Aglyn.CONTACT_ALTERNATE_EMAILS_FIELD])
+      ? (row[Aglyn.CONTACT_ALTERNATE_EMAILS_FIELD] as unknown[]).filter(
+          (email): email is string => typeof email === 'string',
+        )
+      : [],
     name: Aglyn.contactDisplayName(row, group.groupId),
     canonicalName: typeof row['name'] === 'string' ? row['name'] : '',
     nameOverride: facet.name ?? '',

@@ -88,6 +88,7 @@ import {
   CONTACT_EMAIL_HISTORY_ROUTE,
   contactEmailHistoryHandler,
 } from './server/contact-email-history'
+import { CONTACTS_MERGE_ROUTE, contactsMergeHandler } from './server/contacts-merge'
 
 /**
  * `GET /api/crm/ping` → `{ ok: true, plugin: 'crm' }`.
@@ -537,4 +538,8 @@ export function registerCrmConsoleApi(): void {
   // read off the record, the daily cap and both suppression lists are
   // judged, and the message leaves on the site's sending identity.
   registerPluginApiRoute(CRM_API_ROUTES.emailSend, crmEmailSendHandler)
+  // Two records for one person become one (AGL-2625): the repoint of every
+  // row naming the merged record and the transaction over both documents
+  // are the server's, and the address index it writes is closed to clients.
+  registerPluginApiRoute(CONTACTS_MERGE_ROUTE, contactsMergeHandler)
 }
