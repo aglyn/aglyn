@@ -28,9 +28,9 @@ import type { CrmSavedViewController } from './use-crm-saved-view'
  * The visible columns as the view orders them, and the one way to move one.
  *
  * What the column menu's Move left / Move right read and call — see
- * `crm-column-menu.tsx`. The grid itself cannot reorder a column (the
- * community grid forces `disableColumnReorder`), so the order is the view's
- * to keep and the hook's to apply.
+ * `crm-column-menu.tsx`. The grid itself cannot reorder a column (the MIT
+ * grid forces `disableColumnReorder`), so the order is the view's to keep
+ * and the hook's to apply.
  */
 export interface CrmColumnOrder {
   /** The visible, hideable columns by field, first to last as the grid shows them. */

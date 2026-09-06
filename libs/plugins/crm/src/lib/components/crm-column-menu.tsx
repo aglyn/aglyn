@@ -20,8 +20,8 @@
  * THE COLUMN MENU ON A CRM LIST, with a way to move the column (AGL-2635).
  *
  * A saved view keeps its columns in order, and the grid has no gesture for
- * changing that order: the community grid forces `disableColumnReorder`,
- * and its Manage columns panel only shows and hides. So the menu every
+ * changing that order: the MIT grid forces `disableColumnReorder`, and
+ * its Manage columns panel only shows and hides. So the menu every
  * column header already opens — Sort, Hide, Manage columns — grows Move
  * left and Move right, which go through the view's own `columnOrder` (see
  * `useCrmViewGrid`) rather than the grid's column state: the view is what
