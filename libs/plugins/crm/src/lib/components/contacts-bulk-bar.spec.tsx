@@ -27,6 +27,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { soloConsentGroup } from '@aglyn/aglyn'
+import { CrmOrgMountProvider } from '../hooks/use-crm-org-mount'
 import { ContactsBulkBar } from './contacts-bulk-bar'
 
 /** Every write the store received, in order. */
@@ -111,6 +112,15 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
   }),
 }))
 
+/** What the bar posted to the org feed's door (AGL-2634), in order. */
+let posted: Array<{ route: string; payload: Record<string, unknown> }>
+jest.mock('../components/use-crm-api', () => ({
+  useCrmApi: () => async (route: string, payload: Record<string, unknown>) => {
+    posted.push({ route, payload })
+    return { response: { ok: true }, payload: { ok: true } }
+  },
+}))
+
 /** Confirm resolves (proceed) or rejects (cancel), the way the real one does. */
 let confirmAnswer: 'proceed' | 'cancel'
 const confirmSpy = jest.fn(() =>
@@ -168,9 +178,37 @@ function Harness(props: { initial: string[]; children?: ReactNode }) {
 }
 const onSelectedChange = jest.fn()
 
+/**
+ * The same bar beneath the organization hub (AGL-2630): no viewing site,
+ * so each row is written through the holder it was flattened by.
+ */
+const heldRows = rows.map((row) => ({ ...row, groupId: GROUP.groupId }))
+function OrgHarness(props: { initial: string[] }) {
+  return (
+    <CrmOrgMountProvider
+      mount={{
+        orgId: 'org-1',
+        hosts: [{ id: 'host-1', name: 'Site 1', subdomain: 'one' }],
+        hostsReady: true,
+        hostsPath: '/acme/hosts',
+      }}
+    >
+      <ContactsBulkBar
+        hostId={null}
+        scope={['orgs', 'org-1']}
+        consentGroup={null}
+        rows={heldRows}
+        selected={props.initial}
+        onSelectedChange={onSelectedChange}
+      />
+    </CrmOrgMountProvider>
+  )
+}
+
 beforeEach(() => {
   ops = []
   notices = []
+  posted = []
   batchFails = false
   refuseSingle = new Set()
   confirmAnswer = 'proceed'
@@ -384,5 +422,38 @@ describe('the audience door', () => {
     expect(screen.queryByTestId('add-to-list-dialog')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Add to list' }))
     expect(screen.getByTestId('add-to-list-dialog')).toBeTruthy()
+  })
+})
+
+describe('beneath the organization hub', () => {
+  it('writes each row through its own holder, then posts the sentence once as the org feed’s contact line', async () => {
+    render(<OrgHarness initial={['c1', 'c3']} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Set stage' }))
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Lifecycle stage' }))
+    fireEvent.click(within(screen.getByRole('listbox')).getByText('Customer'))
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+    await waitFor(() => expect(ops).toHaveLength(2))
+    expect(ops.map((op) => op.data[facetPath('lifecycleStage')])).toEqual([
+      'customer',
+      'customer',
+    ])
+    await waitFor(() =>
+      expect(posted).toEqual([
+        {
+          route: 'org-activity',
+          payload: { action: 'Stage set on 2 contacts', target: { type: 'contact' } },
+        },
+      ]),
+    )
+  })
+
+  it('posts no org line under a site, where the bar writes into the site feed itself', async () => {
+    render(<Harness initial={['c1', 'c3']} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Set stage' }))
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Lifecycle stage' }))
+    fireEvent.click(within(screen.getByRole('listbox')).getByText('Customer'))
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+    await waitFor(() => expect(notices).toContain('Stage set on 2 contacts'))
+    expect(posted).toEqual([])
   })
 })

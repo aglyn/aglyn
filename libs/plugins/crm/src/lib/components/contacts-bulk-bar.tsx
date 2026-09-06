@@ -184,7 +184,7 @@ function ContactsBulkBarBody(props: ContactsBulkBarProps) {
     props
   const firestore = useFirestore()
   const { confirm } = useConfirmationContext()
-  const { busy, report, apply, dismissReport } = useCrmBulkApply()
+  const { busy, report, apply, dismissReport } = useCrmBulkApply({ recordKind: 'contact' })
 
   const selectedRows = useMemo(() => {
     const chosen = new Set(selected)
