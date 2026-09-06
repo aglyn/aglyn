@@ -46,6 +46,8 @@ export interface ActivityRecordLink {
   contactId?: string
   companyId?: string
   dealId?: string
+  /** A lead's own log (AGL-2615) — see `CrmActivityLink.leadId`. */
+  leadId?: string
 }
 
 /**
@@ -177,7 +179,7 @@ export function useActivityWindow(
   pageSize: number = ACTIVITY_PAGE_SIZE,
 ) {
   const { firestore, dataScope, readTokens } = scope
-  const { contactId, companyId, dealId } = link
+  const { contactId, companyId, dealId, leadId } = link
   const paged = usePagedCollection<CrmActivityRow>(
     (pageLimit) => {
       if (!dataScope) return null
@@ -187,7 +189,9 @@ export function useActivityWindow(
           ? [where('companyId', '==', companyId)]
           : dealId
             ? [where('dealId', '==', dealId)]
-            : []
+            : leadId
+              ? [where('leadId', '==', leadId)]
+              : []
       return query(
         collection(
           firestore,
@@ -201,7 +205,7 @@ export function useActivityWindow(
         limit(pageLimit),
       )
     },
-    [firestore, dataScope, readTokens, contactId, companyId, dealId],
+    [firestore, dataScope, readTokens, contactId, companyId, dealId, leadId],
     { idField: '$id', pageSize },
   )
   const windowSize = paged.pageSize * (paged.page + 1)

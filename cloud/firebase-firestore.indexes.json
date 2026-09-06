@@ -1361,6 +1361,24 @@
       ]
     },
     {
+      "collectionGroup": "crmActivities",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "visibleTo",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "leadId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "atMs",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "products",
       "queryScope": "COLLECTION",
       "fields": [

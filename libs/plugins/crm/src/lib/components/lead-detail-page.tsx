@@ -32,6 +32,7 @@ import { LeadHistoryCard } from './lead-history-card'
 import { useOrgMemberOptions } from './lead-owner-select'
 import { LeadPropertiesCard } from './lead-properties-card'
 import { LeadUnqualifyDialog } from './lead-unqualify-dialog'
+import { RecordActivityCard } from './record-activity-card'
 
 type LeadDocument = Record<string, unknown> & CrmLeadFields
 
@@ -126,6 +127,7 @@ export function LeadDetailPage(props: CrmDetailPageProps) {
           onUnqualify={() => setUnqualifying(true)}
         />
         <LeadHistoryCard hostId={hostId} leadId={id} lead={lead} />
+        <RecordActivityCard hostId={hostId} org={org} leadId={id} />
       </Stack>
       <LeadConvertDialog
         open={converting}
