@@ -110,7 +110,7 @@ export const PLUGIN_DOCS = {
   crmSettings: {
     path: '/content-and-data/contacts/settings',
     title: 'CRM settings',
-    excerpt: 'What the CRM does on its own for every site in your workspace — whether a company is created from a captured contact\'s work email domain, who a new contact is assigned to, by default, by rule, or in turn, and the automation recipes installed on each site from the organization.',
+    excerpt: 'What the CRM does on its own for every site — whether a company is created from a contact\'s work email domain, who a new contact is assigned to by default, by rule, or in turn, and the recipes installed on each site.',
   },
   crmTasks: {
     path: '/content-and-data/contacts/tasks',
