@@ -366,6 +366,8 @@ export type ContactImportSkipReason =
   | 'invalid-email'
   | 'duplicate'
   | 'audience-band'
+  /** The person was erased from this workspace at their request (AGL-2623). */
+  | 'erased'
   | 'write-failed'
 
 /** How a skip reason reads on screen and in the downloaded file. */
@@ -373,6 +375,7 @@ export const CONTACT_IMPORT_SKIP_LABELS: Record<ContactImportSkipReason, string>
   'invalid-email': 'Not a valid email address',
   duplicate: 'Appears earlier in the file',
   'audience-band': 'Contact limit reached',
+  erased: 'Erased from this workspace at their request',
   'write-failed': 'Could not be saved',
 }
 

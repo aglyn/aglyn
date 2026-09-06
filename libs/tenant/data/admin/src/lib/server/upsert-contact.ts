@@ -38,6 +38,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { firebaseAdmin } from './firebase-admin'
 import { countCrmRecords } from './crm-records'
 import { attributeOrderToEmail } from './email-revenue-attribution'
+import { hostRefusesCaptureForErasure } from './email-suppression'
 import {
   attributeCampaignConversion,
   type ResolvedCampaignTouch,
@@ -94,7 +95,16 @@ export type UpsertHostContactVerdict =
       /** True when this call created the row; false when it merged into one. */
       created: boolean
     }
-  | { refused: 'invalid-email' | 'band' | 'error' }
+  | {
+      /**
+       * `erased`: the site holds an erasure row for the address (AGL-2623),
+       * so no record is created — a capture must not quietly rebuild a
+       * person the workspace erased. Only a CREATE is refused; a merge
+       * cannot arise, because the erasure removed the row it would merge
+       * into.
+       */
+      refused: 'invalid-email' | 'band' | 'erased' | 'error'
+    }
 
 /**
  * The per-holder profile fields a door may write alongside the identity.
@@ -722,6 +732,23 @@ export async function upsertHostContact(
       )
       await settleCompanyContactsCounts(companiesBeside(contactsRef), link)
       return { contactId: docSnapshot.id, created: false }
+    }
+
+    /*
+     * THE ERASED PERSON DOES NOT COME BACK (AGL-2623).
+     *
+     * Before the band, on the CREATE branch only — the one read this adds
+     * is paid by a capture that would otherwise make a new row, never by
+     * the merge above. An erasure wrote a row on this site's suppression
+     * list with no address on it; finding that row here is what keeps the
+     * next form fill or checkout from rebuilding the record the workspace
+     * just erased. The order or booking that triggered the capture still
+     * succeeds, exactly as it does when the band refuses: the person bought
+     * something, and the merchant's record of the sale is not the CRM's
+     * record of the person.
+     */
+    if (await hostRefusesCaptureForErasure(options.hostId, email, firestore)) {
+      return { refused: 'erased' }
     }
 
     // New contact: records-band check via the aggregate counts (cheap; no

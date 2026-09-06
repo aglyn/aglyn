@@ -238,6 +238,17 @@ export const CONTACT_BAND_FULL_MESSAGE =
   'Contact limit reached — this contact was not added. Upgrade in Billing ' +
   'to keep collecting.'
 
+/**
+ * What the create route says when the address was erased from this
+ * workspace (AGL-2623). The person asked to be removed and a workspace admin
+ * filed it; a record cannot be re-created by hand any more than by a form,
+ * and the sentence says where the decision lives rather than implying the
+ * address is malformed.
+ */
+export const CONTACT_ERASED_MESSAGE =
+  'This person was erased from your workspace at their request, so a ' +
+  'record cannot be created for this address.'
+
 /** The most tags one create may attach, matching the record page's cap. */
 const CONTACT_TAGS_MAX = 20
 
@@ -447,6 +458,13 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
       }
       if (result.refused === 'invalid-email') {
         res.status(400).json({ error: 'Enter a valid email address.' })
+        return
+      }
+      // The person was erased from this workspace (AGL-2623). A conflict,
+      // like the band: the request was well-formed and the answer is a
+      // standing fact about the address, not a fault in the call.
+      if (result.refused === 'erased') {
+        res.status(409).json({ error: CONTACT_ERASED_MESSAGE, reason: 'erased' })
         return
       }
       res.status(500).json({ error: 'The contact could not be saved.' })
