@@ -18,9 +18,11 @@
 import { DEFAULT_DEAL_STAGES } from './crm'
 import {
   bucketByWeek,
+  closeMonthBuckets,
   crmReportRange,
   currencyOfDeals,
   deltaPercent,
+  forecastByCloseMonth,
   funnelFromStages,
   localDayBounds,
   pipelineTotals,
@@ -260,5 +262,97 @@ describe('localDayBounds', () => {
     const bounds = localDayBounds(NOW)
     expect(bounds.start).toBe(new Date(2026, 8, 16).getTime())
     expect(bounds.end).toBe(new Date(2026, 8, 17).getTime())
+  })
+})
+
+describe('the forecast by close month (AGL-2620)', () => {
+  const sales = { $id: 'sales', name: 'Sales', stages: [...DEFAULT_DEAL_STAGES] }
+  const renewals = {
+    $id: 'renewals',
+    name: 'Renewals',
+    stages: DEFAULT_DEAL_STAGES.map((stage) =>
+      stage.id === 'qualified' ? { ...stage, probability: 50 } : stage,
+    ),
+  }
+  const local = (year: number, monthIndex: number, day: number) =>
+    new Date(year, monthIndex, day, 12).getTime()
+
+  it('buckets the next six local calendar months from the current one, whole', () => {
+    const buckets = closeMonthBuckets(NOW)
+    expect(buckets.map((bucket) => bucket.key)).toEqual([
+      '2026-09',
+      '2026-10',
+      '2026-11',
+      '2026-12',
+      '2027-01',
+      '2027-02',
+    ])
+    // The current month starts on its first, not at "now".
+    expect(buckets[0].start).toBe(new Date(2026, 8, 1).getTime())
+    expect(buckets[0].end).toBe(new Date(2026, 9, 1).getTime())
+    expect(buckets[5].end).toBe(new Date(2027, 2, 1).getTime())
+  })
+
+  it('lays open deals out per pipeline and month, face value and weighted', () => {
+    const forecast = forecastByCloseMonth(
+      [
+        // September, Sales, 10%: 1,000 → 100.
+        { status: 'open', pipelineId: 'sales', stageId: 'qualified', amountCents: 100_000, expectedCloseAtMs: local(2026, 8, 3) },
+        // November, Sales, 60%: 500 → 300.
+        { status: 'open', pipelineId: 'sales', stageId: 'negotiation', amountCents: 50_000, expectedCloseAtMs: local(2026, 10, 30) },
+        // November, Renewals, 50%: 200 → 100.
+        { status: 'open', pipelineId: 'renewals', stageId: 'qualified', amountCents: 20_000, expectedCloseAtMs: local(2026, 10, 1) },
+        // Undated: its own row, at face value and at its stage odds.
+        { status: 'open', pipelineId: 'sales', stageId: 'proposal-sent', amountCents: 10_000, expectedCloseAtMs: null },
+        // Overdue (August) and later (March 2027).
+        { status: 'open', pipelineId: 'sales', stageId: 'qualified', amountCents: 5_000, expectedCloseAtMs: local(2026, 7, 20) },
+        { status: 'open', pipelineId: 'sales', stageId: 'qualified', amountCents: 7_000, expectedCloseAtMs: local(2027, 2, 1) },
+        // Closed deals are not a forecast.
+        { status: 'won', pipelineId: 'sales', stageId: 'won', amountCents: 900_000, expectedCloseAtMs: local(2026, 8, 10) },
+        { status: 'lost', pipelineId: 'sales', stageId: 'lost', amountCents: 900_000, expectedCloseAtMs: local(2026, 8, 10) },
+      ],
+      [sales, renewals],
+      NOW,
+    )
+    expect(forecast.pipelines.map((row) => row.name)).toEqual(['Sales', 'Renewals'])
+    const [salesRow, renewalsRow] = forecast.pipelines
+    expect(salesRow.months.map((cell) => cell.amountCents)).toEqual([100_000, 0, 50_000, 0, 0, 0])
+    expect(salesRow.months.map((cell) => cell.weightedCents)).toEqual([10_000, 0, 30_000, 0, 0, 0])
+    expect(salesRow.undated).toEqual({ count: 1, amountCents: 10_000, weightedCents: 4_000 })
+    expect(salesRow.overdue).toEqual({ count: 1, amountCents: 5_000, weightedCents: 500 })
+    expect(salesRow.later).toEqual({ count: 1, amountCents: 7_000, weightedCents: 700 })
+    expect(salesRow.total).toEqual({ count: 5, amountCents: 172_000, weightedCents: 45_200 })
+    expect(renewalsRow.months[2]).toEqual({ count: 1, amountCents: 20_000, weightedCents: 10_000 })
+    // The grand rows add the pipelines together.
+    expect(forecast.months.map((cell) => cell.amountCents)).toEqual([100_000, 0, 70_000, 0, 0, 0])
+    expect(forecast.total).toEqual({ count: 6, amountCents: 192_000, weightedCents: 55_200 })
+    expect(forecast.buckets).toHaveLength(6)
+  })
+
+  it('keeps an empty pipeline as a row and an unknown one as an unnamed row worth nothing weighted', () => {
+    const forecast = forecastByCloseMonth(
+      [{ status: 'open', pipelineId: 'gone', stageId: 'qualified', amountCents: 1_000, expectedCloseAtMs: local(2026, 8, 3) }],
+      [sales],
+      NOW,
+    )
+    expect(forecast.pipelines.map((row) => [row.pipelineId, row.name])).toEqual([
+      ['sales', 'Sales'],
+      ['gone', ''],
+    ])
+    expect(forecast.pipelines[0].total.count).toBe(0)
+    expect(forecast.pipelines[1].months[0]).toEqual({ count: 1, amountCents: 1_000, weightedCents: 0 })
+    expect(forecast.total.amountCents).toBe(1_000)
+  })
+
+  it('puts a deal dated the first of a month in that month, on the local calendar', () => {
+    const forecast = forecastByCloseMonth(
+      [
+        { status: 'open', pipelineId: 'sales', stageId: 'qualified', amountCents: 100, expectedCloseAtMs: local(2026, 9, 1) },
+        { status: 'open', pipelineId: 'sales', stageId: 'qualified', amountCents: 200, expectedCloseAtMs: new Date(2026, 9, 1).getTime() - 1 },
+      ],
+      [sales],
+      NOW,
+    )
+    expect(forecast.months.map((cell) => cell.amountCents)).toEqual([200, 100, 0, 0, 0, 0])
   })
 })

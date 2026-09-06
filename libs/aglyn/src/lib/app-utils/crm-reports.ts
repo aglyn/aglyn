@@ -38,6 +38,7 @@ import {
   type CrmDeal,
   type CrmDealStage,
   type CrmPipeline,
+  dealStageById,
   weightedDealAmountCents,
 } from './crm'
 
@@ -325,6 +326,177 @@ export function pipelineTotals(
     row.weightedCents += weighted
     totals.weightedCents += weighted
   }
+  return totals
+}
+
+/** How many months ahead the close-month forecast looks. */
+export const FORECAST_MONTHS = 6
+
+/** One calendar month of the forecast, `[start, end)` in local time. */
+export interface CloseMonthBucket {
+  /** `2026-09` — stable across locales, what a row is keyed by. */
+  key: string
+  start: number
+  end: number
+}
+
+/**
+ * The next `months` calendar months from the one `nowMs` falls in, each
+ * `[first of the month, first of the next)` on the reader's calendar.
+ *
+ * The current month is the first bucket, whole: a deal expected to close
+ * on the 3rd when today is the 20th is late, not next month's, and a
+ * forecast that started at "now" would drop it between the rows. Local
+ * months rather than UTC, because `expectedCloseAtMs` is stored at local
+ * noon of the day picked (`dateInputMs`) and a UTC boundary would put a
+ * deal picked for the 1st into the month before in half the world.
+ */
+export function closeMonthBuckets(
+  nowMs: number,
+  months = FORECAST_MONTHS,
+): CloseMonthBucket[] {
+  const now = new Date(nowMs)
+  const buckets: CloseMonthBucket[] = []
+  for (let offset = 0; offset < months; offset += 1) {
+    const start = new Date(now.getFullYear(), now.getMonth() + offset, 1)
+    const end = new Date(now.getFullYear(), now.getMonth() + offset + 1, 1)
+    buckets.push({
+      key: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}`,
+      start: start.getTime(),
+      end: end.getTime(),
+    })
+  }
+  return buckets
+}
+
+/** One pipeline's open deals expected to close in one month. */
+export interface ForecastCell {
+  count: number
+  amountCents: number
+  weightedCents: number
+}
+
+export interface PipelineForecast {
+  pipelineId: string
+  name: string
+  /** One cell per bucket, in `buckets` order, every one present even when empty. */
+  months: ForecastCell[]
+  /** Open deals with no expected close — their own row, never a guess. */
+  undated: ForecastCell
+  /** Expected before the first bucket — overdue to close. */
+  overdue: ForecastCell
+  /** Expected past the last bucket. */
+  later: ForecastCell
+  total: ForecastCell
+}
+
+export interface CloseMonthForecast {
+  buckets: CloseMonthBucket[]
+  pipelines: PipelineForecast[]
+  /** Every pipeline's cells added together, in `buckets` order. */
+  months: ForecastCell[]
+  undated: ForecastCell
+  overdue: ForecastCell
+  later: ForecastCell
+  total: ForecastCell
+}
+
+type ForecastDeal = Pick<
+  CrmDeal,
+  'status' | 'pipelineId' | 'stageId' | 'amountCents' | 'expectedCloseAtMs'
+>
+
+const emptyCell = (): ForecastCell => ({ count: 0, amountCents: 0, weightedCents: 0 })
+
+function addToCell(cell: ForecastCell, amountCents: number, weightedCents: number) {
+  cell.count += 1
+  cell.amountCents += amountCents
+  cell.weightedCents += weightedCents
+}
+
+/**
+ * The open pipeline laid out by the month each deal is expected to close
+ * (AGL-2620): per pipeline, one cell per month for the next
+ * {@link FORECAST_MONTHS}, at face value and weighted by the deal's stage.
+ *
+ * Only open deals, for the reason `pipelineTotals` gives — a closed deal
+ * has closed. A deal with no `expectedCloseAtMs` is its own row rather than
+ * being dropped or dated "now": a forecast that quietly omitted undated
+ * deals would understate the pipeline by exactly the deals nobody has
+ * scheduled, which is the number a sales lead most wants to see. A deal
+ * dated before the first month is overdue and a deal dated past the last
+ * is "later"; both are reported so the rows add up to the pipeline.
+ *
+ * A deal in a pipeline the list does not carry (archived, or a pipeline
+ * the reader cannot see) is grouped under its id with no name, so the
+ * total still counts it; its stage cannot be resolved, so it weighs
+ * nothing, as everywhere else.
+ */
+export function forecastByCloseMonth(
+  deals: readonly ForecastDeal[],
+  pipelines: ReadonlyArray<Pick<CrmPipeline, 'name' | 'stages'> & { $id: string }>,
+  nowMs: number,
+  months = FORECAST_MONTHS,
+): CloseMonthForecast {
+  const buckets = closeMonthBuckets(nowMs, months)
+  const byId = new Map<string, PipelineForecast>()
+  const pipelineRow = (pipelineId: string): PipelineForecast => {
+    let row = byId.get(pipelineId)
+    if (!row) {
+      const pipeline = pipelines.find((entry) => entry.$id === pipelineId)
+      row = {
+        pipelineId,
+        name: pipeline?.name ?? '',
+        months: buckets.map(emptyCell),
+        undated: emptyCell(),
+        overdue: emptyCell(),
+        later: emptyCell(),
+        total: emptyCell(),
+      }
+      byId.set(pipelineId, row)
+    }
+    return row
+  }
+  // Every visible pipeline gets a row, in the order given, even with no
+  // open deals: an empty pipeline is a fact about the forecast too.
+  for (const pipeline of pipelines) pipelineRow(pipeline.$id)
+
+  const totals: CloseMonthForecast = {
+    buckets,
+    pipelines: [],
+    months: buckets.map(emptyCell),
+    undated: emptyCell(),
+    overdue: emptyCell(),
+    later: emptyCell(),
+    total: emptyCell(),
+  }
+  const first = buckets[0]?.start ?? nowMs
+  const last = buckets[buckets.length - 1]?.end ?? nowMs
+  for (const deal of deals) {
+    if (deal.status !== 'open') continue
+    const pipelineId = String(deal.pipelineId ?? '')
+    const row = pipelineRow(pipelineId)
+    const pipeline = pipelines.find((entry) => entry.$id === pipelineId)
+    const amount = Math.max(0, Math.round(Number(deal.amountCents ?? 0) || 0))
+    const weighted = weightedDealAmountCents(deal, dealStageById(pipeline, deal.stageId))
+    const at = deal.expectedCloseAtMs
+    const cells: Array<[ForecastCell, ForecastCell]> = [[row.total, totals.total]]
+    if (typeof at !== 'number' || !Number.isFinite(at)) {
+      cells.push([row.undated, totals.undated])
+    } else if (at < first) {
+      cells.push([row.overdue, totals.overdue])
+    } else if (at >= last) {
+      cells.push([row.later, totals.later])
+    } else {
+      const index = buckets.findIndex((bucket) => at >= bucket.start && at < bucket.end)
+      cells.push([row.months[index], totals.months[index]])
+    }
+    for (const [own, all] of cells) {
+      addToCell(own, amount, weighted)
+      addToCell(all, amount, weighted)
+    }
+  }
+  totals.pipelines = [...byId.values()]
   return totals
 }
 

@@ -68,6 +68,11 @@ import {
   normalizeContactFieldKey,
   taskDueState,
   weightedDealAmountCents,
+  DEAL_LINE_ITEMS_MAX,
+  dealHasLineItems,
+  isPipelineArchived,
+  lineItemsTotalCents,
+  readDealLineItems,
 } from './crm'
 
 describe('CRM collections', () => {
@@ -929,5 +934,77 @@ describe('newAssignmentRuleId', () => {
     expect(first).toMatch(/^rule-/)
     const second = newAssignmentRuleId([first])
     expect(second).not.toBe(first)
+  })
+})
+
+describe('line items on a deal (AGL-2620)', () => {
+  it('accepts a list in the deal\'s currency, normalized, and sums it in whole cents', () => {
+    const read = readDealLineItems(
+      [
+        { productId: ' prod-1 ', name: '  House blend, 5 lb ', quantity: 3, unitAmountCents: 4_500 },
+        { name: 'Delivery', quantity: 1, unitAmountCents: 0, currency: 'USD' },
+      ],
+      'usd',
+    )
+    expect(read).toEqual({
+      items: [
+        { productId: 'prod-1', name: 'House blend, 5 lb', quantity: 3, unitAmountCents: 4_500, currency: 'usd' },
+        { name: 'Delivery', quantity: 1, unitAmountCents: 0, currency: 'usd' },
+      ],
+    })
+    expect(lineItemsTotalCents('items' in read ? read.items : [])).toBe(13_500)
+    expect(dealHasLineItems({ lineItems: 'items' in read ? read.items : [] })).toBe(true)
+  })
+
+  it('reads nothing as no line items, and an empty list as the same', () => {
+    expect(readDealLineItems(undefined, 'usd')).toEqual({ items: [] })
+    expect(readDealLineItems(null, 'usd')).toEqual({ items: [] })
+    expect(readDealLineItems([], 'usd')).toEqual({ items: [] })
+    expect(dealHasLineItems({ lineItems: [] })).toBe(false)
+    expect(dealHasLineItems({})).toBe(false)
+    expect(lineItemsTotalCents(undefined)).toBe(0)
+  })
+
+  it('names the line and the reason it was refused', () => {
+    const error = (input: unknown, currency = 'usd') => {
+      const read = readDealLineItems(input, currency)
+      return 'error' in read ? read.error : null
+    }
+    expect(error('lines')).toMatch(/must be a list/)
+    expect(error([{ quantity: 1, unitAmountCents: 100 }])).toMatch(/^Line 1 needs a name/)
+    expect(error([{ name: 'A', quantity: 0, unitAmountCents: 100 }])).toMatch(/^Line 1: the quantity/)
+    expect(error([{ name: 'A', quantity: 1.5, unitAmountCents: 100 }])).toMatch(/^Line 1: the quantity/)
+    expect(error([{ name: 'A', quantity: 1, unitAmountCents: -1 }])).toMatch(/^Line 1: the unit amount/)
+    expect(error([{ name: 'A', quantity: 1, unitAmountCents: 10.5 }])).toMatch(/^Line 1: the unit amount/)
+    expect(error([{ name: 'A', quantity: 1, unitAmountCents: 100 }, 'x'])).toMatch(/^Line 2 must be an object/)
+    // A line in another currency cannot be added to the rest.
+    expect(error([{ name: 'A', quantity: 1, unitAmountCents: 100, currency: 'eur' }])).toMatch(
+      /Line 1 is in EUR; every line must be in the deal's currency, USD/,
+    )
+    expect(
+      error(
+        Array.from({ length: DEAL_LINE_ITEMS_MAX + 1 }, () => ({ name: 'A', quantity: 1, unitAmountCents: 1 })),
+      ),
+    ).toMatch(/at most 50/)
+  })
+
+  it('trusts a stored line no further than whole, non-negative numbers', () => {
+    expect(
+      lineItemsTotalCents([
+        { quantity: 2.4, unitAmountCents: 99.6 },
+        { quantity: -3, unitAmountCents: 100 },
+        { quantity: Number.NaN, unitAmountCents: 100 },
+      ]),
+    ).toBe(200)
+  })
+})
+
+describe('an archived pipeline (AGL-2620)', () => {
+  it('is one with a positive archivedAt, and nothing else', () => {
+    expect(isPipelineArchived({ archivedAt: 1_700_000_000_000 })).toBe(true)
+    expect(isPipelineArchived({ archivedAt: null })).toBe(false)
+    expect(isPipelineArchived({ archivedAt: 0 })).toBe(false)
+    expect(isPipelineArchived({})).toBe(false)
+    expect(isPipelineArchived(null)).toBe(false)
   })
 })
