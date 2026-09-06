@@ -112,6 +112,12 @@ be paid. Confirm your obligations with a qualified tax professional.
 
 Use the console **bookings** page to see and manage upcoming appointments.
 
+Each upcoming booking carries **View in CRM**, which opens the booker's contact — the
+[CRM's](../../content-and-data/contacts/overview.md) Contacts list asked for their
+address, moving straight on to the record when exactly one person matches. A booking
+taken without an address has no link. A contact's timeline links back to this page
+from the booking that captured them.
+
 ### Canceling and refunding {#canceling-and-refunding}
 
 Canceling a booking reopens the slot. For a **paid** booking, canceling also

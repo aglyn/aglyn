@@ -147,7 +147,10 @@ source entirely.
 The site's **Users** page has two cards: **Site users** (your members — this
 guide) and **Users** (console collaborators). The Site users card is
 searchable and paged, newest first, with **Email**, **Name**, **Joined**, and
-**Status** columns.
+**Status** columns. For members who may open the
+[CRM](../content-and-data/contacts/overview.md), each row's **⋮** menu holds
+**Open in CRM** — the member's contact, found by the address they signed up
+with.
 
 ![The console Users page with the Site users card listing members and their Active status chips](/img/guides/members-users-tab.png)
 

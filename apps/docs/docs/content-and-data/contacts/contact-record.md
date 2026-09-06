@@ -39,7 +39,8 @@ Clicking a row in the list opens the person's own page at
 `…/crm/contacts/{id}` — an address you can paste and that every other CRM
 record links to. The page opens with the person's name, their lifecycle stage,
 their owner and — for a buyer — how many orders they have placed and what they
-have spent. Under it, one card per aspect of the record:
+have spent; the order count is a link to the site's orders list narrowed to the
+person's address. Under it, one card per aspect of the record:
 
 - **Properties** — the editable profile: name, phone, job title, company,
   lifecycle stage, owner, tags, address and an **About** box for your
@@ -56,7 +57,9 @@ have spent. Under it, one card per aspect of the record:
 - **Timeline** — what the site recorded about the person and what your team
   has logged, newest first: the forms they submitted, the orders they placed,
   the bookings they made, and the calls, emails, meetings and notes filed
-  against them, with **Log activity** to add one — see
+  against them, with **Log activity** to add one. A captured entry links to
+  the record it names — **Open submission**, **Open order**, and the Bookings
+  and Users pages for a booking and a sign-up — see
   [Activities & the timeline](./activities.md).
 - **Deals** — the deals the person is named on, with a **New deal** shortcut
   that starts one already linked to them — see [Deals pipeline](./deals.md).
