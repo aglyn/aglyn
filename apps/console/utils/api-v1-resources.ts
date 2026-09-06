@@ -87,6 +87,9 @@ import {
   parseLimit,
   settleCompanyContactsCounts,
 } from '@aglyn/tenant-data-admin'
+// The leaf, not the barrel: the console's API specs substitute the barrel
+// wholesale, and the lookup must reach the real index logic under them.
+import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
 import { createHash, randomUUID } from 'crypto'
 import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { type ApiV1Context, apiUsageMonth, requireScope } from './api-v1'
@@ -2962,13 +2965,16 @@ async function createContact(
   const { claim } = claimed
 
   try {
-    const existing = await collection.where('email', '==', email).limit(1).get()
-    if (!existing.empty) {
+    // Through the org's address index (AGL-2633): an address a merge folded
+    // into another record is that record's, and a create on it would mint
+    // the duplicate the merge removed.
+    const existing = await findContactByEmail(collection, email)
+    if (existing) {
       // Released: the conflict clears if that contact is deleted or merged
       // upstream, and the retry that should then succeed must not replay it.
       await claim.release()
       return ApiErrors.conflict({
-        message: `A contact with this email already exists (${existing.docs[0].id}). Update it instead.`,
+        message: `A contact with this email already exists (${existing.id}). Update it instead.`,
         code: 'contact_exists',
         headers: ctx.headers,
       })
@@ -3271,16 +3277,25 @@ async function deleteContact(
  * perfectly useless: it is indistinguishable from "we don't have them", and
  * it sends the caller hunting a missing person instead of a typo.
  *
+ * ## `email` is a lookup, not a clause
+ *
+ * The address goes through the org's address index (AGL-2633) — the same
+ * lookup every capture door makes — so an address a merge folded into a
+ * record as an alternate finds that record, which is the answer `POST`
+ * gives when it refuses the same address as a duplicate. One address names
+ * one document, so the page is that document or nothing and never carries
+ * a cursor.
+ *
  * ## Why the COMBINATION filters after the read
  *
- * An equality on `email`, an `array-contains` on `tags` and the
- * `orderBy(FieldPath.documentId())` every list applies is a three-clause
- * query, which Firestore serves only from a composite index we would have to
- * ship and wait on. `email` is unique, so it already selects at most one
- * document — testing that one row's tags in memory costs nothing and needs no
- * index. The page can therefore come back empty with `has_more` false, which
- * is the short-page case `conventions.md` already tells clients to expect and
- * which `?channel=online` on orders already produces.
+ * An `array-contains` on `tags` and the `orderBy(FieldPath.documentId())`
+ * every list applies is already a two-clause query; a third would need a
+ * composite index we would have to ship and wait on. The address selects at
+ * most one document, and a company selects a short page — testing those
+ * rows' tags in memory costs nothing and needs no index. The page can
+ * therefore come back empty with `has_more` false, which is the short-page
+ * case `conventions.md` already tells clients to expect and which
+ * `?channel=online` on orders already produces.
  */
 async function listContacts(
   ctx: ApiV1Context,
@@ -3338,24 +3353,28 @@ async function listContacts(
   const group = contactViewGroup(ctx, url)
   if ('response' in group) return group.response
 
-  // ONE clause, the most selective that was given: the unique email, then
+  // ONE selector, the most selective that was given: the unique email, then
   // the company, then the tag. Every other filter is checked on the page.
-  let query: FirebaseFirestore.Query = collection
+  let docs: FirebaseFirestore.DocumentSnapshot[]
+  let nextCursor: string | null = null
   let clause: 'email' | 'companyId' | 'tag' | null = null
   if (email) {
-    query = query.where('email', '==', email)
+    const found = await findContactByEmail(collection, email)
+    docs = found ? [found] : []
     clause = 'email'
-  } else if (companyId) {
-    query = query.where('companyIds', 'array-contains', companyId)
-    clause = 'companyId'
-  } else if (tag) {
-    query = query.where('tags', 'array-contains', tag)
-    clause = 'tag'
+  } else {
+    let query: FirebaseFirestore.Query = collection
+    if (companyId) {
+      query = query.where('companyIds', 'array-contains', companyId)
+      clause = 'companyId'
+    } else if (tag) {
+      query = query.where('tags', 'array-contains', tag)
+      clause = 'tag'
+    }
+    ;({ docs, nextCursor } = await paginate(query, url))
   }
-
-  const { docs, nextCursor } = await paginate(query, url)
   const matched = docs.filter((doc) => {
-    const data = doc.data()
+    const data = doc.data() ?? {}
     if (tag && clause !== 'tag') {
       if (!Array.isArray(data.tags) || !data.tags.includes(tag)) return false
     }

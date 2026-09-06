@@ -191,8 +191,8 @@ export async function findContactByEmail(
     const found = await readQuery(
       contactsRef.where('email', '==', normalized).limit(1),
     )
-    if (found.empty) return null
-    hit = found.docs[0]
+    hit = found.docs[0] ?? null
+    if (!hit) return null
     await writeContactEmailIndex(index, hit.id, [normalized])
   }
   if (hostId && !visibleToHost(hit.get('visibleTo') as string[] | undefined, hostId)) {
