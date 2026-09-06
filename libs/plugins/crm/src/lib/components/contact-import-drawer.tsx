@@ -111,6 +111,7 @@ import {
 } from '@mui/material'
 import { collection, limit, query, where } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { contactImportTemplateCsv, downloadTextFile } from '../model/contacts-csv'
 
 export interface ContactImportDrawerProps {
   open: boolean
@@ -451,7 +452,7 @@ export function ContactImportDrawer(props: ContactImportDrawerProps) {
                   `twice. Up to ${CONTACT_IMPORT_MAX_ROWS.toLocaleString()} ` +
                   'rows per file — split a larger one.'}
               </Typography>
-              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
                 <Button variant="outlined" component="label" disabled={busy}>
                   {'Choose file'}
                   <input
@@ -463,6 +464,21 @@ export function ContactImportDrawer(props: ContactImportDrawerProps) {
                       event.target.value = ''
                     }}
                   />
+                </Button>
+                {/* The export's own header over no rows, so a sheet filled in
+                    against it maps itself — custom fields included. */}
+                <Button
+                  size="small"
+                  disabled={busy}
+                  onClick={() =>
+                    downloadTextFile(
+                      'contacts-template.csv',
+                      'text/csv',
+                      contactImportTemplateCsv(fields),
+                    )
+                  }
+                >
+                  {'Download template'}
                 </Button>
                 {fileName ? (
                   <Chip size="small" variant="outlined" label={fileName} />
