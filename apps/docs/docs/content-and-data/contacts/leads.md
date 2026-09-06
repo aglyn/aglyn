@@ -143,6 +143,17 @@ required, so the closed leads can be counted by why they closed. An unqualified 
 out of the Open view and keeps its reason on its page; set its status back to
 Working to reopen it, which clears the reason.
 
+## Erasing the person
+
+The menu (⋮) in the header of the lead's page also carries **Erase this
+person** — the privacy erasure, for a person who asks to be forgotten. It is
+the same request the contact record offers, filed by the lead's address: the
+person is removed from every site in the workspace, the address is closed to
+capture at once, the lead shows an **Erasure pending** banner, and the sweep
+runs with the nightly erasure job. Workspace admins only. What it removes,
+what it keeps and what it does not reach are listed in
+[Deleting and erasing](./contact-record.md#deleting-and-erasing).
+
 ## Who can do this
 
 Anyone who can open the CRM can work leads — that is the workspace's
