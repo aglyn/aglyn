@@ -840,6 +840,13 @@ jobs:
       # passing tests about destructive writes ran nowhere.
       - run: npm run test:backfill-core
 
+      # AGL-2631. The CRM lifecycle backfill's decisions — which facet gets
+      # which stage, which contact becomes a historical lead and which is
+      # left (erased, already a lead, already worked), what a company's
+      # count should read — and the source guards that refuse `--apply` when
+      # the tree no longer says what the script assumes.
+      - run: npm run test:crm-lifecycle-backfill
+
       # AGL-2586. The uptime probe's Slack notifier — who is told when a
       # journey check goes red. It has to be provable without an outage, and
       # both of a notifier's failure modes are here: sending nothing during a
